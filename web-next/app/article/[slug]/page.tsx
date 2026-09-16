@@ -13,9 +13,10 @@ export const dynamicParams = true;
 export async function generateMetadata({
   params,
 }: {
-  params: { slug: string };
+  params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
-  const bundle = await getArticleSeoBundle(params.slug, "ar");
+  const { slug } = await params;
+  const bundle = await getArticleSeoBundle(slug, "ar");
   if (!bundle) {
     return { title: "غير موجود", robots: { index: false, follow: true } };
   }
@@ -25,9 +26,10 @@ export async function generateMetadata({
 export default async function ArticlePage({
   params,
 }: {
-  params: { slug: string };
+  params: Promise<{ slug: string }>;
 }) {
-  const bundle = await getArticleSeoBundle(params.slug, "ar");
+  const { slug } = await params;
+  const bundle = await getArticleSeoBundle(slug, "ar");
   if (!bundle) notFound();
   return <ArticleView bundle={bundle} lang="ar" />;
 }

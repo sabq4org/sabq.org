@@ -143,6 +143,10 @@ router.get("/api/homepage-lite", cacheControl(AUTOSCALE_CACHE.HOMEPAGE), async (
           infographicBannerUrl: articles.infographicBannerUrl,
           categoryColor: categories.color,
           isFeatured: articles.isFeatured,
+          isReading: articles.isReading,
+          isVideoTemplate: articles.isVideoTemplate,
+          videoUrl: articles.videoUrl,
+          videoThumbnailUrl: articles.videoThumbnailUrl,
           authorName: authorAlias.firstName,
           authorAvatar: authorAlias.profileImageUrl,
           reporterName: reporterAlias.firstName,
@@ -177,10 +181,10 @@ router.get("/api/homepage-lite", cacheControl(AUTOSCALE_CACHE.HOMEPAGE), async (
             // ختم displayOrder = ثوانٍ يونكس لحظة التمييز/الترتيب من اللوحة،
             // لكن بعض مسارات التمييز (تطبيق iOS الإداري) لا تختم فيبقى صفرًا
             // ويغرق المقال تحت كل المختومين القدامى. GREATEST يجعل غير
-            // المختوم يرتب بحداثة نشره — نفس المقياس فلا يكسر ترتيب المحررين
+            // المختوم يرتب بحداثة نشره/إنعاشه — نفس المقياس فلا يكسر ترتيب المحررين
             .orderBy(
-              desc(sql`GREATEST(COALESCE(${articles.displayOrder}, 0), EXTRACT(EPOCH FROM ${articles.publishedAt}))`),
-              desc(articles.publishedAt)
+              desc(sql`GREATEST(COALESCE(${articles.displayOrder}, 0), EXTRACT(EPOCH FROM COALESCE(${articles.resurfacedAt}, ${articles.publishedAt})))`),
+              desc(sql`COALESCE(${articles.resurfacedAt}, ${articles.publishedAt})`)
             )
             .limit(5),
 
@@ -196,7 +200,8 @@ router.get("/api/homepage-lite", cacheControl(AUTOSCALE_CACHE.HOMEPAGE), async (
                 eq(articles.hideFromHomepage, false)
               )
             )
-            .orderBy(desc(articles.publishedAt))
+            // «إنعاش»: صدارة الموجز بوقت الإنعاش دون تغيير تاريخ النشر الظاهر
+            .orderBy(desc(sql`COALESCE(${articles.resurfacedAt}, ${articles.publishedAt})`))
             .limit(28),
 
           db
@@ -212,7 +217,7 @@ router.get("/api/homepage-lite", cacheControl(AUTOSCALE_CACHE.HOMEPAGE), async (
                 eq(articles.newsType, 'breaking')
               )
             )
-            .orderBy(desc(articles.publishedAt))
+            .orderBy(desc(sql`COALESCE(${articles.resurfacedAt}, ${articles.publishedAt})`))
             .limit(5),
 
           db
@@ -235,7 +240,11 @@ router.get("/api/homepage-lite", cacheControl(AUTOSCALE_CACHE.HOMEPAGE), async (
                 )
               )
             )
-            .orderBy(desc(articles.displayOrder), desc(articles.publishedAt), desc(articles.views))
+            .orderBy(
+              desc(articles.displayOrder),
+              desc(sql`COALESCE(${articles.resurfacedAt}, ${articles.publishedAt})`),
+              desc(articles.views),
+            )
             .limit(6),
 
           db
@@ -259,7 +268,10 @@ router.get("/api/homepage-lite", cacheControl(AUTOSCALE_CACHE.HOMEPAGE), async (
                 )
               )
             )
-            .orderBy(desc(articles.publishedAt), desc(articles.views))
+            .orderBy(
+              desc(sql`COALESCE(${articles.resurfacedAt}, ${articles.publishedAt})`),
+              desc(articles.views),
+            )
             .limit(6),
 
           getHomepageTrendingTopics(),
@@ -287,6 +299,7 @@ router.get("/api/homepage-lite", cacheControl(AUTOSCALE_CACHE.HOMEPAGE), async (
           infographicBannerUrl: row.infographicBannerUrl,
           category: row.categoryName ? { nameAr: row.categoryName, color: row.categoryColor } : null,
           isFeatured: row.isFeatured,
+          isReading: row.isReading || false,
           authorName: row.reporterName || row.authorName,
           authorAvatar: row.reporterAvatar || row.authorAvatar,
           keywords: (row.seo as { keywords?: string[] } | null)?.keywords || [],

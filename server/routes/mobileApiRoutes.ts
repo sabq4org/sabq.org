@@ -13,6 +13,15 @@
 import { Router, Request, Response, NextFunction } from "express";
 import rateLimit from "express-rate-limit";
 import { userHasAnyRole } from "../rbac";
+import { invalidateAllUserSessions } from "../auth";
+import { verifyToken, verifyBackupCode } from "../twoFactor";
+import { createTwoFactorChallenge, resolveTwoFactorChallenge, consumeTwoFactorChallenge } from "../services/mobileTwoFactorChallenge";
+import { recordFailure, isLockedOut, clearFailures } from "../services/authAttemptGuard";
+import { createWebResetLink, sendPasswordResetCodeEmail } from "../services/passwordResetService";
+import { normalizePhone } from "../services/phoneAuth";
+import { isUniqueViolation } from "../utils/pgError";
+import { parseLimit, paginationOrReject, boundedLimit } from "../utils/pagination";
+import { EMAIL_FORMAT_REGEX } from "../services/phoneRegistrationService";
 import {
   canSelfAssignSchedule,
   getWriterDayLoads,
@@ -31,6 +40,7 @@ import { log } from "../utils/logger";
 import {
   categories,
   articles,
+  userNotificationPrefs,
   pushDevices,
   pushCampaigns,
   pushCampaignEvents,
@@ -57,8 +67,10 @@ import {
   contactMessageReplies,
   opinionTickets,
   opinionTicketMessages,
+  canUserLogin,
 } from "@shared/schema";
 import { eq, sql, and, gt, gte, lt, desc, asc, or, ne, ilike, aliasedTable, inArray, isNull } from "drizzle-orm";
+import { buildUserRolePayload } from "../services/mobileUserRolePayload";
 
 // Aliased users join target so we can pull both authorId (the staff member who
 // entered the article) AND reporterId (the actual byline) in the same query.
@@ -72,6 +84,7 @@ import { articleCardSelect } from "../selectHelpers";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
 import { cfKeyGenerator, cfValidate } from "../utils/rateLimiting";
+import { validatePassword } from "../utils/passwordPolicy";
 import { sendEmailNotification } from "../services/email";
 import { cloudflareImagesService } from "../services/cloudflareImagesService";
 import { newsImageStorageService } from "../services/newsImageStorageService";
@@ -138,77 +151,6 @@ const router = Router();
 
 // Mount OAuth mobile endpoints (POST /auth/google, /auth/apple)
 router.use(oauthMobileRouter);
-
-// ==========================================
-// Mobile role payload helper
-// ==========================================
-//
-// Build the role/roles/roleLabel/jobTitle bundle the iOS APIUser
-// decoder expects, so /auth/login, /auth/register, AND /members/profile
-// can ALL return it. Previously only /members/profile returned RBAC
-// roles — the login response shipped a bare user object without `role`,
-// `roles`, `roleLabel`, or `jobTitle`, which meant the freshly-logged-in
-// iOS user saw "قارئ" until the async /members/profile call returned
-// (and "قارئ" stayed permanently if that call ever failed transiently).
-// Surfacing the full role bundle on login + register fixes the
-// "writer shows as reader in the iOS app" bug.
-//
-// Returns the same shape used in the /members/profile response so the
-// three endpoints stay in lockstep.
-const MOBILE_ROLE_LABELS: Record<string, string> = {
-  system_admin: "مدير النظام",
-  admin: "مسؤول",
-  editor: "محرر",
-  editor_in_chief: "رئيس التحرير",
-  senior_editor: "محرر أول",
-  reporter: "مراسل",
-  correspondent: "مراسل",
-  journalist: "صحفي",
-  writer: "كاتب",
-  author: "كاتب",
-  article_writer: "كاتب مقال",
-  article_author: "كاتب مقال",
-  opinion_author: "كاتب مقال رأي",
-  columnist: "كاتب عمود",
-  managing_editor: "مدير تحرير",
-  editorial_manager: "مدير تحرير",
-  content_manager: "مدير محتوى",
-  comments_moderator: "مشرف تعليقات",
-  moderator: "مشرف",
-  media_manager: "مدير وسائط",
-  publisher: "ناشر",
-  photographer: "مصور",
-  contributor: "مساهم",
-  reader: "قارئ",
-};
-
-const normalizeRoleKey = (value?: string | null) =>
-  value?.trim().toLowerCase().replace(/\s+/g, "_") || "";
-
-async function buildUserRolePayload(userId: string, legacyRole?: string | null, jobTitle?: string | null) {
-  const rbacRoles = await db
-    .select({ name: roles.name, nameAr: roles.nameAr })
-    .from(userRoles)
-    .innerJoin(roles, eq(userRoles.roleId, roles.id))
-    .where(eq(userRoles.userId, userId));
-
-  const nonReaderRbacRole = rbacRoles.find((r) => normalizeRoleKey(r.name) !== "reader");
-  const legacyKey = normalizeRoleKey(legacyRole);
-  const effectiveRoleKey = normalizeRoleKey(nonReaderRbacRole?.name) || legacyKey || "reader";
-  const explicitRoleLabel =
-    nonReaderRbacRole?.nameAr ||
-    (jobTitle?.trim() ? jobTitle.trim() : null) ||
-    MOBILE_ROLE_LABELS[effectiveRoleKey] ||
-    legacyRole ||
-    "قارئ";
-
-  return {
-    role: effectiveRoleKey,
-    roleLabel: explicitRoleLabel,
-    membershipLabel: explicitRoleLabel,
-    roles: rbacRoles.map((r) => ({ key: r.name, displayName: r.nameAr })),
-  };
-}
 
 // ==========================================
 // Helper: Send Mobile Activation Email
@@ -280,101 +222,16 @@ ${code}
 
     const result = await sendEmailNotification({
       to: email,
-      subject: `رمز تفعيل حسابك في سبق: ${code}`,
+      // الرمز لا يوضع في العنوان — يظهر في معاينات الإشعارات على شاشة القفل (F-20).
+      subject: "رمز تفعيل حسابك في سبق",
       html: htmlContent,
       text: textContent,
     });
 
-    console.log(`[Mobile API] Activation email sent to ${email}: ${result.success}`);
+    console.log(`[Mobile API] Activation email sent: ${result.success}`);
     return result.success;
   } catch (error) {
     console.error('[Mobile API] Failed to send activation email:', error);
-    return false;
-  }
-}
-
-// ==========================================
-// Helper: Send Password Reset Email
-// ==========================================
-async function sendPasswordResetEmail(email: string, code: string): Promise<boolean> {
-  try {
-    const htmlContent = `
-      <!DOCTYPE html>
-      <html dir="rtl" lang="ar">
-      <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <style>
-          body { font-family: 'Tajawal', Arial, sans-serif; background-color: #f5f5f5; margin: 0; padding: 0; direction: rtl; }
-          .container { max-width: 600px; margin: 40px auto; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-          .header { background: linear-gradient(135deg, #e53935 0%, #c62828 100%); padding: 30px; text-align: center; }
-          .header h1 { color: white; margin: 0; font-size: 24px; }
-          .content { padding: 40px 30px; text-align: center; }
-          .greeting { font-size: 20px; color: #333; margin-bottom: 20px; }
-          .message { font-size: 16px; color: #666; line-height: 1.8; margin-bottom: 30px; }
-          .code-box { background: #fff3f3; border: 2px dashed #e53935; border-radius: 12px; padding: 20px; margin: 20px 0; }
-          .code { font-size: 36px; font-weight: bold; color: #e53935; letter-spacing: 8px; font-family: monospace; }
-          .warning { font-size: 14px; color: #e53935; margin-top: 20px; font-weight: bold; }
-          .note { font-size: 14px; color: #999; margin-top: 10px; }
-          .footer { background: #f8f9fa; padding: 20px; text-align: center; font-size: 12px; color: #999; }
-        </style>
-      </head>
-      <body>
-        <div class="container">
-          <div class="header">
-            <h1>استعادة كلمة المرور</h1>
-          </div>
-          <div class="content">
-            <p class="greeting">مرحباً! 🔐</p>
-            <p class="message">
-              تلقينا طلباً لاستعادة كلمة المرور الخاصة بحسابك.<br>
-              استخدم الرمز التالي لإعادة تعيين كلمة المرور:
-            </p>
-            <div class="code-box">
-              <div class="code">${code}</div>
-            </div>
-            <p class="warning">
-              هذا الرمز صالح لمدة 30 دقيقة فقط.
-            </p>
-            <p class="note">
-              إذا لم تطلب استعادة كلمة المرور، يرجى تجاهل هذه الرسالة.<br>
-              حسابك آمن ولم يتم إجراء أي تغييرات.
-            </p>
-          </div>
-          <div class="footer">
-            <p>© ${new Date().getFullYear()} صحيفة سبق الإلكترونية - جميع الحقوق محفوظة</p>
-          </div>
-        </div>
-      </body>
-      </html>
-    `;
-
-    const textContent = `
-مرحباً!
-
-تلقينا طلباً لاستعادة كلمة المرور الخاصة بحسابك.
-استخدم الرمز التالي لإعادة تعيين كلمة المرور:
-
-${code}
-
-هذا الرمز صالح لمدة 30 دقيقة فقط.
-
-إذا لم تطلب استعادة كلمة المرور، يرجى تجاهل هذه الرسالة.
-
-صحيفة سبق الإلكترونية
-    `;
-
-    const result = await sendEmailNotification({
-      to: email,
-      subject: `رمز استعادة كلمة المرور: ${code}`,
-      html: htmlContent,
-      text: textContent,
-    });
-
-    console.log(`[Mobile API] Password reset email sent to ${email}: ${result.success}`);
-    return result.success;
-  } catch (error) {
-    console.error('[Mobile API] Failed to send password reset email:', error);
     return false;
   }
 }
@@ -934,9 +791,50 @@ router.get("/devices/status", async (req: Request, res: Response) => {
 // نظام العضوية - MEMBERSHIP SYSTEM APIs (Using unified users table)
 // ============================================================================
 
-// Helper: Generate 6-digit verification code
+// Brute-force limiter for the account-activation / email-verification endpoints
+// (defined here so it precedes /auth/activate below; audit #4/#10).
+const mobileActivationLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: cfKeyGenerator,
+  validate: cfValidate,
+  message: { success: false, message: "محاولات كثيرة جدًا. حاول لاحقًا." },
+});
+
+// Public list endpoints: the global limiter skips GETs, so a bare loop over
+// /articles, /search, /news/paginated, /breaking, /live can still hammer Neon.
+// 300 req/min per real client IP — generous for one device, fatal for a scrape loop.
+// Mobile apps hit api.sabq.org directly, so carrier-grade NAT can pool many users
+// behind one IP; do not tighten below ~200 without checking app request rates.
+// Key resolution: docs/ratelimit-edge-ip-fix-2026-06-03.md.
+const publicListLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: cfKeyGenerator,
+  validate: cfValidate,
+  message: { success: false, error: "طلبات كثيرة جدًا. حاول لاحقًا." },
+});
+
+// Helper: Generate 6-digit verification code.
+// Uses a CSPRNG (crypto.randomInt) — Math.random is predictable/seedable and must
+// never back a password-reset or email-verification code (security audit S-04:
+// weak reset code). randomInt(100000, 1000000) is a uniform 6-digit value.
 function generateVerificationCode(): string {
-  return Math.floor(100000 + Math.random() * 900000).toString();
+  return crypto.randomInt(100000, 1000000).toString();
+}
+
+// Hash a 6-digit code for storage in email_verification_tokens / password_reset_tokens.
+// The plaintext code is emailed to the user; only this hash is persisted (F-13).
+// The userId is folded into the hash so two users can hold the SAME 6-digit code
+// without colliding on the globally-unique `token` column — which previously
+// turned a birthday-collision into a 500 on a 900k-value space (F-14). Lookups
+// always know the userId, so they recompute the same hash to match.
+function hashMobileCode(userId: string, code: string): string {
+  return crypto.createHash("sha256").update(`${userId}:${code}`).digest("hex");
 }
 
 // Helper: Generate secure session token
@@ -954,16 +852,47 @@ async function verifyMemberSession(req: Request): Promise<{ userId: string } | n
   const token = authHeader.substring(7);
   const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
   
+  // SECURITY: the account's CURRENT status is part of session validity.
+  //
+  // This lookup used to touch `app_member_sessions` only, so banning, deleting
+  // or demoting an account changed nothing for anyone already holding a mobile
+  // token — they kept full /api/v1 access, including the admin endpoints, for
+  // the remaining life of the session (up to 30 days). Moderation and
+  // offboarding were effectively advisory on mobile.
+  //
+  // Joined into the same query — no extra round trip on a path that runs for
+  // every mobile request — and the rule itself is reused from shared/schema.ts
+  // rather than re-implemented, so temporary bans that have expired still work.
   const [session] = await db
-    .select({ userId: appMemberSessions.memberId, lastUsedAt: appMemberSessions.lastUsedAt })
+    .select({
+      userId: appMemberSessions.memberId,
+      lastUsedAt: appMemberSessions.lastUsedAt,
+      status: users.status,
+      bannedUntil: users.bannedUntil,
+      deletedAt: users.deletedAt,
+    })
     .from(appMemberSessions)
+    .innerJoin(users, eq(users.id, appMemberSessions.memberId))
     .where(and(
       eq(appMemberSessions.tokenHash, tokenHash),
       eq(appMemberSessions.isActive, true),
       gt(appMemberSessions.expiresAt, new Date())
     ))
     .limit(1);
-  
+
+  if (session && !canUserLogin(session as any)) {
+    // Retire the token so the next request doesn't re-run this check, and so
+    // the row stops looking live in the sessions dashboard.
+    try {
+      await db.update(appMemberSessions)
+        .set({ isActive: false })
+        .where(eq(appMemberSessions.tokenHash, tokenHash));
+    } catch (err) {
+      console.warn("[auth] failed to retire session for blocked account:", err);
+    }
+    return null;
+  }
+
   if (session) {
     // خنق كتابة lastUsedAt — مرة كل 5 دقائق للجلسة بدل كتابة لكل طلب،
     // فاستطلاعات الموبايل المتكررة كانت تضغط كتابة دائمة على القاعدة.
@@ -980,8 +909,55 @@ async function verifyMemberSession(req: Request): Promise<{ userId: string } | n
     }
     return { userId: session.userId };
   }
-  
+
   return null;
+}
+
+/**
+ * Resolve which newsletter subscription the caller owns.
+ *
+ * The newsletter endpoints used to take a bare `email` and act on whoever
+ * owned it — cross-account unsubscription, and a subscriber-enumeration
+ * oracle. An address identifies; it does not authenticate. Two accepted
+ * proofs, mirroring the web routes:
+ *   - `token`: the subscription row's own uuid, which is what the mailed
+ *     unsubscribe link carries;
+ *   - a valid member session, which may only act on its own address.
+ */
+async function resolveNewsletterSubscription(req: Request) {
+  const { newsletterSubscriptions, users: usersTable } = await import("@shared/schema");
+
+  const token = typeof (req.body as any)?.token === "string"
+    ? (req.body as any).token
+    : typeof req.query.token === "string"
+      ? req.query.token
+      : null;
+
+  if (token) {
+    const [row] = await db
+      .select()
+      .from(newsletterSubscriptions)
+      .where(eq(newsletterSubscriptions.id, token))
+      .limit(1);
+    return row ?? null;
+  }
+
+  const session = await verifyMemberSession(req);
+  if (!session) return null;
+
+  const [member] = await db
+    .select({ email: usersTable.email })
+    .from(usersTable)
+    .where(eq(usersTable.id, session.userId))
+    .limit(1);
+  if (!member?.email) return null;
+
+  const [row] = await db
+    .select()
+    .from(newsletterSubscriptions)
+    .where(eq(newsletterSubscriptions.email, member.email))
+    .limit(1);
+  return row ?? null;
 }
 
 // ==========================================
@@ -1015,49 +991,59 @@ router.post("/auth/register", async (req: Request, res: Response) => {
       lastName = parts.length > 1 ? parts.slice(1).join(" ") : undefined;
     }
 
-    // Validate required fields
-    if (!password || password.length < 6) {
-      return res.status(400).json({ 
-        success: false, 
-        message: "كلمة المرور يجب أن تكون 6 أحرف على الأقل" 
+    // Validate required fields — السياسة الموحدة (8+ وقائمة الكلمات المسربة).
+    const registerPwCheck = validatePassword(password);
+    if (!registerPwCheck.ok) {
+      return res.status(400).json({
+        success: false,
+        message: registerPwCheck.message
       });
     }
 
     if (!email) {
-      return res.status(400).json({ 
-        success: false, 
-        message: "البريد الإلكتروني مطلوب" 
+      return res.status(400).json({
+        success: false,
+        message: "البريد الإلكتروني مطلوب"
       });
     }
 
-    // Check if email already exists
+    // Validate email format — the web register schema does this but v1 only
+    // checked presence, so any non-empty string became an account email (F-27).
+    if (!EMAIL_FORMAT_REGEX.test(String(email).trim())) {
+      return res.status(400).json({
+        success: false,
+        message: "صيغة البريد الإلكتروني غير صحيحة"
+      });
+    }
+
+    // Check if email already exists — case-insensitive to match the DB guard
+    // (users_email_lower_unique); a case-sensitive precheck let a mixed-case
+    // row slip through to a raw 500 on insert (F-11).
     const [existingEmail] = await db
       .select({ id: users.id })
       .from(users)
-      .where(eq(users.email, email.toLowerCase().trim()))
+      .where(sql`lower(${users.email}) = ${email.toLowerCase().trim()}`)
       .limit(1);
-    
+
     if (existingEmail) {
-      return res.status(409).json({ 
-        success: false, 
-        message: "البريد الإلكتروني مسجل مسبقاً" 
+      return res.status(409).json({
+        success: false,
+        message: "البريد الإلكتروني مسجل مسبقاً"
       });
     }
 
-    // Check if phone already exists (if provided)
+    // Check if phone already exists (if provided) — أي صيغة لنفس الرقم.
+    let normalizedRegisterPhone: string | null = null;
     if (phone) {
-      const [existingPhone] = await db
-        .select({ id: users.id })
-        .from(users)
-        .where(eq(users.phoneNumber, phone.trim()))
-        .limit(1);
-      
-      if (existingPhone) {
-        return res.status(409).json({ 
-          success: false, 
-          message: "رقم الجوال مسجل مسبقاً" 
+      const { assertPhoneAvailable } = await import("../services/phoneAuth");
+      const phoneCheck = await assertPhoneAvailable(phone);
+      if (!phoneCheck.ok) {
+        return res.status(409).json({
+          success: false,
+          message: phoneCheck.message,
         });
       }
+      normalizedRegisterPhone = phoneCheck.e164;
     }
 
     // Hash password
@@ -1071,7 +1057,7 @@ router.post("/auth/register", async (req: Request, res: Response) => {
       passwordHash,
       firstName: firstName?.trim(),
       lastName: lastName?.trim(),
-      phoneNumber: phone?.trim() || null,
+      phoneNumber: normalizedRegisterPhone,
       gender,
       city: city?.trim(),
       country: country || "SA",
@@ -1087,6 +1073,24 @@ router.post("/auth/register", async (req: Request, res: Response) => {
       emailVerified: false,
     });
 
+    // Seed default notification preferences, at parity with web register — v1
+    // previously skipped this so mobile signups had no defaults (F-27).
+    await db
+      .insert(userNotificationPrefs)
+      .values({
+        userId,
+        breaking: true,
+        interest: true,
+        likedUpdates: true,
+        mostRead: true,
+        webPush: false,
+        dailyDigest: false,
+      })
+      .catch((error) => {
+        console.error("[Mobile API] Error creating notification preferences:", error);
+        // Don't fail registration if notification prefs fail.
+      });
+
     // Generate verification token + send activation email (best-effort —
     // failures are logged but don't abort the flow now that status='active').
     const verificationToken = generateVerificationCode();
@@ -1094,7 +1098,7 @@ router.post("/auth/register", async (req: Request, res: Response) => {
 
     await db.insert(emailVerificationTokens).values({
       userId,
-      token: verificationToken,
+      token: hashMobileCode(userId, verificationToken), // hash at rest (F-13/F-14)
       expiresAt,
     });
 
@@ -1154,6 +1158,11 @@ router.post("/auth/register", async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error("[Mobile API] auth/register error:", error);
+    // Concurrent signup / legacy mixed-case row hits the unique index → 409 (F-11).
+    if (isUniqueViolation(error, 'users_email_unique') ||
+        isUniqueViolation(error, 'users_email_lower_unique')) {
+      return res.status(409).json({ success: false, message: "البريد الإلكتروني مسجل مسبقاً" });
+    }
     res.status(500).json({ success: false, message: "حدث خطأ في الخادم" });
   }
 });
@@ -1162,7 +1171,7 @@ router.post("/auth/register", async (req: Request, res: Response) => {
 // 2. تفعيل الحساب - Activate Account
 // POST /api/v1/auth/activate
 // ==========================================
-router.post("/auth/activate", async (req: Request, res: Response) => {
+router.post("/auth/activate", mobileActivationLimiter, async (req: Request, res: Response) => {
   try {
     const { userId, email, code } = req.body;
 
@@ -1177,29 +1186,36 @@ router.post("/auth/activate", async (req: Request, res: Response) => {
     let user;
     if (userId) {
       [user] = await db
-        .select({ id: users.id, status: users.status })
+        .select({ id: users.id, status: users.status, emailVerified: users.emailVerified })
         .from(users)
         .where(eq(users.id, userId))
         .limit(1);
     } else if (email) {
       [user] = await db
-        .select({ id: users.id, status: users.status })
+        .select({ id: users.id, status: users.status, emailVerified: users.emailVerified })
         .from(users)
         .where(eq(users.email, email.toLowerCase().trim()))
         .limit(1);
     }
 
+    // Unknown user → same generic error as a bad/expired code, so this doesn't
+    // become an account-existence oracle (F-19).
     if (!user) {
-      return res.status(404).json({ 
-        success: false, 
-        message: "المستخدم غير موجود" 
+      return res.status(400).json({
+        success: false,
+        message: "رمز التفعيل غير صحيح أو منتهي الصلاحية"
       });
     }
 
-    if (user.status === "active") {
-      return res.status(400).json({ 
-        success: false, 
-        message: "الحساب مفعل مسبقاً" 
+    // Accounts are auto-activated at registration (status="active"), so gating
+    // on status made this endpoint permanently reject everyone and no emailed
+    // code could ever be redeemed (F-08). The thing this verifies is the EMAIL,
+    // so gate on emailVerified instead — keeps auto-activation, makes the flag
+    // resolvable/consistent.
+    if (user.emailVerified) {
+      return res.status(400).json({
+        success: false,
+        message: "البريد الإلكتروني موثق مسبقاً"
       });
     }
 
@@ -1209,7 +1225,7 @@ router.post("/auth/activate", async (req: Request, res: Response) => {
       .from(emailVerificationTokens)
       .where(and(
         eq(emailVerificationTokens.userId, user.id),
-        eq(emailVerificationTokens.token, code),
+        eq(emailVerificationTokens.token, hashMobileCode(user.id, code)), // compare hash (F-13)
         eq(emailVerificationTokens.used, false),
         gt(emailVerificationTokens.expiresAt, new Date())
       ))
@@ -1251,7 +1267,7 @@ router.post("/auth/activate", async (req: Request, res: Response) => {
 // 3. إعادة إرسال رمز التفعيل - Resend Activation Code
 // POST /api/v1/auth/resend-activation
 // ==========================================
-router.post("/auth/resend-activation", async (req: Request, res: Response) => {
+router.post("/auth/resend-activation", mobileActivationLimiter, async (req: Request, res: Response) => {
   try {
     const { userId, email } = req.body;
 
@@ -1259,30 +1275,33 @@ router.post("/auth/resend-activation", async (req: Request, res: Response) => {
     let user;
     if (userId) {
       [user] = await db
-        .select({ id: users.id, status: users.status, email: users.email })
+        .select({ id: users.id, status: users.status, email: users.email, emailVerified: users.emailVerified })
         .from(users)
         .where(eq(users.id, userId))
         .limit(1);
     } else if (email) {
       [user] = await db
-        .select({ id: users.id, status: users.status, email: users.email })
+        .select({ id: users.id, status: users.status, email: users.email, emailVerified: users.emailVerified })
         .from(users)
         .where(eq(users.email, email.toLowerCase().trim()))
         .limit(1);
     }
 
+    // Generic response used for unknown-user and already-verified so this
+    // endpoint isn't an account-existence/state oracle (F-19).
+    const genericResendResponse = {
+      success: true,
+      message: "إن كان الحساب بحاجة إلى تفعيل فقد أُرسل رمز جديد إلى بريده.",
+    };
+
     if (!user) {
-      return res.status(404).json({ 
-        success: false, 
-        message: "المستخدم غير موجود" 
-      });
+      return res.json(genericResendResponse);
     }
 
-    if (user.status === "active") {
-      return res.status(400).json({ 
-        success: false, 
-        message: "الحساب مفعل مسبقاً" 
-      });
+    // Gate on emailVerified, not status — accounts are auto-activated so the
+    // status check made resend permanently reject everyone (F-08).
+    if (user.emailVerified) {
+      return res.json(genericResendResponse);
     }
 
     // Invalidate old tokens
@@ -1296,7 +1315,7 @@ router.post("/auth/resend-activation", async (req: Request, res: Response) => {
 
     await db.insert(emailVerificationTokens).values({
       userId: user.id,
-      token: verificationCode,
+      token: hashMobileCode(user.id, verificationCode), // hash at rest (F-13/F-14)
       expiresAt,
     });
 
@@ -1323,9 +1342,78 @@ router.post("/auth/resend-activation", async (req: Request, res: Response) => {
 
 // ==========================================
 // 4. تسجيل الدخول - Login
+// Bound brute-force on the credential + 2FA endpoints. Keyed by client IP
+// (Cloudflare-aware) — an anonymous mitigation until per-account lockout lands.
+const mobileAuthLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: cfKeyGenerator,
+  validate: cfValidate,
+  message: { success: false, message: "محاولات كثيرة جدًا. حاول لاحقًا." },
+});
+
+// Mint the real member session + canonical user payload. Shared by the no-2FA
+// login path and the post-2FA verify path so both return an identical shape
+// (the iOS APIUser decoder depends on it — see buildUserRolePayload).
+async function issueMemberSessionResponse(
+  req: Request,
+  res: Response,
+  user: typeof users.$inferSelect,
+  deviceInfo: unknown,
+) {
+  const sessionToken = generateSessionToken();
+  const tokenHash = crypto.createHash('sha256').update(sessionToken).digest('hex');
+  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
+
+  await db.insert(appMemberSessions).values({
+    memberId: user.id,
+    tokenHash,
+    deviceInfo: deviceInfo || null,
+    ipAddress: req.ip || null,
+    expiresAt,
+  });
+
+  await db.update(users)
+    .set({ lastLoginAt: new Date(), lastDeviceInfo: deviceInfo || null })
+    .where(eq(users.id, user.id));
+
+  console.log(`[Mobile API] User logged in: ${user.id}`);
+
+  const rolePayload = await buildUserRolePayload(user.id, user.role, user.jobTitle);
+
+  return res.json({
+    success: true,
+    message: "تم تسجيل الدخول بنجاح",
+    token: sessionToken,
+    expiresAt: expiresAt.toISOString(),
+    user: {
+      id: user.id,
+      email: user.email,
+      phone: user.phoneNumber,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      profileImageUrl: user.profileImageUrl,
+      gender: user.gender,
+      city: user.city,
+      country: user.country,
+      locale: user.locale,
+      emailVerified: user.emailVerified,
+      phoneVerified: user.phoneVerified,
+      bio: user.bio,
+      jobTitle: user.jobTitle,
+      department: user.department,
+      verificationBadge: user.verificationBadge,
+      hasPressCard: user.hasPressCard,
+      ...rolePayload,
+    },
+  });
+}
+
 // POST /api/v1/auth/login
 // ==========================================
-router.post("/auth/login", async (req: Request, res: Response) => {
+router.post("/auth/login", mobileAuthLimiter, async (req: Request, res: Response) => {
   try {
     const { 
       email, 
@@ -1357,15 +1445,19 @@ router.post("/auth/login", async (req: Request, res: Response) => {
         .where(eq(users.email, email.toLowerCase().trim()))
         .limit(1);
     } else {
+      // Phone rows are stored E.164 (+9665…). Normalize the client input
+      // (05…/9665…/00966…) before matching — a raw compare silently 401'd
+      // valid accounts (server-side residue of «فخ الصفر»; F-06).
+      const phoneE164 = normalizePhone(phone) || phone.trim();
       [user] = await db
         .select()
         .from(users)
-        .where(eq(users.phoneNumber, phone.trim()))
+        .where(eq(users.phoneNumber, phoneE164))
         .limit(1);
     }
 
     if (!user) {
-      return res.status(401).json({ 
+      return res.status(401).json({
         success: false, 
         message: "بيانات الدخول غير صحيحة" 
       });
@@ -1416,73 +1508,113 @@ router.post("/auth/login", async (req: Request, res: Response) => {
       });
     }
 
+    // Per-account lockout on password guessing (audit #4) — bounds brute-force
+    // per ACCOUNT even if the IP rate-limiter is bypassed by spoofing client-IP
+    // headers against a directly-reachable origin.
+    if (await isLockedOut(`login:${user.id}`, 10)) {
+      return res.status(429).json({ success: false, message: "محاولات كثيرة جدًا. حاول لاحقًا." });
+    }
+
     const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
     if (!isPasswordValid) {
-      return res.status(401).json({ 
-        success: false, 
-        message: "بيانات الدخول غير صحيحة" 
+      await recordFailure(`login:${user.id}`);
+      return res.status(401).json({
+        success: false,
+        message: "بيانات الدخول غير صحيحة"
+      });
+    }
+    await clearFailures(`login:${user.id}`);
+
+    // 2FA gate — a valid password ALONE must not mint a session when the account
+    // has TOTP enabled (security audit S-01: the mobile flow skipped this check
+    // entirely, so a leaked password bypassed 2FA on editor/admin accounts).
+    // Hand back a short-lived, single-use challenge; the client completes login
+    // via POST /auth/verify-2fa with the TOTP or a backup code.
+    if (user.twoFactorEnabled) {
+      const challengeToken = await createTwoFactorChallenge(user.id);
+      return res.status(200).json({
+        success: false,
+        requires2FA: true,
+        challengeToken,
+        message: "يرجى إدخال رمز التحقق بخطوتين",
       });
     }
 
-    // Generate session token
-    const sessionToken = generateSessionToken();
-    const tokenHash = crypto.createHash('sha256').update(sessionToken).digest('hex');
-    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
-
-    // Create session
-    await db.insert(appMemberSessions).values({
-      memberId: user.id,
-      tokenHash,
-      deviceInfo: deviceInfo || null,
-      ipAddress: req.ip || null,
-      expiresAt,
-    });
-
-    // Update last login
-    await db.update(users)
-      .set({ 
-        lastLoginAt: new Date(),
-        lastDeviceInfo: deviceInfo || null,
-      })
-      .where(eq(users.id, user.id));
-
-    console.log(`[Mobile API] User logged in: ${user.id}`);
-
-    // Surface the full role/roles/jobTitle bundle on login (previously
-    // omitted) so the iOS APIUser decoder gets the canonical role on
-    // first paint — no more "قارئ" flicker / stuck-at-reader when the
-    // follow-up /members/profile call fails or is slow. See
-    // buildUserRolePayload() comment for the full rationale.
-    const rolePayload = await buildUserRolePayload(user.id, user.role, user.jobTitle);
-
-    res.json({
-      success: true,
-      message: "تم تسجيل الدخول بنجاح",
-      token: sessionToken,
-      expiresAt: expiresAt.toISOString(),
-      user: {
-        id: user.id,
-        email: user.email,
-        phone: user.phoneNumber,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        profileImageUrl: user.profileImageUrl,
-        gender: user.gender,
-        city: user.city,
-        country: user.country,
-        locale: user.locale,
-        emailVerified: user.emailVerified,
-        phoneVerified: user.phoneVerified,
-        bio: user.bio,
-        jobTitle: user.jobTitle,
-        department: user.department,
-        verificationBadge: user.verificationBadge,
-        hasPressCard: user.hasPressCard,
-        ...rolePayload,
-      },
-    });
+    return issueMemberSessionResponse(req, res, user, deviceInfo);
   } catch (error) {
     console.error("[Mobile API] auth/login error:", error);
+    res.status(500).json({ success: false, message: "حدث خطأ في الخادم" });
+  }
+});
+
+// ==========================================
+// POST /api/v1/auth/verify-2fa
+// Completes a login that returned requires2FA: exchanges the challenge token +
+// a valid TOTP / backup code for a real member session. Mirrors the web
+// /api/2fa/verify logic but for the token-based mobile flow.
+// ==========================================
+router.post("/auth/verify-2fa", mobileAuthLimiter, async (req: Request, res: Response) => {
+  try {
+    const { challengeToken, token, backupCode, deviceInfo } = req.body ?? {};
+
+    if (!challengeToken) {
+      return res.status(400).json({ success: false, message: "رمز الجلسة مطلوب" });
+    }
+    if (!token && !backupCode) {
+      return res.status(400).json({ success: false, message: "رمز التحقق مطلوب" });
+    }
+
+    // Peek (do NOT consume yet) so a mistyped code can be retried without being
+    // forced back to the password step — the mobileAuthLimiter + 5-min TTL bound
+    // brute-force. The challenge is consumed only after a successful check.
+    const userId = await resolveTwoFactorChallenge(challengeToken);
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "انتهت صلاحية جلسة التحقق. يرجى تسجيل الدخول من جديد",
+      });
+    }
+
+    const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+    if (!user || !user.twoFactorEnabled) {
+      return res.status(401).json({ success: false, message: "تعذّر التحقق" });
+    }
+
+    // Per-account lockout (audit #4): bound online TOTP/backup-code guessing per
+    // account, not just per IP — an attacker holding the password can rotate IPs.
+    if (await isLockedOut(`2fa:${userId}`, 10)) {
+      return res.status(429).json({ success: false, message: "محاولات كثيرة جدًا. حاول لاحقًا." });
+    }
+
+    let isValid = false;
+    let remainingBackupCodes: string[] | undefined;
+    if (backupCode) {
+      const result = verifyBackupCode(user.twoFactorBackupCodes || [], backupCode);
+      isValid = result.valid;
+      remainingBackupCodes = result.remainingCodes;
+    } else {
+      isValid = verifyToken(user.twoFactorSecret || "", token);
+    }
+
+    if (!isValid) {
+      // Wrong code: keep the challenge alive for a retry, but count the failure.
+      await recordFailure(`2fa:${userId}`);
+      return res.status(401).json({ success: false, message: "رمز التحقق غير صحيح" });
+    }
+
+    // Success — burn the challenge (single-use), clear the failure counter, and
+    // for a backup code persist the remaining set so it can't be reused.
+    await consumeTwoFactorChallenge(challengeToken);
+    await clearFailures(`2fa:${userId}`);
+    if (backupCode && remainingBackupCodes) {
+      await db.update(users)
+        .set({ twoFactorBackupCodes: remainingBackupCodes })
+        .where(eq(users.id, user.id));
+    }
+
+    return issueMemberSessionResponse(req, res, user, deviceInfo);
+  } catch (error) {
+    console.error("[Mobile API] auth/verify-2fa error:", error);
     res.status(500).json({ success: false, message: "حدث خطأ في الخادم" });
   }
 });
@@ -1555,7 +1687,7 @@ router.post("/auth/logout-all", async (req: Request, res: Response) => {
 // 7. نسيت كلمة المرور - Forgot Password
 // POST /api/v1/auth/forgot-password
 // ==========================================
-router.post("/auth/forgot-password", async (req: Request, res: Response) => {
+router.post("/auth/forgot-password", mobileAuthLimiter, async (req: Request, res: Response) => {
   try {
     const { email, phone } = req.body;
 
@@ -1570,24 +1702,48 @@ router.post("/auth/forgot-password", async (req: Request, res: Response) => {
     let user;
     if (email) {
       [user] = await db
-        .select({ id: users.id, email: users.email })
+        .select({
+          id: users.id,
+          email: users.email,
+          emailVerified: users.emailVerified,
+          authProvider: users.authProvider,
+        })
         .from(users)
-        .where(eq(users.email, email.toLowerCase().trim()))
+        .where(sql`lower(${users.email}) = ${email.toLowerCase().trim()}`)
         .limit(1);
     } else {
+      // Normalize to E.164 before matching stored phone rows (F-06).
+      const phoneE164 = normalizePhone(phone) || phone.trim();
       [user] = await db
-        .select({ id: users.id, email: users.email })
+        .select({
+          id: users.id,
+          email: users.email,
+          emailVerified: users.emailVerified,
+          authProvider: users.authProvider,
+        })
         .from(users)
-        .where(eq(users.phoneNumber, phone.trim()))
+        .where(eq(users.phoneNumber, phoneE164))
         .limit(1);
     }
 
-    // Always return success to prevent enumeration attacks
-    if (!user) {
-      return res.json({ 
-        success: true, 
-        message: "إذا كان الحساب موجوداً، سيتم إرسال رمز استعادة كلمة المرور" 
-      });
+    // استجابة واحدة لكل الفروع — لا كشف لوجود الحساب ولا لحالة بريده.
+    const genericResponse = {
+      success: true,
+      message: "إذا كان الحساب موجوداً، سيتم إرسال رمز استعادة كلمة المرور",
+      emailSent: true,
+    };
+
+    // لا إرسال إلى بريد اصطناعي/مفقود، ولا إلى بريد لم تُثبت ملكيته —
+    // وإلا استطاع مالك صندوق البريد الاستيلاء على حساب جوال أدخل بريده خطأً.
+    // حسابات authProvider=local بريدها هو هويتها التاريخية فتبقى قابلة للاستعادة.
+    const { hasRealEmail } = await import("@shared/authEmail");
+    const emailEligible =
+      user &&
+      hasRealEmail(user.email) &&
+      (user.emailVerified || user.authProvider === "local");
+
+    if (!user || !emailEligible) {
+      return res.json(genericResponse);
     }
 
     // Generate reset token
@@ -1602,25 +1758,24 @@ router.post("/auth/forgot-password", async (req: Request, res: Response) => {
         eq(passwordResetTokens.used, false)
       ));
 
-    // Store reset token
+    // Store reset token (hashed at rest, per-user scoped — F-13/F-14)
     await db.insert(passwordResetTokens).values({
       userId: user.id,
-      token: resetToken,
+      token: hashMobileCode(user.id, resetToken),
       expiresAt,
     });
 
+    // رابط ويب مرافق للرمز: بعض الإصدارات المنتشرة (أندرويد قبل شاشة إدخال
+    // الرمز) لا تملك مكانًا لإدخاله، فالرابط يفتح صفحة /reset-password في
+    // المتصفح ويكمل المستخدم من هناك.
+    const resetLink = await createWebResetLink(user.id);
+
     // Send password reset email
-    const emailSent = await sendPasswordResetEmail(user.email!, resetToken);
+    const emailSent = await sendPasswordResetCodeEmail(user.email!, resetToken, resetLink);
 
     console.log(`[Mobile API] Password reset for ${user.id}, email sent: ${emailSent}`);
 
-    res.json({ 
-      success: true, 
-      message: emailSent 
-        ? "تم إرسال رمز استعادة كلمة المرور إلى بريدك الإلكتروني"
-        : "تم إنشاء رمز استعادة كلمة المرور",
-      emailSent,
-    });
+    res.json(genericResponse);
   } catch (error) {
     console.error("[Mobile API] auth/forgot-password error:", error);
     res.status(500).json({ success: false, message: "حدث خطأ في الخادم" });
@@ -1631,7 +1786,7 @@ router.post("/auth/forgot-password", async (req: Request, res: Response) => {
 // 8. إعادة تعيين كلمة المرور - Reset Password
 // POST /api/v1/auth/reset-password
 // ==========================================
-router.post("/auth/reset-password", async (req: Request, res: Response) => {
+router.post("/auth/reset-password", mobileAuthLimiter, async (req: Request, res: Response) => {
   try {
     const { userId, email, phone, code, newPassword } = req.body;
 
@@ -1642,11 +1797,11 @@ router.post("/auth/reset-password", async (req: Request, res: Response) => {
       });
     }
 
-    if (!newPassword || newPassword.length < 6) {
-      return res.status(400).json({ 
-        success: false, 
-        message: "كلمة المرور الجديدة يجب أن تكون 6 أحرف على الأقل" 
-      });
+    // سياسة كلمة المرور الموحدة (server/utils/passwordPolicy) — كان هنا فحص
+    // 6 أحرف يدوي يتجاوز الحد الأدنى المعتمد (8) وقائمة الكلمات المسربة.
+    const resetPwCheck = validatePassword(newPassword);
+    if (!resetPwCheck.ok) {
+      return res.status(400).json({ success: false, message: resetPwCheck.message });
     }
 
     // Find user
@@ -1661,21 +1816,30 @@ router.post("/auth/reset-password", async (req: Request, res: Response) => {
       [user] = await db
         .select({ id: users.id })
         .from(users)
-        .where(eq(users.email, email.toLowerCase().trim()))
+        .where(sql`lower(${users.email}) = ${email.toLowerCase().trim()}`)
         .limit(1);
     } else if (phone) {
+      // Normalize to E.164 before matching stored phone rows (F-06).
+      const phoneE164 = normalizePhone(phone) || phone.trim();
       [user] = await db
         .select({ id: users.id })
         .from(users)
-        .where(eq(users.phoneNumber, phone.trim()))
+        .where(eq(users.phoneNumber, phoneE164))
         .limit(1);
     }
 
     if (!user) {
-      return res.status(404).json({ 
-        success: false, 
-        message: "المستخدم غير موجود" 
+      // نفس رسالة الرمز الخاطئ — 404 «المستخدم غير موجود» كانت كاشفًا لوجود الحسابات.
+      return res.status(400).json({
+        success: false,
+        message: "رمز الاستعادة غير صحيح أو منتهي الصلاحية"
       });
+    }
+
+    // Per-account lockout on reset-code guessing — bounds the 6-digit space per
+    // account regardless of source IP (audit #4).
+    if (await isLockedOut(`reset:${user.id}`, 10)) {
+      return res.status(429).json({ success: false, message: "محاولات كثيرة جدًا. حاول لاحقًا." });
     }
 
     // Verify reset token
@@ -1684,16 +1848,17 @@ router.post("/auth/reset-password", async (req: Request, res: Response) => {
       .from(passwordResetTokens)
       .where(and(
         eq(passwordResetTokens.userId, user.id),
-        eq(passwordResetTokens.token, code),
+        eq(passwordResetTokens.token, hashMobileCode(user.id, code)), // compare hash (F-13)
         eq(passwordResetTokens.used, false),
         gt(passwordResetTokens.expiresAt, new Date())
       ))
       .limit(1);
 
     if (!resetRecord) {
-      return res.status(400).json({ 
-        success: false, 
-        message: "رمز الاستعادة غير صحيح أو منتهي الصلاحية" 
+      await recordFailure(`reset:${user.id}`);
+      return res.status(400).json({
+        success: false,
+        message: "رمز الاستعادة غير صحيح أو منتهي الصلاحية"
       });
     }
 
@@ -1703,15 +1868,19 @@ router.post("/auth/reset-password", async (req: Request, res: Response) => {
       .set({ passwordHash })
       .where(eq(users.id, user.id));
 
-    // Mark token as used
+    // إبطال كل رموز/روابط الاستعادة غير المستهلكة للمستخدم — البريد الواحد
+    // يحمل رمزًا ورابطًا معًا؛ استهلاك أحدهما يجب أن يُبطل الآخر.
     await db.update(passwordResetTokens)
       .set({ used: true })
-      .where(eq(passwordResetTokens.id, resetRecord.id));
+      .where(and(
+        eq(passwordResetTokens.userId, user.id),
+        eq(passwordResetTokens.used, false)
+      ));
 
-    // Invalidate all sessions
-    await db.update(appMemberSessions)
-      .set({ isActive: false })
-      .where(eq(appMemberSessions.memberId, user.id));
+    // Kill ALL sessions (web + mobile) so a stolen session can't survive the
+    // reset — previously only mobile appMemberSessions were invalidated (audit #8).
+    await invalidateAllUserSessions(user.id);
+    await clearFailures(`reset:${user.id}`);
 
     console.log(`[Mobile API] Password reset for: ${user.id}`);
 
@@ -1942,10 +2111,11 @@ router.put("/members/profile", async (req: Request, res: Response) => {
       if (!currentIsSynthetic && currentRow?.email?.trim()) {
         // Already has a real email — ignore silently (same spirit as name lock).
       } else if (nextEmail !== currentRow?.email?.trim().toLowerCase()) {
+        // فرادة غير حساسة لحالة الأحرف — تطابق فهرس users_email_lower_unique.
         const [taken] = await db
           .select({ id: users.id })
           .from(users)
-          .where(eq(users.email, nextEmail))
+          .where(sql`lower(${users.email}) = ${nextEmail}`)
           .limit(1);
         if (taken && taken.id !== session.userId) {
           return res.status(409).json({
@@ -1966,6 +2136,15 @@ router.put("/members/profile", async (req: Request, res: Response) => {
 
     if (Object.keys(updates).length > 0) {
       await db.update(users).set(updates).where(eq(users.id, session.userId));
+    }
+
+    // بريد جديد (بديل الاصطناعي/المفقود) → أرسل رابط التحقق فورًا؛ يبقى
+    // unverified حتى ينجح الرابط. الإرسال لا يعطّل حفظ الملف.
+    if (typeof updates.email === "string" && updates.email) {
+      const { sendVerificationEmail } = await import("../services/email");
+      sendVerificationEmail(session.userId, updates.email).catch((err) =>
+        console.error("[Mobile API] profile email verification send failed:", err),
+      );
     }
 
     // Return the freshly-updated user row so the iOS APIClient can replace
@@ -2196,10 +2375,11 @@ router.post("/members/change-password", async (req: Request, res: Response) => {
       });
     }
 
-    if (newPassword.length < 6) {
-      return res.status(400).json({ 
-        success: false, 
-        message: "كلمة المرور الجديدة يجب أن تكون 6 أحرف على الأقل" 
+    const changePwCheck = validatePassword(newPassword);
+    if (!changePwCheck.ok) {
+      return res.status(400).json({
+        success: false,
+        message: changePwCheck.message
       });
     }
 
@@ -2232,9 +2412,18 @@ router.post("/members/change-password", async (req: Request, res: Response) => {
       .set({ passwordHash })
       .where(eq(users.id, session.userId));
 
-    res.json({ 
-      success: true, 
-      message: "تم تغيير كلمة المرور بنجاح" 
+    // Evict every OTHER session on a password change (audit #8), keeping the
+    // caller's current bearer token so this device stays signed in.
+    const authHeader = req.headers.authorization || "";
+    const bearerToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
+    const currentTokenHash = bearerToken
+      ? crypto.createHash("sha256").update(bearerToken).digest("hex")
+      : undefined;
+    await invalidateAllUserSessions(session.userId, { exceptMobileTokenHash: currentTokenHash });
+
+    res.json({
+      success: true,
+      message: "تم تغيير كلمة المرور بنجاح"
     });
   } catch (error) {
     console.error("[Mobile API] members/change-password error:", error);
@@ -2335,36 +2524,48 @@ async function updateMemberInterests(req: Request, res: Response) {
     }
 
     // Support both interestIds and categoryIds for backwards compatibility
-    const interestIds = req.body.interestIds || req.body.categoryIds;
+    const rawIds = req.body.interestIds || req.body.categoryIds;
 
-    if (!Array.isArray(interestIds)) {
-      return res.status(400).json({ 
-        success: false, 
-        message: "قائمة الاهتمامات مطلوبة (interestIds أو categoryIds)" 
+    if (!Array.isArray(rawIds)) {
+      return res.status(400).json({
+        success: false,
+        message: "قائمة الاهتمامات مطلوبة (interestIds أو categoryIds)"
       });
     }
 
-    // Delete existing interests
-    await db.delete(userInterests)
-      .where(eq(userInterests.userId, session.userId));
+    // Dedupe + keep valid strings, then intersect with the real category
+    // catalog. Previously unchecked IDs hit a FK violation AFTER the delete had
+    // run — wiping the member's interests (F-12).
+    const requested = Array.from(
+      new Set(rawIds.filter((id: unknown): id is string => typeof id === "string" && id.length > 0)),
+    );
+    const validRows = requested.length
+      ? await db.select({ id: categories.id }).from(categories).where(inArray(categories.id, requested))
+      : [];
+    const validIds = validRows.map((r) => r.id);
 
-    // Add new interests
-    if (interestIds.length > 0) {
-      const interestValues = interestIds.map((categoryId: string, index: number) => ({
-        userId: session.userId,
-        categoryId,
-        weight: 1.0 - (index * 0.1), // Higher weight for earlier items
-      }));
+    // Replace-all inside a transaction so a partial failure can't leave zero
+    // interests. Weight floored at 0.1 so long lists don't go negative (the
+    // GET orders by desc(weight)) — F-12.
+    await db.transaction(async (tx) => {
+      await tx.delete(userInterests).where(eq(userInterests.userId, session.userId));
+      if (validIds.length > 0) {
+        await tx.insert(userInterests).values(
+          validIds.map((categoryId, index) => ({
+            userId: session.userId,
+            categoryId,
+            weight: Math.max(0.1, 1.0 - index * 0.1),
+          })),
+        );
+      }
+    });
 
-      await db.insert(userInterests).values(interestValues);
-    }
+    console.log(`[Mobile API] Updated interests for ${session.userId}: ${validIds.length} interests`);
 
-    console.log(`[Mobile API] Updated interests for ${session.userId}: ${interestIds.length} interests`);
-
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       message: "تم تحديث الاهتمامات بنجاح",
-      count: interestIds.length
+      count: validIds.length
     });
   } catch (error) {
     console.error("[Mobile API] members/interests update error:", error);
@@ -2637,6 +2838,10 @@ router.delete("/members/account", async (req: Request, res: Response) => {
       WHERE id = ${userId}
     `);
 
+    // Also kill web (Passport) sessions — the SQL above only cleared
+    // app_member_sessions, leaving any web session alive (audit #8).
+    await invalidateAllUserSessions(userId);
+
     console.log(`[Mobile API] Account hard-deleted (anonymised + cascaded): ${userId}`);
 
     // Best-effort: clean up the Cloudflare Images avatar so the file
@@ -2841,13 +3046,17 @@ function formatArticleForMobile(row: any, baseUrl: string) {
     article_url: `${baseUrl}/article/${article.slug}`,
     is_breaking: article.newsType === "breaking",
     is_featured: article.isFeatured || false,
+    // شارة «قراءة» التحريرية: كانت في الإسقاط (articleCardSelect) والصف الكامل
+    // لكن المُسلسِل يُسقطها، فلا يعرف iOS/Android الشارة التي يعرضها الويب
+    // (بلاغ المالك 2026-09-13). العميلان يفكّان is_reading/isReading معًا.
+    is_reading: article.isReading === true,
     reading_minutes: estimateReadingMinutes(article.content || ""),
     views_count: article.viewsCount || article.views || 0,
     shares_count: article.sharesCount || article.shares || 0,
   };
 }
 
-import { memoryCache as sharedMemoryCache } from "../memoryCache";
+import { memoryCache as sharedMemoryCache, withSWR, CACHE_TTL } from "../memoryCache";
 
 function getCached(key: string) {
   return sharedMemoryCache.get(key);
@@ -2875,11 +3084,11 @@ function wantsFreshData(req: Request): boolean {
 }
 
 // GET /api/v1/articles (list)
-router.get("/articles", async (req: Request, res: Response) => {
+router.get("/articles", publicListLimiter, async (req: Request, res: Response) => {
   try {
-    const limit = Math.min(parseInt(req.query.limit as string) || 20, 50);
-    const page = parseInt(req.query.page as string) || 0;
-    const offset = page > 0 ? (page - 1) * limit : (parseInt(req.query.offset as string) || 0);
+    const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path, ip: cfKeyGenerator(req) }, res, { defaultLimit: 20, maxLimit: 50, allowPage: true }, (m) => log.warn(m));
+    if (!pg) return;
+    const { limit, offset } = pg;
     const section = req.query.section as string | undefined;
     const breaking = req.query.breaking as string | undefined;
     const featured = req.query.featured as string | undefined;
@@ -2911,14 +3120,40 @@ router.get("/articles", async (req: Request, res: Response) => {
     }
     if (breaking === "true") conditions.push(eq(articles.newsType, "breaking"));
     if (featured === "true") conditions.push(eq(articles.isFeatured, true));
-    if (q) conditions.push(ilike(articles.title, `%${q}%`));
 
-    const [countResult] = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(articles)
-      .where(and(...conditions));
+    // بحث العنوان (q): كان `ilike + ORDER BY published_at + LIMIT` في استعلام
+    // واحد — المخطط يمشي على فهرس التاريخ ويرشّح صفًا صفًا، فتستغرق الكلمات
+    // النادرة ثواني (متوسط مقيس 5.1s). الحل: صفّ المرشحين أولًا بلا ترتيب
+    // (يستعمل فهرس trgm عبر Bitmap Scan)، ثم رتّب الدفعة الصغيرة بالتاريخ.
+    // سقف 1000 مرشح يكفي أعمق صفحات الموبايل (50 × 20 صفحة).
+    const SEARCH_CANDIDATE_CAP = 1000;
+    let searchIds: string[] | null = null;
+    if (q) {
+      const candidates = await db
+        .select({ id: articles.id })
+        .from(articles)
+        .where(and(...conditions, ilike(articles.title, `%${q}%`)))
+        .limit(SEARCH_CANDIDATE_CAP);
+      searchIds = candidates.map((c) => c.id);
+      if (searchIds.length === 0) {
+        res.json({ articles: [], total: 0, limit, offset, hasMore: false });
+        return;
+      }
+      conditions.push(inArray(articles.id, searchIds));
+    }
 
-    const total = Number(countResult?.count || 0);
+    // العدّاد: عند البحث نعرف العدد من قائمة المرشحين نفسها (بسقفها) بدل
+    // count(*) ثانٍ كان يكلف 2.7s لكل كتابة حرف في حقل البحث.
+    let total: number;
+    if (searchIds) {
+      total = searchIds.length;
+    } else {
+      const [countResult] = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(articles)
+        .where(and(...conditions));
+      total = Number(countResult?.count || 0);
+    }
 
     const results = await db
       .select({
@@ -2939,7 +3174,7 @@ router.get("/articles", async (req: Request, res: Response) => {
       .leftJoin(reporterUsers, eq(articles.reporterId, reporterUsers.id))
       .where(and(...conditions))
       .orderBy(desc(articles.publishedAt))
-      .limit(limit)
+      .limit(boundedLimit(limit))
       .offset(offset);
 
     res.json({
@@ -2966,11 +3201,11 @@ router.get("/articles", async (req: Request, res: Response) => {
 // `/articles` endpoint (decoded by iOS `APIPaginatedList<APIArticle>` via the
 // `articles` key). The filter mirrors the web `/api/news/paginated`: published,
 // shown on homepage, excluding opinion pieces and AI-sourced items.
-router.get("/news/paginated", async (req: Request, res: Response) => {
+router.get("/news/paginated", publicListLimiter, async (req: Request, res: Response) => {
   try {
-    const limit = Math.min(parseInt(req.query.limit as string) || 20, 50);
-    const page = parseInt(req.query.page as string) || 0;
-    const offset = page > 0 ? (page - 1) * limit : (parseInt(req.query.offset as string) || 0);
+    const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path, ip: cfKeyGenerator(req) }, res, { defaultLimit: 20, maxLimit: 50, allowPage: true }, (m) => log.warn(m));
+    if (!pg) return;
+    const { limit, offset } = pg;
 
     const conditions = [
       eq(articles.status, "published"),
@@ -2979,12 +3214,21 @@ router.get("/news/paginated", async (req: Request, res: Response) => {
       or(isNull(articles.source), ne(articles.source, "ai")),
     ];
 
-    const [countResult] = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(articles)
-      .where(and(...conditions));
-
-    const total = Number(countResult?.count || 0);
+    // العدّاد الإجمالي ثابت عمليًا بين النشرات — كان يُنفَّذ count(*) على كل
+    // طلب من كل جهاز iOS (~370 ألف مرة في 6 أيام، تدقيق 2026-07-25). نفس
+    // مفتاح SWR المستخدم في ويب /api/news/paginated فيتشاركان النتيجة.
+    const total = await withSWR(
+      "news-paginated-total",
+      CACHE_TTL.SHORT,
+      CACHE_TTL.SHORT * 2,
+      async () => {
+        const [countResult] = await db
+          .select({ count: sql<number>`count(*)::int` })
+          .from(articles)
+          .where(and(...conditions));
+        return Number(countResult?.count || 0);
+      },
+    );
 
     const results = await db
       .select({
@@ -3005,7 +3249,7 @@ router.get("/news/paginated", async (req: Request, res: Response) => {
       .leftJoin(reporterUsers, eq(articles.reporterId, reporterUsers.id))
       .where(and(...conditions))
       .orderBy(desc(articles.publishedAt))
-      .limit(limit)
+      .limit(boundedLimit(limit))
       .offset(offset);
 
     res.json({
@@ -3219,9 +3463,11 @@ router.get("/sections", async (req: Request, res: Response) => {
 });
 
 // GET /api/v1/breaking
-router.get("/breaking", async (req: Request, res: Response) => {
+router.get("/breaking", publicListLimiter, async (req: Request, res: Response) => {
   try {
-    const limit = Math.min(parseInt(req.query.limit as string) || 10, 30);
+    const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path, ip: cfKeyGenerator(req) }, res, { defaultLimit: 10, maxLimit: 30 }, (m) => log.warn(m));
+    if (!pg) return;
+    const { limit } = pg;
     const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
     const results = await db
@@ -3243,7 +3489,7 @@ router.get("/breaking", async (req: Request, res: Response) => {
         )
       )
       .orderBy(desc(articles.publishedAt))
-      .limit(limit);
+      .limit(boundedLimit(limit));
 
     res.json({
       articles: results.map((r) => formatArticleForMobile(r, BASE_URL)),
@@ -3258,11 +3504,12 @@ router.get("/breaking", async (req: Request, res: Response) => {
 });
 
 // GET /api/v1/search
-router.get("/search", async (req: Request, res: Response) => {
+router.get("/search", publicListLimiter, async (req: Request, res: Response) => {
   try {
     const q = (req.query.q as string) || "";
-    const limit = Math.min(parseInt(req.query.limit as string) || 20, 50);
-    const offset = parseInt(req.query.offset as string) || 0;
+    const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path, ip: cfKeyGenerator(req) }, res, { defaultLimit: 20, maxLimit: 50 }, (m) => log.warn(m));
+    if (!pg) return;
+    const { limit, offset } = pg;
 
     if (!q.trim()) {
       return res.json({ query: q, articles: [], total: 0, hasMore: false });
@@ -3293,7 +3540,7 @@ router.get("/search", async (req: Request, res: Response) => {
       .leftJoin(reporterUsers, eq(articles.reporterId, reporterUsers.id))
       .where(and(...conditions))
       .orderBy(desc(articles.publishedAt))
-      .limit(limit)
+      .limit(boundedLimit(limit))
       .offset(offset);
 
     res.json({
@@ -3420,9 +3667,9 @@ router.get("/authors/by-name", async (req: Request, res: Response) => {
       });
     }
 
-    const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 30;
-    const offset = (page - 1) * limit;
+    const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path, ip: cfKeyGenerator(req) }, res, { defaultLimit: 30, maxLimit: 100, allowPage: true, defaultPage: 1 }, (m) => log.warn(m));
+    if (!pg) return;
+    const { limit, offset, page } = pg;
 
     const cacheKey = `mobile:author:${rawName.toLowerCase()}:p${page}:l${limit}`;
     const cached = getCached(cacheKey);
@@ -3507,7 +3754,7 @@ router.get("/authors/by-name", async (req: Request, res: Response) => {
           )
         )
         .orderBy(desc(articles.publishedAt))
-        .limit(limit)
+        .limit(boundedLimit(limit))
         .offset(offset),
     ]);
 
@@ -3617,11 +3864,13 @@ function formatGulfEvent(e: any) {
 }
 
 // GET /api/v1/live - Full live coverage feed with timeline, filters, and stats
-router.get("/live", async (req: Request, res: Response) => {
+router.get("/live", publicListLimiter, async (req: Request, res: Response) => {
   try {
-    const { country, limit: qLimit, offset: qOffset, since } = req.query;
-    const lim = Math.min(parseInt(qLimit as string) || 50, 200);
-    const off = parseInt(qOffset as string) || 0;
+    const { country, since } = req.query;
+    const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path, ip: cfKeyGenerator(req) }, res, { defaultLimit: 50, maxLimit: 200 }, (m) => log.warn(m));
+    if (!pg) return;
+    const lim = pg.limit;
+    const off = pg.offset;
 
     const conditions = [eq(gulfEvents.status, "published")];
     if (country && country !== "all") {
@@ -3639,7 +3888,7 @@ router.get("/live", async (req: Request, res: Response) => {
         .from(gulfEvents)
         .where(and(...conditions))
         .orderBy(desc(gulfEvents.isPinned), desc(gulfEvents.publishedAt))
-        .limit(lim)
+        .limit(boundedLimit(lim))
         .offset(off),
       db.select({ count: sql<number>`count(*)` })
         .from(gulfEvents)
@@ -3904,8 +4153,8 @@ router.get("/homepage", async (req: Request, res: Response) => {
         )
       )
       .orderBy(
-        desc(sql`GREATEST(COALESCE(${articles.displayOrder}, 0), EXTRACT(EPOCH FROM ${articles.publishedAt}))`),
-        desc(articles.publishedAt)
+        desc(sql`GREATEST(COALESCE(${articles.displayOrder}, 0), EXTRACT(EPOCH FROM COALESCE(${articles.resurfacedAt}, ${articles.publishedAt})))`),
+        desc(sql`COALESCE(${articles.resurfacedAt}, ${articles.publishedAt})`)
       )
       .limit(5);
 
@@ -3926,7 +4175,8 @@ router.get("/homepage", async (req: Request, res: Response) => {
           eq(articles.hideFromHomepage, false)
         )
       )
-      .orderBy(desc(articles.publishedAt))
+      // «إنعاش»: صدارة الموجز بوقت الإنعاش دون تغيير تاريخ النشر الظاهر
+      .orderBy(desc(sql`COALESCE(${articles.resurfacedAt}, ${articles.publishedAt})`))
       .limit(20);
 
     const breakingArticles = await db
@@ -3947,7 +4197,7 @@ router.get("/homepage", async (req: Request, res: Response) => {
           gte(articles.publishedAt, new Date(Date.now() - 24 * 60 * 60 * 1000))
         )
       )
-      .orderBy(desc(articles.publishedAt))
+      .orderBy(desc(sql`COALESCE(${articles.resurfacedAt}, ${articles.publishedAt})`))
       .limit(10);
 
     const result = {
@@ -4115,6 +4365,7 @@ router.post("/articles/:slug/comments", async (req: Request, res: Response) => {
           userId: session.userId,
           commentId: created.id,
           reason: `كلمات محظورة: ${rejectingWords.join(", ")}`,
+          automated: true,
         });
       }
     }
@@ -4386,27 +4637,22 @@ router.post("/newsletter/subscribe", async (req: Request, res: Response) => {
 // GET /api/v1/newsletter/status?email=...
 router.get("/newsletter/status", async (req: Request, res: Response) => {
   try {
-    const { newsletterSubscriptions } = await import("@shared/schema");
-    const email = typeof req.query.email === "string" ? req.query.email.trim() : "";
-    if (!email || !email.includes("@")) {
-      return res.status(400).json({ success: false, message: "البريد الإلكتروني مطلوب" });
+    // Answering "is <email> subscribed?" for any address is a subscriber
+    // enumeration oracle over the whole reader base — same ownership proof as
+    // unsubscribe.
+    const sub = await resolveNewsletterSubscription(req);
+    if (!sub) {
+      return res.status(403).json({
+        success: false,
+        message: "غير مصرح بالاطلاع على حالة هذا الاشتراك",
+      });
     }
-
-    const [sub] = await db
-      .select({
-        email: newsletterSubscriptions.email,
-        status: newsletterSubscriptions.status,
-        language: newsletterSubscriptions.language,
-      })
-      .from(newsletterSubscriptions)
-      .where(eq(newsletterSubscriptions.email, email))
-      .limit(1);
 
     res.json({
       success: true,
-      subscribed: sub?.status === "active",
-      status: sub?.status || "none",
-      language: sub?.language || null,
+      subscribed: sub.status === "active",
+      status: sub.status || "none",
+      language: sub.language || null,
     });
   } catch (error) {
     console.error("[Mobile API] /newsletter/status error:", error);
@@ -4418,22 +4664,20 @@ router.get("/newsletter/status", async (req: Request, res: Response) => {
 router.post("/newsletter/unsubscribe", async (req: Request, res: Response) => {
   try {
     const { newsletterSubscriptions } = await import("@shared/schema");
-    const email = typeof req.body?.email === "string" ? req.body.email.trim() : "";
     const reason = typeof req.body?.reason === "string" ? req.body.reason : null;
 
-    if (!email || !email.includes("@")) {
-      return res.status(400).json({ success: false, message: "البريد الإلكتروني مطلوب" });
-    }
-
-    const [existing] = await db
-      .select()
-      .from(newsletterSubscriptions)
-      .where(eq(newsletterSubscriptions.email, email))
-      .limit(1);
-
+    // SECURITY: the address used to be the only credential, so anyone could
+    // unsubscribe any reader. Proof of ownership is either the token from the
+    // mailed unsubscribe link (the subscription row's own uuid) or a valid
+    // member session — and a session may only act on its own address.
+    const existing = await resolveNewsletterSubscription(req);
     if (!existing) {
-      return res.status(404).json({ success: false, message: "لم نجد اشتراكاً بهذا البريد" });
+      return res.status(403).json({
+        success: false,
+        message: "رابط غير صالح. استخدم رابط إلغاء الاشتراك من رسالة النشرة، أو سجّل الدخول.",
+      });
     }
+    const email = existing.email;
 
     await db
       .update(newsletterSubscriptions)
@@ -4611,6 +4855,21 @@ router.post("/articles/submit", async (req: Request, res: Response) => {
         success: false,
         message: "صلاحية الإرسال متاحة للكتّاب والمراسلين فقط. تواصل معنا إذا تظن أن هذا خطأ.",
       });
+    }
+
+    // من ٣١ يوليو: كتّاب/مراسلون بلا ترخيص ساري لا يُرسلون من الموبايل
+    if (isWriter || isReporter) {
+      const { assertMediaLicenseAllowsSubmission } = await import(
+        "../services/mediaLicenseService"
+      );
+      const licenseGate = await assertMediaLicenseAllowsSubmission(session.userId);
+      if (!licenseGate.ok) {
+        return res.status(403).json({
+          success: false,
+          message: licenseGate.message,
+          code: licenseGate.code,
+        });
+      }
     }
 
     // Decide article kind. Explicit `kind` wins for admin-likes; otherwise
@@ -5672,12 +5931,6 @@ router.post("/members/push-token", async (req: Request, res: Response) => {
     const safeInstallationId =
       data.installationId && data.installationId.length > 0 ? data.installationId : undefined;
 
-    const existing = await db
-      .select({ id: pushDevices.id })
-      .from(pushDevices)
-      .where(eq(pushDevices.deviceToken, data.token))
-      .limit(1);
-
     // Defensive truncation. The `push_devices.locale` column is varchar(10);
     // some iOS versions return a fully-qualified locale identifier like
     // "ar_SA@calendar=gregorian;numbers=latn" that overflows it. We only
@@ -5728,24 +5981,33 @@ router.post("/members/push-token", async (req: Request, res: Response) => {
       console.log(`[Mobile API] /push-token deactivated ${deactivated.length} old tokens for user=${session.userId}`);
     }
 
+    // upsert ذري على القيد الفريد device_token.
+    //
+    // كان الكود يقرأ الصف أولًا ثم يقرر UPDATE أو INSERT — وهذه نافذة سباق
+    // حقيقية: تطبيق iOS يسجّل الرمز عند الإقلاع وعند العودة للمقدمة، فيصل
+    // طلبان متزامنان يريان كلاهما «غير موجود» فيصطدم الثاني بـ
+    // push_devices_device_token_key (لوق 2026-07-25 05:10). ON CONFLICT يزيل
+    // النافذة كليًا ويوفّر ذهابًا وإيابًا إلى القاعدة في كل نداء.
     const persist = async (values: Record<string, unknown>) => {
-      if (existing.length > 0) {
-        await db.update(pushDevices)
-          .set(values as any)
-          .where(eq(pushDevices.id, existing[0].id));
-      } else {
-        await db.insert(pushDevices).values({
-          ...values,
-          deviceToken: data.token,
-        } as any);
-      }
+      await db.insert(pushDevices)
+        .values({ ...values, deviceToken: data.token } as any)
+        .onConflictDoUpdate({
+          target: pushDevices.deviceToken,
+          set: values as any,
+        });
     };
 
     try {
       await persist(baseWithInstall);
     } catch (err: any) {
-      if (!/installation_id/i.test(String(err?.message ?? err))) throw err;
-      console.warn("[Mobile API] /push-token: installation_id missing — saving without it");
+      // الشرط القديم كان `/installation_id/i.test(err.message)` — ورسالة
+      // DrizzleQueryError تحتوي **نص الاستعلام كاملًا**، وفيه اسم العمود
+      // "installation_id". فأي خطأ على هذا الإدراج كان يطابق التعبير فتُعاد
+      // المحاولة بلا داعٍ ويُطبع لوق مضلل «installation_id missing». الفحص
+      // الصحيح على كود PostgreSQL: 42703 = undefined_column.
+      const code = err?.cause?.code ?? err?.code;
+      if (code !== "42703") throw err;
+      console.warn("[Mobile API] /push-token: عمود installation_id غير موجود — الحفظ بدونه");
       await persist(baseValues);
     }
 
@@ -5970,17 +6232,7 @@ router.post("/sports/intel/ask", async (req: Request, res: Response) => {
   }
 });
 
-// ==========================================
-// توقّعات المباريات (المجتمع) — نظائر الموبايل لمسارات /api/sports/*/predict
-// المحميّة بـrequireAuth (Passport)؛ هنا بجلسة العضو (Bearer) عبر verifyMemberSession.
-//   GET  /api/v1/sports/match/:id/predict   توقّعي لمباراة
-//   POST /api/v1/sports/match/:id/predict   إرسال/تعديل (يُقفل عند الانطلاق)
-//   GET  /api/v1/sports/predictions/me       توقّعاتي + إحصاءاتي
-// ==========================================
-const clampPredGoals = (v: unknown): number | null => {
-  const n = Math.trunc(Number(v));
-  return Number.isFinite(n) && n >= 0 && n <= 30 ? n : null;
-};
+// توقّعات المباريات حصريًا في predictionsMobile.ts — sports_pool حُذفت في #938.
 
 // ==========================================
 // Live Activity push tokens (iOS lock-screen live match)
@@ -6112,7 +6364,7 @@ router.get("/notifications", async (req: Request, res: Response) => {
     }
 
     const { editorialNotifications } = await import("@shared/schema");
-    const limit = Math.min(Number(req.query.limit) || 50, 100);
+    const limit = parseLimit(req.query.limit, 50, 100);
 
     const rows = await db
       .select()
@@ -6586,8 +6838,19 @@ router.post("/loyalty/events", async (req: Request, res: Response) => {
     }
 
     const { awardPoints } = await import("../services/loyalty");
-    const { LOYALTY_ACTIONS, LOYALTY_ACTION_POINTS } = await import("@shared/loyalty");
-    const validActions = new Set(Object.values(LOYALTY_ACTIONS));
+    const { LOYALTY_ACTIONS } = await import("@shared/loyalty");
+    // Client-reportable engagement actions ONLY. Sports prediction wins,
+    // account milestones, and admin adjustments are always granted
+    // server-side; accepting their codes here would let a client mint
+    // uncapped high-value points with arbitrary dedup sources.
+    const validActions = new Set<string>([
+      LOYALTY_ACTIONS.READ_OPEN,
+      LOYALTY_ACTIONS.READ_DEEP,
+      LOYALTY_ACTIONS.LIKE,
+      LOYALTY_ACTIONS.SHARE,
+      LOYALTY_ACTIONS.COMMENT,
+      LOYALTY_ACTIONS.NOTIFICATION_OPEN,
+    ]);
 
     const results = [] as Array<{ action: string; outcome: string; points?: number }>;
     for (const evt of events) {
@@ -6820,6 +7083,7 @@ router.get("/loyalty/rewards", async (req: Request, res: Response) => {
       success: true,
       balance,
       rewards: rewards
+        .filter((r) => (r.rewardData as any)?.partnerApiData?.previewOnly !== true)
         .filter((r) => r.remainingStock === null || (r.remainingStock ?? 0) > 0)
         .map((r) => {
           const myRedeems = myCount.get(r.id) ?? 0;
@@ -6869,99 +7133,33 @@ router.post("/loyalty/rewards/:id/redeem", async (req: Request, res: Response) =
     }
     const rewardId = req.params.id;
 
-    const { loyaltyRewards, userPointsTotal, userRewardsHistory } = await import("@shared/schema");
+    // Single transactional implementation shared with the web route —
+    // reward row lock + guarded balance/stock decrements live there.
+    const { storage } = await import("../storage");
+    const result = await storage.redeemReward({ userId: session.userId, rewardId });
 
-    const [reward] = await db
-      .select()
-      .from(loyaltyRewards)
-      .where(eq(loyaltyRewards.id, rewardId))
-      .limit(1);
-    if (!reward || !reward.isActive) {
-      return res.status(404).json({ success: false, message: "المكافأة غير متاحة" });
+    if (!result.success) {
+      const statusByCode: Record<string, number> = {
+        NOT_FOUND: 404,
+        INACTIVE: 404,
+        EXPIRED: 410,
+        OUT_OF_STOCK: 409,
+        MAX_REDEMPTIONS: 409,
+        INSUFFICIENT_POINTS: 402,
+      };
+      const status = statusByCode[result.code ?? ""] ?? 400;
+      return res.status(status).json({ success: false, message: result.message });
     }
 
-    if (reward.remainingStock !== null && (reward.remainingStock ?? 0) <= 0) {
-      return res.status(409).json({ success: false, message: "نفد المخزون" });
-    }
-
-    if (reward.expiresAt && reward.expiresAt < new Date()) {
-      return res.status(410).json({ success: false, message: "انتهت صلاحية المكافأة" });
-    }
-
-    if (reward.maxRedemptionsPerUser !== null) {
-      const [{ count: myCount }] = await db
-        .select({ count: sql<number>`COUNT(*)::int` })
-        .from(userRewardsHistory)
-        .where(
-          and(
-            eq(userRewardsHistory.userId, session.userId),
-            eq(userRewardsHistory.rewardId, rewardId),
-          ),
-        );
-      if (Number(myCount) >= (reward.maxRedemptionsPerUser ?? Infinity)) {
-        return res.status(409).json({ success: false, message: "وصلت الحد الأقصى لاستبدال هذه المكافأة" });
-      }
-    }
-
-    // Atomic balance decrement: UPDATE ... WHERE totalPoints >= cost.
-    // If the WHERE clause prunes the row (insufficient balance), the
-    // update returns 0 rows and we know not to insert a redemption.
-    const cost = Number(reward.pointsCost);
-    const updated = await db
-      .update(userPointsTotal)
-      .set({
-        totalPoints: sql`${userPointsTotal.totalPoints} - ${cost}`,
-        updatedAt: new Date(),
-      })
-      .where(
-        and(
-          eq(userPointsTotal.userId, session.userId),
-          gte(userPointsTotal.totalPoints, cost),
-        ),
-      )
-      .returning({ totalPoints: userPointsTotal.totalPoints });
-
-    if (updated.length === 0) {
-      return res.status(402).json({ success: false, message: "رصيد النقاط غير كافٍ" });
-    }
-
-    // Decrement the reward's remaining stock when applicable.
-    if (reward.remainingStock !== null) {
-      await db
-        .update(loyaltyRewards)
-        .set({ remainingStock: sql`${loyaltyRewards.remainingStock} - 1` })
-        .where(
-          and(
-            eq(loyaltyRewards.id, rewardId),
-            gte(loyaltyRewards.remainingStock, 1),
-          ),
-        );
-    }
-
-    const [history] = await db
-      .insert(userRewardsHistory)
-      .values({
-        userId: session.userId,
-        rewardId: rewardId,
-        pointsSpent: cost,
-        status: "pending",
-        rewardSnapshot: {
-          nameAr: reward.nameAr,
-          nameEn: reward.nameEn,
-          pointsCost: cost,
-          rewardType: reward.rewardType,
-        },
-      })
-      .returning();
-
+    const history = result.redemption!;
     res.json({
       success: true,
       message: "تم استلام طلب الاستبدال بنجاح ✨",
-      remainingBalance: Number(updated[0].totalPoints),
+      remainingBalance: result.remainingBalance,
       redemption: {
         id: history.id,
         rewardId,
-        pointsSpent: cost,
+        pointsSpent: history.pointsSpent,
         status: history.status,
         redeemedAt: history.redeemedAt,
       },
@@ -7009,6 +7207,179 @@ router.get("/loyalty/redemptions/me", async (req: Request, res: Response) => {
   } catch (error) {
     console.error("[Mobile API] GET /loyalty/redemptions/me error:", error);
     res.status(500).json({ success: false, message: "تعذر جلب الاستبدالات" });
+  }
+});
+
+// ==========================================
+// سبق بلس — المعاينة الداخلية /api/v1/plus/* (مسؤول النظام فقط)
+//
+// مرآة موبايل لمسارات الويب /api/plus-preview/*: نفس خدمات
+// sabqPlusPreviewService، لكن المصادقة بجلسة Bearer العضوية بدل
+// كوكي الويب. غير المسؤول يرى 404 (لا 403) كي لا يُكشف وجود السطح —
+// نفس سياسة الويب. الاستبدال حقيقي: خصم فعلي من محفظة العضو.
+// ==========================================
+
+async function verifyPlusAdminSession(req: Request): Promise<{ userId: string } | "unauthenticated" | "forbidden"> {
+  const session = await verifyMemberSession(req);
+  if (!session) return "unauthenticated";
+  const { isPlusPreviewAdmin } = await import("../services/sabqPlusPreviewService");
+  const [userRow] = await db
+    .select({ role: users.role })
+    .from(users)
+    .where(eq(users.id, session.userId))
+    .limit(1);
+  const ok = await isPlusPreviewAdmin({ id: session.userId, role: userRow?.role ?? null });
+  return ok ? session : "forbidden";
+}
+
+function plusGateResponse(res: Response, gate: "unauthenticated" | "forbidden") {
+  if (gate === "unauthenticated") {
+    return res.status(401).json({ success: false, message: "غير مسجل" });
+  }
+  return res.status(404).json({ success: false, message: "غير موجود" });
+}
+
+router.get("/plus/summary", async (req: Request, res: Response) => {
+  try {
+    const gate = await verifyPlusAdminSession(req);
+    if (typeof gate === "string") return plusGateResponse(res, gate);
+    const { getPlusSummary } = await import("../services/sabqPlusPreviewService");
+    const summary = await getPlusSummary(gate.userId);
+    res.json({ success: true, ...summary });
+  } catch (error) {
+    console.error("[Mobile API] GET /plus/summary error:", error);
+    res.status(500).json({ success: false, message: "تعذر جلب الملخص" });
+  }
+});
+
+router.get("/plus/catalog", async (req: Request, res: Response) => {
+  try {
+    const gate = await verifyPlusAdminSession(req);
+    if (typeof gate === "string") return plusGateResponse(res, gate);
+    const { getPlusCatalog } = await import("../services/sabqPlusPreviewService");
+    const catalog = await getPlusCatalog(gate.userId);
+    res.json({ success: true, ...catalog });
+  } catch (error) {
+    console.error("[Mobile API] GET /plus/catalog error:", error);
+    res.status(500).json({ success: false, message: "تعذر جلب الكتالوج" });
+  }
+});
+
+router.post("/plus/redeem/:id", async (req: Request, res: Response) => {
+  try {
+    const gate = await verifyPlusAdminSession(req);
+    if (typeof gate === "string") return plusGateResponse(res, gate);
+    if (req.body?.termsAccepted !== true) {
+      return res.status(400).json({
+        success: false,
+        message: "يجب الموافقة على شروط الاستخدام وشروط ولاء ون قبل الاستبدال",
+      });
+    }
+    const { redeemPreviewReward } = await import("../services/sabqPlusPreviewService");
+    const result = await redeemPreviewReward(gate.userId, req.params.id);
+    if (!result.success) {
+      const statusByCode: Record<string, number> = {
+        NOT_FOUND: 404,
+        INACTIVE: 404,
+        EXPIRED: 410,
+        OUT_OF_STOCK: 409,
+        MAX_REDEMPTIONS: 409,
+        INSUFFICIENT_POINTS: 402,
+      };
+      return res
+        .status(statusByCode[result.code] ?? 400)
+        .json({ success: false, message: result.message });
+    }
+    res.json({
+      success: true,
+      message: "تم الاستبدال بنجاح ✨",
+      remainingBalance: result.remainingBalance,
+      voucher: result.voucher,
+    });
+  } catch (error) {
+    console.error("[Mobile API] POST /plus/redeem error:", error);
+    res.status(500).json({ success: false, message: "تعذر إتمام الاستبدال" });
+  }
+});
+
+router.get("/plus/redemptions", async (req: Request, res: Response) => {
+  try {
+    const gate = await verifyPlusAdminSession(req);
+    if (typeof gate === "string") return plusGateResponse(res, gate);
+    const { getPlusRedemptions } = await import("../services/sabqPlusPreviewService");
+    const redemptions = await getPlusRedemptions(gate.userId);
+    res.json({ success: true, redemptions });
+  } catch (error) {
+    console.error("[Mobile API] GET /plus/redemptions error:", error);
+    res.status(500).json({ success: false, message: "تعذر جلب السجل" });
+  }
+});
+
+router.delete("/plus/redemptions/:id", async (req: Request, res: Response) => {
+  try {
+    const gate = await verifyPlusAdminSession(req);
+    if (typeof gate === "string") return plusGateResponse(res, gate);
+    const { removePreviewRedemption } = await import("../services/sabqPlusPreviewService");
+    const result = await removePreviewRedemption(gate.userId, req.params.id);
+    if (!result.success) {
+      const status = result.code === "NOT_FOUND" ? 404 : 409;
+      return res.status(status).json({ success: false, message: result.message });
+    }
+    res.json({
+      success: true,
+      refundedPoints: result.refundedPoints,
+      remainingBalance: result.remainingBalance,
+    });
+  } catch (error) {
+    console.error("[Mobile API] DELETE /plus/redemptions error:", error);
+    res.status(500).json({ success: false, message: "تعذر إزالة القسيمة" });
+  }
+});
+
+// بطاقة Apple Wallet للقسيمة — نفس نمط /wallet/press/issue: بث .pkpass
+// مباشرة؛ iOS ينزّلها بـ URLSession (مع الـ Bearer) ثم يعرضها عبر
+// PKAddPassesViewController. الأخطاء JSON لا HTML (لا متصفح هنا).
+router.get("/plus/voucher/:redemptionId/wallet-pass", async (req: Request, res: Response) => {
+  try {
+    const gate = await verifyPlusAdminSession(req);
+    if (typeof gate === "string") return plusGateResponse(res, gate);
+    const { getVoucherPassData } = await import("../services/sabqPlusPreviewService");
+    const voucher = await getVoucherPassData(gate.userId, req.params.redemptionId);
+    if (!voucher) {
+      return res.status(404).json({ success: false, message: "القسيمة غير موجودة" });
+    }
+
+    const [me] = await db
+      .select({ firstName: users.firstName, lastName: users.lastName, email: users.email, role: users.role })
+      .from(users)
+      .where(eq(users.id, gate.userId))
+      .limit(1);
+
+    const { passKitService } = await import("../lib/passkit/PassKitService");
+    const passBuffer = await passKitService.generateCouponPass({
+      userId: gate.userId,
+      serialNumber: `SABQ-PLUS-${req.params.redemptionId.replace(/-/g, "").slice(0, 10).toUpperCase()}`,
+      authToken: passKitService.generateAuthToken(),
+      userName: `${me?.firstName || ""} ${me?.lastName || ""}`.trim() || me?.email || "عضو سبق",
+      userEmail: me?.email ?? "",
+      userRole: me?.role ?? "reader",
+      partnerName: voucher.partnerName,
+      offer: voucher.offer,
+      valueLabel: voucher.valueLabel,
+      couponCode: voucher.couponCode,
+      voucherExpiresAt: voucher.voucherExpiresAt,
+    });
+
+    res.set({
+      "Content-Type": "application/vnd.apple.pkpass",
+      "Content-Disposition": `attachment; filename="sabq-plus-voucher-${voucher.couponCode}.pkpass"`,
+      "Content-Length": String(passBuffer.length),
+      "Cache-Control": "private, no-store",
+    });
+    res.send(passBuffer);
+  } catch (error: any) {
+    console.error("[Mobile API] GET /plus/voucher wallet-pass error:", error);
+    res.status(400).json({ success: false, message: error?.message ?? "تعذر إنشاء بطاقة المحفظة" });
   }
 });
 
@@ -7280,6 +7651,7 @@ const adminArticleDetailColumns = {
   categoryId: articles.categoryId,
   reporterId: articles.reporterId,
   isFeatured: articles.isFeatured,
+  isReading: articles.isReading,
   hideFromHomepage: articles.hideFromHomepage,
   aiSummary: articles.aiSummary,
   imageUrl: articles.imageUrl,
@@ -7319,6 +7691,7 @@ function mapAdminArticleDetail(r: any) {
     authorId: r.authorId || null,
     authorName: authorName || null,
     isFeatured: !!r.isFeatured,
+    isReading: !!r.isReading,
     hideFromHomepage: !!r.hideFromHomepage,
     aiSummary: r.aiSummary || "",
     imageUrl: r.imageUrl || "",
@@ -7437,16 +7810,9 @@ router.get("/admin/dashboard/full-stats", async (req: Request, res: Response) =>
     if (!admin) {
       return res.status(403).json({ success: false, message: "صلاحيات غير كافية" });
     }
-    // Global stats are heavy (~18 aggregate queries over 900k+ articles).
-    // Cache 60s so repeat dashboard opens are instant (mirrors the web route).
-    const { memoryCache } = await import("../memoryCache");
-    const cacheKey = "mobile:admin:fullstats";
-    const cached = memoryCache.get<any>(cacheKey);
-    if (cached) {
-      return res.json(cached);
-    }
-    const { storage } = await import("../storage");
-    const s = await storage.getAdminDashboardStats();
+    // Shares SWR cache with web GET /api/admin/dashboard/stats (5m fresh / 15m stale).
+    const { getCachedAdminDashboardStats } = await import("../services/adminDashboardStatsService");
+    const s = await getCachedAdminDashboardStats();
     const payload = {
       success: true,
       articles: {
@@ -7465,7 +7831,6 @@ router.get("/admin/dashboard/full-stats", async (req: Request, res: Response) =>
       aiImages: { total: s.aiImages.total, thisWeek: s.aiImages.thisWeek },
       smartBlocks: { total: s.smartBlocks.total },
     };
-    memoryCache.set(cacheKey, payload, 60000);
     res.json(payload);
   } catch (error) {
     console.error("[Mobile API] GET /admin/dashboard/full-stats error:", error);
@@ -7565,6 +7930,7 @@ router.post("/admin/articles", async (req: Request, res: Response) => {
       authorId,
       submitterId: admin.userId,
       isFeatured: typeof b.isFeatured === "boolean" ? b.isFeatured : false,
+      isReading: typeof b.isReading === "boolean" ? b.isReading : false,
       hideFromHomepage: typeof b.hideFromHomepage === "boolean" ? b.hideFromHomepage : false,
       aiSummary: typeof b.aiSummary === "string" ? b.aiSummary : null,
       imageUrl: typeof b.imageUrl === "string" && b.imageUrl ? b.imageUrl : null,
@@ -7711,6 +8077,7 @@ router.patch("/admin/articles/:id", async (req: Request, res: Response) => {
       // الكروسيل — بدون الختم هنا يبقى صفرًا ويغرق المقال تحت كل المختومين
       updates.displayOrder = b.isFeatured ? Math.floor(Date.now() / 1000) : 0;
     }
+    if (typeof b.isReading === "boolean") updates.isReading = b.isReading;
     if (typeof b.hideFromHomepage === "boolean") updates.hideFromHomepage = b.hideFromHomepage;
 
     // Scheduling
@@ -7959,64 +8326,15 @@ router.post("/admin/ai/proofread", async (req: Request, res: Response) => {
       return res.status(403).json({ success: false, message: "صلاحيات غير كافية" });
     }
     const content = typeof req.body?.content === "string" ? req.body.content : "";
-    const cleanText = content.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
-    if (cleanText.length < 10) {
-      return res.json({ success: true, issues: [] });
-    }
-    const truncated = cleanText.length > 8000 ? cleanText.substring(0, 8000) : cleanText;
-
-    const { default: OpenAI } = await import("openai");
-    const openaiClient = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-    const { withRetry } = await import("../openai");
-
-    const response = await withRetry(
-      () => openaiClient.chat.completions.create({
-        model: "gpt-5.1",
-        messages: [
-          {
-            role: "system",
-            content: `أنت مدقق إملائي صارم للنصوص العربية الصحفية. مهمتك الوحيدة هي اكتشاف الأخطاء الإملائية الحقيقية فقط (حروف خاطئة، همزات، التاء المربوطة/المفتوحة، الألف المقصورة/الياء). ارفض رفضاً قاطعاً علامات التشكيل والترقيم والمسافات والنحو والأسلوب وأسماء الأعلام. إن كان الفرق مجرد تشكيل أو ترقيم أو مسافة فلا تُرجِعه. أعد JSON بهذا الشكل: { "issues": [ { "original": "الكلمة الخاطئة بدون تشكيل", "suggestion": "الكلمة الصحيحة بدون تشكيل", "type": "إملائي", "explanation": "سبب موجز" } ] }. إن لم تجد خطأً حقيقياً أعد { "issues": [] }`,
-          },
-          { role: "user", content: `دقّق هذا النص إملائياً فقط دون تعديل المعنى:\n\n${truncated}` },
-        ],
-        response_format: { type: "json_object" },
-        max_completion_tokens: 2048,
-      }),
-      3,
-      "AdminProofread",
-    );
-
-    const raw = response.choices?.[0]?.message?.content || '{"issues":[]}';
-    let parsed: { issues: Array<{ original: string; suggestion: string; type?: string; explanation?: string }> } = { issues: [] };
-    try { parsed = JSON.parse(raw); } catch { parsed = { issues: [] }; }
-
-    const normalize = (t: string) =>
-      t.replace(/[ً-ٰٟـ]/g, "")
-        .replace(/[​-‏‪-‮﻿]/g, "")
-        .replace(/[.,،;؛:!؟?\(\)\[\]"'«»“”]/g, "")
-        .replace(/\s+/g, " ")
-        .trim();
-
-    const seen = new Set<string>();
-    const issues = (Array.isArray(parsed.issues) ? parsed.issues : [])
-      .filter(i => i && typeof i.original === "string" && typeof i.suggestion === "string")
-      .filter(i => i.original.trim() !== i.suggestion.trim())
-      .filter(i => normalize(i.original) !== normalize(i.suggestion))
-      .filter(i => normalize(i.original).length >= 2)
-      .filter(i => cleanText.includes(i.original))
-      .filter(i => {
-        const key = `${i.original}→${i.suggestion}`;
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      })
-      .slice(0, 50);
-
+    // نفس خدمة الويب: بوابة الذكاء بمهلة قصيرة وبدائل (كان OpenAI خامًا بمهلة 10 دقائق)
+    const { proofreadContent } = await import("../services/proofreadService");
+    const { issues } = await proofreadContent(content, admin.userId);
     res.json({ success: true, issues });
   } catch (error: any) {
     console.error("[Mobile API] POST /admin/ai/proofread error:", error?.message || error);
-    const isRateLimit = error?.status === 429 || error?.message?.includes("429");
-    res.status(isRateLimit ? 429 : 500).json({ success: false, message: isRateLimit ? "تم تجاوز حد الطلبات، حاول بعد قليل" : "تعذّر التدقيق اللغوي" });
+    const { proofreadErrorResponse } = await import("../services/proofreadService");
+    const { status, message } = proofreadErrorResponse(error);
+    res.status(status).json({ success: false, message });
   }
 });
 
@@ -8184,7 +8502,7 @@ router.post("/admin/articles/:id/archive", async (req: Request, res: Response) =
       .set({ status: "archived", reviewStatus: null, reviewNotes: reason, updatedAt: new Date() })
       .where(eq(articles.id, req.params.id));
 
-    await notifyArticleStakeholders(article, "archived", reason);
+    await notifyArticleStakeholders(article, "archived", reason, { excludeUserId: admin.userId });
 
     res.json({ success: true, item: await fetchAdminArticleItem(req.params.id) });
   } catch (error) {
@@ -8221,7 +8539,7 @@ router.post("/admin/articles/:id/request-revision", async (req: Request, res: Re
       })
       .where(eq(articles.id, req.params.id));
 
-    await notifyArticleStakeholders(article, "needs_revision", notes);
+    await notifyArticleStakeholders(article, "needs_revision", notes, { excludeUserId: admin.userId });
 
     res.json({ success: true, item: await fetchAdminArticleItem(req.params.id) });
   } catch (error) {
@@ -8250,7 +8568,7 @@ router.delete("/admin/articles/:id/permanent", async (req: Request, res: Respons
 
     await db.delete(articles).where(eq(articles.id, req.params.id));
 
-    await notifyArticleStakeholders(article, "deleted", reason);
+    await notifyArticleStakeholders(article, "deleted", reason, { excludeUserId: admin.userId });
 
     res.json({ success: true });
   } catch (error) {

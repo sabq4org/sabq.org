@@ -1,17 +1,16 @@
 import { useState } from "react";
-import { useLocation } from "wouter";
+import { useLocation, Link } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { getDefaultRedirectPath, isStaff, type User } from "@/hooks/useAuth";
-import { Shield, Loader2 } from "lucide-react";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { isStaff, type User } from "@/hooks/useAuth";
+import { Shield, ShieldCheck, KeyRound, Loader2 } from "lucide-react";
+import AuthLayout from "@/components/AuthLayout";
 
 const loginSchema = z.object({
   email: z.string().email("البريد الإلكتروني غير صحيح"),
@@ -44,7 +43,7 @@ export default function AdminLogin() {
         method: "POST",
         body: JSON.stringify(data),
       });
-      
+
       // Check if 2FA is required
       if (response.requires2FA) {
         setRequires2FA(true);
@@ -97,8 +96,8 @@ export default function AdminLogin() {
       await apiRequest("/api/2fa/verify", {
         method: "POST",
         body: JSON.stringify(
-          useBackupCode 
-            ? { backupCode: twoFactorCode } 
+          useBackupCode
+            ? { backupCode: twoFactorCode }
             : { token: twoFactorCode }
         ),
       });
@@ -141,194 +140,186 @@ export default function AdminLogin() {
   // 2FA Verification Screen
   if (requires2FA) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-4" dir="rtl">
-        <Card className="w-full max-w-md border-slate-700 bg-slate-900/50 backdrop-blur">
-          <CardHeader className="text-center space-y-3">
-            <div className="mx-auto w-16 h-16 bg-primary/20 rounded-full flex items-center justify-center mb-2 border-2 border-primary/30">
-              <Shield className="w-8 h-8 text-primary" />
-            </div>
-            <CardTitle className="text-2xl text-white">التحقق بخطوتين</CardTitle>
-            <CardDescription className="text-slate-400 text-right">
-              أدخل الرمز المكون من 6 أرقام من تطبيق المصادقة الخاص بك
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <Alert className="bg-primary/10 border-primary/30 text-right">
-              <AlertDescription className="text-sm text-slate-300">
-                هذا إجراء أمني إضافي لحماية حسابك الإداري
-              </AlertDescription>
-            </Alert>
+      <AuthLayout footer={<p>جميع محاولات الدخول تُسجَّل وتُراقَب.</p>}>
+        <div className="mb-6 text-center">
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+            {useBackupCode ? <KeyRound className="h-7 w-7" /> : <ShieldCheck className="h-7 w-7" />}
+          </div>
+          <h1 className="text-xl font-bold text-foreground sm:text-2xl">التحقق بخطوتين</h1>
+          <p className="mt-1.5 text-sm text-muted-foreground">
+            {useBackupCode
+              ? "أدخل أحد رموزك الاحتياطية — كل رمز يُستخدم مرة واحدة."
+              : "أدخل الرمز المكوّن من 6 أرقام من تطبيق المصادقة."}
+          </p>
+        </div>
 
-            <div className="space-y-2">
-              <label htmlFor="twoFactorCode" className="text-sm font-medium text-white">
-                {useBackupCode ? "الرمز الاحتياطي" : "رمز التحقق"}
-              </label>
-              <Input
-                id="twoFactorCode"
-                type="text"
-                inputMode={useBackupCode ? "text" : "numeric"}
-                maxLength={useBackupCode ? 16 : 6}
-                placeholder={useBackupCode ? "XXXX-XXXX-XXXX-XXXX" : "000000"}
-                value={twoFactorCode}
-                onChange={(e) => {
-                  if (useBackupCode) {
-                    setTwoFactorCode(e.target.value);
-                  } else {
-                    setTwoFactorCode(e.target.value.replace(/\D/g, ""));
-                  }
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && twoFactorCode.length >= 6) {
-                    handleVerify2FA();
-                  }
-                }}
-                className="text-center text-2xl tracking-[0.5em] bg-slate-800 border-slate-700 text-white placeholder:text-slate-600"
-                data-testid="input-2fa-code"
-                autoFocus
-              />
-            </div>
-
-            <Button
-              onClick={handleVerify2FA}
-              disabled={(useBackupCode ? twoFactorCode.length < 6 : twoFactorCode.length !== 6) || isVerifying2FA}
-              className="w-full"
-              data-testid="button-verify-2fa"
-            >
-              {isVerifying2FA && <Loader2 className="ml-2 h-4 w-4 animate-spin" />}
-              تحقق
-            </Button>
-
-            <button
-              type="button"
-              onClick={() => {
-                setUseBackupCode(!useBackupCode);
-                setTwoFactorCode("");
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <label htmlFor="twoFactorCode" className="block text-right text-sm font-medium">
+              {useBackupCode ? "الرمز الاحتياطي" : "رمز التحقق"}
+            </label>
+            <Input
+              id="twoFactorCode"
+              type="text"
+              inputMode={useBackupCode ? "text" : "numeric"}
+              maxLength={useBackupCode ? 16 : 6}
+              placeholder={useBackupCode ? "XXXX-XXXX-XXXX-XXXX" : "000000"}
+              value={twoFactorCode}
+              onChange={(e) => {
+                if (useBackupCode) {
+                  setTwoFactorCode(e.target.value);
+                } else {
+                  setTwoFactorCode(e.target.value.replace(/\D/g, ""));
+                }
               }}
-              className="w-full text-sm text-primary hover:underline transition-colors"
-              data-testid="button-toggle-backup-code"
-            >
-              {useBackupCode ? "استخدام رمز التحقق من التطبيق" : "استخدام رمز احتياطي"}
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                setRequires2FA(false);
-                setTwoFactorCode("");
-                setUseBackupCode(false);
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && twoFactorCode.length >= 6) {
+                  handleVerify2FA();
+                }
               }}
-              className="w-full text-sm text-slate-400 hover:text-white transition-colors"
-            >
-              رجوع إلى تسجيل الدخول
-            </button>
-          </CardContent>
-        </Card>
-      </div>
+              className="text-center font-mono text-2xl tracking-[0.4em]"
+              dir="ltr"
+              data-testid="input-2fa-code"
+              autoFocus
+            />
+          </div>
+
+          <Button
+            onClick={handleVerify2FA}
+            disabled={(useBackupCode ? twoFactorCode.length < 6 : twoFactorCode.length !== 6) || isVerifying2FA}
+            className="min-h-11 w-full text-base font-medium"
+            data-testid="button-verify-2fa"
+          >
+            {isVerifying2FA && <Loader2 className="ml-2 h-4 w-4 animate-spin" />}
+            تحقق
+          </Button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setUseBackupCode(!useBackupCode);
+              setTwoFactorCode("");
+            }}
+            className="w-full text-sm text-primary hover:underline"
+            data-testid="button-toggle-backup-code"
+          >
+            {useBackupCode ? "استخدام رمز التحقق من التطبيق" : "استخدام رمز احتياطي"}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setRequires2FA(false);
+              setTwoFactorCode("");
+              setUseBackupCode(false);
+            }}
+            className="w-full text-sm text-muted-foreground transition-colors hover:text-foreground"
+          >
+            رجوع إلى تسجيل الدخول
+          </button>
+        </div>
+      </AuthLayout>
     );
   }
 
   // Main Admin Login Screen
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-4" dir="rtl">
-      <Card className="w-full max-w-md border-slate-700 bg-slate-900/50 backdrop-blur">
-        <CardHeader className="space-y-3 text-center">
-          <div className="flex justify-center mb-2">
-            <div className="w-20 h-20 bg-primary/20 rounded-full flex items-center justify-center border-2 border-primary/30">
-              <Shield className="w-10 h-10 text-primary" />
-            </div>
-          </div>
-          <CardTitle className="text-3xl font-bold text-white">لوحة تحكم سبق</CardTitle>
-          <CardDescription className="text-slate-400">
-            تسجيل دخول الإدارة والصحفيين
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Alert className="mb-6 bg-primary/10 border-primary/30 text-right">
-            <AlertDescription className="text-sm text-slate-300">
-              هذه البوابة مخصصة للإدارة والصحفيين فقط. جميع محاولات الدخول يتم تسجيلها ومراقبتها.
-            </AlertDescription>
-          </Alert>
-
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-              <FormField
-                control={form.control}
-                name="email"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel className="text-white">البريد الإلكتروني</FormLabel>
-                    <FormControl>
-                      <Input
-                        {...field}
-                        type="email"
-                        placeholder="admin@sabq.sa"
-                        disabled={isLoading}
-                        data-testid="input-admin-email"
-                        className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-600 hover:bg-slate-800 focus-visible:bg-slate-800 focus-visible:text-white"
-                        dir="ltr"
-                      />
-                    </FormControl>
-                    <FormMessage className="text-right" />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="password"
-                render={({ field }) => (
-                  <FormItem>
-                    <div className="flex items-center justify-between">
-                      <FormLabel className="text-white">كلمة المرور</FormLabel>
-                      <button
-                        type="button"
-                        onClick={() => navigate("/admin/forgot-password")}
-                        className="text-sm text-primary hover:underline"
-                        data-testid="link-admin-forgot-password"
-                      >
-                        نسيت كلمة المرور؟
-                      </button>
-                    </div>
-                    <FormControl>
-                      <Input
-                        {...field}
-                        type="password"
-                        placeholder="••••••••"
-                        disabled={isLoading}
-                        data-testid="input-admin-password"
-                        className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-600 hover:bg-slate-800 focus-visible:bg-slate-800 focus-visible:text-white"
-                        dir="ltr"
-                      />
-                    </FormControl>
-                    <FormMessage className="text-right" />
-                  </FormItem>
-                )}
-              />
-
-              <Button
-                type="submit"
-                className="w-full"
-                disabled={isLoading}
-                data-testid="button-admin-login"
-              >
-                {isLoading && <Loader2 className="ml-2 h-4 w-4 animate-spin" />}
-                {isLoading ? "جاري تسجيل الدخول..." : "دخول"}
-              </Button>
-            </form>
-          </Form>
-
-          <div className="mt-6 text-center">
+    <AuthLayout
+      footer={
+        <>
+          <p>
+            لست من الإدارة؟{" "}
+            <Link href="/login" className="text-primary hover:underline">تسجيل دخول القرّاء</Link>
+          </p>
+          <p className="mt-2 flex flex-wrap items-center justify-center gap-x-3 gap-y-1">
             <button
               type="button"
               onClick={() => navigate("/")}
-              className="text-sm text-slate-400 hover:text-white transition-colors"
+              className="transition-colors hover:text-foreground"
               data-testid="link-back-to-home"
             >
-              العودة إلى الصفحة الرئيسية
+              العودة للرئيسية
             </button>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
+            <span>جميع محاولات الدخول تُسجَّل وتُراقَب.</span>
+          </p>
+        </>
+      }
+    >
+      <div className="mb-6 text-center">
+        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+          <Shield className="h-7 w-7" />
+        </div>
+        <h1 className="text-xl font-bold text-foreground sm:text-2xl">بوابة الإدارة والصحفيين</h1>
+        <p className="mt-1.5 text-sm text-muted-foreground">سجّل دخولك للوصول إلى لوحة التحكم.</p>
+      </div>
+
+      <Form {...form}>
+        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+          <FormField
+            control={form.control}
+            name="email"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>البريد الإلكتروني</FormLabel>
+                <FormControl>
+                  <Input
+                    {...field}
+                    type="email"
+                    placeholder="admin@sabq.sa"
+                    disabled={isLoading}
+                    data-testid="input-admin-email"
+                    className="text-base"
+                    dir="ltr"
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="password"
+            render={({ field }) => (
+              <FormItem>
+                <div className="flex items-center justify-between">
+                  <FormLabel>كلمة المرور</FormLabel>
+                  <button
+                    type="button"
+                    onClick={() => navigate("/admin/forgot-password")}
+                    className="text-sm text-primary hover:underline"
+                    data-testid="link-admin-forgot-password"
+                  >
+                    نسيت كلمة المرور؟
+                  </button>
+                </div>
+                <FormControl>
+                  <Input
+                    {...field}
+                    type="password"
+                    placeholder="••••••••"
+                    disabled={isLoading}
+                    data-testid="input-admin-password"
+                    className="text-base"
+                    dir="ltr"
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <Button
+            type="submit"
+            className="min-h-11 w-full text-base font-medium"
+            disabled={isLoading}
+            data-testid="button-admin-login"
+          >
+            {isLoading && <Loader2 className="ml-2 h-4 w-4 animate-spin" />}
+            {isLoading ? "جاري تسجيل الدخول..." : "دخول"}
+          </Button>
+        </form>
+      </Form>
+    </AuthLayout>
   );
 }

@@ -10,9 +10,10 @@ export const dynamicParams = true;
 export async function generateMetadata({
   params,
 }: {
-  params: { slug: string };
+  params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
-  const bundle = await getArticleSeoBundle(params.slug, "en");
+  const { slug } = await params;
+  const bundle = await getArticleSeoBundle(slug, "en");
   if (!bundle) {
     return { title: "Not found", robots: { index: false, follow: true } };
   }
@@ -22,9 +23,10 @@ export async function generateMetadata({
 export default async function EnglishArticlePage({
   params,
 }: {
-  params: { slug: string };
+  params: Promise<{ slug: string }>;
 }) {
-  const bundle = await getArticleSeoBundle(params.slug, "en");
+  const { slug } = await params;
+  const bundle = await getArticleSeoBundle(slug, "en");
   if (!bundle) notFound();
   return <ArticleView bundle={bundle} lang="en" />;
 }

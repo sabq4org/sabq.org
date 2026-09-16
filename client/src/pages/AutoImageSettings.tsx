@@ -28,6 +28,8 @@ import {
   Sparkles
 } from "lucide-react";
 import type { Category } from "@shared/schema";
+import { ImageStylesManager } from "@/components/admin/ImageStylesManager";
+import { LEGACY_STYLE_SLUG_MAP, type ImageStyleSettings } from "@shared/imageStyles";
 
 interface AutoImageSettings {
   enabled: boolean;
@@ -80,12 +82,21 @@ export default function AutoImageSettingsPage() {
   const { data, isLoading } = useQuery<AutoImageSettings>({
     queryKey: ["/api/auto-image/settings"]
   });
-  
+
+  // سجلّ أنماط توليد الصور — مصدر خيارات «نمط الأخبار/المقالات» (يُدار في القسم أعلاه)
+  const { data: imageStylesRaw } = useQuery<ImageStyleSettings>({
+    queryKey: ["/api/admin/image-styles"],
+  });
+  const registryStyles = Array.isArray(imageStylesRaw?.styles) ? imageStylesRaw.styles : [];
+
   // Update local settings when data is fetched (backfill newsStyle/articleStyle from legacy defaultStyle)
   useEffect(() => {
     if (data) {
-      const newsStyle = data.newsStyle || data.defaultStyle || "photorealistic";
-      const articleStyle = data.articleStyle || data.defaultStyle || "photorealistic";
+      // ترجمة القيم القديمة (photorealistic/abstract/…) إلى slugs السجلّ الجديد
+      const mapStyle = (value?: string) =>
+        (value && (LEGACY_STYLE_SLUG_MAP[value] ?? value)) || "realistic";
+      const newsStyle = mapStyle(data.newsStyle || data.defaultStyle);
+      const articleStyle = mapStyle(data.articleStyle || data.defaultStyle);
       setSettings({
         ...data,
         newsStyle,
@@ -165,13 +176,18 @@ export default function AutoImageSettingsPage() {
     { value: "opinion", label: "آراء" }
   ];
 
-  const styleOptions = [
-    { value: "photorealistic", label: "واقعي" },
-    { value: "illustration", label: "رسم توضيحي" },
-    { value: "abstract", label: "تجريدي" },
-    { value: "minimalist", label: "بسيط" },
-    { value: "modern", label: "عصري" }
-  ];
+  // خيارات الأنماط من السجلّ المركزي (قسم «أنماط توليد الصور» أعلاه) —
+  // كانت قائمة ثابتة hard-coded منفصلة عن التوليد الفعلي
+  const styleOptions = registryStyles.length
+    ? registryStyles.map((style) => ({
+        value: style.slug,
+        label: style.enabled ? style.nameAr : `${style.nameAr} (معطّل)`,
+      }))
+    : [
+        { value: "realistic", label: "واقعية" },
+        { value: "graphic", label: "رسومية" },
+        { value: "illustration", label: "توضيحية" },
+      ];
 
   const providerOptions = [
     { value: "nano-banana", label: "Nano Banana Pro" },
@@ -326,6 +342,9 @@ export default function AutoImageSettingsPage() {
             </CardContent>
           </Card>
         )}
+
+        {/* أنماط توليد الصور — السجلّ المركزي (يدوي + تلقائي) */}
+        <ImageStylesManager />
 
         {/* Main Settings */}
         <Card className="border-border/70 bg-card">
@@ -596,25 +615,12 @@ export default function AutoImageSettingsPage() {
             <SectionHeader title="إعدادات متقدمة" />
             
             <div className="space-y-6">
-              {/* Prompt Template */}
-              <div className="space-y-2">
-                <Label htmlFor="promptTemplate" className="flex items-center gap-2">
-                  <Sparkles className="h-4 w-4 text-slate-500" />
-                  قالب التوليد (اختياري)
-                </Label>
-                <textarea
-                  id="promptTemplate"
-                  className="w-full min-h-[100px] p-3 rounded-md border bg-white dark:bg-black/20 resize-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
-                  placeholder="أدخل قالب التوليد المخصص... يمكنك استخدام {title} و {category} كمتغيرات"
-                  value={settings.imagePromptTemplate || ""}
-                  onChange={(e) => 
-                    setSettings({ ...settings, imagePromptTemplate: e.target.value })
-                  }
-                  data-testid="textarea-prompt-template"
-                />
-                <p className="text-xs text-muted-foreground">
-                  استخدم {"{title}"} للعنوان و {"{category}"} للفئة في القالب
-                </p>
+              {/* قالب التوليد القديم أُلغي: كان يُخزَّن ولا يصل للنموذج إطلاقًا.
+                  تعليمات الأسلوب تُدار الآن من قسم «أنماط توليد الصور» أعلاه. */}
+              <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+                <Sparkles className="ml-2 inline h-4 w-4" />
+                قالب التوليد المخصص القديم أُلغي — تعليمات الأسلوب تُدار الآن من قسم
+                «أنماط توليد الصور» أعلى الصفحة وتُطبَّق فعليًا على كل توليد.
               </div>
 
               {/* Monthly Limit */}

@@ -27,6 +27,8 @@ import {
   listCorrespondentApplications,
   rejectCorrespondentApplication,
 } from "../services/correspondentApplicationService";
+import { mediaLicenseExpiryRejection } from "../services/mediaLicenseService";
+import { parsePage, parseLimit } from "../utils/pagination";
 
 const router = Router();
 
@@ -141,21 +143,25 @@ router.post(
 
       const objectStorage = new ObjectStorageService();
       const docId = randomUUID();
-      const licenseExt = licenseFile.mimetype === "application/pdf" ? "pdf"
-        : (licenseFile.mimetype.split("/")[1] || "jpg");
+      const { uploadMediaLicenseDocument } = await import("../services/mediaLicenseUpload");
       const [licenseUpload, cvUpload] = await Promise.all([
-        objectStorage.uploadFile(
-          `correspondent-docs/${docId}-license.${licenseExt}`,
-          licenseFile.buffer, licenseFile.mimetype, "private",
-        ),
-        objectStorage.uploadFile(
+        uploadMediaLicenseDocument({
+          relativeKey: `correspondent-docs/${docId}-license.bin`,
+          buffer: licenseFile.buffer,
+          contentType: licenseFile.mimetype,
+        }),
+        objectStorage.uploadPrivateDocument(
           `correspondent-docs/${docId}-cv.pdf`,
-          cvFile.buffer, cvFile.mimetype, "private",
+          cvFile.buffer,
+          cvFile.mimetype,
         ),
       ]);
 
       const expYears = parseInt(String(yearsOfExperience), 10);
-      const expiresAt = licenseExpiresAt ? new Date(String(licenseExpiresAt)) : null;
+      const expiry = mediaLicenseExpiryRejection(String(licenseExpiresAt || ""));
+      if ("error" in expiry) {
+        return res.status(400).json({ message: expiry.error });
+      }
 
       const application = await createCorrespondentApplication({
         arabicName,
@@ -168,7 +174,7 @@ router.post(
         region,
         nationalId: String(nationalId).trim(),
         licenseNumber: String(licenseNumber).trim(),
-        licenseExpiresAt: expiresAt && !isNaN(expiresAt.getTime()) ? expiresAt : null,
+        licenseExpiresAt: expiry.expiresAt,
         licenseFileKey: licenseUpload.path,
         cvFileKey: cvUpload.path,
         specializations: String(specializations),
@@ -234,8 +240,8 @@ router.get(
       const { status, page = "1", limit = "10" } = req.query;
       const result = await listCorrespondentApplications(
         status as string,
-        parseInt(page as string),
-        parseInt(limit as string),
+        parsePage(page),
+        parseLimit(limit, 10, 200),
       );
       res.json(result);
     } catch (error: unknown) {
@@ -290,12 +296,16 @@ router.post(
       });
 
       // Send approval email notification (non-blocking)
-      sendCorrespondentApprovalEmail(
-        result.user.email,
-        result.application.arabicName || "",
-        result.application.englishName || "",
-        result.temporaryPassword,
-      ).catch((err) => console.error("Failed to send correspondent approval email:", err));
+      // حساب المراسل يُنشأ من بريد الطلب — الحارس هنا لإرضاء nullability فقط.
+      const approvalEmail = result.user.email || result.application.email;
+      if (approvalEmail) {
+        sendCorrespondentApprovalEmail(
+          approvalEmail,
+          result.application.arabicName || "",
+          result.application.englishName || "",
+          result.temporaryPassword,
+        ).catch((err) => console.error("Failed to send correspondent approval email:", err));
+      }
 
       res.json({
         message: result.existingAccountUpgraded
@@ -325,6 +335,9 @@ router.post(
           message:
             "يوجد حساب موظف/إداري بنفس البريد الإلكتروني — لا يمكن ترقيته تلقائياً. راجع حسابه من إدارة المستخدمين أولاً.",
         });
+      }
+      if (err.message.includes("ترخيص منتهٍ")) {
+        return res.status(400).json({ message: err.message });
       }
       res.status(500).json({ message: "فشل في الموافقة على الطلب: " + err.message });
     }

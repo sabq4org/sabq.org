@@ -12,7 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-import { HeartPulse, TrendingUp, TrendingDown, AlertTriangle, MessageSquare } from "lucide-react";
+import { HeartPulse, TrendingUp, TrendingDown, AlertTriangle, MessageSquare, RefreshCw } from "lucide-react";
 import {
   ResponsiveContainer,
   BarChart,
@@ -98,7 +98,7 @@ function DominantPill({ positive, neutral, negative, total }: { positive: number
 export default function SentimentInsights() {
   const [days, setDays] = useState(7);
 
-  const { data: dataRaw, isLoading } = useQuery<SentimentInsights>({
+  const { data: dataRaw, isLoading, isError, refetch } = useQuery<SentimentInsights>({
     queryKey: [`/api/moderation/sentiment-insights?days=${days}`],
   });
   const data = dataRaw ?? null;
@@ -130,12 +130,30 @@ export default function SentimentInsights() {
           }
         />
 
-        {isLoading || !data ? (
+        {isLoading ? (
           <div className="space-y-4">
             {[1, 2, 3].map((i) => (
               <Skeleton key={i} className="h-32" />
             ))}
           </div>
+        ) : isError || !data ? (
+          <Card className="border-destructive/40 bg-destructive/5" data-testid="sentiment-load-error">
+            <CardContent className="flex flex-col gap-3 p-6 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-destructive" />
+                <div>
+                  <p className="font-medium text-foreground">تعذّر تحميل نبض الجمهور</p>
+                  <p className="text-sm text-muted-foreground">
+                    تحقق من صلاحية إشراف التعليقات ثم أعد المحاولة.
+                  </p>
+                </div>
+              </div>
+              <Button variant="outline" className="gap-2" onClick={() => void refetch()} data-testid="button-retry-sentiment">
+                <RefreshCw className="h-4 w-4" />
+                إعادة المحاولة
+              </Button>
+            </CardContent>
+          </Card>
         ) : (
           <>
             {/* بطاقات الملخص */}

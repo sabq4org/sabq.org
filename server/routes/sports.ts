@@ -1,3 +1,6 @@
+import { currentSportsLang } from "../services/sportsLang";
+import { SportsComponentSnapshot, ComponentSnapshotUnavailable, sportsComponentDay } from "../services/sportsComponentSnapshot";
+import { getApiFootballRetryAfterMs } from "../services/apiFootballClient";
 /**
  * البوابة الرياضية العامة — تُغذّي قسم /sports في الويب.
  *
@@ -11,7 +14,14 @@
  * لا يستورد db (ملتزم بـ ADR-001) — كل الوصول للبيانات عبر الخدمة فقط.
  */
 import type { Express, Request, Response } from "express";
-import { applyProvisionalTable } from "../services/liveStandings";
+import {
+  applyProvisionalTable,
+  selectUnabsorbedFinished,
+  isLeagueTableRound,
+  mergeSeasonWithLive,
+} from "../services/liveStandings";
+import { bestEffortWithin } from "../utils/bestEffortDeadline";
+import { warnThrottled } from "../utils/throttledWarn";
 import {
   generateMatchPreview,
   generateMatchStory,
@@ -32,6 +42,7 @@ import {
   getMatchDetail,
   getMatchLite,
   getMatchPlayerRatings,
+  getMatchPlayerStatsTs,
   getMatchTeamStats,
   getMatchTvChannels,
   getPlayerForm,
@@ -91,7 +102,36 @@ import {
   setFollowNotify,
 } from "../services/sportsFollowsService";
 import { getSportsSummary } from "../services/sportsSummaryService";
-import { requireAuth } from "../rbac";
+import { requireAuth, userHasPermission, type PermissionCode } from "../rbac";
+import type { NextFunction } from "express";
+
+/**
+ * حماية معاينة/سرد المباراة للتحرير فقط — لكن بـ403 لا 401 عند غياب جلسة الويب.
+ *
+ * لماذا: تطبيق VARA يُرفق Bearer عضوية `/api/v1` على طلبات `/api/sports/*` العامة،
+ * و`requireAnyPermission` الافتراضي يرد 401 لمن بلا Passport، فيفسّر العميل ذلك
+ * كـ«انتهت الجلسة» ويمسح الدخول (ظهر فجأة بعد 866af4b في 2026-07-26).
+ */
+function requireSportsAiEditor(...codes: PermissionCode[]) {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    if (!req.isAuthenticated?.() || !(req as any).user?.id) {
+      return res.status(403).json({
+        message: "غير مصرح",
+        messageEn: "Forbidden",
+      });
+    }
+    const userId = (req as any).user.id as string;
+    const ok = (await Promise.all(codes.map((c) => userHasPermission(userId, c)))).some(Boolean);
+    if (!ok) {
+      return res.status(403).json({
+        message: "لا توجد لديك صلاحيات للوصول إلى هذه الخدمة",
+        messageEn: "You don't have permission to access this service",
+        required: codes,
+      });
+    }
+    next();
+  };
+}
 import { runWithSportsLang, sportsLangFromReq } from "../services/sportsLang";
 
 const RIYADH_TZ = "Asia/Riyadh";
@@ -135,12 +175,12 @@ function withClockAnchor<T extends SplFixture>(f: T): T {
 }
 
 /**
- * «ساخنة» = تستحق كاش الحافة القصير (5ث): جارية فعلًا، أو حان انطلاقها ولم يقلبها
- * المزوّد بعد، أو على وشك الانطلاق (≤10 دقائق). قبل هذا كانت استجابة ما قبل
- * الانطلاق تُخزَّن على الحافة بـ s-maxage طويل فيرى الجمهور «لم تبدأ» دقائق
- * بعد صافرة البداية.
+ * «ساخنة» = تستحق كاش الحافة القصير: جارية فعلًا، أو حان انطلاقها ولم يقلبها
+ * المزوّد بعد، أو داخل نافذة ما قبل الانطلاق التي تنزل فيها التشكيلات
+ * (عادةً قبل ~ساعة). كانت ≤10 دقائق فقط، فاستجابة بلا تشكيلة تُخزَّن على
+ * الحافة بـ s-maxage=300 ويبقى تبويب التشكيلة مخفيًا بعد صدورها لدى المزوّد.
  */
-const KICKOFF_HOT_BEFORE_SEC = 10 * 60;
+const KICKOFF_HOT_BEFORE_SEC = 75 * 60;
 const KICKOFF_HOT_AFTER_SEC = 3 * 3600;
 function isHotFixture(f: Pick<SplFixture, "timestamp" | "status">): boolean {
   if (f.status.live) return true;
@@ -149,24 +189,48 @@ function isHotFixture(f: Pick<SplFixture, "timestamp" | "status">): boolean {
   return now >= f.timestamp - KICKOFF_HOT_BEFORE_SEC && now <= f.timestamp + KICKOFF_HOT_AFTER_SEC;
 }
 
+/** مباشر → قادمة → منتهية (يمنع ظهور «انتهت» فوق «مباشر» داخل نفس القائمة). */
+function compareByMatchPhase(
+  a: Pick<SplFixture, "timestamp" | "status">,
+  b: Pick<SplFixture, "timestamp" | "status">,
+): number {
+  const rank = (f: Pick<SplFixture, "status">) =>
+    f.status.live ? 0 : f.status.finished ? 2 : 1;
+  const ra = rank(a);
+  const rb = rank(b);
+  if (ra !== rb) return ra - rb;
+  if (ra === 2) return b.timestamp - a.timestamp;
+  return a.timestamp - b.timestamp;
+}
+
 /** يقسّم جدول البطولة إلى مباشر/اليوم/قادمة/نتائج جاهزة للعرض. */
 function bucketFixtures(fixtures: SplFixture[]) {
   const todayKey = riyadhDayKey(Math.floor(Date.now() / 1000));
 
-  const live = fixtures.filter((f) => f.status.live);
-  const today = fixtures.filter(
-    (f) => !f.status.live && riyadhDayKey(f.timestamp) === todayKey
-  );
+  const live = fixtures.filter((f) => f.status.live).sort(compareByMatchPhase);
+  // «اليوم» = كل مباريات يوم الرياض بما فيها الجارية (فلتر اليوم ليس «غير المباشر»).
+  // تبويب «مباشر» يبقى اختصارًا للجارية فقط.
+  const today = fixtures
+    .filter((f) => riyadhDayKey(f.timestamp) === todayKey)
+    .sort(compareByMatchPhase);
+  // 54 ≈ 6 جولات × 9 مباريات (روشن) — السقف السابق 20 كان يقطع منتصف الجولة
+  // الثالثة. الجدول الكامل يبقى عبر /rounds + /round لا عبر هذه المعاينة.
   const upcoming = fixtures
     .filter((f) => !f.status.live && !f.status.finished && riyadhDayKey(f.timestamp) !== todayKey)
-    .slice(0, 20);
+    .sort(compareByMatchPhase)
+    .slice(0, 54);
   const results = fixtures
     .filter((f) => f.status.finished && riyadhDayKey(f.timestamp) !== todayKey)
     .sort((a, b) => b.timestamp - a.timestamp)
-    .slice(0, 20);
+    .slice(0, 54);
 
   return { live, today, upcoming, results };
 }
+
+const todayHomeSnapshot = new SportsComponentSnapshot<Awaited<ReturnType<typeof getGlobalTodayFixtures>>>({
+  blockedForMs: getApiFootballRetryAfterMs,
+  freshMs: 30_000,
+});
 
 export function registerSportsRoutes(app: Express) {
   // تسخين كاش معلومات البطولات على كل pod — يمنع دفع أول مستخدم بعد deploy
@@ -275,12 +339,41 @@ export function registerSportsRoutes(app: Express) {
     }
     try {
       const season = parseSeason(req);
-      const [yellow, red] = await Promise.all([
-        getTopYellowCards(comp, season).catch(() => []),
-        getTopRedCards(comp, season).catch(() => []),
-      ]);
-      res.set("Cache-Control", "public, max-age=300, s-maxage=900, stale-while-revalidate=1800");
-      res.json({ configured: true, yellow, red });
+      let timedOut = false;
+      const board = await bestEffortWithin(
+        Promise.all([
+          getTopYellowCards(comp, season).catch(() => []),
+          getTopRedCards(comp, season).catch(() => []),
+        ]).then(([yellow, red]) => ({ yellow, red })),
+        {
+          fallback: null,
+          timeoutMs: 3_000,
+          onTimeout: () => {
+            timedOut = true;
+            warnThrottled(`deadline:cards:${comp.slug}`, `[Sports] cards deadline exceeded for ${comp.slug}`);
+          },
+        },
+      );
+      if (board == null) {
+        if (timedOut) {
+          res.set("Cache-Control", "private, no-store");
+          res.set("Retry-After", "2");
+          res.status(503).json({ message: "متصدّرو البطاقات يُحمَّلون حاليًا" });
+          return;
+        }
+        res.status(502).json({ message: "تعذر جلب متصدّري البطاقات حاليًا" });
+        return;
+      }
+      const hasLive =
+        !season &&
+        (await getLiveFixtures(comp).catch(() => [])).some((f) => f.status.live);
+      res.set(
+        "Cache-Control",
+        hasLive
+          ? "public, max-age=0, s-maxage=60, stale-while-revalidate=120"
+          : "public, max-age=300, s-maxage=900, stale-while-revalidate=1800",
+      );
+      res.json({ configured: true, yellow: board.yellow, red: board.red });
     } catch (error) {
       console.error("[Sports] cards failed:", error);
       res.status(502).json({ message: "تعذر جلب متصدّري البطاقات حاليًا" });
@@ -376,16 +469,30 @@ export function registerSportsRoutes(app: Express) {
     // ?date=YYYY-MM-DD اختياري للتنقّل بين الأيام (لوحة "مباريات اليوم").
     const dateRaw = typeof req.query.date === "string" ? req.query.date.trim() : "";
     const date = /^\d{4}-\d{2}-\d{2}$/.test(dateRaw) ? dateRaw : undefined;
+    const resilient = req.query.resilient === "1";
     try {
-      const today = (await overlayLiveBoardList(await getGlobalTodayFixtures(date))).map(withClockAnchor);
+      const load = async () => (await overlayLiveBoardList(await getGlobalTodayFixtures(date))).map(withClockAnchor);
+      const snapshot = resilient
+        ? await todayHomeSnapshot.get(`today:${currentSportsLang()}:${sportsComponentDay(date)}`, load)
+        : { data: await load(), freshness: undefined };
+      const today = snapshot.data;
       res.set(
         "Cache-Control",
         today.some(isHotFixture)
           ? "public, max-age=0, s-maxage=5, stale-while-revalidate=15"
           : "public, max-age=30, s-maxage=60, stale-while-revalidate=120",
       );
-      res.json({ configured: true, date: date ?? null, today });
+      if (resilient) res.set("Cache-Control", "no-store");
+      res.json({ configured: true, date: date ?? null, today,
+        ...(snapshot.freshness ? { freshness: snapshot.freshness } : {}),
+      });
     } catch (error) {
+      if (resilient) {
+        res.set("Cache-Control", "no-store");
+        res.set("Retry-After", String(error instanceof ComponentSnapshotUnavailable ? error.retryAfterSeconds : 15));
+        res.status(503).json({ message: "تعذر تحديث مباريات اليوم مؤقتًا" });
+        return;
+      }
       console.error("[Sports] global today failed:", error);
       res.status(502).json({ message: "تعذر جلب مباريات اليوم حاليًا" });
     }
@@ -483,7 +590,8 @@ export function registerSportsRoutes(app: Express) {
     }
     try {
       const { rounds, current } = await getCompetitionRounds(comp, parseSeason(req));
-      res.set("Cache-Control", "public, max-age=300, s-maxage=1800, stale-while-revalidate=3600");
+      // current يتقدّم بعد صافرة آخر مباراة — كاش قصير كيلا يعلق المؤشر على جولة منتهية.
+      res.set("Cache-Control", "public, max-age=60, s-maxage=120, stale-while-revalidate=300");
       res.json({ configured: true, rounds, current });
     } catch (error) {
       console.error("[Sports] rounds failed:", error);
@@ -505,8 +613,25 @@ export function registerSportsRoutes(app: Express) {
       return;
     }
     try {
-      const fixtures = await getFixturesByRound(comp, name, parseSeason(req));
-      res.set("Cache-Control", "public, max-age=60, s-maxage=120, stale-while-revalidate=300");
+      const season = parseSeason(req);
+      let fixtures = await getFixturesByRound(comp, name, season);
+      // موسم جارٍ: دمج live + TheSports حتى تتحرّك النتيجة داخل تبويب الجولات.
+      if (!season) {
+        const liveNow = await getLiveFixtures(comp).catch(() => []);
+        if (liveNow.length > 0) {
+          const byId = new Map(liveNow.map((f) => [f.id, f]));
+          fixtures = fixtures.map((f) => byId.get(f.id) ?? f);
+        }
+        fixtures = await overlayLiveFixturesForComp(fixtures, comp.slug).catch(() => fixtures);
+      }
+      fixtures = [...fixtures].sort(compareByMatchPhase).map(withClockAnchor);
+      const hasLive = fixtures.some((f) => f.status.live || isHotFixture(f));
+      res.set(
+        "Cache-Control",
+        hasLive
+          ? "public, max-age=0, s-maxage=5, stale-while-revalidate=15"
+          : "public, max-age=60, s-maxage=120, stale-while-revalidate=300",
+      );
       res.json({ configured: true, fixtures });
     } catch (error) {
       console.error("[Sports] round fixtures failed:", error);
@@ -530,13 +655,21 @@ export function registerSportsRoutes(app: Express) {
         res.json({ configured: true, standings: await getStandings(comp, season) });
         return;
       }
-      // ترتيب مبدئي لحظي: نطبّق نتائج مباريات البطولة الجارية فوق الجدول فيتحرّك
-      // مع كل هدف. كاش واعٍ للبثّ: قصير أثناء وجود مباراة جارية وإلا أطول.
-      const [base, liveNow] = await Promise.all([
+      // ترتيب مبدئي لحظي: نطبّق نتائج المباريات الجارية (بعد طبقة TheSports) فوق
+      // الجدول فيتحرّك مع كل هدف بنفس دقة قائمة المباريات. وقائمة الموسم تسدّ
+      // فجوة ما بعد الصافرة: المنتهية التي لم يستوعبها جدول المزوّد بعد تبقى
+      // محسوبة مبدئيًّا حتى يلحق (حادثة الحزم–أبها، افتتاح روشن 2026-08-13).
+      const [base, liveNow, seasonFx] = await Promise.all([
         getStandings(comp),
         getLiveFixtures(comp).catch(() => []),
+        comp.hasStandings
+          ? getFixtures(comp).catch(() => [] as SplFixture[])
+          : Promise.resolve([] as SplFixture[]),
       ]);
-      const standings = applyProvisionalTable(base, liveNow);
+      const live = await overlayLiveFixturesForComp(liveNow, comp.slug).catch(() => liveNow);
+      const allFx = mergeSeasonWithLive(seasonFx, live);
+      const pending = selectUnabsorbedFinished(base, allFx, { isCountedRound: isLeagueTableRound });
+      const standings = applyProvisionalTable(base, allFx, pending);
       const hasLive = standings.some((r) => r.live);
       res.set(
         "Cache-Control",
@@ -552,6 +685,8 @@ export function registerSportsRoutes(app: Express) {
   });
 
   // الهدّافون (أعلى 15؛ يرد [] لمن لا يدعمها).
+  // مهلة أفضل جهد: كاش بارد + طابور API-Football كان يعلّق الطلب ~5ث (APM).
+  // عند المهلة 503 + Retry-After حتى يعيد العميل بعد امتلاء SWR — لا نكاش قائمة فارغة.
   app.get("/api/sports/:comp/scorers", async (req, res) => {
     const comp = resolve(req, res);
     if (!comp) return;
@@ -560,8 +695,36 @@ export function registerSportsRoutes(app: Express) {
       return;
     }
     try {
-      res.set("Cache-Control", "public, max-age=300, s-maxage=900, stale-while-revalidate=1800");
-      res.json({ configured: true, scorers: await getTopScorers(comp, parseSeason(req)) });
+      let timedOut = false;
+      const scorers = await bestEffortWithin(getTopScorers(comp, parseSeason(req)), {
+        fallback: null,
+        timeoutMs: 3_000,
+        onTimeout: () => {
+          timedOut = true;
+          warnThrottled(`deadline:scorers:${comp.slug}`, `[Sports] scorers deadline exceeded for ${comp.slug}`);
+        },
+      });
+      if (scorers == null) {
+        if (timedOut) {
+          res.set("Cache-Control", "private, no-store");
+          res.set("Retry-After", "2");
+          res.status(503).json({ message: "قائمة الهدافين تُحمَّل حاليًا" });
+          return;
+        }
+        res.status(502).json({ message: "تعذر جلب قائمة الهدافين حاليًا" });
+        return;
+      }
+      const season = parseSeason(req);
+      const hasLive =
+        !season &&
+        (await getLiveFixtures(comp).catch(() => [])).some((f) => f.status.live);
+      res.set(
+        "Cache-Control",
+        hasLive
+          ? "public, max-age=0, s-maxage=60, stale-while-revalidate=120"
+          : "public, max-age=300, s-maxage=900, stale-while-revalidate=1800",
+      );
+      res.json({ configured: true, scorers });
     } catch (error) {
       console.error("[Sports] scorers failed:", error);
       res.status(502).json({ message: "تعذر جلب قائمة الهدافين حاليًا" });
@@ -595,8 +758,36 @@ export function registerSportsRoutes(app: Express) {
       return;
     }
     try {
-      res.set("Cache-Control", "public, max-age=300, s-maxage=900, stale-while-revalidate=1800");
-      res.json({ configured: true, assists: await getTopAssists(comp, parseSeason(req)) });
+      let timedOut = false;
+      const assists = await bestEffortWithin(getTopAssists(comp, parseSeason(req)), {
+        fallback: null,
+        timeoutMs: 3_000,
+        onTimeout: () => {
+          timedOut = true;
+          warnThrottled(`deadline:assists:${comp.slug}`, `[Sports] assists deadline exceeded for ${comp.slug}`);
+        },
+      });
+      if (assists == null) {
+        if (timedOut) {
+          res.set("Cache-Control", "private, no-store");
+          res.set("Retry-After", "2");
+          res.status(503).json({ message: "قائمة صنّاع الأهداف تُحمَّل حاليًا" });
+          return;
+        }
+        res.status(502).json({ message: "تعذر جلب قائمة صنّاع الأهداف حاليًا" });
+        return;
+      }
+      const season = parseSeason(req);
+      const hasLive =
+        !season &&
+        (await getLiveFixtures(comp).catch(() => [])).some((f) => f.status.live);
+      res.set(
+        "Cache-Control",
+        hasLive
+          ? "public, max-age=0, s-maxage=60, stale-while-revalidate=120"
+          : "public, max-age=300, s-maxage=900, stale-while-revalidate=1800",
+      );
+      res.json({ configured: true, assists });
     } catch (error) {
       console.error("[Sports] assists failed:", error);
       res.status(502).json({ message: "تعذر جلب قائمة صنّاع الأهداف حاليًا" });
@@ -633,9 +824,16 @@ export function registerSportsRoutes(app: Express) {
         return;
       }
       const fixture = withClockAnchor(detail.fixture);
-      // «ساخنة» تشمل نافذة الانطلاق (±) — استجابة ما قبل البدء كانت تُخزَّن على
-      // الحافة 300ث فيرى الجمهور «لم تبدأ» دقائق بعد الصافرة.
-      const ttl = isHotFixture(fixture) ? "max-age=10, s-maxage=15" : "max-age=120, s-maxage=300";
+      // «ساخنة» تشمل نافذة التشكيلات/الانطلاق. كذلك أي قادمة بلا startXI داخل
+      // ساعتين تُخدم بكاش قصير حتى لا تتجمّد [] على الحافة بعد صدور التشكيلة.
+      const awaitingLineups =
+        !fixture.status.finished &&
+        !detail.lineups.some((lu) => (lu.startXI?.length ?? 0) > 0) &&
+        Math.floor(Date.now() / 1000) >= fixture.timestamp - 2 * 3600;
+      const ttl =
+        isHotFixture(fixture) || awaitingLineups
+          ? "max-age=10, s-maxage=15"
+          : "max-age=120, s-maxage=300";
       res.set("Cache-Control", `public, ${ttl}, stale-while-revalidate=120`);
       res.json({ ...detail, fixture });
     } catch (error) {
@@ -740,6 +938,28 @@ export function registerSportsRoutes(app: Express) {
     }
   });
 
+  // تقييمات لاعبين احتياطية (TheSports) — تملأ تبويب «التقييمات» حين لا يرسل
+  // API-Football بيانات لاعبين (نفس احتياط المونديال معمّمًا). أفضل جهد.
+  app.get("/api/sports/match/:id/player-stats", async (req, res) => {
+    if (!isSaudiLeagueConfigured()) {
+      res.json({ available: false, home: null, away: null });
+      return;
+    }
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id) || id <= 0) {
+      res.status(400).json({ message: "معرّف مباراة غير صحيح" });
+      return;
+    }
+    try {
+      const stats = await getMatchPlayerStatsTs(id);
+      res.set("Cache-Control", "public, max-age=120, s-maxage=600, stale-while-revalidate=3600");
+      res.json(stats);
+    } catch (error) {
+      console.error("[Sports] match player stats failed:", error);
+      res.json({ available: false, home: null, away: null });
+    }
+  });
+
   // ---------- إثراء SportMonks للبوابة (xG/الضغط/معطيات) — سعودي/آسيا وغيرها ----------
   // نحلّ معرّف SportMonks من هوية مباراة API-Football ثم نعيد استخدام دوال البناء
   // عبر directSmId (نفس منطق المونديال، بلا تكرار). كلها best-effort بحُرّاس توفّر.
@@ -797,7 +1017,12 @@ export function registerSportsRoutes(app: Express) {
       const liveIds = new Set(liveNow.map((f) => f.id));
       const mergedLive = [...liveNow, ...buckets.live.filter((f) => !liveIds.has(f.id))];
       const live = season ? [] : await overlayLiveFixturesForComp(mergedLive, comp.slug).catch(() => mergedLive);
-      const standings = season ? baseStandings : applyProvisionalTable(baseStandings, liveNow);
+      // نفس معالجة مسار الترتيب: الجارية + المنتهية المعلّقة فوق الجدول الرسمي.
+      const allFx = mergeSeasonWithLive(fixtures, live);
+      const pending = season
+        ? []
+        : selectUnabsorbedFinished(baseStandings, allFx, { isCountedRound: isLeagueTableRound });
+      const standings = season ? baseStandings : applyProvisionalTable(baseStandings, allFx, pending);
       const featured = live[0] ?? buckets.today[0] ?? buckets.upcoming[0] ?? buckets.results[0] ?? null;
 
       const leader = standings[0] ?? null;
@@ -1115,7 +1340,9 @@ export function registerSportsRoutes(app: Express) {
         const tr = await resolveNames(players.map((p) => p.name)).catch(() => null);
         if (tr) for (const p of players) p.name = tr(p.name) || p.name;
       }
-      res.set("Cache-Control", "public, max-age=60, s-maxage=180, stale-while-revalidate=600");
+      res.set("Cache-Control", data.available
+        ? "public, max-age=60, s-maxage=180, stale-while-revalidate=600"
+        : "public, max-age=15, s-maxage=15, stale-while-revalidate=30");
       res.json(data);
     } catch (error) {
       console.error("[Sports] expected-lineup failed:", error);
@@ -1243,12 +1470,60 @@ export function registerSportsRoutes(app: Express) {
     }
     try {
       const withExtras = req.query.with === "stats";
-      const profile = await getTeamProfile(id, { withExtras });
+      let timedOut = false;
+      let failed = false;
+      const fullAttempt = bestEffortWithin(getTeamProfile(id, { withExtras }), {
+        fallback: null,
+        // بعد SWR على الملف الكامل: 3ث كافية؛ أطول من ذلك = طابور مزوّد محتجز.
+        timeoutMs: 3_000,
+        onTimeout: () => {
+          timedOut = true;
+        },
+        onError: () => {
+          failed = true;
+        },
+      }).then((profile) => ({ profile, enriched: true }));
+
+      // الإحصاءات/المدرب/الهدافون إثراء اختياري. على البرود نبدأ الملف الأساسي
+      // بالتوازي ونُرجعه فور اكتماله بدل حجب صفحة النادي كلها حتى تنتهي الإثراءات
+      // خلف طابور المزود. مفاتيح الأجزاء الداخلية SWR + single-flight، لذلك لا
+      // تتكرر نداءات الهوية/التشكيلة/الترتيب بين المحاولتين.
+      const result = withExtras
+        ? await Promise.race([
+            fullAttempt,
+            bestEffortWithin(getTeamProfile(id, { withExtras: false }), {
+              fallback: null,
+              timeoutMs: 3_000,
+              onTimeout: () => {
+                timedOut = true;
+              },
+              onError: () => {
+                failed = true;
+              },
+            }).then(async (profile) => profile
+              ? { profile, enriched: false }
+              : fullAttempt),
+          ])
+        : await fullAttempt;
+      const { profile } = result;
       if (!profile) {
+        if (timedOut || failed) {
+          warnThrottled(`deadline:team-profile:${id}`, `[Sports] team profile deadline exceeded for ${id}`);
+          res.set("Retry-After", "15");
+          res.status(503).json({ message: "صفحة النادي تُحمَّل حاليًا" });
+          return;
+        }
         res.status(404).json({ message: "النادي غير موجود" });
         return;
       }
-      res.set("Cache-Control", "public, max-age=120, s-maxage=600, stale-while-revalidate=1800");
+      if (result.enriched) {
+        res.set("Cache-Control", "public, max-age=120, s-maxage=600, stale-while-revalidate=1800");
+      } else {
+        // لا يُخزّن CDN الاستجابة الجزئية مكان النسخة الكاملة؛ الطلب التالي يصيب
+        // كاش الإثراء الذي استمر بناؤه في الخلفية.
+        res.set("Cache-Control", "no-store");
+        res.set("Retry-After", "2");
+      }
       res.json(profile);
     } catch (error) {
       console.error("[Sports] team profile failed:", error);
@@ -1363,12 +1638,17 @@ export function registerSportsRoutes(app: Express) {
       return;
     }
     try {
-      const transfers = await getTeamTransfers(id);
+      const empty = { arrivals: [] as Awaited<ReturnType<typeof getTeamTransfers>>["arrivals"], departures: [] as Awaited<ReturnType<typeof getTeamTransfers>>["departures"] };
+      const transfers = await bestEffortWithin(getTeamTransfers(id), {
+        fallback: empty,
+        timeoutMs: 3_000,
+        onTimeout: () => warnThrottled(`deadline:team-transfers:${id}`, `[Sports] team transfers deadline exceeded for ${id}`),
+      });
       res.set("Cache-Control", "public, max-age=600, s-maxage=3600, stale-while-revalidate=7200");
       res.json(transfers);
     } catch (error) {
       console.error("[Sports] team transfers failed:", error);
-      res.status(502).json({ message: "تعذر جلب انتقالات النادي حاليًا" });
+      res.json({ arrivals: [], departures: [] });
     }
   });
 
@@ -1481,20 +1761,51 @@ export function registerSportsRoutes(app: Express) {
       return;
     }
     try {
-      const player = await getPlayerCard(id);
+      let timedOut = false;
+      let failed = false;
+      const wantExtras = req.query.with === "extras";
+      // extras كانت تنتظر انتهاء البطاقة (~3ث) ثم تضيف ~2.5ث — ابدأها معًا.
+      const playerPromise = bestEffortWithin(getPlayerCard(id), {
+        fallback: null,
+        timeoutMs: 3_000,
+        onTimeout: () => {
+          timedOut = true;
+          warnThrottled(`deadline:player-card:${id}`, `[Sports] player card deadline exceeded for ${id}`);
+        },
+        onError: () => {
+          failed = true;
+        },
+      });
+      const extrasPromise = wantExtras
+        ? Promise.all([
+            bestEffortWithin(getPlayerSeasonHistory(id).catch(() => []), {
+              fallback: [] as Awaited<ReturnType<typeof getPlayerSeasonHistory>>,
+              timeoutMs: 2_500,
+            }),
+            bestEffortWithin(getPlayerTransfers(id).catch(() => []), {
+              fallback: [] as Awaited<ReturnType<typeof getPlayerTransfers>>,
+              timeoutMs: 2_500,
+            }),
+            bestEffortWithin(getPlayerInjuries(id).catch(() => []), {
+              fallback: [] as Awaited<ReturnType<typeof getPlayerInjuries>>,
+              timeoutMs: 2_500,
+            }),
+          ])
+        : null;
+
+      const [player, extras] = await Promise.all([playerPromise, extrasPromise]);
       if (!player) {
+        if (timedOut || failed) {
+          res.set("Retry-After", "15");
+          res.status(503).json({ message: "ملف اللاعب يُحمَّل حاليًا" });
+          return;
+        }
         res.status(404).json({ message: "ملف اللاعب غير متاح" });
         return;
       }
       res.set("Cache-Control", "public, max-age=600, s-maxage=3600, stale-while-revalidate=7200");
-      // الموجة 2: عند ?with=extras تُضمَّن سلسلة المواسم + الانتقالات + الإصابات
-      // في نفس الاستجابة (تقلّل طلبات صفحة اللاعب). كلها تتدهور بسلاسة إلى [].
-      if (req.query.with === "extras") {
-        const [history, transfers, injuries] = await Promise.all([
-          getPlayerSeasonHistory(id).catch(() => []),
-          getPlayerTransfers(id).catch(() => []),
-          getPlayerInjuries(id).catch(() => []),
-        ]);
+      if (extras) {
+        const [history, transfers, injuries] = extras;
         res.json({ ...player, history, transfers, injuries });
         return;
       }
@@ -1517,8 +1828,23 @@ export function registerSportsRoutes(app: Express) {
       return;
     }
     try {
-      const market = await getPlayerMarketValue(id);
-      res.set("Cache-Control", "public, max-age=3600, s-maxage=21600, stale-while-revalidate=86400");
+      const empty = { available: false, value: null, currency: "€", peak: null, history: [] };
+      let timedOut = false;
+      const market = await bestEffortWithin(getPlayerMarketValue(id), {
+        fallback: empty,
+        // قسم اختياري: نرجع الصفحة سريعًا ونترك SWR يملأ الكاش. المهلة هنا
+        // ليست عطلًا ولا تُسجَّل deadline؛ الأهم ألا يُكاش fallback في CDN.
+        timeoutMs: 1_000,
+        onTimeout: () => {
+          timedOut = true;
+        },
+      });
+      if (timedOut) {
+        res.set("Cache-Control", "no-store");
+        res.set("Retry-After", "2");
+      } else {
+        res.set("Cache-Control", "public, max-age=3600, s-maxage=21600, stale-while-revalidate=86400");
+      }
       res.json(market);
     } catch (error) {
       console.error("[Sports] player market failed:", error);
@@ -1538,8 +1864,20 @@ export function registerSportsRoutes(app: Express) {
       return;
     }
     try {
-      const form = await getPlayerForm(id);
-      res.set("Cache-Control", "public, max-age=1800, s-maxage=10800, stale-while-revalidate=21600");
+      let timedOut = false;
+      const form = await bestEffortWithin(getPlayerForm(id), {
+        fallback: { available: false, matches: [] },
+        timeoutMs: 2_500,
+        onTimeout: () => {
+          timedOut = true;
+        },
+      });
+      if (timedOut) {
+        res.set("Cache-Control", "no-store");
+        res.set("Retry-After", "2");
+      } else {
+        res.set("Cache-Control", "public, max-age=1800, s-maxage=10800, stale-while-revalidate=21600");
+      }
       res.json(form);
     } catch (error) {
       console.error("[Sports] player form failed:", error);
@@ -1547,9 +1885,10 @@ export function registerSportsRoutes(app: Express) {
     }
   });
 
-  // المرحلة 2 (ذكاء): سرد المباراة آليًا بالعربية (جارية/منتهية). lazy — تُستدعى
-  // عند فتح تبويب «الملخّص الذكي». التوليد خلف كاش SWR فلا يتكرّر لكل زائر.
-  app.get("/api/sports/match/:id/story", async (req, res) => {
+  // المرحلة 2 (ذكاء): سرد المباراة آليًا بالعربية (جارية/منتهية).
+  // مقصورة على أهل التحرير (لوحة التحكم) — كانت مفتوحة للعموم بلا مصادقة ولا حدّ،
+  // وكل معرّف مباراة جديد يشغّل توليد LLM + استدعاءات API-Football مدفوعة.
+  app.get("/api/sports/match/:id/story", requireSportsAiEditor("articles.create", "articles.edit_any", "articles.edit_own"), async (req, res) => {
     if (!isSaudiLeagueConfigured()) {
       res.status(404).json({ message: "غير متاح" });
       return;
@@ -1565,8 +1904,8 @@ export function registerSportsRoutes(app: Express) {
         res.status(404).json({ message: "لا يتوفّر ملخّص لهذه المباراة" });
         return;
       }
-      const ttl = story.live ? "max-age=30, s-maxage=60" : "max-age=600, s-maxage=3600";
-      res.set("Cache-Control", `public, ${ttl}, stale-while-revalidate=120`);
+      // استجابة خلف مصادقة — private حتى لا تعلَق نسخة على حافة CDN.
+      res.set("Cache-Control", "private, max-age=60");
       res.json(story);
     } catch (error) {
       console.error("[Sports] match story failed:", error);
@@ -1575,7 +1914,8 @@ export function registerSportsRoutes(app: Express) {
   });
 
   // المرحلة 2 (ذكاء): معاينة ما قبل المباراة (للمباريات غير المبدوءة فقط).
-  app.get("/api/sports/match/:id/preview", async (req, res) => {
+  // مقصورة على أهل التحرير كما «السرد» أعلاه — لا توليد AI مفتوحًا للعموم.
+  app.get("/api/sports/match/:id/preview", requireSportsAiEditor("articles.create", "articles.edit_any", "articles.edit_own"), async (req, res) => {
     if (!isSaudiLeagueConfigured()) {
       res.status(404).json({ message: "غير متاح" });
       return;
@@ -1591,7 +1931,8 @@ export function registerSportsRoutes(app: Express) {
         res.status(404).json({ message: "لا تتوفّر معاينة لهذه المباراة" });
         return;
       }
-      res.set("Cache-Control", "public, max-age=600, s-maxage=1800, stale-while-revalidate=1800");
+      // استجابة خلف مصادقة — private حتى لا تعلَق نسخة على حافة CDN.
+      res.set("Cache-Control", "private, max-age=300");
       res.json(preview);
     } catch (error) {
       console.error("[Sports] match preview failed:", error);

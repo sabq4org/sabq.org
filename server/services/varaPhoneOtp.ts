@@ -1,4 +1,5 @@
 import twilio from "twilio";
+import { sendOtp, verifyOtp } from "./otpService";
 
 // خدمة OTP خاصّة بتطبيق VARA فقط — معزولة تمامًا عن خدمة Twilio المشتركة
 // (WhatsApp/2FA في server/twilio.ts). تقرأ متغيّرات بيئة مستقلّة كي لا تتعارض
@@ -19,7 +20,7 @@ function getVaraVerifyServiceSid(): string | undefined {
 }
 
 /** إرسال رمز تحقّق (SMS) عبر Twilio Verify — للرقم بصيغة E.164 الدولية. */
-export async function varaSendOtp(
+async function legacyVaraSendOtp(
   phoneE164: string,
 ): Promise<{ success: boolean; message: string }> {
   try {
@@ -56,7 +57,7 @@ export async function varaSendOtp(
 }
 
 /** التحقّق من الرمز — للرقم بصيغة E.164. */
-export async function varaVerifyOtp(
+async function legacyVaraVerifyOtp(
   phoneE164: string,
   code: string,
 ): Promise<{ valid: boolean; message: string }> {
@@ -79,4 +80,22 @@ export async function varaVerifyOtp(
     console.error("❌ [VARA OTP] verify error:", error?.message || error);
     return { valid: false, message: "الرمز غير صحيح أو منتهي الصلاحية" };
   }
+}
+
+/**
+ * دخول الجوال (ويب + تطبيقات): الرمز مولَّد داخل سبق ويُرسل عبر Bevatel باسم
+ * SABQ أساسًا وTwilio تراجعًا. مسار Twilio Verify الخاص بـVARA أعلاه يبقى
+ * احتياطًا فقط حين لا يكون أي موصل SMS مهيّأً.
+ */
+export async function varaSendOtp(phoneE164: string): Promise<{ success: boolean; message: string }> {
+  const own = await sendOtp(phoneE164, "login");
+  if (own.configured) return { success: own.success, message: own.message };
+  return legacyVaraSendOtp(phoneE164);
+}
+
+export async function varaVerifyOtp(phoneE164: string, code: string): Promise<{ valid: boolean; message: string }> {
+  const own = await verifyOtp(phoneE164, code, "login");
+  if (own.valid || !own.notFound) return { valid: own.valid, message: own.message };
+  if (process.env.VARA_TWILIO_VERIFY_SERVICE_SID) return legacyVaraVerifyOtp(phoneE164, code);
+  return { valid: false, message: own.message };
 }

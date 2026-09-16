@@ -1,0 +1,17 @@
+# gitleaks false positives — triaged 2026-07-24. These are NOT secrets.
+# Fingerprint format (no-git scan): <file>:<ruleID>:<line>. Surgical, per-finding
+# — the files themselves are still scanned for any REAL secret.
+
+# Documentation placeholder ("Bearer YOUR_JWT_TOKEN"), not a token.
+client/src/pages/DevelopersPage.tsx:curl-auth-header:220
+
+# iOS UserDefaults / Info.plist KEY NAMES (identifier strings, not credentials).
+sabq app ios/sabq/Services/HealthKitManager.swift:generic-api-key:22
+sabq app ios/sabq/Services/HealthKitManager.swift:generic-api-key:32
+sabq app ios/sabq/Services/SabqAnalytics.swift:generic-api-key:165
+
+# PEM header MARKERS in env-driven key normalization / validation code — the
+# literal "-----BEGIN PRIVATE KEY-----" string, never an actual key.
+server/services/apnsService.ts:private-key:91
+server/services/apnsService.ts:private-key:99
+server/services/googleIndexingService.ts:private-key:91

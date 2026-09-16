@@ -40,6 +40,8 @@ backup_unused_assets
 !migrations/*.sql
 # DDL تشغيلي بلا بيانات شخصية — زراعة جداول الميزات عبر محرر SQL
 !scripts/sql/*.sql
+# تهيئة Postgres المحلي (docker-entrypoint-initdb.d) — امتدادات فقط
+!scripts/db-init/*.sql
 *.sql.gz
 *.dump
 *.backup
@@ -120,3 +122,11 @@ docs/security/تقرير_المراجعة_الأمنية_سبق.json
 # Claude Code personal settings
 .claude/settings.local.json
 .claude/worktrees/
+
+# IDE + local worktrees
+.idea/
+.vscode/
+.worktrees/
+
+# Native Firebase QA config is provisioned locally; never bundle it in release.
+/android-native/app/src/debug/google-services.json

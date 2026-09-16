@@ -1,4 +1,6 @@
 import { Router, Request, Response } from "express";
+import sharp from "sharp";
+import crypto from "crypto";
 import { canAcceptExternalSse, trackExternalSse, CACHE_TTL, withSWR } from "./memoryCache";
 import { db } from "./db";
 import { pickTableColumns } from "./utils/sanitizeBody";
@@ -34,6 +36,7 @@ import type {
 } from "@shared/schema";
 import multer from "multer";
 import { ObjectStorageService } from "./objectStorage";
+import { paginationOrReject } from "./utils/pagination";
 
 const router = Router();
 
@@ -125,8 +128,83 @@ function requireAdvertiser(req: Request, res: Response, next: Function) {
     });
     return res.status(403).json({ error: "ليس لديك صلاحية الوصول إلى نظام الإعلانات" });
   }
-  
+
   next();
+}
+
+/**
+ * Which campaigns may this caller see?
+ *
+ * `requireAdvertiser` admits advertiser, admin, superadmin, editor AND
+ * reporter, and the analytics queries then read whatever campaign id they were
+ * handed — so one advertiser could pull a competitor's spend, impressions and
+ * conversion figures, and any reporter could read the whole book.
+ *
+ * Returns `{accountId: null}` for staff (unrestricted, which is the
+ * dashboard's purpose), `{accountId}` for an advertiser, or null when the
+ * caller owns no ad account — they own nothing, so they must see nothing.
+ */
+const STAFF_ADS_ROLES = ["admin", "superadmin", "editor"];
+
+async function resolveAdsScope(req: Request): Promise<{ accountId: string | null } | null> {
+  const role = (req.user as any)?.role;
+  if (STAFF_ADS_ROLES.includes(role)) return { accountId: null };
+
+  const userId = (req.user as any)?.id;
+  if (!userId) return null;
+
+  const [account] = await db
+    .select({ id: adAccounts.id })
+    .from(adAccounts)
+    .where(eq(adAccounts.userId, userId))
+    .limit(1);
+
+  return account ? { accountId: account.id } : null;
+}
+
+/**
+ * Express guard for every analytics route that takes a campaign id from the
+ * client. Staff pass through; an advertiser may only name campaigns on their
+ * own ad account. Reads `campaignId` / `campaignIds` from the query and
+ * `campaignId` from the path, so it covers all shapes these routes use.
+ */
+async function requireCampaignScope(req: Request, res: Response, next: Function) {
+  try {
+    const scope = await resolveAdsScope(req);
+    if (!scope) {
+      return res.status(403).json({ error: "لا يوجد حساب معلن مرتبط بهذا المستخدم" });
+    }
+    // Staff: unrestricted.
+    if (scope.accountId === null) return next();
+
+    const raw = [
+      req.params?.campaignId,
+      req.query?.campaignId,
+      ...(typeof req.query?.campaignIds === "string" ? req.query.campaignIds.split(",") : []),
+    ].filter((v): v is string => typeof v === "string" && v.length > 0);
+
+    if (raw.length === 0) {
+      // No campaign named — the handler aggregates over "everything visible".
+      // Pin that to the caller's account so the aggregate can't span the book.
+      (req as any).adsScopeAccountId = scope.accountId;
+      return next();
+    }
+
+    const owned = await db
+      .select({ id: campaigns.id })
+      .from(campaigns)
+      .where(and(inArray(campaigns.id, raw), eq(campaigns.accountId, scope.accountId)));
+
+    if (owned.length !== new Set(raw).size) {
+      return res.status(403).json({ error: "لا تملك صلاحية الاطلاع على هذه الحملة" });
+    }
+
+    (req as any).adsScopeAccountId = scope.accountId;
+    next();
+  } catch (error) {
+    console.error("[Ads Auth] campaign scope check failed:", error);
+    res.status(500).json({ error: "تعذر التحقق من صلاحية الحملة" });
+  }
 }
 
 // التحقق من أن المستخدم مشرف
@@ -513,9 +591,28 @@ router.put("/campaigns/:id", requireAdvertiser, async (req, res) => {
     if (req.body.dailyBudget !== undefined) allowedFields.dailyBudget = req.body.dailyBudget;
     if (req.body.startDate !== undefined) allowedFields.startDate = new Date(req.body.startDate);
     if (req.body.endDate !== undefined) allowedFields.endDate = req.body.endDate ? new Date(req.body.endDate) : null;
-    if (req.body.status !== undefined) allowedFields.status = req.body.status;
     if (req.body.bidAmount !== undefined) allowedFields.bidAmount = req.body.bidAmount;
-    if (req.body.rejectionReason !== undefined) allowedFields.rejectionReason = req.body.rejectionReason;
+
+    // `status` and `rejectionReason` are the review verdict — they belong to
+    // the admin, not to the advertiser being reviewed. The ownership check
+    // above only blocks editing a campaign that is ALREADY active, so without
+    // this split an advertiser could approve their own draft by sending
+    // status:"active" (and forge the admin's rejection note).
+    const isAdsAdmin = ["admin", "superadmin"].includes(userRole);
+    if (isAdsAdmin) {
+      if (req.body.status !== undefined) allowedFields.status = req.body.status;
+      if (req.body.rejectionReason !== undefined) allowedFields.rejectionReason = req.body.rejectionReason;
+    } else if (req.body.status !== undefined) {
+      // An advertiser may only move their own campaign between the two
+      // pre-review states: keep working on it, or submit it for review.
+      const ADVERTISER_STATUSES = ["draft", "pending"];
+      if (!ADVERTISER_STATUSES.includes(req.body.status)) {
+        return res.status(403).json({
+          error: "لا يمكنك تغيير حالة الحملة — الاعتماد يتم من إدارة الإعلانات",
+        });
+      }
+      allowedFields.status = req.body.status;
+    }
     
     allowedFields.updatedAt = new Date();
     
@@ -2115,20 +2212,37 @@ router.post("/creatives/upload", requireAdvertiser, upload.single("file"), async
       return res.status(400).json({ error: "لم يتم رفع أي ملف" });
     }
     
-    // تحديد نوع الملف
+    // تحديد نوع الملف من الامتداد (قائمة بيضاء)
     const ext = file.originalname.toLowerCase().substring(file.originalname.lastIndexOf('.'));
     const isImage = ALLOWED_IMAGE_EXTENSIONS.includes(ext);
     const isVideo = ALLOWED_VIDEO_EXTENSIONS.includes(ext);
-    
+
     if (!isImage && !isVideo) {
       return res.status(400).json({ error: "نوع الملف غير مدعوم" });
     }
-    
+
+    // للصور: تحقّق فعلي من البايتات واشتقاق الامتداد/النوع من الصيغة المُتحقَّقة —
+    // لا من الامتداد أو ترويسة MIME (audit #6, CWE-434).
+    let safeExt = ext;
+    let contentType = file.mimetype;
+    if (isImage) {
+      const RASTER: Record<string, string> = { jpeg: ".jpg", png: ".png", gif: ".gif", webp: ".webp" };
+      try {
+        const fmt = (await sharp(file.buffer).metadata()).format || "";
+        if (!RASTER[fmt]) return res.status(400).json({ error: "الصورة غير صالحة" });
+        safeExt = RASTER[fmt];
+        contentType = `image/${fmt}`;
+      } catch {
+        return res.status(400).json({ error: "الصورة غير صالحة" });
+      }
+    }
+
     const fileType = isImage ? "image" : "video";
-    
-    // رفع الملف إلى Object Storage
-    const relativePath = `ads/creatives/${userId}/${Date.now()}-${file.originalname}`;
-    const result = await objectStorage.uploadFile(relativePath, file.buffer, file.mimetype, "public");
+
+    // اسم عشوائي + امتداد آمن — لا نستخدم originalname (يمنع اجتياز المسار وامتدادًا مزوَّرًا).
+    const safeName = `${Date.now()}-${crypto.randomBytes(6).toString("hex")}${safeExt}`;
+    const relativePath = `ads/creatives/${userId}/${safeName}`;
+    const result = await objectStorage.uploadFile(relativePath, file.buffer, contentType, "public");
     
     // استخدام proxy URL بدلاً من GCS URL المباشر لتجنب مشاكل الصلاحيات
     const proxyUrl = `/public-objects/${relativePath}`;
@@ -2955,11 +3069,26 @@ router.get("/slots/active", async (_req, res) => {
         // Slot locations that actually filled at least once in the last 24h.
         // Catches slots whose placement is momentarily paused but historically
         // serves; keeps them eligible so we don't oscillate.
-        const recentlyFilled = await db
-          .selectDistinct({ location: inventorySlots.location })
-          .from(impressions)
-          .innerJoin(inventorySlots, eq(impressions.slotId, inventorySlots.id))
-          .where(gte(impressions.timestamp, lookbackStart));
+        //
+        // Soft-fail: بعد DROP يدوي خاطئ لـ impressions أُعيد الجدول بـ
+        // slot_id INTEGER بينما inventory_slots.id varchar → Postgres 42883
+        // ويفشل المسار كاملاً رغم أن eligiblePlacements كافية. لا تُسقط الكاش.
+        let recentlyFilled: Array<{ location: string | null }> = [];
+        try {
+          recentlyFilled = await db
+            .selectDistinct({ location: inventorySlots.location })
+            .from(impressions)
+            .innerJoin(
+              inventorySlots,
+              sql`${impressions.slotId}::text = ${inventorySlots.id}::text`,
+            )
+            .where(gte(impressions.timestamp, lookbackStart));
+        } catch (err: any) {
+          console.warn(
+            "[Ads API] recentlyFilled skipped (impressions schema drift?):",
+            err?.cause?.message || err?.message || err,
+          );
+        }
 
         const slotSet = new Set<string>();
         for (const row of eligiblePlacements) {
@@ -3225,7 +3354,9 @@ router.post("/track/impression/:impressionId", async (req, res) => {
 // Returns multiple ads for rotation in the swipe feed
 router.get("/lite-feed", async (req, res) => {
   try {
-    const limit = Math.min(parseInt(req.query.limit as string) || 10, 20);
+    const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 10, maxLimit: 20 });
+    if (!pg) return;
+    const limit = pg.limit;
     const now = new Date();
     
     // Find ALL active placements for lite-feed slot
@@ -3377,7 +3508,7 @@ router.post("/track/click/:impressionId", async (req, res) => {
 import { adsAnalyticsService } from "./services/adsAnalytics";
 
 // نظرة عامة على الإحصائيات
-router.get("/analytics/overview", requireAdvertiser, async (req, res) => {
+router.get("/analytics/overview", requireAdvertiser, requireCampaignScope, async (req, res) => {
   try {
     const { campaignId, dateFrom, dateTo } = req.query;
     
@@ -3402,7 +3533,7 @@ router.get("/analytics/overview", requireAdvertiser, async (req, res) => {
 });
 
 // نظرة عامة مع المقارنة بالفترة السابقة - DIRECT QUERY FIX
-router.get("/analytics/overview-comparison", requireAdvertiser, async (req, res) => {
+router.get("/analytics/overview-comparison", requireAdvertiser, requireCampaignScope, async (req, res) => {
   try {
     const { campaignId, dateFrom, dateTo } = req.query;
     console.log("[OVERVIEW-COMPARISON V3] 🚀 Direct query fix - Request:", { campaignId, dateFrom, dateTo });
@@ -3494,7 +3625,7 @@ router.get("/analytics/overview-comparison", requireAdvertiser, async (req, res)
 });
 
 // بيانات السلسلة الزمنية
-router.get("/analytics/timeseries", requireAdvertiser, async (req, res) => {
+router.get("/analytics/timeseries", requireAdvertiser, requireCampaignScope, async (req, res) => {
   try {
     const { period = 'daily', campaignId, dateFrom, dateTo } = req.query;
     
@@ -3516,7 +3647,7 @@ router.get("/analytics/timeseries", requireAdvertiser, async (req, res) => {
 });
 
 // بيانات قمع التسويق
-router.get("/analytics/funnel", requireAdvertiser, async (req, res) => {
+router.get("/analytics/funnel", requireAdvertiser, requireCampaignScope, async (req, res) => {
   try {
     const { campaignId, dateFrom, dateTo } = req.query;
     
@@ -3537,7 +3668,7 @@ router.get("/analytics/funnel", requireAdvertiser, async (req, res) => {
 });
 
 // تحليل الجمهور
-router.get("/analytics/audience", requireAdvertiser, async (req, res) => {
+router.get("/analytics/audience", requireAdvertiser, requireCampaignScope, async (req, res) => {
   try {
     const { campaignId, dateFrom, dateTo } = req.query;
     
@@ -3558,7 +3689,7 @@ router.get("/analytics/audience", requireAdvertiser, async (req, res) => {
 });
 
 // مقارنة الحملات
-router.get("/analytics/campaigns/compare", requireAdvertiser, async (req, res) => {
+router.get("/analytics/campaigns/compare", requireAdvertiser, requireCampaignScope, async (req, res) => {
   try {
     const { campaignIds, dateFrom, dateTo } = req.query;
     
@@ -3580,7 +3711,7 @@ router.get("/analytics/campaigns/compare", requireAdvertiser, async (req, res) =
 });
 
 // مؤشرات الجودة
-router.get("/analytics/quality/:campaignId", requireAdvertiser, async (req, res) => {
+router.get("/analytics/quality/:campaignId", requireAdvertiser, requireCampaignScope, async (req, res) => {
   try {
     const { campaignId } = req.params;
     
@@ -3597,17 +3728,27 @@ router.get("/analytics/quality/:campaignId", requireAdvertiser, async (req, res)
 router.get("/analytics/campaigns", requireAdvertiser, async (req, res) => {
   try {
     const { dateFrom, dateTo, status } = req.query;
-    
+
     const fromDate = dateFrom ? new Date(dateFrom as string) : undefined;
     const toDate = dateTo ? new Date(dateTo as string) : undefined;
-    
-    // Get all campaigns
-    let campaignsQuery = db.select().from(campaigns);
-    
-    if (status) {
-      campaignsQuery = campaignsQuery.where(eq(campaigns.status, status as string)) as any;
+
+    // Scope to the caller's own account — this used to return every
+    // advertiser's campaigns with their spend and performance figures.
+    const scope = await resolveAdsScope(req);
+    if (!scope) {
+      return res.status(403).json({ error: "لا يوجد حساب معلن مرتبط بهذا المستخدم" });
     }
-    
+
+    const filters = [
+      status ? eq(campaigns.status, status as string) : undefined,
+      scope.accountId ? eq(campaigns.accountId, scope.accountId) : undefined,
+    ].filter(Boolean) as any[];
+
+    let campaignsQuery = db.select().from(campaigns);
+    if (filters.length > 0) {
+      campaignsQuery = campaignsQuery.where(and(...filters)) as any;
+    }
+
     const allCampaigns = await campaignsQuery.orderBy(desc(campaigns.createdAt));
     
     // Get stats for each campaign
@@ -3637,7 +3778,7 @@ router.get("/analytics/campaigns", requireAdvertiser, async (req, res) => {
 // ============================================
 
 // Polling endpoint for live data (more reliable with auth)
-router.get("/analytics/live-poll", requireAdvertiser, async (req, res) => {
+router.get("/analytics/live-poll", requireAdvertiser, requireCampaignScope, async (req, res) => {
   try {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -3665,14 +3806,14 @@ router.get("/analytics/live-poll", requireAdvertiser, async (req, res) => {
 // Legacy SSE endpoint removed. Clients should use
 // /api/ads/analytics/live-poll (already used by the dashboard) instead to
 // avoid long-lived connections pinning Autoscale instances.
-router.get("/analytics/live", requireAdvertiser, async (_req, res) => {
+router.get("/analytics/live", requireAdvertiser, requireCampaignScope, async (_req, res) => {
   res.status(410).json({
     error: 'SSE stream disabled. Poll /api/ads/analytics/live-poll instead.',
   });
 });
 
 // تصدير التقارير (CSV)
-router.get("/analytics/export/csv", requireAdvertiser, async (req, res) => {
+router.get("/analytics/export/csv", requireAdvertiser, requireCampaignScope, async (req, res) => {
   try {
     const { campaignId, dateFrom, dateTo, type = 'overview' } = req.query;
     

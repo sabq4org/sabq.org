@@ -22,6 +22,7 @@ final class AdminEditorViewModel: ObservableObject {
     @Published var status: AdminArticleStatus = .draft
     @Published var newsType = "regular"
     @Published var isFeatured = false
+    @Published var isReading = false
     @Published var hideFromHomepage = false
     @Published var aiSummary = ""
     @Published var imageUrl = ""
@@ -84,6 +85,7 @@ final class AdminEditorViewModel: ObservableObject {
                 newsType = d.newsType
                 articleType = d.articleType
                 isFeatured = d.isFeatured
+                isReading = d.isReading
                 hideFromHomepage = d.hideFromHomepage
                 aiSummary = d.aiSummary
                 imageUrl = d.imageUrl
@@ -132,6 +134,7 @@ final class AdminEditorViewModel: ObservableObject {
                 articleType: articleType,
                 newsType: newsType,
                 isFeatured: isFeatured,
+                isReading: isReading,
                 hideFromHomepage: hideFromHomepage,
                 aiSummary: aiSummary,
                 imageUrl: imageUrl,
@@ -158,6 +161,7 @@ final class AdminEditorViewModel: ObservableObject {
             status: status.rawValue,
             newsType: newsType,
             isFeatured: isFeatured,
+            isReading: isReading,
             hideFromHomepage: hideFromHomepage,
             aiSummary: aiSummary,
             imageUrl: imageUrl,
@@ -711,6 +715,8 @@ struct AdminArticleEditorView: View {
             }
             Toggle("خبر مميّز", isOn: $vm.isFeatured)
                 .font(SabqFonts.app(size: 14, weight: .semibold)).tint(SabqTheme.gold)
+            Toggle("قراءة من سبق", isOn: $vm.isReading)
+                .font(SabqFonts.app(size: 14, weight: .semibold)).tint(SabqTheme.teal)
             Toggle("إخفاء من الصفحة الرئيسية", isOn: $vm.hideFromHomepage)
                 .font(SabqFonts.app(size: 14, weight: .semibold)).tint(SabqTheme.coral)
         }

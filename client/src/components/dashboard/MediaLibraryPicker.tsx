@@ -48,7 +48,8 @@ import {
   FolderOpen,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { queryClient } from "@/lib/queryClient";
+import { uploadNewsImage, newsImageUploadLabel, type NewsImageUploadProgress } from "@/lib/newsImageUpload";
 import type { MediaFile, MediaFolder } from "@shared/schema";
 
 interface MediaLibraryPickerProps {
@@ -103,6 +104,7 @@ export function MediaLibraryPicker({
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadStatus, setUploadStatus] = useState<NewsImageUploadProgress>({ phase: "preparing", percent: 0 });
 
   const form = useForm<UploadFormValues>({
     resolver: zodResolver(uploadFormSchema),
@@ -255,13 +257,9 @@ export function MediaLibraryPicker({
       if (data.category) formData.append("category", data.category);
       formData.append("isFavorite", String(data.isFavorite));
 
-      return apiRequest<MediaFile>("/api/media/upload", {
-        method: "POST",
-        body: formData,
-        isFormData: true,
-        onUploadProgress: (progress) => {
-          setUploadProgress(Math.round((progress.loaded / progress.total) * 100));
-        },
+      return uploadNewsImage<MediaFile>(formData, (progress) => {
+        setUploadProgress(progress.percent);
+        setUploadStatus(progress);
       });
     },
     onSuccess: (uploadedMedia) => {
@@ -780,11 +778,11 @@ export function MediaLibraryPicker({
                       </Button>
                     </div>
 
-                    {uploadProgress > 0 && uploadProgress < 100 && (
-                      <div className="mt-4">
+                    {uploadMutation.isPending && (
+                      <div className="mt-4" role="status" aria-live="polite">
                         <Progress value={uploadProgress} className="h-2" />
                         <p className="text-xs text-muted-foreground text-center mt-2">
-                          جاري الرفع... {uploadProgress}%
+                          {newsImageUploadLabel(uploadStatus)}
                         </p>
                       </div>
                     )}

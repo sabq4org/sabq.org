@@ -10,9 +10,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.MailOutline
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -23,6 +25,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -30,10 +33,12 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sabq.smart.ui.theme.SabqTheme
 
 /**
- * Forgot password sheet — first step only (request email link).
- * Mirrors iOS `ForgotPasswordSheet` (`SettingsView.swift:2726+`).
- * The full reset-with-code flow lands once the backend supports
- * deep-link redirects on Android.
+ * Forgot password sheet — full flow, mirroring iOS `ForgotPasswordSheet`:
+ *   1. Email → POST /api/v1/auth/forgot-password (emails a 6-digit code)
+ *   2. Code + new password → POST /api/v1/auth/reset-password
+ *   3. Done.
+ * كانت الشاشة «الخطوة الأولى فقط» فيصل المستخدمَ رمزٌ لا مكان لإدخاله —
+ * جذر شكاوى «البريد يعطيني رمزًا بلا مكان» (أغسطس 2026).
  */
 @Composable
 fun ForgotPasswordScreen(
@@ -42,8 +47,33 @@ fun ForgotPasswordScreen(
 ) {
     LaunchedEffect(Unit) { viewModel.reset() }
     val state by viewModel.state.collectAsStateWithLifecycle()
+
+    var step by remember { mutableStateOf(ForgotStep.Email) }
     var email by remember { mutableStateOf("") }
-    val valid = email.contains('@') && email.length >= 5
+    var code by remember { mutableStateOf("") }
+    var newPassword by remember { mutableStateOf("") }
+    var confirmPassword by remember { mutableStateOf("") }
+    // آخر إجراء أُرسل للخادم: إرسال/إعادة إرسال الرمز أم تعيين كلمة المرور —
+    // بدونها نجاحُ «إعادة الإرسال» داخل خطوة الرمز يقفز خطأً إلى «تم».
+    var awaitingReset by remember { mutableStateOf(false) }
+
+    val emailValid = email.contains('@') && email.length >= 5
+    val canSubmitReset = code.length == 6 &&
+        newPassword.length >= 8 &&
+        newPassword == confirmPassword &&
+        !state.isLoading
+
+    // نجاح الإجراء الجاري يحرّك الخطوة: إرسال الرمز → خطوة الرمز، تعيين → تم.
+    LaunchedEffect(state.success) {
+        if (state.success) {
+            if (awaitingReset) {
+                step = ForgotStep.Done
+            } else {
+                step = ForgotStep.Code
+                viewModel.reset()
+            }
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -64,13 +94,13 @@ fun ForgotPasswordScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 Icon(
-                    imageVector = Icons.Filled.MailOutline,
+                    imageVector = if (step == ForgotStep.Done) Icons.Filled.CheckCircle else Icons.Filled.MailOutline,
                     contentDescription = null,
-                    tint = SabqTheme.colors.primaryEnd,
+                    tint = if (step == ForgotStep.Done) SabqTheme.colors.leaf else SabqTheme.colors.primaryEnd,
                     modifier = Modifier.size(48.dp),
                 )
                 Text(
-                    text = "نسيت كلمة المرور؟",
+                    text = if (step == ForgotStep.Done) "تم تغيير كلمة المرور" else "نسيت كلمة المرور؟",
                     style = SabqTheme.typography.cardTitle.copy(
                         fontSize = 22.sp,
                         fontWeight = FontWeight.Bold,
@@ -78,32 +108,106 @@ fun ForgotPasswordScreen(
                     ),
                 )
                 Text(
-                    text = "أدخل بريدك الإلكتروني وسنرسل لك رابط إعادة تعيين كلمة المرور.",
+                    text = when (step) {
+                        ForgotStep.Email -> "أدخل بريدك الإلكتروني وسنرسل لك رمز التحقق لإعادة تعيين كلمة المرور."
+                        ForgotStep.Code -> "أدخل الرمز المرسَل إلى:\n$email"
+                        ForgotStep.Done -> "يمكنك الآن تسجيل الدخول بكلمة المرور الجديدة."
+                    },
                     style = SabqTheme.typography.metaSmall.copy(
                         fontSize = 13.sp,
                         color = SabqTheme.colors.secondaryInk,
                     ),
+                    textAlign = TextAlign.Center,
                 )
             }
 
-            if (state.success) {
-                SuccessBanner(message = "تم إرسال رابط إعادة التعيين إلى بريدك")
-            } else {
-                SheetField(
-                    label = "البريد الإلكتروني",
-                    value = email,
-                    onValueChange = { email = it },
-                    placeholder = "name@example.com",
-                    keyboardType = KeyboardType.Email,
-                )
-                state.errorMessage?.let { ErrorBanner(message = it) }
-                PrimaryGradientButton(
-                    title = "إرسال الرابط",
-                    isLoading = state.isLoading,
-                    enabled = valid,
-                    onClick = { viewModel.forgotPassword(email.trim()) },
-                )
+            when (step) {
+                ForgotStep.Email -> {
+                    SheetField(
+                        label = "البريد الإلكتروني",
+                        value = email,
+                        onValueChange = { email = it },
+                        placeholder = "name@example.com",
+                        keyboardType = KeyboardType.Email,
+                    )
+                    state.errorMessage?.let { ErrorBanner(message = it) }
+                    PrimaryGradientButton(
+                        title = "إرسال رمز التحقق",
+                        isLoading = state.isLoading,
+                        enabled = emailValid,
+                        onClick = {
+                            awaitingReset = false
+                            viewModel.forgotPassword(email.trim())
+                        },
+                    )
+                }
+
+                ForgotStep.Code -> {
+                    SheetField(
+                        label = "رمز التحقق (6 أرقام)",
+                        value = code,
+                        onValueChange = { raw -> code = raw.filter { it.isDigit() }.take(6) },
+                        placeholder = "••••••",
+                        keyboardType = KeyboardType.NumberPassword,
+                    )
+                    SheetField(
+                        label = "كلمة المرور الجديدة",
+                        value = newPassword,
+                        onValueChange = { newPassword = it },
+                        placeholder = "8 أحرف على الأقل",
+                        isSecure = true,
+                    )
+                    SheetField(
+                        label = "تأكيد كلمة المرور",
+                        value = confirmPassword,
+                        onValueChange = { confirmPassword = it },
+                        placeholder = "أعد كتابة كلمة المرور",
+                        isSecure = true,
+                    )
+                    if (confirmPassword.isNotEmpty() && newPassword != confirmPassword) {
+                        ErrorBanner(message = "كلمتا المرور غير متطابقتين")
+                    }
+                    state.errorMessage?.let { ErrorBanner(message = it) }
+                    PrimaryGradientButton(
+                        title = "تعيين كلمة المرور",
+                        isLoading = state.isLoading,
+                        enabled = canSubmitReset,
+                        onClick = {
+                            awaitingReset = true
+                            viewModel.resetPassword(email.trim(), code, newPassword)
+                        },
+                    )
+                    TextButton(
+                        onClick = {
+                            code = ""
+                            awaitingReset = false
+                            viewModel.forgotPassword(email.trim())
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(
+                            text = "إعادة إرسال الرمز",
+                            style = SabqTheme.typography.metaSmall.copy(
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = SabqTheme.colors.primaryEnd,
+                            ),
+                        )
+                    }
+                }
+
+                ForgotStep.Done -> {
+                    SuccessBanner(message = "تم تغيير كلمة المرور بنجاح")
+                    PrimaryGradientButton(
+                        title = "حسناً",
+                        isLoading = false,
+                        enabled = true,
+                        onClick = onBack,
+                    )
+                }
             }
         }
     }
 }
+
+private enum class ForgotStep { Email, Code, Done }

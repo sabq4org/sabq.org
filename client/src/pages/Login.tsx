@@ -10,11 +10,12 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { getDefaultRedirectPath, type User } from "@/hooks/useAuth";
 import { SiApple } from "react-icons/si";
-import { ChevronLeft, Eye, EyeOff, Loader2 } from "lucide-react";
+import { Eye, EyeOff, Loader2 } from "lucide-react";
 import AuthLayout from "@/components/AuthLayout";
 import { GoogleIcon } from "@/components/GoogleIcon";
-import { trackLogin } from "@/lib/analytics";
+import { trackLoginStart } from "@/lib/analytics";
 import { consumePostAuthReturn, rememberPostAuthReturn } from "@/lib/postAuthRedirect";
+import { enqueueConversion } from "@/lib/analytics-conversion-queue";
 
 const loginSchema = z.object({
   email: z.string().email("البريد الإلكتروني غير صحيح"),
@@ -22,6 +23,22 @@ const loginSchema = z.object({
 });
 
 type LoginFormData = z.infer<typeof loginSchema>;
+
+// إكمال تسجيل رقم جوال جديد بعد نجاح OTP — يطابق سياسة الخادم.
+const phoneRegisterSchema = z
+  .object({
+    firstName: z.string().trim().min(2, "الاسم الأول يجب أن يكون حرفين على الأقل").max(60),
+    lastName: z.string().trim().max(60).optional().or(z.literal("")),
+    email: z.string().trim().email("البريد الإلكتروني غير صحيح"),
+    password: z.string().min(8, "كلمة المرور يجب أن تكون 8 أحرف على الأقل").max(128),
+    confirmPassword: z.string(),
+  })
+  .refine((d) => d.password === d.confirmPassword, {
+    message: "كلمتا المرور غير متطابقتين",
+    path: ["confirmPassword"],
+  });
+
+type PhoneRegisterFormData = z.infer<typeof phoneRegisterSchema>;
 
 export default function Login() {
   const [, navigate] = useLocation();
@@ -54,14 +71,13 @@ export default function Login() {
 
   const onSubmit = async (data: LoginFormData) => {
     setIsLoading(true);
-    
+
     try {
       const response = await apiRequest("/api/login", {
         method: "POST",
         body: JSON.stringify(data),
       });
-      
-      // Check if 2FA is required
+
       if (response.mustChangePassword) {
         setIsLoading(false);
         toast({
@@ -72,13 +88,14 @@ export default function Login() {
         return;
       }
 
+      // الجلسة تحتفظ بحالة «بانتظار 2FA» — ننتقل مباشرة لشاشة الرمز بلا تسجيل ثانٍ.
       if (response.requires2FA) {
         setIsLoading(false);
         toast({
-          title: "التحقق بخطوتين مطلوب",
-          description: "يرجى استخدام صفحة تسجيل دخول الإدارة",
+          title: "التحقق بخطوتين",
+          description: "أدخل رمز التحقق لإكمال الدخول",
         });
-        navigate("/admin/login");
+        navigate("/2fa-verify");
         return;
       }
 
@@ -100,22 +117,41 @@ export default function Login() {
       staleTime: 0,
     });
     toast({ title: "مرحباً بك!", description: "تم تسجيل الدخول بنجاح" });
-    trackLogin(method);
+    enqueueConversion("login", method as "email" | "phone");
     const fallback = getDefaultRedirectPath(userData);
     const mustFinishAccount = fallback === "/complete-name" || userData.isProfileComplete === false;
     navigate(mustFinishAccount ? fallback : consumePostAuthReturn(fallback));
   };
 
   // ===== دخول/تسجيل بالجوال (OTP) =====
-  const [authTab, setAuthTab] = useState<"phone" | "email">("phone");
-  const [phoneStep, setPhoneStep] = useState<"phone" | "code">("phone");
+  const [authMethod, setAuthMethod] = useState<"phone" | "email">("phone");
+  const [phoneStep, setPhoneStep] = useState<"phone" | "code" | "register">("phone");
   const [phoneNumber, setPhoneNumber] = useState("");
   const [otp, setOtp] = useState("");
   const [phoneLoading, setPhoneLoading] = useState(false);
   const [resend, setResend] = useState(0);
+  // إثبات توثيق الجوال (قصير العمر، أحادي الاستخدام) لرقم جديد بلا حساب.
+  const [registrationToken, setRegistrationToken] = useState<string | null>(null);
+  const [showRegPassword, setShowRegPassword] = useState(false);
   const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
 
+  const registerForm = useForm<PhoneRegisterFormData>({
+    resolver: zodResolver(phoneRegisterSchema),
+    defaultValues: { firstName: "", lastName: "", email: "", password: "", confirmPassword: "" },
+  });
+
   const phoneValid = /^5\d{8}$/.test(phoneNumber);
+
+  // يقبل الكتابة واللصق بكل الصيغ الشائعة (05XXXXXXXX / 9665XXXXXXXX / +966...)
+  // ويحذف البادئات — الخادم يطبّعها أصلًا، لكن الواجهة كانت تقص إلى 9 خانات
+  // قبل حذف الصفر فيبقى الزر معطلًا بصمت لمن يكتب رقمه بالصيغة المحلية المعتادة.
+  const normalizeSaudiInput = (raw: string) => {
+    let d = raw.replace(/\D/g, "");
+    if (d.startsWith("00966")) d = d.slice(5);
+    else if (d.startsWith("966")) d = d.slice(3);
+    if (d.startsWith("0")) d = d.slice(1);
+    return d.slice(0, 9);
+  };
 
   const startResend = () => {
     setResend(60);
@@ -150,11 +186,67 @@ export default function Login() {
     if (code.length !== 6) return;
     setPhoneLoading(true);
     try {
-      await apiRequest("/api/auth/phone/verify", { method: "POST", body: JSON.stringify({ phone: phoneNumber, code }) });
+      const resp = await apiRequest<{
+        requires2FA?: boolean;
+        registrationRequired?: boolean;
+        registrationToken?: string;
+      }>("/api/auth/phone/verify", { method: "POST", body: JSON.stringify({ phone: phoneNumber, code }) });
+
+      // حساب قائم محمي بـ2FA — نفس مسار الدخول بالبريد.
+      if (resp?.requires2FA) {
+        setPhoneLoading(false);
+        toast({ title: "التحقق بخطوتين", description: "أدخل رمز التحقق لإكمال الدخول" });
+        navigate("/2fa-verify");
+        return;
+      }
+
+      // رقم جديد: الجوال موثق ولا حساب بعد — ننتقل لنموذج إكمال التسجيل.
+      if (resp?.registrationRequired && resp.registrationToken) {
+        setRegistrationToken(resp.registrationToken);
+        setPhoneStep("register");
+        setPhoneLoading(false);
+        return;
+      }
+
       await completeLogin("phone");
     } catch (error: any) {
       toast({ title: "فشل التحقق", description: error.message || "الرمز غير صحيح أو منتهي", variant: "destructive" });
       setPhoneLoading(false);
+    }
+  };
+
+  // إنشاء الحساب النهائي بعد توثيق الجوال — لا حساب (ولا بريد وهمي) قبل هذه الخطوة.
+  const submitPhoneRegistration = async (data: PhoneRegisterFormData) => {
+    if (!registrationToken) return;
+    setPhoneLoading(true);
+    try {
+      await apiRequest("/api/auth/phone/complete-registration", {
+        method: "POST",
+        body: JSON.stringify({
+          registrationToken,
+          firstName: data.firstName,
+          lastName: data.lastName || undefined,
+          email: data.email,
+          password: data.password,
+          confirmPassword: data.confirmPassword,
+        }),
+      });
+      enqueueConversion("sign_up", "phone");
+      toast({ title: "تم إنشاء حسابك", description: "أرسلنا رابط تحقق إلى بريدك الإلكتروني" });
+      // عضو جديد → نفس onboarding مسجّلي البريد (ترحيب ثم اهتمامات)،
+      // بعد تهيئة كاش الجلسة كي لا تعيده الحراس إلى الدخول.
+      await queryClient.fetchQuery<User>({ queryKey: ["/api/auth/user"], staleTime: 0 });
+      navigate("/onboarding/welcome");
+    } catch (error: any) {
+      setPhoneLoading(false);
+      const message: string = error?.message || "تعذّر إكمال التسجيل";
+      // انتهاء صلاحية الإثبات أو استهلاكه — يلزم إعادة التحقق من الرقم.
+      if (message.includes("انتهت صلاحية")) {
+        setRegistrationToken(null);
+        setPhoneStep("phone");
+        setOtp("");
+      }
+      toast({ title: "تعذّر إكمال التسجيل", description: message, variant: "destructive" });
     }
   };
 
@@ -181,215 +273,128 @@ export default function Login() {
     }
   };
 
+  const showingOtp = authMethod === "phone" && phoneStep === "code";
+  const showingRegister = authMethod === "phone" && phoneStep === "register";
+
   return (
-    <AuthLayout>
-      <div className="flex flex-col flex-1">
-        <div className="w-full max-w-md pt-10 mx-auto">
-          <Link 
-            href="/" 
-            className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground transition-colors"
-            data-testid="link-back-home"
-          >
-            <ChevronLeft className="h-5 w-5 ml-1" />
-            العودة للرئيسية
-          </Link>
-        </div>
-        
-        <div className="flex flex-col justify-center flex-1 w-full max-w-md mx-auto">
-          <div className="mb-5 sm:mb-8">
-            <h1 className="mb-2 font-semibold text-gray-800 text-title-sm sm:text-title-md dark:text-white/90 text-right">
-              تسجيل الدخول
-            </h1>
-            <p className="text-sm text-muted-foreground text-right">
-              سجّل دخولك برقم جوالك أو بريدك الإلكتروني.
-            </p>
-          </div>
-          
-          <div className="space-y-5">
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-5">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  trackLogin("google");
-                  window.location.href = '/api/auth/google';
-                }}
-                className="w-full inline-flex items-center justify-center gap-2 sm:gap-3"
-                data-testid="button-google-login"
-              >
-                <GoogleIcon />
-                تسجيل الدخول عبر Google
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  trackLogin("apple");
-                  window.location.href = '/api/auth/apple';
-                }}
-                className="w-full inline-flex items-center justify-center gap-2 sm:gap-3"
-                data-testid="button-apple-login"
-              >
-                <SiApple className="h-4 w-4 sm:h-5 sm:w-5" />
-                تسجيل الدخول عبر Apple
-              </Button>
-            </div>
+    <AuthLayout
+      footer={
+        <>
+          <p>
+            بتسجيل الدخول أنت توافق على{" "}
+            <Link href="/terms" className="text-primary hover:underline">الشروط والأحكام</Link>
+            {" "}و{" "}
+            <Link href="/privacy" className="text-primary hover:underline">سياسة الخصوصية</Link>
+          </p>
+          <p className="mt-2 flex flex-wrap items-center justify-center gap-x-3 gap-y-1">
+            <button
+              type="button"
+              onClick={() => navigate("/admin/login")}
+              className="transition-colors hover:text-foreground"
+              data-testid="link-admin-login"
+            >
+              دخول الإدارة والصحفيين
+            </button>
+            <Link href="/" className="transition-colors hover:text-foreground">العودة للرئيسية</Link>
+          </p>
+        </>
+      }
+    >
+      <div className="mb-6 text-center">
+        <h1 className="text-xl font-bold text-foreground sm:text-2xl">
+          {showingRegister ? "أكمل تسجيلك" : showingOtp ? "رمز التحقق" : "تسجيل الدخول"}
+        </h1>
+        <p className="mt-1.5 text-sm text-muted-foreground">
+          {showingRegister
+            ? "تم توثيق جوالك — نحتاج اسمك وبريدك وكلمة مرور لإنشاء حسابك."
+            : showingOtp
+            ? "أدخل الرمز المكوّن من 6 أرقام"
+            : authMethod === "phone"
+              ? "رقم جوالك يكفي — سنرسل لك رمز تحقق."
+              : "أدخل بريدك الإلكتروني وكلمة المرور."}
+        </p>
+      </div>
 
-            <div className="relative my-6">
-              <div className="absolute inset-0 flex items-center">
-                <span className="w-full border-t border-gray-200 dark:border-gray-700" />
+      {authMethod === "phone" ? (
+        phoneStep === "register" ? (
+          <Form {...registerForm}>
+            <form onSubmit={registerForm.handleSubmit(submitPhoneRegistration)} className="public-auth-form space-y-4">
+              <div className="rounded-lg bg-muted/50 px-3 py-2 text-center text-sm" dir="ltr">
+                ✓ +966 {phoneNumber}
               </div>
-              <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-background px-2 text-muted-foreground">أو</span>
+              <p className="text-center text-xs text-muted-foreground">
+                هذا الرقم غير مربوط بأي حساب سابق. إن كان لديك حساب بالبريد الإلكتروني،{" "}
+                <Link href="/forgot-password" className="font-medium text-primary hover:underline">
+                  استعد كلمة مروره من هنا
+                </Link>{" "}
+                بدل إنشاء حساب جديد.
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <FormField
+                  control={registerForm.control}
+                  name="firstName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>الاسم الأول</FormLabel>
+                      <FormControl>
+                        <Input {...field} autoComplete="given-name" placeholder="أحمد" disabled={phoneLoading} data-testid="input-reg-firstName" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={registerForm.control}
+                  name="lastName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>العائلة (اختياري)</FormLabel>
+                      <FormControl>
+                        <Input {...field} autoComplete="family-name" placeholder="العتيبي" disabled={phoneLoading} data-testid="input-reg-lastName" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
               </div>
-            </div>
-
-          {/* تبويبات الدخول: الجوال / البريد */}
-          <div className="flex p-1 rounded-lg bg-muted mb-5">
-            {([["phone", "الجوال"], ["email", "البريد الإلكتروني"]] as const).map(([k, label]) => (
-              <button
-                key={k}
-                type="button"
-                onClick={() => setAuthTab(k)}
-                className={`flex-1 py-2 text-sm font-semibold rounded-md transition-colors ${authTab === k ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}
-                data-testid={`tab-${k}`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-
-          {authTab === "phone" ? (
-            <div className="space-y-4">
-              {phoneStep === "phone" ? (
-                <>
-                  <div>
-                    <label className="block text-sm font-medium mb-1.5 text-right">رقم الجوال</label>
-                    {/* خانة LTR: المفتاح +966 يسار، الرقم يمينه */}
-                    <div dir="ltr" className="flex items-stretch rounded-md border border-input bg-background overflow-hidden focus-within:ring-2 focus-within:ring-ring focus-within:border-ring transition">
-                      <span className="flex items-center gap-1.5 px-3 bg-muted/60 text-sm font-semibold border-r border-input select-none whitespace-nowrap">
-                        🇸🇦 +966
-                      </span>
-                      <input
-                        dir="ltr"
-                        inputMode="numeric"
-                        autoComplete="tel-national"
-                        maxLength={9}
-                        value={phoneNumber}
-                        onChange={(e) => setPhoneNumber(e.target.value.replace(/\D/g, "").slice(0, 9))}
-                        onKeyDown={(e) => { if (e.key === "Enter" && phoneValid) sendPhoneCode(); }}
-                        placeholder="5XXXXXXXX"
-                        disabled={phoneLoading}
-                        data-testid="input-phone"
-                        className="flex-1 min-w-0 px-3 py-2.5 bg-transparent outline-none text-base tracking-widest placeholder:tracking-normal placeholder:text-muted-foreground"
-                      />
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-1.5 text-right">سنرسل رمز تحقّق برسالة نصية إلى جوالك.</p>
-                  </div>
-                  <Button type="button" onClick={sendPhoneCode} disabled={!phoneValid || phoneLoading} className="w-full min-h-11 text-base font-medium" data-testid="button-send-otp">
-                    {phoneLoading && <Loader2 className="ml-2 h-4 w-4 animate-spin" />}
-                    إرسال رمز التحقق
-                  </Button>
-                </>
-              ) : (
-                <>
-                  <div className="text-center space-y-1">
-                    <p className="text-sm text-muted-foreground">أدخل رمز التحقق المُرسل إلى</p>
-                    <p dir="ltr" className="text-sm font-bold">
-                      +966 {phoneNumber}
-                      <button type="button" onClick={() => { setPhoneStep("phone"); setOtp(""); }} className="text-primary hover:underline text-xs mr-2">تعديل</button>
-                    </p>
-                  </div>
-                  <div dir="ltr" className="flex items-center justify-center gap-2">
-                    {Array.from({ length: 6 }).map((_, i) => (
-                      <input
-                        key={i}
-                        ref={(el) => (otpRefs.current[i] = el)}
-                        inputMode="numeric"
-                        autoComplete={i === 0 ? "one-time-code" : "off"}
-                        maxLength={i === 0 ? 6 : 1}
-                        value={otp[i] ?? ""}
-                        onChange={(e) => handleOtpChange(i, e.target.value)}
-                        onKeyDown={(e) => handleOtpKey(i, e)}
-                        disabled={phoneLoading}
-                        data-testid={`input-otp-${i}`}
-                        className="w-11 h-14 text-center text-xl font-bold rounded-lg border border-input bg-background outline-none focus:border-ring focus:ring-2 focus:ring-ring transition"
-                      />
-                    ))}
-                  </div>
-                  <Button type="button" onClick={() => verifyPhoneCode()} disabled={otp.length !== 6 || phoneLoading} className="w-full min-h-11 text-base font-medium" data-testid="button-verify-otp">
-                    {phoneLoading && <Loader2 className="ml-2 h-4 w-4 animate-spin" />}
-                    تحقّق ودخول
-                  </Button>
-                  <div className="text-center">
-                    {resend > 0 ? (
-                      <p className="text-xs text-muted-foreground">إعادة الإرسال خلال {resend} ثانية</p>
-                    ) : (
-                      <button type="button" onClick={sendPhoneCode} className="text-sm text-primary hover:underline font-medium">إعادة إرسال الرمز</button>
-                    )}
-                  </div>
-                </>
-              )}
-            </div>
-          ) : (
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
               <FormField
-                control={form.control}
+                control={registerForm.control}
                 name="email"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>البريد الإلكتروني</FormLabel>
                     <FormControl>
-                      <Input
-                        {...field}
-                        type="email"
-                        placeholder="admin@sabq.sa"
-                        disabled={isLoading}
-                        data-testid="input-email"
-                        className="text-right"
-                        dir="ltr"
-                      />
+                      <Input {...field} type="email" dir="ltr" autoComplete="email" placeholder="example@email.com" disabled={phoneLoading} data-testid="input-reg-email" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
-
               <FormField
-                control={form.control}
+                control={registerForm.control}
                 name="password"
                 render={({ field }) => (
                   <FormItem>
-                    <div className="flex items-center justify-between">
-                      <FormLabel>كلمة المرور</FormLabel>
-                      <Link 
-                        to="/forgot-password" 
-                        className="text-sm text-primary hover:underline"
-                        data-testid="link-forgot-password"
-                      >
-                        نسيت كلمة المرور؟
-                      </Link>
-                    </div>
+                    <FormLabel>كلمة المرور</FormLabel>
                     <FormControl>
                       <div className="relative">
                         <Input
                           {...field}
-                          type={showPassword ? "text" : "password"}
-                          placeholder="••••••"
-                          disabled={isLoading}
-                          data-testid="input-password"
+                          type={showRegPassword ? "text" : "password"}
                           dir="ltr"
+                          autoComplete="new-password"
+                          placeholder="••••••••"
+                          disabled={phoneLoading}
+                          data-testid="input-reg-password"
                           className="pl-11"
                         />
                         <button
                           type="button"
-                          onClick={() => setShowPassword(!showPassword)}
-                          className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground pointer-events-auto"
-                          aria-label={showPassword ? "إخفاء كلمة المرور" : "إظهار كلمة المرور"}
-                          data-testid="button-toggle-password"
+                          onClick={() => setShowRegPassword(!showRegPassword)}
+                          className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                          aria-label={showRegPassword ? "إخفاء كلمة المرور" : "إظهار كلمة المرور"}
                         >
-                          {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                          {showRegPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                         </button>
                       </div>
                     </FormControl>
@@ -397,49 +402,251 @@ export default function Login() {
                   </FormItem>
                 )}
               />
-
-              <Button
-                type="submit"
-                className="w-full min-h-11 text-base font-medium"
-                disabled={isLoading}
-                data-testid="button-login"
-              >
-                {isLoading && <Loader2 className="ml-2 h-4 w-4 animate-spin" />}
-                {isLoading ? "جاري تسجيل الدخول..." : "تسجيل الدخول"}
+              <FormField
+                control={registerForm.control}
+                name="confirmPassword"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>تأكيد كلمة المرور</FormLabel>
+                    <FormControl>
+                      <Input {...field} type="password" dir="ltr" autoComplete="new-password" placeholder="••••••••" disabled={phoneLoading} data-testid="input-reg-confirmPassword" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <Button type="submit" disabled={phoneLoading} className="min-h-11 w-full text-base font-medium" data-testid="button-complete-registration">
+                {phoneLoading && <Loader2 className="ml-2 h-4 w-4 animate-spin" />}
+                إنشاء الحساب
               </Button>
-
             </form>
           </Form>
-          )}
+        ) : phoneStep === "phone" ? (
+          <div className="public-auth-form space-y-4">
+            <div>
+              <label className="mb-1.5 block text-right text-sm font-medium">رقم الجوال</label>
+              {/* خانة LTR: المفتاح +966 يسار، الرقم يمينه */}
+              <div dir="ltr" className="flex items-stretch overflow-hidden rounded-lg border border-input bg-background transition focus-within:border-ring focus-within:ring-2 focus-within:ring-ring">
+                <span className="flex select-none items-center gap-1.5 whitespace-nowrap border-r border-input bg-muted/60 px-3 text-sm font-semibold">
+                  🇸🇦 +966
+                </span>
+                <input
+                  dir="ltr"
+                  inputMode="numeric"
+                  autoComplete="tel-national"
+                  maxLength={18}
+                  value={phoneNumber}
+                  onChange={(e) => setPhoneNumber(normalizeSaudiInput(e.target.value))}
+                  onKeyDown={(e) => { if (e.key === "Enter" && phoneValid) sendPhoneCode(); }}
+                  placeholder="5XXXXXXXX"
+                  disabled={phoneLoading}
+                  data-testid="input-phone"
+                  className="min-w-0 flex-1 bg-transparent px-3 py-2.5 text-base tracking-widest outline-none placeholder:tracking-normal placeholder:text-muted-foreground"
+                />
+              </div>
+            </div>
+            <Button type="button" onClick={sendPhoneCode} disabled={!phoneValid || phoneLoading} className="min-h-11 w-full text-base font-medium" data-testid="button-send-otp">
+              {phoneLoading && <Loader2 className="ml-2 h-4 w-4 animate-spin" />}
+              متابعة
+            </Button>
+          </div>
+        ) : (
+          <div className="public-auth-form space-y-4">
+            <div className="space-y-1 text-center">
+              <p className="text-sm text-muted-foreground">أرسلنا رمز التحقق إلى</p>
+              <p dir="ltr" className="text-sm font-bold">
+                +966 {phoneNumber}
+                <button type="button" onClick={() => { setPhoneStep("phone"); setOtp(""); }} className="mr-2 text-xs text-primary hover:underline">تعديل</button>
+              </p>
+            </div>
+            <div dir="ltr" className="public-auth-otp flex items-center justify-center gap-1.5 sm:gap-2" aria-label="رمز التحقق المكوّن من 6 أرقام">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <input
+                  key={i}
+                  ref={(el) => (otpRefs.current[i] = el)}
+                  inputMode="numeric"
+                  autoComplete={i === 0 ? "one-time-code" : "off"}
+                  maxLength={i === 0 ? 6 : 1}
+                  value={otp[i] ?? ""}
+                  onChange={(e) => handleOtpChange(i, e.target.value)}
+                  onKeyDown={(e) => handleOtpKey(i, e)}
+                  disabled={phoneLoading}
+                  data-testid={`input-otp-${i}`}
+                  aria-label={`رقم ${i + 1} من 6`}
+                  className="h-12 w-10 rounded-lg border-2 border-input bg-background text-center text-lg font-bold outline-none transition focus:border-ring focus:ring-2 focus:ring-ring sm:h-14 sm:w-11 sm:text-xl"
+                />
+              ))}
+            </div>
+            <Button type="button" onClick={() => verifyPhoneCode()} disabled={otp.length !== 6 || phoneLoading} className="min-h-11 w-full text-base font-medium" data-testid="button-verify-otp">
+              {phoneLoading && <Loader2 className="ml-2 h-4 w-4 animate-spin" />}
+              تحقّق ودخول
+            </Button>
+            <div className="text-center">
+              {resend > 0 ? (
+                <p className="text-xs text-muted-foreground">إعادة الإرسال خلال {resend} ثانية</p>
+              ) : (
+                <button type="button" onClick={sendPhoneCode} className="text-sm font-medium text-primary hover:underline">إعادة إرسال الرمز</button>
+              )}
+            </div>
+          </div>
+        )
+      ) : (
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="public-auth-form space-y-5">
+            <FormField
+              control={form.control}
+              name="email"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>البريد الإلكتروني</FormLabel>
+                  <FormControl>
+                    <Input
+                      {...field}
+                      type="email"
+                      placeholder="example@email.com"
+                      disabled={isLoading}
+                      data-testid="input-email"
+                      autoComplete="username"
+                      className="text-base"
+                      dir="ltr"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="password"
+              render={({ field }) => (
+                <FormItem>
+                  <div className="flex items-center justify-between">
+                    <FormLabel>كلمة المرور</FormLabel>
+                    <Link
+                      to="/forgot-password"
+                      className="text-sm text-primary hover:underline"
+                      data-testid="link-forgot-password"
+                    >
+                      نسيت كلمة المرور؟
+                    </Link>
+                  </div>
+                  <FormControl>
+                    <div className="relative">
+                      <Input
+                        {...field}
+                        type={showPassword ? "text" : "password"}
+                        placeholder="••••••"
+                        disabled={isLoading}
+                        data-testid="input-password"
+                        autoComplete="current-password"
+                        dir="ltr"
+                        className="pl-11 text-base"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="pointer-events-auto absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                        aria-label={showPassword ? "إخفاء كلمة المرور" : "إظهار كلمة المرور"}
+                        data-testid="button-toggle-password"
+                      >
+                        {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                      </button>
+                    </div>
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <Button
+              type="submit"
+              className="min-h-11 w-full text-base font-medium"
+              disabled={isLoading}
+              data-testid="button-login"
+            >
+              {isLoading && <Loader2 className="ml-2 h-4 w-4 animate-spin" />}
+              {isLoading ? "جاري تسجيل الدخول..." : "تسجيل الدخول"}
+            </Button>
+          </form>
+        </Form>
+      )}
+
+      {!showingOtp && !showingRegister && (
+        <>
+          <div className="relative my-6">
+            <div className="absolute inset-0 flex items-center">
+              <span className="w-full border-t border-border" />
+            </div>
+            <div className="relative flex justify-center">
+              <span className="bg-card px-3 text-xs text-muted-foreground">أو المتابعة عبر</span>
+            </div>
           </div>
 
-          <div className="mt-5">
-            <p className="text-sm font-normal text-center text-gray-700 dark:text-gray-400">
-              ليس لديك حساب؟{" "}
+          <div className="grid grid-cols-2 gap-3">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                trackLoginStart("google");
+                window.location.href = '/api/auth/google';
+              }}
+              className="inline-flex w-full items-center justify-center gap-2"
+              data-testid="button-google-login"
+            >
+              <GoogleIcon />
+              Google
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                trackLoginStart("apple");
+                window.location.href = '/api/auth/apple';
+              }}
+              className="inline-flex w-full items-center justify-center gap-2"
+              data-testid="button-apple-login"
+            >
+              <SiApple className="h-4 w-4" />
+              Apple
+            </Button>
+          </div>
+
+          <div className="mt-4 text-center">
+            {authMethod === "phone" ? (
               <button
                 type="button"
-                onClick={() => navigate("/register")}
-                className="text-primary hover:underline font-medium"
-                data-testid="link-register"
+                onClick={() => setAuthMethod("email")}
+                className="text-sm font-medium text-primary hover:underline"
+                data-testid="tab-email"
               >
-                إنشاء حساب جديد
+                الدخول بالبريد الإلكتروني
               </button>
-            </p>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setAuthMethod("phone")}
+                className="text-sm font-medium text-primary hover:underline"
+                data-testid="tab-phone"
+              >
+                الدخول برقم الجوال
+              </button>
+            )}
           </div>
-          
-          <div className="text-center pt-4 mt-4 border-t border-gray-200 dark:border-gray-700">
-            <p className="text-sm text-muted-foreground mb-2">هل أنت من الإدارة أو الصحفيين؟</p>
+
+          <div className="mt-6 border-t border-border pt-4 text-center text-sm text-muted-foreground">
+            ليس لديك حساب؟{" "}
             <button
               type="button"
-              onClick={() => navigate("/admin/login")}
-              className="text-sm text-primary hover:underline font-medium"
-              data-testid="link-admin-login"
+              onClick={() => navigate("/register")}
+              className="font-medium text-primary hover:underline"
+              data-testid="link-register"
             >
-              تسجيل دخول الإدارة
+              إنشاء حساب جديد
             </button>
           </div>
-        </div>
-      </div>
+        </>
+      )}
     </AuthLayout>
   );
 }

@@ -140,6 +140,17 @@ interface SabqApi {
     @POST("api/v1/auth/login")
     suspend fun login(@Body body: LoginRequest): ApiLoginResponse
 
+    /**
+     * Complete a 2FA-gated login. Called only after `/auth/login`
+     * returned `requires2FA: true` + a `challengeToken`. Body carries
+     * the challenge plus a TOTP `token` or a `backupCode`. Success
+     * returns the same envelope as `/auth/login` (token + user); a wrong
+     * code / expired challenge is HTTP 401. See iOS
+     * `APIClient.verifyTwoFactor` (Services/APIClient.swift:711).
+     */
+    @POST("api/v1/auth/verify-2fa")
+    suspend fun verifyTwoFactor(@Body body: VerifyTwoFactorRequest): ApiLoginResponse
+
     /** إرسال رمز OTP للجوال (Twilio Verify). */
     @POST("api/v1/auth/phone/send")
     suspend fun sendPhoneCode(@Body body: PhoneSendRequest): PhoneSendResponse
@@ -320,6 +331,26 @@ interface SabqApi {
     @GET("api/trending-keywords")
     suspend fun getTrendingKeywords(): List<ApiTrendingKeyword>
 
+    /**
+     * مقالات رأي من تصنيف الخبر — بلوك «مقالات قد تهمك» (نقل الويب #1609/#1624).
+     * المسار عام فقط (`/api/opinion/...`) ولا نظير له تحت v1؛ نفس غلاف
+     * `{ articles, total }`. iOS: `APIClient.fetchRelatedOpinions`.
+     */
+    /** «فريق سبق الذكي» — عام، كاش 5 دقائق على الخادم (نقل e1dc9c7). */
+    @GET("api/public/ai-team")
+    suspend fun getAiTeam(): ApiAiTeam
+
+    /** ملف المراسل الموحد — صفته تُستبدل بها صفة الخبر (نقل #1598). عام لا v1. */
+    @GET("api/reporters/{slug}")
+    suspend fun getReporterProfile(@Path("slug") slug: String): ApiReporterProfile
+
+    @GET("api/opinion/related/category/{categoryId}")
+    suspend fun getRelatedOpinions(
+        @Path("categoryId") categoryId: String,
+        @Query("excludeId") excludeId: String? = null,
+        @Query("limit") limit: Int = 5,
+    ): ApiArticlesResponse
+
     @GET("api/opinion")
     suspend fun getOpinions(
         @Query("page") page: Int = 1,
@@ -490,7 +521,7 @@ interface SabqApi {
     // -- keyword & authors -------------------------------------------
 
     @GET("api/keyword/{keyword}")
-    suspend fun getArticlesByKeyword(@Path("keyword") keyword: String): List<ApiArticle>
+    suspend fun getArticlesByKeyword(@Path("keyword") keyword: String): ApiArticlesResponse
 
     @GET("api/v1/authors/by-name")
     suspend fun getAuthorPage(
@@ -696,6 +727,43 @@ interface SabqApi {
 
     @GET("api/v1/asian-cup/predictions/leaderboard")
     suspend fun getAsianCupPredictionsLeaderboard(): com.sabq.smart.feature.asiancup.AcPredictionLeaderboardResponse
+
+    // -- دوري روشن السعودي (Roshn Saudi League) ---------------------------
+    // نفس نقاط iOS العامة (Services/RoshnModels.swift): روابط مطلقة تضرب
+    // api.sabq.org مباشرة — كاش SWR على الخادم يخدم آلاف الزوار من طلب واحد.
+    @GET("https://api.sabq.org/api/rsl/hero")
+    suspend fun getRoshnHero(): com.sabq.smart.feature.roshn.RsHero
+
+    @GET("https://api.sabq.org/api/sports/pro-league/matches")
+    suspend fun getRoshnMatches(): com.sabq.smart.feature.roshn.RsMatchBuckets
+
+    @GET("https://api.sabq.org/api/sports/pro-league/rounds")
+    suspend fun getRoshnRounds(): com.sabq.smart.feature.roshn.RsRoundsResponse
+
+    /** مباريات جولة واحدة — `name` هو المفتاح التقني من /rounds لا التسمية العربية. */
+    @GET("https://api.sabq.org/api/sports/pro-league/round")
+    suspend fun getRoshnRoundFixtures(@Query("name") name: String): com.sabq.smart.feature.roshn.RsRoundFixturesResponse
+
+    @GET("https://api.sabq.org/api/sports/pro-league/standings")
+    suspend fun getRoshnStandings(): com.sabq.smart.feature.roshn.RsStandingsResponse
+
+    @GET("https://api.sabq.org/api/sports/pro-league/scorers")
+    suspend fun getRoshnScorers(@Query("season") season: Int? = null): com.sabq.smart.feature.roshn.RsScorersResponse
+
+    @GET("https://api.sabq.org/api/sports/pro-league/assists")
+    suspend fun getRoshnAssists(@Query("season") season: Int? = null): com.sabq.smart.feature.roshn.RsAssistsResponse
+
+    @GET("https://api.sabq.org/api/sports/pro-league/cards")
+    suspend fun getRoshnCards(@Query("season") season: Int? = null): com.sabq.smart.feature.roshn.RsCards
+
+    @GET("https://api.sabq.org/api/sports/match/{id}")
+    suspend fun getRoshnMatch(@Path("id") fixtureId: Int): com.sabq.smart.feature.roshn.RsMatchDetail
+
+    @GET("https://api.sabq.org/api/sports/match/{id}/players")
+    suspend fun getRoshnMatchRatings(@Path("id") fixtureId: Int): com.sabq.smart.feature.roshn.RsMatchRatings
+
+    @GET("https://api.sabq.org/api/sports/team/{id}?with=stats")
+    suspend fun getRoshnTeamProfile(@Path("id") teamId: Int): com.sabq.smart.feature.roshn.RsTeamProfile
 
     // -- خليجي 27 (Gulf Cup 27 — جدة 2026) --------------------------------
     @GET("https://api.sabq.org/api/gulf-cup/overview")

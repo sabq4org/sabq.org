@@ -1,17 +1,28 @@
 import { Router, type Request } from "express";
 import rateLimit from "express-rate-limit";
+import { randomUUID } from "crypto";
 import { z } from "zod";
 import { requireAuth, userHasAnyRole } from "../rbac";
+import { mediaLicenseUpload } from "../utils/uploadMiddleware";
 import {
   coachWriterIdea,
   generateWriterIdeas,
   getOpinionAuthorWorkspace,
   getWriterEditorialNotifications,
+  getWriterMediaLicense,
   getWriterStyleProfile,
   markAllWriterEditorialNotificationsRead,
   markWriterEditorialNotificationRead,
   reviewWriterArticle,
+  saveWriterMediaLicense,
 } from "../services/opinionAuthorWorkspaceService";
+import { mediaLicenseExpiryRejection } from "../services/mediaLicenseService";
+import { uploadMediaLicenseDocument } from "../services/mediaLicenseUpload";
+import {
+  createOrUpdateAuthorSocialProposal,
+  getAuthorSocialProposalStatus,
+  SocialPublishValidationError,
+} from "../services/socialPublishing/socialPublishingService";
 
 const router = Router();
 const requestUserId = (req: Request) => (req.user as { id: string }).id;
@@ -120,6 +131,114 @@ router.get("/api/opinion-author/style-profile", writerAiLimiter, async (req, res
   } catch (error) {
     console.error("[Writer Workspace] style profile failed:", error);
     res.status(502).json({ message: "تعذر بناء ملف الأسلوب الآن" });
+  }
+});
+
+router.get("/api/opinion-author/media-license", async (req, res) => {
+  try {
+    res.json(await getWriterMediaLicense(requestUserId(req)));
+  } catch (error) {
+    console.error("[Writer Workspace] media license status failed:", error);
+    res.status(500).json({ message: "تعذر جلب حالة الترخيص" });
+  }
+});
+
+// رفع الترخيص: رقم + ملف عبر تخزين خاص S3/R2 فقط (نفس آلية طلبات المراسلين).
+router.post(
+  "/api/opinion-author/media-license",
+  mediaLicenseUpload.single("licenseFile"),
+  async (req, res) => {
+    try {
+      const licenseNumber = String(req.body?.licenseNumber || "").trim();
+      if (licenseNumber.length < 3) {
+        return res.status(400).json({ message: "رقم الترخيص المهني مطلوب" });
+      }
+
+      const expiry = mediaLicenseExpiryRejection(String(req.body?.licenseExpiresAt || ""));
+      if ("error" in expiry) {
+        return res.status(400).json({ message: expiry.error });
+      }
+      const { expiresAt } = expiry;
+
+      const file = req.file;
+      if (!file) {
+        return res.status(400).json({ message: "يرجى إرفاق صورة الترخيص أو ملف PDF" });
+      }
+      if (!file.mimetype.startsWith("image/") && file.mimetype !== "application/pdf") {
+        return res.status(400).json({ message: "الترخيص يجب أن يكون صورة أو ملف PDF" });
+      }
+
+      const uploaded = await uploadMediaLicenseDocument({
+        relativeKey: `writer-media-licenses/${requestUserId(req)}/${randomUUID()}.bin`,
+        buffer: file.buffer,
+        contentType: file.mimetype,
+      });
+
+      const status = await saveWriterMediaLicense(requestUserId(req), {
+        licenseNumber,
+        licenseFileKey: uploaded.path,
+        expiresAt,
+      });
+
+      res.json({
+        message:
+          "وصلنا ملفك وهو تحت مراجعة مسؤول النظام. لن تتمكن من إنشاء مقال حتى تتم الموافقة على الترخيص.",
+        ...status,
+      });
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : "";
+      if (msg.includes("ترخيص منتهٍ") || msg.includes("صورة أو ملف PDF")) {
+        return res.status(400).json({ message: msg });
+      }
+      if (msg.includes("غير متاحة حالياً")) {
+        console.error("[Writer Workspace] Private object storage not configured for media license");
+        return res.status(502).json({ message: msg });
+      }
+      console.error("[Writer Workspace] media license upload failed:", error);
+      res.status(500).json({ message: "تعذر حفظ الترخيص. حاول مرة أخرى لاحقاً." });
+    }
+  },
+);
+
+// ── مقترح النشر على منصة X لمقال الرأي المنشور (نافذة 24 ساعة) ────────
+
+router.get("/api/opinion-author/articles/:articleId/social-proposal", async (req, res) => {
+  try {
+    const status = await getAuthorSocialProposalStatus(req.params.articleId, requestUserId(req));
+    res.json(status);
+  } catch (error: unknown) {
+    if (error instanceof SocialPublishValidationError) {
+      return res.status(error.status).json({ message: error.message });
+    }
+    console.error("[Opinion Author Social Proposal] get status failed:", error);
+    res.status(500).json({ message: "تعذر التحقق من حالة النشر الاجتماعي" });
+  }
+});
+
+const authorProposalSchema = z.object({
+  text: z.string().trim().min(1, "نص المنشور مطلوب").max(2000, "النص طويل جداً"),
+  textSource: z.enum(["title", "custom"]),
+});
+
+router.post("/api/opinion-author/articles/:articleId/social-proposal", async (req, res) => {
+  try {
+    const parsed = authorProposalSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: parsed.error.errors[0]?.message || "بيانات المقترح غير صالحة" });
+    }
+    const post = await createOrUpdateAuthorSocialProposal({
+      articleId: req.params.articleId,
+      authorUserId: requestUserId(req),
+      text: parsed.data.text,
+      textSource: parsed.data.textSource,
+    });
+    res.status(201).json({ success: true, post });
+  } catch (error: unknown) {
+    if (error instanceof SocialPublishValidationError) {
+      return res.status(error.status).json({ message: error.message });
+    }
+    console.error("[Opinion Author Social Proposal] submit failed:", error);
+    res.status(500).json({ message: "تعذر إرسال مقترح النشر الاجتماعي" });
   }
 });
 

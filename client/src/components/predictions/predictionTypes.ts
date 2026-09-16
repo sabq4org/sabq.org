@@ -2,6 +2,15 @@
 // عبر مسارات الويب /api/predictions/* (جلسة Passport). كل البطولات ما عدا
 // مونديال 2026 (يبقى على صفحاته القديمة حتى نهايته).
 
+import { formatTime } from "@/lib/format";
+
+const AR_LATN_GREGORY = "ar-SA-u-nu-latn-ca-gregory";
+
+/** عزل الرقم لاتينيًا حتى لا يحوّله سفاري إلى هندية داخل جملة عربية. */
+function latn(n: number): string {
+  return `\u2066${n}\u2069`;
+}
+
 export type PredCompetitionSummary = {
   id: string;
   slug: string;
@@ -15,30 +24,40 @@ export type PredCompetitionSummary = {
 
 export type PredTeamMeta = { name?: string | null; logo?: string | null };
 
+/** خيار اختيار جاهز لمسابقات الموسم (بطل/هدّاف) — يُدمج في metadata عند الإنشاء. */
+export type PredPickOption = { id: string; name: string; logo?: string | null };
+
+export type PredPenalties = { home?: number | null; away?: number | null } | null;
+
 export type PredContestMeta = {
   home?: PredTeamMeta | null;
   away?: PredTeamMeta | null;
   round?: string | null;
   venue?: string | null;
+  title?: string | null;
+  options?: PredPickOption[] | null;
+  penalties?: PredPenalties;
 };
 
 export type PredScorePayload = { predHome?: number; predAway?: number };
+/** حمولة مسابقات الاختيار (بطل الموسم/الهدّاف) — مرآة longTermPickPayloadSchema. */
+export type PredPickPayload = { pickId?: string; pickName?: string };
+export type PredEntryPayload = PredScorePayload & PredPickPayload;
 
 export type PredContest = {
   id: string;
   contestType: string;
+  /** معرّف المباراة عند المصدر (API-Football) — للروابط العميقة من مركز المباراة. */
+  externalRef?: string | null;
   status: "open" | "locked" | "ready" | "settled" | "void" | string;
   opensAt?: string | null;
   locksAt: string;
   settledAt?: string | null;
   metadata?: PredContestMeta | null;
-  result?: { finalHome?: number; finalAway?: number } | null;
-  myEntry?: { id: string; payload?: PredScorePayload | null } | null;
-};
-
-export type PredCompetitionDetail = {
-  competition: { id: string; slug: string; nameAr: string; seasonKey: string };
-  contests: PredContest[];
+  result?: { finalHome?: number; finalAway?: number; penalties?: PredPenalties; winningPickIds?: string[] } | null;
+  /** عدد المشاركين النشطين في توقّع هذه المسابقة. */
+  entriesCount?: number;
+  myEntry?: { id: string; payload?: PredEntryPayload | null } | null;
 };
 
 export type PredRule = {
@@ -48,7 +67,18 @@ export type PredRule = {
     basePool?: number;
     tiers?: { exact?: number; signedMargin?: number; outcome?: number };
     winCriterion?: "exact" | "outcome";
+    distribution?: "equal" | "early_weighted" | string;
+    earlyTiers?: { beforeHours?: number; weight?: number }[];
   } | null;
+};
+
+/** قاعدة على مستوى البطولة (من detail.rules) — الملف النشط لكل نوع مسابقة. */
+export type PredCompetitionRule = PredRule & { contestType: string };
+
+export type PredCompetitionDetail = {
+  competition: { id: string; slug: string; nameAr: string; seasonKey: string };
+  contests: PredContest[];
+  rules?: PredCompetitionRule[];
 };
 
 export type PredContestDetail = PredContest & { rule?: PredRule | null };
@@ -77,8 +107,42 @@ export type PredLeaderboardResponse = {
   nameAr: string;
   seasonKey?: string;
   entries: PredLeaderEntry[];
+  totalCount?: number;
   myRank: { rank: number; points: number } | null;
+  offset?: number;
+  limit?: number;
 };
+
+/** جائزة واحدة من دفتر النقاط داخل عنصر «توقعاتي» — المبرر مع النقاط. */
+export type PredMyEntryAward = {
+  points: number;
+  reasonCode: string;
+  reasonLabelAr: string;
+  breakdown?: {
+    prediction?: string;
+    finalScore?: string;
+    pool?: { base?: number; carriedIn?: number; tierShare?: number; tierPoints?: number; winners?: number };
+  } | null;
+};
+
+/** عنصر تبويب «توقعاتي» — توقّع المستخدم ومعه حالة المسابقة ونتيجتها وجوائزه. */
+export type PredMyEntryItem = {
+  contestId: string;
+  contestType: string;
+  status: PredContest["status"];
+  externalRef?: string | null;
+  locksAt: string;
+  settledAt?: string | null;
+  metadata?: PredContestMeta | null;
+  result?: PredContest["result"];
+  payload?: PredEntryPayload | null;
+  submittedAt?: string | null;
+  updatedAt?: string | null;
+  awards: PredMyEntryAward[];
+  totalPoints: number;
+};
+
+export type PredMyEntriesResponse = { items: PredMyEntryItem[]; nextCursor: string | null };
 
 export type PredMyAward = {
   points: number;
@@ -95,7 +159,7 @@ export type PredMyAward = {
 
 export type PredSettlementResponse = {
   contestId: string;
-  result?: { finalHome?: number; finalAway?: number } | null;
+  result?: { finalHome?: number; finalAway?: number; penalties?: PredPenalties } | null;
   settledAt?: string | null;
   myAwards: PredMyAward[];
 };
@@ -109,22 +173,52 @@ export function ruleSummaryAr(rule: PredRule | null | undefined): string {
       const exact = Math.round((tiers?.exact ?? 0) * 100);
       const margin = Math.round((tiers?.signedMargin ?? 0) * 100);
       const outcome = Math.round((tiers?.outcome ?? 0) * 100);
-      return `بركة المباراة ${basePool} نقطة: ${exact}٪ للنتيجة الدقيقة، ${margin}٪ للفارق الصحيح، ${outcome}٪ للاتجاه — وما لا يُوزَّع يتراكم للمباراة التالية`;
+      return `جائزة المباراة ${basePool} نقطة: ${exact}٪ للنتيجة الدقيقة، ${margin}٪ للفارق الصحيح، ${outcome}٪ للاتجاه — وما لا يُوزَّع يتراكم للمباراة التالية`;
     }
     case "shared_pool":
       return winCriterion === "exact"
-        ? `بركة ${basePool} نقطة تُقسم بالتساوي على أصحاب النتيجة الدقيقة`
-        : `بركة ${basePool} نقطة تُقسم بالتساوي على من أصابوا اتجاه المباراة`;
+        ? `جائزة ${basePool} نقطة تُقسم بالتساوي على أصحاب النتيجة الدقيقة`
+        : `جائزة ${basePool} نقطة تُقسم بالتساوي على من أصابوا اتجاه المباراة`;
     case "skill_weighted":
       return "نقاط مهارية: دقة توقّعك × جرأته × سلسلة إصاباتك";
     case "fixed_points":
       return "نقاط ثابتة حسب دقة التوقّع";
+    case "long_term_pool": {
+      const early = rule.params.distribution === "early_weighted";
+      const maxWeight = Math.max(1, ...(rule.params.earlyTiers ?? []).map((t) => t.weight ?? 1));
+      return early
+        ? `جائزة ${basePool} نقطة تُقسم على المصيبين — وكلما بكّرت بتوقّعك زاد وزنه (حتى ×${maxWeight})`
+        : `جائزة ${basePool} نقطة تُقسم بالتساوي على المصيبين آخر الموسم`;
+    }
     default:
       return "تُحتسب النقاط بعد صافرة النهاية";
   }
 }
 
-/** «يُقفل بعد ٢س ١٤د» — عدّ تنازلي حتى الإغلاق. */
+/** تسمية نوع المسابقة للعرض — مرآة CONTEST_TYPE_LABELS في عقود الخادم. */
+export function contestTypeLabelAr(contestType: string): string {
+  switch (contestType) {
+    case "match_score": return "توقّع المباريات";
+    case "champion": return "بطل الموسم";
+    case "top_scorer": return "هدّاف الموسم";
+    case "match_scorer": return "هدّاف المباراة";
+    case "first_scorer": return "أول هدّاف";
+    default: return "التوقّعات";
+  }
+}
+
+/**
+ * قاعدة العرض الموحّدة للنتائج في RTL: الرقم الملاصق لليمين للمضيف دائمًا.
+ * الخادم يخزّن النصوص «مضيف-ضيف» (breakdown)، فنقلبها للعرض داخل span
+ * dir="ltr" حتى لا تتلاعب خوارزمية bidi بالترتيب.
+ */
+export function scoreRtlAr(score: string | null | undefined): string | null {
+  if (!score) return null;
+  const m = /^(\d+)\s*[-–]\s*(\d+)$/.exec(score.trim());
+  return m ? `${m[2]}–${m[1]}` : score;
+}
+
+/** «يُقفل بعد 2س 14د» — عدّ تنازلي حتى الإغلاق بأرقام لاتينية. */
 export function lockCountdownAr(locksAt: string, now = Date.now()): string | null {
   const lockTime = Date.parse(locksAt);
   if (Number.isNaN(lockTime)) return null;
@@ -133,25 +227,19 @@ export function lockCountdownAr(locksAt: string, now = Date.now()): string | nul
   const days = Math.floor(seconds / 86_400);
   const hours = Math.floor((seconds % 86_400) / 3_600);
   const minutes = Math.floor((seconds % 3_600) / 60);
-  if (days > 0) return `يُقفل بعد ${days}ي ${hours}س`;
-  if (hours > 0) return `يُقفل بعد ${hours}س ${minutes}د`;
-  return `يُقفل بعد ${Math.max(minutes, 1)}د`;
+  if (days > 0) return `يُقفل بعد ${latn(days)}ي ${latn(hours)}س`;
+  if (hours > 0) return `يُقفل بعد ${latn(hours)}س ${latn(minutes)}د`;
+  return `يُقفل بعد ${latn(Math.max(minutes, 1))}د`;
 }
 
 export function kickoffTimeAr(locksAt: string): string {
-  const date = new Date(locksAt);
-  if (Number.isNaN(date.getTime())) return "—";
-  return new Intl.DateTimeFormat("ar-SA", {
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZone: "Asia/Riyadh",
-  }).format(date);
+  return formatTime(locksAt);
 }
 
 export function kickoffDayAr(locksAt: string): string {
   const date = new Date(locksAt);
   if (Number.isNaN(date.getTime())) return "";
-  return new Intl.DateTimeFormat("ar-SA", {
+  return new Intl.DateTimeFormat(AR_LATN_GREGORY, {
     weekday: "long",
     day: "numeric",
     month: "long",

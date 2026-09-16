@@ -13,6 +13,10 @@ final class GcAuthStore {
     var isLoading = false
     var errorMessage: String?
     var errorSource: GcAuthErrorSource = .none
+    /// غير nil أثناء دخول بكلمة مرور معلّق على المصادقة الثنائية: يحمل تحدّي
+    /// الخادم لمبادلته (برمز TOTP أو رمز احتياطي) بجلسة. يقود خطوة إدخال الرمز
+    /// في شاشة الدخول؛ يُمسح عند النجاح أو الإلغاء.
+    private(set) var pending2FAChallengeToken: String?
 
     var isLoggedIn: Bool { token != nil }
 
@@ -130,14 +134,58 @@ final class GcAuthStore {
         isLoading = true
         errorMessage = nil
         errorSource = .none
+        pending2FAChallengeToken = nil
         do {
             let resp = try await APIClient.shared.loginWithIdentifier(id, password: password)
+            // الحساب مفعّل عليه المصادقة الثنائية: يرجع الخادم requires2FA + تحدّي
+            // (HTTP 200 بلا token) بدل الجلسة. ننتقل لخطوة إدخال الرمز بدل عرض
+            // رسالة التحدّي كخطأ.
+            if resp.requires2FA == true, let challenge = resp.challengeToken {
+                pending2FAChallengeToken = challenge
+                isLoading = false
+                return
+            }
             try await applySession(resp)
         } catch {
             errorMessage = friendly(error)
             errorSource = .credentials
         }
         isLoading = false
+    }
+
+    /// إكمال دخول محمي بالمصادقة الثنائية برمز TOTP أو رمز احتياطي. يُبقي التحدّي
+    /// حيًّا عند فشل الرمز حتى يعيد المستخدم المحاولة دون إعادة إدخال كلمة المرور.
+    func verifyTwoFactor(code: String?, backupCode: String? = nil) async -> Bool {
+        guard let challenge = pending2FAChallengeToken else { return false }
+        isLoading = true
+        errorMessage = nil
+        errorSource = .credentials
+        defer { isLoading = false }
+        do {
+            let resp = try await APIClient.shared.verifyTwoFactor(
+                challengeToken: challenge, code: code, backupCode: backupCode
+            )
+            try await applySession(resp)
+            pending2FAChallengeToken = nil
+            return true
+        } catch {
+            // رمز خاطئ أو تحدٍّ منتهٍ يرجعان 401؛ اعرض رسالة رمز واضحة بدل
+            // «بيانات الدخول غير صحيحة». التحدّي يبقى حيًّا لإعادة المحاولة.
+            if let e = error as? APIError, case .unauthorized = e {
+                errorMessage = L("auth.2fa.invalidCode")
+            } else {
+                errorMessage = friendly(error)
+            }
+            errorSource = .credentials
+            return false
+        }
+    }
+
+    /// إلغاء خطوة المصادقة الثنائية والرجوع لنموذج الدخول.
+    func cancelTwoFactor() {
+        pending2FAChallengeToken = nil
+        errorMessage = nil
+        errorSource = .none
     }
 
     // MARK: جوال OTP

@@ -4,6 +4,8 @@ import {
   LIVE_NEWS_IMAGE_CACHE_CONTROL,
   NewsImageStorageService,
   buildNewsImageObjectPrefix,
+  getR2PutTimeoutMs,
+  getUploadBudgetMs,
   isNewsImagePurpose,
   parseNewsImageRolloutPercent,
   shouldRouteNewsImageToR2,
@@ -157,5 +159,100 @@ describe("news image storage routing", () => {
 
     expect(fallback).toHaveBeenCalledOnce();
     expect(result.provider).toBe("cloudflare-images");
+  });
+});
+
+describe("news image upload request budget", () => {
+  const BUDGET_KEYS = ["NEWS_IMAGES_UPLOAD_BUDGET_MS", "NEWS_IMAGES_R2_PUT_TIMEOUT_MS"] as const;
+  const originalBudgetEnv = Object.fromEntries(
+    BUDGET_KEYS.map((key) => [key, process.env[key]]),
+  ) as Record<(typeof BUDGET_KEYS)[number], string | undefined>;
+
+  function configureR2(): void {
+    process.env.NEWS_IMAGES_R2_ACCOUNT_ID = "account";
+    process.env.NEWS_IMAGES_R2_ACCESS_KEY_ID = "access-key";
+    process.env.NEWS_IMAGES_R2_SECRET_ACCESS_KEY = "secret-key";
+    process.env.NEWS_IMAGES_R2_BUCKET_NAME = "sabq-news-images";
+    process.env.NEWS_IMAGES_R2_PUBLIC_URL = "https://media.sabq.org";
+    process.env.NEWS_IMAGES_R2_ROLLOUT_PERCENT = "100";
+  }
+
+  beforeEach(() => {
+    restoreR2Environment();
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    restoreR2Environment();
+    for (const key of BUDGET_KEYS) {
+      const originalValue = originalBudgetEnv[key];
+      if (originalValue === undefined) delete process.env[key];
+      else process.env[key] = originalValue;
+    }
+  });
+
+  it("reads deadlines from the environment with safe defaults", () => {
+    delete process.env.NEWS_IMAGES_UPLOAD_BUDGET_MS;
+    delete process.env.NEWS_IMAGES_R2_PUT_TIMEOUT_MS;
+    expect(getUploadBudgetMs()).toBe(20_000);
+    expect(getR2PutTimeoutMs()).toBe(10_000);
+    process.env.NEWS_IMAGES_UPLOAD_BUDGET_MS = "12000";
+    process.env.NEWS_IMAGES_R2_PUT_TIMEOUT_MS = "not-a-number";
+    expect(getUploadBudgetMs()).toBe(12_000);
+    expect(getR2PutTimeoutMs()).toBe(10_000);
+  });
+
+  it("hands the remaining budget to the Cloudflare fallback after an R2 failure", async () => {
+    configureR2();
+    process.env.NEWS_IMAGES_UPLOAD_BUDGET_MS = "20000";
+    const service = new NewsImageStorageService();
+    vi.spyOn(
+      service as unknown as { uploadToR2: () => Promise<never> },
+      "uploadToR2",
+    ).mockRejectedValue(new Error("simulated R2 outage"));
+    const fallback = vi.spyOn(cloudflareImagesService, "uploadToCloudflare").mockResolvedValue({
+      success: true,
+      deliveryUrl: "https://imagedelivery.net/example/fallback/public",
+    });
+
+    const result = await service.upload({
+      buffer: Buffer.from("test-image"),
+      filename: "story.jpg",
+      mimeType: "image/jpeg",
+      purpose: "article-hero",
+      rolloutKey: "reporter-42",
+    });
+
+    expect(result.provider).toBe("cloudflare-images");
+    const options = fallback.mock.calls[0]?.[4] as { timeoutMs?: number } | undefined;
+    expect(options?.timeoutMs).toBeGreaterThan(15_000);
+    expect(options?.timeoutMs).toBeLessThanOrEqual(20_000);
+  });
+
+  it("fails fast instead of chaining a second provider once the budget is spent", async () => {
+    configureR2();
+    process.env.NEWS_IMAGES_UPLOAD_BUDGET_MS = "1000";
+    const service = new NewsImageStorageService();
+    vi.spyOn(
+      service as unknown as { uploadToR2: () => Promise<never> },
+      "uploadToR2",
+    ).mockRejectedValue(new Error("simulated R2 timeout"));
+    const fallback = vi.spyOn(cloudflareImagesService, "uploadToCloudflare").mockResolvedValue({
+      success: true,
+      deliveryUrl: "https://imagedelivery.net/example/fallback/public",
+    });
+
+    const result = await service.upload({
+      buffer: Buffer.from("test-image"),
+      filename: "story.jpg",
+      mimeType: "image/jpeg",
+      purpose: "article-hero",
+      rolloutKey: "reporter-42",
+    });
+
+    expect(fallback).not.toHaveBeenCalled();
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("budget exhausted");
   });
 });

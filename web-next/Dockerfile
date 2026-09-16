@@ -2,7 +2,7 @@
 # web-next/ context (no dependency on the parent monorepo at runtime). Uses
 # Next "standalone" output so the runtime image stays small.
 
-FROM node:20-alpine AS builder
+FROM node:22-alpine AS builder
 WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN npm ci
@@ -11,7 +11,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 # API_ORIGIN/PUBLIC_SITE_URL are read at runtime; safe defaults during build.
 RUN npm run build
 
-FROM node:20-alpine AS runner
+FROM node:22-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1

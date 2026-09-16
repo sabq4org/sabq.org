@@ -285,7 +285,10 @@ export function registerTagRoutes(app: Express) {
         })
         .from(articleTags)
         .innerJoin(articles, eq(articleTags.articleId, articles.id))
-        .where(eq(articleTags.tagId, id))
+        // Unauthenticated endpoint with no status filter — it listed drafts,
+        // scheduled/embargoed pieces and archived (retracted) articles by
+        // headline, excerpt and slug to anyone who knew a tag id.
+        .where(and(eq(articleTags.tagId, id), eq(articles.status, "published")))
         .orderBy(desc(articles.publishedAt));
 
       res.json(result);

@@ -1,153 +1,25 @@
-# تعليمات إعداد قاعدة البيانات - منصة Sabq Smart
+# إعداد قاعدة البيانات — سبق
 
-## المشكلة الحالية
+## التطوير المحلي (المسار الحالي)
 
-قاعدة البيانات تم إنشاؤها بنجاح، لكن الـ **endpoint معطل** في Neon. هذا يمنع تطبيق المخططات (migrations) تلقائياً.
+استخدم **PostgreSQL عبر Docker** على جهازك، وليس فرع Neon للتطوير.
 
-الخطأ الذي يظهر:
-```
-ERROR: The endpoint has been disabled. Enable it using Neon API and retry.
-```
-
----
-
-## الحل: تفعيل قاعدة البيانات وتطبيق المخططات
-
-### الخطوة 1: تفعيل Neon Database Endpoint
-
-لديك خياران لتفعيل قاعدة البيانات:
-
-#### الخيار الأول: من خلال Neon Console (الأسهل) ✅
-
-1. افتح [Neon Console](https://console.neon.tech)
-2. اختر المشروع الخاص بك
-3. اذهب إلى: **Project → Branches → Main Branch → Endpoints**
-4. اضغط على زر **"Enable"** أو **"Start"** بجانب الـ endpoint
-5. انتظر بضع ثوانٍ حتى يصبح الـ endpoint في حالة **"Active"**
-
-#### الخيار الثاني: من خلال Neon API
-
-استخدم هذا الأمر (استبدل القيم المناسبة):
-```bash
-curl -X POST \
-  'https://console.neon.tech/api/v2/projects/{project_id}/branches/{branch_id}/endpoints/{endpoint_id}/start' \
-  -H 'Authorization: Bearer {your_api_key}'
-```
-
----
-
-### الخطوة 2: تطبيق المخططات (Migrations)
-
-بعد تفعيل الـ endpoint، لديك خياران:
-
-#### الخيار الأول: تطبيق تلقائي (الأفضل) ✅
+الدليل الكامل: [`LOCAL_POSTGRES_AR.md`](./LOCAL_POSTGRES_AR.md)
 
 ```bash
-npm run db:push
-```
-
-إذا ظهرت تحذيرات بشأن فقدان البيانات، استخدم:
-```bash
-npm run db:push --force
-```
-
-#### الخيار الثاني: تطبيق يدوي من خلال SQL
-
-إذا لم ينجح الأمر أعلاه، يمكنك تنفيذ SQL يدوياً:
-
-1. افتح [Neon SQL Editor](https://console.neon.tech) في مشروعك
-2. نفّذ محتوى الملف: **`complete_database_setup.sql`**
-   - هذا الملف يحتوي على جميع الجداول والعلاقات اللازمة (339 سطر)
-3. الملف يتضمن:
-   - جميع جداول النظام (Users, Articles, Categories, إلخ)
-   - العلاقات والقيود (Foreign Keys, Unique Constraints)
-   - الفهارس (Indexes)
-   - التحسينات الإنتاجية
-
----
-
-### الخطوة 3: التحقق من نجاح التطبيق
-
-بعد تطبيق المخططات، نفّذ هذا الاستعلام للتحقق:
-
-```sql
--- التحقق من القيود الفريدة
-SELECT constraint_name 
-FROM information_schema.table_constraints 
-WHERE table_name = 'short_links' 
-  AND constraint_name = 'short_links_short_code_unique';
-
-SELECT constraint_name 
-FROM information_schema.table_constraints 
-WHERE table_name = 'users' 
-  AND constraint_name = 'users_apple_id_unique';
-
--- التحقق من حذف جدول trend_cache
-SELECT table_name 
-FROM information_schema.tables 
-WHERE table_name = 'trend_cache';
--- يجب أن يكون الناتج فارغاً
-```
-
----
-
-### الخطوة 4: إعادة تشغيل التطبيق
-
-بعد التحقق من نجاح المخططات:
-
-```bash
-# إعادة تشغيل التطبيق
+npm run db:up
+# في .env.local: DATABASE_URL=postgresql://sabq:sabq_password@localhost:5432/sabq_db
+#               DB_DRIVER=pg   — وبدون NEON_DATABASE_URL
+npm run db:push:local
 npm run dev
 ```
 
-أو ببساطة: أعد تشغيل workflow "Start application" في Replit.
+- `npm run db:push:local` يطبّق المخطط على `localhost` فقط ويرفض Neon/الإنتاج.
+- الإنتاج: Neon على Railway — ادفع المخطط عبر `./push-to-production.sh '<PROD_URL>'` فقط.
 
 ---
 
-## ملفات SQL المتاحة
+## ملاحظة تاريخية (Neon endpoint معطّل)
 
-1. **`complete_database_setup.sql`** - ملف شامل يحتوي على جميع المخططات (339 سطر) ✅
-   - `migrations/0000_lazy_jocasta.sql` - المخطط الأساسي
-   - `migrations/0001_production_constraints.sql` - القيود الإضافية
-
-2. **الملفات الأخرى المتاحة:**
-   - `publisher_tables.sql` - جداول نظام الناشرين
-   - `test_keyword_search.sql` - اختبار البحث بالكلمات المفتاحية
-   - وملفات SQL أخرى متخصصة
-
----
-
-## الجداول الرئيسية في النظام
-
-قاعدة البيانات تتضمن:
-
-- **المستخدمون والأدوار:** users, roles, permissions, role_permissions, user_roles
-- **المحتوى:** articles, categories, staff, media_library
-- **التفاعلات:** comments, reactions, bookmarks, reading_history
-- **الذكاء الاصطناعي:** ai_classifications, sentiment_scores, behavior_logs
-- **التحليلات:** analytics tables, click_tracking
-- **النظام:** sessions, activity_logs, themes
-
-**إجمالي الجداول:** أكثر من 50 جدول
-
----
-
-## ملاحظات مهمة
-
-1. ✅ **قاعدة البيانات منشأة** - تم إنشاؤها بنجاح في Neon
-2. ⚠️ **الـ endpoint معطل** - يحتاج تفعيل يدوي من Neon Console
-3. 📝 **المخططات جاهزة** - ملف `complete_database_setup.sql` يحتوي على كل شيء
-4. 🔄 **بعد التفعيل** - نفّذ `npm run db:push` أو الملف SQL يدوياً
-
----
-
-## دعم إضافي
-
-إذا واجهت أي مشاكل:
-- تأكد من أن DATABASE_URL صحيح في environment variables
-- تحقق من أن الـ endpoint في حالة "Active" في Neon Console
-- راجع logs التطبيق بعد إعادة التشغيل
-
----
-
-**تم إعداد هذه التعليمات في:** 20 نوفمبر 2025
+المحتوى السابق عن تفعيل endpoint Neon كان لبيئة تطوير قديمة على فرع Neon.  
+ذلك المسار **لم يعد موصى به للتطوير**. أبقِ Neon للإنتاج (أو تجارب بعيدة مقصودة)، وطوّر على Postgres المحلي.

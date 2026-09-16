@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, type ComponentProps, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
-import { Edit, Star, Trash2, Send, Bell, Loader2, Languages, FilePenLine } from "lucide-react";
+import { Edit, Star, Trash2, Send, Bell, Loader2, Languages, FilePenLine, HeartPulse, Share2 } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { cn } from "@/lib/utils";
 
 interface RowActionsProps {
   articleId: string;
@@ -28,28 +29,68 @@ interface RowActionsProps {
   onDelete: () => void;
   /** Opens the parent's revision-request dialog (returns article to author as draft). */
   onRequestRevision?: () => void;
+  /** يفتح نافذة «النشر على X» في الصفحة الأم (SocialPublishDialog). */
+  onSocialPublish?: () => void;
   canEdit?: boolean;
   canDelete?: boolean;
   canFeature?: boolean;
   canPublish?: boolean;
   canSendNotification?: boolean;
   canTranslate?: boolean;
+  canSocialPublish?: boolean;
 }
 
-export function RowActions({ 
+function ActionBtn({
+  children,
+  className,
+  ...props
+}: ComponentProps<typeof Button>) {
+  return (
+    <Button
+      variant="ghost"
+      size="icon"
+      className={cn("h-7 w-7 sm:h-8 sm:w-8 rounded-lg transition-all hover:bg-muted shrink-0 text-muted-foreground hover:text-foreground", className)}
+      {...props}
+    >
+      {children}
+    </Button>
+  );
+}
+
+function ActionsRow({ children }: { children: ReactNode }) {
+  return (
+    <div
+      className="flex items-center justify-center gap-0.5"
+      role="group"
+      aria-label="إجراءات المقال"
+    >
+      {children}
+    </div>
+  );
+}
+
+/** فاصل رأسي بين مجموعة التحرير (تعديل·تمييز·طلب تعديل·أرشفة)
+ *  ومجموعة التوزيع (ترجمة·إنعاش·إشعار·X). */
+function ActionsDivider() {
+  return <span aria-hidden="true" className="h-4 w-px shrink-0 bg-border" />;
+}
+
+export function RowActions({
   articleId,
   articleTitle,
-  status, 
-  onEdit, 
-  isFeatured: initialIsFeatured, 
+  status,
+  onEdit,
+  isFeatured: initialIsFeatured,
   onDelete,
   onRequestRevision,
+  onSocialPublish,
   canEdit = true,
   canDelete = true,
   canFeature = true,
   canPublish = true,
   canSendNotification = true,
   canTranslate = true,
+  canSocialPublish = false,
 }: RowActionsProps) {
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
@@ -58,6 +99,8 @@ export function RowActions({
   const [isSendingNotification, setIsSendingNotification] = useState(false);
   const [translateDialogOpen, setTranslateDialogOpen] = useState(false);
   const [isTranslating, setIsTranslating] = useState(false);
+  const [resurfaceDialogOpen, setResurfaceDialogOpen] = useState(false);
+  const [isResurfacing, setIsResurfacing] = useState(false);
 
   useEffect(() => {
     setIsFeatured(initialIsFeatured);
@@ -66,15 +109,15 @@ export function RowActions({
   const handleSendNotification = async () => {
     setIsSendingNotification(true);
     try {
-      await apiRequest(`/api/admin/push/quick-send`, {
+      const data = await apiRequest<{ message?: string }>(`/api/admin/push/quick-send`, {
         method: "POST",
         body: JSON.stringify({ articleId }),
         headers: { "Content-Type": "application/json" },
       });
-      
+
       toast({
-        title: "تم الإرسال",
-        description: "تم إرسال الإشعار للمستخدمين بنجاح",
+        title: "بدأ الإرسال",
+        description: data?.message || "جارٍ إرسال الإشعار للمستخدمين في الخلفية",
       });
       setNotifyDialogOpen(false);
     } catch (error: any) {
@@ -111,18 +154,42 @@ export function RowActions({
     }
   };
 
+  // «إنعاش»: يعيد الخبر لصدارة الموجز دون تغيير تاريخه أو مشاهداته أو رابطه
+  const handleResurface = async () => {
+    setIsResurfacing(true);
+    try {
+      await apiRequest(`/api/articles/${articleId}/resurface`, {
+        method: "POST",
+      });
+
+      toast({
+        title: "تم الإنعاش",
+        description: "عاد الخبر إلى صدارة الموجز وبدأ دورة جديدة",
+      });
+      setResurfaceDialogOpen(false);
+    } catch (error: any) {
+      toast({
+        title: "خطأ",
+        description: error.message || "فشل إنعاش الخبر",
+        variant: "destructive",
+      });
+    } finally {
+      setIsResurfacing(false);
+    }
+  };
+
   const handlePublish = async () => {
     setIsLoading(true);
     try {
       await apiRequest(`/api/admin/articles/${articleId}/publish`, {
         method: "POST",
       });
-      
+
       queryClient.removeQueries({ queryKey: ["/api/admin/articles"] });
       queryClient.removeQueries({ queryKey: ["/api/admin/articles/metrics"] });
       await queryClient.refetchQueries({ queryKey: ["/api/admin/articles"] });
       await queryClient.refetchQueries({ queryKey: ["/api/admin/articles/metrics"] });
-      
+
       toast({
         title: "تم النشر",
         description: "تم نشر المقال بنجاح",
@@ -140,21 +207,21 @@ export function RowActions({
 
   const handleFeature = async () => {
     const previousValue = isFeatured;
-    
+
     // Optimistic update
     setIsFeatured(!isFeatured);
     setIsLoading(true);
-    
+
     try {
       await apiRequest(`/api/admin/articles/${articleId}/feature`, {
         method: "POST",
         body: JSON.stringify({ featured: !previousValue }),
         headers: { "Content-Type": "application/json" },
       });
-      
+
       queryClient.removeQueries({ queryKey: ["/api/admin/articles"] });
       await queryClient.refetchQueries({ queryKey: ["/api/admin/articles"] });
-      
+
       toast({
         title: !previousValue ? "تم التمييز" : "تم إلغاء التمييز",
         description: !previousValue ? "تم تمييز المقال بنجاح" : "تم إلغاء تمييز المقال بنجاح",
@@ -162,7 +229,7 @@ export function RowActions({
     } catch (error: any) {
       // Revert on error
       setIsFeatured(previousValue);
-      
+
       toast({
         title: "خطأ",
         description: error.message || "فشل تحديث حالة التمييز",
@@ -176,81 +243,98 @@ export function RowActions({
   // للمقالات المؤرشفة: تعديل - مميز - نشر
   if (status === "archived") {
     return (
-      <div className="flex gap-1">
+      <ActionsRow>
         {canEdit && (
-          <Button
-            variant="ghost"
-            size="icon"
+          <ActionBtn
             onClick={onEdit}
             disabled={isLoading}
             data-testid={`button-action-edit-${articleId}`}
             title="تعديل"
           >
             <Edit className="w-4 h-4" />
-          </Button>
+          </ActionBtn>
         )}
         {canFeature && (
-          <Button
-            variant="ghost"
-            size="icon"
+          <ActionBtn
             onClick={handleFeature}
             disabled={isLoading}
             data-testid={`button-action-feature-${articleId}`}
             title={isFeatured ? "إلغاء التمييز" : "تمييز"}
           >
-            <Star className={`w-4 h-4 ${isFeatured ? 'text-yellow-500 fill-yellow-500' : ''}`} />
-          </Button>
+            <Star className={`w-4 h-4 ${isFeatured ? "text-yellow-500 fill-yellow-500" : ""}`} />
+          </ActionBtn>
         )}
         {canPublish && (
-          <Button
-            variant="ghost"
-            size="icon"
+          <ActionBtn
             onClick={handlePublish}
             disabled={isLoading}
             data-testid={`button-action-publish-${articleId}`}
             title="نشر"
           >
             <Send className="w-4 h-4" />
-          </Button>
+          </ActionBtn>
         )}
-      </div>
+      </ActionsRow>
     );
   }
 
-  // للمقالات النشطة (منشور/مسودة/مجدول): تعديل - مميز - ترجمة - إشعار - أرشفة بالسبب
-  // ملاحظة: زر سلة المهملات الأحمر = أرشفة + إشعار + إيميل للكاتب بالسبب
-  // (يفتح حواراً في الصفحة الأم يطلب السبب إلزامياً ثم يرسل PATCH).
+  // للمقالات النشطة: كل الإجراءات ظاهرة في سطر واحد بدون قائمة منسدلة،
+  // مع فاصل رأسي بين مجموعة التحرير ومجموعة التوزيع/الذكاء.
+  const hasEditGroup =
+    canEdit || canFeature || !!onRequestRevision || canDelete;
+  const hasDistributionGroup =
+    status === "published" &&
+    (canTranslate ||
+      canPublish ||
+      canSendNotification ||
+      (canSocialPublish && !!onSocialPublish));
+
   return (
     <>
-      <div className="flex gap-1">
+      <ActionsRow>
         {canEdit && (
-          <Button
-            variant="ghost"
-            size="icon"
+          <ActionBtn
             onClick={onEdit}
             disabled={isLoading}
             data-testid={`button-action-edit-${articleId}`}
             title="تعديل"
           >
             <Edit className="w-4 h-4" />
-          </Button>
+          </ActionBtn>
         )}
         {canFeature && (
-          <Button
-            variant="ghost"
-            size="icon"
+          <ActionBtn
             onClick={handleFeature}
             disabled={isLoading}
             data-testid={`button-action-feature-${articleId}`}
             title={isFeatured ? "إلغاء التمييز" : "تمييز"}
           >
-            <Star className={`w-4 h-4 ${isFeatured ? 'text-yellow-500 fill-yellow-500' : ''}`} />
-          </Button>
+            <Star className={`w-4 h-4 ${isFeatured ? "text-yellow-500 fill-yellow-500" : ""}`} />
+          </ActionBtn>
         )}
+        {onRequestRevision && (
+          <ActionBtn
+            onClick={onRequestRevision}
+            disabled={isLoading}
+            data-testid={`button-action-revision-${articleId}`}
+            title="طلب تعديل (مع ملاحظات)"
+          >
+            <FilePenLine className="w-4 h-4 text-amber-600" />
+          </ActionBtn>
+        )}
+        {canDelete && (
+          <ActionBtn
+            onClick={onDelete}
+            disabled={isLoading}
+            data-testid={`button-action-delete-${articleId}`}
+            title="أرشفة (مع ذكر السبب)"
+          >
+            <Trash2 className="w-4 h-4 text-destructive" />
+          </ActionBtn>
+        )}
+        {hasEditGroup && hasDistributionGroup && <ActionsDivider />}
         {canTranslate && status === "published" && (
-          <Button
-            variant="ghost"
-            size="icon"
+          <ActionBtn
             onClick={() => setTranslateDialogOpen(true)}
             disabled={isLoading || isTranslating}
             data-testid={`button-action-translate-${articleId}`}
@@ -261,45 +345,43 @@ export function RowActions({
             ) : (
               <Languages className="w-4 h-4 text-emerald-500" />
             )}
-          </Button>
+          </ActionBtn>
+        )}
+        {canPublish && status === "published" && (
+          <ActionBtn
+            onClick={() => setResurfaceDialogOpen(true)}
+            disabled={isLoading || isResurfacing}
+            data-testid={`button-action-resurface-${articleId}`}
+            title="إنعاش (عودة لصدارة الموجز)"
+          >
+            {isResurfacing ? (
+              <Loader2 className="w-4 h-4 animate-spin text-rose-500" />
+            ) : (
+              <HeartPulse className="w-4 h-4 text-rose-500" />
+            )}
+          </ActionBtn>
         )}
         {canSendNotification && status === "published" && (
-          <Button
-            variant="ghost"
-            size="icon"
+          <ActionBtn
             onClick={() => setNotifyDialogOpen(true)}
             disabled={isLoading}
             data-testid={`button-action-notify-${articleId}`}
             title="إرسال إشعار"
           >
             <Bell className="w-4 h-4 text-blue-500" />
-          </Button>
+          </ActionBtn>
         )}
-        {onRequestRevision && status !== "archived" && (
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={onRequestRevision}
+        {canSocialPublish && onSocialPublish && status === "published" && (
+          <ActionBtn
+            onClick={onSocialPublish}
             disabled={isLoading}
-            data-testid={`button-action-revision-${articleId}`}
-            title="طلب تعديل (مع ملاحظات)"
+            data-testid={`button-action-social-publish-${articleId}`}
+            title="النشر على X"
           >
-            <FilePenLine className="w-4 h-4 text-amber-600" />
-          </Button>
+            <Share2 className="w-4 h-4 text-sky-600" />
+          </ActionBtn>
         )}
-        {canDelete && (
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={onDelete}
-            disabled={isLoading}
-            data-testid={`button-action-delete-${articleId}`}
-            title="أرشفة (مع ذكر السبب)"
-          >
-            <Trash2 className="w-4 h-4 text-destructive" />
-          </Button>
-        )}
-      </div>
+      </ActionsRow>
 
       <AlertDialog open={translateDialogOpen} onOpenChange={setTranslateDialogOpen}>
         <AlertDialogContent>
@@ -330,6 +412,42 @@ export function RowActions({
                 <>
                   <Languages className="w-4 h-4 ml-2" />
                   ترجم ونشر
+                </>
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={resurfaceDialogOpen} onOpenChange={setResurfaceDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>إنعاش الخبر</AlertDialogTitle>
+            <AlertDialogDescription className="text-right">
+              سيعود الخبر إلى صدارة الموجز ويبدأ دورة عرض جديدة، دون أي تغيير في تاريخ نشره أو مشاهداته أو رابطه.
+              {articleTitle && (
+                <span className="block mt-2 font-medium text-foreground">
+                  "{articleTitle}"
+                </span>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="gap-2">
+            <AlertDialogCancel disabled={isResurfacing}>إلغاء</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleResurface}
+              disabled={isResurfacing}
+              className="bg-rose-600 hover:bg-rose-700"
+            >
+              {isResurfacing ? (
+                <>
+                  <Loader2 className="w-4 h-4 ml-2 animate-spin" />
+                  جاري الإنعاش...
+                </>
+              ) : (
+                <>
+                  <HeartPulse className="w-4 h-4 ml-2" />
+                  أنعش الخبر
                 </>
               )}
             </AlertDialogAction>

@@ -28,6 +28,23 @@ private val READER_SERIF_KEY = booleanPreferencesKey("article_use_reader_font")
  *  redesigned onboarding ships. */
 private val ONBOARDED_V2_KEY = booleanPreferencesKey("sabqHasCompletedOnboardingV2")
 
+private val BROWSING_MODE_KEY = stringPreferencesKey("sabq_browsing_mode")
+
+/**
+ * وضع التصفح — يقابل iOS `LiteModeManager` بنفس المفاتيح الثلاثة:
+ * كامل / Lite يدوي / تلقائي حسب سرعة الاتصال.
+ */
+enum class SabqBrowsingMode(val key: String, val arabicLabel: String, val arabicSubtitle: String) {
+    Full(key = "full", arabicLabel = "التصفح الكامل", arabicSubtitle = "كل الميزات والبلوكات"),
+    Lite(key = "lite", arabicLabel = "سبق Lite", arabicSubtitle = "أخبار فقط — أسرع وأخف"),
+    Auto(key = "auto", arabicLabel = "تلقائي", arabicSubtitle = "يتبدّل حسب سرعة الاتصال");
+
+    companion object {
+        fun fromKey(raw: String?): SabqBrowsingMode =
+            entries.firstOrNull { it.key == raw } ?: Full
+    }
+}
+
 /**
  * User preferences — mirrors iOS @AppStorage keys 1:1:
  *   - `isDarkMode` (Bool, default false)
@@ -55,6 +72,8 @@ data class AppSettings(
      *  or tapped "تخطّي". Default false → onboarding is shown on first
      *  launch of every fresh install. */
     val hasCompletedOnboardingV2: Boolean = false,
+    /** وضع التصفح (كامل / Lite / تلقائي). */
+    val browsingMode: SabqBrowsingMode = SabqBrowsingMode.Full,
 )
 
 @Singleton
@@ -70,6 +89,7 @@ class SettingsStore @Inject constructor(
             articleLineSpacing = prefs[LINE_SPACING_KEY] ?: 6f,
             articleUseReaderFont = prefs[READER_SERIF_KEY] ?: false,
             hasCompletedOnboardingV2 = prefs[ONBOARDED_V2_KEY] ?: false,
+            browsingMode = SabqBrowsingMode.fromKey(prefs[BROWSING_MODE_KEY]),
         )
     }
 
@@ -108,5 +128,9 @@ class SettingsStore @Inject constructor(
 
     suspend fun setOnboardingCompleted(value: Boolean) {
         context.settingsDataStore.edit { it[ONBOARDED_V2_KEY] = value }
+    }
+
+    suspend fun setBrowsingMode(mode: SabqBrowsingMode) {
+        context.settingsDataStore.edit { it[BROWSING_MODE_KEY] = mode.key }
     }
 }

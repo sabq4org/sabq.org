@@ -1,6 +1,6 @@
 import { LucideIcon } from "lucide-react";
 
-export type UserRole = "admin" | "superadmin" | "super_admin" | "system_admin" | "editor" | "content_manager" | "author" | "reviewer" | "analyst" | "guest" | "opinion_author" | "reporter" | "advertiser" | "comments_moderator" | "publisher" | "angle_writer";
+export type UserRole = "admin" | "superadmin" | "super_admin" | "system_admin" | "editor" | "content_manager" | "author" | "reviewer" | "analyst" | "guest" | "opinion_author" | "reporter" | "advertiser" | "comments_moderator" | "publisher" | "angle_writer" | "hr";
 
 export type BadgeIntent = "default" | "secondary" | "destructive" | "outline";
 

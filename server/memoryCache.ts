@@ -305,6 +305,12 @@ export function getTotalSseCount(): number {
 }
 
 export class MemoryCache {
+  // سجل ثابت بكل النسخ الحيّة — يتيح لقياس الموارد ([Runtime]) طباعة حجم كل
+  // كاش بالاسم دون أن يعرف بوجودها مسبقًا. أُضيف لاصطياد تسرّب الذاكرة
+  // 2026-07-25 (heap تضاعف ×3 بينما fd/sockets/pool ثابتة): كاش يحمل قيمًا
+  // كبيرة تحت سقفه قد يفسّر مئات الميغابايت.
+  static readonly _instances: MemoryCache[] = [];
+
   private cache: Map<string, CacheEntry<any>> = new Map();
   private cleanupInterval: NodeJS.Timeout | null = null;
   private readonly maxEntries: number;
@@ -315,6 +321,12 @@ export class MemoryCache {
     this.maxEntries = maxEntries;
     this.name = name;
     this.startCleanup();
+    MemoryCache._instances.push(this);
+  }
+
+  /** لقطة حجم لهذا الكاش — للقياس فقط. */
+  sizeInfo(): { name: string; size: number; max: number } {
+    return { name: this.name, size: this.cache.size, max: this.maxEntries };
   }
 
   private startCleanup() {
@@ -396,6 +408,7 @@ export class MemoryCache {
 
   delete(key: string): void {
     this.cache.delete(key);
+    poisonInflightCacheKey(key);
   }
 
   // Invalidate cache patterns and broadcast to all SSE clients
@@ -403,7 +416,7 @@ export class MemoryCache {
     const regex = new RegExp(pattern);
     const keys = Array.from(this.cache.keys());
     let invalidatedCount = 0;
-    
+
     for (const key of keys) {
       if (regex.test(key)) {
         this.cache.delete(key);
@@ -411,6 +424,7 @@ export class MemoryCache {
       }
     }
 
+    poisonInflightCacheFetches((k) => regex.test(k));
     invalidatedCount += swrCache.invalidatePattern(pattern);
     
     if (broadcast && invalidatedCount > 0) {
@@ -441,6 +455,8 @@ export class MemoryCache {
       }
     }
     
+    poisonInflightCacheFetches((k) => regexes.some((r) => r.test(k)));
+
     // Invalidate SWR cache too
     for (let i = 0; i < patterns.length; i++) {
       if (swrCache.invalidatePattern(patterns[i]) > 0) {
@@ -469,6 +485,7 @@ export class MemoryCache {
         invalidatedCount++;
       }
     }
+    poisonInflightCacheFetches((k) => k.startsWith(prefix));
     invalidatedCount += swrCache.invalidateByPrefix(prefix);
     
     if (broadcast && invalidatedCount > 0) {
@@ -481,6 +498,7 @@ export class MemoryCache {
 
   clear(): void {
     this.cache.clear();
+    poisonInflightCacheFetches(() => true);
   }
 
   size(): number {
@@ -506,6 +524,73 @@ export const CACHE_TTL = {
   SMART_BLOCKS: 2 * 60 * 1000, // 2 minutes - for smart block queries
 } as const;
 
+// ============================================================================
+// حواجز single-flight ضد الوعود المسمومة (حادثة VARA 2026-07-31)
+// ============================================================================
+// وعد جلب علّق بلا اكتمال — لا نجاح ولا فشل (استعلام DB بلا مهلة أثناء تعثّر
+// عابر) — بقي في خريطة inflight إلى الأبد، فصار كل طلب جديد ينضم إليه:
+// تعليق أبدي لمفاتيح spl:today/spl:live:all/pro-league حتى إعادة النشر،
+// وكرونا SportsAlerts/Sports Intel عالقان («previous cycle still running»).
+// الحاجزان المتكاملان:
+//   1. سقف انتظار المستدعي (SWR_FETCH_DEADLINE_MS): الطلب يرفض بعده فيتحول
+//      إلى 502 سريع بدل احتجاز المقبس بلا نهاية — الجلب الأصلي لا يُلغى،
+//      فإن نجح متأخرًا ملأ الكاش للطلبات التالية.
+//   2. عمر أقصى للوعد الجاري (SWR_INFLIGHT_MAX_AGE_MS ≥ الأول): بعده يُعدّ
+//      الوعد مسمومًا ويُسقَط من الخريطة، فيبدأ الطالبُ التالي جلبًا جديدًا
+//      بدل الانضمام لوعد ميت — تعافٍ ذاتي بلا redeploy.
+function cacheEnvMs(name: string, fallback: number): number {
+  const value = Number.parseInt((process.env[name] || "").trim(), 10);
+  return Number.isFinite(value) && value > 0 ? value : fallback;
+}
+const FETCH_WAIT_DEADLINE_MS = cacheEnvMs("SWR_FETCH_DEADLINE_MS", 20_000);
+const INFLIGHT_MAX_AGE_MS = cacheEnvMs("SWR_INFLIGHT_MAX_AGE_MS", 45_000);
+
+/** ينتظر الوعد حتى السقف ثم يرفض — دون إلغاء الجلب الأصلي (يظل يملأ الكاش). */
+function awaitWithDeadline<T>(promise: Promise<T>, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(`[Cache] fetch wait exceeded ${FETCH_WAIT_DEADLINE_MS}ms for ${label}`));
+    }, FETCH_WAIT_DEADLINE_MS);
+    timer.unref?.();
+    promise.then(
+      (value) => { clearTimeout(timer); resolve(value); },
+      (err) => { clearTimeout(timer); reject(err); },
+    );
+  });
+}
+
+// ============================================================================
+// single-flight لـ withCache
+// ============================================================================
+// حادث 2026-07-28: عند بثّ خبر عاجل يُمسح الكاش أولًا ثم يصل ٣٨ ألف جهاز خلال
+// ثوانٍ على مفتاح واحد بارد. بلا دمج، كل طلب متزامن كان ينفّذ getArticleBySlug
+// الثقيل بشكل مستقل فتمتلئ بركة القاعدة (max=50) ويتحول البطء إلى الموقع كله.
+// swrCache فيه هذه الآلية منذ البداية، لكن مسار المقال وأربعين مستدعيًا آخر
+// (seoInjector، socialCrawler) يمرّون من هنا. نضعها في withCache بدل نقل
+// المفاتيح إلى swrCache: الأخير مثبَّت عند سقفه (5000) ويُخلي باستمرار، بينما
+// memoryCache حول 1500 من 5000 — فالنقل كان سيزيد الطفح لا ينقصه.
+const inflightCacheFetches = new Map<string, { promise: Promise<any>; at: number }>();
+
+// مفاتيح أُبطلت أثناء جلب جارٍ: نتيجة ذلك الجلب قُرئت قبل الإبطال فلا يجوز
+// تخزينها بعده، وإلا بقي المحتوى القديم حيًّا طوال TTL رغم التعديل. الإبطال
+// وحده لا يكفي لأن الجلب لم يكن في الكاش أصلًا ليُحذف منه.
+const poisonedCacheKeys = new Set<string>();
+
+/** تُستدعى من MemoryCache عند إبطال بنمط أو ببادئة أو مسح كامل. */
+function poisonInflightCacheFetches(matches: (key: string) => boolean): void {
+  for (const key of Array.from(inflightCacheFetches.keys())) {
+    if (matches(key)) {
+      inflightCacheFetches.delete(key);
+      poisonedCacheKeys.add(key);
+    }
+  }
+}
+
+/** نسخة المفتاح الواحد — delete() تُستدعى في مسارات ساخنة فلا نمشّط الخريطة. */
+function poisonInflightCacheKey(key: string): void {
+  if (inflightCacheFetches.delete(key)) poisonedCacheKeys.add(key);
+}
+
 export function withCache<T>(
   cacheKey: string,
   ttl: number,
@@ -516,10 +601,37 @@ export function withCache<T>(
     return Promise.resolve(cached);
   }
 
-  return fetcher().then((data) => {
+  // جلب واحد فقط جارٍ لكل مفتاح؛ المتنافسون عليه ينتظرون نفس الوعد — ما دام
+  // حيًّا: وعد تجاوز عمره السقف دون أن يكتمل مسموم (جلبه علّق بلا مهلة)،
+  // فيُسقَط ليبدأ هذا الطالب جلبًا جديدًا بدل الانضمام لوعد ميت.
+  const inflight = inflightCacheFetches.get(cacheKey);
+  if (inflight) {
+    if (Date.now() - inflight.at <= INFLIGHT_MAX_AGE_MS) {
+      return awaitWithDeadline(inflight.promise as Promise<T>, cacheKey);
+    }
+    inflightCacheFetches.delete(cacheKey);
+    console.warn(`[Cache] dropped a stuck in-flight fetch (>${INFLIGHT_MAX_AGE_MS}ms) for ${cacheKey}`);
+  }
+
+  const promise = fetcher().then((data) => {
+    // إن أُبطل المفتاح أثناء الجلب فالنتيجة قديمة — تُسلَّم للمنتظرين ولا تُخزَّن.
+    if (poisonedCacheKeys.delete(cacheKey)) return data;
     memoryCache.set(cacheKey, data, ttl);
     return data;
   });
+
+  inflightCacheFetches.set(cacheKey, { promise, at: Date.now() });
+  // then(cleanup, cleanup) لا finally: الأخيرة تولّد وعدًا مرفوضًا غير معالَج
+  // عند فشل الجلب. الفشل لا يلوّث الكاش — لا set في مسار الرفض.
+  const cleanup = () => {
+    if (inflightCacheFetches.get(cacheKey)?.promise === promise) {
+      inflightCacheFetches.delete(cacheKey);
+    }
+    poisonedCacheKeys.delete(cacheKey);
+  };
+  promise.then(cleanup, cleanup);
+
+  return awaitWithDeadline(promise, cacheKey);
 }
 
 export function createCachedFetcher<TArgs extends any[], TResult>(
@@ -551,21 +663,35 @@ export function createCachedFetcher<TArgs extends any[], TResult>(
 interface SWRCacheEntry<T> {
   data: T;
   timestamp: number;
+  lastAccessedAt: number;
   ttl: number;
   staleWhileRevalidate: number;
 }
 
 export class StaleWhileRevalidateCache {
+  static readonly _instances: StaleWhileRevalidateCache[] = [];
+
   private cache: Map<string, SWRCacheEntry<any>> = new Map();
-  private refreshing: Set<string> = new Set(); // Track in-flight refreshes
-  // single-flight: وعد الجلب الجاري لكل مفتاح. المتنافسون على نفس المفتاح
-  // ينتظرون نفس الوعد بدل الاستقصاء ثم بدء جلب مكرر بعد 6 ثوانٍ.
-  private inflight: Map<string, Promise<any>> = new Map();
+  // علامة تحديث جارٍ (مفتاح → زمن البدء). بطابع زمني لأن تحديثًا خلفيًا علّق
+  // بلا اكتمال كان يُبقي العلم مرفوعًا للأبد فلا يبدأ أي تحديث لاحق أبدًا.
+  private refreshing: Map<string, number> = new Map();
+  // single-flight: وعد الجلب الجاري لكل مفتاح (+ زمن بدئه). المتنافسون على
+  // نفس المفتاح ينتظرون نفس الوعد بدل الاستقصاء ثم بدء جلب مكرر بعد 6 ثوانٍ.
+  // العمر يحدّ التسمم: وعد لم يكتمل بعد السقف يُسقَط (حادثة 2026-07-31).
+  private inflight: Map<string, { promise: Promise<any>; at: number }> = new Map();
   private readonly maxEntries: number;
+  private readonly name: string;
   private lastEvictionLogAt = 0;
 
-  constructor(maxEntries: number = 5000) {
+  constructor(maxEntries: number = 5000, name: string = 'swrCache') {
     this.maxEntries = maxEntries;
+    this.name = name;
+    StaleWhileRevalidateCache._instances.push(this);
+  }
+
+  /** لقطة حجم لهذا الكاش (يشمل الوعود المعلّقة) — للقياس فقط. */
+  sizeInfo(): { name: string; size: number; max: number; inflight: number } {
+    return { name: this.name, size: this.cache.size, max: this.maxEntries, inflight: this.inflight.size };
   }
 
   get<T>(key: string): { data: T | null; isStale: boolean; shouldRefresh: boolean } {
@@ -574,16 +700,21 @@ export class StaleWhileRevalidateCache {
       return { data: null, isStale: false, shouldRefresh: true };
     }
 
-    const age = Date.now() - entry.timestamp;
+    const now = Date.now();
+    const age = now - entry.timestamp;
     const isFresh = age <= entry.ttl;
     const isStale = age <= entry.ttl + entry.staleWhileRevalidate;
-    const shouldRefresh = !isFresh && !this.refreshing.has(key);
+    const shouldRefresh = !isFresh && !this.isRefreshing(key);
 
     if (!isStale) {
       // Data is completely expired (beyond stale-while-revalidate window)
       this.cache.delete(key);
       return { data: null, isStale: false, shouldRefresh: true };
     }
+
+    // Keep freshness tied to timestamp, but track recency separately so a hot
+    // long-lived key is not evicted merely because it was created early.
+    entry.lastAccessedAt = now;
 
     return { 
       data: entry.data as T, 
@@ -601,9 +732,11 @@ export class StaleWhileRevalidateCache {
     if (!this.cache.has(key) && this.cache.size >= this.maxEntries) {
       this.evictForSpace();
     }
+    const now = Date.now();
     this.cache.set(key, {
       data,
-      timestamp: Date.now(),
+      timestamp: now,
+      lastAccessedAt: now,
       ttl: ttlMs,
       staleWhileRevalidate: staleWhileRevalidateMs,
     });
@@ -629,7 +762,7 @@ export class StaleWhileRevalidateCache {
     const overshoot = this.cache.size - this.maxEntries + 1;
     const batch = Math.max(overshoot, Math.ceil(this.maxEntries * 0.02));
     const oldest = Array.from(this.cache.entries())
-      .sort((a, b) => a[1].timestamp - b[1].timestamp)
+      .sort((a, b) => a[1].lastAccessedAt - b[1].lastAccessedAt)
       .slice(0, batch);
     for (const [key] of oldest) {
       this.cache.delete(key);
@@ -640,27 +773,46 @@ export class StaleWhileRevalidateCache {
     if (now - this.lastEvictionLogAt > 60_000) {
       this.lastEvictionLogAt = now;
       console.warn(
-        `[Cache] swrCache hit the ${this.maxEntries}-entry cap — evicted ${oldest.length} oldest entries. ` +
+        `[Cache] ${this.name} hit the ${this.maxEntries}-entry cap — evicted ${oldest.length} least-recently-used entries. ` +
           `If this repeats, some caller is generating unbounded cache keys.`,
       );
     }
   }
 
   markRefreshing(key: string): void {
-    this.refreshing.add(key);
+    this.refreshing.set(key, Date.now());
   }
 
   clearRefreshing(key: string): void {
     this.refreshing.delete(key);
   }
 
+  /** علامة معمّرة (تحديث علّق بلا اكتمال) تُعدّ ساقطة — فلا تمنع تحديثًا جديدًا. */
   isRefreshing(key: string): boolean {
-    return this.refreshing.has(key);
+    const at = this.refreshing.get(key);
+    if (at === undefined) return false;
+    if (Date.now() - at > INFLIGHT_MAX_AGE_MS) {
+      this.refreshing.delete(key);
+      return false;
+    }
+    return true;
   }
 
-  /** الوعد المشترك للجلب الجاري لهذا المفتاح — إن وُجد — وإلا null. */
+  /**
+   * الوعد المشترك للجلب الجاري لهذا المفتاح — إن وُجد وما زال حيًّا — وإلا null.
+   * وعد تجاوز عمره السقف دون اكتمال مسموم (حادثة 2026-07-31: جلب علّق بلا
+   * مهلة فظل كل طلب جديد ينضم إليه للأبد) — يُسقَط ليبدأ الطالب جلبًا جديدًا.
+   */
   getInflight<T>(key: string): Promise<T> | null {
-    return (this.inflight.get(key) as Promise<T> | undefined) ?? null;
+    const entry = this.inflight.get(key);
+    if (!entry) return null;
+    if (Date.now() - entry.at > INFLIGHT_MAX_AGE_MS) {
+      this.inflight.delete(key);
+      this.refreshing.delete(key);
+      console.warn(`[Cache] ${this.name}: dropped a stuck in-flight fetch (>${INFLIGHT_MAX_AGE_MS}ms) for ${key}`);
+      return null;
+    }
+    return entry.promise as Promise<T>;
   }
 
   /**
@@ -669,9 +821,9 @@ export class StaleWhileRevalidateCache {
    * غير معالج (unhandled rejection) عند فشل الجلب.
    */
   trackInflight<T>(key: string, promise: Promise<T>): Promise<T> {
-    this.inflight.set(key, promise);
+    this.inflight.set(key, { promise, at: Date.now() });
     const cleanup = () => {
-      if (this.inflight.get(key) === promise) this.inflight.delete(key);
+      if (this.inflight.get(key)?.promise === promise) this.inflight.delete(key);
     };
     promise.then(cleanup, cleanup);
     return promise;
@@ -708,6 +860,48 @@ export class StaleWhileRevalidateCache {
 export const swrCache = new StaleWhileRevalidateCache();
 
 /**
+ * كاش منفصل لأُسر مفاتيح اللاعبين غير محدودة العدد (مفتاح لكل playerId من
+ * مئات الآلاف الممكنة). قبل العزل كانت صفحات اللاعبين تُبقي swrCache العام
+ * عند سقفه (5000/5000) فتطرد المفاتيح الساخنة — قوائم المقالات والتصنيفات —
+ * ويعود حِملها لقاعدة البيانات (حادثة بطء 2026-08-07). هنا الطرد يقع بين
+ * مفاتيح اللاعبين أنفسهم فقط.
+ */
+export const playerSwrCache = new StaleWhileRevalidateCache(4000, "playerSwrCache");
+
+// بادئات الأُسر غير المحدودة فقط — الفرق (teamId) والجولات محدودة العدد فتبقى
+// في الكاش العام. أي أسرة جديدة بمفتاح لكل لاعب تُضاف هنا.
+const PLAYER_KEY_PREFIXES = [
+  "spl:player", // spl:player: / spl:player-identity: / spl:player-bridge: / spl:playerseason:
+  "spl:market:",
+  "spl:form:",
+  "spl:transfers:player:",
+  "spl:injuries:player:",
+  "wc:player", // wc:player: / wc:playeridEn: / wc:playermarket: / wc:playerform:
+  "tc:story:",
+  "ts:market:",
+];
+
+/** يعيد الكاش الصحيح للمفتاح — استخدمه أيضًا عند أي set يدوي خارج withSWR. */
+export function swrCacheFor(key: string): StaleWhileRevalidateCache {
+  for (const prefix of PLAYER_KEY_PREFIXES) {
+    if (key.startsWith(prefix)) return playerSwrCache;
+  }
+  return swrCache;
+}
+
+/**
+ * أحجام كل الكاشات الحيّة مرتّبة تنازليًا — يستهلكها قياس الموارد لطباعة
+ * أكبرها في سطر [Runtime]. كاش يقترب حجمه من سقفه ويحمل قيمًا كبيرة هو أول
+ * المشتبهين في تسرّب الذاكرة.
+ */
+export function cacheSizes(): { name: string; size: number; max: number; inflight?: number }[] {
+  const out: { name: string; size: number; max: number; inflight?: number }[] = [];
+  for (const c of MemoryCache._instances) out.push(c.sizeInfo());
+  for (const c of StaleWhileRevalidateCache._instances) out.push(c.sizeInfo());
+  return out.sort((a, b) => b.size - a.size);
+}
+
+/**
  * Stale-While-Revalidate cache wrapper for high-traffic endpoints
  * 
  * Usage:
@@ -732,24 +926,28 @@ export async function withSWR<T>(
   // التطبيق تبقى مفاتيحها كما هي تمامًا — توافق رجعي كامل، بلا تبريد كاش.
   if (isEnglishSports()) cacheKey = `${cacheKey}:en`;
 
+  // مفاتيح اللاعبين غير المحدودة تُعزل في playerSwrCache (اللاحقة ‎:en لا
+  // تؤثر على مطابقة البادئات).
+  const cache = swrCacheFor(cacheKey);
+
   // single-flight: جلب واحد فقط جارٍ لكل مفتاح، وكل المتنافسين عليه ينتظرون
   // نفس الوعد. سابقًا كان المنتظرون يستقصون isRefreshing حتى 6 ثوانٍ ثم
   // يستسلمون ويبدؤون جلبًا مكررًا — مضخّم thundering-herd تحت طوابير rate-limit
   // عند المزوّد. الرفض يصل لكل المنتظرين ولا يلوّث الكاش (لا set عند الفشل).
   const startFetch = (logLabel: string): Promise<T> => {
-    swrCache.markRefreshing(cacheKey);
+    cache.markRefreshing(cacheKey);
     const promise = (async () => {
       try {
         const data = await fetcher();
-        swrCache.set(cacheKey, data, ttl, staleWhileRevalidate);
+        cache.set(cacheKey, data, ttl, staleWhileRevalidate);
         return data;
       } catch (err) {
         console.error(`[SWR] ${logLabel} fetch failed for ${cacheKey}:`, err);
-        swrCache.clearRefreshing(cacheKey);
+        cache.clearRefreshing(cacheKey);
         throw err;
       }
     })();
-    return swrCache.trackInflight(cacheKey, promise);
+    return cache.trackInflight(cacheKey, promise);
   };
 
   // Explicit force-refresh (e.g. the native iOS pull-to-refresh, which sends a
@@ -762,12 +960,12 @@ export async function withSWR<T>(
   // app" bug. Concurrent force-refreshes are coalesced via the shared in-flight
   // promise so a burst of pulls never stampedes the DB.
   if (forceFresh) {
-    const inflight = swrCache.getInflight<T>(cacheKey);
-    if (inflight) return inflight;
-    return startFetch('Force-fresh');
+    const inflight = cache.getInflight<T>(cacheKey);
+    if (inflight) return awaitWithDeadline(inflight, cacheKey);
+    return awaitWithDeadline(startFetch('Force-fresh'), cacheKey);
   }
 
-  const cached = swrCache.get<T>(cacheKey);
+  const cached = cache.get<T>(cacheKey);
 
   // Fresh cache hit - return immediately
   if (cached.data !== null && !cached.isStale) {
@@ -791,7 +989,9 @@ export async function withSWR<T>(
   }
 
   // No cache - must fetch. نتشارك الوعد الجاري إن وُجد، وإلا نبدأ الجلب الوحيد.
-  const inflight = swrCache.getInflight<T>(cacheKey);
-  if (inflight) return inflight;
-  return startFetch('Initial');
+  // المستدعي مقيّد بسقف انتظار: يرفض بعده (502 سريع بدل احتجاز المقبس) بينما
+  // الجلب نفسه يستمر بالخلفية ويملأ الكاش إن نجح متأخرًا.
+  const inflight = cache.getInflight<T>(cacheKey);
+  if (inflight) return awaitWithDeadline(inflight, cacheKey);
+  return awaitWithDeadline(startFetch('Initial'), cacheKey);
 }

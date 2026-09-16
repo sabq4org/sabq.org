@@ -12,9 +12,9 @@ import { SkipLinks } from "@/components/SkipLinks";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { lazy, Suspense, useEffect, Component, ErrorInfo, ReactNode } from "react";
 import { useVoiceCommands } from "@/hooks/useVoiceCommands";
-import { useAnalytics } from "@/hooks/use-analytics";
+import { AnalyticsRouteCommit, useAnalytics } from "@/hooks/use-analytics";
 import { resetAdsTriggerFlag } from "@/components/DmsAdSlot";
-import { needsDisplayName, useAuth } from "@/hooks/useAuth";
+import { needsAccountCompletion, useAuth } from "@/hooks/useAuth";
 import {
   consumePostAuthReturn,
   peekPostAuthReturn,
@@ -25,6 +25,7 @@ import { useWebMCP } from "@/hooks/useWebMCP";
 import { syncGuestFocusSessionsToUser } from "@/hooks/useFocusSession";
 import { attemptChunkRecoveryReload, forceDeployRecoveryReload } from "@/lib/deployRecovery";
 import { isChunkErrorMessage, retryImport } from "@/lib/retryImport";
+import { AuthAnalyticsMarker } from "@/components/AuthAnalyticsMarker";
 
 function WebMCPProvider() {
   useWebMCP();
@@ -61,7 +62,7 @@ function PostAuthResumeGuard() {
 
   useEffect(() => {
     if (isLoading || !isAuthenticated || !user) return;
-    if (needsDisplayName(user) || user.isProfileComplete === false) return;
+    if (needsAccountCompletion(user) || user.isProfileComplete === false) return;
     const pending = peekPostAuthReturn();
     if (!pending) return;
 
@@ -79,14 +80,15 @@ function PostAuthResumeGuard() {
   return null;
 }
 
-/** حسابات الجوال بلا اسم — توجيه إلزامي لشاشة إكمال الاسم (جلسات قديمة وجديدة). */
+/** حسابات الجوال الناقصة (اسم مفقود، بريد اصطناعي/مفقود، أو بلا كلمة مرور) —
+ *  توجيه إلزامي لشاشة استكمال الحساب (جلسات قديمة وجديدة). */
 function NameCompletionGuard() {
   const { user, isAuthenticated, isLoading } = useAuth();
   const [location, setLocation] = useLocation();
 
   useEffect(() => {
     if (isLoading || !isAuthenticated || !user) return;
-    if (!needsDisplayName(user)) return;
+    if (!needsAccountCompletion(user)) return;
 
     const path = location.split("?")[0] || "/";
     const exempt =
@@ -179,6 +181,7 @@ const NewsPage = lazy(() => retryImport(() => import("@/pages/NewsPage")));
 const CategoriesListPage = lazy(() => retryImport(() => import("@/pages/CategoriesListPage")));
 const OpinionPage = lazy(() => retryImport(() => import("@/pages/OpinionPage")));
 const OpinionDetailPage = lazy(() => retryImport(() => import("@/pages/OpinionDetailPage")));
+const AuthorArticlesPage = lazy(() => retryImport(() => import("@/pages/AuthorArticlesPage")));
 // AboutPage, TermsPage, PrivacyPage, AccessibilityStatement, DevelopersPage, AIPolicy - moved to eager imports
 const AIPublisher = lazy(() => retryImport(() => import("@/pages/AIPublisher")));
 // ContactPage - moved to eager imports above
@@ -193,10 +196,12 @@ const ArchivePage = lazy(() => retryImport(() => import("@/pages/ArchivePage")))
 
 // === LAZY IMPORTS (Dashboard Core) ===
 const Dashboard = lazy(() => retryImport(() => import("@/pages/Dashboard")));
+const Dashboard2 = lazy(() => retryImport(() => import("@/pages/Dashboard2")));
 const AnalyticsDashboard = lazy(() => retryImport(() => import("@/pages/AnalyticsDashboard")));
 const ArticleEditor = lazy(() => retryImport(() => import("@/pages/ArticleEditor")));
 const ArticlePreview = lazy(() => retryImport(() => import("@/pages/ArticlePreview")));
 const ArticlesManagement = lazy(() => retryImport(() => import("@/pages/ArticlesManagement")));
+const ArticlesManagementPreview = lazy(() => retryImport(() => import("@/pages/ArticlesManagementPreview")));
 const CategoriesManagement = lazy(() => retryImport(() => import("@/pages/CategoriesManagement")));
 const UsersManagement = lazy(() => retryImport(() => import("@/pages/UsersManagement")));
 const RolesManagement = lazy(() => retryImport(() => import("@/pages/RolesManagement")));
@@ -204,12 +209,15 @@ const TagsManagement = lazy(() => retryImport(() => import("@/pages/TagsManageme
 
 // === LAZY IMPORTS (Profile & User) ===
 const Profile = lazy(() => retryImport(() => import("@/pages/Profile")));
+const ProfileSegmentRouter = lazy(() => retryImport(() => import("@/pages/ProfileSegmentRouter")));
 const PreferencesCenter = lazy(() => retryImport(() => import("@/pages/PreferencesCenter")));
+const SettingsCenter = lazy(() => retryImport(() => import("@/pages/settings/SettingsCenter")));
+const OfficialLetters = lazy(() => retryImport(() => import("@/pages/dashboard/OfficialLetters")));
+const MyServicesPage = lazy(() => retryImport(() => import("@/pages/dashboard/MyServicesPage")));
+const VerifyLetter = lazy(() => retryImport(() => import("@/pages/VerifyLetter")));
 const PublicProfile = lazy(() => retryImport(() => import("@/pages/PublicProfile")));
 const DiscoverUsers = lazy(() => retryImport(() => import("@/pages/DiscoverUsers")));
-const CompleteProfile = lazy(() => retryImport(() => import("@/pages/CompleteProfile")));
 const CompleteName = lazy(() => retryImport(() => import("@/pages/CompleteName")));
-const SelectInterests = lazy(() => retryImport(() => import("@/pages/SelectInterests")));
 const EditInterests = lazy(() => retryImport(() => import("@/pages/EditInterests")));
 const NotificationSettings = lazy(() => retryImport(() => import("@/pages/NotificationSettings")));
 const MyFollows = lazy(() => retryImport(() => import("@/pages/MyFollows")));
@@ -219,8 +227,12 @@ const MyKeywords = lazy(() => retryImport(() => import("@/pages/MyKeywords")));
 const LoyaltyAccount = lazy(() => retryImport(() => import("@/pages/LoyaltyAccount")));
 const LoyaltyAdminDashboard = lazy(() => retryImport(() => import("@/pages/dashboard/LoyaltyAdminDashboard")));
 const LoyaltyPreview = lazy(() => retryImport(() => import("@/pages/LoyaltyPreview")));
+const SabqPlusPreview = lazy(() => retryImport(() => import("@/pages/SabqPlusPreview")));
+const NationalDay96HeaderPreview = lazy(() => retryImport(() => import("@/pages/NationalDay96HeaderPreview")));
 const LoyaltyTermsPage = lazy(() => retryImport(() => import("@/pages/LoyaltyTermsPage")));
 const HajjBlockSettings = lazy(() => retryImport(() => import("@/pages/dashboard/HajjBlockSettings")));
+const NationalDayBlockSettings = lazy(() => retryImport(() => import("@/pages/dashboard/NationalDayBlockSettings")));
+const SahraaTvBlockSettings = lazy(() => retryImport(() => import("@/pages/dashboard/SahraaTvBlockSettings")));
 const ThemeManager = lazy(() => retryImport(() => import("@/pages/ThemeManager")));
 const ThemeEditor = lazy(() => retryImport(() => import("@/pages/ThemeEditor")));
 const ThemeSwitcher = lazy(() => retryImport(() => import("@/pages/dashboard/ThemeSwitcher")));
@@ -245,7 +257,6 @@ const MuqtarabReview = lazy(() => retryImport(() => import("@/pages/dashboard/Mu
 
 // === LAZY IMPORTS (Smart Features) ===
 const SmartLinksManagement = lazy(() => retryImport(() => import("@/pages/dashboard/SmartLinksManagement")));
-const SmartJournalist = lazy(() => retryImport(() => import("@/pages/dashboard/SmartJournalist")));
 const TermDetail = lazy(() => retryImport(() => import("@/pages/TermDetail")));
 const EntityDetail = lazy(() => retryImport(() => import("@/pages/EntityDetail")));
 const SmartBlocksPage = lazy(() => retryImport(() => import("@/pages/dashboard/SmartBlocksPage")));
@@ -256,13 +267,9 @@ const SmartCategoriesManagement = lazy(() => retryImport(() => import("@/pages/S
 const ComingSoon = lazy(() => retryImport(() => import("@/pages/ComingSoon")));
 const UserBehavior = lazy(() => retryImport(() => import("@/pages/UserBehavior")));
 const AdvancedAnalytics = lazy(() => retryImport(() => import("@/pages/AdvancedAnalytics")));
-const RecommendationAnalytics = lazy(() => retryImport(() => import("@/pages/RecommendationAnalytics")));
-const SentimentAnalytics = lazy(() => retryImport(() => import("@/pages/dashboard/SentimentAnalytics")));
-const PersonalizationAnalytics = lazy(() => retryImport(() => import("@/pages/dashboard/PersonalizationAnalytics")));
 const NewsletterAnalytics = lazy(() => retryImport(() => import("@/pages/dashboard/NewsletterAnalytics")));
 const ArticleAnalyticsDashboard = lazy(() => retryImport(() => import("@/pages/dashboard/ArticleAnalyticsDashboard")));
-const ABTestsManagement = lazy(() => retryImport(() => import("@/pages/ABTestsManagement")));
-const ABTestDetail = lazy(() => retryImport(() => import("@/pages/ABTestDetail")));
+const SocialPublishingPage = lazy(() => retryImport(() => import("@/pages/dashboard/SocialPublishingPage")));
 
 // === LAZY IMPORTS (Notifications) ===
 const Notifications = lazy(() => retryImport(() => import("@/pages/Notifications")));
@@ -275,6 +282,12 @@ const SentimentInsights = lazy(() => retryImport(() => import("@/pages/admin/Sen
 const PaymentsDashboard = lazy(() => retryImport(() => import("@/pages/admin/PaymentsDashboard")));
 const MediaStoreOrders = lazy(() => retryImport(() => import("@/pages/admin/MediaStoreOrders")));
 const StaffMembers = lazy(() => retryImport(() => import("@/pages/admin/StaffMembers")));
+const StaffProfilesDirectory = lazy(() => retryImport(() => import("@/pages/dashboard/StaffProfilesDirectory")));
+const StaffProfilePage = lazy(() => retryImport(() => import("@/pages/dashboard/StaffProfilePage")));
+const MeetingsHub = lazy(() => retryImport(() => import("@/pages/dashboard/MeetingsHub")));
+const MeetingDetailPage = lazy(() => retryImport(() => import("@/pages/dashboard/MeetingDetail")));
+const MeetingRoomPage = lazy(() => retryImport(() => import("@/pages/dashboard/MeetingRoom")));
+const MeetingInvite = lazy(() => retryImport(() => import("@/pages/MeetingInvite")));
 const AccessibilityInsights = lazy(() => retryImport(() => import("@/pages/admin/AccessibilityInsights")));
 const CorrespondentApplications = lazy(() => retryImport(() => import("@/pages/admin/CorrespondentApplications")));
 const OpinionAuthorApplications = lazy(() => retryImport(() => import("@/pages/admin/OpinionAuthorApplications")));
@@ -286,6 +299,7 @@ const SuspiciousWordsManagement = lazy(() => retryImport(() => import("@/pages/a
 const StoryAdmin = lazy(() => retryImport(() => import("@/pages/StoryAdmin")));
 const SystemSettings = lazy(() => retryImport(() => import("@/pages/SystemSettings")));
 const SportsTournamentsAdmin = lazy(() => retryImport(() => import("@/pages/dashboard/SportsTournamentsAdmin")));
+const Wc2026NumbersReportPage = lazy(() => retryImport(() => import("@/pages/dashboard/Wc2026NumbersReportPage")));
 const AutoImageSettings = lazy(() => retryImport(() => import("@/pages/AutoImageSettings")));
 const FocalPointDashboard = lazy(() => retryImport(() => import("@/pages/dashboard/FocalPointDashboard")));
 const EditorAlertsSettings = lazy(() => retryImport(() => import("@/pages/dashboard/EditorAlertsSettings")));
@@ -295,17 +309,6 @@ const SystemAnnouncementsManagement = lazy(() => retryImport(() => import("@/pag
 const ContactMessageDetail = lazy(() => retryImport(() => import("@/pages/ContactMessageDetail")));
 
 // === LAZY IMPORTS (Audio) ===
-const AudioNewslettersDashboard = lazy(() => retryImport(() => import("@/pages/AudioNewslettersDashboard")));
-const AudioNewsletterEditor = lazy(() => retryImport(() => import("@/pages/AudioNewsletterEditor")));
-const AudioNewslettersArchive = lazy(() => retryImport(() => import("@/pages/AudioNewslettersArchive")));
-const AudioNewsletterDetail = lazy(() => retryImport(() => import("@/pages/AudioNewsletterDetail")));
-const AudioNewslettersPublic = lazy(() => retryImport(() => import("@/pages/AudioNewslettersPublic")));
-const AudioNewsletterAnalytics = lazy(() => retryImport(() => import("@/pages/AudioNewsletterAnalytics")));
-const AudioNewsletterTtsSettings = lazy(() => retryImport(() => import("@/pages/AudioNewsletterTtsSettings")));
-const AudioNewsletterVoiceCompare = lazy(() => retryImport(() => import("@/pages/AudioNewsletterVoiceCompare")));
-const AudioNewsletterTtsStats = lazy(() => retryImport(() => import("@/pages/AudioNewsletterTtsStats")));
-const AudioBriefsDashboard = lazy(() => retryImport(() => import("@/pages/AudioBriefsDashboard")));
-const AudioBriefEditor = lazy(() => retryImport(() => import("@/pages/AudioBriefEditor")));
 
 // === LAZY IMPORTS (Surveys) ===
 const SurveyRespond = lazy(() => retryImport(() => import("@/pages/SurveyRespond")));
@@ -328,6 +331,7 @@ const ShortsEditor = lazy(() => retryImport(() => import("@/pages/ShortsEditor")
 // === LAZY IMPORTS (Opinion) ===
 const OpinionManagement = lazy(() => retryImport(() => import("@/pages/dashboard/OpinionManagement")));
 const OpinionWritersPage = lazy(() => retryImport(() => import("@/pages/dashboard/OpinionWritersPage")));
+const ReportersPage = lazy(() => retryImport(() => import("@/pages/dashboard/ReportersPage")));
 const QuizManagement = lazy(() => retryImport(() => import("@/pages/dashboard/QuizManagement")));
 
 // === LAZY IMPORTS (Dashboard Tools) ===
@@ -335,13 +339,11 @@ const BreakingTickerManager = lazy(() => retryImport(() => import("@/pages/dashb
 const WorldDaysManagement = lazy(() => retryImport(() => import("@/pages/dashboard/WorldDaysManagement")));
 const SmartRadar = lazy(() => retryImport(() => import("@/pages/dashboard/SmartRadar")));
 const RssFeedsManager = lazy(() => retryImport(() => import("@/pages/dashboard/RssFeedsManager")));
-const SpaNewsImporter = lazy(() => retryImport(() => import("@/pages/dashboard/SpaNewsImporter")));
 const SportmonksNewsImporter = lazy(() => retryImport(() => import("@/pages/dashboard/SportmonksNewsImporter")));
 const SportsNamesManager = lazy(() => retryImport(() => import("@/pages/dashboard/SportsNamesManager")));
 const MediaLibrary = lazy(() => retryImport(() => import("@/pages/dashboard/MediaLibrary")));
-const AITools = lazy(() => retryImport(() => import("@/pages/dashboard/AITools")));
-const DataStoryGenerator = lazy(() => retryImport(() => import("@/pages/DataStoryGenerator")));
 const PromptStudio = lazy(() => retryImport(() => import("@/pages/PromptStudio")));
+const DeepSeekLab = lazy(() => retryImport(() => import("@/pages/dashboard/DeepSeekLab")));
 const PromptStudioPublic = lazy(() => retryImport(() => import("@/pages/PromptStudioPublic")));
 const DeepAnalysis = lazy(() => retryImport(() => import("@/pages/dashboard/DeepAnalysis")));
 const DeepAnalysisList = lazy(() => retryImport(() => import("@/pages/dashboard/DeepAnalysisList")));
@@ -349,7 +351,6 @@ const TasksPage = lazy(() => retryImport(() => import("@/pages/dashboard/TasksPa
 const DashboardProfile = lazy(() => retryImport(() => import("@/pages/dashboard/DashboardProfile")));
 const AdminTools = lazy(() => retryImport(() => import("@/pages/dashboard/AdminTools")));
 const VoiceManagement = lazy(() => retryImport(() => import("@/pages/dashboard/VoiceManagement")));
-const TranscriptionTool = lazy(() => retryImport(() => import("@/pages/dashboard/TranscriptionTool")));
 
 // === LAZY IMPORTS (Omq) ===
 const Omq = lazy(() => retryImport(() => import("@/pages/Omq")));
@@ -464,6 +465,9 @@ const IFoxSettings = lazy(() => retryImport(() => import("@/pages/admin/ifox/IFo
 const IFoxAITasks = lazy(() => retryImport(() => import("@/pages/admin/ifox/IFoxAITasks")));
 const AIManagementDashboard = lazy(() => retryImport(() => import("@/pages/admin/ifox/ai-management")));
 const AiHubPage = lazy(() => retryImport(() => import("@/pages/dashboard/AiHub")));
+const AiStaffPage = lazy(() => retryImport(() => import("@/pages/dashboard/AiStaff")));
+const AiStaffProfilePage = lazy(() => retryImport(() => import("@/pages/dashboard/AiStaff/Profile")));
+const OpsRoomPage = lazy(() => retryImport(() => import("@/pages/dashboard/OpsRoom")));
 const IntegrationsSettingsPage = lazy(() => retryImport(() => import("@/pages/dashboard/IntegrationsSettings")));
 const SystemsCatalogPage = lazy(() => retryImport(() => import("@/pages/dashboard/SystemsCatalogPage")));
 const ImageStudio = lazy(() => retryImport(() => import("@/pages/ifox/ImageStudio")));
@@ -480,6 +484,8 @@ const AsianCupTeam = lazy(() => retryImport(() => import("@/pages/AsianCupTeam")
 const AsianCupPlayer = lazy(() => retryImport(() => import("@/pages/AsianCupPlayer")));
 const AsianCupVenues = lazy(() => retryImport(() => import("@/pages/AsianCupVenues")));
 const GulfCup = lazy(() => retryImport(() => import("@/pages/GulfCup")));
+const GulfCupTeam = lazy(() => retryImport(() => import("@/pages/GulfCupTeam")));
+const GulfCupFantasy = lazy(() => retryImport(() => import("@/pages/GulfCupFantasy")));
 const PredictionCenter = lazy(() => retryImport(() => import("@/pages/PredictionCenter")));
 const GulfCupMajlis = lazy(() => retryImport(() => import("@/pages/GulfCupMajlis")));
 const KingsCup = lazy(() => retryImport(() => import("@/pages/KingsCup")));
@@ -487,6 +493,7 @@ const KingsCupTeam = lazy(() => retryImport(() => import("@/pages/KingsCupTeam")
 const KingsCupPlayer = lazy(() => retryImport(() => import("@/pages/KingsCupPlayer")));
 // البوابة الرياضية المعتمدة على /sports (تصميم Dashboard بعمودين)
 const SportsDashboard = lazy(() => retryImport(() => import("@/pages/SportsDashboard")));
+const EconomyLive = lazy(() => retryImport(() => import("@/pages/EconomyLive")));
 // لوحة "مباريات اليوم" (مجمّعة حسب البطولة + فلترة) على /sports/matches
 const SportsMatchesBoard = lazy(() => retryImport(() => import("@/pages/SportsMatchesBoard")));
 // البث المباشر · العالم (كل مباريات العالم المباشرة، مجمّعة حسب الدولة) على /sports/live
@@ -503,6 +510,8 @@ const SportsTransfers = lazy(() => retryImport(() => import("@/pages/SportsTrans
 const TransferStory = lazy(() => retryImport(() => import("@/pages/TransferStory")));
 // هب دوري روشن السعودي الفاخر — تجربة الدخول الرئيسية للبطولات السعودية على /roshn
 const RoshnHub = lazy(() => retryImport(() => import("@/pages/RoshnHub")));
+// البوابة الرياضية بستايل «سعودي سبورت» مربوطة بمباريات دوري روشن — /sports55
+const Sports55 = lazy(() => retryImport(() => import("@/pages/Sports55")));
 const GulfEventsEditor = lazy(() => retryImport(() => import("@/pages/admin/GulfEventsEditor")));
 
 function PageLoader() {
@@ -511,6 +520,11 @@ function PageLoader() {
       <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" />
     </div>
   );
+}
+
+function GulfCupPredictionsRedirect() {
+  const tab = typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("tab");
+  return <Redirect to={tab === "fantasy" ? "/gulf-cup/fantasy" : "/predictions?competition=gulf-cup-27"} />;
 }
 
 class ErrorBoundary extends Component<
@@ -575,6 +589,7 @@ function LazyRoute({ component: Component }: { component: React.LazyExoticCompon
     <ErrorBoundary>
       <Suspense fallback={<PageLoader />}>
         <Component />
+        <AnalyticsRouteCommit />
       </Suspense>
     </ErrorBoundary>
   );
@@ -614,6 +629,8 @@ function VoiceCommandsManager() {
   );
 }
 
+const PublicDesignGallery = lazy(() => import("@/pages/PublicDesignGallery"));
+
 function Router() {
   useAnalytics();
   
@@ -622,6 +639,7 @@ function Router() {
       <ScrollRestoration />
       <AdsTriggerResetter />
       <Switch>
+        {import.meta.env.DEV && <Route path="/__preview/public-design">{() => <LazyRoute component={PublicDesignGallery} />}</Route>}
         {/* English Version Routes */}
         <Route path="/en">{() => <LazyRoute component={EnglishHome} />}</Route>
         <Route path="/en/news">{() => <LazyRoute component={EnglishNewsPage} />}</Route>
@@ -642,6 +660,8 @@ function Router() {
         <Route path="/en/profile">{() => <LazyRoute component={EnglishProfile} />}</Route>
         <Route path="/en/daily-brief">{() => <LazyRoute component={EnglishDailyBrief} />}</Route>
         <Route path="/en/notification-settings">{() => <LazyRoute component={EnglishNotificationSettings} />}</Route>
+        <Route path="/en/settings/:section">{() => <Redirect to="/settings/notifications" />}</Route>
+        <Route path="/en/settings">{() => <Redirect to="/settings" />}</Route>
         <Route path="/en/reporter/:slug">{() => <LazyRoute component={EnglishReporterProfile} />}</Route>
         
         {/* Urdu Version Routes */}
@@ -702,6 +722,8 @@ function Router() {
         {/* Static Pages - Lazy loaded */}
         <Route path="/about">{() => <LazyRoute component={AboutPage} />}</Route>
         <Route path="/loyalty-preview">{() => <LazyRoute component={LoyaltyPreview} />}</Route>
+        <Route path="/plus-preview">{() => <LazyRoute component={SabqPlusPreview} />}</Route>
+        <Route path="/nd96-preview">{() => <LazyRoute component={NationalDay96HeaderPreview} />}</Route>
         <Route path="/loyalty-terms">{() => <LazyRoute component={LoyaltyTermsPage} />}</Route>
         <Route path="/ar/loyalty-terms">{() => <LazyRoute component={LoyaltyTermsPage} />}</Route>
         <Route path="/contact">{() => <LazyRoute component={ContactPage} />}</Route>
@@ -788,16 +810,18 @@ function Router() {
         <Route path="/admin/ifox/ai-tasks">{() => <LazyRoute component={IFoxAITasks} />}</Route>
         <Route path="/admin/ifox/ai-management">{() => <LazyRoute component={AIManagementDashboard} />}</Route>
         <Route path="/admin/ai-hub">{() => <LazyRoute component={AiHubPage} />}</Route>
+        <Route path="/admin/ai/staff/:slug">{() => <LazyRoute component={AiStaffProfilePage} />}</Route>
+        <Route path="/admin/ai/staff">{() => <LazyRoute component={AiStaffPage} />}</Route>
+        <Route path="/admin/ops-room">{() => <LazyRoute component={OpsRoomPage} />}</Route>
 
         <Route path="/reporter/:slug">{() => <LazyRoute component={ReporterProfile} />}</Route>
+        <Route path="/author/:name">{() => <LazyRoute component={AuthorArticlesPage} />}</Route>
         
         {/* Smart Links pages */}
         <Route path="/term/:identifier">{() => <LazyRoute component={TermDetail} />}</Route>
         <Route path="/entity/:slug">{() => <LazyRoute component={EntityDetail} />}</Route>
         
         {/* Audio Newsletters public pages */}
-        <Route path="/audio-newsletters">{() => <LazyRoute component={AudioNewslettersPublic} />}</Route>
-        <Route path="/audio-newsletters/:id">{() => <LazyRoute component={AudioNewsletterDetail} />}</Route>
         
         <Route path="/dashboard/muqtarab">{() => <LazyRoute component={DashboardMuqtarab} />}</Route>
         <Route path="/dashboard/muqtarab/angles/:angleId/topics">{() => <LazyRoute component={TopicsManagement} />}</Route>
@@ -807,18 +831,8 @@ function Router() {
         <Route path="/dashboard/smart-blocks">{() => <LazyRoute component={SmartBlocksPage} />}</Route>
         
         {/* Audio Newsletters dashboard */}
-        <Route path="/dashboard/audio-newsletters">{() => <LazyRoute component={AudioNewslettersDashboard} />}</Route>
-        <Route path="/dashboard/audio-newsletters/analytics">{() => <LazyRoute component={AudioNewsletterAnalytics} />}</Route>
-        <Route path="/dashboard/audio-newsletters/tts-settings">{() => <LazyRoute component={AudioNewsletterTtsSettings} />}</Route>
-        <Route path="/dashboard/audio-newsletters/voice-compare">{() => <LazyRoute component={AudioNewsletterVoiceCompare} />}</Route>
-        <Route path="/dashboard/audio-newsletters/tts-stats">{() => <LazyRoute component={AudioNewsletterTtsStats} />}</Route>
-        <Route path="/dashboard/audio-newsletters/create">{() => <LazyRoute component={AudioNewsletterEditor} />}</Route>
-        <Route path="/dashboard/audio-newsletters/:id/edit">{() => <LazyRoute component={AudioNewsletterEditor} />}</Route>
         
         {/* Audio Briefs dashboard */}
-        <Route path="/dashboard/audio-briefs">{() => <LazyRoute component={AudioBriefsDashboard} />}</Route>
-        <Route path="/dashboard/audio-briefs/create">{() => <LazyRoute component={AudioBriefEditor} />}</Route>
-        <Route path="/dashboard/audio-briefs/:id">{() => <LazyRoute component={AudioBriefEditor} />}</Route>
         
         {/* Internal Announcements dashboard */}
         <Route path="/dashboard/announcements">{() => <LazyRoute component={AnnouncementsList} />}</Route>
@@ -888,6 +902,8 @@ function Router() {
         </Route>
         
         <Route path="/dashboard">{() => <LazyRoute component={Dashboard} />}</Route>
+        {/* مركز قيادة سبق التحريري — صفحة موازية لا تمس اللوحة الحالية */}
+        <Route path="/dashboard2">{() => <LazyRoute component={Dashboard2} />}</Route>
         <Route path="/dashboard/analytics">{() => <LazyRoute component={AnalyticsDashboard} />}</Route>
         {/* Article Analytics - requires analytics.view permission */}
         <Route path="/dashboard/article-analytics">
@@ -899,19 +915,43 @@ function Router() {
             </ProtectedRoute>
           )}
         </Route>
+        <Route path="/dashboard/articles">{() => <LazyRoute component={ArticlesManagement} />}</Route>
+        {/* معاينة مستقلة لإعادة تصميم إدارة المقالات — لا تلمس الصفحة الحالية */}
+        <Route path="/dashboard/articles-preview">{() => <LazyRoute component={ArticlesManagementPreview} />}</Route>
         <Route path="/dashboard/articles/new">{() => <LazyRoute component={ArticleEditor} />}</Route>
         <Route path="/dashboard/article/new">{() => <LazyRoute component={ArticleEditor} />}</Route>
         <Route path="/dashboard/article/:id/preview">{() => <LazyRoute component={ArticlePreview} />}</Route>
         <Route path="/dashboard/articles/:id/preview">{() => <LazyRoute component={ArticlePreview} />}</Route>
         <Route path="/dashboard/articles/:id/edit">{() => <LazyRoute component={ArticleEditor} />}</Route>
         <Route path="/dashboard/articles/:id">{() => <LazyRoute component={ArticleEditor} />}</Route>
-        <Route path="/dashboard/articles">{() => <LazyRoute component={ArticlesManagement} />}</Route>
+        {/* النشر الاجتماعي (X) — social_publish.view */}
+        <Route path="/dashboard/social-publishing">
+          {() => (
+            <ProtectedRoute requireStaff={true} requireAnyPermission={["social_publish.view"]}>
+              <Suspense fallback={<PageLoader />}>
+                <SocialPublishingPage />
+              </Suspense>
+            </ProtectedRoute>
+          )}
+        </Route>
         <Route path="/dashboard/quizzes">{() => <LazyRoute component={QuizManagement} />}</Route>
         <Route path="/dashboard/opinion">{() => <LazyRoute component={OpinionManagement} />}</Route>
         <Route path="/dashboard/opinion-writers">{() => <LazyRoute component={OpinionWritersPage} />}</Route>
+        {/* إدارة المراسلين — مسؤول النظام فقط */}
+        <Route path="/dashboard/reporters">
+          {() => (
+            <ProtectedRoute
+              requireStaff={true}
+              requireRoles={["system_admin", "system.admin", "superadmin", "super_admin"]}
+            >
+              <Suspense fallback={<PageLoader />}>
+                <ReportersPage />
+              </Suspense>
+            </ProtectedRoute>
+          )}
+        </Route>
         <Route path="/dashboard/categories">{() => <LazyRoute component={CategoriesManagement} />}</Route>
         <Route path="/dashboard/media-library">{() => <LazyRoute component={MediaLibrary} />}</Route>
-        <Route path="/dashboard/ai-tools">{() => <LazyRoute component={AITools} />}</Route>
         {/* Infographic Studio - restricted from reporters */}
         <Route path="/dashboard/infographic-studio">
           {() => (
@@ -924,6 +964,14 @@ function Router() {
         </Route>
         <Route path="/dashboard/users">{() => <LazyRoute component={UsersManagement} />}</Route>
         <Route path="/dashboard/staff">{() => <LazyRoute component={StaffMembers} />}</Route>
+        <Route path="/dashboard/staff-profiles">{() => <LazyRoute component={StaffProfilesDirectory} />}</Route>
+        <Route path="/dashboard/official-letters">{() => <LazyRoute component={OfficialLetters} />}</Route>
+        <Route path="/dashboard/my-services">{() => <LazyRoute component={MyServicesPage} />}</Route>
+        <Route path="/verify/:code">{() => <LazyRoute component={VerifyLetter} />}</Route>
+        <Route path="/dashboard/staff-profiles/:userId">{() => <LazyRoute component={StaffProfilePage} />}</Route>
+        <Route path="/dashboard/meetings">{() => <LazyRoute component={MeetingsHub} />}</Route>
+        <Route path="/dashboard/meetings/room/:id">{() => <LazyRoute component={MeetingRoomPage} />}</Route>
+        <Route path="/dashboard/meetings/:id">{() => <LazyRoute component={MeetingDetailPage} />}</Route>
         <Route path="/dashboard/roles">{() => <LazyRoute component={RolesManagement} />}</Route>
         <Route path="/dashboard/push-notifications">{() => <LazyRoute component={PushNotifications} />}</Route>
         
@@ -951,20 +999,26 @@ function Router() {
         <Route path="/dashboard/themes/:id">{() => <LazyRoute component={ThemeEditor} />}</Route>
         <Route path="/dashboard/themes">{() => <LazyRoute component={ThemeManager} />}</Route>
         <Route path="/dashboard/appearance">{() => <LazyRoute component={DashboardAppearancePage} />}</Route>
-        <Route path="/profile/:userId">{() => <LazyRoute component={PublicProfile} />}</Route>
+        <Route path="/profile/:segment">{() => <LazyRoute component={ProfileSegmentRouter} />}</Route>
         <Route path="/profile">{() => <LazyRoute component={Profile} />}</Route>
         {/* محفظة العضو — مسار عام خارج لوحة التحكم */}
         <Route path="/loyalty">{() => <LazyRoute component={LoyaltyAccount} />}</Route>
         <Route path="/dashboard/loyalty">{() => <Redirect to="/loyalty" />}</Route>
         <Route path="/dashboard/loyalty-admin">{() => <LazyRoute component={LoyaltyAdminDashboard} />}</Route>
         <Route path="/dashboard/hajj-block">{() => <LazyRoute component={HajjBlockSettings} />}</Route>
+        <Route path="/dashboard/national-day-block">{() => <LazyRoute component={NationalDayBlockSettings} />}</Route>
+        <Route path="/dashboard/sahraa-tv-block">{() => <LazyRoute component={SahraaTvBlockSettings} />}</Route>
+        <Route path="/settings/:section">{() => <LazyRoute component={SettingsCenter} />}</Route>
+        <Route path="/settings">{() => <LazyRoute component={SettingsCenter} />}</Route>
         <Route path="/preferences">{() => <LazyRoute component={PreferencesCenter} />}</Route>
         {/* discover-users hidden */}
-        <Route path="/complete-profile">{() => <LazyRoute component={CompleteProfile} />}</Route>
+        {/* F-28: /complete-profile (unreachable, saved nothing) and /select-interests
+            (POSTed to a non-existent route + read the wrong endpoint) removed —
+            onboarding lives at /onboarding/* and interests at /interests/edit. */}
         <Route path="/complete-name">{() => <LazyRoute component={CompleteName} />}</Route>
-        <Route path="/select-interests">{() => <LazyRoute component={SelectInterests} />}</Route>
         <Route path="/interests/edit">{() => <LazyRoute component={EditInterests} />}</Route>
         <Route path="/notification-settings">{() => <LazyRoute component={NotificationSettings} />}</Route>
+        <Route path="/ur/notification-settings">{() => <Redirect to="/settings/notifications" />}</Route>
         
         {/* Publisher Dashboard Routes */}
         <Route path="/dashboard/publisher">{() => <LazyRoute component={PublisherDashboard} />}</Route>
@@ -1017,6 +1071,9 @@ function Router() {
         <Route path="/dashboard/admin/ifox/settings">{() => <LazyRoute component={IFoxSettings} />}</Route>
         <Route path="/dashboard/admin/ifox/ai-management">{() => <LazyRoute component={AIManagementDashboard} />}</Route>
         <Route path="/dashboard/ai-hub">{() => <LazyRoute component={AiHubPage} />}</Route>
+        <Route path="/dashboard/ai/staff/:slug">{() => <LazyRoute component={AiStaffProfilePage} />}</Route>
+        <Route path="/dashboard/ai/staff">{() => <LazyRoute component={AiStaffPage} />}</Route>
+        <Route path="/dashboard/ops-room">{() => <LazyRoute component={OpsRoomPage} />}</Route>
         <Route path="/dashboard/integrations">{() => <LazyRoute component={IntegrationsSettingsPage} />}</Route>
         <Route path="/dashboard/admin/ifox/ai-tasks">{() => <LazyRoute component={IFoxAITasks} />}</Route>
         
@@ -1034,6 +1091,8 @@ function Router() {
         <Route path="/moment-by-moment">{() => <LazyRoute component={MomentByMoment} />}</Route>
         <Route path="/live">{() => <LazyRoute component={MomentByMoment} />}</Route>
         <Route path="/gulf-live">{() => <LazyRoute component={GulfLiveCoverage} />}</Route>
+        {/* رابط دعوة اجتماعات سبق — عام: الضيوف يدخلون بلا حساب بعد موافقة المضيف */}
+        <Route path="/meet/:token">{() => <LazyRoute component={MeetingInvite} />}</Route>
         {/* عقل سبق — التعريف بمنظومة الذكاء الاصطناعي؛ /about-ai تحويلة إليه */}
         <Route path="/sabq-ai">{() => <LazyRoute component={SabqAI} />}</Route>
         <Route path="/about-ai">{() => <Redirect to="/sabq-ai" />}</Route>
@@ -1050,7 +1109,9 @@ function Router() {
         <Route path="/asian-cup">{() => <LazyRoute component={AsianCup} />}</Route>
         <Route path="/gulf-cup/majlis/:id">{() => <LazyRoute component={GulfCupMajlis} />}</Route>
         <Route path="/gulf-cup/majlis">{() => <LazyRoute component={GulfCupMajlis} />}</Route>
-        <Route path="/gulf-cup/predictions">{() => <Redirect to="/predictions?competition=gulf-cup-27" />}</Route>
+        <Route path="/gulf-cup/team/:id">{() => <LazyRoute component={GulfCupTeam} />}</Route>
+        <Route path="/gulf-cup/fantasy">{() => <LazyRoute component={GulfCupFantasy} />}</Route>
+        <Route path="/gulf-cup/predictions">{() => <GulfCupPredictionsRedirect />}</Route>
         <Route path="/gulf-cup">{() => <LazyRoute component={GulfCup} />}</Route>
 
         {/* المنصة المركزية للتوقعات — كل البطولات ما عدا مونديال 2026 */}
@@ -1064,6 +1125,8 @@ function Router() {
         {/* مركز دوري روشن السعودي بنظام تصميم المونديال — /rsl يحوّل إليه */}
         <Route path="/roshn/predictions">{() => <Redirect to="/predictions?competition=rsl-2026" />}</Route>
         <Route path="/roshn">{() => <LazyRoute component={RoshnHub} />}</Route>
+        {/* البوابة الرياضية بستايل «سعودي سبورت» مربوطة بمباريات دوري روشن الحيّة */}
+        <Route path="/sports55">{() => <LazyRoute component={Sports55} />}</Route>
         <Route path="/rsl/predictions">{() => <Redirect to="/predictions?competition=rsl-2026" />}</Route>
         <Route path="/rsl">{() => <Redirect to="/roshn" />}</Route>
         {/* توحيد البوابة الرياضية: التجارب القديمة (/sports10، /sports22) اندمجت في
@@ -1091,6 +1154,7 @@ function Router() {
         <Route path="/sports/transfers/story/:playerId">{() => <LazyRoute component={TransferStory} />}</Route>
         <Route path="/sports/transfers">{() => <LazyRoute component={SportsTransfers} />}</Route>
         <Route path="/sports">{() => <LazyRoute component={SportsDashboard} />}</Route>
+        <Route path="/economy">{() => <LazyRoute component={EconomyLive} />}</Route>
         {/* تحويلات من المسارات التجريبية القديمة (/sports2../sports5) إلى /sports */}
         <Route path="/sports2/competition/:slug">{(p) => <Redirect to={`/sports/competition/${p.slug}`} />}</Route>
         <Route path="/sports2/team/:id">{(p) => <Redirect to={`/sports/team/${p.id}`} />}</Route>
@@ -1107,9 +1171,8 @@ function Router() {
         <Route path="/dashboard/ai-moderation">{() => <LazyRoute component={AIModerationDashboard} />}</Route>
         <Route path="/dashboard/sentiment-insights">{() => <LazyRoute component={SentimentInsights} />}</Route>
         <Route path="/admin/comments/suspicious-words">{() => <LazyRoute component={SuspiciousWordsManagement} />}</Route>
-        <Route path="/dashboard/data-stories">{() => <LazyRoute component={DataStoryGenerator} />}</Route>
         <Route path="/dashboard/prompt-studio">{() => <LazyRoute component={PromptStudio} />}</Route>
-        <Route path="/dashboard/smart-journalist">{() => <LazyRoute component={SmartJournalist} />}</Route>
+        <Route path="/dashboard/deepseek-lab">{() => <LazyRoute component={DeepSeekLab} />}</Route>
         <Route path="/dashboard/tasks">{() => <LazyRoute component={TasksPage} />}</Route>
         <Route path="/dashboard/ai/summaries">{() => <LazyRoute component={ComingSoon} />}</Route>
         <Route path="/dashboard/ai/deep-analysis-list">{() => <LazyRoute component={DeepAnalysisList} />}</Route>
@@ -1120,14 +1183,8 @@ function Router() {
         <Route path="/dashboard/analytics/trending">{() => <LazyRoute component={ComingSoon} />}</Route>
         <Route path="/dashboard/analytics/behavior">{() => <LazyRoute component={UserBehavior} />}</Route>
         <Route path="/dashboard/analytics/advanced">{() => <LazyRoute component={AdvancedAnalytics} />}</Route>
-        <Route path="/dashboard/analytics/ab-tests/:id">{() => <LazyRoute component={ABTestDetail} />}</Route>
-        <Route path="/dashboard/analytics/ab-tests">{() => <LazyRoute component={ABTestsManagement} />}</Route>
-        <Route path="/dashboard/analytics/recommendations">{() => <LazyRoute component={RecommendationAnalytics} />}</Route>
-        <Route path="/dashboard/sentiment-analytics">{() => <LazyRoute component={SentimentAnalytics} />}</Route>
-        <Route path="/dashboard/personalization-analytics">{() => <LazyRoute component={PersonalizationAnalytics} />}</Route>
         <Route path="/dashboard/newsletter-analytics">{() => <LazyRoute component={NewsletterAnalytics} />}</Route>
         <Route path="/dashboard/rss-feeds">{() => <LazyRoute component={RssFeedsManager} />}</Route>
-        <Route path="/dashboard/spa-news">{() => <LazyRoute component={SpaNewsImporter} />}</Route>
         <Route path="/dashboard/sportmonks-news">{() => <LazyRoute component={SportmonksNewsImporter} />}</Route>
         <Route path="/dashboard/sports-names">{() => <LazyRoute component={SportsNamesManager} />}</Route>
         <Route path="/dashboard/integrations">{() => <LazyRoute component={ComingSoon} />}</Route>
@@ -1171,12 +1228,13 @@ function Router() {
         <Route path="/dashboard/notification-admin">{() => <LazyRoute component={NotificationAdmin} />}</Route>
         <Route path="/dashboard/email-templates">{() => <LazyRoute component={EmailTemplatesPage} />}</Route>
         <Route path="/notifications">{() => <LazyRoute component={UserNotifications} />}</Route>
-        <Route path="/recommendation-settings">{() => <Redirect to="/notification-settings" />}</Route>
+        <Route path="/recommendation-settings">{() => <Redirect to="/settings/notifications" />}</Route>
         <Route path="/my-follows">{() => <LazyRoute component={MyFollows} />}</Route>
         <Route path="/my-keywords">{() => <LazyRoute component={MyKeywords} />}</Route>
         <Route path="/dashboard/story-admin">{() => <LazyRoute component={StoryAdmin} />}</Route>
         <Route path="/dashboard/system-settings">{() => <LazyRoute component={SystemSettings} />}</Route>
         <Route path="/dashboard/sports-tournaments">{() => <LazyRoute component={SportsTournamentsAdmin} />}</Route>
+        <Route path="/dashboard/wc-2026-numbers-report">{() => <LazyRoute component={Wc2026NumbersReportPage} />}</Route>
         <Route path="/dashboard/auto-image-settings">{() => <LazyRoute component={AutoImageSettings} />}</Route>
         <Route path="/dashboard/focal-points">{() => <LazyRoute component={FocalPointDashboard} />}</Route>
         <Route path="/dashboard/editor-alerts">{() => <LazyRoute component={EditorAlertsSettings} />}</Route>
@@ -1215,7 +1273,6 @@ function Router() {
         {/* Legacy redirects */}
         <Route path="/dashboard/email-agent">{() => <LazyRoute component={CommunicationsManagement} />}</Route>
         <Route path="/dashboard/voice-management">{() => <LazyRoute component={VoiceManagement} />}</Route>
-        <Route path="/dashboard/transcription-tool">{() => <LazyRoute component={TranscriptionTool} />}</Route>
         <Route path="/admin/whatsapp">{() => <LazyRoute component={CommunicationsManagement} />}</Route>
         
         {/* Admin Routes */}
@@ -1270,6 +1327,7 @@ function App() {
                   <VoiceCommandsManager />
                   <ReadingHistorySync />
                   <FocusSessionSync />
+                  <AuthAnalyticsMarker />
                   <PostAuthResumeGuard />
                   <NameCompletionGuard />
                   <CapacitorDeepLinks />

@@ -1589,7 +1589,6 @@
       "media_library.upload",
       "media_library.view",
       "profile.view",
-      "staff.view_productivity",
       "users.view"
     ],
     "editor": [

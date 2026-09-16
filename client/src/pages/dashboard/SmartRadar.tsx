@@ -58,6 +58,7 @@ import {
   FileCheck2,
   Globe,
   Plus,
+  SearchCheck,
   Radar,
   RotateCcw,
   Satellite,
@@ -79,7 +80,9 @@ interface RadarStatsResponse {
   exportedTotal: number;
   activeSources: number;
   lastFetchedAt: string | null;
+  newsapiLastFetchedAt: string | null;
   telegramConfigured: boolean;
+  webSearchConfigured: boolean;
 }
 
 interface RadarItemRow {
@@ -88,6 +91,7 @@ interface RadarItemRow {
   sourceName: string | null;
   sourceType: "rss" | "json" | "x" | null;
   xValue: string | null;
+  publisher: string | null;
   link: string;
   originalTitle: string;
   originalExcerpt: string | null;
@@ -96,12 +100,18 @@ interface RadarItemRow {
   fetchedAt: string;
   status: "new" | "analyzed" | "ready" | "exported" | "dismissed";
   newsValue: number | null;
-  scoreBreakdown: { reason?: string } | null;
+  scoreBreakdown: { reason?: string; saudiRelevance?: number } | null;
   isBreaking: boolean;
   matchedKeywords: string[] | null;
   translatedTitle: string | null;
   translatedSummary: string | null;
   exportedArticleId: string | null;
+  // حقول مسار «طوّر ببحث» فقط — بقية المسودة لا تعرضها البطاقة
+  draft: {
+    developNotes?: string[];
+    developSources?: { title: string; url: string }[];
+    developedWithSearch?: boolean;
+  } | null;
 }
 
 interface RadarSourceRow {
@@ -192,6 +202,7 @@ export default function SmartRadar() {
   const [activeTab, setActiveTab] = useState("inbox");
   const [sourceFilter, setSourceFilter] = useState<string>("all");
   const [channelFilter, setChannelFilter] = useState<"all" | "feed" | "x">("all");
+  const [timeFilter, setTimeFilter] = useState<"all" | "1" | "3" | "24">("all");
   const [limit, setLimit] = useState(30);
 
   const tabParams = TABS.find((t) => t.id === activeTab)?.params ?? {};
@@ -214,6 +225,7 @@ export default function SmartRadar() {
         ...tabParams,
         sourceId: sourceFilter === "all" ? undefined : sourceFilter,
         channel: channelFilter === "all" ? undefined : channelFilter,
+        sinceHours: timeFilter === "all" ? undefined : Number(timeFilter),
         limit,
       },
     ],
@@ -259,6 +271,17 @@ export default function SmartRadar() {
       toast({ title: "❌ فشل التحويل التحريري", description: error.message, variant: "destructive" }),
   });
 
+  // «طوّر ببحث» — نظام التحرير الموحد: بحث تحقق + مسودة مثراة بعزو
+  const developMutation = useMutation({
+    mutationFn: (id: string) => apiRequest(`/api/radar/items/${id}/develop`, { method: "POST" }),
+    onSuccess: () => {
+      invalidateRadar();
+      toast({ title: "✅ طُوّرت المادة — المسودة وملاحظات المراجع في تبويب «جاهز للنشر»" });
+    },
+    onError: (error: Error) =>
+      toast({ title: "❌ فشل التطوير التحريري", description: error.message, variant: "destructive" }),
+  });
+
   const exportMutation = useMutation({
     mutationFn: (id: string) =>
       apiRequest<{ articleId: string }>(`/api/radar/items/${id}/export`, { method: "POST" }),
@@ -292,8 +315,8 @@ export default function SmartRadar() {
   });
 
   const pendingItemId =
-    transformMutation.isPending || exportMutation.isPending
-      ? (transformMutation.variables ?? exportMutation.variables)
+    transformMutation.isPending || exportMutation.isPending || developMutation.isPending
+      ? (transformMutation.variables ?? exportMutation.variables ?? developMutation.variables)
       : null;
 
   return (
@@ -339,6 +362,13 @@ export default function SmartRadar() {
           />
         </div>
 
+        {/* ممر NewsAPI يجلب كل ساعة ترشيدًا للتوكنز — المؤشر يطمئن أنه حي دون فتح «المصادر» */}
+        {stats?.newsapiLastFetchedAt && (
+          <p className="text-xs text-muted-foreground">
+            NewsAPI.ai: آخر سحب {timeAgo(stats.newsapiLastFetchedAt)} · يجلب مرة كل ساعة
+          </p>
+        )}
+
         {/* ---------- التبويبات والفلاتر ---------- */}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="w-full overflow-x-auto sm:w-auto">
@@ -356,6 +386,20 @@ export default function SmartRadar() {
           </Tabs>
           </div>
           <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+            <Select
+              value={timeFilter}
+              onValueChange={(value) => setTimeFilter(value as "all" | "1" | "3" | "24")}
+            >
+              <SelectTrigger className="w-full sm:w-36">
+                <SelectValue placeholder="الوقت" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">كل الأوقات</SelectItem>
+                <SelectItem value="1">آخر ساعة</SelectItem>
+                <SelectItem value="3">آخر 3 ساعات</SelectItem>
+                <SelectItem value="24">آخر 24 ساعة</SelectItem>
+              </SelectContent>
+            </Select>
             <Select
               value={channelFilter}
               onValueChange={(value) => setChannelFilter(value as "all" | "feed" | "x")}
@@ -412,7 +456,9 @@ export default function SmartRadar() {
                   key={item.id}
                   item={item}
                   busy={pendingItemId === item.id}
+                  searchConfigured={stats?.webSearchConfigured ?? false}
                   onTransform={() => transformMutation.mutate(item.id)}
+                  onDevelop={() => developMutation.mutate(item.id)}
                   onExport={() => exportMutation.mutate(item.id)}
                   onDismiss={() => dismissMutation.mutate(item.id)}
                   onRestore={() => restoreMutation.mutate(item.id)}
@@ -471,6 +517,8 @@ function RadarItemCard({
   onDismiss,
   onRestore,
   onOpenArticle,
+  onDevelop,
+  searchConfigured,
 }: {
   item: RadarItemRow;
   busy: boolean;
@@ -479,6 +527,8 @@ function RadarItemCard({
   onDismiss: () => void;
   onRestore: () => void;
   onOpenArticle: (articleId: string) => void;
+  onDevelop: () => void;
+  searchConfigured: boolean;
 }) {
   const score = item.newsValue;
   const keywords = Array.isArray(item.matchedKeywords) ? item.matchedKeywords : [];
@@ -492,7 +542,20 @@ function RadarItemCard({
               <Zap className="ml-0.5 h-3 w-3" /> عاجل
             </Badge>
           )}
-          <Badge variant="secondary">{item.sourceName ?? "مصدر"}</Badge>
+          {/* شأن سعودي (تقييم المحلل ≥60) — تمييز بصري سريع لأولوية سبق الأولى */}
+          {(item.scoreBreakdown?.saudiRelevance ?? 0) >= 60 && (
+            <Badge
+              variant="outline"
+              className="border-green-600 text-green-700 dark:text-green-400"
+              title={`صلة سعودية ${item.scoreBreakdown?.saudiRelevance}%`}
+            >
+              🇸🇦 سعودي
+            </Badge>
+          )}
+          {/* لمواد ممرات الاصطياد (Google News/GDELT) الناشر الحقيقي أهم من اسم الممر */}
+          <Badge variant="secondary" title={item.publisher ? item.sourceName ?? undefined : undefined}>
+            {item.publisher ?? item.sourceName ?? "مصدر"}
+          </Badge>
           {item.sourceType === "x" ? (
             <Badge className="bg-sky-600 text-white hover:bg-sky-600">
               X{item.xValue ? ` · ${item.xValue}` : ""}
@@ -538,6 +601,24 @@ function RadarItemCard({
             {item.scoreBreakdown.reason}
           </p>
         )}
+        {/* ملاحظات المراجع من مسار «طوّر ببحث» — تظهر مع المسودة الجاهزة */}
+        {item.status === "ready" && (item.draft?.developNotes?.length ?? 0) > 0 && (
+          <div className="space-y-1 rounded-md border bg-muted/40 p-2">
+            <div className="flex items-center gap-1.5 text-[11px] font-medium">
+              <SearchCheck className="h-3 w-3" />
+              {item.draft?.developedWithSearch
+                ? `طُوّرت ببحث تحقق (${item.draft?.developSources?.length ?? 0} مصدر)`
+                : "طُوّرت بوضع متحفظ — بلا بحث خارجي"}
+            </div>
+            <ul className="space-y-0.5">
+              {(item.draft?.developNotes ?? []).slice(0, 3).map((note, i) => (
+                <li key={i} className="text-[11px] leading-4 text-muted-foreground">
+                  • {note}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
         {keywords.length > 0 && (
           <div className="flex flex-wrap gap-1">
             {keywords.slice(0, 4).map((keyword) => (
@@ -551,10 +632,27 @@ function RadarItemCard({
       </CardContent>
       <CardFooter className="flex flex-wrap items-center gap-2 pt-0">
         {(item.status === "new" || item.status === "analyzed") && (
-          <Button size="sm" onClick={onTransform} disabled={busy}>
-            <Wand2 className={`ml-1 h-4 w-4 ${busy ? "animate-pulse" : ""}`} />
-            {busy ? "جارٍ التحويل..." : "تحويل تحريري"}
-          </Button>
+          <>
+            <Button size="sm" onClick={onTransform} disabled={busy}>
+              <Wand2 className={`ml-1 h-4 w-4 ${busy ? "animate-pulse" : ""}`} />
+              {busy ? "جارٍ التحويل..." : "تحويل تحريري"}
+            </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={onDevelop}
+              disabled={busy}
+              title={
+                searchConfigured
+                  ? "تطوير معزز ببحث تحقق من الويب — مسودة مثراة بعزو + ملاحظات مراجع"
+                  : "البحث غير مهيأ (TAVILY_API_KEY / SERPER_API_KEY) — سيُطوَّر بوضع متحفظ مع قائمة ما يلزم تحققه"
+              }
+              data-testid={`button-radar-develop-${item.id}`}
+            >
+              <SearchCheck className={`ml-1 h-4 w-4 ${busy ? "animate-pulse" : ""}`} />
+              {busy ? "جارٍ التطوير..." : "طوّر ببحث"}
+            </Button>
+          </>
         )}
         {item.status === "ready" && (
           <Button size="sm" onClick={onExport} disabled={busy}>

@@ -13,6 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
+import { useMediaLicenseGate } from "@/hooks/useMediaLicenseGate";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { SubmitRevisionButton } from "@/components/SubmitRevisionButton";
 import { WriterInquiriesButton } from "@/components/WriterInquiriesButton";
@@ -24,6 +25,7 @@ import {
   useIsWriterRail,
   type ScheduleBannerData,
 } from "./WriterPriorityRail";
+import { MyServicesHomeLink } from "@/components/staff/MyServicesHomeLink";
 import {
   ContributorStatsRow,
   PerformanceChart,
@@ -55,11 +57,13 @@ import {
   Plus,
   RefreshCw,
   Send,
+  Share2,
   Sparkles,
   Target,
   Users,
   WandSparkles,
 } from "lucide-react";
+import { OpinionAuthorSocialProposalDialog } from "./OpinionAuthorSocialProposalDialog";
 
 type ArticleRow = {
   id: string;
@@ -209,27 +213,47 @@ function WriterScheduleBanner() {
         <div className="space-y-0.5">
           <p className="text-sm font-bold sm:text-base">
             {banner.state === "late"
-              ? "فات موعد النشر لهذا الأسبوع"
+              ? new Date(banner.nextPublishAt).getTime() > Date.now()
+                ? "فات آخر موعد لإرسال مقالتك"
+                : "فات موعد النشر لهذا الأسبوع"
               : banner.state === "reminder"
                 ? "تذكير: اقترب موعد مقالتك"
                 : `يومك المخصص للنشر: ${WEEKDAYS_AR[banner.weekday]}`}
           </p>
           <p className="text-xs text-muted-foreground sm:text-sm">
             {banner.state === "late" ? (
-              <>
-                لم تُنشر مقالة في موعدك الماضي. عند إرسال مقالتك الآن ستُجدول ليوم{" "}
-                <b className="text-foreground">{fmt(banner.nextPublishAt)}</b>، أو تواصل مع
-                المحررين عبر الاستفسارات.
-              </>
+              new Date(banner.nextPublishAt).getTime() > Date.now() ? (
+                <>
+                  أرسل مقالتك الآن لتُجدول ليوم{" "}
+                  <b className="text-foreground">{fmt(banner.nextPublishAt)}</b>، أو تواصل مع
+                  المحررين عبر الاستفسارات.
+                </>
+              ) : (
+                <>
+                  لم تُنشر مقالة في موعدك الماضي. عند إرسال مقالتك الآن ستُجدول ليوم{" "}
+                  <b className="text-foreground">{fmt(banner.nextPublishAt)}</b>، أو تواصل مع
+                  المحررين عبر الاستفسارات.
+                </>
+              )
             ) : banner.hasUpcoming ? (
               <>
                 مقالتك القادمة في مسار النشر — موعدها{" "}
                 <b className="text-foreground">{fmt(banner.nextPublishAt)}</b>. شكراً لالتزامك.
               </>
-            ) : (
+            ) : banner.state === "reminder" ? (
+              <>
+                أرسلها قبل <b className="text-foreground">{fmt(banner.submitDeadline, false)}</b> —
+                تُنشر <b className="text-foreground">{fmt(banner.nextPublishAt)}</b>.
+              </>
+            ) : new Date(banner.submitDeadline).getTime() > Date.now() ? (
               <>
                 مقالتك القادمة تُنشر <b className="text-foreground">{fmt(banner.nextPublishAt)}</b>.
                 آخر موعد للإرسال: <b className="text-foreground">{fmt(banner.submitDeadline, false)}</b>.
+              </>
+            ) : (
+              <>
+                مقالتك القادمة تُنشر <b className="text-foreground">{fmt(banner.nextPublishAt)}</b>.
+                أرسلها في أقرب وقت.
               </>
             )}
           </p>
@@ -243,6 +267,19 @@ export default function WriterWorkspacePage() {
   const [, navigate] = useLocation();
   const { user } = useAuth();
   const { toast } = useToast();
+  const { createBlocked, createBlockedReason, openMediaLicenseForm } = useMediaLicenseGate();
+  const startWriting = () => {
+    if (createBlocked) {
+      toast({
+        title: "الترخيص المهني مطلوب",
+        description: createBlockedReason,
+        variant: "destructive",
+      });
+      openMediaLicenseForm();
+      return;
+    }
+    navigate("/dashboard/articles/new");
+  };
   // شريط الأولويات للجوال — تطبيق iOS أولاً (أو ?writerRail=1 للاختبار)
   const railMode = useIsWriterRail();
   const [activeTab, setActiveTab] = useState("today");
@@ -250,6 +287,7 @@ export default function WriterWorkspacePage() {
   const [coachResult, setCoachResult] = useState<CoachResult | null>(null);
   const [reviewResult, setReviewResult] = useState<ReviewResult | null>(null);
   const [reviewTitle, setReviewTitle] = useState("");
+  const [socialProposalArticle, setSocialProposalArticle] = useState<TrackingArticle | null>(null);
   /** Ideas are AI-generated and slow — only fetch after explicit user action. */
   const [ideasRequested, setIdeasRequested] = useState(false);
 
@@ -359,6 +397,10 @@ export default function WriterWorkspacePage() {
       if (token) window.open(`/survey/${token}`, "_blank", "noopener");
       return;
     }
+    if (notification.type === "social_published" && notification.deepLink?.startsWith("https://")) {
+      window.open(notification.deepLink, "_blank", "noopener");
+      return;
+    }
     setActiveTab("articles");
     if (notification.articleId) {
       window.setTimeout(() => {
@@ -379,6 +421,7 @@ export default function WriterWorkspacePage() {
     <DashboardLayout>
       <div className="relative min-h-full w-full text-right" dir="rtl" style={{ direction: "rtl" }}>
         <div className="w-full space-y-3 p-1 sm:space-y-5 sm:p-0" dir="rtl">
+          <MyServicesHomeLink />
           {railMode ? (
             <WriterPriorityRail
               notifications={unreadNotifications}
@@ -395,7 +438,13 @@ export default function WriterWorkspacePage() {
                 <h1 className="min-w-0 truncate text-lg font-bold tracking-tight">
                   {greeting()} يا {firstName}
                 </h1>
-                <Button size="sm" className="shrink-0 gap-1.5" onClick={() => navigate("/dashboard/articles/new")}>
+                <Button
+                  size="sm"
+                  className={`shrink-0 gap-1.5${createBlocked ? " opacity-60" : ""}`}
+                  title={createBlocked ? createBlockedReason : undefined}
+                  onClick={startWriting}
+                  data-testid="button-writer-start-writing"
+                >
                   <PenLine className="h-4 w-4" /> ابدأ الكتابة
                 </Button>
               </div>
@@ -456,7 +505,13 @@ export default function WriterWorkspacePage() {
                 >
                   <Lightbulb className="h-4 w-4 text-primary" /> ساعدني في اختيار فكرة
                 </Button>
-                <Button size="sm" className="justify-center gap-1.5" onClick={() => navigate("/dashboard/articles/new")}>
+                <Button
+                  size="sm"
+                  className={`justify-center gap-1.5${createBlocked ? " opacity-60" : ""}`}
+                  title={createBlocked ? createBlockedReason : undefined}
+                  onClick={startWriting}
+                  data-testid="button-writer-start-writing-desktop"
+                >
                   <PenLine className="h-4 w-4" /> ابدأ الكتابة
                 </Button>
               </div>
@@ -734,6 +789,7 @@ export default function WriterWorkspacePage() {
                         onEdit={() => navigate(`/dashboard/articles/${article.id}/edit`)}
                         onView={() => navigate(`/article/${article.id}`)}
                         onReview={() => reviewMutation.mutate(article)}
+                        onSocialProposal={setSocialProposalArticle}
                         reviewPending={reviewMutation.isPending}
                         submitPending={submitReviewMutation.isPending}
                         onSubmit={(id) => submitReviewMutation.mutate(id)}
@@ -778,6 +834,17 @@ export default function WriterWorkspacePage() {
           {reviewResult && <ReviewResultView result={reviewResult} />}
         </DialogContent>
       </Dialog>
+
+      {socialProposalArticle && (
+        <OpinionAuthorSocialProposalDialog
+          articleId={socialProposalArticle.id}
+          articleTitle={socialProposalArticle.title}
+          open={Boolean(socialProposalArticle)}
+          onOpenChange={(open) => {
+            if (!open) setSocialProposalArticle(null);
+          }}
+        />
+      )}
     </DashboardLayout>
   );
 }
@@ -892,12 +959,41 @@ function trackingState(article: TrackingArticle) {
   return { label: "مسودة", description: "المقال محفوظ لديك ولم يُرسل إلى فريق التحرير بعد.", icon: Feather, tone: "default" as const, dateLabel: "آخر تعديل", date: article.updatedAt };
 }
 
-function WriterTrackingCard({ article, onEdit, onView, onReview, reviewPending, submitPending, onSubmit }: { article: TrackingArticle; onEdit: () => void; onView: () => void; onReview: () => void; reviewPending: boolean; submitPending: boolean; onSubmit: (id: string) => void }) {
+function WriterTrackingCard({
+  article,
+  onEdit,
+  onView,
+  onReview,
+  onSocialProposal,
+  reviewPending,
+  submitPending,
+  onSubmit,
+}: {
+  article: TrackingArticle;
+  onEdit: () => void;
+  onView: () => void;
+  onReview: () => void;
+  onSocialProposal?: (article: TrackingArticle) => void;
+  reviewPending: boolean;
+  submitPending: boolean;
+  onSubmit: (id: string) => void;
+}) {
   const state = trackingState(article);
   const StateIcon = state.icon;
   const isInvalid = state.tone === "danger";
   const needsChanges = article.reviewStatus === "needs_changes";
   const isPlainDraft = article.status === "draft" && !article.reviewStatus;
+
+  const isActuallyPublished =
+    article.status === "published" &&
+    Boolean(article.publishedAt) &&
+    new Date(article.publishedAt!).getTime() <= Date.now();
+  const elapsedMs = isActuallyPublished
+    ? Date.now() - new Date(article.publishedAt!).getTime()
+    : Infinity;
+  const isWithin24Hours =
+    isActuallyPublished && elapsedMs >= 0 && elapsedMs <= 24 * 60 * 60 * 1000;
+
   const toneClasses = {
     default: "border-border bg-card",
     warning: "border-warning/50 bg-warning/[0.08] dark:border-border dark:bg-warning/10",
@@ -913,7 +1009,87 @@ function WriterTrackingCard({ article, onEdit, onView, onReview, reviewPending, 
     danger: "bg-destructive/15 text-destructive",
   };
 
-  return <Card id={`writer-article-${article.id}`} className={toneClasses[state.tone]}><CardContent className="space-y-4 p-4 md:p-5"><div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between"><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><h3 className="font-semibold leading-7">{article.title}</h3><Badge className={`gap-1.5 border-0 ${badgeClasses[state.tone]}`}><StateIcon className="h-3.5 w-3.5" />{state.label}</Badge></div><p className="mt-2 text-sm leading-6 text-muted-foreground">{state.description}</p>{state.date && <p className="mt-1 text-xs text-muted-foreground">{state.dateLabel}: {format(new Date(state.date), "d MMMM yyyy، h:mm a", { locale: ar })}</p>}</div><div className="flex shrink-0 flex-wrap gap-2">{(isPlainDraft || needsChanges) && <Button variant="outline" size="sm" onClick={onEdit} className="gap-1.5"><Edit3 className="h-4 w-4" /> تعديل المقال</Button>}{isPlainDraft && <Button variant="secondary" size="sm" onClick={onReview} disabled={reviewPending} className="gap-1.5"><BrainCircuit className="h-4 w-4" /> قارئ سبق الأول</Button>}{(isPlainDraft || needsChanges) && <SubmitRevisionButton article={article} isPending={submitPending} onSubmit={onSubmit} />}{article.status === "published" && <Button variant="outline" size="sm" onClick={onView}>عرض المقال</Button>}</div></div>{needsChanges && article.reviewNotes && <EditorialChecklist notes={article.reviewNotes} />}{isInvalid && <div className="rounded-xl border border-destructive/30 bg-background/70 p-3 dark:border-border"><p className="text-xs font-semibold text-destructive dark:text-destructive">سبب عدم النشر</p><p className="mt-1 text-sm leading-6 text-destructive/80 dark:text-destructive/80">{article.reviewNotes?.trim() || "لم يسجل فريق التحرير سببًا لهذا القرار. يرجى التواصل عبر الاستفسارات."}</p></div>}{!needsChanges && !isInvalid && article.reviewNotes && article.reviewStatus !== "pending_review" && <div className="rounded-xl border bg-background/70 p-3"><p className="text-xs font-semibold">ملاحظة فريق التحرير</p><p className="mt-1 text-sm leading-6 text-muted-foreground">{article.reviewNotes}</p></div>}</CardContent></Card>;
+  return (
+    <Card id={`writer-article-${article.id}`} className={toneClasses[state.tone]}>
+      <CardContent className="space-y-4 p-4 md:p-5">
+        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="font-semibold leading-7">{article.title}</h3>
+              <Badge className={`gap-1.5 border-0 ${badgeClasses[state.tone]}`}>
+                <StateIcon className="h-3.5 w-3.5" />
+                {state.label}
+              </Badge>
+            </div>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">{state.description}</p>
+            {state.date && (
+              <p className="mt-1 text-xs text-muted-foreground">
+                {state.dateLabel}: {format(new Date(state.date), "d MMMM yyyy، h:mm a", { locale: ar })}
+              </p>
+            )}
+          </div>
+          <div className="flex shrink-0 flex-wrap gap-2">
+            {(isPlainDraft || needsChanges) && (
+              <Button variant="outline" size="sm" onClick={onEdit} className="gap-1.5">
+                <Edit3 className="h-4 w-4" /> تعديل المقال
+              </Button>
+            )}
+            {isPlainDraft && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={onReview}
+                disabled={reviewPending}
+                className="gap-1.5"
+              >
+                <BrainCircuit className="h-4 w-4" /> قارئ سبق الأول
+              </Button>
+            )}
+            {(isPlainDraft || needsChanges) && (
+              <SubmitRevisionButton
+                article={article}
+                isPending={submitPending}
+                onSubmit={onSubmit}
+              />
+            )}
+            {article.status === "published" && (
+              <>
+                {isWithin24Hours && onSocialProposal && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => onSocialProposal(article)}
+                    className="gap-1.5 border-primary/30 text-primary hover:bg-primary/10"
+                    data-testid={`button-writer-social-proposal-${article.id}`}
+                  >
+                    <Share2 className="h-4 w-4" /> اقتراح منشور X
+                  </Button>
+                )}
+                <Button variant="outline" size="sm" onClick={onView}>
+                  عرض المقال
+                </Button>
+              </>
+            )}
+          </div>
+        </div>
+        {needsChanges && article.reviewNotes && <EditorialChecklist notes={article.reviewNotes} />}
+        {isInvalid && (
+          <div className="rounded-xl border border-destructive/30 bg-background/70 p-3 dark:border-border">
+            <p className="text-xs font-semibold text-destructive dark:text-destructive">سبب عدم النشر</p>
+            <p className="mt-1 text-sm leading-6 text-destructive/80 dark:text-destructive/80">
+              {article.reviewNotes?.trim() || "لم يسجل فريق التحرير سببًا لهذا القرار. يرجى التواصل عبر الاستفسارات."}
+            </p>
+          </div>
+        )}
+        {!needsChanges && !isInvalid && article.reviewNotes && article.reviewStatus !== "pending_review" && (
+          <div className="rounded-xl border bg-background/70 p-3">
+            <p className="text-xs font-semibold">ملاحظة فريق التحرير</p>
+            <p className="mt-1 text-sm leading-6 text-muted-foreground">{article.reviewNotes}</p>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
 }
 
 function IdeaCard({ idea, onStart }: { idea: WriterIdea; onStart: () => void }) {

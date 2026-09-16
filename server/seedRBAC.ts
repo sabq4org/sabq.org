@@ -52,6 +52,11 @@ export async function seedRBAC() {
     { code: "staff.update", label: "Update Staff", labelAr: "تعديل الكادر", module: "staff" },
     { code: "staff.delete", label: "Delete Staff", labelAr: "حذف أعضاء الكادر", module: "staff" },
 
+    // Staff profiles (ملف المنسوب الموحد) — admin + دور الموارد البشرية
+    { code: "staff_profiles.view", label: "View Staff Profiles", labelAr: "عرض ملفات المنسوبين", module: "hr" },
+    { code: "staff_profiles.manage", label: "Manage Staff Profiles", labelAr: "إدارة ملفات المنسوبين", module: "hr" },
+    { code: "staff_documents.view", label: "View Staff Documents & National ID", labelAr: "الاطلاع على وثائق المنسوبين والهوية", module: "hr" },
+
     // System permissions
     { code: "system.manage_roles", label: "Manage Roles", labelAr: "إدارة الأدوار", module: "system" },
     { code: "system.manage_settings", label: "Manage Settings", labelAr: "إدارة الإعدادات", module: "system" },
@@ -92,6 +97,16 @@ export async function seedRBAC() {
     { code: "tasks.delete_any", label: "Delete Any Task", labelAr: "حذف أي مهمة", module: "tasks" },
     { code: "tasks.assign", label: "Assign Tasks", labelAr: "تعيين مهام للآخرين", module: "tasks" },
     { code: "tasks.view_analytics", label: "View Task Analytics", labelAr: "عرض تحليلات المهام", module: "tasks" },
+
+    // Social Publishing (X) - النشر الاجتماعي
+    { code: "social_publish.view", label: "View Social Publishing", labelAr: "عرض واجهة النشر الاجتماعي", module: "social_publish" },
+    { code: "social_publish.create", label: "Create Social Post Draft", labelAr: "إنشاء مسودة منشور اجتماعي", module: "social_publish" },
+    { code: "social_publish.ai_generate", label: "AI Generate Social Post", labelAr: "توليد نص المنشور بالذكاء", module: "social_publish" },
+    { code: "social_publish.publish_now", label: "Publish Now on X", labelAr: "النشر الفوري على X", module: "social_publish" },
+    { code: "social_publish.schedule", label: "Schedule Social Post", labelAr: "جدولة منشور على X", module: "social_publish" },
+    { code: "social_publish.manage_scheduled", label: "Manage Scheduled Posts", labelAr: "تعديل/إلغاء المنشورات المجدولة", module: "social_publish" },
+    { code: "social_publish.view_log", label: "View Social Publish Log", labelAr: "عرض سجل النشر الاجتماعي", module: "social_publish" },
+    { code: "social_publish.manage_accounts", label: "Manage Social Accounts", labelAr: "إدارة حسابات المنصات وربطها", module: "social_publish" },
   ];
 
   const insertedPermissions = await db
@@ -156,6 +171,12 @@ export async function seedRBAC() {
       isSystem: false,
     },
     {
+      name: "hr",
+      nameAr: "موارد بشرية",
+      description: "Staff profiles and documents only (ملفات المنسوبين فقط)",
+      isSystem: false,
+    },
+    {
       name: "reader",
       nameAr: "قارئ",
       description: "Basic reader access",
@@ -185,6 +206,7 @@ export async function seedRBAC() {
       "users.view", "users.update", "users.suspend", "users.change_role",
       "comments.view", "comments.approve", "comments.reject", "comments.delete",
       "staff.view", "staff.create", "staff.update", "staff.delete",
+      "staff_profiles.view", "staff_profiles.manage", "staff_documents.view",
       "system.view_logs", "system.manage_themes",
       "muqtarab.manage", "muqtarab.publish",
       "shorts:view", "shorts:create", "shorts:edit", "shorts:delete", "shorts:manage",
@@ -240,6 +262,14 @@ export async function seedRBAC() {
       "muqtarab.own.topic.submit",
     ],
 
+    // الموارد البشرية: ملفات المنسوبين ووثائقهم فقط (قرار المالك 2026-07-21)
+    hr: [
+      "staff_profiles.view",
+      "staff_profiles.manage",
+      "staff_documents.view",
+      "users.view",
+    ],
+
     reader: [
       "articles.view",
       "categories.view",
@@ -265,12 +295,13 @@ export async function seedRBAC() {
   }
 
   if (rolePermissionValues.length > 0) {
-    await db
+    const insertedMappings = await db
       .insert(rolePermissions)
       .values(rolePermissionValues)
-      .onConflictDoNothing();
+      .onConflictDoNothing()
+      .returning({ id: rolePermissions.id });
 
-    console.log(`✅ Created ${rolePermissionValues.length} role-permission mappings`);
+    console.log(`✅ Created ${insertedMappings.length} role-permission mappings (${rolePermissionValues.length - insertedMappings.length} already existed)`);
   }
 
   return { allRoles, allPermissions };

@@ -9,9 +9,13 @@
 
 import { createGoogleGenAI } from "../utils/googleGenAi";
 import { ObjectStorageService } from "../objectStorage";
+import { assertSafeImageUrl } from "../utils/safeImageUrl";
+import { parseVisualAiJson } from "./visualAiJson";
 import pRetry from "p-retry";
 import https from "https";
 import http from "http";
+
+export { parseVisualAiJson } from "./visualAiJson";
 
 // Initialize Gemini client with API key
 const apiKey = process.env.GEMINI_API_KEY || process.env.AI_INTEGRATIONS_GEMINI_API_KEY;
@@ -100,10 +104,14 @@ export interface ImageAnalysisResult {
  * Download image from URL to base64
  */
 async function downloadImageToBase64(url: string): Promise<string> {
+  // SSRF guard: a user-supplied imageUrl must not let the server reach internal
+  // services or the cloud metadata endpoint (169.254.169.254). Only allowlisted
+  // https media hosts pass; anything else throws (security audit S-02).
+  const safeUrl = assertSafeImageUrl(url);
   return new Promise((resolve, reject) => {
-    const client = url.startsWith('https') ? https : http;
-    
-    client.get(url, (response) => {
+    const client = safeUrl.startsWith('https') ? https : http;
+
+    client.get(safeUrl, (response) => {
       if (response.statusCode !== 200) {
         reject(new Error(`Failed to download image: ${response.statusCode}`));
         return;
@@ -160,10 +168,10 @@ export async function analyzeImage(request: ImageAnalysisRequest): Promise<Image
     
     if (request.generateAltText) {
       promptParts.push(`
-توليد Alt Text بثلاث لغات:
-- عربي: وصف دقيق ومختصر للصورة (25-50 كلمة)
-- English: Precise and concise description (25-50 words)
-- اردو: ایک درست اور مختصر تفصیل (25-50 الفاظ)
+توليد Alt Text بثلاث لغات (قصير جداً — 12-25 كلمة لكل لغة، لا أكثر):
+- عربي: وصف دقيق ومختصر
+- English: Precise and concise
+- اردو: درست اور مختصر
       `);
     }
     
@@ -210,14 +218,15 @@ ${promptParts.join('\n\n')}
   "matchingSuggestions": ["Use image with more focus on technology"]
 }
 
-ملاحظة: اجب بـ JSON فقط بدون أي نص إضافي.
+ملاحظة: اجب بـ JSON فقط بدون أي نص إضافي وبدون أسوار markdown. اجعل الأوصاف قصيرة حتى لا يُقطع الرد.
 `;
     
-    // Call Gemini 3 Pro Image with retry logic
-    const response = await pRetry(
+    // توليد + تحليل داخل نفس حلقة إعادة المحاولة (فشل JSON يُعاد توليده)
+    const analysisData = await pRetry(
       async () => {
+        let response: any;
         try {
-          return await geminiClient.models.generateContent({
+          response = await geminiClient.models.generateContent({
             model: "gemini-3-pro-image-preview",
             contents: [
               {
@@ -237,7 +246,8 @@ ${promptParts.join('\n\n')}
             ],
             config: {
               temperature: 0.2, // Low temperature for more consistent JSON
-              maxOutputTokens: 2048,
+              // 2048 كان يقطع الردود الثلاثية اللغات → JSON ناقص
+              maxOutputTokens: 4096,
             }
           });
         } catch (error: any) {
@@ -249,6 +259,29 @@ ${promptParts.join('\n\n')}
           abortError.name = 'AbortError';
           throw abortError;
         }
+
+        const candidate = response.candidates?.[0];
+        const finishReason = candidate?.finishReason || candidate?.finish_reason;
+        const textPart = candidate?.content?.parts?.find((part: any) => part.text);
+
+        if (!textPart?.text) {
+          throw new Error("No response from AI model");
+        }
+
+        const parsed = parseVisualAiJson(textPart.text);
+        if (!parsed) {
+          console.error(
+            `[Visual AI] Failed to parse JSON response (finishReason=${finishReason}):`,
+            textPart.text.slice(0, 500),
+          );
+          throw new Error("Failed to parse AI JSON");
+        }
+
+        if (finishReason && String(finishReason).toUpperCase().includes("MAX")) {
+          console.warn(`[Visual AI] Response truncated (finishReason=${finishReason}); used repaired/partial JSON`);
+        }
+
+        return parsed;
       },
       {
         retries: 3,
@@ -262,34 +295,6 @@ ${promptParts.join('\n\n')}
     );
     
     const processingTime = Date.now() - startTime;
-    
-    // Extract text response
-    const candidate = response.candidates?.[0];
-    const textPart = candidate?.content?.parts?.find((part: any) => part.text);
-    
-    if (!textPart?.text) {
-      console.error(`[Visual AI] No text response from Gemini`);
-      return {
-        success: false,
-        processingTime,
-        error: "No response from AI model"
-      };
-    }
-    
-    // Parse JSON response
-    let analysisData: any;
-    try {
-      // Extract JSON from response (handle markdown code blocks)
-      const jsonText = textPart.text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-      analysisData = JSON.parse(jsonText);
-    } catch (error) {
-      console.error(`[Visual AI] Failed to parse JSON response:`, textPart.text);
-      return {
-        success: false,
-        processingTime,
-        error: "Failed to parse AI response"
-      };
-    }
     
     console.log(`[Visual AI] Analysis completed in ${processingTime}ms`);
     
@@ -324,7 +329,8 @@ export interface NewsImageGenerationRequest {
   articleSummary?: string;
   category: string;
   language: "ar" | "en" | "ur";
-  style?: "photorealistic" | "illustration" | "abstract" | "infographic";
+  /** slug نمط من السجلّ المركزي، أو قيمة قديمة (photorealistic/…) تُترجم تلقائيًا */
+  style?: string;
   mood?: "breaking" | "neutral" | "positive" | "serious" | "dramatic";
 }
 
@@ -336,6 +342,12 @@ export interface NewsImageGenerationResult {
   generationTime?: number;
   cost?: number;
   error?: string;
+  /** البرومبت الفعلي المرسل للنموذج — يُخزَّن كأثر (provenance) لدى المستدعين */
+  finalPrompt?: string;
+  /** النمط والنموذج المستخدمان فعليًا بعد الحسم من السجلّ */
+  styleSlug?: string;
+  variantSlug?: string;
+  model?: string;
 }
 
 /**
@@ -346,8 +358,8 @@ export async function generateNewsImage(request: NewsImageGenerationRequest): Pr
   
   try {
     console.log(`[Visual AI] Generating news image for: ${request.articleTitle}`);
-    
-    // Build smart prompt based on article
+
+    // خريطة الأسلوب القديمة — تبقى احتياطًا أخيرًا إن تعذر الوصول لسجلّ الأنماط
     const styleGuide: Record<string, string> = {
       photorealistic:
         "true photorealistic photography, natural lighting, shallow depth of field, " +
@@ -357,7 +369,7 @@ export async function generateNewsImage(request: NewsImageGenerationRequest): Pr
       abstract: "abstract artistic representation, contemporary design",
       infographic: "infographic style, data visualization, modern design"
     };
-    
+
     const moodGuide: Record<string, string> = {
       breaking: "dramatic, urgent, attention-grabbing",
       neutral: "balanced, professional, informative",
@@ -365,47 +377,78 @@ export async function generateNewsImage(request: NewsImageGenerationRequest): Pr
       serious: "serious tone, professional, authoritative",
       dramatic: "high contrast, dramatic lighting, impactful"
     };
-    
-    const style = request.style || "photorealistic";
+
+    const requestedStyle = request.style || "photorealistic";
     const mood = request.mood || "neutral";
-    
-    const languageContext = request.language === "ar" ? "Arabic news context" :
-                           request.language === "ur" ? "Urdu news context" :
-                           "English news context";
-    
-    const prompt = `
-Create a professional news image for this article:
-Title: ${request.articleTitle}
-${request.articleSummary ? `Summary: ${request.articleSummary}` : ''}
-Category: ${request.category}
-Language: ${languageContext}
 
-Style: ${styleGuide[style]}
-Mood: ${moodGuide[mood]}
+    // حسم الأسلوب من سجلّ الأنماط المركزي (يترجم القيم القديمة تلقائيًا،
+    // ويطابق التوجيه السياقي — مثل الواقعية الغذائية/الطبية — عبر تصنيف الخبر)
+    let styleText = styleGuide[requestedStyle] || styleGuide.photorealistic;
+    let styleNegativePrompt: string | undefined;
+    let styleModel: string | undefined;
+    let styleSlugUsed: string | undefined;
+    let variantSlugUsed: string | undefined;
+    let styleParams: { aspectRatio?: string; imageSize?: string } = {};
+    let resolvedStyleForPrompt: { style: import("@shared/imageStyles").ImageStyle; variant: import("@shared/imageStyles").ImageStyleContextVariant | null } | null = null;
+    try {
+      const { resolveGenerationStyle } = await import("./imageStyleService");
+      const { suggestOptimalModel, detectImageIntent } = await import("./imageModelRouter");
+      const resolved = await resolveGenerationStyle(requestedStyle, request.category);
+      resolvedStyleForPrompt = { style: resolved.style, variant: resolved.variant };
+      styleText = resolved.variant?.stylePrompt ?? resolved.style.stylePrompt;
+      styleNegativePrompt = resolved.variant?.negativePrompt ?? resolved.style.negativePrompt;
+      const detectedIntent = detectImageIntent(request.articleTitle, request.category);
+      const suggested = suggestOptimalModel(detectedIntent, resolved.style.slug, request.category);
+      styleModel = resolved.model || suggested.model;
+      styleSlugUsed = resolved.style.slug;
+      variantSlugUsed = resolved.variant?.slug;
+      styleParams = resolved.style.params || {};
+    } catch (styleError) {
+      console.warn("[Visual AI] Style registry unavailable, using legacy style map:", styleError);
+    }
 
-CRITICAL REQUIREMENTS:
-- ABSOLUTELY NO TEXT, LETTERS, WORDS, NUMBERS, CHARACTERS, OR TYPOGRAPHY OF ANY KIND IN THE IMAGE
-- NO Arabic text, NO English text, NO text in any language whatsoever
-- NO watermarks, NO logos, NO signs with writing, NO banners with text
-- NO newspapers, books, or any objects containing visible text
-- The image must be 100% text-free and purely visual
-- High quality, suitable for news publication
-- Culturally appropriate for ${languageContext}
-- Professional and credible
-- 16:9 aspect ratio
-- Focus on visual storytelling through imagery only
-- Clean, modern composition with no textual elements
-`;
+    // البرومبت النهائي يُركَّب كالمسار اليدوي تمامًا (composeImagePrompt): مضمون =
+    // وصف مشهد واحد ملموس يكتبه نموذج نصي، + نمط الصورة + الحرّاس العامة.
+    // القالب السابق (Title/Category/Style/Mood كقائمة) كان يدفع النموذج إلى خرائط
+    // وأيقونات وبوصلات ونصوص مشوّهة (خبر الأمطار 2026-08-28).
+    const { generateSceneBrief, buildSceneContent, NEWS_IMAGE_AVOID_LIST } = await import("./imageSceneBrief");
+    const { composeImagePrompt } = await import("@shared/imageStyles");
+    const brief = await generateSceneBrief({
+      title: request.articleTitle,
+      summary: request.articleSummary,
+      category: request.category,
+      language: request.language,
+    });
+    console.log(`[Visual AI] Scene brief (${brief.source}): ${brief.scene.substring(0, 120)}…`);
+
+    let prompt: string;
+    if (resolvedStyleForPrompt) {
+      const composed = composeImagePrompt({
+        style: resolvedStyleForPrompt.style,
+        variant: resolvedStyleForPrompt.variant,
+        content: buildSceneContent(brief.scene),
+        userInstructions: `Mood: ${moodGuide[mood]}`,
+      });
+      prompt = composed.prompt;
+      styleNegativePrompt = [composed.negativePrompt, NEWS_IMAGE_AVOID_LIST].filter(Boolean).join(", ");
+    } else {
+      prompt = `${buildSceneContent(brief.scene)}\n\nVisual style:\n${styleText}\nMood: ${moodGuide[mood]}\n\nCRITICAL: absolutely no text, letters, words, numbers, or typography of any kind in the image.`;
+      styleNegativePrompt = [styleNegativePrompt, NEWS_IMAGE_AVOID_LIST].filter(Boolean).join(", ");
+    }
     
-    // Use Nano Banana Pro service (reuse existing service)
+    // Use Nano Banana service (reuse existing service)
     const { generateImage } = await import("./nanoBananaService");
-    
+
     const result = await generateImage({
       prompt,
-      aspectRatio: "16:9",
-      imageSize: "2K",
+      negativePrompt: styleNegativePrompt,
+      model: styleModel,
+      aspectRatio: (styleParams.aspectRatio as any) || "16:9",
+      imageSize: (styleParams.imageSize as any) || "2K",
       numImages: 1,
-      enableSearchGrounding: true, // Use Google Search for factual accuracy
+      // كان true: أداة البحث تدفع النموذج إلى «حقائق» بصرية (خرائط بأسماء المناطق
+      // ونصوص) بدل مشهد صحفي — المسار اليدوي لا يفعّلها، ونتائجه هي المرجع.
+      enableSearchGrounding: false,
       enableThinking: true
     });
     
@@ -425,14 +468,18 @@ CRITICAL REQUIREMENTS:
     const uploaded = await uploadImageToStorage(result.imageData, fileName);
     
     console.log(`[Visual AI] News image generated and optimized in ${generationTime}ms`);
-    
+
     return {
       success: true,
       imageUrl: uploaded.url,
       thumbnailUrl: uploaded.thumbnailUrl,
       blurDataUrl: uploaded.blurDataUrl,
       generationTime,
-      cost: result.cost
+      cost: result.cost,
+      finalPrompt: prompt,
+      styleSlug: styleSlugUsed,
+      variantSlug: variantSlugUsed,
+      model: result.metadata?.model || styleModel
     };
     
   } catch (error: any) {

@@ -1,5 +1,10 @@
 import java.util.Properties
 
+val analyticsDebugEnabled = providers.gradleProperty("analyticsDebugEnabled")
+    .map { it.equals("true", ignoreCase = true) }
+    .orElse(false)
+    .get()
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -9,13 +14,35 @@ plugins {
     alias(libs.plugins.hilt)
 }
 
+// Every release entry point validates the native Firebase app configuration.
+val firebaseConfigCandidates = listOf(file("src/debug/google-services.json"),
+    file("src/release/google-services.json"), file("google-services.json"))
+if (firebaseConfigCandidates.any { it.exists() }) {
+    apply(plugin = "com.google.gms.google-services")
+}
+val validateReleaseFirebase = tasks.register<Exec>("validateReleaseFirebase") {
+    val config = file("src/release/google-services.json").takeIf { it.exists() } ?: file("google-services.json")
+    commandLine("python3", rootProject.file("../scripts/verify-mobile-firebase-config.py"),
+        "--platform", "android", "--config", config, "--identity", "com.sabqorg.sabq")
+}
+val validateDebugFirebase = tasks.register<Exec>("validateDebugFirebase") {
+    val config = file("src/debug/google-services.json").takeIf { it.exists() } ?: file("google-services.json")
+    onlyIf { config.exists() }
+    commandLine("python3", rootProject.file("../scripts/verify-mobile-firebase-config.py"),
+        "--platform", "android", "--config", config, "--identity", "com.sabqorg.sabq.dev")
+}
+tasks.configureEach {
+    if (name == "preReleaseBuild") dependsOn(validateReleaseFirebase)
+    if (name == "preDebugBuild") dependsOn(validateDebugFirebase)
+}
+
 android {
     // Kotlin namespace stays at com.sabq.smart (where all the .kt
     // files live + the R class). The Play Store applicationId
     // (com.sabqorg.sabq) is independent — Android Gradle Plugin
     // supports this split without renaming source folders.
     namespace = "com.sabq.smart"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         // Play Store published bundles for com.sabqorg.sabq:
@@ -29,14 +56,18 @@ android {
         //   • 10.1.1 (142) — World Cup parity polish: adaptive theme on
         //     detail screens, dual same-time hero cards, home reorder
         //     آراء/مُقترب below latest, عمق section removed
-        //   • 10.1.3 (144) — this build (WC tournament tab + Arab teams
-        //     spotlight + predictions win celebration + live polling fixes)
+        //   • 10.1.3 (144) — WC tournament tab + Arab teams spotlight +
+        //     predictions win celebration + live polling fixes
+        //   • 10.1.5 (146) — Play production (targetSdk 35) — last API-35 build
+        //   • 10.1.6 (147) — Play target API 36 compliance (Android 16)
+        //   • 10.2.0 (148) — Play production (2026-08-03): KC+Roshn sections
+        //   • 10.2.1 (149) — KC predictions fix + opinion redesign + widget
         // versionCode strictly monotonic upward — Play rejects equal/lower.
         applicationId = "com.sabqorg.sabq"
         minSdk = 26
-        targetSdk = 35
-        versionCode = 144
-        versionName = "10.1.3"
+        targetSdk = 36
+        versionCode = 151
+        versionName = "10.3.4"
 
         // Locks the rendering locale to Arabic. We still honour the
         // OS-level RTL config in code, but resource fallback is forced
@@ -45,14 +76,6 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
-
-        // GA4 Measurement Protocol credentials — Sabq Android App (MP) stream
-        // in the Sabq GA3 - GA4 property. Shared with web (gtag.js) and iOS
-        // (MP) so events unify in Reports → Engagement → Events.
-        // These values are also visible in the on-the-wire HTTPS POST, so
-        // committing them is no different from shipping them inside the APK.
-        buildConfigField("String", "GA4_MEASUREMENT_ID", "\"G-XPS0W1N9CQ\"")
-        buildConfigField("String", "GA4_API_SECRET", "\"8rfI2G7RTxW7IZ4iIM-D-A\"")
 
         // OAuth — Google Web Client ID is what Credential Manager uses to
         // sign Google ID tokens that our backend can verify (the backend
@@ -72,6 +95,7 @@ android {
             "GOOGLE_WEB_CLIENT_ID",
             "\"664097075837-tk2a6h79sovkgu75teukvcb3bv7gfjpr.apps.googleusercontent.com\"",
         )
+        buildConfigField("boolean", "ANALYTICS_DEBUG_ENABLED", analyticsDebugEnabled.toString())
     }
 
     // Production signing config reads from local.properties (gitignored)
@@ -112,8 +136,10 @@ android {
             // testing. Drop the suffix when shipping to Play Store.
             applicationIdSuffix = ".dev"
             isMinifyEnabled = false
+            manifestPlaceholders["analyticsDeactivated"] = if (analyticsDebugEnabled) "false" else "true"
         }
         release {
+            manifestPlaceholders["analyticsDeactivated"] = "false"
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(
@@ -157,8 +183,12 @@ android {
 }
 
 dependencies {
+    testImplementation(libs.junit)
+
     // Core
     implementation(libs.androidx.core.ktx)
+    // ترقية صريحة فوق fragment القديمة التي تجرّها play-services/appcompat
+    implementation(libs.androidx.fragment.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)
@@ -201,15 +231,17 @@ dependencies {
     // Image loading
     implementation(libs.coil.compose)
 
+    // Home-screen widget (Glance)
+    implementation(libs.androidx.glance.appwidget)
+    implementation(libs.androidx.glance.material3)
+
     // Storage
-    implementation(libs.androidx.room.runtime)
-    implementation(libs.androidx.room.ktx)
-    ksp(libs.androidx.room.compiler)
     implementation(libs.androidx.datastore.preferences)
 
     // Push (FCM)
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.messaging)
+    implementation(libs.firebase.analytics)
 
     // Media (audio)
     implementation(libs.androidx.media3.exoplayer)

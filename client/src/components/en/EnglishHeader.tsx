@@ -200,7 +200,7 @@ export function EnglishHeader({ user, onMenuClick }: EnglishHeaderProps) {
                       </a>
                     </DropdownMenuItem>
                     <DropdownMenuItem asChild>
-                      <a href="/en/notification-settings" className="flex w-full items-center cursor-pointer" data-testid="link-notification-settings-mobile">
+                      <a href="/en/settings/notifications" className="flex w-full items-center cursor-pointer" data-testid="link-notification-settings-mobile">
                         <Bell className="mr-2 h-4 w-4" />
                         Notification Settings
                       </a>
@@ -287,7 +287,7 @@ export function EnglishHeader({ user, onMenuClick }: EnglishHeaderProps) {
                       </a>
                     </DropdownMenuItem>
                     <DropdownMenuItem asChild>
-                      <a href="/en/notification-settings" className="flex w-full items-center cursor-pointer" data-testid="link-notification-settings">
+                      <a href="/en/settings/notifications" className="flex w-full items-center cursor-pointer" data-testid="link-notification-settings">
                         <Bell className="mr-2 h-4 w-4" />
                         Notification Settings
                       </a>

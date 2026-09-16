@@ -11,12 +11,23 @@ import {
   users,
   type UpsertOpinionWriterSchedule,
 } from "@shared/schema";
+import { OPINION_WRITERS_PER_DAY_CAP } from "@shared/opinionWriterConstants";
+import {
+  mediaLicenseFlags,
+  resolveMediaLicenseReviewStatus,
+} from "./mediaLicenseService";
+
+export { OPINION_WRITERS_PER_DAY_CAP };
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 // السعودية بلا توقيت صيفي — إزاحة ثابتة +03:00
 const RIYADH_OFFSET_MS = 3 * 60 * 60 * 1000;
 // الحد الأدنى بين مقالتين للكاتب نفسه (أسبوع مع تسامح ساعات)
 const MIN_GAP_MS = 6 * DAY_MS + 12 * 60 * 60 * 1000;
+/** يجب أن تصل المقالة قبل موعد النشر بهذا الهامش */
+const SUBMIT_LEAD_MS = 2 * DAY_MS;
+/** نافذة التذكير: قبل آخر موعد للإرسال (وليس بعد فواته) */
+const REMINDER_WINDOW_MS = 2 * DAY_MS;
 
 /**
  * مقالة «أُرسلت» وتنتظر التحرير: مراجعة معلّقة، أو مسودة موبايل قديمة
@@ -53,6 +64,23 @@ export type OpinionWriterSummary = {
   nextScheduled: { id: string; title: string; scheduledAt: string } | null;
   nextSlot: string | null;
   commitment: "ok" | "due_soon" | "late" | "awaiting_first" | "unassigned";
+  /** الترخيص المهني (هيئة تنظيم الإعلام) المرفوع من مساحة الكاتب */
+  mediaLicense: {
+    /** مرسل وضمن الصلاحية ومعتمد من الإدارة */
+    hasLicense: boolean;
+    expired: boolean;
+    /** ساري ويتبقّى شهران أو أقل */
+    expiringSoon: boolean;
+    /** الإدارة طلبت إعادة رفع الملف */
+    needsCorrection: boolean;
+    /** أعاد الرفع وينتظر موافقة الإدارة */
+    pendingReview: boolean;
+    adminNote: string | null;
+    number: string | null;
+    submittedAt: string | null;
+    expiresAt: string | null;
+    hasFile: boolean;
+  };
 };
 
 /**
@@ -61,9 +89,22 @@ export type OpinionWriterSummary = {
  */
 function parseDbTimestamp(v: string | Date | null | undefined): Date | null {
   if (!v) return null;
-  if (v instanceof Date) return v;
-  const s = v.includes("T") ? v : v.replace(" ", "T");
-  return new Date(/(?:[zZ]|[+-]\d\d:?\d\d)$/.test(s) ? s : `${s}Z`);
+  const d =
+    v instanceof Date
+      ? v
+      : new Date(
+          (() => {
+            const s = v.includes("T") ? v : v.replace(" ", "T");
+            return /(?:[zZ]|[+-]\d\d:?\d\d)$/.test(s) ? s : `${s}Z`;
+          })(),
+        );
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/** toISOString آمن — لا يُسقط قائمة الكتّاب بسبب تاريخ فاسد في صف واحد. */
+function toIsoOrNull(v: string | Date | null | undefined): string | null {
+  const d = parseDbTimestamp(v);
+  return d ? d.toISOString() : null;
 }
 
 function riyadhDateParts(d: Date): { y: number; m: number; d: number; weekday: number } {
@@ -80,7 +121,11 @@ function riyadhDateParts(d: Date): { y: number; m: number; d: number; weekday: n
 function riyadhDateTime(y: number, m: number, d: number, publishTime: string): Date {
   const mm = String(m).padStart(2, "0");
   const dd = String(d).padStart(2, "0");
-  return new Date(`${y}-${mm}-${dd}T${publishTime}:00+03:00`);
+  // اقبل HH:mm أو HH:mm:ss — غير ذلك → 06:00 افتراضي
+  const time = /^([01]?\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/.test(publishTime.trim())
+    ? publishTime.trim().slice(0, 5)
+    : "06:00";
+  return new Date(`${y}-${mm}-${dd}T${time}:00+03:00`);
 }
 
 /**
@@ -130,6 +175,13 @@ async function fetchWriterUsers(writerId?: string) {
       profileImageUrl: users.profileImageUrl,
       jobTitle: users.jobTitle,
       gender: users.gender,
+      mediaLicenseNumber: users.mediaLicenseNumber,
+      mediaLicenseFileKey: users.mediaLicenseFileKey,
+      mediaLicenseSubmittedAt: users.mediaLicenseSubmittedAt,
+      mediaLicenseExpiresAt: users.mediaLicenseExpiresAt,
+      mediaLicenseAdminNote: users.mediaLicenseAdminNote,
+      mediaLicenseCorrectionRequestedAt: users.mediaLicenseCorrectionRequestedAt,
+      mediaLicenseReviewStatus: users.mediaLicenseReviewStatus,
       scheduleWeekday: opinionWriterSchedules.weekday,
       schedulePublishTime: opinionWriterSchedules.publishTime,
       scheduleActive: opinionWriterSchedules.active,
@@ -230,18 +282,33 @@ export async function listOpinionWriters(): Promise<OpinionWriterSummary[]> {
     // فترة سماح: تخصيص اليوم حديث (< أسبوع) لا يجعل الكاتب "متأخراً" فوراً
     const scheduleIsFresh =
       w.scheduleCreatedAt != null && now.getTime() - w.scheduleCreatedAt.getTime() < 7 * DAY_MS;
+    const submitDeadlineMs = nextSlot ? nextSlot.getTime() - SUBMIT_LEAD_MS : null;
     let commitment: OpinionWriterSummary["commitment"];
     if (!schedule || !schedule.active) commitment = "unassigned";
     else if (!lastPublishedAt && !hasUpcoming) commitment = "awaiting_first";
     else if (hasUpcoming) commitment = "ok";
     else if (
       !scheduleIsFresh &&
-      lastPublishedAt &&
-      now.getTime() - lastPublishedAt.getTime() > 8 * DAY_MS
+      ((submitDeadlineMs != null && now.getTime() >= submitDeadlineMs) ||
+        (lastPublishedAt && now.getTime() - lastPublishedAt.getTime() > 8 * DAY_MS))
     )
       commitment = "late";
-    else if (nextSlot && nextSlot.getTime() - now.getTime() <= 2 * DAY_MS) commitment = "due_soon";
+    else if (
+      submitDeadlineMs != null &&
+      now.getTime() < submitDeadlineMs &&
+      submitDeadlineMs - now.getTime() <= REMINDER_WINDOW_MS
+    )
+      commitment = "due_soon";
     else commitment = "ok";
+
+    const submitted = Boolean(
+      w.mediaLicenseNumber && w.mediaLicenseFileKey && w.mediaLicenseSubmittedAt,
+    );
+    const reviewStatus = resolveMediaLicenseReviewStatus(w);
+    const needsCorrection = reviewStatus === "needs_correction";
+    const pendingReview = reviewStatus === "pending_review";
+    const licenseFlags = mediaLicenseFlags(submitted, w.mediaLicenseExpiresAt ?? null, now);
+    const hasLicense = licenseFlags.hasLicense && reviewStatus === "approved";
 
     return {
       id: w.id,
@@ -254,27 +321,54 @@ export async function listOpinionWriters(): Promise<OpinionWriterSummary[]> {
       publishedCount: s?.publishedCount ?? 0,
       pendingCount: s?.pendingCount ?? 0,
       totalViews: s?.totalViews ?? 0,
-      lastArticle:
-        last && last.publishedAt
-          ? {
-              id: last.id,
-              title: last.title,
-              slug: last.slug,
-              publishedAt: new Date(last.publishedAt).toISOString(),
-            }
-          : null,
-      nextScheduled:
-        next && next.scheduledAt
-          ? {
-              id: next.id,
-              title: next.title,
-              scheduledAt: new Date(next.scheduledAt).toISOString(),
-            }
-          : null,
-      nextSlot: nextSlot ? nextSlot.toISOString() : null,
+      lastArticle: (() => {
+        const publishedAt = toIsoOrNull(last?.publishedAt);
+        if (!last || !publishedAt) return null;
+        return {
+          id: last.id,
+          title: last.title,
+          slug: last.slug,
+          publishedAt,
+        };
+      })(),
+      nextScheduled: (() => {
+        const scheduledAt = toIsoOrNull(next?.scheduledAt);
+        if (!next || !scheduledAt) return null;
+        return {
+          id: next.id,
+          title: next.title,
+          scheduledAt,
+        };
+      })(),
+      nextSlot: toIsoOrNull(nextSlot),
       commitment,
+      mediaLicense: {
+        hasLicense,
+        expired: licenseFlags.expired,
+        expiringSoon: licenseFlags.expiringSoon && reviewStatus === "approved",
+        needsCorrection,
+        pendingReview,
+        adminNote:
+          needsCorrection || pendingReview
+            ? w.mediaLicenseAdminNote?.trim() || null
+            : null,
+        number: w.mediaLicenseNumber ?? null,
+        submittedAt: toIsoOrNull(w.mediaLicenseSubmittedAt),
+        expiresAt: licenseFlags.expiresAtIso,
+        hasFile: Boolean(w.mediaLicenseFileKey),
+      },
     };
   });
+}
+
+/** مفتاح ملف الترخيص الخاص — للأدمن فقط عبر رابط موقّت. */
+export async function getWriterMediaLicenseFileKey(writerId: string): Promise<string | null> {
+  const [row] = await db
+    .select({ mediaLicenseFileKey: users.mediaLicenseFileKey })
+    .from(users)
+    .where(eq(users.id, writerId))
+    .limit(1);
+  return row?.mediaLicenseFileKey ?? null;
 }
 
 export async function upsertWriterSchedule(
@@ -328,6 +422,11 @@ export async function getWriterDayLoads(): Promise<number[]> {
   return loads;
 }
 
+/** هل امتلأ يوم النشر؟ (≥ حد المقالات/الكتّاب لكل يوم) */
+export function isWriterDayFull(load: number): boolean {
+  return load >= OPINION_WRITERS_PER_DAY_CAP;
+}
+
 /**
  * اختيار الكاتب يومه بنفسه — مرة واحدة فقط: أي صف موجود (حتى المعطَّل،
  * لأنه قرار إداري) يمنع الاختيار الذاتي ويُحال الكاتب للإدارة.
@@ -351,6 +450,14 @@ export async function selfAssignWriterSchedule(
       message: "يومك محدد مسبقاً — لتغييره تواصل مع إدارة التحرير",
     };
   }
+  const loads = await getWriterDayLoads();
+  if (isWriterDayFull(loads[weekday] ?? 0)) {
+    return {
+      ok: false,
+      status: 409,
+      message: `يوم النشر ممتلئ (${OPINION_WRITERS_PER_DAY_CAP}/${OPINION_WRITERS_PER_DAY_CAP}) — اختر يوماً آخر`,
+    };
+  }
   const schedule = await upsertWriterSchedule(writerId, { weekday }, writerId);
   return { ok: true, schedule };
 }
@@ -371,31 +478,67 @@ export async function getNextSlotForWriter(writerId: string): Promise<{
   publishTime: string;
   nextSlot: string;
 } | null> {
-  const [schedule] = await db
+  const slots = await getNextSlotsForWriters([writerId]);
+  return slots[writerId] ?? null;
+}
+
+/**
+ * موعد الأسبوع القادم لدفعة كتّاب — قائمة المسودات تستدعيه مرة واحدة
+ * بدل طلب next-slot لكل صف.
+ */
+export async function getNextSlotsForWriters(
+  writerIds: string[],
+): Promise<Record<string, { weekday: number; publishTime: string; nextSlot: string }>> {
+  const unique = [...new Set(writerIds.filter((id) => typeof id === "string" && id.length > 0))];
+  if (unique.length === 0) return {};
+
+  const schedules = await db
     .select()
     .from(opinionWriterSchedules)
-    .where(eq(opinionWriterSchedules.writerId, writerId))
-    .limit(1);
-  if (!schedule || !schedule.active) return null;
+    .where(and(
+      inArray(opinionWriterSchedules.writerId, unique),
+      eq(opinionWriterSchedules.active, true),
+    ));
+  if (schedules.length === 0) return {};
 
-  const [floorRow] = await db
+  const scheduledWriterIds = schedules.map((row) => row.writerId);
+  const floorRows = await db
     .select({
+      authorId: articles.authorId,
       floor: sql<string | null>`greatest(
         max(${articles.publishedAt}) filter (where ${articles.status} = 'published'),
         max(${articles.scheduledAt}) filter (where ${articles.status} = 'scheduled')
       )`,
     })
     .from(articles)
-    .where(and(eq(articles.articleType, "opinion"), eq(articles.authorId, writerId)));
+    .where(and(
+      eq(articles.articleType, "opinion"),
+      inArray(articles.authorId, scheduledWriterIds),
+    ))
+    .groupBy(articles.authorId);
 
-  const floor = parseDbTimestamp(floorRow?.floor);
-  const nextSlot = computeNextSlot(schedule.weekday, schedule.publishTime, floor);
-  if (!nextSlot) return null;
-  return {
-    weekday: schedule.weekday,
-    publishTime: schedule.publishTime,
-    nextSlot: nextSlot.toISOString(),
-  };
+  const floorByWriter = new Map(
+    floorRows.map((row) => [row.authorId, parseDbTimestamp(row.floor)]),
+  );
+
+  const now = new Date();
+  const result: Record<string, { weekday: number; publishTime: string; nextSlot: string }> = {};
+  for (const schedule of schedules) {
+    if (result[schedule.writerId]) continue;
+    const nextSlot = computeNextSlot(
+      schedule.weekday,
+      schedule.publishTime,
+      floorByWriter.get(schedule.writerId) ?? null,
+      now,
+    );
+    if (!nextSlot) continue;
+    result[schedule.writerId] = {
+      weekday: schedule.weekday,
+      publishTime: schedule.publishTime,
+      nextSlot: nextSlot.toISOString(),
+    };
+  }
+  return result;
 }
 
 export type WriterArticleRow = {
@@ -572,18 +715,25 @@ export async function getWriterScheduleBanner(
   const nextSlot = computeNextSlot(schedule.weekday, schedule.publishTime, floor, now);
   if (!nextSlot) return null;
 
+  const submitDeadline = new Date(nextSlot.getTime() - SUBMIT_LEAD_MS);
+
   // فترة سماح: لا نُظهر "متأخر" لكاتب خُصص له يومه قبل أقل من أسبوع
   const scheduleIsFresh =
     schedule.createdAt != null && now.getTime() - schedule.createdAt.getTime() < 7 * DAY_MS;
   let state: WriterScheduleBanner["state"] = "ok";
   if (!hasUpcoming) {
+    // فات آخر موعد للإرسال → متأخر (حتى لو بقي وقت قبل لحظة النشر)
+    // التذكير فقط والمهلة ما زالت في المستقبل — يمنع «أرسلها قبل 18» ونحن في 20
     if (
       !scheduleIsFresh &&
-      lastPublishedAt &&
-      now.getTime() - lastPublishedAt.getTime() > 8 * DAY_MS
+      (now.getTime() >= submitDeadline.getTime() ||
+        (lastPublishedAt != null && now.getTime() - lastPublishedAt.getTime() > 8 * DAY_MS))
     ) {
       state = "late";
-    } else if (nextSlot.getTime() - now.getTime() <= 2 * DAY_MS) {
+    } else if (
+      now.getTime() < submitDeadline.getTime() &&
+      submitDeadline.getTime() - now.getTime() <= REMINDER_WINDOW_MS
+    ) {
       state = "reminder";
     }
   }
@@ -592,7 +742,7 @@ export async function getWriterScheduleBanner(
     weekday: schedule.weekday,
     publishTime: schedule.publishTime,
     nextPublishAt: nextSlot.toISOString(),
-    submitDeadline: new Date(nextSlot.getTime() - 2 * DAY_MS).toISOString(),
+    submitDeadline: submitDeadline.toISOString(),
     state,
     hasUpcoming,
     lastPublishedAt: lastPublishedAt ? lastPublishedAt.toISOString() : null,

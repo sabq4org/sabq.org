@@ -24,6 +24,10 @@ struct ArticleContentView: View {
     /// non-interactive behaviour.
     var onImageTap: ((URL) -> Void)? = nil
 
+    /// عرض عمود القراءة المقيس — تُنسب إليه صور المحرر ذات العرض الجزئي.
+    @State private var columnWidth: CGFloat = 0
+    @Environment(\.layoutDirection) private var layoutDirection
+
     private var design: Font.Design { useReaderFont ? .serif : .default }
 
     var body: some View {
@@ -40,6 +44,11 @@ struct ArticleContentView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .onGeometryChange(for: CGFloat.self) { proxy in
+            proxy.size.width
+        } action: { width in
+            if width > 0 { columnWidth = width }
+        }
     }
 
     @ViewBuilder
@@ -51,19 +60,58 @@ struct ArticleContentView: View {
             paragraph(runs)
         case .list(let ordered, let items):
             listView(ordered: ordered, items: items)
-        case .blockquote(let runs):
-            quoteView(runs)
-        case .image(let url, let alt, let caption):
-            imageBlock(url: url, alt: alt, caption: caption)
+        case .blockquote(let runs, let attribution):
+            quoteView(runs, attribution: attribution)
+        case .image(let url, let alt, let caption, let layout):
+            imageBlock(url: url, alt: alt, caption: caption, layout: layout)
         case .imageGallery(let images):
             galleryView(images: images)
         case .twitterEmbed(let url):
             tweetCard(url: url)
         case .videoEmbed(let provider, let embedURL, let sourceURL):
             videoCard(provider: provider, embedURL: embedURL, sourceURL: sourceURL)
+        case .whatsappCta(_, let phrase, let url):
+            whatsappCtaCard(phrase: phrase, url: url)
+        case .table(let header, let rows, let cardStyle):
+            tableView(header: header, rows: rows, cardStyle: cardStyle)
         case .divider:
             Divider().foregroundStyle(SabqTheme.outline.opacity(0.5))
         }
+    }
+
+    private func whatsappCtaCard(phrase: String, url: URL) -> some View {
+        Link(destination: url) {
+            HStack(spacing: 12) {
+                ZStack {
+                    Circle()
+                        .fill(Color.white.opacity(0.2))
+                        .frame(width: 44, height: 44)
+                    Image(systemName: "message.fill")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(.white)
+                }
+                Text(phrase)
+                    .font(SabqFonts.app(size: 16, weight: .bold))
+                    .foregroundStyle(.white)
+                    .multilineTextAlignment(.leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.85))
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
+            .background(
+                LinearGradient(
+                    colors: [Color(red: 0.145, green: 0.827, blue: 0.4), Color(red: 0.071, green: 0.549, blue: 0.494)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .shadow(color: Color(red: 0.071, green: 0.549, blue: 0.494).opacity(0.28), radius: 12, y: 6)
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: - Run rendering
@@ -127,15 +175,14 @@ struct ArticleContentView: View {
     }
 
     private func paragraph(_ runs: [InlineRun]) -> some View {
-        let attributed = InlineRunAttributing.attributedString(
+        // البناء الفعلي للنص المنسّق يحدث داخل الجسر عند تغيّر المدخلات فقط —
+        // لا هنا في كل إعادة رسم أثناء التمرير (تدقيق iOS 27، F01).
+        JustifiedAttributedText(
             runs: runs,
             baseSize: CGFloat(fontSize),
             baseWeight: .regular,
             useSerifReader: useReaderFont,
-            textColor: UIColor(SabqTheme.ink.opacity(0.92))
-        )
-        return JustifiedAttributedText(
-            attributed: attributed,
+            textColor: UIColor(SabqTheme.ink.opacity(0.92)),
             lineSpacing: CGFloat(lineSpacing) + 3
         )
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -160,7 +207,75 @@ struct ArticleContentView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func quoteView(_ runs: [InlineRun]) -> some View {
+    // MARK: - Table
+
+    /// جدول أصلي: صف رؤوس مظلّل، خطوط شعرية بين الصفوف، وأعمدة متساوية.
+    /// إن ضاقت الشاشة عن (عدد الأعمدة × الحد الأدنى) يتحوّل إلى تمرير أفقي
+    /// عبر ViewThatFits بدل هرس النص.
+    private func tableView(header: [[InlineRun]]?, rows: [[[InlineRun]]], cardStyle: Bool) -> some View {
+        let columnCount = max(header?.count ?? 0, rows.map(\.count).max() ?? 0, 1)
+        let minColumnWidth: CGFloat = 84
+        let grid = VStack(alignment: .leading, spacing: 0) {
+            if let header {
+                tableRow(header, columnCount: columnCount, minColumnWidth: minColumnWidth,
+                         isHeader: true, cardStyle: cardStyle)
+                    .background(SabqTheme.paleFill)
+            }
+            ForEach(Array(rows.enumerated()), id: \.offset) { idx, cells in
+                if header != nil || idx > 0 {
+                    Divider().overlay(SabqTheme.outline.opacity(0.6))
+                }
+                tableRow(cells, columnCount: columnCount, minColumnWidth: minColumnWidth,
+                         isHeader: false, cardStyle: cardStyle)
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(SabqTheme.outline.opacity(0.8), lineWidth: 1)
+        )
+
+        return ViewThatFits(in: .horizontal) {
+            grid.frame(maxWidth: .infinity)
+            ScrollView(.horizontal, showsIndicators: false) {
+                grid.frame(width: minColumnWidth * CGFloat(columnCount) + CGFloat(columnCount - 1))
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func tableRow(
+        _ cells: [[InlineRun]],
+        columnCount: Int,
+        minColumnWidth: CGFloat,
+        isHeader: Bool,
+        cardStyle: Bool
+    ) -> some View {
+        let cellSize = CGFloat(max(13, fontSize - 2))
+        return HStack(alignment: .top, spacing: 0) {
+            ForEach(0..<columnCount, id: \.self) { col in
+                let runs = col < cells.count ? cells[col] : []
+                let emphasised = isHeader || (cardStyle && col == 0)
+                renderText(runs: runs, baseSize: cellSize, baseWeight: emphasised ? .bold : .regular)
+                    .foregroundStyle(emphasised ? SabqTheme.ink : SabqTheme.ink.opacity(0.92))
+                    .multilineTextAlignment(.leading)
+                    .lineSpacing(3)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 9)
+                    // الحشو داخل الحد الأدنى — وإلا صار عرض العمود الفعلي
+                    // min+16 فيفشل شرط «يتسع» في ViewThatFits ويُقصّ الطرفان.
+                    .frame(minWidth: minColumnWidth, maxWidth: .infinity, alignment: .leading)
+                    .background(cardStyle && col == 0 && !isHeader ? SabqTheme.paleFill.opacity(0.6) : Color.clear)
+                if col < columnCount - 1 {
+                    Divider().overlay(SabqTheme.outline.opacity(0.6))
+                }
+            }
+        }
+        .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func quoteView(_ runs: [InlineRun], attribution: [InlineRun]?) -> some View {
         HStack(alignment: .top, spacing: 14) {
             RoundedRectangle(cornerRadius: 3, style: .continuous)
                 .fill(SabqTheme.primaryEnd)
@@ -177,6 +292,16 @@ struct ArticleContentView: View {
                     .multilineTextAlignment(.leading)
                     .lineSpacing(CGFloat(lineSpacing) + 4)
                     .fixedSize(horizontal: false, vertical: true)
+
+                // القائل في سطر مفرد بخط أصغر
+                if let attribution {
+                    (Text("— ").font(SabqFonts.app(size: CGFloat(fontSize - 2), weight: .semibold))
+                        + renderText(runs: attribution, baseSize: CGFloat(fontSize - 2), baseWeight: .semibold))
+                        .foregroundStyle(SabqTheme.ink.opacity(0.6))
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.top, 2)
+                }
             }
         }
         .padding(16)
@@ -197,8 +322,23 @@ struct ArticleContentView: View {
 
     // MARK: - Images
 
-    private func imageBlock(url: URL, alt: String?, caption: String?) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+    /// محاذاة الصورة داخل العمود. الويب يقصد الجهة البصرية (right = يمين
+    /// الشاشة)، بينما leading/trailing في SwiftUI تتبع اتجاه الواجهة — فنقلبها
+    /// تحت RTL كي يبقى «يمين» يمينًا.
+    private func alignment(for align: ImageAlign) -> Alignment {
+        switch align {
+        case .center: return .center
+        case .right: return layoutDirection == .rightToLeft ? .leading : .trailing
+        case .left: return layoutDirection == .rightToLeft ? .trailing : .leading
+        }
+    }
+
+    private func imageBlock(url: URL, alt: String?, caption: String?, layout: ImageLayout) -> some View {
+        // عرض جزئي من المحرر (25/33/50/75٪) → نضيّق الصورة إلى نسبة العمود
+        // المقيس ونحاذيها إلى الجهة المطلوبة (نقل تعديل الويب #1512).
+        let fraction = layout.widthFraction ?? 1
+        let targetWidth: CGFloat? = (fraction < 1 && columnWidth > 0) ? floor(columnWidth * fraction) : nil
+        return VStack(alignment: .leading, spacing: 8) {
             // Inline body image — the column is narrower than the hero,
             // so a 1600px decode is more than enough for retina and
             // halves the decode time + memory cost vs. the default 2400.
@@ -206,7 +346,7 @@ struct ArticleContentView: View {
                 placeholder
             }
             .frame(maxWidth: .infinity)
-            .frame(minHeight: 200)
+            .frame(minHeight: targetWidth == nil ? 200 : 200 * fraction)
             .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
             .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
             .onTapGesture {
@@ -225,6 +365,8 @@ struct ArticleContentView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
+        .frame(width: targetWidth)
+        .frame(maxWidth: .infinity, alignment: targetWidth == nil ? .leading : alignment(for: layout.align))
     }
 
     private var placeholder: some View {

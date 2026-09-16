@@ -14,9 +14,11 @@ import {
   getCompetition,
   getCompetitionHistory,
   getFixtures,
+  getLiveFixtures,
   getSeasonOutlook,
   getStandings,
   isSaudiLeagueConfigured,
+  overlayLiveFixturesForComp,
 } from "../services/saudiLeagueService";
 
 // دوري روشن في سجل بطولات saudiLeagueService (كان يصدَّر من خدمة التوقعات المتقاعدة)
@@ -76,15 +78,25 @@ router.get("/api/rsl/hero", async (_req, res) => {
   if (!guard(res)) return;
   try {
     const comp = rslComp();
-    const [outlook, fixtures, history, settings] = await Promise.all([
+    const [outlook, fixturesRaw, liveNow, history, settings] = await Promise.all([
       getSeasonOutlook(comp),
       getFixtures(comp).catch(() => []),
+      getLiveFixtures(comp).catch(() => []),
       getCompetitionHistory(comp).catch(() => null),
       getTournamentBlockSettings("pro-league"),
     ]);
 
+    // نفس مسار /matches: دمج live الدقيق + طبقة TheSports حتى تتحرّك نتيجة الهيرو مع الهدف.
+    const liveIds = new Set(liveNow.map((f) => f.id));
+    const mergedLive = [
+      ...liveNow,
+      ...fixturesRaw.filter((f) => f.status.live && !liveIds.has(f.id)),
+    ];
+    const live = await overlayLiveFixturesForComp(mergedLive, "pro-league").catch(() => mergedLive);
+    const liveById = new Map(live.map((f) => [f.id, f]));
+    const fixtures = fixturesRaw.map((f) => liveById.get(f.id) ?? f);
+
     const todayKey = new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString().slice(0, 10);
-    const live = fixtures.filter((f) => f.status.live);
     const today = fixtures.filter((f) => (f.date ?? "").slice(0, 10) === todayKey);
     const upcoming = fixtures
       .filter((f) => !f.status.live && !f.status.finished)
@@ -134,7 +146,7 @@ router.get("/api/rsl/hero", async (_req, res) => {
     res.set(
       "Cache-Control",
       live.length > 0
-        ? "public, max-age=0, s-maxage=10, stale-while-revalidate=30"
+        ? "public, max-age=0, s-maxage=5, stale-while-revalidate=15"
         : "public, max-age=30, s-maxage=60, stale-while-revalidate=300",
     );
     res.json({

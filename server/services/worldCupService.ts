@@ -55,15 +55,20 @@ const LEAGUE_ID = 1; // World Cup
 const SEASON = 2026;
 const TIMEZONE = "Asia/Riyadh";
 
-// إيقاعات تحديث أقصر من CACHE_TTL العام — البيانات الحية تتغير بالثواني.
-// 8ث (كان 15): قائمة المباريات الجارية تُلتقط أسرع (بدء/انتهاء) لتطابق إيقاع
-// النتيجة اللحظية المُركّبة فوقها. النتيجة نفسها تأتي من TheSports (5ث)/SportMonks
-// (دفعة 4ث) في الطبقة، فلا يحدّها هذا الكاش.
-const LIVE_TTL = 8 * 1000;
-// 30ث (كان 60): يلتقط cron أخبار المونديال لحظة FT أبكر بعد صافرة النهاية،
-// فيقلّص تأخّر نشر تقرير ما بعد المباراة. البيانات الحية تتغيّر بالثواني.
-const FIXTURES_TTL = 30 * 1000;
-const MATCH_DETAIL_LIVE_TTL = 20 * 1000;
+// كأس العالم 2026 انتهى: كل البيانات ثابتة. WORLD_CUP_LIVE_ENABLED=true يُعيد
+// الإيقاع الحيّ لبطولة قادمة؛ افتراضيًا (غير مضبوط) = وضع الأرشيف: كل مفاتيح
+// المونديال تُحدَّث كل 12 ساعة بدل كل 8–30 ثانية. هذا يوقف استطلاع طابور
+// API-Football لبطولة منتهية — كان يعيد جلب أحداث كل مباريات البطولة كل 30ث
+// عبر wc:racesFromEvents، فيُشبع الطابور («queue saturated») ويفيض السجلّات
+// (حدّ Railway 500/ث) ويحمّل حلقة الأحداث بمئات النداءات الدورية بلا فائدة.
+const WC_LIVE = process.env.WORLD_CUP_LIVE_ENABLED === "true";
+const WC_ARCHIVE_TTL = 12 * 60 * 60 * 1000;
+
+// إيقاعات تحديث أقصر من CACHE_TTL العام — أثناء بطولة حيّة البيانات تتغير
+// بالثواني؛ في وضع الأرشيف تُرفع كلها إلى WC_ARCHIVE_TTL.
+const LIVE_TTL = WC_LIVE ? 8 * 1000 : WC_ARCHIVE_TTL;
+const FIXTURES_TTL = WC_LIVE ? 30 * 1000 : WC_ARCHIVE_TTL;
+const MATCH_DETAIL_LIVE_TTL = WC_LIVE ? 20 * 1000 : WC_ARCHIVE_TTL;
 // المزود ينشر التشكيلات قبل الانطلاق بـ 20–40 دقيقة — كاش 5 دقائق يؤخرها حتى الصافرة
 const MATCH_DETAIL_PREKICKOFF_TTL = 60 * 1000;
 const PREKICKOFF_WINDOW_MS = 75 * 60 * 1000;
@@ -2239,7 +2244,7 @@ interface WcRacesFromEvents {
 }
 
 async function aggregateRacesFromEvents(): Promise<WcRacesFromEvents> {
-  return withSWR<WcRacesFromEvents>("wc:racesFromEvents", 30 * 1000, 60 * 1000, async () => {
+  return withSWR<WcRacesFromEvents>("wc:racesFromEvents", WC_LIVE ? 30 * 1000 : WC_ARCHIVE_TTL, WC_LIVE ? 60 * 1000 : WC_ARCHIVE_TTL * 2, async () => {
     const started = (await getFixtures()).filter((f) => f.status.live || f.status.finished);
     const teamById = new Map<number, WcTeam>();
     for (const f of started) {

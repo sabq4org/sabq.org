@@ -192,6 +192,20 @@ export function TicketThread({ ticketId, viewerRole }: Props) {
               </div>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
+              {viewerRole === "admin" && messages[0] && (
+                <Badge
+                  variant="outline"
+                  className={cn(
+                    "gap-1 font-medium",
+                    messages[0].senderRole === "admin"
+                      ? "border-sky-400 bg-sky-50 text-sky-900 dark:bg-sky-500/15 dark:text-sky-100"
+                      : "border-emerald-400 bg-emerald-50 text-emerald-900 dark:bg-emerald-500/15 dark:text-emerald-100",
+                  )}
+                  data-testid="badge-ticket-direction"
+                >
+                  {messages[0].senderRole === "admin" ? "صادرة منا" : "واردة من المساهم"}
+                </Badge>
+              )}
               <Badge
                 variant="outline"
                 className={cn("gap-1 font-medium", statusMeta.className)}
@@ -397,6 +411,7 @@ export function TicketThread({ ticketId, viewerRole }: Props) {
           </CardContent>
         </Card>
       )}
+
     </div>
   );
 }

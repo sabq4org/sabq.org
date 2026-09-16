@@ -219,7 +219,7 @@ P4 (Low)       → تلميع وتجميل
 - لا تحذف migrations موجودة
 - **لا تعدّل migration قديم** — أضف migration/تغيير جديد فقط
 - **لا تستخدم `--no-verify` أو `--no-gpg-sign`** بدون إذن صريح
-- **لا تشغّل `npm run db:push` ضد `DATABASE_URL` يحتوي `prod`/`production`** — استخدم `./push-to-production.sh` التفاعلي
+- **لا تشغّل `npm run db:push` ضد Neon أو الإنتاج** — للتطوير: `npm run db:push:local` (localhost فقط). للإنتاج: `./push-to-production.sh` التفاعلي. دليل المحلي: [`docs/setup/LOCAL_POSTGRES_AR.md`](docs/setup/LOCAL_POSTGRES_AR.md)
 - لا تطوّر داخل `android/` (Capacitor قديم) — كل عمل أندرويد في `android-native/`
 
 ---

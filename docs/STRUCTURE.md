@@ -20,6 +20,13 @@
 
 لوحة التحكم: `/dashboard/systems-catalog` · CLI: `node scripts/systems-inventory.mjs`
 
+## docs/ai-governance/ — حوكمة الذكاء الاصطناعي (اعتماد سدايا)
+- `README.md` — دليل الحزمة والأدوار والإصدار
+- `ai-usage-policy.md` — سياسة استخدام الذكاء الاصطناعي
+- `model-cards.md` — بطاقات تعريف الأنظمة الذكية
+- `human-oversight-procedures.md` — إجراءات الإشراف البشري والتصعيد
+- `risk-register.md` — سجل المخاطر
+
 ## docs/security/ — الأمن
 - `SECURITY_AUDIT_REPORT.md` — تقرير تدقيق أمني سابق
 - `SECURITY_LINK_INJECTION_AUDIT_AR.md` — تدقيق حقن الروابط
@@ -33,7 +40,8 @@
 - `design_guidelines.md` — إرشادات التصميم
 
 ## docs/setup/ — الإعداد والتشغيل
-- `DATABASE_SETUP_INSTRUCTIONS_AR.md`
+- `LOCAL_POSTGRES_AR.md` — PostgreSQL المحلي عبر Docker للتطوير (`DB_DRIVER=pg`)
+- `DATABASE_SETUP_INSTRUCTIONS_AR.md` — نقطة دخول لإعداد القاعدة (تحيل للمحلي)
 - `OBJECT-STORAGE-SETUP.md`
 - `R2_NEWS_IMAGES_ROLLOUT.md` — تشغيل صور الأخبار على R2، التدرج، الكاش، والتراجع
 - `SECRETS-UPDATE-GUIDE.md`

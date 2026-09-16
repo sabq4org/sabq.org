@@ -19,21 +19,24 @@
 			</array>
 		</dict>
 	</array>
-	<key>GA4_API_SECRET</key>
-	<string>fYZEmXdzQuKjai7EUD7PXA</string>
-	<key>GA4_MEASUREMENT_ID</key>
-	<string>G-26QJ46Q70B</string>
 	<key>GIDClientID</key>
 	<string>664097075837-8cle4eq9agqnt3em9p9k0ae56dtb99h2.apps.googleusercontent.com</string>
-	<key>ITSAppUsesNonExemptEncryption</key>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>audio</string>
+		<string>remote-notification</string>
+	</array>
+	<key>FirebaseAutomaticScreenReportingEnabled</key>
 	<false/>
-	<key>NSHealthShareUsageDescription</key>
-	<string>لعرض خطواتك وساعات نومك في رحلتك المعرفية</string>
-	<key>NSHealthUpdateUsageDescription</key>
-	<string>لعرض خطواتك وساعات نومك في رحلتك المعرفية</string>
-	<key>NSSupportsLiveActivities</key>
-	<true/>
-	<key>NSSupportsLiveActivitiesFrequentUpdates</key>
-	<true/>
+	<key>GOOGLE_ANALYTICS_DEFAULT_ALLOW_ANALYTICS_STORAGE</key>
+	<false/>
+	<key>GOOGLE_ANALYTICS_DEFAULT_ALLOW_AD_STORAGE</key>
+	<false/>
+	<key>GOOGLE_ANALYTICS_DEFAULT_ALLOW_AD_PERSONALIZATION_SIGNALS</key>
+	<false/>
+	<key>FIREBASE_ANALYTICS_COLLECTION_ENABLED</key>
+	<false/>
+	<key>GOOGLE_ANALYTICS_DEFAULT_ALLOW_AD_USER_DATA</key>
+	<false/>
 </dict>
 </plist>

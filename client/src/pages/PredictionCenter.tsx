@@ -3,53 +3,88 @@
 // 2026-07-17 — بطاقة بطولة تفصل نقاط الترتيب عن المحفظة، تبويبات
 // المباريات/سجلّي/المتصدرون، ولوحة تعلن نطاقها وما تشمله نقاطها.
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { CalendarClock, ListOrdered, LogIn, Trophy } from "lucide-react";
+import { Link } from "wouter";
+import { CalendarClock, ChevronLeft, ListOrdered, LogIn, Trophy } from "lucide-react";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { NavigationBar } from "@/components/NavigationBar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/hooks/useAuth";
+import { useToast } from "@/hooks/use-toast";
 import { formatNumber } from "@/lib/format";
+import { apiRequest } from "@/lib/queryClient";
 import { rememberPostAuthReturn } from "@/lib/postAuthRedirect";
 import { PredictionMatchCard } from "@/components/predictions/PredictionMatchCard";
+import { PredictionMyEntryCard } from "@/components/predictions/PredictionMyEntryCard";
+import { PredictionRulesCard } from "@/components/predictions/PredictionRulesCard";
+import { PredictionSeasonCard } from "@/components/predictions/PredictionSeasonCard";
 import { PredictionSettlementDrawer } from "@/components/predictions/PredictionSettlementDrawer";
+import { isPredictionRateLimitError } from "@/components/predictions/predictionRequestError";
 import {
-  kickoffDayAr,
   type PredCompetitionDetail,
   type PredCompetitionSummary,
   type PredContest,
+  type PredLeaderEntry,
   type PredLeaderboardResponse,
-  type PredLedgerResponse,
+  type PredMyEntriesResponse,
+  type PredMyEntryItem,
 } from "@/components/predictions/predictionTypes";
 
-type Tab = "matches" | "ledger" | "leaders";
+type Tab = "matches" | "mine" | "leaders";
+
+/** طريق العودة لمركز كل بطولة — الصفحة كانت بلا أي رابط راجع (طلب المالك). */
+const HUB_LINKS: { prefix: string; href: string; label: string }[] = [
+  { prefix: "rsl", href: "/roshn", label: "مركز دوري روشن" },
+  { prefix: "gulf-cup", href: "/gulf-cup", label: "مركز خليجي 27" },
+  { prefix: "kings-cup", href: "/kings-cup", label: "مركز كأس الملك" },
+  { prefix: "asian-cup", href: "/asian-cup", label: "مركز كأس آسيا" },
+];
 
 const TABS: { key: Tab; label: string }[] = [
   { key: "matches", label: "المباريات" },
-  { key: "ledger", label: "سجلّي" },
+  { key: "mine", label: "توقعاتي" },
   { key: "leaders", label: "المتصدّرون" },
 ];
 
-/** رابط عميق لكل بطولة: /predictions?competition=<slug> — تقرأه الصفحة عند
- *  الفتح وتزامنه عند التبديل، فتصلح الروابط للمشاركة وتحويلات المسارات القديمة. */
+/** رابط عميق: /predictions?competition=<slug>&fixture=<apiId>&contest=<id>
+ *  competition للتبديل بين البطولات؛ fixture/contest لتمييز بطاقة المباراة. */
 function competitionFromUrl(): string | null {
   if (typeof window === "undefined") return null;
   return new URLSearchParams(window.location.search).get("competition");
 }
 
-function syncCompetitionUrl(slug: string) {
+function deepTargetFromUrl(): { fixture: string | null; contest: string | null } {
+  if (typeof window === "undefined") return { fixture: null, contest: null };
+  const params = new URLSearchParams(window.location.search);
+  return {
+    fixture: params.get("fixture"),
+    contest: params.get("contest"),
+  };
+}
+
+function syncCompetitionUrl(slug: string, keepDeep = true) {
   const url = new URL(window.location.href);
   url.searchParams.set("competition", slug);
+  if (!keepDeep) {
+    url.searchParams.delete("fixture");
+    url.searchParams.delete("contest");
+  }
   window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
 }
 
 export default function PredictionCenter() {
   const { user, isAuthenticated } = useAuth();
+  const { toast } = useToast();
   const [tab, setTab] = useState<Tab>("matches");
   const [selectedSlug, setSelectedSlug] = useState<string | null>(competitionFromUrl);
   const [settlementContestId, setSettlementContestId] = useState<string | null>(null);
+  const [deepTarget] = useState(deepTargetFromUrl);
+  const [highlightContestId, setHighlightContestId] = useState<string | null>(
+    deepTarget.contest,
+  );
+  const deepScrollDoneRef = useRef(false);
 
   const goLogin = () => {
     rememberPostAuthReturn(window.location.pathname + window.location.search);
@@ -64,6 +99,17 @@ export default function PredictionCenter() {
     ? competitionsRaw.competitions
     : [];
   const selected = competitions.find((c) => c.slug === selectedSlug) ?? competitions[0] ?? null;
+  // رابط لبطولة غير متاحة (معطّلة/خاطئة): لا نتظاهر — نصحّح الرابط ونخبر الزائر
+  // بدل السقوط الصامت لأول بطولة بينما العنوان يوحي بغيرها.
+  const requestedMissing =
+    Boolean(selectedSlug) && competitions.length > 0 && !competitions.some((c) => c.slug === selectedSlug);
+  useEffect(() => {
+    if (requestedMissing && selected) syncCompetitionUrl(selected.slug);
+  }, [requestedMissing, selected]);
+
+  const hubLink = selected
+    ? HUB_LINKS.find((hub) => selected.slug.startsWith(hub.prefix)) ?? null
+    : null;
 
   // مسابقات البطولة المختارة
   const { data: detailRaw, isLoading: detailLoading } = useQuery<PredCompetitionDetail>({
@@ -72,25 +118,132 @@ export default function PredictionCenter() {
     staleTime: 30_000,
   });
   const contests = Array.isArray(detailRaw?.contests) ? detailRaw.contests : [];
+  const rules = Array.isArray(detailRaw?.rules) ? detailRaw.rules : [];
 
-  // اللوحة (تُستخدم أيضًا لترتيبي في البطاقة)
+  // اللوحة (تُستخدم أيضًا لترتيبي في البطاقة) — الصفحة الأولى + تحميل المزيد
   const { data: boardRaw } = useQuery<PredLeaderboardResponse>({
-    queryKey: ["/api/predictions/leaderboards", { competition: selected?.slug ?? "" }],
+    queryKey: ["/api/predictions/leaderboards", { competition: selected?.slug ?? "", limit: 50 }],
     enabled: Boolean(selected),
     staleTime: 60_000,
   });
+  const [boardPages, setBoardPages] = useState<PredLeaderEntry[][]>([]);
+  const [boardLoadingMore, setBoardLoadingMore] = useState(false);
+  useEffect(() => {
+    setBoardPages([]);
+  }, [selected?.slug]);
 
-  // سجل نقاطي
-  const { data: ledgerRaw, isLoading: ledgerLoading } = useQuery<PredLedgerResponse>({
-    queryKey: ["/api/predictions/me/ledger", { competition: selected?.slug ?? "" }],
-    enabled: Boolean(selected) && isAuthenticated && tab === "ledger",
+  const boardEntries = useMemo(
+    () => [...(Array.isArray(boardRaw?.entries) ? boardRaw.entries : []), ...boardPages.flat()],
+    [boardRaw?.entries, boardPages],
+  );
+
+  const totalBoardCount = boardRaw?.totalCount ?? boardRaw?.entries?.length ?? 0;
+  const hasMoreLeaders = boardEntries.length < totalBoardCount;
+
+  const loadMoreLeaders = async () => {
+    if (!selected?.slug || boardLoadingMore || !hasMoreLeaders) return;
+    setBoardLoadingMore(true);
+    try {
+      const params = new URLSearchParams({
+        competition: selected.slug,
+        offset: String(boardEntries.length),
+        limit: "50",
+      });
+      const page = await apiRequest<PredLeaderboardResponse>(`/api/predictions/leaderboards?${params}`);
+      setBoardPages((pages) => [...pages, Array.isArray(page.entries) ? page.entries : []]);
+    } catch (error) {
+      // 429 is an expected edge throttle: explain it and let the visitor retry.
+      // Re-throw every other failure so genuine application errors stay visible.
+      if (!isPredictionRateLimitError(error)) throw error;
+      toast({
+        title: "تمهّل قليلًا",
+        description: "وصلت إلى حد الطلبات مؤقتًا. انتظر لحظات ثم حاول مجددًا.",
+      });
+    } finally {
+      setBoardLoadingMore(false);
+    }
+  };
+
+  // توقعاتي — الصفحة الأولى عبر useQuery، والتالية تُلحق يدويًا بالكيرسور
+  const { data: mineRaw, isLoading: mineLoading } = useQuery<PredMyEntriesResponse>({
+    queryKey: ["/api/predictions/me/entries", { competition: selected?.slug ?? "" }],
+    enabled: Boolean(selected) && isAuthenticated && tab === "mine",
   });
-  const ledgerItems = Array.isArray(ledgerRaw?.items) ? ledgerRaw.items : [];
+  const [minePages, setMinePages] = useState<PredMyEntryItem[][]>([]);
+  const [mineCursor, setMineCursor] = useState<string | null>(null);
+  const [mineLoadingMore, setMineLoadingMore] = useState(false);
+  useEffect(() => {
+    // تبديل البطولة أو تحديث الصفحة الأولى يصفّر الصفحات الملحقة
+    setMinePages([]);
+    setMineCursor(mineRaw?.nextCursor ?? null);
+  }, [selected?.slug, mineRaw]);
+  const mineItems = useMemo(
+    () => [...(Array.isArray(mineRaw?.items) ? mineRaw.items : []), ...minePages.flat()],
+    [mineRaw, minePages],
+  );
+  const loadMoreMine = async () => {
+    if (!mineCursor || mineLoadingMore) return;
+    setMineLoadingMore(true);
+    try {
+      const params = new URLSearchParams({ competition: selected?.slug ?? "", cursor: mineCursor });
+      const page = await apiRequest<PredMyEntriesResponse>(`/api/predictions/me/entries?${params}`);
+      setMinePages((pages) => [...pages, Array.isArray(page.items) ? page.items : []]);
+      setMineCursor(page.nextCursor ?? null);
+    } finally {
+      setMineLoadingMore(false);
+    }
+  };
 
   const grouped = useMemo(() => groupContests(contests), [contests]);
 
+  // من بطاقة توقّع مفتوحة في «توقعاتي» إلى بطاقتها في تبويب المباريات للتعديل
+  const goToContest = (contestId: string) => {
+    setTab("matches");
+    setHighlightContestId(contestId);
+    window.setTimeout(() => {
+      document
+        .getElementById(`pred-contest-${contestId}`)
+        ?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 120);
+  };
+
+  // رابط عميق من مركز المباراة: ?fixture= أو ?contest= → تبويب المباريات + تمرير وتمييز
+  useEffect(() => {
+    if (deepScrollDoneRef.current || detailLoading || contests.length === 0) return;
+    if (!deepTarget.contest && !deepTarget.fixture) return;
+
+    const byContest = deepTarget.contest
+      ? contests.find((c) => c.id === deepTarget.contest)
+      : null;
+    const byFixture =
+      !byContest && deepTarget.fixture
+        ? contests.find(
+            (c) =>
+              c.contestType === "match_score" &&
+              String(c.externalRef ?? "") === String(deepTarget.fixture),
+          )
+        : null;
+    const target = byContest ?? byFixture;
+    if (!target) return;
+
+    deepScrollDoneRef.current = true;
+    setHighlightContestId(target.id);
+    setTab("matches");
+
+    const timer = window.setTimeout(() => {
+      document
+        .getElementById(`pred-contest-${target.id}`)
+        ?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 120);
+    const clearHighlight = window.setTimeout(() => setHighlightContestId(null), 8_000);
+    return () => {
+      window.clearTimeout(timer);
+      window.clearTimeout(clearHighlight);
+    };
+  }, [detailLoading, contests, deepTarget.contest, deepTarget.fixture]);
+
   return (
-    <div className="flex min-h-screen flex-col bg-background" dir="rtl">
+    <div className="flex min-h-screen flex-col bg-background" dir="rtl" lang="ar-SA-u-nu-latn">
       <Header user={user || undefined} />
       <NavigationBar />
 
@@ -106,6 +259,20 @@ export default function PredictionCenter() {
           />
         ) : (
           <>
+            {hubLink && (
+              <Link href={hubLink.href}>
+                <span className="mb-3 inline-flex cursor-pointer items-center gap-1.5 text-[12.5px] font-bold text-muted-foreground transition hover:text-foreground">
+                  <Trophy className="h-3.5 w-3.5 text-amber-500" />
+                  {hubLink.label}
+                  <ChevronLeft className="h-3.5 w-3.5" />
+                </span>
+              </Link>
+            )}
+            {requestedMissing && selected && (
+              <p className="mb-3 rounded-xl bg-amber-500/10 px-4 py-2.5 text-[12px] font-semibold text-amber-800 dark:text-amber-300">
+                البطولة المطلوبة غير متاحة حاليًا — عرضنا لك {selected.nameAr}.
+              </p>
+            )}
             {competitions.length > 1 && (
               <div className="mb-3 flex gap-2 overflow-x-auto pb-1">
                 {competitions.map((comp) => (
@@ -114,7 +281,8 @@ export default function PredictionCenter() {
                     type="button"
                     onClick={() => {
                       setSelectedSlug(comp.slug);
-                      syncCompetitionUrl(comp.slug);
+                      setHighlightContestId(null);
+                      syncCompetitionUrl(comp.slug, false);
                     }}
                     className={`whitespace-nowrap rounded-full px-4 py-1.5 text-[12px] font-bold transition ${
                       comp.slug === selected?.slug
@@ -136,6 +304,9 @@ export default function PredictionCenter() {
                 onLogin={goLogin}
               />
             )}
+
+            {/* شرح النظام — ظاهر للجميع قبل تسجيل الدخول وقبل فتح أي عدّاد */}
+            <PredictionRulesCard rules={rules} />
 
             {/* التبويبات */}
             <div className="mt-4 flex gap-2">
@@ -164,15 +335,34 @@ export default function PredictionCenter() {
                   isAuthenticated={isAuthenticated}
                   onLoginNeeded={goLogin}
                   onOpenSettlement={setSettlementContestId}
+                  highlightContestId={highlightContestId}
                 />
               )}
-              {tab === "ledger" &&
+              {tab === "mine" &&
                 (isAuthenticated ? (
-                  <LedgerTab items={ledgerItems} loading={ledgerLoading} />
+                  <MyEntriesTab
+                    items={mineItems}
+                    loading={mineLoading}
+                    hasMore={Boolean(mineCursor)}
+                    loadingMore={mineLoadingMore}
+                    onLoadMore={loadMoreMine}
+                    onOpenSettlement={setSettlementContestId}
+                    onGoToContest={goToContest}
+                    onGoToMatches={() => setTab("matches")}
+                  />
                 ) : (
                   <SignInPrompt onLogin={goLogin} />
                 ))}
-              {tab === "leaders" && <LeadersTab board={boardRaw ?? null} />}
+              {tab === "leaders" && (
+                <LeadersTab
+                  board={boardRaw ?? null}
+                  entries={boardEntries}
+                  totalCount={totalBoardCount}
+                  hasMore={hasMoreLeaders}
+                  loadingMore={boardLoadingMore}
+                  onLoadMore={loadMoreLeaders}
+                />
+              )}
             </div>
           </>
         )}
@@ -210,7 +400,9 @@ function HeroCard({
         </span>
         <div>
           <h1 className="text-lg font-extrabold">{competition.nameAr}</h1>
-          <p className="text-[11.5px] text-white/60">موسم {competition.seasonKey}</p>
+          <p className="text-[11.5px] text-white/60">
+            موسم <span dir="ltr" className="tabular-nums">{competition.seasonKey}</span>
+          </p>
         </div>
       </div>
 
@@ -237,7 +429,7 @@ function HeroCard({
 function HeroStat({ value, label, gold }: { value: string; label: string; gold?: boolean }) {
   return (
     <div className="rounded-xl bg-white/10 px-3 py-2.5">
-      <div className={`text-lg font-extrabold tabular-nums ${gold ? "text-amber-400" : "text-white"}`}>
+      <div dir="ltr" className={`text-lg font-extrabold tabular-nums ${gold ? "text-amber-400" : "text-white"}`}>
         {value}
       </div>
       <div className="text-[10.5px] text-white/60">{label}</div>
@@ -250,6 +442,8 @@ function HeroStat({ value, label, gold }: { value: string; label: string; gold?:
 // ---------------------------------------------------------------------------
 
 type GroupedContests = {
+  /** مسابقات الموسم الطويلة (بطل/هدّاف) — كانت تُرشَّح فتختفي كليًا من الويب. */
+  season: PredContest[];
   open: PredContest[];
   locked: PredContest[];
   finished: PredContest[];
@@ -258,13 +452,18 @@ type GroupedContests = {
 function groupContests(contests: PredContest[]): GroupedContests {
   const matchScore = contests.filter((c) => c.contestType === "match_score");
   return {
+    season: contests
+      .filter((c) => c.contestType === "champion" || c.contestType === "top_scorer")
+      .sort((a, b) => a.contestType.localeCompare(b.contestType)),
     open: matchScore
       .filter((c) => c.status === "open")
       .sort((a, b) => a.locksAt.localeCompare(b.locksAt)),
-    locked: matchScore.filter((c) => c.status === "locked" || c.status === "ready"),
+    locked: matchScore
+      .filter((c) => c.status === "locked" || c.status === "ready")
+      .sort((a, b) => a.locksAt.localeCompare(b.locksAt)),
     finished: matchScore
       .filter((c) => c.status === "settled" || c.status === "void")
-      .sort((a, b) => (b.settledAt ?? "").localeCompare(a.settledAt ?? ""))
+      .sort((a, b) => (b.settledAt ?? b.locksAt).localeCompare(a.settledAt ?? a.locksAt))
       .slice(0, 10),
   };
 }
@@ -276,6 +475,7 @@ function MatchesTab({
   isAuthenticated,
   onLoginNeeded,
   onOpenSettlement,
+  highlightContestId,
 }: {
   grouped: GroupedContests;
   loading: boolean;
@@ -283,6 +483,7 @@ function MatchesTab({
   isAuthenticated: boolean;
   onLoginNeeded: () => void;
   onOpenSettlement: (contestId: string) => void;
+  highlightContestId?: string | null;
 }) {
   if (loading) {
     return (
@@ -295,7 +496,10 @@ function MatchesTab({
   }
 
   const isEmpty =
-    grouped.open.length === 0 && grouped.locked.length === 0 && grouped.finished.length === 0;
+    grouped.season.length === 0 &&
+    grouped.open.length === 0 &&
+    grouped.locked.length === 0 &&
+    grouped.finished.length === 0;
   if (isEmpty) {
     return (
       <EmptyBlock
@@ -314,11 +518,27 @@ function MatchesTab({
       isAuthenticated={isAuthenticated}
       onLoginNeeded={onLoginNeeded}
       onOpenSettlement={onOpenSettlement}
+      highlighted={highlightContestId === contest.id}
     />
   );
 
   return (
     <div className="space-y-3">
+      {grouped.season.length > 0 && (
+        <>
+          <h3 className="text-[12px] font-extrabold text-muted-foreground">توقّعات الموسم</h3>
+          {grouped.season.map((contest) => (
+            <PredictionSeasonCard
+              key={contest.id}
+              contest={contest}
+              competitionSlug={competitionSlug}
+              isAuthenticated={isAuthenticated}
+              onLoginNeeded={onLoginNeeded}
+            />
+          ))}
+          <h3 className="pt-2 text-[12px] font-extrabold text-muted-foreground">المباريات</h3>
+        </>
+      )}
       {[...grouped.open, ...grouped.locked].map(renderCard)}
       {grouped.finished.length > 0 && (
         <>
@@ -331,54 +551,76 @@ function MatchesTab({
 }
 
 // ---------------------------------------------------------------------------
-// تبويب سجلّي
+// تبويب توقعاتي — مراجعة توقعاتي كاملة ومقارنتها بالنتائج الفعلية (قرار المالك
+// بعد افتتاح روشن 2026-08-13؛ حلّ محل «سجلّي» الذي كان قيود نقاط صامتة).
 // ---------------------------------------------------------------------------
 
-function LedgerTab({
+function MyEntriesTab({
   items,
   loading,
+  hasMore,
+  loadingMore,
+  onLoadMore,
+  onOpenSettlement,
+  onGoToContest,
+  onGoToMatches,
 }: {
-  items: PredLedgerResponse["items"];
+  items: PredMyEntryItem[];
   loading: boolean;
+  hasMore: boolean;
+  loadingMore: boolean;
+  onLoadMore: () => void;
+  onOpenSettlement: (contestId: string) => void;
+  onGoToContest: (contestId: string) => void;
+  onGoToMatches: () => void;
 }) {
   if (loading) {
     return (
-      <div className="space-y-2">
+      <div className="space-y-3">
         {[0, 1, 2].map((i) => (
-          <Skeleton key={i} className="h-14 w-full rounded-xl" />
+          <Skeleton key={i} className="h-24 w-full rounded-2xl" />
         ))}
       </div>
     );
   }
   if (items.length === 0) {
     return (
-      <EmptyBlock
-        icon={<ListOrdered className="h-8 w-8" />}
-        title="لا قيود نقاط بعد"
-        subtitle="ستظهر نقاطك هنا فور تسوية أول مباراة توقّعتها"
-      />
+      <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-border py-12 text-center">
+        <ListOrdered className="h-8 w-8 text-primary" />
+        <p className="text-sm font-bold text-foreground">لم تتوقّع بعد</p>
+        <p className="text-[12px] text-muted-foreground">
+          توقّع مباريات الجولة وستجد توقعاتك ونتائجها هنا
+        </p>
+        <button
+          type="button"
+          onClick={onGoToMatches}
+          className="rounded-xl bg-primary px-6 py-2 text-[13px] font-bold text-primary-foreground transition hover:opacity-90"
+        >
+          إلى المباريات
+        </button>
+      </div>
     );
   }
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
       {items.map((item) => (
-        <div
-          key={item.id}
-          className="flex items-center justify-between rounded-xl border border-border bg-card px-4 py-3"
-        >
-          <div>
-            <div className="text-[12.5px] font-bold text-foreground">{item.reasonLabelAr}</div>
-            <div className="text-[10.5px] text-muted-foreground">{kickoffDayAr(item.createdAt)}</div>
-          </div>
-          <span
-            className={`text-sm font-extrabold tabular-nums ${
-              item.points >= 0 ? "text-primary" : "text-destructive"
-            }`}
-          >
-            {item.points >= 0 ? `+${formatNumber(item.points)}` : formatNumber(item.points)}
-          </span>
-        </div>
+        <PredictionMyEntryCard
+          key={item.contestId}
+          item={item}
+          onOpenSettlement={onOpenSettlement}
+          onGoToContest={onGoToContest}
+        />
       ))}
+      {hasMore && (
+        <button
+          type="button"
+          onClick={onLoadMore}
+          disabled={loadingMore}
+          className="w-full rounded-xl bg-muted py-2.5 text-[13px] font-bold text-muted-foreground transition hover:bg-muted/70 disabled:opacity-60"
+        >
+          {loadingMore ? "جارٍ التحميل…" : "عرض توقعات أقدم"}
+        </button>
+      )}
     </div>
   );
 }
@@ -387,8 +629,22 @@ function LedgerTab({
 // تبويب المتصدرين — الرأس يعلن النطاق وما تشمله النقاط
 // ---------------------------------------------------------------------------
 
-function LeadersTab({ board }: { board: PredLeaderboardResponse | null }) {
-  if (!board || board.entries.length === 0) {
+function LeadersTab({
+  board,
+  entries,
+  totalCount,
+  hasMore,
+  loadingMore,
+  onLoadMore,
+}: {
+  board: PredLeaderboardResponse | null;
+  entries: PredLeaderEntry[];
+  totalCount?: number;
+  hasMore: boolean;
+  loadingMore: boolean;
+  onLoadMore: () => void;
+}) {
+  if (!board || entries.length === 0) {
     return (
       <EmptyBlock
         icon={<Trophy className="h-8 w-8" />}
@@ -400,7 +656,14 @@ function LeadersTab({ board }: { board: PredLeaderboardResponse | null }) {
   return (
     <div className="space-y-2">
       <div className="rounded-xl border border-border bg-card px-4 py-3">
-        <div className="text-[13px] font-extrabold text-foreground">{board.nameAr}</div>
+        <div className="flex items-center justify-between">
+          <div className="text-[13px] font-extrabold text-foreground">{board.nameAr}</div>
+          {totalCount != null && totalCount > 0 && (
+            <span className="text-[11px] font-bold text-muted-foreground tabular-nums">
+              <span dir="ltr">{formatNumber(totalCount)}</span> مشارك
+            </span>
+          )}
+        </div>
         <div className="text-[10.5px] text-muted-foreground">
           توقّعات المباريات · النقاط الأساسية دون مضاعف العضوية
         </div>
@@ -409,18 +672,19 @@ function LeadersTab({ board }: { board: PredLeaderboardResponse | null }) {
       {board.myRank && (
         <div className="flex items-center justify-between rounded-xl bg-gradient-to-bl from-slate-900 to-slate-800 px-4 py-3 text-white">
           <span className="text-[12.5px] font-bold">ترتيبك الحالي</span>
-          <span className="text-sm font-extrabold tabular-nums">
+          <span dir="ltr" className="text-sm font-extrabold tabular-nums">
             #{formatNumber(board.myRank.rank)} · {formatNumber(board.myRank.points)}
           </span>
         </div>
       )}
 
-      {board.entries.map((entry) => (
+      {entries.map((entry) => (
         <div
           key={entry.userId}
           className="flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-2.5"
         >
           <span
+            dir="ltr"
             className={`w-6 text-center text-[12.5px] font-extrabold tabular-nums ${
               entry.rank <= 3 ? "text-amber-500" : "text-muted-foreground"
             }`}
@@ -437,14 +701,25 @@ function LeadersTab({ board }: { board: PredLeaderboardResponse | null }) {
           <div className="min-w-0 flex-1">
             <div className="truncate text-[12.5px] font-bold text-foreground">{entry.name}</div>
             <div className="text-[10px] text-muted-foreground">
-              {formatNumber(entry.exactCount)} نتيجة دقيقة
+              <span dir="ltr" className="tabular-nums">{formatNumber(entry.exactCount)}</span> نتيجة دقيقة
             </div>
           </div>
-          <span className="text-[13px] font-extrabold tabular-nums text-primary">
+          <span dir="ltr" className="text-[13px] font-extrabold tabular-nums text-primary">
             {formatNumber(entry.points)}
           </span>
         </div>
       ))}
+
+      {hasMore && (
+        <button
+          type="button"
+          onClick={onLoadMore}
+          disabled={loadingMore}
+          className="w-full rounded-xl bg-muted py-2.5 text-[13px] font-bold text-muted-foreground transition hover:bg-muted/70 disabled:opacity-60 mt-3"
+        >
+          {loadingMore ? "جارٍ التحميل…" : "عرض المزيد من المتصدرين"}
+        </button>
+      )}
     </div>
   );
 }

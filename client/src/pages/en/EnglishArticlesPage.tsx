@@ -28,7 +28,7 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Edit, Trash2, Send, Star, Bell, Plus, Archive, Trash, GripVertical, ChevronLeft, ChevronRight } from "lucide-react";
+import { Edit, Trash2, Send, Star, Bell, Plus, Archive, Trash, GripVertical, ChevronLeft, ChevronRight, Clock, Languages } from "lucide-react";
 import { ViewsCount } from "@/components/ViewsCount";
 import { EnglishDashboardLayout } from "@/components/en/EnglishDashboardLayout";
 import {
@@ -58,8 +58,10 @@ type Article = {
   articleType: string;
   newsType: string;
   isFeatured: boolean;
+  isTranslated?: boolean;
   views: number;
   publishedAt: string | null;
+  scheduledAt?: string | null;
   createdAt: string;
   updatedAt: string;
   category?: {
@@ -86,7 +88,15 @@ type Category = {
   nameAr?: string;
 };
 
-function SortableRow({ article, children }: { article: Article; children: React.ReactNode }) {
+function SortableRow({
+  article,
+  children,
+  draggable = true,
+}: {
+  article: Article;
+  children: React.ReactNode;
+  draggable?: boolean;
+}) {
   const {
     attributes,
     listeners,
@@ -94,7 +104,7 @@ function SortableRow({ article, children }: { article: Article; children: React.
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: article.id });
+  } = useSortable({ id: article.id, disabled: !draggable });
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -109,9 +119,11 @@ function SortableRow({ article, children }: { article: Article; children: React.
       className="border-b border-border hover:bg-muted/30"
       data-testid={`row-en-article-${article.id}`}
     >
-      <td className="py-3 px-2 text-center cursor-grab active:cursor-grabbing" {...attributes} {...listeners}>
-        <GripVertical className="h-4 w-4 mx-auto text-muted-foreground" data-testid={`drag-handle-en-${article.id}`} />
-      </td>
+      {draggable && (
+        <td className="py-3 px-2 text-center cursor-grab active:cursor-grabbing" {...attributes} {...listeners}>
+          <GripVertical className="h-4 w-4 mx-auto text-muted-foreground" data-testid={`drag-handle-en-${article.id}`} />
+        </td>
+      )}
       {children}
     </tr>
   );
@@ -134,6 +146,8 @@ export default function EnglishArticlesPage() {
   const [activeStatus, setActiveStatus] = useState<"published" | "scheduled" | "draft" | "archived">("published");
   const [typeFilter, setTypeFilter] = useState("all");
   const [categoryFilter, setCategoryFilter] = useState("all");
+  const [newsTypeFilter, setNewsTypeFilter] = useState("all");
+  const [translatedFilter, setTranslatedFilter] = useState("all");
   const [currentPage, setCurrentPage] = useState(1);
   
   // State for bulk selection
@@ -176,7 +190,7 @@ export default function EnglishArticlesPage() {
   // Reset page when filters/search change
   useEffect(() => {
     setCurrentPage(1);
-  }, [debouncedSearch, activeStatus, typeFilter, categoryFilter]);
+  }, [debouncedSearch, activeStatus, typeFilter, categoryFilter, newsTypeFilter, translatedFilter]);
 
   // Fetch articles with filters and pagination
   const { data: articlesData, isLoading: articlesLoading } = useQuery<{
@@ -186,13 +200,17 @@ export default function EnglishArticlesPage() {
     limit: number;
     totalPages: number;
   }>({
-    queryKey: ["/api/en/dashboard/articles", debouncedSearch, activeStatus, typeFilter, categoryFilter, currentPage],
+    queryKey: ["/api/en/dashboard/articles", debouncedSearch, activeStatus, typeFilter, categoryFilter, newsTypeFilter, translatedFilter, currentPage],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (debouncedSearch) params.append("search", debouncedSearch);
       if (activeStatus) params.append("status", activeStatus);
       if (typeFilter && typeFilter !== "all") params.append("articleType", typeFilter);
       if (categoryFilter && categoryFilter !== "all") params.append("categoryId", categoryFilter);
+      if (newsTypeFilter && newsTypeFilter !== "all") params.append("newsType", newsTypeFilter);
+      if (translatedFilter === "true" || translatedFilter === "false") {
+        params.append("translated", translatedFilter);
+      }
       params.append("page", currentPage.toString());
       params.append("limit", "30");
       
@@ -327,7 +345,7 @@ export default function EnglishArticlesPage() {
       });
     },
     onMutate: async ({ id, currentState }) => {
-      const queryKey = ["/api/en/dashboard/articles", debouncedSearch, activeStatus, typeFilter, categoryFilter, currentPage];
+      const queryKey = ["/api/en/dashboard/articles", debouncedSearch, activeStatus, typeFilter, categoryFilter, newsTypeFilter, translatedFilter, currentPage];
       
       await queryClient.cancelQueries({ queryKey: ["/api/en/dashboard/articles"] });
       
@@ -491,11 +509,14 @@ export default function EnglishArticlesPage() {
     setLocation(`/en/dashboard/articles/${article.id}/edit`);
   };
 
+  // Published list is chronological (publishedAt); drag-reorder must not bury new items.
+  const allowDragReorder = activeStatus !== "published";
+
   // Drag end handler
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
 
-    if (!over || active.id === over.id) {
+    if (!allowDragReorder || !over || active.id === over.id) {
       return;
     }
 
@@ -511,6 +532,21 @@ export default function EnglishArticlesPage() {
     }));
 
     updateOrderMutation.mutate(articleOrders);
+  };
+
+  const formatArticleDate = (date: string | Date | null | undefined) => {
+    if (!date) return null;
+    try {
+      return new Date(date).toLocaleString("en-GB", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    } catch {
+      return null;
+    }
   };
 
   const getStatusBadge = (status: string) => {
@@ -693,8 +729,8 @@ export default function EnglishArticlesPage() {
 
         {/* Filters */}
         <div className="bg-card rounded-lg border border-border p-3 md:p-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
-            <div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 md:gap-4">
+            <div className="sm:col-span-2 lg:col-span-1">
               <Input
                 placeholder="Search by title..."
                 value={searchTerm}
@@ -731,6 +767,32 @@ export default function EnglishArticlesPage() {
                       {cat.nameEn || cat.name || cat.nameAr || cat.id}
                     </SelectItem>
                   ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Select value={newsTypeFilter} onValueChange={setNewsTypeFilter}>
+                <SelectTrigger data-testid="select-en-breaking-filter" className="h-9 md:h-10 text-sm">
+                  <SelectValue placeholder="Breaking" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Urgency</SelectItem>
+                  <SelectItem value="breaking">Breaking only</SelectItem>
+                  <SelectItem value="regular">Regular only</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Select value={translatedFilter} onValueChange={setTranslatedFilter}>
+                <SelectTrigger data-testid="select-en-translated-filter" className="h-9 md:h-10 text-sm">
+                  <SelectValue placeholder="Source" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Sources</SelectItem>
+                  <SelectItem value="true">Translated from Arabic</SelectItem>
+                  <SelectItem value="false">Original English</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -795,16 +857,18 @@ export default function EnglishArticlesPage() {
               No articles found
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto rounded-xl border border-border/80 bg-card shadow-none">
               <DndContext
                 sensors={sensors}
                 collisionDetection={closestCenter}
                 onDragEnd={handleDragEnd}
               >
-                <table className="w-full">
+                <table className="w-full min-w-[850px]">
                   <thead className="bg-muted/50 border-b border-border">
                     <tr>
-                      <th className="text-center py-3 px-2 w-10" data-testid="header-en-drag"></th>
+                      {allowDragReorder && (
+                        <th className="text-center py-3 px-2 w-10" data-testid="header-en-drag"></th>
+                      )}
                       <th className="text-center py-3 px-4 w-12">
                         <Checkbox
                           checked={localArticles.length > 0 && selectedArticles.size === localArticles.length}
@@ -827,7 +891,7 @@ export default function EnglishArticlesPage() {
                       strategy={verticalListSortingStrategy}
                     >
                       {localArticles.map((article) => (
-                        <SortableRow key={article.id} article={article}>
+                        <SortableRow key={article.id} article={article} draggable={allowDragReorder}>
                           <td className="py-3 px-4 text-center">
                             <Checkbox
                               checked={selectedArticles.has(article.id)}
@@ -836,7 +900,35 @@ export default function EnglishArticlesPage() {
                             />
                           </td>
                           <td className="py-3 px-4">
-                            <span className="font-medium max-w-md truncate inline-block">{article.title}</span>
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <span className="font-medium max-w-md truncate inline-block">{article.title}</span>
+                                {article.isTranslated && (
+                                  <Badge variant="outline" className="text-[10px] shrink-0 gap-1" data-testid={`badge-translated-en-${article.id}`}>
+                                    <Languages className="h-3 w-3" />
+                                    Translated
+                                  </Badge>
+                                )}
+                              </div>
+                              {article.status === "scheduled" && article.scheduledAt && (
+                                <div className="text-xs text-amber-700 dark:text-amber-300 flex items-center gap-1" data-testid={`scheduled-date-en-${article.id}`}>
+                                  <Clock className="h-3 w-3 shrink-0" />
+                                  <span>Scheduled: {formatArticleDate(article.scheduledAt)}</span>
+                                </div>
+                              )}
+                              {article.status === "draft" && article.createdAt && (
+                                <div className="text-xs text-muted-foreground flex items-center gap-1" data-testid={`draft-date-en-${article.id}`}>
+                                  <Clock className="h-3 w-3 shrink-0" />
+                                  <span>Created: {formatArticleDate(article.createdAt)}</span>
+                                </div>
+                              )}
+                              {article.status === "published" && article.publishedAt && (
+                                <div className="text-xs text-emerald-600 dark:text-emerald-400 flex items-center gap-1" data-testid={`published-date-en-${article.id}`}>
+                                  <Clock className="h-3 w-3 shrink-0" />
+                                  <span className="font-medium">{formatArticleDate(article.publishedAt)}</span>
+                                </div>
+                              )}
+                            </div>
                           </td>
                           <td className="py-3 px-4">
                             {getTypeBadge(article.articleType || "news")}
@@ -857,7 +949,15 @@ export default function EnglishArticlesPage() {
                             </div>
                           </td>
                           <td className="py-3 px-4">
-                            <span className="text-sm">{article.category?.nameEn || article.category?.name || article.category?.nameAr || "-"}</span>
+                            {article.category?.nameEn || article.category?.name || article.category?.nameAr ? (
+                              <span className="text-sm">
+                                {article.category?.nameEn || article.category?.name || article.category?.nameAr}
+                              </span>
+                            ) : (
+                              <span className="text-xs text-amber-700 dark:text-amber-300" data-testid={`uncategorized-en-${article.id}`}>
+                                Uncategorized
+                              </span>
+                            )}
                           </td>
                           <td className="py-3 px-4">
                             <BreakingSwitch 
@@ -916,9 +1016,35 @@ export default function EnglishArticlesPage() {
                     className="mt-0.5"
                   />
                   <div className="flex-1 flex items-start justify-between gap-2">
-                    <h3 className="font-semibold text-sm flex-1 break-words leading-snug">
-                      {article.title}
-                    </h3>
+                    <div className="flex-1 min-w-0 space-y-1">
+                      <h3 className="font-semibold text-sm break-words leading-snug">
+                        {article.title}
+                      </h3>
+                      {article.isTranslated && (
+                        <Badge variant="outline" className="text-[10px] gap-1" data-testid={`badge-translated-mobile-en-${article.id}`}>
+                          <Languages className="h-3 w-3" />
+                          Translated
+                        </Badge>
+                      )}
+                      {article.status === "published" && article.publishedAt && (
+                        <div className="text-xs text-emerald-600 dark:text-emerald-400 flex items-center gap-1" data-testid={`published-date-mobile-en-${article.id}`}>
+                          <Clock className="h-3 w-3 shrink-0" />
+                          <span>{formatArticleDate(article.publishedAt)}</span>
+                        </div>
+                      )}
+                      {article.status === "scheduled" && article.scheduledAt && (
+                        <div className="text-xs text-amber-700 dark:text-amber-300 flex items-center gap-1">
+                          <Clock className="h-3 w-3 shrink-0" />
+                          <span>Scheduled: {formatArticleDate(article.scheduledAt)}</span>
+                        </div>
+                      )}
+                      {article.status === "draft" && article.createdAt && (
+                        <div className="text-xs text-muted-foreground flex items-center gap-1">
+                          <Clock className="h-3 w-3 shrink-0" />
+                          <span>Created: {formatArticleDate(article.createdAt)}</span>
+                        </div>
+                      )}
+                    </div>
                     {getStatusBadge(article.status)}
                   </div>
                 </div>

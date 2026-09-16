@@ -11,7 +11,7 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
-import coil.compose.SubcomposeAsyncImage
+import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import androidx.compose.ui.platform.LocalContext
 import com.sabq.smart.ui.theme.SabqTheme
@@ -82,11 +82,17 @@ fun FocalCachedAsyncImage(
             .crossfade(250)
             .build()
 
+        // العنصر النائب يُرسم كطبقة خلفية دائمة: يظهر أثناء التحميل وعند
+        // الفشل وتغطيه الصورة عند النجاح — هذا ما سمح باستبدال
+        // SubcomposeAsyncImage (كلفة subcomposition لكل صورة في القوائم،
+        // تدقيق الأداء 2026-08-02) بـ AsyncImage العادي دون تغيير بصري.
+        placeholder()
+
         // Force LTR locally so BiasAlignment math is consistent
         // regardless of the outer layout direction. The image bitmap
         // itself is not mirrored — it's just pixels.
         CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
-            SubcomposeAsyncImage(
+            AsyncImage(
                 model = request,
                 contentDescription = null,
                 modifier = Modifier.fillMaxSize(),
@@ -95,8 +101,6 @@ fun FocalCachedAsyncImage(
                 onError = { errorState ->
                     android.util.Log.e("FocalImage", "Failed to load image: $url", errorState.result.throwable)
                 },
-                loading = { placeholder() },
-                error = { placeholder() },
             )
         }
     }

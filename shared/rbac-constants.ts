@@ -198,6 +198,16 @@ export const PERMISSION_CODES = {
   MUQTARAB_OWN_TOPIC_CREATE: "muqtarab.own.topic.create",
   MUQTARAB_OWN_TOPIC_EDIT: "muqtarab.own.topic.edit",
   MUQTARAB_OWN_TOPIC_SUBMIT: "muqtarab.own.topic.submit",
+
+  // Social Publishing (X) - النشر الاجتماعي على منصة X
+  SOCIAL_PUBLISH_VIEW: "social_publish.view",
+  SOCIAL_PUBLISH_CREATE: "social_publish.create",
+  SOCIAL_PUBLISH_AI_GENERATE: "social_publish.ai_generate",
+  SOCIAL_PUBLISH_NOW: "social_publish.publish_now",
+  SOCIAL_PUBLISH_SCHEDULE: "social_publish.schedule",
+  SOCIAL_PUBLISH_MANAGE_SCHEDULED: "social_publish.manage_scheduled",
+  SOCIAL_PUBLISH_VIEW_LOG: "social_publish.view_log",
+  SOCIAL_PUBLISH_MANAGE_ACCOUNTS: "social_publish.manage_accounts",
 } as const;
 
 // Role to permissions mapping (for UI display)
@@ -267,8 +277,21 @@ export const ROLE_PERMISSIONS_MAP: Record<string, string[]> = {
     PERMISSION_CODES.DASHBOARD_VIEW_VISITORS,
     // Breaking News Ticker
     PERMISSION_CODES.BREAKING_TICKER_MANAGE,
+    // Social Publishing — المحرر ينشر ويجدول على X (بلا إدارة الحسابات)
+    PERMISSION_CODES.SOCIAL_PUBLISH_VIEW,
+    PERMISSION_CODES.SOCIAL_PUBLISH_CREATE,
+    PERMISSION_CODES.SOCIAL_PUBLISH_AI_GENERATE,
+    PERMISSION_CODES.SOCIAL_PUBLISH_NOW,
+    PERMISSION_CODES.SOCIAL_PUBLISH_SCHEDULE,
+    PERMISSION_CODES.SOCIAL_PUBLISH_MANAGE_SCHEDULED,
+    PERMISSION_CODES.SOCIAL_PUBLISH_VIEW_LOG,
+    // اجتماعات سبق — أكواد نصية كنمط hr أدناه
+    "meetings.view",
+    "meetings.create",
   ],
 
+  // مدير المحتوى: بلا إنشاء اجتماعات وبلا إنتاجية الموظفين (قرار المنتج 2026-07-26).
+  // أي ربط قديم في DB يُستبعد عبر ROLE_PERMISSION_DENY_MAP أدناه.
   [ROLE_NAMES.CONTENT_MANAGER]: [
     PERMISSION_CODES.ARTICLES_VIEW,
     PERMISSION_CODES.ARTICLES_CREATE,
@@ -293,8 +316,16 @@ export const ROLE_PERMISSIONS_MAP: Record<string, string[]> = {
     PERMISSION_CODES.MEDIA_UPLOAD,
     PERMISSION_CODES.CATEGORIES_VIEW,
     PERMISSION_CODES.DASHBOARD_VIEW,
-    PERMISSION_CODES.VIEW_STAFF_PRODUCTIVITY,
     PERMISSION_CODES.BREAKING_TICKER_MANAGE,
+    // Social Publishing — مدير المحتوى ينشر ويجدول على X
+    PERMISSION_CODES.SOCIAL_PUBLISH_VIEW,
+    PERMISSION_CODES.SOCIAL_PUBLISH_CREATE,
+    PERMISSION_CODES.SOCIAL_PUBLISH_AI_GENERATE,
+    PERMISSION_CODES.SOCIAL_PUBLISH_NOW,
+    PERMISSION_CODES.SOCIAL_PUBLISH_SCHEDULE,
+    PERMISSION_CODES.SOCIAL_PUBLISH_MANAGE_SCHEDULED,
+    PERMISSION_CODES.SOCIAL_PUBLISH_VIEW_LOG,
+    "meetings.view",
   ],
 
   [ROLE_NAMES.REPORTER]: [
@@ -309,6 +340,7 @@ export const ROLE_PERMISSIONS_MAP: Record<string, string[]> = {
     PERMISSION_CODES.ANALYTICS_VIEW_OWN, // عرض إحصائيات مقالاته فقط
     // Dashboard - يدخل إلى مساحة أخباره الشخصية فقط، بلا إحصاءات عامة للصحيفة
     PERMISSION_CODES.DASHBOARD_VIEW,
+    "meetings.view",
   ],
 
   [ROLE_NAMES.OPINION_AUTHOR]: [
@@ -325,6 +357,7 @@ export const ROLE_PERMISSIONS_MAP: Record<string, string[]> = {
     // hidden (it gates on dashboard.view), so writers couldn't find their panel.
     PERMISSION_CODES.DASHBOARD_VIEW,
     PERMISSION_CODES.DASHBOARD_VIEW_STATS,
+    "meetings.view",
   ],
 
   [ROLE_NAMES.COMMENTS_MODERATOR]: [
@@ -374,6 +407,19 @@ export const ROLE_PERMISSIONS_MAP: Record<string, string[]> = {
     PERMISSION_CODES.MEDIA_UPLOAD,
     PERMISSION_CODES.ANALYTICS_VIEW_OWN,
     PERMISSION_CODES.DASHBOARD_VIEW,
+  ],
+
+  // الموارد البشرية — ملفات المنسوبين ووثائقهم فقط (قرار المالك 2026-07-21).
+  // الأكواد نصية لأن hr غير معرف في PERMISSION_CODES بعد؛ getPermissionsForRoles
+  // يمررها كما هي والواجهة تتحقق بالنص.
+  hr: [
+    "staff_profiles.view",
+    "staff_profiles.manage",
+    "staff_documents.view",
+    "users.view",
+    "dashboard.view",
+    "meetings.view",
+    "meetings.create",
   ],
 
   [ROLE_NAMES.READER]: [],
@@ -491,6 +537,16 @@ export const PERMISSION_LABELS_AR: Record<string, string> = {
   [PERMISSION_CODES.MUQTARAB_OWN_TOPIC_CREATE]: "إضافة موضوع في زاويتي",
   [PERMISSION_CODES.MUQTARAB_OWN_TOPIC_EDIT]: "تعديل مواضيع زاويتي",
   [PERMISSION_CODES.MUQTARAB_OWN_TOPIC_SUBMIT]: "إرسال موضوع لمراجعة الإدارة",
+
+  // Social Publishing - النشر الاجتماعي على X
+  [PERMISSION_CODES.SOCIAL_PUBLISH_VIEW]: "عرض واجهة النشر الاجتماعي",
+  [PERMISSION_CODES.SOCIAL_PUBLISH_CREATE]: "إنشاء مسودة منشور اجتماعي",
+  [PERMISSION_CODES.SOCIAL_PUBLISH_AI_GENERATE]: "توليد نص المنشور بالذكاء",
+  [PERMISSION_CODES.SOCIAL_PUBLISH_NOW]: "النشر الفوري على X",
+  [PERMISSION_CODES.SOCIAL_PUBLISH_SCHEDULE]: "جدولة منشور على X",
+  [PERMISSION_CODES.SOCIAL_PUBLISH_MANAGE_SCHEDULED]: "تعديل/إلغاء المنشورات المجدولة",
+  [PERMISSION_CODES.SOCIAL_PUBLISH_VIEW_LOG]: "عرض سجل النشر الاجتماعي",
+  [PERMISSION_CODES.SOCIAL_PUBLISH_MANAGE_ACCOUNTS]: "إدارة حسابات المنصات وربطها",
 };
 
 // Helper function to get all permissions for given roles.
@@ -518,18 +574,63 @@ export function getPermissionsForRoles(roleNames: string[]): string[] {
   return Array.from(allPermissions);
 }
 
+/**
+ * صلاحيات تُستبعد صراحة لدور معيّن حتى لو بقيت مربوطة في `role_permissions`
+ * (الدمج DB ∪ ROLE_PERMISSIONS_MAP كان يُبقي منحًا قديمة).
+ */
+export const ROLE_PERMISSION_DENY_MAP: Record<string, readonly string[]> = {
+  [ROLE_NAMES.CONTENT_MANAGER]: [
+    "meetings.create",
+    PERMISSION_CODES.VIEW_STAFF_PRODUCTIVITY,
+  ],
+};
+
+/** يستبعد صلاحيات ROLE_PERMISSION_DENY_MAP من قائمة فعّالة حسب أدوار المستخدم. */
+export function denyPermissionsForRoles(
+  roleNames: string[],
+  permissions: string[],
+): string[] {
+  if (permissions.includes("*")) return permissions;
+
+  const denied = new Set<string>();
+  for (const roleName of roleNames) {
+    for (const code of ROLE_PERMISSION_DENY_MAP[roleName] || []) {
+      denied.add(code);
+    }
+  }
+  if (denied.size === 0) return permissions;
+  return permissions.filter((code) => !denied.has(code));
+}
+
+/** دمج صلاحيات DB مع خريطة الكود ثم تطبيق الاستبعادات الصريحة للدور. */
+export function resolveEffectivePermissions(
+  roleNames: string[],
+  dbPermissions: string[] = [],
+): string[] {
+  const codePerms = getPermissionsForRoles(roleNames);
+  if (codePerms.includes("*")) return ["*"];
+  const merged = [...new Set([...dbPermissions, ...codePerms])];
+  return denyPermissionsForRoles(roleNames, merged);
+}
+
+// Roles that grant full superuser via getUserPermissions' name check — assigning
+// ANY of these must be gated the same way, not just the literal "system_admin".
+export const SYSTEM_ADMIN_TIER_ROLES = ["system_admin", "system.admin", "superadmin"];
+
 // Helper function to check if a role can be assigned by another role
 export function canAssignRole(assignerRole: string, targetRole: string): boolean {
   // System admin can assign any role
   if (assignerRole === ROLE_NAMES.SYSTEM_ADMIN) {
     return true;
   }
-  
-  // Admin can assign any role except system_admin
+
+  // Admin can assign any role EXCEPT any system-admin-equivalent tier. Blocking
+  // only the literal "system_admin" let an admin create+assign a role named
+  // "superadmin"/"system.admin" — also superuser tiers — and self-escalate (audit #2).
   if (assignerRole === ROLE_NAMES.ADMIN) {
-    return targetRole !== ROLE_NAMES.SYSTEM_ADMIN;
+    return !SYSTEM_ADMIN_TIER_ROLES.includes(targetRole);
   }
-  
+
   // Other roles cannot assign roles
   return false;
 }

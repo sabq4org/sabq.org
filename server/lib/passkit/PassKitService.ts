@@ -3,33 +3,43 @@ import fs from 'fs';
 import path from 'path';
 import { PressPassBuilder } from './PressPassBuilder';
 import { LoyaltyPassBuilder } from './LoyaltyPassBuilder';
+import { CouponPassBuilder, CouponPassData } from './CouponPassBuilder';
 import { PassBuilder, CertificateConfig, PressPassData, LoyaltyPassData } from './PassBuilder';
 
 export class PassKitService {
   private pressPassTypeId: string;
   private loyaltyPassTypeId: string;
   private teamId: string;
-  
+
   private pressBuilder: PressPassBuilder;
   private loyaltyBuilder: LoyaltyPassBuilder;
-  
+  private couponBuilder: CouponPassBuilder;
+
   constructor() {
     this.pressPassTypeId = process.env.APPLE_PRESS_PASS_TYPE_ID || 'pass.life.sabq.presscard';
     this.loyaltyPassTypeId = process.env.APPLE_LOYALTY_PASS_TYPE_ID || 'pass.life.sabq.loyalty';
     this.teamId = process.env.APPLE_TEAM_ID || 'PLACEHOLDER';
-    
+
     this.pressBuilder = new PressPassBuilder(this.pressPassTypeId, this.teamId);
     this.loyaltyBuilder = new LoyaltyPassBuilder(this.loyaltyPassTypeId, this.teamId);
+    // Coupon passes ride on the loyalty pass type id + certificate — a pass
+    // type id can sign any pass style, so no new Apple provisioning needed.
+    this.couponBuilder = new CouponPassBuilder(this.loyaltyPassTypeId, this.teamId);
   }
-  
+
   async generatePressPass(data: PressPassData): Promise<Buffer> {
     const certificates = await this.loadCertificates('press');
     return this.pressBuilder.generatePass(data, certificates);
   }
-  
+
   async generateLoyaltyPass(data: LoyaltyPassData): Promise<Buffer> {
     const certificates = await this.loadCertificates('loyalty');
     return this.loyaltyBuilder.generatePass(data, certificates);
+  }
+
+  async generateCouponPass(data: CouponPassData): Promise<Buffer> {
+    const certificates = await this.loadCertificates('loyalty');
+    return this.couponBuilder.generatePass(data, certificates);
   }
   
   private async loadCertificates(passType: 'press' | 'loyalty'): Promise<CertificateConfig> {
@@ -245,4 +255,4 @@ export class PassKitService {
 }
 
 export const passKitService = new PassKitService();
-export type { PressPassData, LoyaltyPassData };
+export type { PressPassData, LoyaltyPassData, CouponPassData };

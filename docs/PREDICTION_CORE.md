@@ -98,7 +98,7 @@
 
 ## 4. حالة الإنتاج (منذ 2026-07-17)
 
-- قاعدة الإنتاج: Neon `ep-shy-block-adst1pw6` (المحلية `ep-withered-waterfall` — فرع قديم، **ليست الإنتاج**).
+- قاعدة الإنتاج: Neon `ep-shy-block-adst1pw6`. التطوير المحلي: PostgreSQL عبر Docker (`localhost:5432/sabq_db`) — انظر [`docs/setup/LOCAL_POSTGRES_AR.md`](setup/LOCAL_POSTGRES_AR.md). فرع Neon القديم للتطوير لم يعد مسار التطوير الموصى به.
 - `PREDICTION_CORE_ENABLED=true` على خدمة Railway ‏`sabq.org`.
 - الجداول منشأة، الزرع تام، ومُسحت 171 صف تجارب داخلية (المونديال و`gc_duels` مستثنيان بالتصميم).
 - **المفعّل:** خليجي 27 + دوري روشن. **draft:** كأس الملك، السوبر، كأس آسيا.

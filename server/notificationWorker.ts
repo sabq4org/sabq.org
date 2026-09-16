@@ -394,11 +394,12 @@ async function publishScheduledArticles() {
           console.log(`[ScheduledPublisher] Reporter in-app notification sent for article: ${article.id}`);
         })().catch(error => console.error(`[ScheduledPublisher] Error sending reporter notification for article ${article.id}:`, error));
 
-        // Editorial APNs push to the author/reporter/submitter — the same
-        // pipeline the PATCH endpoint uses for manual publishes. Without
-        // this, scheduled articles publish silently from the writer's
-        // perspective: their iOS device never gets the "published" event
-        // (only the reader broadcast + reporter email fire here).
+        // Editorial APNs push to the author/reporter — the same pipeline
+        // the PATCH endpoint uses for manual publishes. Submitter (CMS
+        // operator) is not a recipient. Without this, scheduled articles
+        // publish silently from the writer's perspective: their iOS
+        // device never gets the "published" event (only the reader
+        // broadcast + reporter email fire here).
         (async () => {
           const { notifyArticleStakeholders } = await import("./services/editorialNotifications");
           await notifyArticleStakeholders(

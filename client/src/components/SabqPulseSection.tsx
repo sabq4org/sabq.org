@@ -57,6 +57,7 @@ type NewsAnalytics = {
     trend: "up" | "down" | "stable";
   } | null;
   worldCup?: {
+    finished?: boolean;
     champion: {
       teamId: number;
       name: string;
@@ -70,6 +71,15 @@ type NewsAnalytics = {
       name: string;
       photo: string | null;
       votes: number;
+      sharePercent: number;
+      goals?: number | null;
+    } | null;
+    publicChampion?: {
+      name: string;
+      sharePercent: number;
+    } | null;
+    publicTopScorer?: {
+      name: string;
       sharePercent: number;
     } | null;
     totalChampionVotes: number;
@@ -323,7 +333,7 @@ export function SabqPulseSection() {
                 <div className="flex items-center justify-between gap-1">
                   <Trophy className="h-3.5 w-3.5 text-amber-600 shrink-0" />
                   <Badge variant="secondary" className="text-[9px] px-1.5 py-0 h-4">
-                    ترشيحات المونديال
+                    {analytics.worldCup.finished ? "ختام المونديال" : "ترشيحات المونديال"}
                   </Badge>
                 </div>
                 {analytics.worldCup.champion && (
@@ -339,16 +349,20 @@ export function SabqPulseSection() {
                         <Trophy className="h-4 w-4 text-amber-600 shrink-0" />
                       )}
                       <div className="min-w-0 flex-1">
-                        <p className="text-[10px] text-muted-foreground leading-none mb-0.5">مرشح للفوز</p>
+                        <p className="text-[10px] text-muted-foreground leading-none mb-0.5">
+                          {analytics.worldCup.finished ? "بطل البطولة" : "مرشح للفوز"}
+                        </p>
                         <p className="text-sm font-semibold truncate" data-testid="stat-wc-champion">
                           {analytics.worldCup.champion.name}
                         </p>
                       </div>
-                      <p className="text-[10px] tabular-nums text-muted-foreground shrink-0">
-                        {analytics.worldCup.champion.sharePercent.toLocaleString("en-US")}%
-                      </p>
+                      {!analytics.worldCup.finished && (
+                        <p className="text-[10px] tabular-nums text-muted-foreground shrink-0">
+                          {analytics.worldCup.champion.sharePercent.toLocaleString("en-US")}%
+                        </p>
+                      )}
                     </div>
-                    {analytics.worldCup.champion.eliminated && (
+                    {!analytics.worldCup.finished && analytics.worldCup.champion.eliminated && (
                       <p
                         className="ps-8 text-[9px] leading-snug text-amber-700 dark:text-amber-400"
                         data-testid="stat-wc-champion-eliminated"
@@ -370,16 +384,45 @@ export function SabqPulseSection() {
                       <Target className="h-4 w-4 text-sky-600 shrink-0" />
                     )}
                     <div className="min-w-0 flex-1">
-                      <p className="text-[10px] text-muted-foreground leading-none mb-0.5">مرشح للهداف</p>
+                      <p className="text-[10px] text-muted-foreground leading-none mb-0.5">
+                        {analytics.worldCup.finished ? "هدّاف البطولة" : "مرشح للهداف"}
+                      </p>
                       <p className="text-sm font-semibold truncate" data-testid="stat-wc-scorer">
                         {analytics.worldCup.topScorer.name}
                       </p>
                     </div>
-                    <p className="text-[10px] tabular-nums text-muted-foreground shrink-0">
-                      {analytics.worldCup.topScorer.sharePercent.toLocaleString("en-US")}%
-                    </p>
+                    {analytics.worldCup.finished ? (
+                      analytics.worldCup.topScorer.goals != null ? (
+                        <p className="text-[10px] tabular-nums text-muted-foreground shrink-0">
+                          {analytics.worldCup.topScorer.goals.toLocaleString("en-US")} هدف
+                        </p>
+                      ) : null
+                    ) : (
+                      <p className="text-[10px] tabular-nums text-muted-foreground shrink-0">
+                        {analytics.worldCup.topScorer.sharePercent.toLocaleString("en-US")}%
+                      </p>
+                    )}
                   </div>
                 )}
+                {analytics.worldCup.finished &&
+                  (analytics.worldCup.publicChampion || analytics.worldCup.publicTopScorer) && (
+                    <p
+                      className="text-[9px] leading-snug text-muted-foreground"
+                      data-testid="stat-wc-public-picks"
+                    >
+                      جمهور سبق رشّح{" "}
+                      {[
+                        analytics.worldCup.publicChampion
+                          ? `${analytics.worldCup.publicChampion.name} (${analytics.worldCup.publicChampion.sharePercent.toLocaleString("en-US")}%)`
+                          : null,
+                        analytics.worldCup.publicTopScorer
+                          ? `${analytics.worldCup.publicTopScorer.name} (${analytics.worldCup.publicTopScorer.sharePercent.toLocaleString("en-US")}%)`
+                          : null,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </p>
+                  )}
               </CardContent>
             </Card>
           )}

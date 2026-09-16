@@ -46,13 +46,80 @@ struct ArticleHtmlParserTests {
         #expect(items2.count == 3)
     }
 
+    /// جدول المحرر (sabq-table): الرؤوس <th> صفٌّ مستقل، والخلايا لا تتناثر كفقرات.
+    @Test func parsesSabqTableIntoHeaderAndRows() {
+        let blocks = ArticleHtmlParser.parse(
+            "<p>قبل</p><table class=\"sabq-table\" style=\"min-width: 100px\"><colgroup><col style=\"min-width: 25px\"><col></colgroup><tbody>"
+            + "<tr><th colspan=\"1\" rowspan=\"1\"><p style=\"text-align: center\">القطاع</p></th><th><p><span style=\"color: rgb(20, 20, 20)\"><strong>القيمة</strong></span></p></th></tr>"
+            + "<tr><td><p>المطاعم</p></td><td><p>1,667.8</p></td></tr>"
+            + "<tr><td><p>الوقود</p></td><td><p>960.4</p></td></tr>"
+            + "</tbody></table><p>بعد</p>"
+        )
+
+        #expect(blocks.count == 3)
+        guard case .table(let header, let rows, let cardStyle) = blocks[1] else {
+            Issue.record("البلوك الأوسط ليس جدولًا: \(blocks)")
+            return
+        }
+        #expect(cardStyle == false)
+        #expect(header?.map { $0.map(\.text).joined() } == ["القطاع", "القيمة"])
+        #expect(rows.count == 2)
+        #expect(rows[0].map { $0.map(\.text).joined() } == ["المطاعم", "1,667.8"])
+        #expect(rows[1].map { $0.map(\.text).joined() } == ["الوقود", "960.4"])
+        guard case .paragraph(let after) = blocks[2] else {
+            Issue.record("الفقرة بعد الجدول ضاعت: \(blocks)")
+            return
+        }
+        #expect(after.map(\.text).joined() == "بعد")
+    }
+
+    /// جدول بلا <th>: كل الصفوف بيانات ولا رأس، ومظهر البطاقة يُلتقط من الـclass.
+    @Test func parsesHeaderlessCardTable() {
+        let blocks = ArticleHtmlParser.parse(
+            "<table class=\"sabq-table sabq-table--card\"><tbody><tr><td>المسار</td><td>الوصف</td></tr></tbody></table>"
+        )
+        guard case .table(let header, let rows, let cardStyle) = blocks.first else {
+            Issue.record("لم يُنتج جدولًا: \(blocks)")
+            return
+        }
+        #expect(header == nil)
+        #expect(rows.count == 1)
+        #expect(cardStyle == true)
+    }
+
     @Test func parsesBlockquote() {
         let blocks = ArticleHtmlParser.parse("<blockquote>اقتباس مهم</blockquote>")
-        guard case .blockquote(let runs) = blocks.first else {
+        guard case .blockquote(let runs, let attribution) = blocks.first else {
             Issue.record("لم يُنتج blockquote: \(blocks)")
             return
         }
         #expect(runs.map(\.text).joined() == "اقتباس مهم")
+        #expect(attribution == nil)
+    }
+
+    /// «المقولة» — القائل في فقرة واحدة: يُفصل القائل عن النص.
+    @Test func splitsQuoteAttribution() {
+        let blocks = ArticleHtmlParser.parse(
+            "<blockquote><p>«الاتفاق يسهم في إنعاش الصناعة النووية» — روبرت أينهورن، المسؤول السابق في الخارجية الأمريكية</p></blockquote>"
+        )
+        guard case .blockquote(let runs, let attribution) = blocks.first else {
+            Issue.record("لم يُنتج blockquote: \(blocks)")
+            return
+        }
+        #expect(runs.map(\.text).joined() == "«الاتفاق يسهم في إنعاش الصناعة النووية»")
+        #expect(attribution?.map(\.text).joined() == "روبرت أينهورن، المسؤول السابق في الخارجية الأمريكية")
+    }
+
+    /// شرطة داخل المقولة نفسها (قبل قفل «») لا تُفصل كقائل.
+    @Test func doesNotSplitDashInsideQuote() {
+        let blocks = ArticleHtmlParser.parse(
+            "<blockquote><p>«العلاقات الأمريكية - السعودية تتعزز»</p></blockquote>"
+        )
+        guard case .blockquote(_, let attribution) = blocks.first else {
+            Issue.record("لم يُنتج blockquote: \(blocks)")
+            return
+        }
+        #expect(attribution == nil)
     }
 
     @Test func skipsEmptyParagraphs() {
@@ -79,7 +146,7 @@ struct ArticleHtmlParserTests {
         let blocks = ArticleHtmlParser.parse(
             #"<img src="https://cdn.sabq.org/a.jpg" alt="وصف الصورة">"#
         )
-        guard case .image(let url, let alt, _) = blocks.first else {
+        guard case .image(let url, let alt, _, _) = blocks.first else {
             Issue.record("لم يُنتج بلوك صورة: \(blocks)")
             return
         }
@@ -91,7 +158,7 @@ struct ArticleHtmlParserTests {
         let blocks = ArticleHtmlParser.parse(
             #"<p><img src="https://cdn.sabq.org/b.jpg"></p>"#
         )
-        guard case .image(let url, _, _) = blocks.first else {
+        guard case .image(let url, _, _, _) = blocks.first else {
             Issue.record("الصورة داخل <p> لم تُستخرج: \(blocks)")
             return
         }

@@ -93,8 +93,21 @@ export function retryImport<T>(
         }
         resolve(mod);
       })
-      .catch((error: Error) => {
-        const isModuleError = isChunkErrorMessage(error.message);
+      .catch((error: unknown) => {
+        // Some browsers reject a failed Vite preload with `undefined` instead
+        // of an Error (JAVASCRIPT-REACT-3A). Reading `error.message` then throws
+        // a second TypeError and bypasses the chunk recovery path entirely.
+        // Normalize every rejection before classification so the original
+        // failure is retried and, if necessary, reaches the existing recovery
+        // UI rather than becoming an unrelated unhandled exception.
+        const normalizedError = error instanceof Error
+          ? error
+          : new Error(
+              error == null
+                ? "Loading chunk failed: import rejected without an Error"
+                : String(error),
+            );
+        const isModuleError = isChunkErrorMessage(normalizedError.message);
 
         if (retries > 0 && isModuleError) {
           console.warn(`[LazyLoad] Retrying import, ${retries} attempts left...`);
@@ -131,7 +144,7 @@ export function retryImport<T>(
           });
           return;
         } else {
-          reject(error);
+          reject(normalizedError);
         }
       });
   });

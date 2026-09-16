@@ -8,7 +8,9 @@ import {
   getCompetitionBySlug,
   getContest,
   getContestSettlement,
+  getHomepagePromoFeed,
   getLeaderboard,
+  getUserEntries,
   getUserLedger,
   getUserPoints,
   isPredictionCoreEnabled,
@@ -19,6 +21,7 @@ import {
   withdrawEntry,
 } from "../services/predictions/predictionCoreService";
 import { PREDICTION_ERROR_CODES } from "@shared/predictions";
+import { parseLimit, paginationOrReject } from "../utils/pagination";
 
 const router = Router();
 
@@ -47,6 +50,22 @@ router.get("/api/predictions/competitions", async (req, res) => {
   if (!requireEnabled(res)) return;
   try {
     res.json({ competitions: await listActiveCompetitions(webUserId(req)) });
+  } catch (error) {
+    handleError(res, error);
+  }
+});
+
+/** إعلانات نصية دوّارة تحت الأخبار البارزة — عامة، خفيفة، بلا جلسة. */
+router.get("/api/predictions/promo-feed", async (req, res) => {
+  if (!requireEnabled(res)) return;
+  try {
+    const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 8, maxLimit: 50 });
+    if (!pg) return;
+    const payload = await getHomepagePromoFeed(
+      req.query.limit ? pg.limit : undefined,
+    );
+    res.setHeader("Cache-Control", "public, max-age=60, s-maxage=120, stale-while-revalidate=300");
+    res.json(payload);
   } catch (error) {
     handleError(res, error);
   }
@@ -122,7 +141,20 @@ router.get("/api/predictions/me/ledger", requireAuth, async (req: any, res) => {
     res.json(await getUserLedger(req.user.id, {
       competitionSlug: typeof req.query.competition === "string" ? req.query.competition : undefined,
       cursor: typeof req.query.cursor === "string" ? req.query.cursor : undefined,
-      limit: req.query.limit ? Number(req.query.limit) : undefined,
+      limit: req.query.limit ? parseLimit(req.query.limit, 20, 50) : undefined,
+    }));
+  } catch (error) {
+    handleError(res, error);
+  }
+});
+
+// «توقعاتي» — تاريخ توقعات المستخدم كاملًا مع النتائج والجوائز (لا يقتطع كتفاصيل البطولة)
+router.get("/api/predictions/me/entries", requireAuth, async (req: any, res) => {
+  try {
+    res.json(await getUserEntries(req.user.id, {
+      competitionSlug: typeof req.query.competition === "string" ? req.query.competition : undefined,
+      cursor: typeof req.query.cursor === "string" ? req.query.cursor : undefined,
+      limit: req.query.limit ? parseLimit(req.query.limit, 30, 100) : undefined,
     }));
   } catch (error) {
     handleError(res, error);
@@ -137,11 +169,13 @@ router.get("/api/predictions/leaderboards", async (req, res) => {
       res.status(400).json({ error: PREDICTION_ERROR_CODES.CONTEST_NOT_FOUND });
       return;
     }
+    const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 50, maxLimit: 100 });
+    if (!pg) return;
     res.json(await getLeaderboard({
       competitionSlug,
       userId: webUserId(req),
-      offset: req.query.offset ? Number(req.query.offset) : 0,
-      limit: req.query.limit ? Number(req.query.limit) : undefined,
+      offset: pg.offset,
+      limit: req.query.limit ? pg.limit : undefined,
     }));
   } catch (error) {
     handleError(res, error);

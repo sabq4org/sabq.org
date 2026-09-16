@@ -271,7 +271,7 @@ router.get("/api/ai/daily-summary", requireAuth, async (req: any, res) => {
     }
 
     const personalizedGreeting = {
-      userName: user.firstName || user.email.split('@')[0],
+      userName: user.firstName || user.email?.split('@')[0] || "قارئ",
       articlesReadToday: uniqueArticlesRead,
       readingTimeMinutes: totalReadingTimeMinutes,
       topCategories,

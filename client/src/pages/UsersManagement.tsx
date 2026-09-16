@@ -68,6 +68,7 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { adminUpdateUserSchema } from "@shared/schema";
+import { hasRealEmail, isSyntheticPhoneEmail } from "@shared/authEmail";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { AddUserDialog } from "@/components/AddUserDialog";
 import { EditUserDialog } from "@/components/EditUserDialog";
@@ -140,8 +141,28 @@ function adminUserLabel(user: {
   const name = [user.firstName, user.lastName].filter(Boolean).join(" ").trim();
   if (name) return name;
   if (user.phoneNumber?.trim()) return `عضو جوال · ${user.phoneNumber.trim()}`;
-  if (user.email?.toLowerCase().includes("@phone.sabq.org")) return "عضو جوال";
+  if (isSyntheticPhoneEmail(user.email)) return "عضو جوال";
   return "بدون اسم";
+}
+
+/** خلية البريد: الاصطناعي التاريخي (@phone.sabq.org) والمفقود يظهران «لم يُضف بريد»،
+ *  وعلامة التوثيق لا تظهر إلا لبريد حقيقي مرّ بتحقق فعلي. */
+function EmailCell({ email, emailVerified }: { email?: string | null; emailVerified?: boolean }) {
+  if (!hasRealEmail(email)) {
+    return (
+      <Badge variant="outline" className="text-xs font-normal text-muted-foreground">
+        لم يُضف بريد
+      </Badge>
+    );
+  }
+  return (
+    <div className="flex items-start gap-1.5">
+      <span className="text-sm break-all">{email}</span>
+      {emailVerified && (
+        <BadgeCheck className="h-4 w-4 text-emerald-500 shrink-0 mt-0.5" aria-label="بريد موثق" />
+      )}
+    </div>
+  );
 }
 
 // Role type
@@ -203,6 +224,7 @@ export default function UsersManagement() {
   const [newPassword, setNewPassword] = useState("");
   const [permanentDeletingUser, setPermanentDeletingUser] = useState<UserListItem | null>(null);
   const [viewingDetails, setViewingDetails] = useState<UserListItem | null>(null);
+  const [promotingUser, setPromotingUser] = useState<UserListItem | null>(null);
 
   const form = useForm<UserFormValues>({
     resolver: zodResolver(adminUpdateUserSchema),
@@ -374,6 +396,29 @@ export default function UsersManagement() {
       toast({
         title: "خطأ",
         description: error.message || "فشل في إعادة تعيين كلمة المرور",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const promoteReporterMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return await apiRequest(`/api/admin/users/${id}/promote-reporter`, {
+        method: "POST",
+      });
+    },
+    onSuccess: (data: { message?: string }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      setPromotingUser(null);
+      toast({
+        title: "تمت الترقية إلى مراسل",
+        description: data?.message || "ستظهر العضوية مراسل في التطبيق واستكمال الملف",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "تعذر الترقية",
+        description: error.message || "فشل في ترقية العضوية إلى مراسل",
         variant: "destructive",
       });
     },
@@ -732,12 +777,7 @@ export default function UsersManagement() {
                           </div>
                         </td>
                         <td className="py-3 px-4 align-top" data-testid={`text-email-${user.id}`}>
-                          <div className="flex items-start gap-1.5">
-                            <span className="text-sm break-all">{user.email}</span>
-                            {user.emailVerified && (
-                              <BadgeCheck className="h-4 w-4 text-emerald-500 shrink-0 mt-0.5" aria-label="بريد موثق" />
-                            )}
-                          </div>
+                          <EmailCell email={user.email} emailVerified={user.emailVerified} />
                         </td>
                         <td className="py-3 px-4 hidden md:table-cell align-top" data-testid={`text-phone-${user.id}`}>
                           {user.phoneNumber ? (
@@ -793,6 +833,16 @@ export default function UsersManagement() {
                               title="عرض التفاصيل"
                             >
                               <Eye className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => setPromotingUser(user)}
+                              disabled={user.id === (globalThis as any).__currentUserId}
+                              data-testid={`button-promote-reporter-${user.id}`}
+                              title="ترقية إلى مراسل"
+                            >
+                              <UserCheck className="h-4 w-4" />
                             </Button>
                             <Button
                               variant="ghost"
@@ -943,13 +993,35 @@ export default function UsersManagement() {
         userId={editingUser?.id || null}
       />
 
+      <AlertDialog open={!!promotingUser} onOpenChange={(open) => !open && setPromotingUser(null)}>
+        <AlertDialogContent data-testid="dialog-promote-reporter">
+          <AlertDialogHeader>
+            <AlertDialogTitle>ترقية إلى مراسل</AlertDialogTitle>
+            <AlertDialogDescription>
+              سيتم تحويل عضوية "{promotingUser ? adminUserLabel(promotingUser) : ""}" من قارئ إلى مراسل،
+              ومزامنة الدور في الصلاحيات وصفحة المراسل حتى يتمكن من استكمال الملف وإصدار شهادة التعريف.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-promote-reporter">إلغاء</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => promotingUser && promoteReporterMutation.mutate(promotingUser.id)}
+              disabled={promoteReporterMutation.isPending}
+              data-testid="button-confirm-promote-reporter"
+            >
+              {promoteReporterMutation.isPending ? "جاري الترقية..." : "ترقية إلى مراسل"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={!!deletingUser} onOpenChange={(open) => !open && setDeletingUser(null)}>
         <AlertDialogContent data-testid="dialog-delete">
           <AlertDialogHeader>
             <AlertDialogTitle>تأكيد الحذف</AlertDialogTitle>
             <AlertDialogDescription>
-              هل أنت متأكد من حذف المستخدم "{deletingUser?.email}"؟ سيتم تعيين حالته إلى "محظور".
+              هل أنت متأكد من حذف المستخدم "{deletingUser ? adminUserLabel(deletingUser) : ""}"؟ سيتم تعيين حالته إلى "محظور".
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -975,7 +1047,7 @@ export default function UsersManagement() {
                 تحذير: هذا الإجراء لا يمكن التراجع عنه!
               </p>
               <p>
-                هل أنت متأكد من حذف المستخدم "{permanentDeletingUser?.email}" نهائياً؟
+                هل أنت متأكد من حذف المستخدم "{permanentDeletingUser ? adminUserLabel(permanentDeletingUser) : ""}" نهائياً؟
               </p>
               <p>
                 سيتم نقل جميع مقالات هذا المستخدم إلى حساب "صحيفة سبق" وحذف بياناته بشكل كامل.
@@ -1118,8 +1190,16 @@ export default function UsersManagement() {
                     <div className="flex items-center justify-between">
                       <span className="text-muted-foreground">البريد</span>
                       <div className="flex items-center gap-1.5">
-                        <span className="font-medium" dir="ltr">{viewingDetails.email}</span>
-                        {viewingDetails.emailVerified && <BadgeCheck className="h-4 w-4 text-emerald-500" />}
+                        {hasRealEmail(viewingDetails.email) ? (
+                          <>
+                            <span className="font-medium" dir="ltr">{viewingDetails.email}</span>
+                            {viewingDetails.emailVerified && (
+                              <BadgeCheck className="h-4 w-4 text-emerald-500" aria-label="بريد موثق" />
+                            )}
+                          </>
+                        ) : (
+                          <span className="text-muted-foreground">لم يُضف بريد — الملف غير مكتمل</span>
+                        )}
                       </div>
                     </div>
                     <div className="flex items-center justify-between">

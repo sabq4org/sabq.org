@@ -5,7 +5,8 @@ import { objectStorageClient } from "../objectStorage";
 import { nanoid } from "nanoid";
 import { twilioClient, sendWhatsAppMessage, sendWhatsAppMessageWithDetails, extractTokenFromMessage, removeTokenFromMessage, validateTwilioSignature, updateLastInboundTime, isWithin24HourWindow } from "../services/whatsapp";
 import { requireAuth, requireRole } from "../rbac";
-import { insertWhatsappTokenSchema, mediaFiles, articleMediaAssets } from "@shared/schema";
+import { insertWhatsappTokenSchema, mediaFiles, articleMediaAssets, whatsappTokens } from "@shared/schema";
+import { pickTableColumns } from "../utils/sanitizeBody";
 import crypto from "crypto";
 import { db } from "../db";
 import { addMessagePart, shouldForceProcess, AGGREGATION_WINDOW_SECONDS, processAggregatedMessage } from "../services/whatsappMessageAggregator";
@@ -14,8 +15,22 @@ import { invalidatePublishedContent } from "../services/contentInvalidation";
 import mammoth from "mammoth";
 import OpenAI from "openai";
 import { newsImageStorageService } from "../services/newsImageStorageService";
+import { riyadhDayRange } from "../utils/riyadhDay";
+import { parseLimit, parseOffset } from "../utils/pagination";
 
 const router = Router();
+
+// الواجهة القديمة كانت ترسل success/failed وهما اسمان لا يكتبهما هذا المسار إطلاقاً،
+// فكان فلتر السجلات يرجع صفر نتائج دائماً. نقبل الاسمين كمرادفين للقيم الحقيقية.
+const LOG_STATUS_ALIASES: Record<string, string> = {
+  success: "processed",
+  failed: "rejected",
+};
+
+function normalizeLogStatus(status?: string): string | undefined {
+  if (!status || status === "all") return undefined;
+  return LOG_STATUS_ALIASES[status] ?? status;
+}
 
 async function uploadToCloudStorage(
   file: Buffer,
@@ -65,20 +80,22 @@ async function uploadToCloudStorage(
       },
     });
 
-    console.log(`[WhatsApp Agent] ✅ Uploaded ${isPublic ? 'PUBLIC' : 'PRIVATE'} media: ${fullPath}`);
+    console.log(`[WhatsApp Agent] ✅ Uploaded ${isPublic ? 'PUBLIC' : 'PRIVATE'} media`);
     
     // 🎯 Return Backend Proxy URL (Replit Object Storage doesn't allow makePublic or signed URLs)
     // The backend will stream the file from Object Storage
     if (isPublic) {
       const frontendUrl = process.env.FRONTEND_URL || 'https://sabq.org';
       const proxyUrl = `${frontendUrl}/api/public-media/${fullPath}`;
-      console.log(`[WhatsApp Agent] 🌐 Generated proxy URL: ${proxyUrl}`);
+      console.log('[WhatsApp Agent] 🌐 Generated media proxy URL');
       return proxyUrl;
     }
     
     return `${objectDir}/${storedFilename}`;
   } catch (error) {
-    console.error("[WhatsApp Agent] Error uploading media:", error);
+    console.error("[WhatsApp Agent] Error uploading media:", {
+      name: error instanceof Error ? error.name : "UnknownError",
+    });
     throw error;
   }
 }
@@ -106,7 +123,7 @@ function parseObjectPath(path: string): { bucketName: string; objectPath: string
     cleanPath = cleanPath.replace(/^replit-objstore-[a-f0-9-]+\//, '');
   }
   
-  console.log(`[WhatsApp Agent] 🪣 Parsed object path: bucket="${REPLIT_BUCKET}", path="${cleanPath}"`);
+  console.log('[WhatsApp Agent] 🪣 Parsed media object path');
   return { bucketName: REPLIT_BUCKET, objectPath: cleanPath };
 }
 
@@ -343,7 +360,7 @@ function getHelpMessage(): string {
 
 async function downloadWhatsAppMedia(mediaUrl: string): Promise<{ buffer: Buffer; contentType: string; filename: string }> {
   try {
-    console.log(`[WhatsApp Agent] 📥 Downloading media from: ${mediaUrl}`);
+    console.log('[WhatsApp Agent] 📥 Downloading inbound media');
     
     // For Twilio-hosted media, use Basic Auth with fetch (more reliable than twilioClient.request)
     const isTwilioMedia = mediaUrl.includes('api.twilio.com') || mediaUrl.includes('media.twiliocdn.com');
@@ -378,8 +395,7 @@ async function downloadWhatsAppMedia(mediaUrl: string): Promise<{ buffer: Buffer
     console.log(`[WhatsApp Agent] 📊 Response headers: content-type=${response.headers.get('content-type')}, content-length=${response.headers.get('content-length')}`);
 
     if (!response.ok) {
-      const errorText = await response.text().catch(() => 'Unable to read error body');
-      console.error(`[WhatsApp Agent] ❌ HTTP Error: ${response.status} - ${errorText.substring(0, 200)}`);
+      console.error(`[WhatsApp Agent] ❌ Media download HTTP error: ${response.status}`);
       throw new Error(`Failed to download: ${response.status} ${response.statusText}`);
     }
 
@@ -413,10 +429,9 @@ async function downloadWhatsAppMedia(mediaUrl: string): Promise<{ buffer: Buffer
     
     return { buffer, contentType, filename };
   } catch (error) {
-    console.error(`[WhatsApp Agent] ❌ Failed to download media from ${mediaUrl}:`, error instanceof Error ? error.message : error);
-    if (error instanceof Error && error.stack) {
-      console.error(`[WhatsApp Agent] Stack:`, error.stack);
-    }
+    console.error('[WhatsApp Agent] ❌ Failed to download media', {
+      name: error instanceof Error ? error.name : 'UnknownError',
+    });
     throw error;
   }
 }
@@ -455,8 +470,7 @@ router.get("/stats", requireAuth, requireRole('admin', 'manager', 'system_admin'
     const allTokens = await storage.getAllWhatsappTokens();
     
     // Calculate stats
-    const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const { start: today } = riyadhDayRange();
     
     const logsToday = allLogs.logs.filter(log => new Date(log.createdAt) >= today);
     const successLogs = logsToday.filter(log => log.status === 'processed');
@@ -492,8 +506,7 @@ router.get("/badge-stats", requireAuth, requireRole('admin', 'manager', 'system_
     const allLogs = await storage.getWhatsappWebhookLogs({ limit: 1000, offset: 0 });
     
     // Calculate today's date range
-    const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const { start: today } = riyadhDayRange();
     
     // Filter logs for today
     const logsToday = allLogs.logs.filter(log => new Date(log.createdAt) >= today);
@@ -503,11 +516,15 @@ router.get("/badge-stats", requireAuth, requireRole('admin', 'manager', 'system_
     const publishedToday = logsToday.filter(log => 
       log.status === 'processed' && log.publishStatus === 'published'
     ).length;
+    const draftedToday = logsToday.filter(log =>
+      log.status === 'processed' && log.publishStatus === 'draft'
+    ).length;
     const rejectedToday = logsToday.filter(log => log.status === 'rejected').length;
     
     return res.json({
       newMessages,
       publishedToday,
+      draftedToday,
       rejectedToday,
     });
   } catch (error) {
@@ -547,7 +564,7 @@ router.post("/webhook", async (req: Request, res: Response) => {
   const dedupKey = messageSid || `${req.body.From || ''}_${req.body.Body?.substring(0, 50) || ''}_${Math.floor(Date.now() / 60000)}`;
   
   if (processedWhatsappMessages.has(dedupKey)) {
-    console.log(`[WhatsApp Agent] 🔒 DUPLICATE DETECTED - Already processing: ${dedupKey.substring(0, 50)}...`);
+    console.log('[WhatsApp Agent] 🔒 Duplicate webhook detected');
     return res.status(200).json({ 
       success: true, 
       message: "Duplicate webhook ignored" 
@@ -556,7 +573,7 @@ router.post("/webhook", async (req: Request, res: Response) => {
   
   // Mark as processing IMMEDIATELY
   processedWhatsappMessages.set(dedupKey, Date.now());
-  console.log(`[WhatsApp Agent] 🔒 Dedup key registered: ${dedupKey.substring(0, 50)}...`);
+  console.log('[WhatsApp Agent] 🔒 Webhook dedup key registered');
   
   try {
     console.log("[WhatsApp Agent] ============ WEBHOOK START ============");
@@ -595,13 +612,13 @@ router.post("/webhook", async (req: Request, res: Response) => {
       const frontendUrl = process.env.FRONTEND_URL || 'https://sabq.org';
       const url = `${frontendUrl}/api/whatsapp/webhook`;
       
-      console.log(`[WhatsApp Agent] 🔐 Validating signature for URL: ${url}`);
+      console.log('[WhatsApp Agent] 🔐 Validating webhook signature');
       isValid = validateTwilioSignature(twilioSignature, url, req.body);
       
       // If it fails with frontend URL, try with the request host as fallback
       if (!isValid) {
         const fallbackUrl = `https://${req.headers.host}${req.originalUrl}`;
-        console.log(`[WhatsApp Agent] 🔄 Retrying with fallback URL: ${fallbackUrl}`);
+        console.log('[WhatsApp Agent] 🔄 Retrying webhook signature with fallback URL');
         isValid = validateTwilioSignature(twilioSignature, fallbackUrl, req.body);
       }
     }
@@ -628,25 +645,19 @@ router.post("/webhook", async (req: Request, res: Response) => {
     console.log("[WhatsApp Agent] Received webhook from Twilio");
     console.log("[WhatsApp Agent] Raw req.body keys:", Object.keys(req.body));
     
-    // 🔍 COMPLETE BODY DUMP FOR DEBUGGING
-    console.log("[WhatsApp Agent] 🔍 COMPLETE req.body:", JSON.stringify(req.body, null, 2));
-    
     const from = req.body.From || "";
-    const to = req.body.To || "";
     const body = req.body.Body || "";
     const numMedia = parseInt(req.body.NumMedia || "0", 10);
     
     console.log("[WhatsApp Agent] Extracted values:");
-    console.log("[WhatsApp Agent] - From:", from);
-    console.log("[WhatsApp Agent] - To:", to);
-    console.log("[WhatsApp Agent] - Body:", body);
+    console.log("[WhatsApp Agent] - Body length:", body.length);
     console.log("[WhatsApp Agent] - NumMedia:", numMedia);
 
     const phoneNumber = from.replace('whatsapp:', '');
     
     // 📥 Track inbound message time for 24-hour window enforcement
     updateLastInboundTime(phoneNumber);
-    console.log(`[WhatsApp Agent] ✅ Updated 24h window tracker for ${phoneNumber.substring(0, 8)}...`);
+    console.log('[WhatsApp Agent] ✅ Updated 24h window tracker');
     
     // ✅ CREATE ONE LOG AT THE BEGINNING
     webhookLog = await storage.createWhatsappWebhookLog({
@@ -672,7 +683,7 @@ router.post("/webhook", async (req: Request, res: Response) => {
       return res.status(200).send('OK');
     }
 
-    console.log(`[WhatsApp Agent] Token extracted: ${token}`);
+    console.log('[WhatsApp Agent] Token extracted from message');
 
     const whatsappToken = await storage.getWhatsappTokenByToken(token);
     
@@ -727,7 +738,6 @@ router.post("/webhook", async (req: Request, res: Response) => {
       
       if (tokenPhone !== incomingPhone) {
         console.log("[WhatsApp Agent] Phone number mismatch");
-        console.log(`[WhatsApp Agent] Expected: ${whatsappToken.phoneNumber} (${tokenPhone}), Got: ${phoneNumber} (${incomingPhone})`);
         
         // ✅ UPDATE THE LOG INSTEAD OF CREATING NEW ONE
         await storage.updateWhatsappWebhookLog(webhookLog.id, {
@@ -779,7 +789,7 @@ router.post("/webhook", async (req: Request, res: Response) => {
         }
 
         try {
-          console.log(`[WhatsApp Agent] 📎 Downloading media ${i + 1}/${numMedia}: ${mediaUrl}`);
+          console.log(`[WhatsApp Agent] 📎 Downloading media ${i + 1}/${numMedia}`);
           console.log(`[WhatsApp Agent] 📎 Twilio MediaContentType${i}: ${mediaContentType || 'MISSING'}`);
           
           const { buffer, contentType, filename } = await downloadWhatsAppMedia(mediaUrl);
@@ -899,9 +909,11 @@ router.post("/webhook", async (req: Request, res: Response) => {
             url: gcsPath,
           });
           
-          console.log(`[WhatsApp Agent] ✅ Media ${i + 1} uploaded to: ${gcsPath}`);
+          console.log(`[WhatsApp Agent] ✅ Media ${i + 1} uploaded`);
         } catch (error) {
-          console.error(`[WhatsApp Agent] ❌ Failed to process media ${i + 1}:`, error);
+          console.error(`[WhatsApp Agent] ❌ Failed to process media ${i + 1}:`, {
+            name: error instanceof Error ? error.name : 'UnknownError',
+          });
         }
       }
       
@@ -909,7 +921,7 @@ router.post("/webhook", async (req: Request, res: Response) => {
     }
 
     const cleanText = removeTokenFromMessage(body);
-    console.log(`[WhatsApp Agent] Cleaned text: "${cleanText}"`);
+    console.log(`[WhatsApp Agent] Cleaned text length: ${cleanText.length}`);
     
     // 🎯 PARSE COMMAND FROM MESSAGE
     const command = parseWhatsAppCommand(cleanText);
@@ -1590,12 +1602,7 @@ router.post("/webhook", async (req: Request, res: Response) => {
       ? `السلام عليكم\n✅ تم نشر الخبر بنجاح\n\nhttps://sabq.org/article/${englishSlug}`
       : `السلام عليكم\n📝 تم حفظ الخبر كمسودة\nسيتم مراجعته قبل النشر`;
 
-    // 🔍 DEBUG REPLY MESSAGE DETAILS
-    console.log(`[WhatsApp Agent] 📤 Preparing to send reply message:`);
-    console.log(`[WhatsApp Agent]   - From: whatsapp:${process.env.TWILIO_PHONE_NUMBER}`);
-    console.log(`[WhatsApp Agent]   - To: whatsapp:${phoneNumber}`);
-    console.log(`[WhatsApp Agent]   - Message: ${replyMessage}`);
-    console.log(`[WhatsApp Agent]   - Slug: ${slug}`);
+    console.log(`[WhatsApp Agent] 📤 Preparing to send reply message`);
     console.log(`[WhatsApp Agent]   - Status: ${articleStatus}`);
 
     try {
@@ -1611,11 +1618,9 @@ router.post("/webhook", async (req: Request, res: Response) => {
       
       if (result.success) {
         console.log(`[WhatsApp Agent] ✅ REPLY SENT SUCCESSFULLY`);
-        console.log(`[WhatsApp Agent]   - SID: ${result.sid}`);
         console.log(`[WhatsApp Agent]   - Status: ${result.status}`);
       } else {
         console.error(`[WhatsApp Agent] ❌ REPLY FAILED`);
-        console.error(`[WhatsApp Agent]   - Error: ${result.error}`);
         console.error(`[WhatsApp Agent]   - Error Code: ${result.errorCode || 'none'}`);
         console.error(`[WhatsApp Agent]   - Requires Template: ${result.requiresTemplate ? 'YES' : 'no'}`);
         
@@ -1624,10 +1629,9 @@ router.post("/webhook", async (req: Request, res: Response) => {
         }
       }
     } catch (error) {
-      console.error(`[WhatsApp Agent] ❌ EXCEPTION while sending reply:`, error instanceof Error ? error.message : error);
-      if (error instanceof Error) {
-        console.error(`[WhatsApp Agent] Stack trace:`, error.stack);
-      }
+      console.error('[WhatsApp Agent] ❌ Exception while sending reply', {
+        name: error instanceof Error ? error.name : 'UnknownError',
+      });
     }
 
     console.log("[WhatsApp Agent] ============ WEBHOOK END (SUCCESS) ============");
@@ -1636,7 +1640,9 @@ router.post("/webhook", async (req: Request, res: Response) => {
 
   } catch (error) {
     console.error("[WhatsApp Agent] ============ WEBHOOK ERROR ============");
-    console.error("[WhatsApp Agent] Error:", error);
+    console.error("[WhatsApp Agent] Webhook processing error:", {
+      name: error instanceof Error ? error.name : 'UnknownError',
+    });
     
     // ✅ UPDATE THE LOG WITH ERROR STATUS INSTEAD OF CREATING NEW ONE
     if (webhookLog && webhookLog.id) {
@@ -1673,17 +1679,16 @@ router.post("/tokens", requireAuth, requireRole('admin', 'manager'), async (req:
   try {
     const userId = (req.user as any).id;
     
+    // الرمز يُولَّد هنا دائماً — لا يُقبل من العميل حتى لا يُختار رمز ضعيف أو مكرر.
+    const token = `SABQ-${crypto.randomBytes(8).toString('hex').toUpperCase()}`;
+    
     const validatedData = insertWhatsappTokenSchema.parse({
       ...req.body,
+      token,
       userId,
     });
     
-    const token = `SABQ-${crypto.randomBytes(8).toString('hex').toUpperCase()}`;
-    
-    const newToken = await storage.createWhatsappToken({
-      ...validatedData,
-      token,
-    });
+    const newToken = await storage.createWhatsappToken(validatedData);
     
     return res.status(201).json(newToken);
   } catch (error) {
@@ -1698,20 +1703,31 @@ router.post("/tokens", requireAuth, requireRole('admin', 'manager'), async (req:
 router.patch("/tokens/:id", requireAuth, requireRole('admin', 'manager'), async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const updates = req.body;
-    
-    console.log("[WhatsApp Agent] PATCH /tokens/:id - Received updates:", JSON.stringify(updates, null, 2));
-    
-    delete updates.token;
-    delete updates.usageCount;
-    delete updates.lastUsedAt;
-    delete updates.createdAt;
-    
-    console.log("[WhatsApp Agent] PATCH /tokens/:id - After cleanup:", JSON.stringify(updates, null, 2));
-    
+
+    // An allowlist, not a denylist: the previous `delete` calls covered four
+    // fields and let `userId` through, so a token could be re-pointed at
+    // another account while keeping its privilege flags.
+    const updates = pickTableColumns(whatsappTokens, req.body, {
+      allow: [
+        "label",
+        "phoneNumber",
+        "autoPublish",
+        "allowedLanguages",
+        "isActive",
+        "isAdmin",
+        "canDeleteAny",
+        "canArchiveAny",
+        "canEditAny",
+        "canMarkBreaking",
+        "expiresAt",
+      ],
+    });
+
+    console.log("[WhatsApp Agent] PATCH /tokens/:id - Allowed fields:", Object.keys(updates));
+
     const updated = await storage.updateWhatsappToken(id, updates);
     
-    console.log("[WhatsApp Agent] PATCH /tokens/:id - Updated token:", JSON.stringify(updated, null, 2));
+    console.log("[WhatsApp Agent] PATCH /tokens/:id - Update completed");
     
     if (!updated) {
       return res.status(404).json({ error: "Token not found" });
@@ -1743,9 +1759,9 @@ router.delete("/tokens/:id", requireAuth, requireRole('admin', 'manager'), async
 
 router.get("/logs", requireAuth, requireRole('admin', 'manager'), async (req: Request, res: Response) => {
   try {
-    const limit = parseInt(req.query.limit as string) || 50;
-    const offset = parseInt(req.query.offset as string) || 0;
-    const status = req.query.status as string | undefined;
+    const limit = parseLimit(req.query.limit, 50, 200);
+    const offset = parseOffset(req.query.offset);
+    const status = normalizeLogStatus(req.query.status as string | undefined);
     
     const result = await storage.getWhatsappWebhookLogs({ limit, offset, status });
     
@@ -1794,13 +1810,8 @@ router.post("/logs/bulk-delete", requireAuth, requireRole('admin', 'manager'), a
 router.post("/status-callback", async (req: Request, res: Response) => {
   try {
     const {
-      MessageSid,
       MessageStatus,
-      To,
-      From,
       ErrorCode,
-      ErrorMessage,
-      ChannelToAddress,
       ChannelPrefix
     } = req.body;
 
@@ -1813,20 +1824,17 @@ router.post("/status-callback", async (req: Request, res: Response) => {
       'undelivered': '⚠️'
     } as Record<string, string>)[MessageStatus] || '📋';
 
-    console.log(`[WhatsApp Status] ${statusEmoji} Message ${MessageSid}:`);
+    console.log(`[WhatsApp Status] ${statusEmoji} Message status update:`);
     console.log(`[WhatsApp Status]   Status: ${MessageStatus}`);
-    console.log(`[WhatsApp Status]   To: ${To || ChannelToAddress}`);
-    console.log(`[WhatsApp Status]   From: ${From}`);
     
     if (ErrorCode && ErrorCode !== '0') {
-      console.error(`[WhatsApp Status] ❌ ERROR ${ErrorCode}: ${ErrorMessage}`);
+      console.error(`[WhatsApp Status] ❌ Provider error code: ${ErrorCode}`);
     }
 
     // Log failed/undelivered messages with more detail
     if (MessageStatus === 'failed' || MessageStatus === 'undelivered') {
-      console.error(`[WhatsApp Status] ❌ DELIVERY FAILED for ${To || ChannelToAddress}`);
+      console.error(`[WhatsApp Status] ❌ DELIVERY FAILED`);
       console.error(`[WhatsApp Status]   Error Code: ${ErrorCode || 'N/A'}`);
-      console.error(`[WhatsApp Status]   Error Message: ${ErrorMessage || 'N/A'}`);
       console.error(`[WhatsApp Status]   Channel: ${ChannelPrefix || 'whatsapp'}`);
       
       // Common Twilio WhatsApp error codes:
@@ -1876,15 +1884,17 @@ router.post("/test-send", requireAuth, requireRole("super_admin", "admin"), asyn
     }
 
     console.log(`[WhatsApp Test] 🧪 Initiating test send...`);
-    console.log(`[WhatsApp Test]   - To: ${to}`);
-    console.log(`[WhatsApp Test]   - Message: ${message.substring(0, 50)}...`);
     
     const result = await sendWhatsAppMessageWithDetails({
       to: to,
       body: message
     });
 
-    console.log(`[WhatsApp Test] 📊 Result:`, result);
+    console.log(`[WhatsApp Test] 📊 Result:`, {
+      success: result.success,
+      status: result.status,
+      errorCode: result.errorCode,
+    });
 
     return res.json({
       success: result.success,
@@ -1895,7 +1905,9 @@ router.post("/test-send", requireAuth, requireRole("super_admin", "admin"), asyn
       requiresTemplate: result.requiresTemplate
     });
   } catch (error: any) {
-    console.error(`[WhatsApp Test] ❌ Exception:`, error);
+    console.error('[WhatsApp Test] ❌ Exception:', {
+      name: error instanceof Error ? error.name : 'UnknownError',
+    });
     return res.status(500).json({
       success: false,
       error: error.message

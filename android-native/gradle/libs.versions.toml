@@ -1,5 +1,5 @@
 [versions]
-agp = "8.7.2"
+agp = "8.13.2"
 kotlin = "2.0.21"
 ksp = "2.0.21-1.0.27"
 hilt = "2.52"
@@ -27,6 +27,12 @@ retrofit-kotlinx-serialization = "1.0.0"
 # Image loading
 coil = "2.7.0"
 
+# Home-screen widget (Glance)
+glance = "1.1.1"
+
+# ترقية صريحة — play-services يجرّ fragment:1.1.0 القديمة (تنبيه Play Console)
+fragment = "1.8.9"
+
 # Storage
 room = "2.6.1"
 datastore = "1.1.1"
@@ -41,6 +47,8 @@ media3 = "1.5.0"
 credentials = "1.3.0"
 googleid = "1.1.1"
 browser = "1.8.0"
+junit = "4.13.2"
+google-services = "4.4.2"
 
 [libraries]
 # Core
@@ -83,6 +91,11 @@ kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-
 
 # Coil (image loading) — Compose 2.x
 coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coil" }
+
+# Glance (home-screen widget)
+androidx-fragment-ktx = { group = "androidx.fragment", name = "fragment-ktx", version.ref = "fragment" }
+androidx-glance-appwidget = { group = "androidx.glance", name = "glance-appwidget", version.ref = "glance" }
+androidx-glance-material3 = { group = "androidx.glance", name = "glance-material3", version.ref = "glance" }
 coil-network-okhttp = { group = "io.coil-kt", name = "coil-svg", version.ref = "coil" }
 
 # Storage
@@ -94,6 +107,7 @@ androidx-datastore-preferences = { group = "androidx.datastore", name = "datasto
 # Push (FCM)
 firebase-bom = { group = "com.google.firebase", name = "firebase-bom", version.ref = "firebase-bom" }
 firebase-messaging = { group = "com.google.firebase", name = "firebase-messaging-ktx" }
+firebase-analytics = { group = "com.google.firebase", name = "firebase-analytics" }
 
 # Media (ExoPlayer for audio newsletters + Android Auto)
 androidx-media3-exoplayer = { group = "androidx.media3", name = "media3-exoplayer", version.ref = "media3" }
@@ -105,6 +119,7 @@ androidx-credentials = { group = "androidx.credentials", name = "credentials", v
 androidx-credentials-play-services-auth = { group = "androidx.credentials", name = "credentials-play-services-auth", version.ref = "credentials" }
 google-id = { group = "com.google.android.libraries.identity.googleid", name = "googleid", version.ref = "googleid" }
 androidx-browser = { group = "androidx.browser", name = "browser", version.ref = "browser" }
+junit = { group = "junit", name = "junit", version.ref = "junit" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
@@ -113,3 +128,4 @@ kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "ko
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
 hilt = { id = "com.google.dagger.hilt.android", version.ref = "hilt" }
+google-services = { id = "com.google.gms.google-services", version.ref = "google-services" }

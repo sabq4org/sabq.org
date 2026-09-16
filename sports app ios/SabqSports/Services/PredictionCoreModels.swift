@@ -41,11 +41,17 @@ nonisolated struct PredTeamMeta: Decodable, Hashable {
     let logo: String?
 }
 
+nonisolated struct PredPenaltiesMeta: Decodable, Hashable {
+    let home: Int?
+    let away: Int?
+}
+
 nonisolated struct PredContestMeta: Decodable, Hashable {
     let home: PredTeamMeta?
     let away: PredTeamMeta?
     let round: String?
     let venue: String?
+    let penalties: PredPenaltiesMeta?
 }
 
 /// حمولة توقّع نتيجة مباراة — كل الحقول اختيارية كي يمرّ فكّ الترميز
@@ -63,6 +69,7 @@ nonisolated struct PredMyEntry: Decodable, Hashable {
 nonisolated struct PredScoreResult: Decodable, Hashable {
     let finalHome: Int?
     let finalAway: Int?
+    let penalties: PredPenaltiesMeta?
 }
 
 nonisolated struct PredContest: Decodable, Hashable, Identifiable {
@@ -73,12 +80,17 @@ nonisolated struct PredContest: Decodable, Hashable, Identifiable {
     let opensAt: String?
     let locksAt: String
     let settledAt: String?
+    /// معرّف المباراة عند المصدر (API-Football) — جسر الربط بمركز المباراة.
+    let externalRef: String?
     let metadata: PredContestMeta?
     let result: PredScoreResult?
+    /// عدد المشاركين النشطين — رقم فقط، بلا أسماء (الأسماء في المتصدرين).
+    let entriesCount: Int?
     let myEntry: PredMyEntry?
 
     var locksAtDate: Date? { PredDates.parse(locksAt) }
     var isMatchScore: Bool { contestType == "match_score" }
+    var predictorsCount: Int { entriesCount ?? 0 }
 }
 
 // MARK: - القاعدة (ملف الاحتساب الفعّال — لتوليد شريط القاعدة، لا نص ثابت)
@@ -109,12 +121,12 @@ nonisolated struct PredRule: Decodable, Hashable {
             let e = Int(((params.tiers?.exact ?? 0) * 100).rounded())
             let m = Int(((params.tiers?.signedMargin ?? 0) * 100).rounded())
             let o = Int(((params.tiers?.outcome ?? 0) * 100).rounded())
-            return Lf("بركة المباراة %d نقطة: %d٪ للنتيجة الدقيقة، %d٪ للفارق الصحيح، %d٪ للاتجاه — وما لا يُوزَّع يتراكم للمباراة التالية", pool, e, m, o)
+            return Lf("جائزة المباراة %d نقطة: %d٪ للنتيجة الدقيقة، %d٪ للفارق الصحيح، %d٪ للاتجاه — وما لا يُوزَّع يتراكم للمباراة التالية", pool, e, m, o)
         case "shared_pool":
             let pool = params.basePool ?? 0
             return params.winCriterion == "exact"
-                ? Lf("بركة %d نقطة تُقسم بالتساوي على أصحاب النتيجة الدقيقة", pool)
-                : Lf("بركة %d نقطة تُقسم بالتساوي على من أصابوا اتجاه المباراة", pool)
+                ? Lf("جائزة %d نقطة تُقسم بالتساوي على أصحاب النتيجة الدقيقة", pool)
+                : Lf("جائزة %d نقطة تُقسم بالتساوي على من أصابوا اتجاه المباراة", pool)
         case "skill_weighted":
             return L("نقاط مهارية: دقة توقّعك × جرأته × سلسلة إصاباتك")
         case "fixed_points":
@@ -134,10 +146,12 @@ nonisolated struct PredContestDetailResponse: Decodable {
     let settledAt: String?
     let metadata: PredContestMeta?
     let result: PredScoreResult?
+    let entriesCount: Int?
     let myEntry: PredMyEntry?
     let rule: PredRule?
 
     var locksAtDate: Date? { PredDates.parse(locksAt) }
+    var predictorsCount: Int { entriesCount ?? 0 }
 }
 
 // MARK: - الإرسال
@@ -152,6 +166,28 @@ nonisolated struct PredEntrySaved: Decodable {
 
 nonisolated struct PredEntrySaveResponse: Decodable {
     let entry: PredEntrySaved
+}
+
+// MARK: - «توقعاتي» (me/entries — نظير تبويب الويب #1413)
+
+nonisolated struct PredMyEntryItem: Decodable, Hashable, Identifiable {
+    let contestId: String
+    let contestType: String
+    let status: String
+    let locksAt: String?
+    let settledAt: String?
+    let metadata: PredContestMeta?
+    let result: PredScoreResult?
+    let payload: PredScorePayload?
+    let totalPoints: Int?
+
+    var id: String { contestId }
+    var locksAtDate: Date? { PredDates.parse(locksAt) }
+}
+
+nonisolated struct PredMyEntriesResponse: Decodable {
+    let items: [PredMyEntryItem]
+    let nextCursor: String?
 }
 
 // MARK: - سجل النقاط
@@ -249,6 +285,34 @@ nonisolated struct PredSettlementResponse: Decodable {
     let myAwards: [PredMyAward]
 }
 
+// MARK: - جسر بطولات الرياضة → بطولات المنصة
+
+/// بادئة slug بطولة التوقعات المقابلة لبطولة الرياضة (المزروع: rsl-2026،
+/// kings-cup-2026…). البادئة تُطابَق على قائمة /competitions الحية — لا slug
+/// مزروع في التطبيق، فتنجو من تبدّل المواسم (نهج أندرويد المعتمد).
+nonisolated enum PredCompetitionBridge {
+    static func prefix(forSportsSlug slug: String?) -> String? {
+        switch slug {
+        case "pro-league": "rsl"
+        case "kings-cup": "kings-cup"
+        case "super-cup": "super-cup"
+        case "gulf-cup": "gulf-cup"
+        case "asian-cup": "asian-cup"
+        default: nil
+        }
+    }
+}
+
+// MARK: - عرض الأرقام في سياق RTL
+
+/// زوج نتيجة داخل عزل LTR **بالضيف أولًا**: في صف RTL (المضيف يمينًا) يثبت
+/// رقم كل فريق تحت عموده — قلب الترتيب داخل العزل هو درع الانقلاب المعتمد.
+nonisolated enum PredFormat {
+    static func scorePair(home: Int, away: Int) -> String {
+        "\u{2066}\(away)–\(home)\u{2069}"
+    }
+}
+
 // MARK: - تواريخ ISO من الخادم
 
 nonisolated enum PredDates {
@@ -319,6 +383,18 @@ extension APIClient {
         if let cursor { query["cursor"] = cursor }
         return try await get(PredLedgerResponse.self,
                              path: "/predictions/me/ledger",
+                             query: query,
+                             ignoreCache: true,
+                             apiRoot: URLConstants.mobileAPI)
+    }
+
+    /// «توقعاتي» عبر البطولات — يتطلب جلسة عضو (401 بلا Bearer).
+    func fetchPredMyEntries(competitionSlug: String? = nil, limit: Int? = nil) async throws -> PredMyEntriesResponse {
+        var query: [String: String] = [:]
+        if let competitionSlug { query["competition"] = competitionSlug }
+        if let limit { query["limit"] = String(limit) }
+        return try await get(PredMyEntriesResponse.self,
+                             path: "/predictions/me/entries",
                              query: query,
                              ignoreCache: true,
                              apiRoot: URLConstants.mobileAPI)

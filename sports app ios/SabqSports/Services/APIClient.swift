@@ -26,6 +26,8 @@ actor APIClient {
     // لغة الواجهة الحالية — تُمرَّر كـ Accept-Language لكل طلب فتُفضّل البوابة
     // المحتوى الإنجليزي عند دعمه. تُحدَّث من SpLanguage عبر setPreferredLanguage.
     private var preferredLanguage: String = "ar"
+    /// يمنع عاصفة 401 من مسح الجلسة قبل التأكد من /members/profile.
+    private var unauthorizedProbeTask: Task<Void, Never>?
 
     private init() {
         let config = URLSessionConfiguration.default
@@ -183,12 +185,22 @@ actor APIClient {
     private func applyHeaders(_ request: inout URLRequest) {
         // يتجاوز الـ Accept-Language الثابت في إعداد الجلسة باللغة النشطة.
         request.setValue(preferredLanguage, forHTTPHeaderField: "Accept-Language")
-        if let token = authToken {
+        // Bearer فقط لمسارات عضوية الموبايل (/api/v1). إرفاقه ببوابة /api/sports
+        // العامة كان يسبب خروجًا قسريًا: نقاط مثل /match/:id/preview و/story
+        // محمية بجلسة Passport للتحرير فترجع 401، والعميل كان يفسّر أي
+        // Bearer+401 كـ«انتهت الجلسة» ويمسح Keychain خلال دقائق من الدخول.
+        if let token = authToken, isMobileMemberAPI(request) {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
         if let csrf = csrfToken {
             request.setValue(csrf, forHTTPHeaderField: "X-CSRF-TOKEN")
         }
+    }
+
+    /// مسارات `/api/v1/*` فقط — عضوية Bearer. الباقي (بوابة الرياضة العامة) زائر.
+    private func isMobileMemberAPI(_ request: URLRequest) -> Bool {
+        let path = request.url?.path ?? ""
+        return path.hasPrefix("/api/v1/") || path == "/api/v1"
     }
 
     private func perform<T: Decodable>(_ request: URLRequest, as type: T.Type) async throws -> T {
@@ -213,17 +225,16 @@ actor APIClient {
         switch http.statusCode {
         case 200..<300: return
         case 401:
-            // 401 في مسارات الدخول أو تأكيد حذف الحساب يعني بيانات اعتماد خاطئة،
-            // لا انتهاء الجلسة الحالية. بقية الطلبات الحاملة لـBearer تُبطل الجلسة.
+            // 401 في مسارات الدخول / حذف الحساب / تغيير كلمة المرور = اعتماد خاطئ،
+            // لا انتهاء الجلسة. غيرها من /api/v1 مع Bearer → نؤكّد قبل المسح.
             let path = request.url?.path ?? ""
-            let isCredentialCheck = path.contains("/auth/") || path.hasSuffix("/members/account")
-            if request.value(forHTTPHeaderField: "Authorization") != nil && !isCredentialCheck {
-                authToken = nil
-                // البثّ من داخل الـactor يصل onReceive على خيط الخلفية فيعدّل
-                // حالة @MainActor (signOut) خارج الخيط الرئيسي — نقفز للرئيسي.
-                Task { @MainActor in
-                    NotificationCenter.default.post(name: .spSessionUnauthorized, object: nil)
-                }
+            let isCredentialCheck =
+                path.contains("/auth/")
+                || path.hasSuffix("/members/account")
+                || path.contains("/members/change-password")
+            let hadBearer = request.value(forHTTPHeaderField: "Authorization") != nil
+            if hadBearer && isMobileMemberAPI(request) && !isCredentialCheck {
+                scheduleUnauthorizedConfirmation()
             }
             throw APIError.unauthorized
         case 403: throw APIError.forbidden
@@ -232,6 +243,50 @@ actor APIClient {
         default:
             let message = (try? JSONDecoder().decode(ApiMessage.self, from: data))?.message
             throw APIError.server(http.statusCode, message)
+        }
+    }
+
+    /// لا نمسح الجلسة من أول 401: نعِد التحقق من /members/profile. إن بقي التوكن
+    /// صالحًا نتجاهل الإنذار (401 زائف/مسار فرعي). وإلا نُبلّغ AuthStore.
+    private func scheduleUnauthorizedConfirmation() {
+        guard authToken != nil else { return }
+        guard unauthorizedProbeTask == nil else { return }
+        unauthorizedProbeTask = Task {
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            let stillInvalid = await self.probeSessionStillUnauthorized()
+            await self.clearUnauthorizedProbeTask()
+            guard stillInvalid else { return }
+            await self.wipeAuthTokenAndNotify()
+        }
+    }
+
+    private func clearUnauthorizedProbeTask() {
+        unauthorizedProbeTask = nil
+    }
+
+    private func probeSessionStillUnauthorized() async -> Bool {
+        guard let token = authToken else { return true }
+        guard let url = URL(string: URLConstants.mobileAPI + "/members/profile") else { return false }
+        var req = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalAndRemoteCacheData)
+        req.httpMethod = "GET"
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        req.setValue(preferredLanguage, forHTTPHeaderField: "Accept-Language")
+        req.setValue("no-cache", forHTTPHeaderField: "Cache-Control")
+        do {
+            let (_, response) = try await ephemeralSession.data(for: req)
+            let code = (response as? HTTPURLResponse)?.statusCode ?? 0
+            // 401/403 فقط = رفض جلسة مؤكّد. أخطاء الشبكة/5xx لا تطرد العضو.
+            return code == 401 || code == 403
+        } catch {
+            return false
+        }
+    }
+
+    private func wipeAuthTokenAndNotify() {
+        guard authToken != nil else { return }
+        authToken = nil
+        Task { @MainActor in
+            NotificationCenter.default.post(name: .spSessionUnauthorized, object: nil)
         }
     }
 }

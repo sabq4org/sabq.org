@@ -10,7 +10,11 @@ interface DashboardPageHeaderProps {
   actions?: ReactNode;
   className?: string;
   titleTestId?: string;
-  /** نجمة التفضيل بجانب العنوان — افتراضيًا مفعّلة */
+  /**
+   * نجمة التفضيل بجانب العنوان.
+   * الافتراضي false لأن النجمة تظهر عالمياً بجانب اسم الصفحة في AppBreadcrumbs
+   * — فعّلها فقط إن أردت نجمة إضافية داخل ترويسة الصفحة.
+   */
   showFavoriteToggle?: boolean;
 }
 
@@ -25,7 +29,7 @@ export function DashboardPageHeader({
   actions,
   className,
   titleTestId,
-  showFavoriteToggle = true,
+  showFavoriteToggle = false,
 }: DashboardPageHeaderProps) {
   return (
     <header

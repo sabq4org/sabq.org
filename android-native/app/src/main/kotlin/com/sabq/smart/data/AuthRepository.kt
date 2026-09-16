@@ -15,6 +15,7 @@ import com.sabq.smart.data.api.ResendActivationRequest
 import com.sabq.smart.data.api.ResendActivationResponse
 import com.sabq.smart.data.api.SabqApi
 import com.sabq.smart.data.api.UpdateMemberInterestsRequest
+import com.sabq.smart.data.api.VerifyTwoFactorRequest
 import com.sabq.smart.data.auth.AuthTokenStore
 import android.os.SystemClock
 import javax.inject.Inject
@@ -159,6 +160,44 @@ class AuthRepository @Inject constructor(
             }
             throw AuthException(errorBody?.message ?: "تعذّر تسجيل الدخول")
         }
+        // Account has 2FA enabled: the server replies HTTP 200 (no
+        // HttpException) with `requires2FA: true`, no token, and a
+        // short-lived challenge. Surface it as a dedicated exception so
+        // the ViewModel switches to the code-entry step instead of
+        // installing a (non-existent) session. iOS parity:
+        // AuthStore.performLogin → pending2FAChallengeToken.
+        if (response.requires2FA == true && !response.challengeToken.isNullOrBlank()) {
+            throw TwoFactorRequiredException(response.challengeToken)
+        }
+        return finishCredentialLogin(response)
+    }
+
+    /**
+     * Complete a 2FA-gated login. Called after [loginWithIdentifier]
+     * threw [TwoFactorRequiredException]; pass the challenge it carried
+     * plus EITHER a TOTP [code] OR a [backupCode]. On success this
+     * installs the session exactly like a normal credential login (same
+     * `/members/profile` hydration path). A wrong code / expired
+     * challenge surfaces as an [AuthException] with the server message
+     * so the caller can keep the challenge alive and let the user retry.
+     * iOS parity: AuthStore.verifyTwoFactor.
+     */
+    suspend fun verifyTwoFactor(
+        challengeToken: String,
+        code: String?,
+        backupCode: String?,
+    ): User {
+        val response = try {
+            api.verifyTwoFactor(
+                VerifyTwoFactorRequest(
+                    challengeToken = challengeToken,
+                    token = code?.trim()?.takeIf { it.isNotEmpty() },
+                    backupCode = backupCode?.trim()?.takeIf { it.isNotEmpty() },
+                ),
+            )
+        } catch (e: HttpException) {
+            throw AuthException(extractErrorMessage(e) ?: "رمز التحقق غير صحيح")
+        }
         return finishCredentialLogin(response)
     }
 
@@ -296,7 +335,9 @@ class AuthRepository @Inject constructor(
                 ),
             )
         } catch (e: HttpException) {
-            throw AuthException(extractErrorMessage(e) ?: "تعذّر إنشاء الحساب")
+            // نحفظ رمز الحالة كي تُصاغ رسالة التسجيل بحسبه (نقل #1530)؛ رسالة
+            // الخادم (مثل «البريد مستخدم») تبقى كما هي عندما تكون مقصودة للقارئ.
+            throw AuthHttpException(e.code(), extractErrorMessage(e) ?: "")
         }
         // Mirrors iOS `AuthStore.register` branching in AuthStore.swift:158-185.
         // Auto-activated mobile signups return a token + user → instant
@@ -368,6 +409,9 @@ class AuthRepository @Inject constructor(
 
 open class AuthException(message: String) : Exception(message)
 
+/** استثناء مصادقة يحمل رمز حالة HTTP — لرسائل التسجيل بحسب الحالة. */
+class AuthHttpException(val statusCode: Int, message: String) : AuthException(message)
+
 /**
  * Outcome of a successful [AuthRepository.register] call. Mirrors iOS
  * `AuthStore.register` in AuthStore.swift:158-185:
@@ -398,3 +442,15 @@ class PendingActivationException(
     val userId: String?,
     val email: String?,
 ) : AuthException(message)
+
+/**
+ * Thrown by [AuthRepository.loginWithIdentifier] when the account has
+ * 2FA enabled: the credentials were correct but the server returned a
+ * [challengeToken] instead of a session. The ViewModel switches to the
+ * TOTP / backup-code entry step and calls
+ * [AuthRepository.verifyTwoFactor] with this [challengeToken]. Mirrors
+ * iOS `AuthStore.pending2FAChallengeToken`.
+ */
+class TwoFactorRequiredException(
+    val challengeToken: String,
+) : AuthException("مطلوب رمز المصادقة الثنائية")

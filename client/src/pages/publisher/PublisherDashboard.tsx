@@ -1,10 +1,19 @@
-import { useEffect, type ReactNode, type ComponentType } from "react";
+import { useEffect, useState, type ReactNode, type ComponentType } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation, Link } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { usePublisherAccess } from "@/hooks/usePublisherAccess";
 import { useAuth } from "@/hooks/useAuth";
 import { PublisherLayout } from "@/components/publisher/PublisherLayout";
+import {
+  PublisherRequestDialog,
+  REQUEST_TYPE_LABELS,
+} from "@/components/publisher/PublisherRequestDialog";
+import {
+  Tooltip as UiTooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -22,6 +31,10 @@ import {
   Clock,
   Sparkles,
   ExternalLink,
+  Send,
+  Hourglass,
+  PenLine,
+  MessageSquareWarning,
 } from "lucide-react";
 import {
   BarChart,
@@ -48,12 +61,16 @@ interface PortalOverview {
     publishingEndsAt: string | null;
     autoPublish: boolean;
   };
+  publishBlock: { reason: string; requestType: string } | null;
+  openRequest: { id: string; type: string; createdAt: string } | null;
   stats: {
     totalArticles: number;
     publishedArticles: number;
     draftArticles: number;
     publishedThisMonth: number;
     totalViews: number;
+    pendingReview: number;
+    needsChanges: number;
   };
   activeCredit: {
     packageName: string;
@@ -80,7 +97,14 @@ interface PortalOverview {
     publishedAt: string | null;
   }>;
   monthlyPublishing: Array<{ month: string; published: number; views: number }>;
-  attention: Array<{ type: string; severity: "warning" | "critical"; message: string }>;
+  attention: Array<{
+    type: string;
+    severity: "warning" | "critical";
+    message: string;
+    action?:
+      | { kind: "request"; requestType: string; label: string }
+      | { kind: "link"; href: string; label: string };
+  }>;
 }
 
 const formatViews = (views: number | null | undefined) => formatCompactNumber(views);
@@ -150,11 +174,38 @@ function KpiCard({
   );
 }
 
+function PipelineRow({
+  icon: Icon,
+  label,
+  value,
+  tone,
+  testId,
+}: {
+  icon: ComponentType<{ className?: string }>;
+  label: string;
+  value: number;
+  tone: string;
+  testId: string;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-2">
+      <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+        <Icon className="h-3.5 w-3.5" />
+        {label}
+      </span>
+      <span className={cn("font-bold tabular-nums", value === 0 ? "text-muted-foreground/60" : tone)} data-testid={testId}>
+        {value}
+      </span>
+    </div>
+  );
+}
+
 export default function PublisherDashboard() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const { user } = useAuth();
   usePublisherAccess();
+  const [requestType, setRequestType] = useState<string | null>(null);
 
   const { data, isLoading, error } = useQuery<PortalOverview>({
     queryKey: ["/api/publisher/portal/overview"],
@@ -206,6 +257,24 @@ export default function PublisherDashboard() {
   const firstName = user?.firstName?.trim();
   const greeting = firstName ? `أهلاً ${firstName}` : "أهلاً بك";
 
+  const publishBlock = data.publishBlock;
+  const openRequest = data.openRequest;
+  // «مسودة» الحقيقية = ما لم يُرسل بعد. الرقم القديم كان يجمع الثلاثة معاً
+  // فيرى الناشر ٩ «مسودات» بينما ٧ منها عند المحرر ولا شيء عليه فيها.
+  const trueDrafts = Math.max(0, stats.draftArticles - stats.pendingReview - stats.needsChanges);
+
+  const newArticleButton = (
+    <Button
+      size="lg"
+      className="rounded-xl shadow-sm"
+      data-testid="button-new-article"
+      disabled={!!publishBlock}
+    >
+      <Plus className="ml-2 h-4 w-4" />
+      خبر جديد
+    </Button>
+  );
+
   return (
     <PublisherLayout>
       <div className="w-full space-y-6" dir="rtl">
@@ -226,18 +295,38 @@ export default function PublisherDashboard() {
                 : ""}
             </p>
           </div>
-          <Link href="/dashboard/publisher/article/new">
-            <Button
-              size="lg"
-              className="rounded-xl shadow-sm"
-              data-testid="button-new-article"
-              disabled={windowDaysLeft !== null && windowDaysLeft < 0}
-            >
-              <Plus className="ml-2 h-4 w-4" />
-              خبر جديد
-            </Button>
-          </Link>
+
+          {/* الزر المعطّل كان صامتاً تماماً: ضغطة بلا استجابة ولا سبب */}
+          {publishBlock ? (
+            <div className="flex flex-col items-start gap-1.5 sm:items-end">
+              <UiTooltip>
+                <TooltipTrigger asChild>
+                  <span tabIndex={0}>{newArticleButton}</span>
+                </TooltipTrigger>
+                <TooltipContent>{publishBlock.reason}</TooltipContent>
+              </UiTooltip>
+              <p className="text-xs text-muted-foreground" data-testid="text-publish-blocked">
+                {publishBlock.reason}
+              </p>
+            </div>
+          ) : (
+            <Link href="/dashboard/publisher/article/new">{newArticleButton}</Link>
+          )}
         </div>
+
+        {/* طلب مفتوح لدى الإدارة */}
+        {openRequest && (
+          <div
+            className="flex flex-wrap items-center gap-2 rounded-xl border border-sky-200 bg-sky-50/80 px-4 py-3 text-sm text-sky-900 dark:border-sky-900 dark:bg-sky-950/30 dark:text-sky-100"
+            data-testid="banner-open-request"
+          >
+            <Hourglass className="h-4 w-4 shrink-0" aria-hidden="true" />
+            <span>
+              طلب «{REQUEST_TYPE_LABELS[openRequest.type] ?? openRequest.type}» قيد المعالجة لدى الإدارة منذ{" "}
+              {formatDateShort(openRequest.createdAt)}
+            </span>
+          </div>
+        )}
 
         {/* يتطلب انتباهك */}
         {attention.length > 0 && (
@@ -246,15 +335,37 @@ export default function PublisherDashboard() {
               <div
                 key={item.type}
                 className={cn(
-                  "flex items-start gap-3 rounded-xl border p-3.5 text-sm shadow-sm",
+                  "flex flex-col gap-2 rounded-xl border p-3.5 text-sm shadow-sm sm:flex-row sm:items-center",
                   item.severity === "critical"
                     ? "border-red-200 bg-red-50/90 text-red-900 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200"
                     : "border-amber-200 bg-amber-50/90 text-amber-950 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200",
                 )}
                 data-testid={`attention-${item.type}`}
               >
-                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-                <span className="leading-relaxed">{item.message}</span>
+                <div className="flex flex-1 items-start gap-3">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+                  <span className="leading-relaxed">{item.message}</span>
+                </div>
+
+                {item.action?.kind === "link" && (
+                  <Link href={item.action.href}>
+                    <Button variant="outline" size="sm" className="shrink-0 bg-background/60">
+                      {item.action.label}
+                    </Button>
+                  </Link>
+                )}
+                {item.action?.kind === "request" && !openRequest && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="shrink-0 gap-1.5 bg-background/60"
+                    onClick={() => setRequestType(item.action!.kind === "request" ? item.action!.requestType : null)}
+                    data-testid={`button-request-${item.type}`}
+                  >
+                    <Send className="h-3.5 w-3.5" />
+                    {item.action.label}
+                  </Button>
+                )}
               </div>
             ))}
           </div>
@@ -311,18 +422,43 @@ export default function PublisherDashboard() {
             hint={`من إجمالي ${stats.publishedArticles} منشور`}
           />
 
+          {/* رقم واحد لا يكفي: «تحتاج تعديلاتك» مطلوب منكم، و«عند المحرر»
+              ليس مطلوباً منكم، و«مسودة» لم تُرسل أصلاً. */}
           <KpiCard
-            testId="card-kpi-pending"
-            title="مسودات / قيد المراجعة"
+            testId="card-kpi-pipeline"
+            title="تحت الإجراء"
             icon={Clock}
             iconClass="bg-amber-500/10 text-amber-600 dark:text-amber-300"
             value={
-              <span className="text-amber-600 dark:text-amber-300" data-testid="text-draft-count">
-                {stats.draftArticles}
+              <span data-testid="text-draft-count">
+                {stats.needsChanges + stats.pendingReview + trueDrafts}
               </span>
             }
-            hint="بانتظار الاستكمال أو الموافقة"
-          />
+          >
+            <div className="mt-3 space-y-1.5 text-xs">
+              <PipelineRow
+                icon={MessageSquareWarning}
+                label="تحتاج تعديلاتك"
+                value={stats.needsChanges}
+                tone="text-red-600 dark:text-red-300"
+                testId="text-needs-changes-count"
+              />
+              <PipelineRow
+                icon={Clock}
+                label="عند المحرر"
+                value={stats.pendingReview}
+                tone="text-amber-600 dark:text-amber-300"
+                testId="text-pending-count"
+              />
+              <PipelineRow
+                icon={PenLine}
+                label="مسودة لم تُرسل"
+                value={trueDrafts}
+                tone="text-muted-foreground"
+                testId="text-true-drafts-count"
+              />
+            </div>
+          </KpiCard>
 
           <KpiCard
             testId="card-kpi-views"
@@ -483,26 +619,43 @@ export default function PublisherDashboard() {
         </div>
 
         {/* شريط معلومات خفيف */}
-        {(publisher.publishingEndsAt || activeCredit) && (
-          <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-dashed border-border/80 bg-muted/20 px-4 py-3 text-xs text-muted-foreground">
-            {publisher.publishingEndsAt ? (
-              <span className="inline-flex items-center gap-1.5">
-                <Calendar className="h-3.5 w-3.5" />
-                نافذة النشر: حتى {formatDateShort(publisher.publishingEndsAt)}
-              </span>
-            ) : null}
-            {activeCredit ? (
-              <span className="inline-flex items-center gap-1.5">
-                <Package className="h-3.5 w-3.5" />
-                الباقة النشطة: {activeCredit.packageName}
-              </span>
-            ) : null}
-            <Link href="/dashboard/publisher/credits" className="ms-auto text-primary hover:underline">
+        <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-dashed border-border/80 bg-muted/20 px-4 py-3 text-xs text-muted-foreground">
+          {publisher.publishingEndsAt ? (
+            <span className="inline-flex items-center gap-1.5">
+              <Calendar className="h-3.5 w-3.5" />
+              نافذة النشر: حتى {formatDateShort(publisher.publishingEndsAt)}
+            </span>
+          ) : null}
+          {activeCredit ? (
+            <span className="inline-flex items-center gap-1.5">
+              <Package className="h-3.5 w-3.5" />
+              الباقة النشطة: {activeCredit.packageName}
+            </span>
+          ) : null}
+          <div className="ms-auto flex items-center gap-3">
+            {!openRequest && (
+              <button
+                type="button"
+                className="inline-flex items-center gap-1.5 text-primary hover:underline"
+                onClick={() => setRequestType("renewal")}
+                data-testid="button-open-request-dialog"
+              >
+                <Send className="h-3.5 w-3.5" />
+                طلب من الإدارة
+              </button>
+            )}
+            <Link href="/dashboard/publisher/credits" className="text-primary hover:underline">
               تفاصيل الرصيد
             </Link>
           </div>
-        )}
+        </div>
       </div>
+
+      <PublisherRequestDialog
+        open={requestType !== null}
+        onOpenChange={(open) => !open && setRequestType(null)}
+        defaultType={requestType ?? undefined}
+      />
     </PublisherLayout>
   );
 }

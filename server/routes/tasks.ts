@@ -3,6 +3,8 @@
 // 2026-06-10 (Milestone-2 extraction #5, audit T2.2). ADR-001-compliant:
 // storage-only data access. taskLimiter moved here with the routes; its
 // shared building blocks live in ../utils/rateLimiting.
+// 2026-07-22: POST /api/tasks/complete-all — إتمام جماعي للمهام الجذر غير المكتملة.
+// 2026-07-23: POST /api/tasks/delete-all — حذف جماعي للمهام الجذر ضمن الفلاتر.
 import type { Express } from "express";
 import rateLimit from "express-rate-limit";
 import { z } from "zod";
@@ -19,7 +21,10 @@ import {
   insertSubtaskSchema,
   insertTaskCommentSchema,
   insertTaskAttachmentSchema,
+  subtasks,
 } from "@shared/schema";
+import { pickTableColumns } from "../utils/sanitizeBody";
+import { parsePage, parseLimit } from "../utils/pagination";
 
 const taskLimiter = rateLimit({
   windowMs: 60 * 1000,
@@ -54,8 +59,8 @@ export function registerTaskRoutes(app: Express) {
         limit = "20"
       } = req.query;
       
-      const pageNum = parseInt(page as string);
-      const limitNum = parseInt(limit as string);
+      const pageNum = parsePage(page);
+      const limitNum = parseLimit(limit, 20, 200);
       const offset = (pageNum - 1) * limitNum;
       
       // Build base filters
@@ -169,7 +174,219 @@ export function registerTaskRoutes(app: Express) {
     }
   });
 
-  // News Analytics Endpoint - Smart statistics and insights
+  // POST /api/tasks/complete-all — إتمام المهام الجذر غير المكتملة ضمن نطاق المستخدم
+  app.post(
+    "/api/tasks/complete-all",
+    taskLimiter,
+    requireAuth,
+    requireAnyPermission("tasks.edit_any", "tasks.edit_own"),
+    async (req, res) => {
+      try {
+        const userId = (req.user as any).id;
+        const userPermissions = await storage.getUserPermissions(userId);
+        const canEditAny = userPermissions.includes("tasks.edit_any");
+
+        const bodySchema = z.object({
+          search: z.string().optional(),
+          priority: z.string().optional(),
+          assignedToId: z.string().optional(),
+          department: z.string().optional(),
+          status: z
+            .enum(["todo", "in_progress", "review", "completed", "archived", "all"])
+            .optional(),
+        });
+        const body = bodySchema.parse(req.body ?? {});
+
+        if (body.status === "completed" || body.status === "archived") {
+          return res.json({ completedCount: 0, skippedCount: 0 });
+        }
+
+        const filters: {
+          status?: string;
+          priority?: string;
+          assignedToId?: string;
+          department?: string;
+          parentTaskId: null;
+          search?: string;
+          limit: number;
+          offset: number;
+          userIdForOwn?: string;
+        } = {
+          parentTaskId: null,
+          limit: 200,
+          offset: 0,
+        };
+
+        if (body.status && body.status !== "all") {
+          filters.status = body.status;
+        }
+        if (body.priority && body.priority !== "all") {
+          filters.priority = body.priority;
+        }
+        if (body.assignedToId && body.assignedToId !== "all") {
+          filters.assignedToId = body.assignedToId;
+        }
+        if (body.department) {
+          filters.department = body.department;
+        }
+        if (body.search?.trim()) {
+          filters.search = body.search.trim();
+        }
+
+        // نفس نطاق العرض: view_own يقيّد القائمة حتى مع edit_own
+        if (!userPermissions.includes("tasks.view_all")) {
+          filters.userIdForOwn = userId;
+        }
+
+        const { tasks: candidates } = await storage.getTasks(filters);
+        const incomplete = candidates.filter(
+          (t) => t.status !== "completed" && t.status !== "archived",
+        );
+
+        let completedCount = 0;
+        let skippedCount = 0;
+        const completedAt = new Date();
+
+        for (const task of incomplete) {
+          if (
+            !canEditAny &&
+            task.createdById !== userId &&
+            task.assignedToId !== userId
+          ) {
+            skippedCount += 1;
+            continue;
+          }
+
+          const updatedTask = await storage.updateTask(task.id, {
+            status: "completed",
+            completedAt,
+            progress: 100,
+          });
+
+          await storage.logTaskActivity({
+            taskId: task.id,
+            userId,
+            action: "status_changed",
+            changes: {
+              field: "status",
+              oldValue: { status: task.status },
+              newValue: { status: updatedTask.status },
+              description: "تم إتمام المهمة عبر «إتمام الكل»",
+            },
+          });
+          completedCount += 1;
+        }
+
+        res.json({ completedCount, skippedCount });
+      } catch (error: any) {
+        console.error("Error completing all tasks:", error);
+        if (error.name === "ZodError") {
+          return res.status(400).json({ error: "بيانات غير صالحة" });
+        }
+        res.status(500).json({ error: "فشل في إتمام المهام" });
+      }
+    },
+  );
+
+  // POST /api/tasks/delete-all — حذف المهام الجذر ضمن نطاق المستخدم/الفلاتر (حد 200)
+  app.post(
+    "/api/tasks/delete-all",
+    taskLimiter,
+    requireAuth,
+    requireAnyPermission("tasks.delete_any", "tasks.delete_own"),
+    async (req, res) => {
+      try {
+        const userId = (req.user as any).id;
+        const userPermissions = await storage.getUserPermissions(userId);
+        const canDeleteAny = userPermissions.includes("tasks.delete_any");
+
+        const bodySchema = z.object({
+          search: z.string().optional(),
+          priority: z.string().optional(),
+          assignedToId: z.string().optional(),
+          department: z.string().optional(),
+          status: z
+            .enum(["todo", "in_progress", "review", "completed", "archived", "all"])
+            .optional(),
+        });
+        const body = bodySchema.parse(req.body ?? {});
+
+        const filters: {
+          status?: string;
+          priority?: string;
+          assignedToId?: string;
+          department?: string;
+          parentTaskId: null;
+          search?: string;
+          limit: number;
+          offset: number;
+          userIdForOwn?: string;
+        } = {
+          parentTaskId: null,
+          limit: 200,
+          offset: 0,
+        };
+
+        if (body.status && body.status !== "all") {
+          filters.status = body.status;
+        }
+        if (body.priority && body.priority !== "all") {
+          filters.priority = body.priority;
+        }
+        if (body.assignedToId && body.assignedToId !== "all") {
+          filters.assignedToId = body.assignedToId;
+        }
+        if (body.department) {
+          filters.department = body.department;
+        }
+        if (body.search?.trim()) {
+          filters.search = body.search.trim();
+        }
+
+        if (!userPermissions.includes("tasks.view_all")) {
+          filters.userIdForOwn = userId;
+        }
+
+        const { tasks: candidates } = await storage.getTasks(filters);
+
+        let deletedCount = 0;
+        let skippedCount = 0;
+
+        for (const task of candidates) {
+          // delete_own: من أنشأ المهمة فقط (نفس قاعدة DELETE /:id)
+          if (!canDeleteAny && task.createdById !== userId) {
+            skippedCount += 1;
+            continue;
+          }
+
+          // مهام فرعية في جدول tasks بلا FK cascade — تُحذف قبل الجذر
+          const { tasks: children } = await storage.getTasks({
+            parentTaskId: task.id,
+            limit: 200,
+            offset: 0,
+          });
+          for (const child of children) {
+            if (!canDeleteAny && child.createdById !== userId) {
+              skippedCount += 1;
+              continue;
+            }
+            await storage.deleteTask(child.id);
+          }
+
+          await storage.deleteTask(task.id);
+          deletedCount += 1;
+        }
+
+        res.json({ deletedCount, skippedCount });
+      } catch (error: any) {
+        console.error("Error deleting all tasks:", error);
+        if (error.name === "ZodError") {
+          return res.status(400).json({ error: "بيانات غير صالحة" });
+        }
+        res.status(500).json({ error: "فشل في حذف المهام" });
+      }
+    },
+  );
 
   // GET /api/tasks/:id - Get task details
   app.get("/api/tasks/:id", taskLimiter, requireAuth, requireAnyPermission('tasks.view_all', 'tasks.view_own'), async (req, res) => {
@@ -224,9 +441,16 @@ export function registerTaskRoutes(app: Express) {
       // Validate PATCH body with partial schema
       const updateSchema = insertTaskSchema.partial();
       const validatedData = updateSchema.parse(req.body);
-      
+
       // Convert validated date strings to Date objects
       const processedBody: any = { ...validatedData };
+
+      // `createdById` was writable here: an assignee holding only
+      // tasks.edit_own could name themselves the creator, which is the
+      // ownership signal the delete route and this very check rely on.
+      // `completedAt` is stamped by the completion flow, not the client.
+      delete processedBody.createdById;
+      delete processedBody.completedAt;
       
       if (validatedData.dueDate) {
         const parsedDate = new Date(validatedData.dueDate as string);
@@ -337,7 +561,10 @@ export function registerTaskRoutes(app: Express) {
       // Check permissions
       if (!userPermissions.includes('tasks.delete_any')) {
         if (task.createdById !== userId) {
-          return res.status(403).json({ error: 'غير مصرح لك بحذف هذه المهمة' });
+          return res.status(403).json({
+            error: "غير مصرح لك بحذف هذه المهمة",
+            message: "غير مصرح لك بحذف هذه المهمة",
+          });
         }
       }
       
@@ -346,7 +573,10 @@ export function registerTaskRoutes(app: Express) {
       res.json({ success: true, message: 'تم حذف المهمة بنجاح' });
     } catch (error: any) {
       console.error('Error deleting task:', error);
-      res.status(500).json({ error: 'فشل في حذف المهمة' });
+      res.status(500).json({
+        error: "فشل في حذف المهمة",
+        message: "فشل في حذف المهمة",
+      });
     }
   });
 
@@ -427,7 +657,13 @@ export function registerTaskRoutes(app: Express) {
       // Store old subtask snapshot before update
       const oldSubtask = { ...subtask };
       
-      const updatedSubtask = await storage.updateSubtask(id, req.body);
+      // Raw req.body reached the UPDATE: `taskId` moved the subtask under a
+      // different (possibly unauthorised) parent task, escaping the ownership
+      // check above, and `completedById` forged who ticked it off.
+      const updates = pickTableColumns(subtasks, req.body, {
+        allow: ["title", "description", "isCompleted", "displayOrder"],
+      });
+      const updatedSubtask = await storage.updateSubtask(id, updates);
       
       // Log activity with before/after values
       await storage.logTaskActivity({
@@ -539,7 +775,7 @@ export function registerTaskRoutes(app: Express) {
   // News Analytics Endpoint - Smart statistics and insights
 
   // GET /api/tasks/:id/comments - Get task comments
-  app.get("/api/tasks/:id/comments", taskLimiter, requireAuth, async (req, res) => {
+  app.get("/api/tasks/:id/comments", taskLimiter, requireAuth, requireAnyPermission('tasks.view_all', 'tasks.view_own'), async (req, res) => {
     try {
       const { id } = req.params;
       
@@ -555,7 +791,7 @@ export function registerTaskRoutes(app: Express) {
   // News Analytics Endpoint - Smart statistics and insights
 
   // POST /api/tasks/:id/comments - Create comment
-  app.post("/api/tasks/:id/comments", taskLimiter, requireAuth, async (req, res) => {
+  app.post("/api/tasks/:id/comments", taskLimiter, requireAuth, requireAnyPermission('tasks.view_all', 'tasks.view_own'), async (req, res) => {
     try {
       const { id } = req.params;
       const userId = (req.user as any).id;
@@ -603,7 +839,7 @@ export function registerTaskRoutes(app: Express) {
   // News Analytics Endpoint - Smart statistics and insights
 
   // DELETE /api/task-comments/:id - Delete comment
-  app.delete("/api/task-comments/:id", taskLimiter, requireAuth, async (req, res) => {
+  app.delete("/api/task-comments/:id", taskLimiter, requireAuth, requireAnyPermission('tasks.edit_any', 'tasks.edit_own'), async (req, res) => {
     try {
       const { id } = req.params;
       const userId = (req.user as any).id;
@@ -640,7 +876,7 @@ export function registerTaskRoutes(app: Express) {
   // News Analytics Endpoint - Smart statistics and insights
 
   // GET /api/tasks/:id/attachments - Get task attachments
-  app.get("/api/tasks/:id/attachments", taskLimiter, requireAuth, async (req, res) => {
+  app.get("/api/tasks/:id/attachments", taskLimiter, requireAuth, requireAnyPermission('tasks.view_all', 'tasks.view_own'), async (req, res) => {
     try {
       const { id } = req.params;
       
@@ -656,7 +892,7 @@ export function registerTaskRoutes(app: Express) {
   // News Analytics Endpoint - Smart statistics and insights
 
   // POST /api/tasks/:id/attachments - Upload attachment
-  app.post("/api/tasks/:id/attachments", taskLimiter, requireAuth, upload.single('file'), async (req, res) => {
+  app.post("/api/tasks/:id/attachments", taskLimiter, requireAuth, requireAnyPermission('tasks.edit_any', 'tasks.edit_own'), upload.single('file'), async (req, res) => {
     try {
       const { id } = req.params;
       const userId = (req.user as any).id;
@@ -712,7 +948,7 @@ export function registerTaskRoutes(app: Express) {
   // News Analytics Endpoint - Smart statistics and insights
 
   // DELETE /api/task-attachments/:id - Delete attachment
-  app.delete("/api/task-attachments/:id", taskLimiter, requireAuth, async (req, res) => {
+  app.delete("/api/task-attachments/:id", taskLimiter, requireAuth, requireAnyPermission('tasks.edit_any', 'tasks.edit_own'), async (req, res) => {
     try {
       const { id } = req.params;
       const userId = (req.user as any).id;
@@ -749,7 +985,7 @@ export function registerTaskRoutes(app: Express) {
   // News Analytics Endpoint - Smart statistics and insights
 
   // GET /api/tasks/:id/activity - Get task activity log
-  app.get("/api/tasks/:id/activity", taskLimiter, requireAuth, async (req, res) => {
+  app.get("/api/tasks/:id/activity", taskLimiter, requireAuth, requireAnyPermission('tasks.view_all', 'tasks.view_own'), async (req, res) => {
     try {
       const { id} = req.params;
       

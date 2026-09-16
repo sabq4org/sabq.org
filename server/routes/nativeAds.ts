@@ -8,8 +8,13 @@ import { z } from "zod";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
+import crypto from "crypto";
+import sharp from "sharp";
+import rateLimit from "express-rate-limit";
+import { cfKeyGenerator, cfValidate } from "../utils/rateLimiting";
 import { objectStorageClient } from "../objectStorage";
 import { setObjectAclPolicy } from "../objectAcl";
+import { paginationOrReject, parsePage, parseLimit } from "../utils/pagination";
 
 const router = Router();
 
@@ -62,6 +67,26 @@ const advertiserUpload = multer({
 function isAdminOrEditor(req: Request, res: Response, next: NextFunction) {
   requireRole("admin", "editor", "superadmin", "chief_editor")(req, res, next);
 }
+
+// The self-serve advertiser upload is intentionally public; bound abuse of the
+// write endpoint by IP (audit #6 / CWE-306 mitigation).
+const advertiserUploadLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: cfKeyGenerator,
+  validate: cfValidate,
+  message: { message: "محاولات رفع كثيرة جدًا. حاول لاحقًا." },
+});
+
+// sharp's raster formats mapped to a safe on-disk extension. Deriving the
+// extension from the VERIFIED decoded format (not originalname) is the core of
+// the CWE-434 fix — a .html/.svg with a spoofed image/* header cannot be stored
+// with an executable extension.
+const VERIFIED_IMAGE_EXT: Record<string, string> = {
+  jpeg: "jpg", png: "png", webp: "webp", gif: "gif",
+};
 
 // Helper function to normalize legacy image URLs to working paths
 function normalizeImageUrl(url: string | null): string {
@@ -393,9 +418,11 @@ async function getTodaySpendMap(adIds: string[]): Promise<Map<string, number>> {
 
 router.get("/public", async (req: Request, res: Response) => {
   try {
-    const { category, keyword, limit: limitParam } = req.query;
+    const { category, keyword } = req.query;
+    const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 5, maxLimit: 6 });
+    if (!pg) return;
     const now = new Date();
-    const maxLimit = Math.min(parseInt(limitParam as string) || 5, 6);
+    const maxLimit = pg.limit;
 
     let baseConditions = and(
       eq(nativeAds.status, "active"),
@@ -499,17 +526,34 @@ router.get("/public", async (req: Request, res: Response) => {
   }
 });
 
-// Public image upload for self-serve advertisers (no auth required)
-router.post("/upload", advertiserUpload.single('file'), async (req: Request, res: Response) => {
+// Public image upload for self-serve advertisers (no auth required, rate-limited)
+router.post("/upload", advertiserUploadLimiter, advertiserUpload.single('file'), async (req: Request, res: Response) => {
   try {
     if (!req.file) {
       return res.status(400).json({ message: "لم يتم اختيار ملف" });
     }
 
     const file = req.file;
+
+    // Authoritative content check: sharp only decodes genuine raster images, so
+    // an HTML/SVG payload with a spoofed image/* Content-Type is rejected here,
+    // and the extension + content-type come from the VERIFIED format — never
+    // from attacker-controlled originalname (audit #6, CWE-434).
+    let verifiedFormat: string;
+    try {
+      const meta = await sharp(file.buffer).metadata();
+      verifiedFormat = meta.format || "";
+    } catch {
+      return res.status(400).json({ message: "الملف ليس صورة صالحة" });
+    }
+    const extension = VERIFIED_IMAGE_EXT[verifiedFormat];
+    if (!extension) {
+      return res.status(400).json({ message: "نوع الصورة غير مدعوم. المسموح: JPEG, PNG, WEBP, GIF" });
+    }
+    const verifiedContentType = `image/${verifiedFormat}`;
+
     const timestamp = Date.now();
-    const randomId = Math.random().toString(36).substring(2, 8);
-    const extension = file.originalname.split('.').pop() || 'jpg';
+    const randomId = crypto.randomBytes(6).toString("hex");
     const filename = `${timestamp}-${randomId}.${extension}`;
 
     // Try to upload to GCS for persistent storage
@@ -520,7 +564,7 @@ router.post("/upload", advertiserUpload.single('file'), async (req: Request, res
         const gcsFile = bucket.file(objectPath);
 
         await gcsFile.save(file.buffer, {
-          contentType: file.mimetype,
+          contentType: verifiedContentType,
           metadata: {
             cacheControl: 'public, max-age=31536000',
           },
@@ -904,8 +948,8 @@ router.get("/analytics", requireAuth, isAdminOrEditor, async (req: Request, res:
 router.get("/", requireAuth, isAdminOrEditor, async (req: Request, res: Response) => {
   try {
     const { status, page = "1", limit = "20" } = req.query;
-    const pageNum = parseInt(page as string);
-    const limitNum = Math.min(parseInt(limit as string), 100);
+    const pageNum = parsePage(page);
+    const limitNum = parseLimit(limit, 20, 100);
     const offset = (pageNum - 1) * limitNum;
 
     let query = db.select().from(nativeAds);

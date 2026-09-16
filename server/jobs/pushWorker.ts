@@ -19,9 +19,10 @@ import {
 } from "@shared/schema";
 import { eq, and, lte, inArray, sql, isNull, or, gte } from "drizzle-orm";
 import { 
-  sendToMultipleDevices,
+  sendToFcmTargets,
   sendToTopic,
   isFcmConfigured,
+  isAnyFcmConfigured,
   FCMMessage
 } from "../services/fcmService";
 import {
@@ -42,7 +43,7 @@ let pushWorkerInterval: NodeJS.Timeout | null = null;
  * Uses APNs for iOS and FCM for Android (hybrid mode)
  */
 export function startPushWorker(): void {
-  const fcmEnabled = isFcmConfigured();
+  const fcmEnabled = isAnyFcmConfigured();
   const apnsEnabled = isApnsConfigured();
   
   if (!fcmEnabled && !apnsEnabled) {
@@ -108,6 +109,18 @@ async function processPendingCampaigns(): Promise<void> {
 }
 
 /**
+ * يستخرج slug المقال من deeplink بأي صيغة (`/article/x`، رابط كامل،
+ * `sabq://article/x`). المفتاح الصريح `article_slug`/`articleSlug` هو ما
+ * تقرؤه التطبيقات مباشرة — الاعتماد على تحليل العميل للرابط وحده كان
+ * يُسقط فتح الخبر من نقرة الإشعار على المنصتين (إصلاح 2026-08-02).
+ */
+function articleSlugFromDeeplink(deeplink?: string | null): string | undefined {
+  if (!deeplink) return undefined;
+  const match = deeplink.match(/(?:^|\/)article\/([^/?#]+)/);
+  return match ? match[1] : undefined;
+}
+
+/**
  * Process a single campaign
  */
 async function processCampaign(campaign: typeof pushCampaigns.$inferSelect): Promise<void> {
@@ -120,6 +133,8 @@ async function processCampaign(campaign: typeof pushCampaigns.$inferSelect): Pro
       .set({ status: "sending", updatedAt: new Date() })
       .where(eq(pushCampaigns.id, campaign.id));
 
+    const campaignArticleSlug = articleSlugFromDeeplink(campaign.deeplink);
+
     // Create FCM message - Arabic only
     const message: FCMMessage = {
       title: campaign.title,
@@ -129,6 +144,7 @@ async function processCampaign(campaign: typeof pushCampaigns.$inferSelect): Pro
         campaignId: campaign.id,
         type: campaign.type || "general",
         deeplink: campaign.deeplink || "",
+        ...(campaignArticleSlug ? { article_slug: campaignArticleSlug } : {}),
       },
     };
 
@@ -146,7 +162,8 @@ async function processCampaign(campaign: typeof pushCampaigns.$inferSelect): Pro
           .select({ 
             deviceToken: pushDevices.deviceToken,
             platform: pushDevices.platform,
-            tokenProvider: pushDevices.tokenProvider
+            tokenProvider: pushDevices.tokenProvider,
+            bundleId: pushDevices.bundleId,
           })
           .from(pushDevices)
           .where(eq(pushDevices.isActive, true));
@@ -182,6 +199,7 @@ async function processCampaign(campaign: typeof pushCampaigns.$inferSelect): Pro
             {
               imageUrl: campaign.imageUrl || campaign.richMediaUrl || undefined,
               deeplink: campaign.deeplink || undefined,
+              articleSlug: campaignArticleSlug,
               campaignId: campaign.id,
               type: campaign.type || "general",
             }
@@ -197,9 +215,11 @@ async function processCampaign(campaign: typeof pushCampaigns.$inferSelect): Pro
         }
         
         // Send to Android via FCM
-        if (androidDevices.length > 0 && isFcmConfigured()) {
-          const androidTokens = androidDevices.map(d => d.deviceToken);
-          const fcmResults = await sendToMultipleDevices(androidTokens, message);
+        if (androidDevices.length > 0 && isAnyFcmConfigured()) {
+          const fcmResults = await sendToFcmTargets(
+            androidDevices.map(d => ({ token: d.deviceToken, bundleId: d.bundleId })),
+            message,
+          );
           log.info(`[PushWorker] FCM (Android): ${fcmResults.successCount}/${androidDevices.length}`);
           totalSuccess += fcmResults.successCount;
           totalFailure += fcmResults.failureCount;
@@ -258,6 +278,7 @@ async function processCampaign(campaign: typeof pushCampaigns.$inferSelect): Pro
             {
               imageUrl: campaign.imageUrl || campaign.richMediaUrl || undefined,
               deeplink: campaign.deeplink || undefined,
+              articleSlug: campaignArticleSlug,
               campaignId: campaign.id,
               type: campaign.type || "general",
             }
@@ -358,6 +379,7 @@ async function processCampaign(campaign: typeof pushCampaigns.$inferSelect): Pro
         {
           imageUrl: campaign.imageUrl || campaign.richMediaUrl || undefined,
           deeplink: campaign.deeplink || undefined,
+          articleSlug: campaignArticleSlug,
           campaignId: campaign.id,
           type: campaign.type || "general",
         }
@@ -373,9 +395,11 @@ async function processCampaign(campaign: typeof pushCampaigns.$inferSelect): Pro
     }
     
     // Send to Android via FCM
-    if (androidDevices.length > 0 && isFcmConfigured()) {
-      const androidTokens = androidDevices.map(d => d.deviceToken);
-      const fcmResults = await sendToMultipleDevices(androidTokens, message);
+    if (androidDevices.length > 0 && isAnyFcmConfigured()) {
+      const fcmResults = await sendToFcmTargets(
+        androidDevices.map(d => ({ token: d.deviceToken, bundleId: d.bundleId })),
+        message,
+      );
       log.info(`[PushWorker] FCM (Android): ${fcmResults.successCount}/${androidDevices.length}`);
       totalSuccess += fcmResults.successCount;
       totalFailure += fcmResults.failureCount;
@@ -416,7 +440,7 @@ async function processCampaign(campaign: typeof pushCampaigns.$inferSelect): Pro
  */
 async function getTargetDevices(
   campaign: typeof pushCampaigns.$inferSelect
-): Promise<Array<{ deviceToken: string; userId: string | null; tokenProvider: string; platform: string }>> {
+): Promise<Array<{ deviceToken: string; userId: string | null; tokenProvider: string; platform: string; bundleId: string | null }>> {
   // If targeting all users
   if (campaign.targetAll) {
     return await db
@@ -424,7 +448,8 @@ async function getTargetDevices(
         deviceToken: pushDevices.deviceToken,
         userId: pushDevices.userId,
         tokenProvider: pushDevices.tokenProvider,
-        platform: pushDevices.platform
+        platform: pushDevices.platform,
+        bundleId: pushDevices.bundleId,
       })
       .from(pushDevices)
       .where(eq(pushDevices.isActive, true));
@@ -452,7 +477,8 @@ async function getTargetDevices(
       deviceToken: pushDevices.deviceToken,
       userId: pushDevices.userId,
       tokenProvider: pushDevices.tokenProvider,
-      platform: pushDevices.platform
+      platform: pushDevices.platform,
+      bundleId: pushDevices.bundleId,
     })
     .from(pushDevices)
     .where(eq(pushDevices.isActive, true));
@@ -473,7 +499,7 @@ async function getDevicesBySegmentCriteria(
     lastActiveAfter?: string;
     lastActiveBefore?: string;
   }
-): Promise<Array<{ deviceToken: string; userId: string | null; tokenProvider: string; platform: string }>> {
+): Promise<Array<{ deviceToken: string; userId: string | null; tokenProvider: string; platform: string; bundleId: string | null }>> {
   // Build conditions array
   const conditions: any[] = [eq(pushDevices.isActive, true)];
 
@@ -499,7 +525,8 @@ async function getDevicesBySegmentCriteria(
       deviceToken: pushDevices.deviceToken,
       userId: pushDevices.userId,
       tokenProvider: pushDevices.tokenProvider,
-      platform: pushDevices.platform
+      platform: pushDevices.platform,
+      bundleId: pushDevices.bundleId,
     })
     .from(pushDevices)
     .innerJoin(users, eq(pushDevices.userId, users.id))
@@ -535,12 +562,12 @@ export async function sendImmediatePush(
     priority?: "low" | "normal" | "high" | "critical";
   } = {}
 ): Promise<{ success: number; failed: number; errors: string[] }> {
-  let targetDevices: Array<{ deviceToken: string; tokenProvider: string }> = [];
+  let targetDevices: Array<{ deviceToken: string; tokenProvider: string; bundleId: string | null }> = [];
 
   // Get devices by tokens (need to look up their provider)
   if (options.deviceTokens && options.deviceTokens.length > 0) {
     const devices = await db
-      .select({ deviceToken: pushDevices.deviceToken, tokenProvider: pushDevices.tokenProvider })
+      .select({ deviceToken: pushDevices.deviceToken, tokenProvider: pushDevices.tokenProvider, bundleId: pushDevices.bundleId })
       .from(pushDevices)
       .where(inArray(pushDevices.deviceToken, options.deviceTokens));
     targetDevices = devices;
@@ -548,7 +575,7 @@ export async function sendImmediatePush(
   // Get devices by user IDs
   else if (options.userIds && options.userIds.length > 0) {
     const devices = await db
-      .select({ deviceToken: pushDevices.deviceToken, tokenProvider: pushDevices.tokenProvider })
+      .select({ deviceToken: pushDevices.deviceToken, tokenProvider: pushDevices.tokenProvider, bundleId: pushDevices.bundleId })
       .from(pushDevices)
       .where(
         and(
@@ -568,7 +595,7 @@ export async function sendImmediatePush(
 
     if (segment) {
       const devices = await getDevicesBySegmentCriteria(segment.criteria as any);
-      targetDevices = devices.map(d => ({ deviceToken: d.deviceToken, tokenProvider: d.tokenProvider }));
+      targetDevices = devices.map(d => ({ deviceToken: d.deviceToken, tokenProvider: d.tokenProvider, bundleId: d.bundleId }));
     }
   }
 
@@ -576,6 +603,7 @@ export async function sendImmediatePush(
     return { success: 0, failed: 0, errors: ["No target devices found"] };
   }
 
+  const immediateArticleSlug = articleSlugFromDeeplink(options.deeplink);
   const message: FCMMessage = {
     title,
     body,
@@ -583,6 +611,7 @@ export async function sendImmediatePush(
     data: {
       type: options.type || "general",
       deeplink: options.deeplink || "",
+      ...(immediateArticleSlug ? { article_slug: immediateArticleSlug } : {}),
     },
   };
 
@@ -594,8 +623,10 @@ export async function sendImmediatePush(
   }
   
   // Send to FCM devices only
-  const fcmTokens = fcmDevices.map(d => d.deviceToken);
-  const fcmResults = await sendToMultipleDevices(fcmTokens, message);
+  const fcmResults = await sendToFcmTargets(
+    fcmDevices.map(d => ({ token: d.deviceToken, bundleId: d.bundleId })),
+    message,
+  );
   
   return { 
     success: fcmResults.successCount, 
@@ -618,40 +649,77 @@ export async function sendBreakingNewsPush(
 ): Promise<{ success: number; failed: number }> {
   log.info(`[PushWorker] Sending breaking news push for article: ${article.id}`);
 
-  // Get all active FCM devices only
-  const devices = await db
-    .select({ deviceToken: pushDevices.deviceToken })
+  const allDevices = await db
+    .select({
+      deviceToken: pushDevices.deviceToken,
+      platform: pushDevices.platform,
+      tokenProvider: pushDevices.tokenProvider,
+      bundleId: pushDevices.bundleId,
+    })
     .from(pushDevices)
-    .where(and(
-      eq(pushDevices.isActive, true),
-      eq(pushDevices.tokenProvider, 'fcm')
-    ));
+    .where(eq(pushDevices.isActive, true));
 
-  if (devices.length === 0) {
-    log.info("[PushWorker] No active FCM devices for breaking news");
+  if (allDevices.length === 0) {
+    log.info("[PushWorker] No active devices for breaking news");
     return { success: 0, failed: 0 };
   }
 
-  const message: FCMMessage = {
-    title: "خبر عاجل",
-    body: article.title,
-    imageUrl: article.imageUrl || undefined,
-    data: {
-      type: "breaking_news",
-      articleId: article.id,
-      deeplink: `/article/${article.slug}`,
-    },
-  };
+  const iosDevices = allDevices.filter((d) => d.platform === "ios" || d.tokenProvider === "apns");
+  const androidDevices = allDevices.filter((d) => d.platform === "android" || d.tokenProvider === "fcm");
 
-  log.info(`[PushWorker] Breaking news: sending to ${devices.length} FCM devices`);
-  
-  // Send to FCM devices only
-  const fcmTokens = devices.map(d => d.deviceToken);
-  const fcmResults = await sendToMultipleDevices(fcmTokens, message);
+  const deeplink = `/article/${article.slug}`;
+  let totalSuccess = 0;
+  let totalFailed = 0;
 
-  log.info(`[PushWorker] Breaking news sent: ${fcmResults.successCount} success, ${fcmResults.failureCount} failed`);
+  // Send to iOS via APNs
+  if (iosDevices.length > 0 && isApnsConfigured()) {
+    const apnsPayload = createCustomNotificationPayload(
+      "🔴 خبر عاجل",
+      article.title,
+      {
+        imageUrl: article.imageUrl || undefined,
+        deeplink,
+        articleId: String(article.id),
+        articleSlug: article.slug,
+        type: "breaking_news",
+        priority: "time-sensitive",
+      }
+    );
+    const iosTokens = iosDevices.map((d) => d.deviceToken);
+    const apnsResults = await sendApnsBatch(iosTokens, apnsPayload);
+    log.info(`[PushWorker] Breaking news APNs (iOS): ${apnsResults.success}/${iosDevices.length}`);
+    totalSuccess += apnsResults.success;
+    totalFailed += apnsResults.failed;
+  } else if (iosDevices.length > 0) {
+    log.info(`[PushWorker] APNs not configured - skipping ${iosDevices.length} iOS devices`);
+  }
 
-  return { success: fcmResults.successCount, failed: fcmResults.failureCount };
+  // Send to Android via FCM
+  if (androidDevices.length > 0 && isAnyFcmConfigured()) {
+    const message: FCMMessage = {
+      title: "🔴 خبر عاجل",
+      body: article.title,
+      imageUrl: article.imageUrl || undefined,
+      data: {
+        type: "breaking_news",
+        articleId: String(article.id),
+        article_slug: article.slug,
+        deeplink,
+      },
+    };
+    const fcmResults = await sendToFcmTargets(
+      androidDevices.map((d) => ({ token: d.deviceToken, bundleId: d.bundleId })),
+      message,
+    );
+    log.info(`[PushWorker] Breaking news FCM (Android): ${fcmResults.successCount}/${androidDevices.length}`);
+    totalSuccess += fcmResults.successCount;
+    totalFailed += fcmResults.failureCount;
+  } else if (androidDevices.length > 0) {
+    log.info(`[PushWorker] FCM not configured - skipping ${androidDevices.length} Android devices`);
+  }
+
+  log.info(`[PushWorker] Breaking news sent: ${totalSuccess} success, ${totalFailed} failed`);
+  return { success: totalSuccess, failed: totalFailed };
 }
 
 export { processPendingCampaigns };

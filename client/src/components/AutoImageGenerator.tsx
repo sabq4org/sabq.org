@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -19,6 +19,8 @@ import {
 import { Loader2, Wand2, AlertCircle, Sparkles } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { ImageStyleSelector } from "@/components/ImageStyleSelector";
+import { LEGACY_STYLE_SLUG_MAP, type EditorImageStyle } from "@shared/imageStyles";
 
 interface AutoImageGeneratorProps {
   articleId?: string;
@@ -46,14 +48,41 @@ export function AutoImageGenerator({
   const [isGenerating, setIsGenerating] = useState(false);
   const [autoGenerate, setAutoGenerate] = useState(false);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [selectedStyleSlug, setSelectedStyleSlug] = useState<string | null>(null);
   const [settings, setSettings] = useState<any>(null);
+  const [stylesDataRaw, setStylesDataRaw] = useState<{
+    styles: EditorImageStyle[];
+    defaultSlug: string;
+  } | null>(null);
 
-  // Fetch settings on mount
-  useState(() => {
+  // جلب مؤجل بعد الـcommit عمدًا (لا useQuery): اشتراكات query أثناء طور الـmount
+  // في هذه الصفحة تُبكّر effect المحرر قبل اكتمال تهيئة TipTap v3 فينهار getHTML
+  useEffect(() => {
+    let cancelled = false;
     apiRequest<any>("/api/auto-image/settings")
-      .then(data => setSettings(data))
+      .then((data) => { if (!cancelled) setSettings(data); })
       .catch(console.error);
-  });
+    apiRequest<{ styles: EditorImageStyle[]; defaultSlug: string }>("/api/image-styles")
+      .then((data) => { if (!cancelled) setStylesDataRaw(data); })
+      .catch(console.error);
+    return () => { cancelled = true; };
+  }, []);
+
+  const availableStyles = Array.isArray(stylesDataRaw?.styles) ? stylesDataRaw.styles : [];
+
+  // الافتراضي المعروض: نمط الإعدادات حسب نوع المقال (بترجمة القيم القديمة)، وإلا افتراضي السجلّ
+  const settingsStyle =
+    articleType === "opinion" || articleType === "column"
+      ? settings?.articleStyle
+      : settings?.newsStyle;
+  const mappedSettingsStyle = settingsStyle
+    ? LEGACY_STYLE_SLUG_MAP[settingsStyle] ?? settingsStyle
+    : undefined;
+  const effectiveStyleSlug =
+    selectedStyleSlug ??
+    (availableStyles.some((s) => s.slug === mappedSettingsStyle)
+      ? mappedSettingsStyle!
+      : stylesDataRaw?.defaultSlug ?? null);
 
   const handleGenerateImage = async (forceGeneration = false) => {
     if (!articleId) {
@@ -86,7 +115,9 @@ export function AutoImageGenerator({
           category,
           language,
           articleType,
-          forceGeneration
+          forceGeneration,
+          // نمط هذه التوليدة (من بطاقات الاختيار) — لا يغيّر إعدادات النظام
+          styleSlug: effectiveStyleSlug || undefined
         })
       });
 
@@ -181,6 +212,17 @@ export function AutoImageGenerator({
                 onCheckedChange={setAutoGenerate}
               />
             </div>
+          )}
+
+          {/* اختيار نمط هذه التوليدة — الافتراضي من إعدادات النظام حسب نوع المقال */}
+          {language === "ar" && availableStyles.length > 0 && effectiveStyleSlug && (
+            <ImageStyleSelector
+              styles={availableStyles}
+              selectedSlug={effectiveStyleSlug}
+              onSelect={setSelectedStyleSlug}
+              category={category}
+              disabled={isGenerating}
+            />
           )}
 
           {/* Manual Generation Button */}

@@ -1,16 +1,21 @@
+import { getAdminArticleMetrics } from "./services/adminArticleList";
+import { resetChangedImageProvenance, resolveArticleImageProvenance } from "./services/articleImageProvenance";
 // Reference: javascript_database blueprint + javascript_log_in_with_replit blueprint
 import { db } from "./db";
 import { log } from "./utils/logger";
 import { isUniqueViolation } from "./utils/pgError";
-import { memoryCache, CACHE_TTL, withCache } from "./memoryCache";
+import { buildEditorialMetadataUpdate } from "./utils/editorialDatesSql";
+import { memoryCache, CACHE_TTL, withCache, withSWR } from "./memoryCache";
 import { articleCardSelect, articleListSelect, categoryBasicSelect, userPublicSelect } from "./selectHelpers";
 import { eq, desc, asc, sql, and, or, not, inArray, ne, gte, lt, lte, isNull, isNotNull, ilike, count, getTableColumns, type SQL } from "drizzle-orm";
 import { alias as aliasedTable } from "drizzle-orm/pg-core";
 import { nanoid } from 'nanoid';
+import { assignRbacRoleByName, resolvePrimaryRoleName, syncLegacyRoleFromRoleIds } from "./services/userRoleSync";
 import bcrypt from 'bcrypt';
 import { generateEnglishSlug } from './utils/slugTransliterator';
 import { notificationBus } from "./notificationBus";
 import { bufferArticleViewIncrement } from "./services/articleViewCounterService";
+import { matchesInternalAnnouncementAudience } from "./utils/internalAnnouncementTargeting";
 import {
   users,
   categories,
@@ -190,16 +195,6 @@ import {
   type SmartBlock,
   type InsertSmartBlock,
   type UpdateSmartBlock,
-  type AudioNewsletter,
-  type InsertAudioNewsletter,
-  type UpdateAudioNewsletter,
-  type AudioNewsletterArticle,
-  type InsertAudioNewsletterArticle,
-  type AudioNewsletterListen,
-  type InsertAudioNewsletterListen,
-  type AudioNewsletterWithDetails,
-  type AudioNewsBrief,
-  type InsertAudioNewsBrief,
   audioNewsBriefs,
   type InternalAnnouncement,
   type InsertInternalAnnouncement,
@@ -432,7 +427,7 @@ import {
   type InsertFocusReadingSession,
   type UpdateFocusReadingSession,
 } from "@shared/schema";
-import { computeTier } from "@shared/loyalty";
+import { computeTier, getLoyaltyActionMeta } from "@shared/loyalty";
 
 export interface IStorage {
   // User operations (required for Replit Auth)
@@ -588,7 +583,7 @@ export interface IStorage {
     phoneVerified?: boolean;
   }, createdBy: string): Promise<{ user: User; temporaryPassword: string }>;
   /** lookup مستخدم بالإيميل (case-insensitive) — لـ pre-check ومعالجة race. */
-  getUserByEmailBasic(email: string): Promise<{ id: string; email: string; firstName: string | null; lastName: string | null; status: string; role: string } | undefined>;
+  getUserByEmailBasic(email: string): Promise<{ id: string; email: string | null; firstName: string | null; lastName: string | null; status: string; role: string } | undefined>;
   getUserRoles(userId: string): Promise<Array<{ id: string; name: string; nameAr: string }>>;
   updateUserRoles(userId: string, roleIds: string[], updatedBy: string, reason?: string): Promise<void>;
   getAllRoles(): Promise<Array<{ id: string; name: string; nameAr: string; description: string | null; isSystem: boolean }>>;
@@ -884,7 +879,7 @@ export interface IStorage {
   getCommentWithArticle(commentId: string): Promise<{
     comment: Comment;
     article: { id: string; title: string; slug: string } | null;
-    user: { id: string; firstName?: string; lastName?: string; email: string } | null;
+    user: { id: string; firstName?: string; lastName?: string; email: string | null } | null;
   } | null>;
   
   // Reaction operations
@@ -971,7 +966,7 @@ export interface IStorage {
   publishTopic(id: string, userId: string): Promise<Topic>;
   unpublishTopic(id: string, userId: string): Promise<Topic>;
   getPublishedTopicsByAngle(angleSlug: string, limit?: number): Promise<Topic[]>;
-  getLatestPublishedTopics(limit?: number): Promise<Array<Topic & { angle: { id: string; name: string; slug: string; icon?: string | null; colorHex?: string | null } }>>;
+  getLatestPublishedTopics(limit?: number): Promise<Array<Topic & { angle: { id: string; name: string; slug: string; icon?: string | null; colorHex?: string | null }; writer: { name: string; avatar: string | null } | null }>>;
   
   // Angle Submissions operations - طلبات كتابة الزوايا
   createAngleSubmission(data: InsertAngleSubmission): Promise<AngleSubmission>;
@@ -1064,7 +1059,7 @@ export interface IStorage {
   // Online moderators operations
   getOnlineModerators(minutesThreshold?: number): Promise<{
     id: string;
-    email: string;
+    email: string | null;
     firstName: string | null;
     lastName: string | null;
     profileImageUrl: string | null;
@@ -1363,33 +1358,18 @@ export interface IStorage {
   // ============================================
   // Audio News Briefs Operations - الأخبار الصوتية السريعة
   // ============================================
-  createAudioNewsBrief(data: InsertAudioNewsBrief): Promise<AudioNewsBrief>;
-  getAudioNewsBriefById(id: string): Promise<AudioNewsBrief | null>;
-  getAllAudioNewsBriefs(): Promise<AudioNewsBrief[]>;
-  getPublishedAudioNewsBriefs(limit?: number): Promise<AudioNewsBrief[]>;
-  updateAudioNewsBrief(id: string, data: Partial<InsertAudioNewsBrief>): Promise<AudioNewsBrief>;
-  deleteAudioNewsBrief(id: string): Promise<void>;
-  publishAudioNewsBrief(id: string): Promise<AudioNewsBrief>;
 
   // ============================================
   // Audio Newsletters Operations - النشرات الصوتية
   // ============================================
   
   // Audio Newsletter CRUD operations
-  createAudioNewsletter(data: InsertAudioNewsletter): Promise<AudioNewsletter>;
-  getAudioNewsletterById(id: string): Promise<AudioNewsletterWithDetails | null>;
-  getAudioNewsletterBySlug(slug: string): Promise<AudioNewsletterWithDetails | null>;
-  getAllAudioNewsletters(filters?: { status?: string; limit?: number; offset?: number }): Promise<AudioNewsletterWithDetails[]>;
-  updateAudioNewsletter(id: string, data: UpdateAudioNewsletter): Promise<AudioNewsletter>;
-  deleteAudioNewsletter(id: string): Promise<void>;
 
   // Articles in newsletter
   addArticlesToNewsletter(newsletterId: string, articleIds: string[]): Promise<void>;
   removeArticleFromNewsletter(newsletterId: string, articleId: string): Promise<void>;
-  getNewsletterArticles(newsletterId: string): Promise<(AudioNewsletterArticle & { article?: Article })[]>;
 
   // Listen tracking
-  trackListen(data: InsertAudioNewsletterListen): Promise<AudioNewsletterListen>;
   getNewsletterAnalytics(newsletterId: string): Promise<{
     totalListens: number;
     uniqueListeners: number;
@@ -2526,6 +2506,9 @@ async function getIfoxCategoryIds(): Promise<string[]> {
   return ids;
 }
 
+/** single-flight لملف المراسل — يمنع عاصفة استعلامات عند فتح نفس الصفحة متزامناً. */
+const reporterProfileInflight = new Map<string, Promise<ReporterProfile | undefined>>();
+
 function reporterPublicSelect(reporterAlias: any) {
   return {
     id: reporterAlias.id,
@@ -3000,12 +2983,13 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateUserRole(userId: string, role: string): Promise<User> {
-    const [user] = await db
-      .update(users)
-      .set({ role })
-      .where(eq(users.id, userId))
-      .returning();
-
+    const [user] = await db.update(users).set({ role }).where(eq(users.id, userId)).returning();
+    await assignRbacRoleByName(userId, role);
+    if (role === "reporter") {
+      try { await this.ensureReporterStaffRecord(userId); } catch (err) {
+        console.error("[updateUserRole] ensureReporterStaffRecord failed:", err);
+      }
+    }
     return user;
   }
 
@@ -3592,6 +3576,7 @@ export class DatabaseStorage implements IStorage {
     const passwordHash = await bcrypt.hash(randomPassword, 12);
 
     const user = await db.transaction(async (tx) => {
+      const primaryRole = await resolvePrimaryRoleName(tx, userData.roleIds);
       const [user] = await tx.insert(users).values({
         id: userId,
         email: userData.email.trim().toLowerCase(),
@@ -3605,7 +3590,7 @@ export class DatabaseStorage implements IStorage {
         status: userData.status || 'active',
         emailVerified: userData.emailVerified || false,
         phoneVerified: userData.phoneVerified || false,
-        role: 'reader',
+        role: primaryRole,
         isProfileComplete: true,
         mustChangePassword: true, // Require password change on first login
       }).returning();
@@ -3642,7 +3627,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   /** lookup مستخدم بالإيميل (case-insensitive) — لـ pre-check ومعالجة race. */
-  async getUserByEmailBasic(email: string): Promise<{ id: string; email: string; firstName: string | null; lastName: string | null; status: string; role: string } | undefined> {
+  async getUserByEmailBasic(email: string): Promise<{ id: string; email: string | null; firstName: string | null; lastName: string | null; status: string; role: string } | undefined> {
     const [u] = await db
       .select({ id: users.id, email: users.email, firstName: users.firstName, lastName: users.lastName, status: users.status, role: users.role })
       .from(users)
@@ -3688,13 +3673,7 @@ export class DatabaseStorage implements IStorage {
         );
       }
 
-      const newRoles = await tx
-        .select({
-          id: roles.id,
-          name: roles.name,
-        })
-        .from(roles)
-        .where(inArray(roles.id, roleIds));
+      const newRoles = await syncLegacyRoleFromRoleIds(tx, userId, roleIds);
 
       await tx.insert(activityLogs).values({
         id: nanoid(),
@@ -3927,7 +3906,7 @@ export class DatabaseStorage implements IStorage {
       return []; // Early return: no results for unauthorized archived requests
     }
 
-    const conditions = [];
+    const conditions: (SQL<unknown> | undefined)[] = [];
 
     if (filters?.categoryId) {
       conditions.push(eq(articles.categoryId, filters.categoryId));
@@ -3944,17 +3923,10 @@ export class DatabaseStorage implements IStorage {
       conditions.push(eq(articles.authorId, filters.authorId));
     }
 
-    if (filters?.searchQuery) {
-      const searchPattern = `%${filters.searchQuery}%`;
-      conditions.push(
-        or(
-          // Matches idx_articles_title_trgm (GIN on lower(title)) for
-          // published searches while preserving case-insensitive semantics.
-          sql`lower(${articles.title}) LIKE lower(${searchPattern})`,
-          ilike(articles.excerpt, searchPattern),
-        )
-      );
-    }
+    // شرط البحث يُحل لاحقًا عبر مسار المرشحين (انظر أسفل بناء الشروط) —
+    // دمجه مباشرة مع ORDER BY يدفع المخطط لمشي فهرس الترتيب والترشيح صفًا
+    // صفًا (قياس 2026-07-25: متوسط 44s للكلمات النادرة).
+    const searchPattern = filters?.searchQuery ? `%${filters.searchQuery}%` : null;
 
     // Exclude opinion articles from regular news feeds
     conditions.push(
@@ -3978,8 +3950,35 @@ export class DatabaseStorage implements IStorage {
       }
     }
 
+    // مسار المرشحين للبحث: صفِّ المطابقات أولًا بلا ترتيب — فيستعمل المخطط
+    // فهارس trgm (title/excerpt) عبر Bitmap Scan — ثم رتّب الدفعة الصغيرة في
+    // الاستعلام الرئيسي. سقف 1000 مرشح يغطي limit الأقصى (500) مرتين.
+    if (searchPattern) {
+      const candidates = await db
+        .select({ id: articles.id })
+        .from(articles)
+        .where(and(
+          ...conditions.filter((c): c is SQL<unknown> => Boolean(c)),
+          or(
+            sql`lower(${articles.title}) LIKE lower(${searchPattern})`,
+            ilike(articles.excerpt, searchPattern),
+          ),
+        ))
+        .limit(1000);
+      if (candidates.length === 0) return [];
+      conditions.push(inArray(articles.id, candidates.map((c) => c.id)));
+    }
+
     const reporterAlias = aliasedTable(users, 'reporter');
-    
+
+    // ملاحظة انحدار 2026-07-25: كان هذا الاستعلام ملفوفًا بـwithStatementTimeout،
+    // وهي معاملة صريحة (BEGIN/SET LOCAL/COMMIT). على نقطة Neon `-pooler` يعمل
+    // PgBouncer في وضع transaction pooling، فالمعاملة تُثبّت اتصال خادم طوال
+    // مدتها بينما الاستعلام المفرد يحرره فور انتهائه. لفّ أسخن استعلام في
+    // التطبيق بمعاملة خفّض التوازي الفعلي عند الـpooler وأنتج موجة
+    // «timeout exceeded when trying to connect». سقف زمن الاستعلام يُضبط الآن
+    // على مستوى الدور في Neon (ALTER ROLE ... SET statement_timeout) فيسري بلا
+    // معاملة ولا اتصال إضافي. لا تُعِد لفّ هذا المسار.
     const results = await db
       .select({
         article: articleListSelect,
@@ -3998,7 +3997,8 @@ export class DatabaseStorage implements IStorage {
       .leftJoin(users, eq(articles.authorId, users.id))
       .leftJoin(reporterAlias, eq(articles.reporterId, reporterAlias.id))
       .where(conditions.length > 0 ? and(...conditions) : undefined)
-      .orderBy(desc(articles.displayOrder), desc(articles.publishedAt), desc(articles.createdAt))
+      // «إنعاش»: COALESCE يقدّم الخبر المُنعش دون تغيير تاريخ نشره الظاهر
+      .orderBy(desc(articles.displayOrder), desc(sql`COALESCE(${articles.resurfacedAt}, ${articles.publishedAt})`), desc(articles.createdAt))
       .limit(filters?.limit || 500);
 
     return results.map((r) => ({
@@ -4124,6 +4124,7 @@ export class DatabaseStorage implements IStorage {
       displayOrder: row.display_order,
       isBreaking: row.is_breaking,
       isFeatured: row.is_featured,
+      isReading: row.is_reading ?? false,
       isEditorPick: row.is_editor_pick,
       isDeepDive: row.is_deep_dive,
       readingTime: row.reading_time,
@@ -4400,9 +4401,17 @@ export class DatabaseStorage implements IStorage {
     if (updateData.imageFocalPoint === null || updateData.imageFocalPoint === undefined) {
       delete updateData.imageFocalPoint;
     }
-    // Same sync as createArticle — pick up the AI flag from the
-    // matching media_files row whenever the cover image changes.
-    await this.applyAiImageFlagFromMedia(updateData);
+
+    // Derive the public update timestamp atomically from the persisted row.
+    // JSONB merges at UPDATE time, so another writer cannot lose metadata keys.
+    const hasImageProvenance = await this.applyAiImageFlagFromMedia(updateData);
+    if (!hasImageProvenance && (typeof updateData.imageUrl === "string" || updateData.imageUrl === null)) {
+      const reset = resetChangedImageProvenance(updateData.imageUrl);
+      if (updateData.aiImageModel === undefined) updateData.aiImageModel = reset.aiImageModel;
+      if (updateData.aiImagePrompt === undefined) updateData.aiImagePrompt = reset.aiImagePrompt;
+    }
+    const editorialMetadata = buildEditorialMetadataUpdate(updateData);
+    if (editorialMetadata) updateData.seoMetadata = editorialMetadata;
     const [updated] = await db
       .update(articles)
       .set(updateData)
@@ -4411,36 +4420,23 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
 
-  /// Mutates `data` in-place: when `data.imageUrl` matches a
-  /// media_files row whose `is_ai_generated` is true and the caller
-  /// hasn't already set `isAiGeneratedImage`, copy the AI metadata
-  /// (model + prompt) onto the article. No-op when the URL doesn't
-  /// resolve to a known media row or when the caller already provided
-  /// an explicit value.
-  private async applyAiImageFlagFromMedia(data: any): Promise<void> {
-    if (data?.isAiGeneratedImage === true) return; // caller already set it
+  /// Refresh provenance even when AI is already enabled: replacing an AI
+  /// image must not retain the model/prompt of the previous image.
+  private async applyAiImageFlagFromMedia(data: any): Promise<boolean> {
     const url = data?.imageUrl;
-    if (typeof url !== 'string' || url.length === 0) return;
+    if (typeof url !== 'string' || url.length === 0) return false;
     try {
-      const [media] = await db
-        .select({
-          isAi: mediaFiles.isAiGenerated,
-          model: mediaFiles.aiGenerationModel,
-          prompt: mediaFiles.aiGenerationPrompt,
-        })
-        .from(mediaFiles)
-        .where(eq(mediaFiles.url, url))
-        .limit(1);
-      if (media?.isAi) {
-        data.isAiGeneratedImage = true;
-        if (!data.aiImageModel && media.model) data.aiImageModel = media.model;
-        if (!data.aiImagePrompt && media.prompt) data.aiImagePrompt = media.prompt;
+      const provenance = await resolveArticleImageProvenance(url);
+      if (provenance) {
+        Object.assign(data, provenance);
+        return true;
       }
     } catch (err) {
       // Best-effort — never block the actual write because of a sync
       // lookup failure. The article saves with the original payload.
       console.warn('[storage] applyAiImageFlagFromMedia failed:', err);
     }
+    return false;
   }
 
   async deleteArticle(id: string): Promise<void> {
@@ -4601,37 +4597,10 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getArticlesMetrics(): Promise<{ published: number; scheduled: number; draft: number; archived: number }> {
-    const now = new Date();
-
-    const [publishedResult] = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(articles)
-      .where(eq(articles.status, 'published'));
-
-    const [scheduledResult] = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(articles)
-      .where(and(
-        eq(articles.status, 'scheduled'),
-        gte(articles.scheduledAt, now)
-      ));
-
-    const [draftResult] = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(articles)
-      .where(eq(articles.status, 'draft'));
-
-    const [archivedResult] = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(articles)
-      .where(eq(articles.status, 'archived'));
-
-    return {
-      published: Number(publishedResult.count),
-      scheduled: Number(scheduledResult.count),
-      draft: Number(draftResult.count),
-      archived: Number(archivedResult.count),
-    };
+    // كل عدّ مستقل يدفع شرط status إلى فهرسه. صيغة FILTER الواحدة كانت تمسح
+    // صف المقال كاملًا (~199k blocks في قياس الإنتاج) كلما انتهى الكاش.
+    // المفتاح يبدأ بـ articles: كي تمسحه بوابة إبطال المقالات بعد أي كتابة.
+    return withSWR("articles:admin:metrics:v3", CACHE_TTL.SHORT, CACHE_TTL.MEDIUM, getAdminArticleMetrics);
   }
 
   async archiveArticle(id: string, userId: string): Promise<Article> {
@@ -5895,7 +5864,7 @@ export class DatabaseStorage implements IStorage {
   async getCommentWithArticle(commentId: string): Promise<{
     comment: Comment;
     article: { id: string; title: string; slug: string } | null;
-    user: { id: string; firstName?: string; lastName?: string; email: string } | null;
+    user: { id: string; firstName?: string; lastName?: string; email: string | null } | null;
   } | null> {
     const [result] = await db
       .select({
@@ -5941,7 +5910,7 @@ export class DatabaseStorage implements IStorage {
       id: string;
       firstName?: string;
       lastName?: string;
-      email: string;
+      email: string | null;
       profileImage?: string;
       createdAt: string;
     };
@@ -6471,6 +6440,10 @@ export class DatabaseStorage implements IStorage {
           a.ai_summary,
           a.ai_generated,
           a.is_featured,
+          a.is_reading,
+          a.is_video_template,
+          a.video_url,
+          a.video_thumbnail_url,
           a.display_order,
           a.views,
           a.seo,
@@ -6577,6 +6550,10 @@ export class DatabaseStorage implements IStorage {
       aiSummary: row.ai_summary,
       aiGenerated: row.ai_generated,
       isFeatured: row.is_featured,
+      isReading: row.is_reading ?? false,
+      isVideoTemplate: row.is_video_template ?? false,
+      videoUrl: row.video_url ?? null,
+      videoThumbnailUrl: row.video_thumbnail_url ?? null,
       displayOrder: row.display_order || 0,
       views: row.views,
       seo: row.seo,
@@ -6725,6 +6702,10 @@ export class DatabaseStorage implements IStorage {
           a.ai_summary,
           a.ai_generated,
           a.is_featured,
+          a.is_reading,
+          a.is_video_template,
+          a.video_url,
+          a.video_thumbnail_url,
           a.display_order,
           a.views,
           a.seo,
@@ -6899,6 +6880,10 @@ export class DatabaseStorage implements IStorage {
       aiSummary: row.ai_summary,
       aiGenerated: row.ai_generated,
       isFeatured: row.is_featured,
+      isReading: row.is_reading ?? false,
+      isVideoTemplate: row.is_video_template ?? false,
+      videoUrl: row.video_url ?? null,
+      videoThumbnailUrl: row.video_thumbnail_url ?? null,
       displayOrder: row.display_order || 0,
       views: row.views,
       seo: row.seo,
@@ -7041,7 +7026,7 @@ export class DatabaseStorage implements IStorage {
         a.image_url, a.thumbnail_url, a.infographic_banner_url, a.image_focal_point,
         a.category_id, a.author_id, a.reporter_id, a.article_type, a.news_type,
         a.status, a.hide_from_homepage, a.ai_summary, a.ai_generated,
-        a.is_featured, a.display_order, a.views, a.seo, a.credibility_score,
+        a.is_featured, a.is_reading, a.is_video_template, a.video_url, a.video_thumbnail_url, a.display_order, a.views, a.seo, a.credibility_score,
         a.source, a.source_url, a.is_ai_generated_image, a.is_ai_generated_thumbnail,
         a.is_publisher_content, a.is_publisher_news, a.publisher_id, a.publisher_status,
         a.published_at, a.created_at, a.updated_at,
@@ -7126,6 +7111,10 @@ export class DatabaseStorage implements IStorage {
       aiSummary: row.ai_summary,
       aiGenerated: row.ai_generated,
       isFeatured: row.is_featured,
+      isReading: row.is_reading ?? false,
+      isVideoTemplate: row.is_video_template ?? false,
+      videoUrl: row.video_url ?? null,
+      videoThumbnailUrl: row.video_thumbnail_url ?? null,
       displayOrder: row.display_order,
       views: row.views,
       seo: row.seo,
@@ -7901,11 +7890,11 @@ export class DatabaseStorage implements IStorage {
         )
       )
       // التمييز من بعض المسارات (iOS الإداري) لا يختم displayOrder فيبقى 0
-      // ويغرق تحت المختومين — GREATEST يساوي غير المختوم بحداثة نشره
+      // ويغرق تحت المختومين — GREATEST يساوي غير المختوم بحداثة نشره/إنعاشه
       // (displayOrder المختوم = ثوانٍ يونكس، نفس مقياس EPOCH)
       .orderBy(
-        desc(sql`GREATEST(COALESCE(${articles.displayOrder}, 0), EXTRACT(EPOCH FROM ${articles.publishedAt}))`),
-        desc(articles.publishedAt),
+        desc(sql`GREATEST(COALESCE(${articles.displayOrder}, 0), EXTRACT(EPOCH FROM COALESCE(${articles.resurfacedAt}, ${articles.publishedAt})))`),
+        desc(sql`COALESCE(${articles.resurfacedAt}, ${articles.publishedAt})`),
         desc(articles.views)
       )
       .limit(3);
@@ -7993,7 +7982,8 @@ export class DatabaseStorage implements IStorage {
           )
         )
       )
-      .orderBy(desc(articles.publishedAt), desc(articles.createdAt))
+      // «إنعاش»: COALESCE يقدّم الخبر المُنعش دون تغيير تاريخ نشره الظاهر
+      .orderBy(desc(sql`COALESCE(${articles.resurfacedAt}, ${articles.publishedAt})`), desc(articles.createdAt))
       .limit(limit * 3)
       .offset(offset);
 
@@ -8262,6 +8252,25 @@ export class DatabaseStorage implements IStorage {
     const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
+    // KPI اختيارية: فشل جدول/عمود (مثل deep_analyses.status الناقص في الإنتاج)
+    // لا يُسقط Promise.all بالكامل وإلا تظهر «تعذر تحميل نبض غرفة الأخبار».
+    const softKpi = async <T,>(
+      label: string,
+      promise: Promise<T[]>,
+      fallback: T,
+    ): Promise<T[]> => {
+      try {
+        const rows = await promise;
+        return rows.length > 0 ? rows : [fallback];
+      } catch (err: any) {
+        console.warn(
+          `[getAdminDashboardStats] optional KPI "${label}" failed:`,
+          err?.cause?.message || err?.message || err,
+        );
+        return [fallback];
+      }
+    };
+
     // Execute all independent queries in parallel for better performance
     const [
       [articleStats],
@@ -8270,7 +8279,8 @@ export class DatabaseStorage implements IStorage {
       [commentStats],
       [categoriesStats],
       [abTestsStats],
-      [reactionsStats],
+      [reactionsTotalStats],
+      [reactionsTodayStats],
       [engagementStats],
       [audioStats],
       [deepAnalysesStats],
@@ -8302,8 +8312,8 @@ export class DatabaseStorage implements IStorage {
         })
         .from(userEvents)
         .where(and(
-          sql`${userEvents.eventType} = 'view'`,
-          sql`${userEvents.createdAt} >= ${todayStart}`
+          eq(userEvents.eventType, "view"),
+          gte(userEvents.createdAt, todayStart),
         )),
 
       // Get user stats with active today count
@@ -8335,89 +8345,121 @@ export class DatabaseStorage implements IStorage {
         })
         .from(categories),
 
-      // Get AB tests stats
-      db
-        .select({
-          total: sql<number>`count(*)`,
-          running: sql<number>`count(*) filter (where ${experiments.status} = 'running')`,
-        })
-        .from(experiments),
+      softKpi(
+        "abTests",
+        db
+          .select({
+            total: sql<number>`count(*)`,
+            running: sql<number>`count(*) filter (where ${experiments.status} = 'running')`,
+          })
+          .from(experiments),
+        { total: 0, running: 0 },
+      ),
 
-      // Get reactions count (total and today)
+      // Reactions total (separate from today so today can use a createdAt range scan)
       db
         .select({
           total: sql<number>`count(*)`,
-          todayCount: sql<number>`count(*) filter (where ${reactions.createdAt} >= ${todayStart})`,
         })
         .from(reactions),
 
-      // Get engagement stats
+      db
+        .select({
+          todayCount: sql<number>`count(*)`,
+        })
+        .from(reactions)
+        .where(gte(reactions.createdAt, todayStart)),
+
+      // Engagement: never full-scan reading_history — last 7d for avg/totalReads + readsToday
       db
         .select({
           totalReads: sql<number>`count(*)`,
           readsToday: sql<number>`count(*) filter (where ${readingHistory.readAt} >= ${todayStart})`,
           avgDuration: sql<number>`coalesce(avg(${readingHistory.readDuration}), 0)`,
         })
-        .from(readingHistory),
+        .from(readingHistory)
+        .where(gte(readingHistory.readAt, weekAgo)),
 
-      // Get audio newsletters stats
-      db
-        .select({
-          total: sql<number>`count(*)`,
-          published: sql<number>`count(*) filter (where ${audioNewsletters.status} = 'published')`,
-          totalListens: sql<number>`coalesce(sum(${audioNewsletters.totalListens}), 0)`,
-        })
-        .from(audioNewsletters),
+      softKpi(
+        "audioNewsletters",
+        db
+          .select({
+            total: sql<number>`count(*)`,
+            published: sql<number>`count(*) filter (where ${audioNewsletters.status} = 'published')`,
+            totalListens: sql<number>`coalesce(sum(${audioNewsletters.totalListens}), 0)`,
+          })
+          .from(audioNewsletters),
+        { total: 0, published: 0, totalListens: 0 },
+      ),
 
-      // Get deep analyses stats
-      db
-        .select({
-          total: sql<number>`count(*)`,
-          published: sql<number>`count(*) filter (where ${deepAnalyses.status} = 'published')`,
-        })
-        .from(deepAnalyses),
+      // الإنتاج قد يفتقد deep_analyses.status — لا تُسقط الداشبورد
+      softKpi(
+        "deepAnalyses",
+        db
+          .select({
+            total: sql<number>`count(*)`,
+            published: sql<number>`count(*) filter (where ${deepAnalyses.status} = 'published')`,
+          })
+          .from(deepAnalyses),
+        { total: 0, published: 0 },
+      ),
 
-      // Get publishers stats
-      db
-        .select({
-          total: sql<number>`count(*)`,
-          active: sql<number>`count(*) filter (where ${publishers.isActive} = true)`,
-        })
-        .from(publishers),
+      softKpi(
+        "publishers",
+        db
+          .select({
+            total: sql<number>`count(*)`,
+            active: sql<number>`count(*) filter (where ${publishers.isActive} = true)`,
+          })
+          .from(publishers),
+        { total: 0, active: 0 },
+      ),
 
-      // Get media library stats
-      db
-        .select({
-          totalFiles: sql<number>`count(*)`,
-          totalSize: sql<number>`coalesce(sum(${mediaFiles.size}), 0)`,
-        })
-        .from(mediaFiles),
+      softKpi(
+        "mediaLibrary",
+        db
+          .select({
+            totalFiles: sql<number>`count(*)`,
+            totalSize: sql<number>`coalesce(sum(${mediaFiles.size}), 0)`,
+          })
+          .from(mediaFiles),
+        { totalFiles: 0, totalSize: 0 },
+      ),
 
-      // Get AI tasks stats
-      db
-        .select({
-          total: sql<number>`count(*)`,
-          pending: sql<number>`count(*) filter (where ${aiScheduledTasks.status} = 'pending')`,
-          completed: sql<number>`count(*) filter (where ${aiScheduledTasks.status} = 'completed')`,
-        })
-        .from(aiScheduledTasks),
+      softKpi(
+        "aiTasks",
+        db
+          .select({
+            total: sql<number>`count(*)`,
+            pending: sql<number>`count(*) filter (where ${aiScheduledTasks.status} = 'pending')`,
+            completed: sql<number>`count(*) filter (where ${aiScheduledTasks.status} = 'completed')`,
+          })
+          .from(aiScheduledTasks),
+        { total: 0, pending: 0, completed: 0 },
+      ),
 
-      // Get AI images stats
-      db
-        .select({
-          total: sql<number>`count(*)`,
-          thisWeek: sql<number>`count(*) filter (where ${aiImageGenerations.createdAt} >= ${weekAgo})`,
-        })
-        .from(aiImageGenerations),
+      softKpi(
+        "aiImages",
+        db
+          .select({
+            total: sql<number>`count(*)`,
+            thisWeek: sql<number>`count(*) filter (where ${aiImageGenerations.createdAt} >= ${weekAgo})`,
+          })
+          .from(aiImageGenerations),
+        { total: 0, thisWeek: 0 },
+      ),
 
-      // Get smart blocks stats
-      db
-        .select({
-          total: sql<number>`count(*)`,
-        })
-        .from(smartBlocks),
+      softKpi(
+        "smartBlocks",
+        db
+          .select({
+            total: sql<number>`count(*)`,
+          })
+          .from(smartBlocks),
+        { total: 0 },
+      ),
 
-      // Get recent articles (latest 5)
+      // Get recent articles (latest 5) — بلا معاملة (راجع ملاحظة الانحدار في getArticles)
       db
         .select({
           article: articleCardSelect,
@@ -8441,7 +8483,7 @@ export class DatabaseStorage implements IStorage {
         .orderBy(desc(comments.createdAt))
         .limit(5),
 
-      // Get top articles (most viewed, top 5)
+      // Get top articles (most viewed, top 5) — بلا معاملة (راجع ملاحظة الانحدار في getArticles)
       db
         .select({
           article: articleCardSelect,
@@ -8507,8 +8549,8 @@ export class DatabaseStorage implements IStorage {
         running: Number(abTestsStats.running),
       },
       reactions: {
-        total: Number(reactionsStats.total),
-        todayCount: Number(reactionsStats.todayCount),
+        total: Number(reactionsTotalStats.total),
+        todayCount: Number(reactionsTodayStats.todayCount),
       },
       engagement: {
         averageTimeOnSite: Math.round(Number(engagementStats.avgDuration)),
@@ -8834,7 +8876,7 @@ export class DatabaseStorage implements IStorage {
   // Online moderators operations
   async getOnlineModerators(minutesThreshold: number = 15): Promise<{
     id: string;
-    email: string;
+    email: string | null;
     firstName: string | null;
     lastName: string | null;
     profileImageUrl: string | null;
@@ -8898,7 +8940,7 @@ export class DatabaseStorage implements IStorage {
     // Combine and deduplicate by user ID, preferring RBAC role when available
     const moderatorMap = new Map<string, {
       id: string;
-      email: string;
+      email: string | null;
       firstName: string | null;
       lastName: string | null;
       profileImageUrl: string | null;
@@ -8969,17 +9011,34 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getUserInterests(userId: string): Promise<InterestWithWeight[]> {
+    // userInterests.categoryId FK → categories (the real catalog; all write
+    // paths store category ids). This previously joined the orphaned `interests`
+    // table, whose ids never match category ids, so it returned EMPTY rows and
+    // /api/user/interests + /api/user/profile/complete served nothing (F-07).
+    // Map category columns onto the Interest shape the callers expect.
     const results = await db
       .select({
-        interest: interests,
+        id: categories.id,
+        nameAr: categories.nameAr,
+        nameEn: categories.nameEn,
+        slug: categories.slug,
+        icon: categories.icon,
+        description: categories.description,
+        createdAt: categories.createdAt,
         weight: userInterests.weight,
       })
       .from(userInterests)
-      .innerJoin(interests, eq(userInterests.categoryId, interests.id))
+      .innerJoin(categories, eq(userInterests.categoryId, categories.id))
       .where(eq(userInterests.userId, userId));
 
     return results.map((r) => ({
-      ...r.interest,
+      id: r.id,
+      nameAr: r.nameAr,
+      nameEn: r.nameEn,
+      slug: r.slug,
+      icon: r.icon ?? null,
+      description: r.description ?? null,
+      createdAt: r.createdAt,
       weight: r.weight,
     }));
   }
@@ -9713,12 +9772,20 @@ export class DatabaseStorage implements IStorage {
         );
       }
       
-      // 1. Get active campaign inside transaction
-      const applicableCampaign = await this.getApplicableCampaignInTx(
-        tx,
-        params.action, 
-        params.metadata?.categoryId
-      );
+      // 1. Get active campaign inside transaction. Sports prediction awards
+      // are already tier-multiplied at settlement time and admin adjustments
+      // are exact by definition — applying a campaign multiplier on top of
+      // either would double-inflate large payouts, so campaigns only apply
+      // to editorial/engagement/account actions.
+      const actionCategory = getLoyaltyActionMeta(params.action).category;
+      const applicableCampaign =
+        actionCategory === "sports" || actionCategory === "admin"
+          ? undefined
+          : await this.getApplicableCampaignInTx(
+              tx,
+              params.action,
+              params.metadata?.categoryId
+            );
 
       // 2. Calculate points with multiplier or bonus
       let pointsToAward = params.points;
@@ -9857,6 +9924,9 @@ export class DatabaseStorage implements IStorage {
       .where(
         and(
           eq(loyaltyRewards.isActive, true),
+          // سبق بلس preview-simulation rewards are admin-only surfaces —
+          // never expose them in the member-facing catalog.
+          sql`COALESCE(${loyaltyRewards.rewardData}->'partnerApiData'->>'previewOnly', '') <> 'true'`,
           or(
             sql`${loyaltyRewards.expiresAt} IS NULL`,
             gte(loyaltyRewards.expiresAt, now)
@@ -9877,106 +9947,146 @@ export class DatabaseStorage implements IStorage {
   async redeemReward(params: {
     userId: string;
     rewardId: string;
-  }): Promise<{ success: boolean; message: string; redemption?: UserRewardsHistory }> {
-    return await db.transaction(async (tx) => {
-      // 1. Get reward details
-      const [reward] = await tx
-        .select()
-        .from(loyaltyRewards)
-        .where(eq(loyaltyRewards.id, params.rewardId));
+    // سبق بلس preview rewards are redeemable only through the admin-gated
+    // /api/plus-preview surface, which passes allowPreview: true.
+    allowPreview?: boolean;
+  }): Promise<{
+    success: boolean;
+    code?: "NOT_FOUND" | "INACTIVE" | "EXPIRED" | "INSUFFICIENT_POINTS" | "OUT_OF_STOCK" | "MAX_REDEMPTIONS";
+    message: string;
+    redemption?: UserRewardsHistory;
+    remainingBalance?: number;
+  }> {
+    // Thrown inside the transaction to roll back the points debit if the
+    // guarded stock decrement touches zero rows.
+    class OutOfStockRollback extends Error {}
+    try {
+      return await db.transaction(async (tx) => {
+        // 1. Lock the reward row — serializes concurrent redemptions of the
+        // same reward so stock and per-user-count checks can't race.
+        const [reward] = await tx
+          .select()
+          .from(loyaltyRewards)
+          .where(eq(loyaltyRewards.id, params.rewardId))
+          .for("update");
 
-      if (!reward) {
-        return { success: false, message: "الجائزة غير موجودة" };
-      }
+        if (!reward) {
+          return { success: false, code: "NOT_FOUND" as const, message: "الجائزة غير موجودة" };
+        }
 
-      if (!reward.isActive) {
-        return { success: false, message: "الجائزة غير متاحة حالياً" };
-      }
+        if (!reward.isActive) {
+          return { success: false, code: "INACTIVE" as const, message: "الجائزة غير متاحة حالياً" };
+        }
 
-      if (reward.expiresAt && new Date(reward.expiresAt) < new Date()) {
-        return { success: false, message: "انتهت صلاحية الجائزة" };
-      }
+        if ((reward.rewardData as any)?.partnerApiData?.previewOnly === true && !params.allowPreview) {
+          return { success: false, code: "NOT_FOUND" as const, message: "الجائزة غير موجودة" };
+        }
 
-      // 2. Check user points
-      const [userPoints] = await tx
-        .select()
-        .from(userPointsTotal)
-        .where(eq(userPointsTotal.userId, params.userId));
+        if (reward.expiresAt && new Date(reward.expiresAt) < new Date()) {
+          return { success: false, code: "EXPIRED" as const, message: "انتهت صلاحية الجائزة" };
+        }
 
-      if (!userPoints || userPoints.totalPoints < reward.pointsCost) {
-        return { 
-          success: false, 
-          message: `النقاط غير كافية. تحتاج إلى ${reward.pointsCost} نقطة` 
-        };
-      }
+        // 2. Check stock
+        if (reward.remainingStock !== null && reward.remainingStock <= 0) {
+          return { success: false, code: "OUT_OF_STOCK" as const, message: "نفذت كمية الجائزة" };
+        }
 
-      // 3. Check stock
-      if (reward.remainingStock !== null && reward.remainingStock <= 0) {
-        return { success: false, message: "نفذت كمية الجائزة" };
-      }
+        // 3. Check max redemptions per user (safe under the reward row lock)
+        if (reward.maxRedemptionsPerUser !== null) {
+          const [{ count: userRedemptions }] = await tx
+            .select({ count: sql<number>`count(*)` })
+            .from(userRewardsHistory)
+            .where(
+              and(
+                eq(userRewardsHistory.userId, params.userId),
+                eq(userRewardsHistory.rewardId, params.rewardId)
+              )
+            );
 
-      // 4. Check max redemptions per user
-      if (reward.maxRedemptionsPerUser !== null) {
-        const [{ count: userRedemptions }] = await tx
-          .select({ count: sql<number>`count(*)` })
-          .from(userRewardsHistory)
+          if (Number(userRedemptions) >= reward.maxRedemptionsPerUser) {
+            return {
+              success: false,
+              code: "MAX_REDEMPTIONS" as const,
+              message: `لقد وصلت إلى الحد الأقصى لاستبدال هذه الجائزة (${reward.maxRedemptionsPerUser})`
+            };
+          }
+        }
+
+        // 4. Deduct points — atomic guarded decrement so two concurrent
+        // redemptions can't both spend the same balance.
+        const debited = await tx
+          .update(userPointsTotal)
+          .set({
+            totalPoints: sql`${userPointsTotal.totalPoints} - ${reward.pointsCost}`,
+            updatedAt: new Date(),
+          })
           .where(
             and(
-              eq(userRewardsHistory.userId, params.userId),
-              eq(userRewardsHistory.rewardId, params.rewardId)
+              eq(userPointsTotal.userId, params.userId),
+              gte(userPointsTotal.totalPoints, reward.pointsCost)
             )
-          );
+          )
+          .returning({ totalPoints: userPointsTotal.totalPoints });
 
-        if (Number(userRedemptions) >= reward.maxRedemptionsPerUser) {
-          return { 
-            success: false, 
-            message: `لقد وصلت إلى الحد الأقصى لاستبدال هذه الجائزة (${reward.maxRedemptionsPerUser})` 
+        if (debited.length === 0) {
+          return {
+            success: false,
+            code: "INSUFFICIENT_POINTS" as const,
+            message: `النقاط غير كافية. تحتاج إلى ${reward.pointsCost} نقطة`
           };
         }
+
+        // 5. Decrement stock — guarded so it can never go negative; zero
+        // affected rows means someone else took the last unit, so roll the
+        // whole redemption (including the debit above) back.
+        if (reward.remainingStock !== null) {
+          const stockRows = await tx
+            .update(loyaltyRewards)
+            .set({ remainingStock: sql`${loyaltyRewards.remainingStock} - 1` })
+            .where(
+              and(
+                eq(loyaltyRewards.id, params.rewardId),
+                gte(loyaltyRewards.remainingStock, 1)
+              )
+            )
+            .returning({ remainingStock: loyaltyRewards.remainingStock });
+          if (stockRows.length === 0) {
+            throw new OutOfStockRollback();
+          }
+        }
+
+        // 6. Create redemption record with snapshot
+        const [redemption] = await tx
+          .insert(userRewardsHistory)
+          .values({
+            userId: params.userId,
+            rewardId: params.rewardId,
+            pointsSpent: reward.pointsCost,
+            rewardSnapshot: {
+              nameAr: reward.nameAr,
+              nameEn: reward.nameEn,
+              pointsCost: reward.pointsCost,
+              rewardType: reward.rewardType,
+            },
+            deliveryData: reward.rewardData?.couponCode ? {
+              couponCode: reward.rewardData.couponCode,
+            } : undefined,
+          })
+          .returning();
+
+        return {
+          success: true,
+          message: "تم استبدال الجائزة بنجاح",
+          redemption,
+          remainingBalance: Number(debited[0].totalPoints),
+        };
+      });
+    } catch (err) {
+      if (err instanceof OutOfStockRollback) {
+        return { success: false, code: "OUT_OF_STOCK" as const, message: "نفذت كمية الجائزة" };
       }
-
-      // 5. Deduct points
-      await tx
-        .update(userPointsTotal)
-        .set({ 
-          totalPoints: userPoints.totalPoints - reward.pointsCost,
-          updatedAt: new Date(),
-        })
-        .where(eq(userPointsTotal.userId, params.userId));
-
-      // 6. Create redemption record with snapshot
-      const [redemption] = await tx
-        .insert(userRewardsHistory)
-        .values({
-          userId: params.userId,
-          rewardId: params.rewardId,
-          pointsSpent: reward.pointsCost,
-          rewardSnapshot: {
-            nameAr: reward.nameAr,
-            nameEn: reward.nameEn,
-            pointsCost: reward.pointsCost,
-            rewardType: reward.rewardType,
-          },
-          deliveryData: reward.rewardData?.couponCode ? {
-            couponCode: reward.rewardData.couponCode,
-          } : undefined,
-        })
-        .returning();
-
-      // 7. Update stock if applicable
-      if (reward.remainingStock !== null) {
-        await tx
-          .update(loyaltyRewards)
-          .set({ remainingStock: reward.remainingStock - 1 })
-          .where(eq(loyaltyRewards.id, params.rewardId));
-      }
-
-      return { 
-        success: true, 
-        message: "تم استبدال الجائزة بنجاح", 
-        redemption 
-      };
-    });
+      throw err;
+    }
   }
 
   async getUserRedemptionHistory(userId: string): Promise<UserRewardsHistory[]> {
@@ -10483,7 +10593,7 @@ export class DatabaseStorage implements IStorage {
     return results.map((r) => r.topic);
   }
 
-  async getLatestPublishedTopics(limit: number = 3): Promise<Array<Topic & { angle: { id: string; name: string; slug: string; icon?: string | null; colorHex?: string | null } }>> {
+  async getLatestPublishedTopics(limit: number = 3): Promise<Array<Topic & { angle: { id: string; name: string; slug: string; icon?: string | null; colorHex?: string | null }; writer: { name: string; avatar: string | null } | null }>> {
     const results = await db
       .select({
         topic: topics,
@@ -10494,20 +10604,35 @@ export class DatabaseStorage implements IStorage {
           icon: angles.iconKey,
           colorHex: angles.colorHex,
         },
+        // كاتب الزاوية — نفس أسبقية getAngleWriter: بيانات المنسوب ثم حساب المستخدم
+        writerFirstName: users.firstName,
+        writerLastName: users.lastName,
+        writerProfileImage: users.profileImageUrl,
+        writerStaffName: staff.nameAr,
+        writerStaffImage: staff.profileImage,
       })
       .from(topics)
       .innerJoin(angles, eq(topics.angleId, angles.id))
+      .leftJoin(users, eq(angles.managerUserId, users.id))
+      .leftJoin(staff, eq(staff.userId, users.id))
       .where(and(
         eq(topics.status, 'published'),
         eq(angles.isActive, true)
       ))
       .orderBy(desc(topics.publishedAt))
       .limit(limit);
-    
-    return results.map((r) => ({
-      ...r.topic,
-      angle: r.angle,
-    }));
+
+    return results.map((r) => {
+      const writerName = (r.writerStaffName
+        || [r.writerFirstName, r.writerLastName].filter(Boolean).join(" ").trim()) || null;
+      return {
+        ...r.topic,
+        angle: r.angle,
+        writer: writerName
+          ? { name: writerName, avatar: r.writerStaffImage || r.writerProfileImage || null }
+          : null,
+      };
+    });
   }
 
   // Angle Submissions operations - طلبات كتابة الزوايا
@@ -11706,164 +11831,173 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getReporterProfile(slug: string, windowDays: number = 90, language: 'ar' | 'en' = 'ar'): Promise<ReporterProfile | undefined> {
-    // Get reporter basic info
+    // كاش أطول + single-flight: صفحة «صحيفة سبق» كانت تسحب كل مقالات 90 يوماً (~2ث).
+    const cacheKey = `reporter:profile:v3:${language}:${slug}:${windowDays}`;
+    const cached = memoryCache.get<ReporterProfile>(cacheKey);
+    if (cached !== null) return cached;
+
+    const existing = reporterProfileInflight.get(cacheKey);
+    if (existing) return existing;
+
+    const compute = this.computeReporterProfile(slug, windowDays, language, cacheKey);
+    reporterProfileInflight.set(cacheKey, compute);
+    try {
+      return await compute;
+    } finally {
+      reporterProfileInflight.delete(cacheKey);
+    }
+  }
+
+  private async computeReporterProfile(
+    slug: string,
+    windowDays: number,
+    language: 'ar' | 'en',
+    cacheKey: string,
+  ): Promise<ReporterProfile | undefined> {
     const reporter = await this.getReporterBySlug(slug);
-    if (!reporter) return undefined;
+    if (!reporter?.userId) return undefined;
 
     const windowDate = new Date();
     windowDate.setDate(windowDate.getDate() - windowDays);
+    const owner = or(eq(articles.reporterId, reporter.userId), eq(articles.authorId, reporter.userId));
+    const published = eq(articles.status, 'published');
 
-    // Get reporter's articles with detailed stats
-    const reporterArticles = await db
-      .select({
-        id: articles.id,
-        title: articles.title,
-        slug: articles.slug,
-        publishedAt: articles.publishedAt,
-        newsType: articles.newsType,
-        views: articles.views,
-        categoryId: categories.id,
-        categoryNameAr: categories.nameAr,
-        categoryNameEn: categories.nameEn,
-        categorySlug: categories.slug,
-        categoryColor: categories.color,
-        categoryIcon: categories.icon,
-      })
-      .from(articles)
-      .leftJoin(categories, eq(articles.categoryId, categories.id))
-      .where(
-        and(
-          or(eq(articles.reporterId, reporter.userId!), eq(articles.authorId, reporter.userId!)),
-          eq(articles.status, 'published'),
-          gte(articles.publishedAt, windowDate)
-        )
-      )
-      .orderBy(desc(articles.displayOrder), desc(articles.publishedAt))
-      .execute();
+    // لا نجلب كل مقالات النافذة: آخر 5 للعرض + تجميع يومي في SQL للسلسلة الزمنية.
+    // نُسقط AVG(reading_history) من المسار الحار — مسح ثقيل بلا فهرس مناسب؛ نستخدم افتراضياً.
+    const [
+      lastArticleRows,
+      allTimeStatsResult,
+      likesResult,
+      categoryStatsResult,
+      followersResult,
+      dailyRows,
+    ] = await Promise.all([
+      db
+        .select({
+          id: articles.id,
+          title: articles.title,
+          slug: articles.slug,
+          englishSlug: articles.englishSlug,
+          excerpt: articles.excerpt,
+          imageUrl: articles.imageUrl,
+          thumbnailUrl: articles.thumbnailUrl,
+          imageFocalPoint: articles.imageFocalPoint,
+          isAiGeneratedImage: articles.isAiGeneratedImage,
+          updatedAt: articles.updatedAt,
+          publishedAt: articles.publishedAt,
+          newsType: articles.newsType,
+          views: articles.views,
+          categoryId: categories.id,
+          categoryNameAr: categories.nameAr,
+          categoryNameEn: categories.nameEn,
+          categorySlug: categories.slug,
+          categoryColor: categories.color,
+          categoryIcon: categories.icon,
+        })
+        .from(articles)
+        .leftJoin(categories, eq(articles.categoryId, categories.id))
+        .where(and(owner, published))
+        .orderBy(desc(articles.displayOrder), desc(articles.publishedAt))
+        .limit(5),
+      db
+        .select({
+          count: sql<number>`CAST(COUNT(DISTINCT ${articles.id}) AS INTEGER)`,
+          totalViews: sql<number>`COALESCE(SUM(${articles.views}), 0)`,
+        })
+        .from(articles)
+        .where(and(owner, published)),
+      db
+        .select({
+          totalLikes: sql<number>`CAST(COUNT(*) AS INTEGER)`,
+        })
+        .from(reactions)
+        .innerJoin(articles, eq(reactions.articleId, articles.id))
+        .where(and(owner, eq(reactions.type, 'like'))),
+      db
+        .select({
+          categoryId: categories.id,
+          categoryNameAr: categories.nameAr,
+          categoryNameEn: categories.nameEn,
+          categorySlug: categories.slug,
+          categoryColor: categories.color,
+          articlesCount: sql<number>`CAST(COUNT(DISTINCT ${articles.id}) AS INTEGER)`,
+          totalViews: sql<number>`COALESCE(SUM(${articles.views}), 0)`,
+        })
+        .from(articles)
+        .innerJoin(categories, eq(articles.categoryId, categories.id))
+        .where(and(owner, published))
+        .groupBy(categories.id, categories.nameAr, categories.nameEn, categories.slug, categories.color)
+        .orderBy(desc(sql`COUNT(DISTINCT ${articles.id})`))
+        .limit(5),
+      db
+        .select({
+          followersCount: sql<number>`CAST(COUNT(*) AS INTEGER)`,
+        })
+        .from(socialFollows)
+        .where(eq(socialFollows.followingId, reporter.userId)),
+      db
+        .select({
+          date: sql<string>`to_char(date_trunc('day', ${articles.publishedAt}), 'YYYY-MM-DD')`,
+          views: sql<number>`COALESCE(SUM(${articles.views}), 0)`,
+        })
+        .from(articles)
+        .where(and(owner, published, gte(articles.publishedAt, windowDate)))
+        .groupBy(sql`date_trunc('day', ${articles.publishedAt})`)
+        .orderBy(sql`date_trunc('day', ${articles.publishedAt})`),
+    ]);
 
-    // Get TOTAL article count (all time, not just within window)
-    // Count articles where user is either reporter_id OR author_id (matching discover page logic)
-    const allTimeStatsResult = await db
-      .select({
-        count: sql<number>`CAST(COUNT(DISTINCT ${articles.id}) AS INTEGER)`,
-        totalViews: sql<number>`COALESCE(SUM(${articles.views}), 0)`,
-      })
-      .from(articles)
-      .where(
-        and(
-          or(
-            or(eq(articles.reporterId, reporter.userId!), eq(articles.authorId, reporter.userId!)),
-            eq(articles.authorId, reporter.userId!)
-          ),
-          eq(articles.status, 'published')
-        )
-      )
-      .execute();
-    
     const totalArticles = allTimeStatsResult[0]?.count || 0;
     const totalViews = Number(allTimeStatsResult[0]?.totalViews) || 0;
-
-    // Get likes count for reporter's articles
-    const likesResult = await db
-      .select({
-        totalLikes: sql<number>`CAST(COUNT(*) AS INTEGER)`,
-      })
-      .from(reactions)
-      .innerJoin(articles, eq(reactions.articleId, articles.id))
-      .where(
-        and(
-          or(eq(articles.reporterId, reporter.userId!), eq(articles.authorId, reporter.userId!)),
-          eq(reactions.type, 'like')
-        )
-      )
-      .execute();
-    
     const totalLikes = likesResult[0]?.totalLikes || 0;
+    const avgCompletionRate = 75;
+    const avgReadTimeMin = 4;
+    const followersCount = followersResult[0]?.followersCount || 0;
 
-    // Get comments count for last articles
-    const commentsResult = await db
-      .select({
-        articleId: comments.articleId,
-        count: sql<number>`CAST(COUNT(*) AS INTEGER)`,
-      })
-      .from(comments)
-      .where(
-        inArray(
-          comments.articleId,
-          reporterArticles.slice(0, 5).map(a => a.id)
-        )
-      )
-      .groupBy(comments.articleId)
-      .execute();
+    const lastIds = lastArticleRows.map((a) => a.id);
+    const commentsResult = lastIds.length
+      ? await db
+          .select({
+            articleId: comments.articleId,
+            count: sql<number>`CAST(COUNT(*) AS INTEGER)`,
+          })
+          .from(comments)
+          .where(inArray(comments.articleId, lastIds))
+          .groupBy(comments.articleId)
+      : [];
+    const commentsMap = new Map(commentsResult.map((r) => [r.articleId, r.count || 0]));
 
-    const commentsMap = new Map(commentsResult.map(r => [r.articleId, r.count || 0]));
-
-    // Get reading history for average read time
-    // Note: reading_history table has read_duration (in seconds)
-    const readingStats = await db
-      .select({
-        avgReadTime: sql<number>`CAST(AVG(read_duration) / 60.0 AS REAL)`,
-      })
-      .from(readingHistory)
-      .innerJoin(articles, eq(readingHistory.articleId, articles.id))
-      .where(eq(articles.reporterId, reporter.userId!))
-      .execute();
-
-    // Use default values for completion rate (not tracked in reading_history)
-    const avgCompletionRate = 75; // Default reasonable value
-    const avgReadTimeMin = Math.round(readingStats[0]?.avgReadTime || 4);
-
-    // Prepare last 5 articles with full details
-    const lastArticles: ReporterArticle[] = reporterArticles.slice(0, 5).map(a => ({
+    const lastArticles: ReporterArticle[] = lastArticleRows.map((a) => ({
       id: a.id,
       title: a.title,
       slug: a.slug,
+      englishSlug: a.englishSlug,
+      excerpt: a.excerpt,
+      imageUrl: a.imageUrl,
+      thumbnailUrl: a.thumbnailUrl,
+      imageFocalPoint: a.imageFocalPoint,
+      isAiGeneratedImage: a.isAiGeneratedImage,
+      updatedAt: a.updatedAt,
       publishedAt: a.publishedAt,
-      category: a.categoryId ? {
-        // Always fallback to Arabic if English is missing
-        name: language === 'en' 
-          ? (a.categoryNameEn || a.categoryNameAr || '') 
-          : (a.categoryNameAr || ''),
-        slug: a.categorySlug || '',
-        color: a.categoryColor,
-        icon: a.categoryIcon,
-      } : null,
+      category: a.categoryId
+        ? {
+            name:
+              language === 'en'
+                ? a.categoryNameEn || a.categoryNameAr || ''
+                : a.categoryNameAr || '',
+            slug: a.categorySlug || '',
+            color: a.categoryColor,
+            icon: a.categoryIcon,
+          }
+        : null,
       isBreaking: a.newsType === 'breaking',
       views: a.views || 0,
-      likes: 0, // Will calculate separately if needed
+      likes: 0,
       comments: commentsMap.get(a.id) || 0,
       readingTime: avgReadTimeMin,
     }));
 
-    // Get top categories - query ALL articles (reporter_id OR author_id, no date filter)
-    const categoryStatsResult = await db
-      .select({
-        categoryId: categories.id,
-        categoryNameAr: categories.nameAr,
-        categoryNameEn: categories.nameEn,
-        categorySlug: categories.slug,
-        categoryColor: categories.color,
-        articlesCount: sql<number>`CAST(COUNT(DISTINCT ${articles.id}) AS INTEGER)`,
-        totalViews: sql<number>`COALESCE(SUM(${articles.views}), 0)`,
-      })
-      .from(articles)
-      .innerJoin(categories, eq(articles.categoryId, categories.id))
-      .where(
-        and(
-          or(
-            or(eq(articles.reporterId, reporter.userId!), eq(articles.authorId, reporter.userId!)),
-            eq(articles.authorId, reporter.userId!)
-          ),
-          eq(articles.status, 'published')
-        )
-      )
-      .groupBy(categories.id, categories.nameAr, categories.nameEn, categories.slug, categories.color)
-      .orderBy(desc(sql`COUNT(DISTINCT ${articles.id})`))
-      .limit(5)
-      .execute();
-
-    const topCategories = categoryStatsResult.map(cat => ({
-      name: language === 'en' ? (cat.categoryNameEn || cat.categoryNameAr || '') : (cat.categoryNameAr || ''),
+    const topCategories = categoryStatsResult.map((cat) => ({
+      name: language === 'en' ? cat.categoryNameEn || cat.categoryNameAr || '' : cat.categoryNameAr || '',
       slug: cat.categorySlug || '',
       color: cat.categoryColor,
       articles: cat.articlesCount || 0,
@@ -11871,94 +12005,47 @@ export class DatabaseStorage implements IStorage {
       sharePct: totalArticles > 0 ? Math.round(((cat.articlesCount || 0) / totalArticles) * 100) : 0,
     }));
 
-    // Generate time series data (simplified - daily aggregates)
-    const timeseries: ReporterTimeseries[] = [];
-    const dailyStats = reporterArticles.reduce((acc, a) => {
-      if (!a.publishedAt) return acc;
-      
-      const dateStr = a.publishedAt.toISOString().split('T')[0];
-      if (!acc[dateStr]) {
-        acc[dateStr] = { views: 0, likes: 0 };
-      }
-      acc[dateStr].views += a.views || 0;
-      
-      return acc;
-    }, {} as Record<string, { views: number; likes: number }>);
+    const timeseries: ReporterTimeseries[] = dailyRows
+      .filter((r) => !!r.date)
+      .map((r) => ({
+        date: r.date,
+        views: Number(r.views) || 0,
+        likes: 0,
+      }));
 
-    Object.entries(dailyStats).forEach(([date, stats]) => {
-      timeseries.push({
-        date,
-        views: stats.views,
-        likes: stats.likes,
-      });
-    });
-
-    timeseries.sort((a, b) => a.date.localeCompare(b.date));
-
-    // Helper function to check if text contains Arabic characters
     const hasArabic = (text: string) => /[\u0600-\u06FF]/.test(text);
-    
-    // Generate badges
     const badges: Array<{ key: string; label: string }> = [];
-    
     if (reporter.isVerified) {
-      badges.push({ 
-        key: 'verified', 
-        label: language === 'en' ? 'Verified' : 'موثق' 
-      });
+      badges.push({ key: 'verified', label: language === 'en' ? 'Verified' : 'موثق' });
     }
-    
     if (totalArticles >= 20) {
-      badges.push({ 
-        key: 'active_contributor', 
-        label: language === 'en' ? 'Active Contributor' : 'كاتب نشط' 
+      badges.push({
+        key: 'active_contributor',
+        label: language === 'en' ? 'Active Contributor' : 'كاتب نشط',
       });
     }
-    
-    if (reporter.specializations.length > 0) {
+    const specs = reporter.specializations ?? [];
+    if (specs.length > 0) {
       if (language === 'en') {
-        // For English, find first non-Arabic specialization
-        const firstEnglishSpec = reporter.specializations.find(spec => !hasArabic(spec));
+        const firstEnglishSpec = specs.find((spec) => !hasArabic(spec));
         if (firstEnglishSpec) {
-          badges.push({ 
-            key: 'specialist', 
-            label: `Specialized in ${firstEnglishSpec}` 
-          });
+          badges.push({ key: 'specialist', label: `Specialized in ${firstEnglishSpec}` });
         }
-        // If all specializations are in Arabic, skip the badge entirely
       } else {
-        // For Arabic, use first specialization
-        badges.push({ 
-          key: 'specialist', 
-          label: `متخصص في ${reporter.specializations[0]}` 
-        });
+        badges.push({ key: 'specialist', label: `متخصص في ${specs[0]}` });
       }
     }
 
-    // Get followers count (only if reporter has a linked userId)
-    let followersCount = 0;
-    if (reporter.userId) {
-      const followersResult = await db
-        .select({
-          followersCount: sql<number>`CAST(COUNT(*) AS INTEGER)`,
-        })
-        .from(socialFollows)
-        .where(eq(socialFollows.followingId, reporter.userId))
-        .execute();
-      
-      followersCount = followersResult[0]?.followersCount || 0;
-    }
-
-    return {
+    const profile: ReporterProfile = {
       id: reporter.id,
-      userId: reporter.userId!,
+      userId: reporter.userId,
       slug: reporter.slug,
-      fullName: language === 'en' ? (reporter.name || reporter.nameAr) : (reporter.nameAr || reporter.name),
-      title: language === 'en' ? (reporter.title || reporter.titleAr) : (reporter.titleAr || reporter.title),
+      fullName: language === 'en' ? reporter.name || reporter.nameAr : reporter.nameAr || reporter.name,
+      title: language === 'en' ? reporter.title || reporter.titleAr : reporter.titleAr || reporter.title,
       avatarUrl: reporter.profileImage,
-      bio: language === 'en' ? (reporter.bio || reporter.bioAr) : (reporter.bioAr || reporter.bio),
+      bio: language === 'en' ? reporter.bio || reporter.bioAr : reporter.bioAr || reporter.bio,
       isVerified: reporter.isVerified,
-      tags: reporter.specializations,
+      tags: specs,
       kpis: {
         totalArticles,
         totalViews,
@@ -11969,12 +12056,12 @@ export class DatabaseStorage implements IStorage {
       },
       lastArticles,
       topCategories,
-      timeseries: {
-        windowDays,
-        daily: timeseries,
-      },
+      timeseries: { windowDays, daily: timeseries },
       badges,
     };
+
+    memoryCache.set(cacheKey, profile, CACHE_TTL.MEDIUM);
+    return profile;
   }
 
   // Activity Logs operations
@@ -12540,163 +12627,22 @@ export class DatabaseStorage implements IStorage {
   // Audio News Briefs Operations - الأخبار الصوتية السريعة
   // ============================================
 
-  async createAudioNewsBrief(data: InsertAudioNewsBrief): Promise<AudioNewsBrief> {
-    const [brief] = await db.insert(audioNewsBriefs).values(data as any).returning();
-    return brief;
-  }
 
-  async getAudioNewsBriefById(id: string): Promise<AudioNewsBrief | null> {
-    const brief = await db.query.audioNewsBriefs.findFirst({
-      where: eq(audioNewsBriefs.id, id),
-    });
-    return brief || null;
-  }
 
-  async getAllAudioNewsBriefs(): Promise<AudioNewsBrief[]> {
-    return db.query.audioNewsBriefs.findMany({
-      orderBy: [desc(audioNewsBriefs.createdAt)],
-    });
-  }
 
-  async getPublishedAudioNewsBriefs(limit = 10): Promise<AudioNewsBrief[]> {
-    return db.query.audioNewsBriefs.findMany({
-      where: eq(audioNewsBriefs.status, 'published'),
-      orderBy: [desc(audioNewsBriefs.publishedAt)],
-      limit,
-    });
-  }
 
-  async updateAudioNewsBrief(id: string, data: Partial<InsertAudioNewsBrief>): Promise<AudioNewsBrief> {
-    const [updated] = await db.update(audioNewsBriefs)
-      .set({ ...data as any, updatedAt: new Date() })
-      .where(eq(audioNewsBriefs.id, id))
-      .returning();
-    return updated;
-  }
 
-  async deleteAudioNewsBrief(id: string): Promise<void> {
-    await db.delete(audioNewsBriefs).where(eq(audioNewsBriefs.id, id));
-  }
 
-  async publishAudioNewsBrief(id: string): Promise<AudioNewsBrief> {
-    const [published] = await db.update(audioNewsBriefs)
-      .set({ 
-        status: 'published', 
-        publishedAt: new Date(),
-        updatedAt: new Date()
-      })
-      .where(eq(audioNewsBriefs.id, id))
-      .returning();
-    return published;
-  }
 
   // ============================================
   // Audio Newsletters Operations - النشرات الصوتية
   // ============================================
 
-  async createAudioNewsletter(data: InsertAudioNewsletter): Promise<AudioNewsletter> {
-    const [newsletter] = await db
-      .insert(audioNewsletters)
-      .values(data as any)
-      .returning();
-    return newsletter;
-  }
 
-  async getAudioNewsletterById(id: string): Promise<AudioNewsletterWithDetails | null> {
-    const [newsletter] = await db
-      .select()
-      .from(audioNewsletters)
-      .where(eq(audioNewsletters.id, id));
 
-    if (!newsletter) return null;
 
-    // Get articles with details
-    const articlesList = await db
-      .select()
-      .from(audioNewsletterArticles)
-      .leftJoin(articles, eq(audioNewsletterArticles.articleId, articles.id))
-      .where(eq(audioNewsletterArticles.newsletterId, id))
-      .orderBy(asc(audioNewsletterArticles.order));
 
-    const articlesWithDetails = articlesList.map((row) => ({
-      ...row.audio_newsletter_articles,
-      article: row.articles || undefined,
-    }));
 
-    // Get listen count
-    const [listensCount] = await db
-      .select({ count: sql<number>`cast(count(*) as integer)` })
-      .from(audioNewsletterListens)
-      .where(eq(audioNewsletterListens.newsletterId, id));
-
-    return {
-      ...newsletter,
-      articles: articlesWithDetails,
-      _count: {
-        articles: articlesWithDetails.length,
-        listens: listensCount?.count || 0,
-      },
-    };
-  }
-
-  async getAudioNewsletterBySlug(slug: string): Promise<AudioNewsletterWithDetails | null> {
-    const [newsletter] = await db
-      .select()
-      .from(audioNewsletters)
-      .where(eq(audioNewsletters.slug, slug));
-
-    if (!newsletter) return null;
-
-    return this.getAudioNewsletterById(newsletter.id);
-  }
-
-  async getAllAudioNewsletters(filters?: { 
-    status?: string; 
-    limit?: number; 
-    offset?: number 
-  }): Promise<AudioNewsletterWithDetails[]> {
-    let query = db
-      .select()
-      .from(audioNewsletters)
-      .orderBy(desc(audioNewsletters.publishedAt), desc(audioNewsletters.createdAt));
-
-    if (filters?.status) {
-      query = query.where(eq(audioNewsletters.status, filters.status)) as any;
-    }
-
-    if (filters?.limit) {
-      query = query.limit(filters.limit) as any;
-    }
-
-    if (filters?.offset) {
-      query = query.offset(filters.offset) as any;
-    }
-
-    const newsletters = await query;
-
-    // Fetch details for each newsletter
-    const newslettersWithDetails = await Promise.all(
-      newsletters.map(async (newsletter) => {
-        const details = await this.getAudioNewsletterById(newsletter.id);
-        return details!;
-      })
-    );
-
-    return newslettersWithDetails;
-  }
-
-  async updateAudioNewsletter(id: string, data: UpdateAudioNewsletter): Promise<AudioNewsletter> {
-    const [updated] = await db
-      .update(audioNewsletters)
-      .set({ ...data, updatedAt: new Date() } as any)
-      .where(eq(audioNewsletters.id, id))
-      .returning();
-    return updated;
-  }
-
-  async deleteAudioNewsletter(id: string): Promise<void> {
-    await db.delete(audioNewsletters).where(eq(audioNewsletters.id, id));
-  }
 
   async addArticlesToNewsletter(newsletterId: string, articleIds: string[]): Promise<void> {
     // Get current max order
@@ -12731,48 +12677,7 @@ export class DatabaseStorage implements IStorage {
       );
   }
 
-  async getNewsletterArticles(newsletterId: string): Promise<(AudioNewsletterArticle & { article?: Article })[]> {
-    const results = await db
-      .select()
-      .from(audioNewsletterArticles)
-      .leftJoin(articles, eq(audioNewsletterArticles.articleId, articles.id))
-      .where(eq(audioNewsletterArticles.newsletterId, newsletterId))
-      .orderBy(asc(audioNewsletterArticles.order));
 
-    return results.map((row) => ({
-      ...row.audio_newsletter_articles,
-      article: row.articles || undefined,
-    }));
-  }
-
-  async trackListen(data: InsertAudioNewsletterListen): Promise<AudioNewsletterListen> {
-    // Insert listen event
-    const [listen] = await db
-      .insert(audioNewsletterListens)
-      .values(data as any)
-      .returning();
-
-    // Atomic analytics update using SQL subqueries (fixes race conditions)
-    await db
-      .update(audioNewsletters)
-      .set({
-        totalListens: sql`${audioNewsletters.totalListens} + 1`,
-        uniqueListeners: sql`(
-          SELECT COUNT(DISTINCT COALESCE(${audioNewsletterListens.userId}, ${audioNewsletterListens.sessionId}))
-          FROM ${audioNewsletterListens}
-          WHERE ${audioNewsletterListens.newsletterId} = ${data.newsletterId}
-        )`,
-        averageCompletionRate: sql`(
-          SELECT COALESCE(AVG(${audioNewsletterListens.completionPercentage}), 0)
-          FROM ${audioNewsletterListens}
-          WHERE ${audioNewsletterListens.newsletterId} = ${data.newsletterId}
-        )`,
-        updatedAt: new Date()
-      })
-      .where(eq(audioNewsletters.id, data.newsletterId));
-
-    return listen;
-  }
 
   async getNewsletterAnalytics(newsletterId: string): Promise<{
     totalListens: number;
@@ -13127,25 +13032,17 @@ export class DatabaseStorage implements IStorage {
       );
     }
 
-    // Filter by audience targeting (roles and specific users)
-    filteredAnnouncements = filteredAnnouncements.filter(a => {
-      // If no audience targeting, show to everyone
-      if (!a.audienceRoles && !a.audienceUserIds) {
-        return true;
-      }
-
-      // Check if user is in specific user list
-      if (a.audienceUserIds && (a.audienceUserIds as string[]).includes(userId)) {
-        return true;
-      }
-
-      // Check if user has any of the required roles
-      if (a.audienceRoles && (a.audienceRoles as string[]).some(role => userRoles.includes(role))) {
-        return true;
-      }
-
-      return false;
-    });
+    // Exact role-name targeting; empty arrays have the same meaning as null (everyone).
+    filteredAnnouncements = filteredAnnouncements.filter((announcement) =>
+      matchesInternalAnnouncementAudience(
+        {
+          audienceRoles: announcement.audienceRoles as string[] | null,
+          audienceUserIds: announcement.audienceUserIds as string[] | null,
+        },
+        userId,
+        userRoles,
+      ),
+    );
 
     // Fetch details for each announcement
     const announcementsWithDetails = await Promise.all(
@@ -15836,7 +15733,14 @@ export class DatabaseStorage implements IStorage {
       })
       .from(tasks)
       .where(whereClause)
-      .orderBy(desc(tasks.createdAt))
+      // مفتوح أولاً → متأخر → أولوية → أقرب استحقاق → الأحدث
+      .orderBy(
+        sql`CASE WHEN ${tasks.status} IN ('completed', 'archived') THEN 1 ELSE 0 END`,
+        sql`CASE WHEN ${tasks.status} NOT IN ('completed', 'archived') AND ${tasks.dueDate} IS NOT NULL AND ${tasks.dueDate} < NOW() THEN 0 ELSE 1 END`,
+        sql`CASE ${tasks.priority} WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 ELSE 4 END`,
+        sql`${tasks.dueDate} ASC NULLS LAST`,
+        desc(tasks.createdAt),
+      )
       .limit(limit)
       .offset(offset);
 
@@ -17596,10 +17500,8 @@ export class DatabaseStorage implements IStorage {
       throw new Error('Publisher not found');
     }
 
-    const conditions: any[] = [
-      eq(articles.authorId, publisher.userId),
-      eq(articles.isPublisherNews, true),
-    ];
+    // مواد الوكالة = المختومة بـ publisher_id فقط (لا أرشيف المراسل عبر authorId)
+    const conditions: any[] = [eq(articles.publisherId, publisherId)];
 
     if (filters?.status) {
       conditions.push(eq(articles.status, filters.status));
@@ -20543,6 +20445,10 @@ export class DatabaseStorage implements IStorage {
       profilePhotoUrl: opinionAuthorApplications.profilePhotoUrl,
       specializations: opinionAuthorApplications.specializations,
       writingSamples: opinionAuthorApplications.writingSamples,
+      licenseNumber: opinionAuthorApplications.licenseNumber,
+      licenseExpiresAt: opinionAuthorApplications.licenseExpiresAt,
+      licenseFileKey: opinionAuthorApplications.licenseFileKey,
+      consentAt: opinionAuthorApplications.consentAt,
       status: opinionAuthorApplications.status,
       reviewedBy: opinionAuthorApplications.reviewedBy,
       reviewedAt: opinionAuthorApplications.reviewedAt,
@@ -20586,19 +20492,49 @@ export class DatabaseStorage implements IStorage {
     // correspondentApplicationService.approveCorrespondentApplication for why this matters).
     const applicantEmail = application.email.toLowerCase().trim();
     const [existingUser] = await db.select().from(users).where(sql`lower(${users.email}) = ${applicantEmail}`);
+
+    const { claimPhoneForStaffAccount, normalizePhone } = await import("./services/phoneAuth");
+    const phoneCheck = await claimPhoneForStaffAccount(application.phone, existingUser?.id ?? null);
+    if (!phoneCheck.ok) {
+      throw new Error(phoneCheck.message);
+    }
+    const normalizedPhone = phoneCheck.e164 ?? normalizePhone(application.phone);
     
     let finalUser: User;
     let temporaryPassword = '';
     
     if (existingUser) {
-      // User already exists - update their role to opinion_author and link to application
+      // SECURITY: `applicantEmail` comes from the PUBLIC opinion-author
+      // application form and is never verified, so this branch can land on any
+      // account whose address the applicant happened to type. It used to
+      // OVERWRITE that account's `role` column and its public profile (bio,
+      // city, job title, photo) with applicant-supplied content — i.e. anyone
+      // could get a staff member's role changed and their public bio rewritten
+      // by naming their email on a form and waiting for an admin to approve.
+      //
+      // A staff account is never the intended target of this flow: refuse and
+      // make the admin link it deliberately.
+      const STAFF_ROLES = new Set([
+        'admin', 'system_admin', 'superadmin', 'editor', 'chief_editor',
+        'content_manager', 'moderator', 'comments_moderator', 'reporter',
+      ]);
+      if (existingUser.role && STAFF_ROLES.has(existingUser.role)) {
+        throw new Error(
+          "البريد مرتبط بحساب منسوب قائم — لا يمكن اعتماد الطلب عليه. راجع الحساب يدويًا.",
+        );
+      }
+
+      // For an ordinary reader account: grant the role through RBAC below, but
+      // do NOT rewrite the legacy `role` column or overwrite profile fields
+      // that the account owner set themselves. Only fill what is still empty.
       const [updatedUser] = await db.update(users)
         .set({
-          role: 'opinion_author',
-          jobTitle: application.jobTitle || existingUser.jobTitle,
-          bio: application.bio || existingUser.bio,
-          city: application.city || existingUser.city,
-          profileImageUrl: application.profilePhotoUrl || existingUser.profileImageUrl,
+          jobTitle: existingUser.jobTitle || application.jobTitle,
+          bio: existingUser.bio || application.bio,
+          city: existingUser.city || application.city,
+          profileImageUrl: existingUser.profileImageUrl || application.profilePhotoUrl,
+          phoneNumber: normalizedPhone || existingUser.phoneNumber,
+          phoneVerified: Boolean(normalizedPhone) || existingUser.phoneVerified,
           isProfileComplete: true,
         })
         .where(eq(users.id, existingUser.id))
@@ -20625,6 +20561,8 @@ export class DatabaseStorage implements IStorage {
         firstName: application.arabicName.split(' ')[0] || application.arabicName,
         lastName: application.arabicName.split(' ').slice(1).join(' ') || '',
         profileImageUrl: application.profilePhotoUrl,
+        phoneNumber: normalizedPhone,
+        phoneVerified: Boolean(normalizedPhone),
         status: 'active',
         passwordHash: hashedPassword,
         emailVerified: true,

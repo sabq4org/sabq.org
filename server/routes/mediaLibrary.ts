@@ -10,6 +10,7 @@ import { saveGeneratedImage } from "../services/mediaGenerationService";
 import { getMediaStats } from "../services/mediaStatsService";
 import { getMediaGovernance } from "../services/mediaGovernanceService";
 import { isAllowedMediaUrl } from "../utils/mediaUrl";
+import { parseLimit } from "../utils/pagination";
 
 const router: Router = Router();
 
@@ -116,7 +117,7 @@ router.get(
       if (!q.trim()) {
         return res.json({ files: [], total: 0, capped: false });
       }
-      const limit = Number(req.query.limit) || 30;
+      const limit = parseLimit(req.query.limit, 30, 200);
       const folderId = typeof req.query.folderId === "string" ? req.query.folderId : null;
       const category = typeof req.query.category === "string" ? req.query.category : null;
 
@@ -145,7 +146,7 @@ router.get(
         return res.json({ files: [], total: 0, query: "" });
       }
       const content = typeof req.query.content === "string" ? req.query.content : null;
-      const limit = Number(req.query.limit) || 6;
+      const limit = parseLimit(req.query.limit, 6, 50);
 
       const result = await suggestMediaForArticle({ title, content, limit });
       res.json(result);
@@ -272,7 +273,7 @@ router.get(
   requirePermission("media.view"),
   async (req: any, res) => {
     try {
-      const limit = Number(req.query.limit) || 12;
+      const limit = parseLimit(req.query.limit, 12, 100);
       const result = await similarMedia(req.params.id, limit);
       res.json(result);
     } catch (error: any) {
@@ -291,7 +292,7 @@ router.get(
   requirePermission("media.edit"),
   async (req: any, res) => {
     try {
-      const limit = Number(req.query.limit) || 20;
+      const limit = parseLimit(req.query.limit, 20, 200);
       const result = await getDuplicateGroups(limit);
       res.json(result);
     } catch (error: any) {

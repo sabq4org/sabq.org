@@ -1,16 +1,17 @@
 /**
- * قسم مباريات دوري روشن — نفس قسم مباريات المونديال: ترويسة بأيقونة، تبويبات
- * (مباشر/اليوم/القادمة/النتائج) من دلاء /api/sports/pro-league/matches الجاهزة،
- * وتجميع بالأيام مع شبكة بطاقات متحرّكة الظهور.
+ * قسم مباريات دوري روشن — تبويبات (مباشر/اليوم/القادمة/النتائج/الجولات).
+ * دلاء /matches للمعاينة السريعة؛ تبويب «الجولات» يجلب الـ٣٤ عبر /rounds + /round
+ * (parity مع iOS وSportsHub) حتى لا يبقى الزائر محصورًا بسقف المباريات القادمة.
  */
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { CalendarRange, Radio } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { RslMatchCard } from "./RslMatchCard";
-import { formatKickoffDay, riyadhDayKey, type RslFixture } from "./rslTypes";
+import { formatKickoffDay, riyadhDayKey, RSL_SLUG, type RslFixture } from "./rslTypes";
 
 export interface RslMatchBuckets {
   live: RslFixture[];
@@ -31,10 +32,22 @@ interface DayGroup {
   items: RslFixture[];
 }
 
+function phaseRank(f: RslFixture): number {
+  if (f.status.live) return 0;
+  if (f.status.finished) return 2;
+  return 1;
+}
+
 function groupByDay(fixtures: RslFixture[], newestFirst = false): DayGroup[] {
-  const sorted = [...fixtures].sort((a, b) =>
-    newestFirst ? b.timestamp - a.timestamp : a.timestamp - b.timestamp,
-  );
+  const sorted = [...fixtures].sort((a, b) => {
+    if (!newestFirst) {
+      const ra = phaseRank(a);
+      const rb = phaseRank(b);
+      if (ra !== rb) return ra - rb;
+      if (ra === 2) return b.timestamp - a.timestamp;
+    }
+    return newestFirst ? b.timestamp - a.timestamp : a.timestamp - b.timestamp;
+  });
   const groups: DayGroup[] = [];
   for (const fx of sorted) {
     const key = riyadhDayKey(fx.date);
@@ -86,10 +99,127 @@ function DayGroupedGrid({ fixtures, onOpenMatch, emptyMessage, newestFirst = fal
   );
 }
 
+/** متصفّح الـ٣٤ جولة — قائمة + مباريات الجولة المختارة (مثل iOS scheduleTab). */
+function RoundsBrowser({ onOpenMatch }: { onOpenMatch: (id: number) => void }) {
+  const { data: roundsData, isLoading: roundsLoading } = useQuery<{
+    rounds: { key: string; label: string }[];
+    current: string | null;
+  }>({
+    queryKey: [`/api/sports/${RSL_SLUG}/rounds`],
+    staleTime: 60_000,
+    refetchInterval: 60_000,
+  });
+  const rounds = Array.isArray(roundsData?.rounds) ? roundsData.rounds : [];
+  // null = اتبع current من الخادم (يتقدّم بعد انتهاء الجولة). أي نقرة تُثبّت الاختيار.
+  const [selected, setSelected] = useState<string | null>(null);
+  const active = selected ?? roundsData?.current ?? rounds[rounds.length - 1]?.key ?? null;
+  const stripRef = useRef<HTMLDivElement>(null);
+
+  const { data: fxData, isLoading: fxLoading } = useQuery<{ fixtures: RslFixture[] }>({
+    queryKey: [`/api/sports/${RSL_SLUG}/round`, { name: active }],
+    enabled: !!active,
+    staleTime: 15_000,
+    // أثناء مباراة جارية في الجولة: حدّث النتيجة كل 15ث (طبقة TheSports على الخادم).
+    refetchInterval: (q) =>
+      (q.state.data?.fixtures ?? []).some((f) => f.status.live) ? 15_000 : 60_000,
+  });
+  const fixtures = Array.isArray(fxData?.fixtures) ? fxData.fixtures : [];
+
+  // مركز الشريط على الجولة الحالية عند وصول القائمة أو تغيّر الاختيار.
+  useEffect(() => {
+    if (!active || !stripRef.current) return;
+    const el = Array.from(stripRef.current.querySelectorAll<HTMLElement>("[data-round-key]")).find(
+      (node) => node.dataset.roundKey === active,
+    );
+    el?.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+  }, [active, rounds.length]);
+
+  if (roundsLoading && rounds.length === 0) {
+    return (
+      <div className="space-y-4">
+        <div className="flex gap-2 overflow-hidden">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <Skeleton key={i} className="h-9 w-20 shrink-0 rounded-full" />
+          ))}
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Skeleton key={i} className="h-36 rounded-xl" />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (rounds.length === 0) {
+    return (
+      <p className="text-center text-sm text-muted-foreground py-10">
+        جدول الموسم يُعلن قريبًا — ستجده هنا فور اعتماده
+      </p>
+    );
+  }
+
+  return (
+    <div>
+      <div
+        ref={stripRef}
+        className="flex gap-2 overflow-x-auto pb-3 mb-4 -mx-1 px-1 scrollbar-hide"
+        role="tablist"
+        aria-label="جولات الدوري"
+      >
+        {rounds.map((r) => {
+          const isActive = active === r.key;
+          return (
+            <button
+              key={r.key}
+              type="button"
+              role="tab"
+              aria-selected={isActive}
+              data-round-key={r.key}
+              data-testid={`roshn-round-${r.key}`}
+              onClick={() => setSelected(r.key)}
+              className={`shrink-0 px-3.5 py-1.5 rounded-full text-sm font-bold whitespace-nowrap transition-colors ${
+                isActive
+                  ? "bg-emerald-600 text-white shadow-sm"
+                  : "bg-card border border-border text-muted-foreground hover:border-emerald-500/40"
+              }`}
+            >
+              {r.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {fxLoading ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Skeleton key={i} className="h-36 rounded-xl" />
+          ))}
+        </div>
+      ) : (
+        <DayGroupedGrid
+          fixtures={fixtures}
+          onOpenMatch={onOpenMatch}
+          emptyMessage="مباريات هذه الجولة تُعلن قريبًا"
+        />
+      )}
+    </div>
+  );
+}
+
 export function RslMatches({ buckets, isLoading, onOpenMatch }: RslMatchesProps) {
   const { live, today, upcoming, results } = buckets;
   const defaultTab = live.length > 0 ? "live" : today.length > 0 ? "today" : "upcoming";
   const [tab, setTab] = useState<string | null>(null);
+
+  // انطلاق مباراة أثناء تصفّح الزائر: نعيد الاختيار للوضع التلقائي فيقفز
+  // التبويب إلى «مباشر» — الشارة الحمراء وحدها لا تكفي لصفحة وعدها
+  // «تغطية لحظة بلحظة»، واختيار المستخدم كان يعلق على تبويبه القديم.
+  const prevLiveCount = useRef(live.length);
+  useEffect(() => {
+    if (prevLiveCount.current === 0 && live.length > 0) setTab(null);
+    prevLiveCount.current = live.length;
+  }, [live.length]);
 
   return (
     <section dir="rtl" className="py-10" id="matches">
@@ -123,6 +253,7 @@ export function RslMatches({ buckets, isLoading, onOpenMatch }: RslMatchesProps)
               <TabsTrigger value="today">اليوم</TabsTrigger>
               <TabsTrigger value="upcoming">القادمة</TabsTrigger>
               <TabsTrigger value="results">النتائج</TabsTrigger>
+              <TabsTrigger value="rounds" data-testid="roshn-tab-rounds">الجولات</TabsTrigger>
             </TabsList>
 
             <TabsContent value="live">
@@ -149,6 +280,9 @@ export function RslMatches({ buckets, isLoading, onOpenMatch }: RslMatchesProps)
                     : "النتائج تظهر هنا فور انتهاء أول مباراة في الموسم"
                 }
               />
+            </TabsContent>
+            <TabsContent value="rounds">
+              <RoundsBrowser onOpenMatch={onOpenMatch} />
             </TabsContent>
           </Tabs>
         )}

@@ -47,6 +47,8 @@ const STAFF_NAV_SECTION_DEFINITIONS = [
       "themes",
       "templates",
       "hajj_block",
+      "national_day_block",
+      "sahraa_tv_block",
     ],
   },
   {
@@ -55,14 +57,10 @@ const STAFF_NAV_SECTION_DEFINITIONS = [
     labelKey: "nav.workspace_ai",
     icon: Bot,
     itemIds: [
-      "smart_journalist",
-      "ai_tools",
       "deep_analysis_manage",
       "deep_analysis_create",
       "deep_analysis_public",
-      "data_story_generator",
       "prompt_studio",
-      "transcription_tool",
       "voice_management",
       "auto_image_settings",
     ],
@@ -112,10 +110,6 @@ const STAFF_NAV_SECTION_DEFINITIONS = [
       "dashboards",
       "trending",
       "behavior",
-      "abTests",
-      "recommendation-analytics",
-      "sentiment-analytics",
-      "personalization-analytics",
       "article-analytics",
       "deep_analysis_stats",
     ],
@@ -144,13 +138,13 @@ const STAFF_NAV_SECTION_DEFINITIONS = [
     icon: Settings,
     itemIds: [
       "rss_feeds",
-      "spa_news",
       "sportmonks_news",
       "integrations",
       "storage",
       "audits",
       "system_settings",
       "sports_tournaments",
+      "wc_2026_numbers_report",
       "admin_tools",
       "systems_catalog",
       "ai_hub",
@@ -412,9 +406,15 @@ function findActiveItem(items: NavItem[], pathname: string): NavItem | null {
     return exactMatch;
   }
 
-  // Then, try startsWith match (longest path first)
+  // Then, try startsWith match (longest path first).
+  // عناصر meta.exact (مثل /dashboard) لا تُطابق بالمقدّمة — وإلا تسرق كل الصفحات الفرعية.
   const startsWithMatches = flat
-    .filter((item) => item.path && pathname.startsWith(item.path))
+    .filter(
+      (item) =>
+        item.path &&
+        !item.meta?.exact &&
+        (pathname === item.path || pathname.startsWith(`${item.path}/`)),
+    )
     .sort((a, b) => (b.path?.length || 0) - (a.path?.length || 0));
 
   return startsWithMatches[0] || null;

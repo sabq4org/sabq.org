@@ -77,6 +77,38 @@ nonisolated struct APIWeeklyPhoto: Decodable, Identifiable, Hashable {
     }
 }
 
+nonisolated struct APIWhatsAppCta: Decodable, Hashable, Sendable {
+    let enabled: Bool?
+    let phone: String?
+    let phrase: String?
+    let message: String?
+    let placement: String?
+
+    var isActiveEndPlacement: Bool {
+        (enabled ?? false)
+            && (placement == nil || placement == "end")
+            && !(phone ?? "").filter(\.isNumber).isEmpty
+    }
+
+    var waURL: URL? {
+        let digits = (phone ?? "").filter(\.isNumber)
+        guard !digits.isEmpty else { return nil }
+        var components = URLComponents(string: "https://wa.me/\(digits)")
+        let text = (message ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if !text.isEmpty {
+            components?.queryItems = [URLQueryItem(name: "text", value: text)]
+        }
+        return components?.url
+    }
+}
+
+/// ملف المراسل العام `/api/reporters/:slug` — نحتاج الصفة فقط لسطر الكاتب.
+nonisolated struct APIReporterProfile: Decodable {
+    let title: String?
+    let fullName: String?
+    let avatarUrl: String?
+}
+
 nonisolated struct APIArticle: Decodable {
     let id: String
     let title: String
@@ -93,11 +125,25 @@ nonisolated struct APIArticle: Decodable {
     let englishSlug: String?
     let categoryName: String?
     let categorySlug: String?
+    /// معرّف التصنيف — يلزم لبلوك «مقالات قد تهمك» (`/api/opinion/related/category/:id`).
+    let categoryId: String?
     let authorName: String?
     let publishedAt: String
     let articleType: String?
     let newsType: String?
     let isFeatured: Bool?
+    let isReading: Bool?
+    /// سطر الكاتب (نقل الويب #1598): صورة الكاتب ومعرّفه، ومعرّف المراسل
+    /// المختار في اللوحة، وبيانات ملف الموظف (slug/الاسم/الصفة/التوثيق)،
+    /// وتاريخ التعديل التحريري الذي يُظهر «آخر تحديث».
+    let authorImage: String?
+    let authorId: String?
+    let reporterId: String?
+    let staffSlug: String?
+    let staffName: String?
+    let staffTitle: String?
+    let staffVerified: Bool?
+    let editorialModifiedAt: String?
     var keywords: [String]?
     let imageUrl: String?
     /// Editorial focal point shipped by the backend as
@@ -121,6 +167,8 @@ nonisolated struct APIArticle: Decodable {
     /// renders these as a numbered gallery inside the article body.
     let weeklyPhotos: [APIWeeklyPhoto]?
     let mediaAssets: [APIMediaAsset]?
+    /// زر واتساب تحريري (نهاية المقال). الإدراج داخل النص يأتي عبر HTML.
+    let whatsappCta: APIWhatsAppCta?
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: FlexKey.self)
@@ -150,11 +198,15 @@ nonisolated struct APIArticle: Decodable {
             categoryName = (try? cat.decode(String.self, forKey: FlexKey("nameAr")))
                 ?? (try? cat.decode(String.self, forKey: FlexKey("name")))
             categorySlug = try? cat.decode(String.self, forKey: FlexKey("slug"))
+            categoryId = (try? cat.decode(String.self, forKey: FlexKey("id")))
+                ?? (try? cat.decode(Int.self, forKey: FlexKey("id"))).map(String.init)
         } else {
             categoryName = (try? c.decode(String.self, forKey: FlexKey("category_name")))
                 ?? (try? c.decode(String.self, forKey: FlexKey("section")))
             categorySlug = (try? c.decode(String.self, forKey: FlexKey("category_slug")))
                 ?? (try? c.decode(String.self, forKey: FlexKey("section_slug")))
+            categoryId = (try? c.decode(String.self, forKey: FlexKey("categoryId")))
+                ?? (try? c.decode(String.self, forKey: FlexKey("category_id")))
         }
 
         if let auth = try? c.nestedContainer(keyedBy: FlexKey.self, forKey: FlexKey("author")) {
@@ -164,9 +216,40 @@ nonisolated struct APIArticle: Decodable {
             authorName = combined.isEmpty
                 ? (try? auth.decode(String.self, forKey: FlexKey("name")))
                 : combined
+            authorId = (try? auth.decode(String.self, forKey: FlexKey("id")))
+                ?? (try? auth.decode(Int.self, forKey: FlexKey("id"))).map(String.init)
+            authorImage = ["profileImageUrl", "profile_image_url", "avatarUrl", "avatar_url", "avatar"]
+                .lazy.compactMap { try? auth.decode(String.self, forKey: FlexKey($0)) }
+                .first { !$0.isEmpty }
         } else {
             authorName = (try? c.decode(String.self, forKey: FlexKey("author_name")))
                 ?? (try? c.decode(String.self, forKey: FlexKey("author")))
+            authorId = (try? c.decode(String.self, forKey: FlexKey("authorId")))
+                ?? (try? c.decode(String.self, forKey: FlexKey("author_id")))
+            authorImage = ["author_image", "authorImage", "authorImageUrl"]
+                .lazy.compactMap { try? c.decode(String.self, forKey: FlexKey($0)) }
+                .first { !$0.isEmpty }
+        }
+        reporterId = (try? c.decode(String.self, forKey: FlexKey("reporterId")))
+            ?? (try? c.decode(String.self, forKey: FlexKey("reporter_id")))
+        if let staff = try? c.nestedContainer(keyedBy: FlexKey.self, forKey: FlexKey("staff")) {
+            staffSlug = try? staff.decode(String.self, forKey: FlexKey("slug"))
+            staffName = (try? staff.decode(String.self, forKey: FlexKey("nameAr")))
+                ?? (try? staff.decode(String.self, forKey: FlexKey("name_ar")))
+            staffTitle = try? staff.decode(String.self, forKey: FlexKey("title"))
+            staffVerified = (try? staff.decode(Bool.self, forKey: FlexKey("isVerified")))
+                ?? (try? staff.decode(Bool.self, forKey: FlexKey("is_verified")))
+        } else {
+            staffSlug = nil
+            staffName = nil
+            staffTitle = nil
+            staffVerified = nil
+        }
+        if let seoMeta = try? c.nestedContainer(keyedBy: FlexKey.self, forKey: FlexKey("seoMetadata")) {
+            editorialModifiedAt = (try? seoMeta.decode(String.self, forKey: FlexKey("editorialModifiedAt")))
+                ?? (try? seoMeta.decode(String.self, forKey: FlexKey("editorial_modified_at")))
+        } else {
+            editorialModifiedAt = try? c.decode(String.self, forKey: FlexKey("editorialModifiedAt"))
         }
 
         if let v = try? c.decode(String.self, forKey: FlexKey("publishedAt")) { publishedAt = v }
@@ -185,6 +268,10 @@ nonisolated struct APIArticle: Decodable {
         if let v = try? c.decode(Bool.self, forKey: FlexKey("isFeatured")) { isFeatured = v }
         else if let v = try? c.decode(Bool.self, forKey: FlexKey("is_featured")) { isFeatured = v }
         else { isFeatured = try? c.decode(Bool.self, forKey: FlexKey("featured")) }
+
+        if let v = try? c.decode(Bool.self, forKey: FlexKey("isReading")) { isReading = v }
+        else if let v = try? c.decode(Bool.self, forKey: FlexKey("is_reading")) { isReading = v }
+        else { isReading = nil }
 
         do {
             var resolvedKeywords: [String]?
@@ -250,6 +337,8 @@ nonisolated struct APIArticle: Decodable {
         }
 
         mediaAssets = try? c.decode([APIMediaAsset].self, forKey: FlexKey("mediaAssets"))
+        whatsappCta = (try? c.decode(APIWhatsAppCta.self, forKey: FlexKey("whatsappCta")))
+            ?? (try? c.decode(APIWhatsAppCta.self, forKey: FlexKey("whatsapp_cta")))
     }
 
     func withKeywords(_ newKeywords: [String]) -> APIArticle {
@@ -622,6 +711,8 @@ nonisolated struct APIOpinion: Decodable, Identifiable {
     let isAiGeneratedImage: Bool?
     let aiImageModel: String?
     let tags: [String]
+    /// المشاهدات — تُعرض على بطاقة أرشيف الرأي كما في الويب (#1605).
+    let views: Int?
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: FlexKey.self)
@@ -629,6 +720,9 @@ nonisolated struct APIOpinion: Decodable, Identifiable {
             ?? (try? c.decode(Int.self, forKey: FlexKey("id"))).map(String.init)
         title = (try? c.decode(String.self, forKey: FlexKey("title"))) ?? ""
         slug = try? c.decode(String.self, forKey: FlexKey("slug"))
+        views = (try? c.decode(Int.self, forKey: FlexKey("views")))
+            ?? (try? c.decode(Int.self, forKey: FlexKey("viewsCount")))
+            ?? (try? c.decode(Int.self, forKey: FlexKey("views_count")))
         id = rawId ?? slug ?? "derived-\(StableID.fnv1a(title))"
         englishSlug = (try? c.decode(String.self, forKey: FlexKey("englishSlug")))
             ?? (try? c.decode(String.self, forKey: FlexKey("english_slug")))
@@ -816,6 +910,13 @@ nonisolated struct APIPhoneVerifyRequest: Encodable {
     let deviceInfo: APIDeviceInfo?
 }
 
+nonisolated struct APIVerifyTwoFactorRequest: Encodable {
+    let challengeToken: String
+    let token: String?       // TOTP code from the authenticator app
+    let backupCode: String?  // or a one-time backup code
+    let deviceInfo: APIDeviceInfo?
+}
+
 nonisolated struct APIAvatarUploadResponse: Decodable {
     let success: Bool?
     let imageUrl: String?
@@ -865,6 +966,11 @@ nonisolated struct APILoginResponse: Decodable {
     let token: String?
     let user: APIUser?
     let emailSent: Bool?
+    // 2FA: when the account has TOTP enabled the server returns HTTP 200 with
+    // requires2FA=true, token=nil, and a short-lived challengeToken to exchange
+    // for a real session via /auth/verify-2fa.
+    let requires2FA: Bool?
+    let challengeToken: String?
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: FlexKey.self)
@@ -874,6 +980,8 @@ nonisolated struct APILoginResponse: Decodable {
         user = (try? c.decode(APIUser.self, forKey: FlexKey("user")))
             ?? (try? c.decode(APIUser.self, forKey: FlexKey("data")))
         emailSent = try? c.decode(Bool.self, forKey: FlexKey("emailSent"))
+        requires2FA = try? c.decode(Bool.self, forKey: FlexKey("requires2FA"))
+        challengeToken = try? c.decode(String.self, forKey: FlexKey("challengeToken"))
     }
 }
 

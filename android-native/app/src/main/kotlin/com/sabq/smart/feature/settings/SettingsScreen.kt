@@ -29,6 +29,9 @@ import androidx.compose.material.icons.filled.AlternateEmail
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Article
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Badge
+import androidx.compose.material.icons.filled.EditNote
+import androidx.compose.material.icons.filled.Stars
 import androidx.compose.material.icons.filled.PersonOutline
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Business
@@ -50,6 +53,7 @@ import androidx.compose.material.icons.filled.PersonOff
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material.icons.filled.WarningAmber
@@ -86,6 +90,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sabq.smart.R
 import com.sabq.smart.data.User
+import com.sabq.smart.data.analytics.SabqAnalytics
 import com.sabq.smart.feature.auth.AuthViewModel
 import com.sabq.smart.ui.components.SurfaceCard
 import com.sabq.smart.ui.theme.SabqAccent
@@ -125,16 +130,31 @@ fun SettingsScreen(
     onNewsletterClick: () -> Unit = {},
     onPrivacyClick: () -> Unit = {},
     onTermsClick: () -> Unit = {},
+    onAiTeamClick: () -> Unit = {},
     onOpenWebsite: () -> Unit = {},
     onOpenTwitter: () -> Unit = {},
     onSubmitOpinionClick: () -> Unit = {},
     onSubmitNewsClick: () -> Unit = {},
     onPickInterestsClick: () -> Unit = {},
     onDashboardClick: () -> Unit = {},
+    onSabqPlusClick: () -> Unit = {},
+    onPressCardClick: () -> Unit = {},
+    onOpenRevisionsClick: () -> Unit = {},
     onLogout: () -> Unit = {},
 ) {
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val currentUser by authViewModel.currentUser.collectAsStateWithLifecycle()
+    val settingsContext = androidx.compose.ui.platform.LocalContext.current
+    var analyticsAllowed by remember {
+        mutableStateOf(SabqAnalytics.consentState(settingsContext) == SabqAnalytics.Consent.GRANTED)
+    }
+    val revisionsStore = remember {
+        dagger.hilt.android.EntryPointAccessors.fromApplication(
+            settingsContext.applicationContext,
+            com.sabq.smart.feature.revisions.RevisionsStoreEntryPoint::class.java,
+        ).revisionsStore()
+    }
+    val revisionsState by revisionsStore.state.collectAsStateWithLifecycle()
     val clearState by viewModel.clearLocalDataState.collectAsStateWithLifecycle()
     var showClearConfirm by remember { mutableStateOf(false) }
     var showLogoutConfirm by remember { mutableStateOf(false) }
@@ -191,13 +211,43 @@ fun SettingsScreen(
             LoyaltyEntryRow(onClick = onLoyaltyClick)
         }
 
-        // 4-ب) مركز التوقّعات — المنصة المركزية (متاح للجميع، الإرسال للمسجّلين)
-        PredictionsEntryRow(onClick = onPredictionsClick)
+        // 3.5) مقالات تنتظر التعديل — تظهر فقط عند وجود مسودات مُعادة للكاتب
+        currentUser?.let { u ->
+            if ((u.isWriter || u.isAdminLike) && revisionsState.count > 0) {
+                RevisionsBadgeCard(
+                    count = revisionsState.count,
+                    onClick = onOpenRevisionsClick,
+                )
+            }
+        }
 
-        // 4) Press card entry — DEFERRED (editorial direction 2026-05-19)
+        // 4.1) البطاقة الصحفية — أي مسجّل دخول؛ الخادم يحسم التصريح
+        // (أُلغي تأجيل 2026-05-19 بقرار المالك في مرحلة سد الفجوات 2026-08-02)
+        if (currentUser != null) {
+            PressCardEntryRow(onClick = onPressCardClick)
+        }
+
+        // 4.5) سبق بلس — معاينة داخلية لمسؤول المنصة فقط (بوابة مزدوجة مع 404 الخادم)
+        if (currentUser?.isPlatformAdmin == true) {
+            SabqPlusEntryRow(onClick = onSabqPlusClick)
+        }
 
         // 5) Display
         DisplaySection(viewModel = viewModel, settings = settings)
+
+        AnalyticsConsentSection(
+            allowed = analyticsAllowed,
+            onChange = { enabled ->
+                analyticsAllowed = enabled
+                SabqAnalytics.setConsent(settingsContext, enabled)
+            },
+        )
+
+        // 5.5) تجربة التصفح (وضع Lite)
+        com.sabq.smart.feature.lite.BrowsingExperienceSection(
+            settings = settings,
+            onSelect = viewModel::setBrowsingMode,
+        )
 
         // 6) Subscription
         SubscriptionSection(onNewsletterClick = onNewsletterClick)
@@ -206,6 +256,7 @@ fun SettingsScreen(
         AboutSection(
             onPrivacyClick = onPrivacyClick,
             onTermsClick = onTermsClick,
+            onAiTeamClick = onAiTeamClick,
             onOpenWebsite = onOpenWebsite,
             onOpenTwitter = onOpenTwitter,
             onContactClick = onContactClick,
@@ -1111,6 +1162,198 @@ private fun LoyaltyEntryRow(onClick: () -> Unit) {
     }
 }
 
+// مدخل البطاقة الصحفية — نفس بنية LoyaltyEntryRow؛ التصريح يحسمه الخادم
+@Composable
+private fun PressCardEntryRow(onClick: () -> Unit) {
+    val pressBlue = Color(red = 0.11f, green = 0.64f, blue = 0.94f)
+    val shape = RoundedCornerShape(SabqTheme.dimens.cardRadius)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(SabqTheme.colors.surface.copy(alpha = 0.92f), shape)
+            .border(BorderStroke(0.5.dp, SabqTheme.colors.outline.copy(alpha = 0.5f)), shape)
+            .clickable { onClick() }
+            .padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(44.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(pressBlue.copy(alpha = 0.14f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Badge,
+                contentDescription = null,
+                tint = pressBlue,
+                modifier = Modifier.size(19.dp),
+            )
+        }
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Text(
+                text = "بطاقتي الصحفية",
+                style = SabqTheme.typography.compactCardTitle.copy(
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Black,
+                    color = SabqTheme.colors.ink,
+                ),
+            )
+            Text(
+                text = "أصدر بطاقتك الرسمية من سبق",
+                style = SabqTheme.typography.metaSmall.copy(
+                    fontSize = 12.sp,
+                    color = SabqTheme.colors.secondaryInk,
+                ),
+            )
+        }
+        Icon(
+            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+            contentDescription = null,
+            tint = SabqTheme.colors.secondaryInk,
+            modifier = Modifier.size(13.dp),
+        )
+    }
+}
+
+// مدخل «سبق بلس» — معاينة داخلية، بوابته isPlatformAdmin
+@Composable
+private fun SabqPlusEntryRow(onClick: () -> Unit) {
+    val plusNavy = Color(red = 0.09f, green = 0.58f, blue = 0.91f)
+    val shape = RoundedCornerShape(SabqTheme.dimens.cardRadius)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(SabqTheme.colors.surface.copy(alpha = 0.92f), shape)
+            .border(BorderStroke(0.5.dp, SabqTheme.colors.outline.copy(alpha = 0.5f)), shape)
+            .clickable { onClick() }
+            .padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(44.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(plusNavy.copy(alpha = 0.14f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Stars,
+                contentDescription = null,
+                tint = plusNavy,
+                modifier = Modifier.size(19.dp),
+            )
+        }
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Text(
+                text = "سبق بلس (معاينة)",
+                style = SabqTheme.typography.compactCardTitle.copy(
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Black,
+                    color = SabqTheme.colors.ink,
+                ),
+            )
+            Text(
+                text = "معاينة داخلية — نقاطك بالريال وقسائم الشركاء",
+                style = SabqTheme.typography.metaSmall.copy(
+                    fontSize = 12.sp,
+                    color = SabqTheme.colors.secondaryInk,
+                ),
+            )
+        }
+        Icon(
+            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+            contentDescription = null,
+            tint = SabqTheme.colors.secondaryInk,
+            modifier = Modifier.size(13.dp),
+        )
+    }
+}
+
+// بطاقة «مقالات تنتظر التعديل» — شارة عددية كهرمانية، تظهر عند count > 0
+@Composable
+private fun RevisionsBadgeCard(count: Int, onClick: () -> Unit) {
+    val amber = Color(0xFFF29E33)
+    val shape = RoundedCornerShape(SabqTheme.dimens.cardRadius)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(amber.copy(alpha = 0.05f), shape)
+            .border(BorderStroke(0.5.dp, amber.copy(alpha = 0.20f)), shape)
+            .clickable { onClick() }
+            .padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(44.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(amber.copy(alpha = 0.14f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = Icons.Filled.EditNote,
+                contentDescription = null,
+                tint = amber,
+                modifier = Modifier.size(19.dp),
+            )
+        }
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Text(
+                    text = "مقالات تنتظر التعديل",
+                    style = SabqTheme.typography.compactCardTitle.copy(
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Black,
+                        color = SabqTheme.colors.ink,
+                    ),
+                )
+                Text(
+                    text = "$count",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Black,
+                    color = Color.White,
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(amber)
+                        .padding(horizontal = 6.dp, vertical = 2.dp),
+                )
+            }
+            Text(
+                text = "أعد إرسالها بعد معالجة ملاحظات المراجع",
+                style = SabqTheme.typography.metaSmall.copy(
+                    fontSize = 12.sp,
+                    color = SabqTheme.colors.secondaryInk,
+                ),
+            )
+        }
+        Icon(
+            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+            contentDescription = null,
+            tint = SabqTheme.colors.secondaryInk,
+            modifier = Modifier.size(13.dp),
+        )
+    }
+}
+
 // مدخل مركز التوقّعات — نفس بنية LoyaltyEntryRow
 @Composable
 private fun PredictionsEntryRow(onClick: () -> Unit) {
@@ -1355,6 +1598,52 @@ private fun AccentDot(
     }
 }
 
+@Composable
+private fun AnalyticsConsentSection(
+    allowed: Boolean,
+    onChange: (Boolean) -> Unit,
+) {
+    SurfaceCard(accent = SabqTheme.colors.teal) {
+        SectionHeader(
+            title = "الخصوصية والقياس",
+            subtitle = "تحكم في قياس الاستخدام لتحسين التطبيق",
+            icon = Icons.Filled.BarChart,
+            tint = SabqTheme.colors.teal,
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            SmallSquareBadge(icon = Icons.Filled.Security, tint = SabqTheme.colors.teal)
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text(
+                    text = "السماح بتحليلات الاستخدام",
+                    style = SabqTheme.typography.cardTitle.copy(
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = SabqTheme.colors.ink,
+                    ),
+                )
+                Text(
+                    text = "قد يرتبط بمعرف حسابك عند تسجيل الدخول، ولا يرسل الاسم أو البريد أو الهاتف",
+                    style = SabqTheme.typography.metaSmall.copy(fontSize = 13.sp, color = SabqTheme.colors.secondaryInk),
+                )
+            }
+            Switch(
+                checked = allowed,
+                onCheckedChange = onChange,
+                colors = SwitchDefaults.colors(
+                    checkedThumbColor = Color.White,
+                    checkedTrackColor = SabqTheme.colors.teal,
+                    uncheckedThumbColor = Color.White,
+                    uncheckedTrackColor = SabqTheme.colors.outline,
+                ),
+            )
+        }
+    }
+}
+
 // MARK: - Subscription
 
 @Composable
@@ -1382,6 +1671,7 @@ private fun SubscriptionSection(onNewsletterClick: () -> Unit) {
 private fun AboutSection(
     onPrivacyClick: () -> Unit,
     onTermsClick: () -> Unit,
+    onAiTeamClick: () -> Unit,
     onOpenWebsite: () -> Unit,
     onOpenTwitter: () -> Unit,
     onContactClick: () -> Unit,
@@ -1399,6 +1689,13 @@ private fun AboutSection(
                 fontSize = 15.sp,
                 color = SabqTheme.colors.secondaryInk,
             ),
+        )
+        SettingsRow(
+            title = "فريق سبق الذكي",
+            subtitle = "زملاؤنا الرقميون بأسمائهم وأدوارهم — تحت إشراف بشري",
+            icon = Icons.Filled.Groups,
+            tint = SabqTheme.colors.primaryEnd,
+            onClick = onAiTeamClick,
         )
         SettingsRow(
             title = "خصوصيتك أولاً",

@@ -3,23 +3,27 @@ import { z } from "zod";
 import { getUserPermissions, requireAuth } from "../rbac";
 import {
   addPublisherMemberByEmail,
-  closePublisherRequest,
   createGuideSection,
   createPublisherMember,
   createPublisherRequest,
   deleteGuideSection,
   deletePortalArticle,
+  deletePublisherRequest,
   getPortalArticle,
   getPortalArticles,
   getPortalCreditLogs,
   getPortalCreditPackages,
   getPortalOverview,
   getPublishedGuideSections,
+  getPublishersSummary,
   listAgencyReviewQueue,
   listGuideSectionsAdmin,
-  listOpenPublisherRequests,
+  listOwnPublisherRequests,
+  listPublisherRequests,
   listPublisherMembers,
   listPublishersRich,
+  resolvePublisherRequest,
+  type PublisherRequestStatus,
   removePublisherMember,
   requestArticleChanges,
   resolvePublisherForUser,
@@ -395,6 +399,16 @@ const portalRequestSchema = z.object({
   message: z.string().trim().max(1000).optional(),
 });
 
+router.get("/api/publisher/portal/requests", async (req, res) => {
+  try {
+    const publisher = (req as any).publisher as { id: string };
+    res.json({ requests: await listOwnPublisherRequests(publisher.id) });
+  } catch (error) {
+    console.error("[Publisher Portal] own requests failed:", error);
+    res.status(500).json({ message: "تعذر جلب طلباتكم" });
+  }
+});
+
 router.post("/api/publisher/portal/requests", async (req, res) => {
   try {
     const parsed = portalRequestSchema.safeParse(req.body ?? {});
@@ -414,23 +428,59 @@ router.post("/api/publisher/portal/requests", async (req, res) => {
   }
 });
 
-router.get("/api/admin/publishers/requests", requireAuth, requirePublisherManagement, async (_req, res) => {
+const REQUEST_STATUSES: readonly (PublisherRequestStatus | "all")[] = ["open", "closed", "rejected", "all"];
+
+router.get("/api/admin/publishers/requests", requireAuth, requirePublisherManagement, async (req, res) => {
   try {
-    res.json({ requests: await listOpenPublisherRequests() });
+    const requested = req.query.status as PublisherRequestStatus | "all" | undefined;
+    const status = requested && REQUEST_STATUSES.includes(requested) ? requested : "open";
+    res.json({ requests: await listPublisherRequests(status), status });
   } catch (error) {
     console.error("[Publisher Portal] requests list failed:", error);
     res.status(500).json({ message: "تعذر جلب الطلبات" });
   }
 });
 
+const rejectRequestSchema = z.object({ note: z.string().trim().max(500).optional() });
+
 router.post("/api/admin/publishers/requests/:id/close", requireAuth, requirePublisherManagement, async (req, res) => {
   try {
-    const closed = await closePublisherRequest(req.params.id, (req.user as { id: string }).id);
-    if (!closed) return res.status(404).json({ message: "الطلب غير موجود أو مغلق بالفعل" });
+    const closed = await resolvePublisherRequest(req.params.id, (req.user as { id: string }).id, "close");
+    if (!closed) return res.status(404).json({ message: "الطلب غير موجود أو معالج بالفعل" });
     res.json({ message: "أُغلق الطلب" });
   } catch (error) {
     console.error("[Publisher Portal] request close failed:", error);
     res.status(500).json({ message: "تعذر إغلاق الطلب" });
+  }
+});
+
+router.post("/api/admin/publishers/requests/:id/reject", requireAuth, requirePublisherManagement, async (req, res) => {
+  try {
+    const parsed = rejectRequestSchema.safeParse(req.body ?? {});
+    if (!parsed.success) return res.status(400).json({ message: "بيانات غير صحيحة" });
+
+    const rejected = await resolvePublisherRequest(
+      req.params.id,
+      (req.user as { id: string }).id,
+      "reject",
+      parsed.data.note,
+    );
+    if (!rejected) return res.status(404).json({ message: "الطلب غير موجود أو معالج بالفعل" });
+    res.json({ message: "رُفض الطلب وأُبلغت الوكالة" });
+  } catch (error) {
+    console.error("[Publisher Portal] request reject failed:", error);
+    res.status(500).json({ message: "تعذر رفض الطلب" });
+  }
+});
+
+router.delete("/api/admin/publishers/requests/:id", requireAuth, requirePublisherManagement, async (req, res) => {
+  try {
+    const deleted = await deletePublisherRequest(req.params.id);
+    if (!deleted) return res.status(404).json({ message: "الطلب غير موجود" });
+    res.json({ message: "حُذف الطلب" });
+  } catch (error) {
+    console.error("[Publisher Portal] request delete failed:", error);
+    res.status(500).json({ message: "تعذر حذف الطلب" });
   }
 });
 
@@ -460,6 +510,15 @@ router.get("/api/admin/publishers/rich-list", requireAuth, requirePublisherManag
   } catch (error) {
     console.error("[Publisher Portal] rich list failed:", error);
     res.status(500).json({ message: "تعذر جلب قائمة الناشرين" });
+  }
+});
+
+router.get("/api/admin/publishers/summary", requireAuth, requirePublisherManagement, async (_req, res) => {
+  try {
+    res.json(await getPublishersSummary());
+  } catch (error) {
+    console.error("[Publisher Portal] summary failed:", error);
+    res.status(500).json({ message: "تعذر جلب ملخص الناشرين" });
   }
 });
 

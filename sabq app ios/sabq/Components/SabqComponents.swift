@@ -27,32 +27,37 @@ enum SabqHaptics {
 // MARK: - Shimmer Effect
 
 struct ShimmerModifier: ViewModifier {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var phase: CGFloat = 0
 
     func body(content: Content) -> some View {
-        content
-            .overlay(
-                GeometryReader { geo in
-                    LinearGradient(
-                        colors: [
-                            .clear,
-                            Color.white.opacity(0.25),
-                            .clear
-                        ],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    )
-                    .frame(width: geo.size.width * 0.6)
-                    .offset(x: phase * (geo.size.width * 1.6) - geo.size.width * 0.3)
-                    .blendMode(.softLight)
+        if reduceMotion {
+            content
+        } else {
+            content
+                .overlay(
+                    GeometryReader { geo in
+                        LinearGradient(
+                            colors: [
+                                .clear,
+                                Color.white.opacity(0.25),
+                                .clear
+                            ],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                        .frame(width: geo.size.width * 0.6)
+                        .offset(x: phase * (geo.size.width * 1.6) - geo.size.width * 0.3)
+                        .blendMode(.softLight)
+                    }
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .onAppear {
+                    withAnimation(.linear(duration: 1.5).repeatForever(autoreverses: false)) {
+                        phase = 1
+                    }
                 }
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-            .onAppear {
-                withAnimation(.linear(duration: 1.5).repeatForever(autoreverses: false)) {
-                    phase = 1
-                }
-            }
+        }
     }
 }
 
@@ -178,15 +183,16 @@ struct HomeFeedSkeleton: View {
 // MARK: - Animated Appear Modifier
 
 struct AnimatedAppear: ViewModifier {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let index: Int
     @State private var isVisible = false
 
     func body(content: Content) -> some View {
         content
-            .opacity(isVisible ? 1 : 0)
-            .offset(y: isVisible ? 0 : 18)
+            .opacity(isVisible || reduceMotion ? 1 : 0)
+            .offset(y: isVisible || reduceMotion ? 0 : 18)
             .onAppear {
-                withAnimation(.spring(response: 0.45, dampingFraction: 0.82).delay(Double(index) * 0.05)) {
+                withAnimation(reduceMotion ? nil : .spring(response: 0.45, dampingFraction: 0.82).delay(Double(index) * 0.05)) {
                     isVisible = true
                 }
             }
@@ -526,6 +532,10 @@ struct CachedAsyncImage<Placeholder: View>: View {
 struct FocalCachedAsyncImage<Placeholder: View>: View {
     let url: URL?
     let focalPoint: ImageFocalPoint?
+    /// سقف بكسلات التحميل/الفك — كان 2400 مثبّتًا فكانت مصغّرات 84pt تجلب
+    /// ~30 ضعف حاجتها (تدقيق الأداء 2026-08-02). الافتراضي 1400 يغطي
+    /// هيرو بعرض الشاشة على أكبر الأجهزة؛ مرّر 260 للمصغرات.
+    var maxPixelSize: CGFloat = 1400
     @ViewBuilder let placeholder: () -> Placeholder
 
     @State private var image: UIImage?
@@ -537,10 +547,12 @@ struct FocalCachedAsyncImage<Placeholder: View>: View {
     init(
         url: URL?,
         focalPoint: ImageFocalPoint?,
+        maxPixelSize: CGFloat = 1400,
         @ViewBuilder placeholder: @escaping () -> Placeholder
     ) {
         self.url = url
         self.focalPoint = focalPoint
+        self.maxPixelSize = maxPixelSize
         self.placeholder = placeholder
     }
 
@@ -605,7 +617,7 @@ struct FocalCachedAsyncImage<Placeholder: View>: View {
             shown = false
             return
         }
-        if let cached = ImageCache.cached(requestedURL, minPixelSize: 2400) {
+        if let cached = ImageCache.cached(requestedURL, minPixelSize: maxPixelSize) {
             // صورة مخبّأة: ضعها بموضعها النهائي فورًا بلا أنيميشن هندسة، ثم
             // لاشِ الشفافية فقط — فلا تنزلق ولا يظهر فراغ على الشاشات العريضة.
             image = cached
@@ -619,7 +631,8 @@ struct FocalCachedAsyncImage<Placeholder: View>: View {
         // these, articles with 10+ inline images stalled half-loaded
         // because URLSession.shared caps at 4 concurrent + .task(id:)
         // does not auto-retry on transient failures.
-        let fetchURL = ImageCDN.sized(requestedURL, width: 2400)
+        let size = maxPixelSize
+        let fetchURL = ImageCDN.sized(requestedURL, width: Int(size))
         var loaded: UIImage? = nil
         for attempt in 0..<2 {
             if Task.isCancelled { return }
@@ -627,7 +640,7 @@ struct FocalCachedAsyncImage<Placeholder: View>: View {
                 guard let (data, _) = try? await ImageCache.imageSession.data(from: fetchURL) else {
                     return nil
                 }
-                return ImageCache.decodedImage(data: data, maxPixelSize: 2400)
+                return ImageCache.decodedImage(data: data, maxPixelSize: size)
             }.value
             if loaded != nil { break }
             if attempt == 0 && !Task.isCancelled {
@@ -636,7 +649,7 @@ struct FocalCachedAsyncImage<Placeholder: View>: View {
         }
 
         if let loaded {
-            ImageCache.store(loaded, for: requestedURL, budget: 2400)
+            ImageCache.store(loaded, for: requestedURL, budget: size)
         }
         guard !Task.isCancelled, url == requestedURL else { return }
         if let loaded {
@@ -1040,9 +1053,13 @@ nonisolated enum SabqTheme {
             : UIColor(red: 0.38, green: 0.40, blue: 0.46, alpha: 1)
     })
     static let tertiaryInk = Color(UIColor { t in
-        t.userInterfaceStyle == .dark
-            ? UIColor(red: 0.50, green: 0.50, blue: 0.55, alpha: 1)
-            : UIColor(red: 0.56, green: 0.58, blue: 0.64, alpha: 1)
+        if t.accessibilityContrast == .high {
+            return t.userInterfaceStyle == .dark
+                ? UIColor(white: 0.88, alpha: 1) : UIColor(white: 0.25, alpha: 1)
+        }
+        return t.userInterfaceStyle == .dark
+            ? UIColor(red: 0.68, green: 0.68, blue: 0.72, alpha: 1)
+            : UIColor(red: 0.42, green: 0.44, blue: 0.49, alpha: 1)
     })
     static let outline = Color(UIColor { t in
         t.userInterfaceStyle == .dark
@@ -1092,10 +1109,20 @@ nonisolated enum SabqTheme {
     nonisolated static let gold        = Color(red: 0.92, green: 0.68, blue: 0.20)
     nonisolated static let coral       = Color(red: 0.90, green: 0.35, blue: 0.32)
     nonisolated static let leaf        = Color(red: 0.40, green: 0.73, blue: 0.22)
+    /// زمردي شارات «قراءة» في الويب (#047857).
+    nonisolated static let emerald     = Color(red: 0.016, green: 0.47, blue: 0.34)
+    /// درجة الأزرق الفاتح المعتمدة في الويب (`--public-surface` ‏#f4f8fb، داكن #172330)
+    /// لحاويات البلوكات الجانبية وبنود الرئيسية — اعتمدها المالك لتطبيق iOS 2026-09-12.
+    static let publicSurface = Color(UIColor { t in
+        t.userInterfaceStyle == .dark
+            ? UIColor(red: 0x17 / 255.0, green: 0x23 / 255.0, blue: 0x30 / 255.0, alpha: 1)
+            : UIColor(red: 0xF4 / 255.0, green: 0xF8 / 255.0, blue: 0xFB / 255.0, alpha: 1)
+    })
+    /// الفاتح يطابق درجة الويب #f4f8fb (كان #f0f7fc)؛ الداكن يبقى محايدًا.
     static let paleFill = Color(UIColor { t in
         t.userInterfaceStyle == .dark
             ? UIColor(red: 0.14, green: 0.14, blue: 0.16, alpha: 1)
-            : UIColor(red: 0.94, green: 0.97, blue: 0.99, alpha: 1)
+            : UIColor(red: 0xF4 / 255.0, green: 0xF8 / 255.0, blue: 0xFB / 255.0, alpha: 1)
     })
     static let softFill = Color(UIColor { t in
         t.userInterfaceStyle == .dark
@@ -1106,6 +1133,28 @@ nonisolated enum SabqTheme {
         t.userInterfaceStyle == .dark
             ? UIColor(red: 0.12, green: 0.12, blue: 0.14, alpha: 1)
             : UIColor(red: 0.95, green: 0.97, blue: 0.99, alpha: 1)
+    })
+
+    // عائلة «الرأي والزوايا» بهوية سبق (دليل الهوية V2): بطاقة سماوية
+    // فاتحة جدًا، شريط عنوان بسماوي سبق #4CBCFD، والأسماء والروابط
+    // بالأزرق العميق #0E76B8 (يُستبدل بالسماوي في الداكن للتباين).
+    // الفاتح #DCF1FE من لوحة الهوية — أوضح تمايزًا عن خلفية التطبيق
+    // #F2F7FC بعد ملاحظة المالك أن الصبغة الأخف كانت تذوب فيها.
+    /// بطاقات بنود الرئيسية (الرأي، الرحلة…) — درجة الويب نفسها #f4f8fb / #172330
+    /// (كانت سماوية أقوى #dbf2ff). اعتمدها المالك 2026-09-12.
+    static let sectionCard = publicSurface
+    static let sectionSeparator = Color(UIColor { t in
+        t.userInterfaceStyle == .dark
+            ? UIColor(red: 0.20, green: 0.26, blue: 0.33, alpha: 1)
+            : UIColor(red: 0.72, green: 0.84, blue: 0.92, alpha: 1)
+    })
+    /// سماوي سبق #4CBCFD — ثابت في الوضعين، لون العلامة نفسه.
+    nonisolated static let brandSky = Color(red: 0.30, green: 0.74, blue: 0.99)
+    /// أزرق سبق العميق #0E76B8 للنصوص التفاعلية؛ سماوي في الداكن.
+    static let brandBlue = Color(UIColor { t in
+        t.userInterfaceStyle == .dark
+            ? UIColor(red: 0.30, green: 0.74, blue: 0.99, alpha: 1)
+            : UIColor(red: 0.05, green: 0.46, blue: 0.72, alpha: 1)
     })
 
     nonisolated static let cardRadius: CGFloat   = 28
@@ -1127,9 +1176,12 @@ nonisolated enum SabqTheme {
 struct SurfaceCard<Content: View>: View {
     private let content: Content
     var accent: Color?
+    /// كسولة للقوائم الطويلة — انظر تعليق body.
+    var lazy: Bool = false
 
-    init(accent: Color? = nil, @ViewBuilder content: () -> Content) {
+    init(accent: Color? = nil, lazy: Bool = false, @ViewBuilder content: () -> Content) {
         self.accent = accent
+        self.lazy = lazy
         self.content = content()
     }
 
@@ -1138,8 +1190,14 @@ struct SurfaceCard<Content: View>: View {
         let strokeWidth: CGFloat = 0.5
         let topShadow = SabqTheme.shadow
 
-        return VStack(alignment: .leading, spacing: 18) {
-            content
+        // `lazy: true` للقوائم الطويلة داخل ScrollView — النسخة العادية كانت
+        // تُركّب 50 صفًا وصورها دفعة واحدة أثناء حركة الدفع (تدقيق 2026-08-02).
+        return Group {
+            if lazy {
+                LazyVStack(alignment: .leading, spacing: 18) { content }
+            } else {
+                VStack(alignment: .leading, spacing: 18) { content }
+            }
         }
         .padding(20)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -1169,7 +1227,21 @@ struct SurfaceCard<Content: View>: View {
 
 // MARK: - Screen Header
 
+struct SabqPageIntro: View {
+    let text: String
+    init(_ text: String) { self.text = text }
+
+    var body: some View {
+        Text(text)
+            .font(SabqFonts.editorial(.subheadline, size: 14))
+            .foregroundStyle(SabqTheme.secondaryInk)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
 struct CompactScreenHeader: View {
+    @Environment(\.legibilityWeight) private var legibilityWeight
     let title: String
     let subtitle: String
     var actionTitle: String?
@@ -1181,7 +1253,8 @@ struct CompactScreenHeader: View {
         HStack(alignment: .top, spacing: 14) {
             VStack(alignment: .leading, spacing: 6) {
                 Text(title)
-                    .font(SabqFonts.app(size: 28, weight: .semibold))
+                    .font(SabqFonts.editorial(.title, size: 28, weight: .semibold, boldText: legibilityWeight == .bold))
+                    .accessibilityAddTraits(.isHeader)
                     .foregroundStyle(SabqTheme.ink)
 
                 Text(subtitle)
@@ -1430,6 +1503,7 @@ struct DetailLabelPill: View {
 // MARK: - Featured Article Card
 
 struct FeaturedArticleCard: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let article: Article
     let onBookmark: () -> Void
     let isBookmarked: Bool
@@ -1493,7 +1567,7 @@ struct FeaturedArticleCard: View {
                     article.title,
                     uiFont: SabqFonts.uiApp(size: 19, weight: .semibold),
                     color: SabqTheme.ink,
-                    lineLimit: 3,
+                    lineLimit: dynamicTypeSize.isAccessibilitySize ? 0 : 3,
                     lineSpacing: 4
                 )
 
@@ -1501,11 +1575,14 @@ struct FeaturedArticleCard: View {
                     article.excerpt,
                     uiFont: SabqFonts.uiApp(size: 14, weight: .regular),
                     color: SabqTheme.secondaryInk,
-                    lineLimit: 2,
+                    lineLimit: dynamicTypeSize.isAccessibilitySize ? 0 : 2,
                     lineSpacing: 3
                 )
 
-                HStack(spacing: 12) {
+                let metadataLayout = dynamicTypeSize.isAccessibilitySize
+                    ? AnyLayout(VStackLayout(alignment: .leading, spacing: 12))
+                    : AnyLayout(HStackLayout(spacing: 12))
+                metadataLayout {
                     HStack(spacing: 5) {
                         Image(systemName: "clock")
                             .font(SabqFonts.app(size: 11, weight: .regular))
@@ -1536,6 +1613,8 @@ struct FeaturedArticleCard: View {
                             .animation(.spring(response: 0.3, dampingFraction: 0.5), value: isBookmarked)
                     }
                     .buttonStyle(.plain)
+                    .frame(minWidth: 44, minHeight: 44)
+                    .accessibilityLabel(isBookmarked ? "إزالة من المحفوظات" : "حفظ المقال")
                 }
             }
             .padding(20)
@@ -1588,6 +1667,8 @@ struct CompactArticleRow: View {
     /// / the live "أخبار جديدة" banner (`ArticlesStore.isRecentlyAdded`).
     /// Defaulted so the eight non-home call sites stay source-compatible.
     var isNew: Bool = false
+    /// The category page already names the section in its header.
+    var showsCategory: Bool = true
 
     // Reader can flip between the legacy thumbnail-on-the-side layout
     // ("classic") and the experimental image-on-top hero layout
@@ -1611,10 +1692,15 @@ struct CompactArticleRow: View {
     private var classicLayout: some View {
         HStack(alignment: .top, spacing: 14) {
             VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 8) {
-                    StatusChip(title: article.category.title, tint: article.category.tint)
-                    if article.isBreaking { breakingPill }
-                    if isNew { newPill }
+                if showsCategory || article.isBreaking || article.isReading || isNew {
+                    HStack(spacing: 8) {
+                        if showsCategory {
+                            StatusChip(title: article.categoryTitle, tint: article.category.tint)
+                        }
+                        if article.isBreaking { breakingPill }
+                        if article.isReading { readingPill }
+                        if isNew { newPill }
+                    }
                 }
 
                 SabqRTLText(
@@ -1630,11 +1716,17 @@ struct CompactArticleRow: View {
             .frame(maxWidth: .infinity, alignment: .leading)
 
             if let urlString = article.imageURL, let url = URL(string: urlString) {
-                FocalCachedAsyncImage(url: url, focalPoint: article.imageFocalPoint) {
+                FocalCachedAsyncImage(url: url, focalPoint: article.imageFocalPoint, maxPixelSize: 260) {
                     thumbnailPlaceholder(size: 84)
                 }
                 .frame(width: 84, height: 84)
                 .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                // شعارات الجهات البيضاء كانت تذوب في البطاقة فتبدو بلا قص؛ الإطار
+                // نفسه المستخدم في صفوف الحاوية الموحدة يحفظ الزوايا (مراجعة 10.3.3).
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(SabqTheme.ink.opacity(0.10), lineWidth: 1)
+                )
                 .aiImageBadgeOverlay(
                     isVisible: article.isAiGeneratedImage,
                     model: article.aiImageModel,
@@ -1691,12 +1783,17 @@ struct CompactArticleRow: View {
                     inset: 10
                 )
 
-            HStack(spacing: 6) {
-                if article.isBreaking { breakingPill }
-                if isNew { newPill }
-                StatusChip(title: article.category.title, tint: article.category.tint)
+            if showsCategory || article.isBreaking || article.isReading || isNew {
+                HStack(spacing: 6) {
+                    if article.isBreaking { breakingPill }
+                    if article.isReading { readingPill }
+                    if isNew { newPill }
+                    if showsCategory {
+                        StatusChip(title: article.categoryTitle, tint: article.category.tint)
+                    }
+                }
+                .padding(10)
             }
-            .padding(10)
         }
     }
 
@@ -1729,6 +1826,23 @@ struct CompactArticleRow: View {
         .background(
             Capsule(style: .continuous)
                 .fill(SabqTheme.coral.opacity(0.10))
+        )
+    }
+
+    /// شارة «قراءة» التحريرية — نص وترتيب شارة البطاقة في الويب (#1420).
+    private var readingPill: some View {
+        HStack(spacing: 4) {
+            Image(systemName: "book")
+                .font(SabqFonts.app(size: 9, weight: .medium))
+            Text("قراءة")
+                .font(SabqFonts.app(size: 10, weight: .medium))
+        }
+        .foregroundStyle(SabqTheme.emerald)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(
+            Capsule(style: .continuous)
+                .fill(SabqTheme.emerald.opacity(0.12))
         )
     }
 
@@ -1796,6 +1910,8 @@ struct CompactArticleRow: View {
 // MARK: - Category Tile
 
 struct CategoryTile: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.legibilityWeight) private var legibilityWeight
     let category: ArticleCategory
 
     init(category: ArticleCategory) {
@@ -1819,13 +1935,13 @@ struct CategoryTile: View {
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(category.title)
-                    .font(SabqFonts.app(size: 16, weight: .semibold))
+                    .font(SabqFonts.editorial(.headline, size: 16, weight: .semibold, boldText: legibilityWeight == .bold))
                     .foregroundStyle(SabqTheme.ink)
 
                 Text(category.subtitle)
                     .font(SabqFonts.app(size: 11, weight: .regular))
                     .foregroundStyle(SabqTheme.tertiaryInk)
-                    .lineLimit(2)
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
                     .fixedSize(horizontal: false, vertical: true)
                     .multilineTextAlignment(.leading)
             }
@@ -1850,69 +1966,39 @@ struct EmptyStateView: View {
     var action: (() -> Void)? = nil
     var actionTitle: String? = nil
 
-    @State private var isAnimating = false
-
     var body: some View {
-        VStack(spacing: 20) {
-            ZStack {
-                Circle()
-                    .fill(
-                        RadialGradient(
-                            colors: [tint.opacity(0.12), tint.opacity(0.03)],
-                            center: .center,
-                            startRadius: 20,
-                            endRadius: 60
-                        )
-                    )
-                    .frame(width: 120, height: 120)
-                    .scaleEffect(isAnimating ? 1.05 : 0.95)
-                    .animation(.easeInOut(duration: 2).repeatForever(autoreverses: true), value: isAnimating)
+        VStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.system(size: 28, weight: .regular))
+                .symbolRenderingMode(.hierarchical)
+                .foregroundStyle(tint)
+                .frame(width: 56, height: 56)
+                .background(tint.opacity(0.08), in: RoundedRectangle(cornerRadius: 16))
+                .accessibilityHidden(true)
 
-                Image(systemName: icon)
-                    .font(SabqFonts.app(size: 42, weight: .semibold))
-                    .foregroundStyle(tint)
-                    .symbolEffect(.pulse, isActive: isAnimating)
-            }
-
-            VStack(spacing: 8) {
-                Text(title)
-                    .font(SabqFonts.app(size: 20, weight: .bold))
-                    .foregroundStyle(SabqTheme.ink)
-                    .multilineTextAlignment(.center)
-
-                Text(subtitle)
-                    .font(SabqFonts.app(size: 15, weight: .regular))
-                    .foregroundStyle(SabqTheme.secondaryInk)
-                    .multilineTextAlignment(.center)
-                    .lineSpacing(4)
-                    .frame(maxWidth: 300)
-            }
+            Text(title)
+                .font(SabqFonts.editorial(.headline, size: 18, weight: .semibold))
+                .foregroundStyle(SabqTheme.ink)
+                .accessibilityAddTraits(.isHeader)
+            Text(subtitle)
+                .font(SabqFonts.editorial(.subheadline, size: 14))
+                .foregroundStyle(SabqTheme.secondaryInk)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: 360)
 
             if let action, let actionTitle {
-                Button {
+                Button(actionTitle) {
                     SabqHaptics.light()
                     action()
-                } label: {
-                    HStack(spacing: 8) {
-                        Image(systemName: "arrow.clockwise")
-                            .font(SabqFonts.app(size: 14, weight: .semibold))
-                        Text(actionTitle)
-                            .font(SabqFonts.app(size: 14, weight: .bold))
-                    }
-                    .foregroundStyle(tint)
-                    .padding(.horizontal, 24)
-                    .padding(.vertical, 12)
-                    .background(
-                        Capsule(style: .continuous)
-                            .fill(tint.opacity(0.10))
-                    )
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.bordered)
+                .tint(tint)
+                .controlSize(.large)
             }
         }
+        .multilineTextAlignment(.center)
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 40)
-        .onAppear { isAnimating = true }
+        .padding(.vertical, 24)
     }
 }
 
@@ -2136,6 +2222,20 @@ struct FlowLayout: Layout {
             subview.place(at: CGPoint(x: currentX, y: currentY), proposal: .unspecified)
             currentX += size.width + spacing
             rowHeight = max(rowHeight, size.height)
+        }
+    }
+}
+
+struct SabqAdaptivePickerStyle: ViewModifier {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            content.pickerStyle(.menu)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            content.pickerStyle(.segmented)
         }
     }
 }

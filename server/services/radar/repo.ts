@@ -3,6 +3,8 @@
  */
 import { and, count, desc, eq, gte, inArray, isNull, lt, sql as dsql } from "drizzle-orm";
 import { db } from "../../db";
+import { RADAR_RATE_LIMIT_BACKOFF_MINUTES } from "./fetchPolicy";
+import { topicFingerprintFor } from "./textNormalize";
 import {
   categories,
   radarAlertRules,
@@ -92,7 +94,16 @@ export async function sourcesDueForFetch(): Promise<RadarSource[]> {
     .where(
       and(
         eq(radarSources.isActive, true),
-        dsql`(${radarSources.lastFetchedAt} IS NULL OR ${radarSources.lastFetchedAt} < now() - make_interval(mins => ${radarSources.fetchIntervalMinutes}))`
+        dsql`(
+          ${radarSources.lastFetchedAt} IS NULL
+          OR ${radarSources.lastFetchedAt} < now() - make_interval(
+            mins => CASE
+              WHEN ${radarSources.lastError} ILIKE '%429%'
+                THEN GREATEST(${radarSources.fetchIntervalMinutes}, ${RADAR_RATE_LIMIT_BACKOFF_MINUTES})
+              ELSE ${radarSources.fetchIntervalMinutes}
+            END
+          )
+        )`
       )
     );
 }
@@ -119,27 +130,72 @@ export interface NormalizedRadarItem {
   link: string;
   title: string;
   excerpt?: string;
+  /** الناشر الحقيقي لمواد ممرات الاصطياد (Google News/GDELT) */
+  publisher?: string;
+  /** لغة المادة الفعلية إن عرفها الممر (GDELT) — وإلا لغة المصدر */
+  language?: string;
   imageUrl?: string;
   publishedAt?: Date;
   metrics?: { likes?: number; retweets?: number; replies?: number; views?: number };
 }
 
-/** إدراج دفعة مواد مع منع التكرار على (sourceId, guid) — يعيد المُدرَج فعليًا فقط */
+/** نافذة منع تكرار القصة عبر المصادر — الخبر يصل من عدة ممرات بعناوين متطابقة تقريبًا */
+const DEDUP_WINDOW_HOURS = Number(process.env.RADAR_DEDUP_WINDOW_HOURS || 48);
+
+/**
+ * إدراج دفعة مواد مع منع التكرار على مستويين:
+ * 1) (sourceId, guid) — نفس المادة من نفس المصدر.
+ * 2) بصمة العنوان عبر كل المصادر خلال النافذة — نفس القصة من ممر آخر
+ *    (لمصادر الخلاصات فقط؛ منشورات X تبقى لأن تفاعلها يغذي الزخم).
+ * يعيد المُدرَج فعليًا فقط.
+ */
 export async function insertItems(
   source: RadarSource,
   items: NormalizedRadarItem[]
 ): Promise<RadarItem[]> {
   if (!items.length) return [];
+
+  const withHashes = items.map((item) => ({
+    item,
+    titleHash: topicFingerprintFor(item.title) || null,
+  }));
+
+  let toInsert = withHashes;
+  if (source.type !== "x") {
+    const hashes = Array.from(
+      new Set(withHashes.map((e) => e.titleHash).filter((h): h is string => Boolean(h)))
+    );
+    const seen = new Set<string>();
+    if (hashes.length) {
+      const cutoff = new Date(Date.now() - DEDUP_WINDOW_HOURS * 60 * 60 * 1000);
+      const existing = await db
+        .select({ titleHash: radarItems.titleHash })
+        .from(radarItems)
+        .where(and(inArray(radarItems.titleHash, hashes), gte(radarItems.fetchedAt, cutoff)));
+      for (const row of existing) if (row.titleHash) seen.add(row.titleHash);
+    }
+    // يصفي أيضًا المكرر داخل الدفعة نفسها (نفس القصة مرتين في جلبة واحدة)
+    toInsert = withHashes.filter((entry) => {
+      if (!entry.titleHash) return true;
+      if (seen.has(entry.titleHash)) return false;
+      seen.add(entry.titleHash);
+      return true;
+    });
+  }
+  if (!toInsert.length) return [];
+
   const rows = await db
     .insert(radarItems)
     .values(
-      items.map((item) => ({
+      toInsert.map(({ item, titleHash }) => ({
         sourceId: source.id,
         guid: item.guid,
         link: item.link,
         originalTitle: item.title,
         originalExcerpt: item.excerpt,
-        originalLanguage: source.language,
+        originalLanguage: item.language ?? source.language,
+        publisher: item.publisher ?? null,
+        titleHash,
         imageUrl: item.imageUrl,
         publishedAt: item.publishedAt,
         metrics: item.metrics ?? null,
@@ -157,6 +213,8 @@ export interface RadarItemFilters {
   /** x = رصدات إكس فقط · feed = صحف/RSS/JSON فقط */
   channel?: "x" | "feed";
   breakingOnly?: boolean;
+  /** آخر N ساعة — على تاريخ النشر، ويسقط لوقت الرصد إن غاب */
+  sinceHours?: number;
   limit?: number;
   offset?: number;
 }
@@ -173,6 +231,11 @@ function itemConditions(filters: RadarItemFilters) {
   if (filters.minScore != null) conditions.push(gte(radarItems.newsValue, filters.minScore));
   if (filters.sourceId) conditions.push(eq(radarItems.sourceId, filters.sourceId));
   if (filters.breakingOnly) conditions.push(eq(radarItems.isBreaking, true));
+  if (filters.sinceHours) {
+    conditions.push(
+      dsql`coalesce(${radarItems.publishedAt}, ${radarItems.fetchedAt}) >= now() - make_interval(hours => ${filters.sinceHours})`
+    );
+  }
   if (filters.channel === "x") conditions.push(eq(radarSources.type, "x"));
   if (filters.channel === "feed") conditions.push(inArray(radarSources.type, ["rss", "json"]));
   return conditions.length ? and(...conditions) : undefined;
@@ -335,13 +398,15 @@ export interface RadarStats {
   exportedTotal: number;
   activeSources: number;
   lastFetchedAt: string | null;
+  /** آخر جلب لممر NewsAPI.ai (Event Registry) — يُجلب كل ساعة ترشيدًا للتوكنز */
+  newsapiLastFetchedAt: string | null;
 }
 
 export async function radarStats(): Promise<RadarStats> {
   const startOfDay = new Date();
   startOfDay.setHours(0, 0, 0, 0);
 
-  const [newToday, breakingActive, readyDrafts, exportedTotal, activeSources, lastFetch] =
+  const [newToday, breakingActive, readyDrafts, exportedTotal, activeSources, lastFetch, newsapiFetch] =
     await Promise.all([
       db.select({ value: count() }).from(radarItems).where(gte(radarItems.fetchedAt, startOfDay)),
       db
@@ -361,6 +426,12 @@ export async function radarStats(): Promise<RadarStats> {
         .from(radarSources)
         .orderBy(desc(radarSources.lastFetchedAt))
         .limit(1),
+      db
+        .select({ value: radarSources.lastFetchedAt })
+        .from(radarSources)
+        .where(dsql`${radarSources.url} like '%eventregistry.org%'`)
+        .orderBy(desc(radarSources.lastFetchedAt))
+        .limit(1),
     ]);
 
   return {
@@ -370,5 +441,8 @@ export async function radarStats(): Promise<RadarStats> {
     exportedTotal: exportedTotal[0]?.value ?? 0,
     activeSources: activeSources[0]?.value ?? 0,
     lastFetchedAt: lastFetch[0]?.value ? new Date(lastFetch[0].value).toISOString() : null,
+    newsapiLastFetchedAt: newsapiFetch[0]?.value
+      ? new Date(newsapiFetch[0].value).toISOString()
+      : null,
   };
 }

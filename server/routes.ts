@@ -1,3 +1,5 @@
+import { adminScheduledOrder, getAdminPublishedPageIds } from "./services/adminArticleList";
+import { getPublicEditorialModifiedAt } from "./utils/editorialDates";
 // Reference: javascript_object_storage blueprint
 import type { Express, NextFunction, Request, Response } from "express";
 import { createServer, type Server } from "http";
@@ -12,20 +14,32 @@ import {
   verifyImageMagicBytes,
 } from "./utils/imageVerify";
 import { isAllowedMediaUrl } from "./utils/mediaUrl";
-import { extractPgError } from "./utils/pgError";
+import { isSafeRedirectUrl } from "./utils/safeRedirect";
+import { getRealIp as getTrustedRealIp } from "./utils/trustedProxyIp";
+import { toPublicUser } from "./utils/publicUser";
+import { denyPublish } from "./services/publishGate";
+import { AR_SITEMAP_BUCKETS, archiveSitemapBucketCondition, isCanonicalArchiveArticle } from "./services/archiveSeo";
+import { apiListingNoindex, apiListingRobotsRules } from "./utils/apiListingRobots";
+import { decideStatusDemotion, resolveArticleEditFlags, statusAfterSubmitForReview } from "./services/publishGateRules";
+import { authorizeArticleWrite, authorizeArticleWriteByMediaAsset } from "./services/articleAccessService";
+import { extractPgError, isUniqueViolation } from "./utils/pgError";
+import { isLockedOut, recordFailure, clearFailures } from "./services/authAttemptGuard";
 import { deleteMediaBlob } from "./services/mediaStorage";
 import { shouldAutoTag, enqueueAutoTag } from "./services/mediaAutoTagService";
 import { recordArticleView, initArticleViewStats } from "./services/articleViewStatsService";
 import { varaSendOtp, varaVerifyOtp } from "./services/varaPhoneOtp";
-import { normalizePhone, findOrCreatePhoneUser } from "./services/phoneAuth";
+import { normalizePhone, findExistingPhoneUser } from "./services/phoneAuth";
 import { bufferArticleViewIncrement, initArticleViewCounters } from "./services/articleViewCounterService";
 import { getArticleReadingOverrides, resolveReadingMetrics } from "./services/adminToolsService";
+import { evaluatePressIdNumberChange } from "./services/pressCardNumberService";
+import { getNextSlotsForWriters } from "./services/opinionWritersService";
+import { attachWriterWeeklySlots, collectOpinionDraftWriterIds } from "./services/writerWeeklySlot";
 import {
   getEnArticleAnalyticsDetail,
   searchEnArticlesForAnalytics,
 } from "./services/articleAnalyticsSearchService";
-import { pickTableColumns } from "./utils/sanitizeBody";
-import { setupAuth, isAuthenticated, invalidateUserSessionCache } from "./auth";
+import { pickTableColumns, ARTICLE_SERVER_OWNED_COLUMNS } from "./utils/sanitizeBody";
+import { setupAuth, isAuthenticated, invalidateUserSessionCache, invalidateAllUserSessions } from "./auth";
 import { getCsrfToken, validateCsrfToken, ensureCsrfToken } from "./csrf";
 import adsRoutes from "./ads-routes";
 import { registerDataStoryRoutes } from './data-story-routes';
@@ -46,7 +60,7 @@ import storeCustomerRoutes from './routes/storeCustomerRoutes';
 import pollsRoutes from './routes/pollsRoutes';
 import worldDaysRoutes from './routes/worldDays';
 import { registerSplitRoutes } from './routes/splitRoutesIndex';
-import { ObjectStorageService, ObjectNotFoundError, objectStorageClient } from "./objectStorage";
+import { ObjectStorageService, ObjectNotFoundError, objectStorageClient, isPrivateObjectStorageConfigured } from "./objectStorage";
 import newsletterAnalyticsRoutes from './routes/newsletterAnalyticsRoutes';
 import pushNotificationRoutes from './routes/pushNotificationRoutes';
 import imageOptimizationService, { optimizeImage, getOptimizedImage, generateSrcSet, getBestFormat, supportsWebP, IMAGE_SIZES, generateLiteOptimizedImage } from "./services/imageOptimizationService";
@@ -63,8 +77,10 @@ import { summarizeText, generateSocialPost, suggestImageQuery, translateContent,
 import { importFromRssFeed } from "./rssImporter";
 import { generateCalendarEventIdeas, generateArticleDraft } from "./services/calendarAi";
 import { generateNewsletterSubtitle } from "./services/smartCategoryClassifier";
-import { requireAuth, requirePermission, requireAnyPermission, requireRole, logActivity, getUserPermissions, userHasAnyRole, userHasPermission, invalidateUserPermissionCache } from "./rbac";
-import { PERMISSION_CODES } from "@shared/rbac-constants";
+import { requireAuth, requirePermission, requireAnyPermission, requireRole, logActivity, getUserPermissions, getEffectiveUserPermissions, userHasAnyRole, userHasPermission, invalidateUserPermissionCache, getRoleAssignmentAuthority, roleAssignmentError, roleIdsAssignmentError } from "./rbac";
+import { PERMISSION_CODES, ROLE_LABELS_AR, ROLE_NAMES } from "@shared/rbac-constants";
+import { isReaderLikeRole, mergeRoleSignals, primaryRoleKey } from "@shared/effectiveRoles";
+import { inferStaffRolesFromWork } from "./services/staffRoleInference";
 import { createNotification, notifyReporterArticlePublished, notifyReporterArticleScheduled, notifyOpinionAuthorArticleScheduled } from "./notificationEngine";
 import { notificationBus } from "./notificationBus";
 // Google Indexing API is invoked via notifySearchEngines() in indexNow.ts when
@@ -74,9 +90,18 @@ import { sendEditorPublishAlert, getPublisherName, sendReporterPublishEmail, sen
 import { awardPoints } from "./services/loyalty";
 import { safeErrorPayload } from "./utils/safeError";
 import { deductPublisherCreditSafely } from "./services/publisherCreditService";
-import { getPublishingGate, submitPortalArticle, notifyPublisherUser, getPortalArticles, trustedPublisherCanPublish } from "./services/publisherPortalService";
+import { getPublishingGate, submitPortalArticle, notifyPublisherUser, getPortalArticles, trustedPublisherCanPublish, resolvePublisherForUser } from "./services/publisherPortalService";
+import { SABQ_NEWSPAPER_ACCOUNT_ID } from "@shared/sabqNewspaper";
 import { LOYALTY_ACTIONS } from "@shared/loyalty";
 import { notifyArticleStakeholders } from "./services/editorialNotifications";
+import {
+  assertMediaLicenseAllowsSubmission,
+  isInstitutionalMediaByline,
+  isMediaLicenseEnforcementActive,
+  mediaLicenseExpiryRejection,
+  mediaLicenseFlags,
+  resolveContentBylineUserId,
+} from "./services/mediaLicenseService";
 import { vectorizeArticle } from "./embeddingsService";
 import { trackUserEvent } from "./eventTrackingService";
 import { findSimilarArticles, getPersonalizedRecommendations } from "./similarityEngine";
@@ -110,14 +135,23 @@ import { generateSeoMetadata } from './seo-generator';
 import { cacheControl, noCache, withETag, CACHE_DURATIONS, AUTOSCALE_CACHE } from "./cacheMiddleware";
 import { passKitService, type PressPassData, type LoyaltyPassData } from "./lib/passkit/PassKitService";
 import { memoryCache, CACHE_TTL, withCache, sseConnectionManager, withSWR, canAcceptExternalSse, trackExternalSse } from "./memoryCache";
+import { getCachedNewsStatistics } from "./services/newsStatisticsService";
 import { invalidatePublishedContent, invalidateArticleWrite } from "./services/contentInvalidation";
 import { getNewsPulseExtras } from "./services/newsPulseInsights";
+import { bestEffortWithin } from "./utils/bestEffortDeadline";
+import { getOrBuildSitemapXml, invalidateSitemapXmlCache } from "./services/sitemapCacheService";
+import {
+  pickEnArticleSlug,
+  resolveEnCategoryId,
+  syncBreakingToArabicSource,
+} from "./services/enArticleTranslationService";
 import pLimit from 'p-limit';
 import { db, executeWithStatementTimeout } from "./db";
-import { articleCardSelect, articleAdminSelect } from "./selectHelpers";
-import { eq, and, or, desc, asc, ilike, sql, inArray, gte, lt, lte, aliasedTable, isNull, ne, not, isNotNull, gt } from "drizzle-orm";
+import { articleCardSelect, articleAdminSelect, userBylineSelect } from "./selectHelpers";
+import { eq, and, or, desc, asc, ilike, sql, inArray, gte, lt, lte, aliasedTable, isNull, ne, not, isNotNull, gt, type SQL } from "drizzle-orm";
 import bcrypt from "bcrypt";
 import { generateEnglishSlug, transliterateToEnglish, normalizeTopicSlug } from './utils/slugTransliterator';
+import { resolveUniqueArticleSlug } from "./services/articleSlugService";
 import path from "path";
 import { fileURLToPath } from "url";
 import passport from "passport";
@@ -128,7 +162,12 @@ import { checkUserStatus } from "./userStatusMiddleware";
 import { slugRedirectMiddleware } from "./middleware/slugRedirect";
 import rateLimit from "express-rate-limit";
 import { z } from "zod";
-import { getRealIp, cfKeyGenerator, cfValidate } from "./utils/rateLimiting";
+import { cfKeyGenerator, cfValidate } from "./utils/rateLimiting";
+import {
+  mediaUploadProbe,
+  markMediaUploadStage,
+  type MediaUploadProbe,
+} from "./utils/mediaUploadDiagnostics";
 
 // A genuine article view counts ONCE per visitor (logged-in user, else real
 // client IP) per article within this window. Rapid repeats (refresh-mashing,
@@ -158,6 +197,41 @@ const phoneOtpSendLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: (req) => normalizePhone(req.body?.phone) || cfKeyGenerator(req),
+  validate: cfValidate,
+});
+
+// authLimiter above uses skipSuccessfulRequests so repeated *successful* logins
+// don't lock out a legitimate user — correct for login/2FA where only failures
+// matter. But that same flag makes forgot-password (always 200 for anti-
+// enumeration), resend-verification (200 on success) and register (201) count
+// NOTHING, leaving them effectively unlimited: email-bombing + unbounded
+// account creation. These flows need a limiter that counts EVERY request.
+// Keyed by email/phone when present so one IP can't be shared-bucketed and one
+// victim address can't be flooded regardless of source IP.
+function authTargetKey(req: any): string {
+  const raw = (req.body?.email || req.body?.phone || "").toString().trim().toLowerCase();
+  return raw ? `t:${raw}` : cfKeyGenerator(req);
+}
+
+// Reset/verify email dispatch: 5 per hour per target address (or IP fallback).
+const emailDispatchLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 5,
+  message: { message: "تجاوزت الحد المسموح لطلبات البريد. حاول بعد قليل." },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: authTargetKey,
+  validate: cfValidate,
+});
+
+// Account creation: 10 per hour per IP, counting successes (unlike authLimiter).
+const registerLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 10,
+  message: { message: "تم تجاوز حد إنشاء الحسابات. يرجى المحاولة لاحقاً." },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: cfKeyGenerator,
   validate: cfValidate,
 });
 
@@ -276,6 +350,8 @@ import {
   smartTerms,
   articleSmartLinks,
   enArticles,
+  deepAnalyses,
+  userPreferences,
   enCategories,
   enComments,
   enReactions,
@@ -363,11 +439,6 @@ import {
   insertTaskAttachmentSchema,
   insertExperimentConversionSchema,
   insertSmartBlockSchema,
-  insertAudioNewsletterSchema,
-  updateAudioNewsletterSchema,
-  insertAudioNewsletterArticleSchema,
-  insertAudioNewsletterListenSchema,
-  insertAudioNewsBriefSchema,
   insertInternalAnnouncementSchema,
   updateInternalAnnouncementSchema,
   insertInternalAnnouncementVersionSchema,
@@ -426,6 +497,7 @@ import {
   type InsertTaskAttachment,
 } from "@shared/schema";
 import { pool } from "./db";
+import { paginationOrReject, parseLimit, parseOffset, parsePage } from "./utils/pagination";
 
 function processFocalPointResult(result: FocalPointResult): { data: { x: number; y: number; confidence: "high" | "medium" | "low"; needsReview?: boolean }; shouldSave: boolean } {
   const data: { x: number; y: number; confidence: "high" | "medium" | "low"; needsReview?: boolean } = {
@@ -476,6 +548,7 @@ function sanitizeArticleUpdatePayload(body: any) {
 }
 
 export async function registerRoutes(app: Express, httpServer: Server): Promise<Server> {
+  app.use(apiListingNoindex);
   const AI_BULLETS_TTL_MS = 30 * 60 * 1000;
   const aiBulletsCache = new Map<string, { bullets: string[]; expiresAt: number }>();
   const aiBulletsInFlight = new Map<string, Promise<string[]>>();
@@ -548,8 +621,8 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
   // Start WhatsApp message aggregator job (processes multi-part messages)
   startMessageAggregatorJob();
 
-  // Helper function to check if user has moderator role (legacy + RBAC)
-  const COMMENT_MODERATOR_ROLES = ["admin", "superadmin", "editor", "chief_editor", "moderator", "comments_moderator"];
+  // Keep in sync with commentModeration.ts — include system_admin aliases.
+  const COMMENT_MODERATOR_ROLES = ["admin", "superadmin", "system_admin", "system.admin", "super_admin", "editor", "chief_editor", "moderator", "comments_moderator"];
   
   async function hasModeratorRole(userId: string, legacyRole: string): Promise<boolean> {
     // Check 1: Legacy role field
@@ -581,11 +654,25 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
   // ============================================================
 
   // Login
-  app.post("/api/login", authLimiter, (req, res, next) => {
+  app.post("/api/login", authLimiter, async (req, res, next) => {
     if (process.env.NODE_ENV !== 'production') {
-      console.log("🔐 Login attempt for:", req.body?.email);
+      console.log("🔐 Login attempt received");
     }
-    
+
+    // Per-ACCOUNT lockout (audit F-16). The IP-keyed authLimiter is spoofable
+    // and, behind the edge worker, shared — so bound password guessing per
+    // account too, as the mobile login already does. Keyed by the submitted
+    // identifier (lowercased email or phone) since we don't yet have a userId.
+    const loginIdentifier = (req.body?.email || req.body?.username || req.body?.phone || "")
+      .toString().trim().toLowerCase();
+    const attemptKey = loginIdentifier ? `login:web:${loginIdentifier}` : null;
+    const LOGIN_MAX_FAILURES = 10;
+    if (attemptKey && (await isLockedOut(attemptKey, LOGIN_MAX_FAILURES))) {
+      return res.status(429).json({
+        message: "تم قفل الحساب مؤقتاً بسبب محاولات دخول فاشلة متعددة. حاول بعد قليل.",
+      });
+    }
+
     passport.authenticate("local", async (err: any, user: any, info: any) => {
       if (err) {
         console.error("❌ Login error:", err);
@@ -593,8 +680,12 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       }
       if (!user) {
         console.log("❌ Login failed:", info?.message);
+        if (attemptKey) { try { await recordFailure(attemptKey); } catch { /* best-effort */ } }
         return res.status(401).json({ message: info?.message || "فشل تسجيل الدخول" });
       }
+
+      // Successful credential match — clear the failure counter.
+      if (attemptKey) { try { await clearFailures(attemptKey); } catch { /* best-effort */ } }
 
       // Check if 2FA is enabled
       if (user.twoFactorEnabled) {
@@ -647,6 +738,24 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       return res.redirect(`/ar/login?error=${name}_auth_failed`);
     };
 
+  // The callback is the only reliable web signal that OAuth completed: it runs
+  // after Passport has authenticated and created the session. Keep the marker
+  // short-lived and free of identity data; the SPA consumes it once only after
+  // confirming /api/auth/user, then removes it from the URL.
+  const oauthLanding = (req: any, res: Response) => {
+    const user = req.user as { isProfileComplete?: boolean; isNewUser?: boolean } | undefined;
+    // Preserve the existing onboarding destination for incomplete existing
+    // accounts; isNewUser only controls the conversion event semantics.
+    const destination = user?.isProfileComplete === false ? "/onboarding/welcome" : "/dashboard";
+    const event = user?.isNewUser ? "sign_up" : "login";
+    const marker = new URLSearchParams({
+      sabq_auth_event: event,
+      method: req.path.includes("google") ? "google" : "apple",
+      nonce: randomUUID(),
+    });
+    return res.redirect(`${destination}?${marker.toString()}`);
+  };
+
   // Google OAuth Routes
   app.get("/api/auth/google",
     requireOAuthStrategy("google"),
@@ -661,13 +770,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
     }),
     (req, res) => {
       console.log("✅ Google OAuth callback successful");
-      // Redirect to onboarding or dashboard based on isProfileComplete
-      const user = req.user as any;
-      if (user && !user.isProfileComplete) {
-        res.redirect("/onboarding/welcome");
-      } else {
-        res.redirect("/dashboard");
-      }
+      oauthLanding(req, res);
     }
   );
 
@@ -685,13 +788,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
     }),
     (req, res) => {
       console.log("✅ Apple OAuth callback successful");
-      // Redirect to onboarding or dashboard based on isProfileComplete
-      const user = req.user as any;
-      if (user && !user.isProfileComplete) {
-        res.redirect("/onboarding/welcome");
-      } else {
-        res.redirect("/dashboard");
-      }
+      oauthLanding(req, res);
     }
   );
 
@@ -801,7 +898,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
     role: z.string().max(40).optional(),
   });
 
-  app.post("/api/register", authLimiter, async (req, res) => {
+  app.post("/api/register", registerLimiter, async (req, res) => {
     try {
       const parsed = registerSchema.safeParse(req.body);
       if (!parsed.success) {
@@ -815,11 +912,13 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         return res.status(400).json({ message: pwCheck.message });
       }
 
-      // Check if user exists
+      // Check if user exists — case-insensitive to match the DB guard
+      // (users_email_lower_unique). A case-sensitive precheck let a legacy
+      // mixed-case row slip through and blow up as a raw 500 on insert (F-11).
       const [existingUser] = await db
         .select()
         .from(users)
-        .where(eq(users.email, email.toLowerCase()))
+        .where(sql`lower(${users.email}) = ${email.toLowerCase()}`)
         .limit(1);
 
       if (existingUser) {
@@ -836,8 +935,10 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         ? role 
         : "reader";
 
-      // Create user
-      const userId = `user-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      // Create user — nanoid like every other creation path (F-21); the old
+      // `user-${Date.now()}-${Math.random()}` was timestamp-prefixed/guessable.
+      const { nanoid } = await import("nanoid");
+      const userId = `user-${nanoid()}`;
       const [newUser] = await db
         .insert(users)
         .values({
@@ -869,10 +970,10 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         });
 
       // Send verification email
-      const emailResult = await sendVerificationEmail(newUser.id, newUser.email);
+      const emailResult = await sendVerificationEmail(newUser.id, email.toLowerCase());
       
       if (!emailResult.success) {
-        console.warn("⚠️  Failed to send verification email:", emailResult.error);
+        console.warn("⚠️  Failed to send verification email");
       }
 
       // Auto-login after registration
@@ -882,7 +983,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
           return res.status(500).json({ message: "تم إنشاء الحساب ولكن فشل تسجيل الدخول التلقائي" });
         }
         
-        console.log("✅ User registered and logged in:", newUser.email);
+        console.log("✅ User registered and logged in");
         res.status(201).json({ 
           message: emailResult.success 
             ? "تم إنشاء الحساب بنجاح. يرجى التحقق من بريدك الإلكتروني لتفعيل الحساب" 
@@ -899,6 +1000,12 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       });
     } catch (error) {
       console.error("Registration error:", error);
+      // A concurrent signup (TOCTOU) or a legacy mixed-case row races the
+      // precheck and hits the unique index — surface it as 409, not 500 (F-11).
+      if (isUniqueViolation(error, 'users_email_unique') ||
+          isUniqueViolation(error, 'users_email_lower_unique')) {
+        return res.status(409).json({ message: "هذا البريد الإلكتروني مستخدم بالفعل" });
+      }
       res.status(500).json({ message: "خطأ في إنشاء الحساب" });
     }
   });
@@ -916,7 +1023,9 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         });
       }
       const result = await varaSendOtp(e164);
-      return res.status(result.success ? 200 : 502).json(result);
+      // 422 لا 502: العميل يترجم 502 إلى «الخادم غير متاح» ويخفي السبب الحقيقي
+      // (رفض المزوّد، حد الإرسال...). الرسالة في result.message.
+      return res.status(result.success ? 200 : 422).json(result);
     } catch (error) {
       console.error("❌ /api/auth/phone/send error:", error);
       return res.status(500).json({ message: "تعذّر إرسال رمز التحقق" });
@@ -933,11 +1042,47 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       const check = await varaVerifyOtp(e164, code);
       if (!check.valid) return res.status(401).json({ message: check.message });
 
-      const result = await findOrCreatePhoneUser(e164);
+      const result = await findExistingPhoneUser(e164);
       if (!result.ok) return res.status(result.status).json({ message: result.message });
 
+      // رقم جديد: لا يُنشأ حساب هنا (ولا بريد اصطناعي). نصدر تذكرة إثبات قصيرة
+      // العمر أحادية الاستخدام، والواجهة تعرض نموذج إكمال التسجيل
+      // (الاسم + البريد + كلمة المرور) ثم POST /api/auth/phone/complete-registration.
+      if (!result.user) {
+        const { issuePhoneRegistrationTicket } = await import(
+          "./services/phoneRegistrationService"
+        );
+        const registrationToken = await issuePhoneRegistrationTicket(e164);
+        return res.json({
+          registrationRequired: true,
+          registrationToken,
+          phone: e164,
+          message: "تم توثيق رقم جوالك. أكمل بيانات التسجيل لإنشاء حسابك.",
+        });
+      }
+
+      // SECURITY: honour 2FA here exactly as /api/login does. Passing the OTP
+      // proves control of the phone number, not of the second factor — without
+      // this branch, an account protected by TOTP could be entered with the
+      // phone step alone, which is a complete 2FA bypass for anyone who can
+      // receive that number's SMS.
+      if ((result.user as any).twoFactorEnabled) {
+        (req.session as any).pending2FAUserId = result.user.id;
+        return req.session.save((saveErr) => {
+          if (saveErr) {
+            console.error("❌ phone login session save error:", saveErr);
+            return res.status(500).json({ message: "خطأ في حفظ الجلسة" });
+          }
+          return res.json({
+            requires2FA: true,
+            message: "يرجى إدخال رمز التحقق بخطوتين",
+          });
+        });
+      }
+
       // جلسة كوكيز عبر Passport (نفس نمط /api/register).
-      req.logIn(result.user as any, (err) => {
+      const phoneUser = result.user;
+      req.logIn(phoneUser as any, (err) => {
         if (err) {
           console.error("❌ phone login session error:", err);
           return res.status(500).json({ message: "تم التحقق ولكن فشل تسجيل الدخول" });
@@ -945,11 +1090,11 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         return res.json({
           message: "تم تسجيل الدخول عبر الجوال",
           user: {
-            id: result.user.id,
-            email: result.user.email,
-            firstName: result.user.firstName,
-            lastName: result.user.lastName,
-            phone: result.user.phoneNumber,
+            id: phoneUser.id,
+            email: phoneUser.email,
+            firstName: phoneUser.firstName,
+            lastName: phoneUser.lastName,
+            phone: phoneUser.phoneNumber,
           },
         });
       });
@@ -993,7 +1138,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
   // News Analytics Endpoint - Smart statistics and insights
 
   // Resend Verification Email
-  app.post("/api/auth/resend-verification", isAuthenticated, async (req, res) => {
+  app.post("/api/auth/resend-verification", isAuthenticated, emailDispatchLimiter, async (req, res) => {
     try {
       if (!req.user) {
         return res.status(401).json({ message: "يجب تسجيل الدخول أولاً" });
@@ -1016,25 +1161,36 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
   // News Analytics Endpoint - Smart statistics and insights
 
   // Forgot Password - Request reset token
-  app.post("/api/auth/forgot-password", async (req, res) => {
+  app.post("/api/auth/forgot-password", emailDispatchLimiter, async (req, res) => {
     try {
       const { email } = req.body;
 
-      if (!email) {
+      if (!email || typeof email !== "string") {
         return res.status(400).json({ message: "البريد الإلكتروني مطلوب" });
       }
 
-      // Check if user exists
+      // Check if user exists (فرادة البريد غير حساسة لحالة الأحرف)
       const [user] = await db
         .select()
         .from(users)
-        .where(eq(users.email, email.toLowerCase()))
+        .where(sql`lower(${users.email}) = ${email.toLowerCase().trim()}`)
         .limit(1);
 
+      // الاستعادة عبر البريد تتطلب بريدًا حقيقيًا مُثبت الملكية:
+      // - لا إرسال إلى بريد اصطناعي تاريخي @phone.sabq.org (صندوق غير موجود).
+      // - حساب جوال/OAuth ببريد غير موثق لا يُستعاد عبره — وإلا استولى مالك
+      //   الصندوق على حساب أُدخل بريده خطأً. استعادة حسابات الجوال تتم بدخول OTP.
+      // - حسابات authProvider=local بريدها هويتها التاريخية فتبقى قابلة للاستعادة.
+      const { hasRealEmail } = await import("@shared/authEmail");
+      const emailEligible =
+        user &&
+        hasRealEmail(user.email) &&
+        (user.emailVerified || user.authProvider === "local");
+
       // Always return success to prevent email enumeration
-      if (!user) {
-        return res.json({ 
-          message: "إذا كان البريد الإلكتروني مسجلاً، سيتم إرسال رابط إعادة تعيين كلمة المرور" 
+      if (!user || !emailEligible) {
+        return res.json({
+          message: "إذا كان البريد الإلكتروني مسجلاً، سيتم إرسال رابط إعادة تعيين كلمة المرور"
         });
       }
 
@@ -1069,10 +1225,10 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       // Send password reset email via MailerSend
       const emailResult = await sendPasswordResetEmail(email, compositeToken);
       if (!emailResult.success) {
-        console.warn("⚠️  Failed to send password reset email:", emailResult.error);
+        console.warn("⚠️  Failed to send password reset email");
         // Still return success to prevent email enumeration
       } else {
-        console.log(`✅ Password reset email sent to ${email}`);
+        console.log("✅ Password reset email accepted for delivery");
       }
 
       res.json({ 
@@ -1087,7 +1243,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
   // News Analytics Endpoint - Smart statistics and insights
 
   // Reset Password - Set new password with token
-  app.post("/api/auth/reset-password", async (req, res) => {
+  app.post("/api/auth/reset-password", authLimiter, async (req, res) => {
     try {
       const { token, password } = req.body;
 
@@ -1142,11 +1298,17 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         .set({ passwordHash })
         .where(eq(users.id, matchedToken.userId));
 
-      // Mark token as used
+      // إبطال كل رموز/روابط الاستعادة غير المستهلكة للمستخدم — مسار الموبايل
+      // يرسل رمزًا ورابطًا معًا؛ استهلاك أحدهما يجب أن يُبطل الآخر.
       await db
         .update(passwordResetTokens)
         .set({ used: true })
-        .where(eq(passwordResetTokens.id, matchedToken.id));
+        .where(and(
+          eq(passwordResetTokens.userId, matchedToken.userId),
+          eq(passwordResetTokens.used, false)
+        ));
+
+      await invalidateAllUserSessions(matchedToken.userId); // kill all sessions so a stolen cookie can't survive the reset (audit #8)
 
       res.json({ message: "تم إعادة تعيين كلمة المرور بنجاح" });
     } catch (error) {
@@ -1158,7 +1320,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
   // News Analytics Endpoint - Smart statistics and insights
 
   // Set Password - For users with temporary password who must change it
-  app.post("/api/auth/set-password", isAuthenticated, async (req: any, res) => {
+  app.post("/api/auth/set-password", isAuthenticated, authLimiter, async (req: any, res) => {
     try {
       const { currentPassword, newPassword } = req.body;
       const userId = req.user.id;
@@ -1194,13 +1356,17 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       // Update user password and set mustChangePassword to false
       await db
         .update(users)
-        .set({ 
+        .set({
           passwordHash,
-          mustChangePassword: false 
+          mustChangePassword: false
         })
         .where(eq(users.id, userId));
 
-      console.log("✅ Password changed successfully for user:", user.email);
+      // Evict every OTHER session on a password change (audit #8), keeping the
+      // caller's current session so they aren't logged out mid-flow.
+      await invalidateAllUserSessions(userId, { exceptWebSid: req.sessionID });
+
+      console.log("✅ Password changed successfully");
       res.json({ message: "تم تغيير كلمة المرور بنجاح" });
     } catch (error) {
       console.error("Set password error:", error);
@@ -1357,42 +1523,36 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         return res.status(404).json({ message: "User not found" });
       }
 
-      // Get all roles as array
-      const rolesArray = userRolesResult.map(r => r.roleName);
-
-      // Prefer the first non-reader RBAC role so writers/reporters/editors
-      // surface their actual title instead of getting overridden by a
-      // stray "reader" assignment (matches Mobile API logic in
-      // mobileApiRoutes.ts:buildUserRolePayload).
-      const nonReaderRole = userRolesResult.find(
-        (r) => r.roleName && r.roleName !== "reader",
+      // Union RBAC + users.role and drop leftover "reader" when a staff
+      // role exists — same helper as Mobile API / getUserRoleNames so a
+      // correspondent never surfaces as «قارئ» from a stale layer.
+      let allRoles = mergeRoleSignals(
+        userRolesResult.map((r) => r.roleName),
+        user.role,
       );
-
-      // For backward compatibility, keep 'role' as first role, add 'roles' array
-      const role = nonReaderRole?.roleName
-        || rolesArray[0]
-        || user.role
-        || "reader";
-      const allRoles = rolesArray.length > 0
-        ? rolesArray
-        : [user.role || "reader"];
-      // `roleLabel` is the Arabic display name pulled straight from the
-      // `roles` table — single source of truth, no client-side
-      // translation map needed. Falls back to the job title (e.g.
-      // "كاتب رأي في علم النفس والمجتمع") and finally a hard-coded
-      // "قارئ" so writers without an explicit job title still show
-      // something meaningful.
-      const roleLabel = nonReaderRole?.roleNameAr
-        || userRolesResult[0]?.roleNameAr
+      if (
+        allRoles.every((name) => isReaderLikeRole(name)) &&
+        (user.jobTitle || user.hasPressCard)
+      ) {
+        const inferred = await inferStaffRolesFromWork(userId);
+        if (inferred.length > 0) {
+          allRoles = mergeRoleSignals(
+            [...userRolesResult.map((r) => r.roleName), ...inferred],
+            user.role,
+          );
+        }
+      }
+      const role = primaryRoleKey(allRoles);
+      const primaryRbac = userRolesResult.find((r) => r.roleName === role);
+      const roleLabel = primaryRbac?.roleNameAr
+        || ROLE_LABELS_AR[role as keyof typeof ROLE_LABELS_AR]
         || user.jobTitle
         || "قارئ";
 
       // Also derive permissions from role-based mapping (for permissions defined in code but not yet in DB)
-      const { getPermissionsForRoles } = await import("@shared/rbac-constants");
-      const roleBasedPermissions = getPermissionsForRoles(allRoles);
-      
-      // Merge both sources
-      const permissionsArray = [...new Set([...dbPermissions, ...roleBasedPermissions])];
+      const { resolveEffectivePermissions } = await import("@shared/rbac-constants");
+      // دمج DB ∪ خريطة الكود مع استبعاد ROLE_PERMISSION_DENY_MAP (مثل meetings.create لمدير المحتوى)
+      const permissionsArray = resolveEffectivePermissions(allRoles, dbPermissions);
 
       // الناشر الموثوق (auto_publish) يستخدم المحرر الأساسي وينشر منه —
       // نمنحه articles.publish ديناميكياً ما دامت بوابة نشره مفتوحة، حتى
@@ -1410,14 +1570,40 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         }
       }
 
-      // SECURITY: Never send passwordHash to client
-      const { passwordHash, twoFactorSecret, ...safeUser } = user;
+      // حساب الوكالة (مالك publishers أو linkedPublisherId) — للواجهة
+      // (مثلاً قائمة المراسلين تقتصر على «صحيفة سبق»).
+      let publisherAccount: {
+        id: string;
+        agencyName: string;
+        autoPublish: boolean;
+      } | null = null;
+      try {
+        const pub = await resolvePublisherForUser(userId);
+        if (pub) {
+          publisherAccount = {
+            id: pub.id,
+            agencyName: pub.agencyName,
+            autoPublish: pub.autoPublish === true,
+          };
+        }
+      } catch (err) {
+        console.error("[auth/user] resolvePublisherForUser failed:", err);
+      }
+
+      // SECURITY: never send credential columns to a client. This used to
+      // strip only passwordHash + twoFactorSecret by hand and shipped
+      // twoFactorBackupCodes and fcmToken; toPublicUser covers all four and is
+      // drift-tested against the schema.
+      const safeUser = toPublicUser(user);
       const payload = {
         ...safeUser,
         role,
         roles: allRoles,
         roleLabel,
         permissions: permissionsArray,
+        publisherAccount,
+        // للواجهة: حساب جوال بلا كلمة مرور يُطلب منه تعيينها في استكمال الملف.
+        hasPassword: Boolean(user.passwordHash),
       };
       memoryCache.set(authUserCacheKey, payload, 60 * 1000);
       res.json(payload);
@@ -1459,7 +1645,8 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
 
       const user = await storage.updateUser(userId, data);
       memoryCache.delete(`auth-user:${userId}`);
-      res.json(user);
+      // toPublicUser: storage.updateUser returns the raw row (bare .returning()).
+      res.json(toPublicUser(user));
     } catch (error) {
       console.error("Error updating user:", error);
       res.status(500).json({ message: "فشل في تحديث البيانات" });
@@ -1490,7 +1677,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         return res.status(400).json({ message: "رابط الصورة مطلوب" });
       }
 
-      console.log("[Profile Image] Upload URL received:", req.body.profileImageUrl);
+      console.log("[Profile Image] Upload URL received");
 
       // If the URL is already a fully-qualified external URL (Cloudflare
       // Images via imagedelivery.net, or any other CDN), we skip the
@@ -1510,7 +1697,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
             visibility: "public",
           }
         );
-        console.log("[Profile Image] Object path after ACL:", objectPath);
+        console.log("[Profile Image] Object ACL updated");
       }
 
       // Update user profile with the new image path
@@ -1519,12 +1706,12 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       });
       memoryCache.delete(`auth-user:${userId}`);
 
-      console.log("[Profile Image] User updated with new image:", user.profileImageUrl);
+      console.log("[Profile Image] User image updated");
 
       res.json({ 
         success: true,
         profileImageUrl: objectPath,
-        user
+        user: toPublicUser(user)
       });
     } catch (error) {
       console.error("Error updating profile image:", error);
@@ -1553,9 +1740,9 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         limit = 20,
       } = req.query;
 
-      const pageNum = Math.max(1, parseInt(page as string, 10) || 1);
+      const pageNum = parsePage(page, 1);
       // radix MUST be 10 (was 20 → "20" parsed as base-20 = 40, corrupting paging).
-      const limitNum = Math.min(100, Math.max(1, parseInt(limit as string, 10) || 20));
+      const limitNum = parseLimit(limit, 20, 100);
       const offset = (pageNum - 1) * limitNum;
 
       // Build where conditions
@@ -1791,7 +1978,11 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
   // images, rich editor, angle-writer topic images) — NOT just the media library.
   // Intentionally auth-only: angle writers and avatar uploaders have no media.*
   // permission, so do NOT add requirePermission("media.upload") — it'd break them.
-  app.post("/api/media/upload", isAuthenticated, mediaUploadLimiter, parseMediaUpload, async (req: any, res) => {
+  app.post("/api/media/upload", mediaUploadProbe, markMediaUploadStage("auth"), isAuthenticated, markMediaUploadStage("rate-limit"), mediaUploadLimiter, markMediaUploadStage("body-receive"), parseMediaUpload, async (req: any, res) => {
+    const probe = req.__mediaUploadProbe as MediaUploadProbe;
+    const uploadStartedAt = probe?.startedAt ?? Date.now();
+    const handlerStartedAt = Date.now();
+    const uploadTimings: Record<string, number> = {};
     try {
       const userId = req.user.id;
 
@@ -1810,6 +2001,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       // Verify the file's actual magic bytes match the claimed MIME
       // (security audit M1, 2026-05-11). multer's fileFilter only
       // trusts the client-declared header; sharp reads the real format.
+      probe.stage = "verify";
       if (req.file.mimetype.startsWith('image/')) {
         let verify = await verifyImageMagicBytes(req.file.buffer, req.file.mimetype);
         // iPhone / some browsers mislabel HEIC/AVIF as image/jpeg. If the
@@ -1860,10 +2052,30 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       }
 
       console.log("[Media Upload] File received:", {
-        originalName: req.file.originalname,
         mimetype: req.file.mimetype,
         size: req.file.size,
       });
+
+      // Per-phase timings land in one log line at the end so Railway logs
+      // show where a slow upload spent its time (verify/transcode vs provider
+      // vs DB) without guessing.
+      // Keep transport/auth/multer time separate from application work. The
+      // lifecycle line reports body arrival; this phase starts when the async
+      // upload handler actually begins.
+      uploadTimings.verify = Date.now() - handlerStartedAt;
+      if (probe.bodyReceivedAt) uploadTimings.body = probe.bodyReceivedAt - uploadStartedAt;
+      let phaseStartedAt = Date.now();
+
+      // Perceptual hash (dedup warning) needs a decode pass over the source.
+      // Start it now so it overlaps the network upload instead of running
+      // serially after the DB insert. Best-effort: a failure just means no
+      // duplicate warning.
+      const uploadBufferForHash = req.file.buffer;
+      const perceptualHashPromise: Promise<string | null> = req.file.mimetype.startsWith('image/')
+        ? import("./services/mediaHashService")
+            .then((m) => m.computeDHash(uploadBufferForHash))
+            .catch(() => null)
+        : Promise.resolve(null);
 
       // Generate unique filename with year/month structure
       const now = new Date();
@@ -1883,6 +2095,8 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       // Only explicit article purposes join the R2 rollout; every other image
       // keeps the existing Cloudflare Images behavior.
       let cloudflareUrl: string | null = null;
+      let providerWidth: number | undefined;
+      let providerHeight: number | undefined;
       const uploadPurpose = String(req.body?.purpose || req.body?.entityType || '').trim();
       const isEditorialImage = isNewsImagePurpose(uploadPurpose);
       if (
@@ -1891,6 +2105,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
           ? newsImageStorageService.isUploadAvailable()
           : cloudflareImagesService.isCloudflareConfigured())
       ) {
+        probe.stage = "provider";
         const imageResult = isEditorialImage
           ? await newsImageStorageService.upload({
               buffer: req.file.buffer,
@@ -1906,20 +2121,29 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
               { uploadedBy: userId.toString(), type: 'media' },
               req.file.mimetype,
             );
+        uploadTimings.provider = Date.now() - phaseStartedAt;
         if (imageResult.success && imageResult.deliveryUrl) {
           cloudflareUrl = imageResult.deliveryUrl;
+          const providerDims = imageResult as { width?: number; height?: number };
+          if (typeof providerDims.width === 'number' && typeof providerDims.height === 'number') {
+            providerWidth = providerDims.width;
+            providerHeight = providerDims.height;
+          }
           console.log("[Media Upload] Image upload successful:", {
             provider: ('provider' in imageResult && imageResult.provider) || 'cloudflare-images',
             imageId: imageResult.imageId,
+            ms: uploadTimings.provider,
           });
         } else {
           console.log("[Media Upload] Primary image upload failed, will try GCS fallback:", imageResult.error);
         }
       }
+      phaseStartedAt = Date.now();
 
       // GCS path — used only when CF didn't claim the upload. Wrapped in
       // try/catch so a missing/misconfigured GCS doesn't kill the request
       // when CF already has the file.
+      probe.stage = "storage";
       let storagePath: string;
       if (cloudflareUrl) {
         storagePath = cloudflareUrl;
@@ -1996,10 +2220,10 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       // Extract real dimensions for images via sharp (the columns existed but
       // were always left NULL before). Best-effort — a metadata failure must
       // not block the upload.
-      let width: number | undefined;
-      let height: number | undefined;
+      let width: number | undefined = providerWidth;
+      let height: number | undefined = providerHeight;
 
-      if (req.file.mimetype.startsWith('image/')) {
+      if (!width && req.file.mimetype.startsWith('image/')) {
         try {
           const meta = await sharp(req.file.buffer).metadata();
           width = meta.width;
@@ -2008,6 +2232,9 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
           console.log("[Media Upload] Could not extract image dimensions:", err);
         }
       }
+      uploadTimings.storage = Date.now() - phaseStartedAt;
+      phaseStartedAt = Date.now();
+      probe.stage = "database";
 
       // Upload is image-only (the multer fileFilter rejects everything else),
       // so the type is always "image". Real video/document support is a
@@ -2195,15 +2422,26 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       // Phase 7: perceptual-hash dedup — persist the hash and surface an
       // existing visually-identical file so the client can warn the uploader.
       // assignPerceptualHash is already best-effort (swallows missing-column).
+      uploadTimings.db = Date.now() - phaseStartedAt;
+      phaseStartedAt = Date.now();
+      probe.stage = "hash";
       let duplicateOf = null;
       if (fileType === 'image') {
         try {
           const { assignPerceptualHash } = await import("./services/mediaHashService");
-          duplicateOf = await assignPerceptualHash(mediaFile.id, req.file.buffer);
+          // Hash was computed concurrently with the provider upload; only the
+          // two indexed queries (UPDATE + duplicate lookup) remain here.
+          duplicateOf = await assignPerceptualHash(mediaFile.id, req.file.buffer, await perceptualHashPromise);
         } catch (hashErr) {
           console.warn("[Media Upload] Hash step failed:", hashErr instanceof Error ? hashErr.message : hashErr);
         }
       }
+      uploadTimings.hash = Date.now() - phaseStartedAt;
+      uploadTimings.handler = Date.now() - handlerStartedAt;
+      uploadTimings.total = Date.now() - uploadStartedAt;
+      console.log(
+        `[Media Upload] timings requestId=${probe.requestId} ${Object.entries(uploadTimings).map(([k, v]) => `${k}=${v}ms`).join(' ')} kind=${isEditorialImage ? "editorial" : "generic"} size=${req.file.size}`,
+      );
 
       res.json({
         ...mediaFileWithDetails,
@@ -2212,7 +2450,13 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         duplicateOf,
       });
     } catch (error: any) {
-      console.error("Error uploading media file:", error);
+      console.error("Error uploading media file:", {
+        requestId: probe?.requestId,
+        stage: probe?.stage,
+        errorName: error?.name,
+        errorCode: error?.code,
+        elapsed: Date.now() - uploadStartedAt,
+      });
 
       if (error.code === 'LIMIT_FILE_SIZE') {
         return res.status(400).json({ message: "الملف كبير جداً. الحد الأقصى 10MB" });
@@ -2978,7 +3222,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
 
       // Sort by score descending and take top N
       scoredResults.sort((a, b) => b.score - a.score);
-      const topResults = scoredResults.slice(0, Number(limit));
+      const topResults = scoredResults.slice(0, parseLimit(limit, 10, 50));
 
       // Determine confidence level based on number of matches and scores
       let confidence: "high" | "medium" | "low" = "low";
@@ -3114,7 +3358,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       res.json({ 
         success: true,
         profileImageUrl: publicUrl,
-        user
+        user: toPublicUser(user)
       });
     } catch (error: any) {
       console.error("Error uploading avatar:", error);
@@ -3566,7 +3810,9 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
   app.get("/api/categories/:slug/articles", cacheControl({ maxAge: CACHE_DURATIONS.SHORT, sMaxAge: 300, staleWhileRevalidate: 120 }), async (req, res) => {
     try {
       const slug = req.params.slug;
-      const requestedLimit = req.query.limit ? Math.min(parseInt(req.query.limit as string), 100) : 50;
+      const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 50, maxLimit: 100 });
+      if (!pg) return;
+      const requestedLimit = pg.limit;
 
       const result = await withSWR(
         `category-articles:${slug}:${requestedLimit}`,
@@ -3593,7 +3839,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
                 eq(articleSmartCategories.categoryId, category.id),
                 eq(articles.status, "published")
               ))
-              .orderBy(desc(articleSmartCategories.score), desc(articles.publishedAt))
+              .orderBy(desc(articleSmartCategories.score), desc(sql`COALESCE(${articles.resurfacedAt}, ${articles.publishedAt})`))
               .limit(requestedLimit);
 
             articlesList = smartAssignments.map(item => item.article);
@@ -4947,12 +5193,25 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
           );
         staffUserIds = staffResults.map(s => s.userId).filter(Boolean) as string[];
         
+        // بحث بالجوال: تاريخيًا كان البريد الاصطناعي p<digits>@phone.sabq.org
+        // يجعل بحث ilike(email) يلتقط الأرقام عرضًا. مع إخفاء الاصطناعي
+        // وحسابات الجوال بلا بريد، نطابق أرقام الجوال صراحةً بأي صيغة إدخال
+        // (05… / 5… / +9665…) عبر تجريد غير الأرقام من الطرفين.
+        const searchDigits = searchTerm.replace(/[^0-9]/g, "");
+        const phoneSearchConditions =
+          searchDigits.length >= 4
+            ? [
+                sql`regexp_replace(coalesce(${users.phoneNumber}, ''), '[^0-9]', '', 'g') LIKE ${'%' + searchDigits + '%'}`,
+              ]
+            : [];
+
         // Combine user search with staff search
         const userSearchConditions = or(
           ilike(users.email, `%${searchTerm}%`),
           ilike(users.firstName, `%${searchTerm}%`),
           ilike(users.lastName, `%${searchTerm}%`),
           sql`LOWER(CONCAT(${users.firstName}, ' ', ${users.lastName})) LIKE LOWER(${'%' + searchTerm + '%'})`,
+          ...phoneSearchConditions,
           // Include users found via staff Arabic name search
           ...(staffUserIds.length > 0 ? [inArray(users.id, staffUserIds)] : [])
         );
@@ -4987,6 +5246,8 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
           hasPressCard: users.hasPressCard,
           phoneNumber: users.phoneNumber,
           phoneVerified: users.phoneVerified,
+          // للواجهة: تمييز حسابات الجوال (بريد اصطناعي/مفقود) عن حسابات البريد.
+          authProvider: users.authProvider,
           country: users.country,
           city: users.city,
           gender: users.gender,
@@ -4998,6 +5259,10 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
           bannedUntil: users.bannedUntil,
           suspensionReason: users.suspensionReason,
           banReason: users.banReason,
+          mediaLicenseNumber: users.mediaLicenseNumber,
+          mediaLicenseFileKey: users.mediaLicenseFileKey,
+          mediaLicenseSubmittedAt: users.mediaLicenseSubmittedAt,
+          mediaLicenseExpiresAt: users.mediaLicenseExpiresAt,
         })
         .from(users);
 
@@ -5066,7 +5331,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       // Execute main query
       const userList = await usersListQuery
         .orderBy(desc(users.createdAt))
-        .limit(isPaginated ? pageSize : parseInt(limit as string, 10))
+        .limit(isPaginated ? pageSize : Math.max(1, parseInt(limit as string, 10) || 500))
         .offset(isPaginated ? offset : 0);
 
       const userIds = userList.map(u => u.id);
@@ -5144,23 +5409,26 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         };
       });
 
-      // Debug: Log banned/deleted users
-      const bannedInResponse = usersWithRoles.filter((u: any) => u.status === "banned" || u.status === "deleted");
-      if (bannedInResponse.length > 0) {
-        console.log("[ADMIN USERS API] Banned/deleted users in response:", bannedInResponse.map((u: any) => ({ id: u.id, email: u.email, status: u.status })));
-      } else {
-        console.log("[ADMIN USERS API] No banned users found. Sample statuses:", usersWithRoles.slice(0, 3).map((u: any) => ({ id: u.id, status: u.status })));
-      }
-
       // Return in both formats for compatibility. `total` + `page` +
       // `pageSize` + `hasMore` ride along when the request was paged
       // (`?page=N` was supplied). Legacy callers see only the original
       // shape so nothing breaks.
-      const itemsMapped = usersWithRoles.map(u => ({
+      const licenseEnforcement = isMediaLicenseEnforcementActive();
+      const itemsMapped = usersWithRoles.map(u => {
+        const licenseSubmitted = Boolean(
+          u.mediaLicenseNumber && u.mediaLicenseFileKey && u.mediaLicenseSubmittedAt,
+        );
+        const licenseOk =
+          isInstitutionalMediaByline(u.id) ||
+          mediaLicenseFlags(licenseSubmitted, u.mediaLicenseExpiresAt).hasLicense;
+        // بعد المهلة: بلا ترخيص ساري = غير قابل للاختيار في منتقي المراسل/الكاتب
+        const licenseSelectable = !licenseEnforcement || licenseOk;
+        return {
           id: u.id,
-          // Prefer staff Arabic name, then full name, then email
-          name: u.staffNameAr || u.staffName || `${u.firstName || ''} ${u.lastName || ''}`.trim() || u.email,
+          // Prefer staff Arabic name, then full name, then email, then phone
+          name: u.staffNameAr || u.staffName || `${u.firstName || ''} ${u.lastName || ''}`.trim() || u.email || u.phoneNumber || "عضو جوال",
           email: u.email,
+          authProvider: u.authProvider,
           avatarUrl: u.staffProfileImage || u.profileImageUrl,
           firstName: u.firstName,
           lastName: u.lastName,
@@ -5178,7 +5446,10 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
           lastLoginAt: u.lastLoginAt,
           lastDeviceInfo: u.lastDeviceInfo,
           loyalty: u.loyalty,
-        }));
+          licenseSelectable,
+          mediaLicenseValid: licenseOk,
+        };
+      });
       res.json({
         items: itemsMapped,
         users: usersWithRoles,
@@ -5274,6 +5545,11 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         });
       }
 
+      // This generic user-update endpoint also assigns a role (roleId) — apply the
+      // same hierarchy guard as /roles so an admin can't mint system_admin here (audit #2).
+      const patchRoleErr = await roleIdsAssignmentError(adminUserId, parsed.data.roleId ? [parsed.data.roleId] : null);
+      if (patchRoleErr) return res.status(patchRoleErr.status).json({ message: patchRoleErr.message });
+
       // Get old user data for logging
       const [oldUser] = await db
         .select()
@@ -5322,7 +5598,18 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       if (parsed.data.lastName !== undefined) updateData.lastName = parsed.data.lastName;
       if (parsed.data.firstNameEn !== undefined) updateData.firstNameEn = parsed.data.firstNameEn || null;
       if (parsed.data.lastNameEn !== undefined) updateData.lastNameEn = parsed.data.lastNameEn || null;
-      if (parsed.data.phoneNumber !== undefined) updateData.phoneNumber = parsed.data.phoneNumber || null;
+      if (parsed.data.phoneNumber !== undefined) {
+        if (parsed.data.phoneNumber) {
+          const { assertPhoneAvailable, normalizePhone } = await import("./services/phoneAuth");
+          const phoneCheck = await assertPhoneAvailable(parsed.data.phoneNumber, targetUserId);
+          if (!phoneCheck.ok) {
+            return res.status(409).json({ message: phoneCheck.message });
+          }
+          updateData.phoneNumber = phoneCheck.e164 ?? normalizePhone(parsed.data.phoneNumber) ?? parsed.data.phoneNumber;
+        } else {
+          updateData.phoneNumber = null;
+        }
+      }
       if (parsed.data.profileImageUrl !== undefined) updateData.profileImageUrl = parsed.data.profileImageUrl || null;
       if (parsed.data.status !== undefined) updateData.status = parsed.data.status;
       if (parsed.data.emailVerified !== undefined) updateData.emailVerified = parsed.data.emailVerified;
@@ -5330,20 +5617,33 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       if (parsed.data.verificationBadge !== undefined) updateData.verificationBadge = parsed.data.verificationBadge;
       
       // Press Card fields (Apple Wallet Digital Press Card)
+      //
+      // رقم البطاقة دائم كرقم الهوية (النظام المركزي في
+      // services/pressCardNumberService): لا يُعدَّل بعد إصداره، ولا
+      // يُمحى عند إطفاء التفعيل — الإطفاء يوقف الإصدار فقط، وإعادة
+      // التفعيل تعيد الرقم نفسه لصاحبه.
+      const pressIdCheck = evaluatePressIdNumberChange(
+        oldUser.pressIdNumber,
+        parsed.data.pressIdNumber,
+      );
+      if (!pressIdCheck.ok) {
+        return res.status(400).json({ message: pressIdCheck.message });
+      }
+      if (pressIdCheck.value !== undefined) updateData.pressIdNumber = pressIdCheck.value;
+
       if (parsed.data.hasPressCard !== undefined) {
         updateData.hasPressCard = parsed.data.hasPressCard;
-        
-        // If press card is disabled, clear all press card data
+
+        // If press card is disabled, clear the card presentation fields
+        // (the permanent press ID number is deliberately preserved)
         if (!parsed.data.hasPressCard) {
           updateData.jobTitle = null;
           updateData.department = null;
-          updateData.pressIdNumber = null;
           updateData.cardValidUntil = null;
         } else {
           // Only update press card fields if press card is enabled
           if (parsed.data.jobTitle !== undefined) updateData.jobTitle = parsed.data.jobTitle ?? null;
           if (parsed.data.department !== undefined) updateData.department = parsed.data.department ?? null;
-          if (parsed.data.pressIdNumber !== undefined) updateData.pressIdNumber = parsed.data.pressIdNumber ?? null;
           if (parsed.data.cardValidUntil !== undefined) {
             if (parsed.data.cardValidUntil) {
               const parsedDate = new Date(parsed.data.cardValidUntil);
@@ -5362,7 +5662,6 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         // Only allow updating individual fields if press card is currently enabled
         if (parsed.data.jobTitle !== undefined) updateData.jobTitle = parsed.data.jobTitle ?? null;
         if (parsed.data.department !== undefined) updateData.department = parsed.data.department ?? null;
-        if (parsed.data.pressIdNumber !== undefined) updateData.pressIdNumber = parsed.data.pressIdNumber ?? null;
         if (parsed.data.cardValidUntil !== undefined) {
           if (parsed.data.cardValidUntil) {
             const parsedDate = new Date(parsed.data.cardValidUntil);
@@ -5507,6 +5806,8 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         .set({ status: "banned" })
         .where(eq(users.id, targetUserId));
 
+      await invalidateAllUserSessions(targetUserId); // revoke access immediately: web+mobile sessions + cache (audit #8)
+
       // Log activity
       await logActivity({
         userId: adminUserId,
@@ -5625,6 +5926,8 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         },
       });
 
+      await invalidateAllUserSessions(targetUserId); // kill any lingering sessions (audit #8)
+
       console.log(`[ADMIN] User ${targetUserId} permanently deleted by admin ${adminUserId}`);
 
       res.json({
@@ -5684,10 +5987,12 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       // Update password
       await db
         .update(users)
-        .set({ 
+        .set({
           passwordHash: hashedPassword
         })
         .where(eq(users.id, targetUserId));
+
+      await invalidateAllUserSessions(targetUserId); // admin reset must also evict a compromised session (audit #8)
 
       // Log activity
       await logActivity({
@@ -5729,13 +6034,27 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         });
       }
 
+      // Can't bootstrap a system_admin via user creation either (audit #2).
+      const createRoleErr = await roleIdsAssignmentError(createdBy, parsed.data.roleIds);
+      if (createRoleErr) return res.status(createRoleErr.status).json({ message: createRoleErr.message });
+
       // Pre-check lower(email) قبل الإدراج (يطابق /api/register، يقلل الضغط).
       const normalizedEmail = parsed.data.email.trim().toLowerCase();
       const existingUser = await storage.getUserByEmailBasic(normalizedEmail);
       if (existingUser) {
-        console.log("ℹ️ [CREATE USER] Email already registered", { email: normalizedEmail, existingUserId: existingUser.id });
+        console.log("ℹ️ [CREATE USER] Email already registered");
         return res.status(409).json({ message: "هذا البريد الإلكتروني مستخدم بالفعل", existingUser });
       }
+
+      if (parsed.data.phoneNumber) {
+        const { assertPhoneAvailable, normalizePhone } = await import("./services/phoneAuth");
+        const phoneCheck = await assertPhoneAvailable(parsed.data.phoneNumber);
+        if (!phoneCheck.ok) {
+          return res.status(409).json({ message: phoneCheck.message });
+        }
+        parsed.data.phoneNumber = phoneCheck.e164 ?? normalizePhone(parsed.data.phoneNumber) ?? parsed.data.phoneNumber;
+      }
+
       console.log("✅ [CREATE USER] Creating new user with roles", {
         email: parsed.data.email,
         roleIds: parsed.data.roleIds,
@@ -5874,6 +6193,11 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         return res.status(404).json({ message: "User not found" });
       }
 
+      // RBAC hierarchy guard: the assigner may only grant roles their authority
+      // permits — an `admin` must never be able to mint a `system_admin` (audit #2).
+      const rolesErr = await roleIdsAssignmentError(updatedBy, parsed.data.roleIds);
+      if (rolesErr) return res.status(rolesErr.status).json({ message: rolesErr.message });
+
       await storage.updateUserRoles(
         targetUserId,
         parsed.data.roleIds,
@@ -5985,6 +6309,18 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         return res.status(400).json({ message: "التأثير يجب أن يكون 'allow' أو 'deny'" });
       }
 
+      // Escalation guard (audit #2, override vector): 'allow'-granting a
+      // privilege-management permission is a back door to superuser — only a
+      // system_admin may, and no one edits their own overrides.
+      if (userId === grantedBy) {
+        return res.status(403).json({ message: "لا يمكنك تعديل صلاحياتك بنفسك" });
+      }
+      const PRIVILEGE_GRANTING_CODES = new Set(["users.change_role", "users.manage", "system.manage_roles", "permissions.manage", "roles.manage"]);
+      if (effect === "allow" && PRIVILEGE_GRANTING_CODES.has(permissionCode)
+          && (await getRoleAssignmentAuthority(grantedBy)) !== ROLE_NAMES.SYSTEM_ADMIN) {
+        return res.status(403).json({ message: "منح هذه الصلاحية مقصور على مدير النظام" });
+      }
+
       // Upsert the permission override
       const { userPermissionOverrides } = await import("@shared/schema");
       const { eq, and } = await import("drizzle-orm");
@@ -6061,8 +6397,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
   
   app.post("/api/admin/staff/send-credentials", requireAuth, requirePermission("users.manage"), async (req: any, res) => {
     try {
-      const adminUser = req.user;
-      console.log(`📧 [SEND CREDENTIALS] Admin ${adminUser.email} initiating staff credentials send`);
+      console.log("📧 [SEND CREDENTIALS] Staff credentials send initiated");
 
       // Find all staff users by role
       const staffUsers = await db
@@ -6091,13 +6426,19 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
         let password = '';
         for (let i = 0; i < length; i++) {
-          password += chars.charAt(Math.floor(Math.random() * chars.length));
+          // CSPRNG — this password is emailed/stored as a real login credential (audit #10).
+          password += chars.charAt(crypto.randomInt(chars.length));
         }
         return password;
       }
 
       // Process each staff user
       for (const staffUser of staffUsers) {
+        if (!staffUser.email) {
+          // حساب جوال بلا بريد — لا يمكن إرسال بيانات دخول له.
+          results.push({ userId: staffUser.id, email: "", success: false, error: "لا يوجد بريد إلكتروني للحساب" });
+          continue;
+        }
         try {
           // Generate temporary password
           const tempPassword = generateTempPassword(8);
@@ -6195,17 +6536,21 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
                 updatedAt: new Date(),
               } as any)
               .where(eq(users.id, staffUser.id));
-            
+
+            await invalidateAllUserSessions(staffUser.id); // new credentials — evict any old/compromised session (audit #8)
+
             results.push({ userId: staffUser.id, email: staffUser.email, success: true });
-            console.log(`✅ [SEND CREDENTIALS] Sent credentials to ${staffUser.email}`);
+            console.log("✅ [SEND CREDENTIALS] Credentials accepted for delivery");
           } else {
             results.push({ userId: staffUser.id, email: staffUser.email, success: false, error: emailResult.error });
-            console.error(`❌ [SEND CREDENTIALS] Failed to send to ${staffUser.email}: ${emailResult.error}`);
+            console.error("❌ [SEND CREDENTIALS] Provider rejected credentials email");
           }
         } catch (userError) {
           const errorMsg = userError instanceof Error ? userError.message : 'Unknown error';
           results.push({ userId: staffUser.id, email: staffUser.email, success: false, error: errorMsg });
-          console.error(`❌ [SEND CREDENTIALS] Error processing ${staffUser.email}:`, userError);
+          console.error("❌ [SEND CREDENTIALS] Error processing credentials email", {
+            name: userError instanceof Error ? userError.name : "UnknownError",
+          });
         }
       }
 
@@ -6448,6 +6793,15 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
 
       if (!normalizedName || normalizedName.length < 2) {
         return res.status(400).json({ message: "اسم الدور يجب أن يحتوي على حرفين على الأقل" });
+      }
+
+      // Never let a custom role be named into a superuser tier — those names grant
+      // full superuser via getUserPermissions' name check, so creating one would be
+      // a back door around canAssignRole (audit #2). Note: normalization strips the
+      // dot, so "system.admin" arrives as "systemadmin".
+      const RESERVED_ROLE_NAMES = ["system_admin", "systemadmin", "superadmin", "admin"];
+      if (RESERVED_ROLE_NAMES.includes(normalizedName)) {
+        return res.status(400).json({ message: "اسم الدور محجوز ولا يمكن استخدامه" });
       }
 
       // Validate with Zod schema
@@ -6755,7 +7109,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       const { pattern } = req.body;
       if (pattern) {
         memoryCache.invalidatePattern(pattern);
-        console.log(`[Cache] Admin ${req.user.email} purged cache pattern: ${pattern}`);
+        console.log(`[Cache] Admin purged cache pattern: ${pattern}`);
       } else {
         memoryCache.invalidatePattern('^article:');
         memoryCache.invalidatePattern('^articles:');
@@ -6770,7 +7124,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         memoryCache.invalidatePattern('^breaking');
         memoryCache.delete('lite-feed');
         memoryCache.delete('breaking-ticker-active');
-        console.log(`[Cache] Admin ${req.user.email} purged ALL caches`);
+        console.log(`[Cache] Admin purged ALL caches`);
       }
       res.json({ success: true, message: "Cache purged successfully" });
     } catch (error) {
@@ -6789,33 +7143,30 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       const { search, status, articleType, categoryId, authorId, featured, includeAI, page = '1', limit = '30' } = req.query;
       
       // Auto-filter for reporters: they should only see their own articles
-      const userPermissions = await getUserPermissions(req.user.id);
-      console.log("[ARTICLES DEBUG] User:", req.user.email, "| Role from session:", req.user.role, "| Permissions:", userPermissions.slice(0,5).join(", ") + "...");
-      const canViewAllArticles = userPermissions.includes('articles.view_all') || 
+      // The permission middleware has already populated the effective RBAC cache.
+      // Reuse it instead of querying users/roles/permissions again on every list load.
+      const userPermissions = await getEffectiveUserPermissions(req.user.id);
+      const canViewAllArticles = userPermissions.includes('*') ||
+        userPermissions.includes('articles.view_all') ||
         userPermissions.includes('articles.manage') ||
         ['admin', 'system_admin', 'editor', 'chief_editor', 'content_manager'].includes(req.user.role);
       
       // If user cannot view all articles, ALWAYS filter to their own content
       // Ignore any authorId parameter to prevent privilege escalation
       const shouldFilterByUser = !canViewAllArticles;
-      console.log("[ARTICLES DEBUG] canViewAllArticles:", canViewAllArticles, "| shouldFilterByUser:", shouldFilterByUser);
-      const pageNum = Math.max(1, parseInt(page as string, 10) || 1);
-      const limitNum = Math.max(1, Math.min(100, parseInt(limit as string, 10) || 30));
+      const pageNum = parsePage(page, 1);
+      const limitNum = parseLimit(limit, 30, 100);
       const offset = (pageNum - 1) * limitNum;
 
       const reporterAlias = aliasedTable(users, 'reporter');
 
       // Build where conditions array
-      const whereConditions = [];
+      const whereConditions: (SQL<unknown> | undefined)[] = [];
 
-      if (search) {
-        whereConditions.push(
-          or(
-            ilike(articles.title, `%${search}%`),
-            ilike(articles.excerpt, `%${search}%`)
-          )
-        );
-      }
+      // شرط البحث يُدفع لاحقًا عبر مسار المرشحين (قبل الاستعلام الرئيسي) —
+      // دمج ILIKE مع ORDER BY يجعل المخطط يمشي فهرس الترتيب ويرشّح صفًا صفًا
+      // (قياس 2026-07-25: متوسط 25s لهذه النقطة عند البحث).
+      const adminSearchPattern = search ? `%${search}%` : null;
 
       if (status && status !== "all") {
         whereConditions.push(eq(articles.status, status));
@@ -6877,74 +7228,124 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         }
       }
 
-      // Build query with all conditions
-      let query = db
-        .select({
-          article: articleAdminSelect,
-          category: categories,
-          author: {
-            id: users.id,
-            firstName: users.firstName,
-            lastName: users.lastName,
-            firstNameEn: users.firstNameEn,
-            lastNameEn: users.lastNameEn,
-            email: users.email,
-            profileImageUrl: users.profileImageUrl,
-          },
-          reporter: {
-            id: reporterAlias.id,
-            firstName: reporterAlias.firstName,
-            lastName: reporterAlias.lastName,
-            firstNameEn: reporterAlias.firstNameEn,
-            lastNameEn: reporterAlias.lastNameEn,
-            email: reporterAlias.email,
-            profileImageUrl: reporterAlias.profileImageUrl,
-          },
-          publisher: {
-            id: publishers.id,
-            companyName: publishers.agencyName,
-          },
-        })
-        .from(articles)
-        .leftJoin(categories, eq(articles.categoryId, categories.id))
-        .leftJoin(users, eq(articles.authorId, users.id))
-        .leftJoin(reporterAlias, eq(articles.reporterId, reporterAlias.id))
-        .leftJoin(publishers, eq(articles.publisherId, publishers.id))
-        .$dynamic();
-
-      // Apply all conditions
-      if (whereConditions.length > 0) {
-        query = query.where(and(...whereConditions));
-      }
-
-      
-      // Get total count for pagination
-      let countQuery = db.select({ count: sql<number>`count(*)` }).from(articles).$dynamic();
-      if (whereConditions.length > 0) {
-        countQuery = countQuery.where(and(...whereConditions));
-      }
-      const [countResult] = await countQuery;
-      const total = Number(countResult?.count || 0);
-
-      // Determine orderBy dynamically based on status so archived/drafts with null publishedAt sort correctly
-      // displayOrder leads every clause (matching the public queries in storage.ts) so drag-and-drop
-      // reordering from the dashboard persists after refetch instead of snapping back to date order
+      // Draft/archive retain manual order. Scheduled rows show the nearest due
+      // time first. Published rows use the indexed candidate merge below so an
+      // old scheduled draft rises when published without losing manual curation.
       let orderClauses;
       if (status === "archived") {
         orderClauses = [desc(articles.displayOrder), desc(articles.updatedAt), desc(articles.createdAt)];
       } else if (status === "draft") {
         orderClauses = [desc(articles.displayOrder), desc(articles.updatedAt), desc(articles.createdAt)];
       } else if (status === "scheduled") {
-        orderClauses = [desc(articles.displayOrder), desc(articles.scheduledAt), desc(articles.createdAt)];
+        orderClauses = [adminScheduledOrder];
       } else {
         orderClauses = [desc(articles.displayOrder), desc(articles.publishedAt), desc(articles.createdAt)];
       }
 
-      query = query.orderBy(...orderClauses)
-        .limit(limitNum)
-        .offset(offset);
+      // مسار المرشحين للبحث: صفِّ المطابقات أولًا بلا ترتيب (Bitmap Scan على
+      // فهارس trgm) ثم رتّب الدفعة الصغيرة. العدّاد يأتي من قائمة المرشحين
+      // نفسها (بسقف 1000) بدل count(*) ثانٍ بنفس تكلفة المسح.
+      let searchCandidateTotal: number | null = null;
+      if (adminSearchPattern) {
+        const candidates = await db
+          .select({ id: articles.id })
+          .from(articles)
+          .where(and(
+            ...whereConditions.filter((c): c is SQL<unknown> => Boolean(c)),
+            or(
+              ilike(articles.title, adminSearchPattern),
+              ilike(articles.excerpt, adminSearchPattern),
+            ),
+          ))
+          .limit(1000);
+        if (candidates.length === 0) {
+          return res.json({ articles: [], total: 0, page: pageNum, limit: limitNum, totalPages: 0 });
+        }
+        whereConditions.push(inArray(articles.id, candidates.map((c) => c.id)));
+        searchCandidateTotal = candidates.length;
+      }
 
-      const results = await query;
+      // انحدار 2026-07-25: كان هذا ملفوفًا بـwithStatementTimeout (معاملة صريحة).
+      // على نقطة Neon `-pooler` يعمل PgBouncer في وضع transaction pooling،
+      // فالمعاملة تُثبّت اتصال خادم طوال مدتها بينما الاستعلام المفرد يحرره فورًا.
+      // سقف زمن الاستعلام يُضبط الآن على مستوى الدور في Neon، فلا حاجة للمعاملة.
+      const { results, total } = await (async () => {
+        const tx = db;
+        let query = tx
+          .select({
+            article: articleAdminSelect,
+            category: categories,
+            author: {
+              id: users.id,
+              firstName: users.firstName,
+              lastName: users.lastName,
+              firstNameEn: users.firstNameEn,
+              lastNameEn: users.lastNameEn,
+              email: users.email,
+              profileImageUrl: users.profileImageUrl,
+            },
+            reporter: {
+              id: reporterAlias.id,
+              firstName: reporterAlias.firstName,
+              lastName: reporterAlias.lastName,
+              firstNameEn: reporterAlias.firstNameEn,
+              lastNameEn: reporterAlias.lastNameEn,
+              email: reporterAlias.email,
+              profileImageUrl: reporterAlias.profileImageUrl,
+            },
+            publisher: {
+              id: publishers.id,
+              companyName: publishers.agencyName,
+            },
+          })
+          .from(articles)
+          .leftJoin(categories, eq(articles.categoryId, categories.id))
+          .leftJoin(users, eq(articles.authorId, users.id))
+          .leftJoin(reporterAlias, eq(articles.reporterId, reporterAlias.id))
+          .leftJoin(publishers, eq(articles.publisherId, publishers.id))
+          .$dynamic();
+
+        // Apply all conditions
+        if (whereConditions.length > 0) {
+          query = query.where(and(...whereConditions));
+        }
+
+        // Get total count for pagination — عند البحث يكفينا عدد المرشحين
+        // المحسوب مسبقًا بدل count(*) ثانٍ بنفس تكلفة المسح. في القائمة
+        // العادية لا يعتمد العد على صفوف الصفحة، لذلك نشغّلهما بالتوازي.
+        const requestedMetricsStatus: 'published' | 'draft' | 'archived' | null =
+          status === 'published' ? 'published' :
+          status === 'draft' ? 'draft' :
+          status === 'archived' ? 'archived' : null;
+        const metricsTotalStatus = !shouldFilterByUser && whereConditions.length === 1
+          ? requestedMetricsStatus
+          : null;
+        const totalPromise = searchCandidateTotal !== null
+          ? Promise.resolve(searchCandidateTotal)
+          : metricsTotalStatus
+            ? storage.getArticlesMetrics().then((metrics) => metrics[metricsTotalStatus])
+          : (async () => {
+              let countQuery = tx.select({ count: sql<number>`count(*)` }).from(articles).$dynamic();
+              if (whereConditions.length > 0) {
+                countQuery = countQuery.where(and(...whereConditions));
+              }
+              const [countResult] = await countQuery;
+              return Number(countResult?.count || 0);
+            })();
+
+        const rowsPromise = status === "published"
+          ? (async () => {
+              const ids = await getAdminPublishedPageIds(and(...whereConditions), limitNum, offset);
+              if (!ids.length) return [];
+              const rows = await query.where(and(...whereConditions, inArray(articles.id, ids)));
+              const position = new Map(ids.map((id, index) => [id, index]));
+              return rows.sort((a, b) => position.get(a.article.id)! - position.get(b.article.id)!);
+            })()
+          : query.orderBy(...orderClauses).limit(limitNum).offset(offset);
+        const [totalCount, rows] = await Promise.all([totalPromise, rowsPromise]);
+
+        return { results: rows, total: totalCount };
+      })();
 
       const formattedArticles = results.map((row) => ({
         ...row.article,
@@ -6953,8 +7354,12 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         publisher: row.publisher,
       }));
 
+      const writerIds = collectOpinionDraftWriterIds(formattedArticles);
+      const slotsByWriter = await getNextSlotsForWriters(writerIds);
+      const articlesWithSlots = attachWriterWeeklySlots(formattedArticles, slotsByWriter);
+
       res.json({ 
-        articles: formattedArticles, 
+        articles: articlesWithSlots, 
         total,
         page: pageNum,
         limit: limitNum,
@@ -7041,23 +7446,23 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         return res.status(404).json({ message: "Article not found" });
       }
 
-      // Own-only roles (edit_own / opinion.edit_own without broader view/edit)
-      // may only open articles they authored, reported, or submitted.
-      const userPermissions = await getUserPermissions(userId);
-      const canViewAny =
-        userPermissions.includes("articles.view") ||
-        userPermissions.includes("articles.edit") ||
+      // فتح المقال في المحرر سطحُ تحرير لا عرض: «articles.view» ترى القوائم ولا
+      // تفتح مواد الآخرين (حادثة 2026-08-08) — الفتح للمكتب أو للمالك فقط.
+      const userPermissions = await getEffectiveUserPermissions(userId);
+      const isOpinionArticle = result.article.articleType === "opinion";
+      const canOpenAny =
+        userPermissions.includes("*") ||
+        userPermissions.includes("system.admin") ||
         userPermissions.includes("articles.edit_any") ||
-        userPermissions.includes("opinion.view") ||
-        userPermissions.includes("opinion.edit_any") ||
-        userPermissions.includes("system.admin");
-      if (!canViewAny) {
+        userPermissions.includes("articles.publish") ||
+        (isOpinionArticle && userPermissions.includes("opinion.edit_any"));
+      if (!canOpenAny) {
         const isOwner =
           result.article.authorId === userId ||
           result.article.reporterId === userId ||
           result.article.submitterId === userId;
         if (!isOwner) {
-          return res.status(403).json({ message: "Forbidden" });
+          return res.status(403).json({ message: "لا تملك صلاحية فتح هذه المادة — ليست من موادك" });
         }
       }
 
@@ -7175,6 +7580,12 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         authorId = opinionAuthorId;
       }
 
+      // حسابات الوكالات: الإسناد الظاهر للقارئ دائماً «صحيفة سبق»
+      const creatorPublisher = await resolvePublisherForUser(req.user.id);
+      if (creatorPublisher) {
+        parsed.data.reporterId = SABQ_NEWSPAPER_ACCOUNT_ID;
+      }
+
       // Validate reporterId if provided
       if (parsed.data.reporterId) {
         // Check if user exists
@@ -7207,23 +7618,12 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
           });
         }
       }
-      // Check publish permission if status is "published"
-      if (parsed.data.status === 'published') {
-        // Publisher-agency accounts have a publishing window (publishers.
-        // publishing_ends_at); once it passes, publishing is blocked even
-        // though the role/permission still allows it.
-        const gate = await getPublishingGate(req.user.id);
-        if (gate.publisher && !gate.allowed) {
-          return res.status(403).json({ message: gate.message, code: gate.code });
-        }
-
-        const userPermissions = await getUserPermissions(req.user.id);
-        // الناشر الموثوق (auto_publish) ينشر من المحرر الأساسي دون
-        // articles.publish العامة — بوابته المفتوحة هي التفويض
-        const canPublish = userPermissions.includes("articles.publish")
-          || (gate.allowed && gate.publisher?.autoPublish === true);
-        if (!canPublish) {
-          return res.status(403).json({ message: "You don't have permission to publish articles. Please save as draft." });
+      // Publishing gate — covers "scheduled" as well as "published", plus the
+      // publisher publishing-window check. See server/services/publishGate.ts.
+      {
+        const denial = await denyPublish(req.user.id, parsed.data.status);
+        if (denial) {
+          return res.status(denial.httpStatus).json({ message: denial.message, code: denial.code });
         }
       }
 
@@ -7233,6 +7633,12 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         ...parsed.data,
         authorId,
       };
+
+      if (creatorPublisher) {
+        articleData.reporterId = SABQ_NEWSPAPER_ACCOUNT_ID;
+        articleData.publisherId = creatorPublisher.id;
+        articleData.isPublisherNews = true;
+      }
 
       // Opinion: authorId may be the writer; track the entering editor separately.
       if (
@@ -7246,11 +7652,18 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       // Contributor creation can save and submit in one request. Without
       // this, the client navigates away believing the new article is pending
       // while the database still has a plain draft.
+      // الناشر الموثوق (auto_publish): لا يُرسل للمراجعة — يُنشر مباشرة.
       if (req.body?.submitForReview === true) {
-        const isContributor = await userHasAnyRole(req.user.id, ["opinion_author", "reporter"]);
-        if (isContributor) {
-          articleData.reviewStatus = "pending_review";
-          articleData.status = "draft";
+        if (await trustedPublisherCanPublish(req.user.id)) {
+          articleData.status = "published";
+          articleData.reviewStatus = null;
+          if (!articleData.publishedAt) articleData.publishedAt = new Date();
+        } else {
+          const isContributor = await userHasAnyRole(req.user.id, ["opinion_author", "reporter"]);
+          if (isContributor) {
+            articleData.reviewStatus = "pending_review";
+            articleData.status = "draft";
+          }
         }
       }
       
@@ -7263,28 +7676,26 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         articleData.displayOrder = Math.floor(Date.now() / 1000);
       }
 
-      // Check for duplicate slug and append suffix if needed
-      let finalSlug = articleData.slug;
-      let slugSuffix = 1;
-      let slugExists = true;
-      
-      while (slugExists) {
-        const [existingArticle] = await db
-          .select({ id: articles.id })
-          .from(articles)
-          .where(eq(articles.slug, finalSlug))
-          .limit(1);
-        
-        if (existingArticle) {
-          slugSuffix++;
-          finalSlug = `${articleData.slug}-${slugSuffix}`;
-        } else {
-          slugExists = false;
+      // Ensure unique slug (appends -2, -3 if duplicate exists)
+      articleData.slug = await resolveUniqueArticleSlug(articleData.slug);
+      articleData.englishSlug = generateEnglishSlug(parsed.data.title);
+
+      // من ٣١ يوليو: لا نشر/إرسال بلا ترخيص مهني ساري لصاحب الاسم
+      if (articleData.status === "published" || req.body?.submitForReview === true) {
+        const bylineUserId = resolveContentBylineUserId({
+          articleType: articleData.articleType,
+          authorId: articleData.authorId,
+          reporterId: articleData.reporterId,
+          opinionAuthorId: req.body?.opinionAuthorId,
+        });
+        const licenseGate = await assertMediaLicenseAllowsSubmission(bylineUserId);
+        if (!licenseGate.ok) {
+          return res.status(403).json({
+            message: licenseGate.message,
+            code: licenseGate.code,
+          });
         }
       }
-      
-      articleData.slug = finalSlug;
-      articleData.englishSlug = generateEnglishSlug(parsed.data.title);
 
       const [newArticle] = await db
         .insert(articles)
@@ -7400,7 +7811,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
               authorId: newArticle.authorId,
               reporterId: newArticle.reporterId,
               submitterId: newArticle.submitterId,
-            }, event);
+            }, event, undefined, { excludeUserId: req.user?.id });
           } catch (notifyErr: any) {
             console.error('[CreateArticle Notify] error:', notifyErr?.message || notifyErr);
           }
@@ -7603,10 +8014,13 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         return res.status(404).json({ message: "Article not found" });
       }
 
-      // Check permissions: edit_own or edit_any
-      const userPermissions = await getUserPermissions(userId);
-      const canEditOwn = userPermissions.includes("articles.edit_own");
-      const canEditAny = userPermissions.includes("articles.edit_any");
+      // Check permissions: edit_own or edit_any — من الصلاحيات الفعلية (نفس
+      // مصدر بوابة requireAnyPermission) بدل getUserPermissions (DB فقط).
+      const userPermissions = await getEffectiveUserPermissions(userId);
+      const { canEditOwn, canEditAny } = resolveArticleEditFlags(
+        userPermissions,
+        existingArticle.articleType,
+      );
 
       // User can edit if they have edit_any, or if they have edit_own AND own the row
       // (author, reporter, or original submitter — matches contributor analytics).
@@ -7649,6 +8063,30 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         });
       }
 
+      // حارس الهبوط scheduled/published→draft — القاعدة في publishGateRules.decideStatusDemotion
+      const demotion = decideStatusDemotion({
+        requestedStatus: parsed.data.status,
+        currentStatus: existingArticle.status,
+        confirmed: req.body?.confirmStatusDowngrade === true,
+        permissions: userPermissions,
+        articleType: existingArticle.articleType,
+      });
+      if (demotion.action === "forbid") {
+        return res.status(demotion.httpStatus).json({ message: demotion.message, code: demotion.code });
+      }
+      if (demotion.action === "ignore") {
+        console.warn(`[ARTICLE UPDATE] ignored implicit ${existingArticle.status}→draft demotion for ${articleId} by ${userId} — status preserved`);
+        delete parsed.data.status;
+      }
+
+      // حسابات الوكالات: الإسناد الظاهر للقارئ دائماً «صحيفة سبق»
+      const updaterPublisher = await resolvePublisherForUser(req.user.id);
+      if (updaterPublisher) {
+        parsed.data.reporterId = SABQ_NEWSPAPER_ACCOUNT_ID;
+        (parsed.data as { publisherId?: string }).publisherId = updaterPublisher.id;
+        (parsed.data as { isPublisherNews?: boolean }).isPublisherNews = true;
+      }
+
       // Validate reporterId if provided
       if (parsed.data.reporterId) {
         // Check if user exists
@@ -7682,11 +8120,12 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         }
       }
 
-      // If status is being changed to published, check publish permission
-      if (parsed.data.status === "published" && existingArticle.status !== "published") {
-        const canPublish = userPermissions.includes("articles.publish");
-        if (!canPublish) {
-          return res.status(403).json({ message: "You don't have permission to publish articles" });
+      // Any move into a publishing status: "scheduled" counts, since the
+      // scheduler promotes it with no check of its own. See publishGate.ts.
+      if (parsed.data.status !== existingArticle.status) {
+        const denial = await denyPublish(req.user.id, parsed.data.status);
+        if (denial) {
+          return res.status(denial.httpStatus).json({ message: denial.message, code: denial.code });
         }
       }
 
@@ -7720,11 +8159,11 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       
       // Handle republish feature
       if (req.body.republish === true) {
-        // User wants to republish with current timestamp
+        // Resurface the article without rewriting its original publication
+        // date. The surfaced timestamp controls ordering only.
         updateData.displayOrder = Math.floor(Date.now() / 1000);
-        // User wants to republish with current timestamp
-        updateData.publishedAt = new Date();
-      } else if (parsed.data.status === "published" && existingArticle.status !== "published" && !updateData.publishedAt) {
+        updateData.resurfacedAt = new Date();
+      } else if (parsed.data.status === "published" && existingArticle.status !== "published" && !existingArticle.publishedAt && !updateData.publishedAt) {
         // Only set publishedAt automatically when publishing for the first time
         updateData.displayOrder = Math.floor(Date.now() / 1000);
         updateData.publishedAt = new Date();
@@ -7754,11 +8193,18 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       // Contributor "save + send for review" — one PATCH instead of save then
       // POST submit-review (avoids races where the UI refetches needs_changes
       // before the second request lands).
+      // الناشر الموثوق: إرسال = نشر فوري.
       const wantsSubmitForReview = req.body?.submitForReview === true;
       if (wantsSubmitForReview && !canEditAny && canEditOwn && isOwner) {
-        if (existingArticle.reviewStatus !== "pending_review") {
+        if (await trustedPublisherCanPublish(req.user.id)) {
+          updateData.status = "published";
+          updateData.reviewStatus = null;
+          if (!updateData.publishedAt && !existingArticle.publishedAt) {
+            updateData.publishedAt = new Date();
+          }
+        } else if (existingArticle.reviewStatus !== "pending_review") {
           updateData.reviewStatus = "pending_review";
-          updateData.status = "draft";
+          updateData.status = statusAfterSubmitForReview(existingArticle.status);
         }
       }
 
@@ -7818,6 +8264,35 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         reporterIdInBody: req.body.reporterId,
         reporterIdInParsed: parsed.data.reporterId,
       });
+
+      const nextStatus = updateData.status ?? existingArticle.status;
+      const nextReview = updateData.reviewStatus ?? existingArticle.reviewStatus;
+      const publishingNow =
+        nextStatus === "published" && existingArticle.status !== "published";
+      const submittingNow =
+        wantsSubmitForReview ||
+        (nextReview === "pending_review" &&
+          existingArticle.reviewStatus !== "pending_review");
+      if (publishingNow || submittingNow) {
+        const bylineUserId = resolveContentBylineUserId({
+          articleType: updateData.articleType ?? existingArticle.articleType,
+          authorId: updateData.authorId ?? existingArticle.authorId,
+          reporterId: updateData.reporterId ?? existingArticle.reporterId,
+          opinionAuthorId: req.body?.opinionAuthorId,
+        });
+        const licenseGate = await assertMediaLicenseAllowsSubmission(bylineUserId);
+        if (!licenseGate.ok) {
+          return res.status(403).json({
+            message: licenseGate.message,
+            code: licenseGate.code,
+          });
+        }
+      }
+
+      // Ensure unique slug (appends -2, -3 if duplicate exists on another article)
+      if (updateData.slug) {
+        updateData.slug = await resolveUniqueArticleSlug(updateData.slug, articleId);
+      }
 
       const [updatedArticle] = await db
         .update(articles)
@@ -7894,12 +8369,12 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
 
             // status: draft/needs_review → scheduled
             if (updatedArticle.status === "scheduled" && existingArticle.status !== "scheduled") {
-              await notifyArticleStakeholders(articleForNotify, "scheduled");
+              await notifyArticleStakeholders(articleForNotify, "scheduled", undefined, { excludeUserId: userId });
             }
 
             // status: anything → published (only first transition)
             if (updatedArticle.status === "published" && existingArticle.status !== "published") {
-              await notifyArticleStakeholders(articleForNotify, "published");
+              await notifyArticleStakeholders(articleForNotify, "published", undefined, { excludeUserId: userId });
             }
 
             // reviewStatus: anything → rejected (carries reviewer note)
@@ -7907,7 +8382,8 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
               await notifyArticleStakeholders(
                 articleForNotify,
                 "rejected",
-                updatedArticle.reviewNotes
+                updatedArticle.reviewNotes,
+                { excludeUserId: userId },
               );
             }
 
@@ -7916,7 +8392,8 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
               await notifyArticleStakeholders(
                 articleForNotify,
                 "needs_revision",
-                updatedArticle.reviewNotes
+                updatedArticle.reviewNotes,
+                { excludeUserId: userId },
               );
             }
 
@@ -7930,7 +8407,8 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
               await notifyArticleStakeholders(
                 articleForNotify,
                 "archived",
-                updatedArticle.reviewNotes
+                updatedArticle.reviewNotes,
+                { excludeUserId: userId },
               );
 
               const archiveReasonForEmail =
@@ -8183,8 +8661,15 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       } else {
         console.log(`⏸️ [UPDATE ARTICLE] No notification sent - Status unchanged or not published`);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error updating article:", error);
+      if (error?.code === "23505" || error?.cause?.code === "23505") {
+        return res.status(409).json({
+          message: "رابط المقال (slug) مستخدم بالفعل لمقال آخر. يرجى تعديل العنوان أو الرابط.",
+          field: "slug",
+          code: "DUPLICATE_SLUG",
+        });
+      }
       res.status(500).json({ message: "Failed to update article" });
     }
   });
@@ -8554,6 +9039,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
             },
             "needs_revision",
             reviewNotes.trim(),
+            { excludeUserId: userId },
           );
           if (updatedArticle.articleType === "opinion") {
             await sendOpinionAuthorRevisionEmail(updatedArticle.id, reviewNotes.trim());
@@ -8742,6 +9228,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
             },
             "archived",
             reviewNotes,
+            { excludeUserId: userId },
           );
         } catch (notifyErr) {
           console.error("[ARCHIVE] Push notification failed:", notifyErr);
@@ -8882,9 +9369,13 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
           excerpt: articles.excerpt,
           imageUrl: articles.imageUrl,
           thumbnailUrl: articles.thumbnailUrl,
+          imageFocalPoint: articles.imageFocalPoint,
           categoryId: articles.categoryId,
+          reporterId: articles.reporterId,
           articleType: articles.articleType,
           newsType: articles.newsType,
+          isFeatured: articles.isFeatured,
+          englishSlug: articles.englishSlug,
           seo: articles.seo,
           status: articles.status,
         })
@@ -8900,27 +9391,8 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         return res.status(400).json({ message: "يجب أن يكون المقال منشوراً قبل الترجمة" });
       }
 
-      // 3. Get category name for context
-      let categoryNameAr = "";
-      let enCategoryId: string | null = null;
-      if (article.categoryId) {
-        const [cat] = await db
-          .select({ nameAr: categories.nameAr, nameEn: categories.nameEn })
-          .from(categories)
-          .where(eq(categories.id, article.categoryId))
-          .limit(1);
-        if (cat) {
-          categoryNameAr = cat.nameAr;
-          const [enCat] = await db
-            .select({ id: enCategories.id })
-            .from(enCategories)
-            .where(sql`LOWER(${enCategories.name}) = LOWER(${cat.nameEn})`)
-            .limit(1);
-          if (enCat) {
-            enCategoryId = enCat.id;
-          }
-        }
-      }
+      // 3. Map AR category → en_categories (slug / englishSlug / nameEn)
+      const { enCategoryId, categoryNameAr } = await resolveEnCategoryId(article.categoryId);
 
       // 4. Translate using OpenAI with retry
       const { withRetry } = await import("./openai");
@@ -8970,19 +9442,22 @@ Respond in valid JSON format only:
         return JSON.parse(text);
       }, 3, "Translate");
 
-      // 5. Generate unique English slug
+      // 5. Prefer Arabic englishSlug so AR/EN share the same short code (hreflang-safe).
       const { generateEnglishSlug: genSlug } = await import("./utils/slugTransliterator");
-      let englishSlug = genSlug(translated.title);
+      let englishSlug = await pickEnArticleSlug({
+        preferredFromAr: article.englishSlug,
+        fromTitle: genSlug(translated.title),
+      });
 
-      // Handle slug collision
+      // Handle slug collision when falling back to title-derived slug
       const [slugExists] = await db
         .select({ id: enArticles.id })
         .from(enArticles)
-        .where(eq(enArticles.slug, englishSlug))
+        .where(or(eq(enArticles.slug, englishSlug), eq(enArticles.englishSlug, englishSlug)))
         .limit(1);
       if (slugExists) {
         const { nanoid } = await import("nanoid");
-        englishSlug = `${englishSlug}-${nanoid(5)}`;
+        englishSlug = `${genSlug(translated.title)}-${nanoid(5)}`;
       }
 
       // 6. Create the English article as published (always under "Sabq Newspaper" account)
@@ -8992,6 +9467,16 @@ Respond in valid JSON format only:
         .where(eq(users.email, "admin@sabq.org"))
         .limit(1);
       const sabqAuthorId = sabqNewspaperUser?.id || userId;
+      // Pin new translations at the top of the EN dashboard (displayOrder leads sort).
+      const [maxOrderRow] = await db
+        .select({ maxOrder: sql<number>`COALESCE(MAX(${enArticles.displayOrder}), 0)::int` })
+        .from(enArticles);
+      const nextDisplayOrder = (maxOrderRow?.maxOrder || 0) + 1;
+
+      if (!enCategoryId && article.categoryId) {
+        console.warn(`[Translate] EN category missing for AR article ${articleId} — publishing without category`);
+      }
+
       const [newEnArticle] = await db
         .insert(enArticles)
         .values([{
@@ -9002,12 +9487,16 @@ Respond in valid JSON format only:
           content: translated.content,
           excerpt: translated.excerpt || null,
           imageUrl: article.imageUrl,
+          imageFocalPoint: article.imageFocalPoint || null,
           categoryId: enCategoryId,
           authorId: sabqAuthorId,
+          reporterId: article.reporterId || null,
           articleType: article.articleType,
           newsType: article.newsType,
+          isFeatured: article.isFeatured ?? false,
           status: "published",
           publishedAt: new Date(),
+          displayOrder: nextDisplayOrder,
           hideFromHomepage: false,
           aiGenerated: true,
           aiSummary: translated.excerpt || null,
@@ -9029,10 +9518,29 @@ Respond in valid JSON format only:
 
       console.log(`[Translate] Article ${articleId} translated to English as ${newEnArticle.id} by user ${userId}`);
 
+      // Notify search engines for the EN URL + refresh AR hreflang cluster.
+      const enSlug = newEnArticle.englishSlug || newEnArticle.slug;
+      if (enSlug) {
+        notifySearchEngines(enSlug, "en").catch(() => {});
+      }
+      const arSlug = article.englishSlug || null;
+      if (arSlug) notifySearchEngines(arSlug, "ar").catch(() => {});
+      invalidatePublishedContent({ reason: "en-translate" });
+      invalidateSitemapXmlCache(["__sitemapEnArticles", "index"]).catch(() => {});
+      try {
+        (app as any).__sitemapNewsCache = null;
+      } catch {
+        /* best-effort */
+      }
+
       res.json({
         message: "تمت ترجمة المقال ونشره في النسخة الإنجليزية بنجاح",
         enArticleId: newEnArticle.id,
         enArticleTitle: newEnArticle.title,
+        enCategoryId,
+        warning: !enCategoryId && article.categoryId
+          ? "Published without EN category — map categories or run backfill"
+          : undefined,
       });
     } catch (error: any) {
       res.status(500).json(safeErrorPayload(error, "فشلت عملية الترجمة", "translate-article"));
@@ -9055,6 +9563,19 @@ Respond in valid JSON format only:
       }
 
       const updatedArticle = await storage.toggleArticleBreaking(articleId, userId);
+
+      // Keep linked EN translation in sync (dashboard EN was stale when only Arabic was toggled).
+      try {
+        await db
+          .update(enArticles)
+          .set({
+            newsType: updatedArticle.newsType,
+            updatedAt: new Date(),
+          })
+          .where(sql`${enArticles.seoMetadata}->>'sourceArticleId' = ${articleId}`);
+      } catch (syncErr) {
+        console.warn(`[Breaking News] Failed to sync EN translation for ${articleId}:`, syncErr);
+      }
 
       // Log activity
       await logActivity({
@@ -9181,6 +9702,7 @@ Respond in valid JSON format only:
             },
             "archived",
             reviewNotes,
+            { excludeUserId: userId },
           );
         } catch (notifyErr) {
           console.error("[ARCHIVE-DELETE] Push notification failed:", notifyErr);
@@ -9300,7 +9822,7 @@ Respond in valid JSON format only:
       // response is not blocked on MailerSend / APNs latency.
       setImmediate(async () => {
         try {
-          await notifyArticleStakeholders(articleSnapshot, "deleted", finalReason);
+          await notifyArticleStakeholders(articleSnapshot, "deleted", finalReason, { excludeUserId: userId });
         } catch (notifyErr) {
           console.error("[PERMANENT-DELETE] Push notification failed:", notifyErr);
         }
@@ -9419,7 +9941,7 @@ Respond in valid JSON format only:
       setImmediate(async () => {
         for (const a of archivedArticles) {
           try {
-            await notifyArticleStakeholders(a, "archived", reviewNotes);
+            await notifyArticleStakeholders(a, "archived", reviewNotes, { excludeUserId: userId });
           } catch (notifyErr) {
             console.error(`[BULK ARCHIVE] Push notification failed for ${a.id}:`, notifyErr);
           }
@@ -9546,7 +10068,7 @@ Respond in valid JSON format only:
       setImmediate(async () => {
         for (const snap of snapshots) {
           try {
-            await notifyArticleStakeholders(snap, "deleted", snap.reason);
+            await notifyArticleStakeholders(snap, "deleted", snap.reason, { excludeUserId: userId });
           } catch (notifyErr) {
             console.error(`[BULK PERMANENT-DELETE] Push notification failed for ${snap.id}:`, notifyErr);
           }
@@ -9650,8 +10172,8 @@ Respond in valid JSON format only:
       } = req.query;
 
       // Hard cap: never return more than 20 rows per page (keeps this admin tool light).
-      const limitNum = Math.min(Math.max(parseInt(String(limit), 10) || 20, 1), 20);
-      const offsetNum = Math.max(parseInt(String(offset), 10) || 0, 0);
+      const limitNum = parseLimit(limit, 20, 20);
+      const offsetNum = parseOffset(offset);
 
       const whereConditions = [];
 
@@ -9665,7 +10187,8 @@ Respond in valid JSON format only:
           const parts = path.split("/").filter(Boolean);
           const articleIdx = parts.findIndex((p) => p === "article");
           if (articleIdx >= 0 && parts[articleIdx + 1]) {
-            searchQuery = parts[articleIdx + 1];
+            // Browser-copied Arabic URLs arrive percent-encoded; the slug column is not.
+            searchQuery = decodeURIComponent(parts[articleIdx + 1]);
           }
         } catch {
           // keep raw query
@@ -9694,14 +10217,28 @@ Respond in valid JSON format only:
             .map((row) => row.sourceArticleId)
             .filter((id): id is string => !!id);
 
-          const textMatch = or(
-            ilike(articles.title, pattern),
-            ilike(articles.subtitle, pattern),
-            ilike(articles.excerpt, pattern),
-            ilike(articles.slug, pattern),
-            ilike(articles.englishSlug, pattern),
+          // Every branch of this OR must be index-backed. `articles` holds ~940k rows,
+          // and a single non-indexable branch makes Postgres drop the whole OR into an
+          // ordered scan over every published article — which only terminates early when
+          // the term is common. A term matching one or two rows scanned the lot and died
+          // on the 15s statement timeout (verified on production: 15s+ before, 207ms after).
+          //   title / excerpt      → GIN pg_trgm, needs >= 3 chars to be usable
+          //   slug / english_slug  → btree equality only (this is the pasted-URL path;
+          //                          partial slug text is covered by the title trigram)
+          //   subtitle             → no index in production (dropped 2026-07-25, unused)
+          const exactMatch = or(
+            eq(articles.slug, searchQuery),
+            eq(articles.englishSlug, searchQuery),
             eq(articles.id, searchQuery),
           );
+          const textMatch =
+            searchQuery.length >= 3
+              ? or(
+                  ilike(articles.title, pattern),
+                  ilike(articles.excerpt, pattern),
+                  exactMatch,
+                )
+              : exactMatch;
 
           whereConditions.push(
             linkedArIds.length > 0
@@ -10458,7 +10995,9 @@ Respond in valid JSON format only:
 
   app.get("/api/activities", async (req, res) => {
     try {
-      const limit = Math.min(parseInt(req.query.limit as string) || 20, 50);
+      const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 20, maxLimit: 50 });
+      if (!pg) return;
+      const limit = pg.limit;
       const cursor = req.query.cursor as string | undefined;
       const typeFilter = req.query.type ? (Array.isArray(req.query.type) ? req.query.type : [req.query.type]) : undefined;
       const importanceFilter = req.query.importance as string | undefined;
@@ -11147,8 +11686,23 @@ Respond in valid JSON format only:
       const cached = memoryCache.get(cacheKey);
       if (cached) return res.json(cached);
 
+      // إسقاط content وبقية الأعمدة الثقيلة: المعالج يستهلك عشرة حقول فقط،
+      // وسحب كل الأعمدة كان يجرّ أرشيف المراسل بنصوصه كاملة في كل استدعاء
+      // بارد — يحتجز وصلة المسبح لثوانٍ وفشل فعليًا في الإنتاج
+      // (DrizzleQueryError، سجل 2026-07-27).
       const myArticles = await db
-        .select()
+        .select({
+          id: articles.id,
+          title: articles.title,
+          status: articles.status,
+          reviewStatus: articles.reviewStatus,
+          reviewNotes: articles.reviewNotes,
+          reviewedAt: articles.reviewedAt,
+          views: articles.views,
+          publishedAt: articles.publishedAt,
+          createdAt: articles.createdAt,
+          updatedAt: articles.updatedAt,
+        })
         .from(articles)
         .where(
           or(
@@ -11824,11 +12378,26 @@ Respond in valid JSON format only:
       // resubmission directly. Same behaviour now applied at the
       // `/api/articles/:id/submit-revision` route (~25649).
 
+      {
+        const bylineUserId = resolveContentBylineUserId({
+          articleType: existingArticle.articleType,
+          authorId: existingArticle.authorId,
+          reporterId: existingArticle.reporterId,
+        });
+        const licenseGate = await assertMediaLicenseAllowsSubmission(bylineUserId);
+        if (!licenseGate.ok) {
+          return res.status(403).json({
+            message: licenseGate.message,
+            code: licenseGate.code,
+          });
+        }
+      }
+
       const [updatedArticle] = await db
         .update(articles)
         .set({
           reviewStatus: "pending_review",
-          status: "draft",
+          status: statusAfterSubmitForReview(existingArticle.status),
           updatedAt: new Date(),
         })
         .where(eq(articles.id, articleId))
@@ -11862,8 +12431,8 @@ Respond in valid JSON format only:
       }
       
       const status = req.query.status as string;
-      const page = parseInt(req.query.page as string) || 1;
-      const limit = parseInt(req.query.limit as string) || 10;
+      const page = parsePage(req.query.page, 1);
+      const limit = parseLimit(req.query.limit, 10, 100);
       const offset = (page - 1) * limit;
       
       let whereConditions = [eq(articles.authorId, user.id)];
@@ -12233,14 +12802,16 @@ Respond in valid JSON format only:
         limit = '12',
         page = '1'
       } = req.query;
+      const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 12, maxLimit: 50, allowPage: true, defaultPage: 1 });
+      if (!pg) return;
 
       // Fetch iFox articles from the 5 designated categories + AI-generated only
       const result = await storage.listIFoxArticles({ 
         status: status as any,
         categorySlug: categorySlug as string | undefined,
         search: search as string | undefined,
-        limit: parseInt(limit as string, 10),
-        page: parseInt(page as string, 10)
+        limit: pg.limit,
+        page: pg.page
       });
       
       res.json(result);
@@ -12394,13 +12965,15 @@ Respond in valid JSON format only:
     return cacheControl({ maxAge: 30, sMaxAge: 120, staleWhileRevalidate: 60 })(req, res, next);
   }, async (req: any, res) => {
     try {
-      const { category, search, status, author, limit, orderBy } = req.query;
+      const { category, search, status, author, orderBy } = req.query;
+      const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 50, maxLimit: 100 });
+      if (!pg) return;
       const userId = req.user?.id;
       const userRole = req.user?.role;
 
       // userId is part of the key so each user gets their own per-user flags
       // and they never cross-contaminate. Anonymous shares one 'anon' entry.
-      const cacheKey = `articles:list:${category || ''}:${search || ''}:${status || ''}:${author || ''}:${limit || ''}:${orderBy || ''}:${userRole || ''}:${userId || 'anon'}`;
+      const cacheKey = `articles:list:${category || ''}:${search || ''}:${status || ''}:${author || ''}:${pg.limit}:${orderBy || ''}:${userRole || ''}:${userId || 'anon'}`;
 
       const result = await withSWR(cacheKey, CACHE_TTL.SHORT, CACHE_TTL.SHORT * 2, async () => {
         const articles = await storage.getArticles({
@@ -12410,7 +12983,7 @@ Respond in valid JSON format only:
           authorId: author as string,
           userRole: userRole,
           includeAI: false,
-          limit: limit ? Math.min(parseInt(limit as string), 100) : 50,
+          limit: pg.limit,
           orderBy: orderBy as string,
         });
 
@@ -12466,8 +13039,10 @@ Respond in valid JSON format only:
   // Paginated news for "load more" functionality on homepage
   app.get("/api/news/paginated", cacheControl({ maxAge: 0, sMaxAge: 15, staleWhileRevalidate: 15 }), async (req, res) => {
     try {
-      const limit = Math.min(parseInt(req.query.limit as string) || 8, 50);
-      const offset = parseInt(req.query.offset as string) || 0;
+      const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 8, maxLimit: 50 });
+      if (!pg) return;
+      const limit = pg.limit;
+      const offset = pg.offset;
       
       const total = await withSWR('news-paginated-total', CACHE_TTL.SHORT, CACHE_TTL.SHORT * 2, async () => {
         const [countResult] = await db
@@ -12515,7 +13090,8 @@ Respond in valid JSON format only:
           or(isNull(articles.articleType), ne(articles.articleType, "opinion")),
           or(isNull(articles.source), ne(articles.source, "ai"))
         ))
-        .orderBy(desc(articles.publishedAt))
+        // «إنعاش»: الخبر المُنعش يتقدّم الموجز بوقت إنعاشه دون تغيير تاريخ نشره
+        .orderBy(desc(sql`COALESCE(${articles.resurfacedAt}, ${articles.publishedAt})`))
         .limit(limit)
         .offset(offset);
       
@@ -12587,7 +13163,7 @@ Respond in valid JSON format only:
   // News Analytics Endpoint - Smart statistics and insights
   app.get("/api/news/analytics", async (req, res) => {
     try {
-      const analyticsData = await withSWR('news-analytics-ar-v3', CACHE_TTL.MEDIUM, CACHE_TTL.MEDIUM * 2, async () => {
+      const analyticsData = await withSWR('news-analytics-ar-v4', CACHE_TTL.MEDIUM, CACHE_TTL.MEDIUM * 2, async () => {
         const now = new Date();
         const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
         const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
@@ -12707,8 +13283,20 @@ Respond in valid JSON format only:
           ],
         };
 
-        let pulse: Awaited<ReturnType<typeof getNewsPulseExtras>> = { topInterest: null, worldCup: null };
-        try { pulse = await getNewsPulseExtras(monthAgo, prevMonthStart); } catch (e) { console.warn("[news/analytics] pulse extras failed", e); }
+        const emptyPulse: Awaited<ReturnType<typeof getNewsPulseExtras>> = { topInterest: null, worldCup: null };
+        const pulse = await bestEffortWithin(
+          getNewsPulseExtras(monthAgo, prevMonthStart),
+          {
+            fallback: emptyPulse,
+            // نبض الرياضة إضافة اختيارية للأخبار. لا نسمح لطابور مزوّد خارجي
+            // (خصوصًا عند إقلاع حاوية بكاش بارد) بتعطيل التحليلات الأساسية.
+            timeoutMs: 1_000,
+            onTimeout: () => console.warn(
+              "[news/analytics] pulse extras exceeded 1000ms; serving core analytics",
+            ),
+            onError: (error) => console.warn("[news/analytics] pulse extras failed", error),
+          },
+        );
         return {
           period: { today: todayC, week: weekC, month: monthC },
           growth: {
@@ -12747,12 +13335,7 @@ Respond in valid JSON format only:
   // News Statistics Endpoint - Statistics cards data
   app.get("/api/news/stats", async (req, res) => {
     try {
-      const cacheKey = 'news:stats';
-      const cached = memoryCache.get(cacheKey);
-      if (cached) return res.json(cached);
-
-      const stats = await storage.getNewsStatistics();
-      memoryCache.set(cacheKey, stats, CACHE_TTL.SHORT);
+      const stats = await getCachedNewsStatistics();
       res.json(stats);
     } catch (error) {
       console.error("Error fetching news stats:", error);
@@ -12782,7 +13365,9 @@ Respond in valid JSON format only:
   // Recent articles endpoint for sidebar widgets
   app.get("/api/articles/recent", cacheControl({ maxAge: CACHE_DURATIONS.SHORT, sMaxAge: 120, staleWhileRevalidate: 60 }), async (req: any, res) => {
     try {
-      const limit = Math.min(parseInt(req.query.limit as string) || 10, 20);
+      const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 10, maxLimit: 20 });
+      if (!pg) return;
+      const limit = pg.limit;
       const excludeId = req.query.excludeId as string | undefined;
       const excludeOpinion = req.query.excludeOpinion === "true";
 
@@ -12922,6 +13507,21 @@ Respond in valid JSON format only:
       if (!article) {
         return res.status(404).json({ message: "المقال غير موجود" });
       }
+
+      // `isAuthenticated` alone made this a read-any-article endpoint: a
+      // self-registered reader could pull drafts, scheduled/embargoed pieces
+      // and retracted articles in full by id. Published articles stay open
+      // (they're public anyway); anything else needs desk access or ownership.
+      if (article.status !== "published") {
+        const permissions = await getUserPermissions(userId);
+        const canSeeUnpublished =
+          permissions.includes("articles.view") ||
+          (await authorizeArticleWrite(userId, articleId, permissions)).ok;
+        if (!canSeeUnpublished) {
+          return res.status(403).json({ message: "غير مصرح لك بمعاينة هذا المقال" });
+        }
+      }
+
       res.json({ ...article, isPreview: true });
     } catch (error) {
       console.error("Error fetching article preview:", error);
@@ -13177,7 +13777,9 @@ Respond in valid JSON format only:
   app.get("/api/articles/:slug/related-infographics", cacheControl(CACHE_DURATIONS.SHORT as any), async (req: any, res) => {
     try {
       const { slug } = req.params;
-      const limit = parseInt(req.query.limit as string) || 6;
+      const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 6, maxLimit: 20 });
+      if (!pg) return;
+      const limit = pg.limit;
 
       // First get the current article to exclude it
       const [currentArticle] = await db
@@ -13239,7 +13841,9 @@ Respond in valid JSON format only:
   app.get("/api/articles/:slug/infographics", cacheControl(CACHE_DURATIONS.SHORT as any), async (req: any, res) => {
     try {
       const { slug } = req.params;
-      const limit = parseInt(req.query.limit as string) || 6;
+      const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 6, maxLimit: 20 });
+      if (!pg) return;
+      const limit = pg.limit;
 
       // First get the current article to exclude it
       const [currentArticle] = await db
@@ -13397,6 +14001,11 @@ Respond in valid JSON format only:
 
   // Get smart summary audio for an article
   app.get("/api/articles/:slug/summary-audio", async (req: any, res) => {
+    // Settings changes must reach the origin; generated audio remains cached on the server.
+    res.setHeader("Cache-Control", "private, no-store");
+    res.setHeader("CDN-Cache-Control", "no-store");
+    res.setHeader("Vercel-CDN-Cache-Control", "no-store");
+    res.append("Access-Control-Expose-Headers", "X-TTS-Provider, X-TTS-Cache");
     try {
       const userId = req.user?.id;
       const userRole = req.user?.role;
@@ -13413,72 +14022,13 @@ Respond in valid JSON format only:
         return res.status(400).json({ message: "الموجز غير متوفر لهذا المقال" });
       }
 
-      // Select active TTS provider (ElevenLabs preferred for Saudi/Gulf voice, Google fallback)
-      const explicit = (process.env.TTS_PROVIDER || '').toLowerCase();
-      let audioBuffer: Buffer | null = null;
-      let usedProvider = '';
-
-      const timeoutPromise = (ms: number) => new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('TTS timeout')), ms)
-      );
-
-      if (explicit !== 'google') {
-        const { getElevenLabsService } = await import("./services/elevenlabs");
-        const elevenLabsService = getElevenLabsService();
-        if (elevenLabsService) {
-          try {
-            audioBuffer = await Promise.race([
-              elevenLabsService.textToSpeech({
-                text: textToConvert,
-                model: 'eleven_flash_v2_5',
-                voiceSettings: {
-                  stability: 0.75,
-                  similarity_boost: 0.75,
-                  style: 0.30,
-                  use_speaker_boost: true
-                }
-              }),
-              timeoutPromise(30000)
-            ]);
-            usedProvider = 'elevenlabs';
-          } catch (eErr) {
-            const eMsg = eErr instanceof Error ? eErr.message : String(eErr);
-            // نفاد رصيد ElevenLabs حالة متوقَّعة (نعتمد على Google كبديل)؛ لا نُسجّلها
-            // كخطأ حتى لا تُغرق السجلّات في كل طلب صوت. الأخطاء الأخرى تبقى تحذيرًا.
-            if (eMsg.includes('quota_exceeded')) {
-              console.log('[summary-audio] ElevenLabs quota exhausted — using Google TTS fallback');
-            } else {
-              console.warn('[summary-audio] ElevenLabs TTS failed, trying Google fallback:', eMsg);
-            }
-          }
-        }
-      }
-
-      if (!audioBuffer) {
-        const { getGoogleTTSService } = await import("./services/googleTts");
-        const google = getGoogleTTSService();
-        if (!google) {
-          throw new Error('No TTS provider available');
-        }
-        audioBuffer = await Promise.race([
-          google.textToSpeech({
-            text: textToConvert,
-            voiceId: 'ar-XA-Wavenet-C',
-            voiceSettings: { stability: 0.6, speed: 1.0 }
-          }),
-          timeoutPromise(30000)
-        ]);
-        usedProvider = 'google';
-      }
-      res.setHeader("X-TTS-Provider", usedProvider);
-
-      // Set response headers for audio with cache busting support
-      res.setHeader("Content-Type", "audio/mpeg");
-      res.setHeader("Content-Length", audioBuffer.length.toString());
-      res.setHeader("Cache-Control", "public, max-age=86400, must-revalidate"); // Cache 24h but always revalidate via ETag
-      // Include provider in ETag so switching TTS providers invalidates old cached audio
-      res.setHeader("ETag", `"${article.id}-${article.updatedAt}-${usedProvider}"`);
-      res.send(audioBuffer);
+      const { getSummaryAudio } = await import("./services/summaryAudioService");
+      const audio = await getSummaryAudio(String(article.id), textToConvert);
+      res.setHeader("X-TTS-Provider", audio.provider);
+      res.setHeader("X-TTS-Cache", audio.cache);
+      res.setHeader("Content-Type", audio.contentType);
+      res.setHeader("Content-Length", audio.buffer.length.toString());
+      res.send(audio.buffer);
     } catch (error) {
       console.error("Error generating summary audio:", error);
       const errorMessage = error instanceof Error && error.message === 'ElevenLabs timeout' 
@@ -13709,11 +14259,7 @@ Respond in valid JSON format only:
       // Pages egress doesn't collapse every anonymous visitor into one bucket.
       const viewerKey = req.user?.id
         ? `u:${req.user.id}`
-        : ((req.headers['x-sabq-client-ip'] || req.headers['true-client-ip']) as string | undefined)?.split(',')[0]?.trim()
-          || (req.headers['cf-connecting-ip'] as string)
-          || (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim()
-          || req.ip
-          || 'unknown';
+        : getTrustedRealIp(req);
       const viewDedupKey = `view:seen:${articleId}:${viewerKey}`;
       if (memoryCache.get<boolean>(viewDedupKey)) {
         return res.json({ success: true, counted: false });
@@ -13731,11 +14277,7 @@ Respond in valid JSON format only:
 
       // Record the per-IP aggregate (hashed IP, buffered) so a counted view can
       // later be broken down by distinct IP. Same precedence as rateLimitKey().
-      const clientIp = ((req.headers['x-sabq-client-ip'] || req.headers['true-client-ip']) as string | undefined)?.split(',')[0]?.trim()
-        || (req.headers['cf-connecting-ip'] as string)
-        || (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim()
-        || req.ip
-        || 'unknown';
+      const clientIp = getTrustedRealIp(req);
       recordArticleView(articleId, clientIp, userId);
 
       res.json({ success: true, counted: true });
@@ -13851,10 +14393,16 @@ Respond in valid JSON format only:
   });
 
   // News Analytics Endpoint - Smart statistics and insights
-  app.post("/api/articles/:id/analyze-credibility", isAuthenticated, async (req: any, res) => {
+  app.post("/api/articles/:id/analyze-credibility", isAuthenticated, requireAnyPermission('articles.create', 'articles.edit_any', 'articles.edit_own'), async (req: any, res) => {
     try {
       const articleId = req.params.id;
-      
+
+      // كانت بلا أي فحص فيكتب أي مسجّل أعمدة المصداقية — نفس إصلاح analyze-seo.
+      const access = await authorizeArticleWrite(req.user.id, articleId);
+      if (!access.ok) {
+        return res.status(access.httpStatus).json({ message: access.message });
+      }
+
       const [article] = await db
         .select()
         .from(articles)
@@ -13889,7 +14437,13 @@ Respond in valid JSON format only:
   app.post("/api/articles/:id/analyze-seo", isAuthenticated, requireAnyPermission('articles.create', 'articles.edit_any', 'articles.edit_own'), async (req: any, res) => {
     try {
       const articleId = req.params.id;
-      
+
+      // articles.edit_own with no ownership check behaved as edit_any.
+      const access = await authorizeArticleWrite(req.user.id, articleId);
+      if (!access.ok) {
+        return res.status(access.httpStatus).json({ message: access.message });
+      }
+
       const [article] = await db
         .select()
         .from(articles)
@@ -14036,6 +14590,7 @@ Respond in valid JSON format only:
             userId,
             commentId: comment.id,
             reason: `كلمات محظورة: ${rejectingWords.join(", ")}`,
+            automated: true,
           });
         }
 
@@ -14121,111 +14676,22 @@ Respond in valid JSON format only:
         return res.status(400).json({ message: "يجب توفير محتوى الخبر" });
       }
 
+      // المنطق مشترك مع المسار المبثوث (routes/editAndGenerateStream.ts)
       console.log("[Edit+Generate API] Processing with parallel AI calls for best quality...");
-      
-      // Get available categories for better AI classification
-      const allCategories = await storage.getAllCategories();
-      const categoryList = allCategories.map(c => ({ nameAr: c.nameAr, nameEn: c.nameEn || c.nameAr }));
-      
-      // Run three operations in parallel for better quality:
-      // 1. Smart content generation from ORIGINAL content (same as "توليد ذكي شامل")
-      // 2. Editorial rewrite separately
-      // 3. Newsletter subtitle/excerpt generation
-      const { analyzeAndEditWithSabqStyle } = await import("./ai/contentAnalyzer");
-      
-      // Import retry helper for rate limit handling
-      const { withRetry } = await import("./openai");
-
-      // Run the three AI calls IN PARALLEL — they all consume the same original
-      // `content` with no inter-dependency, so total latency drops from the sum of
-      // three calls to just the slowest one (the Claude rewrite). Each call keeps
-      // its own retry/backoff, which absorbs the occasional 429 under concurrency.
-      // The newsletter subtitle is optional: its failure must not fail the request,
-      // so it resolves to empty values instead of rejecting the Promise.all.
-      console.log("[Edit+Generate API] Running smart content + Sabq edit + newsletter in parallel...");
-      const [generatedContent, editResult, newsletterResult] = await Promise.all([
-        withRetry(
-          () => generateSmartContent(content, language as "ar" | "en"),
-          3,
-          "SmartContent"
-        ),
-        withRetry(
-          () => analyzeAndEditWithSabqStyle(content, language as "ar" | "en" | "ur", categoryList),
-          3,
-          "EditContent"
-        ),
-        withRetry(
-          () => generateNewsletterSubtitle({
-            title: content.substring(0, 200),
-            content: content,
-            excerpt: undefined
-          }),
-          3,
-          "Newsletter"
-        ).catch((err): { subtitle: string | undefined; excerpt: string | undefined } => {
-          console.warn("[Edit+Generate API] Newsletter generation failed (optional):", err);
-          return { subtitle: undefined, excerpt: undefined };
-        }),
-      ]);
-
-      console.log("[Edit+Generate API] ✅ All operations completed");
-      console.log("[Edit+Generate API] Quality score:", editResult.qualityScore);
-      console.log("[Edit+Generate API] Title (Claude→GPT fallback):", editResult.optimized.title || generatedContent.mainTitle);
-      console.log("[Edit+Generate API] Newsletter subtitle:", newsletterResult?.subtitle || "N/A");
-      
-      // Return combined result with best of both worlds
-      res.json({
-        // Rewritten content from Sabq editor
-        editedContent: editResult.optimized.content,
-        editedLead: editResult.optimized.lead,
-        qualityScore: editResult.qualityScore,
-        detectedCategory: editResult.detectedCategory,
-        hasNewsValue: editResult.hasNewsValue,
-        issues: editResult.issues,
-        suggestions: editResult.suggestions,
-        // العنوان من محرر الأسلوب المعتمد (Claude) — وعنوان GPT احتياطاً عند فشله
-        mainTitle: editResult.optimized.title || generatedContent.mainTitle,
-        subTitle: generatedContent.subTitle,
-        smartSummary: generatedContent.smartSummary,
-        keywords: generatedContent.keywords,
-        seo: generatedContent.seo,
-        // Newsletter fields
-        newsletterSubtitle: newsletterResult.subtitle,
-        newsletterExcerpt: newsletterResult.excerpt,
-      });
+      const { runEditAndGenerate } = await import("./services/editAndGenerateService");
+      res.json(await runEditAndGenerate({ content, language }));
     } catch (error: any) {
       console.error("[Edit+Generate API] ❌ Error occurred:");
       console.error("[Edit+Generate API] Error name:", error?.name);
       console.error("[Edit+Generate API] Error message:", error?.message);
       console.error("[Edit+Generate API] Error status:", error?.status);
       console.error("[Edit+Generate API] Error code:", error?.code);
-      console.error("[Edit+Generate API] Full error:", JSON.stringify(error, null, 2));
-      
-      // Determine error type for appropriate response
-      const isRateLimit = error?.status === 429 || 
-                          error?.message?.includes("429") || 
-                          error?.message?.includes("rate limit") ||
-                          error?.message?.includes("Rate limit");
-      const isTimeout = error?.message?.includes("timeout") || error?.code === 'ETIMEDOUT';
-      const isNetwork = error?.code === 'ECONNREFUSED' || error?.code === 'ENOTFOUND';
-      
-      let statusCode = 500;
-      let message = "فشل في تحرير وتوليد المحتوى";
-      
-      if (isRateLimit) {
-        statusCode = 429;
-        message = "تم تجاوز حد الطلبات، يرجى المحاولة بعد دقيقة";
-      } else if (isTimeout) {
-        statusCode = 504;
-        message = "انتهت مهلة الاتصال، يرجى المحاولة مرة أخرى";
-      } else if (isNetwork) {
-        statusCode = 503;
-        message = "خطأ في الاتصال بخدمة الذكاء الاصطناعي";
-      }
-      
-      res.status(statusCode).json({ 
+
+      const { editAndGenerateErrorResponse } = await import("./services/editAndGenerateService");
+      const { status, message, errorType } = editAndGenerateErrorResponse(error);
+      res.status(status).json({
         message,
-        errorType: isRateLimit ? "rate_limit" : isTimeout ? "timeout" : isNetwork ? "network" : "unknown",
+        errorType,
         details: process.env.NODE_ENV === 'development' ? error?.message : undefined
       });
     }
@@ -14249,6 +14715,11 @@ Respond in valid JSON format only:
         const parsed = insertArticleMediaAssetSchema.safeParse({
           ...req.body,
           articleId,
+          // The ORM contract requires NOT NULL; preserve the existing API
+          // fallback before validation so omitted alt text remains accepted.
+          altText: req.body.altText === undefined || req.body.altText === ""
+            ? "صورة الخبر"
+            : req.body.altText,
         });
 
         if (!parsed.success) {
@@ -14258,10 +14729,7 @@ Respond in valid JSON format only:
           });
         }
         
-        const dataToInsert = {
-          ...parsed.data,
-          altText: parsed.data.altText || "صورة الخبر",
-        };
+        const dataToInsert = parsed.data;
         const asset = await storage.createArticleMediaAsset(dataToInsert);
         memoryCache.invalidatePattern('^article:media-assets:');
         // Purge article HTML/JSON/sidebar at the edge so newly-added photos
@@ -14328,7 +14796,14 @@ Respond in valid JSON format only:
     try {
         const { id } = req.params;
         
-        const parsed = updateArticleMediaAssetSchema.safeParse(req.body);
+        const parsed = updateArticleMediaAssetSchema.safeParse({
+          ...req.body,
+          // Keep the established PATCH behavior for omitted/empty alt text,
+          // while rejecting explicit null before the database write.
+          altText: req.body.altText === undefined || req.body.altText === ""
+            ? "صورة الخبر"
+            : req.body.altText,
+        });
 
         if (!parsed.success) {
           return res.status(400).json({ 
@@ -14337,10 +14812,13 @@ Respond in valid JSON format only:
           });
         }
         
-        const dataToUpdate = {
-          ...parsed.data,
-          altText: parsed.data.altText || "صورة الخبر",
-        };
+        // The permission gate above is article-agnostic.
+        const access = await authorizeArticleWriteByMediaAsset(req.user.id, id);
+        if (!access.ok) {
+          return res.status(access.httpStatus).json({ message: access.message });
+        }
+
+        const dataToUpdate = parsed.data;
         const asset = await storage.updateArticleMediaAsset(id, dataToUpdate);
 
         if (!asset) {
@@ -14364,10 +14842,17 @@ Respond in valid JSON format only:
   app.delete("/api/media-assets/:id",
     requireAuth,
     // Was requireRole("editor","admin") — see PATCH note (legacy role-text trap).
-    requireAnyPermission("articles.edit_any", "media.delete"),
+    // edit_own + authorizeArticleWriteByMediaAsset: صاحب المقال يحذف مرفقه اليتيم.
+    requireAnyPermission("articles.edit_any", "articles.edit_own", "media.delete"),
     async (req: any, res) => {
     try {
         const { id } = req.params;
+
+        // `media.delete` is not article-scoped; edit_any short-circuits.
+        const access = await authorizeArticleWriteByMediaAsset(req.user.id, id);
+        if (!access.ok) {
+          return res.status(access.httpStatus).json({ message: access.message });
+        }
 
         // Look up asset BEFORE deleting so we can purge the right article URLs.
         const existing = await storage.getArticleMediaAssetById(id);
@@ -14446,61 +14931,8 @@ Respond in valid JSON format only:
         return res.status(403).json({ message: "Forbidden" });
       }
 
-      // Check cache first (60 second TTL for dashboard stats)
-      const cacheKey = 'admin:dashboard:stats';
-      const cached = memoryCache.get(cacheKey);
-      if (cached) {
-        return res.json(cached);
-      }
-
-      const stats = await storage.getAdminDashboardStats();
-      
-      // Trim response data for performance - only include essential fields
-      const trimmedStats = {
-        ...stats,
-        recentArticles: stats.recentArticles.map((article: any) => ({
-          id: article.id,
-          title: article.title,
-          slug: article.slug,
-              englishSlug: article.englishSlug || undefined,
-          status: article.status,
-          publishedAt: article.publishedAt,
-          views: article.views,
-          author: article.author ? {
-            firstName: article.author.firstName,
-            lastName: article.author.lastName,
-            email: article.author.email,
-          } : undefined,
-        })),
-        topArticles: stats.topArticles.map((article: any) => ({
-          id: article.id,
-          title: article.title,
-          slug: article.slug,
-              englishSlug: article.englishSlug || undefined,
-          status: article.status,
-          publishedAt: article.publishedAt,
-          views: article.views,
-          category: article.category ? {
-            nameAr: article.category.nameAr,
-          } : undefined,
-        })),
-        recentComments: stats.recentComments.map((comment: any) => ({
-          id: comment.id,
-          content: comment.content ? comment.content.substring(0, 100) : '',
-          articleId: comment.articleId,
-          createdAt: comment.createdAt,
-          status: comment.status,
-          user: comment.user ? {
-            firstName: comment.user.firstName,
-            lastName: comment.user.lastName,
-            email: comment.user.email,
-          } : undefined,
-        })),
-      };
-
-      // Cache for 60 seconds
-      memoryCache.set(cacheKey, trimmedStats, CACHE_TTL.SHORT);
-      
+      const { getCachedAdminDashboardStats } = await import("./services/adminDashboardStatsService");
+      const trimmedStats = await getCachedAdminDashboardStats();
       res.json(trimmedStats);
     } catch (error) {
       console.error("Error fetching admin dashboard stats:", error);
@@ -14578,12 +15010,14 @@ Respond in valid JSON format only:
     try {
       const [totalResult] = await db.select({ count: sql<number>`count(*)::int` }).from(enArticles);
       const [publishedResult] = await db.select({ count: sql<number>`count(*)::int` }).from(enArticles).where(eq(enArticles.status, "published"));
+      const [scheduledResult] = await db.select({ count: sql<number>`count(*)::int` }).from(enArticles).where(eq(enArticles.status, "scheduled"));
       const [draftResult] = await db.select({ count: sql<number>`count(*)::int` }).from(enArticles).where(eq(enArticles.status, "draft"));
       const [archivedResult] = await db.select({ count: sql<number>`count(*)::int` }).from(enArticles).where(eq(enArticles.status, "archived"));
 
       res.json({
         total: totalResult.count || 0,
         published: publishedResult.count || 0,
+        scheduled: scheduledResult.count || 0,
         draft: draftResult.count || 0,
         archived: archivedResult.count || 0,
       });
@@ -14598,9 +15032,9 @@ Respond in valid JSON format only:
   // Get all English articles with filtering (dashboard)
   app.get("/api/en/dashboard/articles", requireAuth, requirePermission("articles.view"), async (req: any, res) => {
     try {
-      const { search, status, articleType, categoryId, authorId, featured, page = "1", limit = "30" } = req.query;
-      const pageNum = Math.max(1, parseInt(page as string, 10) || 1);
-      const limitNum = Math.max(1, Math.min(100, parseInt(limit as string, 10) || 30));
+      const { search, status, articleType, categoryId, authorId, featured, newsType, translated, page = "1", limit = "30" } = req.query;
+      const pageNum = parsePage(page, 1);
+      const limitNum = parseLimit(limit, 30, 100);
       const offset = (pageNum - 1) * limitNum;
 
       const reporterAlias = aliasedTable(users, 'reporter');
@@ -14640,6 +15074,17 @@ Respond in valid JSON format only:
         whereConditions.push(eq(enArticles.isFeatured, featured === "true"));
       }
 
+      if (newsType && newsType !== "all") {
+        whereConditions.push(eq(enArticles.newsType, newsType as string));
+      }
+
+      // Translated from Arabic: seoMetadata.sourceArticleId is set by translate-to-english
+      if (translated === "true") {
+        whereConditions.push(sql`${enArticles.seoMetadata}->>'sourceArticleId' IS NOT NULL`);
+      } else if (translated === "false") {
+        whereConditions.push(sql`${enArticles.seoMetadata}->>'sourceArticleId' IS NULL`);
+      }
+
       const whereClause = whereConditions.length > 0 ? and(...whereConditions) : undefined;
 
       let countQuery = db.select({ count: sql<number>`count(*)` }).from(enArticles).$dynamic();
@@ -14648,6 +15093,20 @@ Respond in valid JSON format only:
       }
       const [countResult] = await countQuery;
       const total = Number(countResult?.count || 0);
+
+      // Published EN dashboard must be chronological (newest first) — same as public
+      // /api/en/articles. Leading with displayOrder buried July translations under
+      // older rows that had been drag-reordered (May/Feb with high displayOrder).
+      let orderClauses;
+      if (status === "archived") {
+        orderClauses = [desc(enArticles.updatedAt), desc(enArticles.createdAt)];
+      } else if (status === "draft") {
+        orderClauses = [desc(enArticles.updatedAt), desc(enArticles.createdAt)];
+      } else if (status === "scheduled") {
+        orderClauses = [desc(enArticles.scheduledAt), desc(enArticles.createdAt)];
+      } else {
+        orderClauses = [desc(enArticles.publishedAt), desc(enArticles.createdAt)];
+      }
 
       let query = db
         .select({
@@ -14683,7 +15142,7 @@ Respond in valid JSON format only:
       }
 
       query = query
-        .orderBy(desc(enArticles.displayOrder), desc(enArticles.createdAt))
+        .orderBy(...orderClauses)
         .limit(limitNum)
         .offset(offset);
 
@@ -14694,6 +15153,11 @@ Respond in valid JSON format only:
         category: row.category,
         author: row.reporter || row.author,
         publisher: (row as any).publisher,
+        isTranslated: Boolean(
+          row.article?.seoMetadata &&
+          typeof row.article.seoMetadata === "object" &&
+          (row.article.seoMetadata as { sourceArticleId?: string }).sourceArticleId
+        ),
       }));
 
       res.json({
@@ -14811,6 +15275,11 @@ Respond in valid JSON format only:
         authorId,
       };
 
+      // Ensure unique slug
+      if (articleData.slug) {
+        articleData.slug = await resolveUniqueArticleSlug(articleData.slug, undefined, enArticles);
+      }
+
       [newArticle] = await db
         .insert(enArticles)
         .values([{
@@ -14833,8 +15302,15 @@ Respond in valid JSON format only:
       });
 
       res.status(201).json(newArticle);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error creating English article:", error);
+      if (error?.code === "23505" || error?.cause?.code === "23505") {
+        return res.status(409).json({
+          message: "Article slug already exists. Please choose a different title or slug.",
+          field: "slug",
+          code: "DUPLICATE_SLUG",
+        });
+      }
       // Log article created event
       logArticleEvent({
         articleId: newArticle.id,
@@ -14910,11 +15386,11 @@ Respond in valid JSON format only:
         }
       }
 
-      // If status is being changed to published, check publish permission
-      if (parsed.data.status === "published" && existingArticle.status !== "published") {
-        const canPublish = userPermissions.includes("articles.publish");
-        if (!canPublish) {
-          return res.status(403).json({ message: "You don't have permission to publish articles" });
+      // "scheduled" counts as publishing — see publishGate.ts.
+      if (parsed.data.status !== existingArticle.status) {
+        const denial = await denyPublish(req.user.id, parsed.data.status);
+        if (denial) {
+          return res.status(denial.httpStatus).json({ message: denial.message, code: denial.code });
         }
       }
 
@@ -14929,10 +15405,11 @@ Respond in valid JSON format only:
 
       // Handle republish feature
       if (req.body.republish === true) {
-        // User wants to republish with current timestamp
+        // Resurface the article without rewriting its original publication
+        // date. The surfaced timestamp controls ordering only.
         updateData.displayOrder = Math.floor(Date.now() / 1000);
-        updateData.publishedAt = new Date();
-      } else if (parsed.data.status === "published" && existingArticle.status !== "published" && !updateData.publishedAt) {
+        updateData.resurfacedAt = new Date();
+      } else if (parsed.data.status === "published" && existingArticle.status !== "published" && !existingArticle.publishedAt && !updateData.publishedAt) {
         updateData.publishedAt = new Date();
       }
 
@@ -14944,6 +15421,11 @@ Respond in valid JSON format only:
       // Convert empty thumbnailUrl to null (for proper deletion)
       if (updateData.thumbnailUrl === "") {
         updateData.thumbnailUrl = null;
+      }
+
+      // Ensure unique slug (appends -2, -3 if duplicate exists on another article)
+      if (updateData.slug) {
+        updateData.slug = await resolveUniqueArticleSlug(updateData.slug, articleId, enArticles);
       }
 
       const [updatedArticle] = await db
@@ -14979,8 +15461,15 @@ Respond in valid JSON format only:
       console.log(`[Breaking News] Cache invalidated and SSE broadcast sent for article ${articleId}`);
 
       res.json(updatedArticle);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error updating English article:", error);
+      if (error?.code === "23505" || error?.cause?.code === "23505") {
+        return res.status(409).json({
+          message: "Article slug already exists. Please choose a different title or slug.",
+          field: "slug",
+          code: "DUPLICATE_SLUG",
+        });
+      }
       res.status(500).json({ message: "Failed to update English article" });
     }
   });
@@ -15055,6 +15544,7 @@ Respond in valid JSON format only:
             },
             "archived",
             reviewNotes,
+            { excludeUserId: userId },
           );
         } catch (notifyErr) {
           console.error("[EN ARCHIVE] Push notification failed:", notifyErr);
@@ -15100,6 +15590,13 @@ Respond in valid JSON format only:
         })
         .where(eq(enArticles.id, articleId))
         .returning();
+
+      // Keep Arabic source in sync when this EN row is a translation.
+      try {
+        await syncBreakingToArabicSource(updatedArticle, newNewsType);
+      } catch (syncErr) {
+        console.warn(`[Breaking News] Failed to sync AR source for EN ${articleId}:`, syncErr);
+      }
 
       // Log activity
       await logActivity({
@@ -15374,7 +15871,7 @@ Respond in valid JSON format only:
       setImmediate(async () => {
         for (const a of archivedRows) {
           try {
-            await notifyArticleStakeholders(a, "archived", reviewNotes);
+            await notifyArticleStakeholders(a, "archived", reviewNotes, { excludeUserId: userId });
           } catch (notifyErr) {
             console.error(`[EN BULK ARCHIVE] Push failed for ${a.id}:`, notifyErr);
           }
@@ -15464,7 +15961,7 @@ Respond in valid JSON format only:
       setImmediate(async () => {
         for (const a of archivedRows) {
           try {
-            await notifyArticleStakeholders(a, "archived", reviewNotes);
+            await notifyArticleStakeholders(a, "archived", reviewNotes, { excludeUserId: userId });
           } catch (notifyErr) {
             console.error(`[EN BULK DELETE] Push failed for ${a.id}:`, notifyErr);
           }
@@ -15919,6 +16416,13 @@ Respond in valid JSON format only:
         return res.status(400).json({ message: "Invalid article data", errors: parsed.error });
       }
 
+      // The role check above admits `reporter` and `status` comes from the
+      // body; the scheduledAt check earlier doesn't cover status="scheduled".
+      const denial = await denyPublish(userId, parsed.data.status);
+      if (denial) {
+        return res.status(denial.httpStatus).json({ message: denial.message, code: denial.code });
+      }
+
       const article = await storage.createArticle(parsed.data);
 
       // Invalidate caches (in-memory + Redis pub/sub + Cloudflare CDN purge)
@@ -16142,12 +16646,22 @@ Respond in valid JSON format only:
       // Mass-assignment guard: restrict to real article columns (drops
       // unknown keys + id/createdAt/updatedAt). `republish` is a control flag,
       // not a column, so it's read from req.body directly.
-      const articleData: any = pickTableColumns(articles, req.body);
-      
+      const articleData: any = pickTableColumns(articles, req.body, {
+        omit: ARTICLE_SERVER_OWNED_COLUMNS,
+      });
+
       // Remove republish flag from data (it's only for control logic)
       const shouldRepublish = req.body.republish === true;
       delete articleData.republish;
-      
+
+      // Legacy path had no publish gate at all.
+      if (articleData.status && articleData.status !== article.status) {
+        const denial = await denyPublish(userId, articleData.status);
+        if (denial) {
+          return res.status(denial.httpStatus).json({ message: denial.message, code: denial.code });
+        }
+      }
+
       // Handle publishedAt timestamp logic
       if (shouldRepublish) {
         // Explicitly requested to update publish time
@@ -16434,8 +16948,8 @@ Respond in valid JSON format only:
         status: req.query.status as string | undefined,
         search: req.query.search as string | undefined,
         source: req.query.source as string | undefined,
-        page: parseInt(req.query.page) || 1,
-        limit: parseInt(req.query.limit) || 20,
+        page: parsePage(req.query.page, 1),
+        limit: parseLimit(req.query.limit, 20, 100),
       });
       res.json(result);
     } catch (error) {
@@ -16612,8 +17126,8 @@ Respond in valid JSON format only:
     try {
       const { category, severity, isActive, search } = req.query;
 
-      const page = Math.max(1, parseInt(req.query.page as string) || 1);
-      const limit = Math.min(200, Math.max(1, parseInt(req.query.limit as string) || 20));
+      const page = parsePage(req.query.page, 1);
+      const limit = parseLimit(req.query.limit, 20, 200);
       const offset = (page - 1) * limit;
 
       const conditions: any[] = [];
@@ -17026,111 +17540,22 @@ Respond in valid JSON format only:
   // ============================================================
 
   // Proofread endpoint — spelling/typo detection only, NEVER modifies the text
+  // التدقيق اللغوي: المنطق في services/proofreadService عبر بوابة الذكاء
+  // (مهلة 25ث + بدائل + قاطع دائرة). كان يستدعي OpenAI الخام بمهلة 10 دقائق
+  // وبلا بديل، فتجمّد المحرر 45–68ث في نوافذ تدهور gpt-5.1 (تشخيص 2026-08-28).
   app.post("/api/ai/proofread", requireAuth, requirePermission(PERMISSION_CODES.ARTICLES_AI_GENERATE), async (req: any, res) => {
     try {
       const { content } = req.body;
       if (!content || typeof content !== "string") {
         return res.status(400).json({ message: "Content is required" });
       }
-
-      // Strip HTML to get clean text
-      const cleanText = content.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
-      if (cleanText.length < 10) {
-        return res.json({ issues: [] });
-      }
-
-      // Cap input length to avoid token blowups
-      const truncated = cleanText.length > 8000 ? cleanText.substring(0, 8000) : cleanText;
-
-      const { default: OpenAI } = await import("openai");
-      const openaiClient = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-      const { withRetry } = await import("./openai");
-
-      const response = await withRetry(
-        () => openaiClient.chat.completions.create({
-          model: "gpt-5.1",
-          messages: [
-            {
-              role: "system",
-              content: `أنت مدقق إملائي صارم للنصوص العربية الصحفية. مهمتك الوحيدة هي اكتشاف الأخطاء الإملائية الحقيقية فقط.
-
-✅ اقبل فقط هذه الأنواع من الأخطاء:
-- حروف خاطئة (حذف/إضافة/قلب حرف يغيّر الكلمة فعلياً مثل: "اللذي" بدل "الذي").
-- همزات خاطئة (مثل: "أبتدأ" بدل "ابتدأ"، "هؤلائ" بدل "هؤلاء").
-- خلط بين التاء المربوطة (ة) والتاء المفتوحة (ت).
-- خلط بين الألف المقصورة (ى) والياء (ي).
-- خلط بين الهاء (ه) والتاء المربوطة (ة) في نهاية الكلمة.
-
-❌ ارفض رفضاً قاطعاً (لا تُرجِعها أبداً كأخطاء):
-- علامات التشكيل (فتحة، ضمة، كسرة، شدة، سكون، تنوين). إن كان الفرق الوحيد بين الكلمتين تشكيل، اعتبر الكلمة صحيحة.
-- علامات الترقيم (الفواصل، النقاط، علامات الاستفهام، الأقواس، علامات التنصيص).
-- المسافات الزائدة أو الناقصة.
-- النحو والإعراب والقواعد الإنشائية.
-- الأسلوب وإعادة الصياغة.
-- أسماء الأعلام، الأماكن، الكلمات الأجنبية، الأسماء التجارية، الاختصارات.
-- الكلمات الصحيحة لكنها غير شائعة.
-
-قاعدة ذهبية: إن كان الفرق بين "original" و "suggestion" مجرد تشكيل أو علامة ترقيم أو مسافة، فلا تُرجِعها. إن لم تكن متأكداً 100% من الخطأ، اتركها.
-
-أعد JSON بهذا الشكل بالضبط:
-{ "issues": [ { "original": "الكلمة الخاطئة كما وردت في النص بدون تشكيل", "suggestion": "الكلمة الصحيحة بدون تشكيل", "type": "إملائي", "explanation": "سبب موجز جداً" } ] }
-
-إن لم تجد أي خطأ إملائي حقيقي، أعد: { "issues": [] }`,
-            },
-            {
-              role: "user",
-              content: `دقّق هذا النص إملائياً فقط دون تعديل المعنى:\n\n${truncated}`,
-            },
-          ],
-          response_format: { type: "json_object" },
-          max_completion_tokens: 2048,
-        }),
-        3,
-        "Proofread"
-      );
-
-      const raw = response.choices?.[0]?.message?.content || '{"issues":[]}';
-      let parsed: { issues: Array<{ original: string; suggestion: string; type?: string; explanation?: string }> } = { issues: [] };
-      try {
-        parsed = JSON.parse(raw);
-      } catch {
-        parsed = { issues: [] };
-      }
-
-      // Normalize: strip diacritics, tatweel, and trim/collapse whitespace
-      const normalize = (t: string) =>
-        t
-          .replace(/[\u064B-\u065F\u0670\u0640]/g, "") // diacritics + tatweel
-          .replace(/[\u200B-\u200F\u202A-\u202E\uFEFF]/g, "") // zero-width / bidi
-          .replace(/[.,،;؛:!؟?\(\)\[\]"'«»“”]/g, "") // common punctuation
-          .replace(/\s+/g, " ")
-          .trim();
-
-      // Sanitize: drop trivial differences (diacritics-only, punctuation-only, whitespace-only),
-      // keep only issues whose original actually exists in the text.
-      const issues = Array.isArray(parsed.issues) ? parsed.issues : [];
-      const seen = new Set<string>();
-      const filtered = issues
-        .filter((i) => i && typeof i.original === "string" && typeof i.suggestion === "string")
-        .filter((i) => i.original.trim() !== i.suggestion.trim())
-        .filter((i) => normalize(i.original) !== normalize(i.suggestion)) // skip diacritic/punct-only
-        .filter((i) => normalize(i.original).length >= 2) // ignore single chars / empty
-        .filter((i) => cleanText.includes(i.original))
-        .filter((i) => {
-          const key = `${i.original}→${i.suggestion}`;
-          if (seen.has(key)) return false;
-          seen.add(key);
-          return true;
-        })
-        .slice(0, 50);
-
-      res.json({ issues: filtered });
+      const { proofreadContent } = await import("./services/proofreadService");
+      res.json(await proofreadContent(content, req.user?.id));
     } catch (error: any) {
       console.error("Error proofreading:", error?.message || error);
-      const isRateLimit = error?.status === 429 || error?.message?.includes("429");
-      res.status(isRateLimit ? 429 : 500).json({
-        message: isRateLimit ? "تم تجاوز حد الطلبات، يرجى المحاولة بعد قليل" : "Failed to proofread content",
-      });
+      const { proofreadErrorResponse } = await import("./services/proofreadService");
+      const { status, message } = proofreadErrorResponse(error);
+      res.status(status).json({ message });
     }
   });
 
@@ -17140,88 +17565,13 @@ Respond in valid JSON format only:
       if (!title || typeof title !== "string") {
         return res.status(400).json({ message: "Title is required" });
       }
-
-      const cleanTitle = title.replace(/\s+/g, " ").trim();
-      if (cleanTitle.length < 3) {
-        return res.json({ original: cleanTitle, suggestion: cleanTitle, hasIssues: false, notes: [] });
-      }
-
-      const truncated = cleanTitle.length > 500 ? cleanTitle.substring(0, 500) : cleanTitle;
-
-      const { default: OpenAI } = await import("openai");
-      const openaiClient = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-      const { withRetry } = await import("./openai");
-
-      const response = await withRetry(
-        () => openaiClient.chat.completions.create({
-          model: "gpt-5.1",
-          messages: [
-            {
-              role: "system",
-              content: `أنت مدقق لغوي محترف لعناوين الأخبار العربية. مهمتك تصحيح العنوان مع الحفاظ على معناه الأصلي تماماً.
-
-✅ صحّح فقط:
-- الأخطاء الإملائية (همزات، تاء مربوطة/مفتوحة، ألف مقصورة/ياء، حروف خاطئة).
-- الأخطاء النحوية الواضحة (رفع/نصب/جر، تطابق المذكر والمؤنث، تطابق المفرد والجمع).
-- علامات الترقيم الضرورية (إضافة فاصلة بين جملتين متعاطفتين، حذف نقطة من نهاية العنوان).
-- المسافات الزائدة أو الناقصة.
-- الأخطاء الأسلوبية الفجّة فقط (تكرار غير مبرر، ركاكة واضحة).
-
-❌ لا تغيّر:
-- معنى العنوان أو فكرته الأساسية.
-- أسماء الأعلام، الأماكن، المؤسسات، الكلمات الأجنبية، الأسماء التجارية.
-- الأرقام والإحصائيات.
-- علامات التشكيل (لا تُضِف ولا تحذف).
-- ترتيب الكلمات إلا إذا كان النحو خاطئاً.
-
-أعد JSON بهذا الشكل بالضبط:
-{ "suggestion": "العنوان بعد التصحيح", "hasIssues": true/false, "notes": [ { "type": "إملائي|نحوي|ترقيم|أسلوبي", "explanation": "وصف موجز للتصحيح" } ] }
-
-إن كان العنوان سليماً تماماً، أعد suggestion مطابقاً للأصل وhasIssues=false وnotes=[].`,
-            },
-            {
-              role: "user",
-              content: `دقّق هذا العنوان لغوياً:\n\n${truncated}`,
-            },
-          ],
-          response_format: { type: "json_object" },
-          max_completion_tokens: 1024,
-        }),
-        3,
-        "ProofreadTitle"
-      );
-
-      const raw = response.choices?.[0]?.message?.content || '{}';
-      let parsed: { suggestion?: string; hasIssues?: boolean; notes?: Array<{ type?: string; explanation?: string }> } = {};
-      try {
-        parsed = JSON.parse(raw);
-      } catch {
-        parsed = {};
-      }
-
-      const suggestion = (typeof parsed.suggestion === "string" ? parsed.suggestion : cleanTitle).trim();
-      const normalize = (t: string) =>
-        t
-          .replace(/[\u064B-\u065F\u0670\u0640]/g, "")
-          .replace(/[\u200B-\u200F\u202A-\u202E\uFEFF]/g, "")
-          .replace(/\s+/g, " ")
-          .trim();
-
-      const isSame = normalize(suggestion) === normalize(cleanTitle) || suggestion.length === 0;
-      const notes = Array.isArray(parsed.notes) ? parsed.notes.filter((n) => n && typeof n.explanation === "string").slice(0, 10) : [];
-
-      res.json({
-        original: cleanTitle,
-        suggestion: isSame ? cleanTitle : suggestion,
-        hasIssues: !isSame,
-        notes: isSame ? [] : notes,
-      });
+      const { proofreadTitle } = await import("./services/proofreadService");
+      res.json(await proofreadTitle(title, req.user?.id));
     } catch (error: any) {
       console.error("Error proofreading title:", error?.message || error);
-      const isRateLimit = error?.status === 429 || error?.message?.includes("429");
-      res.status(isRateLimit ? 429 : 500).json({
-        message: isRateLimit ? "تم تجاوز حد الطلبات، يرجى المحاولة بعد قليل" : "Failed to proofread title",
-      });
+      const { proofreadErrorResponse } = await import("./services/proofreadService");
+      const { status, message } = proofreadErrorResponse(error);
+      res.status(status).json({ message });
     }
   });
 
@@ -17317,26 +17667,11 @@ Respond in valid JSON format only:
     }
   });
 
-  // News Analytics Endpoint - Smart statistics and insights
   // Smart Headline Comparison - Multi-Model AI
-  app.post("/api/ai/compare-headlines", isAuthenticated, async (req: any, res) => {
+  // نفس صلاحية باقي أدوات العناوين (generate-titles / proofread-title) —
+  // الفحص القديم بـ articles:write + أدوار نصية كان يرفض محررين لديهم articles.ai_generate.
+  app.post("/api/ai/compare-headlines", requireAuth, requirePermission(PERMISSION_CODES.ARTICLES_AI_GENERATE), async (req: any, res) => {
     try {
-      const user = await storage.getUser(req.user.id);
-      if (!user) {
-        return res.status(403).json({ message: "Forbidden" });
-      }
-      
-      // Allow editors, admins, and reporters to use AI headline generation
-      const userPermissions = await getUserPermissions(user.id);
-      const canUseAI = user.role === "admin" || 
-                       user.role === "editor" || 
-                       user.role === "reporter" ||
-                       userPermissions.includes("articles:write");
-      
-      if (!canUseAI) {
-        return res.status(403).json({ message: "Forbidden" });
-      }
-
       const { content, currentTitle } = req.body;
       if (!content) {
         return res.status(400).json({ message: "Content is required" });
@@ -17557,55 +17892,9 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
 
   // News Analytics Endpoint - Smart statistics and insights
 
-  // Text-to-Speech using ElevenLabs
-  app.post("/api/ai/text-to-speech", async (req: any, res) => {
-    try {
-      const { text } = req.body;
-      if (!text) {
-        return res.status(400).json({ message: "Text is required" });
-      }
-
-      const apiKey = process.env.ELEVENLABS_API_KEY;
-      if (!apiKey) {
-        return res.status(500).json({ message: "ElevenLabs API key not configured" });
-      }
-
-      // Using Adam voice (pre-made multilingual voice ID)
-      const voiceId = "pNInz6obpgDQGcFmaJgB"; // Adam - multilingual
-
-      const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
-        method: "POST",
-        headers: {
-          "Accept": "audio/mpeg",
-          "Content-Type": "application/json",
-          "xi-api-key": apiKey,
-        },
-        body: JSON.stringify({
-          text,
-          model_id: "eleven_multilingual_v2",
-          voice_settings: {
-            stability: 0.5,
-            similarity_boost: 0.75,
-          },
-        }),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error("ElevenLabs API error:", errorText);
-        throw new Error(`ElevenLabs API error: ${response.status}`);
-      }
-
-      const audioBuffer = await response.arrayBuffer();
-      
-      res.setHeader("Content-Type", "audio/mpeg");
-      res.setHeader("Content-Length", audioBuffer.byteLength.toString());
-      res.send(Buffer.from(audioBuffer));
-    } catch (error) {
-      console.error("Error generating speech:", error);
-      res.status(500).json({ message: "Failed to generate speech" });
-    }
-  });
+  // الموجز الصوتي لمواضيع مُقترب انتقل إلى server/routes/topicSummaryAudio.ts
+  // (وفق ADR-001 وحارس max-lines). النقطة القديمة POST /api/ai/text-to-speech
+  // حُذفت نهائيًا: كانت بلا مصادقة وتُخلّق أي نص يرسله العميل على حساب ElevenLabs.
 
   // News Analytics Endpoint - Smart statistics and insights
 
@@ -17757,8 +18046,8 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       console.log("📋 [USERS] Fetching users with filters:", req.query);
       
       const params = {
-        page: req.query.page ? parseInt(req.query.page) : undefined,
-        limit: req.query.limit ? parseInt(req.query.limit) : undefined,
+        page: req.query.page ? parsePage(req.query.page, 1) : undefined,
+        limit: req.query.limit ? parseLimit(req.query.limit, 20, 200) : undefined,
         status: req.query.status,
         role: req.query.role,
         verificationBadge: req.query.verificationBadge,
@@ -17812,7 +18101,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
 
       const parsed = suspendUserSchema.safeParse(req.body);
       if (!parsed.success) {
-        return res.status(400).json({ message: "بيانات غير صحيحة", errors: parsed.error });
+        return res.status(400).json({ message: "بيانات غير صحيحة", errors: parsed.error.flatten() });
       }
 
       const { reason, duration } = parsed.data;
@@ -17854,7 +18143,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
 
       const parsed = banUserSchema.safeParse(req.body);
       if (!parsed.success) {
-        return res.status(400).json({ message: "بيانات غير صحيحة", errors: parsed.error });
+        return res.status(400).json({ message: "بيانات غير صحيحة", errors: parsed.error.flatten() });
       }
 
       const { reason, isPermanent, duration } = parsed.data;
@@ -17899,6 +18188,14 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       if (!role) {
         return res.status(400).json({ message: "الدور مطلوب" });
       }
+      // RBAC hierarchy guard (audit #2 — this dashboard sibling was missed by the
+      // first fix, which only covered /api/admin/users/:id/roles). An admin must
+      // not be able to write role='system_admin' or self-escalate.
+      if (userId === req.user?.id) {
+        return res.status(403).json({ message: "لا يمكنك تعديل دورك بنفسك" });
+      }
+      const roleErr = await roleAssignmentError(req.user.id, role);
+      if (roleErr) return res.status(roleErr.status).json({ message: roleErr.message });
 
       const updatedUser = await storage.updateUserRole(userId, role);
       invalidateUserPermissionCache(userId);
@@ -17945,7 +18242,8 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       console.log("🗑️ [USER DELETE] Soft deleting user:", userId);
 
       const updatedUser = await storage.softDeleteUser(userId);
-      
+      await invalidateAllUserSessions(userId); // revoke access immediately (audit #8)
+
       console.log("✅ [USER DELETE] User soft deleted successfully:", userId);
       res.json(updatedUser);
     } catch (error) {
@@ -18042,6 +18340,12 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       if (!role) {
         return res.status(400).json({ message: "الدور مطلوب" });
       }
+      // Same RBAC hierarchy guard as the single-user endpoint (audit #2).
+      if (userIds.includes(req.user?.id)) {
+        return res.status(403).json({ message: "لا يمكنك تعديل دورك ضمن التحديث الجماعي" });
+      }
+      const bulkRoleErr = await roleAssignmentError(req.user.id, role);
+      if (bulkRoleErr) return res.status(bulkRoleErr.status).json({ message: bulkRoleErr.message });
 
       const result = await storage.bulkUpdateUserRole(userIds, role);
       for (const uid of userIds) {
@@ -18183,7 +18487,10 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   app.put("/api/user/preferences", requireAuth, async (req: any, res) => {
     try {
       const userId = req.user.id;
-      const updatedPrefs = await storage.updateUserFullPreferences(userId, req.body);
+      // WHERE is bound to the session user, but `...prefs` carried `userId`
+      // from the body into the SET, re-pointing the row at another account.
+      const prefs = pickTableColumns(userPreferences, req.body, { omit: ["userId"] });
+      const updatedPrefs = await storage.updateUserFullPreferences(userId, prefs);
       res.json(updatedPrefs);
     } catch (error) {
       console.error("Error updating user preferences:", error);
@@ -18269,8 +18576,10 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         .filter((e: any) => e && typeof e.id === "string" && typeof e.timestamp === "number")
         .slice(0, 200);
 
-      let saved = 0;
-      for (const e of clean) {
+      if (clean.length === 0) return res.json({ saved: 0 });
+
+      // دفعة واحدة بدل حتى 200 INSERT متسلسل (~1s+ على Neon تحت ضغط).
+      const valueRows = clean.map((e: any) => {
         const ts = new Date(e.timestamp);
         const kws = Array.isArray(e.keywords)
           ? e.keywords.filter((k: any) => typeof k === "string").slice(0, 20)
@@ -18279,23 +18588,24 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         const kwsLiteral = kws.length === 0
           ? sql`ARRAY[]::text[]`
           : sql`ARRAY[${sql.join(kws.map((k: string) => sql`${k}`), sql`, `)}]::text[]`;
-        await db.execute(sql`
-          INSERT INTO user_reading_history
-            (user_id, article_id, category_id, category_name, keywords, timestamp, time_spent)
-          VALUES (${userId}, ${e.id},
+        return sql`(${userId}, ${e.id},
                   ${e.categoryId || null}, ${e.categoryName || null},
-                  ${kwsLiteral}, ${ts}, ${timeSpent})
-          ON CONFLICT (user_id, article_id) DO UPDATE SET
-            category_id = COALESCE(EXCLUDED.category_id, user_reading_history.category_id),
-            category_name = COALESCE(EXCLUDED.category_name, user_reading_history.category_name),
-            keywords = CASE WHEN array_length(EXCLUDED.keywords, 1) IS NOT NULL
-                            THEN EXCLUDED.keywords ELSE user_reading_history.keywords END,
-            timestamp = GREATEST(EXCLUDED.timestamp, user_reading_history.timestamp),
-            time_spent = GREATEST(EXCLUDED.time_spent, user_reading_history.time_spent)
-        `);
-        saved++;
-      }
-      res.json({ saved });
+                  ${kwsLiteral}, ${ts}, ${timeSpent})`;
+      });
+
+      await db.execute(sql`
+        INSERT INTO user_reading_history
+          (user_id, article_id, category_id, category_name, keywords, timestamp, time_spent)
+        VALUES ${sql.join(valueRows, sql`, `)}
+        ON CONFLICT (user_id, article_id) DO UPDATE SET
+          category_id = COALESCE(EXCLUDED.category_id, user_reading_history.category_id),
+          category_name = COALESCE(EXCLUDED.category_name, user_reading_history.category_name),
+          keywords = CASE WHEN array_length(EXCLUDED.keywords, 1) IS NOT NULL
+                          THEN EXCLUDED.keywords ELSE user_reading_history.keywords END,
+          timestamp = GREATEST(EXCLUDED.timestamp, user_reading_history.timestamp),
+          time_spent = GREATEST(EXCLUDED.time_spent, user_reading_history.time_spent)
+      `);
+      res.json({ saved: clean.length });
     } catch (error) {
       console.error("Error saving reading history:", error);
       res.status(500).json({ message: "Failed to save reading history" });
@@ -18445,8 +18755,8 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       const userId = req.user.id;
       const { page = 1, limit = 20, action, entityType } = req.query;
       
-      const pageNum = parseInt(page as string) || 1;
-      const limitNum = Math.min(parseInt(limit as string) || 20, 100);
+      const pageNum = parsePage(page, 1);
+      const limitNum = parseLimit(limit, 20, 100);
       const offset = (pageNum - 1) * limitNum;
       
       // Build conditions
@@ -19206,7 +19516,9 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         return res.json({ recommendations: [], hasInteractions: false });
       }
 
-      const limit = Math.min(parseInt(req.query.limit as string) || 5, 10);
+      const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 5, maxLimit: 10 });
+      if (!pg) return;
+      const limit = pg.limit;
       const recommendations = await recommendationService.getFeedRecommendations(userId, limit);
 
       res.json({
@@ -19229,7 +19541,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         return res.json({ articles: [] });
       }
 
-      const limit = Math.min(parseInt(req.query.limit as string) || 5, 10);
+      const limit = parseLimit(req.query.limit, 5, 10);
       const articles = await storage.getContinueReading(userId, limit);
 
       res.json({ 
@@ -19351,8 +19663,8 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       const userId = req.user.id;
       
       // Validate and sanitize pagination parameters
-      const rawLimit = parseInt(req.query.limit as string) || 20;
-      const rawOffset = parseInt(req.query.offset as string) || 0;
+      const rawLimit = parseLimit(req.query.limit, 20, 100);
+      const rawOffset = parseOffset(req.query.offset);
       const limit = Math.min(Math.max(rawLimit, 1), 100); // Clamp between 1 and 100
       const offset = Math.max(rawOffset, 0); // Minimum 0
       
@@ -19742,7 +20054,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   app.get("/api/behavior/interests", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.id;
-      const limit = Math.min(parseInt(req.query.limit as string) || 10, 50);
+      const limit = parseLimit(req.query.limit, 10, 50);
       
       const { behaviorSignalService } = await import('./notificationMemoryService');
       const interests = await behaviorSignalService.getTopInterests(userId, limit);
@@ -19981,7 +20293,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   app.get("/api/loyalty/history", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.id;
-      const limit = parseInt(req.query.limit as string) || 50;
+      const limit = parseLimit(req.query.limit, 50, 100);
       const history = await storage.getUserLoyaltyHistory(userId, limit);
       res.json(history);
     } catch (error) {
@@ -20026,39 +20338,14 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   // Get loyalty leaderboard
   app.get("/api/loyalty/leaderboard", async (req: any, res) => {
     try {
-      const limit = parseInt(req.query.limit as string) || 100;
+      const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 100, maxLimit: 100 });
+      if (!pg) return;
+      const limit = pg.limit;
       const topUsers = await storage.getTopUsers(limit);
       res.json(topUsers);
     } catch (error) {
       console.error("Error fetching leaderboard:", error);
       res.status(500).json({ message: "Failed to fetch leaderboard" });
-    }
-  });
-
-  // News Analytics Endpoint - Smart statistics and insights
-
-  // Manual points update endpoint (for testing/admin use)
-  app.post("/api/loyalty/update-points", requireAuth, async (req: any, res) => {
-    try {
-      const userId = req.user.id;
-      const { points, reason } = req.body;
-      
-      if (typeof points !== 'number') {
-        return res.status(400).json({ error: 'Points must be a number' });
-      }
-      
-      // Update points
-      await storage.updateUserPointsTotal(userId, {
-        totalPoints: points,
-      });
-      
-      // Trigger pass update
-      await storage.triggerLoyaltyPassUpdate(userId, reason || 'manual_update');
-      
-      res.json({ success: true, points });
-    } catch (error: any) {
-      console.error('Error updating points:', error);
-      res.status(500).json({ error: error.message });
     }
   });
 
@@ -20088,7 +20375,9 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   // Get latest published topics for homepage block
   app.get("/api/muqtarab/latest-topics", async (req, res) => {
     try {
-      const limit = Number(req.query.limit) || 3;
+      const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 3, maxLimit: 50 });
+      if (!pg) return;
+      const limit = pg.limit;
       const topics = await storage.getLatestPublishedTopics(limit);
       res.json({ topics });
     } catch (error) {
@@ -20100,7 +20389,9 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   // GET /api/muqtarab/topics/featured - Get featured topics for homepage showcase
   app.get("/api/muqtarab/topics/featured", async (req, res) => {
     try {
-      const limit = Number(req.query.limit) || 8;
+      const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 8, maxLimit: 50 });
+      if (!pg) return;
+      const limit = pg.limit;
       const topicsWithAngles = await storage.getLatestPublishedTopics(limit);
       
       // Transform to match frontend expected format
@@ -20144,7 +20435,9 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   app.get("/api/muqtarab/angles/:slug", async (req, res) => {
     try {
       const { slug } = req.params;
-      const limit = parseInt(req.query.limit as string) || 12;
+      const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 12, maxLimit: 50 });
+      if (!pg) return;
+      const limit = pg.limit;
       
       const angle = await storage.getAngleBySlug(slug);
       if (!angle) {
@@ -20170,7 +20463,9 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   app.get("/api/muqtarab/angles/:angleSlug/topics", async (req, res) => {
     try {
       const { angleSlug } = req.params;
-      const limit = Number(req.query.limit) || 20;
+      const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 20, maxLimit: 50 });
+      if (!pg) return;
+      const limit = pg.limit;
       
       const topics = await storage.getPublishedTopicsByAngle(angleSlug, limit);
       res.json({ topics });
@@ -20387,9 +20682,9 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
           html: emailHtml,
         }).then(result => {
           if (result.success) {
-            console.log(`[AngleSubmissions] Email sent to ${submission.email} for ${status}`);
+            console.log(`[AngleSubmissions] Email accepted for delivery (${status})`);
           } else {
-            console.error(`[AngleSubmissions] Failed to send email: ${result.error}`);
+            console.error("[AngleSubmissions] Email provider rejected delivery");
           }
         }).catch(err => {
           console.error("[AngleSubmissions] Email error:", err);
@@ -20599,8 +20894,8 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       
       const result = await storage.getTopicsByAngle(angleId, {
         status: status as 'draft' | 'published' | 'archived' | undefined,
-        limit: limit ? Number(limit) : 200,
-        offset: offset ? Number(offset) : 0,
+        limit: parseLimit(limit, 200, 200),
+        offset: parseOffset(offset),
         listOnly: true,
       });
       
@@ -20944,7 +21239,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         const userId = req.user.id;
         console.log(`[API] GET /api/recommendations/personalized - User: ${userId}`);
 
-        const rawLimit = req.query.limit ? parseInt(req.query.limit as string) : 20;
+        const rawLimit = parseLimit(req.query.limit, 20, 50);
         const limit = Math.min(Math.max(rawLimit, 1), 50);
         
         console.log(`[API] Requested limit: ${rawLimit}, Sanitized limit: ${limit}`);
@@ -20971,7 +21266,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         return res.status(401).json({ message: "يجب تسجيل الدخول للحصول على التوصيات" });
       }
 
-      const limit = Math.min(parseInt(req.query.limit as string) || 10, 50);
+      const limit = parseLimit(req.query.limit, 10, 50);
       const recommendations = await hybridRecommendationEngine.getRecommendations(userId, limit);
 
       res.json({
@@ -20994,7 +21289,9 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   app.get("/api/recommendations/similar/:articleId", async (req, res) => {
     try {
       const { articleId } = req.params;
-      const limit = parseInt(req.query.limit as string) || 5;
+      const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 5, maxLimit: 20 });
+      if (!pg) return;
+      const limit = pg.limit;
 
       const { findSimilarArticles } = await import('./similarityEngine');
       const similar = await findSimilarArticles(articleId, limit);
@@ -21011,7 +21308,9 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   // Get trending articles
   app.get("/api/recommendations/trending", async (req, res) => {
     try {
-      const limit = parseInt(req.query.limit as string) || 10;
+      const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 10, maxLimit: 20 });
+      if (!pg) return;
+      const limit = pg.limit;
 
       const { getTrendingArticles } = await import('./similarityEngine');
       const trending = await getTrendingArticles(limit);
@@ -21121,7 +21420,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   app.get("/api/recommendations/log", requireAuth, async (req: any, res) => {
     try {
       const userId = req.user.id;
-      const limit = parseInt(req.query.limit as string) || 50;
+      const limit = parseLimit(req.query.limit, 50, 200);
       const { recommendationLog } = await import('@shared/schema');
 
       const logs = await db.query.recommendationLog.findMany({
@@ -21548,6 +21847,12 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
     try {
       const { id } = req.params;
 
+      // articles.ai_generate says nothing about WHICH article.
+      const access = await authorizeArticleWrite(req.user.id, id);
+      if (!access.ok) {
+        return res.status(access.httpStatus).json({ message: access.message });
+      }
+
       // Get article
       const [article] = await db
         .select()
@@ -21740,6 +22045,12 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       if (validated.mode === "saved") {
         // Existing flow: generate SEO for saved article
         const { articleId, language } = validated;
+
+        // articles.ai_generate is not article-scoped.
+        const access = await authorizeArticleWrite(req.user.id, articleId);
+        if (!access.ok) {
+          return res.status(access.httpStatus).json({ message: access.message });
+        }
 
         // Fetch article using storage method
         const article = await storage.getArticleForSeo(articleId, language);
@@ -22247,6 +22558,8 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         return res.status(404).json({ message: "المراسل غير موجود" });
       }
 
+      // ملف عام شبه ثابت — CF يمتص التكرار بعد أول تعبئة للكاش الداخلي.
+      res.set("Cache-Control", "public, max-age=60, s-maxage=300, stale-while-revalidate=600");
       res.json(profile);
     } catch (error: any) {
       console.error("Error fetching reporter profile:", error);
@@ -22272,6 +22585,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         return res.status(404).json({ message: "Reporter not found" });
       }
 
+      res.set("Cache-Control", "public, max-age=60, s-maxage=300, stale-while-revalidate=600");
       res.json(profile);
     } catch (error: any) {
       console.error("Error fetching reporter profile:", error);
@@ -22285,6 +22599,9 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   // Smart Blocks Routes - البلوكات الذكية
   // ==========================================
 
+  // NOTE (2026-07-19): Arabic/EN/UR smart-blocks handlers below are superseded by
+  // server/routes/smartBlocks.ts (registerSplitRoutes mounts first). Keep temporarily
+  // for reference; do not add new logic here — edit smartBlocksService instead.
   // GET /api/smart-blocks - List all smart blocks
   app.get("/api/smart-blocks", noCache(), async (req: any, res) => {
     try {
@@ -22417,13 +22734,15 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   // GET /api/smart-blocks/query/articles - Query articles by keyword
   app.get("/api/smart-blocks/query/articles", async (req: any, res) => {
     try {
-      const { keyword, limit = 6, categories, dateFrom, dateTo } = req.query;
+      const { keyword, categories, dateFrom, dateTo } = req.query;
+      const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 6, maxLimit: 30 });
+      if (!pg) return;
 
       if (!keyword) {
         return res.status(400).json({ message: "الكلمة المفتاحية مطلوبة" });
       }
 
-      console.log(`🔍 [Smart Block] Searching for keyword: "${keyword}", limit: ${limit}`);
+      console.log(`🔍 [Smart Block] Searching for keyword: "${keyword}", limit: ${pg.limit}`);
 
       const filters: any = {};
       if (categories) {
@@ -22438,7 +22757,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
 
       const articles = await storage.queryArticlesByKeyword(
         keyword,
-        parseInt(limit as string) || 6,
+        pg.limit,
         filters
       );
 
@@ -22604,13 +22923,15 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   // GET /api/en/smart-blocks/query/articles - Query English articles by keyword
   app.get("/api/en/smart-blocks/query/articles", async (req: any, res) => {
     try {
-      const { keyword, limit = 6, categories, dateFrom, dateTo } = req.query;
+      const { keyword, categories, dateFrom, dateTo } = req.query;
+      const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 6, maxLimit: 30 });
+      if (!pg) return;
 
       if (!keyword) {
         return res.status(400).json({ message: "Keyword is required" });
       }
 
-      console.log(`🔍 [EN Smart Block] Searching for keyword: "${keyword}", limit: ${limit}`);
+      console.log(`🔍 [EN Smart Block] Searching for keyword: "${keyword}", limit: ${pg.limit}`);
 
       const conditions: any[] = [
         eq(enArticles.status, 'published'),
@@ -22639,7 +22960,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         .leftJoin(users, eq(enArticles.authorId, users.id))
         .where(and(...conditions))
         .orderBy(desc(enArticles.publishedAt))
-        .limit(parseInt(limit as string) || 6);
+        .limit(pg.limit);
 
       // Map results to include category and author information
       const articles = results.map(result => {
@@ -22673,409 +22994,6 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   // News Analytics Endpoint - Smart statistics and insights
 
   // ============================================================
-  // AUDIO NEWSLETTERS ROUTES - النشرات الصوتية
-  // ============================================================
-
-  // GET /api/audio-newsletters/admin - List all newsletters for admin (protected)
-  app.get("/api/audio-newsletters/admin", 
-    requireAuth,
-    requirePermission('audio_newsletters.view'),
-    async (req: any, res) => {
-    try {
-        const { limit = 50, offset = 0 } = req.query;
-
-        // Admin can see all statuses
-        const newsletters = await storage.getAllAudioNewsletters({
-          limit: parseInt(limit as string),
-          offset: parseInt(offset as string),
-        });
-
-        res.json(newsletters);
-      } catch (error: any) {
-        console.error("Error fetching audio newsletters:", error);
-        res.status(500).json({ message: "فشل في جلب النشرات الصوتية" });
-      }
-    }
-  );
-
-  // GET /api/audio-newsletters - List published newsletters (public)
-  app.get("/api/audio-newsletters", async (req: any, res) => {
-    try {
-      const { status = 'published', limit = 20, offset = 0 } = req.query;
-
-      const newsletters = await storage.getAllAudioNewsletters({
-        status: status as string,
-        limit: parseInt(limit as string),
-        offset: parseInt(offset as string),
-      });
-
-      res.json({ newsletters, total: newsletters.length });
-    } catch (error: any) {
-      console.error("Error fetching audio newsletters:", error);
-      res.status(500).json({ message: "فشل في جلب النشرات الصوتية" });
-    }
-  });
-
-  // News Analytics Endpoint - Smart statistics and insights
-
-  // GET /api/audio-newsletters/feed.xml - RSS/Podcast feed (public)
-  app.get("/api/audio-newsletters/feed.xml", async (req: any, res) => {
-    try {
-      const newsletters = await storage.getAllAudioNewsletters({
-        status: 'published',
-        limit: 50,
-      });
-
-      const baseUrl = `${req.protocol}://${req.get('host')}`;
-
-      const rssItems = newsletters
-        .filter(n => n.audioUrl && n.publishedAt)
-        .map(newsletter => {
-          const pubDate = newsletter.publishedAt ? new Date(newsletter.publishedAt).toUTCString() : new Date().toUTCString();
-          const duration = newsletter.duration || 0;
-          const fileSize = newsletter.fileSize || 0;
-
-          return `
-    <item>
-      <title><![CDATA[${newsletter.title}]]></title>
-      <description><![CDATA[${newsletter.description || ''}]]></description>
-      <link>${baseUrl}/audio-newsletters/${newsletter.slug}</link>
-      <guid isPermaLink="false">${newsletter.id}</guid>
-      <pubDate>${pubDate}</pubDate>
-      <enclosure url="${newsletter.audioUrl}" length="${fileSize}" type="audio/mpeg"/>
-      <itunes:duration>${duration}</itunes:duration>
-      <itunes:author>${newsletter.author || 'سبق الذكية'}</itunes:author>
-      <itunes:explicit>no</itunes:explicit>
-      ${newsletter.coverImageUrl ? `<itunes:image href="${newsletter.coverImageUrl}"/>` : ''}
-    </item>`;
-        }).join('\n');
-
-      const rssXml = `<?xml version="1.0" encoding="UTF-8"?>
-<rss version="2.0" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd" xmlns:atom="http://www.w3.org/2005/Atom">
-  <channel>
-    <title>سبق الذكية - النشرات الصوتية</title>
-    <link>${baseUrl}/audio-newsletters</link>
-    <atom:link href="${baseUrl}/api/audio-newsletters/feed.xml" rel="self" type="application/rss+xml"/>
-    <description>النشرات الإخبارية الصوتية من سبق الذكية</description>
-    <language>ar</language>
-    <copyright>© ${new Date().getFullYear()} سبق الذكية</copyright>
-    <itunes:author>سبق الذكية</itunes:author>
-    <itunes:summary>النشرات الإخبارية الصوتية من سبق الذكية</itunes:summary>
-    <itunes:category text="News"/>
-    <itunes:explicit>no</itunes:explicit>
-    ${rssItems}
-  </channel>
-</rss>`;
-
-      res.set('Content-Type', 'application/xml; charset=utf-8');
-      res.send(rssXml);
-    } catch (error: any) {
-      console.error("Error generating RSS feed:", error);
-      res.status(500).send('<?xml version="1.0" encoding="UTF-8"?><error>Failed to generate feed</error>');
-    }
-  });
-
-  // News Analytics Endpoint - Smart statistics and insights
-
-  // GET /api/audio-newsletters/:slug - Get newsletter by slug (public)
-  app.get("/api/audio-newsletters/:slug", async (req: any, res) => {
-    try {
-      const newsletter = await storage.getAudioNewsletterBySlug(req.params.slug);
-
-      if (!newsletter) {
-        return res.status(404).json({ message: "النشرة الصوتية غير موجودة" });
-      }
-
-      if (newsletter.status !== 'published' && !req.user) {
-        return res.status(403).json({ message: "هذه النشرة غير منشورة" });
-      }
-
-      res.json(newsletter);
-    } catch (error: any) {
-      console.error("Error fetching audio newsletter:", error);
-      res.status(500).json({ message: "فشل في جلب النشرة الصوتية" });
-    }
-  });
-
-  // News Analytics Endpoint - Smart statistics and insights
-
-  // POST /api/audio-newsletters - Create new newsletter (admin only)
-  app.post("/api/audio-newsletters", requireAuth, requirePermission('audio_newsletters.create'), async (req: any, res) => {
-    try {
-      const validatedData = insertAudioNewsletterSchema.parse(req.body);
-
-      // Auto-generate slug from title if not provided
-      let slug = validatedData.slug;
-      if (!slug && validatedData.title) {
-        slug = validatedData.title
-          .toLowerCase()
-          .replace(/[^a-z0-9\u0600-\u06FF\s-]/g, '')
-          .replace(/\s+/g, '-')
-          .substring(0, 100);
-      }
-
-      const newsletter = await storage.createAudioNewsletter({
-        ...validatedData,
-        slug: slug || `newsletter-${Date.now()}`,
-        generatedBy: req.user.id,
-      });
-
-      await logActivity({
-        userId: req.user.id,
-        action: 'create_audio_newsletter',
-        entityType: 'audio_newsletter',
-        entityId: newsletter.id,
-        newValue: { title: newsletter.title, slug: newsletter.slug }
-      });
-
-      res.json(newsletter);
-    } catch (error: any) {
-      console.error("Error creating audio newsletter:", error);
-      if (error.name === 'ZodError') {
-        return res.status(400).json({ message: "بيانات غير صحيحة", errors: error.errors });
-      }
-      res.status(500).json({ message: "فشل في إنشاء النشرة الصوتية" });
-    }
-  });
-
-  // News Analytics Endpoint - Smart statistics and insights
-
-  // POST /api/audio-newsletters/:id/generate - Generate TTS audio (admin only)
-  app.post("/api/audio-newsletters/:id/generate", 
-    requireAuth, 
-    requirePermission('audio_newsletters.manage_all'),
-    async (req: any, res) => {
-    try {
-        const newsletter = await storage.getAudioNewsletterById(req.params.id);
-
-        if (!newsletter) {
-          return res.status(404).json({ message: "النشرة الصوتية غير موجودة" });
-        }
-
-        // Import job queue
-        const { jobQueue } = await import("./services/job-queue");
-
-        // Add job to queue instead of processing immediately
-        const jobId = await jobQueue.add('generate-tts', { 
-          newsletterId: req.params.id, 
-          userId: req.user.id 
-        });
-
-      res.json({ 
-          status: 'queued', 
-          jobId, 
-          message: 'جاري التوليد في الخلفية' 
-        });
-      } catch (error: any) {
-        console.error("Error initiating audio generation:", error);
-        res.status(500).json({ message: "فشل في بدء توليد الصوت" });
-      }
-    }
-  );
-
-  // GET /api/audio-newsletters/jobs/:jobId - Get job status (admin only)
-  app.get("/api/audio-newsletters/jobs/:jobId",
-    requireAuth,
-    async (req: any, res) => {
-    try {
-        const { jobQueue } = await import("./services/job-queue");
-        const job = await jobQueue.getStatus(req.params.jobId);
-        
-        if (!job) {
-          return res.status(404).json({ message: 'الوظيفة غير موجودة' });
-        }
-        
-        res.json(job);
-      } catch (error: any) {
-        console.error("Error fetching job status:", error);
-        res.status(500).json({ message: "فشل في جلب حالة الوظيفة" });
-      }
-    }
-  );
-
-  // PUT /api/audio-newsletters/:id - Update newsletter (admin only)
-  app.put("/api/audio-newsletters/:id", requireAuth, requirePermission('audio_newsletters.update'), async (req: any, res) => {
-    try {
-      const validatedData = updateAudioNewsletterSchema.parse(req.body);
-
-      const existing = await storage.getAudioNewsletterById(req.params.id);
-      if (!existing) {
-        return res.status(404).json({ message: "النشرة الصوتية غير موجودة" });
-      }
-
-      const updated = await storage.updateAudioNewsletter(req.params.id, validatedData);
-
-      await logActivity({
-        userId: req.user.id,
-        action: 'update_audio_newsletter',
-        entityType: 'audio_newsletter',
-        entityId: req.params.id,
-        oldValue: { title: existing.title, status: existing.status },
-        newValue: { title: updated.title, status: updated.status }
-      });
-
-      res.json(updated);
-    } catch (error: any) {
-      console.error("Error updating audio newsletter:", error);
-      if (error.name === 'ZodError') {
-        return res.status(400).json({ message: "بيانات غير صحيحة", errors: error.errors });
-      }
-      res.status(500).json({ message: "فشل في تحديث النشرة الصوتية" });
-    }
-  });
-
-  // News Analytics Endpoint - Smart statistics and insights
-
-  // DELETE /api/audio-newsletters/:id - Delete newsletter (admin only)
-  app.delete("/api/audio-newsletters/:id", requireAuth, requirePermission('audio_newsletters.delete'), async (req: any, res) => {
-    try {
-      const existing = await storage.getAudioNewsletterById(req.params.id);
-      if (!existing) {
-        return res.status(404).json({ message: "النشرة الصوتية غير موجودة" });
-      }
-
-      await storage.deleteAudioNewsletter(req.params.id);
-
-      await logActivity({
-        userId: req.user.id,
-        action: 'delete_audio_newsletter',
-        entityType: 'audio_newsletter',
-        entityId: req.params.id,
-        oldValue: { title: existing.title }
-      });
-
-      res.json({ success: true, message: "تم حذف النشرة الصوتية بنجاح" });
-    } catch (error: any) {
-      console.error("Error deleting audio newsletter:", error);
-      res.status(500).json({ message: "فشل في حذف النشرة الصوتية" });
-    }
-  });
-
-  // News Analytics Endpoint - Smart statistics and insights
-
-  // POST /api/audio-newsletters/:id/articles - Add articles to newsletter (admin only)
-  app.post("/api/audio-newsletters/:id/articles", requireAuth, requirePermission('audio_newsletters.update'), async (req: any, res) => {
-    try {
-      const { articleIds } = req.body;
-
-      if (!Array.isArray(articleIds) || articleIds.length === 0) {
-        return res.status(400).json({ message: "يجب تحديد مقالات" });
-      }
-
-      const newsletter = await storage.getAudioNewsletterById(req.params.id);
-      if (!newsletter) {
-        return res.status(404).json({ message: "النشرة الصوتية غير موجودة" });
-      }
-
-      await storage.addArticlesToNewsletter(req.params.id, articleIds);
-
-      res.json({ success: true, message: "تمت إضافة المقالات بنجاح" });
-    } catch (error: any) {
-      console.error("Error adding articles to newsletter:", error);
-      res.status(500).json({ message: "فشل في إضافة المقالات" });
-    }
-  });
-
-  // News Analytics Endpoint - Smart statistics and insights
-
-  // DELETE /api/audio-newsletters/:id/articles/:articleId - Remove article from newsletter (admin only)
-  app.delete("/api/audio-newsletters/:id/articles/:articleId", requireAuth, requirePermission('audio_newsletters.update'), async (req: any, res) => {
-    try {
-      await storage.removeArticleFromNewsletter(req.params.id, req.params.articleId);
-
-      res.json({ success: true, message: "تمت إزالة المقال بنجاح" });
-    } catch (error: any) {
-      console.error("Error removing article from newsletter:", error);
-      res.status(500).json({ message: "فشل في إزالة المقال" });
-    }
-  });
-
-  // News Analytics Endpoint - Smart statistics and insights
-
-  // POST /api/audio-newsletters/:id/publish - Publish newsletter (admin only)
-  app.post("/api/audio-newsletters/:id/publish", 
-    requireAuth, 
-    requirePermission('audio_newsletters.publish'), 
-    async (req: any, res) => {
-    try {
-      const newsletter = await storage.getAudioNewsletterById(req.params.id);
-
-      if (!newsletter) {
-        return res.status(404).json({ message: "النشرة الصوتية غير موجودة" });
-      }
-
-      if (!newsletter.audioUrl) {
-        return res.status(400).json({ message: "يجب توليد الصوت أولاً" });
-      }
-
-      const updated = await storage.updateAudioNewsletter(req.params.id, {
-        status: 'published',
-        publishedAt: new Date(),
-      });
-
-      await logActivity({
-        userId: req.user.id,
-        action: 'publish_audio_newsletter',
-        entityType: 'audio_newsletter',
-        entityId: req.params.id,
-        newValue: { status: 'published' }
-      });
-
-      res.json(updated);
-    } catch (error: any) {
-      console.error("Error publishing audio newsletter:", error);
-      res.status(500).json({ message: "فشل في نشر النشرة الصوتية" });
-    }
-  });
-
-  // News Analytics Endpoint - Smart statistics and insights
-
-  // POST /api/audio-newsletters/:id/listen - Track listening event (public/authenticated)
-  app.post("/api/audio-newsletters/:id/listen", async (req: any, res) => {
-    try {
-      const validatedData = insertAudioNewsletterListenSchema.parse(req.body);
-
-      const { nanoid } = await import('nanoid');
-
-      const listenData = {
-        ...validatedData,
-        newsletterId: req.params.id,
-        userId: req.user?.id || null,
-        sessionId: validatedData.sessionId || nanoid(),
-        ipAddress: req.ip || req.connection.remoteAddress,
-        userAgent: req.get('user-agent'),
-      };
-
-      const listen = await storage.trackListen(listenData as any);
-
-      res.json(listen);
-    } catch (error: any) {
-      console.error("Error tracking listen:", error);
-      if (error.name === 'ZodError') {
-        return res.status(400).json({ message: "بيانات غير صحيحة", errors: error.errors });
-      }
-      res.status(500).json({ message: "فشل في تسجيل الاستماع" });
-    }
-  });
-
-  // News Analytics Endpoint - Smart statistics and insights
-
-  // GET /api/audio-newsletters/:id/analytics - Get analytics (admin only)
-  app.get("/api/audio-newsletters/:id/analytics", requireAuth, requirePermission('audio_newsletters.view_analytics'), async (req: any, res) => {
-    try {
-      const analytics = await storage.getNewsletterAnalytics(req.params.id);
-
-      res.json(analytics);
-    } catch (error: any) {
-      console.error("Error fetching analytics:", error);
-      res.status(500).json({ message: "فشل في جلب الإحصائيات" });
-    }
-  });
-
-  // News Analytics Endpoint - Smart statistics and insights
-
-
-  // ============================================================
   // AI PUBLISHER API v1 - Machine-readable endpoints for LLMs
   // ============================================================
 
@@ -23092,8 +23010,10 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         featured
       } = req.query;
 
-      const limitNum = Math.min(parseInt(limit as string), 200);
-      const offsetNum = parseInt(offset as string);
+      const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 50, maxLimit: 200 });
+      if (!pg) return;
+      const limitNum = pg.limit;
+      const offsetNum = pg.offset;
 
       let query = db
         .select({
@@ -23220,8 +23140,10 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   app.get("/api/v1/weekly-photos", async (req, res) => {
     try {
       const { page = '1', limit = '10' } = req.query;
-      const pageNum = Math.max(1, parseInt(page as string, 10) || 1);
-      const limitNum = Math.max(1, Math.min(50, parseInt(limit as string, 10) || 10));
+      const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 10, maxLimit: 50, allowPage: true, defaultPage: 1 });
+      if (!pg) return;
+      const pageNum = pg.page;
+      const limitNum = pg.limit;
       const offset = (pageNum - 1) * limitNum;
 
       const results = await db
@@ -23462,7 +23384,9 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         return res.status(400).json({ message: "Search query 'q' is required" });
       }
 
-      const limitNum = Math.min(parseInt(limit as string), 100);
+      const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 20, maxLimit: 100 });
+      if (!pg) return;
+      const limitNum = pg.limit;
       const searchQuery = q as string;
 
       let query = db
@@ -23539,7 +23463,9 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   app.get("/api/v1/breaking", async (req, res) => {
     try {
       const { limit = "10" } = req.query;
-      const limitNum = Math.min(parseInt(limit as string), 50);
+      const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 10, maxLimit: 50 });
+      if (!pg) return;
+      const limitNum = pg.limit;
 
       const results = await db
         .select({
@@ -25252,7 +25178,11 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   // Public: Get all published opinion articles
   app.get("/api/opinion", async (req, res) => {
     try {
-      const { page = 1, limit = 12, authorId, search, sort } = req.query;
+      const { authorId, search, sort } = req.query;
+      const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 12, maxLimit: 50, allowPage: true, defaultPage: 1 });
+      if (!pg) return;
+      const page = pg.page;
+      const limit = pg.limit;
       // `sort=views`     — order by all-time view count desc.
       // `sort=trending`  — restrict to articles published in the last 24h
       //                    and order by views desc. Powers the iOS "ترند
@@ -25270,7 +25200,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         return res.json(cached);
       }
 
-      const offset = (Number(page) - 1) * Number(limit);
+      const offset = pg.offset;
 
       const reporterAlias = aliasedTable(users, 'reporter');
 
@@ -25353,7 +25283,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
           sortByViews    ? desc(articles.views) :
                            desc(articles.publishedAt)
         )
-        .limit(Number(limit))
+        .limit(limit)
         .offset(offset);
 
       const formattedArticles = results.map((row) => ({
@@ -25372,10 +25302,10 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       const result = {
         articles: formattedArticles,
         pagination: {
-          page: Number(page),
-          limit: Number(limit),
+          page,
+          limit,
           total: count,
-          totalPages: Math.ceil(count / Number(limit)),
+          totalPages: Math.ceil(count / limit),
         },
       };
       // Cache the result before sending - TTL 20 seconds
@@ -25464,7 +25394,9 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   app.get("/api/opinion/related/category/:categoryId", async (req, res) => {
     try {
       const { categoryId } = req.params;
-      const { excludeId, limit = 5 } = req.query;
+      const { excludeId } = req.query;
+      const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 5, maxLimit: 20 });
+      if (!pg) return;
 
       // Build query for opinion articles in the same category
       let query = db
@@ -25515,7 +25447,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
           )
         )
         .orderBy(sql`score DESC`)
-        .limit(Number(limit));
+        .limit(pg.limit);
 
       const results = await query;
 
@@ -25545,11 +25477,41 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   app.get("/api/dashboard/opinion", requireAuth, requireAnyPermission("articles.view", "articles.edit_own"), async (req: any, res) => {
     try {
       const userId = req.user?.id;
-      const userPermissions = await getUserPermissions(userId);
+      const userPermissions = await getEffectiveUserPermissions(userId);
       const { page = 1, limit = 20, status, reviewStatus, search } = req.query;
-      const offset = (Number(page) - 1) * Number(limit);
+      const pageNum = parsePage(page, 1);
+      const limitNum = parseLimit(limit, 20, 200);
+      const offset = (pageNum - 1) * limitNum;
 
-      let query = db
+      // رؤية كل مواد الرأي للمكتب فقط؛ غيرهم يرى مواده هو. (القديم كان fail-open:
+      // الفلتر كان يُطبَّق فقط على حاملي opinion.edit_own)
+      const canSeeAllOpinion =
+        userPermissions.includes("*") ||
+        userPermissions.includes("system.admin") ||
+        userPermissions.includes("articles.edit_any") ||
+        userPermissions.includes("opinion.edit_any");
+
+      // شرط واحد مركّب — .where() المتسلسلة في Drizzle تستبدل بعضها ولا تتراكم.
+      const conditions = [eq(articles.articleType, "opinion")];
+      if (!canSeeAllOpinion) {
+        conditions.push(eq(articles.authorId, userId));
+      }
+      if (status && status !== "all") {
+        conditions.push(eq(articles.status, status as string));
+      }
+      if (reviewStatus && reviewStatus !== "all") {
+        conditions.push(eq(articles.reviewStatus, reviewStatus as string));
+      }
+      if (search) {
+        conditions.push(
+          or(
+            ilike(articles.title, `%${search}%`),
+            ilike(articles.excerpt, `%${search}%`)
+          )!
+        );
+      }
+
+      const results = await db
         .select({
           article: articleAdminSelect,
           category: categories,
@@ -25564,34 +25526,9 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         .from(articles)
         .leftJoin(categories, eq(articles.categoryId, categories.id))
         .leftJoin(users, eq(articles.authorId, users.id))
-        .where(eq(articles.articleType, "opinion"))
-        .$dynamic();
-
-      // If user can only view their own, filter by authorId
-      if (!userPermissions.includes("opinion.edit_any") && userPermissions.includes("opinion.edit_own")) {
-        query = query.where(eq(articles.authorId, userId));
-      }
-
-      if (status && status !== "all") {
-        query = query.where(eq(articles.status, status as string));
-      }
-
-      if (reviewStatus && reviewStatus !== "all") {
-        query = query.where(eq(articles.reviewStatus, reviewStatus as string));
-      }
-
-      if (search) {
-        query = query.where(
-          or(
-            ilike(articles.title, `%${search}%`),
-            ilike(articles.excerpt, `%${search}%`)
-          )
-        );
-      }
-
-      const results = await query
+        .where(and(...conditions))
         .orderBy(desc(articles.createdAt))
-        .limit(Number(limit))
+        .limit(limitNum)
         .offset(offset);
 
       const formattedArticles = results.map((row) => ({
@@ -25600,19 +25537,15 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         author: row.author,
       }));
 
-      // Calculate metrics
-      let metricsQuery = db
+      // Calculate metrics — نفس قاعدة الرؤية أعلاه
+      const metricsConditions = [eq(articles.articleType, "opinion")];
+      if (!canSeeAllOpinion) {
+        metricsConditions.push(eq(articles.authorId, userId));
+      }
+      const allOpinionArticles = await db
         .select({ id: articles.id, status: articles.status, reviewStatus: articles.reviewStatus })
         .from(articles)
-        .where(eq(articles.articleType, "opinion"))
-        .$dynamic();
-
-      // Apply same permission filter for metrics
-      if (!userPermissions.includes("opinion.edit_any") && userPermissions.includes("opinion.edit_own")) {
-        metricsQuery = metricsQuery.where(eq(articles.authorId, userId));
-      }
-
-      const allOpinionArticles = await metricsQuery;
+        .where(and(...metricsConditions));
 
       const metrics = {
         total: allOpinionArticles.length,
@@ -25625,8 +25558,8 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         articles: formattedArticles,
         metrics,
         pagination: {
-          page: Number(page),
-          limit: Number(limit),
+          page: pageNum,
+          limit: limitNum,
         },
       });
     } catch (error) {
@@ -25670,6 +25603,11 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         englishSlug: parsed.data.englishSlug || generateEnglishSlug(parsed.data.title),
       };
 
+      // Ensure unique slug
+      if (articleData.slug) {
+        articleData.slug = await resolveUniqueArticleSlug(articleData.slug);
+      }
+
       const [newArticle] = await db
         .insert(articles)
         .values(articleData)
@@ -25706,8 +25644,15 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       }
 
       res.status(201).json(newArticle);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error creating opinion article:", error);
+      if (error?.code === "23505" || error?.cause?.code === "23505") {
+        return res.status(409).json({
+          message: "رابط المقال (slug) مستخدم بالفعل لمقال آخر. يرجى تعديل العنوان أو الرابط.",
+          field: "slug",
+          code: "DUPLICATE_SLUG",
+        });
+      }
       res.status(500).json({ message: "Failed to create opinion article" });
     }
   });
@@ -25786,6 +25731,11 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         aiBulletsInFlight.delete(articleId);
       }
 
+      // Ensure unique slug (appends -2, -3 if duplicate exists on another article)
+      if (updateData.slug) {
+        updateData.slug = await resolveUniqueArticleSlug(updateData.slug, articleId);
+      }
+
       const [updatedArticle] = await db
         .update(articles)
         .set({
@@ -25818,8 +25768,15 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       console.log(`[Breaking News] Cache invalidated and SSE broadcast sent for article ${articleId}`);
 
       res.json(updatedArticle);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error updating opinion article:", error);
+      if (error?.code === "23505" || error?.cause?.code === "23505") {
+        return res.status(409).json({
+          message: "رابط المقال (slug) مستخدم بالفعل لمقال آخر. يرجى تعديل العنوان أو الرابط.",
+          field: "slug",
+          code: "DUPLICATE_SLUG",
+        });
+      }
       res.status(500).json({ message: "Failed to update opinion article" });
     }
   });
@@ -25861,11 +25818,23 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       // the full rationale. Letting any resubmit through eliminates the
       // silent-failure UX where the contributor missed the 400 toast.
 
+      {
+        const licenseGate = await assertMediaLicenseAllowsSubmission(
+          existingArticle.authorId,
+        );
+        if (!licenseGate.ok) {
+          return res.status(403).json({
+            message: licenseGate.message,
+            code: licenseGate.code,
+          });
+        }
+      }
+
       const [updatedArticle] = await db
         .update(articles)
         .set({
           reviewStatus: "pending_review",
-          status: "draft",
+          status: statusAfterSubmitForReview(existingArticle.status),
           updatedAt: new Date(),
         })
         .where(eq(articles.id, articleId))
@@ -26066,7 +26035,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
           authorId: updatedArticle.authorId,
           reporterId: updatedArticle.reporterId,
           submitterId: updatedArticle.submitterId,
-        }, "rejected", reviewNotes);
+        }, "rejected", reviewNotes, { excludeUserId: userId });
       } catch (notifyErr: any) {
         console.error("[OpinionReject] push notify failed:", notifyErr?.message || notifyErr);
       }
@@ -26195,7 +26164,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
             authorId: articleForNotification.authorId,
             reporterId: articleForNotification.reporterId,
             submitterId: articleForNotification.submitterId,
-          }, "published");
+          }, "published", undefined, { excludeUserId: userId });
         } catch (notifyErr: any) {
           console.error("[OpinionPublish] push notify failed:", notifyErr?.message || notifyErr);
         }
@@ -26261,7 +26230,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
             authorId: updatedArticle.authorId,
             reporterId: updatedArticle.reporterId,
             submitterId: updatedArticle.submitterId,
-          }, "needs_revision", reviewNotes);
+          }, "needs_revision", reviewNotes, { excludeUserId: userId });
           if (updatedArticle.articleType === "opinion") {
             await sendOpinionAuthorRevisionEmail(updatedArticle.id, reviewNotes);
           } else {
@@ -26364,7 +26333,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   // News Analytics Endpoint - Smart statistics and insights
 
   // POST /api/entity-types - إنشاء نوع كيان جديد
-  app.post("/api/entity-types", requireAuth, async (req: any, res) => {
+  app.post("/api/entity-types", requireAuth, requirePermission(PERMISSION_CODES.ARTICLES_SMART_LINKS), async (req: any, res) => {
     try {
       const result = insertEntityTypeSchema.safeParse(req.body);
       if (!result.success) {
@@ -26408,7 +26377,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   // News Analytics Endpoint - Smart statistics and insights
 
   // POST /api/smart-entities - إنشاء كيان جديد
-  app.post("/api/smart-entities", requireAuth, async (req: any, res) => {
+  app.post("/api/smart-entities", requireAuth, requirePermission(PERMISSION_CODES.ARTICLES_SMART_LINKS), async (req: any, res) => {
     try {
       const result = insertSmartEntitySchema.safeParse(req.body);
       if (!result.success) {
@@ -26435,7 +26404,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   // News Analytics Endpoint - Smart statistics and insights
 
   // PATCH /api/smart-entities/:id - تحديث كيان
-  app.patch("/api/smart-entities/:id", requireAuth, async (req: any, res) => {
+  app.patch("/api/smart-entities/:id", requireAuth, requirePermission(PERMISSION_CODES.ARTICLES_SMART_LINKS), async (req: any, res) => {
     try {
       const { id } = req.params;
       const entity = await storage.updateSmartEntity(id, req.body);
@@ -26458,7 +26427,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   // News Analytics Endpoint - Smart statistics and insights
 
   // DELETE /api/smart-entities/:id - حذف كيان
-  app.delete("/api/smart-entities/:id", requireAuth, async (req: any, res) => {
+  app.delete("/api/smart-entities/:id", requireAuth, requirePermission(PERMISSION_CODES.ARTICLES_SMART_LINKS), async (req: any, res) => {
     try {
       const { id } = req.params;
       await storage.deleteSmartEntity(id);
@@ -26497,7 +26466,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   // News Analytics Endpoint - Smart statistics and insights
 
   // POST /api/smart-terms - إنشاء مصطلح جديد
-  app.post("/api/smart-terms", requireAuth, async (req: any, res) => {
+  app.post("/api/smart-terms", requireAuth, requirePermission(PERMISSION_CODES.ARTICLES_SMART_LINKS), async (req: any, res) => {
     try {
       const result = insertSmartTermSchema.safeParse(req.body);
       if (!result.success) {
@@ -26573,7 +26542,8 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   app.get("/api/smart-entities/:slug/articles", async (req: any, res) => {
     try {
       const { slug } = req.params;
-      const { limit = 10 } = req.query;
+      const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 10, maxLimit: 50 });
+      if (!pg) return;
       
       // جلب الكيان أولاً
       const entities = await storage.getSmartEntities({ status: 'active' });
@@ -26590,7 +26560,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       });
       
       // تحديد عدد النتائج
-      const limitedArticles = articlesData.slice(0, parseInt(limit as string));
+      const limitedArticles = articlesData.slice(0, pg.limit);
       
       res.json({ articles: limitedArticles, total: articlesData.length });
     } catch (error: any) {
@@ -26605,7 +26575,8 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   app.get("/api/smart-terms/:identifier/articles", async (req: any, res) => {
     try {
       const { identifier } = req.params;
-      const { limit = 10 } = req.query;
+      const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 10, maxLimit: 50 });
+      if (!pg) return;
       
       // جلب المصطلح أولاً
       const terms = await storage.getSmartTerms({ status: 'active' });
@@ -26625,7 +26596,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       });
       
       // تحديد عدد النتائج
-      const limitedArticles = articlesData.slice(0, parseInt(limit as string));
+      const limitedArticles = articlesData.slice(0, pg.limit);
       
       res.json({ articles: limitedArticles, total: articlesData.length });
     } catch (error: any) {
@@ -26637,7 +26608,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   // News Analytics Endpoint - Smart statistics and insights
 
   // POST /api/smart-entities/upload-image - رفع صورة كيان
-  app.post("/api/smart-entities/upload-image", requireAuth, upload.single('image'), async (req: any, res) => {
+  app.post("/api/smart-entities/upload-image", requireAuth, requirePermission(PERMISSION_CODES.ARTICLES_SMART_LINKS), upload.single('image'), async (req: any, res) => {
     try {
       if (!req.file) {
         return res.status(400).json({ message: "الصورة مطلوبة" });
@@ -26780,7 +26751,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   // Stable hash-bucketed article sitemaps:
   // articles partitioned by abs(hashtext(id::text)) % N, lastmod from
   // updated_at || published_at. Bucket assignment is stable for a given id.
-  const SITEMAP_AR_BUCKETS = 50;
+  const SITEMAP_AR_BUCKETS = AR_SITEMAP_BUCKETS;
   const SITEMAP_EN_BUCKETS = 10;
   const SITEMAP_UR_BUCKETS = 10;
 
@@ -26788,44 +26759,40 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   app.get("/sitemap.xml", async (_req, res) => {
     try {
       const baseUrl = "https://sabq.org";
-      const now = Date.now();
-      const cache = (app as any).__sitemapIndexCache;
-      if (cache && now - cache.ts < 30 * 60 * 1000) {
-        res.header('Content-Type', 'application/xml; charset=utf-8');
-        res.setHeader('Cache-Control', 'public, max-age=1800, s-maxage=1800');
-        return res.send(cache.xml);
-      }
+      // Redis ← توليد (getOrBuildSitemapXml) — Redis ينجو من النشرات،
+      // وsingle-flight يمنع توليد المفتاح نفسه بالتوازي.
+      const indexXml = await getOrBuildSitemapXml('index_archive_v3', 30 * 60 * 1000, async () => {
+        // Most-recent published article → a <lastmod> hint on the
+        // frequently-changing news + article-bucket children so Google
+        // reprioritizes them on recrawl. One cheap aggregate; index is cached 30m.
+        let lastmod = '';
+        try {
+          const r = await db.execute(sql`SELECT MAX(published_at) AS m FROM articles WHERE status = 'published'`);
+          const m = (((r as any).rows || r)[0] || {}).m;
+          if (m) lastmod = `<lastmod>${new Date(m).toISOString()}</lastmod>`;
+        } catch { /* lastmod is best-effort */ }
 
-      // Most-recent published article → a <lastmod> hint on the
-      // frequently-changing news + article-bucket children so Google
-      // reprioritizes them on recrawl. One cheap aggregate; index is cached 10m.
-      let lastmod = '';
-      try {
-        const r = await db.execute(sql`SELECT MAX(published_at) AS m FROM articles WHERE status = 'published'`);
-        const m = (((r as any).rows || r)[0] || {}).m;
-        if (m) lastmod = `<lastmod>${new Date(m).toISOString()}</lastmod>`;
-      } catch { /* lastmod is best-effort */ }
+        let xml = '<?xml version="1.0" encoding="UTF-8"?>\n';
+        xml += '<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n';
+        xml += `  <sitemap><loc>${baseUrl}/sitemap-static.xml</loc></sitemap>\n`;
+        xml += `  <sitemap><loc>${baseUrl}/sitemap-categories.xml</loc>${lastmod}</sitemap>\n`;
+        xml += `  <sitemap><loc>${baseUrl}/sitemap-news.xml</loc>${lastmod}</sitemap>\n`;
+        for (let i = 1; i <= SITEMAP_AR_BUCKETS; i++) {
+          xml += `  <sitemap><loc>${baseUrl}/sitemap-articles-${i}.xml</loc>${lastmod}</sitemap>\n`;
+        }
+        for (let i = 1; i <= SITEMAP_EN_BUCKETS; i++) {
+          xml += `  <sitemap><loc>${baseUrl}/sitemap-en-articles-${i}.xml</loc>${lastmod}</sitemap>\n`;
+        }
+        for (let i = 1; i <= SITEMAP_UR_BUCKETS; i++) {
+          xml += `  <sitemap><loc>${baseUrl}/sitemap-ur-articles-${i}.xml</loc>${lastmod}</sitemap>\n`;
+        }
+        xml += '</sitemapindex>';
+        return xml;
+      });
 
-      let xml = '<?xml version="1.0" encoding="UTF-8"?>\n';
-      xml += '<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n';
-      xml += `  <sitemap><loc>${baseUrl}/sitemap-static.xml</loc></sitemap>\n`;
-      xml += `  <sitemap><loc>${baseUrl}/sitemap-categories.xml</loc>${lastmod}</sitemap>\n`;
-      xml += `  <sitemap><loc>${baseUrl}/sitemap-news.xml</loc>${lastmod}</sitemap>\n`;
-      for (let i = 1; i <= SITEMAP_AR_BUCKETS; i++) {
-        xml += `  <sitemap><loc>${baseUrl}/sitemap-articles-${i}.xml</loc>${lastmod}</sitemap>\n`;
-      }
-      for (let i = 1; i <= SITEMAP_EN_BUCKETS; i++) {
-        xml += `  <sitemap><loc>${baseUrl}/sitemap-en-articles-${i}.xml</loc>${lastmod}</sitemap>\n`;
-      }
-      for (let i = 1; i <= SITEMAP_UR_BUCKETS; i++) {
-        xml += `  <sitemap><loc>${baseUrl}/sitemap-ur-articles-${i}.xml</loc>${lastmod}</sitemap>\n`;
-      }
-      xml += '</sitemapindex>';
-
-      (app as any).__sitemapIndexCache = { xml, ts: now };
       res.header('Content-Type', 'application/xml; charset=utf-8');
       res.setHeader('Cache-Control', 'public, max-age=1800, s-maxage=1800');
-      res.send(xml);
+      res.send(indexXml as string);
     } catch (error) {
       console.error("Error generating sitemap index:", error);
       res.status(500).send("Error generating sitemap");
@@ -26840,7 +26807,8 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
     xml += `  <url><loc>${baseUrl}/en</loc><changefreq>hourly</changefreq><priority>0.9</priority></url>\n`;
     xml += `  <url><loc>${baseUrl}/ur</loc><changefreq>hourly</changefreq><priority>0.8</priority></url>\n`;
     xml += `  <url><loc>${baseUrl}/world-cup</loc><changefreq>hourly</changefreq><priority>0.8</priority></url>\n`;
-    for (const page of ['/gulf-live', '/world-days']) {
+    xml += `  <url><loc>${baseUrl}/roshn</loc><changefreq>hourly</changefreq><priority>0.8</priority></url>\n`;
+    for (const page of ['/gulf-live', '/world-days', '/predictions']) {
       xml += `  <url><loc>${baseUrl}${page}</loc><changefreq>daily</changefreq><priority>0.5</priority></url>\n`;
     }
     for (const page of ['/about', '/privacy', '/terms', '/contact', '/rss', '/categories', '/opinion', '/shorts', '/daily-brief']) {
@@ -26855,32 +26823,27 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   app.get("/sitemap-categories.xml", async (_req, res) => {
     try {
       const baseUrl = "https://sabq.org";
-      const now = Date.now();
-      const cache = (app as any).__sitemapCatsCache;
-      if (cache && now - cache.ts < 30 * 60 * 1000) {
-        res.header('Content-Type', 'application/xml; charset=utf-8');
-        res.setHeader('Cache-Control', 'public, max-age=1800, s-maxage=1800');
-        return res.send(cache.xml);
-      }
-      const activeCats = await db.execute(sql`
-        SELECT c.slug, c.english_slug FROM categories c
-        WHERE c.status = 'visible'
-        AND EXISTS (SELECT 1 FROM articles a WHERE a.category_id = c.id AND a.status = 'published' LIMIT 1)
-        ORDER BY c.display_order
-      `);
-      const catRows: any[] = (activeCats as any).rows || activeCats;
+      const catsXml = await getOrBuildSitemapXml('categories', 30 * 60 * 1000, async () => {
+        const activeCats = await db.execute(sql`
+          SELECT c.slug, c.english_slug FROM categories c
+          WHERE c.status = 'visible'
+          AND EXISTS (SELECT 1 FROM articles a WHERE a.category_id = c.id AND a.status = 'published' LIMIT 1)
+          ORDER BY c.display_order
+        `);
+        const catRows: any[] = (activeCats as any).rows || activeCats;
 
-      let xml = '<?xml version="1.0" encoding="UTF-8"?>\n';
-      xml += '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n';
-      for (const cat of catRows) {
-        const catSlug = cat.english_slug || cat.slug;
-        xml += `  <url><loc>${baseUrl}/category/${encodeURIComponent(catSlug)}</loc><changefreq>hourly</changefreq><priority>0.6</priority></url>\n`;
-      }
-      xml += '</urlset>';
-      (app as any).__sitemapCatsCache = { xml, ts: now };
+        let xml = '<?xml version="1.0" encoding="UTF-8"?>\n';
+        xml += '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n';
+        for (const cat of catRows) {
+          const catSlug = cat.english_slug || cat.slug;
+          xml += `  <url><loc>${baseUrl}/category/${encodeURIComponent(catSlug)}</loc><changefreq>hourly</changefreq><priority>0.6</priority></url>\n`;
+        }
+        xml += '</urlset>';
+        return xml;
+      });
       res.header('Content-Type', 'application/xml; charset=utf-8');
       res.setHeader('Cache-Control', 'public, max-age=1800, s-maxage=1800');
-      res.send(xml);
+      res.send(catsXml as string);
     } catch (error) {
       console.error("Error generating categories sitemap:", error);
       res.status(500).send("Error generating sitemap");
@@ -26917,17 +26880,24 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         title: spec.title,
         publishedAt: spec.publishedAt,
         updatedAt: spec.updatedAt,
+        editorialModifiedAt: spec.table === articles
+          ? sql<string | null>`${articles.seoMetadata}->>'editorialModifiedAt'`
+          : sql<string | null>`NULL`,
         imageUrl: spec.imageUrl,
       })
       .from(spec.table)
       .where(
         and(
           eq(spec.status, "published"),
+          spec.table === articles ? isCanonicalArchiveArticle() : undefined,
           isNotNull(spec.publishedAt),
           isNotNull(spec.title),
           ne(spec.title, ""),
           lte(spec.publishedAt, new Date()),
-          sql`abs(hashtext(${spec.id}::text)) % ${totalBuckets} = ${bucket - 1}`,
+          // المقسوم حرفي (raw) لا باراميتر — شرط مطابقة فهرس التعبير
+          // idx_articles_sitemap_bucket؛ لو صار $N يعود المسح الكامل للجدول
+          spec.table === articles ? archiveSitemapBucketCondition(bucket)
+            : sql`abs(hashtext(${spec.id}::text)) % ${sql.raw(String(totalBuckets))} = ${bucket - 1}`,
         ),
       )
       .orderBy(desc(spec.publishedAt))
@@ -26955,7 +26925,8 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
     for (const row of rows) {
       const canonicalSlug = row.englishSlug || row.slug;
       if (!canonicalSlug) continue;
-      const lastmodSource = row.updatedAt || row.publishedAt || new Date();
+      const lastmodSource = (spec.table === articles ? getPublicEditorialModifiedAt(row.publishedAt, { editorialModifiedAt: row.editorialModifiedAt }) : row.updatedAt) || row.publishedAt;
+      if (!lastmodSource) continue;
       const lastmod = new Date(lastmodSource).toISOString();
       const pubDate = row.publishedAt ? new Date(row.publishedAt) : new Date(0);
       let priority = '0.3';
@@ -26991,21 +26962,14 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
           return res.status(404).send("Not found");
         }
 
-        const now = Date.now();
-        const cacheKey = `${cachePrefix}_${bucket}`;
-        const cache = (app as any)[cacheKey];
-        if (cache && now - cache.ts < 30 * 60 * 1000) {
-          res.header('Content-Type', 'application/xml; charset=utf-8');
-          res.setHeader('Cache-Control', 'public, max-age=1800, s-maxage=1800');
-          return res.send(cache.xml);
-        }
-
-        const xml = await generateArticleSitemap(spec, pathPrefix, bucket, totalBuckets);
+        // كاش Redis لمدة 6 ساعات: الـ buckets أرشيفية — اكتشاف الجديد
+        // مسؤولية sitemap-news.xml (آخر 48 ساعة، كاش 3 دقائق) لا هذه الملفات
+        const xml = await getOrBuildSitemapXml(`${cachePrefix}_${bucket}`, 6 * 60 * 60 * 1000,
+          () => generateArticleSitemap(spec, pathPrefix, bucket, totalBuckets));
         if (xml === null) return res.status(404).send("Not found");
 
-        (app as any)[cacheKey] = { xml, ts: now };
         res.header('Content-Type', 'application/xml; charset=utf-8');
-        res.setHeader('Cache-Control', 'public, max-age=1800, s-maxage=1800');
+        res.setHeader('Cache-Control', 'public, max-age=1800, s-maxage=3600');
         res.send(xml);
       } catch (error) {
         console.error(`Error generating ${cachePrefix} sitemap:`, error);
@@ -27048,7 +27012,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
     imageUrl: urArticles.imageUrl,
   } as any;
 
-  registerBucketedSitemap("/sitemap-articles-:page.xml", "__sitemapArticles", arSitemapSpec, "/article", SITEMAP_AR_BUCKETS);
+  registerBucketedSitemap("/sitemap-articles-:page.xml", "__sitemapArticlesCanonicalV3", arSitemapSpec, "/article", SITEMAP_AR_BUCKETS);
   registerBucketedSitemap("/sitemap-en-articles-:page.xml", "__sitemapEnArticles", enSitemapSpec, "/en/article", SITEMAP_EN_BUCKETS);
   registerBucketedSitemap("/sitemap-ur-articles-:page.xml", "__sitemapUrArticles", urSitemapSpec, "/ur/article", SITEMAP_UR_BUCKETS);
 
@@ -27196,6 +27160,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
 User-agent: *
 Allow: /
 Disallow: /api/
+${apiListingRobotsRules}
 
 # ملاحظة: صفحات الحساب والمصادقة (login, register, logout, *-password,
 # 2fa-verify, verify-email, profile, bookmarks, reading-history, my-*,
@@ -27205,7 +27170,8 @@ Disallow: /api/
 # Search Console: لأن Google لا يستطيع زحفها، فلا يرى وسم noindex ولا يُسقطها.
 # الآن يستطيع زحفها ويرى X-Robots-Tag: noindex (يضيفه وسيط Cloudflare Pages
 # لكل مسارات noindex — راجع functions/_middleware.js) فيُسقطها من الفهرس.
-# /api/ يبقى محظورًا لأنه نقاط نهاية JSON (ليست HTML) ولا يمكن وسمها بـ noindex.
+# بقية /api/ تبقى محظورة. قائمتا الأخبار المحددتان أعلاه قابلتان للزحف
+# لرؤية X-Robots-Tag: noindex, nofollow؛ الترويسة صالحة لموارد JSON أيضاً.
 
 # Googlebot-News intentionally has NO separate group — a previous
 # "Disallow: /" (with a few Allow exceptions) blocked it from the homepage
@@ -27272,19 +27238,8 @@ Sitemap: https://sabq.org/sitemap-news.xml
 
   // News Analytics Endpoint - Smart statistics and insights
 
-  // POST English Category (Admin only)
-  app.post("/api/en/categories", async (req, res) => {
-    if (!req.isAuthenticated()) {
-      return res.status(401).json({ message: "Unauthorized" });
-    }
-
-    const user = req.user as User;
-    
-    // Check if user has EN language permission and is admin/editor
-    if (!user.allowedLanguages?.includes('en') || !['admin', 'editor', 'chief_editor'].includes(user.role)) {
-      return res.status(403).json({ message: "لا توجد لديك صلاحيات للمحتوى الإنجليزي" });
-    }
-
+  // POST English Category — legacy; prefer /api/en/dashboard/categories
+  app.post("/api/en/categories", requireAuth, requirePermission("categories.create"), async (req, res) => {
     try {
       const validatedData = insertEnCategorySchema.parse(req.body);
       
@@ -27305,18 +27260,8 @@ Sitemap: https://sabq.org/sitemap-news.xml
 
   // News Analytics Endpoint - Smart statistics and insights
 
-  // PATCH English Category (Admin only)
-  app.patch("/api/en/categories/:id", async (req, res) => {
-    if (!req.isAuthenticated()) {
-      return res.status(401).json({ message: "Unauthorized" });
-    }
-
-    const user = req.user as User;
-    
-    if (!user.allowedLanguages?.includes('en') || !['admin', 'editor', 'chief_editor'].includes(user.role)) {
-      return res.status(403).json({ message: "لا توجد لديك صلاحيات لهذه الخدمة" });
-    }
-
+  // PATCH English Category — legacy; prefer /api/en/dashboard/categories/:id
+  app.patch("/api/en/categories/:id", requireAuth, requirePermission("categories.update"), async (req, res) => {
     try {
       const updated = await db
         .update(enCategories)
@@ -27362,7 +27307,8 @@ Sitemap: https://sabq.org/sitemap-news.xml
   // GET English Articles by Category ID
   app.get("/api/en/categories/:id/articles", async (req, res) => {
     try {
-      const { limit = 50, offset = 0 } = req.query;
+      const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 50, maxLimit: 100 });
+      if (!pg) return;
       
       // Create alias for reporter
       const reporterAlias = aliasedTable(users, 'reporter');
@@ -27381,8 +27327,8 @@ Sitemap: https://sabq.org/sitemap-news.xml
           )
         )
         .orderBy(desc(enArticles.publishedAt))
-        .limit(Number(limit))
-        .offset(Number(offset));
+        .limit(pg.limit)
+        .offset(pg.offset);
 
       // Map results to include category, author and reporter information
       const articles = results.map((result: any) => {
@@ -27410,6 +27356,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
           newsType: article.newsType,
           status: article.status,
           isFeatured: article.isFeatured,
+          isReading: article.isReading,
           views: article.views,
           publishedAt: article.publishedAt,
           createdAt: article.createdAt,
@@ -27423,7 +27370,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
           } : undefined,
           author: displayAuthor ? {
             id: displayAuthor.id,
-            email: displayAuthor.email,
+            // `email` deliberately omitted — public listing, staff author.
             firstName: displayAuthor.firstName,
             lastName: displayAuthor.lastName,
             profileImageUrl: displayAuthor.profileImageUrl,
@@ -27594,13 +27541,17 @@ Sitemap: https://sabq.org/sitemap-news.xml
   // GET English Articles (with filters)
   app.get("/api/en/articles", async (req, res) => {
     try {
-      const { categoryId, status = "published", limit = 20, offset = 0 } = req.query;
-      
-      // Build conditions array
-      const conditions: any[] = [];
-      if (status) {
-        conditions.push(eq(enArticles.status, status as string));
-      }
+      const { categoryId } = req.query;
+      const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 20, maxLimit: 100 });
+      if (!pg) return;
+
+      // SECURITY: `status` is NOT taken from the query here.
+      // It used to be (`status = "published"` was only a default), so
+      // `?status=draft` on this unauthenticated endpoint dumped unpublished
+      // drafts and embargoed pieces. The staff-facing listing that legitimately
+      // filters by status is GET /api/en/dashboard/articles, which is behind
+      // requireAuth + requirePermission("articles.view").
+      const conditions: any[] = [eq(enArticles.status, "published")];
       if (categoryId) {
         conditions.push(eq(enArticles.categoryId, categoryId as string));
       }
@@ -27617,8 +27568,8 @@ Sitemap: https://sabq.org/sitemap-news.xml
         .leftJoin(reporterAlias, eq(enArticles.reporterId, reporterAlias.id))
         .where(conditions.length > 0 ? and(...conditions) : undefined)
         .orderBy(desc(enArticles.publishedAt))
-        .limit(Number(limit))
-        .offset(Number(offset));
+        .limit(pg.limit)
+        .offset(pg.offset);
 
       // Map results to include category, author and reporter information
       const articles = results.map((result: any) => {
@@ -27646,6 +27597,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
           newsType: article.newsType,
           status: article.status,
           isFeatured: article.isFeatured,
+          isReading: article.isReading,
           views: article.views,
           publishedAt: article.publishedAt,
           createdAt: article.createdAt,
@@ -27659,7 +27611,8 @@ Sitemap: https://sabq.org/sitemap-news.xml
           } : undefined,
           author: displayAuthor ? {
             id: displayAuthor.id,
-            email: displayAuthor.email,
+            // `email` deliberately omitted — this is a public listing and the
+            // author is a staff member. The byline needs a name, not an address.
             firstName: displayAuthor.firstNameEn || displayAuthor.firstName,
             lastName: displayAuthor.lastNameEn || displayAuthor.lastName,
             firstNameEn: displayAuthor.firstNameEn,
@@ -27859,8 +27812,16 @@ Sitemap: https://sabq.org/sitemap-news.xml
       const baseCacheKey = `en:article:base:${slug}`;
       const baseData = await withCache(baseCacheKey, CACHE_TTL.SHORT, async () => {
         const reporterAlias = aliasedTable(users, 'reporter');
+        // Project the joined author/reporter explicitly — a bare .select()
+        // returns the whole `users` row (passwordHash, twoFactorSecret,
+        // twoFactorBackupCodes) and this endpoint is public.
         const results = await db
-          .select()
+          .select({
+            en_articles: enArticles,
+            en_categories: enCategories,
+            users: userBylineSelect(users),
+            reporter: userBylineSelect(reporterAlias),
+          })
           .from(enArticles)
           .leftJoin(enCategories, eq(enArticles.categoryId, enCategories.id))
           .leftJoin(users, eq(enArticles.authorId, users.id))
@@ -27878,8 +27839,11 @@ Sitemap: https://sabq.org/sitemap-news.xml
         return {
           article: art,
           category: r.en_categories,
-          authorData: r.users,
-          reporterData: r.reporter,
+          // A column-object projection over a leftJoin yields {id:null,…}
+          // instead of null when the join misses, so collapse it — otherwise
+          // an empty reporter would win over a real author below.
+          authorData: r.users?.id ? r.users : null,
+          reporterData: r.reporter?.id ? r.reporter : null,
           reactionsCount: Number(reactionsCountResult[0].count),
           commentsCount: Number(commentsCountResult[0].count),
         };
@@ -28204,31 +28168,19 @@ Sitemap: https://sabq.org/sitemap-news.xml
 
   // News Analytics Endpoint - Smart statistics and insights
 
-  // POST English Article (Editor/Admin only)
-  app.post("/api/en/articles", async (req, res) => {
-    if (!req.isAuthenticated()) {
-      console.log('[EN Article] User not authenticated');
-      return res.status(401).json({ message: "Unauthorized" });
-    }
-
+  // POST English Article — legacy path; prefer /api/en/dashboard/articles.
+  // Auth via RBAC (articles.create), not users.allowed_languages (defaults to ar-only).
+  app.post("/api/en/articles", requireAuth, requirePermission("articles.create"), async (req, res) => {
     const user = req.user as User;
-    
-    console.log('[EN Article POST] User check:', {
-      userId: user.id,
-      role: user.role,
-      allowedLanguages: user.allowedLanguages,
-      hasEnglish: user.allowedLanguages?.includes('en'),
-      hasValidRole: ['admin', 'editor', 'chief_editor', 'reporter', 'opinion_author'].includes(user.role)
-    });
-    
-    if (!user.allowedLanguages?.includes('en') || !['admin', 'editor', 'chief_editor', 'reporter', 'opinion_author'].includes(user.role)) {
-      console.log('[EN Article] Permission denied - Language or role check failed');
-      return res.status(403).json({ message: "لا توجد لديك صلاحيات للمحتوى الإنجليزي" });
-    }
 
     try {
       const validatedData = insertEnArticleSchema.parse(req.body);
-      
+
+      const denial = await denyPublish(user.id, validatedData.status);
+      if (denial) {
+        return res.status(denial.httpStatus).json({ message: denial.message, code: denial.code });
+      }
+
       // Set published_at if status is published
       const articleData = {
         ...validatedData,
@@ -28254,17 +28206,9 @@ Sitemap: https://sabq.org/sitemap-news.xml
 
   // News Analytics Endpoint - Smart statistics and insights
 
-  // PATCH English Article
-  app.patch("/api/en/articles/:id", async (req, res) => {
-    if (!req.isAuthenticated()) {
-      return res.status(401).json({ message: "Unauthorized" });
-    }
-
+  // PATCH English Article — legacy path; prefer /api/en/dashboard/articles/:id
+  app.patch("/api/en/articles/:id", requireAuth, async (req, res) => {
     const user = req.user as User;
-    
-    if (!user.allowedLanguages?.includes('en')) {
-      return res.status(403).json({ message: "لا توجد لديك صلاحيات لهذه الخدمة" });
-    }
 
     try {
       // Check if article exists and user has permission
@@ -28278,13 +28222,29 @@ Sitemap: https://sabq.org/sitemap-news.xml
         return res.status(404).json({ message: "Article not found" });
       }
 
-      // Only admins and the author can edit
-      if (user.role !== 'admin' && user.id !== existing[0].authorId) {
+      const userPermissions = await getUserPermissions(user.id);
+      const canEditOwn = userPermissions.includes("articles.edit_own");
+      const canEditAny = userPermissions.includes("articles.edit_any");
+
+      if (!canEditAny && (!canEditOwn || existing[0].authorId !== user.id)) {
         return res.status(403).json({ message: "لا توجد لديك صلاحيات لهذه الخدمة" });
       }
 
+      // No publish gate existed here.
+      if (req.body.status && req.body.status !== existing[0].status) {
+        const denial = await denyPublish(user.id, req.body.status);
+        if (denial) {
+          return res.status(denial.httpStatus).json({ message: denial.message, code: denial.code });
+        }
+      }
+
       const updateData: any = {
-        ...pickTableColumns(enArticles, req.body),
+        // Without the omit list this accepted every enArticles column: `views`
+        // (ranking inflation), `authorId` (byline theft), `reviewStatus`
+        // (forged editorial approval), `publishedAt`.
+        ...pickTableColumns(enArticles, req.body, {
+          omit: [...ARTICLE_SERVER_OWNED_COLUMNS, "publishedAt"],
+        }),
         updatedAt: new Date(),
       };
 
@@ -28309,18 +28269,8 @@ Sitemap: https://sabq.org/sitemap-news.xml
 
   // News Analytics Endpoint - Smart statistics and insights
 
-  // DELETE English Article
-  app.delete("/api/en/articles/:id", async (req, res) => {
-    if (!req.isAuthenticated()) {
-      return res.status(401).json({ message: "Unauthorized" });
-    }
-
-    const user = req.user as User;
-    
-    if (!user.allowedLanguages?.includes('en') || !['admin', 'chief_editor'].includes(user.role)) {
-      return res.status(403).json({ message: "لا توجد لديك صلاحيات لهذه الخدمة" });
-    }
-
+  // DELETE English Article — legacy; prefer /api/en/dashboard/articles/:id
+  app.delete("/api/en/articles/:id", requireAuth, requirePermission("articles.delete"), async (req, res) => {
     try {
       await db
         .delete(enArticles)
@@ -28634,7 +28584,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
       }
 
       const personalizedGreeting = {
-        userName: user.firstName || user.email.split('@')[0],
+        userName: user.firstName || user.email?.split('@')[0] || "Reader",
         articlesReadToday: uniqueArticlesRead,
         readingTimeMinutes: totalReadingTimeMinutes,
         topCategories,
@@ -28870,12 +28820,14 @@ Sitemap: https://sabq.org/sitemap-news.xml
   // Get Urdu articles (published)
   app.get("/api/ur/articles", async (req, res) => {
     try {
-      const { categoryId, status = "published", limit = 20, offset = 0 } = req.query;
-      
-      const conditions: any[] = [];
-      if (status) {
-        conditions.push(eq(urArticles.status, status as string));
-      }
+      const { categoryId } = req.query;
+      const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 20, maxLimit: 100 });
+      if (!pg) return;
+
+      // Same as the English twin: `status` is never taken from the query on
+      // this public listing. Staff filtering lives on
+      // GET /api/ur/dashboard/articles (requireAuth + articles.view).
+      const conditions: any[] = [eq(urArticles.status, "published")];
       if (categoryId) {
         conditions.push(eq(urArticles.categoryId, categoryId as string));
       }
@@ -28890,8 +28842,8 @@ Sitemap: https://sabq.org/sitemap-news.xml
         .leftJoin(reporterAlias, eq(urArticles.reporterId, reporterAlias.id))
         .where(conditions.length > 0 ? and(...conditions) : undefined)
         .orderBy(desc(urArticles.publishedAt))
-        .limit(Number(limit))
-        .offset(Number(offset));
+        .limit(pg.limit)
+        .offset(pg.offset);
 
       const articles = results.map((result: any) => {
         const article = result.ur_articles;
@@ -28916,6 +28868,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
           newsType: article.newsType,
           status: article.status,
           isFeatured: article.isFeatured,
+          isReading: article.isReading,
           views: article.views,
           publishedAt: article.publishedAt,
           createdAt: article.createdAt,
@@ -28929,7 +28882,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
           } : undefined,
           author: displayAuthor ? {
             id: displayAuthor.id,
-            email: displayAuthor.email,
+            // `email` deliberately omitted — public listing, staff author.
             firstName: displayAuthor.firstName,
             lastName: displayAuthor.lastName,
             profileImageUrl: displayAuthor.profileImageUrl,
@@ -28955,16 +28908,24 @@ Sitemap: https://sabq.org/sitemap-news.xml
       // Create alias for reporter
       const reporterAlias = aliasedTable(users, 'reporter');
 
-      // Get article with category, author, and reporter joins
+      // Get article with category, author, and reporter joins.
+      // Author/reporter are projected explicitly: a bare .select() returns the
+      // whole `users` row (passwordHash, twoFactorSecret, twoFactorBackupCodes)
+      // and this endpoint is public.
       const results = await db
-        .select()
+        .select({
+          ur_articles: urArticles,
+          ur_categories: urCategories,
+          users: userBylineSelect(users),
+          reporter: userBylineSelect(reporterAlias),
+        })
         .from(urArticles)
         .leftJoin(urCategories, eq(urArticles.categoryId, urCategories.id))
         .leftJoin(users, eq(urArticles.authorId, users.id))
         .leftJoin(reporterAlias, eq(urArticles.reporterId, reporterAlias.id))
         .where(eq(urArticles.slug, req.params.slug))
         .limit(1);
-      
+
       if (!results || results.length === 0) {
         return res.status(404).json({ message: "Article not found" });
       }
@@ -28973,8 +28934,11 @@ Sitemap: https://sabq.org/sitemap-news.xml
       const result: any = results[0];
       const article = result.ur_articles;
       const category = result.ur_categories;
-      const authorData = result.users;
-      const reporterData = result.reporter;
+      // A column-object projection over a leftJoin yields {id:null,…} instead
+      // of null when the join misses — collapse it so an empty reporter can't
+      // win over a real author.
+      const authorData = result.users?.id ? result.users : null;
+      const reporterData = result.reporter?.id ? result.reporter : null;
 
       // Run all queries in parallel for better performance
       const [
@@ -29098,8 +29062,10 @@ Sitemap: https://sabq.org/sitemap-news.xml
         .select({
           article: urArticles,
           category: urCategories,
-          author: users,
-          reporter: reporterAlias,
+          // Byline columns only — `author: users` would ship the whole row
+          // (passwordHash, twoFactorSecret) for up to five staff per call.
+          author: userBylineSelect(users),
+          reporter: userBylineSelect(reporterAlias),
         })
         .from(urArticles)
         .leftJoin(urCategories, eq(urArticles.categoryId, urCategories.id))
@@ -29112,7 +29078,9 @@ Sitemap: https://sabq.org/sitemap-news.xml
       const related = results.map((r) => ({
         ...r.article,
         category: r.category || undefined,
-        author: r.reporter || r.author || undefined,
+        // ?.id — a column-object projection over a leftJoin yields {id:null,…}
+        // rather than null, so an empty reporter would shadow a real author.
+        author: (r.reporter?.id ? r.reporter : null) || (r.author?.id ? r.author : null) || undefined,
       }));
 
       res.json(related);
@@ -29208,7 +29176,8 @@ Sitemap: https://sabq.org/sitemap-news.xml
   // Get Urdu category articles by slug
   app.get("/api/ur/category/:slug/articles", async (req, res) => {
     try {
-      const { limit = 50, offset = 0 } = req.query;
+      const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 50, maxLimit: 100 });
+      if (!pg) return;
       
       const [category] = await db
         .select()
@@ -29235,8 +29204,8 @@ Sitemap: https://sabq.org/sitemap-news.xml
           )
         )
         .orderBy(desc(urArticles.publishedAt))
-        .limit(Number(limit))
-        .offset(Number(offset));
+        .limit(pg.limit)
+        .offset(pg.offset);
 
       const articles = results.map((result: any) => {
         const article = result.ur_articles;
@@ -29261,6 +29230,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
           newsType: article.newsType,
           status: article.status,
           isFeatured: article.isFeatured,
+          isReading: article.isReading,
           views: article.views,
           publishedAt: article.publishedAt,
           createdAt: article.createdAt,
@@ -29274,7 +29244,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
           } : undefined,
           author: displayAuthor ? {
             id: displayAuthor.id,
-            email: displayAuthor.email,
+            // `email` deliberately omitted — public listing, staff author.
             firstName: displayAuthor.firstName,
             lastName: displayAuthor.lastName,
             profileImageUrl: displayAuthor.profileImageUrl,
@@ -29318,7 +29288,8 @@ Sitemap: https://sabq.org/sitemap-news.xml
   app.get("/api/ur/categories/:id/articles", async (req, res) => {
     try {
       const categoryId = req.params.id;
-      const { limit = 50, offset = 0 } = req.query;
+      const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 50, maxLimit: 100 });
+      if (!pg) return;
 
       const reporterAlias = aliasedTable(users, 'reporter');
 
@@ -29335,8 +29306,8 @@ Sitemap: https://sabq.org/sitemap-news.xml
           )
         )
         .orderBy(desc(urArticles.publishedAt))
-        .limit(Number(limit))
-        .offset(Number(offset));
+        .limit(pg.limit)
+        .offset(pg.offset);
 
       const articles = results.map((result: any) => {
         const article = result.ur_articles;
@@ -29361,6 +29332,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
           newsType: article.newsType,
           status: article.status,
           isFeatured: article.isFeatured,
+          isReading: article.isReading,
           views: article.views,
           publishedAt: article.publishedAt,
           createdAt: article.createdAt,
@@ -29374,7 +29346,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
           } : undefined,
           author: displayAuthor ? {
             id: displayAuthor.id,
-            email: displayAuthor.email,
+            // `email` deliberately omitted — public listing, staff author.
             firstName: displayAuthor.firstName,
             lastName: displayAuthor.lastName,
             profileImageUrl: displayAuthor.profileImageUrl,
@@ -29784,8 +29756,8 @@ Sitemap: https://sabq.org/sitemap-news.xml
         .leftJoin(reporterAlias, eq(urArticles.reporterId, reporterAlias.id))
         .where(conditions.length > 0 ? and(...conditions) : undefined)
         .orderBy(desc(urArticles.createdAt))
-        .limit(Number(limit))
-        .offset(Number(offset));
+        .limit(parseLimit(limit, 50, 200))
+        .offset(parseOffset(offset));
 
       const articles = results.map((result: any) => {
         const article = result.ur_articles;
@@ -29913,29 +29885,23 @@ Sitemap: https://sabq.org/sitemap-news.xml
         });
       }
 
-      const [existingArticle] = await db
-        .select()
-        .from(urArticles)
-        .where(eq(urArticles.slug, parsed.data.slug))
-        .limit(1);
-
-      if (existingArticle) {
-        return res.status(409).json({ message: "Article slug already exists" });
-      // Check publish permission if status is "published"
-      if (parsed.data?.status === 'published') {
-        const userPermissions = await getUserPermissions(req.user.id);
-        const canPublish = userPermissions.includes("articles.publish");
-        if (!canPublish) {
-          return res.status(403).json({ message: "You don't have permission to publish articles. Please save as draft." });
-        }
+      let finalSlug = parsed.data.slug;
+      if (finalSlug) {
+        finalSlug = await resolveUniqueArticleSlug(finalSlug, undefined, urArticles);
       }
 
+      // The old check sat INSIDE the block above, after its unconditional
+      // `return` — dead code that never ran once.
+      const denial = await denyPublish(userId, parsed.data.status);
+      if (denial) {
+        return res.status(denial.httpStatus).json({ message: denial.message, code: denial.code });
       }
 
       const [article] = await db
         .insert(urArticles)
         .values({
           ...parsed.data,
+          slug: finalSlug,
           authorId: userId,
         } as any)
         .returning();
@@ -29953,8 +29919,15 @@ Sitemap: https://sabq.org/sitemap-news.xml
       });
 
       res.json(article);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error creating Urdu article:", error);
+      if (error?.code === "23505" || error?.cause?.code === "23505") {
+        return res.status(409).json({
+          message: "Article slug already exists. Please choose a different title or slug.",
+          field: "slug",
+          code: "DUPLICATE_SLUG",
+        });
+      }
       res.status(500).json({ message: "Failed to create Urdu article" });
     }
   });
@@ -29997,15 +29970,15 @@ Sitemap: https://sabq.org/sitemap-news.xml
         });
       }
 
-      if (parsed.data.slug && parsed.data.slug !== oldArticle.slug) {
-        const [existingArticle] = await db
-          .select()
-          .from(urArticles)
-          .where(eq(urArticles.slug, parsed.data.slug))
-          .limit(1);
+      if (parsed.data.slug) {
+        parsed.data.slug = await resolveUniqueArticleSlug(parsed.data.slug, articleId, urArticles);
+      }
 
-        if (existingArticle && existingArticle.id !== articleId) {
-          return res.status(409).json({ message: "Article slug already exists" });
+      // No publish gate existed here.
+      if (parsed.data.status && parsed.data.status !== oldArticle.status) {
+        const denial = await denyPublish(userId, parsed.data.status);
+        if (denial) {
+          return res.status(denial.httpStatus).json({ message: denial.message, code: denial.code });
         }
       }
 
@@ -30032,8 +30005,15 @@ Sitemap: https://sabq.org/sitemap-news.xml
       });
 
       res.json(article);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error updating Urdu article:", error);
+      if (error?.code === "23505" || error?.cause?.code === "23505") {
+        return res.status(409).json({
+          message: "Article slug already exists. Please choose a different title or slug.",
+          field: "slug",
+          code: "DUPLICATE_SLUG",
+        });
+      }
       res.status(500).json({ message: "Failed to update Urdu article" });
     }
   });
@@ -30103,6 +30083,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
             },
             "archived",
             reviewNotes,
+            { excludeUserId: userId },
           );
         } catch (notifyErr) {
           console.error("[UR ARCHIVE] Push notification failed:", notifyErr);
@@ -30475,13 +30456,15 @@ Sitemap: https://sabq.org/sitemap-news.xml
   // GET /api/ur/smart-blocks/query/articles - Query Urdu articles by keyword
   app.get("/api/ur/smart-blocks/query/articles", async (req: any, res) => {
     try {
-      const { keyword, limit = 6, categories, dateFrom, dateTo } = req.query;
+      const { keyword, categories, dateFrom, dateTo } = req.query;
+      const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 6, maxLimit: 30 });
+      if (!pg) return;
 
       if (!keyword) {
         return res.status(400).json({ message: "مطلوبہ مطلوبہ لفظ" });
       }
 
-      console.log(`🔍 [Urdu Smart Block] Searching for keyword: "${keyword}", limit: ${limit}`);
+      console.log(`🔍 [Urdu Smart Block] Searching for keyword: "${keyword}", limit: ${pg.limit}`);
 
       const filters: any = {};
       if (categories) {
@@ -30496,7 +30479,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
 
       const articles = await storage.queryUrArticlesByKeyword(
         keyword,
-        parseInt(limit as string) || 6,
+        pg.limit,
         filters
       );
 
@@ -30558,7 +30541,15 @@ Sitemap: https://sabq.org/sitemap-news.xml
   app.post("/api/shortlinks", shortLinksLimiter, async (req: any, res) => {
     try {
       const validatedData = insertShortLinkSchema.parse(req.body);
-      
+
+      // Unauthenticated + CSRF-exempt, and GET /s/:code renders the target
+      // into an <a href> on sabq.org. `z.string().url()` accepts any scheme.
+      if (!isSafeRedirectUrl(validatedData.originalUrl)) {
+        return res.status(400).json({
+          message: "الرابط غير مسموح — يجب أن يكون رابط http(s) على نطاق سبق",
+        });
+      }
+
       if (validatedData.articleId) {
         const existingLink = await storage.getShortLinkByArticle(validatedData.articleId);
         if (existingLink) {
@@ -30635,6 +30626,12 @@ Sitemap: https://sabq.org/sitemap-news.xml
         return res.status(410).send("انتهت صلاحية هذا الرابط");
       }
 
+      // Also at the sink: rows planted before the check above still exist.
+      if (!isSafeRedirectUrl(shortLink.originalUrl)) {
+        console.warn(`[shortlinks] blocked unsafe destination on /s/${code}: ${shortLink.originalUrl}`);
+        return res.status(410).send("هذا الرابط غير صالح");
+      }
+
       const clickData: InsertShortLinkClick = {
         shortLinkId: shortLink.id,
         ipAddress: req.ip,
@@ -30697,9 +30694,11 @@ Sitemap: https://sabq.org/sitemap-news.xml
       const safeRedirectUrl = escapeHtml(redirectUrl);
 
       // For crawlers: serve meta tags without redirect; for browsers: instant redirect
+      // JSON.stringify for the JS string: `&quot;` is never decoded inside
+      // <script>, so HTML escaping there corrupts without encoding.
       const redirectMeta = isCrawler ? '' : `
   <meta http-equiv="refresh" content="0;url=${safeRedirectUrl}">
-  <script>window.location.href="${safeRedirectUrl}";</script>`;
+  <script>window.location.href=${JSON.stringify(redirectUrl)};</script>`;
 
       const html = `<!DOCTYPE html>
 <html lang="ar" dir="rtl">
@@ -30842,12 +30841,34 @@ Sitemap: https://sabq.org/sitemap-news.xml
   // News Analytics Endpoint - Smart statistics and insights
 
   // Get Deep Analysis by ID
-  app.get("/api/deep-analysis/:id", requireAuth, async (req, res) => {
+  // Desk access for the editorial deep-analysis surfaces. The public,
+  // published-only view is /api/omq; these two routes are the newsroom's.
+  const ANALYSIS_DESK_PERMISSIONS = ["articles.view", "articles.edit_any", "articles.publish"];
+
+  async function hasAnalysisDeskAccess(userId?: string): Promise<boolean> {
+    if (!userId) return false;
+    const permissions = await getUserPermissions(userId);
+    return ANALYSIS_DESK_PERMISSIONS.some((p) => permissions.includes(p));
+  }
+
+  async function canSeeUnpublishedAnalysis(userId: string | undefined, analysis: any): Promise<boolean> {
+    if (!userId) return false;
+    if (analysis?.createdBy === userId) return true;
+    return hasAnalysisDeskAccess(userId);
+  }
+
+  app.get("/api/deep-analysis/:id", requireAuth, async (req: any, res) => {
     try {
       const analysis = await storage.getDeepAnalysis(req.params.id);
       
       if (!analysis) {
         return res.status(404).json({ error: 'Analysis not found' });
+      }
+
+      // requireAuth alone let any self-registered reader read unpublished
+      // analyses by id. The published ones are already public via /api/omq.
+      if (analysis.status !== 'published' && !(await canSeeUnpublishedAnalysis(req.user?.id, analysis))) {
+        return res.status(403).json({ error: 'غير مصرح لك بعرض هذا التحليل' });
       }
 
       res.json(analysis);
@@ -30860,16 +30881,22 @@ Sitemap: https://sabq.org/sitemap-news.xml
   // News Analytics Endpoint - Smart statistics and insights
 
   // List Deep Analyses
-  app.get("/api/deep-analysis", requireAuth, async (req, res) => {
+  app.get("/api/deep-analysis", requireAuth, async (req: any, res) => {
     try {
       const { createdBy, status, categoryId, limit, offset } = req.query;
-      
+
+      // Same gap on the listing: `status` came straight from the query with no
+      // default, so `?status=draft` enumerated every unpublished analysis.
+      // Non-editorial callers are pinned to published.
+      const isEditorial = await hasAnalysisDeskAccess(req.user?.id);
+      const effectiveStatus = isEditorial ? (status as string | undefined) : 'published';
+
       const result = await storage.listDeepAnalyses({
         createdBy: createdBy as string | undefined,
-        status: status as string | undefined,
+        status: effectiveStatus,
         categoryId: categoryId as string | undefined,
-        limit: limit ? parseInt(limit as string) : 20,
-        offset: offset ? parseInt(offset as string) : 0,
+        limit: parseLimit(limit, 20, 100),
+        offset: parseOffset(offset),
       });
 
       res.json(result);
@@ -30964,7 +30991,21 @@ Sitemap: https://sabq.org/sitemap-news.xml
         return res.status(403).json({ error: 'Not authorized to update this analysis' });
       }
 
-      const updated = await storage.updateDeepAnalysis(req.params.id, req.body);
+      // Anyone can create an analysis to own, so the ownership check above
+      // is not a publishing authorisation.
+      if (req.body?.status && req.body.status !== analysis.status) {
+        const denial = await denyPublish((req.user as any).id, req.body.status);
+        if (denial) {
+          return res.status(denial.httpStatus).json({ error: denial.message, code: denial.code });
+        }
+      }
+
+      // Raw req.body reached the UPDATE: `createdBy` was client-settable.
+      const updates = pickTableColumns(deepAnalyses, req.body, {
+        omit: ["createdBy", "generationTime"],
+      });
+
+      const updated = await storage.updateDeepAnalysis(req.params.id, updates);
       res.json(updated);
     } catch (error: any) {
       console.error('Error updating deep analysis:', error);
@@ -31025,15 +31066,17 @@ Sitemap: https://sabq.org/sitemap-news.xml
   // GET /api/omq - قائمة التحليلات المنشورة (public)
   app.get("/api/omq", async (req, res) => {
     try {
-      const { status, keyword, category, dateFrom, dateTo, page, limit } = req.query;
+      const { status, keyword, category, dateFrom, dateTo } = req.query;
+      const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 20, maxLimit: 50, allowPage: true, defaultPage: 1 });
+      if (!pg) return;
       
       // Parse filters
       const filters: any = {
         status: status as string | undefined,
         keyword: keyword as string | undefined,
         category: category as string | undefined,
-        page: page ? parseInt(page as string) : 1,
-        limit: limit ? parseInt(limit as string) : 20,
+        page: pg.page,
+        limit: pg.limit,
       };
       
       // Parse date range if provided
@@ -31485,7 +31528,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
   app.get("/api/accessibility/recent", requireAuth, requirePermission('admin.manage_settings'), async (req, res) => {
     try {
       const { limit = '50', eventType } = req.query;
-      const limitNum = Math.min(parseInt(limit as string) || 50, 100);
+      const limitNum = parseLimit(limit, 50, 100);
       
       // Build where conditions
       const conditions = [];
@@ -31605,8 +31648,8 @@ Sitemap: https://sabq.org/sitemap-news.xml
         const result = await storage.getAllNewsletterSubscriptions({
           status: status as string,
           language: language as string,
-          limit: limit ? parseInt(limit as string) : 50,
-          offset: offset ? parseInt(offset as string) : 0,
+          limit: parseLimit(limit, 50, 200),
+          offset: parseOffset(offset),
         });
         res.json(result);
       } catch (error: any) {
@@ -31723,8 +31766,8 @@ Sitemap: https://sabq.org/sitemap-news.xml
     try {
         const { page, limit, isActive } = req.query;
         const result = await storage.getAllPublishers({
-          page: page ? parseInt(page as string) : 1,
-          limit: limit ? parseInt(limit as string) : 20,
+          page: parsePage(page, 1),
+          limit: parseLimit(limit, 20, 100),
           isActive: isActive === 'true' ? true : isActive === 'false' ? false : undefined,
         });
         res.json(result);
@@ -31918,8 +31961,8 @@ Sitemap: https://sabq.org/sitemap-news.xml
         const { page, limit } = req.query;
         const result = await storage.getPublisherCreditLogs(
           req.params.id,
-          page ? parseInt(page as string) : 1,
-          limit ? parseInt(limit as string) : 50
+          parsePage(page, 1),
+          parseLimit(limit, 50, 100)
         );
 
         res.json(result);
@@ -31943,8 +31986,8 @@ Sitemap: https://sabq.org/sitemap-news.xml
           return res.status(404).json({ message: "الناشر غير موجود" });
         }
 
-        const page = Math.max(1, parseInt(req.query.page as string) || 1);
-        const limit = Math.min(50, Math.max(1, parseInt(req.query.limit as string) || 10));
+        const page = parsePage(req.query.page, 1);
+        const limit = parseLimit(req.query.limit, 10, 50);
         const result = await getPortalArticles(publisher, {
           page,
           limit,
@@ -31972,8 +32015,8 @@ Sitemap: https://sabq.org/sitemap-news.xml
     try {
         const { page, limit, isActive } = req.query;
         const result = await storage.getAllPublishers({
-          page: page ? parseInt(page as string) : 1,
-          limit: limit ? parseInt(limit as string) : 20,
+          page: parsePage(page, 1),
+          limit: parseLimit(limit, 20, 100),
           isActive: isActive === 'true' ? true : isActive === 'false' ? false : undefined,
         });
         res.json(result);
@@ -33939,48 +33982,101 @@ Sitemap: https://sabq.org/sitemap-news.xml
   // Opinion Author Applications Routes - طلبات كتّاب الرأي
   // ============================================
 
-  // POST /api/opinion-author-applications - Public registration with photo upload
-  app.post("/api/opinion-author-applications", contactUploadLimiter, upload.single('profilePhoto'), async (req: any, res) => {
+  // POST /api/opinion-author-applications - Public registration (photo + license)
+  // نفس آلية المراسلين: صورة عبر CF Images، الترخيص عبر تخزين خاص S3/R2 فقط
+  // (لا نستخدم Replit sidecar — يكسر التقديم على Railway بـ ECONNREFUSED 127.0.0.1:1106).
+  app.post(
+    "/api/opinion-author-applications",
+    contactUploadLimiter,
+    upload.fields([
+      { name: "profilePhoto", maxCount: 1 },
+      { name: "licenseFile", maxCount: 1 },
+    ]),
+    async (req: any, res) => {
     try {
-      const { arabicName, englishName, email, phone, jobTitle, bio, city, specializations, writingSamples } = req.body;
+      const {
+        arabicName, englishName, email, phone, jobTitle, bio, city,
+        specializations, writingSamples, licenseNumber, licenseExpiresAt, consent,
+      } = req.body;
+      const files = req.files as Record<string, Express.Multer.File[]> | undefined;
+      const profilePhoto = files?.profilePhoto?.[0];
+      const licenseFile = files?.licenseFile?.[0];
 
-      // Validate required fields
-      if (!arabicName || !englishName || !email || !phone || !city) {
+      if (!arabicName || !englishName || !email || !phone || !city || !licenseNumber) {
         return res.status(400).json({ message: "جميع الحقول المطلوبة يجب ملؤها" });
       }
 
-      if (!req.file) {
-        return res.status(400).json({ message: "الصورة الشخصية مطلوبة" });
+      if (consent !== "true") {
+        return res.status(400).json({ message: "يجب الإقرار بصحة البيانات والموافقة على معالجتها" });
       }
 
-      // Upload photo. CF Images first (works everywhere); fall back to GCS
-      // only when CF isn't configured. The previous hardcoded Replit bucket +
-      // sidecar ACL path returned ECONNREFUSED 127.0.0.1:1106 on Railway.
+      if (!profilePhoto) {
+        return res.status(400).json({ message: "الصورة الشخصية مطلوبة" });
+      }
+      if (!profilePhoto.mimetype.startsWith("image/")) {
+        return res.status(400).json({ message: "الصورة الشخصية يجب أن تكون ملف صورة" });
+      }
+      if (!licenseFile) {
+        return res.status(400).json({ message: "صورة الترخيص المهني مطلوبة" });
+      }
+      if (!licenseFile.mimetype.startsWith("image/") && licenseFile.mimetype !== "application/pdf") {
+        return res.status(400).json({ message: "الترخيص المهني يجب أن يكون صورة أو ملف PDF" });
+      }
+
+      const normalizedEmail = String(email).toLowerCase().trim();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+        return res.status(400).json({ message: "البريد الإلكتروني غير صحيح" });
+      }
+
+      // Profile photo → Cloudflare Images (public delivery URL)
       let profilePhotoUrl: string | null = null;
 
       if (cloudflareImagesService.isCloudflareConfigured()) {
         const cfResult = await cloudflareImagesService.uploadToCloudflare(
-          req.file.buffer,
-          req.file.originalname || 'profile.jpg',
-          { type: 'opinion-author-application', email },
-          req.file.mimetype
+          profilePhoto.buffer,
+          profilePhoto.originalname || "profile.jpg",
+          { type: "opinion-author-application", email: normalizedEmail },
+          profilePhoto.mimetype,
         );
         if (cfResult.success && cfResult.deliveryUrl) {
           profilePhotoUrl = cfResult.deliveryUrl;
         } else {
-          console.warn('[OpinionAuthor] CF Images upload failed:', cfResult.error);
+          console.warn("[OpinionAuthor] CF Images upload failed:", cfResult.error);
         }
       }
 
       if (!profilePhotoUrl) {
-        return res.status(502).json({ message: 'خدمة رفع الصورة غير متاحة حالياً. حاول لاحقاً.' });
+        return res.status(502).json({ message: "خدمة رفع الصورة غير متاحة حالياً. حاول لاحقاً." });
       }
 
-      // Create application
+      // License document → PRIVATE R2-first (HEIC→JPEG) — never dead S3 / Replit sidecar.
+      if (!isPrivateObjectStorageConfigured()) {
+        console.error(
+          "[OpinionAuthor] Private object storage not configured " +
+            "(need R2 via R2_* or NEWS_IMAGES_R2_*, or S3 credentials)",
+        );
+        return res.status(502).json({
+          message: "خدمة رفع المستندات غير متاحة حالياً. حاول لاحقاً.",
+        });
+      }
+
+      const docId = randomUUID();
+      const { uploadMediaLicenseDocument } = await import("./services/mediaLicenseUpload");
+      const licenseUpload = await uploadMediaLicenseDocument({
+        relativeKey: `opinion-author-docs/${docId}-license.bin`,
+        buffer: licenseFile.buffer,
+        contentType: licenseFile.mimetype,
+      });
+
+      const expiry = mediaLicenseExpiryRejection(String(licenseExpiresAt || ""));
+      if ("error" in expiry) {
+        return res.status(400).json({ message: expiry.error });
+      }
+
       const application = await storage.createOpinionAuthorApplication({
         arabicName,
         englishName,
-        email,
+        email: normalizedEmail,
         phone,
         jobTitle: jobTitle || "كاتب رأي",
         bio: bio || null,
@@ -33988,18 +34084,51 @@ Sitemap: https://sabq.org/sitemap-news.xml
         profilePhotoUrl,
         specializations: specializations || null,
         writingSamples: writingSamples || null,
+        licenseNumber: String(licenseNumber).trim(),
+        licenseExpiresAt: expiry.expiresAt,
+        licenseFileKey: licenseUpload.path,
+        consentAt: new Date(),
       });
 
       console.log(`✅ Opinion author application created: ${application.id}`);
-      res.status(201).json({ 
-        message: "تم تقديم طلبك بنجاح. سيتم مراجعته والرد عليك قريباً.", 
-        applicationId: application.id 
+      res.status(201).json({
+        message: "تم تقديم طلبك بنجاح. سيتم مراجعته والرد عليك قريباً.",
+        applicationId: application.id,
       });
     } catch (error: any) {
       console.error("Error creating opinion author application:", error);
-      res.status(500).json({ message: "حدث خطأ في تقديم الطلب: " + error.message });
+      // Do not leak backend/storage internals into the public registration form.
+      res.status(500).json({
+        message: "حدث خطأ في تقديم الطلب. يرجى المحاولة مرة أخرى لاحقاً.",
+      });
     }
   });
+
+  // GET /api/admin/opinion-author-applications/:id/file/license - Signed download
+  app.get(
+    "/api/admin/opinion-author-applications/:id/file/license",
+    requireAuth,
+    requireRole("admin", "system_admin"),
+    async (req: any, res) => {
+      try {
+        const application = await storage.getOpinionAuthorApplicationById(req.params.id);
+        if (!application) {
+          return res.status(404).json({ message: "الطلب غير موجود" });
+        }
+        if (!application.licenseFileKey) {
+          return res.status(404).json({ message: "لا يوجد ملف ترخيص مرفق لهذا الطلب" });
+        }
+        const url = await new ObjectStorageService().getPrivateFileDownloadURL(
+          application.licenseFileKey,
+          300,
+        );
+        res.redirect(url);
+      } catch (error: unknown) {
+        console.error("Error fetching opinion author license file:", error);
+        res.status(500).json({ message: "فشل في جلب الملف" });
+      }
+    },
+  );
 
   // News Analytics Endpoint - Smart statistics and insights
 
@@ -34010,8 +34139,8 @@ Sitemap: https://sabq.org/sitemap-news.xml
       
       const result = await storage.getOpinionAuthorApplications(
         status as string,
-        parseInt(page as string),
-        parseInt(limit as string)
+        parsePage(page, 1),
+        parseLimit(limit, 10, 100)
       );
 
       res.json(result);
@@ -34489,7 +34618,21 @@ Sitemap: https://sabq.org/sitemap-news.xml
         subject: z.enum(["استفسار عام", "شراكات إعلامية", "شكوى", "اقتراح", "أخرى"]),
         message: z.string().min(10),
         
-        attachments: z.array(z.object({ name: z.string(), size: z.number(), type: z.string(), url: z.string() })).optional().default([]),
+        // `url` must be exactly what POST /api/contact/upload returns — a
+        // relative path under the contact-attachments prefix. It was a free
+        // `z.string()`, and the dashboard renders it as a raw href
+        // (client/src/pages/ContactMessageDetail.tsx), so an anonymous
+        // submitter could plant `javascript:…` and have it run in an admin's
+        // session, or point the "attachment" at any external host.
+        attachments: z.array(z.object({
+          name: z.string().max(300),
+          size: z.number(),
+          type: z.string().max(150),
+          url: z.string().regex(
+            /^\/public-objects\/contact-attachments\/[A-Za-z0-9._-]+$/,
+            "مسار مرفق غير صالح",
+          ),
+        })).max(10).optional().default([]),
       });
 
       const validatedData = contactSchema.parse(req.body);
@@ -34508,8 +34651,14 @@ Sitemap: https://sabq.org/sitemap-news.xml
 
       // إرسال نسخة من الرسالة إلى بريد الصحيفة
       try {
+        // `att.name` is the submitter's original filename — escape it before it
+        // goes into outbound HTML from the sabq.org domain.
+        const escapeHtmlText = (s: string) => String(s)
+          .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+
         const attachmentsList = validatedData.attachments.length > 0
-          ? `<div style="margin-top: 16px; padding: 12px; background: #f5f5f5; border-radius: 8px;"><strong>المرفقات:</strong><ul style="margin: 8px 0 0 0; padding-right: 20px;">${validatedData.attachments.map((att: any) => `<li><a href="https://sabq.org${att.url}">${att.name}</a></li>`).join("")}</ul></div>`
+          ? `<div style="margin-top: 16px; padding: 12px; background: #f5f5f5; border-radius: 8px;"><strong>المرفقات:</strong><ul style="margin: 8px 0 0 0; padding-right: 20px;">${validatedData.attachments.map((att: any) => `<li><a href="https://sabq.org${escapeHtmlText(att.url)}">${escapeHtmlText(att.name)}</a></li>`).join("")}</ul></div>`
           : "";
 
         const { sendEmailNotification } = await import("./services/email");
@@ -34553,8 +34702,8 @@ Sitemap: https://sabq.org/sitemap-news.xml
   // List all contact messages with pagination and filtering
   app.get("/api/admin/contact-messages", requireAuth, requireRole("admin", "editor"), async (req: any, res) => {
     try {
-      const page = parseInt(req.query.page as string) || 1;
-      const limit = parseInt(req.query.limit as string) || 20;
+      const page = parsePage(req.query.page, 1);
+      const limit = parseLimit(req.query.limit, 20, 100);
       const status = req.query.status as string;
       const search = req.query.search as string;
       const offset = (page - 1) * limit;
@@ -35955,28 +36104,47 @@ Sitemap: https://sabq.org/sitemap-news.xml
 
 
   // Enhanced search endpoint for news search (title priority, then content)
+  // single-flight لنفس الاستعلام — يمنع عاصفة FTS عند الكتابة الحية (debounce ناقص).
+  if (!(globalThis as any).__sabqSearchInflight) {
+    (globalThis as any).__sabqSearchInflight = new Map<string, Promise<unknown>>();
+  }
+  const searchInflightMap: Map<string, Promise<unknown>> =
+    (globalThis as any).__sabqSearchInflight;
+
   app.get("/api/search", async (req, res) => {
     try {
       const q = String(req.query.q || "").trim();
-      const limit = Math.min(parseInt(String(req.query.limit || "20")), 50);
-      const page = Math.max(0, parseInt(String(req.query.page || "0")));
+      const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 20, maxLimit: 50 });
+      if (!pg) return;
+      const limit = pg.limit;
+      const page = parseOffset(req.query.page);
       const offset = page * limit;
 
       if (!q || q.length < 2) {
         return res.json({ results: [], query: q });
       }
 
-      const cacheKey = `search:${q}:${limit}:${page}`;
-      const cached = memoryCache.get(cacheKey);
-      if (cached) return res.json(cached);
-
+      // مفتاح موحّد (بدون تشكيل) حتى لا يتفتت الكاش بين «تقني» و«تَقْنِي».
       const normalizeArabic = (text: string) => text.replace(/[\u064B-\u065F\u0670]/g, '');
       const normalizedQuery = normalizeArabic(q);
+      const cacheKey = `search:v2:${normalizedQuery.toLowerCase()}:${limit}:${page}`;
+      const cached = memoryCache.get(cacheKey);
+      if (cached) {
+        res.set("Cache-Control", "public, max-age=30, s-maxage=60, stale-while-revalidate=120");
+        return res.json(cached);
+      }
 
+      const existing = searchInflightMap.get(cacheKey);
+      if (existing) {
+        const shared = await existing;
+        res.set("Cache-Control", "public, max-age=30, s-maxage=60, stale-while-revalidate=120");
+        return res.json(shared);
+      }
+
+      const compute = (async () => {
       const words = normalizedQuery.trim().split(/\s+/).filter(w => w.length > 1);
-      if (!words.length) return res.json({ results: [], query: q });
-      // plainto_tsquery يبني tsquery تلقائياً من نص خام (آمن مع أي input، لا
-      // syntax errors كما كان يحصل مع to_tsquery على الكلمات العربية المفردة).
+      if (!words.length) return { results: [], query: q };
+
       const compactQuery = normalizedQuery.replace(/\s+/g, '');
 
       // Pure-numeric queries (e.g. "4220449") are the source of the 7s+ slow
@@ -35991,6 +36159,9 @@ Sitemap: https://sabq.org/sitemap-news.xml
       const useFts = !isNumericQuery && compactQuery.length >= 5;
 
       let results: any[] = [];
+      const startedAt = Date.now();
+      // ميزانية إجمالية — كانت تصل ~2.5ث بتكديس مهلات FTS ثم العنوان.
+      const BUDGET_MS = 1_800;
 
       const recentCut = new Date();
       recentCut.setFullYear(recentCut.getFullYear() - 2);
@@ -35998,8 +36169,11 @@ Sitemap: https://sabq.org/sitemap-news.xml
       const searchTimeout = <T>(promise: Promise<T>, ms: number): Promise<T> =>
         Promise.race([promise, new Promise<T>((_, reject) => setTimeout(() => reject(new Error('search_timeout')), ms))]);
 
+      const remaining = () => Math.max(200, BUDGET_MS - (Date.now() - startedAt));
+
       // Primary FTS query (recent articles, AND-mode for precision)
-      if (useFts) try {
+      if (useFts && remaining() > 400) try {
+        const primaryMs = Math.min(1_500, remaining());
         const recentResults: any = await searchTimeout(executeWithStatementTimeout(sql`
           -- Keep FTS selection and pagination as separate optimization fences.
           -- Otherwise Postgres can walk the date index and filter search_vector
@@ -36025,30 +36199,26 @@ Sitemap: https://sabq.org/sitemap-news.xml
           JOIN articles a ON a.id = m.id
           LEFT JOIN categories c ON c.id = a.category_id
           ORDER BY m.published_at DESC
-        `, 3000), 4000);
+        `, primaryMs), primaryMs + 500);
 
         const rows = recentResults?.rows || recentResults;
         results = (Array.isArray(rows) ? rows : []).map((r: any) => ({ ...r, matchType: 'title' }));
       } catch (ftsError: any) {
         if (ftsError?.message === 'search_timeout') {
-          console.warn(`[Search] Primary FTS timed out (3s) for: "${q}"`);
+          console.warn(`[Search] Primary FTS timed out for: "${q}"`);
         } else {
-          // Drizzle يلفّ خطأ PG؛ السبب الفعلي على cause (code/message).
           const c = (ftsError as any)?.cause;
           console.warn(`[Search] Primary FTS error for "${q}":`, ftsError?.message, c?.code ? { pgCode: c.code, pgMessage: c.message } : '');
         }
-        // Don't wipe results — they were already empty.
       }
-      // Supplemental: search older articles only if recent yielded few results.
-      // Errors here MUST NOT wipe the primary results. Skipped for numeric
-      // queries (handled by the trigram title fallback below).
-      if (useFts && results.length < Math.min(limit, 5)) {
+      // Supplemental: only if recent yielded few results AND budget remains.
+      if (useFts && results.length < Math.min(limit, 5) && remaining() > 500) {
         try {
           const existingIds = results.map(r => r.id);
-          const remaining = Math.min(limit - results.length, 10);
+          const remLimit = Math.min(limit - results.length, 10);
+          const suppMs = Math.min(1_000, remaining());
 
           const allTimeResults: any = await searchTimeout(executeWithStatementTimeout(sql`
-            -- Use the same GIN-first plan for the older-article fallback.
             WITH matched AS MATERIALIZED (
               SELECT id, published_at
               FROM articles
@@ -36061,7 +36231,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
               SELECT id, published_at
               FROM matched
               ORDER BY published_at DESC
-              LIMIT ${remaining}
+              LIMIT ${remLimit}
             )
             SELECT a.id, a.title, a.subtitle, a.slug, a.image_url as "imageUrl",
               a.image_focal_point as "imageFocalPoint", a.published_at as "publishedAt",
@@ -36071,23 +36241,21 @@ Sitemap: https://sabq.org/sitemap-news.xml
             JOIN articles a ON a.id = m.id
             LEFT JOIN categories c ON c.id = a.category_id
             ORDER BY m.published_at DESC
-          `, 2000), 3000);
+          `, suppMs), suppMs + 400);
           const allRows = allTimeResults?.rows || allTimeResults;
           results = [...results, ...(Array.isArray(allRows) ? allRows : []).map((r: any) => ({ ...r, matchType: 'content' }))];
         } catch (suppErr: any) {
           if (suppErr?.message === 'search_timeout') {
             console.warn(`[Search] Supplemental FTS skipped (timeout) for: "${q}"`);
           }
-          // Keep whatever results we already have.
         }
       }
 
-      // Fallback: direct title ILIKE search (powered by the pg_trgm GIN index
-      // idx_articles_title_trgm). Runs when FTS returns nothing, and is the ONLY
-      // pass for numeric queries — keeps cost low and avoids stacked timeouts.
-      if (results.length === 0 && page === 0) {
+      // Fallback: title ILIKE via trigram — only when empty and budget left.
+      if (results.length === 0 && page === 0 && remaining() > 300) {
         try {
           const likePattern = `%${normalizedQuery.toLowerCase().replace(/[%_\\]/g, c => '\\' + c)}%`;
+          const titleMs = Math.min(1_200, remaining());
           const titleResults = await searchTimeout(executeWithStatementTimeout(sql`
             SELECT a.id, a.title, a.subtitle, a.slug, a.image_url as "imageUrl",
               a.image_focal_point as "imageFocalPoint", a.published_at as "publishedAt",
@@ -36099,12 +36267,12 @@ Sitemap: https://sabq.org/sitemap-news.xml
               AND lower(a.title) LIKE ${likePattern}
           ORDER BY a.published_at DESC NULLS LAST
               LIMIT ${limit}
-          `, 2500), 3500);
+          `, titleMs), titleMs + 400);
           const tRows = (titleResults as any).rows || titleResults;
           results = (Array.isArray(tRows) ? tRows : []).map((r: any) => ({ ...r, matchType: 'title' }));
         } catch (likeErr: any) {
           if (likeErr?.message === 'search_timeout') {
-            console.warn(`[Search] Title fallback timed out (3s) for: "${q}"`);
+            console.warn(`[Search] Title fallback timed out for: "${q}"`);
           }
         }
       }
@@ -36118,8 +36286,17 @@ Sitemap: https://sabq.org/sitemap-news.xml
       };
 
       memoryCache.set(cacheKey, response, page === 0 ? CACHE_TTL.SHORT : CACHE_TTL.SHORT / 2);
+      return response;
+      })();
 
-      res.json(response);
+      searchInflightMap.set(cacheKey, compute);
+      try {
+        const response = await compute;
+        res.set("Cache-Control", "public, max-age=30, s-maxage=60, stale-while-revalidate=120");
+        res.json(response);
+      } finally {
+        searchInflightMap.delete(cacheKey);
+      }
     } catch (error) {
       console.error("Error in search:", error);
       res.status(500).json({ message: "فشل في البحث" });

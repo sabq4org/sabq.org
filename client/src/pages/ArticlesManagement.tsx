@@ -33,19 +33,21 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Edit, Trash2, Send, Star, Bell, Plus, Archive, Trash, GripVertical, Sparkles, Newspaper, Clock, FilePenLine, Brain, PenLine, MessageCircle, Mail, ChevronLeft, ChevronRight, Camera, BarChart3, Images, Building2, Languages, Loader2, Smartphone } from "lucide-react";
+import { Edit, Trash2, Send, Star, Bell, Plus, Archive, Trash, GripVertical, Sparkles, Newspaper, Clock, CalendarClock, FilePenLine, Brain, PenLine, MessageCircle, Mail, ChevronLeft, ChevronRight, Camera, BarChart3, Images, Building2, Languages, Loader2, Smartphone, Share2, Tag, BookOpen, HeartPulse, Zap } from "lucide-react";
+import { SocialPublishDialog } from "@/components/social/SocialPublishDialog";
 import { ViewsCount } from "@/components/ViewsCount";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
 import { DashboardPageShell } from "@/components/dashboard/DashboardPageShell";
-import { MobileOptimizedKpiCard } from "@/components/MobileOptimizedKpiCard";
 import { BreakingSwitch } from "@/components/admin/BreakingSwitch";
 import { RowActions } from "@/components/admin/RowActions";
 import { EditorialDraftReviewCue } from "@/components/admin/EditorialDraftReviewCue";
 import { isAwaitingContributorRevision, isResubmittedAfterRevision } from "@/lib/articleRevision";
+import { fmtSocialDateTime } from "@/components/social/socialFormat";
+import { cn } from "@/lib/utils";
 import {
   DndContext,
   closestCenter,
@@ -76,10 +78,17 @@ type Article = {
   articleType: string;
   newsType: string;
   isFeatured: boolean;
+  isReading?: boolean;
   views: number;
   publishedAt: string | null;
+  scheduledAt?: string | null;
   createdAt: string;
   updatedAt: string;
+  writerWeeklySlot?: {
+    weekday: number;
+    publishTime: string;
+    nextSlot: string;
+  } | null;
   isAiGeneratedThumbnail?: boolean;
   source?: string;
   sourceMetadata?: {
@@ -95,6 +104,7 @@ type Article = {
     id: string;
     nameAr: string;
     nameEn: string;
+    color?: string | null;
   } | null;
   author?: {
     id: string;
@@ -116,15 +126,33 @@ type Category = {
   nameEn: string;
 };
 
+type ArticlesPage = {
+  articles: Article[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+};
+
+// جوال = عرض أقل من md، أو هاتف بالوضع الأفقي (شاشة لمس قصيرة الارتفاع
+// يتجاوز عرضها 768 فتُعامَل خطأً كديسكتوب لو اعتمدنا على العرض وحده)
+function isMobileViewport() {
+  if (typeof window === "undefined") return false;
+  if (window.innerWidth < 768) return true;
+  return window.matchMedia("(pointer: coarse)").matches && window.innerHeight < 500;
+}
+
 function SortableRow({
   article,
   children,
   isSaving,
+  disableSorting,
   highlightResubmitted,
 }: {
   article: Article;
   children: React.ReactNode;
   isSaving?: boolean;
+  disableSorting?: boolean;
   highlightResubmitted?: false | "resubmitted" | "awaiting";
 }) {
   const {
@@ -134,7 +162,7 @@ function SortableRow({
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: article.id });
+  } = useSortable({ id: article.id, disabled: disableSorting });
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -148,30 +176,59 @@ function SortableRow({
     <tr
       ref={setNodeRef}
       style={style}
-      className={`border-b border-border hover:bg-muted/30 ${isDragging ? 'bg-primary/10 shadow-lg' : ''} ${isSaving ? 'opacity-70' : ''} ${highlightResubmitted === 'resubmitted' ? 'bg-amber-50/80 dark:bg-muted/60 border-r-4 border-r-amber-500' : ''} ${highlightResubmitted === 'awaiting' ? 'bg-orange-50/80 dark:bg-muted/60 border-r-4 border-r-orange-500' : ''}`}
+      className={cn(
+        "border-b border-border/80 transition-colors",
+        "bg-card even:bg-muted/40 hover:bg-muted/60 dark:even:bg-muted/20 dark:hover:bg-muted/40",
+        isDragging ? "bg-primary/15 shadow-lg" : "",
+        isSaving ? "opacity-70" : "",
+        highlightResubmitted === "resubmitted" ? "bg-amber-50/90 dark:bg-amber-950/30 border-r-4 border-r-amber-500" : "",
+        highlightResubmitted === "awaiting" ? "bg-orange-50/90 dark:bg-orange-950/30 border-r-4 border-r-orange-500" : ""
+      )}
       data-testid={`row-article-${article.id}`}
     >
       <td 
-        className="hidden md:table-cell py-3 px-2 text-center cursor-grab active:cursor-grabbing touch-none select-none" 
+        className={cn("hidden md:table-cell w-9 py-3 px-1 text-center", !disableSorting && "cursor-grab active:cursor-grabbing touch-none select-none")}
         {...attributes} 
         {...listeners}
       >
-        <GripVertical 
+        {!disableSorting && <GripVertical
           className={`h-4 w-4 mx-auto ${isDragging ? 'text-primary' : 'text-muted-foreground'} ${isSaving ? 'animate-pulse' : ''}`} 
           data-testid={`drag-handle-${article.id}`} 
-        />
+        />}
       </td>
       {children}
     </tr>
   );
 }
 
-// Section Header component matching Dashboard style
-const SectionHeader = ({ title }: { title: string }) => (
-  <div className="px-1">
-    <h2 className="text-base font-semibold text-foreground">{title}</h2>
-  </div>
-);
+const TYPE_CHIP: Record<string, { label: string; className: string; icon?: typeof Camera }> = {
+  news: {
+    label: "خبر",
+    className: "border-sky-500/20 bg-sky-500/10 text-sky-700 dark:text-sky-300",
+  },
+  opinion: {
+    label: "رأي",
+    className: "border-violet-500/20 bg-violet-500/10 text-violet-700 dark:text-violet-300",
+  },
+  analysis: {
+    label: "تحليل",
+    className: "border-indigo-500/20 bg-indigo-500/10 text-indigo-700 dark:text-indigo-300",
+  },
+  column: {
+    label: "عمود",
+    className: "border-fuchsia-500/20 bg-fuchsia-500/10 text-fuchsia-700 dark:text-fuchsia-300",
+  },
+  weekly_photos: {
+    label: "صور",
+    className: "border-orange-500/20 bg-orange-500/10 text-orange-700 dark:text-orange-300",
+    icon: Camera,
+  },
+  infographic: {
+    label: "إنفوجرافيك",
+    className: "border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+    icon: BarChart3,
+  },
+};
 
 export default function ArticlesManagement() {
   const { user, isLoading: isUserLoading } = useAuth({ redirectToLogin: true });
@@ -187,6 +244,7 @@ export default function ArticlesManagement() {
   const canPublishArticle = user && hasAnyPermission(user, "articles.publish");
   const canFeatureArticle = user && hasAnyPermission(user, "articles.feature");
   const canArchiveArticle = user && hasAnyPermission(user, "articles.archive");
+  const canSocialPublish = user && hasAnyPermission(user, "social_publish.view", "social_publish.create");
 
   // Helper function to check if user can edit a specific article
   // Reporters cannot edit articles after publication
@@ -218,6 +276,9 @@ export default function ArticlesManagement() {
   // State for dialogs and filters
   const [deletingArticle, setDeletingArticle] = useState<Article | null>(null);
   const [revisionArticle, setRevisionArticle] = useState<Article | null>(null);
+  const [socialPublishArticle, setSocialPublishArticle] = useState<Article | null>(null);
+  const [notifyArticle, setNotifyArticle] = useState<Article | null>(null);
+  const [isSendingNotification, setIsSendingNotification] = useState(false);
   const [revisionNotes, setRevisionNotes] = useState("");
   const [revisionNotesError, setRevisionNotesError] = useState<string | null>(null);
   // Reason captured in the archive dialog. Required by the backend
@@ -226,12 +287,25 @@ export default function ArticlesManagement() {
   const [archiveReason, setArchiveReason] = useState("");
   const [archiveReasonError, setArchiveReasonError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
-  const [activeStatus, setActiveStatus] = useState<"published" | "scheduled" | "draft" | "archived">("published");
-  const [typeFilter, setTypeFilter] = useState("all");
-  const [categoryFilter, setCategoryFilter] = useState("all");
-  
-  // State for pagination
-  const [currentPage, setCurrentPage] = useState(1);
+  // Commit filters and page together: never fetch a new filter on the old page.
+  const [listParams, setListParams] = useState({
+    search: "",
+    status: "published" as "published" | "scheduled" | "draft" | "archived",
+    type: "all",
+    category: "all",
+    page: 1,
+  });
+  const { status: activeStatus, type: typeFilter, category: categoryFilter, page: currentPage } = listParams;
+  const changeFilters = (filters: Partial<Omit<typeof listParams, "page">>) => {
+    setListParams(previous => ({ ...previous, search: searchTerm, ...filters, page: 1 }));
+  };
+  useEffect(() => {
+    if (searchTerm === listParams.search) return;
+    const timer = window.setTimeout(() => {
+      setListParams(previous => ({ ...previous, search: searchTerm, page: 1 }));
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [searchTerm, listParams.search]);
   
   // State for bulk selection
   const [selectedArticles, setSelectedArticles] = useState<Set<string>>(new Set());
@@ -242,23 +316,22 @@ export default function ArticlesManagement() {
   const [bulkArchiveReason, setBulkArchiveReason] = useState("");
   const [bulkArchiveReasonError, setBulkArchiveReasonError] = useState<string | null>(null);
 
-  // State for drag and drop
-  const [localArticles, setLocalArticles] = useState<Article[]>([]);
-
   // State for AI classification
   const [classificationResult, setClassificationResult] = useState<any>(null);
   const [showClassificationDialog, setShowClassificationDialog] = useState(false);
 
   // State for mobile detection
-  const [isMobile, setIsMobile] = useState(
-    typeof window !== 'undefined' ? window.innerWidth < 768 : false
-  );
+  const [isMobile, setIsMobile] = useState(isMobileViewport);
 
   // Mobile detection effect
   useEffect(() => {
-    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    const handleResize = () => setIsMobile(isMobileViewport());
     window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+    window.addEventListener('orientationchange', handleResize);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('orientationchange', handleResize);
+    };
   }, []);
 
   // DnD sensors
@@ -275,7 +348,7 @@ export default function ArticlesManagement() {
 
   // Fetch metrics
   const { data: metrics, isLoading: metricsLoading, error: metricsError } = useQuery({
-    queryKey: ["/api/admin/articles/metrics"],
+    queryKey: ["/api/admin/articles/metrics", user?.id],
     queryFn: async () => {
       const response = await fetch(apiUrl("/api/admin/articles/metrics"), { credentials: "include" });
       if (!response.ok) {
@@ -285,26 +358,24 @@ export default function ArticlesManagement() {
       const data = await response.json();
       return data;
     },
-    enabled: !!user,
+    enabled: !!canViewArticles,
+    staleTime: 0,
+    refetchOnWindowFocus: true,
+    refetchInterval: 60_000,
   });
 
-  // Reset page to 1 when filters change
+  // Selection belongs only to the visible account/filter/page.
   useEffect(() => {
-    setCurrentPage(1);
-  }, [searchTerm, activeStatus, typeFilter, categoryFilter]);
+    setSelectedArticles(new Set());
+  }, [user?.id, searchTerm, activeStatus, typeFilter, categoryFilter, currentPage]);
 
   // Fetch articles with filters and pagination
-  const { data: articlesData, isLoading: articlesLoading } = useQuery<{
-    articles: Article[];
-    total: number;
-    page: number;
-    limit: number;
-    totalPages: number;
-  }>({
-    queryKey: ["/api/admin/articles", searchTerm, activeStatus, typeFilter, categoryFilter, currentPage],
-    queryFn: async () => {
+  const articlesQueryKey = ["/api/admin/articles", user?.id, listParams.search, activeStatus, typeFilter, categoryFilter, currentPage];
+  const { data: articlesData, isLoading: articlesLoading, isFetching: articlesFetching, isPlaceholderData, isError: articlesError, refetch: refetchArticles } = useQuery<ArticlesPage>({
+    queryKey: articlesQueryKey,
+    queryFn: async ({ signal }) => {
       const params = new URLSearchParams();
-      if (searchTerm) params.append("search", searchTerm);
+      if (listParams.search) params.append("search", listParams.search);
       if (activeStatus) params.append("status", activeStatus);
       if (typeFilter && typeFilter !== "all") params.append("articleType", typeFilter);
       if (categoryFilter && categoryFilter !== "all") params.append("categoryId", categoryFilter);
@@ -312,17 +383,42 @@ export default function ArticlesManagement() {
       params.append("limit", "30");
       
       const url = `/api/admin/articles?${params.toString()}`;
-      const response = await fetch(url, { credentials: "include" });
+      const response = await fetch(apiUrl(url), { credentials: "include", signal });
       if (!response.ok) {
-        throw new Error(`Failed to fetch articles: ${response.statusText}`);
+        // Preserve the HTTP status for the shared retry policy (4xx must fail fast).
+        throw new Error(`${response.status}: ${response.statusText}`);
       }
       return response.json();
     },
-    enabled: !!user,
+    enabled: !!canViewArticles,
+    staleTime: 0,
+    refetchOnWindowFocus: true,
+    refetchInterval: activeStatus === "published" || activeStatus === "scheduled" ? 60_000 : false,
+    // Keep the table in place during transitions, but never carry another account's rows.
+    placeholderData: (previousData, previousQuery) =>
+      user?.id && previousQuery?.queryKey[1] === user.id ? previousData : undefined,
   });
 
-  const articles = useMemo(() => articlesData?.articles || [], [articlesData?.articles]);
+  const articles = useMemo(() => canViewArticles && Array.isArray(articlesData?.articles) ? articlesData.articles : [], [canViewArticles, articlesData?.articles]);
+  const articlesBusy = articlesFetching || isPlaceholderData || searchTerm !== listParams.search;
+  const displayedPage = articlesData?.page ?? currentPage;
   const totalPages = articlesData?.totalPages || 1;
+
+  // A scheduled row may publish, or move to another page, during a refresh.
+  // Bulk actions must never retain IDs that are no longer in the visible result.
+  useEffect(() => {
+    if (articlesFetching || isPlaceholderData || articlesError) return;
+    const visible = new Set(articles.map(article => article.id));
+    setSelectedArticles(previous => {
+      const next = new Set(Array.from(previous).filter(id => visible.has(id)));
+      return next.size === previous.size ? previous : next;
+    });
+  }, [articles, articlesFetching, isPlaceholderData, articlesError]);
+  useEffect(() => {
+    if (selectedArticles.size > 0) return;
+    setShowBulkArchiveDialog(false);
+    setShowBulkDeleteDialog(false);
+  }, [selectedArticles]);
 
   // Fetch categories for filter
   const { data: categoriesRaw } = useQuery<Category[]>({
@@ -330,13 +426,6 @@ export default function ArticlesManagement() {
     enabled: !!user,
   });
   const categories = Array.isArray(categoriesRaw) ? categoriesRaw : [];
-
-  // Update local articles when articles change
-  useEffect(() => {
-    if (articlesData?.articles) {
-      setLocalArticles(articlesData.articles);
-    }
-  }, [articlesData?.articles]);
 
   // Publish mutation
   const publishMutation = useMutation({
@@ -490,22 +579,22 @@ export default function ArticlesManagement() {
     },
     onMutate: async ({ id, currentState }) => {
       // Store the exact query key being modified
-      const queryKey = ["/api/admin/articles", searchTerm, activeStatus, typeFilter, categoryFilter];
+      const queryKey = articlesQueryKey;
       
       // Cancel any outgoing refetches
       await queryClient.cancelQueries({ queryKey: ["/api/admin/articles"] });
       
       // Snapshot the previous value with its query key
-      const previousArticles = queryClient.getQueryData(queryKey);
+      const previousArticles = queryClient.getQueryData<ArticlesPage>(queryKey);
       
       // Optimistically update to the new value
-      queryClient.setQueryData(queryKey, (old: Article[] | undefined) => {
+      queryClient.setQueryData(queryKey, (old: ArticlesPage | undefined) => {
         if (!old) return old;
-        return old.map(article => 
+        return { ...old, articles: old.articles.map(article =>
           article.id === id 
             ? { ...article, newsType: currentState ? "regular" : "breaking" }
             : article
-        );
+        ) };
       });
       
       return { previousArticles, queryKey };
@@ -615,15 +704,14 @@ export default function ArticlesManagement() {
       await queryClient.cancelQueries({ queryKey: ["/api/admin/articles"] });
 
       // Store the previous state for rollback
-      const previousData = queryClient.getQueryData<{ articles: Article[]; total: number; page: number; limit: number; totalPages: number }>(data.queryKey);
-      const previousLocalArticles = [...localArticles];
+      const previousData = queryClient.getQueryData<ArticlesPage>(data.queryKey);
 
       // Optimistically update the cache, preserving the paginated response shape
       if (previousData) {
         queryClient.setQueryData(data.queryKey, { ...previousData, articles: [...data.newOrderedArticles] });
       }
 
-      return { previousData, previousLocalArticles, queryKey: data.queryKey };
+      return { previousData, queryKey: data.queryKey };
     },
     onSuccess: () => {
       // Invalidate homepage and related caches for instant update
@@ -640,9 +728,6 @@ export default function ArticlesManagement() {
       // Rollback to the previous state with fresh copies
       if (context?.previousData && context?.queryKey) {
         queryClient.setQueryData(context.queryKey, { ...context.previousData, articles: [...context.previousData.articles] });
-      }
-      if (context?.previousLocalArticles) {
-        setLocalArticles([...context.previousLocalArticles]);
       }
       toast({
         title: "خطأ في حفظ الترتيب",
@@ -679,8 +764,56 @@ export default function ArticlesManagement() {
     },
   });
 
+  const resurfaceMutation = useMutation({
+    mutationFn: async (articleId: string) => {
+      return await apiRequest(`/api/articles/${articleId}/resurface`, {
+        method: "POST",
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/articles"] });
+      toast({
+        title: "تم الإنعاش",
+        description: "عاد الخبر إلى صدارة الموجز وبدأ دورة جديدة",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "خطأ",
+        description: error.message || "فشل إنعاش الخبر",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleSendNotification = async (article: Article) => {
+    setIsSendingNotification(true);
+    try {
+      const data = await apiRequest<{ message?: string }>(`/api/admin/push/quick-send`, {
+        method: "POST",
+        body: JSON.stringify({ articleId: article.id }),
+        headers: { "Content-Type": "application/json" },
+      });
+
+      toast({
+        title: "بدأ الإرسال",
+        description: data?.message || "جارٍ إرسال الإشعار للمستخدمين في الخلفية",
+      });
+      setNotifyArticle(null);
+    } catch (error: any) {
+      toast({
+        title: "خطأ",
+        description: error.message || "فشل إرسال الإشعار",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSendingNotification(false);
+    }
+  };
+
   // Selection handlers
   const toggleArticleSelection = (articleId: string) => {
+    if (articlesBusy) return;
     setSelectedArticles(prev => {
       const newSet = new Set(prev);
       if (newSet.has(articleId)) {
@@ -693,6 +826,7 @@ export default function ArticlesManagement() {
   };
 
   const toggleSelectAll = () => {
+    if (articlesBusy) return;
     if (selectedArticles.size === articles.length) {
       setSelectedArticles(new Set());
     } else {
@@ -701,50 +835,55 @@ export default function ArticlesManagement() {
   };
 
   const handleBulkArchive = () => {
-    if (selectedArticles.size === 0) return;
+    if (articlesBusy || selectedArticles.size === 0) return;
     setBulkArchiveReason("");
     setBulkArchiveReasonError(null);
     setShowBulkArchiveDialog(true);
   };
 
   const handleBulkPermanentDelete = () => {
-    if (selectedArticles.size === 0) return;
+    if (articlesBusy || selectedArticles.size === 0) return;
     setShowBulkDeleteDialog(true);
   };
 
   const handleEdit = (article: Article) => {
+    if (articlesBusy) return;
     setLocation(`/dashboard/articles/${article.id}`);
   };
 
   // Drag end handler
   const handleDragEnd = (event: DragEndEvent) => {
+    if (articlesBusy || updateOrderMutation.isPending || activeStatus === "scheduled") return;
     const { active, over } = event;
 
     if (!over || active.id === over.id) {
       return;
     }
 
-    const oldIndex = localArticles.findIndex((article) => article.id === active.id);
-    const newIndex = localArticles.findIndex((article) => article.id === over.id);
+    const oldIndex = articles.findIndex((article) => article.id === active.id);
+    const newIndex = articles.findIndex((article) => article.id === over.id);
 
     if (oldIndex === -1 || newIndex === -1) {
       return;
     }
 
     // Create a new array with the reordered items
-    const newArticles = arrayMove([...localArticles], oldIndex, newIndex);
-    setLocalArticles(newArticles);
+    const newArticles = arrayMove([...articles], oldIndex, newIndex);
 
-    // Generate unique descending displayOrder values using high-precision timestamp
-    // Each article gets a unique value: baseTimestamp * 1000 - (index * 1000) ensures no collisions
-    const baseTimestamp = Date.now();
+    // Every manual rank must exceed every publication second on this page;
+    // otherwise a just-published row could snap back above its drag target.
+    const publicationSeconds = newArticles.map(article => {
+      const time = article.publishedAt ? new Date(article.publishedAt).getTime() : 0;
+      return Number.isFinite(time) ? Math.floor(time / 1000) : 0;
+    });
+    const baseOrder = Math.max(Math.floor(Date.now() / 1000), ...publicationSeconds) + newArticles.length;
     const articleOrders = newArticles.map((article, index) => ({
       id: article.id,
-      displayOrder: Math.floor((baseTimestamp - index * 1000) / 1000),
+      displayOrder: baseOrder - index,
     }));
 
     // Build the current query key at call time to avoid stale closures
-    const currentQueryKey = ["/api/admin/articles", searchTerm, activeStatus, typeFilter, categoryFilter, currentPage];
+    const currentQueryKey = articlesQueryKey;
 
     updateOrderMutation.mutate({
       articleOrders,
@@ -765,17 +904,18 @@ export default function ArticlesManagement() {
 
   const formatArticleDate = (date: string | Date | null | undefined) => {
     if (!date) return null;
-    try {
-      return new Date(date).toLocaleString("ar-SA-u-ca-gregory-nu-latn", {
-        day: "numeric",
-        month: "long",
-        year: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-      });
-    } catch {
-      return null;
-    }
+    const d = date instanceof Date ? date : new Date(date);
+    if (Number.isNaN(d.getTime())) return null;
+
+    return new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Asia/Riyadh",
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    }).format(d);
   };
 
   const formatScheduledDate = formatArticleDate;
@@ -783,51 +923,52 @@ export default function ArticlesManagement() {
   const formatPublishedDate = formatArticleDate;
 
   const getTypeBadge = (type: string) => {
-    const badges = {
-      news: <Badge variant="secondary">خبر</Badge>,
-      opinion: <Badge variant="outline">رأي</Badge>,
-      analysis: <Badge variant="default">تحليل</Badge>,
-      column: <Badge variant="default">عمود</Badge>,
-      weekly_photos: <Badge variant="default" className="bg-orange-500/90 text-white border-orange-600 gap-1"><Camera className="h-3 w-3" />صور</Badge>,
-      infographic: <Badge variant="default" className="bg-emerald-500/90 text-white border-emerald-600 gap-1"><BarChart3 className="h-3 w-3" /></Badge>,
-    };
-    return badges[type as keyof typeof badges] || <Badge>{type}</Badge>;
+    const meta = TYPE_CHIP[type] ?? { label: type, className: "border-border/70 bg-muted text-muted-foreground" };
+    const Icon = meta.icon;
+    return (
+      <Badge
+        variant="outline"
+        className={cn(
+          "gap-1 rounded-md px-2 py-0.5 text-xs font-semibold border shadow-xs",
+          meta.className,
+        )}
+      >
+        {Icon ? <Icon className="h-3 w-3 shrink-0" /> : null}
+        <span>{meta.label}</span>
+      </Badge>
+    );
   };
 
-  const getSourceBadge = (source?: string) => {
-    const badges = {
-      manual: (
-        <Badge variant="outline" className="gap-1 bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800" data-testid="badge-source-manual">
-          <PenLine className="h-3 w-3" />
-          المحرر
+  const getCategoryChip = (category?: { nameAr?: string | null; color?: string | null } | null) => {
+    if (!category?.nameAr) return null;
+    const catColor = category.color && /^#([0-9a-fA-F]{6})$/.test(category.color) ? category.color : null;
+    
+    if (catColor) {
+      return (
+        <Badge
+          variant="outline"
+          className="gap-1 rounded-md font-semibold px-2.5 py-0.5 text-xs shadow-xs transition-colors"
+          style={{
+            borderColor: `${catColor}55`,
+            backgroundColor: `${catColor}18`,
+            color: catColor,
+          }}
+        >
+          <Tag className="h-3 w-3 shrink-0" style={{ color: catColor }} />
+          <span>{category.nameAr}</span>
         </Badge>
-      ),
-      whatsapp: (
-        <Badge variant="outline" className="gap-1 bg-green-50 dark:bg-green-950/30 text-green-700 dark:text-green-300 border-green-200 dark:border-green-800" data-testid="badge-source-whatsapp">
-          <MessageCircle className="h-3 w-3" />
-          واتساب
-        </Badge>
-      ),
-      email: (
-        <Badge variant="outline" className="gap-1 bg-purple-50 dark:bg-purple-950/30 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800" data-testid="badge-source-email">
-          <Mail className="h-3 w-3" />
-          البريد الذكي
-        </Badge>
-      ),
-      'ios-app': (
-        <Badge variant="outline" className="gap-1 bg-slate-100 dark:bg-slate-900/50 text-slate-700 dark:text-slate-200 border-slate-300 dark:border-slate-700" data-testid="badge-source-ios">
-          <Smartphone className="h-3 w-3" />
-          تطبيق iOS
-        </Badge>
-      ),
-      'android-app': (
-        <Badge variant="outline" className="gap-1 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800" data-testid="badge-source-android">
-          <Smartphone className="h-3 w-3" />
-          تطبيق Android
-        </Badge>
-      ),
-    };
-    return badges[(source || 'manual') as keyof typeof badges] || badges.manual;
+      );
+    }
+
+    return (
+      <Badge
+        variant="outline"
+        className="gap-1 rounded-md border-primary/25 bg-primary/10 text-primary hover:bg-primary/15 font-semibold px-2.5 py-0.5 text-xs shadow-xs"
+      >
+        <Tag className="h-3 w-3 opacity-75 shrink-0" />
+        <span>{category.nameAr}</span>
+      </Badge>
+    );
   };
 
   const isMobileAppSource = (source?: string) => source === 'ios-app' || source === 'android-app';
@@ -845,54 +986,180 @@ export default function ArticlesManagement() {
   const getMobilePlatformLabel = (source?: string) =>
     source === 'android-app' ? 'تطبيق Android' : 'تطبيق iOS';
 
+  const getAuthorOrSourceBadge = (article: Article) => {
+    if (article.source === "email") {
+      const sender = article.sourceMetadata?.senderName || article.sourceMetadata?.from || "بريد إلكتروني";
+      return (
+        <span
+          className="inline-flex items-center gap-1.5 rounded-md border border-purple-500/25 bg-purple-50/70 dark:bg-purple-950/30 px-2 py-0.5 text-xs font-medium text-purple-700 dark:text-purple-300"
+          data-testid="badge-source-email"
+        >
+          <Mail className="h-3 w-3 text-purple-600 dark:text-purple-400 shrink-0" />
+          <span>البريد الذكي: {sender}</span>
+        </span>
+      );
+    }
+    if (article.source === "whatsapp") {
+      const sender = article.sourceMetadata?.senderName || article.sourceMetadata?.from || "واتساب";
+      return (
+        <span
+          className="inline-flex items-center gap-1.5 rounded-md border border-emerald-500/25 bg-emerald-50/70 dark:bg-emerald-950/30 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-300"
+          data-testid="badge-source-whatsapp"
+        >
+          <MessageCircle className="h-3 w-3 text-emerald-600 dark:text-emerald-400 shrink-0" />
+          <span>واتساب: {sender}</span>
+        </span>
+      );
+    }
+    if (isMobileAppSource(article.source)) {
+      return (
+        <span
+          className="inline-flex items-center gap-1.5 rounded-md border border-slate-400/25 bg-slate-100/70 dark:bg-slate-900/40 px-2 py-0.5 text-xs font-medium text-slate-700 dark:text-slate-300"
+          data-testid={article.source === "android-app" ? "badge-source-android" : "badge-source-ios"}
+        >
+          <Smartphone className="h-3 w-3 text-slate-600 dark:text-slate-400 shrink-0" />
+          <span>{getMobilePlatformLabel(article.source)}: {getMobileSenderName(article)}</span>
+        </span>
+      );
+    }
+    if ((article as any).publisher?.companyName) {
+      return (
+        <span className="inline-flex items-center gap-1.5 rounded-md border border-amber-500/25 bg-amber-50/70 dark:bg-amber-950/30 px-2 py-0.5 text-xs font-medium text-amber-800 dark:text-amber-300">
+          <Building2 className="h-3 w-3 text-amber-600 dark:text-amber-400 shrink-0" />
+          <span>وكالة: {(article as any).publisher.companyName}</span>
+        </span>
+      );
+    }
+    const authorName =
+      article.author?.firstName && article.author?.lastName
+        ? `${article.author.firstName} ${article.author.lastName}`
+        : article.author?.firstName || article.author?.email || "المحرر";
+
+    return (
+      <span
+        className="inline-flex items-center gap-1.5 rounded-md border border-blue-500/25 bg-blue-50/70 dark:bg-blue-950/30 px-2 py-0.5 text-xs font-medium text-blue-700 dark:text-blue-300"
+        data-testid="badge-source-manual"
+      >
+        <PenLine className="h-3 w-3 text-blue-600 dark:text-blue-400 shrink-0" />
+        <span>المحرر: {authorName}</span>
+      </span>
+    );
+  };
+
+  const getDateBadge = (article: Article, isDesktop = true) => {
+    if (article.status === "scheduled" && (article as any).scheduledAt) {
+      return (
+        <span
+          className="inline-flex items-center gap-1 rounded-md border border-sky-500/25 bg-sky-50/60 dark:bg-sky-950/25 px-2 py-0.5 text-xs font-medium text-sky-700 dark:text-sky-300"
+          data-testid={isDesktop ? `scheduled-label-desktop-${article.id}` : `scheduled-label-${article.id}`}
+        >
+          <Clock className="h-3 w-3 text-sky-600 dark:text-sky-400 shrink-0" />
+          <span dir="ltr" className="tabular-nums font-mono text-[11px]">
+            {formatScheduledDate((article as any).scheduledAt)}
+          </span>
+        </span>
+      );
+    }
+    if (article.status === "draft") {
+      const weeklyAt =
+        article.articleType === "opinion"
+          ? article.scheduledAt || article.writerWeeklySlot?.nextSlot || null
+          : null;
+      const weeklyFormatted = weeklyAt ? formatArticleDate(weeklyAt) : null;
+      if (weeklyFormatted) {
+        return (
+          <span
+            className="inline-flex items-center gap-1 rounded-md border border-violet-500/25 bg-violet-50/60 dark:bg-violet-950/25 px-2 py-0.5 text-xs font-medium text-violet-700 dark:text-violet-300"
+            title="موعد الجدول الأسبوعي للكاتب"
+            data-testid={isDesktop ? `weekly-slot-desktop-${article.id}` : `weekly-slot-${article.id}`}
+          >
+            <CalendarClock className="h-3 w-3 text-violet-600 dark:text-violet-400 shrink-0" />
+            <span>أسبوعي</span>
+            <span dir="ltr" className="tabular-nums font-mono text-[11px]">
+              {weeklyFormatted}
+            </span>
+          </span>
+        );
+      }
+      if (article.createdAt) {
+        return (
+          <span
+            className="inline-flex items-center gap-1 rounded-md border border-amber-500/25 bg-amber-50/60 dark:bg-amber-950/25 px-2 py-0.5 text-xs font-medium text-amber-800 dark:text-amber-300"
+            data-testid={isDesktop ? `draft-date-desktop-${article.id}` : `draft-date-${article.id}`}
+          >
+            <Clock className="h-3 w-3 text-amber-600 dark:text-amber-400 shrink-0" />
+            <span dir="ltr" className="tabular-nums font-mono text-[11px]">
+              {formatDraftDate(article.createdAt)}
+            </span>
+          </span>
+        );
+      }
+    }
+    if (article.status === "published" && article.publishedAt) {
+      return (
+        <span
+          className="inline-flex items-center gap-1 rounded-md border border-border/60 bg-muted/40 px-2 py-0.5 text-xs font-medium text-muted-foreground"
+          data-testid={isDesktop ? `published-date-desktop-${article.id}` : `published-date-${article.id}`}
+        >
+          <Clock className="h-3 w-3 shrink-0 opacity-70" />
+          <span dir="ltr" className="tabular-nums font-mono text-[11px]">
+            {formatPublishedDate(article.publishedAt)}
+          </span>
+        </span>
+      );
+    }
+    return null;
+  };
+
+  const articlesTotal = articlesData?.total ?? 0;
+
   return (
     <DashboardLayout>
-      <DashboardPageShell maxWidthClassName="max-w-[1600px]" contentClassName="overflow-x-hidden pb-10 space-y-5 md:space-y-6">
+      <DashboardPageShell maxWidthClassName="max-w-[1600px]" contentClassName="overflow-x-hidden px-4 pb-10 sm:px-6 space-y-4">
         {/* Header */}
         <DashboardPageHeader
           icon={Newspaper}
           title="إدارة الأخبار والمقالات"
-          description="إدارة المحتوى الإخباري والمقالات من مكان واحد"
+          description="غرفة تحرير المحتوى — بحث سريع، فرز بالحالة، وإجراءات ظاهرة لكل خبر"
           titleTestId="heading-title"
+          className="p-4 sm:p-4"
           actions={canCreateArticle ? (
             <Button
               onClick={() => setLocation("/dashboard/articles/new")}
               className="gap-2 w-full sm:w-auto"
-              size="sm"
               data-testid="button-create-article"
             >
-              <Plus className="h-3.5 w-3.5 md:h-4 md:w-4" />
+              <Plus className="h-4 w-4" />
               مقال جديد
             </Button>
           ) : undefined}
         />
 
-        {/* Status filter chips — compact; selected = darker filled */}
-        <div className="space-y-2">
-          <SectionHeader title="إحصائيات المقالات" />
+        {/* Status KPIs — compact selectable chips */}
         {metricsLoading ? (
-          <div className="grid grid-cols-4 gap-1.5 sm:gap-2">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             {[1, 2, 3, 4].map((i) => (
-              <Card key={i} className="rounded-xl border-border/60">
-                <CardContent className="p-2.5 sm:p-3">
-                  <Skeleton className="mb-1.5 h-3 w-10" />
-                  <Skeleton className="h-5 w-12" />
+              <Card key={i} className="rounded-2xl border-border/80 bg-card shadow-xs">
+                <CardContent className="p-3.5">
+                  <Skeleton className="mb-2 h-3.5 w-14" />
+                  <Skeleton className="h-7 w-16" />
                 </CardContent>
               </Card>
             ))}
           </div>
         ) : metrics ? (
-          <div className="grid grid-cols-4 gap-1.5 sm:gap-2" role="tablist" aria-label="تصفية حسب الحالة">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4" role="tablist" aria-label="تصفية حسب الحالة">
             {([
               {
                 key: "published" as const,
                 label: "منشورة",
                 value: metrics.published,
                 Icon: Newspaper,
-                idle: "border-emerald-200/70 bg-emerald-50/40 text-emerald-900 dark:border-emerald-900/40 dark:bg-emerald-950/20 dark:text-emerald-100",
-                active: "border-emerald-700 bg-emerald-700 text-white shadow-sm dark:border-emerald-500 dark:bg-emerald-600",
-                iconIdle: "bg-emerald-100/90 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300",
-                iconActive: "bg-white/20 text-white",
+                idle: "border-border/80 bg-card/90 hover:border-emerald-500/40 hover:bg-emerald-500/[0.04] text-foreground",
+                active: "border-emerald-500/50 bg-emerald-500/10 text-emerald-950 dark:text-emerald-100 ring-2 ring-emerald-500/20 shadow-xs",
+                iconIdle: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+                iconActive: "bg-emerald-500 text-white dark:bg-emerald-500 dark:text-white shadow-xs",
+                valueClass: "text-emerald-600 dark:text-emerald-400",
                 testId: "card-stat-published",
               },
               {
@@ -900,10 +1167,11 @@ export default function ArticlesManagement() {
                 label: "مجدولة",
                 value: metrics.scheduled,
                 Icon: Clock,
-                idle: "border-sky-200/70 bg-sky-50/40 text-sky-900 dark:border-sky-900/40 dark:bg-sky-950/20 dark:text-sky-100",
-                active: "border-sky-700 bg-sky-700 text-white shadow-sm dark:border-sky-500 dark:bg-sky-600",
-                iconIdle: "bg-sky-100/90 text-sky-700 dark:bg-sky-950/50 dark:text-sky-300",
-                iconActive: "bg-white/20 text-white",
+                idle: "border-border/80 bg-card/90 hover:border-sky-500/40 hover:bg-sky-500/[0.04] text-foreground",
+                active: "border-sky-500/50 bg-sky-500/10 text-sky-950 dark:text-sky-100 ring-2 ring-sky-500/20 shadow-xs",
+                iconIdle: "bg-sky-500/10 text-sky-600 dark:text-sky-400",
+                iconActive: "bg-sky-500 text-white dark:bg-sky-500 dark:text-white shadow-xs",
+                valueClass: "text-sky-600 dark:text-sky-400",
                 testId: "card-stat-scheduled",
               },
               {
@@ -911,10 +1179,11 @@ export default function ArticlesManagement() {
                 label: "مسودة",
                 value: metrics.draft,
                 Icon: FilePenLine,
-                idle: "border-amber-200/70 bg-amber-50/40 text-amber-950 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-100",
-                active: "border-amber-700 bg-amber-700 text-white shadow-sm dark:border-amber-500 dark:bg-amber-600",
-                iconIdle: "bg-amber-100/90 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300",
-                iconActive: "bg-white/20 text-white",
+                idle: "border-border/80 bg-card/90 hover:border-amber-500/40 hover:bg-amber-500/[0.04] text-foreground",
+                active: "border-amber-500/50 bg-amber-500/10 text-amber-950 dark:text-amber-100 ring-2 ring-amber-500/20 shadow-xs",
+                iconIdle: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+                iconActive: "bg-amber-500 text-white dark:bg-amber-500 dark:text-white shadow-xs",
+                valueClass: "text-amber-600 dark:text-amber-400",
                 testId: "card-stat-draft",
               },
               {
@@ -922,10 +1191,11 @@ export default function ArticlesManagement() {
                 label: "مؤرشفة",
                 value: metrics.archived,
                 Icon: Archive,
-                idle: "border-rose-200/70 bg-rose-50/40 text-rose-950 dark:border-rose-900/40 dark:bg-rose-950/20 dark:text-rose-100",
-                active: "border-rose-800 bg-rose-800 text-white shadow-sm dark:border-rose-500 dark:bg-rose-700",
-                iconIdle: "bg-rose-100/90 text-rose-800 dark:bg-rose-950/50 dark:text-rose-300",
-                iconActive: "bg-white/20 text-white",
+                idle: "border-border/80 bg-card/90 hover:border-rose-500/40 hover:bg-rose-500/[0.04] text-foreground",
+                active: "border-rose-500/50 bg-rose-500/10 text-rose-950 dark:text-rose-100 ring-2 ring-rose-500/20 shadow-xs",
+                iconIdle: "bg-rose-500/10 text-rose-600 dark:text-rose-400",
+                iconActive: "bg-rose-500 text-white dark:bg-rose-500 dark:text-white shadow-xs",
+                valueClass: "text-rose-600 dark:text-rose-400",
                 testId: "card-stat-archived",
               },
             ]).map((card) => {
@@ -936,19 +1206,25 @@ export default function ArticlesManagement() {
                   type="button"
                   role="tab"
                   aria-selected={isActive}
-                  onClick={() => setActiveStatus(card.key)}
-                  className={`rounded-xl border px-2 py-2 text-start transition-colors sm:px-3 sm:py-2.5 ${
-                    isActive ? card.active : card.idle
-                  }`}
+                  onClick={() => changeFilters({ status: card.key })}
+                  className={cn(
+                    "rounded-2xl border p-3.5 sm:p-4 text-start transition-all duration-200 cursor-pointer select-none",
+                    isActive ? card.active : card.idle,
+                  )}
                   data-testid={card.testId}
                 >
-                  <div className="flex items-center justify-between gap-1">
-                    <span className="truncate text-[11px] font-semibold sm:text-xs">{card.label}</span>
-                    <span className={`rounded-md p-1 ${isActive ? card.iconActive : card.iconIdle}`}>
-                      <card.Icon className="h-3 w-3 sm:h-3.5 sm:w-3.5" aria-hidden="true" />
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="truncate text-xs sm:text-sm font-semibold text-muted-foreground">{card.label}</span>
+                    <span className={cn("rounded-xl p-1.5 transition-colors", isActive ? card.iconActive : card.iconIdle)}>
+                      <card.Icon className="h-4 w-4" aria-hidden="true" />
                     </span>
                   </div>
-                  <div className="mt-1 text-base font-bold tabular-nums sm:text-lg">
+                  <div
+                    className={cn(
+                      "mt-2 text-2xl sm:text-3xl font-bold tabular-nums tracking-tight leading-none transition-colors",
+                      isActive ? card.valueClass : "text-foreground"
+                    )}
+                  >
                     {card.value.toLocaleString("en-US")}
                   </div>
                 </button>
@@ -956,31 +1232,24 @@ export default function ArticlesManagement() {
             })}
           </div>
         ) : (
-          <div className="p-4 bg-destructive/10 text-destructive rounded-lg">
+          <div className="rounded-lg bg-destructive/10 p-4 text-destructive">
             خطأ في تحميل الإحصائيات: {metricsError?.message || "غير معروف"}
           </div>
         )}
-        </div>
 
-        {/* Filters - Mobile Optimized */}
-        <div className="space-y-3">
-          <SectionHeader title="البحث والفلاتر" />
-        <div className="rounded-2xl border border-sky-200/55 bg-gradient-to-br from-sky-50/40 via-card to-card p-3 shadow-sm dark:border-sky-900/35 dark:from-sky-950/15 md:p-4">
-          <div className="flex flex-col gap-3">
-            {/* Search */}
-            <div>
-              <Input
-                placeholder="البحث عن مقال..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                data-testid="input-search-articles"
-              />
-            </div>
-            
-            {/* Filters Row */}
-            <div className="grid grid-cols-3 md:flex gap-2">
-              <Select value={typeFilter} onValueChange={setTypeFilter}>
-                <SelectTrigger data-testid="select-type-filter" className="md:w-[150px]">
+        {/* Search + filters — single compact toolbar */}
+        <div className="rounded-xl border border-border/80 bg-card p-3 shadow-none sm:p-3.5">
+          <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
+            <Input
+              placeholder="البحث عن مقال..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              data-testid="input-search-articles"
+              className="h-10 flex-1 text-sm"
+            />
+            <div className="grid grid-cols-3 gap-2 lg:flex lg:shrink-0">
+              <Select value={typeFilter} onValueChange={type => changeFilters({ type })}>
+                <SelectTrigger data-testid="select-type-filter" className="h-10 lg:w-[140px]">
                   <SelectValue placeholder="النوع" />
                 </SelectTrigger>
                 <SelectContent>
@@ -991,9 +1260,9 @@ export default function ArticlesManagement() {
                   <SelectItem value="column">عمود</SelectItem>
                 </SelectContent>
               </Select>
-              
-              <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                <SelectTrigger data-testid="select-category-filter" className="md:w-[150px]">
+
+              <Select value={categoryFilter} onValueChange={category => changeFilters({ category })}>
+                <SelectTrigger data-testid="select-category-filter" className="h-10 lg:w-[150px]">
                   <SelectValue placeholder="التصنيف" />
                 </SelectTrigger>
                 <SelectContent>
@@ -1005,13 +1274,13 @@ export default function ArticlesManagement() {
                   ))}
                 </SelectContent>
               </Select>
-              
+
               <Button
                 variant="outline"
+                className="h-10"
                 onClick={() => {
                   setSearchTerm("");
-                  setTypeFilter("all");
-                  setCategoryFilter("all");
+                  changeFilters({ search: "", type: "all", category: "all" });
                 }}
                 data-testid="button-clear-filters"
               >
@@ -1020,16 +1289,39 @@ export default function ArticlesManagement() {
             </div>
           </div>
         </div>
-        </div>
 
         {/* Articles List Section */}
         <div className="space-y-3">
-          <SectionHeader title="قائمة المقالات" />
+          <div className="flex flex-wrap items-end justify-between gap-2 px-0.5">
+            <div>
+              <h2 className="text-lg font-bold tracking-tight sm:text-xl">قائمة المقالات</h2>
+              <p className="mt-0.5 text-sm text-muted-foreground tabular-nums">
+                {articlesLoading
+                  ? "جاري التحميل…"
+                  : `${articlesTotal.toLocaleString("en-US")} نتيجة · الصفحة ${displayedPage.toLocaleString("en-US")}`}
+              </p>
+            </div>
+          </div>
 
-          {/* Bulk Actions Toolbar */}
-          {selectedArticles.size > 0 && (
+          {articlesBusy && !articlesLoading && (
+            <div role="status" className="flex items-center gap-2 text-sm text-muted-foreground" data-testid="articles-updating">
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+              جارٍ تحديث النتائج…
+            </div>
+          )}
+          {articlesError && (
+            <div role="alert" className="flex items-center gap-3 text-sm text-destructive">
+              تعذّر تحديث قائمة المقالات. حاول مرة أخرى.
+              <Button variant="outline" size="sm" disabled={articlesBusy} onClick={() => void refetchArticles()}>
+                إعادة المحاولة
+              </Button>
+            </div>
+          )}
+
+          {/* Bulk Actions Toolbar — الجوال يكتفي بالشريط السفلي الثابت */}
+          {selectedArticles.size > 0 && !isMobile && (
             <div className="rounded-2xl border border-sky-200/55 bg-gradient-to-br from-sky-50/40 via-card to-card p-3 shadow-sm dark:border-sky-900/35 dark:from-sky-950/15 md:p-4">
-              <div className="flex items-center justify-between gap-4">
+              <div className="flex flex-wrap items-center justify-between gap-2 md:gap-4">
                 <div className="text-sm text-muted-foreground tabular-nums">
                   تم تحديد {selectedArticles.size.toLocaleString("en-US")} مقال
                 </div>
@@ -1039,7 +1331,7 @@ export default function ArticlesManagement() {
                       variant="outline"
                       size="sm"
                       onClick={handleBulkArchive}
-                      disabled={bulkArchiveMutation.isPending}
+                      disabled={articlesBusy || bulkArchiveMutation.isPending}
                       data-testid="button-bulk-archive"
                       className="gap-2"
                     >
@@ -1052,7 +1344,7 @@ export default function ArticlesManagement() {
                       variant="destructive"
                       size="sm"
                       onClick={handleBulkPermanentDelete}
-                      disabled={bulkPermanentDeleteMutation.isPending}
+                      disabled={articlesBusy || bulkPermanentDeleteMutation.isPending}
                       data-testid="button-bulk-delete-permanent"
                       className="gap-2"
                     >
@@ -1074,253 +1366,200 @@ export default function ArticlesManagement() {
           )}
 
           {/* Articles Table - Desktop View */}
-          <div className="hidden overflow-hidden rounded-2xl border border-sky-200/55 bg-gradient-to-br from-sky-50/40 via-card to-card shadow-sm dark:border-sky-900/35 dark:from-sky-950/15 md:block">
+          {!isMobile && (
+          <div className="overflow-x-auto rounded-xl border border-border/80 bg-card shadow-none"
+            data-testid="articles-desktop-results" aria-busy={articlesBusy}
+            {...(articlesBusy ? { inert: "" } : {})}>
             {articlesLoading ? (
               <div className="p-8 text-center text-muted-foreground">
                 جاري التحميل...
               </div>
-            ) : localArticles.length === 0 ? (
+            ) : articles.length === 0 ? (
               <div className="p-8 text-center text-muted-foreground">
-                لا توجد مقالات
+                {articlesError ? "تعذّر تحميل المقالات" : "لا توجد مقالات"}
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <DndContext
-                  sensors={isMobile ? [] : sensors}
-                  collisionDetection={closestCenter}
-                  onDragEnd={handleDragEnd}
-                >
-                  <table className="w-full">
-                    <thead className="bg-muted/50 border-b border-border">
-                      <tr>
-                        <th className="text-center py-3 px-2 w-10" data-testid="header-drag"></th>
-                        <th className="text-center py-3 px-4 w-12">
-                          <Checkbox
-                            checked={localArticles.length > 0 && selectedArticles.size === localArticles.length}
-                            onCheckedChange={toggleSelectAll}
-                            data-testid="checkbox-select-all"
-                          />
-                        </th>
-                        <th className="text-right py-3 px-4 font-medium">العنوان</th>
-                        <th className="text-right py-3 px-4 font-medium">النوع</th>
-                        <th className="hidden xl:table-cell text-right py-3 px-4 font-medium">المصدر</th>
-                        <th className="hidden lg:table-cell text-right py-3 px-4 font-medium">الكاتب</th>
-                        <th className="text-right py-3 px-4 font-medium">التصنيف</th>
-                        <th className="text-right py-3 px-4 font-medium">عاجل</th>
-                        <th className="hidden xl:table-cell text-right py-3 px-4 font-medium">المشاهدات</th>
-                        <th className="text-right py-3 px-4 font-medium">الإجراءات</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <SortableContext
-                        items={localArticles.map(a => a.id)}
-                        strategy={verticalListSortingStrategy}
-                      >
-                        {localArticles.map((article) => (
-                          <SortableRow
-                            key={article.id}
-                            article={article}
-                            isSaving={updateOrderMutation.isPending}
-                            highlightResubmitted={
-                              isResubmittedAfterRevision(article)
-                                ? "resubmitted"
-                                : isAwaitingContributorRevision(article)
-                                  ? "awaiting"
-                                  : false
-                            }
-                          >
-                            <td className="py-3 px-4 text-center">
-                              <Checkbox
-                                checked={selectedArticles.has(article.id)}
-                                onCheckedChange={() => toggleArticleSelection(article.id)}
-                                data-testid={`checkbox-article-${article.id}`}
-                              />
-                            </td>
-                            <td className="py-3 px-4">
-                              <div className="space-y-1">
-                                <div className="flex items-center gap-1.5">
-                                  {((article as any).albumImages?.length > 0 || (article as any).mediaAssetsCount > 0) && (
-                                    <Images className="h-4 w-4 text-blue-500 flex-shrink-0" />
-                                  )}
-                                  <span className="font-medium max-w-md truncate inline-block">{article.title}</span>
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={handleDragEnd}
+              >
+                <table className="w-full min-w-[920px] table-fixed">
+                  <thead className="border-b border-border bg-muted/40 text-muted-foreground">
+                    <tr>
+                      <th className="w-8 px-1 py-3 text-center" data-testid="header-drag"></th>
+                      <th className="w-10 px-2 py-3 text-center">
+                        <Checkbox
+                          checked={articles.length > 0 && selectedArticles.size === articles.length}
+                          onCheckedChange={toggleSelectAll}
+                          data-testid="checkbox-select-all"
+                        />
+                      </th>
+                      <th className="min-w-[340px] px-4 py-3 text-right text-xs font-bold uppercase tracking-wider text-muted-foreground">الخبر</th>
+                      <th className="w-20 px-2 py-3 text-center text-xs font-bold uppercase tracking-wider text-muted-foreground">عاجل</th>
+                      <th className="w-28 px-2 py-3 text-center text-xs font-bold uppercase tracking-wider text-muted-foreground">المشاهدات</th>
+                      <th className="w-72 px-3 py-3 text-center text-xs font-bold uppercase tracking-wider text-muted-foreground">الإجراءات</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <SortableContext
+                      items={articles.map((a) => a.id)}
+                      strategy={verticalListSortingStrategy}
+                    >
+                      {articles.map((article) => (
+                        <SortableRow
+                          key={article.id}
+                          article={article}
+                          isSaving={updateOrderMutation.isPending}
+                          disableSorting={activeStatus === "scheduled"}
+                          highlightResubmitted={
+                            isResubmittedAfterRevision(article)
+                              ? "resubmitted"
+                              : isAwaitingContributorRevision(article)
+                                ? "awaiting"
+                                : false
+                          }
+                        >
+                          <td className="px-2 py-3.5 text-center align-middle">
+                            <Checkbox
+                              checked={selectedArticles.has(article.id)}
+                              onCheckedChange={() => toggleArticleSelection(article.id)}
+                              data-testid={`checkbox-article-${article.id}`}
+                            />
+                          </td>
+                          <td className="min-w-[340px] px-4 py-3.5 align-middle">
+                            <div className="space-y-1.5">
+                              <div className="flex items-center gap-2">
+                                {((article as any).albumImages?.length > 0 ||
+                                  (article as any).mediaAssetsCount > 0) && (
+                                  <span title="يحتوي على ألبوم صور" className="inline-flex">
+                                    <Images className="h-4 w-4 shrink-0 text-sky-500" />
+                                  </span>
+                                )}
+                                <div className="flex min-w-0 flex-1 items-center gap-1.5">
+                                  <h3
+                                    title={article.title}
+                                    onClick={() => canEditArticle(article) ? handleEdit(article) : undefined}
+                                    className={cn(
+                                      "min-w-0 truncate text-[15px] sm:text-base font-normal sm:font-medium leading-relaxed tracking-normal text-foreground/90 hover:text-primary transition-colors",
+                                      canEditArticle(article) ? "cursor-pointer" : ""
+                                    )}
+                                  >
+                                    {article.title}
+                                  </h3>
                                   <EditorialDraftReviewCue
                                     article={article}
                                     layout="inline"
                                     testId={`badge-review-desktop-${article.id}`}
                                   />
                                 </div>
-                                <EditorialDraftReviewCue
-                                  article={article}
-                                  layout="banner"
-                                  testId={`banner-review-desktop-${article.id}`}
-                                />
-                                <div className="text-xs text-blue-600 dark:text-blue-400 flex items-center gap-1">
-                                  {article.source === 'email' ? (
-                                    <>
-                                      <Mail className="h-3 w-3" />
-                                      <span>أُرسل بواسطة: {article.sourceMetadata?.senderName || article.sourceMetadata?.from || 'بريد إلكتروني'}</span>
-                                    </>
-                                  ) : article.source === 'whatsapp' ? (
-                                    <>
-                                      <MessageCircle className="h-3 w-3" />
-                                      <span>أُرسل بواسطة: {article.sourceMetadata?.senderName || article.sourceMetadata?.from || 'واتساب'}</span>
-                                    </>
-                                  ) : isMobileAppSource(article.source) ? (
-                                    <>
-                                      <Smartphone className="h-3 w-3" />
-                                      <span>أُرسل من {getMobilePlatformLabel(article.source)}: {getMobileSenderName(article)}</span>
-                                    </>
-                                  ) : (article as any).publisher?.companyName ? (
-                                    <>
-                                      <Building2 className="h-3 w-3" />
-                                      <span>أُرسل بواسطة: {(article as any).publisher.companyName}</span>
-                                    </>
-                                  ) : (
-                                    <>
-                                      <PenLine className="h-3 w-3" />
-                                      <span>نُشر بواسطة: {article.author?.firstName && article.author?.lastName 
-                                        ? `${article.author.firstName} ${article.author.lastName}` 
-                                        : article.author?.firstName || article.author?.email || 'المحرر'}</span>
-                                    </>
-                                  )}
-                                </div>
-                                {article.status === "scheduled" && (article as any).scheduledAt && (
-                                  <div className="text-xs text-green-700 dark:text-green-300 flex items-center gap-1" data-testid={`scheduled-label-desktop-${article.id}`}>
-                                    <Clock className="h-3 w-3 flex-shrink-0" />
-                                    <span>تمت الجدولة في: {formatScheduledDate((article as any).scheduledAt)}</span>
-                                  </div>
-                                )}
-                                {article.status === "draft" && article.createdAt && (
-                                  <div className="text-xs text-green-700 dark:text-green-300 flex items-center gap-1" data-testid={`draft-date-desktop-${article.id}`}>
-                                    <Clock className="h-3 w-3 flex-shrink-0" />
-                                    <span>أُرسلت بتاريخ: {formatDraftDate(article.createdAt)}</span>
-                                  </div>
-                                )}
-                                {article.status === "draft" && (
-                                  <EditorialDraftReviewCue
-                                    article={article}
-                                    layout="meta"
-                                    testId={`meta-review-desktop-${article.id}`}
-                                  />
-                                )}
-                                {article.status === "published" && article.publishedAt && (
-                                  <div className="text-xs text-emerald-600 dark:text-emerald-400 flex items-center gap-1" data-testid={`published-date-desktop-${article.id}`}>
-                                    <Clock className="h-3 w-3 flex-shrink-0" />
-                                    <span dir="ltr" className="font-medium">{formatPublishedDate(article.publishedAt)}</span>
-                                  </div>
-                                )}
-                                {article.status === "archived" && (article as any).reviewNotes && (
-                                  <div
-                                    className="text-xs text-red-600 dark:text-red-400 flex items-start gap-1 mt-0.5"
-                                    data-testid={`archive-reason-desktop-${article.id}`}
-                                  >
-                                    <Archive className="h-3 w-3 flex-shrink-0 mt-0.5" />
-                                    <span>
-                                      <span className="font-semibold">سبب الأرشفة:</span>{" "}
-                                      {(article as any).reviewNotes}
-                                    </span>
-                                  </div>
-                                )}
                               </div>
-                            </td>
-                            <td className="py-3 px-4">
-                              {getTypeBadge(article.articleType || "news")}
-                            </td>
-                            <td className="hidden xl:table-cell py-3 px-4">
-                              {getSourceBadge(article.source)}
-                            </td>
-                            <td className="hidden lg:table-cell py-3 px-4">
-                              <div className="flex flex-col gap-1">
-                                <div className="flex items-center gap-2">
-                                  <Avatar className="h-6 w-6">
-                                    <AvatarImage src={article.author?.profileImageUrl || ""} />
-                                    <AvatarFallback className="text-xs">
-                                      {article.author?.firstName?.[0] || article.author?.email?.[0]?.toUpperCase()}
-                                    </AvatarFallback>
-                                  </Avatar>
-                                  <span className="text-sm">
-                                    {article.author?.firstName || article.author?.email}
-                                  </span>
-                                </div>
-                                {article.publisher?.companyName && (
-                                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                                    <Building2 className="h-3 w-3" />
-                                    <span>{article.publisher.companyName}</span>
-                                  </div>
-                                )}
-                              </div>
-                            </td>
-                            <td className="py-3 px-4">
-                              <span className="text-sm">{article.category?.nameAr || "-"}</span>
-                            </td>
-                            <td className="py-3 px-4">
-                              {canPublishArticle ? (
-                                <BreakingSwitch 
-                                  articleId={article.id}
-                                  initialValue={article.newsType === "breaking"}
-                                />
-                              ) : (
-                                <span className="text-sm text-muted-foreground">
-                                  {article.newsType === "breaking" ? "عاجل" : "-"}
-                                </span>
-                              )}
-                            </td>
-                            <td className="hidden xl:table-cell py-3 px-4">
-                              <ViewsCount 
-                                views={article.views}
-                                iconClassName="h-4 w-4"
-                              />
-                            </td>
-                            <td className="py-3 px-4">
-                              <div className="flex gap-1">
-                                {/* AI Generated Image Indicator (Featured or Thumbnail) */}
-                                {(article.isAiGeneratedThumbnail || (article as any).isAiGeneratedImage) && (
-                                  <div 
-                                    className="flex items-center justify-center w-8 h-8"
+
+                              <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                                {getCategoryChip(article.category)}
+                                {getTypeBadge(article.articleType || "news")}
+                                {getAuthorOrSourceBadge(article)}
+                                {getDateBadge(article, true)}
+                                {(article.isAiGeneratedThumbnail ||
+                                  (article as any).isAiGeneratedImage) && (
+                                  <Badge
+                                    variant="outline"
+                                    className="gap-1 rounded-md border-purple-500/25 bg-purple-50/70 dark:bg-purple-950/30 text-purple-700 dark:text-purple-300 font-medium px-2 py-0.5 text-[11px] shadow-xs"
                                     title="صورة مولدة بالذكاء الاصطناعي"
                                     data-testid={`badge-ai-image-${article.id}`}
                                   >
-                                    <Brain className="w-4 h-4 text-purple-500" />
-                                  </div>
+                                    <Brain className="h-3 w-3 text-purple-600 dark:text-purple-400 shrink-0" />
+                                    <span>AI</span>
+                                  </Badge>
                                 )}
-                                <RowActions 
-                                  articleId={article.id}
-                                  articleTitle={article.title}
-                                  status={article.status}
-                                  onEdit={() => handleEdit(article)}
-                                  isFeatured={article.isFeatured}
-                                  onDelete={() => setDeletingArticle(article)}
-                                  onRequestRevision={
-                                    activeStatus !== "archived"
-                                      ? () => setRevisionArticle(article)
-                                      : undefined
-                                  }
-                                  canEdit={canEditArticle(article)}
-                                  canDelete={!!(canDeleteArticle || canArchiveArticle)}
-                                  canFeature={!!canFeatureArticle}
-                                  canPublish={!!canPublishArticle}
-                                />
                               </div>
-                            </td>
-                          </SortableRow>
-                        ))}
-                      </SortableContext>
-                    </tbody>
-                  </table>
-                </DndContext>
-              </div>
+
+                              <EditorialDraftReviewCue
+                                article={article}
+                                layout="banner"
+                                testId={`banner-review-desktop-${article.id}`}
+                              />
+
+
+                              {article.status === "draft" && (
+                                <EditorialDraftReviewCue
+                                  article={article}
+                                  layout="meta"
+                                  testId={`meta-review-desktop-${article.id}`}
+                                />
+                              )}
+                              {article.status === "archived" && (article as any).reviewNotes && (
+                                <div
+                                  className="flex items-start gap-1 text-sm text-red-600 dark:text-red-400"
+                                  data-testid={`archive-reason-desktop-${article.id}`}
+                                >
+                                  <Archive className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                                  <span>
+                                    <span className="font-semibold">سبب الأرشفة:</span>{" "}
+                                    {(article as any).reviewNotes}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                          <td className="w-[72px] px-2 py-3.5 text-center align-top">
+                            {canPublishArticle ? (
+                              <BreakingSwitch
+                                articleId={article.id}
+                                initialValue={article.newsType === "breaking"}
+                              />
+                            ) : (
+                              <span className="text-sm text-muted-foreground">
+                                {article.newsType === "breaking" ? "عاجل" : "-"}
+                              </span>
+                            )}
+                          </td>
+                          <td className="w-[88px] px-2 py-3.5 text-center align-top">
+                            <ViewsCount views={article.views} iconClassName="h-4 w-4" />
+                          </td>
+                          <td className="w-[280px] px-2 py-3.5 align-top">
+                            <RowActions
+                              articleId={article.id}
+                              articleTitle={article.title}
+                              status={article.status}
+                              onEdit={() => handleEdit(article)}
+                              isFeatured={article.isFeatured}
+                              onDelete={() => setDeletingArticle(article)}
+                              onRequestRevision={
+                                activeStatus !== "archived"
+                                  ? () => setRevisionArticle(article)
+                                  : undefined
+                              }
+                              onSocialPublish={() => setSocialPublishArticle(article)}
+                              canEdit={canEditArticle(article)}
+                              canDelete={!!(canDeleteArticle || canArchiveArticle)}
+                              canFeature={!!canFeatureArticle}
+                              canPublish={!!canPublishArticle}
+                              canSocialPublish={!!canSocialPublish}
+                            />
+                          </td>
+                        </SortableRow>
+                      ))}
+                    </SortableContext>
+                  </tbody>
+                </table>
+              </DndContext>
             )}
           </div>
+          )}
 
-          {/* Articles Cards - Mobile View */}
-          <div className="md:hidden space-y-2">
+          {/* Articles Cards - Mobile View (عمود واحد رأسيًا، وعمودان على الجوال الأفقي) */}
+          {isMobile && (
+          <div className="grid grid-cols-1 items-start gap-2.5 min-[820px]:grid-cols-2"
+            data-testid="articles-mobile-results" aria-busy={articlesBusy}
+            {...(articlesBusy ? { inert: "" } : {})}>
             {articlesLoading ? (
-              <div className="p-8 text-center text-muted-foreground text-sm">
+              <div className="col-span-full p-8 text-center text-muted-foreground text-sm">
                 جاري التحميل...
               </div>
             ) : articles.length === 0 ? (
-              <div className="p-8 text-center text-muted-foreground text-sm">
-                لا توجد مقالات
+              <div className="col-span-full p-8 text-center text-muted-foreground text-sm">
+                {articlesError ? "تعذّر تحميل المقالات" : "لا توجد مقالات"}
               </div>
             ) : (
               articles.map((article) => (
@@ -1336,102 +1575,74 @@ export default function ArticlesManagement() {
                   data-testid={`card-article-${article.id}`}
                 >
                   {/* Header: Checkbox + Title + Status */}
-                  <div className="flex items-start gap-2">
-                    <Checkbox 
-                      className="mt-0.5"
-                      checked={selectedArticles.has(article.id)}
-                      onCheckedChange={() => toggleArticleSelection(article.id)}
-                      data-testid={`checkbox-article-mobile-${article.id}`}
-                    />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between gap-2 mb-1">
-                        <div className="flex-1">
-                          <h3 className="font-semibold text-base break-words leading-snug flex items-center gap-1.5 flex-wrap">
-                            {((article as any).albumImages?.length > 0 || (article as any).mediaAssetsCount > 0) && (
-                              <Images className="h-4 w-4 text-blue-500 flex-shrink-0" />
-                            )}
-                            {article.title}
-                            <EditorialDraftReviewCue
-                              article={article}
-                              layout="inline"
-                              testId={`badge-review-mobile-${article.id}`}
-                            />
-                          </h3>
+                  <div className="flex items-start gap-2.5">
+                    {/* هدف اللمس 44px يوفره الغلاف؛ بدونه قاعدة الـWCAG العامة
+                        تضخّم المربع نفسه إلى 44px فيبدو كصورة مكسورة */}
+                    <div
+                      className="-m-2.5 shrink-0 cursor-pointer p-2.5"
+                      onClick={(e) => {
+                        // نقرات الفأرة/اللمس تصل للغلاف فقط (المربع pointer-events-none)،
+                        // أما click المصطنع من كيبورد المربع فيتكفل به onCheckedChange
+                        if (e.target === e.currentTarget) toggleArticleSelection(article.id);
+                      }}
+                    >
+                      <Checkbox
+                        className="no-min-touch-size pointer-events-none mt-1"
+                        checked={selectedArticles.has(article.id)}
+                        onCheckedChange={() => toggleArticleSelection(article.id)}
+                        data-testid={`checkbox-article-mobile-${article.id}`}
+                      />
+                    </div>
+                    <div className="flex-1 min-w-0 space-y-2">
+                      <div>
+                        <h3
+                          className={cn(
+                            "font-normal sm:font-medium text-[15px] sm:text-base break-words leading-relaxed text-foreground flex items-center gap-1.5 flex-wrap",
+                            canEditArticle(article) ? "cursor-pointer hover:text-primary transition-colors" : ""
+                          )}
+                          onClick={() => canEditArticle(article) ? handleEdit(article) : undefined}
+                        >
+                          {((article as any).albumImages?.length > 0 || (article as any).mediaAssetsCount > 0) && (
+                            <Images className="h-4 w-4 text-sky-500 flex-shrink-0" />
+                          )}
+                          {article.title}
                           <EditorialDraftReviewCue
                             article={article}
-                            layout="banner"
-                            testId={`banner-review-mobile-${article.id}`}
+                            layout="inline"
+                            testId={`badge-review-mobile-${article.id}`}
                           />
-                          <div className="text-xs text-blue-600 dark:text-blue-400 flex items-center gap-1 mt-0.5">
-                            {article.source === 'email' ? (
-                              <>
-                                <Mail className="h-3 w-3" />
-                                <span>أُرسل بواسطة: {article.sourceMetadata?.senderName || article.sourceMetadata?.from || 'بريد إلكتروني'}</span>
-                              </>
-                            ) : article.source === 'whatsapp' ? (
-                              <>
-                                <MessageCircle className="h-3 w-3" />
-                                <span>أُرسل بواسطة: {article.sourceMetadata?.senderName || article.sourceMetadata?.from || 'واتساب'}</span>
-                              </>
-                            ) : isMobileAppSource(article.source) ? (
-                              <>
-                                <Smartphone className="h-3 w-3" />
-                                <span>أُرسل من {getMobilePlatformLabel(article.source)}: {getMobileSenderName(article)}</span>
-                              </>
-                            ) : (article as any).publisher?.companyName ? (
-                              <>
-                                <Building2 className="h-3 w-3" />
-                                <span>أُرسل بواسطة: {(article as any).publisher.companyName}</span>
-                              </>
-                            ) : (
-                              <>
-                                <PenLine className="h-3 w-3" />
-                                <span>نُشر بواسطة: {article.author?.firstName && article.author?.lastName 
-                                  ? `${article.author.firstName} ${article.author.lastName}` 
-                                  : article.author?.firstName || article.author?.email || 'المحرر'}</span>
-                              </>
-                            )}
-                          </div>
-                          {article.status === "scheduled" && (article as any).scheduledAt && (
-                            <div className="text-xs text-green-700 dark:text-green-300 flex items-center gap-1 mt-1" data-testid={`scheduled-label-${article.id}`}>
-                              <Clock className="h-3 w-3" />
-                              <span>تمت الجدولة في: {formatScheduledDate((article as any).scheduledAt)}</span>
-                            </div>
-                          )}
-                          {article.status === "draft" && article.createdAt && (
-                            <div className="text-xs text-green-700 dark:text-green-300 flex items-center gap-1 mt-1" data-testid={`draft-date-${article.id}`}>
-                              <Clock className="h-3 w-3" />
-                              <span>أُرسلت بتاريخ: {formatDraftDate(article.createdAt)}</span>
-                            </div>
-                          )}
-                          {article.status === "published" && article.publishedAt && (
-                            <div className="text-xs text-emerald-600 dark:text-emerald-400 flex items-center gap-1 mt-1" data-testid={`published-date-${article.id}`}>
-                              <Clock className="h-3 w-3" />
-                              <span dir="ltr" className="font-medium">{formatPublishedDate(article.publishedAt)}</span>
-                            </div>
-                          )}
-                          {article.status === "archived" && (article as any).reviewNotes && (
-                            <div
-                              className="text-xs text-red-600 dark:text-red-400 flex items-start gap-1 mt-1"
-                              data-testid={`archive-reason-${article.id}`}
-                            >
-                              <Archive className="h-3 w-3 flex-shrink-0 mt-0.5" />
-                              <span>
-                                <span className="font-semibold">سبب الأرشفة:</span>{" "}
-                                {(article as any).reviewNotes}
-                              </span>
-                            </div>
-                          )}
-                        </div>
+                        </h3>
+                        <EditorialDraftReviewCue
+                          article={article}
+                          layout="banner"
+                          testId={`banner-review-mobile-${article.id}`}
+                        />
                       </div>
-                      <div className="flex items-center gap-2 flex-wrap">
+
+                      {/* Distinct Meta Strip */}
+                      <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                        {getCategoryChip(article.category)}
                         {getTypeBadge(article.articleType || "news")}
-                        {getSourceBadge(article.source)}
+                        {getAuthorOrSourceBadge(article)}
+                        {getDateBadge(article, false)}
                       </div>
+
+                      {article.status === "archived" && (article as any).reviewNotes && (
+                        <div
+                          className="text-xs text-red-600 dark:text-red-400 bg-red-500/10 border border-red-500/20 rounded-md p-2 flex items-start gap-1 mt-1"
+                          data-testid={`archive-reason-${article.id}`}
+                        >
+                          <Archive className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" />
+                          <span>
+                            <span className="font-semibold">سبب الأرشفة:</span>{" "}
+                            {(article as any).reviewNotes}
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </div>
                   
-                  {/* Meta Info: Author + Publisher + Category */}
+                  {/* Meta Info: Author + Publisher */}
                   <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
                     <div className="flex items-center gap-2">
                       <Avatar className="h-5 w-5">
@@ -1451,8 +1662,6 @@ export default function ArticlesManagement() {
                         </div>
                       </>
                     )}
-                    <span>•</span>
-                    <span>{article.category?.nameAr || "-"}</span>
                   </div>
                   
                   {/* Stats Row */}
@@ -1470,6 +1679,12 @@ export default function ArticlesManagement() {
                           مميز
                         </Badge>
                       )}
+                      {article.isReading && (
+                        <Badge variant="outline" className="text-xs text-emerald-600 dark:text-emerald-400 border-emerald-500/30 bg-emerald-500/10">
+                          <BookOpen className="h-3 w-3 ml-1" />
+                          قراءة
+                        </Badge>
+                      )}
                       {(article.isAiGeneratedThumbnail || (article as any).isAiGeneratedImage) && (
                         <Badge className="text-xs bg-violet-500/90 hover:bg-violet-600 text-white border-0">
                           <Brain className="h-3 w-3 ml-1" />
@@ -1485,96 +1700,167 @@ export default function ArticlesManagement() {
                   </div>
                   
                   {/* Action Buttons - Permission-based visibility */}
-                  <div className="flex gap-2 pt-2 border-t">
-                    {canEditArticle(article) && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleEdit(article)}
-                        className="flex-1"
-                        data-testid={`button-edit-mobile-${article.id}`}
-                      >
-                        <Edit className="ml-2 h-3.5 w-3.5" />
-                        تعديل
-                      </Button>
-                    )}
-                    
-                    {canPublishArticle && (
-                      <Button
-                        size="sm"
-                        variant={article.newsType === "breaking" ? "destructive" : "outline"}
-                        onClick={() => toggleBreakingMutation.mutate({ 
-                          id: article.id, 
-                          currentState: article.newsType === "breaking"
-                        })}
-                        disabled={toggleBreakingMutation.isPending}
-                        className="flex-1"
-                        data-testid={`button-breaking-mobile-${article.id}`}
-                      >
-                        <Bell className="ml-2 h-3.5 w-3.5" />
-                        {article.newsType === "breaking" ? "إلغاء العاجل" : "عاجل"}
-                      </Button>
-                    )}
-                    
-                    {canFeatureArticle && (
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        onClick={() => featureMutation.mutate({ id: article.id, featured: !article.isFeatured })}
-                        disabled={featureMutation.isPending}
-                        data-testid={`button-feature-mobile-${article.id}`}
-                      >
-                        <Star className={`h-4 w-4 ${article.isFeatured ? 'text-yellow-500 fill-yellow-500' : ''}`} />
-                      </Button>
-                    )}
-                    
-                    {article.status === "published" && (
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        onClick={() => translateMutation.mutate(article.id)}
-                        disabled={translateMutation.isPending}
-                        data-testid={`button-translate-mobile-${article.id}`}
-                        title="ترجم للإنجليزية"
-                      >
-                        {translateMutation.isPending ? (
-                          <Loader2 className="h-4 w-4 animate-spin text-emerald-500" />
-                        ) : (
-                          <Languages className="h-4 w-4 text-emerald-500" />
+                  <div className="space-y-2 pt-2 border-t">
+                    {/* Primary Action Buttons Grid */}
+                    <div className="grid grid-cols-2 gap-2">
+                      {canEditArticle(article) && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleEdit(article)}
+                          className="h-9 font-medium text-xs sm:text-sm"
+                          data-testid={`button-edit-mobile-${article.id}`}
+                        >
+                          <Edit className="ml-1.5 h-3.5 w-3.5" />
+                          تعديل
+                        </Button>
+                      )}
+                      
+                      {canPublishArticle && (
+                        <Button
+                          size="sm"
+                          variant={article.newsType === "breaking" ? "destructive" : "outline"}
+                          onClick={() => toggleBreakingMutation.mutate({ 
+                            id: article.id, 
+                            currentState: article.newsType === "breaking"
+                          })}
+                          disabled={toggleBreakingMutation.isPending}
+                          className="h-9 font-medium text-xs sm:text-sm"
+                          data-testid={`button-breaking-mobile-${article.id}`}
+                        >
+                          <Zap className="ml-1.5 h-3.5 w-3.5" />
+                          {article.newsType === "breaking" ? "إلغاء العاجل" : "عاجل"}
+                        </Button>
+                      )}
+
+                      {canSocialPublish && article.status === "published" && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setSocialPublishArticle(article)}
+                          className="h-9 font-medium text-xs sm:text-sm text-sky-700 dark:text-sky-400 border-sky-200 dark:border-sky-800 hover:bg-sky-50 dark:hover:bg-sky-950/50"
+                          data-testid={`button-social-publish-mobile-${article.id}`}
+                        >
+                          <Share2 className="ml-1.5 h-3.5 w-3.5 text-sky-600 dark:text-sky-400" />
+                          نشر على X
+                        </Button>
+                      )}
+
+                      {canPublishArticle && article.status === "published" && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setNotifyArticle(article)}
+                          className="h-9 font-medium text-xs sm:text-sm text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-800 hover:bg-blue-50 dark:hover:bg-blue-950/50"
+                          data-testid={`button-notify-mobile-${article.id}`}
+                        >
+                          <Bell className="ml-1.5 h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+                          إرسال إشعار
+                        </Button>
+                      )}
+                    </div>
+
+                    {/* Secondary Action Icons Row */}
+                    <div className="flex items-center justify-between gap-1 pt-1 border-t border-border/40">
+                      <div className="flex items-center gap-1">
+                        {canFeatureArticle && (
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-8 w-8"
+                            onClick={() => featureMutation.mutate({ id: article.id, featured: !article.isFeatured })}
+                            disabled={featureMutation.isPending}
+                            data-testid={`button-feature-mobile-${article.id}`}
+                            title={article.isFeatured ? "إلغاء التمييز" : "تمييز"}
+                          >
+                            <Star className={`h-4 w-4 ${article.isFeatured ? 'text-yellow-500 fill-yellow-500' : 'text-muted-foreground'}`} />
+                          </Button>
                         )}
-                      </Button>
-                    )}
-                    {canArchiveArticle && article.status !== "archived" && (
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        // Route through the same confirmation dialog as the
-                        // desktop trash button so the editor is forced to
-                        // capture an archive reason. The previous direct
-                        // POST to `/archive` was silent — the author got
-                        // zero feedback when their content disappeared.
-                        onClick={() => setDeletingArticle(article)}
-                        data-testid={`button-archive-mobile-${article.id}`}
-                        title="أرشفة"
-                      >
-                        <Archive className="h-4 w-4" />
-                      </Button>
-                    )}
-                    {canDeleteArticle && (
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        onClick={() => setDeletingArticle(article)}
-                        data-testid={`button-delete-mobile-${article.id}`}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    )}
+                        
+                        {article.status === "published" && (
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-8 w-8"
+                            onClick={() => translateMutation.mutate(article.id)}
+                            disabled={translateMutation.isPending}
+                            data-testid={`button-translate-mobile-${article.id}`}
+                            title="ترجم للإنجليزية"
+                          >
+                            {translateMutation.isPending ? (
+                              <Loader2 className="h-4 w-4 animate-spin text-emerald-500" />
+                            ) : (
+                              <Languages className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                            )}
+                          </Button>
+                        )}
+
+                        {canPublishArticle && article.status === "published" && (
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-8 w-8"
+                            onClick={() => resurfaceMutation.mutate(article.id)}
+                            disabled={resurfaceMutation.isPending}
+                            data-testid={`button-resurface-mobile-${article.id}`}
+                            title="إنعاش (عودة لصدارة الموجز)"
+                          >
+                            {resurfaceMutation.isPending ? (
+                              <Loader2 className="h-4 w-4 animate-spin text-rose-500" />
+                            ) : (
+                              <HeartPulse className="h-4 w-4 text-rose-500" />
+                            )}
+                          </Button>
+                        )}
+
+                        {activeStatus !== "archived" && article.status !== "archived" && (
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-8 w-8"
+                            onClick={() => setRevisionArticle(article)}
+                            data-testid={`button-revision-mobile-${article.id}`}
+                            title="طلب تعديل"
+                          >
+                            <FilePenLine className="h-4 w-4 text-amber-600" />
+                          </Button>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-1">
+                        {canArchiveArticle && article.status !== "archived" && (
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-8 w-8"
+                            onClick={() => setDeletingArticle(article)}
+                            data-testid={`button-archive-mobile-${article.id}`}
+                            title="أرشفة"
+                          >
+                            <Archive className="h-4 w-4 text-muted-foreground hover:text-destructive" />
+                          </Button>
+                        )}
+                        
+                        {canDeleteArticle && (
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-8 w-8"
+                            onClick={() => setDeletingArticle(article)}
+                            data-testid={`button-delete-mobile-${article.id}`}
+                            title="حذف"
+                          >
+                            <Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" />
+                          </Button>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </div>
               ))
             )}
           </div>
+          )}
 
           {/* Pagination */}
           {totalPages > 1 && (
@@ -1582,21 +1868,21 @@ export default function ArticlesManagement() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                disabled={currentPage === 1 || articlesLoading}
+                onClick={() => setListParams(previous => ({ ...previous, page: Math.max(1, previous.page - 1) }))}
+                disabled={currentPage === 1 || articlesBusy || articlesLoading}
                 data-testid="button-pagination-prev"
               >
                 <ChevronRight className="h-4 w-4 ml-1" />
                 السابق
               </Button>
               <span className="text-sm tabular-nums text-muted-foreground" data-testid="text-pagination-info">
-                الصفحة {currentPage.toLocaleString("en-US")} من {totalPages.toLocaleString("en-US")}
+                الصفحة {displayedPage.toLocaleString("en-US")} من {totalPages.toLocaleString("en-US")}
               </span>
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                disabled={currentPage >= totalPages || totalPages <= 1 || articlesLoading}
+                onClick={() => setListParams(previous => ({ ...previous, page: Math.min(totalPages, previous.page + 1) }))}
+                disabled={currentPage >= totalPages || totalPages <= 1 || articlesBusy || articlesLoading}
                 data-testid="button-pagination-next"
               >
                 التالي
@@ -1608,8 +1894,8 @@ export default function ArticlesManagement() {
       </DashboardPageShell>
 
       {/* Bulk Action Bar - Mobile Only */}
-      {selectedArticles.size > 0 && (
-        <div className="md:hidden fixed bottom-0 left-0 right-0 bg-card border-t shadow-lg p-3 z-50">
+      {selectedArticles.size > 0 && isMobile && (
+        <div className="fixed bottom-0 left-0 right-0 bg-card border-t shadow-lg p-3 z-50">
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm font-medium tabular-nums">
               {selectedArticles.size.toLocaleString("en-US")} مقال محدد
@@ -1629,7 +1915,7 @@ export default function ArticlesManagement() {
                 size="default"
                 variant="outline"
                 onClick={handleBulkArchive}
-                disabled={bulkArchiveMutation.isPending}
+                disabled={articlesBusy || bulkArchiveMutation.isPending}
                 className="flex-1"
                 data-testid="button-bulk-archive-mobile"
               >
@@ -1641,8 +1927,9 @@ export default function ArticlesManagement() {
               <Button
                 size="default"
                 variant="destructive"
-                onClick={() => setShowBulkDeleteDialog(true)}
+                onClick={handleBulkPermanentDelete}
                 className="flex-1"
+                disabled={articlesBusy || bulkPermanentDeleteMutation.isPending}
                 data-testid="button-bulk-delete-mobile"
               >
                 <Trash className="ml-2 h-4 w-4" />
@@ -1838,7 +2125,7 @@ export default function ArticlesManagement() {
           <AlertDialogFooter>
             <AlertDialogCancel data-testid="button-cancel-bulk-archive">إلغاء</AlertDialogCancel>
             <AlertDialogAction
-              disabled={bulkArchiveMutation.isPending}
+              disabled={articlesBusy || bulkArchiveMutation.isPending}
               onClick={(e) => {
                 e.preventDefault();
                 const trimmed = bulkArchiveReason.trim();
@@ -1907,7 +2194,7 @@ export default function ArticlesManagement() {
           <AlertDialogFooter>
             <AlertDialogCancel data-testid="button-cancel-bulk-delete">إلغاء</AlertDialogCancel>
             <AlertDialogAction
-              disabled={bulkPermanentDeleteMutation.isPending}
+              disabled={articlesBusy || bulkPermanentDeleteMutation.isPending}
               onClick={(e) => {
                 e.preventDefault();
                 const trimmed = bulkDeleteReason.trim();
@@ -1992,6 +2279,75 @@ export default function ArticlesManagement() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* النشر على X */}
+      {socialPublishArticle && (
+        <SocialPublishDialog
+          articleId={socialPublishArticle.id}
+          articleTitle={socialPublishArticle.title}
+          open={!!socialPublishArticle}
+          onOpenChange={(open) => {
+            if (!open) setSocialPublishArticle(null);
+          }}
+        />
+      )}
+
+      {/* إرسال إشعار للمستخدمين - موبايل */}
+      <AlertDialog
+        open={!!notifyArticle}
+        onOpenChange={(open) => {
+          if (!open && !isSendingNotification) {
+            setNotifyArticle(null);
+          }
+        }}
+      >
+        <AlertDialogContent dir="rtl" className="sm:max-w-md w-[95vw] rounded-2xl p-4 sm:p-6">
+          <AlertDialogHeader className="text-right space-y-1.5">
+            <AlertDialogTitle className="text-base sm:text-lg font-bold flex items-center gap-2">
+              <Bell className="h-5 w-5 text-blue-600" />
+              <span>إرسال إشعار للمستخدمين</span>
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-xs sm:text-sm text-muted-foreground text-right">
+              سيتم إرسال إشعار فوري بهذا الخبر لجميع مستخدمي التطبيق ومتابعي سبق.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {notifyArticle && (
+            <div className="py-2">
+              <div className="p-3 rounded-xl border bg-muted/40 text-xs sm:text-sm font-semibold text-foreground leading-relaxed">
+                "{notifyArticle.title}"
+              </div>
+            </div>
+          )}
+          <AlertDialogFooter className="flex flex-row items-center justify-end gap-2 pt-2 border-t border-border/60">
+            <AlertDialogCancel disabled={isSendingNotification} className="text-xs h-9 px-3 mt-0">
+              إلغاء
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                if (notifyArticle) {
+                  handleSendNotification(notifyArticle);
+                }
+              }}
+              disabled={isSendingNotification}
+              className="text-xs font-bold h-9 px-4 bg-blue-600 hover:bg-blue-700 text-white"
+              data-testid="button-confirm-send-notification"
+            >
+              {isSendingNotification ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 ml-1.5 animate-spin" />
+                  جاري الإرسال...
+                </>
+              ) : (
+                <>
+                  <Bell className="w-3.5 h-3.5 ml-1.5" />
+                  إرسال الإشعار
+                </>
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </DashboardLayout>
   );
 }

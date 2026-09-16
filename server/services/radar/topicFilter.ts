@@ -48,6 +48,33 @@ export const SABQ_INTEREST_TERMS: string[] = [
   "arabian gulf",
   "gulf cooperation",
   "gcc",
+  // كيانات سعودية لا تحمل كلمة Saudi في النص الأجنبي
+  "public investment fund",
+  "liv golf",
+  "turki alalshikh",
+  "alula",
+  "al-ula",
+  "diriyah",
+  "qiddiya",
+  "expo 2030",
+  "king salman",
+  "bin salman",
+  "kaust",
+  "sabic",
+  "flynas",
+  "sindalah",
+  "roshn",
+  "esports world cup",
+  // «السعودية» بلغات العالم — تجعل الفلتر يعمل على مواد GDELT وأي خلاصة غير إنجليزية
+  "saoudite", // فرنسية: Arabie saoudite
+  "saudita", // إسبانية/إيطالية/برتغالية
+  "suudi", // تركية: Suudi Arabistan
+  "саудовская", // روسية
+  "سعودی", // فارسية/أردو
+  "सऊदी", // هندية
+  "サウジ", // يابانية
+  "沙特", // صينية مبسطة
+  "הסעודית", // عبرية
   "السعودية",
   "السعودي",
   "الرياض",
@@ -59,6 +86,19 @@ export const SABQ_INTEREST_TERMS: string[] = [
   "أوبك",
   "الحج",
   "العمرة",
+  "صندوق الاستثمارات",
+  "موسم الرياض",
+  "موسم جدة",
+  "العلا",
+  "الدرعية",
+  "القدية",
+  "إكسبو",
+  "الملك سلمان",
+  "بن سلمان",
+  "سابك",
+  "طيران ناس",
+  "روشن",
+  "تركي آل الشيخ",
   // —— أمريكا / إيران والتصعيد ——
   "iran",
   "iranian",

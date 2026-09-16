@@ -76,6 +76,11 @@ struct SpMatchCenter: View {
     @State private var segment: Segment = .events
     @State private var selectedTeam: IDBox?
 
+    // بطاقة «توقّع النتيجة» — مسابقة المنصة المركزية المقابلة لهذه المباراة
+    // (اكتشاف بالبادئة + مطابقة externalRef). تظهر قبل الانطلاق فقط.
+    @State private var predContest: PredContest?
+    @State private var predSheet: PredSheetBox?
+
     // إثراء SportMonks (أفضل جهد) — يُفعّل تبويب «التحليل» عند توفّره.
     @State private var xg: SpXg?
     @State private var momentum: SpMomentum?
@@ -208,6 +213,15 @@ struct SpMatchCenter: View {
         guard let e = expectedLineup, e.available else { return false }
         return e.home != nil || e.away != nil
     }
+    /// نافذة انتظار التشكيلة: قادمة/جارية بلا startXI وقبل ساعتين من الانطلاق أو بعده.
+    /// نُظهر التبويب بحالة فارغة بدل إخفائه فيبدو للمستخدم أن الميزة مفقودة.
+    private var awaitingLineups: Bool {
+        guard let f = fixture, !f.status.finished else { return false }
+        if detail?.lineups.contains(where: { !$0.startXI.isEmpty }) == true { return false }
+        if hasExpectedLineup { return false }
+        let secs = f.kickoff.timeIntervalSinceNow
+        return secs <= 2 * 3600 && secs > -3 * 3600
+    }
 
     private var segments: [Segment] {
         guard let d = detail else { return [] }
@@ -218,7 +232,7 @@ struct SpMatchCenter: View {
         if hasCommentary { s.append(.commentary) }
         if hasAnalysis { s.append(.analysis) }
         if hasRatings { s.append(.ratings) }
-        if !d.lineups.isEmpty || hasExpectedLineup { s.append(.lineups) }
+        if !d.lineups.isEmpty || hasExpectedLineup || awaitingLineups { s.append(.lineups) }
         if let st = d.statistics, !st.rows.isEmpty { s.append(.stats) }
         if hasH2H { s.append(.h2h) }
         return s
@@ -235,6 +249,7 @@ struct SpMatchCenter: View {
                 if let f = fixture { header(f) }
 
                 preMatchCard
+                predictionCard
                 // حكم المباراة للقادمة يظهر مباشرةً تحت «الوقت المتبقّي» (قرار 2026-07-09).
                 // للمباريات التي انطلقت يبقى ضمن تبويب التشكيلة (أدناه) بلا تكرار.
                 if fixture?.started == false { refereeCard }
@@ -253,6 +268,13 @@ struct SpMatchCenter: View {
         .background(SpAmbientBackground())
         .navigationTitle(L("مركز المباراة"))
         .navigationBarTitleDisplayMode(.inline)
+        .task(id: fixture?.id) { await resolvePredContest() }
+        .sheet(item: $predSheet, onDismiss: {
+            // تحديث «توقّعتَ …» بعد العودة من النموذج.
+            Task { predContest = nil; await resolvePredContest() }
+        }) { box in
+            NavigationStack { PredictionContestDetailView(contestId: box.id) }
+        }
         .toolbar {
             if let f = fixture {
                 // زرّان في ToolbarItem واحد (HStack) بدل ToolbarItemَين منفصلين —
@@ -481,6 +503,59 @@ struct SpMatchCenter: View {
             )
             .padding(.horizontal, 16)
         }
+    }
+
+    // MARK: - بطاقة «توقّع النتيجة» (المنصة المركزية — تظهر قبل الانطلاق فقط)
+
+    @ViewBuilder private var predictionCard: some View {
+        if let contest = predContest, fixture?.started == false {
+            Button { predSheet = PredSheetBox(id: contest.id) } label: {
+                HStack(spacing: 11) {
+                    Image(systemName: "target")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundStyle(acc)
+                        .frame(width: 38, height: 38)
+                        .background(Circle().fill(acc.opacity(0.13)))
+                    VStack(alignment: .leading, spacing: 2) {
+                        if let p = contest.myEntry?.payload, let h = p.predHome, let a = p.predAway {
+                            Text(L("توقّعتَ") + " " + PredFormat.scorePair(home: h, away: a) + " — " + L("عدّل توقّعك"))
+                                .font(SportsFonts.app(size: 13.5, weight: .bold))
+                                .foregroundStyle(SpTheme.onDark)
+                        } else {
+                            Text(L("توقّع النتيجة ونافس على الجائزة"))
+                                .font(SportsFonts.app(size: 13.5, weight: .bold))
+                                .foregroundStyle(SpTheme.onDark)
+                        }
+                        Text(L("مسابقة مجانية — يُقفل التوقّع عند ضربة البداية"))
+                            .font(SportsFonts.app(size: 10.5))
+                            .foregroundStyle(SpTheme.onDarkDim)
+                    }
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.backward")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(acc)
+                }
+                .padding(14)
+                .background(
+                    RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous).fill(SpTheme.card)
+                        .overlay(RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous).stroke(acc.opacity(0.35), lineWidth: 1))
+                )
+                .padding(.horizontal, 16)
+            }
+            .buttonStyle(SpPressStyle())
+        }
+    }
+
+    /// اكتشاف مسابقة هذه المباراة: بادئة slug من الجسر ← بطولة المنصة الحية
+    /// ← مطابقة externalRef بمعرّف المباراة. صفر نداءات لبطولات خارج المنصة.
+    private func resolvePredContest() async {
+        guard predContest == nil, let f = fixture, !f.started,
+              let prefix = PredCompetitionBridge.prefix(forSportsSlug: f.competitionSlug) else { return }
+        guard let comps = try? await APIClient.shared.fetchPredCompetitions().competitions,
+              let slug = comps.first(where: { $0.slug.hasPrefix(prefix) })?.slug else { return }
+        let contests: [PredContest] = (try? await APIClient.shared.fetchPredCompetition(slug: slug))?.contests ?? []
+        let ref = String(fixtureId)
+        predContest = contests.first(where: { $0.externalRef == ref && $0.status == "open" && $0.isMatchScore })
     }
 
     // MARK: - حكم المباراة (كما في ويب المونديال — أعداد صحيحة لا متوسطات كسرية)
@@ -1373,6 +1448,13 @@ struct SpMatchCenter: View {
                     expectedBadge
                     lineupsView(expectedAsLineups(d))
                 }
+            } else if awaitingLineups || d.lineups.isEmpty {
+                SpEmptyState(
+                    icon: "person.3",
+                    title: L("لم تُعلَن التشكيلة بعد"),
+                    subtitle: L("تنزل تشكيلتا الفريقين عادةً قبل المباراة بساعة. عُد لاحقًا لاختيار الهداف.")
+                )
+                .padding(.top, 12)
             } else {
                 lineupsView(d.lineups)
             }
@@ -1895,9 +1977,10 @@ struct SpMatchCenter: View {
             if f == nil || f?.status.finished == true { return }
             let live = f?.status.live == true
             let secsToKickoff = f?.kickoff.timeIntervalSinceNow ?? .greatestFiniteMagnitude
-            if !live && secsToKickoff > 1800 {
+            // نافذة التشكيلات ≈ ساعة قبل الانطلاق — كانت 30د فتفوت صدور التشكيلة.
+            if !live && secsToKickoff > 4500 {
                 // بعيدة: نَم حتى ما قبل النافذة (بدل الانسحاب — الشاشة قد تبقى مفتوحة).
-                let wait = min(secsToKickoff - 1700, 3600)
+                let wait = min(secsToKickoff - 4400, 3600)
                 try? await Task.sleep(nanoseconds: UInt64(max(wait, 30)) * 1_000_000_000)
                 continue
             }
@@ -1926,6 +2009,12 @@ struct SpMatchCenter: View {
         // التعليق قد يبدأ بعد فتح الشاشة فيظهر تبويبه حال توفّره).
         if let c = try? await APIClient.shared.fetchCommentary(matchId: fixtureId, ignoreCache: true) {
             self.commentary = c
+        }
+        // إن بقيت الرسمية فارغة أعد جلب المتوقعة — قد تصدر بعد أول فتح للشاشة.
+        if !fresh.lineups.contains(where: { !$0.startXI.isEmpty }) {
+            if let exp = try? await APIClient.shared.fetchExpectedLineup(matchId: fixtureId, ignoreCache: true) {
+                self.expectedLineup = exp
+            }
         }
     }
 
@@ -2200,4 +2289,9 @@ private struct SpVisionFullHeightKey: PreferenceKey {
 private struct SpVisionClampHeightKey: PreferenceKey {
     static var defaultValue: CGFloat = 0
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
+}
+
+/// غلاف معرّف مسابقة للتقديم كـsheet (المعرّف نص UUID).
+private struct PredSheetBox: Identifiable {
+    let id: String
 }

@@ -399,6 +399,11 @@ router.get("/purchase/:purchaseId", async (req: Request, res: Response) => {
   try {
     const { purchaseId } = req.params;
     
+    // `accessToken` (the secret that unlocks the paid article, see
+    // /check-purchase?token=) is returned ONLY to the verified buyer below —
+    // either the Tap charge id from the payment redirect (?tap_id=, which every
+    // buyer receives) or the authenticated owner. Returning it to anyone holding
+    // the purchaseId was an IDOR credential leak (audit #7).
     const [purchase] = await db
       .select({
         id: articlePurchases.id,
@@ -407,8 +412,9 @@ router.get("/purchase/:purchaseId", async (req: Request, res: Response) => {
         priceHalalas: articlePurchases.priceHalalas,
         currency: articlePurchases.currency,
         chargeId: articlePurchases.chargeId,
-        accessToken: articlePurchases.accessToken,
         createdAt: articlePurchases.createdAt,
+        userId: articlePurchases.userId,
+        accessToken: articlePurchases.accessToken,
       })
       .from(articlePurchases)
       .where(eq(articlePurchases.id, purchaseId))
@@ -429,13 +435,24 @@ router.get("/purchase/:purchaseId", async (req: Request, res: Response) => {
       .where(eq(articles.id, purchase.articleId))
       .limit(1);
     
+    // Ownership proof: the Tap charge id from the redirect, or the logged-in owner.
+    const tapId = typeof req.query.tap_id === "string" ? req.query.tap_id : null;
+    const sessionUserId = (req.user as { id?: string } | undefined)?.id ?? null;
+    const isVerifiedBuyer =
+      (!!tapId && !!purchase.chargeId && tapId === purchase.chargeId) ||
+      (!!sessionUserId && !!purchase.userId && sessionUserId === purchase.userId);
+
+    const { accessToken, userId, ...safePurchase } = purchase;
+
     res.json({
       success: true,
       data: {
-        ...purchase,
+        ...safePurchase,
+        // Only the verified buyer receives the access token (audit #7).
+        ...(isVerifiedBuyer ? { accessToken } : {}),
         article,
         priceSAR: tapService.formatPriceFromHalalas(purchase.priceHalalas),
-        statusArabic: purchase.status === "completed" ? "مكتمل" : 
+        statusArabic: purchase.status === "completed" ? "مكتمل" :
                       purchase.status === "failed" ? "فشل" : "قيد المعالجة",
       },
     });

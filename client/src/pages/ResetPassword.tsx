@@ -13,7 +13,7 @@ import { Lock, CheckCircle2 } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
 const resetPasswordSchema = z.object({
-  password: z.string().min(6, "كلمة المرور يجب أن تكون 6 أحرف على الأقل"),
+  password: z.string().min(8, "كلمة المرور يجب أن تكون 8 أحرف على الأقل"),
   confirmPassword: z.string(),
 }).refine((data) => data.password === data.confirmPassword, {
   message: "كلمات المرور غير متطابقة",
@@ -153,6 +153,7 @@ export default function ResetPassword() {
                         placeholder="••••••"
                         disabled={isLoading}
                         data-testid="input-new-password"
+                        autoComplete="new-password"
                         dir="ltr"
                       />
                     </FormControl>
@@ -174,6 +175,7 @@ export default function ResetPassword() {
                         placeholder="••••••"
                         disabled={isLoading}
                         data-testid="input-confirm-password"
+                        autoComplete="new-password"
                         dir="ltr"
                       />
                     </FormControl>

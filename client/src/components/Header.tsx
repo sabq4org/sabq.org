@@ -1,4 +1,4 @@
-import { Menu, User, LogOut, LayoutDashboard, Bell, Newspaper, Brain, Sparkles, ExternalLink, Zap, Home, Clock, BookOpen, Boxes, Bookmark, ChevronLeft, FolderOpen, Search } from "lucide-react";
+import { Menu, User, LogOut, Newspaper, Brain, Sparkles, ExternalLink, Zap, Home, Clock, BookOpen, Boxes, ChevronLeft, FolderOpen, Search } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "./ThemeToggle";
@@ -21,20 +21,28 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import "@/styles/header-brand.css";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useTheme } from "@/components/ThemeProvider";
 import logoImage from "@assets/sabq-logo.png";
-import worldCupEmblem from "@assets/world-cup-2026-emblem.png";
 import kingsCupEmblem from "@assets/kings-cup-logo.png";
+import {
+  ND96_SCOPE_CLASS,
+  ND96_SCOPE_STYLE,
+  NationalDay96GreetingBar,
+  NationalDay96ScopeStyles,
+  NationalDaySaduStrip,
+  useNationalDay96Season,
+} from "@/components/seasonal/NationalDay96Theme";
 import type { Category } from "@shared/schema";
 import { SearchDialog } from "./SearchDialog";
-import { hasPermission } from "@/hooks/useAuth";
+import { getMobileToolsItems } from "@/nav/accountMenuItems";
 
 interface HeaderProps {
-  user?: { name?: string | null; email?: string; role?: string; profileImageUrl?: string | null; permissions?: string[] } | null;
+  user?: { name?: string | null; email?: string | null; role?: string; profileImageUrl?: string | null; permissions?: string[] } | null;
   onMenuClick?: () => void;
   /** افتراضيًا الهيدر لاصق أعلى الصفحة. صفحات معيّنة (مثل لوحة المباريات) تعطّله
    *  ليُمرَّر طبيعيًا ويختفي عند النزول مُفسحًا المجال لشريط فلاتر لاصق وحده. */
@@ -43,9 +51,34 @@ interface HeaderProps {
 
 export function Header({ user, onMenuClick, sticky = true }: HeaderProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [compactBrand, setCompactBrand] = useState(false);
+
+  useEffect(() => {
+    if (!sticky) return;
+    let frame = 0;
+    const update = () => {
+      frame = 0;
+      // Separate thresholds prevent the header's height change from toggling
+      // the state repeatedly near the collapse point (scroll anchoring).
+      setCompactBrand((compact) => window.scrollY > 72 ? true : window.scrollY <= 16 ? false : compact);
+    };
+    const onScroll = () => {
+      if (!frame) frame = window.requestAnimationFrame(update);
+    };
+    update();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      window.cancelAnimationFrame(frame);
+    };
+  }, [sticky]);
   const [location, navigate] = useLocation();
   const { toast } = useToast();
   const { theme, appTheme } = useTheme();
+
+  // سمة اليوم الوطني الـ96: تصحو تلقائيًا 21–25 سبتمبر 2026 (توقيت الرياض)
+  // وتنطفئ بعدها — بلا أي تدخل. للمعاينة خارج الموعد: ?nd96=force
+  const nd96 = useNationalDay96Season();
 
   // Determine logo based on theme and active app theme
   const currentLogo = appTheme?.assets?.logoLight && theme === 'light'
@@ -80,7 +113,7 @@ export function Header({ user, onMenuClick, sticky = true }: HeaderProps) {
     }
   };
 
-  const getInitials = (name?: string, email?: string) => {
+  const getInitials = (name?: string, email?: string | null) => {
     if (name) {
       return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
     }
@@ -96,15 +129,27 @@ export function Header({ user, onMenuClick, sticky = true }: HeaderProps) {
     { name: "مقالات", href: "/opinion" },
     { name: "مُقترب", href: "/muqtarab" },
     { name: "لحظة بلحظة", href: "/moment-by-moment" },
+    { name: "عقل سبق", href: "/sabq-ai", icon: Brain },
   ];
 
   return (
     <>
-    <header role="banner" aria-label="رأس الصفحة الرئيسي" className={`${sticky ? "sticky top-0" : "relative"} z-50 w-full border-b bg-background/95 backdrop-blur-lg supports-[backdrop-filter]:bg-background/60`} dir="rtl">
+    <header
+      role="banner"
+      aria-label="رأس الصفحة الرئيسي"
+      data-compact-brand={sticky && compactBrand ? "true" : "false"}
+      className={`${sticky ? "sabq-adaptive-header sticky top-0" : "relative"} z-50 w-full border-b bg-background/95 backdrop-blur-lg supports-[backdrop-filter]:bg-background/60 ${nd96.active ? ND96_SCOPE_CLASS : ""}`}
+      style={{
+        ...(nd96.active ? ND96_SCOPE_STYLE : {}),
+        ...(sticky && compactBrand ? { "--public-header-height": "64px" } : {}),
+      } as React.CSSProperties}
+      dir="rtl"
+    >
+      {nd96.active && <NationalDay96ScopeStyles />}
       <div className="relative z-10 container mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex h-16 items-center justify-between gap-4">
+        <div className="sabq-header-row flex h-16 items-center justify-between gap-4">
           {/* Logo - Left side (Desktop only) */}
-          <div className="hidden md:flex items-center gap-3">
+          <div className="hidden lg:flex items-center gap-3">
             <Link href="/" onClick={(e) => {
               if (window.location.pathname === '/') {
                 e.preventDefault();
@@ -115,31 +160,12 @@ export function Header({ user, onMenuClick, sticky = true }: HeaderProps) {
                 <img 
                   src={currentLogo} 
                   alt="سبق - SABQ" 
-                  className="h-12 w-auto object-contain"
+                  className="sabq-header-logo sabq-header-logo-desktop h-12 w-auto object-contain"
                   width={751}
                   height={681}
                   loading="eager"
                   decoding="async"
                 />
-              </span>
-            </Link>
-            <Link href="/world-cup">
-              <span
-                className="flex items-center hover-elevate active-elevate-2 rounded-md px-2 py-1.5 cursor-pointer border-s border-border/60 ps-3"
-                data-testid="link-world-cup-header"
-                aria-label="تغطية كأس العالم 2026"
-              >
-                <span className="rounded-md p-0.5 dark:bg-white">
-                  <img
-                    src={worldCupEmblem}
-                    alt="كأس العالم 2026"
-                    className="h-9 w-auto object-contain"
-                    width={233}
-                    height={360}
-                    loading="eager"
-                    decoding="async"
-                  />
-                </span>
               </span>
             </Link>
             {showKingsCupLink && (
@@ -164,7 +190,7 @@ export function Header({ user, onMenuClick, sticky = true }: HeaderProps) {
           </div>
 
           {/* Mobile Logo */}
-          <div className="md:hidden flex items-center">
+          <div className="lg:hidden flex items-center">
             <Link href="/" onClick={(e) => {
               if (window.location.pathname === '/') {
                 e.preventDefault();
@@ -175,31 +201,12 @@ export function Header({ user, onMenuClick, sticky = true }: HeaderProps) {
                 <img 
                   src={currentLogo} 
                   alt="سبق - SABQ" 
-                  className="h-11 w-auto object-contain"
+                  className="sabq-header-logo sabq-header-logo-mobile h-11 w-auto object-contain"
                   width={751}
                   height={681}
                   loading="eager"
                   decoding="async"
                 />
-              </span>
-            </Link>
-            <Link href="/world-cup">
-              <span
-                className="flex items-center hover-elevate active-elevate-2 rounded-md px-1.5 py-1 cursor-pointer border-s border-border/60 ps-2.5"
-                data-testid="link-world-cup-header-mobile"
-                aria-label="تغطية كأس العالم 2026"
-              >
-                <span className="rounded-md p-0.5 dark:bg-white">
-                  <img
-                    src={worldCupEmblem}
-                    alt="كأس العالم 2026"
-                    className="h-8 w-auto object-contain"
-                    width={233}
-                    height={360}
-                    loading="eager"
-                    decoding="async"
-                  />
-                </span>
               </span>
             </Link>
             {showKingsCupLink && (
@@ -224,7 +231,7 @@ export function Header({ user, onMenuClick, sticky = true }: HeaderProps) {
           </div>
 
           {/* Main Navigation - Center (Desktop only) */}
-          <nav id="main-nav" role="navigation" aria-label="القائمة الرئيسية" tabIndex={-1} className="hidden md:flex items-center gap-6 flex-1 justify-center">
+          <nav id="main-nav" role="navigation" aria-label="القائمة الرئيسية" tabIndex={-1} className="hidden lg:flex items-center gap-5 flex-1 justify-center min-w-0">
             {mainSections.map((section) => (
               section.external ? (
                 <a 
@@ -245,7 +252,14 @@ export function Header({ user, onMenuClick, sticky = true }: HeaderProps) {
                     data-testid={`link-section-${section.name}`}
                     aria-current={location === section.href ? "page" : undefined}
                   >
-                    {section.icon && <section.icon className="h-3.5 w-3.5" />}
+                    {section.icon && (
+                      <section.icon
+                        className={`h-3.5 w-3.5 ${
+                          section.href === "/sabq-ai" ? "text-primary" : ""
+                        }`}
+                        aria-hidden="true"
+                      />
+                    )}
                     {section.name}
                   </span>
                 </Link>
@@ -261,7 +275,7 @@ export function Header({ user, onMenuClick, sticky = true }: HeaderProps) {
             <Button
               variant="ghost"
               size="icon"
-              className="md:hidden hover-elevate active-elevate-2"
+              className="lg:hidden hover-elevate active-elevate-2"
               onClick={() => setMobileMenuOpen(true)}
               data-testid="button-menu"
               aria-label="فتح القائمة"
@@ -270,7 +284,7 @@ export function Header({ user, onMenuClick, sticky = true }: HeaderProps) {
             </Button>
 
             {/* Mobile Actions */}
-            <div className="md:hidden flex items-center gap-0.5 max-sm:gap-0">
+            <div className="lg:hidden flex items-center gap-0.5 max-sm:gap-0">
               <SearchDialog />
               <LanguageSwitcher />
               <ThemeToggle />
@@ -318,7 +332,7 @@ export function Header({ user, onMenuClick, sticky = true }: HeaderProps) {
             </div>
 
             {/* Desktop Actions */}
-            <div className="hidden md:flex items-center gap-1">
+            <div className="hidden lg:flex items-center gap-1">
               <SearchDialog />
               <AccessibilitySettings variant="desktop" />
               <LanguageSwitcher />
@@ -458,6 +472,16 @@ export function Header({ user, onMenuClick, sticky = true }: HeaderProps) {
                     مُقترب
                   </span>
                 </Link>
+                <Link href="/sabq-ai">
+                  <span
+                    className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium hover-elevate active-elevate-2 cursor-pointer"
+                    onClick={() => setMobileMenuOpen(false)}
+                    data-testid="link-mobile-sabq-ai"
+                  >
+                    <Brain className="h-5 w-5 text-primary" aria-hidden="true" />
+                    عقل سبق
+                  </span>
+                </Link>
                 <Link href="/lite">
                   <span
                     className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium hover-elevate active-elevate-2 cursor-pointer bg-primary/5 border border-primary/20"
@@ -514,65 +538,38 @@ export function Header({ user, onMenuClick, sticky = true }: HeaderProps) {
               </div>
             </div>
 
-            {/* أدواتي - My Tools (Logged-in users) */}
+            {/* أدواتي - My Tools (Logged-in users) — مصدر واحد مع القائمة المنسدلة */}
             {user && (
               <div className="p-3 border-t">
                 <h3 className="px-3 py-2 text-xs font-semibold text-foreground/65 uppercase tracking-wider">
                   أدواتي
                 </h3>
                 <div className="space-y-1">
-                  {hasPermission(user as any, "dashboard.view") && (
-                    <Link href="/dashboard">
-                      <span
-                        className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium hover-elevate active-elevate-2 cursor-pointer"
-                        onClick={() => setMobileMenuOpen(false)}
-                        data-testid="link-mobile-dashboard"
-                      >
-                        <LayoutDashboard className="h-5 w-5 text-primary" aria-hidden="true" />
-                        لوحة التحكم
-                      </span>
-                    </Link>
-                  )}
-                  <Link href="/daily-brief">
-                    <span
-                      className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium hover-elevate active-elevate-2 cursor-pointer"
-                      onClick={() => setMobileMenuOpen(false)}
-                      data-testid="link-mobile-daily-brief"
-                    >
-                      <Newspaper className="h-5 w-5 text-primary" aria-hidden="true" />
-                      ملخصي اليومي
-                    </span>
-                  </Link>
-                  <Link href="/profile">
-                    <span
-                      className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium hover-elevate active-elevate-2 cursor-pointer"
-                      onClick={() => setMobileMenuOpen(false)}
-                      data-testid="link-mobile-profile"
-                    >
-                      <User className="h-5 w-5 text-primary" aria-hidden="true" />
-                      الملف الشخصي
-                    </span>
-                  </Link>
-                  <Link href="/profile?tab=bookmarks">
-                    <span
-                      className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium hover-elevate active-elevate-2 cursor-pointer"
-                      onClick={() => setMobileMenuOpen(false)}
-                      data-testid="link-mobile-bookmarks"
-                    >
-                      <Bookmark className="h-5 w-5 text-primary" aria-hidden="true" />
-                      المحفوظات
-                    </span>
-                  </Link>
-                  <Link href="/notification-settings">
-                    <span
-                      className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium hover-elevate active-elevate-2 cursor-pointer"
-                      onClick={() => setMobileMenuOpen(false)}
-                      data-testid="link-mobile-notification-settings"
-                    >
-                      <Bell className="h-5 w-5 text-primary" aria-hidden="true" />
-                      إعدادات الإشعارات
-                    </span>
-                  </Link>
+                  {getMobileToolsItems(user).map((item) => {
+                    const Icon = item.icon;
+                    return (
+                      <Link key={item.id} href={item.href}>
+                        <span
+                          className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium hover-elevate active-elevate-2 cursor-pointer min-h-[44px]"
+                          onClick={() => setMobileMenuOpen(false)}
+                          data-testid={
+                            item.id === "dashboard"
+                              ? "link-mobile-dashboard"
+                              : item.id === "profile"
+                                ? "link-mobile-profile"
+                                : item.id === "bookmarks-row"
+                                  ? "link-mobile-bookmarks"
+                                  : item.id === "settings"
+                                    ? "link-mobile-settings"
+                                    : `link-mobile-${item.id}`
+                          }
+                        >
+                          <Icon className="h-5 w-5 text-primary" aria-hidden="true" />
+                          {item.labelAr}
+                        </span>
+                      </Link>
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -616,6 +613,16 @@ export function Header({ user, onMenuClick, sticky = true }: HeaderProps) {
         </SheetContent>
       </Sheet>
       <BreakingNewsTicker />
+      {nd96.active && (
+        <>
+          <NationalDaySaduStrip />
+          <NationalDay96GreetingBar
+            active
+            dismissed={nd96.dismissed}
+            onDismiss={nd96.dismiss}
+          />
+        </>
+      )}
     </header>
     </>
   );

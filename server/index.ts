@@ -2,6 +2,7 @@ import dotenv from "dotenv";
 dotenv.config({ path: ".env.local", override: true });
 dotenv.config();
 import * as Sentry from "@sentry/node";
+import { shouldSendServerEvent } from "./utils/sentryServerNoise";
 // Sentry error monitoring — enabled only when SENTRY_DSN is set. Errors-only:
 // tracing/profiling/logs deliberately off (quota + overhead on a site this
 // size). exitEvenIfOtherHandlersAreRegistered=false preserves the
@@ -14,6 +15,12 @@ if (process.env.SENTRY_DSN) {
     integrations: [
       Sentry.onUncaughtExceptionIntegration({ exitEvenIfOtherHandlersAreRegistered: false }),
     ],
+    // قطعُ العميل للاتصال (read ECONNRESET الواصل عبر sentryErrorMiddleware)
+    // ليس خللًا في التطبيق: لا سطر يُصلَح ولا مستخدم يُحمى. يُسقط بشرطين
+    // معًا — توقيع القطع، وخلوّ المكدس من إطار من كودنا — حتى لا نخفي
+    // ECONNRESET صادرًا من Postgres/Redis. التفصيل في utils/sentryServerNoise.ts.
+    beforeSend: (event, hint) =>
+      shouldSendServerEvent(event, hint?.originalException) ? event : null,
   });
   console.log("[Server] ✅ Sentry error monitoring enabled");
 } else {
@@ -28,7 +35,8 @@ import compression from "compression";
 import cookieParser from "cookie-parser";
 import fs from "fs";
 import path from "path";
-import { randomBytes, createHash } from "crypto";
+import { randomBytes } from "crypto";
+import { getRealIp, originGate, signProxyHeaders } from "./utils/trustedProxyIp";
 import { isNoindexPath } from "./utils/noindexPaths";
 import { readOnlyMirrorGuard, isReadOnlyMirror } from "./middleware/readOnlyMirror";
 
@@ -115,6 +123,69 @@ const deployBranch =
   process.env.RAILWAY_GIT_BRANCH ||
   process.env.VERCEL_GIT_COMMIT_REF ||
   null;
+
+// لقطة موارد العملية عند الطلب — نفس أرقام سطر [Runtime] الدوري لكن فورًا.
+// تُقرأ وقت البطء مباشرة: fd يتصاعد ⇒ تسرّب مقابس؛ pool.waiting>0 ⇒ تشبّع
+// المسبح؛ loopLag مرتفع ⇒ حجب حلقة الأحداث. لا أسرار فيها.
+app.get("/api/diagnostics", (_req, res) => {
+  res.set("Cache-Control", "no-store, max-age=0");
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { runtimeSnapshot } = require("./utils/runtimeDiagnostics");
+    res.status(200).json(runtimeSnapshot());
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || "unavailable" });
+  }
+});
+
+// لقطة heap — الأداة الحاسمة لتسمية الكائن المتسرّب. تُنتج ملف
+// .heapsnapshot يُفتح في Chrome DevTools ← Memory. الطريقة: خذ لقطتين
+// (مبكرة ومتأخرة بعشرين دقيقة) وحمّلهما، ثم في عرض «Comparison» رتّب
+// بـ«# Delta» — المُنشئ في الأعلى هو المتسرّب.
+//
+// محمية بسرّ إلزامي (HEAP_SNAPSHOT_TOKEN): اللقطة نسخة كاملة من ذاكرة
+// العملية — فيها أسرار وtokens وPII — فلا تُكشف بلا سرّ. غيابه ⇒ 404 (لا
+// نكشف وجود النقطة أصلًا). المقارنة timing-safe.
+//
+// تحذير تشغيلي: أخذ اللقطة يُجبر GC كاملًا ويجمّد حلقة الأحداث ثوانيَ
+// (heap بحجم ~1.5GB ⇒ 2–5ث). خذها بوعي وقت تحمّل خفيف إن أمكن.
+app.get("/api/diagnostics/heap", async (req, res) => {
+  const secret = process.env.HEAP_SNAPSHOT_TOKEN;
+  if (!secret) return res.status(404).end();
+
+  const provided = String(req.query.token || "");
+  try {
+    const { timingSafeEqual } = await import("node:crypto");
+    const a = Buffer.from(provided);
+    const b = Buffer.from(secret);
+    if (a.length !== b.length || !timingSafeEqual(a, b)) {
+      return res.status(403).json({ error: "forbidden" });
+    }
+  } catch {
+    return res.status(403).json({ error: "forbidden" });
+  }
+
+  try {
+    const v8 = await import("node:v8");
+    res.setHeader("Content-Type", "application/octet-stream");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="sabq-heap-${Math.round(process.uptime())}s.heapsnapshot"`,
+    );
+    console.warn("[Runtime] أخذ لقطة heap — قد تتجمّد حلقة الأحداث ثوانيَ");
+    const stream = v8.getHeapSnapshot();
+    stream.pipe(res);
+    stream.on("error", () => {
+      try {
+        res.destroy();
+      } catch {
+        /* noop */
+      }
+    });
+  } catch (err: any) {
+    if (!res.headersSent) res.status(500).json({ error: err?.message || "snapshot failed" });
+  }
+});
 
 app.get("/api/version", (_req, res) => {
   res.set("Cache-Control", "no-store, max-age=0");
@@ -246,10 +317,24 @@ app.use(cors({
     // Ionic legacy → ionic://localhost
     // These are app-bundle WebViews loading our own JS, so we trust them like
     // first-party origins. App identity is enforced separately by auth tokens.
+    // SECURITY: the http(s)+localhost branch must NOT accept a port.
+    //
+    // Capacitor serves the app bundle from bare `https://localhost` (and
+    // legacy `http://localhost`) — no port. Matching on hostname alone also
+    // accepted `http://localhost:<anything>` in production with
+    // `credentials: true`, so any process the victim could be lured into
+    // running locally (a dev server, an npx tool, a malicious "localhost app")
+    // became a trusted origin able to read authenticated API responses —
+    // including GET /api/csrf-token, which then defeats CSRF entirely.
+    // Ports stay allowed outside production for local dev servers.
+    const isBareLocalhost = parsed.hostname === 'localhost' && parsed.port === '';
     const isCapacitorWebView =
       (parsed.protocol === 'capacitor:' && parsed.hostname === 'localhost') ||
       (parsed.protocol === 'ionic:' && parsed.hostname === 'localhost') ||
-      ((parsed.protocol === 'https:' || parsed.protocol === 'http:') && parsed.hostname === 'localhost');
+      ((parsed.protocol === 'https:' || parsed.protocol === 'http:') &&
+        (isBareLocalhost || process.env.NODE_ENV !== 'production'
+          ? parsed.hostname === 'localhost'
+          : false));
     if (isCapacitorWebView) {
       return callback(null, true);
     }
@@ -273,7 +358,12 @@ app.use(cors({
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'x-csrf-token'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'x-csrf-token', 'x-agent-secret'],
+  // بلا exposedHeaders لا يستطيع المتصفح قراءة ترويسة من أصل مختلف — وتطبيقا
+  // كاباسيتور يخاطبان api.sabq.org مباشرة. X-Session-Degraded تميّز «تعذّرت
+  // قراءة جلستك الآن» عن «انتهت جلستك»، فبدونها يُطرد المستخدم إلى صفحة
+  // الدخول عند عطل عابر في Redis.
+  exposedHeaders: ['X-Session-Degraded'],
 }));
 
 // Security headers with Helmet.js - 'unsafe-inline' and 'unsafe-eval' needed for Swagger UI
@@ -379,6 +469,16 @@ app.use(express.json({
                  // raw photo, so a couple of phone images need headroom.
                  // Bumped 10mb → 25mb to stop /articles/submit 413s.
   verify: (req: any, _res: any, buf: Buffer) => {
+    // The CSP report endpoint has its own small parser, but this global parser
+    // runs first. Enforce the same cap here so the 25 MB upload limit cannot
+    // be used to bypass the report endpoint's 16 KB budget.
+    const requestPath = String(req.originalUrl || req.url || "").split("?", 1)[0];
+    if (requestPath === "/api/security/csp-report" && buf.length > 16 * 1024) {
+      const error: any = new Error("CSP report payload too large");
+      error.status = 413;
+      error.type = "entity.too.large";
+      throw error;
+    }
     // Stash the exact raw bytes before JSON parsing so webhook handlers
     // can verify HMAC signatures against the original payload.
     req.rawBody = buf;
@@ -500,33 +600,21 @@ function hasSessionCookie(req: Request): boolean {
 //     handler — so `req.user` is unset when the limiter runs. Without this branch
 //     every app user behind the same carrier-grade NAT public IP shares ONE
 //     write bucket and intermittently gets HTTP 429 (e.g. when posting a
-//     comment). Keying by the token (hashed) gives each session its own bucket.
+//     comment). Route authentication may establish a user key later; an
+//     unverified token must never mint a bucket here.
 //  3. Anonymous requests → CDN/real client IP.
 function rateLimitKey(req: Request): string {
   const userId = (req as any).user?.id;
   if (userId) return `u:${userId}`;
-  const auth = req.headers.authorization;
-  if (auth && auth.startsWith('Bearer ')) {
-    return `b:${createHash('sha256').update(auth.slice(7)).digest('hex').slice(0, 32)}`;
-  }
-  // Real visitor IP resolution. When traffic is proxied through our Cloudflare
-  // Worker (frontend-edge-worker.js, route sabq.org/*), the worker re-issues
-  // the request with `fetch(request)`, which makes Cloudflare REWRITE
-  // `cf-connecting-ip` on the origin subrequest to the worker's single egress
-  // IP. The result: every visitor collapses into ONE rate-limit bucket and the
-  // whole site's anonymous writes (logins, comments, reactions) share the
-  // writeLimiter's 1000/15min ceiling → permanent HTTP 429 for everyone.
-  //
-  // Fix: the worker forwards the genuine client IP it sees in a trusted custom
-  // header (`x-sabq-client-ip`; `true-client-ip` is also honored for parity
-  // with Cloudflare Enterprise). We prefer that, then fall back to
-  // `cf-connecting-ip` (correct for DIRECT origin pulls like api.sabq.org),
-  // then the leftmost X-Forwarded-For, then req.ip.
-  const forwardedReal = (req.headers['x-sabq-client-ip'] || req.headers['true-client-ip']) as string | undefined;
-  const cfIp = req.headers['cf-connecting-ip'] as string;
-  const xForwardedFor = req.headers['x-forwarded-for'] as string;
-  return forwardedReal?.split(',')[0]?.trim() || cfIp || xForwardedFor?.split(',')[0]?.trim() || req.ip || 'unknown';
+  // Bearer authentication runs inside the route handler. An arbitrary Bearer
+  // value must not mint a fresh bucket before it has been verified.
+  return getRealIp(req);
 }
+
+// Optional origin gate. It is deliberately off until api.sabq.org is routed
+// through the signing Worker for mobile, web-next, meetings, and webhooks.
+// Health endpoints remain reachable for Railway healthchecks and diagnostics.
+app.use(originGate);
 
 // Fire-and-forget TELEMETRY beacons (view counter, behavior/accessibility logs)
 // are high-frequency, anonymous, and harmless to over-count — they must NOT be
@@ -560,22 +648,9 @@ const generalApiLimiter = rateLimit({
   },
 });
 
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // 5 login attempts per window
-  message: { message: "تم تجاوز حد محاولات تسجيل الدخول. يرجى المحاولة بعد 15 دقيقة" },
-  standardHeaders: true,
-  legacyHeaders: false,
-  skipSuccessfulRequests: true, // Don't count successful logins
-});
-
-const strictLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 10, // 10 requests per window for sensitive operations
-  message: { message: "تم تجاوز حد الطلبات للعمليات الحساسة. يرجى المحاولة بعد قليل" },
-  standardHeaders: true,
-  legacyHeaders: false,
-});
+// (F-22) Removed two dead limiter definitions here — `authLimiter` and
+// `strictLimiter` were never applied in this file (the live ones with the same
+// names live in server/routes.ts) and only served to confuse maintenance.
 
 const writeLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -592,6 +667,14 @@ const writeLimiter = rateLimit({
   skip: (req) => {
     if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') return true;
     if (isTelemetryWrite(req)) return true;
+    // Meetings-agent (and future M2M) posts under /api/internal/* with a
+    // shared secret — all Railway egress shares one IP; don't throttle it
+    // with the anonymous write bucket. Mounted at /api so req.path is
+    // "/internal/…"; originalUrl keeps the full "/api/internal/…" form.
+    const full = (req.originalUrl || req.path).split("?")[0];
+    if (full.startsWith("/api/internal/") || req.path.startsWith("/internal/")) {
+      return true;
+    }
     return false;
   },
 });
@@ -920,6 +1003,12 @@ if (!(globalThis as any).__sabqServer) {
       : { port, host: "0.0.0.0" };
   server.listen(listenOpts, () => {
     console.log(`[Server] ✅ Listening on port ${port}`);
+    void import("./utils/runtimeDiagnostics")
+      .then((m) => m.startRuntimeDiagnostics())
+      .catch((e) => console.warn("[Runtime] تعذّر تشغيل القياس:", e?.message));
+    void import("./utils/processWatchdog")
+      .then((m) => m.startProcessWatchdog(server))
+      .catch((e) => console.warn("[Watchdog] تعذّر تشغيل الحارس:", e?.message));
   });
 }
 
@@ -1289,7 +1378,19 @@ if (!(globalThis as any).__sabqServer) {
           // /sitemap-index.xml are never linked — a 404 is correct, and the log is
           // just noise from bots/stale URLs. Indexing is unaffected.
           const isNoisy404 =
-            urlPath === '/service-worker.js' || /^\/sitemap[\w-]*\.xml$/i.test(urlPath);
+            urlPath === '/service-worker.js' ||
+            urlPath === '/sw.js' ||
+            /^\/sitemap[\w-]*\.xml$/i.test(urlPath) ||
+            // أرشيف CMS القديم (قبل سبق الحالي): material-file / media-cache لم يُرحَّل.
+            // 404 صحيح؛ التحذير يملأ لوق Railway فقط من مقالات قديمة بروابط ميتة.
+            urlPath.startsWith('/uploads/material-file/') ||
+            urlPath.startsWith('/uploads/media-cache/') ||
+            // ماسحات تبحث عن أسرار/إعدادات مسربة — 404 صحيح والضوضاء فقط تملأ اللوق.
+            /(?:^|\/)(?:secrets?|credentials?|service[-_]?account(?:[-_]?key)?|firebase(?:[-_](?:admin(?:sdk)?|credentials|config))?|gcp(?:[-_](?:credentials|key))?|google[-_]?credentials|aws-exports|amplifyconfiguration|auth|config|env|settings|key|sa|appsettings(?:\.[A-Za-z]+)?|local\.settings|openapi|swagger)\.(?:json|js)$/i.test(urlPath) ||
+            /(?:^|\/)\.(?:vscode|docker|env|claude|cursor|mcp|config|openclaw|continue|hermes|git)\//i.test(urlPath) ||
+            /(?:^|\/)(?:__env|runtime-config|app-config|env)\.(?:js|json)$/i.test(urlPath) ||
+            urlPath === '/__/firebase/init.json' ||
+            urlPath === '/api/openapi.json';
           if (!isNoisy404) {
             console.warn(`[Static 404] Missing asset: ${urlPath}`);
           }
@@ -1370,53 +1471,12 @@ if (!(globalThis as any).__sabqServer) {
         }
 
         
-        // Warm up dashboard stats cache in background (non-blocking)
+        // Warm up dashboard stats cache in background (non-blocking) — every replica
         setImmediate(async () => {
           try {
-            const { storage } = await import("./storage");
-            const { memoryCache, CACHE_TTL } = await import("./memoryCache");
+            const { getCachedAdminDashboardStats } = await import("./services/adminDashboardStatsService");
             console.log(`[Cache Warmup] 🔄 Pre-loading dashboard stats cache...`);
-            const stats = await storage.getAdminDashboardStats();
-            const trimmedStats = {
-              ...stats,
-              recentArticles: stats.recentArticles.map((article: any) => ({
-                id: article.id,
-                title: article.title,
-                slug: article.slug,
-                englishSlug: article.englishSlug || undefined,
-                status: article.status,
-                publishedAt: article.publishedAt,
-                views: article.views,
-                author: article.author ? {
-                  firstName: article.author.firstName,
-                  lastName: article.author.lastName,
-                  email: article.author.email,
-                } : undefined,
-              })),
-              topArticles: stats.topArticles.map((article: any) => ({
-                id: article.id,
-                title: article.title,
-                slug: article.slug,
-                englishSlug: article.englishSlug || undefined,
-                status: article.status,
-                publishedAt: article.publishedAt,
-                views: article.views,
-                category: article.category ? {
-                  nameAr: article.category.nameAr,
-                } : undefined,
-              })),
-              recentComments: stats.recentComments.map((comment: any) => ({
-                id: comment.id,
-                content: comment.content ? comment.content.substring(0, 100) : '',
-                status: comment.status,
-                createdAt: comment.createdAt,
-                user: comment.user ? {
-                  firstName: comment.user.firstName,
-                  lastName: comment.user.lastName,
-                } : undefined,
-              })),
-            };
-            memoryCache.set('admin:dashboard:stats', trimmedStats, CACHE_TTL.MEDIUM);
+            await getCachedAdminDashboardStats(true);
             console.log(`[Cache Warmup] ✅ Dashboard stats cache loaded successfully`);
           } catch (error) {
             console.error("[Cache Warmup] ⚠️  Dashboard stats cache warmup failed:", error);
@@ -1428,9 +1488,12 @@ if (!(globalThis as any).__sabqServer) {
           try {
             const port = parseInt(process.env.PORT || '5000', 10);
             console.log(`[Cache Warmup] 🔄 Pre-loading homepage cache...`);
+            const warmupHeaders = signProxyHeaders("GET", "/api/homepage-lite");
             const [homepageRes, categoriesRes] = await Promise.all([
-              fetch(`http://localhost:${port}/api/homepage-lite`),
-              fetch(`http://localhost:${port}/api/categories`),
+              fetch(`http://localhost:${port}/api/homepage-lite`, { headers: warmupHeaders }),
+              fetch(`http://localhost:${port}/api/categories`, {
+                headers: signProxyHeaders("GET", "/api/categories"),
+              }),
             ]);
             if (homepageRes.ok) {
               console.log(`[Cache Warmup] ✅ Homepage cache loaded successfully`);
@@ -1456,6 +1519,8 @@ if (!(globalThis as any).__sabqServer) {
       // تكتب في قاعدة البيانات، وهو ممنوع على الـ replica (مستخدم SELECT-only).
       const enableBackgroundWorkers =
         process.env.ENABLE_BACKGROUND_WORKERS === "true" && !isReadOnlyMirror();
+      // كأس العالم انتهى: وظائفه معطّلة افتراضيًا. WORLD_CUP_LIVE_ENABLED=true لبطولة قادمة.
+      const wcLive = process.env.WORLD_CUP_LIVE_ENABLED === "true";
       // النشرة الثقيلة لها process مستقل. لا تعِد تشغيلها داخل API إلا كخيار
       // legacy صريح أثناء rollback؛ القيمة الافتراضية الآمنة false.
       const runNewsletterSchedulerInWeb = process.env.RUN_NEWSLETTER_SCHEDULER_IN_WEB === "true";
@@ -1478,13 +1543,6 @@ if (!(globalThis as any).__sabqServer) {
             startPushWorker();
           } catch (error) {
             console.error("[Server] Error starting push worker after failover:", error);
-          }
-          try {
-            const { initializeAudioNewsletterJobs } = await import("./jobs/audioNewsletterJob");
-            initializeAudioNewsletterJobs();
-            console.log("[Server] ✅ Audio newsletter jobs started after failover");
-          } catch (error) {
-            console.error("[Server] Error starting audio newsletter jobs after failover:", error);
           }
           try {
             if (
@@ -1531,150 +1589,6 @@ if (!(globalThis as any).__sabqServer) {
         });
       }
 
-      // Register job queue handlers for TTS generation
-      if (shouldRunBackgroundJobs) {
-        setImmediate(async () => {
-          try {
-            const { jobQueue } = await import("./services/job-queue");
-            const { getElevenLabsService } = await import("./services/elevenlabs");
-            const { ObjectStorageService } = await import("./objectStorage");
-            const { storage } = await import("./storage");
-
-          jobQueue.onExecute(async (job) => {
-            if (job.type === 'generate-tts') {
-              console.log(`[JobQueue] Executing TTS generation job ${job.id}`);
-              
-              const { newsletterId } = job.data;
-              const newsletter = await storage.getAudioNewsletterById(newsletterId);
-
-              if (!newsletter) {
-                throw new Error('النشرة الصوتية غير موجودة');
-              }
-
-              // Update status to processing
-              await storage.updateAudioNewsletter(newsletter.id, {
-                generationStatus: 'processing',
-                generationError: null,
-              });
-
-              const elevenLabs = getElevenLabsService();
-              const objectStorage = new ObjectStorageService();
-
-              if (!elevenLabs) {
-                await storage.updateAudioNewsletter(newsletter.id, {
-                  generationStatus: 'failed',
-                  generationError: 'ElevenLabs service is not available - missing API key',
-                });
-                throw new Error('ElevenLabs service is not configured');
-              }
-
-              // Build script from articles
-              const articlesData = newsletter.articles?.map(na => ({
-                title: na.article?.title || '',
-                excerpt: na.article?.excerpt || undefined,
-                aiSummary: na.article?.aiSummary || undefined,
-              })) || [];
-
-              const script = elevenLabs.buildNewsletterScript({
-                title: newsletter.title,
-                description: newsletter.description || undefined,
-                articles: articlesData,
-              });
-
-              console.log(`[JobQueue] Generating TTS for newsletter ${newsletter.id}`);
-              console.log(`[JobQueue] Script length: ${script.length} characters`);
-
-              // Generate audio
-              const audioBuffer = await elevenLabs.textToSpeech({
-                text: script,
-                voiceId: newsletter.voiceId || undefined,
-                model: newsletter.voiceModel || undefined,
-                voiceSettings: newsletter.voiceSettings || undefined,
-              });
-
-              // Upload to object storage
-              const audioPath = `audio-newsletters/${newsletter.id}.mp3`;
-              const uploadedFile = await objectStorage.uploadFile(
-                audioPath,
-                audioBuffer,
-                'audio/mpeg'
-              );
-
-              // Update newsletter with audio details
-              await storage.updateAudioNewsletter(newsletter.id, {
-                audioUrl: uploadedFile.url,
-                fileSize: audioBuffer.length,
-                duration: Math.floor(audioBuffer.length / 16000), // Rough estimate
-                generationStatus: 'completed',
-                generationError: null,
-              });
-
-              console.log(`[JobQueue] Successfully generated audio for newsletter ${newsletter.id}`);
-            } else if (job.type === 'generate-audio-brief') {
-              console.log(`[JobQueue] Executing audio brief generation job ${job.id}`);
-              
-              const { briefId } = job.data;
-              const brief = await storage.getAudioNewsBriefById(briefId);
-
-              if (!brief) {
-                throw new Error('الخبر الصوتي غير موجود');
-              }
-
-              // Update status to processing
-              await storage.updateAudioNewsBrief(briefId, {
-                generationStatus: 'processing',
-              });
-
-              const elevenLabs = getElevenLabsService();
-              const objectStorage = new ObjectStorageService();
-
-              if (!elevenLabs) {
-                await storage.updateAudioNewsBrief(briefId, {
-                  generationStatus: 'failed',
-                });
-                throw new Error('ElevenLabs service is not configured');
-              }
-
-              console.log(`[JobQueue] Generating TTS for audio brief ${briefId}`);
-              console.log(`[JobQueue] Content length: ${brief.content.length} characters`);
-
-              // Generate audio
-              const audioBuffer = await elevenLabs.textToSpeech({
-                text: brief.content,
-                voiceId: brief.voiceId || undefined,
-                voiceSettings: brief.voiceSettings || undefined,
-              });
-
-              // Upload to object storage
-              const audioPath = `audio-briefs/brief_${briefId}_${Date.now()}.mp3`;
-              const uploadedFile = await objectStorage.uploadFile(
-                audioPath,
-                audioBuffer,
-                'audio/mpeg'
-              );
-
-              // Get audio duration (rough estimate: ~150 words per minute for Arabic)
-              const wordCount = brief.content.split(/\s+/).length;
-              const estimatedDuration = Math.ceil((wordCount / 150) * 60);
-
-              // Update brief with audio details
-              await storage.updateAudioNewsBrief(briefId, {
-                audioUrl: uploadedFile.url,
-                duration: estimatedDuration,
-                generationStatus: 'completed',
-              });
-
-              console.log(`[JobQueue] Successfully generated audio for brief ${briefId}`);
-            }
-          });
-
-            console.log("[Server] ✅ Job queue handlers registered successfully");
-          } catch (error) {
-            console.error("[Server] ⚠️  Error registering job queue handlers:", error);
-            console.error("[Server] Server will continue running without job queue");
-          }
-        });
-      }
 
       // ============================================
       // DELAYED BACKGROUND JOBS - تأخير الوظائف الخلفية
@@ -1751,19 +1665,6 @@ if (!(globalThis as any).__sabqServer) {
         }, BACKGROUND_JOB_DELAY + 19000);
       }
       
-      // Start Audio Newsletter Jobs (scheduled generation and retries) - delayed
-      if (shouldRunBackgroundJobs) {
-        setTimeout(async () => {
-          try {
-            const { initializeAudioNewsletterJobs } = await import("./jobs/audioNewsletterJob");
-            initializeAudioNewsletterJobs();
-            console.log("[Server] ✅ Audio newsletter jobs started successfully");
-          } catch (error) {
-            console.error("[Server] ⚠️  Error starting audio newsletter jobs:", error);
-            console.error("[Server] Server will continue running without audio newsletter automation");
-          }
-        }, BACKGROUND_JOB_DELAY + 20000); // +20s stagger
-      }
 
       const enableNewsletterScheduler = process.env.ENABLE_NEWSLETTER_SCHEDULER !== 'false';
       
@@ -1781,6 +1682,13 @@ if (!(globalThis as any).__sabqServer) {
         console.log('[Server] Newsletter scheduler delegated to newsletter-worker');
       }
       
+      // SQL leases coordinate every worker replica, including after leader failover.
+      // Separate admission and worker flags permit draining before disabling the feature.
+      if (enableBackgroundWorkers && process.env.EDITORIAL_RESEARCH_WORKER_ENABLED === "true") {
+        const { startEditorialResearchJob } = await import("./jobs/editorialResearchJob");
+        startEditorialResearchJob();
+      }
+
       const enableAITasksScheduler = process.env.ENABLE_AI_TASKS_SCHEDULER !== 'false';
       const enableIfoxGenerator = process.env.ENABLE_IFOX_GENERATOR !== 'false';
       
@@ -1841,6 +1749,9 @@ if (!(globalThis as any).__sabqServer) {
             startAiProviderHealthCheckJob();
             const { startAiUsageRollupJob } = await import("./jobs/aiUsageRollup");
             startAiUsageRollupJob();
+            // غرفة عمليات سبق الذكية — نبضة التوزيع (تجريبية، القائد فقط)
+            const { startOpsRoomJob } = await import("./jobs/opsRoomJob");
+            startOpsRoomJob();
           } catch (error) {
             console.error("[Server] Error starting AI Hub jobs:", error);
           }
@@ -1914,70 +1825,30 @@ if (!(globalThis as any).__sabqServer) {
         // }, BACKGROUND_JOB_DELAY + 90000);
         console.log("[Thumbnail Job] ⏸️ Disabled for performance optimization");
         
-        // Dashboard Stats Cache Refresh - runs every 4 minutes to keep cache warm
+      } else {
+        console.log("[Server] Background maintenance + AI jobs skipped (background workers disabled or not leader)");
+      }
+
+      // Dashboard stats cache: memory is per-process, so every replica must refresh.
+      // SWR fresh window is 5m — refresh every 4m keeps the hot path off Neon.
+      if (enableBackgroundWorkers) {
         setTimeout(async () => {
           try {
-            const { storage } = await import("./storage");
-            const { memoryCache, CACHE_TTL } = await import("./memoryCache");
-            
+            const { getCachedAdminDashboardStats } = await import("./services/adminDashboardStatsService");
             const refreshDashboardCache = async () => {
               try {
-                const stats = await storage.getAdminDashboardStats();
-                const trimmedStats = {
-                  ...stats,
-                  recentArticles: stats.recentArticles.map((article: any) => ({
-                    id: article.id,
-                    title: article.title,
-                    slug: article.slug,
-                    englishSlug: article.englishSlug || undefined,
-                    status: article.status,
-                    publishedAt: article.publishedAt,
-                    views: article.views,
-                    author: article.author ? {
-                      firstName: article.author.firstName,
-                      lastName: article.author.lastName,
-                      email: article.author.email,
-                    } : undefined,
-                  })),
-                  topArticles: stats.topArticles.map((article: any) => ({
-                    id: article.id,
-                    title: article.title,
-                    slug: article.slug,
-                    englishSlug: article.englishSlug || undefined,
-                    status: article.status,
-                    publishedAt: article.publishedAt,
-                    views: article.views,
-                    category: article.category ? {
-                      nameAr: article.category.nameAr,
-                    } : undefined,
-                  })),
-                  recentComments: stats.recentComments.map((comment: any) => ({
-                    id: comment.id,
-                    content: comment.content ? comment.content.substring(0, 100) : '',
-                    status: comment.status,
-                    createdAt: comment.createdAt,
-                    user: comment.user ? {
-                      firstName: comment.user.firstName,
-                      lastName: comment.user.lastName,
-                    } : undefined,
-                  })),
-                };
-                memoryCache.set('admin:dashboard:stats', trimmedStats, CACHE_TTL.MEDIUM);
+                await getCachedAdminDashboardStats(true);
                 console.log("[Dashboard Cache] ✅ Cache refreshed successfully");
               } catch (error) {
                 console.error("[Dashboard Cache] ⚠️ Refresh failed:", error);
               }
             };
-            
-            setInterval(refreshDashboardCache, 30 * 60 * 1000);
-            console.log("[Server] ✅ Dashboard Cache Refresh job started (every 30 minutes)");
+            setInterval(refreshDashboardCache, 4 * 60 * 1000);
+            console.log("[Server] ✅ Dashboard Cache Refresh job started (every 4 minutes, all replicas)");
           } catch (error) {
             console.error("[Server] ⚠️ Error starting dashboard cache refresh:", error);
           }
         }, BACKGROUND_JOB_DELAY + 100000);
-        
-      } else {
-        console.log("[Server] Background maintenance + AI jobs skipped (background workers disabled or not leader)");
       }
 
       // أخبار المونديال: التسجيل خارج بوابة isLeader() عمدًا — أثناء النشر
@@ -1987,8 +1858,12 @@ if (!(globalThis as any).__sabqServer) {
       if (enableBackgroundWorkers) {
         setTimeout(async () => {
           try {
-            const { startWorldCupNewsJob } = await import("./jobs/worldCupNewsJob");
-            startWorldCupNewsJob();
+            if (wcLive) {
+              const { startWorldCupNewsJob } = await import("./jobs/worldCupNewsJob");
+              startWorldCupNewsJob();
+            } else {
+              console.log("[WC] بطولة منتهية — أخبار المونديال معطّلة (WORLD_CUP_LIVE_ENABLED != true)");
+            }
           } catch (error) {
             console.error("[Server] Error starting world cup news job:", error);
           }
@@ -2017,6 +1892,19 @@ if (!(globalThis as any).__sabqServer) {
             startKingsCupNewsJob();
           } catch (error) {
             console.error("[Server] Error starting kings cup news job:", error);
+          }
+        }, BACKGROUND_JOB_DELAY);
+      }
+
+      // النشر الاجتماعي المجدول (X): نفس نمط التسجيل الدائم وفحص القيادة
+      // داخل الدورة — المطالبة بـ SKIP LOCKED تمنع النشر المكرر.
+      if (enableBackgroundWorkers) {
+        setTimeout(async () => {
+          try {
+            const { startSocialPublishWorker } = await import("./jobs/socialPublishWorker");
+            startSocialPublishWorker();
+          } catch (error) {
+            console.error("[Server] Error starting social publish worker:", error);
           }
         }, BACKGROUND_JOB_DELAY);
       }
@@ -2052,8 +1940,12 @@ if (!(globalThis as any).__sabqServer) {
       if (enableBackgroundWorkers) {
         setTimeout(async () => {
           try {
-            const { startWcPredictionsJob } = await import("./jobs/wcPredictionsJob");
-            startWcPredictionsJob();
+            if (wcLive) {
+              const { startWcPredictionsJob } = await import("./jobs/wcPredictionsJob");
+              startWcPredictionsJob();
+            } else {
+              console.log("[WC] بطولة منتهية — تسوية توقّعات المونديال معطّلة (WORLD_CUP_LIVE_ENABLED != true)");
+            }
           } catch (error) {
             console.error("[Server] Error starting world cup predictions job:", error);
           }
@@ -2126,6 +2018,18 @@ if (!(globalThis as any).__sabqServer) {
             startRadarJob();
           } catch (error) {
             console.error("[Server] Error starting radar job:", error);
+          }
+        }, BACKGROUND_JOB_DELAY);
+      }
+
+      // رصد البنك المركزي السعودي (اقتصاد سبق الحي): نفس النمط — فحص القيادة داخل الدورة
+      if (enableBackgroundWorkers) {
+        setTimeout(async () => {
+          try {
+            const { startSamaWatchJob } = await import("./jobs/samaWatchJob");
+            startSamaWatchJob();
+          } catch (error) {
+            console.error("[Server] Error starting SAMA watch job:", error);
           }
         }, BACKGROUND_JOB_DELAY);
       }

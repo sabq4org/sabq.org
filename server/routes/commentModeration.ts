@@ -12,46 +12,82 @@ import { z } from "zod";
 import { db } from "../db";
 import { userRoles, roles, users, comments } from "@shared/schema";
 import { eq, sql } from "drizzle-orm";
+import { PERMISSION_CODES, SUPERUSER_ROLE_NAMES } from "@shared/rbac-constants";
+import { userHasPermission } from "../rbac";
+import { parsePage, parseLimit, parseOffset } from "../utils/pagination";
 
 const router = Router();
 
-// List of moderator roles that can access comment moderation features
-const MODERATOR_ROLES = ['admin', 'superadmin', 'editor', 'chief_editor', 'moderator', 'comments_moderator'];
+/**
+ * أدوار إشراف التعليقات — تشمل SUPERUSER_ROLE_NAMES (admin / system_admin / …)
+ * حتى لا تُرفض لوحة `/dashboard/ai-moderation` لحسابات مدير النظام التي
+ * ترى العنصر في الشريط الجانبي (صلاحية *) بينما القائمة القديمة كانت
+ * تُسقِط `system_admin` فترجع /api/moderation/* بـ 403 والواجهة تبدو فارغة.
+ */
+const MODERATOR_ROLES: readonly string[] = [
+  ...SUPERUSER_ROLE_NAMES,
+  "super_admin",
+  "editor",
+  "chief_editor",
+  "moderator",
+  "comments_moderator",
+];
 
 async function requireModeratorAuth(req: Request, res: Response, next: NextFunction) {
   const user = (req as any).user;
-  if (!user) {
+  if (!user?.id) {
     return res.status(401).json({ error: "يجب تسجيل الدخول للقيام بهذا الإجراء" });
   }
-  
-  // Check 1: Legacy role field in users table
+
+  // 1) صلاحية comments.view — مصدر الحقيقة مع الشريط الجانبي؛
+  //    userHasPermission يختصر SUPERUSER (بما فيه system_admin).
+  try {
+    if (await userHasPermission(user.id, PERMISSION_CODES.COMMENTS_VIEW)) {
+      return next();
+    }
+  } catch (error) {
+    console.error("[Moderation] Permission check error:", error);
+  }
+
+  // 2) دور نصّي قديم في users.role
   if (user.role && MODERATOR_ROLES.includes(user.role)) {
     return next();
   }
-  
-  // Check 2: RBAC user_roles table (for new role-based system)
+
+  // 3) أدوار RBAC في user_roles (محرر / مشرف تعليقات بلا comments.view صريح في الخريطة)
   try {
     const rbacRoles = await db
       .select({ roleName: roles.name })
       .from(userRoles)
       .innerJoin(roles, eq(userRoles.roleId, roles.id))
       .where(eq(userRoles.userId, user.id));
-    
-    const userRoleNames = rbacRoles.map(r => r.roleName);
-    const hasModeratorRole = userRoleNames.some(roleName => MODERATOR_ROLES.includes(roleName));
-    
-    if (hasModeratorRole) {
-      console.log(`[Moderation] RBAC auth granted for user ${user.email} with roles: ${userRoleNames.join(', ')}`);
+
+    const userRoleNames = rbacRoles.map((r) => r.roleName);
+    if (userRoleNames.some((roleName) => MODERATOR_ROLES.includes(roleName))) {
+      console.log(`[Moderation] RBAC auth granted for user ${user.email} with roles: ${userRoleNames.join(", ")}`);
       return next();
     }
-    
-    console.log(`[Moderation] Access denied for user ${user.email}. Legacy role: ${user.role}, RBAC roles: ${userRoleNames.join(', ')}`);
+
+    console.log(
+      `[Moderation] Access denied for user ${user.email}. Legacy role: ${user.role}, RBAC roles: ${userRoleNames.join(", ")}`,
+    );
   } catch (error) {
     console.error("[Moderation] RBAC check error:", error);
   }
-  
+
   return res.status(403).json({ error: "ليس لديك صلاحية للوصول إلى هذه الميزة" });
 }
+
+// SECURITY: gate the WHOLE router, not route by route.
+// Half of these routes were declared without the guard, so anyone on the
+// internet could read every commenter's email (/search/commenters), dump
+// unpublished comment text (/comments, /results, /search/comments), and burn
+// AI spend while overwriting stored moderation verdicts (/analyze-all,
+// /analyze/:commentId). Gating at the mount point makes the default
+// fail-closed: a new route added below cannot be exposed by omission.
+// Every consumer is an admin surface (AIModerationDashboard,
+// SentimentInsights, ModerationAdvancedSearch) — nothing public reads this.
+router.use(requireModeratorAuth);
 
 // Analyze a comment with AI
 router.post("/analyze", async (req: Request, res: Response) => {
@@ -93,7 +129,7 @@ router.get("/sentiment-stats", async (req: Request, res: Response) => {
 });
 
 // Editorial sentiment insights (نبض الجمهور dashboard)
-router.get("/sentiment-insights", requireModeratorAuth, async (req: Request, res: Response) => {
+router.get("/sentiment-insights", async (req: Request, res: Response) => {
   try {
     const days = parseInt((req.query.days as string) || "7", 10) || 7;
     const insights = await getSentimentInsights(days);
@@ -113,7 +149,7 @@ router.get("/results", async (req: Request, res: Response) => {
       classification: classification as string | undefined,
       minScore: minScore ? parseInt(minScore as string, 10) : undefined,
       maxScore: maxScore ? parseInt(maxScore as string, 10) : undefined,
-      limit: parseInt(limit as string, 10),
+      limit: parseLimit(limit, 50, 200),
     });
     
     res.json(results);
@@ -184,8 +220,8 @@ router.get("/comments", async (req: Request, res: Response) => {
       classification: classification as string | undefined,
       status: status as string | undefined,
       search: search as string | undefined,
-      page: parseInt(page as string, 10),
-      limit: parseInt(limit as string, 10),
+      page: parsePage(page),
+      limit: parseLimit(limit, 20, 200),
     };
 
     const result = await storage.getCommentsForModeration(filters);
@@ -197,7 +233,7 @@ router.get("/comments", async (req: Request, res: Response) => {
 });
 
 // Re-analyze a comment
-router.post("/reanalyze/:commentId", requireModeratorAuth, async (req: Request, res: Response) => {
+router.post("/reanalyze/:commentId", async (req: Request, res: Response) => {
   try {
     const { commentId } = req.params;
     
@@ -219,7 +255,7 @@ router.post("/reanalyze/:commentId", requireModeratorAuth, async (req: Request, 
 });
 
 // Approve a comment
-router.post("/approve/:commentId", requireModeratorAuth, async (req: Request, res: Response) => {
+router.post("/approve/:commentId", async (req: Request, res: Response) => {
   try {
     const { commentId } = req.params;
     const userId = (req as any).user?.id;
@@ -238,7 +274,7 @@ router.post("/approve/:commentId", requireModeratorAuth, async (req: Request, re
 });
 
 // Reject a comment
-router.post("/reject/:commentId", requireModeratorAuth, async (req: Request, res: Response) => {
+router.post("/reject/:commentId", async (req: Request, res: Response) => {
   try {
     const { commentId } = req.params;
     const { reason } = req.body;
@@ -261,7 +297,7 @@ router.post("/reject/:commentId", requireModeratorAuth, async (req: Request, res
 });
 
 // Bulk actions
-router.post("/bulk", requireModeratorAuth, async (req: Request, res: Response) => {
+router.post("/bulk", async (req: Request, res: Response) => {
   try {
     const { commentIds, action, reason } = req.body;
     const userId = (req as any).user?.id;
@@ -322,7 +358,7 @@ const editCommentSchema = z.object({
   reason: z.string().max(500, "السبب طويل جداً").optional(),
 });
 
-router.put("/edit/:commentId", requireModeratorAuth, async (req: Request, res: Response) => {
+router.put("/edit/:commentId", async (req: Request, res: Response) => {
   try {
     const { commentId } = req.params;
     
@@ -369,7 +405,7 @@ const deleteCommentSchema = z.object({
   reason: z.string().max(500, "السبب طويل جداً").optional(),
 });
 
-router.delete("/delete/:commentId", requireModeratorAuth, async (req: Request, res: Response) => {
+router.delete("/delete/:commentId", async (req: Request, res: Response) => {
   try {
     const { commentId } = req.params;
     
@@ -439,7 +475,7 @@ router.get("/details/:commentId", async (req: Request, res: Response) => {
 });
 
 // Get member profile with statistics (for moderators)
-router.get("/member/:memberId", requireModeratorAuth, async (req: Request, res: Response) => {
+router.get("/member/:memberId", async (req: Request, res: Response) => {
   try {
     const { memberId } = req.params;
     
@@ -457,7 +493,7 @@ router.get("/member/:memberId", requireModeratorAuth, async (req: Request, res: 
 });
 
 // Get member comment history with filtering (for moderators)
-router.get("/member/:memberId/comments", requireModeratorAuth, async (req: Request, res: Response) => {
+router.get("/member/:memberId/comments", async (req: Request, res: Response) => {
   try {
     const { memberId } = req.params;
     const { status, classification, sortBy, sortOrder, limit, offset } = req.query;
@@ -467,8 +503,8 @@ router.get("/member/:memberId/comments", requireModeratorAuth, async (req: Reque
       classification: classification as string,
       sortBy: sortBy as 'date' | 'score',
       sortOrder: sortOrder as 'asc' | 'desc',
-      limit: limit ? parseInt(limit as string) : undefined,
-      offset: offset ? parseInt(offset as string) : undefined,
+      limit: limit ? parseLimit(limit, 20, 200) : undefined,
+      offset: offset ? parseOffset(offset) : undefined,
     });
     
     res.json(result);
@@ -485,7 +521,7 @@ const bulkActionSchema = z.object({
   reason: z.string().optional(),
 });
 
-router.post("/member/:memberId/bulk-action", requireModeratorAuth, async (req: Request, res: Response) => {
+router.post("/member/:memberId/bulk-action", async (req: Request, res: Response) => {
   try {
     const { memberId } = req.params;
     const moderatorId = (req as any).user?.id;
@@ -539,7 +575,7 @@ const bulkActionByFilterSchema = z.object({
   reason: z.string().optional(),
 });
 
-router.post("/member/:memberId/bulk-action-by-filter", requireModeratorAuth, async (req: Request, res: Response) => {
+router.post("/member/:memberId/bulk-action-by-filter", async (req: Request, res: Response) => {
   try {
     const { memberId } = req.params;
     const moderatorId = (req as any).user?.id;
@@ -753,7 +789,7 @@ router.get("/search/commenters", async (req: Request, res: Response) => {
             )`
           : undefined
       )
-      .limit(parseInt(limit as string, 10));
+      .limit(parseLimit(limit, 20, 200));
     
     res.json(commentersData);
   } catch (error) {

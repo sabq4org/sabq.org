@@ -12,7 +12,7 @@
 # locally and mount dist/public into the container).
 
 # Stage 1: Builder
-FROM node:20-alpine AS builder
+FROM node:20.20.2-alpine AS builder
 
 # Bumped to bust Railway's docker layer cache when mobileApiRoutes.ts
 # changes weren't being picked up despite commits landing on main. Any
@@ -35,7 +35,7 @@ COPY . .
 RUN npm run build:server
 
 # Stage 2: Production
-FROM node:20-alpine AS production
+FROM node:20.20.2-alpine AS production
 
 WORKDIR /app
 
@@ -70,12 +70,16 @@ COPY --from=builder /app/drizzle.config.ts ./
 # PassKit service reads from disk relative to process.cwd() (=/app):
 #   - server/lib/passkit/pass-template.pass/         (press card model)
 #   - server/lib/passkit/loyalty-pass-template.pass/ (loyalty card model)
+#   - server/lib/passkit/coupon-pass-template.pass/  (سبق بلس voucher model)
 #   - certs/wwdr.pem                                 (Apple intermediate)
 # They were missing in the prior image, which is why /api/v1/wallet/press/issue
 # was throwing "Cannot import model: directory /app/server/lib/passkit/
 # pass-template.pass not found" even after env-var creds were configured.
+# Any NEW .pass template must get its own COPY line here or it will 404 in
+# production while working locally.
 COPY --from=builder /app/server/lib/passkit/pass-template.pass ./server/lib/passkit/pass-template.pass
 COPY --from=builder /app/server/lib/passkit/loyalty-pass-template.pass ./server/lib/passkit/loyalty-pass-template.pass
+COPY --from=builder /app/server/lib/passkit/coupon-pass-template.pass ./server/lib/passkit/coupon-pass-template.pass
 COPY --from=builder /app/certs ./certs
 
 # كتالوج الأنظمة — السجل + SYSTEM.md + لقطة الجرد (للوحة /dashboard/systems-catalog)
@@ -117,4 +121,8 @@ EXPOSE 5000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
   CMD wget --no-verbose --tries=1 --spider http://localhost:5000/health || exit 1
 
-CMD ["node", "dist/index.js"]
+# --max-old-space-size: سقف صريح لكومة V8. تسرّب فجر 2026-07-25 رفع RSS إلى
+# 3.1GB وحوّل العملية إلى zombie تحت وقفات GC لساعات بلا انهيار — بسقفٍ أدنى
+# تنهار العملية سريعًا وتلتقطها restartPolicyType=ON_FAILURE فتعود خلال ثوانٍ.
+# حارس server/utils/processWatchdog.ts يخرج برشاقة قبل هذا السقف أصلًا.
+CMD ["node", "--max-old-space-size=3072", "dist/index.js"]

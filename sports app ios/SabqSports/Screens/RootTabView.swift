@@ -1,9 +1,9 @@
 import SwiftUI
 
 // جذر التطبيق — خمسة تبويبات. المباريات (مركز المباريات الموحّد لكل البطولات) ·
-// روشن (هب الدوري = الرئيسية) · البطولات (بقية البطولات) · عالمية (كل مباريات
-// العالم الجارية الآن) · حسابي. «التوقّعات» (نظام البركة المتدرّجة المعمّم) تُفتح
-// من داخل صفحة «حسابي». مركز المباراة وصفحات النادي/اللاعب تُفتح من داخل التبويبات.
+// فريقي (هب الفريق المفضّل بدوريه) · البطولات · عالمية (كل مباريات
+// العالم الجارية الآن) · حسابي. «التوقّعات» (المنصة المركزية predictions-core)
+// تُفتح من داخل صفحة «حسابي». مركز المباراة وصفحات النادي/اللاعب تُفتح من داخل التبويبات.
 struct RootTabView: View {
     @Environment(SpTabBarVisibility.self) private var tabBarVis
     @Environment(SpAppRouter.self) private var router
@@ -38,7 +38,7 @@ struct RootTabView: View {
             SpLazyTab(active: router.selectedTab == .roshn) {
                 HomeView()
             }
-                .tabItem { Label(L("روشن"), systemImage: "trophy.fill") }
+                .tabItem { Label(L("فريقي"), systemImage: "shield.lefthalf.filled") }
                 .toolbar(tabBarVisibility, for: .tabBar)
                 .tag(SpTab.roshn)
 

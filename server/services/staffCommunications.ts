@@ -14,6 +14,50 @@ import {
 } from "@shared/schema";
 import { eq, and, desc, inArray, sql, count, or, ilike, lte } from "drizzle-orm";
 import { sendEmailNotification } from "./email";
+import { toMediaLicenseStatus } from "./mediaLicenseService";
+import { isInstitutionalMediaByline } from "@shared/mediaLicense";
+
+/** فلتر الترخيص المهني على جمهور حملة «راسل الزملاء» — يُحفظ في metadata.licenseFilter */
+export type StaffCommLicenseFilter = "all" | "with_valid" | "without_valid";
+
+function parseLicenseFilter(metadata: unknown): StaffCommLicenseFilter {
+  const raw = (metadata as { licenseFilter?: string } | null | undefined)?.licenseFilter;
+  if (raw === "with_valid" || raw === "without_valid") return raw;
+  return "all";
+}
+
+async function applyLicenseFilter(
+  recipients: Array<{ id: string; email: string; name: string }>,
+  filter: StaffCommLicenseFilter,
+): Promise<Array<{ id: string; email: string; name: string }>> {
+  if (filter === "all" || recipients.length === 0) return recipients;
+
+  const ids = recipients.map((r) => r.id);
+  const rows = await db
+    .select({
+      id: users.id,
+      mediaLicenseNumber: users.mediaLicenseNumber,
+      mediaLicenseFileKey: users.mediaLicenseFileKey,
+      mediaLicenseSubmittedAt: users.mediaLicenseSubmittedAt,
+      mediaLicenseExpiresAt: users.mediaLicenseExpiresAt,
+      mediaLicenseReviewStatus: users.mediaLicenseReviewStatus,
+      mediaLicenseCorrectionRequestedAt: users.mediaLicenseCorrectionRequestedAt,
+    })
+    .from(users)
+    .where(inArray(users.id, ids));
+
+  const validById = new Map<string, boolean>();
+  for (const row of rows) {
+    const valid =
+      isInstitutionalMediaByline(row.id) || toMediaLicenseStatus(row).valid;
+    validById.set(row.id, valid);
+  }
+
+  return recipients.filter((r) => {
+    const valid = validById.get(r.id) ?? false;
+    return filter === "with_valid" ? valid : !valid;
+  });
+}
 
 // Saudi Arabia timezone offset (UTC+3)
 const SAUDI_TIMEZONE_OFFSET_HOURS = 3;
@@ -61,13 +105,13 @@ function convertScheduledTimeToUTC(value: string | Date | null): Date | null {
   return new Date(strValue);
 }
 
-function getUserDisplayName(user: { firstName?: string | null; lastName?: string | null; email: string }): string {
+function getUserDisplayName(user: { firstName?: string | null; lastName?: string | null; email: string | null }): string {
   if (user.firstName && user.lastName) {
     return `${user.firstName} ${user.lastName}`;
   }
   if (user.firstName) return user.firstName;
   if (user.lastName) return user.lastName;
-  return user.email;
+  return user.email || "عضو سبق";
 }
 
 export interface GroupWithMembers extends StaffCommunicationGroup {
@@ -345,7 +389,7 @@ export class StaffCommunicationsService {
       }
     }
 
-    return recipients;
+    return applyLicenseFilter(recipients, parseLicenseFilter(campaign.metadata));
   }
 
   async sendCampaign(

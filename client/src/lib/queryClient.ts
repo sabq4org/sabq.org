@@ -273,14 +273,35 @@ function handleSessionExpiration() {
   }, 2000);
 }
 
+/**
+ * الخادم يقول: «هذا 401 ليس انتهاء جلسة، بل تعذّرت قراءتها الآن».
+ *
+ * يحدث أثناء عطل عابر في Redis: الجلسة موجودة ولم تُحذف، لكن المخزنين
+ * فشلا معًا فعامل الخادمُ الطلبَ كزائر بلا جلسة (بدل رمي 500). بدون هذا
+ * التمييز يبدو الردّان متطابقين عند العميل، فيعرض «انتهت صلاحية جلستك»
+ * ويحوّل المحرّر إلى صفحة الدخول — وقد يفقد مسودّة غير محفوظة.
+ */
+export const SESSION_DEGRADED_HEADER = "x-session-degraded";
+export const SESSION_DEGRADED_MESSAGE = "تعذّرت قراءة الجلسة مؤقتاً، جارٍ إعادة المحاولة";
+
+export function isDegradedSessionResponse(res: Response): boolean {
+  return res.status === 401 && res.headers.get(SESSION_DEGRADED_HEADER) === "1";
+}
+
 async function throwIfResNotOk(res: Response, silent = false) {
   if (!res.ok) {
+    // قبل أي شيء: 401 بسبب تعذّر القراءة لا يُعامَل انتهاءَ جلسة. نرمي خطأ
+    // قابلاً لإعادة المحاولة فيتكفّل بها retry أدناه، والمستخدم يبقى داخلاً.
+    if (isDegradedSessionResponse(res)) {
+      throw new Error(SESSION_DEGRADED_MESSAGE);
+    }
+
     const text = (await res.text()) || res.statusText;
-    
+
     if (res.status === 401 && !silent) {
       handleSessionExpiration();
     }
-    
+
     if (res.status === 429) {
       throw new Error("RATE_LIMITED");
     }
@@ -361,6 +382,11 @@ export function isRetriableError(error: unknown): boolean {
 
   // Anonymous rate-limit throttling (mapped in throwIfResNotOk).
   if (msg === "RATE_LIMITED") return true;
+
+  // تعذّرت قراءة الجلسة أثناء عطل عابر في المخزن — الجلسة قائمة ولم تُحذف،
+  // فإعادة المحاولة بعد ثانية أو ثانيتين تنجح غالباً. هذا ما يجعل المحرّر
+  // يبقى داخل اللوحة بدل أن يُحوَّل إلى /login.
+  if (msg === SESSION_DEGRADED_MESSAGE) return true;
 
   // Network-layer failures — request never completed. These are the
   // idle-tab-resume failures this whole change exists to recover from.
@@ -456,10 +482,16 @@ export async function apiRequest<T = any>(
             reject(new Error(`Failed to parse response: ${error}`));
           }
         } else {
+          // نفس التمييز في مسار XHR (رفع الملفات): تعذّر القراءة ليس انتهاء جلسة
+          if (xhr.status === 401 && xhr.getResponseHeader(SESSION_DEGRADED_HEADER) === "1") {
+            reject(new Error(SESSION_DEGRADED_MESSAGE));
+            return;
+          }
+
           if (xhr.status === 401 && !silent) {
             handleSessionExpiration();
           }
-          
+
           if (xhr.status === 403) {
             try {
               const data = JSON.parse(xhr.responseText);
@@ -539,7 +571,7 @@ export async function apiRequest<T = any>(
     });
   }
 
-  async function makeRequest(retryAttempt = 0): Promise<T> {
+  async function makeRequest(retryAttempt = 0, degradedAttempt = 0): Promise<T> {
     const currentCsrfToken = getCsrfToken();
     
     const headers: Record<string, string> = {
@@ -573,8 +605,16 @@ export async function apiRequest<T = any>(
       }
     }
 
+    // الطفرات لا تُعيد المحاولة تلقائياً (retry:false)، فلو تعذّرت قراءة
+    // الجلسة أثناء حفظ خبر لفشل الحفظ أمام المحرّر. إعادة محاولة شفافة
+    // مرتين بتباطؤ تكفي لعبور عطل Redis العابر.
+    if (isDegradedSessionResponse(res) && degradedAttempt < 2) {
+      await new Promise((resolve) => setTimeout(resolve, retryDelayWithJitter(degradedAttempt)));
+      return makeRequest(retryAttempt, degradedAttempt + 1);
+    }
+
     await throwIfResNotOk(res, silent);
-    
+
     const contentType = res.headers.get("content-type");
     if (contentType && contentType.includes("application/json")) {
       return await res.json();
@@ -617,6 +657,13 @@ export function getQueryFn<T = unknown>(options: {
       credentials: "include",
       signal,
     });
+
+    // الترتيب مقصود: «تعذّرت القراءة» يُفحص قبل returnNull. لولا ذلك لعاد
+    // /api/auth/user بـnull أثناء عطل Redis، فتستنتج الواجهة أن المستخدم
+    // غير مسجّل وتُظهره زائرًا — وهو مسجّل فعلًا.
+    if (isDegradedSessionResponse(res)) {
+      throw new Error(SESSION_DEGRADED_MESSAGE);
+    }
 
     if (unauthorizedBehavior === "returnNull" && res.status === 401) {
       return null as unknown as T;

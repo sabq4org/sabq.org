@@ -37,6 +37,15 @@ import {
   isBlockHidden,
 } from "../services/tournamentBlockSettings";
 
+import { SportsComponentSnapshot, ComponentSnapshotUnavailable, sportsComponentDay } from "../services/sportsComponentSnapshot";
+import { getApiFootballRetryAfterMs } from "../services/apiFootballClient";
+import { currentSportsLang } from "../services/sportsLang";
+
+const homeSnapshot = new SportsComponentSnapshot<{
+  ov: Awaited<ReturnType<typeof getKcOverview>>;
+  fixtures: Awaited<ReturnType<typeof getKcFixtures>>;
+}>({ blockedForMs: getApiFootballRetryAfterMs });
+
 const NOT_CONFIGURED = {
   configured: false,
   message: "تغطية كأس خادم الحرمين الشريفين غير مفعّلة حاليًا",
@@ -53,14 +62,28 @@ export function registerKingsCupRoutes(app: Express) {
 
   // نظرة عامة — تُستهلك من بانر الرئيسية ورأس صفحة القسم. blockHidden يخفي
   // بلوك الواجهة فقط (لا نفرّغ الحمولة كي تعمل صفحة /kings-cup نفسها).
-  app.get("/api/kings-cup/overview", async (_req, res) => {
+  app.get("/api/kings-cup/overview", async (req, res) => {
+    const resilient = req.query.resilient === "1";
+    if (resilient && !isKingsCupConfigured()) {
+      res.set("Cache-Control", "no-store");
+      res.json(NOT_CONFIGURED);
+      return;
+    }
     if (!guard(res)) return;
     try {
-      const [ov, fixtures, settings] = await Promise.all([
-        getKcOverview(),
-        getKcFixtures().catch(() => []),
+      const load = async () => {
+        const [ov, fixtures] = await Promise.all([getKcOverview(), getKcFixtures()]);
+        return { ov, fixtures };
+      };
+      // Cache provider data only: editorial hide/manual-champion settings must
+      // still be read on every request, including during an upstream outage.
+      const [snapshot, settings] = await Promise.all([
+        resilient
+          ? homeSnapshot.get(`kc:${currentSportsLang()}:${sportsComponentDay()}:${process.env.KC_SEASON ?? "auto"}`, load)
+          : Promise.all([getKcOverview(), getKcFixtures().catch(() => [])]).then(([ov, fixtures]) => ({ data: { ov, fixtures }, freshness: undefined })),
         getTournamentBlockSettings("kings-cup"),
       ]);
+      const { ov, fixtures } = snapshot.data;
       // البطل اليدوي من اللوحة يتقدّم على المكتشف تلقائيًّا
       let champion = ov.champion;
       if (settings.manualChampionTeamId && champion?.team.id !== settings.manualChampionTeamId) {
@@ -96,11 +119,20 @@ export function registerKingsCupRoutes(app: Express) {
       res.set(
         "Cache-Control",
         hasLive
-          ? "public, max-age=0, s-maxage=10, stale-while-revalidate=30"
+          ? "public, max-age=0, s-maxage=5, stale-while-revalidate=15"
           : "public, max-age=30, s-maxage=60, stale-while-revalidate=300",
       );
-      res.json({ ...ov, blockHidden: isBlockHidden(settings), champion, matchday });
+      if (resilient) res.set("Cache-Control", "no-store");
+      res.json({ ...ov, blockHidden: isBlockHidden(settings), champion, matchday,
+        ...(snapshot.freshness ? { freshness: snapshot.freshness } : {}),
+      });
     } catch (error) {
+      if (resilient) {
+        res.set("Cache-Control", "no-store");
+        res.set("Retry-After", String(error instanceof ComponentSnapshotUnavailable ? error.retryAfterSeconds : 15));
+        res.status(503).json({ message: "تعذر تحديث كأس الملك مؤقتًا" });
+        return;
+      }
       console.error("[KingsCup] overview failed:", error);
       res.status(502).json({ message: "تعذر جلب نظرة كأس الملك حاليًا" });
     }
@@ -114,7 +146,7 @@ export function registerKingsCupRoutes(app: Express) {
       res.set(
         "Cache-Control",
         hasLive
-          ? "public, max-age=0, s-maxage=10, stale-while-revalidate=30"
+          ? "public, max-age=0, s-maxage=5, stale-while-revalidate=15"
           : "public, max-age=30, s-maxage=120, stale-while-revalidate=300",
       );
       res.json({ fixtures });
@@ -127,7 +159,7 @@ export function registerKingsCupRoutes(app: Express) {
   app.get("/api/kings-cup/live", async (_req, res) => {
     if (!guard(res)) return;
     try {
-      res.set("Cache-Control", "public, max-age=0, s-maxage=10, stale-while-revalidate=30");
+      res.set("Cache-Control", "public, max-age=0, s-maxage=5, stale-while-revalidate=15");
       res.json({ fixtures: await getKcLiveFixtures() });
     } catch (error) {
       console.error("[KingsCup] live failed:", error);
@@ -143,7 +175,7 @@ export function registerKingsCupRoutes(app: Express) {
       res.set(
         "Cache-Control",
         hasLive
-          ? "public, max-age=0, s-maxage=10, stale-while-revalidate=30"
+          ? "public, max-age=0, s-maxage=5, stale-while-revalidate=15"
           : "public, max-age=120, s-maxage=300, stale-while-revalidate=600",
       );
       res.json(bracket);
@@ -167,8 +199,18 @@ export function registerKingsCupRoutes(app: Express) {
   app.get("/api/kings-cup/scorers", async (_req, res) => {
     if (!guard(res)) return;
     try {
-      res.set("Cache-Control", "public, max-age=300, s-maxage=900, stale-while-revalidate=1800");
-      res.json({ scorers: await getKcScorers() });
+      const [scorers, live] = await Promise.all([
+        getKcScorers(),
+        getKcLiveFixtures().catch(() => []),
+      ]);
+      const hasLive = live.some((f) => f.status?.live);
+      res.set(
+        "Cache-Control",
+        hasLive
+          ? "public, max-age=0, s-maxage=60, stale-while-revalidate=120"
+          : "public, max-age=300, s-maxage=900, stale-while-revalidate=1800",
+      );
+      res.json({ scorers });
     } catch (error) {
       console.error("[KingsCup] scorers failed:", error);
       res.status(502).json({ message: "تعذر جلب قائمة الهدّافين حاليًا" });
@@ -178,8 +220,18 @@ export function registerKingsCupRoutes(app: Express) {
   app.get("/api/kings-cup/assists", async (_req, res) => {
     if (!guard(res)) return;
     try {
-      res.set("Cache-Control", "public, max-age=300, s-maxage=900, stale-while-revalidate=1800");
-      res.json({ leaders: await getKcAssists() });
+      const [leaders, live] = await Promise.all([
+        getKcAssists(),
+        getKcLiveFixtures().catch(() => []),
+      ]);
+      const hasLive = live.some((f) => f.status?.live);
+      res.set(
+        "Cache-Control",
+        hasLive
+          ? "public, max-age=0, s-maxage=60, stale-while-revalidate=120"
+          : "public, max-age=300, s-maxage=900, stale-while-revalidate=1800",
+      );
+      res.json({ leaders });
     } catch (error) {
       console.error("[KingsCup] assists failed:", error);
       res.status(502).json({ message: "تعذر جلب قائمة صنّاع الأهداف حاليًا" });
@@ -189,8 +241,18 @@ export function registerKingsCupRoutes(app: Express) {
   app.get("/api/kings-cup/cards", async (_req, res) => {
     if (!guard(res)) return;
     try {
-      const [yellow, red] = await Promise.all([getKcYellowCards(), getKcRedCards()]);
-      res.set("Cache-Control", "public, max-age=300, s-maxage=900, stale-while-revalidate=1800");
+      const [yellow, red, live] = await Promise.all([
+        getKcYellowCards(),
+        getKcRedCards(),
+        getKcLiveFixtures().catch(() => []),
+      ]);
+      const hasLive = live.some((f) => f.status?.live);
+      res.set(
+        "Cache-Control",
+        hasLive
+          ? "public, max-age=0, s-maxage=60, stale-while-revalidate=120"
+          : "public, max-age=300, s-maxage=900, stale-while-revalidate=1800",
+      );
       res.json({ yellow, red });
     } catch (error) {
       console.error("[KingsCup] cards failed:", error);
@@ -398,7 +460,7 @@ export function registerKingsCupRoutes(app: Express) {
       res.set(
         "Cache-Control",
         detail.fixture.status.live
-          ? "public, max-age=0, s-maxage=10, stale-while-revalidate=30"
+          ? "public, max-age=0, s-maxage=5, stale-while-revalidate=15"
           : "public, max-age=60, s-maxage=120, stale-while-revalidate=300",
       );
       res.json(detail);

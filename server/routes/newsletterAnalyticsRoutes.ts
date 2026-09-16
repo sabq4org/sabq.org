@@ -5,6 +5,8 @@ import { eq, desc, sql, and } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { z } from "zod";
 import { requireAuth } from "../rbac";
+import { isSafeRedirectUrl } from "../utils/safeRedirect";
+import { parseLimit, parseOffset } from "../utils/pagination";
 
 const router = Router();
 
@@ -15,8 +17,8 @@ const TRANSPARENT_1X1_GIF = Buffer.from(
 
 router.get("/campaigns", requireAuth, async (req: Request, res: Response) => {
   try {
-    const limit = parseInt(req.query.limit as string) || 50;
-    const offset = parseInt(req.query.offset as string) || 0;
+    const limit = parseLimit(req.query.limit, 50, 200);
+    const offset = parseOffset(req.query.offset);
 
     const campaigns = await db
       .select()
@@ -131,6 +133,16 @@ router.get("/track/click/:trackingId", async (req: Request, res: Response) => {
       return res.status(400).json({ message: "Missing redirect URL" });
     }
 
+    // SECURITY: `url` is an unauthenticated query parameter that this handler
+    // redirects to — an open redirect wearing a sabq.org address, which is
+    // exactly what a phishing campaign wants out of a newsletter link. Reject
+    // before the write so the events table can't be stuffed with foreign URLs
+    // either.
+    if (!isSafeRedirectUrl(url)) {
+      console.warn(`[Newsletter Analytics] blocked unsafe redirect target: ${url}`);
+      return res.status(400).json({ message: "Redirect URL not allowed" });
+    }
+
     const parts = trackingId.split("_");
     const campaignId = parts[0];
     const emailHash = parts.slice(1).join("_");
@@ -161,8 +173,10 @@ router.get("/track/click/:trackingId", async (req: Request, res: Response) => {
     res.redirect(url);
   } catch (error) {
     console.error("[Newsletter Analytics] Error tracking click:", error);
+    // Same check on the failure path — logging a tracking error must not become
+    // a second, unvalidated way to reach res.redirect().
     const url = req.query.url as string;
-    if (url) {
+    if (isSafeRedirectUrl(url)) {
       res.redirect(url);
     } else {
       res.status(500).json({ message: "Failed to track click" });

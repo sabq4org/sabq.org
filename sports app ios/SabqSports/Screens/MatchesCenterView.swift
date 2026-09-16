@@ -1265,12 +1265,28 @@ struct MatchesCenterView: View {
                         .font(SportsFonts.app(size: 12, weight: .semibold))
                         .foregroundStyle(SpTheme.onDarkDim)
                         .listRowBackground(Color.clear)
-                    if !favorites.items.isEmpty {
-                        Button(role: .destructive) {
-                            favorites.removeAll()
-                        } label: {
-                            Label(L("إلغاء التحديد"), systemImage: "xmark.circle")
-                                .font(SportsFonts.app(size: 14, weight: .bold))
+                    let allSelected = !competitions.isEmpty && favorites.items.count >= competitions.count
+                        && Set(favorites.items.map(\.slug)) == Set(competitions.map(\.slug))
+                    if !allSelected || !favorites.items.isEmpty {
+                        HStack(spacing: 16) {
+                            if !favorites.items.isEmpty {
+                                Button(role: .destructive) {
+                                    favorites.removeAll()
+                                } label: {
+                                    Label(L("إلغاء التحديد"), systemImage: "xmark.circle")
+                                        .font(SportsFonts.app(size: 14, weight: .bold))
+                                }
+                            }
+                            if !allSelected {
+                                Button {
+                                    favorites.selectAll(from: competitions)
+                                } label: {
+                                    Label(L("تحديد الكل"), systemImage: "checkmark.circle")
+                                        .font(SportsFonts.app(size: 14, weight: .bold))
+                                }
+                                .tint(SpTheme.green)
+                            }
+                            Spacer(minLength: 0)
                         }
                     }
                 }

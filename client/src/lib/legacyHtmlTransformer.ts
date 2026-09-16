@@ -64,29 +64,40 @@ function transformImg(img: HTMLImageElement): void {
 
   const existingStyle = img.getAttribute("style") || "";
   const hasAspect = /aspect-ratio\s*:/i.test(existingStyle);
+  const hasCustomWidth =
+    /(?:^|;)\s*width\s*:/i.test(existingStyle) ||
+    img.hasAttribute("data-width") ||
+    img.classList.contains("sabq-article-image");
+  const widthRule = hasCustomWidth ? "" : "width: 100%;";
 
   if (!hasAspect) {
     if (hasIntrinsicDims) {
       const ratio = `${widthNum} / ${heightNum}`;
+      const styleSuffix = widthRule
+        ? `aspect-ratio: ${ratio}; ${widthRule} height: auto;`
+        : `aspect-ratio: ${ratio}; height: auto;`;
       img.setAttribute(
         "style",
-        `${existingStyle ? existingStyle + ";" : ""}aspect-ratio: ${ratio}; width: 100%; height: auto;`,
+        `${existingStyle ? existingStyle + ";" : ""}${styleSuffix}`,
       );
     } else {
       const cached = finalSrc ? getCachedAspectRatio(finalSrc) : null;
       if (cached) {
+        const styleSuffix = widthRule
+          ? `aspect-ratio: ${formatAspectRatio(cached)}; ${widthRule} height: auto;`
+          : `aspect-ratio: ${formatAspectRatio(cached)}; height: auto;`;
         img.setAttribute(
           "style",
-          `${existingStyle ? existingStyle + ";" : ""}aspect-ratio: ${formatAspectRatio(cached)}; width: 100%; height: auto;`,
+          `${existingStyle ? existingStyle + ";" : ""}${styleSuffix}`,
         );
         img.setAttribute("data-legacy-aspect", "cached");
       } else {
         // No intrinsic dims + no cached ratio → let the image render at its
-        // natural aspect ratio (width:100%; height:auto). Slight layout shift
-        // on load is acceptable; forcing 16/9 was cropping/distorting images.
+        // natural aspect ratio (width:100%; height:auto) unless a custom width is defined.
+        const styleSuffix = widthRule ? `${DEFAULT_IMG_STYLE}` : `height: auto;`;
         img.setAttribute(
           "style",
-          `${existingStyle ? existingStyle + ";" : ""}${DEFAULT_IMG_STYLE}`,
+          `${existingStyle ? existingStyle + ";" : ""}${styleSuffix}`,
         );
         img.setAttribute("data-legacy-aspect", "natural");
       }

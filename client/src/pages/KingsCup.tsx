@@ -42,9 +42,21 @@ export default function KingsCup() {
     refetchIntervalInBackground: false,
   });
 
+  const fixtures = Array.isArray(fixturesData?.fixtures) ? fixturesData.fixtures : [];
+  const hasLiveMatch =
+    fixtures.some((f) => f.status.live) ||
+    (overview?.live?.length ?? 0) > 0 ||
+    Boolean(overview?.matchOfTheDay?.fixture?.status.live);
+
+  // أثناء البث: كل دقيقتين (كاش الخادم SHORT). خارج المباريات: 10 دقائق — نفس روشن.
+  const raceStale = hasLiveMatch ? 2 * 60_000 : 10 * 60_000;
+  const racePoll = hasLiveMatch ? 2 * 60_000 : false;
+
   const { data: scorersData, isLoading: scorersLoading } = useQuery<{ scorers: KcScorer[] }>({
     queryKey: ["/api/kings-cup/scorers"],
-    staleTime: 10 * 60_000,
+    staleTime: raceStale,
+    refetchInterval: racePoll,
+    refetchIntervalInBackground: false,
   });
 
   const { data: teamsData, isLoading: teamsLoading } = useQuery<{ teams: KcTeam[] }>({
@@ -52,7 +64,6 @@ export default function KingsCup() {
     staleTime: 30 * 60_000,
   });
 
-  const fixtures = Array.isArray(fixturesData?.fixtures) ? fixturesData.fixtures : [];
   const scorers = Array.isArray(scorersData?.scorers) ? scorersData.scorers : [];
   const teams = Array.isArray(teamsData?.teams) ? teamsData.teams : [];
 
@@ -75,6 +86,7 @@ export default function KingsCup() {
           scorers={scorers}
           isLoading={scorersLoading}
           tournamentStarted={fixtures.some((f) => f.status.live || f.status.finished)}
+          hasLiveMatch={hasLiveMatch}
           onOpenPlayer={setOpenPlayerId}
         />
         <KcTeams teams={teams} isLoading={teamsLoading} />

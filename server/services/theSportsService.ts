@@ -50,6 +50,8 @@ export const TS_COMPETITION_IDS: Record<string, string> = {
   // متحقَّق حيًّا من competition/additional/list (2026-07-04) — لا يُخلط مع
   // معرّف النخبة الآسيوية القريب شكلًا (9dn1m1ghjpmoepl):
   "kings-cup": "9dn1m1gh44wmoep",           // كأس خادم الحرمين الشريفين (كأس الملك)
+  // من دعم TheSports (2026-08-25) — مباراة التحقق: الأهلي × أوكلاند 26 أغسطس 2026
+  "intercontinental-cup": "kjw2r09h26krz84", // كأس الإنتركونتيننتال (موسم 2026: y39mp1h33kzmojx)
 };
 
 // حالات TheSports: 1=لم تبدأ، 2=ش1، 3=استراحة، 4=ش2، 5/6=وقت إضافي، 7=ركلات،
@@ -102,6 +104,10 @@ export type TsMqttStatus = {
   lastError: string | null;
   messagesReceived: number;
   matchesTracked: number;
+  /** عدد محاولات إعادة الاتصال المتتالية الفاشلة (صفر بعد نجاح الاتصال). */
+  reconnectAttempts: number;
+  /** التباعد الحالي بين المحاولات بالمللي — يتصاعد أسّيًا حتى سقف. */
+  retryDelayMs: number;
 };
 
 let mqttStatus: TsMqttStatus = {
@@ -111,6 +117,8 @@ let mqttStatus: TsMqttStatus = {
   lastError: null,
   messagesReceived: 0,
   matchesTracked: 0,
+  reconnectAttempts: 0,
+  retryDelayMs: 0,
 };
 
 export function setTheSportsMqttStatus(patch: Partial<TsMqttStatus>): void {
@@ -518,18 +526,46 @@ async function getDiaryRaw(dateKey: string): Promise<any[]> {
   return Array.isArray(data?.results) ? data.results : [];
 }
 
+export type TsMatchTeamHint = { homeTsId?: string | null; awayTsId?: string | null };
+
+/**
+ * اختيار صف diary: وقت فريد، أو فضّ التزامن بمعرّفات الفريقين (home_team_id /
+ * away_team_id). الأسماء محجوبة في diary — لا تُستخدم للمطابقة.
+ */
+export function pickTsDiaryMatch(
+  day: unknown[],
+  competitionId: string,
+  kickoffTs: number,
+  teams?: TsMatchTeamHint,
+): string | null {
+  const rows: any[] = Array.isArray(day) ? day : [];
+  const candidates = rows.filter((m) =>
+    m?.competition_id === competitionId &&
+    Math.abs((m?.match_time ?? 0) - kickoffTs) <= 120,
+  );
+  if (candidates.length === 1 && candidates[0]?.id) return String(candidates[0].id);
+  if (candidates.length > 1 && teams?.homeTsId && teams?.awayTsId) {
+    const matched = candidates.filter(
+      (m: any) =>
+        String(m?.home_team_id ?? "") === teams.homeTsId &&
+        String(m?.away_team_id ?? "") === teams.awayTsId,
+    );
+    if (matched.length === 1 && matched[0]?.id) return String(matched[0].id);
+  }
+  return null;
+}
+
 // حلّ معرّف مباراة TheSports لمباراتنا عبر الجسر (بطولة + وقت بداية).
 //
 // التعميم خارج المونديال: نفلتر diary على competitionId ثم نطابق وقت البداية
 // بسماحية دقيقتين. **شرط الأمان: تطابق فريد** — إن وُجدت أكثر من مباراة في نفس
-// البطولة بنفس التوقيت (جولة دوري بمواعيد متزامنة، أو الجولة الأخيرة لمجموعات
-// المونديال) نمتنع عن الربط ونرجع null، فلا نخاطر بربط خاطئ يعطي نتيجة مباراة
-// أخرى. يتراجع المستدعي بهدوء لـSportMonks/API-Football. (الأسماء محجوبة في
-// diary، فلا يمكن فضّ الالتباس بالأسماء بعد — يأتي لاحقًا عبر results_extra.)
+// البطولة بنفس التوقيت (جولة دوري بمواعيد متزامنة) نمتنع عن التخمين بالوقت وحده.
+// يُفضّ الالتباس اختياريًا بـ home_team_id/away_team_id من جسر الفِرق.
 export async function resolveTsMatchId(
   fixtureId: number,
   kickoffTs: number,
-  competitionId: string
+  competitionId: string,
+  teams?: TsMatchTeamHint,
 ): Promise<string | null> {
   const cached = matchIdBridge.get(fixtureId);
   if (cached) return cached;
@@ -537,16 +573,10 @@ export async function resolveTsMatchId(
 
   for (const dateKey of candidateDateKeys(kickoffTs)) {
     const day = await getDiaryRaw(dateKey);
-    const candidates = day.filter(
-      (m) =>
-        m.competition_id === competitionId &&
-        Math.abs((m.match_time ?? 0) - kickoffTs) <= 120
-    );
-    // التباس (مباريات متزامنة في نفس البطولة) → لا نخمّن.
-    if (candidates.length > 1) return null;
-    if (candidates.length === 1 && candidates[0]?.id) {
-      matchIdBridge.set(fixtureId, candidates[0].id);
-      return candidates[0].id;
+    const id = pickTsDiaryMatch(day, competitionId, kickoffTs, teams);
+    if (id) {
+      matchIdBridge.set(fixtureId, id);
+      return id;
     }
   }
   return null;
@@ -1395,7 +1425,7 @@ export interface TsLineup {
 export async function getTsLineup(matchUuid: string): Promise<TsLineup | null> {
   if (!matchUuid || !isTheSportsConfigured() || Date.now() < tsCooldownUntil) return null;
   try {
-    const data = await withSWR(`ts:lineup:${matchUuid}`, 60 * 1000, 5 * 60 * 1000, () =>
+    const data = await withSWR(`ts:lineup:${matchUuid}`, 15 * 1000, 45 * 1000, () =>
       tsGet("match/lineup/detail", { uuid: matchUuid }),
     );
     const r = data?.results;

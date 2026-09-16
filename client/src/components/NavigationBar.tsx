@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { Link } from "wouter";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
+import { apiUrl } from "@/lib/queryClient";
 import type { Category } from "@shared/schema";
 import { filterAICategories } from "@/utils/filterAICategories";
 
@@ -23,7 +24,8 @@ export function NavigationBar() {
     queryKey: ["/api/categories/smart", "core", "active"],
     queryFn: async () => {
       const params = new URLSearchParams({ type: "core", status: "active" });
-      const res = await fetch(`/api/categories/smart?${params}`, { credentials: "include" });
+      // apiUrl بدل fetch الخام — يعمل في وضعي PROXY وDIRECT (قاعدة وقف النزيف)
+      const res = await fetch(apiUrl(`/api/categories/smart?${params}`), { credentials: "include" });
       if (!res.ok) return [];
       return await res.json();
     },
@@ -32,14 +34,16 @@ export function NavigationBar() {
 
   const coreCategories = useMemo(() => filterAICategories(allCoreCategories), [allCoreCategories]);
 
+  // لا نحجز شريطاً فارغاً أسفل الهيدر عندما لا يعيد المصدر تصنيفات.
+  if (coreCategories.length === 0) return null;
+
   return (
     <div className="w-full border-b bg-background hidden md:block">
-      {coreCategories.length > 0 && (
-        <div className="sticky top-16 z-40 bg-background/95 backdrop-blur-sm border-b border-border/30">
-          <div className="container mx-auto px-3 sm:px-6 lg:px-8">
-            <ScrollArea className="w-full whitespace-nowrap">
-              <div className="flex gap-4 sm:gap-6 py-2.5 sm:py-3" dir="rtl">
-                {coreCategories.map((category, index) => (
+      <div className="sticky top-16 z-40 bg-background/95 backdrop-blur-sm border-b border-border/30">
+        <div className="container mx-auto px-3 sm:px-6 lg:px-8">
+          <ScrollArea className="w-full whitespace-nowrap">
+            <div className="flex gap-4 sm:gap-6 py-2.5 sm:py-3" dir="rtl">
+              {coreCategories.map((category, index) => (
                   <Link key={category.id} href={`/category/${category.englishSlug || category.slug}`}>
                     <span
                       className="group cursor-pointer flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors duration-200 whitespace-nowrap"
@@ -50,12 +54,11 @@ export function NavigationBar() {
                     </span>
                   </Link>
                 ))}
-              </div>
-              <ScrollBar orientation="horizontal" className="h-1" />
-            </ScrollArea>
-          </div>
+            </div>
+            <ScrollBar orientation="horizontal" className="h-1" />
+          </ScrollArea>
         </div>
-      )}
+      </div>
     </div>
   );
 }

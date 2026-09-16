@@ -12,7 +12,9 @@ nonisolated enum SabqFormatters {
     /// "٤٥٤٥" because the editorial team standardised on Latin digits
     /// across web + email + dashboard.
     private static let arabicLatinDigits = Locale(identifier: "ar-u-nu-latn")
-    private static let saudiArabicLatinDigits = Locale(identifier: "ar_SA-u-nu-latn")
+    /// معرّف الويب نفسه (`ar-SA-u-ca-gregory-nu-latn`): الصيغة السابقة بشرطة سفلية
+    /// لم تكن تُفعّل الأرقام اللاتينية فظهرت «٠٧:٢٣» في أوقات الرياض.
+    private static let saudiArabicLatinDigits = Locale(identifier: "ar-SA-u-ca-gregory-nu-latn")
 
     static let arabicDate: DateFormatter = {
         let f = DateFormatter()
@@ -48,6 +50,36 @@ nonisolated enum SabqFormatters {
         return f
     }()
 
+    /// تاريخ النشر بتوقيت الرياض بأرقام لاتينية — «12 سبتمبر 2026» (سطر الكاتب في الويب).
+    static let riyadhDate: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = saudiArabicLatinDigits
+        f.calendar = Calendar(identifier: .gregorian)
+        f.timeZone = TimeZone(identifier: "Asia/Riyadh")
+        f.dateFormat = "d MMMM yyyy"
+        return f
+    }()
+
+    /// ساعة النشر 12-ساعة بتوقيت الرياض — «07:23 ص» كما في الويب (`hour12: true`).
+    static let riyadhClock12: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = saudiArabicLatinDigits
+        f.calendar = Calendar(identifier: .gregorian)
+        f.timeZone = TimeZone(identifier: "Asia/Riyadh")
+        f.dateFormat = "hh:mm a"
+        return f
+    }()
+
+    /// تاريخ ووقت مطلقان لسطر «آخر تحديث».
+    static let riyadhDateTime: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = saudiArabicLatinDigits
+        f.calendar = Calendar(identifier: .gregorian)
+        f.timeZone = TimeZone(identifier: "Asia/Riyadh")
+        f.dateFormat = "d MMMM yyyy، hh:mm a"
+        return f
+    }()
+
     static let arabicFullDate: DateFormatter = {
         let f = DateFormatter()
         f.locale = saudiArabicLatinDigits
@@ -66,6 +98,16 @@ nonisolated enum SabqFormatters {
         case 2:    return "دقيقتان قراءة"
         default:   return "\(minutes) دقائق قراءة"
         }
+    }
+
+    /// عدد صحيح مجمّع بأرقام لاتينية (1240 → "1,240") — نظير `formatNumber` في الويب.
+    nonisolated static func groupedLatin(_ n: Int) -> String {
+        let f = NumberFormatter()
+        f.locale = Locale(identifier: "en_US")
+        f.numberStyle = .decimal
+        f.usesGroupingSeparator = true
+        f.maximumFractionDigits = 0
+        return f.string(from: NSNumber(value: n)) ?? String(n)
     }
 
     /// Compact, eye-friendly view count. 1,234 → "1,234". 12,500 → "12.5K".
@@ -277,18 +319,19 @@ enum ArticleCategory: String, CaseIterable, Identifiable {
         }
     }
 
-    nonisolated init(fromSection name: String?) {
+    /// مطابقة دقيقة بالاسم العربي أو الـslug؛ nil إن كان القسم غير معروف للتطبيق.
+    nonisolated static func match(_ name: String?) -> ArticleCategory? {
         let trimmed = name?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        if let match = ArticleCategory(rawValue: trimmed) {
-            self = match
-            return
-        }
+        if let match = ArticleCategory(rawValue: trimmed) { return match }
         let lower = trimmed.lowercased()
-        if let bySlug = ArticleCategory.allCases.first(where: { $0.slug == lower }) {
-            self = bySlug
-            return
-        }
-        self = .saudi
+        return ArticleCategory.allCases.first(where: { $0.slug == lower })
+    }
+
+    /// القسم غير المعروف يسقط على لون «محليات» لأغراض التلوين فقط — اسمه
+    /// يُحمل في `Article.categoryLabel` كي لا يُنسب الخبر إلى المحليات
+    /// (نقل إصلاح أندرويد #1573).
+    nonisolated init(fromSection name: String?) {
+        self = ArticleCategory.match(name) ?? .saudi
     }
 
     private static func color(hex: String) -> Color {
@@ -417,10 +460,23 @@ struct Article: Identifiable, Equatable, Hashable {
     /// list-payload articles. ArticleHtmlParser consumes this — never `body`.
     let bodyHTML: String
     let category: ArticleCategory
+    /// اسم القسم كما أرسله الخادم عندما لا يطابق أحد الأقسام الثابتة.
+    /// nil = الاسم من `category.title`.
+    var categoryLabel: String? = nil
+    /// معرّف التصنيف في الخادم (لبلوك مقالات الرأي المرتبطة). nil في الحمولات القديمة.
+    var categoryId: String? = nil
     let author: String
+    /// سطر الكاتب (نقل الويب #1598): الصورة، الصفة، رابط ملف المراسل، التوثيق،
+    /// وتاريخ التعديل التحريري (يُظهر «آخر تحديث» فقط عند وجوده).
+    var authorImageURL: String? = nil
+    var authorRole: String? = nil
+    var authorSlug: String? = nil
+    var isAuthorVerified: Bool = false
+    var editorialModifiedAt: Date? = nil
     let publishDate: Date
     let isBreaking: Bool
     let isFeatured: Bool
+    var isReading: Bool = false
     var tags: [String]
     let imageURL: String?
     /// Editorial focal point (percentages from top-left) shipped by the
@@ -447,6 +503,32 @@ struct Article: Identifiable, Equatable, Hashable {
     /// Photo packs for weekly-photos articles. Nil for everything else.
     var weeklyPhotos: [APIWeeklyPhoto]? = nil
     var mediaAssets: [APIMediaAsset]? = nil
+    /// زر واتساب في نهاية المقال (من حقل whatsappCta). الإدراج داخل النص عبر HTML.
+    var whatsappCta: APIWhatsAppCta? = nil
+
+    /// اسم القسم المعروض للقارئ: القسم الثابت إن طابق، وإلا اسم الخادم، وإلا «أخبار».
+    var categoryTitle: String { categoryLabel ?? category.title }
+
+    /// تاريخ النشر بتوقيت الرياض («12 سبتمبر 2026»).
+    var publicationDate: String { SabqFormatters.riyadhDate.string(from: publishDate) }
+    /// ساعة النشر («07:23 ص»).
+    var publicationClock: String { SabqFormatters.riyadhClock12.string(from: publishDate) }
+    /// «آخر تحديث» — nil عندما لا يوجد تعديل تحريري مسجّل (كما في الويب).
+    var lastUpdatedLabel: String? {
+        editorialModifiedAt.map { SabqFormatters.riyadhDateTime.string(from: $0) }
+    }
+    /// «قراءة N دقيقة» بصياغة الويب.
+    var readingLabel: String { "قراءة \(readingMinutes) دقيقة" }
+
+    /// صفة الكاتب بقواعد الويب نفسها: صفة ملف المراسل إن وُجدت، وإلا
+    /// «صحيفة إلكترونية سعودية» لحساب الصحيفة، وإلا «مراسل صحفي» عندما يكون
+    /// الكاتب هو المراسل المختار في اللوحة، وإلا «كاتب الخبر».
+    nonisolated static func resolveAuthorRole(name: String, authorId: String?, reporterId: String?, staffTitle: String?) -> String {
+        if let t = staffTitle?.trimmingCharacters(in: .whitespacesAndNewlines), !t.isEmpty { return t }
+        if name.trimmingCharacters(in: .whitespacesAndNewlines) == "صحيفة سبق" { return "صحيفة إلكترونية سعودية" }
+        if let authorId, let reporterId, !authorId.isEmpty, authorId == reporterId { return "مراسل صحفي" }
+        return "كاتب الخبر"
+    }
 
     var readingMinutes: Int {
         max(1, body.count / 800)
@@ -496,8 +578,26 @@ struct Article: Identifiable, Equatable, Hashable {
         hasher.combine(id)
     }
 
+    /// قسم غير معروف لا يُسمّى «محليات»: اسم الخادم ← الاسم المشتق من slug
+    /// ← «أخبار». nil عندما يطابق قسمًا ثابتًا (يُستخدم اسمه).
+    nonisolated static func resolveCategoryLabel(name: String?, slug: String?) -> String? {
+        if ArticleCategory.match(name) != nil { return nil }
+        if let slug, let bySlug = ArticleCategory.match(slug) { return bySlug.rawValue }
+        if let trimmed = name?.trimmingCharacters(in: .whitespacesAndNewlines), !trimmed.isEmpty {
+            return trimmed
+        }
+        if let slug = slug?.trimmingCharacters(in: .whitespacesAndNewlines), !slug.isEmpty {
+            return slug.replacingOccurrences(of: "-", with: " ")
+        }
+        return "أخبار"
+    }
+
     nonisolated static func from(_ api: APIArticle) -> Article {
         let body = Self.stripHTMLTags(from: api.fullText)
+        // الاسم: الكاتب (الاسم الأول + الأخير) ثم اسم ملف الموظف ثم «سبق» — كما في الويب.
+        let authorName = api.authorName.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.flatMap { $0.isEmpty ? nil : $0 }
+            ?? api.staffName.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.flatMap { $0.isEmpty ? nil : $0 }
+            ?? "سبق"
         // Preserve raw HTML for the rich renderer. List payloads return a
         // short excerpt without HTML; detail payloads carry the full body
         // with TipTap markup (paragraphs, bold, blockquotes, galleries, …).
@@ -518,10 +618,18 @@ struct Article: Identifiable, Equatable, Hashable {
             body: body.isEmpty ? excerpt : body,
             bodyHTML: bodyHTML,
             category: ArticleCategory(fromSection: api.categoryName),
-            author: api.authorName.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.flatMap { $0.isEmpty ? nil : $0 } ?? "سبق",
+            categoryLabel: Self.resolveCategoryLabel(name: api.categoryName, slug: api.categorySlug),
+            categoryId: api.categoryId,
+            author: authorName,
+            authorImageURL: api.authorImage.flatMap { $0.isEmpty ? nil : $0 },
+            authorRole: Self.resolveAuthorRole(name: authorName, authorId: api.authorId, reporterId: api.reporterId, staffTitle: api.staffTitle),
+            authorSlug: api.staffSlug.flatMap { $0.isEmpty ? nil : $0 },
+            isAuthorVerified: api.staffVerified ?? false,
+            editorialModifiedAt: api.editorialModifiedAt.flatMap { SabqFormatters.parseISO8601($0) },
             publishDate: Self.parsePublishedAt(api.publishedAt),
             isBreaking: api.newsType == "breaking",
             isFeatured: api.isFeatured ?? false,
+            isReading: api.isReading ?? false,
             tags: api.keywords ?? [],
             imageURL: api.imageUrl,
             imageFocalPoint: api.imageFocalPoint,
@@ -532,7 +640,8 @@ struct Article: Identifiable, Equatable, Hashable {
             viewsCount: api.viewsCount ?? 0,
             articleType: api.articleType,
             weeklyPhotos: api.weeklyPhotos,
-            mediaAssets: api.mediaAssets
+            mediaAssets: api.mediaAssets,
+            whatsappCta: api.whatsappCta
         )
     }
 
@@ -671,6 +780,10 @@ struct OpinionArticle: Identifiable, Equatable, Hashable {
     var aiImageModel: String? = nil
     let slug: String?
     let articleURL: String?
+    /// المشاهدات لبطاقة الأرشيف («1,240 مشاهدة» بأرقام لاتينية مجمّعة — #1605).
+    var viewsCount: Int = 0
+
+    var viewsLabel: String { "\(SabqFormatters.groupedLatin(viewsCount)) مشاهدة" }
 
     /// Minimal opinion shell used by deep-link routes that only carry a
     /// slug. OpinionDetailView re-fetches the full payload via
@@ -792,7 +905,8 @@ struct OpinionArticle: Identifiable, Equatable, Hashable {
             isAiGeneratedImage: api.isAiGeneratedImage ?? false,
             aiImageModel: api.aiImageModel,
             slug: slug,
-            articleURL: articleURL
+            articleURL: articleURL,
+            viewsCount: api.views ?? 0
         )
     }
 
@@ -831,7 +945,8 @@ struct OpinionArticle: Identifiable, Equatable, Hashable {
             isAiGeneratedImage: api.isAiGeneratedImage ?? false,
             aiImageModel: api.aiImageModel,
             slug: slug,
-            articleURL: articleURL
+            articleURL: articleURL,
+            viewsCount: api.viewsCount ?? 0
         )
     }
 }

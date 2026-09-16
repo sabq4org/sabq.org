@@ -16,7 +16,7 @@ import { consumePostAuthReturn } from "@/lib/postAuthRedirect";
 
 const setPasswordSchema = z.object({
   currentPassword: z.string().min(1, "كلمة المرور الحالية مطلوبة"),
-  newPassword: z.string().min(6, "كلمة المرور الجديدة يجب أن تكون 6 أحرف على الأقل"),
+  newPassword: z.string().min(8, "كلمة المرور الجديدة يجب أن تكون 8 أحرف على الأقل"),
   confirmPassword: z.string(),
 }).refine((data) => data.newPassword === data.confirmPassword, {
   message: "كلمات المرور غير متطابقة",
@@ -139,6 +139,7 @@ export default function SetPassword() {
                           placeholder="••••••"
                           disabled={isLoading}
                           data-testid="input-current-password"
+                          autoComplete="current-password"
                           dir="ltr"
                         />
                         <button
@@ -146,6 +147,7 @@ export default function SetPassword() {
                           onClick={() => setShowCurrentPassword(!showCurrentPassword)}
                           className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                           data-testid="button-toggle-current-password"
+                          aria-label={showCurrentPassword ? "إخفاء كلمة المرور" : "إظهار كلمة المرور"}
                         >
                           {showCurrentPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                         </button>
@@ -170,6 +172,7 @@ export default function SetPassword() {
                           placeholder="••••••"
                           disabled={isLoading}
                           data-testid="input-new-password"
+                          autoComplete="new-password"
                           dir="ltr"
                         />
                         <button
@@ -177,6 +180,7 @@ export default function SetPassword() {
                           onClick={() => setShowNewPassword(!showNewPassword)}
                           className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                           data-testid="button-toggle-new-password"
+                          aria-label={showNewPassword ? "إخفاء كلمة المرور" : "إظهار كلمة المرور"}
                         >
                           {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                         </button>
@@ -201,6 +205,7 @@ export default function SetPassword() {
                           placeholder="••••••"
                           disabled={isLoading}
                           data-testid="input-confirm-password"
+                          autoComplete="new-password"
                           dir="ltr"
                         />
                         <button
@@ -208,6 +213,7 @@ export default function SetPassword() {
                           onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                           className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                           data-testid="button-toggle-confirm-password"
+                          aria-label={showConfirmPassword ? "إخفاء كلمة المرور" : "إظهار كلمة المرور"}
                         >
                           {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                         </button>

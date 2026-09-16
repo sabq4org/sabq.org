@@ -108,7 +108,7 @@ export default function EnglishPrivacyPage() {
               <span>Aligned with Saudi Arabia’s Personal Data Protection Law</span>
             </div>
             <div className="mt-6 flex flex-wrap gap-3">
-              <Link href="/en/notification-settings">
+              <Link href="/settings/notifications">
                 <Button variant="outline" size="sm" className="gap-2" data-testid="en-button-manage-preferences-top">
                   <SlidersHorizontal className="w-4 h-4" aria-hidden="true" />
                   Manage preferences
@@ -253,7 +253,7 @@ export default function EnglishPrivacyPage() {
                       <ul className="space-y-2.5 text-[13.5px] text-muted-foreground leading-relaxed">
                         <li>
                           <Link
-                            href="/en/notification-settings"
+                            href="/settings/notifications"
                             className="text-primary font-semibold hover:underline underline-offset-2"
                           >
                             Notification settings
@@ -343,7 +343,7 @@ export default function EnglishPrivacyPage() {
                         <ArrowUpRight className="w-4 h-4" aria-hidden="true" />
                       </Button>
                     </Link>
-                    <Link href="/en/notification-settings">
+                    <Link href="/settings/notifications">
                       <Button variant="outline" className="gap-2" data-testid="en-button-manage-preferences">
                         <SlidersHorizontal className="w-4 h-4" aria-hidden="true" />
                         Manage preferences

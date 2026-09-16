@@ -130,6 +130,12 @@ export interface KcSquadPlayer {
   positionEn: string;
   age: number | null;
   photo: string;
+  captain?: boolean;
+  nationality?: { name: string; flag?: string | null; code?: string | null } | null;
+  height?: number | null;
+  weight?: number | null;
+  contract?: { start?: string | null; end?: string | null } | null;
+  detailedPosition?: string | null;
 }
 
 export interface KcTeamInfo {
@@ -158,6 +164,7 @@ export interface KcMatchEvent {
   teamId: number;
   team: string;
   player: string;
+  playerId?: number;
   assist: string | null;
   type: string;
   label: string;

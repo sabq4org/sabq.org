@@ -12,9 +12,11 @@ local.properties
 /app/build
 /app/release/
 /app/google-services.json
+/vara/google-services.json
 *.keystore
 *.jks
 !/gradle/wrapper/gradle-wrapper.jar
 
 # Kotlin compiler session files
 .kotlin/
+/vara/build

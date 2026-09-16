@@ -156,6 +156,19 @@ const SEED_TOURNAMENTS: InsertSportsTournament[] = [
     sortOrder: 80,
     features: { bracket: true, scorers: true, teams: true },
   },
+  {
+    slug: "intercontinental-cup",
+    apiFootballLeagueId: 1168,
+    name: "كأس الإنتركونتيننتال",
+    shortName: "الإنتركونتيننتال",
+    kind: "seasonal",
+    status: "upcoming",
+    visibleWeb: true,
+    visibleApp: true,
+    sortOrder: 75,
+    season: 2026,
+    features: { scorers: true, teams: true, news: true },
+  },
 ];
 
 /** آخر خطأ وصول للجدول — لتمييز «الجدول غير موجود بعد» في لوج واحد لا عاصفة. */
@@ -175,13 +188,12 @@ let seedChecked = false;
 /** يزرع الجدول عند أول استخدام إن كان فارغًا (idempotent، آمن على الإنتاج). */
 async function ensureSeeded(): Promise<void> {
   if (seedChecked) return;
-  const existing = await db
-    .select({ id: sportsTournaments.id })
-    .from(sportsTournaments)
-    .limit(1);
-  if (existing.length === 0) {
-    await db.insert(sportsTournaments).values(SEED_TOURNAMENTS).onConflictDoNothing();
-    console.log(`[SportsTournaments] زُرع سجل البطولات (${SEED_TOURNAMENTS.length} بطولة)`);
+  const existing = await db.select({ slug: sportsTournaments.slug }).from(sportsTournaments);
+  const have = new Set(existing.map((r) => r.slug));
+  const missing = SEED_TOURNAMENTS.filter((s) => !have.has(s.slug));
+  if (missing.length > 0) {
+    await db.insert(sportsTournaments).values(missing).onConflictDoNothing();
+    console.log(`[SportsTournaments] أُضيفت بطولات جديدة للسجل (${missing.map((s) => s.slug).join("، ")})`);
   }
   seedChecked = true;
 }

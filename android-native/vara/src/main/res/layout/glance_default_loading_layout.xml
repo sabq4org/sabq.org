@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  بديل (stub) يرضي ربط الموارد فقط: res.srcDirs يدمج كامل موارد تطبيق سبق
+  (للخطوط وأيقونة الإشعار)، ومنها sabq_news_widget_info.xml لويدجت أخبار سبق
+  الذي يشير إلى هذا الـlayout من مكتبة Glance — وVARA لا تعتمد المكتبة ولا
+  تعلن الويدجت في المانيفست، فلا يُستخدم هذا الملف في وقت التشغيل إطلاقًا.
+-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent" />

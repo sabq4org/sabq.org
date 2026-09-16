@@ -92,6 +92,7 @@ export function PermissionMatrix({ selectedRoleIds }: PermissionMatrixProps) {
     analytics: "التحليلات",
     tags: "الوسوم",
     system: "النظام",
+    social_publish: "النشر الاجتماعي",
   };
 
   return (

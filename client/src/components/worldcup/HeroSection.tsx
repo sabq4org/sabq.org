@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
-import { CalendarDays, MapPin, Radio, Sparkles, Trophy } from "lucide-react";
+import { CalendarDays, MapPin, Radio, Trophy } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -354,6 +354,27 @@ function ChampionHeroCard({ champion }: { champion: NonNullable<WcOverview["cham
           )}
         </div>
       </div>
+      <p className="mt-5 text-center text-sm text-emerald-100/70">
+        شكرًا لصحبتكم طوال البطولة — نلتقيكم في المونديال القادم
+      </p>
+    </div>
+  );
+}
+
+/** ختام بلا بطل مكتشف — أرشيف وداع بدل «تنطلق قريبًا». */
+function FarewellHeroCard() {
+  return (
+    <div
+      className="mx-auto max-w-3xl rounded-3xl bg-white/[0.06] p-6 sm:p-8 ring-1 ring-white/10 backdrop-blur-md shadow-2xl"
+      data-testid="wc-farewell-hero"
+    >
+      <div className="text-center text-emerald-100/80 py-4 flex flex-col items-center gap-2">
+        <Trophy className="h-8 w-8 text-amber-300" />
+        <p className="font-bold text-white text-lg">انتهت تغطية مونديال 2026</p>
+        <p className="text-sm max-w-md">
+          الأرشيف باقٍ هنا: النتائج، الشجرة، والمنتخبات. شكرًا لصحبتكم — نلتقيكم في المونديال القادم
+        </p>
+      </div>
     </div>
   );
 }
@@ -451,7 +472,7 @@ export function HeroSection({ overview, isLoading, onOpenMatch }: HeroSectionPro
           <div className="flex items-center gap-2">
             <Badge className="bg-emerald-400/15 text-emerald-200 border border-emerald-300/20 gap-1.5 px-3 py-1">
               <Trophy className="h-3.5 w-3.5" />
-              تغطية خاصة
+              {champion ? "ختام المونديال" : "تغطية خاصة"}
             </Badge>
             {liveCount > 0 && !champion && (
               <Badge className="bg-red-500 text-white border-0 gap-1.5 px-3 py-1">
@@ -468,7 +489,7 @@ export function HeroSection({ overview, isLoading, onOpenMatch }: HeroSectionPro
           </h1>
           <p className="text-sm sm:text-base text-emerald-100/70 max-w-xl">
             {champion
-              ? "اكتملت البطولة — بطل كأس العالم 2026"
+              ? "اكتملت البطولة — أرشيف التغطية من سبق، ونلتقيكم في المونديال القادم"
               : "48 منتخبًا · 16 ملعبًا · ثلاث دول مضيفة — تغطية حية لحظة بلحظة بتوقيت الرياض"}
           </p>
         </motion.div>
@@ -489,15 +510,7 @@ export function HeroSection({ overview, isLoading, onOpenMatch }: HeroSectionPro
 
         {!isLoading && champion && <ChampionHeroCard champion={champion} />}
 
-        {!isLoading && !champion && heroFixtures.length === 0 && (
-          <div className="mx-auto max-w-3xl rounded-3xl bg-white/[0.06] p-6 sm:p-8 ring-1 ring-white/10 backdrop-blur-md shadow-2xl">
-            <div className="text-center text-emerald-100/80 py-6 flex flex-col items-center gap-2">
-              <Sparkles className="h-8 w-8 text-emerald-300" />
-              <p className="font-bold text-white">تغطية المونديال تنطلق قريبًا</p>
-              <p className="text-sm">تابعنا — جدول المباريات والنتائج الحية ستجدها هنا أولًا بأول</p>
-            </div>
-          </div>
-        )}
+        {!isLoading && !champion && heroFixtures.length === 0 && <FarewellHeroCard />}
 
         {!isLoading && !champion && heroFixtures.length > 0 && (
           <motion.div

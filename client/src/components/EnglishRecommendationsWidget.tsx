@@ -33,7 +33,7 @@ export function EnglishRecommendationsWidget({
       </CardHeader>
       <CardContent className="p-0">
         <div className="divide-y">
-          {articles.map((article, index) => {
+          {articles.map((article) => {
             const timeAgo = article.publishedAt
               ? formatDistanceToNow(new Date(article.publishedAt), {
                   addSuffix: true,
@@ -64,15 +64,6 @@ export function EnglishRecommendationsWidget({
                       ) : (
                         <div className="w-full h-full bg-gradient-to-br from-primary/20 via-accent/20 to-primary/10" />
                       )}
-                      {/* Number Badge */}
-                      <div className="absolute bottom-1 left-1">
-                        <Badge 
-                          variant="secondary" 
-                          className="h-5 px-1.5 text-xs font-bold bg-background/90 backdrop-blur-sm"
-                        >
-                          {index + 1}
-                        </Badge>
-                      </div>
                     </div>
 
                     {/* Content */}

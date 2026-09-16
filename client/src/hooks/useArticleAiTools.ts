@@ -8,9 +8,9 @@
 // data flow is visible at the call site.
 /* eslint-disable no-console -- legacy debug logging preserved from the
    original inline code; stripped from prod builds by vite esbuild.pure. */
-import type { Dispatch, SetStateAction } from "react";
+import { useState, type Dispatch, type SetStateAction } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, apiUrl, ensureCsrfToken, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { generateSlug } from "@/lib/slug";
 import type { Category } from "@shared/schema";
@@ -27,6 +27,77 @@ export interface ProofreadIssue {
   suggestion: string;
   type: string;
   explanation: string;
+}
+
+export type EditStreamPhase = "edit" | "smart" | "newsletter";
+export type EditStreamPhaseStatus = "running" | "done" | "failed";
+export interface EditStreamState {
+  open: boolean;
+  preview: string;
+  phases: Record<EditStreamPhase, EditStreamPhaseStatus>;
+  startedAt: number;
+}
+const EDIT_STREAM_IDLE: EditStreamState = {
+  open: false,
+  preview: "",
+  phases: { edit: "running", smart: "running", newsletter: "running" },
+  startedAt: 0,
+};
+
+/**
+ * يشغّل «تحرير وتوليد شامل» عبر SSE ويغذّي onEvent بالتقدم. يعيد null إن لم يقدّم
+ * الخادم بثًا (نسخة أقدم أثناء النشر مثلًا) ليسقط المستدعي إلى المسار العادي.
+ */
+async function streamEditAndGenerate(
+  content: string,
+  onEvent: (event: string, data: any) => void,
+): Promise<any | null> {
+  const csrfToken = await ensureCsrfToken();
+  const response = await fetch(apiUrl("/api/articles/edit-and-generate/stream"), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(csrfToken ? { "x-csrf-token": csrfToken } : {}),
+    },
+    credentials: "include",
+    body: JSON.stringify({ content, language: "ar" }),
+  });
+  if (!response.ok || !response.headers.get("content-type")?.includes("text/event-stream") || !response.body) {
+    return null;
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let currentEvent = "";
+  let result: any = null;
+  let streamError: Error | null = null;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() || "";
+    for (const line of lines) {
+      if (line.startsWith("event: ")) {
+        currentEvent = line.substring(7).trim();
+      } else if (line.startsWith("data: ")) {
+        let data: any;
+        try {
+          data = JSON.parse(line.substring(6));
+        } catch {
+          continue;
+        }
+        if (currentEvent === "result") result = data;
+        else if (currentEvent === "error") streamError = new Error(data?.message || "فشل في تحرير وتوليد المحتوى");
+        else onEvent(currentEvent, data);
+      }
+    }
+  }
+  if (streamError) throw streamError;
+  if (!result) throw new Error("انقطع الاتصال قبل اكتمال التحرير، يرجى المحاولة مرة أخرى");
+  return result;
 }
 
 export interface SocialCards {
@@ -55,7 +126,7 @@ interface UseArticleAiToolsArgs {
   newsletterExcerpt: string;
   imageUrl: string;
   thumbnailUrl: string;
-  status: "draft" | "published";
+  status: "draft" | "published" | "scheduled" | "archived";
   generatedSocialCards: SocialCards | null;
   // State setters (written by the mutations)
   setTitle: Dispatch<SetStateAction<string>>;
@@ -118,6 +189,8 @@ export function useArticleAiTools({
   setGeneratedSocialCards,
 }: UseArticleAiToolsArgs) {
   const { toast } = useToast();
+  // حالة المعاينة الحية لـ«تحرير وتوليد شامل» (تُعرض في EditAndGenerateStreamDialog)
+  const [editStream, setEditStream] = useState<EditStreamState>(EDIT_STREAM_IDLE);
 
   const generateSummaryMutation = useMutation({
     mutationFn: async () => {
@@ -184,19 +257,23 @@ export function useArticleAiTools({
 
   const proofreadMutation = useMutation({
     mutationFn: async () => {
-      return await apiRequest("/api/ai/proofread", {
+      const result = await apiRequest<{ issues: ProofreadIssue[] }>("/api/ai/proofread", {
         method: "POST",
         body: JSON.stringify({ content }),
       });
+      if (!Array.isArray(result?.issues) || result.issues.some(i => !i || typeof i.original !== "string" || typeof i.suggestion !== "string")) {
+        throw new Error("لم تكتمل نتيجة التدقيق، يرجى إعادة المحاولة");
+      }
+      return result;
     },
     onSuccess: (data: any) => {
       const issues = Array.isArray(data?.issues) ? data.issues : [];
       setProofreadIssues(issues);
       setShowProofreadDialog(true);
       toast({
-        title: issues.length === 0 ? "لا توجد أخطاء إملائية" : `تم العثور على ${issues.length} ملاحظة`,
+        title: issues.length === 0 ? "اكتمل التدقيق" : `تم العثور على ${issues.length} ملاحظة`,
         description: issues.length === 0
-          ? "النص سليم إملائياً"
+          ? "لم يرصد المدقق أخطاء إملائية في هذه المراجعة"
           : "راجع الاقتراحات يدوياً — لن يتم تعديل النص تلقائياً",
       });
     },
@@ -644,17 +721,39 @@ export function useArticleAiTools({
       
       console.log('[Edit+Generate] Starting comprehensive edit and generation...');
       console.log('[Edit+Generate] Original content length:', content.length);
-      
-      const result = await apiRequest("/api/articles/edit-and-generate", {
-        method: "POST",
-        body: JSON.stringify({ 
-          content, 
-          language: "ar" 
-        }),
-      });
-      
-      console.log('[Edit+Generate] Result received:', result);
-      return result;
+
+      // إعادة الصياغة تستغرق 20–35 ثانية لمقال كامل (قياس حي 2026-08-28): نبثّ النص
+      // حرفًا بحرف في نافذة معاينة بدل شاشة جامدة، ونسقط للمسار العادي إن لم يتوفر البث.
+      setEditStream({ ...EDIT_STREAM_IDLE, open: true, startedAt: Date.now() });
+      try {
+        const streamed = await streamEditAndGenerate(content, (event, data) => {
+          if (event === "delta") {
+            setEditStream((prev) => ({ ...prev, preview: prev.preview + String(data?.text ?? "") }));
+          } else if (event === "reset") {
+            setEditStream((prev) => ({ ...prev, preview: "" }));
+          } else if (event === "phase" && data?.phase) {
+            setEditStream((prev) => ({ ...prev, phases: { ...prev.phases, [data.phase]: data.status === "failed" ? "failed" : "done" } }));
+          }
+        });
+        if (streamed) {
+          console.log('[Edit+Generate] Result received (stream):', streamed);
+          return streamed;
+        }
+
+        console.warn('[Edit+Generate] Stream unavailable — falling back to JSON endpoint');
+        const result = await apiRequest("/api/articles/edit-and-generate", {
+          method: "POST",
+          body: JSON.stringify({ 
+            content, 
+            language: "ar" 
+          }),
+        });
+
+        console.log('[Edit+Generate] Result received:', result);
+        return result;
+      } finally {
+        setEditStream((prev) => ({ ...prev, open: false }));
+      }
     },
     onSuccess: (data: {
       editedContent: string;
@@ -946,6 +1045,8 @@ export function useArticleAiTools({
   });
 
   return {
+    editStream,
+    setEditStreamOpen: (open: boolean) => setEditStream((prev) => ({ ...prev, open })),
     generateSummaryMutation,
     proofreadTitleMutation,
     proofreadMutation,

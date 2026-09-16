@@ -5,6 +5,8 @@ import {
   parseAnalysisPayload,
   parseDraftPayload,
   parseFeedDate,
+  resolveEnvPlaceholders,
+  stripPublisherSuffix,
 } from "../../server/services/radar/parsing";
 import type { RadarAlertRule } from "@shared/schema";
 
@@ -96,6 +98,63 @@ describe("parseFeedDate", () => {
     expect(parseFeedDate("")).toBeUndefined();
     expect(parseFeedDate(null)).toBeUndefined();
     expect(parseFeedDate("not a date XYZ")).toBeUndefined();
+  });
+
+  it("parses the GDELT compact seendate format", () => {
+    expect(parseFeedDate("20260731T054500Z")!.toISOString()).toBe("2026-07-31T05:45:00.000Z");
+  });
+});
+
+describe("resolveEnvPlaceholders", () => {
+  it("substitutes {{ENV:VAR}} from the provided env", () => {
+    expect(
+      resolveEnvPlaceholders("https://api.example.com/v1?q=x&apiKey={{ENV:MY_KEY}}", {
+        MY_KEY: "secret-123",
+      })
+    ).toBe("https://api.example.com/v1?q=x&apiKey=secret-123");
+  });
+
+  it("throws a named error when the variable is missing or empty", () => {
+    expect(() => resolveEnvPlaceholders("https://x.com?k={{ENV:MISSING_KEY}}", {})).toThrow(
+      "RADAR_ENV_MISSING:MISSING_KEY"
+    );
+    expect(() =>
+      resolveEnvPlaceholders("https://x.com?k={{ENV:EMPTY_KEY}}", { EMPTY_KEY: "" })
+    ).toThrow("RADAR_ENV_MISSING:EMPTY_KEY");
+  });
+
+  it("leaves URLs without placeholders untouched", () => {
+    expect(resolveEnvPlaceholders("https://news.google.com/rss/search?q=Saudi", {})).toBe(
+      "https://news.google.com/rss/search?q=Saudi"
+    );
+  });
+});
+
+describe("stripPublisherSuffix", () => {
+  it("strips the Google News ' - Publisher' suffix when it matches", () => {
+    expect(
+      stripPublisherSuffix(
+        "Three countries asked for US$1 million. Then Saudi Arabia stepped in - RNZ",
+        "RNZ"
+      )
+    ).toBe("Three countries asked for US$1 million. Then Saudi Arabia stepped in");
+  });
+
+  it("matches the suffix case-insensitively", () => {
+    expect(stripPublisherSuffix("Saudi GDP grows - the new york times", "The New York Times")).toBe(
+      "Saudi GDP grows"
+    );
+  });
+
+  it("keeps legitimate hyphens when the suffix is not the publisher", () => {
+    expect(stripPublisherSuffix("US-Saudi relations - a new era", "RNZ")).toBe(
+      "US-Saudi relations - a new era"
+    );
+  });
+
+  it("returns the title untouched without a publisher or when stripping would empty it", () => {
+    expect(stripPublisherSuffix("Saudi headline", undefined)).toBe("Saudi headline");
+    expect(stripPublisherSuffix(" - RNZ", "RNZ")).toBe("- RNZ");
   });
 });
 

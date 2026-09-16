@@ -4,8 +4,9 @@ import UIKit
 /// Shared sharing & link-copy logic used by ArticleDetailView and OpinionDetailView.
 @MainActor
 enum SabqShareHelper {
-    static func presentShareSheet(with url: URL) {
+    static func presentShareSheet(with url: URL, completion: ((Bool) -> Void)? = nil) {
         let av = UIActivityViewController(activityItems: [url], applicationActivities: nil)
+        av.completionWithItemsHandler = { _, completed, _, _ in completion?(completed) }
         guard let scene = UIApplication.shared.connectedScenes
             .compactMap({ $0 as? UIWindowScene }).first,
               let root = scene.windows.first?.rootViewController else { return }

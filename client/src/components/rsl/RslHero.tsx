@@ -24,11 +24,14 @@ import {
   type RslFixture,
   type RslHero as RslHeroData,
 } from "./rslTypes";
+import { RslPredictionsHeroPromo } from "./RslPredictionsPromo";
 
 interface RslHeroProps {
   hero: RslHeroData | undefined;
   isLoading: boolean;
   onOpenMatch: (fixtureId: number) => void;
+  /** عدد أندية الموسم (من الترتيب) — يشتقّ سطر الحقائق بدل أرقام مكتوبة تتقادم. */
+  teamsCount?: number;
 }
 
 function TeamSide({
@@ -273,11 +276,6 @@ function PreSeasonCard({ hero, onOpenMatch }: { hero: RslHeroData; onOpenMatch: 
           </p>
         )}
 
-        <div className="flex justify-center">
-          <Button asChild className="bg-sky-300 text-sky-950 hover:bg-sky-200 font-bold rounded-full px-6">
-            <a href="/roshn/predictions?tab=tournament">توقّع بطل الموسم واربح 10,000 نقطة</a>
-          </Button>
-        </div>
       </div>
     </div>
   );
@@ -307,7 +305,12 @@ function OffSeasonCard({ hero }: { hero: RslHeroData }) {
   );
 }
 
-export function RslHero({ hero, isLoading, onOpenMatch }: RslHeroProps) {
+export function RslHero({ hero, isLoading, onOpenMatch, teamsCount }: RslHeroProps) {
+  // سطر الحقائق من عدد الأندية الفعلي (دوري كامل ذهابًا وإيابًا)؛ 18 احتياط
+  // ريثما يصل الترتيب — فلا تتقادم الأرقام إن تغيّر نظام البطولة.
+  const clubs = teamsCount && teamsCount > 1 ? teamsCount : 18;
+  const rounds = (clubs - 1) * 2;
+  const totalMatches = clubs * (clubs - 1);
   const outlook = hero?.outlook;
   const live = Array.isArray(hero?.live) ? hero.live : [];
   const liveCount = live.length;
@@ -367,10 +370,10 @@ export function RslHero({ hero, isLoading, onOpenMatch }: RslHeroProps) {
             )}
           </div>
           <h1 className="text-3xl sm:text-5xl font-black text-white tracking-tight">
-            دوري <span className="text-sky-300">روشن</span> السعودي
+            دوري <span className="text-sky-300">روشن</span>
           </h1>
           <p className="text-sm sm:text-base text-emerald-100/70 max-w-xl">
-            18 ناديًا · 34 جولة · 306 مباريات — أقوى دوريات المنطقة بتغطية حية لحظة بلحظة بتوقيت الرياض
+            {clubs} ناديًا · {rounds} جولة · {totalMatches} مباريات — أقوى دوريات المنطقة بتغطية حية لحظة بلحظة بتوقيت الرياض
           </p>
         </motion.div>
 
@@ -412,6 +415,8 @@ export function RslHero({ hero, isLoading, onOpenMatch }: RslHeroProps) {
                 </div>
               </div>
             )}
+            {/* إعلان دائم لمسابقة التوقعات — يظهر في كل حالات الهيرو عند تفعيل المنصة */}
+            {hero.predictionsEnabled && <RslPredictionsHeroPromo />}
           </motion.div>
         )}
       </div>

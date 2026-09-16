@@ -12,6 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import kingsCupLogo from "@assets/kings-cup-logo.png";
 import { LiveMinute } from "../worldcup/LiveMinute";
 import { PenaltyResult } from "../worldcup/PenaltyResult";
+import { KcPredictionsHeroPromo } from "./KcPredictionsPromo";
 import { KcProbabilityBar } from "./KcProbabilityBar";
 import {
   countdownTo,
@@ -520,6 +521,9 @@ export function KcHero({ overview, fixtures, isLoading, onOpenMatch }: KcHeroPro
             onOpenMatch={onOpenMatch}
           />
         )}
+
+        {/* إعلان دائم لمسابقة التوقعات — يظهر تلقائيًا بعد تفعيل البطولة على المنصة */}
+        <KcPredictionsHeroPromo />
       </div>
     </section>
   );

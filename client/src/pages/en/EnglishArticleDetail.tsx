@@ -10,7 +10,8 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { useCanonical } from "@/hooks/useCanonical";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useAnalyticsPageMetadata } from "@/hooks/use-analytics";
+import { apiRequest, queryClient, apiUrl } from "@/lib/queryClient";
 import {
   Heart,
   Bookmark,
@@ -134,8 +135,8 @@ export default function EnglishArticleDetail() {
           text: article.excerpt || article.aiSummary || "",
           url: window.location.href,
         });
-      } catch (err) {
-        console.log("Share cancelled");
+      } catch {
+        // User dismissed the native share sheet — not an error.
       }
     } else {
       navigator.clipboard.writeText(window.location.href);
@@ -164,19 +165,11 @@ export default function EnglishArticleDetail() {
   // Track article view via POST request (works even when GET is cached by CDN)
   useEffect(() => {
     if (article?.id) {
-      fetch(`/api/en/articles/${article.id}/view`, { method: 'POST' }).catch(() => {});
+      fetch(apiUrl(`/api/en/articles/${article.id}/view`), { method: 'POST' }).catch(() => {});
     }
   }, [article?.id]);
 
-  // Update document.title for SEO (GA4 auto-tracks page views)
-  useEffect(() => {
-    if (article?.title) {
-      document.title = `${article.title} | Sabq`;
-    }
-    return () => {
-      document.title = 'Sabq - Saudi Electronic Newspaper';
-    };
-  }, [article?.title]);
+  useAnalyticsPageMetadata(article?.title ? `${article.title} | Sabq` : isLoading ? null : "Article Not Found | Sabq");
 
   useCanonical(article ? `https://sabq.org/en/article/${article.englishSlug || params.slug}` : null);
 
@@ -214,8 +207,12 @@ export default function EnglishArticleDetail() {
 
   // Sanitize HTML content with XSS protection
   const sanitizedContent = DOMPurify.sanitize(article.content, {
-    ADD_TAGS: ['iframe', 'blockquote', 'img'],
-    ADD_ATTR: ['allow', 'allowfullscreen', 'frameborder', 'scrolling', 'src'],
+    ADD_TAGS: ['iframe', 'blockquote', 'img', 'figure', 'figcaption'],
+    ADD_ATTR: [
+      'allow', 'allowfullscreen', 'frameborder', 'scrolling', 'src',
+      'class', 'data-align', 'data-width', 'data-caption', 'style',
+      'alt', 'title', 'loading', 'width', 'height', 'srcset', 'sizes',
+    ],
     ALLOWED_URI_REGEXP: /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|sms|cid|xmpp):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i,
   });
 
@@ -262,7 +259,7 @@ export default function EnglishArticleDetail() {
                         ? `${article.author.firstNameEn} ${article.author.lastNameEn}`
                         : article.author.firstName && article.author.lastName
                           ? `${article.author.firstName} ${article.author.lastName}`
-                          : article.author.email}
+                          : "Sabq"}
                     </p>
                     <p className="text-xs">Reporter</p>
                   </div>
@@ -310,7 +307,7 @@ export default function EnglishArticleDetail() {
                   ? `${article.author.firstNameEn} ${article.author.lastNameEn}`
                   : article.author.firstName && article.author.lastName
                     ? `${article.author.firstName} ${article.author.lastName}`
-                    : article.author.email)
+                    : "Sabq")
                 : null}
               publishedAt={article.publishedAt}
               articleSlug={params.slug}
@@ -369,7 +366,7 @@ export default function EnglishArticleDetail() {
                   </Button>
                 </div>
                 <p 
-                  className={`text-foreground/90 leading-relaxed text-sm ${!isSummaryExpanded ? 'line-clamp-2' : ''}`} 
+                  className={`text-foreground/90 leading-relaxed text-sm ${!isSummaryExpanded ? 'line-clamp-3' : ''}`} 
                   data-testid="text-smart-summary"
                 >
                   {article.aiSummary || article.excerpt}

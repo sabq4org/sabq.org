@@ -1,7 +1,8 @@
 import { ReactNode, useState, useEffect, useMemo, useRef } from "react";
 import { Link, useLocation } from "wouter";
-import { useAuth, getHighestRole } from "@/hooks/useAuth";
-import { LogOut, ChevronDown, Globe, User, Search, Star, Plus, PenLine, Mic } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { useAuth, getHighestRole, hasPermission, hasRole } from "@/hooks/useAuth";
+import { LogOut, ChevronDown, Globe, User, Search, Star, Plus, PenLine, Mic, Newspaper, BadgeCheck, BadgeAlert } from "lucide-react";
 import { useDashboardFavorites } from "@/hooks/useDashboardFavorites";
 import {
   Sidebar,
@@ -44,11 +45,15 @@ import { useToast } from "@/hooks/use-toast";
 import { useNav, trackNavClick } from "@/nav/useNav";
 import { AppBreadcrumbs } from "./AppBreadcrumbs";
 import { InternalAnnouncement } from "./InternalAnnouncement";
+import { MeetingCallAlert } from "./meetings/MeetingCallAlert";
 import { DashboardThemeProvider } from "@/dashboard-themes/DashboardThemeProvider";
 import type { UserRole } from "@/nav/types";
 import { resolveUserRole } from "@/lib/roleMapping";
 import type { NavItem } from "@/nav/types";
 import { cn } from "@/lib/utils";
+import { MEDIA_LICENSE_DASHBOARD_WARNING } from "@shared/mediaLicense";
+import { useMediaLicenseGate } from "@/hooks/useMediaLicenseGate";
+import { DashboardSessionLoading } from "./DashboardSessionLoading";
 
 interface DashboardLayoutProps {
   children: ReactNode;
@@ -58,7 +63,7 @@ const OPEN_GROUP_STORAGE_KEY = "sabq.sidebar.open-group.v2";
 
 export function DashboardLayout({ children }: DashboardLayoutProps) {
   const [location, navigate] = useLocation();
-  const { user, isLoading } = useAuth({ redirectToLogin: true });
+  const { user, isLoading, isUnavailable, isRetrying, retryAuth } = useAuth({ redirectToLogin: true });
   const { toast } = useToast();
   
   const [openGroupId, setOpenGroupId] = useState<string | null>(() => {
@@ -87,6 +92,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
     const handleSearchShortcut = (event: KeyboardEvent) => {
       if (event.key.toLowerCase() === "k" && (event.metaKey || event.ctrlKey)) {
         event.preventDefault();
+        if (window.matchMedia("(max-width: 767px)").matches) return;
         searchInputRef.current?.focus();
       }
     };
@@ -163,16 +169,41 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
         .slice(0, 8)
     : [];
 
+  const canViewSocial = Boolean(
+    user && (hasPermission(user, "social_publish.view") || hasRole(user, "admin", "system_admin", "editor"))
+  );
+  const { data: socialStats } = useQuery<{ pendingAuthorProposals?: number }>({
+    queryKey: ["/api/social-publishing/stats"],
+    enabled: canViewSocial,
+    refetchInterval: 60_000,
+    staleTime: 30_000,
+  });
+  const pendingAuthorSocialProposals = socialStats?.pendingAuthorProposals ?? 0;
+
+  // بطاقة هوية أعلى الشريط — كتّاب الرأي/الزاوية والمراسل ومدير المحتوى
+  const isIdentitySidebar =
+    role === "opinion_author" || role === "angle_writer" || role === "reporter" || role === "content_manager";
+  const {
+    isMediaLicensed,
+    showExpiringSoonBadge,
+    showExpiredBadge,
+    showUnlicensedBadge,
+    showWarningBanner: showMediaLicenseWarningBanner,
+    createBlocked,
+    createBlockedReason,
+    openMediaLicenseForm,
+  } = useMediaLicenseGate();
+
   // عرض شاشة تحميل أثناء التحقق من المصادقة
   if (isLoading || !user) {
     return (
       <DashboardThemeProvider>
-        <div className="flex h-screen w-full items-center justify-center" dir="rtl">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
-            <p className="mt-4 text-muted-foreground">جاري التحميل...</p>
-          </div>
-        </div>
+        <DashboardSessionLoading
+          isUnavailable={isUnavailable}
+          isRetrying={isRetrying}
+          onRetry={() => { void retryAuth(); }}
+          onReload={() => window.location.reload()}
+        />
       </DashboardThemeProvider>
     );
   }
@@ -194,7 +225,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
     trackNavClick(item.id, item.path);
   };
 
-  const getInitials = (firstName?: string | null, lastName?: string | null, email?: string) => {
+  const getInitials = (firstName?: string | null, lastName?: string | null, email?: string | null) => {
     if (firstName && lastName) {
       return `${firstName?.[0]}${lastName?.[0]}`.toUpperCase();
     }
@@ -207,16 +238,26 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
     return 'س';
   };
 
-  // بطاقة هوية أعلى الشريط — كتّاب الرأي/الزاوية والمراسل (مثل بطاقة الوكالة في بوابة الناشر)
-  const isIdentitySidebar =
-    role === "opinion_author" || role === "angle_writer" || role === "reporter";
   const identityDisplayName =
     user.firstName && user.lastName
       ? `${user.firstName} ${user.lastName}`
-      : user.firstName || user.name || user.email || (role === "reporter" ? "مراسل" : "كاتب");
+      : user.firstName || user.name || user.email || (
+        role === "reporter"
+          ? "مراسل"
+          : role === "content_manager"
+            ? "مدير محتوى"
+            : "كاتب"
+      );
   const identityRoleLabel =
-    role === "reporter" ? "مراسل" : role === "angle_writer" ? "كاتب زاوية" : "كاتب رأي";
-  const IdentityRoleIcon = role === "reporter" ? Mic : PenLine;
+    role === "reporter"
+      ? "مراسل"
+      : role === "angle_writer"
+        ? "كاتب زاوية"
+        : role === "content_manager"
+          ? "مدير محتوى"
+          : "كاتب رأي";
+  const IdentityRoleIcon =
+    role === "reporter" ? Mic : role === "content_manager" ? Newspaper : PenLine;
 
   const renderNavItem = (item: NavItem) => {
     const Icon = item.icon;
@@ -277,6 +318,10 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       );
     }
 
+    const isSocialPublishing =
+      item.id === "social_publishing" || item.path === "/dashboard/social-publishing";
+    const badgeCount = isSocialPublishing ? pendingAuthorSocialProposals : (item.badge?.count ?? 0);
+
     return (
       <SidebarMenuItem key={item.id}>
         <SidebarMenuButton
@@ -288,9 +333,20 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
             href={item.path || "#"}
             onClick={() => handleNavClick(item)}
           >
-            <span className="flex min-w-0 items-center gap-3">
-              {Icon && <Icon className="h-4 w-4 shrink-0" />}
-              <span className="truncate">{item.labelAr || item.labelKey}</span>
+            <span className="flex w-full min-w-0 items-center justify-between gap-2">
+              <span className="flex min-w-0 items-center gap-3">
+                {Icon && <Icon className="h-4 w-4 shrink-0" />}
+                <span className="truncate">{item.labelAr || item.labelKey}</span>
+              </span>
+              {badgeCount > 0 && (
+                <Badge
+                  variant="secondary"
+                  className="h-5 min-w-5 shrink-0 rounded-full bg-primary/15 px-1.5 text-[10px] font-bold tabular-nums text-primary border-0"
+                  data-testid={`badge-nav-${item.id}`}
+                >
+                  {badgeCount > 99 ? "+99" : badgeCount}
+                </Badge>
+              )}
             </span>
           </Link>
         </SidebarMenuButton>
@@ -363,7 +419,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                             {getInitials(user.firstName, user.lastName, user.email)}
                           </AvatarFallback>
                         </Avatar>
-                        <div className="min-w-0 flex-1">
+                        <div className="min-w-0 flex-1 text-start">
                           <p
                             className="truncate text-sm font-bold leading-snug tracking-tight"
                             data-testid="sidebar-identity-name"
@@ -376,38 +432,121 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                               className="mt-0.5 truncate text-[11px] text-muted-foreground"
                               data-testid="sidebar-identity-email"
                               title={user.email}
-                              dir="ltr"
                             >
-                              {user.email}
+                              <span dir="ltr" className="inline-block max-w-full truncate align-bottom">
+                                {user.email}
+                              </span>
                             </p>
                           )}
                         </div>
                       </div>
-                      <Badge
-                        className={cn(
-                          "gap-1 border-0 bg-primary/12 text-primary hover:bg-primary/15",
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <Badge
+                          className={cn(
+                            "gap-1 border-0 bg-primary/12 text-primary hover:bg-primary/15",
+                          )}
+                          data-testid="sidebar-identity-role-badge"
+                        >
+                          <IdentityRoleIcon className="h-3 w-3" />
+                          {identityRoleLabel}
+                        </Badge>
+                        {isMediaLicensed && (
+                          <Badge
+                            className="gap-1 border-0 bg-emerald-100 text-emerald-800 hover:bg-emerald-100 dark:bg-emerald-900/40 dark:text-emerald-300 dark:hover:bg-emerald-900/40"
+                            data-testid="sidebar-identity-licensed-badge"
+                          >
+                            <BadgeCheck className="h-3 w-3" />
+                            مرخّص
+                          </Badge>
                         )}
-                        data-testid="sidebar-identity-role-badge"
-                      >
-                        <IdentityRoleIcon className="h-3 w-3" />
-                        {identityRoleLabel}
-                      </Badge>
+                        {showExpiringSoonBadge && (
+                          <Badge
+                            role="button"
+                            tabIndex={0}
+                            title="اضغط لتحديث بيانات الترخيص"
+                            className="cursor-pointer gap-1 border-0 bg-red-600 text-white hover:bg-red-700 dark:bg-red-700 dark:text-white dark:hover:bg-red-600"
+                            onClick={openMediaLicenseForm}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" || e.key === " ") {
+                                e.preventDefault();
+                                openMediaLicenseForm();
+                              }
+                            }}
+                            data-testid="sidebar-identity-expiring-license-badge"
+                          >
+                            <BadgeAlert className="h-3 w-3" />
+                            جدّد الترخيص
+                          </Badge>
+                        )}
+                        {showExpiredBadge && (
+                          <Badge
+                            role="button"
+                            tabIndex={0}
+                            title="اضغط لتحديث الترخيص المنتهي"
+                            className="cursor-pointer gap-1 border-0 bg-rose-100 text-rose-900 hover:bg-rose-200 dark:bg-rose-900/40 dark:text-rose-200 dark:hover:bg-rose-900/60"
+                            onClick={openMediaLicenseForm}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" || e.key === " ") {
+                                e.preventDefault();
+                                openMediaLicenseForm();
+                              }
+                            }}
+                            data-testid="sidebar-identity-expired-license-badge"
+                          >
+                            <BadgeAlert className="h-3 w-3" />
+                            منتهٍ
+                          </Badge>
+                        )}
+                        {showUnlicensedBadge && (
+                          <Badge
+                            role="button"
+                            tabIndex={0}
+                            title="اضغط لإرسال الترخيص المهني"
+                            className="cursor-pointer gap-1 border-0 bg-amber-100 text-amber-900 hover:bg-amber-200 dark:bg-amber-900/40 dark:text-amber-200 dark:hover:bg-amber-900/60"
+                            onClick={openMediaLicenseForm}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" || e.key === " ") {
+                                e.preventDefault();
+                                openMediaLicenseForm();
+                              }
+                            }}
+                            data-testid="sidebar-identity-unlicensed-badge"
+                          >
+                            <BadgeAlert className="h-3 w-3" />
+                            غير مرخّص
+                          </Badge>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
               )}
               <div className="mb-3 space-y-3 px-2">
                 {quickCreateItem && (
-                  <Button asChild className="w-full justify-start gap-2 shadow-sm">
-                    <Link
-                      href={quickCreateItem.path || "/dashboard/articles/new"}
-                      onClick={() => handleNavClick(quickCreateItem)}
-                      data-testid="sidebar-quick-create-article"
+                  createBlocked ? (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      className="w-full justify-start gap-2 shadow-sm opacity-60"
+                      title={createBlockedReason}
+                      onClick={openMediaLicenseForm}
+                      data-testid="sidebar-quick-create-article-blocked"
                     >
                       <Plus className="h-4 w-4" />
                       <span>{role === "opinion_author" ? "إنشاء مقال جديد" : "إنشاء خبر جديد"}</span>
-                    </Link>
-                  </Button>
+                    </Button>
+                  ) : (
+                    <Button asChild className="w-full justify-start gap-2 shadow-sm">
+                      <Link
+                        href={quickCreateItem.path || "/dashboard/articles/new"}
+                        onClick={() => handleNavClick(quickCreateItem)}
+                        data-testid="sidebar-quick-create-article"
+                      >
+                        <Plus className="h-4 w-4" />
+                        <span>{role === "opinion_author" ? "إنشاء مقال جديد" : "إنشاء خبر جديد"}</span>
+                      </Link>
+                    </Button>
+                  )
                 )}
 
                 <div className="relative">
@@ -417,11 +556,12 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                     value={searchQuery}
                     onChange={(event) => setSearchQuery(event.target.value)}
                     placeholder="ابحث في لوحة التحكم"
-                    className="h-9 w-full rounded-md border border-sidebar-border bg-sidebar-accent/40 pr-9 pl-12 text-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-primary focus:bg-background"
+                    autoFocus={false}
+                    className="h-9 w-full rounded-md border border-sidebar-border bg-sidebar-accent/40 pr-9 pl-3 text-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-primary focus:bg-background md:pl-12"
                     aria-label="البحث في لوحة التحكم"
                     data-testid="sidebar-navigation-search"
                   />
-                  <kbd className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 rounded border bg-background px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                  <kbd className="pointer-events-none absolute left-2 top-1/2 hidden -translate-y-1/2 rounded border bg-background px-1.5 py-0.5 text-[10px] text-muted-foreground md:inline">
                     ⌘K
                   </kbd>
                 </div>
@@ -547,7 +687,24 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                         : user?.email}
                     </p>
                     <p className="text-xs text-muted-foreground truncate">
-                      {user?.role === "admin" ? "مدير" : user?.role === "editor" ? "محرر" : "كاتب"}
+                      {(user as { roleLabel?: string | null })?.roleLabel
+                        || (user?.role === "system_admin" || user?.role === "system.admin" || user?.role === "superadmin" || user?.role === "super_admin"
+                          ? "مسؤول النظام"
+                          : user?.role === "admin"
+                            ? "مسؤول النظام"
+                            : user?.role === "editor"
+                              ? "محرر"
+                            : user?.role === "reporter"
+                              ? "مراسل"
+                              : user?.role === "content_manager"
+                                ? "مدير محتوى"
+                                : user?.role === "opinion_author"
+                                  ? "كاتب رأي"
+                                  : user?.role === "angle_writer"
+                                    ? "كاتب زاوية"
+                                    : user?.role === "author"
+                                      ? "كاتب"
+                                      : "عضو")}
                     </p>
                   </div>
                 </div>
@@ -579,9 +736,31 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
           
           <InternalAnnouncement />
           <AutoPublishBanner />
+          <MeetingCallAlert />
 
           <div className="flex-1 overflow-auto p-3 md:p-6">
-            <AppBreadcrumbs role={role} flags={flags} />
+            <AppBreadcrumbs
+              role={role}
+              flags={flags}
+              permissions={user?.permissions || []}
+              allRoles={
+                user?.roles && user.roles.length > 0
+                  ? user.roles
+                  : user?.role
+                    ? [user.role]
+                    : []
+              }
+            />
+            {showMediaLicenseWarningBanner ? (
+              <button
+                type="button"
+                onClick={openMediaLicenseForm}
+                className="mb-4 w-full rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-start text-sm font-medium leading-relaxed text-red-700 transition-colors hover:bg-red-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 dark:border-red-800 dark:bg-red-950/50 dark:text-red-200 dark:hover:bg-red-950/70"
+                data-testid="banner-media-license-warning"
+              >
+                {MEDIA_LICENSE_DASHBOARD_WARNING}
+              </button>
+            ) : null}
             {children}
           </div>
         </SidebarInset>

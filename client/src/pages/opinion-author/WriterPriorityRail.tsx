@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { OPINION_WRITERS_PER_DAY_CAP } from "@shared/opinionWriterConstants";
 import {
   ArrowLeft,
   BellRing,
@@ -31,6 +32,7 @@ import {
   CircleX,
   ClipboardList,
   Edit3,
+  Share2,
 } from "lucide-react";
 
 export const WEEKDAYS_AR = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
@@ -64,6 +66,9 @@ export function editorialNotificationStyle(type: EditorialNotification["type"]) 
   if (type === "needs_revision") return { icon: Edit3, label: "ملاحظات تحريرية", item: "border-warning/40 bg-warning/10 dark:border-border dark:bg-warning/10", iconClass: "text-warning dark:text-warning" };
   if (type === "survey_invite") return { icon: ClipboardList, label: "دعوة استطلاع", item: "border-primary/40 bg-primary/5 dark:border-border dark:bg-primary/10", iconClass: "text-primary" };
   if (type === "rejected" || type === "deleted" || type === "archived") return { icon: CircleX, label: type === "deleted" ? "حُذف نهائيًا" : "غير صالح للنشر", item: "border-destructive/30 bg-destructive/10 dark:border-border dark:bg-destructive/10", iconClass: "text-destructive" };
+  if (type === "social_published") return { icon: Share2, label: "نُشر على X", item: "border-emerald-500/30 bg-emerald-500/10 dark:border-border dark:bg-emerald-950/20", iconClass: "text-emerald-600 dark:text-emerald-400" };
+  if (type === "social_scheduled") return { icon: CalendarClock, label: "جدولة على X", item: "border-amber-500/30 bg-amber-500/10 dark:border-border dark:bg-amber-950/20", iconClass: "text-amber-600 dark:text-amber-400" };
+  if (type === "social_rejected") return { icon: CircleX, label: "مقترح X", item: "border-border bg-muted/30", iconClass: "text-muted-foreground" };
   // أنواع مستقبلية غير معروفة: عرض محايد بدل الوقوع على النمط الأحمر
   return { icon: BellRing, label: "تنبيه", item: "border-border bg-muted/30", iconClass: "text-muted-foreground" };
 }
@@ -130,33 +135,50 @@ export function WriterDayPicker({ dayLoads }: { dayLoads: number[] }) {
             <p className="text-sm font-bold sm:text-base">اختر يومك الأسبوعي للنشر</p>
             <p className="text-xs text-muted-foreground sm:text-sm">
               مقالتك ستُنشر في هذا اليوم من كل أسبوع. يُحدد مرة واحدة، وتغييره لاحقاً عبر إدارة
-              التحرير — الأرقام تحت كل يوم توضح عدد الكتّاب المسجلين فيه.
+              التحرير — الحد {OPINION_WRITERS_PER_DAY_CAP} كتّاب لكل يوم؛ الأيام المكتملة غير متاحة.
             </p>
           </div>
         </div>
         <div className="grid grid-cols-4 gap-1.5 sm:grid-cols-7">
-          {WEEKDAYS_AR.map((day, i) => (
-            <button
-              key={day}
-              type="button"
-              onClick={() => setPicked(i)}
-              className={`min-h-[52px] rounded-lg border p-2 text-center transition-colors ${
-                picked === i
-                  ? "border-primary bg-primary/10 font-bold text-primary"
-                  : "border-border bg-muted/30 hover:border-primary/40"
-              }`}
-            >
-              <div className="text-xs sm:text-sm">{day}</div>
-              <div className="mt-0.5 text-[10px] text-muted-foreground sm:text-xs">
-                {dayLoads[i] ? `${dayLoads[i]} كاتب` : "شاغر"}
-              </div>
-            </button>
-          ))}
+          {WEEKDAYS_AR.map((day, i) => {
+            const load = dayLoads[i] ?? 0;
+            const isFull = load >= OPINION_WRITERS_PER_DAY_CAP;
+            const isPicked = picked === i;
+            return (
+              <button
+                key={day}
+                type="button"
+                disabled={isFull}
+                onClick={() => !isFull && setPicked(i)}
+                className={`min-h-[52px] rounded-lg border p-2 text-center transition-colors ${
+                  isFull
+                    ? "cursor-not-allowed border-amber-300/70 bg-amber-50/80 text-amber-900 opacity-90 dark:border-amber-800/50 dark:bg-amber-950/40 dark:text-amber-200"
+                    : isPicked
+                      ? "border-primary bg-primary/10 font-bold text-primary"
+                      : "border-border bg-muted/30 hover:border-primary/40"
+                }`}
+                data-testid={`writer-day-pick-${i}`}
+              >
+                <div className="text-xs sm:text-sm">{day}</div>
+                <div className="mt-0.5 text-[10px] leading-snug sm:text-xs">
+                  {isFull
+                    ? "غير متاح للنشر"
+                    : load
+                      ? `${load} من ${OPINION_WRITERS_PER_DAY_CAP} كتّاب`
+                      : "شاغر"}
+                </div>
+              </button>
+            );
+          })}
         </div>
         <Button
           size="sm"
           className="gap-1.5"
-          disabled={picked === null || chooseMutation.isPending}
+          disabled={
+            picked === null ||
+            chooseMutation.isPending ||
+            (picked !== null && (dayLoads[picked] ?? 0) >= OPINION_WRITERS_PER_DAY_CAP)
+          }
           onClick={() => picked !== null && chooseMutation.mutate(picked)}
         >
           <CheckCircle2 className="h-4 w-4" />
@@ -230,11 +252,16 @@ export function WriterPriorityRail({
   const items = useMemo<RailItem[]>(() => {
     const list: RailItem[] = [];
     if (banner?.state === "late") {
+      const publishStillAhead = new Date(banner.nextPublishAt).getTime() > Date.now();
       list.push({
         key: "schedule-late",
         kind: "late",
-        title: "فات موعد النشر لهذا الأسبوع",
-        subtitle: `عند إرسال مقالتك الآن ستُجدول ليوم ${fmtDate(banner.nextPublishAt)}`,
+        title: publishStillAhead
+          ? "فات آخر موعد لإرسال مقالتك"
+          : "فات موعد النشر لهذا الأسبوع",
+        subtitle: publishStillAhead
+          ? `أرسلها الآن لتُجدول ليوم ${fmtDate(banner.nextPublishAt)}`
+          : `عند إرسال مقالتك الآن ستُجدول ليوم ${fmtDate(banner.nextPublishAt)}`,
       });
     } else if (banner?.state === "reminder") {
       list.push({
@@ -263,13 +290,16 @@ export function WriterPriorityRail({
       });
     }
     if (banner && banner.state === "ok") {
+      const submitOpen = new Date(banner.submitDeadline).getTime() > Date.now();
       list.push({
         key: "schedule-ok",
         kind: "schedule_ok",
         title: `يومك المخصص: ${WEEKDAYS_AR[banner.weekday]}`,
         subtitle: banner.hasUpcoming
           ? `مقالتك القادمة في مسار النشر — موعدها ${fmtDate(banner.nextPublishAt)}`
-          : `مقالتك القادمة تُنشر ${fmtDate(banner.nextPublishAt)} — آخر موعد للإرسال ${fmtDate(banner.submitDeadline, false)}`,
+          : submitOpen
+            ? `مقالتك القادمة تُنشر ${fmtDate(banner.nextPublishAt)} — آخر موعد للإرسال ${fmtDate(banner.submitDeadline, false)}`
+            : `مقالتك القادمة تُنشر ${fmtDate(banner.nextPublishAt)} — أرسلها في أقرب وقت`,
       });
     }
     return list.sort((a, b) => KIND_PRIORITY[a.kind] - KIND_PRIORITY[b.kind]);

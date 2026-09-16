@@ -1,5 +1,9 @@
 import crypto from "crypto";
 import { pool } from "../db";
+import {
+  ArticleViewStatsBuffer,
+  type PendingArticleView,
+} from "./articleViewStatsBuffer";
 
 /**
  * Per-IP article view stats.
@@ -16,10 +20,11 @@ import { pool } from "../db";
 
 const IP_HASH_SALT = process.env.VIEW_IP_HASH_SALT || "sabq-view-ip-hash-v1";
 const FLUSH_INTERVAL_MS = 30_000;
+const FLUSH_CHUNK_SIZE = 100;
+const FLUSH_LOCK_TIMEOUT_MS = 1_000;
+const FLUSH_STATEMENT_TIMEOUT_MS = 5_000;
 
-type Pending = { articleId: string; ipHash: string; userId: string | null };
-
-const buffer: Pending[] = [];
+const buffer = new ArticleViewStatsBuffer();
 let flushing = false;
 let timer: NodeJS.Timeout | null = null;
 
@@ -30,38 +35,25 @@ export function hashIp(ip: string): string {
 /** Queue a counted view for the per-IP aggregate (cheap, non-blocking). */
 export function recordArticleView(articleId: string, ip: string, userId?: string | null): void {
   if (!articleId || !ip || ip === "unknown") return;
-  buffer.push({ articleId, ipHash: hashIp(ip), userId: userId || null });
+  buffer.add(articleId, hashIp(ip), userId || null);
 }
 
-export async function flushArticleViewStats(): Promise<void> {
-  if (flushing || buffer.length === 0) return;
-  flushing = true;
-  const batch = buffer.splice(0);
+async function flushChunk(rows: PendingArticleView[]): Promise<void> {
+  const params: any[] = [];
+  const values = rows
+    .map((row, index) => {
+      const offset = index * 4;
+      params.push(row.articleId, row.ipHash, row.userId, row.count);
+      return `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, now(), now())`;
+    })
+    .join(", ");
+
+  const client = await pool.connect();
   try {
-    // Collapse the batch to one row per (article, ipHash) before hitting the DB.
-    const agg = new Map<string, { articleId: string; ipHash: string; userId: string | null; count: number }>();
-    for (const e of batch) {
-      const key = `${e.articleId}|${e.ipHash}`;
-      const cur = agg.get(key);
-      if (cur) {
-        cur.count += 1;
-        if (!cur.userId && e.userId) cur.userId = e.userId;
-      } else {
-        agg.set(key, { articleId: e.articleId, ipHash: e.ipHash, userId: e.userId, count: 1 });
-      }
-    }
-
-    const rows = [...agg.values()];
-    const params: any[] = [];
-    const values = rows
-      .map((r, i) => {
-        const o = i * 4;
-        params.push(r.articleId, r.ipHash, r.userId, r.count);
-        return `($${o + 1}, $${o + 2}, $${o + 3}, $${o + 4}, now(), now())`;
-      })
-      .join(", ");
-
-    await pool.query(
+    await client.query("BEGIN");
+    await client.query(`SET LOCAL lock_timeout = '${FLUSH_LOCK_TIMEOUT_MS}ms'`);
+    await client.query(`SET LOCAL statement_timeout = '${FLUSH_STATEMENT_TIMEOUT_MS}ms'`);
+    await client.query(
       `INSERT INTO article_ip_views (article_id, ip_hash, user_id, views_count, first_seen, last_seen)
        VALUES ${values}
        ON CONFLICT (article_id, ip_hash)
@@ -70,9 +62,46 @@ export async function flushArticleViewStats(): Promise<void> {
                      user_id = COALESCE(article_ip_views.user_id, EXCLUDED.user_id)`,
       params,
     );
-  } catch (err) {
-    console.error("[ArticleViewStats] flush failed, re-buffering:", err);
-    buffer.push(...batch);
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+export async function flushArticleViewStats(): Promise<void> {
+  if (flushing || buffer.size === 0) return;
+  flushing = true;
+  const batch = buffer.drain();
+  try {
+    for (let offset = 0; offset < batch.length; offset += FLUSH_CHUNK_SIZE) {
+      const chunk = batch.slice(offset, offset + FLUSH_CHUNK_SIZE);
+      try {
+        await flushChunk(chunk);
+      } catch (error: any) {
+        for (const row of chunk) {
+          buffer.add(row.articleId, row.ipHash, row.userId, row.count);
+        }
+
+        console.warn("[ArticleViewStats] chunk deferred", {
+          rows: chunk.length,
+          code: error?.code || "unknown",
+          pending: buffer.size,
+        });
+
+        // A lock/statement timeout usually means one article is being edited;
+        // continue so unrelated chunks still flush. Infrastructure failures
+        // would affect every chunk, so requeue the remainder without hammering DB.
+        if (error?.code !== "55P03" && error?.code !== "57014") {
+          for (const row of batch.slice(offset + chunk.length)) {
+            buffer.add(row.articleId, row.ipHash, row.userId, row.count);
+          }
+          break;
+        }
+      }
+    }
   } finally {
     flushing = false;
   }

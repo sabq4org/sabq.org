@@ -43,7 +43,19 @@ interface SpStandingRow {
   goalsFor: number; goalsAgainst: number; goalsDiff: number; points: number; form: string | null;
 }
 interface SpSquadPlayer {
-  id: number; name: string; number: number | null; position: string; positionEn: string; age: number | null; photo: string;
+  id: number;
+  name: string;
+  number: number | null;
+  position: string;
+  positionEn: string;
+  age: number | null;
+  photo: string;
+  captain?: boolean;
+  nationality?: { name: string; flag?: string | null; code?: string | null } | null;
+  height?: number | null;
+  weight?: number | null;
+  contract?: { start?: string | null; end?: string | null } | null;
+  detailedPosition?: string | null;
 }
 interface SpTeamInfo {
   id: number; name: string; logo: string; country: string | null; founded: number | null;
@@ -667,17 +679,41 @@ export default function SportsTeam() {
                             <Link
                               key={pl.id}
                               href={`/sports/player/${pl.id}`}
-                              className="flex items-center gap-3 p-2.5 rounded-xl border border-border hover:bg-muted/50 transition-colors"
+                              className="flex items-center gap-3 p-2.5 rounded-xl border border-border hover:bg-muted/50 transition-colors relative"
                             >
-                              {pl.photo ? (
-                                <img src={pl.photo} alt="" className="w-11 h-11 rounded-full object-cover bg-muted shrink-0" loading="lazy" />
-                              ) : (
-                                <span className="w-11 h-11 rounded-full bg-muted shrink-0" />
-                              )}
-                              <div className="min-w-0">
-                                <div className="text-sm font-semibold text-foreground truncate">{pl.name}</div>
-                                <div className="text-[11px] text-muted-foreground">
-                                  {pl.number != null ? `#${pl.number}` : ""}{pl.age != null ? ` • ${pl.age} سنة` : ""}
+                              <div className="relative shrink-0">
+                                {pl.photo ? (
+                                  <img src={pl.photo} alt="" className="w-11 h-11 rounded-full object-cover bg-muted shrink-0" loading="lazy" />
+                                ) : (
+                                  <span className="w-11 h-11 rounded-full bg-muted shrink-0 block" />
+                                )}
+                                {pl.captain && (
+                                  <span
+                                    className="absolute -top-1 -right-1 bg-amber-500 text-slate-950 font-black text-[9px] w-4 h-4 rounded-full flex items-center justify-center shadow-xs ring-1 ring-background"
+                                    title="قائد الفريق"
+                                  >
+                                    C
+                                  </span>
+                                )}
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-1.5 truncate">
+                                  {pl.nationality?.flag && (
+                                    <img
+                                      src={pl.nationality.flag}
+                                      alt={pl.nationality.name || ""}
+                                      className="w-4 h-2.5 rounded-xs object-cover shrink-0"
+                                      loading="lazy"
+                                    />
+                                  )}
+                                  <span className="text-sm font-semibold text-foreground truncate">{pl.name}</span>
+                                </div>
+                                <div className="text-[11px] text-muted-foreground truncate">
+                                  {pl.number != null ? `#${pl.number}` : ""}
+                                  {pl.detailedPosition && pl.detailedPosition !== pl.position
+                                    ? ` • ${pl.detailedPosition}`
+                                    : ""}
+                                  {pl.age != null ? ` • ${pl.age} سنة` : ""}
                                 </div>
                               </div>
                             </Link>

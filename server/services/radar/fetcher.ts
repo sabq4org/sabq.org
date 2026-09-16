@@ -5,7 +5,12 @@
 import Parser from "rss-parser";
 import type { RadarSource } from "@shared/schema";
 import type { NormalizedRadarItem } from "./repo";
-import { filterFreshItems, parseFeedDate } from "./parsing";
+import {
+  filterFreshItems,
+  parseFeedDate,
+  resolveEnvPlaceholders,
+  stripPublisherSuffix,
+} from "./parsing";
 import { filterItemsBySabqInterest, shouldApplyTopicFilter } from "./topicFilter";
 import { fetchXSource } from "./xFetcher";
 
@@ -13,10 +18,17 @@ const FETCH_TIMEOUT_MS = 15_000;
 const MAX_ITEMS_PER_FETCH = 30;
 const MAX_ITEM_AGE_HOURS = Number(process.env.RADAR_MAX_ITEM_AGE_HOURS || 48);
 
+// عنصر <source> في خلاصات بحث Google News يحمل اسم الناشر الحقيقي (RNZ، Le Monde…)
 const rssParser = new Parser({
   timeout: FETCH_TIMEOUT_MS,
   headers: { "User-Agent": "SabqSmartRadar/1.0 (+https://sabq.org)" },
+  customFields: { item: [["source", "feedSource"]] },
 });
+
+/** ممر اصطياد Google News — مصدر «بحث» لا «اشتراك»، وعناوينه تحمل لاحقة الناشر */
+function isGoogleNewsLane(source: RadarSource): boolean {
+  return source.url.includes("news.google.com/rss");
+}
 
 function cleanText(value: unknown, maxLength: number): string {
   return String(value ?? "")
@@ -27,18 +39,32 @@ function cleanText(value: unknown, maxLength: number): string {
 }
 
 async function fetchRss(source: RadarSource): Promise<NormalizedRadarItem[]> {
-  const feed = await rssParser.parseURL(source.url);
+  const feed = await rssParser.parseURL(resolveEnvPlaceholders(source.url, process.env));
+  const gnewsLane = isGoogleNewsLane(source);
   const items: NormalizedRadarItem[] = [];
   for (const item of feed.items ?? []) {
-    const title = cleanText(item.title, 300);
+    // feedSource إما نص مباشر أو {_: "الاسم", $: {url}} حسب المُفكِّك
+    const rawSource = (item as any).feedSource;
+    const publisher = cleanText(
+      typeof rawSource === "string" ? rawSource : rawSource?._,
+      120
+    ) || undefined;
+    const title = gnewsLane
+      ? cleanText(stripPublisherSuffix(String(item.title ?? ""), publisher), 300)
+      : cleanText(item.title, 300);
     const link = String(item.link ?? "").trim();
     if (!title || !link) continue;
     const enclosureUrl = (item as any).enclosure?.url as string | undefined;
+    // ملخص Google News قائمة روابط HTML تكرر العنوان — لا قيمة له بعد التنظيف
+    const excerpt = gnewsLane
+      ? undefined
+      : cleanText(item.contentSnippet ?? (item as any).summary ?? item.content, 1200) || undefined;
     items.push({
-      guid: String(item.guid ?? item.id ?? link),
+      guid: String(item.guid ?? (item as any).id ?? link),
       link,
       title,
-      excerpt: cleanText(item.contentSnippet ?? (item as any).summary ?? item.content, 1200) || undefined,
+      excerpt,
+      publisher: gnewsLane ? publisher : undefined,
       imageUrl: enclosureUrl && /^https?:\/\//.test(enclosureUrl) ? enclosureUrl : undefined,
       // pubDate الخام قبل isoDate: مكتبة rss-parser تحسب isoDate بـ new Date
       // فتُسقط لواحق مثل BST التي تعالجها parseFeedDate
@@ -79,7 +105,7 @@ async function fetchJson(source: RadarSource): Promise<NormalizedRadarItem[]> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   try {
-    const response = await fetch(source.url, {
+    const response = await fetch(resolveEnvPlaceholders(source.url, process.env), {
       signal: controller.signal,
       headers: {
         Accept: "application/json",
@@ -92,21 +118,46 @@ async function fetchJson(source: RadarSource): Promise<NormalizedRadarItem[]> {
 
     const items: NormalizedRadarItem[] = [];
     for (const raw of rawItems) {
+      // Event Registry يعلّم النسخ المكررة من نفس المادة عبر المصادر — لا نهدر تحليلًا عليها
+      if (raw.isDuplicate === true) continue;
       const title = cleanText(firstString(raw, ["title", "headline", "name"]), 300);
       const link = firstString(raw, ["link", "url", "web_url", "webUrl", "href"]);
       if (!title || !link) continue;
+      // Event Registry: الناشر كائن source بحقل title؛ GDELT: نطاق نصي في domain
+      const sourceObj = raw.source as { title?: unknown; uri?: unknown } | undefined;
+      const nestedPublisher =
+        sourceObj && typeof sourceObj === "object"
+          ? String(sourceObj.title ?? sourceObj.uri ?? "")
+          : "";
       items.push({
         guid: firstString(raw, ["guid", "id", "uuid", "uri"]) || link,
         link,
         title,
+        // body (النص الكامل لدى Event Registry) يعطي المحلل سياقًا أدق — يُقص لـ1200 حرف
         excerpt:
           cleanText(
-            firstString(raw, ["description", "summary", "abstract", "excerpt", "snippet", "lead"]),
+            firstString(raw, ["description", "summary", "abstract", "excerpt", "snippet", "lead", "body"]),
             1200
           ) || undefined,
-        imageUrl: firstString(raw, ["image", "imageUrl", "image_url", "thumbnail", "urlToImage"]) || undefined,
+        publisher:
+          cleanText(
+            firstString(raw, ["domain", "publisher", "source_name", "sourceName"]) || nestedPublisher,
+            120
+          ) || undefined,
+        language: cleanText(firstString(raw, ["language", "sourcelanguage", "lang"]), 30).toLowerCase() || undefined,
+        imageUrl:
+          firstString(raw, ["image", "imageUrl", "image_url", "thumbnail", "urlToImage", "socialimage"]) || undefined,
         publishedAt: parseFeedDate(
-          firstString(raw, ["publishedAt", "published_at", "pubDate", "date", "published", "created_at"])
+          firstString(raw, [
+            "publishedAt",
+            "published_at",
+            "pubDate",
+            "dateTime", // Event Registry — قبل date لأن date لديه بدقة اليوم فقط
+            "date",
+            "published",
+            "created_at",
+            "seendate",
+          ])
         ),
       });
     }

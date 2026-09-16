@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatNumber } from "@/lib/format";
-import type { PredMyAward, PredSettlementResponse } from "./predictionTypes";
+import { scoreRtlAr, type PredMyAward, type PredSettlementResponse } from "./predictionTypes";
 
 type Props = {
   contestId: string | null;
@@ -55,7 +55,12 @@ export function PredictionSettlementDrawer({ contestId, onClose }: Props) {
 function scoreText(data: PredSettlementResponse | undefined): string | null {
   const result = data?.result;
   if (result?.finalHome === undefined || result?.finalAway === undefined) return null;
-  return `${result.finalHome}–${result.finalAway}`;
+  const pen = result.penalties;
+  const base = `${result.finalAway}–${result.finalHome}`;
+  if (pen && (pen.home != null || pen.away != null)) {
+    return `${base} (${pen.away ?? 0}–${pen.home ?? 0} ر.ت)`;
+  }
+  return base;
 }
 
 function AwardDetails({ award, finalScore }: { award: PredMyAward; finalScore: string | null }) {
@@ -68,8 +73,8 @@ function AwardDetails({ award, finalScore }: { award: PredMyAward; finalScore: s
   if (pool?.base) {
     steps.push(
       (pool.carriedIn ?? 0) > 0
-        ? `بركة المباراة ${formatNumber(totalPool)} نقطة (${formatNumber(pool.base)} أساس + ${formatNumber(pool.carriedIn ?? 0)} مُرحّلة)`
-        : `بركة المباراة ${formatNumber(totalPool)} نقطة`,
+        ? `جائزة المباراة ${formatNumber(totalPool)} نقطة (${formatNumber(pool.base)} أساس + ${formatNumber(pool.carriedIn ?? 0)} مُرحّلة)`
+        : `جائزة المباراة ${formatNumber(totalPool)} نقطة`,
     );
   }
   if (pool?.tierShare !== undefined && tierTotal !== null) {
@@ -94,8 +99,15 @@ function AwardDetails({ award, finalScore }: { award: PredMyAward; finalScore: s
       {/* التوقع والفئة */}
       <div className="flex items-center justify-between rounded-xl bg-muted px-3 py-2.5">
         <span className="text-[12px] font-bold text-muted-foreground">
-          {award.breakdown?.prediction ? `توقّعتَ ${award.breakdown.prediction}` : "توقّعك"}
-          {finalScore ? ` — انتهت ${finalScore}` : ""}
+          {/* النتائج داخل LTR بالضيف أولًا — فرقم المضيف يلاصق اليمين (القاعدة الموحّدة) */}
+          {award.breakdown?.prediction ? (
+            <>توقّعتَ <span dir="ltr" className="tabular-nums">{scoreRtlAr(award.breakdown.prediction)}</span></>
+          ) : (
+            "توقّعك"
+          )}
+          {finalScore ? (
+            <> — انتهت <span dir="ltr" className="tabular-nums">{finalScore}</span></>
+          ) : null}
         </span>
         <span className="rounded-full bg-amber-500/15 px-3 py-1 text-[11px] font-extrabold text-amber-700 dark:text-amber-400">
           🎯 {award.reasonLabelAr}

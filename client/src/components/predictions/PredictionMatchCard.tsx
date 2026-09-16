@@ -2,11 +2,12 @@
 // وشريط قاعدة مولّد من الملف الفعّال (يُجلب عند فتح العدّاد)، وحالة واحدة
 // واضحة لكل مباراة. الأزرار للمسجّلين، وغيرهم يُدعى لتسجيل الدخول.
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Lock, Minus, Plus, Shield } from "lucide-react";
+import { Lock, Minus, Plus, Shield, Users } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { formatNumber } from "@/lib/format";
 import {
   kickoffTimeAr,
   lockCountdownAr,
@@ -21,6 +22,8 @@ type Props = {
   isAuthenticated: boolean;
   onLoginNeeded: () => void;
   onOpenSettlement: (contestId: string) => void;
+  /** تمييز من رابط عميق (?fixture= / ?contest=) */
+  highlighted?: boolean;
 };
 
 export function PredictionMatchCard({
@@ -29,6 +32,7 @@ export function PredictionMatchCard({
   isAuthenticated,
   onLoginNeeded,
   onOpenSettlement,
+  highlighted = false,
 }: Props) {
   const { toast } = useToast();
   const mine = contest.myEntry?.payload;
@@ -36,10 +40,20 @@ export function PredictionMatchCard({
   const [predHome, setPredHome] = useState(mine?.predHome ?? 0);
   const [predAway, setPredAway] = useState(mine?.predAway ?? 0);
 
+  // ساعة حية كل 30 ثانية: العدّاد التنازلي كان يُحسب مرة واحدة عند الرسم،
+  // فيبقى تبويب خامل يعرض «توقّع الآن» بعد انطلاق المباراة ثم يفشل الحفظ.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(timer);
+  }, []);
+  const lockPassed = Date.parse(contest.locksAt) <= now;
+  const isOpen = contest.status === "open" && !lockPassed;
+
   // القاعدة تُجلب عند فتح العدّاد فقط — من ملف الاحتساب الفعّال
   const { data: detailRaw } = useQuery<PredContestDetail>({
     queryKey: [`/api/predictions/contests/${contest.id}`],
-    enabled: editing && contest.status === "open",
+    enabled: editing && isOpen,
     staleTime: 5 * 60_000,
   });
 
@@ -53,31 +67,63 @@ export function PredictionMatchCard({
       toast({ title: "تم حفظ توقّعك ✅", description: "يمكنك تعديله حتى ضربة البداية" });
       setEditing(false);
       queryClient.invalidateQueries({ queryKey: [`/api/predictions/competitions/${competitionSlug}`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/predictions/me/entries"] });
     },
-    onError: () =>
+    onError: (error: unknown) => {
+      const message = error instanceof Error ? error.message : "";
+      const locked = message.includes("PREDICTION_LOCKED") || message.includes("409");
       toast({
-        title: "تعذّر حفظ التوقّع",
-        description: "ربما أُقفلت المباراة — حدّث الصفحة",
+        title: locked ? "أُقفل التوقّع" : "تعذّر حفظ التوقّع",
+        description: locked
+          ? "انطلقت المباراة — التوقّع يُقفل عند ضربة البداية"
+          : "تحقّق من اتصالك وحاول مجددًا",
         variant: "destructive",
-      }),
+      });
+      if (locked) {
+        setEditing(false);
+        queryClient.invalidateQueries({ queryKey: [`/api/predictions/competitions/${competitionSlug}`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/predictions/me/entries"] });
+      }
+    },
   });
 
   const home = contest.metadata?.home;
   const away = contest.metadata?.away;
-  const countdown = contest.status === "open" ? lockCountdownAr(contest.locksAt) : null;
+  const countdown = isOpen ? lockCountdownAr(contest.locksAt, now) : null;
 
   return (
-    <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+    <div
+      id={`pred-contest-${contest.id}`}
+      data-fixture-ref={contest.externalRef ?? undefined}
+      data-testid={`prediction-match-card-${contest.id}`}
+      className={`rounded-2xl border bg-card p-4 shadow-sm scroll-mt-24 transition ring-offset-2 ${
+        highlighted
+          ? "border-sky-500 ring-2 ring-sky-400/70"
+          : "border-border"
+      }`}
+    >
       {/* الفريقان والوسط */}
       <div className="flex items-center gap-2">
         <TeamSide name={home?.name} logo={home?.logo} />
         <div className="min-w-[72px] text-center">
           {contest.status === "settled" && contest.result ? (
-            <span className="text-xl font-extrabold tabular-nums text-foreground" dir="ltr">
-              {contest.result.finalHome}–{contest.result.finalAway}
-            </span>
+            <div>
+              {/* المضيف معروض يمينًا في RTL — الضيف أولًا داخل LTR ليلاصق كل رقم فريقه */}
+              <span className="text-xl font-extrabold tabular-nums text-foreground block" dir="ltr">
+                {contest.result.finalAway}–{contest.result.finalHome}
+              </span>
+              {(() => {
+                const pen = contest.result?.penalties ?? contest.metadata?.penalties;
+                if (!pen || (pen.home == null && pen.away == null)) return null;
+                return (
+                  <span className="text-[10.5px] font-bold tabular-nums text-muted-foreground block" dir="ltr">
+                    ({pen.away ?? 0}–{pen.home ?? 0} ر.ت)
+                  </span>
+                );
+              })()}
+            </div>
           ) : (
-            <span className="text-sm font-bold tabular-nums text-muted-foreground">
+            <span dir="ltr" className="text-sm font-bold tabular-nums text-muted-foreground">
               {kickoffTimeAr(contest.locksAt)}
             </span>
           )}
@@ -85,13 +131,29 @@ export function PredictionMatchCard({
         <TeamSide name={away?.name} logo={away?.logo} trailing />
       </div>
 
-      {/* السطر السفلي: معلومات + الحالة */}
-      <div className="mt-3 flex items-center justify-between gap-2">
-        <span className="text-[11px] text-muted-foreground">
-          {[contest.metadata?.round, countdown].filter(Boolean).join(" · ")}
-        </span>
+      {/* السطر السفلي: يمين = جولة/عدّاد + عدد المشاركين · يسار = حالة التوقّع */}
+      <div className="mt-3 flex items-end justify-between gap-2">
+        <div className="min-w-0 space-y-0.5 text-start">
+          <p className="text-[11px] text-muted-foreground">
+            {[contest.metadata?.round, countdown].filter(Boolean).join(" · ")}
+          </p>
+          <p
+            className="inline-flex items-center gap-1 text-[11px] font-semibold tabular-nums text-muted-foreground"
+            data-testid={`contest-entries-count-${contest.id}`}
+          >
+            <Users className="h-3 w-3 shrink-0 opacity-70" aria-hidden />
+            {(contest.entriesCount ?? 0) > 0 ? (
+              <>
+                <span dir="ltr">{formatNumber(contest.entriesCount ?? 0)}</span> متوقّع
+              </>
+            ) : (
+              "كن أول المتوقّعين"
+            )}
+          </p>
+        </div>
         <StatusChip
           contest={contest}
+          lockPassed={lockPassed}
           onPredict={() => {
             if (!isAuthenticated) return onLoginNeeded();
             setEditing((value) => !value);
@@ -101,7 +163,7 @@ export function PredictionMatchCard({
       </div>
 
       {/* العدّاد + القاعدة + الحفظ */}
-      {editing && contest.status === "open" && (
+      {editing && isOpen && (
         <div className="mt-4 space-y-3 border-t border-border pt-4">
           {detailRaw?.rule && (
             <p className="rounded-xl bg-primary/10 px-3 py-2 text-[11.5px] font-semibold leading-relaxed text-primary">
@@ -119,7 +181,11 @@ export function PredictionMatchCard({
             disabled={submitMutation.isPending}
             className="w-full rounded-xl bg-primary py-2.5 text-sm font-bold text-primary-foreground transition hover:opacity-90 disabled:opacity-60"
           >
-            {submitMutation.isPending ? "جارٍ الحفظ…" : `تأكيد التوقّع ${predHome}–${predAway}`}
+            {submitMutation.isPending ? (
+              "جارٍ الحفظ…"
+            ) : (
+              <>تأكيد التوقّع <span dir="ltr" className="tabular-nums">{predAway}–{predHome}</span></>
+            )}
           </button>
           <p className="text-center text-[10.5px] text-muted-foreground">
             يُقفل التوقّع عند ضربة البداية — ويمكنك تعديله حتى ذلك الحين
@@ -145,14 +211,30 @@ function TeamSide({ name, logo, trailing }: { name?: string | null; logo?: strin
 
 function StatusChip({
   contest,
+  lockPassed,
   onPredict,
   onOpenSettlement,
 }: {
   contest: PredContest;
+  lockPassed: boolean;
   onPredict: () => void;
   onOpenSettlement: () => void;
 }) {
   const mine = contest.myEntry?.payload;
+  // انقضى موعد الإغلاق والحالة لم تنقلب بعد (عامل القفل يعمل كل دقيقة) —
+  // نعرض «مقفل» فورًا بدل زر توقّع سيفشل حتمًا.
+  if (contest.status === "open" && lockPassed) {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-destructive/10 px-3 py-1 text-[11px] font-bold text-destructive">
+        <Lock className="h-3 w-3" />
+        {mine ? (
+          <>توقّعك <span dir="ltr" className="tabular-nums">{mine.predAway}–{mine.predHome}</span> مقفل</>
+        ) : (
+          "أُقفل التوقّع"
+        )}
+      </span>
+    );
+  }
   switch (contest.status) {
     case "open":
       return mine ? (
@@ -161,7 +243,7 @@ function StatusChip({
           onClick={onPredict}
           className="rounded-full bg-primary/10 px-3 py-1 text-[11px] font-bold text-primary transition hover:bg-primary/20"
         >
-          توقّعتَ {mine.predHome}–{mine.predAway} · تعديل
+          توقّعتَ <span dir="ltr" className="tabular-nums">{mine.predAway}–{mine.predHome}</span> · تعديل
         </button>
       ) : (
         <button
@@ -177,7 +259,11 @@ function StatusChip({
       return (
         <span className="inline-flex items-center gap-1 rounded-full bg-destructive/10 px-3 py-1 text-[11px] font-bold text-destructive">
           <Lock className="h-3 w-3" />
-          {mine ? `توقّعك ${mine.predHome}–${mine.predAway} مقفل` : "مقفل — بانتظار النتيجة"}
+          {mine ? (
+            <>توقّعك <span dir="ltr" className="tabular-nums">{mine.predAway}–{mine.predHome}</span> مقفل</>
+          ) : (
+            "مقفل — بانتظار النتيجة"
+          )}
         </span>
       );
     case "settled":

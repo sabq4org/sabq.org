@@ -5,6 +5,7 @@ struct TrendingView: View {
     @State private var articles: [Article] = []
     @State private var tags: [String] = []
     @State private var isLoading = true
+    @State private var loadError: String? = nil
 
     var body: some View {
         ScrollView(showsIndicators: false) {
@@ -17,6 +18,11 @@ struct TrendingView: View {
 
                 if isLoading {
                     loadingSection
+                } else if articles.isEmpty, let loadError {
+                    ErrorStateView(message: loadError) {
+                        isLoading = true
+                        Task { await loadData() }
+                    }
                 } else if articles.isEmpty {
                     EmptyStateView(
                         icon: "flame",
@@ -35,49 +41,13 @@ struct TrendingView: View {
         }
         .background(SabqTheme.background)
         .sabqRTL()
-        .navigationBarBackButtonHidden(true)
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button {
-                    SabqHaptics.light()
-                    dismiss()
-                } label: {
-                    Image(systemName: "chevron.right")
-                        .font(SabqFonts.app(size: 14, weight: .bold))
-                        .foregroundStyle(SabqTheme.ink)
-                        .padding(8)
-                        .background(Circle().fill(.ultraThinMaterial))
-                }
-            }
-            ToolbarItem(placement: .principal) {
-                Text("الأكثر تداولاً")
-                    .font(SabqFonts.app(size: 17, weight: .bold))
-                    .foregroundStyle(SabqTheme.ink)
-            }
-        }
+        .navigationTitle("الأكثر تداولاً")
+        .navigationBarTitleDisplayMode(.inline)
         .task { await loadData() }
     }
 
-    @Environment(\.dismiss) private var dismiss
-
     private var heroSection: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "flame.fill")
-                .font(SabqFonts.app(size: 28, weight: .medium))
-                .foregroundStyle(.orange)
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text("الأكثر تداولاً")
-                    .font(SabqFonts.app(size: 22, weight: .bold))
-                    .foregroundStyle(SabqTheme.ink)
-
-                Text("الأخبار الأكثر مشاهدة في آخر 48 ساعة")
-                    .font(SabqFonts.app(size: 13, weight: .regular))
-                    .foregroundStyle(SabqTheme.secondaryInk)
-            }
-
-            Spacer()
-        }
+        SabqPageIntro("الأخبار الأكثر مشاهدة في آخر 48 ساعة")
     }
 
     private var tagsSection: some View {
@@ -129,7 +99,7 @@ struct TrendingView: View {
     }
 
     private var articlesSection: some View {
-        SurfaceCard {
+        SurfaceCard(lazy: true) {
             ForEach(Array(articles.enumerated()), id: \.element.id) { index, article in
                 if index > 0 {
                     Divider().foregroundStyle(SabqTheme.outline)
@@ -150,7 +120,7 @@ struct TrendingView: View {
                                 .multilineTextAlignment(.leading)
 
                             HStack(spacing: 8) {
-                                Text(article.category.title)
+                                Text(article.categoryTitle)
                                     .font(SabqFonts.app(size: 10, weight: .regular))
                                     .foregroundStyle(SabqTheme.primaryEnd)
 
@@ -203,10 +173,16 @@ struct TrendingView: View {
             await MainActor.run {
                 articles = mapped
                 tags = response.tags
+                loadError = nil
                 isLoading = false
             }
         } catch {
-            await MainActor.run { isLoading = false }
+            // رسالة مفهومة للقارئ بحسب نوع الفشل بدل الصمت (نقل أندرويد #1573).
+            let message = ReaderErrorMessage.message(for: error, fallback: "تعذّر تحميل الأخبار الرائجة. حاول مرة أخرى.")
+            await MainActor.run {
+                loadError = message
+                isLoading = false
+            }
         }
     }
 }

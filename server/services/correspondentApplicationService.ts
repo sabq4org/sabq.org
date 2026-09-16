@@ -15,6 +15,10 @@ import {
   type InsertCorrespondentApplication,
   type User,
 } from "@shared/schema";
+import { isMediaLicenseExpired } from "./mediaLicenseService";
+import { invalidateAllUserSessions } from "../auth";
+import { invalidateUserPermissionCache } from "../rbac";
+import { claimPhoneForStaffAccount, normalizePhone } from "./phoneAuth";
 
 // Only plain reader-type accounts may be auto-upgraded on approval. A
 // staff/admin account with the same email must be handled manually — silently
@@ -190,9 +194,39 @@ export async function approveCorrespondentApplication(
     .from(users)
     .where(sql`lower(${users.email}) = ${applicantEmail}`);
 
+  // اربط جوال الطلب بالحساب الرسمي (E.164) حتى يجد OTP نفس العضوية لاحقاً.
+  // إن وُجد قارئ بنفس الرقم يُلغى ويُحرَّر الجوال للمنسوب.
+  const phoneCheck = await claimPhoneForStaffAccount(
+    application.phone,
+    existingUser?.id ?? null,
+  );
+  if (!phoneCheck.ok) {
+    throw new Error(phoneCheck.message);
+  }
+  const normalizedPhone = phoneCheck.e164 ?? normalizePhone(application.phone);
+
   let finalUser: User;
   const temporaryPassword = nanoid(12);
   const hashedPassword = await bcrypt.hash(temporaryPassword, 12);
+
+  // نسخ الترخيص من الطلب إلى الحساب عند توفر البيانات (لا نمسح إن كان الطلب بلا ترخيص)
+  if (
+    application.licenseNumber &&
+    application.licenseFileKey &&
+    application.licenseExpiresAt &&
+    isMediaLicenseExpired(application.licenseExpiresAt)
+  ) {
+    throw new Error("لا يمكن قبول طلب بترخيص منتهٍ — اطلب من المتقدم تجديد الترخيص أولاً");
+  }
+  const licenseFromApplication =
+    application.licenseNumber && application.licenseFileKey
+      ? {
+          mediaLicenseNumber: application.licenseNumber,
+          mediaLicenseFileKey: application.licenseFileKey,
+          mediaLicenseExpiresAt: application.licenseExpiresAt ?? null,
+          mediaLicenseSubmittedAt: new Date(),
+        }
+      : null;
 
   if (existingUser) {
     if (!UPGRADEABLE_ROLES.includes((existingUser.role || "reader").toLowerCase())) {
@@ -211,10 +245,13 @@ export async function approveCorrespondentApplication(
         bio: application.bio || existingUser.bio,
         city: application.city || existingUser.city,
         profileImageUrl: application.profilePhotoUrl || existingUser.profileImageUrl,
+        phoneNumber: normalizedPhone || existingUser.phoneNumber,
+        phoneVerified: Boolean(normalizedPhone) || existingUser.phoneVerified,
         isProfileComplete: true,
         status: "active",
         passwordHash: hashedPassword,
         mustChangePassword: true,
+        ...(licenseFromApplication ?? {}),
       })
       .where(eq(users.id, existingUser.id))
       .returning();
@@ -228,20 +265,30 @@ export async function approveCorrespondentApplication(
         firstName: application.arabicName.split(" ")[0] || application.arabicName,
         lastName: application.arabicName.split(" ").slice(1).join(" ") || "",
         profileImageUrl: application.profilePhotoUrl,
+        phoneNumber: normalizedPhone,
+        phoneVerified: Boolean(normalizedPhone),
         status: "active",
         passwordHash: hashedPassword,
         emailVerified: true,
         role: "reporter",
         jobTitle: application.jobTitle,
         bio: application.bio,
+        city: application.city,
         isProfileComplete: true,
         mustChangePassword: true,
+        ...(licenseFromApplication ?? {}),
       })
       .returning();
     finalUser = newUser;
   }
 
   await assignReporterRbacRole(finalUser.id, reviewerId);
+
+  // An existing reader account was re-credentialed and escalated to reporter —
+  // evict every prior session and permission cache so a stale/stolen session
+  // can't survive the reset or silently inherit the higher role (audit #8).
+  await invalidateAllUserSessions(finalUser.id);
+  invalidateUserPermissionCache(finalUser.id);
 
   const [updatedApplication] = await db
     .update(correspondentApplications)

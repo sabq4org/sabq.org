@@ -9,6 +9,7 @@ import {
   FileText,
   CreditCard,
   Building2,
+  BookOpen,
   Zap,
   ShieldCheck,
   Package,
@@ -94,9 +95,18 @@ const navItems: NavItem[] = [
     icon: CreditCard,
     testId: "nav-publisher-credits",
   },
+  // المسار مسجّل في App.tsx منذ البداية لكنه كان بلا مدخل في القائمة،
+  // فكانت صفحة الدليل غير قابلة للوصول إلا بكتابة الرابط يدوياً.
+  {
+    id: "publisher-guide",
+    href: "/dashboard/publisher/guide",
+    label: "دليل النشر",
+    icon: BookOpen,
+    testId: "nav-publisher-guide",
+  },
 ];
 
-function getInitials(firstName?: string | null, lastName?: string | null, email?: string) {
+function getInitials(firstName?: string | null, lastName?: string | null, email?: string | null) {
   if (firstName && lastName) return `${firstName[0]}${lastName[0]}`.toUpperCase();
   if (firstName) return firstName[0].toUpperCase();
   if (email) return email[0].toUpperCase();

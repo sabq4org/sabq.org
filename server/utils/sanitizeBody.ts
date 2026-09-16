@@ -7,6 +7,49 @@ import { getTableColumns, type Table } from "drizzle-orm";
 const ALWAYS_OMIT = new Set(["id", "createdAt", "updatedAt"]);
 
 /**
+ * Article columns no editor request may set directly, shared by the Arabic,
+ * English and Urdu write paths.
+ *
+ * Three groups, all of which were reachable from `req.body`:
+ *  - editorial verdict (`reviewStatus`, `reviewedBy`, …, and the publisher
+ *    review/approval chain) — a contributor could stamp their own article as
+ *    approved and satisfy any downstream check that trusts those columns;
+ *  - authorship (`authorId`, `submitterId`, `verifiedBy`, `publisherId`) —
+ *    byline theft, and it moves the row into another account's ownership
+ *    checks;
+ *  - metrics the platform computes (`views`, the read-time overrides, the
+ *    credibility triplet) — inflating them reorders "most read" surfaces.
+ *
+ * `status` is NOT here: legitimate edits change it, and moving it into a
+ * publishing status is authorised separately by server/services/publishGate.ts.
+ */
+export const ARTICLE_SERVER_OWNED_COLUMNS = [
+  "authorId",
+  "submitterId",
+  "views",
+  "avgReadTimeOverride",
+  "completionRateOverride",
+  "credibilityScore",
+  "credibilityAnalysis",
+  "credibilityLastUpdated",
+  "reviewStatus",
+  "reviewedBy",
+  "reviewedAt",
+  "reviewNotes",
+  "verifiedBy",
+  "verifiedAt",
+  "publisherId",
+  "publisherStatus",
+  "publisherReviewedBy",
+  "publisherReviewedAt",
+  "publisherReviewNotes",
+  "publisherCreditDeducted",
+  "publisherSubmittedAt",
+  "publisherApprovedAt",
+  "publisherApprovedBy",
+];
+
+/**
  * Mass-assignment guard for Drizzle writes.
  *
  * Restricts an untrusted request body to the actual columns of `table`,

@@ -206,6 +206,7 @@ nonisolated struct AdminArticleDetail: Decodable, Hashable {
     var authorId: String?
     var authorName: String?
     var isFeatured: Bool
+    var isReading: Bool
     var hideFromHomepage: Bool
     var aiSummary: String
     var imageUrl: String
@@ -217,7 +218,7 @@ nonisolated struct AdminArticleDetail: Decodable, Hashable {
 
     private enum CodingKeys: String, CodingKey {
         case id, title, subtitle, excerpt, content, slug, status, articleType, newsType
-        case categoryId, categoryName, reporterId, reporterName, authorId, authorName, isFeatured, hideFromHomepage
+        case categoryId, categoryName, reporterId, reporterName, authorId, authorName, isFeatured, isReading, hideFromHomepage
         case aiSummary, imageUrl, thumbnailUrl, seo, scheduledAt, publishedAt, views
     }
 
@@ -240,6 +241,7 @@ nonisolated struct AdminArticleDetail: Decodable, Hashable {
         authorId = try? c.decodeIfPresent(String.self, forKey: .authorId)
         authorName = try? c.decodeIfPresent(String.self, forKey: .authorName)
         isFeatured = (try? c.decode(Bool.self, forKey: .isFeatured)) ?? false
+        isReading = (try? c.decode(Bool.self, forKey: .isReading)) ?? false
         hideFromHomepage = (try? c.decode(Bool.self, forKey: .hideFromHomepage)) ?? false
         aiSummary = str(.aiSummary)
         imageUrl = str(.imageUrl)
@@ -308,6 +310,7 @@ nonisolated struct AdminArticleEditPayload: Encodable {
     var status: String
     var newsType: String
     var isFeatured: Bool
+    var isReading: Bool
     var hideFromHomepage: Bool
     var aiSummary: String
     var imageUrl: String
@@ -329,6 +332,7 @@ nonisolated struct AdminCreateBody: Encodable {
     var articleType: String
     var newsType: String
     var isFeatured: Bool
+    var isReading: Bool
     var hideFromHomepage: Bool
     var aiSummary: String
     var imageUrl: String

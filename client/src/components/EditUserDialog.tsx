@@ -29,7 +29,7 @@ import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, apiUrl, queryClient } from "@/lib/queryClient";
-import { Loader2, IdCard, User, UserCheck, Phone, Briefcase, Shield, Key, Eye, EyeOff, Mail } from "lucide-react";
+import { Loader2, IdCard, User, UserCheck, Phone, Briefcase, Shield, Key, Eye, EyeOff, Mail, Lock, Wand2 } from "lucide-react";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { ImageUpload } from "@/components/ImageUpload";
 
@@ -54,6 +54,7 @@ interface User {
   lastNameEn: string | null;
   phoneNumber: string | null;
   profileImageUrl: string | null;
+  bio?: string | null;
   status: string;
   emailVerified: boolean;
   phoneVerified: boolean;
@@ -83,7 +84,8 @@ interface PermissionOverride {
 }
 
 const editUserSchema = z.object({
-  email: z.string().email("البريد الإلكتروني غير صحيح"),
+  // حسابات الجوال قد تكون بلا بريد — الفارغ مسموح ولا يُرسل للخادم.
+  email: z.union([z.string().email("البريد الإلكتروني غير صحيح"), z.literal("")]),
   firstName: z.string().min(2, "الاسم الأول يجب أن يكون حرفين على الأقل"),
   lastName: z.string().min(2, "اسم العائلة يجب أن يكون حرفين على الأقل"),
   firstNameEn: z.union([z.string().min(2, "English first name must be at least 2 characters"), z.literal("")]).optional(),
@@ -111,7 +113,11 @@ export function EditUserDialog({ open, onOpenChange, userId }: EditUserDialogPro
   const { user: currentUser } = useAuth();
   const [newPassword, setNewPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  
+  /** رقم بطاقة وُلِّد داخل هذه الجلسة — يقفل الحقل بلا إعادة تحميل تفقد التعديلات */
+  const [issuedPressId, setIssuedPressId] = useState<string | null>(null);
+  const [generatingPressId, setGeneratingPressId] = useState(false);
+  const [initializedUserId, setInitializedUserId] = useState<string | null>(null);
+
   // Only system_admin can edit staff emails
   const canEditEmail = hasRole(currentUser, "system_admin");
 
@@ -150,6 +156,36 @@ export function EditUserDialog({ open, onOpenChange, userId }: EditUserDialogPro
     resetPasswordMutation.mutate(newPassword);
   };
 
+  /**
+   * توليد رقم البطاقة من النظام المركزي — يُحفظ في الخادم فوراً (مثل رقم
+   * الهوية: يُصدر مرة ولا يتغير)، ثم يُعرض في الحقل. لا نُبطل الكاش هنا
+   * كي لا تُفقد تعديلات النافذة غير المحفوظة.
+   */
+  const generatePressId = async () => {
+    if (!userId) return;
+    setGeneratingPressId(true);
+    try {
+      const result = await apiRequest<{ pressIdNumber: string; created: boolean }>(
+        `/api/staff-profiles/${userId}/press-id-number`,
+        { method: "POST" },
+      );
+      form.setValue("pressIdNumber", result.pressIdNumber, { shouldDirty: true });
+      setIssuedPressId(result.pressIdNumber);
+      toast({
+        title: result.created ? "تم توليد رقم البطاقة" : "للمنسوب رقم صادر مسبقاً",
+        description: `${result.pressIdNumber} — رقم دائم لا يتغير`,
+      });
+    } catch (error: unknown) {
+      toast({
+        title: "تعذر توليد الرقم",
+        description: error instanceof Error ? error.message : "حدث خطأ غير متوقع",
+        variant: "destructive",
+      });
+    } finally {
+      setGeneratingPressId(false);
+    }
+  };
+
   const { data: rolesRaw, isLoading: rolesLoading } = useQuery<Role[]>({
     queryKey: ["/api/admin/roles"],
     enabled: open,
@@ -162,9 +198,11 @@ export function EditUserDialog({ open, onOpenChange, userId }: EditUserDialogPro
   });
   const roles = Array.isArray(rolesRaw) ? rolesRaw : [];
 
-  const { data: user, isLoading: userLoading } = useQuery<User>({
+  const { data: user, isFetching: userFetching, isError: userError, refetch: refetchUser } = useQuery<User>({
     queryKey: ["/api/admin/users", userId],
     enabled: open && !!userId,
+    staleTime: 0,
+    refetchOnWindowFocus: false,
     queryFn: async () => {
       const res = await fetch(apiUrl(`/api/admin/users/${userId}`));
       if (!res.ok) throw new Error("Failed to fetch user");
@@ -172,12 +210,14 @@ export function EditUserDialog({ open, onOpenChange, userId }: EditUserDialogPro
     },
   });
 
-  const { data: staffData } = useQuery<{ bio?: string; bioAr?: string; title?: string; titleAr?: string } | null>({
+  const { data: staffData, isFetching: staffFetching, isError: staffError, refetch: refetchStaff } = useQuery<{ bio?: string | null; bioAr?: string | null; title?: string | null; titleAr?: string | null } | null>({
     queryKey: ["/api/admin/users", userId, "staff"],
     enabled: open && !!userId,
+    staleTime: 0,
+    refetchOnWindowFocus: false,
     queryFn: async () => {
       const res = await fetch(apiUrl(`/api/admin/users/${userId}/staff`));
-      if (!res.ok) return null;
+      if (!res.ok) throw new Error("تعذر تحميل معلومات الموظف");
       return res.json();
     },
   });
@@ -296,20 +336,26 @@ export function EditUserDialog({ open, onOpenChange, userId }: EditUserDialogPro
     if (!open) {
       setNewPassword("");
       setShowPassword(false);
+      setIssuedPressId(null);
+      setGeneratingPressId(false);
+      setInitializedUserId(null);
     }
   }, [open]);
 
   useEffect(() => {
-    if (user) {
+    // Initialize once per opening, after both requests complete. Refetches must
+    // not reset edits, and a failed staff request must never look like empty data.
+    if (open && user?.id === userId && staffData !== undefined && !userFetching && !staffFetching && !userError && !staffError && initializedUserId !== userId) {
       form.reset({
-        email: user.email,
+        email: user.email || "",
         firstName: user.firstName,
         lastName: user.lastName,
         firstNameEn: user.firstNameEn || "",
         lastNameEn: user.lastNameEn || "",
         phoneNumber: user.phoneNumber || "",
         profileImageUrl: user.profileImageUrl,
-        bioAr: staffData?.bioAr || "",
+        // Accepted writers can have their Arabic biography on users.bio only.
+        bioAr: staffData?.bioAr || user.bio || "",
         bio: staffData?.bio || "",
         titleAr: staffData?.titleAr || "",
         title: staffData?.title || "",
@@ -322,12 +368,19 @@ export function EditUserDialog({ open, onOpenChange, userId }: EditUserDialogPro
         pressIdNumber: user.pressIdNumber || "",
         cardValidUntil: user.cardValidUntil || "",
       });
+      setInitializedUserId(userId);
     }
-  }, [user, staffData, form]);
+  }, [open, userId, user, staffData, userFetching, staffFetching, userError, staffError, initializedUserId, form]);
 
   const updateUserMutation = useMutation({
     mutationFn: async (data: FormData) => {
-      const { roleIds, bioAr, bio, titleAr, title, hasPressCard, jobTitle, department, pressIdNumber, cardValidUntil, email, ...userData } = data;
+      const { roleIds, bioAr, bio, titleAr, title, hasPressCard, jobTitle, department, pressIdNumber, cardValidUntil, email, phoneNumber, ...userData } = data;
+      // Do not reassign an untouched phone while editing the biography. Legacy
+      // duplicate numbers must not block unrelated edits; changed numbers still
+      // go through the server's uniqueness check (including an explicit clear).
+      const phoneData = phoneNumber !== (form.formState.defaultValues?.phoneNumber ?? "")
+        ? { phoneNumber }
+        : {};
       
       // Prepare press card data
       const pressCardData = {
@@ -340,7 +393,8 @@ export function EditUserDialog({ open, onOpenChange, userId }: EditUserDialogPro
       
       await apiRequest(`/api/admin/users/${userId}`, {
         method: "PATCH",
-        body: JSON.stringify({ ...userData, ...pressCardData, email }),
+        // بريد فارغ (حساب جوال بلا بريد) لا يُرسل — لا نمسح ولا نخترع بريدًا.
+        body: JSON.stringify({ ...userData, ...pressCardData, ...phoneData, ...(email ? { email } : {}) }),
       });
 
       if (roleIds && roleIds.length > 0) {
@@ -380,6 +434,7 @@ export function EditUserDialog({ open, onOpenChange, userId }: EditUserDialogPro
   });
 
   const onSubmit = (data: FormData) => {
+    if (initializedUserId !== userId || userError || staffError) return;
     updateUserMutation.mutate(data);
   };
   
@@ -404,7 +459,14 @@ export function EditUserDialog({ open, onOpenChange, userId }: EditUserDialogPro
           </DialogDescription>
         </DialogHeader>
 
-        {userLoading ? (
+        {(userError || staffError) && !userFetching && !staffFetching ? (
+          <div className="space-y-4 py-8 text-center" role="alert">
+            <p>تعذر تحميل بيانات المستخدم أو السيرة الذاتية. أعد المحاولة قبل التعديل.</p>
+            <Button type="button" variant="outline" onClick={() => { void refetchUser(); void refetchStaff(); }}>
+              إعادة المحاولة
+            </Button>
+          </div>
+        ) : initializedUserId !== userId || userError || staffError ? (
           <div className="flex items-center justify-center py-8" data-testid="loading-user">
             <Loader2 className="h-8 w-8 animate-spin" />
           </div>
@@ -867,18 +929,49 @@ export function EditUserDialog({ open, onOpenChange, userId }: EditUserDialogPro
                         <FormField
                           control={form.control}
                           name="pressIdNumber"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>رقم البطاقة الصحفية</FormLabel>
-                              <FormControl>
-                                <Input {...field} value={field.value || ''} placeholder="PRESS-12345" data-testid="input-press-id-number" />
-                              </FormControl>
-                              <FormDescription>
-                                رقم فريد للبطاقة الصحفية
-                              </FormDescription>
-                              <FormMessage />
-                            </FormItem>
-                          )}
+                          render={({ field }) => {
+                            const locked = Boolean((user?.pressIdNumber || issuedPressId || '').trim());
+                            return (
+                              <FormItem>
+                                <FormLabel>رقم البطاقة الصحفية</FormLabel>
+                                <div className="flex gap-2">
+                                  <FormControl>
+                                    <Input
+                                      {...field}
+                                      value={field.value || ''}
+                                      readOnly={locked}
+                                      dir="ltr"
+                                      className={locked ? 'bg-muted/60 font-mono' : 'font-mono'}
+                                      placeholder="اضغط «توليد»"
+                                      data-testid="input-press-id-number"
+                                    />
+                                  </FormControl>
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={generatePressId}
+                                    disabled={locked || generatingPressId}
+                                    data-testid="button-generate-press-id"
+                                  >
+                                    {generatingPressId ? (
+                                      <Loader2 className="h-4 w-4 animate-spin" />
+                                    ) : locked ? (
+                                      <Lock className="h-4 w-4" />
+                                    ) : (
+                                      <Wand2 className="h-4 w-4" />
+                                    )}
+                                    <span>{locked ? 'مُصدر' : 'توليد'}</span>
+                                  </Button>
+                                </div>
+                                <FormDescription>
+                                  {locked
+                                    ? 'رقم دائم للصحفي كرقم الهوية — لا يتغير ولا يُعاد إصداره'
+                                    : 'يُولّده النظام المركزي مرة واحدة (SBQ-PR-0001) ويبقى ثابتاً للصحفي'}
+                                </FormDescription>
+                                <FormMessage />
+                              </FormItem>
+                            );
+                          }}
                         />
                         <FormField
                           control={form.control}

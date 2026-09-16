@@ -1,28 +1,43 @@
+import { Link } from "wouter";
 import sabqLogo from "@assets/sabq-logo.png";
 
-export default function AuthLayout({ children }: { children: React.ReactNode }) {
+interface AuthLayoutProps {
+  children: React.ReactNode;
+  /** محتوى أسفل البطاقة: سطر الشروط أو روابط ثانوية. */
+  footer?: React.ReactNode;
+}
+
+export default function AuthLayout({ children, footer }: AuthLayoutProps) {
   return (
-    <div className="relative min-h-screen bg-background" dir="rtl">
-      <div className="flex flex-col lg:flex-row min-h-screen">
-        {/* Right Side - Form Content */}
-        <div className="flex flex-col w-full lg:w-1/2 overflow-y-auto px-4 sm:px-6 md:px-8">
+    <div className="relative min-h-[100dvh] overflow-x-hidden bg-[hsl(207,30%,97%)] dark:bg-background" dir="rtl">
+      {/* خلفية هادئة: شبكة نقاط خافتة + توهج علوي بلون الهوية */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle,hsl(var(--foreground)/0.05)_1px,transparent_1.1px)] [background-size:26px_26px]"
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 top-0 h-72 bg-[radial-gradient(65%_100%_at_50%_0%,hsl(var(--primary)/0.13),transparent_72%)]"
+      />
+
+      <div className="relative z-10 flex min-h-[100dvh] flex-col items-center justify-center px-4 py-8 sm:py-12">
+        <Link href="/" aria-label="العودة للرئيسية" data-testid="link-back-home">
+          <img
+            src={sabqLogo}
+            alt="سبق"
+            className="h-12 w-auto object-contain sm:h-14 dark:brightness-0 dark:invert"
+          />
+        </Link>
+
+        <main className="mt-6 w-full max-w-[400px] rounded-2xl border border-border bg-card p-5 shadow-xl shadow-slate-950/[0.08] dark:shadow-black/40 sm:p-8">
           {children}
-        </div>
-        
-        {/* Left Side - Branding Panel (hidden on mobile) */}
-        <div className="hidden lg:flex w-1/2 bg-gradient-to-br from-[#4A90E2] via-[#5B9FED] to-[#6DAEF8] items-center justify-center p-8">
-          <div className="text-center text-white space-y-6 max-w-md">
-            <img 
-              src={sabqLogo} 
-              alt="سبق" 
-              className="w-48 lg:w-56 xl:w-64 mx-auto brightness-0 invert"
-              style={{ filter: 'brightness(0) invert(1)' }}
-              loading="lazy"
-            />
-            <h2 className="text-xl lg:text-2xl font-semibold">حيث تلتقي الثقة بالمصداقية</h2>
-            <p className="text-base lg:text-lg opacity-90">صحافة ذكية. مستقبل مشرق.</p>
-          </div>
-        </div>
+        </main>
+
+        {footer && (
+          <footer className="mt-5 w-full max-w-[400px] text-center text-xs leading-relaxed text-muted-foreground">
+            {footer}
+          </footer>
+        )}
       </div>
     </div>
   );

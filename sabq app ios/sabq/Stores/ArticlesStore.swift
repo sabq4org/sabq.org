@@ -105,8 +105,11 @@ final class ArticlesStore {
                 .compactMap { $0.imageURL.flatMap(URL.init(string:)) }
             let cardURLs = allArticles.prefix(6)
                 .compactMap { $0.imageURL.flatMap(URL.init(string:)) }
-            if !heroURLs.isEmpty { ImageCache.prefetch(urls: heroURLs, maxPixelSize: 2000) }
-            if !cardURLs.isEmpty { ImageCache.prefetch(urls: cardURLs, maxPixelSize: 1200) }
+            // ميزانيات الجلب المسبق تطابق ميزانيات العرض (هيرو 1400 / مصغّر
+            // 260) — عدم التطابق كان يجعل نسبة إصابة الجلب المسبق صفرًا
+            // فتُحمَّل كل صورة مرتين (تدقيق الأداء 2026-08-02).
+            if !heroURLs.isEmpty { ImageCache.prefetch(urls: heroURLs, maxPixelSize: 1400) }
+            if !cardURLs.isEmpty { ImageCache.prefetch(urls: cardURLs, maxPixelSize: 260) }
         } else if !result.featured.isEmpty {
             // لا تمسح قائمة «آخر الأخبار» إن عادت الرئيسية بلا latest.
             applyFeaturedCarousel(result.featured)

@@ -3,8 +3,20 @@ import * as Sentry from "@sentry/react";
 import App from "./App";
 import "./index.css";
 import "./mobile.css";
+import "./styles/public-design.css";
+import "./styles/public-opinion-card.css";
 import { installDeployRecovery } from "./lib/deployRecovery";
 import { startBuildVersionPolling } from "./lib/buildVersion";
+import { ensureAnalyticsReady } from "./lib/analytics-privacy";
+import {
+  sentryBeforeSend,
+  SENTRY_DENY_URLS,
+  SENTRY_IGNORE_ERRORS,
+} from "./lib/sentryNoiseFilter";
+
+// GA4 is loaded only after the current host/route passes the privacy boundary.
+// Route-level event helpers call this again so SPA transitions are dynamic.
+ensureAnalyticsReady();
 
 // Sentry — أخطاء فقط (بلا tracing/replay/logs: تستهلك الحصة وتضخّم الحزمة).
 // PROD فقط حتى لا يضج التطوير. الـDSN عام بطبيعته (يظهر في حزمة المتصفح مهما
@@ -12,11 +24,9 @@ import { startBuildVersionPolling } from "./lib/buildVersion";
 // يتيح التبديل. denyUrls يطابق فلسفة كاتم أخطاء الطرف الثالث أدناه —
 // سكربتات الإعلانات وإضافات المتصفح ليست أخطاءنا. أخطاء الـchunks المفقودة
 // تمرّ عمدًا: هي إنذار «الشاشة البيضاء بعد النشر».
-// «من أصولنا»: حزمة الويب (sabq.org بما فيها cdn، ومعاينات Pages)، عمّال
-// blob: أنشأناها نحن، وأغلفة كاباسيتور (capacitor://localhost على iOS
-// وhttps://localhost داخل تطبيق أندرويد).
-const FIRST_PARTY_FRAME =
-  /^(?:blob:|capacitor:)|(?:sabq\.org|\.pages\.dev|\/\/localhost(?::\d+)?)\/(?:assets|src)\//;
+// تعريف «من أصولنا» ومنطق الفرز انتقلا إلى lib/sentryNoiseFilter.ts حتى
+// يصيرا قابلين للاختبار بالوحدة (tests/unit/sentryNoiseFilter.test.ts يثبّت
+// أحداثًا حقيقية من production فلا ترجع المشكلة صامتة).
 
 if (import.meta.env.PROD) {
   Sentry.init({
@@ -24,6 +34,29 @@ if (import.meta.env.PROD) {
       import.meta.env.VITE_SENTRY_DSN ||
       "https://1b0d0e5e036519383e22c0e20f9eddc0@o4511664870391808.ingest.us.sentry.io/4511665077420032",
     environment: "production",
+    // السبب الجذري لـJAVASCRIPT-REACT-32 وعائلته (14 و2E وK…): تكامل
+    // browserApiErrors يلفّ addEventListener/setTimeout/setInterval/rAF/XHR
+    // **عالميًا**، فيشمل الدوال الراجعة التي يسجّلها كود ليس لنا: متصفحات
+    // داخل التطبيقات (تطبيق Google على iOS)، إضافات المتصفح، وسوم GTM
+    // المخصّصة، أكواد الإعلانات. حين ترمي إحداها، يكون إطار الغلاف — وهو
+    // من `/assets/index-*.js` أي من حزمتنا — الإطارَ الوحيد في المكدس،
+    // فيُنسب خطأ الطرف الثالث إلينا ويعبر كل فلاتر «أول إطار من أصولنا».
+    // هكذا صار بريدج `window.webkit.messageHandlers` — ولا وجود له في كود
+    // الويب إطلاقًا — خطأً «من كودنا» على iPhone داخل صفحة مقال.
+    //
+    // إيقاف اللفّ يعيد النسبة الصحيحة ولا يفقدنا تغطية: الخطأ الذي يرميه
+    // كودنا داخل مستمع أو مؤقّت يظل يصعد إلى window.onerror فيلتقطه
+    // globalHandlers بمكدس كامل. المفقود الوحيد بيانات وصفية إضافية عن
+    // نوع الـAPI — ثمن زهيد مقابل إسناد صحيح.
+    integrations: [
+      Sentry.browserApiErrorsIntegration({
+        setTimeout: false,
+        setInterval: false,
+        requestAnimationFrame: false,
+        XMLHttpRequest: false,
+        eventTarget: false,
+      }),
+    ],
     // أول 90 دقيقة تشغيل أثبتت أن denyUrls وحدها لا تكفي: الضجيج الأكبر جاء من
     // إطارات مجهولة (<anonymous>) وسكربتات لا يغطيها النمط (beacon.min.js حقن
     // كلاودفلير، player.ima إعلانات فيديو، «moment-by-moment» يمشّط الـDOM).
@@ -32,69 +65,16 @@ if (import.meta.env.PROD) {
     // فتمرّ. ملاحظة: أحداث بلا إطارات (captureMessage/رفض غير-Error) لا يسقطها
     // allowUrls — لذلك تبقى ignoreErrors لنصوصها المعروفة.
     allowUrls: [/sabq\.org\/assets\//, /\.pages\.dev\/assets\//],
-    denyUrls: [
-      /googletagmanager|googlesyndication|doubleclick|adservice|novatiq|permutive/i,
-      /^chrome-extension:\/\//,
-      /^moz-extension:\/\//,
-      /^safari(-web)?-extension:\/\//,
-    ],
-    ignoreErrors: [
-      "ResizeObserver loop limit exceeded",
-      "ResizeObserver loop completed with undelivered notifications.",
-      // تتبّع خارجي محجوب بمانع إعلانات — السلسلة ليست في كودنا أصلًا
-      "Failed to track Pageview",
-      // سكربت إعلانات محقون (GTM/DMS) يمشّط DOM الصفحة بحثًا عن البطاقة
-      // الرابعة ليحقن إعلانًا داخل الشبكة — في الصفحات التي تعرض أقل من 4
-      // بطاقات يرمي TypeError. ليس في مستودعنا إطلاقًا (السيلكتور لا يظهر
-      // إلا كـtestid في NewsArticleCard)، لكنه أكبر مصدر ضجيج في Sentry
-      // (3,400+ حدث/أسبوع) وقد يصل بلا إطارات فلا يسقطه allowUrls.
-      /card-article-grid/,
-      /reading 'parentNode'/,
-      // GPT غير محمّل (مانع إعلانات) وسكربت خارجي يستدعيه بلا حارس —
-      // كودنا (DmsAdSlot) يفحص window.googletag.pubads قبل أي استدعاء
-      /googletag\.pubads is not a function/,
-      // ماسح روابط Outlook (SafeLinks) يرفض Promise بكائن ليس Error —
-      // نمط عالمي معروف، يصل بلا إطارات فلا يسقطه beforeSend أدناه
-      "Object Not Found Matching Id",
-      // إضافة «تعبئة تلقائية» في متصفحات أندرويد تستدعي دالة غير معرّفة
-      // (بصيغتي Chrome وSafari/WebKit)
-      /xbrowser is not defined|Can't find variable: xbrowser/,
-      // fetch محجوب (مانع إعلانات) نحو نطاقات إعلانات/تحليلات خارجية —
-      // منذ SDK v8 تُلحق الرسالة بمضيف الطلب الفاشل فنطابق عليه.
-      /(?:Failed to fetch|Load failed|NetworkError)[^(]*\([^)]*(?:googlesyndication|doubleclick|googletagmanager|google-analytics|analytics\.google|adservice|spadsync)/i,
-      // polyfill الـmodulepreload من Vite يجلب chunks مسبقًا بـfetch — فشله
-      // (شبكة متقطعة، إغلاق الصفحة أثناء الجلب، دوران build بعد النشر) لا
-      // يكسر شيئًا: الاستيراد الفعلي له مسار خطئه وdeployRecovery يعالج
-      // الشاشة البيضاء. 1,428 حدثًا في 16 يومًا (JAVASCRIPT-REACT-D) صفر
-      // مستخدم متأثر. إنذار CDN الحقيقي محفوظ: رسائل فشل الاستيراد
-      // الديناميكي (Failed to fetch dynamically imported module /
-      // Importing a module script failed) بلا لاحقة "(host)" فلا تطابق.
-      /(?:Failed to fetch|Load failed|NetworkError)[^(]*\(cdn\.sabq\.org\)/,
-    ],
-    // allowUrls لا يكفي وحده: غلاف Sentry (browserApiErrors) يلفّ callbacks
-    // setInterval/addEventListener حتى للسكربتات المحقونة (إضافات متصفح،
-    // WebView داخل التطبيقات، أكواد إعلانات)، فيظهر إطار الغلاف — وهو من
-    // حزمتنا — أسفل المكدس ويمرّر الحدث رغم أن موضع الرمي الفعلي
-    // <anonymous>. هذا وحده ضخّ ~288 ألف حدث في 9 أيام (JAVASCRIPT-REACT-K).
-    // الحسم هنا بموضع الرمي: أعلى إطار ذي ملف يجب أن يكون من أصولنا وإلا
-    // أُسقط الحدث قبل الإرسال — فلا يستهلك من الحصة أصلًا.
-    beforeSend(event) {
-      const frames = event.exception?.values?.[0]?.stacktrace?.frames;
-      // بلا مكدس (captureMessage/رفض غير-Error): تكفيه ignoreErrors أعلاه
-      if (!frames?.length) return event;
-      for (let i = frames.length - 1; i >= 0; i--) {
-        const filename = frames[i]?.filename;
-        // native/wasm فقط تُتخطى نزولًا. إطار بلا ملف = كود eval محقون
-        // (JAVASCRIPT-REACT-V تسرّب من هنا: أعلى إطاره `eval` بلا filename
-        // فسقط الفحص على إطار غلاف Sentry من حزمتنا) — حزمة Vite الإنتاجية
-        // لا تستخدم eval إطلاقًا، فاعتباره دخيلًا آمن.
-        if (filename === "[native code]" || filename === "[wasm code]") continue;
-        if (!filename) return null;
-        return FIRST_PARTY_FRAME.test(filename) ? event : null;
-      }
-      // كل الإطارات مجهولة الملف — callback خارجي ملفوف بغلاف Sentry
-      return null;
-    },
+    // القوائم الكاملة والتعليل في lib/sentryNoiseFilter.ts — مصدر واحد
+    // يستهلكه الـSDK هنا ويُعاد فحصه في beforeSend مع اختبارات الوحدة.
+    denyUrls: SENTRY_DENY_URLS,
+    ignoreErrors: SENTRY_IGNORE_ERRORS,
+    // الحسم بموضع الرمي: أعلى إطار ذي ملف يجب أن يكون من أصولنا، وإلا أُسقط
+    // الحدث قبل الإرسال فلا يستهلك من الحصة أصلًا. والأحداث بلا مكدس التي
+    // التقطها المتصفح تلقائيًا (auto.*) تسقط كذلك — لا دليل واحد على أنها
+    // منّا، وكانت هي المنفذ الأخير الذي عبرت منه JAVASCRIPT-REACT-H و1A.
+    // المنطق كامل ومشروح في lib/sentryNoiseFilter.ts.
+    beforeSend: sentryBeforeSend,
   });
 }
 

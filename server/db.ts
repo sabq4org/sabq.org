@@ -57,12 +57,34 @@ function initPool(databaseUrl: string): void {
   // returning 5xx HTML to clients (the "JSON Parse: Unrecognized token '<'"
   // reports). max=50 stays well under Neon's limits (direct ≥112, -pooler 10k).
   // min=2 keeps warm sockets so a post-idle burst doesn't pay full cold-start.
+  //
+  // Per-pod ceiling is configurable via DB_POOL_MAX so the connection budget can
+  // be right-sized to (pods × DB_POOL_MAX ≤ provider limit) WITHOUT a code change
+  // — essential when scaling horizontally. On the Neon -pooler endpoint the limit
+  // is ~10k (safe under high replica counts); on a DIRECT connection (≥112) keep
+  // pods × max under it. See docs/NEON_CONNECTION_SCALING.md. Bounded [1,500].
+  const parsedPoolMax = Number.parseInt(process.env.DB_POOL_MAX || "", 10);
+  const poolMax = Number.isFinite(parsedPoolMax)
+    ? Math.min(500, Math.max(1, parsedPoolMax))
+    : 50;
+  // (حادثة 2026-07-31) استعلام بلا مهلة علّق للأبد فسمّم single-flight في
+  // withSWR وعلّقت مسارات الرياضة حتى إعادة النشر. query_timeout مهلة عميل
+  // بحتة (لا SET جلسيًا — آمنة مع Neon ‑pooler، راجع حادثة 07-25) تُفشل
+  // الاستعلام محليًا بعد السقف فيتحرر أي await ينتظره ويعود الاتصال للبركة.
+  // 60 ثانية سقف واسع: أبطأ الاستعلامات الشرعية دونه بكثير، وصيانة الإقلاع
+  // كلها معزولة بـtry/catch فتسقط بأمان لو تجاوزته. نظير البركة الاحتياطية
+  // للجلسات (query_timeout: 2500 في dbPoolConfig.ts).
+  const parsedQueryTimeout = Number.parseInt(process.env.DB_QUERY_TIMEOUT_MS || "", 10);
+  const queryTimeoutMs = Number.isFinite(parsedQueryTimeout) && parsedQueryTimeout > 0
+    ? parsedQueryTimeout
+    : 60_000;
   const poolConfig = {
     connectionString: databaseUrl,
-    max: 50,
+    max: poolMax,
     min: 2,
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 10000,
+    query_timeout: queryTimeoutMs,
     allowExitOnIdle: true,
     maxUses: 5000,
   };
@@ -404,6 +426,35 @@ export async function executeWithStatementTimeout<T = any>(
   return (db as any).transaction(async (tx: any) => {
     await tx.execute(sql.raw(`SET LOCAL statement_timeout = ${ms}`));
     return (await tx.execute(query)) as T;
+  });
+}
+
+/**
+ * ⚠️ تحذير تشغيلي (انحدار 2026-07-25): كلا الغلافين يفتح **معاملة صريحة**
+ * (BEGIN / SET LOCAL / COMMIT). الإنتاج يتصل بنقطة Neon `-pooler`، أي PgBouncer
+ * في وضع transaction pooling: المعاملة تُثبّت اتصال خادم طوال مدتها، بينما
+ * الاستعلام المفرد يحرره فور انتهائه. لفّ المسارات الساخنة (getArticles،
+ * إحصاءات اللوحة، قائمة مقالات الإدارة) بهذه الأغلفة خفّض التوازي الفعلي عند
+ * الـpooler وأنتج موجة «timeout exceeded when trying to connect».
+ *
+ * القاعدة: لا تستخدمها على أي مسار يُنادى في كل طلب. السقف العام للاستعلامات
+ * يُضبط على مستوى الدور في Neon فيسري بلا معاملة ولا اتصال إضافي:
+ *   ALTER ROLE <role> SET statement_timeout = '15s';
+ * أبقِ هذه الأغلفة للاستعلامات الإدارية النادرة فقط (البحث الدلالي في الوسائط).
+ */
+// الشقيق الآمن للأنواع: executeWithStatementTimeout يمرر الاستعلام إلى
+// tx.execute فيرجع صفوفًا خامًا (snake_case، وأعمدة الـjoins تتصادم) — يصلح
+// للـSQL الخام فقط. هذا الغلاف يمرر tx نفسه فتُبنى استعلامات Drizzle عليه
+// وتحتفظ بتخطيط select والأنواع كاملة. المهلة تلغي الاستعلام من جهة الخادم
+// (SET LOCAL داخل المعاملة) فيتحرر اتصال الـpool بدل أن يبقى محتجزًا.
+export async function withStatementTimeout<T>(
+  timeoutMs: number,
+  run: (tx: typeof db) => Promise<T>,
+): Promise<T> {
+  const ms = Math.max(100, Math.floor(timeoutMs));
+  return (db as any).transaction(async (tx: any) => {
+    await tx.execute(sql.raw(`SET LOCAL statement_timeout = ${ms}`));
+    return run(tx as typeof db);
   });
 }
 

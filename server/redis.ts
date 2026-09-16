@@ -12,6 +12,11 @@ export interface RedisSessionClient {
   del(keys: string | string[]): Promise<number>;
   expire(key: string, ttl: number): Promise<number>;
   scan(...args: any[]): Promise<any>;
+  /** قراءة دفعة مفاتيح برحلة واحدة — بديل GET المتسلسل في إبطال الجلسات. */
+  mget(keys: string[]): Promise<(string | null)[]>;
+  /** الفهرس العكسي usess:<userId> — مجموعة معرّفات جلسات المستخدم. */
+  sadd(key: string, ...members: string[]): Promise<number>;
+  smembers(key: string): Promise<string[]>;
   /** SET NX PX الذرّي — للأقفال/الـleases (انتخاب القائد). يعيد "OK" عند النجاح وإلا null. */
   setLock(key: string, val: string, ttlMs: number): Promise<"OK" | null>;
 }
@@ -31,6 +36,10 @@ function createSessionAdapter(client: Redis): RedisSessionClient {
     },
     expire: (key: string, ttl: number) => client.expire(key, ttl),
     scan: (...args: any[]) => (client as any).scan(...args),
+    mget: (keys: string[]) => (keys.length ? client.mget(...keys) : Promise.resolve([])),
+    sadd: (key: string, ...members: string[]) =>
+      members.length ? client.sadd(key, ...members) : Promise.resolve(0),
+    smembers: (key: string) => client.smembers(key),
     setLock: (key: string, val: string, ttlMs: number) =>
       client.set(key, val, "PX", ttlMs, "NX") as Promise<"OK" | null>,
   };

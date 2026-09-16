@@ -23,12 +23,26 @@ import {
   editorialNotifications,
   editorialNotificationPrefs,
   pushDevices,
+  socialPosts,
+  articles,
 } from "@shared/schema";
 import {
   sendPushNotification,
   createCustomNotificationPayload,
   isApnsConfigured,
 } from "./apnsService";
+import {
+  isNonHumanAccount,
+  resolveArticleStakeholderIds,
+  type ResolveStakeholdersOptions,
+} from "./editorialStakeholderIds";
+
+export {
+  NEWSPAPER_REPORTER_ID,
+  isNonHumanAccount,
+  resolveArticleStakeholderIds,
+  type ResolveStakeholdersOptions,
+} from "./editorialStakeholderIds";
 
 export type EditorialEvent =
   | "scheduled"
@@ -36,7 +50,10 @@ export type EditorialEvent =
   | "rejected"
   | "needs_revision"
   | "archived"
-  | "deleted";
+  | "deleted"
+  | "social_published"
+  | "social_scheduled"
+  | "social_rejected";
 
 export interface NotifyEditorialArgs {
   /** Recipient — typically `articles.authorId` or `articles.reporterId`. */
@@ -52,12 +69,14 @@ export interface NotifyEditorialArgs {
     publishedAt?: Date | null;
   };
   /** Editor's note (rejection reason or revision request). Required for
-   *  rejected/needs_revision; ignored for scheduled/published. */
+   *  rejected/needs_revision/social_rejected; ignored for scheduled/published. */
   reviewerNote?: string | null;
+  socialPost?: {
+    id: string;
+    externalPostUrl?: string | null;
+    scheduledAt?: Date | null;
+  };
 }
-
-/** Generic "صحيفة سبق" byline account — not a human colleague. */
-export const NEWSPAPER_REPORTER_ID = "RnP7eDOAl5T5rGpib9_8d";
 
 const PREFS_DEFAULTS = {
   scheduledEnabled: true,
@@ -65,15 +84,6 @@ const PREFS_DEFAULTS = {
   rejectedEnabled: true,
   revisionEnabled: true,
 };
-
-function isNonHumanAccount(userId: string): boolean {
-  return (
-    userId === "newspaper" ||
-    userId === "system" ||
-    userId === "sabq-newspaper" ||
-    userId === NEWSPAPER_REPORTER_ID
-  );
-}
 
 async function fetchUserPrefs(userId: string) {
   const [row] = await db
@@ -92,10 +102,17 @@ async function fetchUserPrefs(userId: string) {
 
 function eventEnabled(prefs: typeof PREFS_DEFAULTS, event: EditorialEvent): boolean {
   switch (event) {
-    case "scheduled":      return prefs.scheduledEnabled;
-    case "published":      return prefs.publishedEnabled;
-    case "rejected":       return prefs.rejectedEnabled;
-    case "needs_revision": return prefs.revisionEnabled;
+    case "scheduled":
+    case "social_scheduled":
+      return prefs.scheduledEnabled;
+    case "published":
+    case "social_published":
+      return prefs.publishedEnabled;
+    case "rejected":
+    case "social_rejected":
+      return prefs.rejectedEnabled;
+    case "needs_revision":
+      return prefs.revisionEnabled;
     // Archive/delete are critical — always deliver (in-app + push attempt).
     // Previously gated on `rejectedEnabled` ("الاعتذار / الرفض" toggle in
     // iOS) which caused writers to miss archive/delete entirely when they
@@ -106,48 +123,13 @@ function eventEnabled(prefs: typeof PREFS_DEFAULTS, event: EditorialEvent): bool
   }
 }
 
-/** Who should receive editorial pushes for this article? */
-export function resolveArticleStakeholderIds(article: {
-  reporterId?: string | null;
-  authorId?: string | null;
-  submitterId?: string | null;
-}): string[] {
-  const seen = new Set<string>();
-  const add = (id?: string | null) => {
-    if (!id || isNonHumanAccount(id) || seen.has(id)) return;
-    seen.add(id);
-  };
-
-  const reporter = article.reporterId;
-  const author = article.authorId;
-
-  // Prefer the human byline reporter. When the dropdown still points at the
-  // generic newspaper account, fall through to authorId (staff writer / editor
-  // who filed the piece) so someone actually receives the alert.
-  if (reporter && !isNonHumanAccount(reporter)) {
-    add(reporter);
-  } else if (author) {
-    add(author);
-  } else if (reporter) {
-    add(reporter);
-  }
-
-  if (author) add(author);
-  if (article.submitterId) add(article.submitterId);
-
-  return [...seen];
-}
-
-/** Format `scheduled_at` as a short Arabic date+time. Uses the
- *  `ar-SA-u-nu-latn` locale extension so digits render as 1234 instead of
- *  ١٢٣٤ — matches the editorial team's product-wide convention. Pinned
- *  to `Asia/Riyadh` because the server runs on UTC; without the
- *  explicit timezone, a 7:25 AM Riyadh schedule was being shown to
- *  authors as 4:25 AM. */
+/** Format `scheduled_at` as a short Arabic date+time.
+ *  Gregorian calendar + Latin digits (`ar-SA-u-ca-gregory-nu-latn`).
+ *  Pinned to `Asia/Riyadh` because the server runs on UTC. */
 function formatArabicDateTime(d?: Date | null): string {
   if (!d) return "";
   try {
-    const date = new Intl.DateTimeFormat("ar-SA-u-nu-latn", {
+    return new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-latn", {
       timeZone: "Asia/Riyadh",
       weekday: "short",
       day: "numeric",
@@ -156,9 +138,8 @@ function formatArabicDateTime(d?: Date | null): string {
       minute: "2-digit",
       hour12: true,
     }).format(d);
-    return date;
   } catch {
-    return d.toLocaleString("ar-SA", { timeZone: "Asia/Riyadh" });
+    return d.toLocaleString("ar-SA-u-ca-gregory-nu-latn", { timeZone: "Asia/Riyadh" });
   }
 }
 
@@ -228,6 +209,30 @@ function buildCopy(args: NotifyEditorialArgs): { title: string; body: string } {
           : `«${title}» — لم يعد المحتوى متاحاً على المنصة.`,
       };
     }
+    case "social_published": {
+      return {
+        title: `🚀 نُشر مقترحك على منصة X`,
+        body: `«${title}» — تم نشر تغريدة مقالك عبر حساب سبق الرسمي على منصة X.`,
+      };
+    }
+    case "social_scheduled": {
+      const when = formatArabicDateTime(args.socialPost?.scheduledAt || args.article.scheduledAt);
+      return {
+        title: `🗓️ تمت جدولة مقترحك للنشر على X`,
+        body: when
+          ? `«${title}» — موعد النشر المجدول للتغريدة: ${when}`
+          : `«${title}» — اعتمد فريق سبق تغريدة مقالك وجدولها للنشر.`,
+      };
+    }
+    case "social_rejected": {
+      const reason = (args.reviewerNote || "").trim();
+      return {
+        title: `ℹ️ قرار حول مقترح النشر على X`,
+        body: reason
+          ? `«${title}» — اعتذر فريق النشر عن تغريدة المقال. السبب: ${reason}`
+          : `«${title}» — اعتذر فريق النشر عن تغريدة المقال.`,
+      };
+    }
   }
 }
 
@@ -259,6 +264,14 @@ function buildDeepLink(args: NotifyEditorialArgs): string {
     // send the author to the same feedback screen as rejection/archive
     // so the deletion reason is visible alongside other editor notes.
     case "deleted":        return `sabq://feedback/${id}`;
+    case "social_published":
+      if (args.socialPost?.externalPostUrl) return args.socialPost.externalPostUrl;
+      if (!slug) return `sabq://draft/${id}`;
+      return isOpinion ? `sabq://opinion/${slug}` : `sabq://article/${slug}`;
+    case "social_scheduled":
+    case "social_rejected":
+      if (!slug) return `sabq://draft/${id}`;
+      return isOpinion ? `sabq://opinion/${slug}` : `sabq://article/${slug}`;
   }
 }
 
@@ -375,20 +388,24 @@ export async function notifyEditorialEvent(args: NotifyEditorialArgs): Promise<v
 }
 
 /**
- * Helper used by `routes.ts` to fan out to ALL of an article's stakeholders
+ * Helper used by `routes.ts` to fan out to an article's content owners
  * (author + reporter, when they differ). Deduplicates on userId.
+ * Pass `excludeUserId` as the acting editor/admin so they never get the
+ * author-facing copy for their own action.
  */
 export async function notifyArticleStakeholders(
   article: NotifyEditorialArgs["article"] & { authorId?: string | null; reporterId?: string | null; submitterId?: string | null },
   event: EditorialEvent,
   reviewerNote?: string | null,
+  options?: ResolveStakeholdersOptions,
 ): Promise<void> {
-  const targets = resolveArticleStakeholderIds(article);
+  const targets = resolveArticleStakeholderIds(article, options);
 
   if (targets.length === 0) {
     console.warn(
       `[Editorial Notify] No human stakeholders for article ${article.id} ` +
-      `(reporterId=${article.reporterId ?? "null"}, authorId=${article.authorId ?? "null"}) — ` +
+      `(reporterId=${article.reporterId ?? "null"}, authorId=${article.authorId ?? "null"}, ` +
+      `submitterId=${article.submitterId ?? "null"}, exclude=${options?.excludeUserId ?? "null"}) — ` +
       `event=${event} skipped`,
     );
     return;
@@ -403,4 +420,58 @@ export async function notifyArticleStakeholders(
       notifyEditorialEvent({ userId, event, article, reviewerNote }),
     ),
   );
+}
+
+/**
+ * Helper to notify the author of an opinion article when their social post proposal
+ * is published, scheduled, or rejected by the editorial team.
+ */
+export async function notifyAuthorOfSocialPostStatus(
+  postId: string,
+  event: "social_published" | "social_scheduled" | "social_rejected",
+  options?: { reviewerNote?: string | null },
+): Promise<void> {
+  try {
+    const [row] = await db
+      .select({
+        post: socialPosts,
+        article: articles,
+      })
+      .from(socialPosts)
+      .innerJoin(articles, eq(socialPosts.articleId, articles.id))
+      .where(eq(socialPosts.id, postId))
+      .limit(1);
+
+    if (!row || !row.article || !row.post) return;
+
+    const { post, article } = row;
+    const authorUserId = post.createdByUserId;
+
+    // نتأكد أن المنشور تم اقتراحه بواسطة كاتب أو مدخل المقال
+    const isAuthorPost =
+      article.authorId === authorUserId || article.submitterId === authorUserId;
+    if (!isAuthorPost) return;
+
+    await notifyEditorialEvent({
+      userId: authorUserId,
+      event,
+      article: {
+        id: article.id,
+        title: article.title,
+        slug: article.slug,
+        englishSlug: article.englishSlug,
+        articleType: article.articleType,
+        scheduledAt: article.scheduledAt,
+        publishedAt: article.publishedAt,
+      },
+      socialPost: {
+        id: post.id,
+        externalPostUrl: post.externalPostUrl,
+        scheduledAt: post.scheduledAt,
+      },
+      reviewerNote: options?.reviewerNote,
+    });
+  } catch (error) {
+    console.error("[Editorial Notify] notifyAuthorOfSocialPostStatus error:", error);
+  }
 }

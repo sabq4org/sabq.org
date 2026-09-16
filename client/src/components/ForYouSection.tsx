@@ -16,7 +16,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { formatDistanceToNow } from "date-fns";
 import { arSA } from "date-fns/locale";
 import { OptimizedImage } from "./OptimizedImage";
-import { getObjectPosition } from "@/lib/imageUtils";
+import { getObjectPosition, getArticleDisplayImageUrl } from "@/lib/imageUtils";
 
 interface RecommendedArticle {
   articleId: string;
@@ -89,17 +89,19 @@ function ForYouCard({ recommendation, index }: { recommendation: RecommendedArti
           data-testid={`card-foryou-${article.id}`}
         >
           <div className="relative aspect-[16/9] overflow-hidden">
-            {/* Priority: infographicBannerUrl (AI 16:9 banner) → imageUrl → thumbnailUrl */}
-            {(article.infographicBannerUrl || article.imageUrl || article.thumbnailUrl) ? (
-              <OptimizedImage
-                src={article.infographicBannerUrl || article.imageUrl || article.thumbnailUrl || ''}
-                alt={article.title}
-                className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                objectPosition={getObjectPosition(article)}
-              />
-            ) : (
-              <div className="w-full h-full bg-gradient-to-br from-primary/20 via-accent/20 to-primary/10" />
-            )}
+            {(() => {
+              const displayImg = getArticleDisplayImageUrl(article);
+              return displayImg ? (
+                <OptimizedImage
+                  src={displayImg}
+                  alt={article.title}
+                  className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                  objectPosition={getObjectPosition(article)}
+                />
+              ) : (
+                <div className="w-full h-full bg-gradient-to-br from-primary/20 via-accent/20 to-primary/10" />
+              );
+            })()}
             <div className="absolute top-2 right-2 flex gap-1">
               {article.articleType === 'weekly_photos' && (
                 <Badge 

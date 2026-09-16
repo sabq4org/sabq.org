@@ -837,13 +837,11 @@ struct SpMyMatchesCard: View {
     }
 }
 
-// MARK: - بلوك «فريقي» (الفريق المفضّل عبر البطولات — هب روشن)
+// MARK: - بلوك «فريقي» (مباريات المفضّل عبر بطولاته)
 
 // خلَف SpMyMatchesCard في الرئيسية (المتابعات انتقلت لمركز المباريات):
-// مباريات الفريق المفضّل **عبر البطولات** (روشن، كأس الملك، السوبر، أبطال
-// آسيا، مونديال الأندية) من GET /sports/fixtures — الجارية/القادمة + آخر 3
-// نتائج + مركزه في ترتيب روشن + زرّ صفحة الفريق. بلا فريق مفضّل: بطاقة دعوة
-// لطيفة تفتح ترتيب روشن (النجمة في صفحة النادي تضبط التفضيل).
+// مباريات الفريق المفضّل **عبر البطولات** من GET /sports/fixtures حسب دوريه
+// (+ أكواب مرتبطة). بلا مفضّل: الدعوة تُعرض من HomeView (pickFavoritePanel).
 struct SpMyTeamCard: View {
     @Environment(SpFavorites.self) private var favorites
     @Environment(SpLiveStream.self) private var liveStream
@@ -860,8 +858,25 @@ struct SpMyTeamCard: View {
     /// نبضة موجز وصلت والتبويب مخفي — تُصرف بتحميل واحد عند العودة.
     @State private var pendingReload = false
 
-    /// بطولات الفريق السعودي المحتملة — ≤ 8 (حد الخادم).
-    private static let teamComps = ["pro-league", "kings-cup", "super-cup", "afc-champions-league", "club-world-cup"]
+    /// بطولات جدول المفضّل حسب دوريه — ≤ 8 (حد الخادم).
+    private static func teamComps(for slug: String?) -> [String] {
+        let primary = (slug?.isEmpty == false) ? slug! : "pro-league"
+        var list = [primary]
+        switch primary {
+        case "pro-league", "division-1", "division-2", "womens-league":
+            list += ["kings-cup", "super-cup", "afc-champions-league", "club-world-cup"]
+        case "premier-league", "la-liga", "serie-a", "bundesliga", "ligue-1":
+            list += ["champions-league", "europa-league", "uefa-super-cup"]
+        case "uae-pro-league", "qatar-stars-league", "kuwait-premier-league",
+             "bahrain-premier-league", "oman-pro-league":
+            list += ["gulf-club-champions", "afc-champions-league"]
+        default:
+            break
+        }
+        // إزالة التكرار مع الإبقاء على الترتيب.
+        var seen = Set<String>()
+        return list.filter { seen.insert($0).inserted }.prefix(8).map { $0 }
+    }
 
     var body: some View {
         Group {
@@ -1013,14 +1028,14 @@ struct SpMyTeamCard: View {
     private var invitation: some View {
         Button(action: onPickTeam) {
             HStack(spacing: 13) {
-                Image(systemName: "star.circle.fill")
-                    .font(.system(size: 34))
+                Image(systemName: "shield.lefthalf.filled")
+                    .font(.system(size: 30))
                     .foregroundStyle(SpTheme.green)
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(L("اختر فريقك المفضّل"))
+                    Text(L("اختر فريقك"))
                         .font(SportsFonts.app(size: 15, weight: .heavy))
                         .foregroundStyle(SpTheme.onDark)
-                    Text(L("تابع مبارياته عبر كل البطولات من هنا — النجمة في صفحة النادي"))
+                    Text(L("ثبّت ناديك بالنجمة لتصبح هذه صفحته — مبارياته ودوريه هنا"))
                         .font(SportsFonts.app(size: 11, weight: .semibold))
                         .foregroundStyle(SpTheme.onDarkDim)
                         .lineLimit(2)
@@ -1064,7 +1079,7 @@ struct SpMyTeamCard: View {
         let from = SpFormat.dateKey(Date().addingTimeInterval(-14 * day))
         let to = SpFormat.dateKey(Date().addingTimeInterval(60 * day))
         if let resp = try? await APIClient.shared.fetchUnifiedFixtures(
-            comps: Self.teamComps, from: from, to: to, ignoreCache: force) {
+            comps: Self.teamComps(for: favorites.team?.competitionSlug), from: from, to: to, ignoreCache: force) {
             fixtures = resp.fixtures
         }
         loaded = true

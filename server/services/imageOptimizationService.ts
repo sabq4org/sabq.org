@@ -375,10 +375,29 @@ export async function generateLiteOptimizedImage(
       return liteUrl;
     }
 
+    // Absolute CDN/R2/external URLs — no Replit object-storage rewrite on Railway.
+    // Use the source as-is for Lite (already served via CDN); never call searchPublicObject.
+    if (/^https?:\/\//i.test(imageUrl)) {
+      console.log(`[Lite Image] Skipping local optimize for remote URL: ${imageUrl.slice(0, 120)}`);
+      return imageUrl.split('?')[0];
+    }
+
+    // Local /public-objects/* path requires GCS search paths (Replit-era). Unset on Railway.
+    const publicSearchPaths = (process.env.PUBLIC_OBJECT_SEARCH_PATHS || "")
+      .split(",")
+      .map((p) => p.trim())
+      .filter(Boolean);
+    if (publicSearchPaths.length === 0) {
+      console.warn(
+        `[Lite Image] PUBLIC_OBJECT_SEARCH_PATHS unset — skip optimize for: ${imageUrl.slice(0, 120)}`,
+      );
+      return null;
+    }
+
     // Normalize path - handle both /public-objects/ URLs and direct paths
     let imagePath = imageUrl;
     if (imageUrl.includes('/public-objects/')) {
-      imagePath = imageUrl.replace(/^\/public-objects\//, '');
+      imagePath = imageUrl.replace(/^.*\/public-objects\//, '');
     }
     
     // Get original image

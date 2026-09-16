@@ -36,17 +36,8 @@ struct DailyBriefView: View {
         }
         .background(SabqTheme.background)
         .sabqRTL()
+        .navigationTitle("لك")
         .navigationBarTitleDisplayMode(.inline)
-        .navigationBarBackButtonHidden(true)
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button { dismiss() } label: {
-                    Image(systemName: "chevron.right")
-                        .font(SabqFonts.app(size: 16, weight: .semibold))
-                        .foregroundStyle(SabqTheme.ink)
-                }
-            }
-        }
         .sheet(isPresented: $showLogin, onDismiss: { }) {
             LoginSheet(initialMode: false)
         }
@@ -180,7 +171,7 @@ struct DailyBriefView: View {
                     .fill(article.category.tint.opacity(0.15))
                     .frame(width: 220, height: 124)
             }
-            Text(article.category.title)
+            Text(article.categoryTitle)
                 .font(SabqFonts.app(size: 10, weight: .regular))
                 .foregroundStyle(SabqTheme.secondaryInk)
             SabqRTLText(

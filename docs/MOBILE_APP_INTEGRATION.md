@@ -80,8 +80,8 @@ npm install @react-native-firebase/analytics
 import analytics from '@react-native-firebase/analytics';
 
 // أو باستخدام Measurement Protocol مباشرة
-const GA_MEASUREMENT_ID = 'G-EEB5593GY7';
-const GA_API_SECRET = 'bQ0kFYHbRYelCTjeT3iVmg';
+const GA_MEASUREMENT_ID = 'YOUR_GA_MEASUREMENT_ID';
+const GA_API_SECRET = 'YOUR_GA_API_SECRET'; // من متغيّر بيئة — لا تضع السرّ في الكود
 
 export async function trackEvent(name: string, params: Record<string, any>) {
   // الطريقة 1: Firebase Analytics (موصى بها)
@@ -323,10 +323,10 @@ Body:
 
 | المعلومة | القيمة |
 |----------|--------|
-| **Measurement ID** | `G-EEB5593GY7` |
-| **API Secret** | `bQ0kFYHbRYelCTjeT3iVmg` |
+| **Measurement ID** | `YOUR_GA_MEASUREMENT_ID` |
+| **API Secret** | `YOUR_GA_API_SECRET` (من متغيّر بيئة — لا تضعه هنا) |
 
-✅ جاهز للاستخدام في التطبيق!
+> ⚠️ القيمة القديمة كانت مكشوفة في المستودع — يجب تدويرها في Google Analytics.
 
 ---
 

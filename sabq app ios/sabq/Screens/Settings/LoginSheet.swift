@@ -21,6 +21,10 @@ struct LoginSheet: View {
     @State private var isRegisterMode: Bool
     @State private var showForgotPassword = false
     @State private var showAISignUp = false
+    // 2FA code-entry step state (shown when authStore.pending2FAChallengeToken != nil).
+    @State private var twoFactorCode = ""
+    @State private var twoFactorBackupCode = ""
+    @State private var useBackupCode = false
 
     init(initialMode: Bool = false) {
         _isRegisterMode = State(initialValue: initialMode)
@@ -36,6 +40,8 @@ struct LoginSheet: View {
                 VStack(alignment: .leading, spacing: 24) {
                     if awaitingName {
                         CompleteNameForm(onDone: { dismiss() })
+                    } else if authStore.pending2FAChallengeToken != nil {
+                        twoFactorStepView
                     } else if authStore.registrationPending {
                         registrationSuccessView
                     } else {
@@ -44,6 +50,7 @@ struct LoginSheet: View {
                 }
                 .padding(24)
             }
+            .sabqNavigationEdge()
             .background(SabqTheme.background)
             .sabqRTL()
             .interactiveDismissDisabled(awaitingName)
@@ -54,9 +61,8 @@ struct LoginSheet: View {
                             authStore.clearMessages()
                             dismiss()
                         } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .font(SabqFonts.app(size: 22))
-                                .foregroundStyle(SabqTheme.tertiaryInk)
+                            Label("إغلاق", systemImage: "xmark")
+                            .labelStyle(.iconOnly)
                         }
                     }
                 }
@@ -85,6 +91,11 @@ struct LoginSheet: View {
             }
             .onDisappear {
                 authStore.isAuthSheetPresented = false
+                // Drop any half-finished 2FA step so reopening the sheet starts clean.
+                if authStore.pending2FAChallengeToken != nil { authStore.cancelTwoFactor() }
+                twoFactorCode = ""
+                twoFactorBackupCode = ""
+                useBackupCode = false
             }
             .onChange(of: authStore.isLoggedIn) { _, loggedIn in
                 if loggedIn && !authStore.needsDisplayName { dismiss() }
@@ -92,6 +103,104 @@ struct LoginSheet: View {
             .onChange(of: authStore.needsDisplayName) { _, needs in
                 if authStore.isLoggedIn && !needs { dismiss() }
             }
+        }
+    }
+
+    // Two-factor code-entry step, shown mid-login when the account has TOTP
+    // enabled. Reuses LoginOtpBoxes (QuickType-aware) for the 6-digit code, with
+    // a fallback to a one-time backup code.
+    private var twoFactorStepView: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("التحقّق بخطوتين")
+                    .font(SabqFonts.app(size: 24, weight: .bold))
+                    .foregroundStyle(SabqTheme.ink)
+                Text(useBackupCode
+                     ? "أدخل أحد الرموز الاحتياطية"
+                     : "أدخل الرمز المكوّن من ٦ أرقام من تطبيق المصادقة")
+                    .font(SabqFonts.app(size: 15))
+                    .foregroundStyle(SabqTheme.secondaryInk)
+            }
+
+            if useBackupCode {
+                TextField("الرمز الاحتياطي", text: $twoFactorBackupCode)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .font(SabqFonts.app(size: 18, weight: .semibold))
+                    .multilineTextAlignment(.center)
+                    .padding(.vertical, 14)
+                    .frame(maxWidth: .infinity)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .fill(SabqTheme.paleFill)
+                    )
+                    .environment(\.layoutDirection, .leftToRight)
+            } else {
+                LoginOtpBoxes(code: $twoFactorCode) {
+                    Task { await submitTwoFactor() }
+                }
+            }
+
+            if let error = authStore.errorMessage, authStore.errorSource == .credentials {
+                Text(error)
+                    .font(SabqFonts.app(size: 14))
+                    .foregroundStyle(SabqTheme.coral)
+            }
+
+            Button {
+                Task { await submitTwoFactor() }
+            } label: {
+                HStack(spacing: 8) {
+                    if authStore.isLoading { ProgressView().tint(.white) }
+                    Text("تحقّق")
+                        .font(SabqFonts.app(size: 17, weight: .bold))
+                }
+                .frame(maxWidth: .infinity)
+                .frame(height: 52)
+                .foregroundStyle(.white)
+                .background(SabqTheme.brandGradient, in: RoundedRectangle(cornerRadius: SabqTheme.buttonRadius, style: .continuous))
+            }
+            .disabled(authStore.isLoading || (useBackupCode ? twoFactorBackupCode.isEmpty : twoFactorCode.count < 6))
+
+            HStack {
+                Button(useBackupCode ? "استخدام رمز التطبيق" : "استخدام رمز احتياطي") {
+                    useBackupCode.toggle()
+                    twoFactorCode = ""
+                    twoFactorBackupCode = ""
+                    authStore.clearMessages()
+                }
+                .font(SabqFonts.app(size: 14, weight: .semibold))
+                .foregroundStyle(SabqTheme.primaryEnd)
+
+                Spacer()
+
+                Button("رجوع") {
+                    twoFactorCode = ""
+                    twoFactorBackupCode = ""
+                    useBackupCode = false
+                    authStore.cancelTwoFactor()
+                }
+                .font(SabqFonts.app(size: 14, weight: .semibold))
+                .foregroundStyle(SabqTheme.secondaryInk)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @MainActor
+    private func submitTwoFactor() async {
+        let ok = await authStore.verifyTwoFactor(
+            code: useBackupCode ? nil : twoFactorCode,
+            backupCode: useBackupCode ? twoFactorBackupCode : nil
+        )
+        if ok {
+            twoFactorCode = ""
+            twoFactorBackupCode = ""
+            useBackupCode = false
+        } else {
+            // Wrong code — clear the field for a fresh retry; the server keeps the
+            // challenge alive so the user need not re-enter their password.
+            twoFactorCode = ""
         }
     }
 
@@ -390,7 +499,15 @@ private struct PhoneLoginFlow: View {
     @State private var resend = 0
     @FocusState private var phoneFocused: Bool
 
-    private var normalized: String { String(number.filter(\.isNumber).prefix(9)) }
+    // يحذف بادئات 00966/966/0 قبل القص — من يكتب رقمه بالصيغة المحلية المعتادة
+    // (05XXXXXXXX) كان يُقص إلى 9 خانات بصفره فيبقى الزر معطلًا بصمت.
+    private var normalized: String {
+        var d = number.filter(\.isNumber)
+        if d.hasPrefix("00966") { d.removeFirst(5) }
+        else if d.hasPrefix("966") { d.removeFirst(3) }
+        if d.hasPrefix("0") { d.removeFirst() }
+        return String(d.prefix(9))
+    }
     private var phoneValid: Bool { normalized.count == 9 && normalized.first == "5" }
     private var e164Display: String { "+966 " + normalized }
 
@@ -422,7 +539,9 @@ private struct PhoneLoginFlow: View {
                     .tint(SabqTheme.primaryEnd)
                     .multilineTextAlignment(.leading)
                     .focused($phoneFocused)
-                    .onChange(of: number) { _, v in number = String(v.filter(\.isNumber).prefix(9)) }
+                    // سقف 14 لا 9: يستوعب 00966 + 9 خانات؛ حذف البادئات في normalized —
+                    // القص المبكر إلى 9 كان يبتلع آخر خانة لمن يكتب 05XXXXXXXX.
+                    .onChange(of: number) { _, v in number = String(v.filter(\.isNumber).prefix(14)) }
             }
             .environment(\.layoutDirection, .leftToRight)
             .padding(.horizontal, 14)

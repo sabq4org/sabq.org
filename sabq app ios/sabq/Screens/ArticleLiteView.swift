@@ -21,11 +21,11 @@ import SwiftUI
 struct ArticleLiteView: View {
     let article: Article
 
-    @Environment(\.dismiss) private var dismiss
     @Environment(BookmarksStore.self) private var bookmarksStore
 
     @State private var fullArticle: Article?
     @State private var isLoading = false
+    @State private var isAnalyticsVisible = false
 
     /// Same fall-back pattern as `ArticleDetailView`: prefer the
     /// freshly-fetched detail (canonical id, full body) and fall back
@@ -38,25 +38,33 @@ struct ArticleLiteView: View {
                 titleBlock
                 heroImage
                 bodyText
+                    .analyticsReadingBody()
             }
             .padding(.horizontal, 16)
             .padding(.top, 12)
             .padding(.bottom, 40)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(maxWidth: 760, alignment: .leading)
+            .frame(maxWidth: .infinity)
         }
         .background(SabqTheme.background.ignoresSafeArea())
-        .navigationBarBackButtonHidden(true)
+        .analyticsReadingProgress { progress in
+            SabqAnalytics.updateReading(articleId: displayArticle.id, percent: Int(progress * 100))
+        }
+        .sabqScreen("ArticleDetail")
+        .navigationBarTitleDisplayMode(.inline)
         .toolbar { liteToolbar }
         .task(id: displayArticle.id) {
             // Skip the placeholder phase so we don't ship the slug
             // to anything that expects a canonical id (mirrors the
             // ArticleDetailView guard added in #72).
             guard displayArticle.id != displayArticle.slug else { return }
+            isAnalyticsVisible = true
             SabqAnalytics.articleView(
                 id: displayArticle.id,
                 title: displayArticle.title,
-                category: displayArticle.category.title
+                category: displayArticle.categoryTitle
             )
+            SabqAnalytics.beginReading(articleId: displayArticle.id)
         }
         .task {
             // Hydrate the body content. Lite mode doesn't pull related
@@ -68,21 +76,22 @@ struct ArticleLiteView: View {
                 isLoading = false
             }
         }
+        .onDisappear {
+            isAnalyticsVisible = false
+            SabqAnalytics.endReading(articleId: displayArticle.id)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: SabqAnalytics.collectionDidChange)) { _ in
+            guard isAnalyticsVisible, SabqAnalytics.analyticsCollectionEnabled else { return }
+            SabqAnalytics.beginReading(articleId: displayArticle.id)
+        }
     }
 
     // MARK: - Sub-views
 
     private var titleBlock: some View {
         VStack(alignment: .leading, spacing: 8) {
+            // شارة التصنيف حُذفت من سبق لايت كما في الويب (#1614) — يبقى الوقت.
             HStack(spacing: 8) {
-                Text(displayArticle.category.title)
-                    .font(SabqFonts.app(size: 12, weight: .semibold))
-                    .foregroundStyle(displayArticle.category.tint)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
-                    .background(
-                        Capsule().fill(displayArticle.category.tint.opacity(0.12))
-                    )
                 Text(SabqFormatters.relativeArabic.localizedString(for: displayArticle.publishDate, relativeTo: Date()))
                     .font(SabqFonts.app(size: 11, weight: .medium))
                     .foregroundStyle(SabqTheme.tertiaryInk)
@@ -132,45 +141,33 @@ struct ArticleLiteView: View {
 
     @ToolbarContentBuilder
     private var liteToolbar: some ToolbarContent {
-        ToolbarItem(placement: .cancellationAction) {
+
+        ToolbarItemGroup(placement: .topBarTrailing) {
+            Button {
+                SabqHaptics.medium()
+                bookmarksStore.toggle(displayArticle.id, article: displayArticle)
+            } label: {
+                Image(systemName: bookmarksStore.isBookmarked(displayArticle.id) ? "bookmark.fill" : "bookmark")
+                    .font(SabqFonts.app(size: 14, weight: .semibold))
+                    .foregroundStyle(
+                        bookmarksStore.isBookmarked(displayArticle.id)
+                            ? SabqTheme.primaryEnd
+                            : SabqTheme.secondaryInk
+                    )
+
+            }
+            .accessibilityLabel(bookmarksStore.isBookmarked(displayArticle.id) ? "إزالة من المحفوظات" : "حفظ الخبر")
             Button {
                 SabqHaptics.light()
-                dismiss()
+                share()
             } label: {
-                Image(systemName: "chevron.right")
-                    .font(SabqFonts.app(size: 14, weight: .bold))
+                Image(systemName: "square.and.arrow.up")
+                    .font(SabqFonts.app(size: 14, weight: .semibold))
                     .foregroundStyle(SabqTheme.ink)
-                    .padding(8)
-                    .background(Circle().fill(.ultraThinMaterial))
+
             }
-        }
-        ToolbarItem(placement: .primaryAction) {
-            HStack(spacing: 8) {
-                Button {
-                    SabqHaptics.medium()
-                    bookmarksStore.toggle(displayArticle.id, article: displayArticle)
-                } label: {
-                    Image(systemName: bookmarksStore.isBookmarked(displayArticle.id) ? "bookmark.fill" : "bookmark")
-                        .font(SabqFonts.app(size: 14, weight: .semibold))
-                        .foregroundStyle(
-                            bookmarksStore.isBookmarked(displayArticle.id)
-                                ? SabqTheme.primaryEnd
-                                : SabqTheme.secondaryInk
-                        )
-                        .padding(8)
-                        .background(Circle().fill(.ultraThinMaterial))
-                }
-                Button {
-                    SabqHaptics.light()
-                    share()
-                } label: {
-                    Image(systemName: "square.and.arrow.up")
-                        .font(SabqFonts.app(size: 14, weight: .semibold))
-                        .foregroundStyle(SabqTheme.ink)
-                        .padding(8)
-                        .background(Circle().fill(.ultraThinMaterial))
-                }
-            }
+            .accessibilityLabel("مشاركة")
+
         }
     }
 
@@ -179,7 +176,12 @@ struct ArticleLiteView: View {
     private func share() {
         guard let urlString = displayArticle.articleURL ?? displayArticle.slug.map({ "https://sabq.org/article/\($0)" }),
               let url = URL(string: urlString) else { return }
+        SabqAnalytics.shareIntent(articleId: displayArticle.id)
         let activity = UIActivityViewController(activityItems: [displayArticle.title, url], applicationActivities: nil)
+        let articleId = displayArticle.id
+        activity.completionWithItemsHandler = { _, completed, _, _ in
+            if completed { SabqAnalytics.shareCompleted(articleId: articleId, stage: "ios_lite_completion") }
+        }
         if let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
            let root = scene.windows.first?.rootViewController {
             // Walk to topmost presented controller so we don't try to
@@ -188,6 +190,5 @@ struct ArticleLiteView: View {
             while let next = presenter.presentedViewController { presenter = next }
             presenter.present(activity, animated: true)
         }
-        SabqAnalytics.articleShare(id: displayArticle.id, platform: "ios_lite_share")
     }
 }

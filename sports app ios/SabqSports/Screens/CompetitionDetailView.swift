@@ -1384,7 +1384,9 @@ struct CompetitionDetailView: View {
         self.outlook = (await outlookT) ?? nil
         self.insights = await insightsT
         let tr = await transfersT
-        self.leagueTransfers = (tr?.topDeals ?? tr?.transfers) ?? []
+        // `transfers` موجز زمني (الأحدث أولًا). `topDeals` أعلى مبلغ — قديم/غير مناسب للتبويب.
+        self.leagueTransfers = (tr?.transfers ?? tr?.topDeals ?? [])
+            .sorted { $0.date > $1.date || ($0.date == $1.date && $0.id > $1.id) }
 
         let roundsResponse = await roundsT
         self.rounds = roundsResponse?.rounds ?? []

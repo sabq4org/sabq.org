@@ -36,7 +36,12 @@ data class PredContestMeta(
     val away: PredTeamMeta? = null,
     val round: String? = null,
     val venue: String? = null,
+    /** ركلات الترجيح إن حُسمت المباراة بها (نقل الويب #1439). */
+    val penalties: PredPenaltiesMeta? = null,
 )
+
+@Serializable
+data class PredPenaltiesMeta(val home: Int? = null, val away: Int? = null)
 
 /** حمولة توقّع نتيجة مباراة — اختيارية الحقول لتمرير حمولات الأنواع الأخرى. */
 @Serializable
@@ -46,7 +51,20 @@ data class PredScorePayload(val predHome: Int? = null, val predAway: Int? = null
 data class PredMyEntry(val id: String = "", val payload: PredScorePayload? = null)
 
 @Serializable
-data class PredScoreResult(val finalHome: Int? = null, val finalAway: Int? = null)
+data class PredScoreResult(
+    val finalHome: Int? = null,
+    val finalAway: Int? = null,
+    val penalties: PredPenaltiesMeta? = null,
+) {
+    companion object {
+        /** «(الضيف–المضيف ر.ت)» تحت النتيجة النهائية — نفس ترتيب iOS/الويب. */
+        fun penaltiesLabel(pen: PredPenaltiesMeta?): String? {
+            val ph = pen?.home ?: return null
+            val pa = pen.away ?: return null
+            return "($pa–$ph ر.ت)"
+        }
+    }
+}
 
 @Serializable
 data class PredContest(
@@ -57,6 +75,8 @@ data class PredContest(
     val settledAt: String? = null,
     val metadata: PredContestMeta? = null,
     val result: PredScoreResult? = null,
+    /** عدد المشاركين النشطين — رقم فقط، بلا أسماء (الأسماء في المتصدرين). */
+    val entriesCount: Int = 0,
     val myEntry: PredMyEntry? = null,
 ) {
     val isMatchScore: Boolean get() = contestType == "match_score"
@@ -104,13 +124,13 @@ data class PredRule(
                 val exact = ((p.tiers?.exact ?: 0.0) * 100).toInt()
                 val margin = ((p.tiers?.signedMargin ?: 0.0) * 100).toInt()
                 val outcome = ((p.tiers?.outcome ?: 0.0) * 100).toInt()
-                "بركة المباراة ${p.basePool ?: 0} نقطة: $exact٪ للنتيجة الدقيقة، $margin٪ للفارق الصحيح، $outcome٪ للاتجاه — وما لا يُوزَّع يتراكم للمباراة التالية"
+                "جائزة المباراة ${p.basePool ?: 0} نقطة: $exact٪ للنتيجة الدقيقة، $margin٪ للفارق الصحيح، $outcome٪ للاتجاه — وما لا يُوزَّع يتراكم للمباراة التالية"
             }
             "shared_pool" ->
                 if (p.winCriterion == "exact")
-                    "بركة ${p.basePool ?: 0} نقطة تُقسم بالتساوي على أصحاب النتيجة الدقيقة"
+                    "جائزة ${p.basePool ?: 0} نقطة تُقسم بالتساوي على أصحاب النتيجة الدقيقة"
                 else
-                    "بركة ${p.basePool ?: 0} نقطة تُقسم بالتساوي على من أصابوا اتجاه المباراة"
+                    "جائزة ${p.basePool ?: 0} نقطة تُقسم بالتساوي على من أصابوا اتجاه المباراة"
             "skill_weighted" -> "نقاط مهارية: دقة توقّعك × جرأته × سلسلة إصاباتك"
             "fixed_points" -> "نقاط ثابتة حسب دقة التوقّع"
             else -> "تُحتسب النقاط بعد صافرة النهاية"
@@ -126,6 +146,7 @@ data class PredContestDetailResponse(
     val locksAt: String = "",
     val metadata: PredContestMeta? = null,
     val result: PredScoreResult? = null,
+    val entriesCount: Int = 0,
     val myEntry: PredMyEntry? = null,
     val rule: PredRule? = null,
 )
@@ -142,10 +163,12 @@ data class PredEntrySaveResponse(val entry: PredEntrySaved = PredEntrySaved())
 @Serializable
 data class PredLedgerItem(
     val id: String = "",
+    val contestId: String? = null,
     val points: Int = 0,
     val reasonCode: String = "",
     val reasonLabelAr: String = "",
     val createdAt: String = "",
+    val breakdown: PredAwardBreakdown? = null,
 )
 
 @Serializable

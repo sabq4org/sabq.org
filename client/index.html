@@ -303,22 +303,11 @@
       visitor who bounced inside the first 5 seconds (a huge share of
       news traffic) was never counted.
 
-      Loading the library immediately as `async` keeps the document
-      parse non-blocking (modern browsers don't block on `async`), while
-      ensuring the very first pageview from a fast-bounce visitor
-      actually fires. SPA route changes are tracked separately from
-      App.tsx — `send_page_view: false` here so we don't double-count.
+      The TypeScript bootstrap loads the library once the current public
+      route passes the privacy gate. SPA route changes are tracked separately
+      from App.tsx — `send_page_view: false` so we don't double-count.
     -->
-    <script async src="https://www.googletagmanager.com/gtag/js?id=G-EEB5593GY7" data-cfasync="false"></script>
-    <script data-cfasync="false">
-      window.dataLayer = window.dataLayer || [];
-      function gtag(){dataLayer.push(arguments);}
-      gtag('js', new Date());
-      gtag('config', 'G-EEB5593GY7', {
-        send_page_view: false,
-        cookie_flags: 'SameSite=None;Secure'
-      });
-    </script>
+    <!-- GA4 is initialized by the privacy-gated TypeScript bootstrap. -->
     
     <!-- Initialize DMS Signal Object (required by DMS) - sync, fast -->
     <script data-cfasync="false">
@@ -332,7 +321,7 @@
     
     <!-- DEFERRED: Load GPT and GTM after first content paint (smart gate).
          Triggers, whichever fires first:
-           1. user interaction (scroll/click/touch/mouse/key) — immediate
+           1. user interaction (scroll/click/touch/key) — immediate
            2. 'sabq:content-painted' — dispatched by the app (Home/Category/Article)
               via double-rAF once the route's main data has actually painted,
               so the ~1.16MB ad stack (GTM→Permutive, GPT, apstag) never
@@ -341,12 +330,18 @@
     <script data-cfasync="false">
       (function() {
         var loaded = false;
+        var requested = false;
+        function requestAdScripts() { requested = true; loadAdScripts(); }
+        function retryRequestedAds() { if (requested) loadAdScripts(); }
         function loadAdScripts() {
           if (loaded) return;
+          if (typeof window.__sabqAnalyticsAllowed !== 'function' || !window.__sabqAnalyticsAllowed()) return;
           loaded = true;
-          var evts = ['scroll','click','touchstart','mousemove','keydown'];
-          evts.forEach(function(e){ document.removeEventListener(e, loadAdScripts, {capture:true}); });
-          window.removeEventListener('sabq:content-painted', loadAdScripts);
+          var evts = ['scroll','click','touchstart','keydown'];
+          evts.forEach(function(e){ document.removeEventListener(e, requestAdScripts, {capture:true}); });
+          window.removeEventListener('sabq:content-painted', requestAdScripts);
+          window.removeEventListener('sabq:analytics-route', retryRequestedAds);
+          window.removeEventListener('sabq:analytics-ready', retryRequestedAds);
           var gpt = document.createElement('script');
           gpt.async = true;
           gpt.src = 'https://securepubads.g.doubleclick.net/tag/js/gpt.js';
@@ -357,10 +352,17 @@
           'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
           })(window,document,'script','dataLayer','GTM-T5PW84LM');
         }
-        var evts = ['scroll','click','touchstart','mousemove','keydown'];
-        evts.forEach(function(e){ document.addEventListener(e, loadAdScripts, {capture:true,once:true,passive:true}); });
-        window.addEventListener('sabq:content-painted', loadAdScripts, {once:true});
-        setTimeout(loadAdScripts, 7000);
+        // mousemove was dropped from the triggers 2026-07-26: on desktop the
+        // cursor almost always moves during the LCP window, which fired the
+        // ~1.16MB ad stack right while the hero image was downloading. The
+        // content-painted signal (or scroll/click/touch/key, or the 7s timer)
+        // still loads ads promptly after the main content is on screen.
+        var evts = ['scroll','click','touchstart','keydown'];
+        evts.forEach(function(e){ document.addEventListener(e, requestAdScripts, {capture:true,once:true,passive:true}); });
+        window.addEventListener('sabq:content-painted', requestAdScripts, {once:true});
+        window.addEventListener('sabq:analytics-ready', retryRequestedAds);
+        window.addEventListener('sabq:analytics-route', retryRequestedAds);
+        setTimeout(requestAdScripts, 7000);
       })();
     </script>
     <!-- Disable Cloudflare Rocket Loader for this page (rocket-loader=off) -->
@@ -456,11 +458,17 @@
     <link rel="preconnect" href="https://api.sabq.org" crossorigin>
     <link rel="dns-prefetch" href="https://api.sabq.org">
 
+    <!--
+      Preload the Arabic subset of IBM Plex 400 only (body text / LCP).
+      URL must match the unicode-range file Google Fonts CSS serves for
+      wght@400 arabic — a stale hash shows as "preloaded but not used"
+      in Safari/Chrome. Re-check after bumping the Google Fonts family URL.
+    -->
     <link
       rel="preload"
       as="font"
       type="font/woff2"
-      href="https://fonts.gstatic.com/s/ibmplexsansarabic/v15/Qw3NZRtWPQCuHme67tEYUIx3Kh0PHR9N6YPi-OCRXMRrKATtYV0.woff2"
+      href="https://fonts.gstatic.com/s/ibmplexsansarabic/v15/Qw3CZRtWPQCuHme67tEYUIx3Kh0PHR9N6Ys43PW5fslBEg0.woff2"
       crossorigin
     >
 
@@ -496,8 +504,8 @@
   </head>
   <body>
     <!-- Google Tag Manager (noscript) -->
-    <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-T5PW84LM"
-    height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+    <!-- GTM is intentionally JavaScript-gated above; a static noscript iframe
+         would bypass the admin/auth/sensitive-route privacy boundary. -->
     <!-- End Google Tag Manager (noscript) -->
     <div id="root">
       <style>

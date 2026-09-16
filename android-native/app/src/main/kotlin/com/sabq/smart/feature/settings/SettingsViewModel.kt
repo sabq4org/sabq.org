@@ -69,6 +69,10 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch { store.setArticleUseReaderFont(value) }
     }
 
+    fun setBrowsingMode(mode: com.sabq.smart.data.SabqBrowsingMode) {
+        viewModelScope.launch { store.setBrowsingMode(mode) }
+    }
+
     /** Called by the 4-slide welcome flow when the user either taps the
      *  final CTA ("ابدأ الآن") or "تخطّي" on any earlier slide. Sets
      *  the persistent flag so the cover never shows again on this

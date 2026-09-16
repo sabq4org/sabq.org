@@ -13,9 +13,13 @@ export const NOINDEX_EXACT: ReadonlySet<string> = new Set<string>([
   '/login', '/register', '/logout',
   '/verify-email', '/forgot-password', '/reset-password', '/set-password', '/2fa-verify',
   '/select-interests',
+  '/plus-preview',
+  // صفحة معاينة داخلية لهيدر اليوم الوطني الـ96 — اختبار تصميم فقط
+  '/nd96-preview',
   '/profile', '/bookmarks', '/reading-history',
   '/my-follows', '/my-keywords', '/my-votes',
   '/notification-settings', '/recommendation-settings',
+  '/preferences', '/loyalty',
   '/en/profile', '/en/notification-settings',
   '/ur/profile',
 ]);
@@ -26,8 +30,14 @@ export const NOINDEX_PREFIXES: readonly string[] = [
   '/ifox',
   '/onboarding',
   '/payment',
+  '/settings',
+  // صفحة التحقق من الخطابات الرسمية: عامة الوصول (يفتحها موظف الجهة من QR)
+  // لكنها تعرض اسم منسوب وصفته — لا تُفهرس ولا تُخزَّن على الحافة.
+  '/verify',
   '/en/dashboard',
+  '/en/settings',
   '/ur/dashboard',
+  '/ur/settings',
   // مجالس التوقعات تحمل دعوات وواجهات عضوية شخصية؛ تبقى قابلة للمشاركة لكن
   // لا تُفهرس ولا تُخزّن كغلاف HTML مشترك على الحافة.
   '/gulf-cup/majlis',
@@ -39,6 +49,8 @@ export const NOINDEX_PREFIXES: readonly string[] = [
   '/sports5',
   // صفحات الاستطلاعات برابط شخصي (توكن لكل مدعو) — لا فهرسة ولا تخزين على الحافة.
   '/survey',
+  // روابط دعوة الاجتماعات (توكن سري لكل اجتماع) — لا فهرسة ولا تخزين على الحافة.
+  '/meet',
 ];
 
 export function isNoindexPath(pathname: string): boolean {

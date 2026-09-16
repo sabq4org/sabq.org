@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { requireAuth, requirePermission } from "../rbac";
 import { getArticleIpBreakdown } from "../services/articleViewStatsService";
+import { parseLimit } from "../utils/pagination";
 
 const router: Router = Router();
 
@@ -16,7 +17,7 @@ router.get(
       if (!articleId) {
         return res.status(400).json({ message: "معرف المقال مطلوب" });
       }
-      const limit = Number(req.query.limit) || 50;
+      const limit = parseLimit(req.query.limit, 50, 200);
       const breakdown = await getArticleIpBreakdown(articleId, limit);
       res.json(breakdown);
     } catch (error) {

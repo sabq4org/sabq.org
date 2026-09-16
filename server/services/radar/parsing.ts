@@ -116,6 +116,15 @@ export function parseFeedDate(value: unknown): Date | undefined {
   let date = new Date(raw);
   if (!Number.isNaN(date.getTime())) return date;
 
+  // صيغة GDELT المضغوطة 20260731T073000Z — لا يفهمها V8 مباشرة
+  const compact = raw.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/);
+  if (compact) {
+    date = new Date(
+      `${compact[1]}-${compact[2]}-${compact[3]}T${compact[4]}:${compact[5]}:${compact[6]}Z`
+    );
+    if (!Number.isNaN(date.getTime())) return date;
+  }
+
   const match = raw.match(/\s([A-Z]{3,4})$/);
   const offset = match ? TZ_ABBREVIATIONS[match[1]] : undefined;
   if (offset) {
@@ -123,6 +132,34 @@ export function parseFeedDate(value: unknown): Date | undefined {
     if (!Number.isNaN(date.getTime())) return date;
   }
   return undefined;
+}
+
+/**
+ * روابط الممرات المدفوعة تحمل مفاتيحها كعنصر نائب {{ENV:VAR}} — المفتاح الحقيقي
+ * يعيش في env فقط، لا في قاعدة البيانات ولا في حزم البذر.
+ * env مفقود = خطأ صريح يظهر في lastError للمصدر بدل جلب فاشل صامت.
+ */
+export function resolveEnvPlaceholders(url: string, env: Record<string, string | undefined>): string {
+  return url.replace(/\{\{ENV:([A-Z0-9_]+)\}\}/g, (_, name: string) => {
+    const value = env[name];
+    if (!value) throw new Error(`RADAR_ENV_MISSING:${name}`);
+    return value;
+  });
+}
+
+/**
+ * عناوين Google News تأتي بصيغة «العنوان - الناشر» — نقص اللاحقة فقط عند
+ * مطابقتها اسم الناشر حرفيًا (لا قصّ أعمى: العناوين قد تحوي شرطات مشروعة).
+ */
+export function stripPublisherSuffix(title: string, publisher?: string | null): string {
+  const trimmed = title.trim();
+  if (!publisher?.trim()) return trimmed;
+  const suffix = ` - ${publisher.trim()}`;
+  if (trimmed.toLowerCase().endsWith(suffix.toLowerCase())) {
+    const stripped = trimmed.slice(0, -suffix.length).trim();
+    if (stripped) return stripped;
+  }
+  return trimmed;
 }
 
 // ---------- بوابة الحداثة ----------

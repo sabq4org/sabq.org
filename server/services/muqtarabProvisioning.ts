@@ -17,14 +17,15 @@
  */
 
 import { db } from "../db";
+import crypto from "crypto";
 import { storage } from "../storage";
-import { users, roles, userRoles, type AngleSubmission, type Angle, type User } from "@shared/schema";
+import { users, roles, userRoles, angles, type AngleSubmission, type Angle, type User } from "@shared/schema";
 import { eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import bcrypt from "bcrypt";
 import { transliterateToEnglish, generateEnglishSlug } from "../utils/slugTransliterator";
 import { logActivity, invalidateUserPermissionCache } from "../rbac";
-import { invalidateUserSessionCache } from "../auth";
+import { invalidateAllUserSessions } from "../auth";
 import { sendEmailNotification } from "./email";
 
 const LOGIN_URL = "https://sabq.org/login";
@@ -33,7 +34,7 @@ export interface ProvisionResult {
   ok: boolean;
   alreadyProvisioned?: boolean;
   angle?: Angle;
-  user?: { id: string; email: string };
+  user?: { id: string; email: string | null };
   isNewUser?: boolean;
   emailSent?: boolean;
   emailError?: string;
@@ -52,7 +53,8 @@ function generatePassword(): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
   let password = "";
   for (let i = 0; i < 10; i++) {
-    password += chars.charAt(Math.floor(Math.random() * chars.length));
+    // CSPRNG — this becomes the writer's real login password (audit #10).
+    password += chars.charAt(crypto.randomInt(chars.length));
   }
   return password;
 }
@@ -141,7 +143,7 @@ export async function provisionAngleFromSubmission(
     console.warn("[muqtarab] دور angle_writer غير موجود في DB — شغّل seedRBAC. تم تخطّي إسناد الدور.");
   }
   invalidateUserPermissionCache(user.id);
-  invalidateUserSessionCache(user.id);
+  await invalidateAllUserSessions(user.id);
 
   // إنشاء الزاوية وربطها بالمستخدم كمدير
   const angle = await storage.createAngle({
@@ -216,9 +218,37 @@ export async function resendAngleWriterCredentials(
   }
 
   const email = submission.email.trim().toLowerCase();
-  const [user] = await db.select().from(users).where(eq(users.email, email)).limit(1);
+
+  // SECURITY: resolve the account through the angle this flow actually
+  // provisioned — never through the submission's email.
+  //
+  // `submission.email` comes from POST /api/angle-submissions, a public,
+  // unauthenticated, CSRF-exempt form where the submitter types any address
+  // they like. Matching `users.email` against it meant a holder of
+  // `muqtarab.manage` (an editor-level permission) could aim this at ANY
+  // account — including system_admin — and force a password reset, wipe the
+  // session, and flip `status` back to "active", which quietly undoes a ban.
+  // `angles.managerUserId` is the account this submission genuinely created.
+  const [angle] = await db
+    .select({ managerUserId: angles.managerUserId })
+    .from(angles)
+    .where(eq(angles.id, submission.createdAngleId))
+    .limit(1);
+
+  if (!angle?.managerUserId) {
+    return { ok: false, message: "لم يُعثر على حساب المستخدم المرتبط بالطلب" };
+  }
+
+  const [user] = await db.select().from(users).where(eq(users.id, angle.managerUserId)).limit(1);
   if (!user) {
     return { ok: false, message: "لم يُعثر على حساب المستخدم المرتبط بالطلب" };
+  }
+
+  // Defence in depth: even the correct angle owner must not be re-credentialled
+  // through this path if the account has since been banned or deleted —
+  // otherwise the reset below (`status: "active"`) becomes a ban-evasion tool.
+  if (user.deletedAt || user.status === "banned") {
+    return { ok: false, message: "الحساب موقوف أو محذوف — لا يمكن إعادة إرسال بيانات الدخول" };
   }
 
   let tempPassword: string | null = null;
@@ -236,7 +266,7 @@ export async function resendAngleWriterCredentials(
         emailVerified: true,
       })
       .where(eq(users.id, user.id));
-    invalidateUserSessionCache(user.id);
+    await invalidateAllUserSessions(user.id);
     showAsNewCredentials = true;
   }
 

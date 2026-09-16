@@ -55,6 +55,11 @@ private struct AcLoginResponse: Decodable {
     let token: String?
     let member: AcMember?
     let message: String?
+    // المصادقة الثنائية: عند تفعيل TOTP يرجّع الخادم HTTP 200 مع
+    // requires2FA=true و token=nil وتحدّي قصير العمر يُبادَل بجلسة كاملة
+    // عبر /auth/verify-2fa بدل تثبيت الجلسة مباشرة.
+    let requires2FA: Bool?
+    let challengeToken: String?
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: AcFlexKey.self)
@@ -63,6 +68,8 @@ private struct AcLoginResponse: Decodable {
         member = (try? c.decode(AcMember.self, forKey: AcFlexKey("user")))
             ?? (try? c.decode(AcMember.self, forKey: AcFlexKey("member")))
         message = try? c.decode(String.self, forKey: AcFlexKey("message"))
+        requires2FA = try? c.decode(Bool.self, forKey: AcFlexKey("requires2FA"))
+        challengeToken = try? c.decode(String.self, forKey: AcFlexKey("challengeToken"))
     }
 }
 
@@ -93,6 +100,13 @@ private struct AcPhoneSendResponse: Decodable {
 private struct AcPhoneVerifyRequest: Encodable {
     let phone: String
     let code: String
+    let deviceInfo: AcDeviceInfo?
+}
+
+private struct AcVerifyTwoFactorRequest: Encodable {
+    let challengeToken: String
+    let token: String?       // رمز TOTP من تطبيق المصادقة
+    let backupCode: String?  // أو رمز احتياطي لمرة واحدة
     let deviceInfo: AcDeviceInfo?
 }
 
@@ -177,6 +191,27 @@ extension APIClient {
         )
     }
 
+    /// إكمال دخول محمي بالمصادقة الثنائية: يبادل تحدّي الدخول + رمز TOTP (أو رمز
+    /// احتياطي) بجلسة كاملة. الرد عند النجاح مطابق لرد الدخول العادي.
+    fileprivate func verifyTwoFactor(
+        challengeToken: String,
+        code: String?,
+        backupCode: String?
+    ) async throws -> AcLoginResponse {
+        let body = AcVerifyTwoFactorRequest(
+            challengeToken: challengeToken,
+            token: code,
+            backupCode: backupCode,
+            deviceInfo: Self.acDeviceInfo()
+        )
+        return try await post(
+            AcLoginResponse.self,
+            path: "/auth/verify-2fa",
+            body: body,
+            apiRoot: URLConstants.mobileAPI
+        )
+    }
+
     fileprivate func fetchAcMemberProfile() async throws -> AcMember? {
         struct Response: Decodable {
             let member: AcMember?
@@ -210,6 +245,9 @@ final class AcAuthStore {
     var isLoading = false
     var errorMessage: String?
     var errorSource: AcAuthErrorSource = .none
+    /// تحدّي المصادقة الثنائية المعلّق بعد دخول بحساب مفعّل عليه TOTP.
+    /// غير nil ⇐ تعرض الواجهة خطوة إدخال الرمز بدل نموذج الدخول.
+    private(set) var pending2FAChallengeToken: String?
 
     var isLoggedIn: Bool { token != nil }
 
@@ -325,14 +363,53 @@ final class AcAuthStore {
         isLoading = true
         errorMessage = nil
         errorSource = .none
+        pending2FAChallengeToken = nil
         defer { isLoading = false }
         do {
             let response = try await APIClient.shared.loginWithIdentifier(id, password: password)
+            // حساب مفعّل عليه المصادقة الثنائية: يرجّع الخادم requires2FA + تحدّيًا
+            // (HTTP 200، بلا token) بدل الجلسة. ننتقل لخطوة إدخال الرمز بدل عرض
+            // رسالة التحدّي كخطأ.
+            if response.requires2FA == true, let challenge = response.challengeToken {
+                pending2FAChallengeToken = challenge
+                return
+            }
             try await applySession(response)
         } catch {
             errorMessage = friendly(error)
             errorSource = .credentials
         }
+    }
+
+    /// إكمال دخول محمي بالمصادقة الثنائية برمز TOTP أو رمز احتياطي. يُبقي التحدّي
+    /// عند فشل الرمز حتى يتمكّن المستخدم من إعادة المحاولة دون إعادة الدخول.
+    @discardableResult
+    func verifyTwoFactor(code: String?, backupCode: String? = nil) async -> Bool {
+        guard let challenge = pending2FAChallengeToken else { return false }
+        isLoading = true
+        errorMessage = nil
+        errorSource = .credentials
+        defer { isLoading = false }
+        do {
+            let response = try await APIClient.shared.verifyTwoFactor(
+                challengeToken: challenge, code: code, backupCode: backupCode
+            )
+            try await applySession(response)
+            pending2FAChallengeToken = nil
+            return true
+        } catch {
+            // نُبقي التحدّي حيًّا عند رمز خاطئ حتى يعيد المستخدم المحاولة.
+            errorMessage = friendly2FA(error)
+            errorSource = .credentials
+            return false
+        }
+    }
+
+    /// إلغاء خطوة المصادقة الثنائية والرجوع لنموذج الدخول.
+    func cancelTwoFactor() {
+        pending2FAChallengeToken = nil
+        errorMessage = nil
+        errorSource = .none
     }
 
     // MARK: جوال OTP
@@ -417,6 +494,7 @@ final class AcAuthStore {
         member = nil
         errorMessage = nil
         errorSource = .none
+        pending2FAChallengeToken = nil
         AcKeychain.delete(tokenKey)
         UserDefaults.standard.removeObject(forKey: memberKey)
         AcFollowsStore.shared.clear()
@@ -425,6 +503,19 @@ final class AcAuthStore {
             guard token == nil else { return }
             await APIClient.shared.setAuthToken(nil)
         }
+    }
+
+    /// خطأ خطوة المصادقة الثنائية: 401 يعني رمزًا خاطئًا أو تحدّيًا منتهيًا،
+    /// فنعرض رسالة «الرمز غير صحيح» بدل «انتهت الجلسة» العامة.
+    private func friendly2FA(_ error: Error) -> String {
+        if let api = error as? APIError {
+            switch api {
+            case .unauthorized, .forbidden: return L("auth.2fa.invalidCode")
+            case .server(_, let msg): return msg ?? L("auth.2fa.invalidCode")
+            default: return friendly(error)
+            }
+        }
+        return friendly(error)
     }
 
     private func friendly(_ error: Error) -> String {

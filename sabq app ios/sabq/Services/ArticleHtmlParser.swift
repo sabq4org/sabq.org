@@ -15,7 +15,10 @@ import SwiftUI
 //
 // All attribute values are HTML-entity-decoded before use — the production
 // payload double-encodes data-images as `[{&quot;src&quot;:…}]`.
-enum ArticleHtmlParser {
+// nonisolated: يُستدعى من Task.detached لتحليل المقال خارج الـMainActor
+// (المشروع يعزل كل شيء على MainActor افتراضيًا عبر
+// SWIFT_DEFAULT_ACTOR_ISOLATION) — المحلل نقي بلا حالة مشتركة.
+nonisolated enum ArticleHtmlParser {
 
     static func parse(_ html: String) -> [ArticleBlock] {
         let normalized = normaliseWhitespace(html)
@@ -61,7 +64,12 @@ enum ArticleHtmlParser {
         if tag.name == "img" {
             scanner.consumeTag()
             if let src = tag.attr("src"), let url = URL(string: src) {
-                return .image(url: url, alt: tag.attr("alt"), caption: nil)
+                return .image(
+                    url: url,
+                    alt: tag.attr("alt"),
+                    caption: tag.attr("data-caption").flatMap { $0.isEmpty ? nil : $0 },
+                    layout: ImageLayout.parse(width: tag.attr("data-width"), align: tag.attr("data-align"))
+                )
             }
             return nil
         }
@@ -71,6 +79,7 @@ enum ArticleHtmlParser {
             let isGallery = tag.attr("data-image-gallery") != nil || tag.classes.contains("photo-album")
             let isVideo = tag.attr("data-video-embed") != nil || tag.classes.contains("video-embed") || tag.classes.contains("youtube-embed")
             let isTweet = tag.attr("data-twitter-embed") != nil || tag.classes.contains("tweet-embed") || (tag.classes.contains("social-embed") && tag.attr("data-embed-type") == "twitter")
+            let isWhatsApp = tag.attr("data-whatsapp-cta") != nil || tag.classes.contains("whatsapp-cta-card")
 
             if isGallery {
                 return parseImageGallery(scanner: &scanner, tag: tag)
@@ -80,6 +89,9 @@ enum ArticleHtmlParser {
             }
             if isTweet {
                 return parseTwitterEmbed(scanner: &scanner, tag: tag)
+            }
+            if isWhatsApp {
+                return parseWhatsAppCta(scanner: &scanner, tag: tag)
             }
             // Generic div: render children as paragraph.
             let inner = scanner.consumeContainer()
@@ -95,7 +107,9 @@ enum ArticleHtmlParser {
             }
             let inner = scanner.consumeContainer()
             let runs = parseInlineRuns(inner)
-            return runsAreEmpty(runs) ? nil : .blockquote(runs: runs)
+            if runsAreEmpty(runs) { return nil }
+            let split = splitQuoteAttribution(runs)
+            return .blockquote(runs: split.quote, attribution: split.attribution)
         }
 
         if let level = headingLevel(tag.name) {
@@ -106,6 +120,10 @@ enum ArticleHtmlParser {
 
         if tag.name == "ul" || tag.name == "ol" {
             return parseList(scanner: &scanner, ordered: tag.name == "ol")
+        }
+
+        if tag.name == "table" {
+            return parseTable(scanner: &scanner, tag: tag)
         }
 
         if tag.name == "p" {
@@ -135,6 +153,43 @@ enum ArticleHtmlParser {
             if !runsAreEmpty(runs) { items.append(runs) }
         }
         return .list(ordered: ordered, items: items)
+    }
+
+    /// `<table class="sabq-table"><tbody><tr><th>…</th></tr><tr><td>…</td></tr>…`
+    /// كان الجدول يسقط إلى «وسم مجهول» فتتناثر خلاياه كفقرات مستقلة.
+    /// الصف الأول يُعدّ رأسًا إذا كانت كل خلاياه <th>. colgroup/thead/tbody تُتجاوز.
+    private static func parseTable(scanner: inout HTMLScanner, tag: HTMLTag) -> ArticleBlock? {
+        let inner = scanner.consumeContainer()
+        let cardStyle = tag.classes.contains("sabq-table--card")
+        var header: [[InlineRun]]? = nil
+        var rows: [[[InlineRun]]] = []
+        var s = HTMLScanner(input: inner)
+        while !s.isAtEnd {
+            s.skipWhitespace()
+            guard let t = s.peekTag() else { s.advance(1); continue }
+            guard t.name == "tr", !t.isClosing else { s.consumeTag(); continue }
+            let rowHTML = s.consumeContainer()
+            var cells: [[InlineRun]] = []
+            var allHeader = true
+            var c = HTMLScanner(input: rowHTML)
+            while !c.isAtEnd {
+                c.skipWhitespace()
+                guard let ct = c.peekTag() else { c.advance(1); continue }
+                guard (ct.name == "td" || ct.name == "th"), !ct.isClosing else { c.consumeTag(); continue }
+                if ct.name == "td" { allHeader = false }
+                // فقرات متعددة داخل الخلية → أسطر
+                let cellHTML = c.consumeContainer().replacingOccurrences(of: "</p><p", with: "<br><p")
+                cells.append(parseInlineRuns(cellHTML))
+            }
+            guard !cells.isEmpty else { continue }
+            if allHeader, header == nil, rows.isEmpty {
+                header = cells
+            } else {
+                rows.append(cells)
+            }
+        }
+        guard header != nil || !rows.isEmpty else { return nil }
+        return .table(header: header, rows: rows, cardStyle: cardStyle)
     }
 
     private static func parseImageGallery(scanner: inout HTMLScanner, tag: HTMLTag) -> ArticleBlock {
@@ -225,7 +280,31 @@ enum ArticleHtmlParser {
     private static func parseTwitterEmbedFromBlockquote(scanner: inout HTMLScanner) -> ArticleBlock {
         let inner = scanner.consumeContainer()
         if let url = extractTweetURL(from: inner) { return .twitterEmbed(tweetURL: url) }
-        return .blockquote(runs: parseInlineRuns(inner))
+        let split = splitQuoteAttribution(parseInlineRuns(inner))
+        return .blockquote(runs: split.quote, attribution: split.attribution)
+    }
+
+    private static func parseWhatsAppCta(scanner: inout HTMLScanner, tag: HTMLTag) -> ArticleBlock {
+        let inner = scanner.consumeContainer()
+        let phone = (tag.attr("data-phone") ?? "").filter(\.isNumber)
+        let phraseAttr = tag.attr("data-phrase")?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let phraseFromText = stripTags(inner).trimmingCharacters(in: .whitespacesAndNewlines)
+        let phrase = !phraseAttr.isEmpty
+            ? phraseAttr
+            : (!phraseFromText.isEmpty ? phraseFromText : "تواصل عبر واتساب")
+
+        var href: URL?
+        let pattern = "href=\"(https?://wa\\.me/[^\"]+)\""
+        if let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive),
+           let match = regex.firstMatch(in: inner, range: NSRange(inner.startIndex..., in: inner)),
+           let range = Range(match.range(at: 1), in: inner) {
+            href = URL(string: String(inner[range]))
+        }
+        if href == nil, !phone.isEmpty {
+            href = URL(string: "https://wa.me/\(phone)")
+        }
+        guard let url = href else { return .divider }
+        return .whatsappCta(phone: phone, phrase: phrase, url: url)
     }
 
     private static func extractTweetURL(from html: String) -> URL? {
@@ -243,6 +322,19 @@ enum ArticleHtmlParser {
         return .other
     }
 
+    /// قيمة سمة داخل وسم خام (`<img … data-width="50%">`) — للمسار الذي لا يملك HTMLTag.
+    private static func inlineAttr(_ name: String, in raw: String) -> String? {
+        for q in ["\"", "'"] {
+            let pattern = "\\b\(name)\\s*=\\s*\(q)([^\(q)]*)\(q)"
+            if let regex = HTMLRegexCache.regex(pattern, options: .caseInsensitive),
+               let m = regex.firstMatch(in: raw, range: NSRange(raw.startIndex..., in: raw)),
+               let r = Range(m.range(at: 1), in: raw) {
+                return String(raw[r])
+            }
+        }
+        return nil
+    }
+
     private static func tryExtractInlineImage(_ inner: String) -> ArticleBlock? {
         let trimmed = inner.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.lowercased().hasPrefix("<img") else { return nil }
@@ -254,7 +346,12 @@ enum ArticleHtmlParser {
         let alt: String? = match.numberOfRanges > 2
             ? Range(match.range(at: 2), in: trimmed).map { String(trimmed[$0]) }
             : nil
-        return .image(url: url, alt: alt, caption: nil)
+        return .image(
+            url: url,
+            alt: alt,
+            caption: inlineAttr("data-caption", in: trimmed).flatMap { $0.isEmpty ? nil : $0 },
+            layout: ImageLayout.parse(width: inlineAttr("data-width", in: trimmed), align: inlineAttr("data-align", in: trimmed))
+        )
     }
 
     // MARK: - Inline runs
@@ -370,6 +467,66 @@ enum ArticleHtmlParser {
         return out
     }
 
+    /// يفصل القائل عن نص المقولة عندما يأتيان في فقرة واحدة داخل blockquote:
+    /// «المقولة» — فلان، صفته. النمط المعتمد في التحرير هو قفل الاقتباس «»»
+    /// (أو سطر جديد من <br>) متبوعًا بشرطة ثم اسم القائل. لا فصل عند الشك —
+    /// الشرطات داخل الجمل العادية لا تطابق لأن الفصل يشترط «»» أو \n قبلها.
+    static func splitQuoteAttribution(
+        _ runs: [InlineRun]
+    ) -> (quote: [InlineRun], attribution: [InlineRun]?) {
+        let full = runs.map(\.text).joined()
+        // (نمط، هل تبقى علامة «»» ضمن المقولة)
+        let separators: [(pattern: String, keepMark: Bool)] = [
+            ("»\\s*[—–-]+\\s*", true),
+            ("\\n\\s*[—–]+\\s*", false),
+        ]
+        for sep in separators {
+            guard let regex = HTMLRegexCache.regex(sep.pattern) else { continue }
+            let matches = regex.matches(in: full, range: NSRange(full.startIndex..., in: full))
+            guard let last = matches.last, let match = Range(last.range, in: full) else { continue }
+            let attributionText = String(full[match.upperBound...])
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            // قائل معقول: غير فارغ، قصير، وليس بداية اقتباس آخر
+            guard !attributionText.isEmpty, attributionText.count <= 140,
+                  !attributionText.contains("«"), !attributionText.contains("»") else { continue }
+            let quoteEnd = sep.keepMark ? full.index(after: match.lowerBound) : match.lowerBound
+            let quote = sliceRuns(runs, from: 0, to: full.distance(from: full.startIndex, to: quoteEnd))
+            let attribution = sliceRuns(
+                runs,
+                from: full.distance(from: full.startIndex, to: match.upperBound),
+                to: full.count
+            )
+            if runsAreEmpty(quote) || runsAreEmpty(attribution) { continue }
+            return (quote, attribution)
+        }
+        return (runs, nil)
+    }
+
+    /// يقصّ [InlineRun] على مدى حرفي [from, to) مع الحفاظ على تنسيقات كل run.
+    private static func sliceRuns(_ runs: [InlineRun], from: Int, to: Int) -> [InlineRun] {
+        var out: [InlineRun] = []
+        var pos = 0
+        for run in runs {
+            let len = run.text.count
+            defer { pos += len }
+            let start = max(from - pos, 0)
+            let end = min(to - pos, len)
+            guard start < end else { continue }
+            let s = run.text.index(run.text.startIndex, offsetBy: start)
+            let e = run.text.index(run.text.startIndex, offsetBy: end)
+            out.append(InlineRun(
+                text: String(run.text[s..<e]),
+                bold: run.bold,
+                italic: run.italic,
+                underline: run.underline,
+                strikethrough: run.strikethrough,
+                colorHex: run.colorHex,
+                link: run.link
+            ))
+        }
+        return out
+    }
+
     private static func runsAreEmpty(_ runs: [InlineRun]) -> Bool {
         let text = runs.map(\.text).joined()
         return text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -474,7 +631,7 @@ private nonisolated enum HTMLRegexCache {
 
 // MARK: - Minimal HTML scanner
 
-private struct HTMLTag {
+private nonisolated struct HTMLTag {
     let name: String
     let isClosing: Bool
     let attributesRaw: String
@@ -497,7 +654,7 @@ private struct HTMLTag {
     }
 }
 
-private struct HTMLScanner {
+private nonisolated struct HTMLScanner {
     let input: String
     var index: String.Index
 

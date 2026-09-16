@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- ودجت «آخر الأخبار» — تحديث دوري كل 30 دقيقة (updatePeriodMillis)
+     بلا WorkManager. مقاسان: صغير 2×2 (3 صفوف) ومتوسط 4×2 (5 صفوف). -->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:minWidth="110dp"
+    android:minHeight="110dp"
+    android:targetCellWidth="2"
+    android:targetCellHeight="2"
+    android:maxResizeWidth="360dp"
+    android:maxResizeHeight="240dp"
+    android:resizeMode="horizontal|vertical"
+    android:updatePeriodMillis="1800000"
+    android:widgetCategory="home_screen"
+    android:description="@string/sabq_news_widget_description"
+    android:initialLayout="@layout/glance_default_loading_layout"
+    tools:targetApi="31" />

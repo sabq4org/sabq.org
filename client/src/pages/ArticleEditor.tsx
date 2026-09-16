@@ -52,6 +52,7 @@ import {
   Send,
   ArrowRight,
   Sparkles,
+  NotebookPen,
   FileText,
   ImagePlus,
   Loader2,
@@ -90,6 +91,7 @@ import {
   SpellCheck,
   Frame,
   MoreHorizontal,
+  BookOpen,
 } from "lucide-react";
 import {
   AlertDialog,
@@ -109,9 +111,11 @@ import { useAuth, hasAnyPermission, hasPermission } from "@/hooks/useAuth";
 import { useArticleAiTools } from "@/hooks/useArticleAiTools";
 import { TitleProofreadDialog } from "@/components/article-editor/TitleProofreadDialog";
 import { ProofreadDialog } from "@/components/article-editor/ProofreadDialog";
+import { EditAndGenerateStreamDialog } from "@/components/article-editor/EditAndGenerateStreamDialog";
+import { SabqEditorAssistant } from "@/components/article-editor/SabqEditorAssistant";
 import { useArticleEditLock } from "@/hooks/useArticleEditLock";
 import { useEditorPresence } from "@/hooks/useEditorPresence";
-import { PERMISSION_CODES } from "@shared/rbac-constants";
+import { PERMISSION_CODES, SUPERUSER_ROLE_NAMES } from "@shared/rbac-constants";
 import { apiRequest, apiUrl, queryClient, getCsrfToken } from "@/lib/queryClient";
 import {
   markArticleSubmittedInAnalyticsCache,
@@ -128,6 +132,8 @@ import { RichTextEditor } from "@/components/RichTextEditor";
 import { TagInput } from "@/components/TagInput";
 import { ReporterSelect } from "@/components/ReporterSelect";
 import { OpinionAuthorSelect } from "@/components/OpinionAuthorSelect";
+import { MEDIA_LICENSE_DASHBOARD_WARNING, MEDIA_LICENSE_REQUIRED_MESSAGE } from "@shared/mediaLicense";
+import { useMediaLicenseGate } from "@/hooks/useMediaLicenseGate";
 import {
   WriterEditorialNoticesAside,
   WriterEditorialNoticesMobile,
@@ -139,6 +145,8 @@ import { HeroImageSuggestions } from "@/components/dashboard/HeroImageSuggestion
 import { HeroRightsDialog } from "@/components/dashboard/HeroRightsDialog";
 import { InlineHeadlineSuggestions } from "@/components/InlineHeadlineSuggestions";
 import { PollEditor, type PollData } from "@/components/PollEditor";
+import { WhatsAppCtaEditor, type WhatsAppCtaData } from "@/components/WhatsAppCtaEditor";
+import { normalizeWhatsAppPhone } from "@shared/whatsappCta";
 import { WeeklyPhotosEditor } from "@/components/WeeklyPhotosEditor";
 import {
   Dialog,
@@ -151,6 +159,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { WriterDayPicker } from "@/pages/opinion-author/WriterPriorityRail";
 import { AIImageGeneratorDialog } from "@/components/AIImageGeneratorDialog";
+import { OpenAIImageGeneratorDialog } from "@/components/OpenAIImageGeneratorDialog";
 import { InfographicGeneratorDialog } from "@/components/InfographicGeneratorDialog";
 import { InfographicAiDialog } from "@/components/InfographicAiDialog";
 import { InfographicDataEditor } from "@/components/dashboard/InfographicDataEditor";
@@ -165,9 +174,14 @@ import type { Editor } from "@tiptap/react";
 import type { MediaFile } from "@shared/schema";
 import { SortableAttachmentItem } from "@/components/article-editor/SortableAttachmentItem";
 import { ImageCaptionForm } from "@/components/article-editor/ImageCaptionForm";
+import {
+  listEditableAttachments,
+  mediaAssetUrl,
+} from "@/components/article-editor/mediaAssetHelpers";
 import { generateSlug } from "@/lib/slug";
 import { cn } from "@/lib/utils";
 import { isAvifFile, transcodeAvifInBrowser } from "@/lib/browserImageTranscode";
+import { uploadNewsImage, newsImageUploadLabel, type NewsImageUploadProgress } from "@/lib/newsImageUpload";
 
 // تعطيل مؤقت لحاجز توثيق حقوق الصورة عند النشر.
 // غيّر القيمة إلى true لإعادة الخطوة دون استرجاع الكود المحذوف.
@@ -178,11 +192,12 @@ export default function ArticleEditor() {
   const [location, navigate] = useLocation();
   
   // Extract pathname without query string
-  const pathname = location.split('?')[0];
-  const isNewArticle = pathname.endsWith('/article/new') || pathname.endsWith('/articles/new');
+  const pathname = location.split('?')[0].replace(/\/+$/, '');
+  const isNewArticle = pathname.endsWith('/article/new') || pathname.endsWith('/articles/new') || pathname === '/dashboard/articles' || !params.id || params.id === 'new' || params.id === 'articles';
   
-  // Extract id from params or pathname
-  const id = params.id || pathname.split('/').pop();
+  // Extract id strictly from params or edit path, preventing fallback to "articles"
+  const rawId = params.id || (pathname.endsWith('/edit') ? pathname.split('/').slice(-2)[0] : pathname.split('/').pop());
+  const id = (!isNewArticle && rawId && rawId !== 'new' && rawId !== 'articles') ? rawId : undefined;
   
   // Extract query parameters from URL
   const queryParams = new URLSearchParams(location.split('?')[1] || '');
@@ -230,6 +245,7 @@ export default function ArticleEditor() {
   const [infographicBannerUrl, setInfographicBannerUrl] = useState("");
   const [isAiGeneratedInfographicBanner, setIsAiGeneratedInfographicBanner] = useState(false);
   const [isUploadingInfographicBanner, setIsUploadingInfographicBanner] = useState(false);
+  const [bannerUploadProgress, setBannerUploadProgress] = useState<NewsImageUploadProgress>({ phase: "preparing", percent: 0 });
   const [isGeneratingInfographicBanner, setIsGeneratingInfographicBanner] = useState(false);
   
   // Debug: Track reporterId changes
@@ -252,6 +268,7 @@ export default function ArticleEditor() {
   // New fields
   const [newsType, setNewsType] = useState<"breaking" | "regular">("regular");
   const [isFeatured, setIsFeatured] = useState(false);
+  const [isReading, setIsReading] = useState(false);
   const [publishType, setPublishType] = useState<"instant" | "scheduled">("instant");
   const [scheduledAt, setScheduledAt] = useState("");
   const [customPublishedAt, setCustomPublishedAt] = useState(""); // For admin backdating
@@ -260,6 +277,7 @@ export default function ArticleEditor() {
   // Video Template fields
   const [videoSourceType, setVideoSourceType] = useState<"url" | "upload">("url");
   const [isUploadingVideo, setIsUploadingVideo] = useState(false);
+  const [isResolvingVideo, setIsResolvingVideo] = useState(false);
   const [isVideoTemplate, setIsVideoTemplate] = useState(false);
   const [videoUrl, setVideoUrl] = useState("");
   const [videoThumbnailUrl, setVideoThumbnailUrl] = useState("");
@@ -268,15 +286,17 @@ export default function ArticleEditor() {
   const [metaTitle, setMetaTitle] = useState("");
   const [metaDescription, setMetaDescription] = useState("");
   
-  const [status, setStatus] = useState<"draft" | "published">("draft");
+  const [status, setStatus] = useState<"draft" | "published" | "scheduled" | "archived">("draft");
   const [reviewStatus, setReviewStatus] = useState<string | null>(null);
   const [reviewNotes, setReviewNotes] = useState<string | null>(null);
   const [reviewedAt, setReviewedAt] = useState<string | null>(null);
   const [articleUpdatedAt, setArticleUpdatedAt] = useState<string | null>(null);
   const [pollData, setPollData] = useState<PollData | null>(null);
+  const [whatsappCta, setWhatsappCta] = useState<WhatsAppCtaData | null>(null);
   const [republish, setRepublish] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [imageUploadProgress, setImageUploadProgress] = useState<NewsImageUploadProgress>({ phase: "preparing", percent: 0 });
   const [isAnalyzingSEO, setIsAnalyzingSEO] = useState(false);
   const [isClassifying, setIsClassifying] = useState(false);
   const [isGeneratingSocialCards, setIsGeneratingSocialCards] = useState(false);
@@ -291,6 +311,7 @@ export default function ArticleEditor() {
   const [showMediaPicker, setShowMediaPicker] = useState(false);
   const [showLogoComposer, setShowLogoComposer] = useState(false);
   const [showAIImageDialog, setShowAIImageDialog] = useState(false);
+  const [showOpenAIImageDialog, setShowOpenAIImageDialog] = useState(false);
   const [showInfographicDialog, setShowInfographicDialog] = useState(false);
   const [showStoryCardsDialog, setShowStoryCardsDialog] = useState(false);
   const [showAlbumUploadDialog, setShowAlbumUploadDialog] = useState(false);
@@ -305,6 +326,7 @@ export default function ArticleEditor() {
   const [lastAutoSaveTime, setLastAutoSaveTime] = useState<Date | null>(null);
   const [showDraftRecoveryDialog, setShowDraftRecoveryDialog] = useState(false);
   const [showProofreadDialog, setShowProofreadDialog] = useState(false);
+  const [showSabqAssistant, setShowSabqAssistant] = useState(false);
   const [proofreadIssues, setProofreadIssues] = useState<Array<{
     original: string;
     suggestion: string;
@@ -329,7 +351,8 @@ export default function ArticleEditor() {
   const [timelineOpen, setTimelineOpen] = useState(false);
   const [newsletterOpen, setNewsletterOpen] = useState(false);
   const [imageToolsOpen, setImageToolsOpen] = useState(false);
-  const [autoImageOpen, setAutoImageOpen] = useState(false);
+  const [autoImageOpen, setAutoImageOpen] = useState(true);
+  const [albumOpen, setAlbumOpen] = useState(false);
   const [titleCardOpen, setTitleCardOpen] = useState(true);
 
   // على الديسكتوب أبقِ بطاقة العنوان مفتوحة دائماً
@@ -380,6 +403,7 @@ export default function ArticleEditor() {
     setKeywords([]);
     setNewsType("regular");
     setIsFeatured(false);
+    setIsReading(false);
     setPublishType("instant");
     setScheduledAt("");
     setCustomPublishedAt("");
@@ -412,6 +436,27 @@ export default function ArticleEditor() {
   // Check if user is an opinion author - opinion authors have restricted editor interface
   const isOpinionAuthor = user?.role === 'opinion_author' || (user?.roles && user.roles.some((r: any) => r.name === 'opinion_author' || r === 'opinion_author'));
 
+  const {
+    createBlocked,
+    createBlockedReason,
+    openMediaLicenseForm,
+    mediaLicense: ownMediaLicense,
+  } = useMediaLicenseGate();
+  const ownSubmissionBlocked = Boolean(ownMediaLicense?.submissionBlocked);
+
+  // منع فتح «مقال/خبر جديد» عبر الرابط المباشر دون ترخيص ساري أو مع ترخيص يحتاج تحديثاً
+  const licenseCreateBlockHandledRef = useRef(false);
+  useEffect(() => {
+    if (!isNewArticle || !createBlocked || licenseCreateBlockHandledRef.current) return;
+    licenseCreateBlockHandledRef.current = true;
+    toast({
+      title: "الترخيص المهني مطلوب",
+      description: createBlockedReason || MEDIA_LICENSE_DASHBOARD_WARNING,
+      variant: "destructive",
+    });
+    openMediaLicenseForm();
+  }, [isNewArticle, createBlocked, createBlockedReason, openMediaLicenseForm, toast]);
+
   // Opinion authors (and opinion/column pieces) write "مقال", everyone else "خبر".
   // Drives the editor header wording so a كاتب رأي doesn't see "خبر جديد".
   const isOpinionContext = isOpinionAuthor || articleType === 'opinion' || articleType === 'column';
@@ -435,13 +480,21 @@ export default function ArticleEditor() {
     )
   );
   
-  // Check if user can publish directly (otherwise saves as draft)
-  const canPublish = user && hasPermission(user, PERMISSION_CODES.ARTICLES_PUBLISH);
+  // Check if user can publish directly (otherwise saves as draft).
+  // الناشر الموثوق (auto_publish) يُمنح articles.publish من /api/auth/user،
+  // ونحتاط أيضاً بـ publisherAccount.autoPublish إن تأخّر كاش الصلاحيات.
+  const canPublish = Boolean(
+    user &&
+      (hasPermission(user, PERMISSION_CODES.ARTICLES_PUBLISH) ||
+        (user as { publisherAccount?: { autoPublish?: boolean } }).publisherAccount
+          ?.autoPublish === true),
+  );
   const isContributorRole =
-    user?.role === "reporter" ||
-    user?.role === "opinion_author" ||
-    (user?.roles?.includes("reporter") ?? false) ||
-    (user?.roles?.includes("opinion_author") ?? false);
+    !canPublish &&
+    (user?.role === "reporter" ||
+      user?.role === "opinion_author" ||
+      (user?.roles?.includes("reporter") ?? false) ||
+      (user?.roles?.includes("opinion_author") ?? false));
 
   const submitReviewMutation = useMutation({
     mutationFn: async (articleId?: string) => {
@@ -483,13 +536,14 @@ export default function ArticleEditor() {
   const canUseContentTypeSelector = user && hasPermission(user, PERMISSION_CODES.ARTICLES_CONTENT_TYPE_SELECTOR);
   const canHideFromHomepage = user && hasPermission(user, PERMISSION_CODES.ARTICLES_HIDE_HOMEPAGE);
   
-  // Check if user can backdate articles (superadmin, admin, chief_editor only)
+  // Check if user can backdate articles (any superuser-tier role + chief_editor).
+  // SUPERUSER_ROLE_NAMES covers admin/superadmin/system_admin/system.admin — a
+  // hand-rolled list here previously omitted system_admin and hid the feature.
+  const backdateRoles: string[] = [...SUPERUSER_ROLE_NAMES, 'chief_editor'];
   const canBackdateArticles = user && (
-    user.role === 'superadmin' || 
-    user.role === 'admin' || 
-    user.role === 'chief_editor' ||
-    (user.roles && user.roles.some((r: any) => 
-      ['superadmin', 'admin', 'chief_editor'].includes(r.name || r)
+    backdateRoles.includes(user.role ?? "") ||
+    (user.roles && user.roles.some((r: any) =>
+      backdateRoles.includes(r.name || r)
     ))
   );
   
@@ -583,6 +637,8 @@ export default function ArticleEditor() {
     enabled: !isNewArticle && !!article?.id,
   });
   const mediaAssets = Array.isArray(mediaAssetsRaw) ? mediaAssetsRaw : [];
+  // يشمل اليتامى بلا URL — الفلترة القديمة كانت تخفي المرفق فلا يظهر زر الحذف.
+  const editableAttachments = listEditableAttachments(mediaAssets);
 
   // مقالات الرأي: اليوم الأسبوعي المخصص لكاتب المقال — يعبّئ الجدولة تلقائياً ويبقى قابلاً للتغيير
   const writerSlotPrefillRef = useRef<string | null>(null);
@@ -724,7 +780,10 @@ export default function ArticleEditor() {
       setThumbnailUrl(validThumbnailUrl);
       setThumbnailManuallyDeleted((article as any).thumbnailManuallyDeleted || false);
       setImageFocalPoint((article as any).imageFocalPoint || null);
-      setAlbumImages(Array.isArray((article as any).albumImages) ? (article as any).albumImages : []);
+      const loadedAlbum = Array.isArray((article as any).albumImages) ? (article as any).albumImages : [];
+      setAlbumImages(loadedAlbum);
+      // ألبوم مطوي افتراضياً كان يخفي صوراً موجودة — افتحه إن وُجدت صور.
+      if (loadedAlbum.length > 0) setAlbumOpen(true);
       const loadedArticleType = (article.articleType as any) || "news";
       setArticleType(loadedArticleType);
       // Handle infographic type
@@ -748,11 +807,27 @@ export default function ArticleEditor() {
       if ((article as any).weeklyPhotosData?.photos) {
         setWeeklyPhotosData((article as any).weeklyPhotosData);
       }
+      {
+        const wa = (article as any).whatsappCta;
+        if (wa && typeof wa === "object" && wa.enabled && wa.phone) {
+          setWhatsappCta({
+            enabled: true,
+            phone: String(wa.phone),
+            phrase: String(wa.phrase || "تواصل معنا عبر واتساب"),
+            message: wa.message ? String(wa.message) : undefined,
+            placement: wa.placement === "inline" ? "inline" : "end",
+          });
+        } else {
+          setWhatsappCta(null);
+        }
+      }
       // Load newsType - convert "featured" to "regular" since isFeatured is now separate
       const loadedNewsType = (article.newsType as any) || "regular";
       setNewsType(loadedNewsType === "featured" ? "regular" : loadedNewsType);
       // Load isFeatured separately
       setIsFeatured(article.isFeatured || false);
+      // Load isReading
+      setIsReading(article.isReading || false);
       // For published articles, always reset publishType to "instant" to avoid re-scheduling
       // Only keep "scheduled" for articles that are still in scheduled status
       const savedPublishType = (article.publishType as any) || "instant";
@@ -834,6 +909,7 @@ export default function ArticleEditor() {
       keywords,
       newsType,
       isFeatured,
+      isReading,
       publishType,
       scheduledAt,
       hideFromHomepage,
@@ -856,7 +932,7 @@ export default function ArticleEditor() {
   }, [
     autoSaveKey, title, subtitle, slug, content, excerpt, categoryId, 
     reporterId, opinionAuthorId, articleType, imageUrl, thumbnailUrl, 
-    albumImages, imageFocalPoint, keywords, newsType, isFeatured, publishType, scheduledAt, 
+    albumImages, imageFocalPoint, keywords, newsType, isFeatured, isReading, publishType, scheduledAt, 
     hideFromHomepage, isVideoTemplate, videoUrl, videoThumbnailUrl, metaTitle, metaDescription
   ]);
 
@@ -888,6 +964,7 @@ export default function ArticleEditor() {
     if (draft.keywords) setKeywords(draft.keywords);
     if (draft.newsType) setNewsType(draft.newsType === "featured" ? "regular" : draft.newsType);
     if (draft.isFeatured !== undefined) setIsFeatured(draft.isFeatured);
+    if (draft.isReading !== undefined) setIsReading(draft.isReading);
     if (draft.publishType) setPublishType(draft.publishType);
     if (draft.scheduledAt) setScheduledAt(draft.scheduledAt);
     if (draft.hideFromHomepage !== undefined) setHideFromHomepage(draft.hideFromHomepage);
@@ -1146,6 +1223,7 @@ export default function ArticleEditor() {
 
   const uploadFeaturedImageFile = async (file: File): Promise<boolean> => {
     setIsUploadingImage(true);
+    setImageUploadProgress({ phase: "preparing", percent: 0 });
 
     try {
       type UploadedImage = {
@@ -1159,11 +1237,7 @@ export default function ArticleEditor() {
         formData.append("file", uploadFileValue);
         formData.append("purpose", "article-hero");
         formData.append("entityType", "article");
-        return (await apiRequest("/api/media/upload", {
-          method: "POST",
-          body: formData,
-          isFormData: true,
-        })) as UploadedImage;
+        return uploadNewsImage<UploadedImage>(formData, setImageUploadProgress);
       };
 
       const declaredFile = isAvifFile(file) && file.type.toLowerCase() !== "image/avif"
@@ -1275,16 +1349,13 @@ export default function ArticleEditor() {
     }
 
     setIsUploadingInfographicBanner(true);
+    setBannerUploadProgress({ phase: "preparing", percent: 0 });
 
     try {
       const formData = new FormData();
       formData.append("file", file);
       formData.append("entityType", "article-infographic-banner");
-      const uploaded = (await apiRequest("/api/media/upload", {
-        method: "POST",
-        body: formData,
-        isFormData: true,
-      })) as { id: string; url: string };
+      const uploaded = await uploadNewsImage<{ id: string; url: string }>(formData, setBannerUploadProgress);
 
       setInfographicBannerUrl(uploaded.url);
       setIsAiGeneratedInfographicBanner(false);
@@ -1406,7 +1477,21 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
       const albumSource = Array.isArray(albumImages) ? albumImages : [];
       const safeAlbumImages = albumSource.filter(url => typeof url === 'string' && url.trim().length > 0);
       const normalizedVideoUrl = typeof videoUrl === "string" ? videoUrl.trim() : "";
-      const normalizedVideoThumbnailUrl = typeof videoThumbnailUrl === "string" ? videoThumbnailUrl.trim() : "";
+      let normalizedVideoThumbnailUrl = typeof videoThumbnailUrl === "string" ? videoThumbnailUrl.trim() : "";
+      
+      if (isVideoTemplate && normalizedVideoUrl && !normalizedVideoThumbnailUrl) {
+        const ytMatch = normalizedVideoUrl.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/|youtube\.com\/shorts\/)([^"&?\/\s]{11})/i);
+        if (ytMatch && ytMatch[1]) {
+          normalizedVideoThumbnailUrl = `https://img.youtube.com/vi/${ytMatch[1]}/maxresdefault.jpg`;
+        } else {
+          const dmMatch = normalizedVideoUrl.match(/(?:dailymotion\.com\/video\/|dai\.ly\/|dailymotion\.com\/embed\/video\/)([^_\n?#\/]+)/i);
+          if (dmMatch && dmMatch[1]) {
+            normalizedVideoThumbnailUrl = `https://www.dailymotion.com/thumbnail/video/${dmMatch[1]}`;
+          }
+        }
+      }
+
+      const effectiveImageUrl = imageUrl?.trim() || (isVideoTemplate ? normalizedVideoThumbnailUrl : "") || "";
       const effectiveSlug = slug?.trim() || generateSlug(title) || `opinion-${Date.now()}`;
       console.log('[Save Article] Album images count:', safeAlbumImages.length, 'original:', albumImages?.length);
       
@@ -1416,7 +1501,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
         content,
         excerpt,
         categoryId: categoryId || null,
-        imageUrl: imageUrl || "",
+        imageUrl: effectiveImageUrl,
         isAiGeneratedImage: isAiGeneratedImage,
         thumbnailUrl: thumbnailUrl || "",
         thumbnailManuallyDeleted: thumbnailManuallyDeleted,
@@ -1429,9 +1514,14 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
         isVideoTemplate,
         videoUrl: isVideoTemplate && normalizedVideoUrl ? normalizedVideoUrl : null,
         videoThumbnailUrl: isVideoTemplate && normalizedVideoThumbnailUrl ? normalizedVideoThumbnailUrl : null,
-        status: publishNow 
+        // مادة مجدولة/منشورة: زر الحفظ يحفظ التعديلات على الحالة نفسها — إرسال
+        // "draft" حرفيًا كان يُسقط الجدولة بصمت والكرون لا يلتقط المادة بعدها
+        // (حادثة 2026-08-08). الخادم يتجاهل الهبوط الضمني من جهته أيضًا.
+        status: publishNow
           ? (publishType === "scheduled" ? "scheduled" : "published")
-          : "draft",
+          : (!isNewArticle && (status === "scheduled" || status === "published"))
+            ? status
+            : "draft",
         ...(submitForReview ? { submitForReview: true } : {}),
         seo: {
           metaTitle: metaTitle ? metaTitle.substring(0, 70) : (title ? title.substring(0, 70) : ""),
@@ -1462,6 +1552,44 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
         articleData.isAiGeneratedInfographicBanner = isAiGeneratedInfographicBanner;
       }
       
+      // زر واتساب: يُحفظ في jsonb + يجب أن يكون مضمّناً داخل content HTML
+      if (whatsappCta?.enabled && whatsappCta.phone) {
+        const digits = normalizeWhatsAppPhone(whatsappCta.phone);
+        if (digits) {
+          const placement = whatsappCta.placement === "inline" ? "inline" : "end";
+          // إن اختار «نهاية النص» نزامن الكتلة داخل المحرر قبل قراءة HTML
+          if (placement === "end" && editorInstance) {
+            editorInstance.commands.setWhatsAppCtaAtEnd({
+              phone: digits,
+              phrase: (whatsappCta.phrase || "تواصل معنا عبر واتساب").trim().slice(0, 120),
+              message: whatsappCta.message?.trim() || undefined,
+            });
+            const html = editorInstance.getHTML();
+            articleData.content = html;
+            setContent(html);
+          }
+          articleData.whatsappCta = {
+            enabled: true,
+            phone: digits,
+            phrase: (whatsappCta.phrase || "تواصل معنا عبر واتساب").trim().slice(0, 120),
+            message: whatsappCta.message?.trim()
+              ? whatsappCta.message.trim().slice(0, 500)
+              : undefined,
+            placement,
+          };
+        } else {
+          articleData.whatsappCta = null;
+        }
+      } else {
+        if (editorInstance) {
+          editorInstance.commands.clearWhatsAppCta();
+          const html = editorInstance.getHTML();
+          articleData.content = html;
+          setContent(html);
+        }
+        articleData.whatsappCta = null;
+      }
+
       // Add fields specific to news articles (not for opinion)
       if (articleType !== "opinion") {
         articleData.subtitle = subtitle;
@@ -1470,10 +1598,12 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
         articleData.reporterId = validReporterId;
         articleData.newsType = newsType;
         articleData.isFeatured = isFeatured;
+        articleData.isReading = isReading;
       } else {
         // Opinion articles always use regular newsType
         articleData.newsType = "regular";
         articleData.isFeatured = false;
+        articleData.isReading = isReading;
         // Add opinionAuthorId for opinion articles
         if (!isOpinionAuthor && opinionAuthorId) {
           articleData.opinionAuthorId = opinionAuthorId;
@@ -1600,7 +1730,8 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
       const isUpdate = !isNewArticle && status === "published";
       const isScheduled = variables.publishNow && publishType === "scheduled";
       const scheduledLabel = isScheduled && scheduledAt
-        ? new Date(scheduledAt).toLocaleString("ar-SA-u-ca-gregory", {
+        ? new Date(scheduledAt).toLocaleString("ar-SA-u-ca-gregory-nu-latn", {
+            timeZone: "Asia/Riyadh",
             dateStyle: "medium",
             timeStyle: "short",
           })
@@ -1656,6 +1787,8 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
     generateSeoMutation,
     generateAllInOneMutation,
     editAndGenerateMutation,
+    editStream,
+    setEditStreamOpen,
     analyzeSEOMutation,
     generateSocialCardsMutation,
     generateSmartContentMutation,
@@ -1820,6 +1953,16 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
       toast({
         title: "حقول مطلوبة",
         description: `الرجاء ملء: ${missingFields.join(" - ")}`,
+        variant: "destructive",
+      });
+      return { ok: false };
+    }
+
+    // من ١ أغسطس: مراسل/كاتب رأي بلا ترخيص ساري لا يرسل ولا ينشر
+    if ((publishNow || options?.submitForReview) && ownSubmissionBlocked) {
+      toast({
+        title: "الترخيص المهني مطلوب",
+        description: MEDIA_LICENSE_REQUIRED_MESSAGE,
         variant: "destructive",
       });
       return { ok: false };
@@ -2169,13 +2312,11 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
   const handleAttachmentDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     if (active.id !== over?.id) {
-      const filteredAssets = mediaAssets
-        .filter((a: any) => a.mediaFile?.url || a.url)
-        .sort((a: any, b: any) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0));
-      const oldIndex = filteredAssets.findIndex((a: any) => a.id === active.id);
-      const newIndex = filteredAssets.findIndex((a: any) => a.id === over?.id);
+      const ordered = listEditableAttachments(mediaAssets);
+      const oldIndex = ordered.findIndex((a: any) => a.id === active.id);
+      const newIndex = ordered.findIndex((a: any) => a.id === over?.id);
       if (oldIndex !== -1 && newIndex !== -1) {
-        const newOrder = arrayMove(filteredAssets, oldIndex, newIndex);
+        const newOrder = arrayMove(ordered, oldIndex, newIndex);
         reorderAttachmentsMutation.mutate(newOrder.map((a: any) => a.id));
       }
     }
@@ -2292,6 +2433,28 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
         setContent={setContent}
       />
 
+      {/* معاينة حية لـ«تحرير وتوليد شامل» أثناء البث */}
+      <EditAndGenerateStreamDialog
+        open={editStream.open}
+        onOpenChange={setEditStreamOpen}
+        preview={editStream.preview}
+        phases={editStream.phases}
+        startedAt={editStream.startedAt}
+      />
+
+      {/* محرر سبق — مهام التحرير الموحد */}
+      <SabqEditorAssistant
+        open={showSabqAssistant}
+        onOpenChange={setShowSabqAssistant}
+        articleTitle={title}
+        articleContent={content}
+        onApplyHeadline={handleTitleChange}
+        onApplyBody={(html) => {
+          setContent(html);
+          editorInstance?.commands.setContent(html);
+        }}
+      />
+
       <AlertDialog open={showDraftRecoveryDialog} onOpenChange={setShowDraftRecoveryDialog}>
         <AlertDialogContent className="max-w-md" data-testid="dialog-draft-recovery">
           <AlertDialogHeader>
@@ -2394,6 +2557,17 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
             width: 100% !important;
             max-width: none !important;
           }
+          /* clip preserves rounded corners without trapping sticky in a scroll container. */
+          .article-editor-stage .rich-text-editor {
+            overflow: clip;
+          }
+          .article-editor-stage .rich-text-editor__toolbar {
+            position: sticky;
+            /* DashboardLayout scrolls below its header, so no header offset is needed. */
+            top: 0;
+            z-index: 20;
+            box-shadow: 0 2px 4px hsl(var(--foreground) / 0.08);
+          }
         `}</style>
        <div className="w-full min-w-0">
         {/* Concurrent Editors Alert - Warns when other editors are working on the same article */}
@@ -2449,8 +2623,10 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
           </div>
         )}
 
-        {/* Lock Status Indicator - When current user owns the lock */}
-        {!isNewArticle && lockStatus?.isOwner && (
+        {/* Lock Status Indicator - When current user owns the lock.
+            لا تظهر مع وجود محررين آخرين — رسالة «حصري» بجوار «فلان يحرّر الآن
+            أيضًا» كانت تقرأ كتناقض وتوحي بتصريحٍ بالمتابعة رغم التحذير. */}
+        {!isNewArticle && lockStatus?.isOwner && coEditors.length === 0 && (
           <div 
             className="mb-4 flex items-center gap-2 text-xs text-muted-foreground"
             data-testid="lock-status"
@@ -2516,6 +2692,15 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
             )}
           </div>
 
+          {ownSubmissionBlocked ? (
+            <div
+              className="mb-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-950 dark:text-amber-100"
+              data-testid="alert-media-license-required"
+            >
+              {MEDIA_LICENSE_REQUIRED_MESSAGE}
+            </div>
+          ) : null}
+
           {/* Actions Row */}
           <div className={isOpinionAuthor ? "flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center sm:justify-end" : "flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center sm:justify-end"}>
             {/* Auto-save indicator - visible on mobile only */}
@@ -2561,7 +2746,9 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                 data-testid="button-save-draft"
               >
                 {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                <span className="hidden xs:inline">حفظ كمسودة</span>
+                <span className="hidden xs:inline">
+                  {status === "scheduled" || status === "published" ? "حفظ التعديلات" : "حفظ كمسودة"}
+                </span>
                 <span className="xs:hidden">حفظ</span>
               </Button>
               {reviewStatus === "needs_changes" && isContributorRole && !canPublish && (
@@ -2653,7 +2840,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
           </DialogContent>
         </Dialog>
 
-        <div className={isOpinionAuthor ? "grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_280px] lg:items-start" : "flex flex-col gap-5 pb-24 lg:grid lg:grid-cols-12 lg:pb-0"}>
+        <div className={isOpinionAuthor ? "grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_280px] lg:items-start" : "flex flex-col gap-5 pb-24 lg:grid lg:grid-cols-12 lg:items-start lg:pb-10"}>
           {/* Main Content Area — contents على الموبايل لدمج الترتيب مع الشريط الجانبي */}
           <div className={isOpinionAuthor ? "flex min-w-0 flex-col gap-5" : "contents lg:col-span-8 lg:flex lg:min-w-0 lg:flex-col lg:gap-5"}>
             {isOpinionAuthor && (
@@ -2918,6 +3105,27 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                     onOpenLibrary={() => setShowMediaPicker(true)}
                   />
                 )}
+                {/* تعريف بارز يتيم بعد مسح الصورة — كان يختفي مع اختفاء نموذج الشرح. */}
+                {!imageUrl && !isOpinionAuthor && (() => {
+                  const orphanHero = mediaAssets.find((a: any) => a.displayOrder === 0);
+                  if (!orphanHero?.id) return null;
+                  return (
+                    <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+                      <span>يوجد تعريف صورة بارزة بلا صورة — احذفه إن لم تعد تحتاجه.</span>
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        size="sm"
+                        className="h-7"
+                        disabled={deleteCaptionMutation.isPending}
+                        onClick={() => deleteCaptionMutation.mutate(orphanHero.id)}
+                        data-testid="button-delete-orphan-hero-caption"
+                      >
+                        حذف التعريف اليتيم
+                      </Button>
+                    </div>
+                  );
+                })()}
                 {imageUrl && (
                   <div className="relative aspect-video w-full overflow-hidden rounded-lg border">
                     <img
@@ -2988,6 +3196,12 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                       </Button>
                     )}
                   </div>
+                  {isUploadingImage && (
+                    <div className="space-y-2" role="status" aria-live="polite" data-testid="hero-upload-progress">
+                      <p className="text-xs text-muted-foreground">{newsImageUploadLabel(imageUploadProgress)}</p>
+                      <Progress value={imageUploadProgress.percent} className="h-1.5" />
+                    </div>
+                  )}
                   {!isOpinionAuthor && imageToolsOpen && (
                     <div className="flex flex-wrap gap-2 rounded-xl border border-border/70 bg-muted/30 p-3">
                       {imageUrl && (
@@ -3030,6 +3244,19 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                         >
                           <Sparkles className="h-4 w-4 text-primary" />
                           توليد بالذكاء الاصطناعي
+                        </Button>
+                      )}
+                      {canGenerateImages && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setShowOpenAIImageDialog(true)}
+                          className="gap-2 border-sky-300 bg-sky-50 text-sky-900 hover:bg-sky-100 dark:border-sky-800 dark:bg-sky-950 dark:text-sky-100"
+                          data-testid="button-generate-openai-image"
+                        >
+                          <ImagePlus className="h-4 w-4" />
+                          صور GPT
                         </Button>
                       )}
                       {canUseInfographics && (
@@ -3099,11 +3326,16 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                         variant="destructive"
                         size="sm"
                         onClick={() => {
+                          const heroAsset = mediaAssets.find((a: any) => a.displayOrder === 0);
                           setImageUrl("");
                           setIsAiGeneratedImage(false);
                           setThumbnailUrl("");
                           setHeroImageMediaId(null);
                           setImageFocalPoint(null);
+                          // صف التعريف (displayOrder 0) كان يبقى يتيماً في المرفقات/المكتبة.
+                          if (heroAsset?.id) {
+                            deleteCaptionMutation.mutate(heroAsset.id);
+                          }
                           toast({
                             title: "تم حذف الصورة",
                             description: "تم حذف الصورة البارزة بنجاح",
@@ -3179,7 +3411,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
               </Collapsible>
             )}
             
-            {/* Auto Image Generation — مطوي افتراضياً حتى لا يزاحم مسار الكتابة */}
+            {/* Auto Image Generation — موسّع افتراضياً */}
             {!isOpinionAuthor && canGenerateImages && articleType !== "infographic" && (
               <Collapsible open={autoImageOpen} onOpenChange={setAutoImageOpen}>
                 {!autoImageOpen ? (
@@ -3299,6 +3531,12 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                     </div>
                   )}
                   
+                  {isUploadingInfographicBanner && (
+                    <div className="space-y-2" role="status" aria-live="polite" data-testid="banner-upload-progress">
+                      <p className="text-xs text-muted-foreground">{newsImageUploadLabel(bannerUploadProgress)}</p>
+                      <Progress value={bannerUploadProgress.percent} className="h-1.5" />
+                    </div>
+                  )}
                   <div className="flex flex-wrap gap-2">
                     <Button
                       variant="outline"
@@ -3368,22 +3606,29 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
 
             {/* ألبوم الصور + مرفقات كاملة — في الوسائط وليس تحت SEO (مخفي عن كتّاب الرأي) */}
             {!isNewArticle && !isOpinionAuthor && (
+              <Collapsible open={albumOpen} onOpenChange={setAlbumOpen}>
               <Card data-testid="card-media-album">
-                <CardHeader>
+                <CollapsibleTrigger asChild>
+                <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors" data-testid="collapsible-media-album">
                   <CardTitle className="flex items-center justify-between gap-2">
                     <span className="flex items-center gap-2">
                       <LayoutGrid className="h-4 w-4 text-primary" />
                       ألبوم الصور
                     </span>
-                    <Badge variant="outline" className="text-xs">
-                      {albumImages.length} صورة
-                    </Badge>
+                    <span className="flex items-center gap-2">
+                      <Badge variant="outline" className="text-xs">
+                        {albumImages.length} صورة
+                      </Badge>
+                      <ChevronDown className={`h-4 w-4 transition-transform duration-200 ${albumOpen ? 'rotate-180' : ''}`} />
+                    </span>
                   </CardTitle>
                   <p className="text-xs text-muted-foreground">
                     صور إضافية تظهر داخل المقال
                   </p>
                 </CardHeader>
-                <CardContent className="space-y-4">
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                <CardContent className="space-y-4 pt-0">
                   <div className="flex justify-end">
                     <Button
                       variant="outline"
@@ -3469,7 +3714,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                       </div>
                       <div className="flex items-center gap-2">
                         <Badge variant="outline" className="text-xs">
-                          {mediaAssets.filter((asset: any) => asset.mediaFile?.url || asset.url).length} مرفق
+                          {editableAttachments.length} مرفق
                         </Badge>
                         <Button
                           variant="outline"
@@ -3483,7 +3728,12 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                         </Button>
                       </div>
                     </div>
-                    {mediaAssets.filter((asset: any) => asset.mediaFile?.url || asset.url).length > 0 ? (
+                    {editableAttachments.some((a) => !mediaAssetUrl(a)) && (
+                      <p className="text-xs text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-md px-3 py-2">
+                        يوجد مرجع مرفق بلا صورة ظاهرة — احذفه من البطاقة التي تحمل علامة «!» إن لم تعد تحتاجه.
+                      </p>
+                    )}
+                    {editableAttachments.length > 0 ? (
                       <div className="max-h-[400px] overflow-y-auto rounded-lg border bg-muted/10 p-2" dir="rtl">
                         <DndContext
                           sensors={sensors}
@@ -3491,17 +3741,11 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                           onDragEnd={handleAttachmentDragEnd}
                         >
                           <SortableContext
-                            items={mediaAssets
-                              .filter((asset: any) => asset.mediaFile?.url || asset.url)
-                              .sort((a: any, b: any) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0))
-                              .map((asset: any) => asset.id)}
+                            items={editableAttachments.map((asset: any) => asset.id)}
                             strategy={rectSortingStrategy}
                           >
                             <div className="grid grid-cols-2 gap-3">
-                              {mediaAssets
-                                .filter((asset: any) => asset.mediaFile?.url || asset.url)
-                                .sort((a: any, b: any) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0))
-                                .map((asset: any, index: number) => (
+                              {editableAttachments.map((asset: any, index: number) => (
                                   <SortableAttachmentItem
                                     key={asset.id}
                                     asset={asset}
@@ -3522,7 +3766,9 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                     )}
                   </div>
                 </CardContent>
+                </CollapsibleContent>
               </Card>
+              </Collapsible>
             )}
 
             </div>
@@ -3562,6 +3808,19 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                       </Button>
                       )}
                       
+                      {/* محرر سبق — نظام التحرير الموحد (حرر/طور/ادمج/راجع/فحص...) */}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setShowSabqAssistant(true)}
+                        className="gap-2 w-full sm:w-auto justify-center"
+                        data-testid="button-sabq-assistant"
+                        title="مهام التحرير الموحد وفق الدستور التحريري — المخرج مسودة لا تُطبق إلا بقرارك"
+                      >
+                        <NotebookPen className="h-4 w-4" />
+                        محرر سبق
+                      </Button>
+
                       {/* Proofread Button - Spell check only, no auto-modification */}
                       <Button
                         variant="outline"
@@ -3802,6 +4061,42 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
               </div>
             )}
 
+            {/* زر واتساب — يُدرج داخل نص الخبر (نهاية النص أو عند المؤشر) */}
+            {!isOpinionAuthor && articleType !== "infographic" && (
+              <div className="order-[91] lg:order-none">
+                <WhatsAppCtaEditor
+                  value={whatsappCta}
+                  onChange={(next) => {
+                    setWhatsappCta(next);
+                    // إيقاف الخاصية → احذف الكتلة من داخل النص
+                    if (!next?.enabled && editorInstance) {
+                      editorInstance.chain().focus().clearWhatsAppCta().run();
+                    }
+                  }}
+                  disabled={isLockedByOther}
+                  onPlaceInContent={(cta, where) => {
+                    if (!editorInstance) return false;
+                    if (where === "end") {
+                      return editorInstance.commands.setWhatsAppCtaAtEnd({
+                        phone: cta.phone,
+                        phrase: cta.phrase,
+                        message: cta.message,
+                      });
+                    }
+                    return editorInstance
+                      .chain()
+                      .focus()
+                      .setWhatsAppCta({
+                        phone: cta.phone,
+                        phrase: cta.phrase,
+                        message: cta.message,
+                      })
+                      .run();
+                  }}
+                />
+              </div>
+            )}
+
             {/* Smart Links Panel - Collapsible - Hidden for infographics */}
             {!isOpinionAuthor && canUseSmartLinks && articleType !== "infographic" && (
               <Collapsible open={smartLinksOpen} onOpenChange={setSmartLinksOpen} className="order-[92] lg:order-none">
@@ -3862,9 +4157,11 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
 
           {isOpinionAuthor && <WriterEditorialNoticesAside />}
 
-          {/* Settings Sidebar — contents على الموبايل لدمج الترتيب مع المحتوى */}
+          {/* Settings Sidebar — contents على الموبايل لدمج الترتيب مع المحتوى.
+              لا نستخدم sticky+max-h هنا: كانت تقصّ أسفل السايدبار (SEO/الكلمات)
+              داخل منطقة التمرير للداشبورد ولا يمكن الوصول لآخر الحقول. */}
           {!isOpinionAuthor && <div
-            className="contents lg:col-span-4 lg:flex lg:flex-col lg:gap-5 lg:sticky lg:top-20 lg:max-h-[calc(100vh-5.5rem)] lg:overflow-y-auto lg:overscroll-contain lg:pb-2"
+            className="contents lg:col-span-4 lg:flex lg:flex-col lg:gap-5"
             data-editor-panel="publish"
           >
             <div
@@ -4105,18 +4402,73 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
 
                     {videoSourceType === "url" ? (
                       <div className="space-y-2">
-                        <Label htmlFor="videoUrl" className="text-sm">رابط الفيديو</Label>
+                        <div className="flex items-center justify-between">
+                          <Label htmlFor="videoUrl" className="text-sm">رابط الفيديو</Label>
+                          {videoUrl && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              disabled={isResolvingVideo}
+                              onClick={async () => {
+                                if (!videoUrl.trim()) return;
+                                setIsResolvingVideo(true);
+                                try {
+                                  const csrfToken = getCsrfToken();
+                                  const res = await fetch(apiUrl('/api/video/resolve'), {
+                                    method: 'POST',
+                                    headers: {
+                                      'Content-Type': 'application/json',
+                                      ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
+                                    },
+                                    credentials: 'include',
+                                    body: JSON.stringify({ url: videoUrl.trim() }),
+                                  });
+                                  if (res.ok) {
+                                    const data = await res.json();
+                                    if (data.thumbnailUrl) {
+                                      setVideoThumbnailUrl(data.thumbnailUrl);
+                                    }
+                                    toast({
+                                      title: "تم التعرف على الفيديو بنجاح",
+                                      description: data.platform === 'twitter' 
+                                        ? "تم استخراج فيديو وصورة منصة X بنجاح" 
+                                        : "تم استخراج معلومات الفيديو بنجاح",
+                                    });
+                                  } else {
+                                    toast({
+                                      title: "تنبيه",
+                                      description: "تعذر استخراج معلومات إضافية عن الفيديو",
+                                    });
+                                  }
+                                } catch (err: any) {
+                                  console.error('[ArticleEditor] Resolve video err:', err);
+                                } finally {
+                                  setIsResolvingVideo(false);
+                                }
+                              }}
+                              className="h-7 text-xs gap-1 text-primary hover:text-primary"
+                            >
+                              {isResolvingVideo ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : (
+                                <Sparkles className="h-3 w-3" />
+                              )}
+                              <span>جلب معلومات وصورة الفيديو</span>
+                            </Button>
+                          )}
+                        </div>
                         <Input
                           id="videoUrl"
                           value={videoUrl}
                           onChange={(e) => setVideoUrl(e.target.value)}
-                          placeholder="رابط YouTube أو Dailymotion أو رابط مباشر للفيديو"
+                          placeholder="رابط YouTube أو Dailymotion أو منصة X (تويتر) أو رابط مباشر"
                           className="text-sm"
                           dir="ltr"
                           data-testid="input-video-url"
                         />
                         <p className="text-xs text-muted-foreground">
-                          يدعم: YouTube, Dailymotion, أو رابط مباشر (mp4)
+                          يدعم: YouTube, Dailymotion, منصة X (تويتر), أو رابط مباشر (mp4)
                         </p>
                       </div>
                     ) : (
@@ -4193,7 +4545,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                         <div className="flex items-center gap-1.5">
                           <RadioGroupItem value="auto" id="thumb-auto" data-testid="radio-thumb-auto" />
                           <Label htmlFor="thumb-auto" className="text-xs cursor-pointer">
-                            تلقائي (YouTube/Dailymotion)
+                            تلقائي (YouTube/Dailymotion/منصة X)
                           </Label>
                         </div>
                         <div className="flex items-center gap-1.5">
@@ -4574,6 +4926,27 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                       </Label>
                     </div>
                   </div>
+
+                  {/* Reading / Sabq Long-form Read Checkbox */}
+                  <div className="pt-4 border-t mt-4">
+                    <div className="flex items-center space-x-2 space-x-reverse">
+                      <Checkbox 
+                        id="isReading"
+                        checked={isReading}
+                        onCheckedChange={(checked) => setIsReading(checked as boolean)}
+                        data-testid="checkbox-is-reading"
+                      />
+                      <Label htmlFor="isReading" className="flex items-center gap-2 cursor-pointer text-sm">
+                        <BookOpen className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                        <div>
+                          <div className="font-medium">قراءة من سبق</div>
+                          <div className="text-xs text-muted-foreground">
+                            تمييز المادة كوسم «قراءة» يظهر للقارئ أعلى الخبر وفي البطاقات
+                          </div>
+                        </div>
+                      </Label>
+                    </div>
+                  </div>
                   
                   {/* Hide from Homepage Option - Requires permission */}
                   {canHideFromHomepage && (
@@ -4590,7 +4963,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                           <div>
                             <div className="font-medium">إخفاء من الواجهة الرئيسية</div>
                             <div className="text-xs text-muted-foreground">
-                              المقال سينشر لكن لن يظهر في الصفحة الرئيسية
+                              المقال سينشر لكن لن يظهر في الصفحة الرئيسية أو صفحة لحظة بلحظة
                             </div>
                           </div>
                         </Label>
@@ -4611,34 +4984,40 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                       المرفقات
                     </span>
                     <Badge variant="outline" className="text-xs">
-                      {mediaAssets?.filter((asset: any) => asset.mediaFile?.url || asset.url).length || 0}
+                      {editableAttachments.length}
                     </Badge>
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <p className="text-xs text-muted-foreground">
-                    صور مرفقة من البريد الإلكتروني أو واتساب
+                    صور مرفقة من البريد أو واتساب — بما فيها المراجع اليتيمة بلا معاينة
                   </p>
                   
-                  {/* Quick preview of attachments */}
-                  {mediaAssets?.filter((asset: any) => asset.mediaFile?.url || asset.url).length > 0 ? (
+                  {/* Quick preview of attachments (يشمل اليتامى) */}
+                  {editableAttachments.length > 0 ? (
                     <div className="grid grid-cols-3 gap-2">
-                      {mediaAssets
-                        .filter((asset: any) => asset.mediaFile?.url || asset.url)
-                        .slice(0, 6)
-                        .map((asset: any, index: number) => {
-                          const imageUrl = asset.mediaFile?.url || asset.url;
+                      {editableAttachments.slice(0, 6).map((asset: any, index: number) => {
+                          const previewUrl = mediaAssetUrl(asset);
                           return (
                             <div 
                               key={asset.id} 
-                              className="relative aspect-square rounded-md border bg-muted/30"
+                              className={`relative aspect-square rounded-md border bg-muted/30 ${
+                                !previewUrl ? "border-dashed border-amber-400" : ""
+                              }`}
                             >
-                              <img
-                                src={imageUrl}
-                                alt={asset.altText || `مرفق ${index + 1}`}
-                                className="w-full h-full object-cover rounded-md"
-                                loading="lazy"
-                              />
+                              {previewUrl ? (
+                                <img
+                                  src={previewUrl}
+                                  alt={asset.altText || `مرفق ${index + 1}`}
+                                  className="w-full h-full object-cover rounded-md"
+                                  loading="lazy"
+                                />
+                              ) : (
+                                <div className="flex h-full w-full flex-col items-center justify-center gap-0.5 px-1 text-center bg-amber-50 dark:bg-amber-950/30 rounded-md">
+                                  <AlertCircle className="h-4 w-4 text-amber-600" />
+                                  <span className="text-[9px] font-bold text-amber-800 dark:text-amber-200">بلا صورة</span>
+                                </div>
+                              )}
                               <Button
                                 variant="destructive"
                                 size="icon"
@@ -4667,10 +5046,9 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                     </div>
                   )}
                   
-                  {/* Show more indicator if there are more than 6 */}
-                  {mediaAssets?.filter((asset: any) => asset.mediaFile?.url || asset.url).length > 6 && (
+                  {editableAttachments.length > 6 && (
                     <p className="text-xs text-center text-muted-foreground">
-                      +{mediaAssets.filter((asset: any) => asset.mediaFile?.url || asset.url).length - 6} مرفق آخر
+                      +{editableAttachments.length - 6} مرفق آخر
                     </p>
                   )}
                   
@@ -4883,6 +5261,8 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                       placeholder="اكتب كلمة واضغط Enter..."
                       testId="input-keywords"
                     />
+                    {/* مساحة سفلية حتى لا يُقطع آخر صف من الكلمات عند نهاية الصفحة */}
+                    <div className="h-6 lg:h-10" aria-hidden />
                   </TabsContent>
 
                   <TabsContent value="preview">
@@ -4926,7 +5306,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
               data-testid="button-save-draft-mobile-bar"
             >
               {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-              مسودة
+              {status === "scheduled" || status === "published" ? "حفظ" : "مسودة"}
             </Button>
             <Button
               size="sm"
@@ -5003,7 +5383,26 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
             description: "تم إضافة الصورة المولدة بالذكاء الاصطناعي كصورة بارزة للمقال",
           });
         }}
-        initialPrompt={title ? `صورة بارزة احترافية لمقال بعنوان: ${title}` : ""}
+        articleContext={{
+          title,
+          excerpt,
+          category:
+            allCategories.find((cat) => cat.id === categoryId)?.slug ||
+            allCategories.find((cat) => cat.id === categoryId)?.nameAr,
+        }}
+      />
+
+      <OpenAIImageGeneratorDialog
+        userId={user?.id || ""}
+        open={showOpenAIImageDialog}
+        onClose={() => setShowOpenAIImageDialog(false)}
+        articleTitle={title}
+        articleExcerpt={excerpt}
+        onImageGenerated={(generatedUrl) => {
+          setImageUrl(generatedUrl);
+          setIsAiGeneratedImage(true);
+          toast({ title: "تم استخدام صورة GPT", description: "أُضيفت الصورة المولّدة كصورة بارزة. احفظ الخبر لتثبيت التغيير." });
+        }}
       />
 
       {/* Infographic Generator Dialog */}

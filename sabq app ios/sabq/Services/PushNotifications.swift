@@ -23,6 +23,9 @@ enum NotificationDeepLink: Hashable {
     case feedback(id: String)
     case match(id: Int)
     case asianCupMatch(id: Int)
+    case roshn
+    case roshnTeam(id: Int)
+    case roshnMatch(id: Int)
     case survey(token: String)
 }
 
@@ -106,13 +109,19 @@ final class NotificationsStore {
     }
 
     func extractDeepLink(from userInfo: [AnyHashable: Any]) -> NotificationDeepLink? {
-        // Backend ships either a `deeplink` field (canonical) or sets
-        // `articleSlug` / `articleId` on the userInfo dictionary.
+        // Backend ships a `deeplink` field (canonical) and/or explicit
+        // `articleSlug`/`article_slug` keys. A deeplink that fails to
+        // parse must FALL THROUGH to the explicit keys — the previous
+        // early-return here swallowed every article tap because campaign
+        // deeplinks arrive as relative "/article/{slug}" paths that
+        // parseSabqDeepLink rejected (فحص المرحلة 2، 2026-08-02).
         if let link = userInfo["deeplink"] as? String,
-           let url = URL(string: link) {
-            return parseSabqDeepLink(url: url)
+           let url = URL(string: link),
+           let parsed = parseSabqDeepLink(url: url) {
+            return parsed
         }
-        if let slug = userInfo["articleSlug"] as? String, !slug.isEmpty {
+        if let slug = (userInfo["articleSlug"] ?? userInfo["article_slug"]) as? String,
+           !slug.isEmpty {
             return .article(slug: slug)
         }
         if let id = userInfo["articleId"] as? String, !id.isEmpty {
@@ -132,6 +141,34 @@ final class NotificationsStore {
         // sabq://match/<id>              — match center (WC / sports alerts)
         // sabq://asian-cup/match/<id>    — Asian Cup match center
         // sabq://survey/<token>          — personal survey invitation (SurveyView)
+        // Universal Links من الويب: نفس /roshn وصفحات الأندية تفتح التجربة
+        // الأصلية بدل بدء التطبيق على الرئيسية.
+        if url.scheme == "https", ["sabq.org", "www.sabq.org"].contains(url.host ?? "") {
+            let parts = url.pathComponents.filter { $0 != "/" }
+            if parts.count >= 2, parts[0] == "article", !parts[1].isEmpty {
+                return .article(slug: parts[1])
+            }
+            if parts.first == "roshn" {
+                if parts.count >= 3, parts[1] == "match", let id = Int(parts[2]) {
+                    return .roshnMatch(id: id)
+                }
+                return .roshn
+            }
+            if parts.count >= 3, parts[0] == "sports", parts[1] == "team", let id = Int(parts[2]) {
+                return .roshnTeam(id: id)
+            }
+            return nil
+        }
+
+        // مسار نسبي بلا scheme — صيغة حملات اللوحة القياسية "/article/{slug}"
+        if url.scheme == nil {
+            let parts = url.pathComponents.filter { $0 != "/" }
+            if parts.count >= 2, parts[0] == "article", !parts[1].isEmpty {
+                return .article(slug: parts[1])
+            }
+            return nil
+        }
+
         guard url.scheme == "sabq" else { return nil }
         let host = url.host ?? ""
         let path = url.pathComponents.filter { $0 != "/" }
@@ -151,6 +188,15 @@ final class NotificationsStore {
                 return .asianCupMatch(id: id)
             }
             return nil
+        case "roshn":
+            // sabq://roshn أو sabq://roshn/team/<id> أو /match/<id>
+            if path.count >= 2, path[0] == "team", let id = Int(path[1]) {
+                return .roshnTeam(id: id)
+            }
+            if path.count >= 2, path[0] == "match", let id = Int(path[1]) {
+                return .roshnMatch(id: id)
+            }
+            return .roshn
         default: return nil
         }
     }
@@ -247,7 +293,9 @@ final class SabqAppDelegate: NSObject, UIApplicationDelegate, UNUserNotification
     ) {
         let userInfo = response.notification.request.content.userInfo
         Task { @MainActor in
-            if let link = NotificationsStore.shared.extractDeepLink(from: userInfo) {
+            let link = NotificationsStore.shared.extractDeepLink(from: userInfo)
+            print("[Push] tap keys=\(userInfo.keys) → link=\(String(describing: link))")
+            if let link {
                 NotificationsStore.shared.pendingDeepLink = link
             }
             await NotificationsStore.shared.refreshUnreadCount()

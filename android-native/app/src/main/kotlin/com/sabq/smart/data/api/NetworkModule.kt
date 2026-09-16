@@ -17,6 +17,7 @@ import kotlinx.serialization.json.Json
 import okhttp3.Cache
 import okhttp3.Interceptor
 import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.Dispatcher
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
@@ -35,7 +36,10 @@ import retrofit2.Retrofit
  * commit it — that breaks every install on a real device. Use a
  * BuildConfig field + flavour if you need a dev override.
  */
-private const val BASE_URL = "https://sabq.org/"
+// مباشرة إلى الخادم بلا وسيط Pages — sabq.org كانت تمرر كل طلب عبر
+// Cloudflare Pages ثم إلى api.sabq.org (قفزة إضافية لكل نداء). نفس ما
+// يفعله iOS (URLConstants.apiOrigin) ونقاط الرياضة هنا أصلًا.
+private const val BASE_URL = "https://api.sabq.org/"
 
 @Module
 @InstallIn(SingletonComponent::class)
@@ -88,9 +92,17 @@ object NetworkModule {
             // devices and propagating as uncaught SocketTimeoutException
             // → app crash. 30s read is generous but matches what iOS
             // uses (URLSession.timeoutIntervalForRequest = 30).
-            connectTimeout(15, TimeUnit.SECONDS)
+            connectTimeout(8, TimeUnit.SECONDS)
             readTimeout(30, TimeUnit.SECONDS)
             writeTimeout(15, TimeUnit.SECONDS)
+            // الرئيسية تطلق ~18 طلبًا لنفس المضيف؛ سقف OkHttp الافتراضي 5
+            // كان يحوّلها لثلاث موجات متسلسلة (تدقيق الأداء 2026-08-02).
+            dispatcher(
+                Dispatcher().apply {
+                    maxRequests = 64
+                    maxRequestsPerHost = 20
+                }
+            )
             addInterceptor(authInterceptor)
             if (BuildConfig.DEBUG) {
                 addInterceptor(

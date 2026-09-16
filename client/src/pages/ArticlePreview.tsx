@@ -16,6 +16,7 @@ import {
   Edit,
   AlertTriangle,
   CheckCircle2,
+  BookOpen,
 } from "lucide-react";
 import { formatArticleTimestamp } from "@/lib/formatTime";
 import type { ArticleWithDetails } from "@shared/schema";
@@ -58,7 +59,7 @@ export default function ArticlePreview() {
     ? article?.opinionAuthor
     : article?.author;
 
-  const getInitials = (firstName?: string | null, lastName?: string | null, email?: string) => {
+  const getInitials = (firstName?: string | null, lastName?: string | null, email?: string | null) => {
     if (firstName && lastName) {
       return `${firstName?.[0]}${lastName?.[0]}`.toUpperCase();
     }
@@ -191,6 +192,16 @@ export default function ArticlePreview() {
                     {article.category.icon} {article.category.nameAr}
                   </Badge>
                 )}
+                {article.isReading && (
+                  <Badge
+                    variant="secondary"
+                    className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/25 hover:bg-emerald-500/15 gap-1 font-bold text-xs px-2.5 py-0.5 rounded-md"
+                    data-testid="badge-article-reading"
+                  >
+                    <BookOpen className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+                    قراءة
+                  </Badge>
+                )}
                 {article.newsType === 'breaking' && (
                   <Badge className="bg-red-600 hover:bg-red-700 text-white border-red-600 gap-1" data-testid="badge-article-urgent">
                     <Zap className="h-3 w-3" />
@@ -292,8 +303,12 @@ export default function ArticlePreview() {
                 className="prose prose-lg dark:prose-invert max-w-none article-content"
                 dangerouslySetInnerHTML={{ 
                   __html: DOMPurify.sanitize(article.content || '', {
-                    ADD_TAGS: ['iframe', 'blockquote'],
-                    ADD_ATTR: ['allow', 'allowfullscreen', 'frameborder', 'scrolling', 'class', 'data-theme'],
+                    ADD_TAGS: ['iframe', 'blockquote', 'img', 'figure', 'figcaption'],
+                    ADD_ATTR: [
+                      'allow', 'allowfullscreen', 'frameborder', 'scrolling', 'src',
+                      'class', 'data-theme', 'data-align', 'data-width', 'data-caption',
+                      'alt', 'title', 'loading', 'width', 'height', 'style',
+                    ],
                   }) 
                 }}
                 data-testid="article-content"

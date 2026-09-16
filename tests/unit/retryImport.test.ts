@@ -91,6 +91,24 @@ describe("retryImport", () => {
     expect(calls).toBe(2);
   });
 
+  it("normalizes an undefined preload rejection before reading its message", async () => {
+    const { retryImport } = await import("@/lib/retryImport");
+    const mod = { default: () => null };
+    let calls = 0;
+    const importFn = async () => {
+      calls += 1;
+      if (calls === 1) {
+        // Firefox/Vite can reject the preload promise without an Error object.
+        // This exact shape caused JAVASCRIPT-REACT-3A when retryImport read
+        // `error.message` from undefined instead of entering recovery.
+        throw undefined;
+      }
+      return mod;
+    };
+    await expect(retryImport(importFn, 2, 1)).resolves.toBe(mod);
+    expect(calls).toBe(2);
+  });
+
   it("retries the bracket-form WebKit TypeError instead of failing fast", async () => {
     const { retryImport } = await import("@/lib/retryImport");
     const mod = { default: () => null };

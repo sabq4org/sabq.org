@@ -12,11 +12,15 @@ import {
   userHasAnyRole,
   logActivity,
 } from "../rbac";
+import { ObjectStorageService } from "../objectStorage";
 import {
   canSelfAssignSchedule,
   getNextSlotForWriter,
   getWriterArticlesWithStats,
   getWriterDayLoads,
+  isWriterDayFull,
+  OPINION_WRITERS_PER_DAY_CAP,
+  getWriterMediaLicenseFileKey,
   getWriterScheduleBanner,
   listOpinionWriters,
   scheduleApprovedOpinionArticle,
@@ -60,6 +64,18 @@ router.put(
       if (!(await userHasAnyRole(writerId, ["opinion_author"]))) {
         return res.status(400).json({ message: "المستخدم المحدد ليس كاتب رأي" });
       }
+      // عند تفعيل يوم ممتلئ: ارفض إلا إن الكاتب أصلاً على نفس اليوم (تحديث وقت فقط)
+      if (parsed.data.active !== false && parsed.data.weekday !== undefined) {
+        const loads = await getWriterDayLoads();
+        const currentBanner = await getWriterScheduleBanner(writerId).catch(() => null);
+        // البانر يظهر فقط لجدول نشط — إن تطابق اليوم فالكاتب أصلاً عليه
+        const alreadyOnDay = currentBanner?.weekday === parsed.data.weekday;
+        if (!alreadyOnDay && isWriterDayFull(loads[parsed.data.weekday] ?? 0)) {
+          return res.status(409).json({
+            message: `يوم النشر ممتلئ (${OPINION_WRITERS_PER_DAY_CAP}/${OPINION_WRITERS_PER_DAY_CAP}) — غير متاح لنشر إضافي`,
+          });
+        }
+      }
       const schedule = await upsertWriterSchedule(writerId, parsed.data, requestUserId(req));
       res.json({ schedule });
     } catch (error) {
@@ -83,6 +99,89 @@ router.get(
     } catch (error) {
       console.error("[opinion-writers] writer articles failed:", error);
       res.status(500).json({ message: "تعذر جلب مقالات الكاتب" });
+    }
+  },
+);
+
+// رابط موقّت لملف الترخيص المهني المرفوع من مساحة الكاتب
+router.get(
+  "/api/admin/opinion-writers/:writerId/media-license-file",
+  requireAuth,
+  requirePermission(PERMISSION_CODES.OPINION_REVIEW),
+  async (req: Request, res: Response) => {
+    try {
+      const key = await getWriterMediaLicenseFileKey(req.params.writerId);
+      if (!key) {
+        return res.status(404).json({ message: "لا يوجد ملف ترخيص لهذا الكاتب" });
+      }
+      const url = await new ObjectStorageService().getPrivateFileDownloadURL(key, 300);
+      res.redirect(url);
+    } catch (error) {
+      console.error("[opinion-writers] media license file failed:", error);
+      res.status(500).json({ message: "تعذر جلب ملف الترخيص" });
+    }
+  },
+);
+
+// طلب تصحيح ملف الترخيص — ملاحظة تظهر للكاتب حتى يعيد الرفع
+router.post(
+  "/api/admin/opinion-writers/:writerId/media-license-correction",
+  requireAuth,
+  requirePermission(PERMISSION_CODES.OPINION_REVIEW),
+  async (req: Request, res: Response) => {
+    try {
+      const { requestMediaLicenseCorrection } = await import("../services/mediaLicenseService");
+      const note = typeof req.body?.note === "string" ? req.body.note : "";
+      const status = await requestMediaLicenseCorrection(
+        req.params.writerId,
+        requestUserId(req),
+        note,
+      );
+      res.json({ ok: true, mediaLicense: status });
+    } catch (error: any) {
+      const msg = error?.message || "تعذر إرسال طلب التصحيح";
+      const code = /ملاحظة|ملف ترخيص/.test(msg) ? 400 : 500;
+      if (code === 500) console.error("[opinion-writers] license correction failed:", error);
+      res.status(code).json({ message: msg });
+    }
+  },
+);
+
+// موافقة على ملف الترخيص بعد الاطلاع — يصبح مرخّصاً
+router.post(
+  "/api/admin/opinion-writers/:writerId/media-license-approve",
+  requireAuth,
+  requirePermission(PERMISSION_CODES.OPINION_REVIEW),
+  async (req: Request, res: Response) => {
+    try {
+      const { approveMediaLicense } = await import("../services/mediaLicenseService");
+      const status = await approveMediaLicense(req.params.writerId, requestUserId(req));
+      res.json({ ok: true, mediaLicense: status });
+    } catch (error: any) {
+      const msg = error?.message || "تعذر اعتماد الترخيص";
+      const code = /لا يوجد|بانتظار/.test(msg) ? 400 : 500;
+      if (code === 500) console.error("[opinion-writers] license approve failed:", error);
+      res.status(code).json({ message: msg });
+    }
+  },
+);
+
+// رفض الملف بعد الاطلاع — يعيد «يحتاج تصحيحاً» مع ملاحظة
+router.post(
+  "/api/admin/opinion-writers/:writerId/media-license-reject",
+  requireAuth,
+  requirePermission(PERMISSION_CODES.OPINION_REVIEW),
+  async (req: Request, res: Response) => {
+    try {
+      const { rejectMediaLicense } = await import("../services/mediaLicenseService");
+      const note = typeof req.body?.note === "string" ? req.body.note : "";
+      const status = await rejectMediaLicense(req.params.writerId, requestUserId(req), note);
+      res.json({ ok: true, mediaLicense: status });
+    } catch (error: any) {
+      const msg = error?.message || "تعذر رفض الترخيص";
+      const code = /ملاحظة|ملف ترخيص/.test(msg) ? 400 : 500;
+      if (code === 500) console.error("[opinion-writers] license reject failed:", error);
+      res.status(code).json({ message: msg });
     }
   },
 );

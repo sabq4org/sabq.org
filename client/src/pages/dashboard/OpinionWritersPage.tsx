@@ -2,9 +2,10 @@ import { useMemo, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { ar } from "date-fns/locale";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { queryClient, apiRequest, apiUrl } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -17,7 +18,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Loader2, CalendarClock, Eye, MessageSquare, ThumbsUp, X } from "lucide-react";
+import { Loader2, CalendarClock, Eye, MessageSquare, ThumbsUp, X, BadgeCheck, Search, FileText } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { MediaLicenseAdminActions } from "@/components/MediaLicenseAdminActions";
+import { OPINION_WRITERS_PER_DAY_CAP } from "@shared/opinionWriterConstants";
 
 const WEEKDAYS = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
 
@@ -36,7 +40,27 @@ type WriterSummary = {
   nextScheduled: { id: string; title: string; scheduledAt: string } | null;
   nextSlot: string | null;
   commitment: "ok" | "due_soon" | "late" | "awaiting_first" | "unassigned";
+  mediaLicense: {
+    hasLicense: boolean;
+    expired: boolean;
+    expiringSoon: boolean;
+    needsCorrection: boolean;
+    pendingReview: boolean;
+    adminNote: string | null;
+    number: string | null;
+    submittedAt: string | null;
+    expiresAt: string | null;
+    hasFile: boolean;
+  };
 };
+
+type LicenseFilter =
+  | "all"
+  | "licensed"
+  | "expired"
+  | "missing"
+  | "needs_correction"
+  | "pending_review";
 
 type WriterArticlesResponse = {
   writer: { id: string; name: string; profileImageUrl: string | null } | null;
@@ -114,8 +138,16 @@ function ArticleStatusBadge({ status, reviewStatus }: { status: string; reviewSt
 export default function OpinionWritersPage() {
   const { toast } = useToast();
   const [selectedWriterId, setSelectedWriterId] = useState<string | null>(null);
+  const [licenseFilter, setLicenseFilter] = useState<LicenseFilter>("all");
+  const [search, setSearch] = useState("");
 
-  const { data: writersData, isLoading } = useQuery<{ writers: WriterSummary[] }>({
+  const {
+    data: writersData,
+    isLoading,
+    isError: writersError,
+    error: writersErrorDetail,
+    refetch: refetchWriters,
+  } = useQuery<{ writers: WriterSummary[] }>({
     queryKey: ["/api/admin/opinion-writers"],
   });
   const writers = Array.isArray(writersData?.writers) ? writersData.writers : [];
@@ -146,8 +178,12 @@ export default function OpinionWritersPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/opinion-writers"] });
       toast({ title: "تم حفظ يوم النشر" });
     },
-    onError: () => {
-      toast({ title: "تعذر حفظ يوم النشر", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({
+        title: "تعذر حفظ يوم النشر",
+        description: error.message || undefined,
+        variant: "destructive",
+      });
     },
   });
 
@@ -157,6 +193,17 @@ export default function OpinionWritersPage() {
     const now = Date.now();
     const weekAgo = now - 7 * 24 * 60 * 60 * 1000;
     const twoMonthsAgo = now - 60 * 24 * 60 * 60 * 1000;
+    const licensed = writers.filter((w) => w.mediaLicense?.hasLicense).length;
+    const expiredLicense = writers.filter((w) => w.mediaLicense?.expired).length;
+    const needsCorrection = writers.filter((w) => w.mediaLicense?.needsCorrection).length;
+    const pendingReview = writers.filter((w) => w.mediaLicense?.pendingReview).length;
+    const missingLicense = writers.filter(
+      (w) =>
+        !w.mediaLicense?.hasLicense &&
+        !w.mediaLicense?.expired &&
+        !w.mediaLicense?.needsCorrection &&
+        !w.mediaLicense?.pendingReview,
+    ).length;
     return {
       total: writers.length,
       publishedThisWeek: writers.filter(
@@ -169,8 +216,63 @@ export default function OpinionWritersPage() {
         (w) =>
           !w.lastArticle || new Date(w.lastArticle.publishedAt).getTime() < twoMonthsAgo,
       ).length,
+      licensed,
+      expiredLicense,
+      needsCorrection,
+      pendingReview,
+      missingLicense,
     };
   }, [writers]);
+
+  const filteredWriters = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const filtered = writers.filter((w) => {
+      if (licenseFilter === "licensed" && !w.mediaLicense?.hasLicense) return false;
+      if (licenseFilter === "expired" && !w.mediaLicense?.expired) return false;
+      if (licenseFilter === "needs_correction" && !w.mediaLicense?.needsCorrection)
+        return false;
+      if (licenseFilter === "pending_review" && !w.mediaLicense?.pendingReview)
+        return false;
+      if (
+        licenseFilter === "missing" &&
+        (w.mediaLicense?.hasLicense ||
+          w.mediaLicense?.expired ||
+          w.mediaLicense?.needsCorrection ||
+          w.mediaLicense?.pendingReview)
+      )
+        return false;
+      if (!q) return true;
+      return (
+        w.name.toLowerCase().includes(q) ||
+        (w.email?.toLowerCase().includes(q) ?? false) ||
+        (w.mediaLicense?.number?.toLowerCase().includes(q) ?? false)
+      );
+    });
+
+    // الأولوية: تحت المراجعة → منتهٍ → يحتاج تصحيحاً → جدّد → بدون → ساري
+    const licenseRank = (w: WriterSummary) => {
+      if (w.mediaLicense?.pendingReview) return 0;
+      if (w.mediaLicense?.expired) return 1;
+      if (w.mediaLicense?.needsCorrection) return 2;
+      if (w.mediaLicense?.expiringSoon) return 3;
+      if (!w.mediaLicense?.hasLicense) return 4;
+      return 5;
+    };
+    const expiresMs = (w: WriterSummary) => {
+      const raw = w.mediaLicense?.expiresAt;
+      if (!raw) return Number.POSITIVE_INFINITY;
+      const t = new Date(raw).getTime();
+      return Number.isNaN(t) ? Number.POSITIVE_INFINITY : t;
+    };
+
+    return filtered.sort((a, b) => {
+      const rankDiff = licenseRank(a) - licenseRank(b);
+      if (rankDiff !== 0) return rankDiff;
+      const expDiff = expiresMs(a) - expiresMs(b);
+      if (expDiff !== 0) return expDiff;
+      return a.name.localeCompare(b.name, "ar");
+    });
+  }, [writers, licenseFilter, search]);
 
   const byWeekday = useMemo(() => {
     const map: WriterSummary[][] = Array.from({ length: 7 }, () => []);
@@ -213,22 +315,71 @@ export default function OpinionWritersPage() {
   return (
     <DashboardLayout>
       <div className="space-y-6 p-4 md:p-6" dir="rtl">
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <CalendarClock className="h-6 w-6 text-primary" />
-            كتّاب الرأي
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            يوم النشر المخصص لكل كاتب، حالة الالتزام، والإحصائيات الكاملة
-          </p>
-        </div>
+        <DashboardPageHeader
+          icon={CalendarClock}
+          title="كتّاب الرأي"
+          description="الترخيص المهني، يوم النشر، الالتزام، والإحصائيات — من مكان واحد"
+          titleTestId="text-opinion-writers-title"
+        />
+
+        {writersError ? (
+          <Card className="border-destructive/40 bg-destructive/5">
+            <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
+              <p className="text-sm text-destructive">
+                تعذر جلب قائمة الكتّاب
+                {writersErrorDetail instanceof Error && writersErrorDetail.message
+                  ? `: ${writersErrorDetail.message}`
+                  : ""}
+              </p>
+              <Button size="sm" variant="outline" onClick={() => void refetchWriters()}>
+                إعادة المحاولة
+              </Button>
+            </CardContent>
+          </Card>
+        ) : null}
 
         {/* KPI cards */}
-        <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <Card>
             <CardContent className="p-4">
               <div className="text-2xl font-extrabold tabular-nums">{kpis.total}</div>
               <div className="text-sm text-muted-foreground">كاتباً نشطاً</div>
+            </CardContent>
+          </Card>
+          <Card
+            className="cursor-pointer transition-shadow hover:shadow-md border-emerald-200/60 dark:border-emerald-900/40"
+            onClick={() => setLicenseFilter("licensed")}
+          >
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2">
+                <BadgeCheck className="h-5 w-5 text-emerald-600" />
+                <div className="text-2xl font-extrabold tabular-nums text-emerald-700 dark:text-emerald-300">
+                  {kpis.licensed}
+                </div>
+              </div>
+              <div className="text-sm text-muted-foreground">ترخيص ساري</div>
+            </CardContent>
+          </Card>
+          <Card
+            className="cursor-pointer transition-shadow hover:shadow-md border-rose-200/60 dark:border-rose-900/40"
+            onClick={() => setLicenseFilter("expired")}
+          >
+            <CardContent className="p-4">
+              <div className="text-2xl font-extrabold tabular-nums text-rose-600 dark:text-rose-400">
+                {kpis.expiredLicense}
+              </div>
+              <div className="text-sm text-muted-foreground">ترخيص منتهٍ</div>
+            </CardContent>
+          </Card>
+          <Card
+            className="cursor-pointer transition-shadow hover:shadow-md border-amber-200/60 dark:border-amber-900/40"
+            onClick={() => setLicenseFilter("missing")}
+          >
+            <CardContent className="p-4">
+              <div className="text-2xl font-extrabold tabular-nums text-amber-600 dark:text-amber-400">
+                {kpis.missingLicense}
+              </div>
+              <div className="text-sm text-muted-foreground">بدون ترخيص بعد</div>
             </CardContent>
           </Card>
           <Card>
@@ -271,32 +422,137 @@ export default function OpinionWritersPage() {
           </Card>
         </div>
 
-        {/* Weekly distribution */}
+        {/* Weekly distribution — stacked on mobile, 7-column grid on md+ */}
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-base">توزيع الكتّاب على أيام الأسبوع</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-7 gap-2 overflow-x-auto min-w-[640px] lg:min-w-0">
-              {WEEKDAYS.map((day, i) => (
-                <div key={day} className={i === todayWeekday ? "rounded-lg bg-primary/5 p-1" : "p-1"}>
+            {/* Mobile: one day per row, full names, wrap chips */}
+            <div className="space-y-2.5 md:hidden">
+              {WEEKDAYS.map((day, i) => {
+                const writersForDay = byWeekday[i];
+                const isToday = i === todayWeekday;
+                const isFull = writersForDay.length >= OPINION_WRITERS_PER_DAY_CAP;
+                return (
                   <div
-                    className={`text-xs font-bold pb-1 mb-2 border-b-2 ${
-                      i === todayWeekday
-                        ? "text-primary border-primary"
-                        : "text-muted-foreground border-border"
+                    key={day}
+                    className={cn(
+                      "rounded-xl border p-3",
+                      isFull
+                        ? "border-amber-300/70 bg-amber-50/80 dark:border-amber-800/60 dark:bg-amber-950/30"
+                        : isToday
+                          ? "border-primary/35 bg-primary/5"
+                          : "border-border bg-muted/40",
+                    )}
+                    data-testid={`weekday-mobile-${i}`}
+                  >
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <div
+                        className={cn(
+                          "text-sm font-bold",
+                          isFull
+                            ? "text-amber-800 dark:text-amber-300"
+                            : isToday
+                              ? "text-primary"
+                              : "text-foreground",
+                        )}
+                      >
+                        {day}
+                        {isToday && !isFull && (
+                          <span className="ms-1.5 text-xs font-semibold text-primary">(اليوم)</span>
+                        )}
+                      </div>
+                      <Badge
+                        variant="secondary"
+                        className={cn(
+                          "text-[11px] font-semibold",
+                          isFull && "bg-amber-100 text-amber-900 dark:bg-amber-900/50 dark:text-amber-200",
+                        )}
+                      >
+                        {writersForDay.length} من {OPINION_WRITERS_PER_DAY_CAP} كتّاب
+                      </Badge>
+                    </div>
+                    {isFull && (
+                      <p
+                        className="mb-2 text-xs font-semibold text-amber-800 dark:text-amber-300"
+                        data-testid={`weekday-full-mobile-${i}`}
+                      >
+                        غير متاح للنشر — اكتمل العدد
+                      </p>
+                    )}
+                    {writersForDay.length === 0 ? (
+                      <p className="text-xs italic text-muted-foreground">شاغر</p>
+                    ) : (
+                      <div className="flex flex-wrap gap-1.5">
+                        {writersForDay.map((w) => (
+                          <span
+                            key={w.id}
+                            className="rounded-md border border-border bg-card px-2.5 py-1 text-xs leading-snug text-foreground"
+                          >
+                            {w.name}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Desktop / tablet: unchanged 7-column board */}
+            <div className="hidden grid-cols-7 gap-2 md:grid">
+              {WEEKDAYS.map((day, i) => {
+                const count = byWeekday[i].length;
+                const isFull = count >= OPINION_WRITERS_PER_DAY_CAP;
+                return (
+                <div
+                  key={day}
+                  className={cn(
+                    "p-1",
+                    isFull
+                      ? "rounded-lg bg-amber-50/90 dark:bg-amber-950/30"
+                      : i === todayWeekday
+                        ? "rounded-lg bg-primary/5"
+                        : "",
+                  )}
+                  data-testid={`weekday-desktop-${i}`}
+                >
+                  <div
+                    className={`mb-1 border-b-2 pb-1 text-xs font-bold ${
+                      isFull
+                        ? "border-amber-400 text-amber-800 dark:text-amber-300"
+                        : i === todayWeekday
+                          ? "border-primary text-primary"
+                          : "border-border text-muted-foreground"
                     }`}
                   >
                     {day}
-                    {i === todayWeekday && " (اليوم)"}
+                    {i === todayWeekday && !isFull && " (اليوم)"}
                   </div>
-                  {byWeekday[i].length === 0 ? (
-                    <div className="text-xs text-muted-foreground italic">شاغر</div>
+                  <div
+                    className={cn(
+                      "mb-1.5 text-[10px] font-semibold leading-snug",
+                      isFull ? "text-amber-800 dark:text-amber-300" : "text-muted-foreground",
+                    )}
+                  >
+                    {count} من {OPINION_WRITERS_PER_DAY_CAP} كتّاب
+                  </div>
+                  {isFull && (
+                    <p
+                      className="mb-1.5 text-[10px] font-semibold leading-snug text-amber-800 dark:text-amber-300"
+                      data-testid={`weekday-full-desktop-${i}`}
+                    >
+                      غير متاح للنشر
+                    </p>
+                  )}
+                  {count === 0 ? (
+                    <div className="text-xs italic text-muted-foreground">شاغر</div>
                   ) : (
                     byWeekday[i].map((w) => (
                       <div
                         key={w.id}
-                        className="text-xs bg-muted rounded-md px-2 py-1 mb-1 truncate"
+                        className="mb-1 truncate rounded-md bg-muted px-2 py-1 text-xs"
                         title={w.name}
                       >
                         {w.name}
@@ -304,31 +560,82 @@ export default function OpinionWritersPage() {
                     ))
                   )}
                 </div>
-              ))}
+                );
+              })}
             </div>
           </CardContent>
         </Card>
 
         {/* Writers table */}
         <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">جدول الكتّاب</CardTitle>
+          <CardHeader className="space-y-3 pb-3">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <CardTitle className="text-base">
+                جدول الكتّاب
+                <span className="ms-2 text-sm font-normal text-muted-foreground tabular-nums">
+                  ({filteredWriters.length.toLocaleString("en-US")})
+                </span>
+              </CardTitle>
+              <div className="relative w-full sm:w-64">
+                <Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="بحث بالاسم أو البريد أو رقم الترخيص"
+                  className="pr-9"
+                  data-testid="input-writers-search"
+                />
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {(
+                [
+                  { id: "all" as const, label: "الكل" },
+                  { id: "licensed" as const, label: `ساري (${kpis.licensed})` },
+                  {
+                    id: "pending_review" as const,
+                    label: `تحت المراجعة (${kpis.pendingReview})`,
+                  },
+                  { id: "expired" as const, label: `منتهٍ (${kpis.expiredLicense})` },
+                  {
+                    id: "needs_correction" as const,
+                    label: `يحتاج تصحيحاً (${kpis.needsCorrection})`,
+                  },
+                  { id: "missing" as const, label: `بدون ترخيص (${kpis.missingLicense})` },
+                ] as const
+              ).map((tab) => (
+                <Button
+                  key={tab.id}
+                  size="sm"
+                  variant={licenseFilter === tab.id ? "default" : "outline"}
+                  onClick={() => setLicenseFilter(tab.id)}
+                  data-testid={`filter-license-${tab.id}`}
+                >
+                  {tab.label}
+                </Button>
+              ))}
+            </div>
           </CardHeader>
           <CardContent className="p-0">
             {isLoading ? (
               <div className="flex items-center justify-center py-12">
                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
               </div>
-            ) : writers.length === 0 ? (
+            ) : writersError ? (
+              <div className="py-12 text-center text-sm text-destructive">
+                فشل تحميل البيانات — استخدم «إعادة المحاولة» أعلاه
+              </div>
+            ) : filteredWriters.length === 0 ? (
               <div className="py-12 text-center text-muted-foreground text-sm">
-                لا يوجد كتّاب رأي بعد
+                {writers.length === 0 ? "لا يوجد كتّاب رأي بعد" : "لا نتائج مطابقة للفلتر أو البحث"}
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-sm min-w-[860px]">
+                <table className="w-full text-sm min-w-[1040px]">
                   <thead>
                     <tr className="border-b bg-muted/50 text-xs text-muted-foreground">
                       <th className="text-right font-bold px-4 py-3">الكاتب</th>
+                      <th className="text-right font-bold px-4 py-3">الترخيص المهني</th>
                       <th className="text-right font-bold px-4 py-3">اليوم المخصص</th>
                       <th className="text-right font-bold px-4 py-3">وقت النشر</th>
                       <th className="text-right font-bold px-4 py-3">المقالات المنشورة</th>
@@ -338,10 +645,11 @@ export default function OpinionWritersPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {writers.map((writer) => {
+                    {filteredWriters.map((writer) => {
                       const badge = COMMITMENT_BADGE[writer.commitment];
                       const badgeLabel =
                         writer.gender === "female" && badge.labelF ? badge.labelF : badge.label;
+                      const license = writer.mediaLicense;
                       return (
                         <tr
                           key={writer.id}
@@ -358,10 +666,125 @@ export default function OpinionWritersPage() {
                               <div className="min-w-0">
                                 <div className="font-bold whitespace-nowrap">{writer.name}</div>
                                 <div className="text-xs text-muted-foreground">
-                                  {writer.jobTitle ||
+                                  {writer.email ||
+                                    writer.jobTitle ||
                                     (writer.gender === "female" ? "كاتبة رأي" : "كاتب رأي")}
                                 </div>
                               </div>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 align-middle">
+                            <div className="flex max-w-[13rem] flex-col gap-1">
+                              <div className="flex items-center gap-1">
+                                {license?.pendingReview ? (
+                                  <Badge
+                                    className="gap-1 border-0 bg-sky-100 text-sky-950 hover:bg-sky-100 dark:bg-sky-900/40 dark:text-sky-100"
+                                    title="أعاد رفع الملف — اطّلع ثم اعتمد أو ارفض"
+                                    data-testid={`badge-pending-review-${writer.id}`}
+                                  >
+                                    تحت المراجعة
+                                  </Badge>
+                                ) : license?.needsCorrection ? (
+                                  <Badge
+                                    className="gap-1 border-0 bg-amber-100 text-amber-950 hover:bg-amber-100 dark:bg-amber-900/40 dark:text-amber-100"
+                                    title={license.adminNote || "مطلوب إعادة رفع ملف الترخيص"}
+                                    data-testid={`badge-needs-correction-${writer.id}`}
+                                  >
+                                    يحتاج تصحيحاً
+                                  </Badge>
+                                ) : license?.hasLicense || license?.expired ? (
+                                  license.expired ? (
+                                    <Badge
+                                      className="gap-1 border-0 bg-rose-100 text-rose-900 hover:bg-rose-100 dark:bg-rose-900/40 dark:text-rose-200"
+                                      data-testid={`badge-expired-license-${writer.id}`}
+                                    >
+                                      منتهٍ
+                                    </Badge>
+                                  ) : license.expiringSoon ? (
+                                    <Badge
+                                      className="gap-1 border-0 bg-red-600 text-white hover:bg-red-600"
+                                      title="أقل من شهرين — يجب التجديد للاستمرار"
+                                      data-testid={`badge-expiring-license-${writer.id}`}
+                                    >
+                                      جدّد الترخيص
+                                    </Badge>
+                                  ) : (
+                                    <Badge className="gap-1 bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">
+                                      <BadgeCheck className="h-3 w-3" />
+                                      مرخّص
+                                    </Badge>
+                                  )
+                                ) : (
+                                  <Badge
+                                    className="gap-1 border-0 bg-amber-100 text-amber-900 hover:bg-amber-100 dark:bg-amber-900/40 dark:text-amber-200"
+                                    data-testid={`badge-unlicensed-${writer.id}`}
+                                  >
+                                    غير مرخّص
+                                  </Badge>
+                                )}
+                                {license?.hasFile && (
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-7 w-7 shrink-0 text-muted-foreground"
+                                    title="عرض ملف الترخيص"
+                                    onClick={() =>
+                                      window.open(
+                                        apiUrl(
+                                          `/api/admin/opinion-writers/${writer.id}/media-license-file`,
+                                        ),
+                                        "_blank",
+                                        "noopener",
+                                      )
+                                    }
+                                    data-testid={`button-view-license-${writer.id}`}
+                                  >
+                                    <FileText className="h-3.5 w-3.5" />
+                                  </Button>
+                                )}
+                                <MediaLicenseAdminActions
+                                  personName={writer.name}
+                                  invalidateQueryKey={["/api/admin/opinion-writers"]}
+                                  correctionEndpoint={`/api/admin/opinion-writers/${writer.id}/media-license-correction`}
+                                  approveEndpoint={`/api/admin/opinion-writers/${writer.id}/media-license-approve`}
+                                  rejectEndpoint={`/api/admin/opinion-writers/${writer.id}/media-license-reject`}
+                                  existingNote={license?.adminNote}
+                                  needsCorrection={license?.needsCorrection}
+                                  pendingReview={license?.pendingReview}
+                                  hasFile={license?.hasFile}
+                                  testIdPrefix={writer.id}
+                                />
+                              </div>
+                              {(license?.hasLicense ||
+                                license?.expired ||
+                                license?.needsCorrection ||
+                                license?.pendingReview) && (
+                                <>
+                                  <div
+                                    className={cn(
+                                      "text-[11px] tabular-nums leading-none",
+                                      !license?.expiresAt ||
+                                        license?.expiringSoon ||
+                                        license?.expired
+                                        ? "font-semibold text-red-700 dark:text-red-300"
+                                        : "text-muted-foreground",
+                                    )}
+                                  >
+                                    {license?.expiresAt
+                                      ? `حتى ${format(new Date(license.expiresAt), "d/M/yyyy", { locale: ar })}`
+                                      : "بلا تاريخ انتهاء"}
+                                  </div>
+                                  {license?.number && (
+                                    <div
+                                      className="truncate text-[11px] tabular-nums text-muted-foreground leading-none"
+                                      dir="ltr"
+                                      title={license.number}
+                                    >
+                                      {license.number}
+                                    </div>
+                                  )}
+                                </>
+                              )}
                             </div>
                           </td>
                           <td className="px-4 py-3">
@@ -379,11 +802,19 @@ export default function OpinionWritersPage() {
                               </SelectTrigger>
                               <SelectContent>
                                 <SelectItem value="none">بدون يوم</SelectItem>
-                                {WEEKDAYS.map((day, i) => (
-                                  <SelectItem key={i} value={String(i)}>
-                                    {day}
-                                  </SelectItem>
-                                ))}
+                                {WEEKDAYS.map((day, i) => {
+                                  const count = byWeekday[i].length;
+                                  const isCurrent =
+                                    writer.schedule?.active && writer.schedule.weekday === i;
+                                  const isFull =
+                                    count >= OPINION_WRITERS_PER_DAY_CAP && !isCurrent;
+                                  return (
+                                    <SelectItem key={i} value={String(i)} disabled={isFull}>
+                                      {day} — {count} من {OPINION_WRITERS_PER_DAY_CAP} كتّاب
+                                      {isFull ? " (غير متاح)" : ""}
+                                    </SelectItem>
+                                  );
+                                })}
                               </SelectContent>
                             </Select>
                           </td>

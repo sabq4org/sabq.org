@@ -727,6 +727,11 @@ nonisolated struct SpLoginResponse: Decodable {
     let token: String?
     let member: SpMember?
     let message: String?
+    // 2FA: حين يكون الحساب مفعّلًا للتحقّق بخطوتين يرجع الخادم HTTP 200 مع
+    // requires2FA=true وtoken=nil وتحدّيًا قصير العمر (challengeToken) يُبادَل
+    // بجلسة كاملة عبر /auth/verify-2fa.
+    let requires2FA: Bool?
+    let challengeToken: String?
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: SpFlexKey.self)
@@ -736,6 +741,8 @@ nonisolated struct SpLoginResponse: Decodable {
             ?? (try? c.decode(SpMember.self, forKey: SpFlexKey("member")))
             ?? (try? c.decode(SpMember.self, forKey: SpFlexKey("data")))
         message = try? c.decode(String.self, forKey: SpFlexKey("message"))
+        requires2FA = try? c.decode(Bool.self, forKey: SpFlexKey("requires2FA"))
+        challengeToken = try? c.decode(String.self, forKey: SpFlexKey("challengeToken"))
     }
 }
 
@@ -772,6 +779,15 @@ nonisolated struct SpLoginRequest: Encodable {
     let email: String?
     let phone: String?
     let password: String
+    let deviceInfo: SpDeviceInfo?
+}
+
+/// إكمال دخول محمي بالمصادقة الثنائية: يبادل تحدّي الدخول برمز TOTP (token) أو
+/// رمز احتياطي (backupCode) — الحقول الفارغة تُحذف من JSON تلقائيًّا.
+nonisolated struct SpVerifyTwoFactorRequest: Encodable {
+    let challengeToken: String
+    let token: String?       // رمز TOTP من تطبيق المصادقة
+    let backupCode: String?  // أو رمز احتياطي لمرة واحدة
     let deviceInfo: SpDeviceInfo?
 }
 
@@ -885,72 +901,6 @@ nonisolated struct SpEngagementBody: Encodable {
     let homeId: Int
     let awayId: Int
     let competitionSlug: String?
-}
-
-// MARK: - المجتمع — لوحة المتصدّرين (عامّة)
-
-nonisolated struct SpLeaderboardEntry: Decodable, Identifiable, Hashable {
-    let userId: String
-    let name: String
-    let avatar: String?
-    let totalPoints: Int
-    let predictions: Int
-    let exact: Int
-    let correct: Int
-    let rank: Int
-    var id: String { userId }
-}
-
-nonisolated struct SpLeaderboardResponse: Decodable {
-    let period: String?
-    let leaderboard: [SpLeaderboardEntry]
-}
-
-// توقّع المستخدم لمباراة (المجتمع) — مطابق صفّ sports_predictions (camelCase).
-nonisolated struct SpPrediction: Decodable, Hashable {
-    let fixtureId: Int
-    let homeName: String
-    let awayName: String
-    let homeLogo: String?
-    let awayLogo: String?
-    let predHome: Int
-    let predAway: Int
-    let actualHome: Int?
-    let actualAway: Int?
-    let points: Int?
-    let kickoffTs: Int?
-    let competitionSlug: String?
-}
-
-nonisolated struct SpPredictionResponse: Decodable {
-    let success: Bool?
-    let prediction: SpPrediction?
-}
-
-nonisolated struct SpUserStats: Decodable, Hashable {
-    let totalPoints: Int
-    let predictions: Int
-    let exact: Int
-    let correct: Int
-}
-
-nonisolated struct SpMyPredictionsResponse: Decodable {
-    let success: Bool?
-    let predictions: [SpPrediction]
-    let stats: SpUserStats?
-}
-
-nonisolated struct SpPredictBody: Encodable {
-    let predHome: Int
-    let predAway: Int
-    let kickoffTs: Int
-    let competitionSlug: String?
-    let homeId: Int?
-    let awayId: Int?
-    let homeName: String
-    let awayName: String
-    let homeLogo: String?
-    let awayLogo: String?
 }
 
 /// تسجيل رمز جهاز APNs — /api/v1/devices/register (userId من الجسم، tokenProvider=apns).
@@ -1116,6 +1066,12 @@ nonisolated struct SpTeamInfo: Decodable, Hashable {
     let venue: SpVenueInfo?
 }
 
+nonisolated struct SpPlayerNationality: Decodable, Hashable {
+    let name: String?
+    let flag: String?
+    let code: String?
+}
+
 nonisolated struct SpSquadPlayer: Decodable, Identifiable, Hashable {
     let id: Int
     let name: String
@@ -1124,6 +1080,11 @@ nonisolated struct SpSquadPlayer: Decodable, Identifiable, Hashable {
     let positionEn: String
     let age: Int?
     let photo: String
+    let captain: Bool?
+    let nationality: SpPlayerNationality?
+    let height: Int?
+    let weight: Int?
+    let detailedPosition: String?
 }
 
 nonisolated struct SpStatTriple: Decodable, Hashable {
@@ -1663,26 +1624,6 @@ extension APIClient {
         try await get(SpExpectedLineups.self, path: "/sports/match/\(matchId)/expected-lineup", ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
     }
 
-    /// لوحة المتصدّرين (عامّة) — period: all | month | week.
-    func fetchLeaderboard(period: String = "all", ignoreCache: Bool = false) async throws -> [SpLeaderboardEntry] {
-        try await get(SpLeaderboardResponse.self, path: "/sports/leaderboard",
-                      query: ["period": period], ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI).leaderboard
-    }
-
-    // توقّعات المباريات (جلسة عضو، عبر mobileAPI).
-    func fetchMyPrediction(matchId: Int) async throws -> SpPrediction? {
-        try await get(SpPredictionResponse.self, path: "/sports/match/\(matchId)/predict",
-                      ignoreCache: true, apiRoot: URLConstants.mobileAPI).prediction
-    }
-    func submitPrediction(_ body: SpPredictBody, matchId: Int) async throws -> SpPrediction? {
-        try await post(SpPredictionResponse.self, path: "/sports/match/\(matchId)/predict",
-                       body: body, apiRoot: URLConstants.mobileAPI).prediction
-    }
-    func fetchMyPredictions() async throws -> SpMyPredictionsResponse {
-        try await get(SpMyPredictionsResponse.self, path: "/sports/predictions/me",
-                      ignoreCache: true, apiRoot: URLConstants.mobileAPI)
-    }
-
     /// تسجيل رمز جهاز APNs ليصله بثّ التنبيهات (يلزم userId لربط الجهاز بالعضو).
     func registerDevice(deviceToken: String, userId: String) async throws {
         let info = APIClient.deviceInfo()
@@ -1856,6 +1797,18 @@ extension APIClient {
     func verifyPhoneCode(_ phone: String, code: String) async throws -> SpLoginResponse {
         let body = SpPhoneVerifyRequest(phone: phone, code: code, deviceInfo: APIClient.deviceInfo())
         return try await post(SpLoginResponse.self, path: "/auth/phone/verify", body: body, apiRoot: URLConstants.mobileAPI)
+    }
+
+    /// إكمال دخول محمي بالمصادقة الثنائية: يبادل تحدّي الدخول + رمز TOTP (أو رمز
+    /// احتياطي) بجلسة كاملة. الرد عند النجاح مطابق لرد الدخول العادي.
+    func verifyTwoFactor(challengeToken: String, code: String?, backupCode: String?) async throws -> SpLoginResponse {
+        let body = SpVerifyTwoFactorRequest(
+            challengeToken: challengeToken,
+            token: code,
+            backupCode: backupCode,
+            deviceInfo: APIClient.deviceInfo()
+        )
+        return try await post(SpLoginResponse.self, path: "/auth/verify-2fa", body: body, apiRoot: URLConstants.mobileAPI)
     }
 
     /// أخبار سبق الرياضية (تصنيف «رياضة») — عبر mobileAPI، عامّة بلا مصادقة.

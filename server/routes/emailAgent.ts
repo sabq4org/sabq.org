@@ -20,6 +20,12 @@ import { memoryCache } from "../memoryCache";
 import { invalidatePublishedContent } from "../services/contentInvalidation";
 import { detectUrls, isNewsUrl, containsOnlyUrl, extractArticleContent, getSourceAttribution } from "../services/urlContentExtractor";
 import { sendEditorPublishAlert, getPublisherName } from "../services/editorAlerts";
+import { riyadhDayRange } from "../utils/riyadhDay";
+import {
+  claimEmailDedup,
+  extractEmailAddress,
+} from "../services/emailAgentDedup";
+import { parsePage, parseLimit } from "../utils/pagination";
 
 const router = Router();
 
@@ -458,8 +464,8 @@ async function extractTextFromImage(buffer: Buffer, mimeType: string): Promise<s
   }
 }
 
-// 🔒 DEDUPLICATION: In-memory cache to prevent duplicate email processing
-// SendGrid retries webhooks on slow responses, causing duplicate articles
+// 🔒 DEDUPLICATION: In-memory fallback only when DB claim fails.
+// Primary dedup is DB-backed via claimEmailDedup (Message-ID + sender/subject).
 const processedEmails = new Map<string, number>(); // messageId -> timestamp
 const DEDUP_TTL = 5 * 60 * 1000; // 5 minutes TTL for processed emails
 
@@ -491,10 +497,25 @@ setInterval(cleanupProcessedEmails, 5 * 60 * 1000);
 // "always reject" once the secret is deployed everywhere.
 //
 // (Security audit C6, 2026-05-11.)
+/** Safe JSON response — no-op if we already ACKed SendGrid after dedup claim. */
+function respondWebhook(res: Response, body: Record<string, unknown>, status = 200): void {
+  if (res.headersSent) return;
+  res.status(status).json(body);
+}
+
 function verifyInboundWebhookSecret(req: Request): { ok: boolean; reason?: string } {
   const inboundSecret = process.env.SENDGRID_INBOUND_SECRET;
   if (!inboundSecret) {
-    console.warn("[Email Agent] CRITICAL: SENDGRID_INBOUND_SECRET not set — webhook is unauthenticated. Set this env var to enable shared-secret validation.");
+    // The backward-compatibility window above is now closed in production:
+    // failing OPEN here meant an unauthenticated endpoint that accepts file
+    // uploads, writes to the database and spends GPT-4o Vision credit, gated
+    // on nothing but URL obscurity. Outside production the permissive path
+    // stays so local and preview runs don't need the secret.
+    if (process.env.NODE_ENV === "production") {
+      console.error("[Email Agent] CRITICAL: SENDGRID_INBOUND_SECRET not set — rejecting inbound webhook. Set this env var on the backend.");
+      return { ok: false, reason: "webhook secret not configured" };
+    }
+    console.warn("[Email Agent] SENDGRID_INBOUND_SECRET not set — accepting unauthenticated webhook (non-production only).");
     return { ok: true };
   }
   const provided = String(req.query.token || req.get("x-webhook-token") || "");
@@ -619,43 +640,94 @@ router.post("/webhook", upload.any(), async (req: Request, res: Response) => {
       }
     }
     
-    // 🔒 DEDUPLICATION CHECK - Database-based for Autoscale pods
-    // Use Message-ID if available, otherwise create hash from subject + from + date
-    dedupKey = messageId || `${from}_${subject}_${new Date().toISOString().substring(0, 16)}`; // Round to minute
-    
-    // Check database for existing processed email (works across all pods)
+    // 🔒 DEDUPLICATION — Message-ID (SendGrid retries) + sender/subject window (resends)
+    // Incident 2026-07-26: same story resent 6× with new Message-IDs → 5 published copies.
+    const senderEmailEarly = extractEmailAddress(from);
     try {
-      const existingEmail = await db.execute(
-        sql`SELECT id FROM email_agent_processed WHERE id = ${dedupKey} OR message_id = ${messageId || ''} LIMIT 1`
-      );
-      
-      if (existingEmail.rows.length > 0) {
-        console.log(`[Email Agent] 🔒 DUPLICATE DETECTED (DB) - Already processed: ${dedupKey.substring(0, 80)}...`);
-        return res.status(200).json({ 
-          success: true, 
-          message: "Duplicate webhook ignored - already processed this email",
-          dedupKey: dedupKey.substring(0, 50)
+      const claim = await claimEmailDedup({
+        messageId,
+        from,
+        subject,
+      });
+      dedupKey = claim.messageKey;
+
+      if (!claim.claimed) {
+        console.log(
+          `[Email Agent] 🔒 DUPLICATE DETECTED (${claim.reason}) — ${claim.messageKey.substring(0, 80)}`,
+        );
+
+        // Content resends should appear in the inbox as rejected so editors see the block.
+        // Message-ID retries stay silent (SendGrid noise).
+        if (claim.reason === "duplicate_content") {
+          try {
+            await storage.createEmailWebhookLog({
+              fromEmail: senderEmailEarly,
+              subject: subject || "(بدون موضوع)",
+              bodyText: typeof text === "string" ? text.substring(0, 2000) : "",
+              bodyHtml: typeof html === "string" ? html.substring(0, 2000) : "",
+              status: "rejected",
+              rejectionReason: "duplicate_content",
+              senderVerified: false,
+              tokenVerified: false,
+              processingError: `حُظر كتكرار لنفس المرسل والموضوع خلال نافذة منع التكرار (${claim.contentKey})`,
+            });
+            await storage.updateEmailAgentStats(new Date(), {
+              emailsReceived: 1,
+              emailsRejected: 1,
+            });
+          } catch (logError) {
+            console.error("[Email Agent] Failed to log content-duplicate rejection:", logError);
+          }
+        }
+
+        return res.status(200).json({
+          success: true,
+          message:
+            claim.reason === "duplicate_content"
+              ? "Duplicate content ignored - same sender/subject recently processed"
+              : "Duplicate webhook ignored - already processed this email",
+          reason: claim.reason,
+          dedupKey: claim.messageKey.substring(0, 50),
         });
       }
-      
-      // Insert immediately to claim this email (atomic operation)
-      await db.execute(
-        sql`INSERT INTO email_agent_processed (id, message_id, subject, sender) 
-            VALUES (${dedupKey}, ${messageId || null}, ${subject.substring(0, 500)}, ${from.substring(0, 255)})
-            ON CONFLICT (id) DO NOTHING`
+
+      console.log(
+        `[Email Agent] 🔒 Dedup claimed message=${claim.messageKey.substring(0, 60)} content=${claim.contentKey}`,
       );
-      console.log(`[Email Agent] 🔒 Dedup key registered in DB: ${dedupKey.substring(0, 80)}...`);
+
+      // ACK SendGrid immediately after a successful claim — BEFORE AI / uploads.
+      // Inbound Parse retries on timeout/slow 200s. Processing often takes >30s
+      // (GPT + images), so without an early ACK the same MIME is POSTed again
+      // while the first run is still publishing. Combined with the post-token
+      // flood of previously-401'd mail, that looked like "news keeps repeating".
+      // Dedup still blocks true duplicates; this stops the retry storm at the source.
+      if (!res.headersSent) {
+        res.status(200).json({
+          success: true,
+          message: "Email accepted for processing",
+          accepted: true,
+          dedupKey: claim.messageKey.substring(0, 50),
+        });
+      }
     } catch (dbError) {
       console.error(`[Email Agent] DB dedup check failed, using memory fallback:`, dbError);
-      // Fallback to in-memory check if DB fails
+      dedupKey = messageId || `${senderEmailEarly}_${subject}_${new Date().toISOString().substring(0, 16)}`;
       if (processedEmails.has(dedupKey)) {
-        return res.status(200).json({ 
-          success: true, 
+        return res.status(200).json({
+          success: true,
           message: "Duplicate webhook ignored - already processing",
-          dedupKey: dedupKey.substring(0, 50)
+          dedupKey: dedupKey.substring(0, 50),
         });
       }
       processedEmails.set(dedupKey, Date.now());
+      if (!res.headersSent) {
+        res.status(200).json({
+          success: true,
+          message: "Email accepted for processing",
+          accepted: true,
+          dedupKey: dedupKey.substring(0, 50),
+        });
+      }
     }
     
     // 📎 Process attachments from SendGrid (multer files OR parsed attachments from raw MIME)
@@ -1023,7 +1095,7 @@ router.post("/webhook", upload.any(), async (req: Request, res: Response) => {
       console.log(`[Email Agent] 📸 ========== uploadPendingImages completed ==========`);
     };
 
-    const senderEmail = from.match(/<(.+)>/)?.[1] || from;
+    const senderEmail = extractEmailAddress(from);
     
     const logId = nanoid();
     webhookLog = await storage.createEmailWebhookLog({
@@ -1058,10 +1130,11 @@ router.post("/webhook", upload.any(), async (req: Request, res: Response) => {
         emailsRejected: 1,
       });
 
-      return res.status(200).json({
+      respondWebhook(res, {
         success: false,
         message: "Sender not authorized",
       });
+      return;
     }
 
     if (trustedSender.status !== "active") {
@@ -1087,10 +1160,11 @@ router.post("/webhook", upload.any(), async (req: Request, res: Response) => {
         emailsRejected: 1,
       });
 
-      return res.status(200).json({
+      respondWebhook(res, {
         success: false,
         message: "Sender account is inactive",
       });
+      return;
     }
 
     const tokenInSubject = extractTokenFromText(subject);
@@ -1145,10 +1219,11 @@ router.post("/webhook", upload.any(), async (req: Request, res: Response) => {
         emailsRejected: 1,
       });
 
-      return res.status(200).json({
+      respondWebhook(res, {
         success: false,
         message: "Invalid token",
       });
+      return;
     }
 
     console.log("[Email Agent] Sender verified successfully");
@@ -1435,10 +1510,11 @@ router.post("/webhook", upload.any(), async (req: Request, res: Response) => {
         emailsRejected: 1,
       });
 
-      return res.status(200).json({
+      respondWebhook(res, {
         success: false,
         message: "No content found in email",
       });
+      return;
     }
 
     // 🌐 USE TRUSTED SENDER LANGUAGE PREFERENCE
@@ -1515,13 +1591,14 @@ router.post("/webhook", upload.any(), async (req: Request, res: Response) => {
         emailsRejected: 1,
       });
 
-      return res.status(200).json({
+      respondWebhook(res, {
         success: false,
         message: "Content quality below threshold (Sabq standards)",
         qualityScore: editorialResult.qualityScore,
         issues: editorialResult.issues,
         suggestions: editorialResult.suggestions,
       });
+      return;
     }
 
     // 🎨 Bypass news value check for infographics (visual content is inherently valuable)
@@ -1556,11 +1633,12 @@ router.post("/webhook", upload.any(), async (req: Request, res: Response) => {
         emailsRejected: 1,
       });
 
-      return res.status(200).json({
+      respondWebhook(res, {
         success: false,
         message: "Content has no news value",
         issues: editorialResult.issues,
       });
+      return;
     }
 
     // 🛡️ SAFETY: Reject if AI returned empty content (truncated response, partial JSON, etc.)
@@ -1591,10 +1669,11 @@ router.post("/webhook", upload.any(), async (req: Request, res: Response) => {
         emailsRejected: 1,
       });
 
-      return res.status(200).json({
+      respondWebhook(res, {
         success: false,
         message: "AI processing returned empty content - article not published for safety",
       });
+      return;
     }
 
     // ✅ SUCCESSFUL VALIDATION - Upload pending images to PUBLIC
@@ -2008,7 +2087,12 @@ router.post("/webhook", upload.any(), async (req: Request, res: Response) => {
       ...(trustedSender.autoPublish ? { emailsPublished: 1 } : { emailsDrafted: 1 }),
     });
 
-    return res.status(200).json({
+    // Early ACK already returned 200 after dedup claim.
+    if (res.headersSent) {
+      console.log("[Email Agent] ✅ Processing finished (already ACKed to SendGrid)");
+      return;
+    }
+    respondWebhook(res, {
       success: true,
       message: trustedSender.autoPublish 
         ? "Article published successfully (edited with Sabq style)" 
@@ -2027,6 +2111,7 @@ router.post("/webhook", upload.any(), async (req: Request, res: Response) => {
         suggestions: editorialResult.suggestions,
       },
     });
+    return;
 
   } catch (error: any) {
     console.error("[Email Agent] ❌ Error processing webhook:", error);
@@ -2057,7 +2142,8 @@ router.post("/webhook", upload.any(), async (req: Request, res: Response) => {
       emailsFailed: 1,
     });
 
-    return res.status(200).json({
+    // Early ACK may already have been sent after dedup claim — don't double-send.
+    respondWebhook(res, {
       success: false,
       message: "Internal processing error",
       error: error.message,
@@ -2065,23 +2151,27 @@ router.post("/webhook", upload.any(), async (req: Request, res: Response) => {
   }
 });
 
+// المسار يكتب "processed" للرسالة التي حُفظت مسودة (مرسل بلا نشر تلقائي)؛
+// "drafted" قيمة تاريخية بقيت في صفوف قديمة.
+const DRAFTED_STATUSES = new Set(["processed", "drafted"]);
+
+function isDraftedStatus(status?: string | null): boolean {
+  return !!status && DRAFTED_STATUSES.has(status);
+}
+
 // GET /api/email-agent/stats - Get email agent statistics (admin only)
 router.get("/stats", isAuthenticated, requirePermission('admin.manage_settings'), async (req: Request, res: Response) => {
   try {
-    // Calculate stats directly from webhook logs for today
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
+    const { start, end } = riyadhDayRange();
     
     // Get all webhook logs for today using date range query
-    const todayLogs = await storage.getEmailWebhookLogsByDateRange(today, tomorrow);
+    const todayLogs = await storage.getEmailWebhookLogsByDateRange(start, end);
     
     // Calculate stats from actual logs (already filtered by DB)
     const stats = {
       emailsReceived: todayLogs.length,
       emailsPublished: todayLogs.filter((log: any) => log.status === 'published').length,
-      emailsDrafted: todayLogs.filter((log: any) => log.status === 'drafted').length,
+      emailsDrafted: todayLogs.filter((log: any) => isDraftedStatus(log.status)).length,
       emailsRejected: todayLogs.filter((log: any) => log.status === 'rejected').length,
       emailsFailed: todayLogs.filter((log: any) => log.status === 'failed').length,
     };
@@ -2110,23 +2200,21 @@ router.get("/stats", isAuthenticated, requirePermission('admin.manage_settings')
 // GET /api/email-agent/badge-stats - Get badge notification statistics (admin only)
 router.get("/badge-stats", isAuthenticated, requirePermission('admin.manage_settings'), async (req: Request, res: Response) => {
   try {
-    // Calculate today's date range
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
+    const { start, end } = riyadhDayRange();
     
     // Get all webhook logs for today using date range query
-    const todayLogs = await storage.getEmailWebhookLogsByDateRange(today, tomorrow);
+    const todayLogs = await storage.getEmailWebhookLogsByDateRange(start, end);
     
     // Calculate badge stats
     const newMessages = todayLogs.filter((log: any) => log.status === 'received').length;
     const publishedToday = todayLogs.filter((log: any) => log.status === 'published').length;
+    const draftedToday = todayLogs.filter((log: any) => isDraftedStatus(log.status)).length;
     const rejectedToday = todayLogs.filter((log: any) => log.status === 'rejected').length;
     
     return res.json({
       newMessages,
       publishedToday,
+      draftedToday,
       rejectedToday,
     });
   } catch (error: any) {
@@ -2138,8 +2226,8 @@ router.get("/badge-stats", isAuthenticated, requirePermission('admin.manage_sett
 // GET /api/email-agent/logs - Get email webhook logs with pagination (admin only)
 router.get("/logs", isAuthenticated, requirePermission('admin.manage_settings'), async (req: Request, res: Response) => {
   try {
-    const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 50;
+    const page = parsePage(req.query.page);
+    const limit = parseLimit(req.query.limit, 50, 200);
     const status = req.query.status as string;
     const offset = (page - 1) * limit;
     
@@ -2166,6 +2254,26 @@ router.get("/logs", isAuthenticated, requirePermission('admin.manage_settings'),
     console.error("[Email Agent] Error fetching logs:", error);
     return res.status(500).json({
       message: "Failed to fetch email logs",
+      error: error.message,
+    });
+  }
+});
+
+// POST /api/email-agent/logs/bulk-delete - Delete several webhook logs (admin only)
+router.post("/logs/bulk-delete", isAuthenticated, requirePermission('admin.manage_settings'), async (req: Request, res: Response) => {
+  try {
+    const { ids } = req.body ?? {};
+    
+    if (!Array.isArray(ids) || ids.length === 0 || !ids.every((id) => typeof id === 'string')) {
+      return res.status(400).json({ message: "قائمة المعرفات مطلوبة" });
+    }
+    
+    await storage.deleteEmailWebhookLogs(ids);
+    return res.json({ message: "Logs deleted successfully", deleted: ids.length });
+  } catch (error: any) {
+    console.error("[Email Agent] Error bulk deleting logs:", error);
+    return res.status(500).json({
+      message: "Failed to delete logs",
       error: error.message,
     });
   }

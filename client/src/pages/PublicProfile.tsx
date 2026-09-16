@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { queryClient, apiRequest, apiUrl } from "@/lib/queryClient";
 import {
   Users,
   UserPlus,
@@ -27,7 +27,8 @@ import { MobileOptimizedKpiCard } from "@/components/MobileOptimizedKpiCard";
 export default function PublicProfile() {
   const { toast } = useToast();
   const [, params] = useRoute("/profile/:userId");
-  const userId = params?.userId;
+  const [, segmentParams] = useRoute("/profile/:segment");
+  const userId = params?.userId ?? segmentParams?.segment;
   const [activeTab, setActiveTab] = useState("followers");
 
   // Fetch current user
@@ -53,7 +54,7 @@ export default function PublicProfile() {
   }>({
     queryKey: ["/api/users", userId, "public"],
     queryFn: async () => {
-      const res = await fetch(`/api/users/${userId}/public`);
+      const res = await fetch(apiUrl(`/api/users/${userId}/public`));
       if (!res.ok) throw new Error('Failed to fetch public profile');
       return res.json();
     },
@@ -81,7 +82,7 @@ export default function PublicProfile() {
   >({
     queryKey: ["/api/social/followers", userId],
     queryFn: async () => {
-      const res = await fetch(`/api/social/followers/${userId}?limit=50`);
+      const res = await fetch(apiUrl(`/api/social/followers/${userId}?limit=50`));
       if (!res.ok) throw new Error('Failed to fetch followers');
       return res.json();
     },
@@ -102,7 +103,7 @@ export default function PublicProfile() {
   >({
     queryKey: ["/api/social/following", userId],
     queryFn: async () => {
-      const res = await fetch(`/api/social/following/${userId}?limit=50`);
+      const res = await fetch(apiUrl(`/api/social/following/${userId}?limit=50`));
       if (!res.ok) throw new Error('Failed to fetch following');
       return res.json();
     },

@@ -19,8 +19,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "./ui/select";
-import { ChevronLeft, ChevronRight, Trash2, Paperclip } from "lucide-react";
+import { ChevronLeft, ChevronRight, Trash2, Paperclip, Inbox } from "lucide-react";
 import { Skeleton } from "./ui/skeleton";
+import {
+  EMAIL_STATUS_FILTERS,
+  formatDateTimeSafe,
+  getLogStatusMeta,
+} from "./communications/logStatus";
 import type { EmailWebhookLog } from "@shared/schema";
 
 interface WebhookLogsTableProps {
@@ -91,40 +96,9 @@ export function WebhookLogsTable({
   const isAllSelected = logs && logs.length > 0 && selectedIds.length === logs.length;
 
   const getStatusBadge = (status: string) => {
-    switch (status) {
-      case "published":
-        return (
-          <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300">
-            منشور
-          </Badge>
-        );
-      case "drafted":
-        return (
-          <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300">
-            مسودة
-          </Badge>
-        );
-      case "rejected":
-        return (
-          <Badge className="bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300">
-            مرفوض
-          </Badge>
-        );
-      case "failed":
-        return (
-          <Badge className="bg-slate-100 text-slate-700 dark:bg-slate-900 dark:text-slate-300">
-            فشل
-          </Badge>
-        );
-      case "processing":
-        return (
-          <Badge className="bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300">
-            جاري المعالجة
-          </Badge>
-        );
-      default:
-        return <Badge variant="outline">{status}</Badge>;
-    }
+    // مسار البريد يكتب "processed" للرسالة المحفوظة مسودة — لا "drafted".
+    const meta = getLogStatusMeta(status === "processed" ? "drafted" : status);
+    return <Badge className={meta.className}>{meta.label}</Badge>;
   };
 
   const getLanguageName = (lang?: string) => {
@@ -164,12 +138,11 @@ export function WebhookLogsTable({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">الكل</SelectItem>
-              <SelectItem value="published">منشور</SelectItem>
-              <SelectItem value="drafted">مسودة</SelectItem>
-              <SelectItem value="rejected">مرفوض</SelectItem>
-              <SelectItem value="failed">فشل</SelectItem>
-              <SelectItem value="processing">جاري المعالجة</SelectItem>
+              {EMAIL_STATUS_FILTERS.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
@@ -190,8 +163,14 @@ export function WebhookLogsTable({
 
       {/* Table */}
       {!logs || logs.length === 0 ? (
-        <div className="text-center py-12 border rounded-lg">
-          <p className="text-muted-foreground">لا توجد سجلات متاحة</p>
+        <div className="rounded-lg border border-dashed py-12 text-center">
+          <Inbox className="mx-auto mb-3 h-8 w-8 text-muted-foreground" aria-hidden="true" />
+          <p className="font-medium">لا توجد سجلات</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {selectedStatus === "all"
+              ? "لم تصل أي رسالة بريد بعد"
+              : "لا توجد رسائل بهذه الحالة — جرّب فلتراً آخر"}
+          </p>
         </div>
       ) : (
         <>
@@ -244,9 +223,7 @@ export function WebhookLogsTable({
                         </TableCell>
                       )}
                       <TableCell className="whitespace-nowrap">
-                        {format(new Date(log.receivedAt), "dd MMM yyyy HH:mm", {
-                          locale: ar,
-                        })}
+                        {formatDateTimeSafe(log.receivedAt)}
                       </TableCell>
                       <TableCell className="font-medium">
                         {log.fromEmail}
@@ -348,9 +325,7 @@ export function WebhookLogsTable({
                       {log.subject}
                     </h3>
                     <p className="text-xs text-muted-foreground">
-                      {format(new Date(log.receivedAt), "dd MMM yyyy HH:mm", {
-                        locale: ar,
-                      })}
+                      {formatDateTimeSafe(log.receivedAt)}
                     </p>
                   </div>
                   {onDelete && (

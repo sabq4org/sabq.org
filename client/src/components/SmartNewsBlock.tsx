@@ -10,6 +10,7 @@ import { formatArticleTimestamp } from "@/lib/formatTime";
 import type { SmartBlock } from "@shared/schema";
 import { OptimizedImage } from "./OptimizedImage";
 import { getObjectPosition } from "@/lib/imageUtils";
+import { apiUrl } from "@/lib/queryClient";
 
 // Helper function to check if article is new (published within last 30 minutes)
 const isNewArticle = (publishedAt: Date | string | null | undefined) => {
@@ -35,6 +36,10 @@ interface ArticleResult {
   aiGenerated?: boolean | null;
   isAiGeneratedThumbnail?: boolean | null;
   articleType?: string | null;
+  isReading?: boolean | null;
+  isVideoTemplate?: boolean | null;
+  videoUrl?: string | null;
+  videoThumbnailUrl?: string | null;
   imageFocalPoint?: { x: number; y: number } | null;
   category?: {
     nameAr: string;
@@ -51,39 +56,69 @@ interface ProcessedArticle extends ArticleResult {
   displayImageUrl: string | null;
 }
 
-// Helper function to get display image URL for articles
-// If infographicBannerUrl exists, always use it - it's the 16:9 horizontal banner
 const getArticleDisplayImageUrl = (article: ArticleResult): string | null => {
-  // Prioritize banner URL - if it exists, it's specifically made for card display
   if (article.infographicBannerUrl) {
     return article.infographicBannerUrl;
   }
-  return article.imageUrl || article.thumbnailUrl || null;
+  if (article.imageUrl) return article.imageUrl;
+  if (article.videoThumbnailUrl) return article.videoThumbnailUrl;
+  if (article.thumbnailUrl) return article.thumbnailUrl;
+
+  const vUrl = article.videoUrl;
+  if (typeof vUrl === 'string' && vUrl.trim()) {
+    const trimmed = vUrl.trim();
+    const ytMatch = trimmed.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/|youtube\.com\/shorts\/)([^"&?\/\s]{11})/i);
+    if (ytMatch && ytMatch[1]) {
+      return `https://img.youtube.com/vi/${ytMatch[1]}/maxresdefault.jpg`;
+    }
+    const dmMatch = trimmed.match(/(?:dailymotion\.com\/video\/|dai\.ly\/|dailymotion\.com\/embed\/video\/)([^_\n?#\/]+)/i);
+    if (dmMatch && dmMatch[1]) {
+      return `https://www.dailymotion.com/thumbnail/video/${dmMatch[1]}`;
+    }
+  }
+
+  return null;
 };
 
+type SmartBlockView = Pick<SmartBlock, "id" | "title" | "color"> &
+  Partial<SmartBlock> & {
+    layoutStyle?: string | null;
+    backgroundColor?: string | null;
+    subtitle?: string | null;
+  };
+
 interface SmartNewsBlockProps {
-  config: SmartBlock;
+  config: SmartBlockView;
+  /** مقالات جاهزة من حزمة /homepage — يمنع N+1 على الصفحة الرئيسية */
+  initialArticles?: ArticleResult[] | null;
 }
 
-export function SmartNewsBlock({ config }: SmartNewsBlockProps) {
-  const { data: articles, isLoading } = useQuery<ArticleResult[]>({
-    queryKey: ['/api/smart-blocks/query/articles', config.keyword, config.limitCount],
+export function SmartNewsBlock({ config, initialArticles }: SmartNewsBlockProps) {
+  const hasInitial = Array.isArray(initialArticles);
+  const { data: fetchedArticles, isLoading } = useQuery<ArticleResult[]>({
+    queryKey: [
+      '/api/smart-blocks',
+      config.id,
+      'articles',
+      config.sourceType,
+      config.keyword,
+      config.limitCount,
+      config.updatedAt,
+    ],
     queryFn: async () => {
-      const params = new URLSearchParams({
-        keyword: config.keyword,
-        limit: config.limitCount.toString(),
-      });
-      const res = await fetch(`/api/smart-blocks/query/articles?${params}`, {
+      const res = await fetch(apiUrl(`/api/smart-blocks/${config.id}/articles`), {
         credentials: 'include',
       });
       if (!res.ok) throw new Error('Failed to fetch articles');
       const data = await res.json();
       return data.items || [];
     },
+    enabled: !hasInitial,
     staleTime: 5 * 60 * 1000,
     gcTime: 10 * 60 * 1000,
     placeholderData: [],
   });
+  const articles = hasInitial ? initialArticles! : fetchedArticles;
   
   const processedArticles = useMemo(() => {
     if (!articles) return [];
@@ -113,17 +148,9 @@ export function SmartNewsBlock({ config }: SmartNewsBlockProps) {
     );
   }
 
+  // إخفاء المشهد بالكامل إن لم تتوفر مقالات (جدولة / حد أدنى / مصدر فارغ)
   if (!articles || articles.length === 0) {
-    return (
-      <div 
-        className="text-center py-8 text-muted-foreground" 
-        dir="rtl"
-        data-testid={`smart-block-empty-${config.id}`}
-      >
-        <Tag className="h-12 w-12 mx-auto mb-3 opacity-50" />
-        <p>لا توجد مقالات متاحة لـ "{config.title}"</p>
-      </div>
-    );
+    return null;
   }
 
   const sectionContent = (
@@ -144,12 +171,14 @@ export function SmartNewsBlock({ config }: SmartNewsBlockProps) {
           {config.title}
         </h2>
         
-        <div className="col-start-2 flex items-center gap-1.5 text-sm text-muted-foreground">
-          <Tag className="h-3.5 w-3.5" />
-          <span data-testid={`text-smart-block-keyword-${config.id}`}>
-            الكلمة المفتاحية: {config.keyword}
-          </span>
-        </div>
+        {config.subtitle ? (
+          <p
+            className="col-start-2 text-sm text-muted-foreground"
+            data-testid={`text-smart-block-subtitle-${config.id}`}
+          >
+            {config.subtitle}
+          </p>
+        ) : null}
       </div>
 
       {config.layoutStyle === 'grid' && <GridLayout articles={processedArticles} blockId={config.id} />}
@@ -250,6 +279,16 @@ function GridLayout({ articles, blockId }: { articles: ProcessedArticle[]; block
                                 {article.category.nameAr}
                               </Badge>
                             ) : null}
+
+                            {article.isReading && (
+                              <Badge 
+                                className="text-[10px] h-4 gap-0.5 bg-emerald-600 hover:bg-emerald-700 text-white border-0 shrink-0 font-medium"
+                                data-testid={`badge-smart-mobile-reading-${article.id}`}
+                              >
+                                <BookOpen className="h-2 w-2" aria-hidden="true" />
+                                قراءة
+                              </Badge>
+                            )}
 
                             {article.isNew && (
                               <Badge 
@@ -366,6 +405,16 @@ function GridLayout({ articles, blockId }: { articles: ProcessedArticle[]; block
                         {article.category.nameAr}
                       </Badge>
                     ) : null}
+
+                    {article.isReading && (
+                      <Badge 
+                        className="text-xs h-5 gap-1 bg-emerald-600 hover:bg-emerald-700 text-white border-0 shrink-0 font-medium" 
+                        data-testid={`badge-smart-reading-${article.id}`}
+                      >
+                        <BookOpen className="h-2.5 w-2.5" aria-hidden="true" />
+                        قراءة
+                      </Badge>
+                    )}
 
                     {article.isNew && (
                       <Badge 
@@ -487,6 +536,16 @@ function ListLayout({ articles, blockId }: { articles: ProcessedArticle[]; block
                       </Badge>
                     ) : null}
 
+                    {article.isReading && (
+                      <Badge 
+                        className="text-xs font-medium px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white border-0 gap-1.5 shadow-sm font-semibold shrink-0"
+                        data-testid={`badge-smart-article-list-reading-${article.id}`}
+                      >
+                        <BookOpen className="h-3.5 w-3.5" aria-hidden="true" />
+                        قراءة
+                      </Badge>
+                    )}
+
                     {article.isNew && (
                       <Badge 
                         className="text-xs font-medium px-3 py-1 bg-emerald-500 hover:bg-emerald-600 text-white border-emerald-600 gap-1 shadow-sm font-semibold animate-pulse"
@@ -591,6 +650,16 @@ function FeaturedLayout({ articles, blockId }: { articles: ProcessedArticle[]; b
                   </Badge>
                 ) : null}
 
+                {featured.isReading && (
+                  <Badge 
+                    className="text-xs text-white bg-emerald-600 hover:bg-emerald-700 border-0 gap-1.5 shadow-sm font-semibold shrink-0"
+                    data-testid={`badge-smart-article-featured-reading-${featured.id}`}
+                  >
+                    <BookOpen className="h-3.5 w-3.5" aria-hidden="true" />
+                    قراءة
+                  </Badge>
+                )}
+
                 {featured.isNew && (
                   <Badge 
                     className="text-xs bg-emerald-500 hover:bg-emerald-600 text-white border-emerald-600 gap-1 shadow-sm font-semibold animate-pulse"
@@ -685,6 +754,16 @@ function FeaturedLayout({ articles, blockId }: { articles: ProcessedArticle[]; b
                           </Badge>
                         ) : null}
 
+                        {article.isReading && (
+                          <Badge 
+                            className="text-[9px] h-4 text-white bg-emerald-600 hover:bg-emerald-700 border-0 font-medium shrink-0 gap-0.5"
+                            data-testid={`badge-featured-side-reading-${article.id}`}
+                          >
+                            <BookOpen className="h-2 w-2" aria-hidden="true" />
+                            قراءة
+                          </Badge>
+                        )}
+
                         {article.isNew && (
                           <Badge 
                             className="text-[9px] h-4 bg-emerald-500 hover:bg-emerald-600 text-white border-emerald-600 font-medium animate-pulse"
@@ -718,7 +797,7 @@ function FeaturedLayout({ articles, blockId }: { articles: ProcessedArticle[]; b
   );
 }
 
-function CarouselLayout({ articles, blockId, config }: { articles: ProcessedArticle[]; blockId: string; config: SmartBlock }) {
+function CarouselLayout({ articles, blockId, config }: { articles: ProcessedArticle[]; blockId: string; config: SmartBlockView }) {
   return (
     <section className="py-2" data-testid={`smart-block-carousel-${blockId}`}>
       <div>
@@ -764,6 +843,16 @@ function CarouselLayout({ articles, blockId, config }: { articles: ProcessedArti
                           {article.category.nameAr}
                         </Badge>
                       ) : null}
+
+                      {article.isReading && (
+                        <Badge 
+                          className="text-[10px] shadow-sm text-white bg-emerald-600 hover:bg-emerald-700 border-0 font-medium shrink-0 gap-0.5"
+                          data-testid={`badge-carousel-reading-${article.id}`}
+                        >
+                          <BookOpen className="h-2 w-2" aria-hidden="true" />
+                          قراءة
+                        </Badge>
+                      )}
 
                       {article.isNew && (
                         <Badge 

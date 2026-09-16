@@ -386,5 +386,14 @@
   "auth.error.rateLimited": "Too many attempts, try again shortly",
   "auth.error.generic": "Could not sign in",
   "auth.account": "Your account",
-  "auth.phone.pickCountry": "Choose country"
+  "auth.phone.pickCountry": "Choose country",
+  "auth.2fa.title": "Two-factor authentication",
+  "auth.2fa.subtitle": "Enter the 6-digit code from your authenticator app",
+  "auth.2fa.verify": "Verify & sign in",
+  "auth.2fa.useBackup": "Use a backup code",
+  "auth.2fa.useApp": "Use authenticator code",
+  "auth.2fa.backupHint": "Enter one of the backup codes you saved when enabling 2FA",
+  "auth.2fa.backupPlaceholder": "Backup code",
+  "auth.2fa.back": "Back to sign in",
+  "auth.2fa.invalidCode": "Invalid code, please try again"
 }

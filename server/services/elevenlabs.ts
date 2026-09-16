@@ -237,6 +237,34 @@ export const ARABIC_NEWS_VOICES = [
   },
 ];
 
+/** بعد نفاد الرصيد نتخطّى ElevenLabs لفترة بدل إعادة المحاولة في كل طلب صوت. */
+const ELEVENLABS_QUOTA_COOLDOWN_MS = 15 * 60 * 1000;
+let elevenLabsQuotaCooldownUntil = 0;
+
+export function isElevenLabsQuotaCoolingDown(): boolean {
+  return Date.now() < elevenLabsQuotaCooldownUntil;
+}
+
+export function isElevenLabsQuotaError(error: unknown): boolean {
+  const status = (error as any)?.status ?? (error as any)?.statusCode;
+  if (status === 401 || status === 402) return true;
+  const msg = String((error as any)?.message || error || "").toLowerCase();
+  return (
+    msg.includes("quota_exceeded") ||
+    msg.includes("quota") ||
+    msg.includes("payment_required") ||
+    msg.includes("out of credits") ||
+    msg.includes("insufficient credits")
+  );
+}
+
+function armElevenLabsQuotaCooldown(reason: string): void {
+  elevenLabsQuotaCooldownUntil = Date.now() + ELEVENLABS_QUOTA_COOLDOWN_MS;
+  console.warn(
+    `[ElevenLabs] quota cooldown ${ELEVENLABS_QUOTA_COOLDOWN_MS}ms — skipping provider: ${reason.slice(0, 160)}`,
+  );
+}
+
 export class ElevenLabsService {
   private apiKey: string;
   private baseUrl = 'https://api.elevenlabs.io/v1';
@@ -258,11 +286,35 @@ export class ElevenLabsService {
     this.apiKey = apiKey;
   }
 
-  async textToSpeech(options: TTSOptions, timeoutMs: number = 30000): Promise<Buffer> {
+  async textToSpeech(options: TTSOptions, timeoutMs: number = 30000, retry = true): Promise<Buffer> {
+    if (isElevenLabsQuotaCoolingDown()) {
+      const err: any = new Error('quota_exceeded: ElevenLabs cooling down after payment/quota failure');
+      err.status = 402;
+      throw err;
+    }
+    if (!retry) return this._textToSpeechRequest(options, timeoutMs);
     return retryWithBackoff(
       () => this._textToSpeechRequest(options, timeoutMs),
       'ElevenLabs TTS',
-      { maxRetries: 3, baseDelay: 2000 }
+      {
+        maxRetries: 3,
+        baseDelay: 2000,
+        // نفاد الرصيد/الدفع ليس عابراً — إعادة المحاولة تضاعف التأخير بلا فائدة.
+        retryOn: (error) => {
+          if (isElevenLabsQuotaError(error)) return false;
+          const status = error?.status || error?.statusCode;
+          if (status === 429 || status === 500 || status === 502 || status === 503 || status === 504) return true;
+          const msg = (error?.message || '').toLowerCase();
+          return (
+            msg.includes('rate limit') ||
+            msg.includes('timeout') ||
+            msg.includes('econnreset') ||
+            msg.includes('socket hang up') ||
+            msg.includes('network') ||
+            msg.includes('fetch failed')
+          );
+        },
+      },
     );
   }
 
@@ -295,25 +347,27 @@ export class ElevenLabsService {
         signal: controller.signal
       });
 
-      clearTimeout(timeoutId);
-
       if (!response.ok) {
         const errorText = await response.text();
         const err: any = new Error(`ElevenLabs API error: ${response.status} - ${errorText}`);
         err.status = response.status;
+        if (isElevenLabsQuotaError(err) || response.status === 401 || response.status === 402) {
+          armElevenLabsQuotaCooldown(`${response.status}: ${errorText.slice(0, 120)}`);
+          err.message = `quota_exceeded: ${err.message}`;
+        }
         throw err;
       }
 
       const audioBuffer = await response.arrayBuffer();
       return Buffer.from(audioBuffer);
     } catch (error) {
-      clearTimeout(timeoutId);
-      
       if (error instanceof Error && error.name === 'AbortError') {
         throw new Error(`Request timeout: ElevenLabs API did not respond within ${timeoutMs}ms`);
       }
       
       throw error;
+    } finally {
+      clearTimeout(timeoutId);
     }
   }
 

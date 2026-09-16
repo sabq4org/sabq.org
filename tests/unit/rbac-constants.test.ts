@@ -5,6 +5,8 @@ import {
   ROLE_PERMISSIONS_MAP,
   PERMISSION_CODES,
   getPermissionsForRoles,
+  resolveEffectivePermissions,
+  denyPermissionsForRoles,
   canAssignRole,
 } from "@shared/rbac-constants";
 
@@ -39,6 +41,30 @@ describe("getPermissionsForRoles — wildcard contract", () => {
   });
 });
 
+describe("content_manager — meetings.create and staff productivity revoked", () => {
+  it("ROLE_PERMISSIONS_MAP no longer grants meetings.create or staff.view_productivity", () => {
+    const perms = ROLE_PERMISSIONS_MAP[ROLE_NAMES.CONTENT_MANAGER] || [];
+    expect(perms).toContain("meetings.view");
+    expect(perms).not.toContain("meetings.create");
+    expect(perms).not.toContain(PERMISSION_CODES.VIEW_STAFF_PRODUCTIVITY);
+  });
+
+  it("resolveEffectivePermissions strips stale DB grants for content_manager", () => {
+    const effective = resolveEffectivePermissions(
+      [ROLE_NAMES.CONTENT_MANAGER],
+      ["meetings.create", PERMISSION_CODES.VIEW_STAFF_PRODUCTIVITY, "articles.view"],
+    );
+    expect(effective).not.toContain("meetings.create");
+    expect(effective).not.toContain(PERMISSION_CODES.VIEW_STAFF_PRODUCTIVITY);
+    expect(effective).toContain("articles.view");
+    expect(effective).toContain("meetings.view");
+  });
+
+  it("denyPermissionsForRoles leaves wildcard untouched", () => {
+    expect(denyPermissionsForRoles([ROLE_NAMES.CONTENT_MANAGER], ["*"])).toEqual(["*"]);
+  });
+});
+
 describe("SUPERUSER_ROLE_NAMES — must stay in sync with seed data (audit H5)", () => {
   it("contains exactly the four known superuser role strings", () => {
     expect([...SUPERUSER_ROLE_NAMES].sort()).toEqual(
@@ -58,8 +84,12 @@ describe("canAssignRole", () => {
     expect(canAssignRole(ROLE_NAMES.SYSTEM_ADMIN, ROLE_NAMES.READER)).toBe(true);
   });
 
-  it("admin can assign anything except system_admin", () => {
+  it("admin can assign anything except any system-admin-equivalent tier", () => {
     expect(canAssignRole(ROLE_NAMES.ADMIN, ROLE_NAMES.SYSTEM_ADMIN)).toBe(false);
+    // The whole superuser tier is blocked, not just the literal "system_admin" —
+    // else an admin could create+assign a "superadmin" role and self-escalate (audit #2).
+    expect(canAssignRole(ROLE_NAMES.ADMIN, "superadmin")).toBe(false);
+    expect(canAssignRole(ROLE_NAMES.ADMIN, "system.admin")).toBe(false);
     expect(canAssignRole(ROLE_NAMES.ADMIN, ROLE_NAMES.EDITOR)).toBe(true);
     expect(canAssignRole(ROLE_NAMES.ADMIN, ROLE_NAMES.ADMIN)).toBe(true);
   });

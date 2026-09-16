@@ -28,7 +28,8 @@ export function usePublisherAccess() {
         user.role === "publisher" ||
         user.role === "admin" ||
         user.role === "system_admin" ||
-        (user as any).linkedPublisherId),
+        (user as any).linkedPublisherId ||
+        (user as any).publisherAccount?.id),
   );
 
   useEffect(() => {

@@ -102,6 +102,21 @@ data class ApiArticle(
     @JsonNames("author_name")
     val authorName: String? = null,
     val author: kotlinx.serialization.json.JsonElement? = null,
+    /** صورة كاتب الرأي — نفس مفاتيح iOS (APIModels.swift line 665). */
+    @JsonNames("author_image", "authorImage")
+    val authorImage: String? = null,
+    /** معرّف مُدخل الخبر ومعرّف المراسل المختار — لصفة «مراسل صحفي» (نقل #1598). */
+    @JsonNames("author_id", "authorId")
+    val authorId: String? = null,
+    @JsonNames("reporter_id", "reporterId")
+    val reporterId: String? = null,
+    /** ملف المراسل الموحد (`staff`) في تفاصيل الخبر العامة. */
+    val staff: ApiStaffNested? = null,
+    /** `seoMetadata.editorialModifiedAt` هو المصدر الوحيد لـ«آخر تحديث». */
+    @JsonNames("seo_metadata", "seoMetadata")
+    val seoMetadata: ApiSeoMetadata? = null,
+    @JsonNames("editorial_modified_at", "editorialModifiedAt")
+    val editorialModifiedAt: String? = null,
 
     @JsonNames("published_at", "publishedAt", "createdAt", "created_at")
     val publishedAt: String? = null,
@@ -113,6 +128,8 @@ data class ApiArticle(
 
     @JsonNames("is_featured", "isFeatured", "featured")
     val isFeatured: Boolean? = null,
+    @JsonNames("is_reading", "isReading")
+    val isReading: Boolean? = null,
     @JsonNames("is_breaking", "isBreaking")
     val isBreaking: Boolean? = null,
 
@@ -174,6 +191,18 @@ data class ApiArticle(
 
     @JsonNames("albumImages", "album_images")
     val albumImages: List<String>? = null,
+
+    @JsonNames("whatsappCta", "whatsapp_cta")
+    val whatsappCta: ApiWhatsAppCta? = null,
+)
+
+@Serializable
+data class ApiWhatsAppCta(
+    val enabled: Boolean? = null,
+    val phone: String? = null,
+    val phrase: String? = null,
+    val message: String? = null,
+    val placement: String? = null,
 )
 
 @Serializable
@@ -203,6 +232,68 @@ data class ApiSeo(
     val keywords: kotlinx.serialization.json.JsonElement? = null,
 )
 
+@OptIn(ExperimentalSerializationApi::class)
+@Serializable
+data class ApiStaffNested(
+    val id: String? = null,
+    @JsonNames("nameAr", "name", "fullName")
+    val nameAr: String? = null,
+    val slug: String? = null,
+    @JsonNames("profileImage", "avatarUrl", "profile_image")
+    val profileImage: String? = null,
+    @JsonNames("isVerified", "is_verified")
+    val isVerified: Boolean? = null,
+    @JsonNames("title", "titleAr", "jobTitle")
+    val title: String? = null,
+)
+
+@OptIn(ExperimentalSerializationApi::class)
+@Serializable
+data class ApiSeoMetadata(
+    @JsonNames("editorialModifiedAt", "editorial_modified_at")
+    val editorialModifiedAt: String? = null,
+)
+
+/** `/api/reporters/{slug}` — الصفة تُستبدل بها صفة الخبر (نقل #1598). */
+@Serializable
+data class ApiReporterProfile(
+    val title: String? = null,
+    val fullName: String? = null,
+    val avatarUrl: String? = null,
+)
+
+/** «فريق سبق الذكي» — `/api/public/ai-team` (نقل e1dc9c7). */
+@Serializable
+data class ApiAiTeam(
+    val generatedAt: String? = null,
+    val team: List<ApiAiTeamMember> = emptyList(),
+    val counters: ApiAiTeamCounters? = null,
+) {
+    /** «لا أرقام وهمية»: بلا أعضاء لا يُعرض القسم. */
+    val isRenderable: Boolean get() = team.isNotEmpty()
+}
+
+@Serializable
+data class ApiAiTeamMember(
+    val slug: String = "",
+    val nameAr: String = "",
+    val titleAr: String = "",
+    val departmentAr: String = "",
+    val avatarUrl: String? = null,
+) {
+    /** الصور نسبية على الويب (`/ai-team/rased.jpg`) — نُكمّلها بأصل الموقع. */
+    val absoluteAvatarUrl: String?
+        get() {
+            val raw = avatarUrl?.trim().orEmpty()
+            if (raw.isEmpty()) return null
+            if (raw.startsWith("http")) return raw
+            return "https://sabq.org" + (if (raw.startsWith("/")) raw else "/$raw")
+        }
+}
+
+@Serializable
+data class ApiAiTeamCounters(val monthOps: Int = 0, val teamCount: Int = 0)
+
 @Serializable
 data class ApiAuthor(
     @SerialName("firstName") val firstName: String? = null,
@@ -213,6 +304,7 @@ data class ApiAuthor(
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class ApiCategoryNested(
+    val id: String? = null,
     @JsonNames("nameAr", "name")
     val name: String? = null,
     val slug: String? = null,

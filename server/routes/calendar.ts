@@ -13,6 +13,7 @@ import {
 } from "../rbac";
 import { generateCalendarEventIdeas, generateArticleDraft } from "../services/calendarAi";
 import { createNotification } from "../notificationEngine";
+import { authorizeAssignmentWrite } from "../services/calendarAssignmentService";
 import {
   insertCalendarEventSchema,
   updateCalendarEventSchema,
@@ -20,6 +21,7 @@ import {
   insertCalendarReminderSchema,
   updateCalendarAssignmentSchema,
 } from "@shared/schema";
+import { paginationOrReject } from "../utils/pagination";
 
 export function registerCalendarRoutes(app: Express) {
   // ============================================================
@@ -42,8 +44,10 @@ export function registerCalendarRoutes(app: Express) {
           : [req.query.tags];
       }
       if (req.query.searchQuery) filters.searchQuery = req.query.searchQuery;
-      if (req.query.page) filters.page = parseInt(req.query.page as string);
-      if (req.query.limit) filters.limit = parseInt(req.query.limit as string);
+      const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 20, maxLimit: 100, allowPage: true });
+      if (!pg) return;
+      if (req.query.page) filters.page = pg.page;
+      if (req.query.limit) filters.limit = pg.limit;
 
       const result = await storage.getAllCalendarEvents(filters);
       res.json(result);
@@ -399,7 +403,14 @@ export function registerCalendarRoutes(app: Express) {
     try {
       const { id } = req.params;
       const userId = req.user!.id;
-      
+
+      // requireAuth alone let any account — including a self-registered public
+      // reader — retarget any newsroom coverage assignment.
+      const access = await authorizeAssignmentWrite(userId, id);
+      if (!access.ok) {
+        return res.status(access.httpStatus).json({ message: access.message });
+      }
+
       const validatedData = updateCalendarAssignmentSchema.parse(req.body);
       const updated = await storage.updateCalendarAssignment(id, validatedData as any);
 
@@ -428,6 +439,12 @@ export function registerCalendarRoutes(app: Express) {
     try {
       const { id } = req.params;
       const userId = req.user!.id;
+
+      // Same gap as the PATCH sibling: anyone could close out anyone's coverage.
+      const access = await authorizeAssignmentWrite(userId, id);
+      if (!access.ok) {
+        return res.status(access.httpStatus).json({ message: access.message });
+      }
 
       const updated = await storage.completeCalendarAssignment(id);
 

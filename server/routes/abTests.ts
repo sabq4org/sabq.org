@@ -2,7 +2,8 @@ import type { Express } from "express";
 import { randomUUID } from "crypto";
 import { eq } from "drizzle-orm";
 import { db } from "../db";
-import { experimentVariants } from "@shared/schema";
+import { experimentVariants, experiments } from "@shared/schema";
+import { pickTableColumns } from "../utils/sanitizeBody";
 import {
   insertExperimentSchema,
   insertExperimentVariantSchema,
@@ -124,7 +125,13 @@ export function registerAbTestRoutes(app: Express) {
         });
       }
 
-      const updatedExperiment = await storage.updateExperiment(req.params.id, req.body);
+      // Raw req.body reached the UPDATE, so an editor could start a draft
+      // experiment without the "≥2 variants, 100% split" validation that
+      // /start enforces, and could stamp its winner and its creator.
+      const updates = pickTableColumns(experiments, req.body, {
+        allow: ["name", "description", "testType", "successMetric", "articleId"],
+      });
+      const updatedExperiment = await storage.updateExperiment(req.params.id, updates);
 
       await logActivity({
         userId: req.user.id,

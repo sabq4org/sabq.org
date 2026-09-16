@@ -19,6 +19,10 @@ on:
         description: "Base URL to smoke-test"
         required: false
         default: "https://sabq.org"
+      api_base_url:
+        description: "API origin for the read-only health probe"
+        required: false
+        default: "https://api.sabq.org"
 
 concurrency:
   group: smoke-${{ github.ref }}
@@ -53,6 +57,7 @@ jobs:
         run: npx playwright test e2e/smoke.spec.ts
         env:
           PW_BASE_URL: ${{ github.event.inputs.base_url || 'https://sabq.org' }}
+          PW_API_BASE_URL: ${{ github.event.inputs.api_base_url || 'https://api.sabq.org' }}
 
       - name: Upload report on failure
         if: failure()

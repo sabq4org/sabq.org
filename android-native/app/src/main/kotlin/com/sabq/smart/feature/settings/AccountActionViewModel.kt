@@ -46,7 +46,9 @@ class AccountActionViewModel @Inject constructor(
     }
 
     fun changePassword(currentPassword: String, newPassword: String) {
-        if (currentPassword.isBlank() || newPassword.length < 6) return
+        // حد الخادم الموحد 8 (server/utils/passwordPolicy.ts) — كان 6 هنا فيجتاز
+        // المستخدم الواجهة ثم يصطدم برفض الخادم.
+        if (currentPassword.isBlank() || newPassword.length < 8) return
         runAction {
             accountRepo.changePassword(currentPassword, newPassword)
         }
@@ -55,6 +57,12 @@ class AccountActionViewModel @Inject constructor(
     fun forgotPassword(email: String) {
         if (email.isBlank()) return
         runAction { accountRepo.forgotPassword(email) }
+    }
+
+    /** الخطوة الثانية من الاستعادة: الرمز المرسَل بالبريد + كلمة المرور الجديدة. */
+    fun resetPassword(email: String, code: String, newPassword: String) {
+        if (email.isBlank() || code.length != 6 || newPassword.length < 8) return
+        runAction { accountRepo.resetPassword(email, code, newPassword) }
     }
 
     fun deleteAccount(password: String, onLogout: () -> Unit) {
@@ -280,6 +288,14 @@ class AccountActionViewModel @Inject constructor(
         404 -> "الخدمة غير متوفرة حالياً"
         409 -> "البريد مسجّل مسبقاً"
         422 -> "البيانات غير صحيحة"
-        else -> e.rawMessage?.takeIf { it.isNotBlank() } ?: "تعذر إكمال العملية"
+        else -> serverMessage(e.rawMessage) ?: "تعذر إكمال العملية"
+    }
+
+    /** يستخرج حقل message العربي من جسم خطأ JSON بدل عرض النص الخام للمستخدم. */
+    private fun serverMessage(raw: String?): String? {
+        if (raw.isNullOrBlank()) return null
+        val fromJson = Regex("\"message\"\\s*:\\s*\"([^\"]+)\"").find(raw)?.groupValues?.get(1)
+        if (fromJson != null) return fromJson
+        return raw.takeIf { it.isNotBlank() && !it.trimStart().startsWith("{") }
     }
 }

@@ -10,6 +10,7 @@ import { articles } from '@shared/schema';
 import { eq, desc } from 'drizzle-orm';
 import path from 'path';
 import { newsImageStorageService } from './newsImageStorageService';
+import { isSafeImageUrl } from '../utils/safeImageUrl';
 
 interface FocalPoint {
   x: number;
@@ -69,51 +70,12 @@ function normalizeImageUrl(url: string): string {
  * Validate URL for security (prevent SSRF)
  */
 function isValidImageUrl(url: string): boolean {
-  try {
-    const parsedUrl = new URL(url);
-    
-    // Allow only HTTPS and HTTP protocols
-    if (parsedUrl.protocol !== 'https:' && parsedUrl.protocol !== 'http:') {
-      return false;
-    }
-    
-    // Build list of trusted domains dynamically
-    const trustedDomains = [
-      'storage.googleapis.com',
-      'imagedelivery.net', // Cloudflare Images CDN
-      'localhost',
-      '127.0.0.1',
-      '0.0.0.0',
-      'replit.dev', // Replit domains
-      'repl.co',
-    ];
-    
-    // Add configured domains
-    if (process.env.DOMAIN) {
-      trustedDomains.push(process.env.DOMAIN);
-    }
-    if (process.env.REPLIT_DEV_DOMAIN) {
-      trustedDomains.push(process.env.REPLIT_DEV_DOMAIN);
-    }
-    
-    // Add additional trusted domains
-    trustedDomains.push('sabq.org', 'sabq.org');
-    
-    const hostname = parsedUrl.hostname.toLowerCase();
-    
-    // Check if hostname is in trusted domains or is a subdomain
-    const isTrusted = trustedDomains.some(domain => 
-      hostname === domain || hostname.endsWith(`.${domain}`)
-    );
-    
-    if (!isTrusted) {
-      console.warn(`[Thumbnail Service] Untrusted domain: ${hostname}`);
-    }
-    
-    return isTrusted;
-  } catch {
-    return false;
-  }
+  // SSRF guard: the old allowlist explicitly permitted http:// and
+  // localhost/127.0.0.1/0.0.0.0, so an authenticated caller of
+  // /api/thumbnails/generate could point the server at loopback (audit #3).
+  // Delegate to the shared strict guard: https-only, tight host allowlist,
+  // private/loopback IP rejection.
+  return isSafeImageUrl(url);
 }
 
 /**
@@ -166,6 +128,7 @@ export async function generateThumbnail(
   options: ThumbnailOptions = {}
 ): Promise<string> {
   const config = { ...DEFAULT_OPTIONS, ...options };
+  const outputFormat: NonNullable<ThumbnailOptions['format']> = config.format ?? 'jpeg';
   
   // Normalize URL (convert relative paths to absolute URLs)
   const normalizedUrl = normalizeImageUrl(imageUrl);
@@ -197,6 +160,7 @@ export async function generateThumbnail(
       
       const response = await fetch(normalizedUrl, {
         signal: controller.signal,
+        redirect: "error", // no redirect past the isValidImageUrl allowlist check (audit #3)
         headers: {
           'User-Agent': 'Sabq-Thumbnail-Service/1.0'
         }
@@ -269,11 +233,11 @@ export async function generateThumbnail(
         const thumbnail = await sharp(buffer)
           .resize(scaledW, scaledH, { fit: 'fill' })
           .extract({ left: extractLeft, top: extractTop, width: targetW, height: targetH })
-          .toFormat(config.format as keyof sharp.FormatEnum, { quality: config.quality })
+          .toFormat(outputFormat, { quality: config.quality })
           .toBuffer();
         
         const timestamp = Date.now();
-        const filename = `thumbnail_${timestamp}_${config.width}x${config.height}.${config.format}`;
+        const filename = `thumbnail_${timestamp}_${config.width}x${config.height}.${outputFormat}`;
         const thumbnailUrl = await uploadThumbnailToStorage(thumbnail, filename);
         
         console.log(`[Thumbnail Service] Thumbnail generated with focal point: ${thumbnailUrl}`);
@@ -286,12 +250,12 @@ export async function generateThumbnail(
         fit: 'cover',
         position: sharpPosition
       })
-      .toFormat(config.format as keyof sharp.FormatEnum, { quality: config.quality })
+      .toFormat(outputFormat, { quality: config.quality })
       .toBuffer();
     
     // Generate unique filename for thumbnail
     const timestamp = Date.now();
-    const filename = `thumbnail_${timestamp}_${config.width}x${config.height}.${config.format}`;
+    const filename = `thumbnail_${timestamp}_${config.width}x${config.height}.${outputFormat}`;
     
     // Upload to storage (assuming GCS is configured)
     const thumbnailUrl = await uploadThumbnailToStorage(thumbnail, filename);

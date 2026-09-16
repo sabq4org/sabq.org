@@ -8,14 +8,24 @@ import connectPg from "connect-pg-simple";
 import bcrypt from "bcrypt";
 import { storage } from "./storage";
 import { db, getSessionFallbackPool } from "./db";
-import { users, canUserLogin, getUserStatusMessage } from "@shared/schema";
-import { eq, or, sql } from "drizzle-orm";
+import { users, appMemberSessions, canUserLogin, getUserStatusMessage } from "@shared/schema";
+import { eq, or, sql, and, ne } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import appleSignin from "apple-signin-auth";
 import { memoryCache, CACHE_TTL } from "./memoryCache";
 import { getRedisSessionAdapter } from "./redis";
 import { RedisStore } from "connect-redis";
-import { SessionFailoverStore } from "./sessionFailoverStore";
+import {
+  SESSION_DEGRADED_HEADER,
+  SessionFailoverStore,
+  sessionIdFromCookieHeader,
+} from "./sessionFailoverStore";
+
+/**
+ * مرجع لمخزن الجلسات الثنائي حين يكون Redis مفعّلًا. يحتاجه الوسيط أدناه
+ * ليعرف هل تعذّرت قراءة جلسة هذا الطلب فيَسِم الرد بالترويسة.
+ */
+let activeFailoverStore: SessionFailoverStore | null = null;
 
 export function getSession() {
   const sessionTtl = 7 * 24 * 60 * 60 * 1000; // 1 week
@@ -43,7 +53,9 @@ export function getSession() {
       prefix: "sess:",
       ttl: Math.floor(sessionTtl / 1000),
     });
-    store = new SessionFailoverStore(redisStore, pgStore);
+    const failoverStore = new SessionFailoverStore(redisStore, pgStore);
+    activeFailoverStore = failoverStore;
+    store = failoverStore;
     console.log("[Session] Redis primary + isolated PostgreSQL failover (commandTimeout 2.5s)");
   } else {
     console.log("[Session] Using isolated PostgreSQL store (add REDIS_URL for Redis primary + failover)");
@@ -134,8 +146,20 @@ export async function setupAuth(app: Express) {
     if (!needsSession(req)) {
       return next();
     }
+    // المعرّف يُلتقط من الكوكي **قبل** الوسيط: حين تعود القراءة فارغة يولّد
+    // express-session معرّفًا جديدًا فورًا، فلا يعود req.sessionID هو المعرّف
+    // الذي فشلت قراءته.
+    const incomingSid = activeFailoverStore
+      ? sessionIdFromCookieHeader(req.headers.cookie)
+      : null;
+
     sessionMiddleware(req, res, (err?: any) => {
       if (err) return next(err);
+      // تعذّرت قراءة الجلسة (لا أنها انتهت): نَسِم الرد كي تعيد الواجهة
+      // المحاولة بدل عرض «انتهت صلاحية جلستك» وطرد المستخدم.
+      if (incomingSid && activeFailoverStore?.consumeDegradedRead(incomingSid)) {
+        res.setHeader(SESSION_DEGRADED_HEADER, "1");
+      }
       passportInit(req, res, (err2?: any) => {
         if (err2) return next(err2);
         passportSession(req, res, next);
@@ -196,7 +220,8 @@ export async function setupAuth(app: Express) {
 
           if (authDebug) console.log("🔑 LocalStrategy: Password valid? true");
 
-          // Check if user can login (not banned or deleted)
+          // Block hard-negative account states (banned/deleted/suspended/locked;
+          // "pending"/unverified stays allowed) — see canUserLogin in schema.
           if (!canUserLogin(user)) {
             const statusMessage = getUserStatusMessage(user);
             console.log("❌ LocalStrategy: User cannot login:", statusMessage);
@@ -243,13 +268,17 @@ export async function setupAuth(app: Express) {
               return done(null, false, { message: "لم نتمكن من الحصول على البريد الإلكتروني من Google" });
             }
 
-            // Check if user exists with this Google ID or email
+            // Check if user exists with this Google ID or email.
+            // المطابقة بـlower(email) لا بالعمود حرفيًا: حسابات قديمة مخزّنة
+            // بأحرف كبيرة لا يجدها الشرط الحرفي، فيُحاوَل الإدراج ويصطدم
+            // بقيد users_email_lower_unique — وصاحب الحساب لا يستطيع الدخول
+            // بـGoogle إطلاقًا (حادثة NODE-EXPRESS-G في Sentry).
             const [existingUser] = await db
               .select()
               .from(users)
               .where(or(
                 eq(users.googleId, googleId),
-                eq(users.email, email.toLowerCase())
+                sql`lower(${users.email}) = ${email.toLowerCase()}`
               ))
               .limit(1);
 
@@ -275,6 +304,7 @@ export async function setupAuth(app: Express) {
               return done(null, {
                 id: existingUser.id,
                 email: existingUser.email,
+                isNewUser: false,
                 isProfileComplete: existingUser.isProfileComplete ?? true, // ✅ Pass profile status
                 twoFactorEnabled: false, // OAuth users don't need 2FA
                 twoFactorMethod: 'authenticator'
@@ -306,6 +336,7 @@ export async function setupAuth(app: Express) {
             return done(null, {
               id: newUserId,
               email: email.toLowerCase(),
+              isNewUser: true,
               isProfileComplete: false, // ✅ New users need to complete onboarding
               twoFactorEnabled: false,
               twoFactorMethod: 'authenticator'
@@ -387,13 +418,15 @@ export async function setupAuth(app: Express) {
               }
             }
 
-            // Check if user exists with this Apple ID or email
+            // Check if user exists with this Apple ID or email.
+            // lower(email) كما في استراتيجية Google أعلاه — الشرط الحرفي يفوّت
+            // الحسابات المخزّنة بأحرف كبيرة فينفجر الإدراج بقيد الفرادة.
             const [existingUser] = await db
               .select()
               .from(users)
               .where(or(
                 eq(users.appleId, appleId),
-                eq(users.email, email.toLowerCase())
+                sql`lower(${users.email}) = ${email.toLowerCase()}`
               ))
               .limit(1);
 
@@ -427,6 +460,7 @@ export async function setupAuth(app: Express) {
               return done(null, {
                 id: existingUser.id,
                 email: existingUser.email,
+                isNewUser: false,
                 isProfileComplete: existingUser.isProfileComplete ?? true, // ✅ Pass profile status
                 twoFactorEnabled: false, // OAuth users don't need 2FA
                 twoFactorMethod: 'authenticator'
@@ -454,6 +488,7 @@ export async function setupAuth(app: Express) {
             return done(null, {
               id: newUserId,
               email: email.toLowerCase(),
+              isNewUser: true,
               isProfileComplete: false, // ✅ New users need to complete onboarding
               twoFactorEnabled: false,
               twoFactorMethod: 'authenticator'
@@ -491,7 +526,16 @@ export async function setupAuth(app: Express) {
       if (!user) {
         return done(null, false);
       }
-      
+
+      // Reject sessions of banned/suspended/deleted accounts on EVERY request —
+      // deserialize is the choke point, so an admin ban/delete (or self-delete)
+      // revokes web access immediately, even for a session that predates it
+      // (audit #8: access revocation, not just password reset). The 60s cache is
+      // cleared by invalidateAllUserSessions at ban/delete time so this is hit.
+      if (!canUserLogin(user)) {
+        return done(null, false);
+      }
+
       // Include display fields used by presence / avatars. Omitting firstName
       // made /api/editor-presence fall back to the email local-part (e.g. alawijan1).
       const serializedUser = {
@@ -524,6 +568,134 @@ export async function setupAuth(app: Express) {
 export function invalidateUserSessionCache(userId: string): void {
   memoryCache.delete(`user:session:${userId}`);
   memoryCache.delete(`user:session:v2:${userId}`);
+}
+
+/**
+ * Hard-invalidate EVERY server-side session for a user. Call on any password
+ * change/reset so a stolen cookie/bearer token can't outlive the reset — the
+ * old code only updated passwordHash, leaving live sessions valid (audit #8).
+ *
+ * Clears all three: web sessions in BOTH stores (Redis `sess:*` + the Postgres
+ * `sessions` table), mobile bearer sessions (`appMemberSessions`), and the
+ * deserialize cache. Best-effort per store — a failure in one is logged but
+ * never thrown into the caller's reset flow. Password resets are rare, so the
+ * Redis scan cost is acceptable.
+ */
+export async function invalidateAllUserSessions(
+  userId: string,
+  opts?: { exceptWebSid?: string; exceptMobileTokenHash?: string },
+): Promise<void> {
+  invalidateUserSessionCache(userId);
+
+  // Mobile bearer tokens (keep the caller's own token on a self-service change).
+  try {
+    const cond = opts?.exceptMobileTokenHash
+      ? and(eq(appMemberSessions.memberId, userId), ne(appMemberSessions.tokenHash, opts.exceptMobileTokenHash))
+      : eq(appMemberSessions.memberId, userId);
+    await db.delete(appMemberSessions).where(cond);
+  } catch (e) {
+    console.error("[Session] appMemberSessions purge failed:", e);
+  }
+
+  // Postgres session store (connect-pg-simple: table `sessions`, jsonb `sess`).
+  try {
+    const pool = getSessionFallbackPool();
+    if (opts?.exceptWebSid) {
+      await pool.query(
+        `DELETE FROM sessions WHERE (sess #>> '{passport,user}') = $1 AND sid <> $2`,
+        [userId, opts.exceptWebSid],
+      );
+    } else {
+      await pool.query(`DELETE FROM sessions WHERE (sess #>> '{passport,user}') = $1`, [userId]);
+    }
+  } catch (e) {
+    console.error("[Session] Postgres session purge failed:", e);
+  }
+
+  // Redis session store (connect-redis, prefix `sess:`).
+  //
+  // كان هذا المقطع يمشّط مفاتيح Redis كلها (SCAN sess:*) مع GET **متسلسل**
+  // لكل مفتاح. مع N جلسة نشطة فهذه N رحلة ذهاب وإياب متتابعة، وRedis أحادي
+  // الخيط: كل أمر آخر يقف في الطابور خلفها — بما فيه قراءة الجلسة التي
+  // يجريها express-session في **كل** طلب وارد قبل أي مسار. أثر ذلك في
+  // سجلات 2026-07-24/25 كان تجمّدًا عامًا: طلبات لمسارات لا تجمعها صلة
+  // تنتهي كلها في نفس المللي ثانية (1258/1263/1260/1262/1262)، ونقاط مكاشة
+  // في ذاكرة العملية تستغرق ثانية ونصفًا لأن الطلب لم يبلغ معالجها أصلًا.
+  // والدالة موصولة بأربعة عشر موضعًا (حظر، حذف، تزويد إداري، اعتماد مراسل)
+  // لا بإعادة تعيين كلمة المرور النادرة وحدها كما افترض التعليق الأصلي.
+  //
+  // المسار السريع الآن: الفهرس العكسي usess:<userId> الذي يبنيه
+  // SessionFailoverStore.set — SMEMBERS واحد ثم DEL واحد، بعدد جلسات
+  // المستخدم لا بعدد جلسات الموقع.
+  try {
+    const redis = getRedisSessionAdapter();
+    if (redis) {
+      const indexKey = `usess:${userId}`;
+      let indexedSids: string[] = [];
+      try {
+        indexedSids = await redis.smembers(indexKey);
+      } catch {
+        /* الفهرس غير متاح — نسقط إلى التمشيط المحدود أدناه */
+      }
+
+      if (indexedSids.length > 0) {
+        const doomed = indexedSids
+          .filter((sid) => sid !== opts?.exceptWebSid)
+          .map((sid) => `sess:${sid}`);
+        if (doomed.length > 0) await redis.del(doomed);
+        await redis.del(indexKey);
+        // الجلسة المستثناة (تغيير ذاتي لكلمة المرور) تبقى مفهرسة.
+        if (opts?.exceptWebSid) {
+          void redis.sadd(indexKey, opts.exceptWebSid).catch(() => {});
+        }
+      } else {
+        // احتياطي: جلسات أُنشئت قبل وجود الفهرس. تمشيط بـMGET على دفعات
+        // (رحلة واحدة لكل دفعة بدل رحلة لكل مفتاح) وبميزانية صارمة —
+        // تجاوزها يُسجَّل ولا يُمدَّد، فحجب Redis أسوأ من إبطال ناقص.
+        const keepKey = opts?.exceptWebSid ? `sess:${opts.exceptWebSid}` : null;
+        const startedAt = Date.now();
+        const budgetMs = Number(process.env.SESSION_PURGE_BUDGET_MS) || 1_500;
+        const maxKeys = Number(process.env.SESSION_PURGE_MAX_KEYS) || 20_000;
+        let scanned = 0;
+        let cursor = "0";
+        do {
+          const [next, keys] = (await redis.scan(
+            cursor,
+            "MATCH",
+            "sess:*",
+            "COUNT",
+            500,
+          )) as [string, string[]];
+          cursor = next;
+          if (keys.length > 0) {
+            scanned += keys.length;
+            const values = await redis.mget(keys);
+            const doomed: string[] = [];
+            for (let i = 0; i < keys.length; i++) {
+              const key = keys[i];
+              if (key === keepKey) continue;
+              const raw = values[i];
+              if (!raw) continue;
+              try {
+                if (JSON.parse(raw)?.passport?.user === userId) doomed.push(key);
+              } catch {
+                /* skip non-JSON session payloads */
+              }
+            }
+            if (doomed.length > 0) await redis.del(doomed);
+          }
+          if (scanned >= maxKeys || Date.now() - startedAt > budgetMs) {
+            console.warn(
+              `[Session] نفدت ميزانية تمشيط الجلسات (فُحص ${scanned} مفتاحًا في ${Date.now() - startedAt}ms) — توقف قبل إكمال إبطال ${userId}`,
+            );
+            break;
+          }
+        } while (cursor !== "0");
+      }
+    }
+  } catch (e) {
+    console.error("[Session] Redis session purge failed:", e);
+  }
 }
 
 // Bounded activity update cache to prevent memory leaks

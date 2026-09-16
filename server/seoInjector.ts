@@ -2,6 +2,7 @@ import type { Request, Response, NextFunction } from "express";
 import { db } from "./db";
 import { articles, categories, users, enArticles, urArticles, gulfEvents, deepAnalyses, worldDays, tags, articleTags, angles, topics, staff } from "@shared/schema";
 import { eq, or, desc, and, sql, aliasedTable, inArray } from "drizzle-orm";
+import { sanitizeArticleHtml } from "./utils/sanitizeHtml";
 
 // Pulled into a module-level alias so we can join the `users` table twice in
 // the same query — once for `authorId` (the staff member who entered the
@@ -17,7 +18,8 @@ import path from "path";
 import { withCache, CACHE_TTL } from "./memoryCache";
 import { VALID_PREFIXES } from "./utils/spaRouteMatcher";
 import { isNoindexPath } from "./utils/noindexPaths";
-import { buildNewsArticleSchemaExtras } from "./utils/newsArticleSchema";
+import { buildNewsArticleSchemaExtras, getArticleSchemaType } from "./utils/newsArticleSchema";
+import { getPublicEditorialModifiedAt } from "./utils/editorialDates";
 import {
   buildPersonJsonLd,
   buildProfilePageJsonLd,
@@ -103,21 +105,11 @@ function truncate(str: string, len: number): string {
   return str.substring(0, len).replace(/\s+\S*$/, '') + '...';
 }
 
-// Removes script/iframe/style/embed tags, inline event handlers, and javascript: URLs
-// from stored article HTML before injecting it into the SSR response. The content
-// is editor-controlled (TipTap) so this is defense-in-depth, not primary sanitization.
+// Sanitizes stored article HTML before injecting it into the SSR response.
+// Delegates to the shared DOMPurify-based sanitizer — the previous regex missed
+// unquoted event handlers (`<img src=x onerror=...>`) → stored XSS (audit #5).
 function stripUnsafeHtml(html: string): string {
-  if (!html) return '';
-  return html
-    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
-    .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '')
-    .replace(/<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi, '')
-    .replace(/<embed\b[^>]*>/gi, '')
-    .replace(/<object\b[^<]*(?:(?!<\/object>)<[^<]*)*<\/object>/gi, '')
-    .replace(/\son\w+\s*=\s*"[^"]*"/gi, '')
-    .replace(/\son\w+\s*=\s*'[^']*'/gi, '')
-    .replace(/(href|src)\s*=\s*"\s*javascript:[^"]*"/gi, '$1="#"')
-    .replace(/(href|src)\s*=\s*'\s*javascript:[^']*'/gi, "$1='#'");
+  return sanitizeArticleHtml(html);
 }
 
 function getBaseUrl(req: Request): string {
@@ -262,6 +254,8 @@ async function handleArticlePage(slug: string, baseUrl: string, urlPrefix: strin
         publishedAt: articles.publishedAt,
         updatedAt: articles.updatedAt,
         seo: articles.seo,
+        seoMetadata: articles.seoMetadata,
+        articleType: articles.articleType,
         status: articles.status,
         categoryName: categories.nameAr,
         authorId: articles.authorId,
@@ -277,8 +271,8 @@ async function handleArticlePage(slug: string, baseUrl: string, urlPrefix: strin
       .leftJoin(categories, eq(articles.categoryId, categories.id))
       .leftJoin(users, eq(articles.authorId, users.id))
       .leftJoin(reporterUsers, eq(articles.reporterId, reporterUsers.id))
-      .leftJoin(reporterStaff, eq(articles.reporterId, reporterStaff.userId))
-      .leftJoin(authorStaff, eq(articles.authorId, authorStaff.userId))
+      .leftJoin(reporterStaff, and(eq(articles.reporterId, reporterStaff.userId), eq(reporterStaff.isActive, true), inArray(reporterStaff.staffType, ["reporter", "writer", "opinion_author", "content_creator"])))
+      .leftJoin(authorStaff, and(eq(articles.authorId, authorStaff.userId), eq(authorStaff.isActive, true), inArray(authorStaff.staffType, ["reporter", "writer", "opinion_author", "content_creator"])))
       .where(or(eq(articles.slug, slug), eq(articles.englishSlug, slug)))
       .limit(1)
   );
@@ -304,16 +298,7 @@ async function handleArticlePage(slug: string, baseUrl: string, urlPrefix: strin
   const editorName = [a.authorFirstName, a.authorLastName].filter(Boolean).join(' ');
   const authorName = reporterName || editorName || 'صحيفة سبق الإلكترونية';
   const publishedTime = a.publishedAt ? new Date(a.publishedAt).toISOString() : undefined;
-  let modifiedTime = a.updatedAt ? new Date(a.updatedAt).toISOString() : publishedTime;
-  if (publishedTime && modifiedTime && a.publishedAt && a.updatedAt) {
-    const pubMs = new Date(a.publishedAt).getTime();
-    const updMs = new Date(a.updatedAt).getTime();
-    const articleAgeMs = Date.now() - pubMs;
-    const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
-    if (articleAgeMs > thirtyDaysMs && (updMs - pubMs) > 7 * 24 * 60 * 60 * 1000) {
-      modifiedTime = publishedTime;
-    }
-  }
+  const modifiedTime = getPublicEditorialModifiedAt(a.publishedAt, a.seoMetadata) || publishedTime;
   const keywords = seoData.keywords || [];
   const schemaExtras = buildNewsArticleSchemaExtras(a.content, image, baseUrl);
   const authorPerson = buildArticleAuthorPerson(baseUrl, {
@@ -327,7 +312,7 @@ async function handleArticlePage(slug: string, baseUrl: string, urlPrefix: strin
 
   const jsonLd = {
     "@context": "https://schema.org",
-    "@type": "NewsArticle",
+    "@type": getArticleSchemaType(a.articleType),
     "mainEntityOfPage": { "@type": "WebPage", "@id": canonicalUrl },
     "headline": title,
     "description": description,
@@ -357,8 +342,22 @@ async function handleArticlePage(slug: string, baseUrl: string, urlPrefix: strin
     { lang: 'ar', href: canonicalUrl },
     { lang: 'x-default', href: canonicalUrl },
   ];
-  if (a.englishSlug) {
-    hreflangLinks.push({ lang: 'en', href: `${baseUrl}/en/article/${a.englishSlug}` });
+  // Only link EN when a real translation exists (slug often differs from Arabic englishSlug).
+  const [enSibling] = await db
+    .select({ slug: enArticles.slug, englishSlug: enArticles.englishSlug })
+    .from(enArticles)
+    .where(
+      and(
+        eq(enArticles.status, "published"),
+        sql`${enArticles.seoMetadata}->>'sourceArticleId' = ${a.id}`,
+      ),
+    )
+    .limit(1);
+  if (enSibling) {
+    hreflangLinks.push({
+      lang: 'en',
+      href: `${baseUrl}/en/article/${enSibling.englishSlug || enSibling.slug}`,
+    });
   }
 
   return {
@@ -397,6 +396,7 @@ async function handleEnArticlePage(slug: string, baseUrl: string): Promise<SeoDa
         publishedAt: enArticles.publishedAt,
         updatedAt: enArticles.updatedAt,
         seo: enArticles.seo,
+        seoMetadata: enArticles.seoMetadata,
         authorId: enArticles.authorId,
         reporterId: enArticles.reporterId,
         authorFirstName: users.firstName,
@@ -479,14 +479,26 @@ async function handleEnArticlePage(slug: string, baseUrl: string): Promise<SeoDa
   const safeExcerpt = escapeHtml(truncate(a.excerpt || a.aiSummary || '', 300));
   const semanticHtml = `<article style="position:absolute;left:-9999px;"><h1>${safeTitle}</h1>${publishedTime ? `<time datetime="${publishedTime}">${publishedTime}</time>` : ''}<p>${safeExcerpt}</p></article>`;
 
-  const arSlug = a.englishSlug || a.slug;
   const hreflangLinks: Array<{ lang: string; href: string }> = [
     { lang: 'en', href: canonicalUrl },
   ];
-  if (arSlug) {
+  const sourceArticleId =
+    a.seoMetadata && typeof a.seoMetadata === "object"
+      ? (a.seoMetadata as { sourceArticleId?: string }).sourceArticleId
+      : undefined;
+  let siblingArSlug: string | null = null;
+  if (sourceArticleId) {
+    const [arRow] = await db
+      .select({ englishSlug: articles.englishSlug, slug: articles.slug })
+      .from(articles)
+      .where(and(eq(articles.id, sourceArticleId), eq(articles.status, "published")))
+      .limit(1);
+    if (arRow) siblingArSlug = arRow.englishSlug || arRow.slug;
+  }
+  if (siblingArSlug) {
     hreflangLinks.push(
-      { lang: 'ar', href: `${baseUrl}/article/${arSlug}` },
-      { lang: 'x-default', href: `${baseUrl}/article/${arSlug}` },
+      { lang: 'ar', href: `${baseUrl}/article/${siblingArSlug}` },
+      { lang: 'x-default', href: `${baseUrl}/article/${siblingArSlug}` },
     );
   }
 
@@ -753,7 +765,9 @@ const STATIC_INDEXABLE_PAGES: Record<string, { title: string; desc: string; loca
   '/polls': { title: 'استطلاعات الرأي — سبق', desc: 'شارك في استطلاعات الرأي على صحيفة سبق الإلكترونية وتعرّف على آراء القرّاء.' },
   '/poll': { title: 'استطلاعات الرأي — سبق', desc: 'شارك في استطلاعات الرأي على صحيفة سبق الإلكترونية وتعرّف على آراء القرّاء.' },
   '/ai': { title: 'iFox — مساعد سبق الذكي', desc: 'iFox هو مساعد سبق الذكي للأخبار والمعلومات والإجابات الفورية.' },
-  '/sabq-ai': { title: 'عقل سبق — الذكاء الاصطناعي في خدمة الصحافة', desc: 'كيف طوّعت سبق الذكاء الاصطناعي في خدمة الإعلام السعودي: أول صحيفة سعودية وعربية تدمج الذكاء في كامل دورة العمل التحريري — بقرار بشري في كل مادة، ووفق ميثاق معلن من ثماني مواد.' },
+  '/sabq-ai': { title: 'عقل سبق — الذكاء الاصطناعي في خدمة الصحافة | سبق', desc: 'كيف طوّعت سبق الذكاء الاصطناعي في خدمة الإعلام السعودي: أول صحيفة سعودية وعربية تدمج الذكاء في كامل دورة العمل التحريري — بقرار بشري في كل مادة، ووفق ميثاق معلن من ثماني مواد.' },
+  '/roshn': { title: 'دوري روشن السعودي — مباريات وترتيب وهدّافون | سبق', desc: 'تغطية حية لدوري روشن السعودي: جدول المباريات بتوقيت الرياض، ترتيب الدوري، الهدّافون، ومركز مباراة تفصيلي على صحيفة سبق.' },
+  '/predictions': { title: 'مركز التوقعات — توقّع ونافس على النقاط | سبق', desc: 'توقّع نتائج مباريات دوري روشن وبطولات الخليج ونافس على جوائز النقاط المتراكمة على صحيفة سبق.' },
   '/en/news': { title: 'Latest News — Sabq', desc: 'Browse the latest breaking news and updates on Sabq News.', locale: 'en_US', siteName: 'Sabq News' },
   '/ur/news': { title: 'تازہ خبریں — سبق نیوز', desc: 'سبق نیوز پر تازہ ترین خبریں اور بریکنگ نیوز پڑھیں۔', locale: 'ur_PK', siteName: 'سبق نیوز' },
   // English mirrors
@@ -772,7 +786,7 @@ const INDEXABLE_SECTION_PREFIXES = new Map<string, { title: string; desc: string
   ['saudia', { title: 'السعودية — سبق', desc: 'أخبار السعودية والمحافظات على صحيفة سبق الإلكترونية.' }],
   ['world', { title: 'العالم — سبق', desc: 'الأخبار العالمية وأهم أحداث الدول من حول العالم على صحيفة سبق الإلكترونية.' }],
   ['business', { title: 'الأعمال — سبق', desc: 'أخبار الأعمال والشركات والاقتصاد على صحيفة سبق الإلكترونية.' }],
-  ['economy', { title: 'الاقتصاد — سبق', desc: 'الأخبار الاقتصادية والمالية على صحيفة سبق الإلكترونية.' }],
+  ['economy', { title: 'الاقتصاد بالأرقام — بيانات البنك المركزي السعودي حيًا | سبق', desc: 'الاقتصاد السعودي بالأرقام: إنفاق الأسبوع، أسعار الصرف، الفائدة والتضخم — أرقام رسمية تتحدث تلقائيًا لحظة صدورها من البنك المركزي السعودي.' }],
   ['technology', { title: 'التقنية — سبق', desc: 'أخبار التقنية والذكاء الاصطناعي والابتكار على صحيفة سبق الإلكترونية.' }],
   ['sports', { title: 'رياضة سبق — مباريات مباشرة وانتقالات وترتيب الدوريات | سبق', desc: 'بوابة سبق الرياضية: نتائج مباشرة وجدول المباريات بتوقيت الرياض، ترتيب دوري روشن وكبرى الدوريات العالمية، ومركز الانتقالات لحظة بلحظة.' }],
   ['sport', { title: 'رياضة سبق — مباريات مباشرة وانتقالات وترتيب الدوريات | سبق', desc: 'بوابة سبق الرياضية: نتائج مباشرة وجدول المباريات بتوقيت الرياض، ترتيب دوري روشن وكبرى الدوريات العالمية، ومركز الانتقالات لحظة بلحظة.' }],

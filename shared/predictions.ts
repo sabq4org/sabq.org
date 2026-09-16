@@ -98,6 +98,7 @@ export const PREDICTION_ERROR_CODES = {
   SETTLEMENT_PENDING: "SETTLEMENT_PENDING",
   COMPETITION_DISABLED: "COMPETITION_DISABLED",
   WITHDRAWAL_NOT_ALLOWED: "WITHDRAWAL_NOT_ALLOWED",
+  ENTRY_NOT_FOUND: "ENTRY_NOT_FOUND",
 } as const;
 
 export type PredictionErrorCode =
@@ -234,6 +235,13 @@ export const ENTRY_PAYLOAD_SCHEMAS: Record<ContestType, z.ZodTypeAny> = {
 export const matchScoreResultSchema = z.object({
   finalHome: z.number().int().min(0),
   finalAway: z.number().int().min(0),
+  penalties: z
+    .object({
+      home: z.number().int().min(0).nullable(),
+      away: z.number().int().min(0).nullable(),
+    })
+    .nullable()
+    .optional(),
 });
 export type MatchScoreResult = z.infer<typeof matchScoreResultSchema>;
 
