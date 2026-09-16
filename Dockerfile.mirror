@@ -13,12 +13,17 @@
 # See railway.mirror.json (set this service's config-as-code path to it).
 
 # Stage 1: Builder
-FROM node:20-alpine AS builder
+FROM node:20.20.2-alpine AS builder
 
-ARG DEPLOY_MARKER=2026-06-14-mirror
+ARG DEPLOY_MARKER=2026-09-16-mirror-sync-main
 ENV DEPLOY_MARKER=$DEPLOY_MARKER
 
 WORKDIR /app
+
+# puppeteer is a dependency but the read-only mirror never renders PDFs
+# (those are dashboard write paths, blocked by READ_ONLY_MODE). Skip the
+# ~150MB Chrome download in both stages.
+ENV PUPPETEER_SKIP_DOWNLOAD=true
 
 COPY package*.json ./
 RUN npm ci
@@ -28,9 +33,11 @@ COPY . .
 RUN npm run build
 
 # Stage 2: Production
-FROM node:20-alpine AS production
+FROM node:20.20.2-alpine AS production
 
 WORKDIR /app
+
+ENV PUPPETEER_SKIP_DOWNLOAD=true
 
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/public ./public
@@ -41,7 +48,10 @@ COPY --from=builder /app/drizzle.config.ts ./
 # main image so no import-time path lookups fail even in read-only mode).
 COPY --from=builder /app/server/lib/passkit/pass-template.pass ./server/lib/passkit/pass-template.pass
 COPY --from=builder /app/server/lib/passkit/loyalty-pass-template.pass ./server/lib/passkit/loyalty-pass-template.pass
+COPY --from=builder /app/server/lib/passkit/coupon-pass-template.pass ./server/lib/passkit/coupon-pass-template.pass
 COPY --from=builder /app/certs ./certs
+# كتالوج الأنظمة — يقرؤه systemsCatalogService من القرص
+COPY --from=builder /app/docs/systems ./docs/systems
 COPY --from=builder /app/server/fonts ./server/fonts
 
 RUN npm ci --omit=dev && npm cache clean --force
@@ -64,4 +74,5 @@ EXPOSE 5000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
   CMD wget --no-verbose --tries=1 --spider http://localhost:5000/health || exit 1
 
-CMD ["node", "dist/index.js"]
+# Same heap ceiling as the main image (server bundle grew; see Dockerfile).
+CMD ["node", "--max-old-space-size=3072", "dist/index.js"]
