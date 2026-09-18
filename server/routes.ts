@@ -1643,6 +1643,11 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         delete data.lastName;
       }
 
+      // الجوال لا يُكتب خامًا من هنا: يُدار حصرًا عبر مسار التوثيق
+      // /api/account/phone/send + /verify (OTP + فحص تفرّد)، حتى لا يربط
+      // عضو رقمًا لا يملكه أو يزاحم حسابًا آخر.
+      delete (data as { phoneNumber?: unknown }).phoneNumber;
+
       const user = await storage.updateUser(userId, data);
       memoryCache.delete(`auth-user:${userId}`);
       // toPublicUser: storage.updateUser returns the raw row (bare .returning()).

@@ -1,6 +1,6 @@
 # المصادقة والصلاحيات (`auth-rbac`)
 
-> آخر مراجعة: 2026-09-13 | المالك: platform
+> آخر مراجعة: 2026-09-18 (توثيق جوال الحساب المسجّل) | المالك: platform
 
 ## الغرض
 مصادقة الويب (Passport) وموبايل (Bearer member session) + طبقتا RBAC (DB + constants).
@@ -64,3 +64,9 @@
 ## أحداث نجاح المصادقة للويب — 2026-09-13
 - Issue #1646: نتيجة Google/Apple strategy تميّز الحساب المنشأ الآن عن القائم بـisNewUser دون تغيير serialization أو APIs الموبايل. callback الناجح بعد Passport يرفق sabq_auth_event/method/nonce بلا بيانات هوية؛ failureRedirect لا يرفق نجاحًا، ووجهة onboarding تبقى حسب اكتمال الملف.
 - AuthAnalyticsMarker ينظف الرابط ويتحقق من جلسة الويب قبل إرسال conversion؛ الأحداث مؤجلة عند صفحات الحساب الحساسة، ومحدودة بعمر وبصمة لمنع العد المكرر. login نجاح حساب قائم، sign_up إنشاء جديد. لا تتغير RBAC أو Schema.
+
+## توثيق جوال الحساب المسجّل — 2026-09-18
+- مسار جديد للعضو/المنسوب المسجّل: `POST /api/account/phone/send` ثم `POST /api/account/phone/verify` (Passport + CSRF، محدِّد `registrationLimiter`، وغرض OTP مستقل `phone_verify` — أول استخدام فعلي له). لا يُحفظ الرقم إلا بعد التحقق، ويُطبّع إلى E.164 عبر `normalizePhone`.
+- `classifyPhoneConflict` و`claimVerifiedAccountPhone` في `services/phoneAuth.ts`: قفل استشاري على الرقم + إعادة فحص داخل معاملة. تعارض مع **منسوب آخر** → رفض؛ تعارض مع **عضوية قارئ سابقة** → رفض برسالة توجيه للدعم. **لا حذف ولا دمج تلقائي** (يختلف عن `retireDuplicateReaderPhoneAccounts` المستخدم في اعتماد المنسوبين/الدخول).
+- `PATCH /api/auth/user` لم يعد يكتب `phoneNumber` خامًا (يُسقطه صراحةً)؛ الواجهة (إعدادات → الحساب) توثّق الرقم بالـOTP. `upsertStaffProfile` الذاتي يطبّع `users.phoneNumber` إلى E.164 **دون** رفض تعارض حتى لا يتعطّل استكمال ملف المنسوب (التوثيق متاح من الإعدادات).
+- الدخول بالجوال كما هو (`findExistingPhoneUser` يفضّل المنسوب). الموبايل v1 (`findOrCreatePhoneUser`) لم يتغير في هذا التحديث.

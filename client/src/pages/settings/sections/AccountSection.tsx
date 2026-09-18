@@ -6,18 +6,18 @@ import { z } from "zod";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Loader2, Mail, Phone, Upload } from "lucide-react";
+import { BadgeCheck, Loader2, Mail, Phone, Upload } from "lucide-react";
 
 const profileSchema = z.object({
   firstName: z.string().min(1, "الاسم الأول مطلوب").max(50),
   lastName: z.string().max(50).optional().or(z.literal("")),
   bio: z.string().max(500).optional().or(z.literal("")),
-  phoneNumber: z.string().max(20).optional().or(z.literal("")),
 });
 
 type ProfileForm = z.infer<typeof profileSchema>;
@@ -29,9 +29,18 @@ type AuthUser = {
   lastName?: string | null;
   bio?: string | null;
   phoneNumber?: string | null;
+  phoneVerified?: boolean;
   profileImageUrl?: string | null;
   emailVerified?: boolean;
 };
+
+/** صيغة العرض المحلية 05XXXXXXXX من أي صيغة مخزّنة. */
+function formatSaudiPhoneForDisplay(value?: string | null): string {
+  if (!value) return "";
+  const digits = value.replace(/\D/g, "");
+  const last9 = digits.slice(-9);
+  return last9.startsWith("5") ? `0${last9}` : value;
+}
 
 export function AccountSection() {
   const { toast } = useToast();
@@ -41,13 +50,18 @@ export function AccountSection() {
     queryKey: ["/api/auth/user"],
   });
 
+  // ── توثيق الجوال (OTP) — لا يُحفظ الرقم إلا بعد إثبات الملكية ──
+  const [phoneDraft, setPhoneDraft] = useState("");
+  const [phoneCode, setPhoneCode] = useState("");
+  const [phoneStep, setPhoneStep] = useState<"idle" | "editing" | "code">("idle");
+  const [resend, setResend] = useState(0);
+
   const form = useForm<ProfileForm>({
     resolver: zodResolver(profileSchema),
     defaultValues: {
       firstName: "",
       lastName: "",
       bio: "",
-      phoneNumber: "",
     },
   });
 
@@ -57,9 +71,59 @@ export function AccountSection() {
       firstName: user.firstName ?? "",
       lastName: user.lastName ?? "",
       bio: user.bio ?? "",
-      phoneNumber: user.phoneNumber ?? "",
     });
   }, [user, form]);
+
+  useEffect(() => {
+    if (resend <= 0) return;
+    const t = setInterval(() => setResend((r) => (r <= 1 ? 0 : r - 1)), 1000);
+    return () => clearInterval(t);
+  }, [resend > 0]);
+
+  const sendPhoneCode = useMutation({
+    mutationFn: async () =>
+      apiRequest("/api/account/phone/send", {
+        method: "POST",
+        body: JSON.stringify({ phone: phoneDraft }),
+        headers: { "Content-Type": "application/json" },
+      }),
+    onSuccess: () => {
+      setPhoneCode("");
+      setPhoneStep("code");
+      setResend(60);
+      toast({ title: "تم إرسال الرمز", description: "أدخل رمز التحقق المرسل إلى جوالك" });
+    },
+    onError: (error: Error) => {
+      toast({
+        variant: "destructive",
+        title: "تعذّر إرسال الرمز",
+        description: error.message || "حاول مرة أخرى",
+      });
+    },
+  });
+
+  const verifyPhoneCode = useMutation({
+    mutationFn: async () =>
+      apiRequest("/api/account/phone/verify", {
+        method: "POST",
+        body: JSON.stringify({ phone: phoneDraft, code: phoneCode }),
+        headers: { "Content-Type": "application/json" },
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+      setPhoneStep("idle");
+      setPhoneDraft("");
+      setPhoneCode("");
+      toast({ title: "تم التوثيق", description: "أصبح رقم جوالك موثّقًا في حسابك" });
+    },
+    onError: (error: Error) => {
+      toast({
+        variant: "destructive",
+        title: "فشل التحقق",
+        description: error.message || "الرمز غير صحيح أو منتهي",
+      });
+    },
+  });
 
   const updateMutation = useMutation({
     mutationFn: async (data: ProfileForm) => {
@@ -239,22 +303,6 @@ export function AccountSection() {
                   </FormItem>
                 )}
               />
-              <FormField
-                control={form.control}
-                name="phoneNumber"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel className="inline-flex items-center gap-1.5">
-                      <Phone className="h-3.5 w-3.5" />
-                      رقم الجوال
-                    </FormLabel>
-                    <FormControl>
-                      <Input {...field} dir="ltr" className="text-left" data-testid="input-settings-phone" />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
               <Button
                 type="submit"
                 disabled={updateMutation.isPending}
@@ -271,6 +319,152 @@ export function AccountSection() {
               </Button>
             </form>
           </Form>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="inline-flex items-center gap-2">
+            <Phone className="h-5 w-5" />
+            رقم الجوال
+          </CardTitle>
+          <CardDescription>
+            يُستخدم للدخول برقم الجوال واستعادة الحساب. لا يُحفظ أي رقم قبل تأكيده برمز SMS.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <span dir="ltr" className="text-sm font-medium tabular-nums">
+              {user.phoneNumber ? formatSaudiPhoneForDisplay(user.phoneNumber) : "لا يوجد رقم"}
+            </span>
+            {user.phoneNumber ? (
+              user.phoneVerified ? (
+                <Badge
+                  variant="secondary"
+                  className="gap-1 bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"
+                >
+                  <BadgeCheck className="h-3.5 w-3.5" /> موثّق
+                </Badge>
+              ) : (
+                <Badge
+                  variant="secondary"
+                  className="bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300"
+                >
+                  غير موثّق
+                </Badge>
+              )
+            ) : null}
+            {phoneStep === "idle" && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="ms-auto"
+                onClick={() => {
+                  setPhoneDraft(user.phoneNumber ?? "");
+                  setPhoneStep("editing");
+                }}
+                data-testid="button-account-phone-edit"
+              >
+                {user.phoneNumber ? "تغيير الرقم" : "إضافة رقم"}
+              </Button>
+            )}
+          </div>
+
+          {phoneStep === "editing" && (
+            <div className="flex flex-wrap items-end gap-2">
+              <div className="min-w-[12rem] flex-1 space-y-1.5">
+                <label htmlFor="account-phone-input" className="text-sm font-medium">
+                  رقم الجوال
+                </label>
+                <Input
+                  id="account-phone-input"
+                  dir="ltr"
+                  className="text-left"
+                  inputMode="tel"
+                  placeholder="05XXXXXXXX"
+                  value={phoneDraft}
+                  onChange={(e) => setPhoneDraft(e.target.value)}
+                  data-testid="input-account-phone"
+                />
+              </div>
+              <Button
+                onClick={() => sendPhoneCode.mutate()}
+                disabled={sendPhoneCode.isPending || phoneDraft.replace(/\D/g, "").length < 9}
+                className="gap-2"
+                data-testid="button-account-phone-send"
+              >
+                {sendPhoneCode.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Phone className="h-4 w-4" />
+                )}
+                إرسال الرمز
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setPhoneStep("idle");
+                  setPhoneDraft("");
+                }}
+                data-testid="button-account-phone-cancel"
+              >
+                إلغاء
+              </Button>
+            </div>
+          )}
+
+          {phoneStep === "code" && (
+            <div className="space-y-2 rounded-lg border bg-muted/30 p-3">
+              <p className="text-sm text-muted-foreground">
+                أدخل الرمز المرسل إلى{" "}
+                <span dir="ltr" className="font-medium">
+                  {formatSaudiPhoneForDisplay(phoneDraft)}
+                </span>
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                <Input
+                  dir="ltr"
+                  className="max-w-[8rem] text-center tracking-[0.4em]"
+                  inputMode="numeric"
+                  maxLength={6}
+                  placeholder="______"
+                  value={phoneCode}
+                  onChange={(e) => setPhoneCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                  data-testid="input-account-phone-code"
+                />
+                <Button
+                  onClick={() => verifyPhoneCode.mutate()}
+                  disabled={verifyPhoneCode.isPending || phoneCode.length !== 6}
+                  data-testid="button-account-phone-verify"
+                >
+                  {verifyPhoneCode.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    "تأكيد"
+                  )}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={resend > 0 || sendPhoneCode.isPending}
+                  onClick={() => sendPhoneCode.mutate()}
+                  data-testid="button-account-phone-resend"
+                >
+                  {resend > 0 ? `إعادة الإرسال (${resend})` : "إعادة الإرسال"}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setPhoneStep("editing");
+                    setPhoneCode("");
+                  }}
+                >
+                  تغيير الرقم
+                </Button>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 

@@ -66,7 +66,6 @@ const updateUserSchema = z.object({
   firstName: z.string().min(2, "الاسم الأول يجب أن يكون حرفين على الأقل").optional(),
   lastName: z.string().min(2, "اسم العائلة يجب أن يكون حرفين على الأقل").optional(),
   bio: z.string().max(500, "النبذة يجب أن لا تزيد عن 500 حرف").optional(),
-  phoneNumber: z.string().regex(/^[0-9+\-\s()]*$/, "رقم الهاتف غير صحيح").optional(),
   profileImageUrl: z.string().url("رابط الصورة غير صحيح").optional().or(z.literal("")),
 });
 
@@ -255,7 +254,6 @@ export default function Profile() {
       firstName: user?.firstName || "",
       lastName: user?.lastName || "",
       bio: user?.bio || "",
-      phoneNumber: user?.phoneNumber || "",
       profileImageUrl: user?.profileImageUrl || "",
     },
   });
@@ -1131,19 +1129,6 @@ export default function Profile() {
                               </>
                             );
                           })()}
-                          <FormField
-                            control={form.control}
-                            name="phoneNumber"
-                            render={({ field }) => (
-                              <FormItem>
-                                <FormLabel>رقم الهاتف</FormLabel>
-                                <FormControl>
-                                  <Input {...field} data-testid="input-phone-number" />
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
                           <FormField
                             control={form.control}
                             name="bio"

@@ -26,7 +26,14 @@ import {
   completePhoneUserProfile,
 } from "../services/phoneRegistrationService";
 import { sendVerificationEmail } from "../services/email";
+import { sendOtp, verifyOtp } from "../services/otpService";
+import {
+  normalizePhone,
+  classifyPhoneConflict,
+  claimVerifiedAccountPhone,
+} from "../services/phoneAuth";
 import { memoryCache } from "../memoryCache";
+import type { PhoneConflictKind } from "../services/phoneAuth";
 
 const router = Router();
 
@@ -245,6 +252,98 @@ router.post(
       });
     } catch (error) {
       console.error("[phoneRegistration] complete-profile error:", error);
+      return res.status(500).json({ message: "خطأ داخلي في الخادم" });
+    }
+  },
+);
+
+// ── توثيق جوال الحساب الحالي (مسجّل دخول) — إضافة/تغيير بالـOTP ──
+// الغرض phone_verify معزول عن login/2fa. لا يُنشأ حساب ولا يُدمج/يُحذف غيره.
+
+const PHONE_CONFLICT_MESSAGES: Record<PhoneConflictKind, { code: string; message: string }> = {
+  staff: {
+    code: "phone_taken_staff",
+    message: "رقم الجوال مسجل على حساب منسوب آخر. راجع الإدارة لتسويته.",
+  },
+  reader: {
+    code: "phone_taken_reader",
+    message:
+      "الرقم مرتبط بعضوية قارئ سابقة. لا ندمج الحسابات تلقائيًا — تواصل مع الدعم لتوحيد العضوية دون فقدان بياناتك.",
+  },
+  unknown: { code: "phone_taken_unknown", message: "رقم الجوال مسجل مسبقًا." },
+};
+
+router.post(
+  "/api/account/phone/send",
+  isAuthenticated,
+  registrationLimiter,
+  async (req: any, res: Response) => {
+    try {
+      const userId = req.user?.id as string | undefined;
+      if (!userId) return res.status(401).json({ message: "غير مصرح" });
+
+      const e164 = normalizePhone(req.body?.phone);
+      if (!e164) return res.status(400).json({ message: "رقم جوال غير صحيح" });
+
+      const conflict = await classifyPhoneConflict(e164, userId);
+      if (conflict) {
+        const { code, message } = PHONE_CONFLICT_MESSAGES[conflict.kind];
+        return res.status(409).json({ code, message });
+      }
+
+      const result = await sendOtp(e164, "phone_verify");
+      if (!result.configured) {
+        return res.status(503).json({ message: "خدمة الرسائل غير مهيّأة حاليًا" });
+      }
+      return res
+        .status(result.success ? 200 : 422)
+        .json({ message: result.message, retryAfterSeconds: result.retryAfterSeconds });
+    } catch (error) {
+      console.error("[accountPhone] send error:", error);
+      return res.status(500).json({ message: "تعذّر إرسال رمز التحقق" });
+    }
+  },
+);
+
+router.post(
+  "/api/account/phone/verify",
+  isAuthenticated,
+  registrationLimiter,
+  async (req: any, res: Response) => {
+    try {
+      const userId = req.user?.id as string | undefined;
+      if (!userId) return res.status(401).json({ message: "غير مصرح" });
+
+      const e164 = normalizePhone(req.body?.phone);
+      const code = String(req.body?.code ?? "").replace(/[^0-9]/g, "");
+      if (!e164) return res.status(400).json({ message: "رقم جوال غير صحيح" });
+      if (code.length < 4) return res.status(400).json({ message: "رمز التحقق غير صحيح" });
+
+      // فحص التعارض قبل استهلاك الرمز حتى لا يُحرق OTP على خطأ قابل للتصحيح.
+      const conflict = await classifyPhoneConflict(e164, userId);
+      if (conflict) {
+        const { code: conflictCode, message } = PHONE_CONFLICT_MESSAGES[conflict.kind];
+        return res.status(409).json({ code: conflictCode, message });
+      }
+
+      const check = await verifyOtp(e164, code, "phone_verify");
+      if (!check.valid) return res.status(401).json({ message: check.message });
+
+      const claim = await claimVerifiedAccountPhone(userId, e164);
+      if (!claim.ok) {
+        return res.status(claim.status).json({ code: claim.code, message: claim.message });
+      }
+
+      // /api/auth/user مخبأ 60ث — أبطله ليرى الحارس الرقم الموثّق فورًا.
+      memoryCache.delete(`auth-user:${userId}`);
+
+      return res.json({
+        message: "تم توثيق رقم جوالك بنجاح",
+        phoneNumber: claim.phoneNumber,
+        phoneVerified: true,
+      });
+    } catch (error) {
+      console.error("[accountPhone] verify error:", error);
       return res.status(500).json({ message: "خطأ داخلي في الخادم" });
     }
   },

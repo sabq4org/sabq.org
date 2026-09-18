@@ -569,6 +569,15 @@ export async function upsertStaffProfile(
     for (const [key, raw] of Object.entries(patch)) {
       if (raw === undefined) continue;
       if (USER_PATCH_KEYS.has(key)) {
+        if (key === "phoneNumber") {
+          // تطبيع E.164 لمطابقة مسار الدخول بالجوال (05/966/+966).
+          // لا رفض تعارض هنا كي لا يتعطّل استكمال ملف المنسوب؛ التوثيق
+          // بالـOTP متاح من إعدادات الحساب (/api/account/phone/*).
+          const { normalizePhone } = await import("./phoneAuth");
+          const trimmed = raw === "" ? "" : String(raw).trim();
+          userUpdate[key] = trimmed ? (normalizePhone(trimmed) ?? trimmed) : null;
+          continue;
+        }
         userUpdate[key] = raw === "" ? null : String(raw).trim();
         continue;
       }
