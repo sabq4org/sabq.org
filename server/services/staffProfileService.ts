@@ -570,12 +570,33 @@ export async function upsertStaffProfile(
       if (raw === undefined) continue;
       if (USER_PATCH_KEYS.has(key)) {
         if (key === "phoneNumber") {
-          // تطبيع E.164 لمطابقة مسار الدخول بالجوال (05/966/+966).
-          // لا رفض تعارض هنا كي لا يتعطّل استكمال ملف المنسوب؛ التوثيق
-          // بالـOTP متاح من إعدادات الحساب (/api/account/phone/*).
-          const { normalizePhone } = await import("./phoneAuth");
+          // الجوال حقل حسّاس: يمنع ربط رقم يملكه حساب آخر (منع الازدواج
+          // والاستيلاء)، ويُطبّع E.164، ويُسقط التوثيق عند تغيير الرقم.
+          const { normalizePhone, classifyPhoneConflict } = await import("./phoneAuth");
           const trimmed = raw === "" ? "" : String(raw).trim();
-          userUpdate[key] = trimmed ? (normalizePhone(trimmed) ?? trimmed) : null;
+          if (!trimmed) {
+            userUpdate.phoneNumber = null;
+            userUpdate.phoneVerified = false;
+            continue;
+          }
+          const e164 = normalizePhone(trimmed) ?? trimmed;
+          if (normalizePhone(user.phoneNumber) === e164) {
+            // نفس الرقم الحالي — لا تلمس حالة التوثيق.
+            continue;
+          }
+          const conflict = await classifyPhoneConflict(e164, userId);
+          if (conflict) {
+            return {
+              success: false as const,
+              status: 409,
+              message:
+                conflict.kind === "staff"
+                  ? "رقم الجوال مسجل على حساب منسوب آخر. راجع الإدارة لتسويته."
+                  : "الرقم مرتبط بحساب آخر. لا ندمج الحسابات تلقائيًا — تواصل مع الدعم لتوحيد العضوية دون فقدان بياناتك.",
+            };
+          }
+          userUpdate.phoneNumber = e164;
+          userUpdate.phoneVerified = false;
           continue;
         }
         userUpdate[key] = raw === "" ? null : String(raw).trim();
