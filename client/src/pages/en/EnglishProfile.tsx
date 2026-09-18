@@ -49,12 +49,12 @@ import { SmartInterestsBlock } from "@/components/SmartInterestsBlock";
 import { TwoFactorSettings } from "@/components/TwoFactorSettings";
 import type { ArticleWithDetails, User as UserType, UserPointsTotal } from "@shared/schema";
 import { hasRole } from "@/hooks/useAuth";
+import { PhoneVerificationCard } from "@/components/account/PhoneVerificationCard";
 
 const updateUserSchema = z.object({
   firstName: z.string().min(2, "First name must be at least 2 characters").optional(),
   lastName: z.string().min(2, "Last name must be at least 2 characters").optional(),
   bio: z.string().max(500, "Bio must not exceed 500 characters").optional(),
-  phoneNumber: z.string().regex(/^[0-9+\-\s()]*$/, "Invalid phone number").optional(),
   profileImageUrl: z.string().url("Invalid image URL").optional().or(z.literal("")),
 });
 
@@ -75,7 +75,6 @@ export default function EnglishProfile() {
       firstName: user?.firstName || "",
       lastName: user?.lastName || "",
       bio: user?.bio || "",
-      phoneNumber: user?.phoneNumber || "",
       profileImageUrl: user?.profileImageUrl || "",
     },
   });
@@ -905,7 +904,15 @@ export default function EnglishProfile() {
                         <p className="text-sm text-muted-foreground mb-6">
                           Update your personal information. All fields are optional.
                         </p>
-                        
+
+                        <PhoneVerificationCard
+                          locale="en"
+                          phoneNumber={user?.phoneNumber}
+                          phoneVerified={user?.phoneVerified}
+                          testIdPrefix="en-phone"
+                          className="mb-6"
+                        />
+
                         <Form {...form}>
                           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
                             <div className="grid gap-6 md:grid-cols-2">
@@ -945,24 +952,6 @@ export default function EnglishProfile() {
                                 )}
                               />
                             </div>
-
-                            <FormField
-                              control={form.control}
-                              name="phoneNumber"
-                              render={({ field }) => (
-                                <FormItem>
-                                  <FormLabel>Phone Number</FormLabel>
-                                  <FormControl>
-                                    <Input 
-                                      placeholder="+966 123 456 789" 
-                                      {...field}
-                                      data-testid="input-phoneNumber"
-                                    />
-                                  </FormControl>
-                                  <FormMessage />
-                                </FormItem>
-                              )}
-                            />
 
                             <FormField
                               control={form.control}

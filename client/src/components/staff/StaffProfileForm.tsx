@@ -25,6 +25,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { ImageUpload } from "@/components/ImageUpload";
 import { DateField } from "@/components/staff/DateField";
+import { PhoneVerificationCard } from "@/components/account/PhoneVerificationCard";
 import {
   IdCard, Briefcase, Newspaper, Phone, Globe, FolderLock, Eye, Loader2, Plus, Upload, ExternalLink,
   ChevronRight, ChevronLeft,
@@ -39,7 +40,7 @@ type Lookups = {
 type ProfileResponse = {
   user: {
     id: string; firstName: string | null; lastName: string | null;
-    email: string; phoneNumber: string | null; profileImageUrl: string | null; role: string;
+    email: string; phoneNumber: string | null; phoneVerified?: boolean; profileImageUrl: string | null; role: string;
   };
   profile: (Record<string, unknown> & {
     employeeNumber?: string | null;
@@ -55,14 +56,6 @@ type ProfileResponse = {
   missingLabels?: string[];
   suggestedEmploymentType?: "opinion_writer" | "field_reporter" | null;
 };
-
-/** صيغة العرض المحلية 05XXXXXXXX من أي صيغة مخزّنة. */
-function formatSaudiPhone(value?: string | null): string {
-  if (!value) return "";
-  const digits = value.replace(/\D/g, "");
-  const last9 = digits.slice(-9);
-  return last9.startsWith("5") ? `0${last9}` : value;
-}
 
 const SECTIONS = [
   { id: "identity", labelAr: "الهوية الرسمية", icon: IdCard },
@@ -124,55 +117,6 @@ export function StaffProfileForm({
   /** رقم بطاقة وُلِّد في هذه الجلسة — يقفل الحقل بلا إعادة جلب تُفقد التعديلات */
   const [issuedPressId, setIssuedPressId] = useState<string | null>(null);
   const [generatingPressId, setGeneratingPressId] = useState(false);
-
-  // توثيق الجوال (وضع self): الرقم لا يُحفظ من النموذج — يُوثّق برمز SMS
-  // عبر /api/account/phone/* الذي يثبت ملكية الرقم قبل الكتابة.
-  const [phoneDraft, setPhoneDraft] = useState("");
-  const [phoneCode, setPhoneCode] = useState("");
-  const [phoneStep, setPhoneStep] = useState<"idle" | "editing" | "code">("idle");
-  const [phoneResend, setPhoneResend] = useState(0);
-
-  useEffect(() => {
-    if (phoneResend <= 0) return;
-    const t = setInterval(() => setPhoneResend((r) => (r <= 1 ? 0 : r - 1)), 1000);
-    return () => clearInterval(t);
-  }, [phoneResend > 0]);
-
-  const sendPhoneCode = useMutation({
-    mutationFn: async () =>
-      apiRequest("/api/account/phone/send", {
-        method: "POST",
-        body: JSON.stringify({ phone: phoneDraft }),
-        headers: { "Content-Type": "application/json" },
-      }),
-    onSuccess: () => {
-      setPhoneCode("");
-      setPhoneStep("code");
-      setPhoneResend(60);
-      toast({ title: "تم إرسال الرمز", description: "أدخل الرمز المرسل إلى جوالك" });
-    },
-    onError: (err: Error) =>
-      toast({ title: "تعذّر الإرسال", description: err.message, variant: "destructive" }),
-  });
-
-  const verifyPhoneCode = useMutation({
-    mutationFn: async () =>
-      apiRequest("/api/account/phone/verify", {
-        method: "POST",
-        body: JSON.stringify({ phone: phoneDraft, code: phoneCode }),
-        headers: { "Content-Type": "application/json" },
-      }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [apiBase] });
-      queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
-      setPhoneStep("idle");
-      setPhoneDraft("");
-      setPhoneCode("");
-      toast({ title: "تم توثيق الرقم", description: "أصبح رقم جوالك موثّقًا في حسابك" });
-    },
-    onError: (err: Error) =>
-      toast({ title: "فشل التحقق", description: err.message, variant: "destructive" }),
-  });
 
   const { data: dataRaw, isLoading } = useQuery({ queryKey: [apiBase] });
   const { data: lookupsRaw } = useQuery({ queryKey: [lookupsKey] });
@@ -515,88 +459,14 @@ export function StaffProfileForm({
             { required: true, hint: "يظهر في المقالات والملف العام فقط" })}
           {isSelf
             ? field("phoneNumber", "رقم الجوال",
-                <div className="space-y-2">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Input
-                      dir="ltr"
-                      readOnly
-                      value={formatSaudiPhone(data.user.phoneNumber)}
-                      placeholder="لا يوجد رقم موثّق"
-                      className={`flex-1 ${missingClass("phoneNumber")}`}
-                      data-testid="input-staff-phone"
-                    />
-                    {phoneStep === "idle" && (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => { setPhoneDraft(""); setPhoneStep("editing"); }}
-                        data-testid="button-staff-phone-edit"
-                      >
-                        {data.user.phoneNumber ? "تغيير الرقم" : "إضافة رقم"}
-                      </Button>
-                    )}
-                  </div>
-                  {phoneStep === "editing" && (
-                    <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/30 p-2">
-                      <Input
-                        dir="ltr"
-                        inputMode="tel"
-                        placeholder="05XXXXXXXX"
-                        value={phoneDraft}
-                        onChange={(e) => setPhoneDraft(e.target.value)}
-                        className="min-w-[10rem] flex-1"
-                        data-testid="input-staff-phone-draft"
-                      />
-                      <Button
-                        type="button"
-                        onClick={() => sendPhoneCode.mutate()}
-                        disabled={sendPhoneCode.isPending || phoneDraft.replace(/\D/g, "").length < 9}
-                        data-testid="button-staff-phone-send"
-                      >
-                        {sendPhoneCode.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "إرسال الرمز"}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        onClick={() => { setPhoneStep("idle"); setPhoneDraft(""); }}
-                      >
-                        إلغاء
-                      </Button>
-                    </div>
-                  )}
-                  {phoneStep === "code" && (
-                    <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/30 p-2">
-                      <Input
-                        dir="ltr"
-                        inputMode="numeric"
-                        maxLength={6}
-                        placeholder="______"
-                        value={phoneCode}
-                        onChange={(e) => setPhoneCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                        className="max-w-[8rem] text-center tracking-[0.4em]"
-                        data-testid="input-staff-phone-code"
-                      />
-                      <Button
-                        type="button"
-                        onClick={() => verifyPhoneCode.mutate()}
-                        disabled={verifyPhoneCode.isPending || phoneCode.length !== 6}
-                        data-testid="button-staff-phone-verify"
-                      >
-                        {verifyPhoneCode.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "تأكيد"}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        disabled={phoneResend > 0 || sendPhoneCode.isPending}
-                        onClick={() => sendPhoneCode.mutate()}
-                      >
-                        {phoneResend > 0 ? `إعادة الإرسال (${phoneResend})` : "إعادة الإرسال"}
-                      </Button>
-                    </div>
-                  )}
-                </div>,
+                <PhoneVerificationCard
+                  variant="inline"
+                  phoneNumber={data.user.phoneNumber}
+                  phoneVerified={data.user.phoneVerified}
+                  testIdPrefix="staff-phone"
+                  className={missingClass("phoneNumber") ? "rounded-lg ring-1 ring-destructive/40 p-2" : undefined}
+                  onVerified={() => queryClient.invalidateQueries({ queryKey: [apiBase] })}
+                />,
                 { required: true, hint: "يُوثَّق برمز SMS — لا يُحفظ الرقم قبل إثبات الملكية" })
             : field("phoneNumber", "رقم الجوال",
                 <Input dir="ltr" className={missingClass("phoneNumber")} value={String(form.phoneNumber ?? "")} onChange={(e) => set("phoneNumber", e.target.value)} />,

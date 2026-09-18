@@ -15,6 +15,7 @@ import {
   roles,
 } from "@shared/schema";
 import { db } from "../db";
+import { hasRealEmail } from "@shared/authEmail";
 // لا تستورد auth هنا بشكل ثابت — phoneAuth يُستورد من storage/المسارات، وauth يستورد storage.
 
 /// يُطبّع أي إدخال سعودي إلى E.164 (+9665XXXXXXXX). يقبل: 564255999، 0564255999،
@@ -536,12 +537,90 @@ export async function classifyPhoneConflict(
   return { user: other, kind };
 }
 
+/** هل هذا الحساب منسوب (دور نصي أو RBAC)؟ */
+export async function isStaffAccount(user: Pick<UserRow, "id" | "role">): Promise<boolean> {
+  return isStaffPhoneRole(user.role) || (await userHasStaffRbac(user.id));
+}
+
+export type PhoneClaimRejectionCode =
+  | "phone_taken_staff"
+  | "phone_taken_reader"
+  | "phone_taken_unknown";
+
+export const PHONE_CLAIM_REJECTIONS: Record<PhoneClaimRejectionCode, string> = {
+  phone_taken_staff: "رقم الجوال مسجل على حساب منسوب آخر. راجع الإدارة لتسويته.",
+  phone_taken_reader:
+    "الرقم مرتبط بعضوية قارئ سابقة. لا ندمج الحسابات تلقائيًا — تواصل مع الدعم لتوحيد العضوية دون فقدان بياناتك.",
+  phone_taken_unknown: "رقم الجوال مسجل مسبقًا.",
+};
+
+export type PhoneClaimDecision =
+  | { action: "link" }
+  | { action: "transfer"; retireOther: boolean }
+  | { action: "reject"; code: PhoneClaimRejectionCode };
+
+/**
+ * قرار نقي (بلا DB) لمطالبة موثّقة بالرقم — بعد إثبات الملكية بالـOTP.
+ *
+ * - لا حساب آخر → ربط مباشر.
+ * - الحساب الآخر منسوب → رفض (تسوية إدارية).
+ * - الحساب الآخر قارئ والمُطالِب منسوب → **نقل موثّق بلا دمج**: الرقم ينتقل
+ *   للمنسوب لأنه أثبت ملكيته الآن. عضوية القارئ تُحفظ إن كان لها بريد حقيقي
+ *   (تبقى قابلة للدخول به)، وتُقاعَد إن كانت قشرة دخول-بالجوال بلا بريد، لأن
+ *   بقاءها بلا أي وسيلة دخول أسوأ من إغلاقها الموثّق. هذا هو السيناريو الشائع:
+ *   منسوب دخل بجواله قبل ربطه فأُنشئ له قارئ صامت.
+ * - الحساب الآخر قارئ والمُطالِب قارئ → رفض إلى الدعم (لا نسحب رقمًا بين قرّاء).
+ * - دور غير معروف → رفض.
+ */
+export function decideVerifiedPhoneClaim(input: {
+  claimantIsStaff: boolean;
+  other: { kind: PhoneConflictKind; email: string | null | undefined } | null;
+}): PhoneClaimDecision {
+  const { claimantIsStaff, other } = input;
+  if (!other) return { action: "link" };
+  if (other.kind === "staff") return { action: "reject", code: "phone_taken_staff" };
+  if (other.kind === "unknown") return { action: "reject", code: "phone_taken_unknown" };
+  if (!claimantIsStaff) return { action: "reject", code: "phone_taken_reader" };
+  return { action: "transfer", retireOther: !hasRealEmail(other.email) };
+}
+
+export type PhoneClaimPreview =
+  | { ok: true; willTransfer: boolean }
+  | { ok: false; status: number; code: PhoneClaimRejectionCode; message: string };
+
+/**
+ * معاينة القرار قبل إرسال/استهلاك OTP (بلا كتابة) — لرسالة مبكرة وواضحة
+ * في الواجهة، وحتى لا يُحرق رمز على خطأ قابل للتصحيح.
+ */
+export async function previewVerifiedPhoneClaim(
+  userId: string,
+  e164: string,
+): Promise<PhoneClaimPreview> {
+  const [claimant] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+  if (!claimant) return { ok: false, status: 401, code: "phone_taken_unknown", message: "غير مصرح" };
+
+  const conflict = await classifyPhoneConflict(e164, userId);
+  const decision = decideVerifiedPhoneClaim({
+    claimantIsStaff: await isStaffAccount(claimant),
+    other: conflict ? { kind: conflict.kind, email: conflict.user.email } : null,
+  });
+  if (decision.action === "reject") {
+    return { ok: false, status: 409, code: decision.code, message: PHONE_CLAIM_REJECTIONS[decision.code] };
+  }
+  return { ok: true, willTransfer: decision.action === "transfer" };
+}
+
 export type VerifiedPhoneClaim =
-  | { ok: true; phoneNumber: string }
+  | {
+      ok: true;
+      phoneNumber: string;
+      /** حين نُقل الرقم من عضوية قارئ إلى المنسوب. */
+      transferred: { fromUserId: string; retired: boolean } | null;
+    }
   | {
       ok: false;
       status: number;
-      code: "phone_taken_staff" | "phone_taken_reader" | "phone_taken_unknown";
+      code: PhoneClaimRejectionCode;
       message: string;
     };
 
@@ -549,17 +628,29 @@ export type VerifiedPhoneClaim =
  * يثبّت الرقم على الحساب بعد نجاح OTP في غرض phone_verify.
  *
  * قواعد السلامة:
- * - لا حذف ولا دمج تلقائي لأي حساب.
+ * - لا دمج بيانات بين حسابين أبدًا.
  * - تعارض مع منسوب آخر → رفض.
- * - تعارض مع عضوية قارئ سابقة → رفض برسالة توجّه للدعم (لا سحب للرقم من القارئ).
+ * - تعارض مع قارئ والمُطالِب منسوب → نقل الرقم (انظر decideVerifiedPhoneClaim).
+ * - تعارض مع قارئ والمُطالِب قارئ → رفض إلى الدعم.
  * - قفل استشاري على الرقم + إعادة فحص داخل المعاملة لمنع سباق التزامن.
  */
 export async function claimVerifiedAccountPhone(
   userId: string,
   e164: string,
 ): Promise<VerifiedPhoneClaim> {
-  return db.transaction(async (tx) => {
+  const result = await db.transaction(async (tx) => {
     await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${"phone-reg:" + e164}))`);
+
+    const [claimant] = await tx.select().from(users).where(eq(users.id, userId)).limit(1);
+    if (!claimant || claimant.status === "deleted") {
+      return {
+        ok: false as const,
+        status: 401,
+        code: "phone_taken_unknown" as const,
+        message: "غير مصرح",
+        retiredUserId: null,
+      };
+    }
 
     const others = await tx
       .select()
@@ -572,33 +663,44 @@ export async function claimVerifiedAccountPhone(
         ),
       )
       .limit(1);
-    const other = others[0];
+    const other = others[0] ?? null;
 
-    if (other) {
-      const otherIsStaff = isStaffPhoneRole(other.role) || (await userHasStaffRbac(other.id));
-      if (otherIsStaff) {
-        return {
-          ok: false as const,
-          status: 409,
-          code: "phone_taken_staff" as const,
-          message: "رقم الجوال مسجل على حساب منسوب آخر. راجع الإدارة لتسويته.",
-        };
-      }
-      if (isReaderLikeRole(other.role)) {
-        return {
-          ok: false as const,
-          status: 409,
-          code: "phone_taken_reader" as const,
-          message:
-            "الرقم مرتبط بعضوية قارئ سابقة. لا ندمج الحسابات تلقائيًا — تواصل مع الدعم لتوحيد العضوية دون فقدان بياناتك.",
-        };
-      }
+    const decision = decideVerifiedPhoneClaim({
+      claimantIsStaff: await isStaffAccount(claimant),
+      other: other
+        ? {
+            kind: phoneConflictKindFor(other.role, await userHasStaffRbac(other.id)),
+            email: other.email,
+          }
+        : null,
+    });
+
+    if (decision.action === "reject") {
       return {
         ok: false as const,
         status: 409,
-        code: "phone_taken_unknown" as const,
-        message: "رقم الجوال مسجل مسبقًا.",
+        code: decision.code,
+        message: PHONE_CLAIM_REJECTIONS[decision.code],
+        retiredUserId: null,
       };
+    }
+
+    let transferred: { fromUserId: string; retired: boolean } | null = null;
+    if (decision.action === "transfer" && other) {
+      await tx
+        .update(users)
+        .set({
+          phoneNumber: null,
+          phoneVerified: false,
+          ...(decision.retireOther ? { status: "deleted" as const } : {}),
+        })
+        .where(eq(users.id, other.id));
+      transferred = { fromUserId: other.id, retired: decision.retireOther };
+      console.log(
+        `[PhoneAuth] Verified claim ${e164}: moved from reader ${other.id} (${
+          decision.retireOther ? "retired" : "kept, phone detached"
+        }) to staff ${userId}`,
+      );
     }
 
     const [updated] = await tx
@@ -606,6 +708,27 @@ export async function claimVerifiedAccountPhone(
       .set({ phoneNumber: e164, phoneVerified: true })
       .where(eq(users.id, userId))
       .returning();
-    return { ok: true as const, phoneNumber: updated.phoneNumber ?? e164 };
+    return {
+      ok: true as const,
+      phoneNumber: updated.phoneNumber ?? e164,
+      transferred,
+      retiredUserId: transferred?.retired ? transferred.fromUserId : null,
+    };
   });
+
+  // إبطال جلسات القارئ المُقاعَد خارج المعاملة (يستورد auth كسولًا).
+  if (result.retiredUserId) {
+    try {
+      const { invalidateAllUserSessions } = await import("../auth");
+      await invalidateAllUserSessions(result.retiredUserId);
+    } catch (err) {
+      console.error(
+        `[PhoneAuth] Failed to invalidate sessions for retired reader ${result.retiredUserId}:`,
+        err,
+      );
+    }
+  }
+
+  const { retiredUserId: _omit, ...claim } = result;
+  return claim;
 }

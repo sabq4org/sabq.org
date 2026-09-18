@@ -111,6 +111,7 @@ function computeCompletion(
     firstName: string | null;
     lastName: string | null;
     phoneNumber: string | null;
+    phoneVerified?: boolean;
     profileImageUrl?: string | null;
     mediaLicenseNumber?: string | null;
     mediaLicenseExpiresAt?: Date | string | null;
@@ -408,6 +409,7 @@ export async function getStaffProfile(userId: string) {
       lastNameEn: user.lastNameEn,
       email: user.email,
       phoneNumber: user.phoneNumber,
+      phoneVerified: Boolean(user.phoneVerified),
       profileImageUrl: user.profileImageUrl,
       bio: user.bio,
       role: user.role,

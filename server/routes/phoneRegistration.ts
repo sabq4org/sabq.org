@@ -29,11 +29,11 @@ import { sendVerificationEmail } from "../services/email";
 import { sendOtp, verifyOtp } from "../services/otpService";
 import {
   normalizePhone,
-  classifyPhoneConflict,
+  previewVerifiedPhoneClaim,
   claimVerifiedAccountPhone,
 } from "../services/phoneAuth";
 import { memoryCache } from "../memoryCache";
-import type { PhoneConflictKind } from "../services/phoneAuth";
+import { logActivity } from "../rbac";
 
 const router = Router();
 
@@ -260,18 +260,9 @@ router.post(
 // ── توثيق جوال الحساب الحالي (مسجّل دخول) — إضافة/تغيير بالـOTP ──
 // الغرض phone_verify معزول عن login/2fa. لا يُنشأ حساب ولا يُدمج/يُحذف غيره.
 
-const PHONE_CONFLICT_MESSAGES: Record<PhoneConflictKind, { code: string; message: string }> = {
-  staff: {
-    code: "phone_taken_staff",
-    message: "رقم الجوال مسجل على حساب منسوب آخر. راجع الإدارة لتسويته.",
-  },
-  reader: {
-    code: "phone_taken_reader",
-    message:
-      "الرقم مرتبط بعضوية قارئ سابقة. لا ندمج الحسابات تلقائيًا — تواصل مع الدعم لتوحيد العضوية دون فقدان بياناتك.",
-  },
-  unknown: { code: "phone_taken_unknown", message: "رقم الجوال مسجل مسبقًا." },
-};
+/** رسالة تظهر فوق خانات الرمز حين سيُنقل الرقم من عضوية قارئ إلى المنسوب. */
+const PHONE_TRANSFER_NOTICE =
+  "هذا الرقم مرتبط بعضوية قارئ أُنشئت عند دخول سابق بالجوال. بعد تأكيد الرمز سيُنقل الرقم إلى حسابك هذا بأدوارك وصلاحياتك.";
 
 router.post(
   "/api/account/phone/send",
@@ -285,19 +276,21 @@ router.post(
       const e164 = normalizePhone(req.body?.phone);
       if (!e164) return res.status(400).json({ message: "رقم جوال غير صحيح" });
 
-      const conflict = await classifyPhoneConflict(e164, userId);
-      if (conflict) {
-        const { code, message } = PHONE_CONFLICT_MESSAGES[conflict.kind];
-        return res.status(409).json({ code, message });
+      const policy = await previewVerifiedPhoneClaim(userId, e164);
+      if (!policy.ok) {
+        return res.status(policy.status).json({ code: policy.code, message: policy.message });
       }
 
       const result = await sendOtp(e164, "phone_verify");
       if (!result.configured) {
         return res.status(503).json({ message: "خدمة الرسائل غير مهيّأة حاليًا" });
       }
-      return res
-        .status(result.success ? 200 : 422)
-        .json({ message: result.message, retryAfterSeconds: result.retryAfterSeconds });
+      return res.status(result.success ? 200 : 422).json({
+        message: result.message,
+        retryAfterSeconds: result.retryAfterSeconds,
+        willTransfer: policy.willTransfer,
+        notice: policy.willTransfer ? PHONE_TRANSFER_NOTICE : undefined,
+      });
     } catch (error) {
       console.error("[accountPhone] send error:", error);
       return res.status(500).json({ message: "تعذّر إرسال رمز التحقق" });
@@ -319,11 +312,10 @@ router.post(
       if (!e164) return res.status(400).json({ message: "رقم جوال غير صحيح" });
       if (code.length < 4) return res.status(400).json({ message: "رمز التحقق غير صحيح" });
 
-      // فحص التعارض قبل استهلاك الرمز حتى لا يُحرق OTP على خطأ قابل للتصحيح.
-      const conflict = await classifyPhoneConflict(e164, userId);
-      if (conflict) {
-        const { code: conflictCode, message } = PHONE_CONFLICT_MESSAGES[conflict.kind];
-        return res.status(409).json({ code: conflictCode, message });
+      // فحص السياسة قبل استهلاك الرمز حتى لا يُحرق OTP على خطأ قابل للتصحيح.
+      const policy = await previewVerifiedPhoneClaim(userId, e164);
+      if (!policy.ok) {
+        return res.status(policy.status).json({ code: policy.code, message: policy.message });
       }
 
       const check = await verifyOtp(e164, code, "phone_verify");
@@ -337,10 +329,31 @@ router.post(
       // /api/auth/user مخبأ 60ث — أبطله ليرى الحارس الرقم الموثّق فورًا.
       memoryCache.delete(`auth-user:${userId}`);
 
+      // أثر تدقيقي دائم: من وثّق أي رقم، ومن أي عضوية نُقل إن نُقل.
+      await logActivity({
+        userId,
+        action: claim.transferred ? "phone.transferred" : "phone.verified",
+        entityType: "user",
+        entityId: userId,
+        newValue: {
+          phoneNumber: claim.phoneNumber,
+          transferredFrom: claim.transferred?.fromUserId ?? null,
+          otherRetired: claim.transferred?.retired ?? false,
+        },
+        metadata: {
+          ip: req.ip,
+          userAgent: req.headers["user-agent"],
+          reason: "account_phone_otp",
+        },
+      });
+
       return res.json({
-        message: "تم توثيق رقم جوالك بنجاح",
+        message: claim.transferred
+          ? "تم توثيق رقم جوالك ونقله إلى حسابك هذا. الدخول بالجوال سيفتح هذا الحساب."
+          : "تم توثيق رقم جوالك بنجاح",
         phoneNumber: claim.phoneNumber,
         phoneVerified: true,
+        transferred: claim.transferred,
       });
     } catch (error) {
       console.error("[accountPhone] verify error:", error);
