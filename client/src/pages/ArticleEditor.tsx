@@ -3182,6 +3182,18 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                       )}
                       {isOpinionAuthor ? (imageUrl ? "تغيير الصورة" : "رفع صورة") : "رفع من الجهاز"}
                     </Button>
+                    {!isOpinionAuthor && canGenerateImages && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setShowOpenAIImageDialog(true)}
+                        className="gap-2 flex-1 sm:flex-none border-sky-300 bg-sky-50 text-sky-900 hover:bg-sky-100 dark:border-sky-800 dark:bg-sky-950 dark:text-sky-100"
+                        data-testid="button-generate-openai-image"
+                      >
+                        <ImagePlus className="h-4 w-4" />
+                        صور GPT
+                      </Button>
+                    )}
                     {!isOpinionAuthor && (
                       <Button
                         type="button"
@@ -3244,19 +3256,6 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                         >
                           <Sparkles className="h-4 w-4 text-primary" />
                           توليد بالذكاء الاصطناعي
-                        </Button>
-                      )}
-                      {canGenerateImages && (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setShowOpenAIImageDialog(true)}
-                          className="gap-2 border-sky-300 bg-sky-50 text-sky-900 hover:bg-sky-100 dark:border-sky-800 dark:bg-sky-950 dark:text-sky-100"
-                          data-testid="button-generate-openai-image"
-                        >
-                          <ImagePlus className="h-4 w-4" />
-                          صور GPT
                         </Button>
                       )}
                       {canUseInfographics && (
