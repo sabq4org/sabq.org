@@ -17,7 +17,7 @@ Firebase Analytics هو مرسل أحداث النسخ الجديدة. لا تض
 | تطبيق Firebase | App ID | حالة الإعداد في المستودع |
 |---|---|---|
 | iOS `com.sabq.sabqorg` | `1:534820013195:ios:d516ed2e146f209abdc08e` | `GoogleService-Info.plist` مدمج مع الحفاظ على إعدادات Google Sign-In الحالية |
-| Android `com.sabqorg.sabq` | `1:534820013195:android:22935774c3725e53bdc08e` | إعداد Release غير موجود عمدًا حتى فصل مشروع FCM الإنتاجي المختلف |
+| Android `com.sabqorg.sabq` | `1:534820013195:android:22935774c3725e53bdc08e` | إعداد Release يُزوّد محليًا ويُستبعد من Git؛ مسار FCM مفصول في الخادم عبر `FCM_SABQ_*` |
 | Android QA `com.sabqorg.sabq.dev` | `1:534820013195:android:5287c6c9eacf65d0bdc08e` | `src/debug/google-services.json` مُزوّد محليًا للاختبار ومستبعد من Git |
 
 تدفقات التطبيقات الأصلية المسجلة في GA4 property `369420309` هي: iOS `15768236568`، Android الإنتاجي `15768279887`، وAndroid QA `15768280630`. هذه أرقام تسجيل وربط فقط، ولا تُثبت استقبال الأحداث أو ظهورها في DebugView.
@@ -26,7 +26,7 @@ Firebase Analytics هو مرسل أحداث النسخ الجديدة. لا تض
 1. استخدم مشروع سبق `sabq-ga3-ga4` المرتبط بملكية GA4 `369420309` بعد التحقق من الملكية والصلاحيات.
 2. سجّل كل هوية أصلية بنوعها الصحيح: iOS وAndroid. لا تنشئ Web stream باسم تطبيق.
 3. نزّل الإعدادات من المشروع نفسه. ملف iOS المدمج يحافظ على `CLIENT_ID` و`REVERSED_CLIENT_ID` وتهيئة Google Sign-In الحالية.
-4. زوّد `android-native/app/src/debug/google-services.json` محليًا بإعداد Android QA المطابق للـsuffix للاختبار. الملف مستبعد من Git؛ CI الافتراضي يبني Debug دون جمع. لا تستعر ملف VARA ولا تستخدم Application ID وهميًا. لا تُدخل إعداد Android Release قبل حل اختلاف مشروع FCM الإنتاجي.
+4. زوّد `android-native/app/google-services.json` محليًا بملف مشروع سبق الذي يحتوي هويتي Release وDebug. الملف مستبعد من Git؛ CI الافتراضي يبني Debug دون جمع. لا تستعر ملف VARA ولا تستخدم Application ID وهميًا.
 5. افحص كل config دون طباعة المفاتيح:
 
 ```bash

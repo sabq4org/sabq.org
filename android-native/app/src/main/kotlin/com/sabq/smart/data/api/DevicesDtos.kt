@@ -22,6 +22,7 @@ data class DeviceRegisterRequest(
     val locale: String? = "ar",
     val timezone: String? = null,
     val installationId: String? = null,
+    val bundleId: String,
 )
 
 @OptIn(ExperimentalSerializationApi::class)
