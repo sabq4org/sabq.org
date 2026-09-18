@@ -584,6 +584,16 @@ export async function upsertStaffProfile(
             // نفس الرقم الحالي — لا تلمس حالة التوثيق.
             continue;
           }
+          if (opts.actorIsSelf) {
+            // إثبات الملكية إلزامي: الرقم لا يُغيَّر من نموذج الملف الذاتي،
+            // بل عبر توثيق OTP (/api/account/phone/*) الذي يثبت ملكية الرقم.
+            return {
+              success: false as const,
+              status: 409,
+              message:
+                "لا يمكن حفظ رقم جوال جديد من الملف الشخصي — وثّقه أولًا برمز SMS من زر «توثيق الرقم».",
+            };
+          }
           const conflict = await classifyPhoneConflict(e164, userId);
           if (conflict) {
             return {
