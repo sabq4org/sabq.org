@@ -66,6 +66,7 @@
 - AuthAnalyticsMarker ينظف الرابط ويتحقق من جلسة الويب قبل إرسال conversion؛ الأحداث مؤجلة عند صفحات الحساب الحساسة، ومحدودة بعمر وبصمة لمنع العد المكرر. login نجاح حساب قائم، sign_up إنشاء جديد. لا تتغير RBAC أو Schema.
 
 ## توثيق جوال الحساب المسجّل — 2026-09-18
+> الدليل الكامل (التدفّق، الكتابة الخام، التعارض، الاختبارات): [`docs/architecture/PHONE_VERIFICATION_AND_MEMBERSHIP.md`](../../architecture/PHONE_VERIFICATION_AND_MEMBERSHIP.md).
 - مسار جديد للعضو/المنسوب المسجّل: `POST /api/account/phone/send` ثم `POST /api/account/phone/verify` (Passport + CSRF، محدِّد `registrationLimiter`، وغرض OTP مستقل `phone_verify` — أول استخدام فعلي له). لا يُحفظ الرقم إلا بعد التحقق، ويُطبّع إلى E.164 عبر `normalizePhone`.
 - `classifyPhoneConflict` و`claimVerifiedAccountPhone` في `services/phoneAuth.ts`: قفل استشاري على الرقم + إعادة فحص داخل معاملة. تعارض مع **منسوب آخر** → رفض؛ تعارض مع **عضوية قارئ سابقة** → رفض برسالة توجيه للدعم. **لا حذف ولا دمج تلقائي** (يختلف عن `retireDuplicateReaderPhoneAccounts` المستخدم في اعتماد المنسوبين/الدخول).
 - `PATCH /api/auth/user` لم يعد يكتب `phoneNumber` خامًا (يُسقطه صراحةً)؛ الواجهة (إعدادات → الحساب) توثّق الرقم بالـOTP. وفي ملف المنسوب: `upsertStaffProfile` في **الوضع الذاتي** يرفض أي تغيير لرقم الجوال (409) ويوجّه لتوثيق OTP، وفي الوضع الإداري يمنع ربط رقم يملكه حساب آخر (`classifyPhoneConflict` → 409). تغيير الرقم يُسقط `phoneVerified`. واجهة ملف المنسوب (self) تعرض الرقم للقراءة فقط مع زر توثيق SMS عبر `/api/account/phone/*`.
