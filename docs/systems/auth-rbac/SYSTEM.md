@@ -68,5 +68,5 @@
 ## توثيق جوال الحساب المسجّل — 2026-09-18
 - مسار جديد للعضو/المنسوب المسجّل: `POST /api/account/phone/send` ثم `POST /api/account/phone/verify` (Passport + CSRF، محدِّد `registrationLimiter`، وغرض OTP مستقل `phone_verify` — أول استخدام فعلي له). لا يُحفظ الرقم إلا بعد التحقق، ويُطبّع إلى E.164 عبر `normalizePhone`.
 - `classifyPhoneConflict` و`claimVerifiedAccountPhone` في `services/phoneAuth.ts`: قفل استشاري على الرقم + إعادة فحص داخل معاملة. تعارض مع **منسوب آخر** → رفض؛ تعارض مع **عضوية قارئ سابقة** → رفض برسالة توجيه للدعم. **لا حذف ولا دمج تلقائي** (يختلف عن `retireDuplicateReaderPhoneAccounts` المستخدم في اعتماد المنسوبين/الدخول).
-- `PATCH /api/auth/user` لم يعد يكتب `phoneNumber` خامًا (يُسقطه صراحةً)؛ الواجهة (إعدادات → الحساب) توثّق الرقم بالـOTP. `upsertStaffProfile` الذاتي يطبّع `users.phoneNumber` إلى E.164 **دون** رفض تعارض حتى لا يتعطّل استكمال ملف المنسوب (التوثيق متاح من الإعدادات).
+- `PATCH /api/auth/user` لم يعد يكتب `phoneNumber` خامًا (يُسقطه صراحةً)؛ الواجهة (إعدادات → الحساب) توثّق الرقم بالـOTP. `upsertStaffProfile` (ذاتي أو إداري) يمنع ربط رقم يملكه حساب آخر (`classifyPhoneConflict` → 409) ويُسقط `phoneVerified` عند تغيير الرقم؛ تغيير الرقم إلى رقم حر يبقى بلا توثيق حتى يُوثّق من الإعدادات.
 - الدخول بالجوال كما هو (`findExistingPhoneUser` يفضّل المنسوب). الموبايل v1 (`findOrCreatePhoneUser`) لم يتغير في هذا التحديث.
