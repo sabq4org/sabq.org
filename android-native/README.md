@@ -4,7 +4,7 @@
 
 ## الحالة الحالية
 
-- الإصدار المضبوط في `main`: **10.3.4** (`versionCode = 151`) — `targetSdk = 36`.
+- الإصدار المضبوط حاليًا: **10.3.5** (`versionCode = 153`) — `targetSdk = 36`.
 - نحو **50 شاشة Compose** تحت `feature/`، تشمل القراءة، البحث، الأقسام، الحساب، الولاء، الإشعارات، الصوت، وكؤوس العالم والخليج وآسيا.
 - اتصال مباشر بـ `https://api.sabq.org/api/v1/*` عبر Retrofit ومصادقة Bearer.
 - تسجيل أجهزة FCM واستقبال الإشعارات وفتح الوجهة داخل التطبيق.
@@ -75,7 +75,7 @@ release.keyPassword=...
 - `AndroidManifest.xml` يعلن App Links لـ `sabq.org` و`www.sabq.org`.
 - يلزم وجود `/.well-known/assetlinks.json` على الموقع، ويجب أن يحتوي `com.sabqorg.sabq` وبصمة SHA-256 من **Play App Signing**.
 - التطبيق يسجل توكن FCM عبر `/api/v1/devices/register` ويعالجه في `SabqMessagingService`.
-- الإرسال من السيرفر يعتمد على ضبط `FCM_PROJECT_ID` و`FCM_PRIVATE_KEY` و`FCM_CLIENT_EMAIL` في Railway. وجود الكود لا يثبت أن متغيرات الإنتاج مضبوطة.
+- إرسال إشعارات سبق من السيرفر يعتمد على `FCM_SABQ_PROJECT_ID` و`FCM_SABQ_PRIVATE_KEY` و`FCM_SABQ_CLIENT_EMAIL` في Railway. تبقى متغيرات `FCM_*` الافتراضية لـVARA والتطبيقات القديمة.
 
 ## بوابات الجودة قبل أي إصدار
 
