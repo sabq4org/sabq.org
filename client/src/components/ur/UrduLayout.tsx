@@ -17,13 +17,16 @@ interface User {
 export function UrduLayout({ children }: UrduLayoutProps) {
   // Set Urdu page title and RTL direction
   useEffect(() => {
+    // Restore what was there before, not a hardcoded ltr/en: the site default
+    // is rtl/ar and portaled dialogs inherit <html dir> after leaving Urdu.
+    const previousDir = document.documentElement.dir;
+    const previousLang = document.documentElement.lang;
     document.documentElement.dir = "rtl";
     document.documentElement.lang = "ur";
-    
-    // Cleanup: restore defaults when unmounting
+
     return () => {
-      document.documentElement.dir = "ltr";
-      document.documentElement.lang = "en";
+      document.documentElement.dir = previousDir || "rtl";
+      document.documentElement.lang = previousLang || "ar";
     };
   }, []);
 

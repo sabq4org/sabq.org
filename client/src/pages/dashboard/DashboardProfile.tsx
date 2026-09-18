@@ -69,6 +69,7 @@ import {
   BadgeCheck,
 } from "lucide-react";
 import { PhoneVerificationCard, formatSaudiPhoneForDisplay } from "@/components/account/PhoneVerificationCard";
+import { hasRealEmail } from "@shared/authEmail";
 import type { User as UserType } from "@shared/schema";
 import { format, formatDistanceToNow } from "date-fns";
 import { ar } from "date-fns/locale";
@@ -240,6 +241,21 @@ export default function DashboardProfile() {
       toast({
         title: "خطأ",
         description: "فشل في تحديث البيانات. حاول مرة أخرى.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // توثيق البريد: نفس مسار الإعدادات — يرسل رابط التحقق لبريد الحساب الحالي.
+  const resendEmailVerification = useMutation({
+    mutationFn: async () => apiRequest("/api/auth/resend-verification", { method: "POST" }),
+    onSuccess: () => {
+      toast({ title: "تم الإرسال", description: "تحقق من بريدك لإكمال التوثيق" });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "تعذّر الإرسال",
+        description: error.message || "حاول مرة أخرى بعد قليل",
         variant: "destructive",
       });
     },
@@ -469,9 +485,31 @@ export default function DashboardProfile() {
                   </div>
 
                   <div className="w-full space-y-3 text-sm">
-                    <div className="flex items-center gap-2 text-muted-foreground">
+                    <div className="flex flex-wrap items-center gap-2 text-muted-foreground">
                       <Mail className="h-4 w-4" />
-                      <span data-testid="text-user-email">{user.email}</span>
+                      {hasRealEmail(user.email) ? (
+                        <>
+                          <span dir="ltr" data-testid="text-user-email">{user.email}</span>
+                          {user.emailVerified ? (
+                            <BadgeCheck className="h-4 w-4 text-emerald-600" aria-label="بريد موثّق" />
+                          ) : (
+                            <>
+                              <span className="text-xs text-amber-600">غير موثّق</span>
+                              <button
+                                type="button"
+                                onClick={() => resendEmailVerification.mutate()}
+                                disabled={resendEmailVerification.isPending}
+                                className="text-xs font-medium text-primary hover:underline disabled:opacity-60"
+                                data-testid="button-resend-email-verification"
+                              >
+                                {resendEmailVerification.isPending ? "جارٍ الإرسال…" : "أرسل رابط التوثيق"}
+                              </button>
+                            </>
+                          )}
+                        </>
+                      ) : (
+                        <span className="text-xs">لا يوجد بريد إلكتروني</span>
+                      )}
                     </div>
 
                     {user.phoneNumber && (
