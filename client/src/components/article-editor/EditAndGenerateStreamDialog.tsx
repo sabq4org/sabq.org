@@ -19,7 +19,7 @@ interface EditAndGenerateStreamDialogProps {
 
 const PHASE_LABELS: Record<EditStreamPhase, string> = {
   edit: "إعادة الصياغة بأسلوب سبق",
-  smart: "العنوان الفرعي والموجز والكلمات وSEO",
+  smart: "العنوان الفرعي والموجز والكلمات المفتاحية وSEO",
   newsletter: "عنوان البريد الذكي",
 };
 
@@ -74,7 +74,7 @@ export function EditAndGenerateStreamDialog({ open, onOpenChange, preview, phase
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl gap-0 overflow-hidden p-0" data-testid="dialog-edit-and-generate-stream">
+      <DialogContent dir="rtl" className="max-w-2xl gap-0 overflow-hidden p-0" data-testid="dialog-edit-and-generate-stream">
         {/* رأس متدرّج + عدّاد الزمن — مساحة `ps-10` تحجز موضع إكس الإغلاق كي لا يتداخل مع النص */}
         <DialogHeader className="space-y-2 border-b bg-gradient-to-b from-primary/[0.07] to-transparent pb-4 pe-6 ps-10 pt-6 text-start">
           <DialogTitle className="flex items-center gap-2.5 text-base">

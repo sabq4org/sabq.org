@@ -382,7 +382,7 @@ export default function ArticleDetail() {
     
     // Cleanup: restore previous values when unmounting
     return () => {
-      document.documentElement.dir = previousDir || "ltr";
+      document.documentElement.dir = previousDir || "rtl";
       document.documentElement.lang = previousLang || "en";
     };
   }, []);
