@@ -1646,7 +1646,22 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       // الجوال لا يُكتب خامًا من هنا: يُدار حصرًا عبر مسار التوثيق
       // /api/account/phone/send + /verify (OTP + فحص تفرّد)، حتى لا يربط
       // عضو رقمًا لا يملكه أو يزاحم حسابًا آخر.
+      // رقم مطابق للمخزّن (نماذج قديمة تعيد إرسال الحقل كاملًا) يُسقط بصمت؛
+      // أما رقم **مختلف** فيُرفض صراحةً بدل «نجاح كاذب» أوهم المنسوبين
+      // بأن الرقم حُفظ بينما لم يُربط شيء (حادثة 2026-09-18).
+      const rawPhone = (data as { phoneNumber?: unknown }).phoneNumber;
       delete (data as { phoneNumber?: unknown }).phoneNumber;
+      if (typeof rawPhone === "string" && rawPhone.trim()) {
+        const wanted = normalizePhone(rawPhone);
+        const current = normalizePhone(existing?.phoneNumber);
+        if (wanted !== current) {
+          return res.status(400).json({
+            code: "phone_requires_verification",
+            message:
+              "رقم الجوال لا يُحفظ من هنا. استخدم «إضافة/تغيير الرقم» ليصلك رمز تحقق يثبت ملكيتك للرقم ويربطه بحسابك.",
+          });
+        }
+      }
 
       const user = await storage.updateUser(userId, data);
       memoryCache.delete(`auth-user:${userId}`);

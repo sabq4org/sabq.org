@@ -46,3 +46,50 @@ describe("توثيق الجوال — تطبيع كل الصيغ إلى E.164", 
     expect(normalizePhone(null)).toBeNull();
   });
 });
+
+import { decideVerifiedPhoneClaim } from "../../server/services/phoneAuth";
+
+describe("decideVerifiedPhoneClaim — سياسة المطالبة الموثّقة بالرقم (بعد OTP)", () => {
+  it("لا حساب آخر → ربط مباشر", () => {
+    expect(decideVerifiedPhoneClaim({ claimantIsStaff: true, other: null })).toEqual({ action: "link" });
+    expect(decideVerifiedPhoneClaim({ claimantIsStaff: false, other: null })).toEqual({ action: "link" });
+  });
+
+  it("الرقم على منسوب آخر → رفض للإدارة، أيًّا كان المُطالِب", () => {
+    for (const claimantIsStaff of [true, false]) {
+      expect(
+        decideVerifiedPhoneClaim({ claimantIsStaff, other: { kind: "staff", email: "x@sabq.org" } }),
+      ).toEqual({ action: "reject", code: "phone_taken_staff" });
+    }
+  });
+
+  it("منسوب يطالب برقم على قارئ بلا بريد حقيقي (قشرة دخول بالجوال) → نقل وتقاعد القشرة", () => {
+    expect(
+      decideVerifiedPhoneClaim({ claimantIsStaff: true, other: { kind: "reader", email: null } }),
+    ).toEqual({ action: "transfer", retireOther: true });
+    expect(
+      decideVerifiedPhoneClaim({
+        claimantIsStaff: true,
+        other: { kind: "reader", email: "p966501234567@phone.sabq.org" },
+      }),
+    ).toEqual({ action: "transfer", retireOther: true });
+  });
+
+  it("منسوب يطالب برقم على قارئ له بريد حقيقي → نقل الرقم فقط والعضوية تبقى", () => {
+    expect(
+      decideVerifiedPhoneClaim({ claimantIsStaff: true, other: { kind: "reader", email: "reader@gmail.com" } }),
+    ).toEqual({ action: "transfer", retireOther: false });
+  });
+
+  it("قارئ يطالب برقم على قارئ آخر → رفض إلى الدعم (لا سحب بين القرّاء)", () => {
+    expect(
+      decideVerifiedPhoneClaim({ claimantIsStaff: false, other: { kind: "reader", email: null } }),
+    ).toEqual({ action: "reject", code: "phone_taken_reader" });
+  });
+
+  it("دور غير معروف → رفض بلا معالجة تلقائية", () => {
+    expect(
+      decideVerifiedPhoneClaim({ claimantIsStaff: true, other: { kind: "unknown", email: null } }),
+    ).toEqual({ action: "reject", code: "phone_taken_unknown" });
+  });
+});
