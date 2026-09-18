@@ -53,6 +53,10 @@ export type OpinionWriterSummary = {
   id: string;
   name: string;
   email: string | null;
+  /** توثيق البريد والجوال — لمتابعة من يستطيع الدخول بالجوال */
+  emailVerified: boolean;
+  phoneNumber: string | null;
+  phoneVerified: boolean;
   profileImageUrl: string | null;
   jobTitle: string | null;
   gender: string | null;
@@ -172,6 +176,9 @@ async function fetchWriterUsers(writerId?: string) {
       firstName: users.firstName,
       lastName: users.lastName,
       email: users.email,
+      emailVerified: users.emailVerified,
+      phoneNumber: users.phoneNumber,
+      phoneVerified: users.phoneVerified,
       profileImageUrl: users.profileImageUrl,
       jobTitle: users.jobTitle,
       gender: users.gender,
@@ -314,6 +321,9 @@ export async function listOpinionWriters(): Promise<OpinionWriterSummary[]> {
       id: w.id,
       name: [w.firstName, w.lastName].filter(Boolean).join(" ") || w.email || w.id,
       email: w.email,
+      emailVerified: Boolean(w.emailVerified),
+      phoneNumber: w.phoneNumber,
+      phoneVerified: Boolean(w.phoneVerified),
       profileImageUrl: w.profileImageUrl,
       jobTitle: w.jobTitle,
       gender: w.gender,

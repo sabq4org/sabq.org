@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { VerificationChips, VerificationSummary } from "@/components/account/VerificationChips";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   Select,
@@ -76,6 +77,8 @@ interface StaffUser {
   profileImageUrl: string | null;
   status: string;
   emailVerified: boolean;
+  phoneNumber?: string | null;
+  phoneVerified?: boolean;
   role: string;
   roleName: string | null;
   roleNameAr: string | null;
@@ -375,6 +378,11 @@ export default function StaffMembers() {
         <span data-testid={`text-staff-email-${info.row.original.id}`}>{info.getValue()}</span>
       ),
     }),
+    columnHelper.display({
+      id: "verification",
+      header: "التوثيق",
+      cell: (info) => <VerificationChips user={info.row.original} idForTest={info.row.original.id} />,
+    }),
     columnHelper.accessor("roleNameAr", {
       header: "الدور",
       cell: (info) => {
@@ -668,6 +676,7 @@ export default function StaffMembers() {
                     data-testid="input-staff-search"
                   />
                 </div>
+                <VerificationSummary users={allUsers} className="mt-2" />
               </div>
               <div className="flex flex-wrap gap-2">
                 <Select value={roleFilter} onValueChange={setRoleFilter}>
