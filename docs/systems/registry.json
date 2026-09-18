@@ -764,7 +764,8 @@
       "summary": "Passport للويب، جلسات الأعضاء للموبايل، أدوار وصلاحيات.",
       "docPath": "docs/systems/auth-rbac/SYSTEM.md",
       "relatedDocs": [
-        "docs/architecture/AUTHENTICATION_FLOW.md"
+        "docs/architecture/AUTHENTICATION_FLOW.md",
+        "docs/architecture/PHONE_VERIFICATION_AND_MEMBERSHIP.md"
       ],
       "pathGlobs": [
         "server/auth.ts",
