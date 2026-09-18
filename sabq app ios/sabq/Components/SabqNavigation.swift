@@ -16,18 +16,22 @@ final class SabqNavigationState {
 
 /// Use the standard stack in compact windows so deep links and native back
 /// navigation share the same path. Wide windows keep the list beside the reader.
-struct SabqTabNavigation<Root: View>: View {
+struct SabqTabNavigation<Root: View, Sidebar: View>: View {
     @Binding var path: NavigationPath
     var usesReaderColumns = true
     @Environment(\.horizontalSizeClass) private var sizeClass
     @ViewBuilder var root: () -> Root
+    /// ما يُعرض في عمود القائمة على العرض المنتظم (iPhone Duo مفتوحًا، iPad).
+    /// الافتراضي `root` نفسه؛ «الرئيسية» تمرّر `HomeSidebarView` لأن الصفحة
+    /// الأولى الكاملة لا تصلح عمودًا بجوار القارئ.
+    @ViewBuilder var sidebar: () -> Sidebar
 
     var body: some View {
         if sizeClass == .regular && usesReaderColumns {
             NavigationSplitView {
-                root()
+                sidebar()
                     .modifier(SabqDestinations())
-                    .navigationSplitViewColumnWidth(min: 320, ideal: 390, max: 520)
+                    .navigationSplitViewColumnWidth(min: 340, ideal: 400, max: 520)
             } detail: {
                 NavigationStack(path: $path) {
                     ContentUnavailableView("اختر ما تود قراءته", systemImage: "newspaper",
@@ -43,6 +47,20 @@ struct SabqTabNavigation<Root: View>: View {
                     .modifier(SabqDestinations())
             }
         }
+    }
+}
+
+extension SabqTabNavigation where Sidebar == Root {
+    /// التبويبات التي تصلح جذورها عمودًا كما هي (قوائم وشبكات) لا تمرّر `sidebar`.
+    init(
+        path: Binding<NavigationPath>,
+        usesReaderColumns: Bool = true,
+        @ViewBuilder root: @escaping () -> Root
+    ) {
+        self._path = path
+        self.usesReaderColumns = usesReaderColumns
+        self.root = root
+        self.sidebar = root
     }
 }
 

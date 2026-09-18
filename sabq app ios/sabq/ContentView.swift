@@ -26,6 +26,8 @@ struct ContentView: View {
             ForEach(AppTab.allCases) { tab in
                 SabqTabNavigation(path: path(for: tab), usesReaderColumns: tab != .profile) {
                     tabRoot(tab)
+                } sidebar: {
+                    tabSidebar(tab)
                 }
                 .tabItem { Label(tab.title, systemImage: tab.systemImage) }
                 .tag(tab)
@@ -147,6 +149,16 @@ struct ContentView: View {
         case .explore: ExploreView()
         case .bookmarks: BookmarksView()
         case .profile: SettingsView()
+        }
+    }
+
+    /// عمود القائمة على العرض المنتظم: بطاقات الأخبار للرئيسية بدل الصفحة
+    /// الأولى الكاملة، والجذر نفسه لبقية التبويبات (قوائم تصلح عمودًا كما هي).
+    @ViewBuilder
+    private func tabSidebar(_ tab: AppTab) -> some View {
+        switch tab {
+        case .home: HomeSidebarView()
+        default: tabRoot(tab)
         }
     }
 
