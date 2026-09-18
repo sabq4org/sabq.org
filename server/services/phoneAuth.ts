@@ -503,3 +503,109 @@ export async function claimPhoneForStaffAccount(
 
   return { ok: true, e164 };
 }
+
+/** تصنيف صاحب الرقم المتعارض — للحسم الآمن بلا دمج أو حذف. */
+export type PhoneConflictKind = "staff" | "reader" | "unknown";
+
+/**
+ * تصنيف نقي (بلا DB) لدور صاحب الرقم: يُفضّل إشارة RBAC إن وُجدت،
+ * ثم دور `users.role` المعروف. يُستخدم في مسار توثيق الجوال.
+ */
+export function phoneConflictKindFor(
+  role: string | null | undefined,
+  hasStaffRbac: boolean,
+): PhoneConflictKind {
+  if (hasStaffRbac || isStaffPhoneRole(role)) return "staff";
+  if (isReaderLikeRole(role)) return "reader";
+  return "unknown";
+}
+
+/**
+ * يصف حسابًا آخر يملك هذا الرقم (بأي صيغة) دون أي تعديل.
+ * يُستخدم في مسار «توثيق الجوال» للمنع المبكر ورسالة واضحة.
+ */
+export async function classifyPhoneConflict(
+  e164: string,
+  excludeUserId?: string | null,
+): Promise<{ user: UserRow; kind: PhoneConflictKind } | null> {
+  const matches = await findUsersByPhone(e164);
+  const other = matches.find((u) => u.id !== excludeUserId);
+  if (!other) return null;
+  const staff = isStaffPhoneRole(other.role) || (await userHasStaffRbac(other.id));
+  const kind = phoneConflictKindFor(other.role, staff);
+  return { user: other, kind };
+}
+
+export type VerifiedPhoneClaim =
+  | { ok: true; phoneNumber: string }
+  | {
+      ok: false;
+      status: number;
+      code: "phone_taken_staff" | "phone_taken_reader" | "phone_taken_unknown";
+      message: string;
+    };
+
+/**
+ * يثبّت الرقم على الحساب بعد نجاح OTP في غرض phone_verify.
+ *
+ * قواعد السلامة:
+ * - لا حذف ولا دمج تلقائي لأي حساب.
+ * - تعارض مع منسوب آخر → رفض.
+ * - تعارض مع عضوية قارئ سابقة → رفض برسالة توجّه للدعم (لا سحب للرقم من القارئ).
+ * - قفل استشاري على الرقم + إعادة فحص داخل المعاملة لمنع سباق التزامن.
+ */
+export async function claimVerifiedAccountPhone(
+  userId: string,
+  e164: string,
+): Promise<VerifiedPhoneClaim> {
+  return db.transaction(async (tx) => {
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${"phone-reg:" + e164}))`);
+
+    const others = await tx
+      .select()
+      .from(users)
+      .where(
+        and(
+          phoneMatchSql(users.phoneNumber, e164),
+          ne(users.status, "deleted"),
+          ne(users.id, userId),
+        ),
+      )
+      .limit(1);
+    const other = others[0];
+
+    if (other) {
+      const otherIsStaff = isStaffPhoneRole(other.role) || (await userHasStaffRbac(other.id));
+      if (otherIsStaff) {
+        return {
+          ok: false as const,
+          status: 409,
+          code: "phone_taken_staff" as const,
+          message: "رقم الجوال مسجل على حساب منسوب آخر. راجع الإدارة لتسويته.",
+        };
+      }
+      if (isReaderLikeRole(other.role)) {
+        return {
+          ok: false as const,
+          status: 409,
+          code: "phone_taken_reader" as const,
+          message:
+            "الرقم مرتبط بعضوية قارئ سابقة. لا ندمج الحسابات تلقائيًا — تواصل مع الدعم لتوحيد العضوية دون فقدان بياناتك.",
+        };
+      }
+      return {
+        ok: false as const,
+        status: 409,
+        code: "phone_taken_unknown" as const,
+        message: "رقم الجوال مسجل مسبقًا.",
+      };
+    }
+
+    const [updated] = await tx
+      .update(users)
+      .set({ phoneNumber: e164, phoneVerified: true })
+      .where(eq(users.id, userId))
+      .returning();
+    return { ok: true as const, phoneNumber: updated.phoneNumber ?? e164 };
+  });
+}
