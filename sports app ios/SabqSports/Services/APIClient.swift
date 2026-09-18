@@ -61,6 +61,23 @@ actor APIClient {
     }
 
     func setAuthToken(_ token: String?) { authToken = token }
+
+    /// Revoke the captured session before discarding local credentials.
+    func revokeSession(_ token: String) async throws {
+        let url = try buildURL(path: "/auth/logout", query: [:], apiRoot: URLConstants.mobileAPI)
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = Data("{}".utf8)
+        let (_, response) = try await ephemeralSession.data(for: request)
+        guard let http = response as? HTTPURLResponse,
+              (200..<300).contains(http.statusCode) || http.statusCode == 401 else {
+            throw NSError(domain: "sabqsports", code: 500,
+                userInfo: [NSLocalizedDescriptionKey: "تعذّر إنهاء الجلسة على الخادم. حاول مجددًا"])
+        }
+    }
+
     func setCsrfToken(_ token: String?) { csrfToken = token }
     func setPreferredLanguage(_ code: String) { preferredLanguage = code }
 

@@ -169,7 +169,7 @@ final class AuthStore {
             let response = try await APIClient.shared.verifyTwoFactor(
                 challengeToken: challenge, code: code, backupCode: backupCode
             )
-            try await applySession(response, analyticsMethod: "2fa")
+            guard try await applySession(response, analyticsMethod: "2fa") else { return false }
             pending2FAChallengeToken = nil
             return true
         } catch let apiError as APIError {
@@ -230,8 +230,7 @@ final class AuthStore {
         defer { isLoading = false }
         do {
             let response = try await APIClient.shared.verifyPhoneCode(phone, code: code)
-            try await applySession(response, analyticsMethod: "phone")
-            return true
+            return try await applySession(response, analyticsMethod: "phone")
         } catch let apiError as APIError {
             errorMessage = apiError.errorDescription
             errorSource = .phone
@@ -245,7 +244,15 @@ final class AuthStore {
 
     /// تثبيت الجلسة بعد أي مسار دخول ناجح (بريد/جوال/OTP).
     @MainActor
-    private func applySession(_ response: APILoginResponse, analyticsMethod: String) async throws {
+    @discardableResult
+    private func applySession(_ response: APILoginResponse, analyticsMethod: String) async throws -> Bool {
+        if response.requires2FA == true {
+            guard let challenge = response.challengeToken, !challenge.isEmpty else {
+                throw APIError.apiMessage("تعذّر بدء التحقق بخطوتين")
+            }
+            pending2FAChallengeToken = challenge
+            return false
+        }
         guard let token = response.token, !token.isEmpty else {
             throw APIError.apiMessage(response.message ?? "بيانات الدخول غير صحيحة")
         }
@@ -256,11 +263,13 @@ final class AuthStore {
         if let loginUser = response.user {
             currentUser = loginUser
             isLoggedIn = true
+            needsProfileCompletion = loginUser.isProfileComplete == false
             SabqAnalytics.setUserId(loginUser.id)
             SabqAnalytics.login(method: analyticsMethod)
         }
         await fetchFullProfile()
         await registerPushTokenAfterAuth()
+        return true
     }
 
     /// Re-send the activation email for the account whose login attempt
@@ -316,20 +325,7 @@ final class AuthStore {
         pendingActivationEmail = nil
         do {
             let response = try await APIClient.shared.loginWithGoogle(idToken: idToken)
-            if let token = response.token {
-                await APIClient.shared.setAuthToken(token)
-            }
-            await APIClient.shared.markAuthenticated()
-            UserDefaults.standard.set(Date(), forKey: "sabq_last_auth_date")
-            if let loginUser = response.user {
-                currentUser = loginUser
-                isLoggedIn = true
-                needsProfileCompletion = loginUser.isProfileComplete == false
-                SabqAnalytics.setUserId(loginUser.id)
-                SabqAnalytics.login(method: "google")
-            }
-            await fetchFullProfile()
-            await registerPushTokenAfterAuth()
+            try await applySession(response, analyticsMethod: "google")
         } catch let apiError as APIError {
             errorMessage = apiError.errorDescription
             errorSource = .social
@@ -364,20 +360,7 @@ final class AuthStore {
                 lastName: lastName,
                 email: email
             )
-            if let token = response.token {
-                await APIClient.shared.setAuthToken(token)
-            }
-            await APIClient.shared.markAuthenticated()
-            UserDefaults.standard.set(Date(), forKey: "sabq_last_auth_date")
-            if let loginUser = response.user {
-                currentUser = loginUser
-                isLoggedIn = true
-                needsProfileCompletion = loginUser.isProfileComplete == false
-                SabqAnalytics.setUserId(loginUser.id)
-                SabqAnalytics.login(method: "apple")
-            }
-            await fetchFullProfile()
-            await registerPushTokenAfterAuth()
+            try await applySession(response, analyticsMethod: "apple")
         } catch let apiError as APIError {
             errorMessage = apiError.errorDescription
             errorSource = .social

@@ -236,12 +236,18 @@ class VaraViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun logout() = viewModelScope.launch {
+        _account.value = _account.value.copy(busy = true, error = null)
+        val failure = runCatching { api.memberPost("/auth/logout", buildJsonObject {}) }.exceptionOrNull()
+        if (failure != null && (failure as? ApiFailure)?.status != 401) {
+            _account.value = _account.value.copy(busy = false, error = "تعذّر إنهاء الجلسة على الخادم. حاول مجددًا")
+            return@launch
+        }
         val token = runCatching { FirebaseMessaging.getInstance().token.await() }.getOrNull()
         if (!token.isNullOrBlank()) runCatching {
             api.memberDelete("/devices/unregister", body = buildJsonObject { put("deviceToken", token) })
         }
         clearSession()
-        _account.value = _account.value.copy(error = null)
+        _account.value = _account.value.copy(busy = false, error = null)
     }
 
     fun loadMemberData() = viewModelScope.launch {
