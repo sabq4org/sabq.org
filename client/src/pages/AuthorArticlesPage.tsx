@@ -14,7 +14,8 @@ import { useAuth } from "@/hooks/useAuth";
 import { useCanonical } from "@/hooks/useCanonical";
 import { apiUrl } from "@/lib/queryClient";
 import { OpinionCard } from "@/components/public/OpinionCard";
-import { Loader2, PenLine } from "lucide-react";
+import { Eye, Loader2, PenLine } from "lucide-react";
+import { formatNumber } from "@/lib/format";
 import { NewsArticleCard } from "@/components/NewsArticleCard";
 import type { ArticleWithDetails } from "@shared/schema";
 
@@ -166,10 +167,14 @@ export default function AuthorArticlesPage() {
           </div>
         ) : (
           <>
-            <section className="public-page-header border-b border-border bg-muted/30">
-              <div className="container max-w-6xl mx-auto px-4 py-8 sm:py-10">
+            <section className="public-page-header relative overflow-hidden border-b border-border">
+              <div
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-0 bg-gradient-to-b from-primary/[0.06] via-transparent to-transparent"
+              />
+              <div className="container relative max-w-6xl mx-auto px-4 py-8 sm:py-10">
                 <div className="flex flex-col sm:flex-row sm:items-start gap-5 sm:gap-7">
-                  <Avatar className="h-20 w-20 sm:h-24 sm:w-24 shrink-0 border border-border">
+                  <Avatar className="h-20 w-20 sm:h-24 sm:w-24 shrink-0 border-2 border-background shadow-md ring-1 ring-border">
                     {firstPage.author.avatarUrl ? (
                       <AvatarImage
                         src={firstPage.author.avatarUrl}
@@ -198,6 +203,15 @@ export default function AuthorArticlesPage() {
                       <span className="tabular-nums">
                         {firstPage.stats.articleCount.toLocaleString("en-US")} مقال
                       </span>
+                      {firstPage.stats.totalViews > 0 && (
+                        <>
+                          <span className="text-border">·</span>
+                          <span className="inline-flex items-center gap-1.5 tabular-nums">
+                            <Eye className="h-3.5 w-3.5" />
+                            {formatNumber(firstPage.stats.totalViews)} مشاهدة
+                          </span>
+                        </>
+                      )}
                     </p>
                     {firstPage.author.bio ? (
                       <p className="text-sm sm:text-base text-muted-foreground leading-7 max-w-2xl pt-1">
@@ -209,9 +223,16 @@ export default function AuthorArticlesPage() {
               </div>
             </section>
 
-            <section className="container max-w-6xl mx-auto px-4 py-8 sm:py-10">
+            {/* شريط ملوّن خلف البطاقات البيضاء حتى لا تذوب في خلفية بيضاء */}
+            <section className="public-surface flex-1">
+              <div className="container max-w-6xl mx-auto px-4 py-8 sm:py-10">
               {pageNumber > 1 && <a href={pageHref(pageNumber - 1)} rel="prev" className="inline-block mb-4 text-primary">الصفحة السابقة</a>}
-              <h2 className="text-lg font-bold mb-6">أحدث المقالات</h2>
+              <h2 className="text-lg font-bold mb-6 flex items-baseline gap-2">
+                أحدث المقالات
+                <span className="text-sm font-normal text-muted-foreground tabular-nums">
+                  ({firstPage.stats.articleCount.toLocaleString("en-US")})
+                </span>
+              </h2>
 
               {articles.length === 0 ? (
                 <p className="text-sm text-muted-foreground py-12 text-center">
@@ -224,6 +245,7 @@ export default function AuthorArticlesPage() {
                       <OpinionCard
                         key={article.id}
                         variant="grid"
+                        hideAuthor
                         article={{
                           ...article,
                           author: {
@@ -272,6 +294,7 @@ export default function AuthorArticlesPage() {
                   ) : null}
                 </>
               )}
+              </div>
             </section>
           </>
         )}

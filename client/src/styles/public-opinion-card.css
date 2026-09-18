@@ -72,6 +72,9 @@
 }
 
 .public-opinion-card-grid .public-opinion-title { margin-top: 14px; }
+/* بطاقة بلا صف كاتب (صفحة الكاتب): العنوان يبدأ من الأعلى ويترك مكان علامة الاقتباس */
+.public-opinion-card-noauthor .public-opinion-title { margin-top: 0; padding-inline-end: 40px; }
+.public-opinion-card-noauthor { min-height: 200px; }
 .public-opinion-card-grid .public-opinion-title + .public-opinion-excerpt { margin-top: 8px; }
 .public-opinion-card-home .public-opinion-title { margin-top: 16px; }
 

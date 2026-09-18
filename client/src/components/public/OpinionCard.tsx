@@ -41,9 +41,12 @@ function validDate(value?: string | null): Date | null {
 export function OpinionCard({
   article,
   variant = "grid",
+  hideAuthor = false,
 }: {
   article: OpinionCardArticle;
   variant?: OpinionCardVariant;
+  /** في صفحة الكاتب نفسه: صورته واسمه في رأس الصفحة، فلا تُكرَّر في كل بطاقة. */
+  hideAuthor?: boolean;
 }) {
   const name = authorName(article);
   const href = `/opinion/${article.slug}`;
@@ -90,11 +93,11 @@ export function OpinionCard({
 
   return (
     <article
-      className={`public-opinion-card public-opinion-card-${variant} group`}
+      className={`public-opinion-card public-opinion-card-${variant} group${hideAuthor ? " public-opinion-card-noauthor" : ""}`}
       data-testid={`opinion-card-${article.id}`}
     >
       <Quote className="public-opinion-quote" aria-hidden="true" />
-      {(variant === "home" || variant === "grid") && (
+      {!hideAuthor && (variant === "home" || variant === "grid") && (
         <div className="public-opinion-author-row">
           <Avatar className="public-opinion-avatar h-12 w-12 shrink-0">
             <AvatarImage
@@ -126,7 +129,7 @@ export function OpinionCard({
       )}
       <div className="public-opinion-footer">
         <span className="public-opinion-footer-meta">
-          {variant === "grid" && <span>{name}</span>}
+          {variant === "grid" && !hideAuthor && <span>{name}</span>}
           {publishedDate && (
             <time
               dateTime={publishedDate.toISOString()}
