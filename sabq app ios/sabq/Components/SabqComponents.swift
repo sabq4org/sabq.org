@@ -1838,12 +1838,20 @@ struct CompactArticleRow: View {
         .fixedSize(horizontal: false, vertical: true)
     }
 
+    /// اسم القسم نصًّا بلون القسم بلا كبسولة — على نسق سطر بيانات بطاقات
+    /// «اقرأ أيضًا» (الاسم · الوقت). الكبسولة الملوّنة كانت تثقل كل صف في
+    /// القائمة وتنافس العنوان (ملاحظة المالك 2026-09-19).
     @ViewBuilder
     private var metadataBadges: some View {
         HStack(alignment: .center, spacing: 6) {
             if showsCategory {
-                StatusChip(title: article.categoryTitle, tint: article.category.tint)
-                    .fixedSize(horizontal: false, vertical: true)
+                Text(article.categoryTitle)
+                    .font(SabqFonts.app(size: 12, weight: .medium))
+                    .foregroundStyle(article.category.tint)
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+                Text("·")
+                    .foregroundStyle(SabqTheme.tertiaryInk)
             }
             if isNew {
                 newPill
