@@ -18,6 +18,7 @@ struct ContentView: View {
     /// (cold start, foreground, or background restore). We watch it via the
     /// onChange handler below and translate it into a NavigationPath entry.
     @State private var notificationsStore = NotificationsStore.shared
+    @State private var seasonal = SeasonalThemeStore.shared
     @State private var showCompleteName = false
     @Environment(\.scenePhase) private var scenePhase
 
@@ -41,6 +42,13 @@ struct ContentView: View {
         }
         .id(navigation.sessionID)
         .tint(SabqTheme.primaryEnd)
+        // ألوان `SabqTheme` ثابتة تُقرأ وقت الرسم، فلا يتتبّعها SwiftUI.
+        // تبديل المفتاح يجدّد `sessionID` فتُعاد بناء الشجرة بألوان الهوية
+        // الجديدة. `paths` و`selectedTab` يعيشان في `navigation` فيبقى
+        // القارئ في مكانه، والتبديل نادر بطبيعته.
+        .onChange(of: seasonal.isNationalDayActive) { _, _ in
+            navigation.sessionID = UUID()
+        }
         .environment(articlesStore)
         .environment(navigation)
         .environment(bookmarksStore)

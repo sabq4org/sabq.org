@@ -1123,11 +1123,7 @@ struct SettingsView: View {
 
     private var appInfoSection: some View {
         VStack(spacing: 16) {
-            Image("SabqLogo")
-                .renderingMode(.original)
-                .resizable()
-                .aspectRatio(contentMode: .fit)
-                .frame(height: 56)
+            SabqBrandLogo(height: 56)
 
             // Reads CFBundleShortVersionString + CFBundleVersion from the
             // bundle's Info.plist so the displayed version always matches

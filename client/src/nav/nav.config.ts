@@ -876,6 +876,17 @@ export const navConfig: NavItem[] = [
     roles: ["admin"],
   },
 
+  // ===== ثيم اليوم الوطني لتطبيق iOS / iOS National Day theme =====
+  {
+    id: "ios_national_day_theme",
+    labelKey: "nav.ios_national_day_theme",
+    labelAr: "ثيم اليوم الوطني — تطبيق iOS",
+    icon: Flag,
+    path: "/dashboard/ios-national-day-theme",
+    roles: ["admin"],
+    permissions: ["system.manage_settings"],
+  },
+
   // ===== بلوك قناة الصحراء / Al-Sahraa TV =====
   {
     id: "sahraa_tv_block",

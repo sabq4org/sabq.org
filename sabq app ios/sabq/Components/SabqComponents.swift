@@ -1088,7 +1088,15 @@ nonisolated enum SabqTheme {
         return accent
     }
 
+    // ثيم اليوم الوطني الموسمي يعلو على لون التمييز الذي اختاره القارئ،
+    // فيصبغ الأزرار الأساسية وعناصر التنقل النشطة واللمسات البصرية دفعة
+    // واحدة (نقطة واحدة تغذّي ~395 موضعًا). إطفاء المفتاح يُسقط الشرط
+    // فتعود هوية `AppAccent` الأصلية كما هي — لا بقايا ولا حالة إضافية.
+    //
+    // الألوان الدلالية (coral للأخطاء، gold للتنبيهات…) خارج هذا المسار
+    // عمدًا، فتبقى دلالتها مقروءة أثناء الموسم.
     static var primaryStart: Color {
+        if NationalDayTheme.isActive { return NationalDayTheme.accentSoft }
         let accent = resolvedAccent
         return Color(UIColor { t in
             t.userInterfaceStyle == .dark
@@ -1097,6 +1105,7 @@ nonisolated enum SabqTheme {
         })
     }
     static var primaryEnd: Color {
+        if NationalDayTheme.isActive { return NationalDayTheme.accent }
         let accent = resolvedAccent
         return Color(UIColor { t in
             t.userInterfaceStyle == .dark

@@ -91,11 +91,7 @@ struct HomeSidebarView: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .center, spacing: 12) {
-                Image("SabqLogo")
-                    .renderingMode(.original)
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .frame(height: 44)
+                SabqBrandLogo(height: 44)
 
                 Spacer(minLength: 0)
 
