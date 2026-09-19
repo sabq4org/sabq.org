@@ -89,7 +89,7 @@ function formatPrivateKey(privateKey: string): string {
     const match = key.match(/-----BEGIN [^-]+-----\s*([\s\S]+?)\s*-----END [^-]+-----/);
     if (match) {
       const body = match[1].replace(/\s+/g, "");
-      return `-----BEGIN PRIVATE KEY-----\n${body}\n-----END PRIVATE KEY-----`;
+      return `-----BEGIN PRIVATE KEY-----\n${body}\n-----END PRIVATE KEY-----`; // gitleaks:allow — قالب ترويسة PEM لا مفتاح
     }
     return key;
   }
@@ -97,7 +97,7 @@ function formatPrivateKey(privateKey: string): string {
   // لا ترويسة → جسم Base64 عارٍ. أزل كل فراغ ولفّه بترويسة PEM صحيحة.
   const body = key.replace(/\s+/g, "");
   if (!body) return key;
-  return `-----BEGIN PRIVATE KEY-----\n${body}\n-----END PRIVATE KEY-----`;
+  return `-----BEGIN PRIVATE KEY-----\n${body}\n-----END PRIVATE KEY-----`; // gitleaks:allow — قالب ترويسة PEM لا مفتاح
 }
 
 /**
