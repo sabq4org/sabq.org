@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import UIKit
 
 /// شكل ردّ `/api/system/ios-national-day-theme`.
 nonisolated struct IosNationalDayThemeFlag: Decodable, Sendable {
@@ -19,6 +20,9 @@ nonisolated struct IosNationalDayThemeFlag: Decodable, Sendable {
 /// 3. **التحديث دوري لا لحظي.** لا يوجد دفع فوري لهذا المفتاح: التبديل يصل
 ///    عند فتح التطبيق، ثم كل ست ساعات أثناء الاستخدام. الجهاز غير المتصل لا
 ///    يستقبل التبديل حتى يتصل.
+/// 4. **أيقونة التطبيق تتبع الحالة.** تبديلها يمرّ بـ`setAlternateIconName`،
+///    وهو الطريق الوحيد المعلن من آبل. يعرض النظام تنبيهًا للمستخدم عند كل
+///    تبديل ناجح، ولا سبيل لكتمه بواجهة معلنة — انظر `syncAppIcon`.
 @MainActor
 @Observable
 final class SeasonalThemeStore {
@@ -73,7 +77,33 @@ final class SeasonalThemeStore {
         // اكتب دائمًا حتى تبقى المرآة التي يقرأها `SabqTheme` صحيحة بعد
         // إعادة التشغيل، ولو لم تتغيّر الحالة.
         UserDefaults.standard.set(enabled, forKey: NationalDayTheme.activeDefaultsKey)
+        syncAppIcon(enabled: enabled)
         guard enabled != isNationalDayActive else { return }
         isNationalDayActive = enabled
+    }
+
+    /// يوائم أيقونة الشاشة الرئيسية مع حالة الثيم.
+    ///
+    /// يقارن دائمًا بالأيقونة المركّبة فعلًا لا بالحالة السابقة في الذاكرة،
+    /// فلو فشل تبديل سابق (يرفض النظام التبديل والتطبيق في الخلفية) صحّحه
+    /// النداء التالي من تلقائه.
+    ///
+    /// **تنبيه النظام:** عند كل تبديل ناجح يعرض iOS تنبيهًا يخبر المستخدم أن
+    /// أيقونة التطبيق تغيّرت. هذا سلوك النظام منذ iOS 10.3 ولا يمكن إلغاؤه
+    /// بواجهة معلنة، فلا تُعامل ظهوره على أنه خطأ.
+    private func syncAppIcon(enabled: Bool) {
+        let app = UIApplication.shared
+        guard app.supportsAlternateIcons else { return }
+
+        let desired: String? = enabled ? NationalDayTheme.alternateIconName : nil
+        guard app.alternateIconName != desired else { return }
+
+        app.setAlternateIconName(desired) { error in
+            #if DEBUG
+            if let error {
+                print("[sabq] alternate app icon change failed: \(error)")
+            }
+            #endif
+        }
     }
 }
