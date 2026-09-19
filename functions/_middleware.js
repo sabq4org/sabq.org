@@ -54,6 +54,12 @@
  * callsites that bypass apiUrl().
  */
 
+import { createPublicApiBurstCache, newPublicApiCacheKey, newPublicApiPolicy } from "../cloudflare-worker/public-api-burst-cache.js";
+
+export { newPublicApiCacheKey, newPublicApiPolicy };
+
+const pagesPublicApiBurstCache = createPublicApiBurstCache();
+
 const DEFAULT_API_ORIGIN = "https://api.sabq.org";
 
 // Short TTLs so a freshly published/edited article's meta + slug canonical
@@ -780,6 +786,8 @@ function apiCacheKey(requestUrl) {
   return new Request(u.toString(), { method: "GET" });
 }
 
+// Shared public API burst caching is initialized above; the Pages adapter below
+// supplies its proxy transport and waitUntil callback.
 // ── stale-if-error: «آخر نسخة سليمة» ────────────────────────────────────────
 // Dawn 2026-07-25 outage: the origin hung for ~4 hours and every anonymous
 // reader saw errors, even though the edge had served the exact same JSON
@@ -1024,6 +1032,18 @@ async function handleRequest(context) {
 
   // 1) Proxy backend paths (every method).
   if (isProxyPath(path)) {
+    const newPublicApiResponse = await pagesPublicApiBurstCache(request, {
+      cache: caches.default,
+      waitUntil: (promise) => context.waitUntil(promise),
+      fetchOrigin: (sourceRequest) => proxyToApiWithFallback(
+        sourceRequest,
+        apiOrigin,
+        resolveFallbackOrigin(apiOrigin, env),
+        10_000,
+        env.EDGE_PROXY_SHARED_SECRET,
+      ),
+    });
+    if (newPublicApiResponse) return newPublicApiResponse;
     const apiCacheTtl = getApiCacheTtl(path, request);
     const useApiCache = apiCacheTtl > 0;
     const apiCacheKeyReq = useApiCache ? apiCacheKey(request.url) : null;

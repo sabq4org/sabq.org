@@ -120,7 +120,24 @@ struct WorldCupHomeStrip: View {
         .task {
             // تحميل أولي ثم استطلاع كشبكة أمان؛ SSE يحدّث فور تغيّر الموجز.
             await store.loadIfNeeded()
+            var streamAcquired = false
+            defer {
+                if streamAcquired { liveStream.release() }
+            }
             while !Task.isCancelled {
+                let needsLiveStream = !stripHidden && (store.matchOfTheDayLive || {
+                    guard let ts = store.nextKickoffTimestamp else { return false }
+                    let untilKickoff = TimeInterval(ts) - Date().timeIntervalSince1970
+                    return untilKickoff <= 600 && untilKickoff >= -900
+                }())
+                if needsLiveStream, !streamAcquired {
+                    liveStream.acquire()
+                    streamAcquired = true
+                } else if !needsLiveStream, streamAcquired {
+                    liveStream.release()
+                    streamAcquired = false
+                }
+
                 let interval: UInt64
                 var lightRefresh = false
                 if store.matchOfTheDayLive {
