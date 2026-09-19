@@ -111,9 +111,12 @@ router.post("/api/system/ifox-block-visibility", requireAuth, requirePermission(
 router.get("/api/system/dms-top-ads", async (req, res) => {
   try {
     const setting = await storage.getSystemSetting("dms_top_ads_visibility");
+    res.set("X-Sabq-Public-Cache", "1");
+    res.set("Cache-Control", "public, max-age=0, s-maxage=15");
     res.json({ showTopAds: setting?.showTopAds ?? true });
   } catch (error) {
     console.error("Error fetching DMS top ads visibility:", error);
+    res.set("Cache-Control", "no-store");
     res.json({ showTopAds: true });
   }
 });

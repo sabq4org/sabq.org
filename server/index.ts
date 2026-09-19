@@ -38,6 +38,7 @@ import path from "path";
 import { randomBytes } from "crypto";
 import { getRealIp, originGate, signProxyHeaders } from "./utils/trustedProxyIp";
 import { isNoindexPath } from "./utils/noindexPaths";
+import { httpPressure } from "./utils/httpPressure";
 
 process.on('uncaughtException', (error) => {
   console.error('[CRITICAL] Uncaught Exception:', error.message);
@@ -989,6 +990,7 @@ app.use((req, res, next) => {
 const isProduction = process.env.NODE_ENV === "production";
 const port = (globalThis as any).__sabqPort || parseInt(process.env.PORT || '5000', 10);
 const server = (globalThis as any).__sabqServer || createServer(app);
+httpPressure.attach(server);
 
 if (!(globalThis as any).__sabqServer) {
   // reusePort is unsupported on macOS/Darwin; only enable on Linux

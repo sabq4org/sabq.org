@@ -332,7 +332,9 @@
         "client/src/components/article-editor/EditorialResearchPanel.tsx",
         "tests/unit/editorialResearch*.test.ts",
         "e2e/editorial-research.spec.ts",
-        "scripts/sql/add-editorial-research-jobs-2026-09-12.sql"
+        "scripts/sql/add-editorial-research-jobs-2026-09-12.sql",
+        "server/services/articleReadOverlay.ts",
+        "tests/unit/articleReadOverlay.test.ts"
       ],
       "aiFeatureKeys": [
         "content-tools",
@@ -370,7 +372,7 @@
       "owners": [
         "editorial"
       ],
-      "lastReviewed": "2026-09-18"
+      "lastReviewed": "2026-09-19"
     },
     {
       "id": "ifox",
@@ -672,7 +674,9 @@
         "sports app ios/SabqSports/Services/AuthStore.swift",
         "sports app ios/SabqSports/Screens/MatchCenterView.swift",
         "android-native/vara/src/main/kotlin/com/sabq/vara/ui/MatchCenterScreen.kt",
-        "server/services/theSportsService.ts"
+        "server/services/theSportsService.ts",
+        "sabq app ios/sabq/Services/SabqLiveStream.swift",
+        "sabq app ios/sabqTests/SabqLiveStreamTests.swift"
       ],
       "aiFeatureKeys": [
         "world-cup-news",
@@ -695,7 +699,7 @@
       "owners": [
         "sports"
       ],
-      "lastReviewed": "2026-09-15"
+      "lastReviewed": "2026-09-19"
     },
     {
       "id": "push-notifications",
@@ -718,14 +722,20 @@
         "server/routes/pushNotificationRoutes.ts",
         "android-native/app/src/main/kotlin/com/sabq/smart/data/push/**",
         "android-native/vara/src/main/kotlin/com/sabq/vara/push/**",
-        "docs/APPLE_PUSH_SETUP.md"
+        "docs/APPLE_PUSH_SETUP.md",
+        "server/services/pushBroadcast*.ts",
+        "tests/unit/pushBroadcast*.test.ts",
+        "server/utils/httpPressure.ts",
+        "tests/unit/httpPressure.test.ts",
+        "sabq app ios/sabq/Services/PushNotifications.swift",
+        "tests/unit/apnsBroadcastBatch.test.ts"
       ],
       "aiFeatureKeys": [],
       "dashboardPath": "/dashboard/notification-admin",
       "owners": [
         "platform"
       ],
-      "lastReviewed": "2026-09-14"
+      "lastReviewed": "2026-09-19"
     },
     {
       "id": "ads",
@@ -805,14 +815,16 @@
         "cloudflare-worker/api-origin-worker.js",
         "cloudflare-worker/wrangler.api.toml",
         "client/src/components/EditUserDialog.tsx",
-        "e2e/edit-user-biography.spec.ts"
+        "e2e/edit-user-biography.spec.ts",
+        "cloudflare-worker/public-api-burst-cache.js",
+        "tests/unit/apiOriginWorkerBurst.test.ts"
       ],
       "aiFeatureKeys": [],
       "dashboardPath": "/dashboard/roles",
       "owners": [
         "platform"
       ],
-      "lastReviewed": "2026-09-13"
+      "lastReviewed": "2026-09-19"
     },
     {
       "id": "seo-ssr",
@@ -849,14 +861,15 @@
         "tests/web-next/**",
         "vitest.web-next.config.ts",
         "client/src/pages/CategoryPage.tsx",
-        "client/src/components/CategoryArchivePage.tsx"
+        "client/src/components/CategoryArchivePage.tsx",
+        "tests/unit/edgeApiSurge.test.ts"
       ],
       "aiFeatureKeys": [],
       "dashboardPath": null,
       "owners": [
         "platform"
       ],
-      "lastReviewed": "2026-09-18"
+      "lastReviewed": "2026-09-19"
     },
     {
       "id": "comments",

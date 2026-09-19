@@ -1,5 +1,6 @@
 import { adminScheduledOrder, getAdminPublishedPageIds } from "./services/adminArticleList";
 import { getPublicEditorialModifiedAt } from "./utils/editorialDates";
+import { coalesceArticleReadOverlay } from "./services/articleReadOverlay";
 // Reference: javascript_object_storage blueprint
 import type { Express, NextFunction, Request, Response } from "express";
 import { createServer, type Server } from "http";
@@ -13440,7 +13441,7 @@ Respond in valid JSON format only:
 
 
   // Lightweight helper to get article ID by slug (cached for performance)
-  async function getArticleIdBySlug(slug: string): Promise<{ id: string; categoryId: string | null } | null> {
+  async function getArticleIdBySlug(slug: string): Promise<{ id: string; categoryId: string | null; status: string | null; publishedAt: Date | null } | null> {
     const cacheKey = `article:id:${slug}`;
     return withCache(cacheKey, CACHE_TTL.LONG, async () => {
       // Match by slug or englishSlug. If the param looks like a UUID, also match
@@ -13450,11 +13451,11 @@ Respond in valid JSON format only:
       const matcher = isUuid
         ? or(eq(articles.slug, slug), eq(articles.englishSlug, slug), eq(articles.id, slug))
         : or(eq(articles.slug, slug), eq(articles.englishSlug, slug));
-      const result = await db.select({ id: articles.id, categoryId: articles.categoryId })
+      const result = await db.select({ id: articles.id, categoryId: articles.categoryId, status: articles.status, publishedAt: articles.publishedAt })
         .from(articles)
         .where(matcher)
         .limit(1);
-      return result.length > 0 ? { id: result[0].id, categoryId: result[0].categoryId } : null;
+      return result[0] ?? null;
     });
   }
 
@@ -13595,13 +13596,25 @@ Respond in valid JSON format only:
       // Always overlay the LIVE view count so the 5-10 boost shows immediately
       // on refresh — the cached payload's `views` is up to 5 min stale. The
       // heavy article query stays cached; this is just one PK-indexed lookup.
-      {
-        const [viewsRow] = await db.select({ views: articles.views }).from(articles)
-          .where(eq(articles.id, finalArticle.id)).limit(1);
-        if (viewsRow) {
-          finalArticle = { ...finalArticle, views: Number(viewsRow.views ?? (finalArticle as any).views ?? 0) };
-        }
-      }
+      const readArticleId = finalArticle.id;
+      const overlay = await coalesceArticleReadOverlay(readArticleId, async () => {
+        const [[viewsRow], assets] = await Promise.all([
+          db.select({ views: articles.views }).from(articles)
+            .where(eq(articles.id, readArticleId)).limit(1),
+          storage.getArticleMediaAssetWithDetails?.(readArticleId),
+        ]);
+        return {
+          views: viewsRow?.views == null ? null : Number(viewsRow.views),
+          mediaAssets: (assets || [])
+            .filter((a: any) => a.mediaFile?.url)
+            .map((a: any) => ({ url: a.mediaFile.url, altText: a.altText || "", displayOrder: a.displayOrder ?? 0 })),
+        };
+      });
+      finalArticle = {
+        ...finalArticle,
+        ...(overlay.views !== null ? { views: overlay.views } : {}),
+        ...(overlay.mediaAssets.length > 0 ? { mediaAssets: overlay.mediaAssets } : {}),
+      };
 
       if (userId) {
         const articleId = finalArticle.id;
@@ -13625,18 +13638,6 @@ Respond in valid JSON format only:
 
       if (userId) {
         await storage.recordArticleRead(userId, finalArticle.id);
-      }
-
-      // Attach media assets (email agent images) so mobile apps can render them
-      const mediaAssets = await storage.getArticleMediaAssetWithDetails?.(finalArticle.id);
-      if (mediaAssets && mediaAssets.length > 0) {
-        (finalArticle as any).mediaAssets = mediaAssets
-          .filter((a: any) => a.mediaFile?.url)
-          .map((a: any) => ({
-            url: a.mediaFile.url,
-            altText: a.altText || "",
-            displayOrder: a.displayOrder ?? 0,
-          }));
       }
 
       res.json(finalArticle);
@@ -13682,7 +13683,8 @@ Respond in valid JSON format only:
 
   // News Analytics Endpoint - Smart statistics and insights
 
-  app.get("/api/articles/:slug/comments", cacheControl({ maxAge: CACHE_DURATIONS.REALTIME, sMaxAge: 60, staleWhileRevalidate: 30 }), async (req: any, res) => {
+  app.get("/api/articles/:slug/comments", async (req: any, res) => {
+    res.set("Cache-Control", "private, no-store");
     try {
       const userRole = req.user?.role;
       const slug = req.params.slug;
@@ -13703,6 +13705,13 @@ Respond in valid JSON format only:
         const comments = await withCache(cacheKey, CACHE_TTL.SHORT, async () => {
           return storage.getCommentsByArticle(articleInfo.id, false);
         });
+        // Only anonymous, approved comments on a published article can opt in
+        // to the short edge burst cache. Staff/pending responses stay private.
+        if (!req.user && articleInfo.status === "published" && articleInfo.publishedAt &&
+            articleInfo.publishedAt.getTime() <= Date.now()) {
+          res.set("X-Sabq-Public-Cache", "1");
+          res.set("Cache-Control", "public, max-age=0, s-maxage=15");
+        }
         return res.json(comments);
       }
       

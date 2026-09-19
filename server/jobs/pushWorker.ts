@@ -30,6 +30,10 @@ import {
   sendBatchPushNotifications as sendApnsBatch,
   createCustomNotificationPayload,
 } from "../services/apnsService";
+import {
+  acquirePushBroadcast,
+  PushBroadcastCapacityError,
+} from "../services/pushBroadcastCoordinator";
 // NOTE: Now using APNs for iOS and FCM for Android (hybrid mode)
 
 // Topic prefix - types starting with "topic_" are sent to Firebase Topics
@@ -37,6 +41,7 @@ const TOPIC_PREFIX = "topic_";
 
 const PUSH_CHECK_INTERVAL = 600000; // Check every 10 minutes
 let pushWorkerInterval: NodeJS.Timeout | null = null;
+let pendingCampaignRun = false;
 
 /**
  * Start the push worker background job
@@ -80,6 +85,11 @@ export function stopPushWorker(): void {
  * Process all pending scheduled campaigns
  */
 async function processPendingCampaigns(): Promise<void> {
+  // setInterval can fire again while a large campaign is still pacing. Keep
+  // the database poll itself single-flight; the broadcast lease below is a
+  // second guard shared with quick-send.
+  if (pendingCampaignRun) return;
+  pendingCampaignRun = true;
   try {
     const now = new Date();
     
@@ -105,6 +115,8 @@ async function processPendingCampaigns(): Promise<void> {
     }
   } catch (error) {
     console.error("[PushWorker] Error processing campaigns:", error);
+  } finally {
+    pendingCampaignRun = false;
   }
 }
 
@@ -126,12 +138,40 @@ function articleSlugFromDeeplink(deeplink?: string | null): string | undefined {
 async function processCampaign(campaign: typeof pushCampaigns.$inferSelect): Promise<void> {
   log.info(`[PushWorker] Processing campaign: ${campaign.id} - ${campaign.name}`);
 
+  let broadcastLease: ReturnType<typeof acquirePushBroadcast>;
+  let ownsCampaign = false;
   try {
-    // Mark as sending
-    await db
+    broadcastLease = acquirePushBroadcast("news");
+    broadcastLease.start();
+  } catch (error) {
+    if (error instanceof PushBroadcastCapacityError) {
+      // Leave the campaign scheduled. The next worker poll can retry it, and
+      // the campaign was never marked sending or treated as accepted.
+      log.warn(
+        `[PushWorker] Broadcast capacity full; campaign ${campaign.id} remains scheduled (next worker poll in ${PUSH_CHECK_INTERVAL / 1000}s)`,
+      );
+      return;
+    }
+    throw error;
+  }
+
+  try {
+    // Claim atomically before reading the audience. Multiple API replicas may
+    // poll the same scheduled row; only the winner is allowed to fan out.
+    const [claimedCampaign] = await db
       .update(pushCampaigns)
       .set({ status: "sending", updatedAt: new Date() })
-      .where(eq(pushCampaigns.id, campaign.id));
+      .where(and(
+        eq(pushCampaigns.id, campaign.id),
+        eq(pushCampaigns.status, "scheduled"),
+      ))
+      .returning({ id: pushCampaigns.id });
+
+    if (!claimedCampaign) {
+      log.info(`[PushWorker] Campaign ${campaign.id} was claimed by another worker; skipping fanout`);
+      return;
+    }
+    ownsCampaign = true;
 
     const campaignArticleSlug = articleSlugFromDeeplink(campaign.deeplink);
 
@@ -423,6 +463,10 @@ async function processCampaign(campaign: typeof pushCampaigns.$inferSelect): Pro
     log.info(`[PushWorker] Campaign ${campaign.id} sent: ${totalSuccess} success, ${totalFailure} failed`);
   } catch (error) {
     console.error(`[PushWorker] Error processing campaign ${campaign.id}:`, error);
+
+    // A failed claim means this worker never owned the row. Leave it
+    // scheduled for the next poll; another replica may already own it.
+    if (!ownsCampaign) return;
     
     // Mark as failed
     await db
@@ -432,6 +476,8 @@ async function processCampaign(campaign: typeof pushCampaigns.$inferSelect): Pro
         updatedAt: new Date() 
       })
       .where(eq(pushCampaigns.id, campaign.id));
+  } finally {
+    broadcastLease.release();
   }
 }
 
