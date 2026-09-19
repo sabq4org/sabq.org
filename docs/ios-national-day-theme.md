@@ -29,6 +29,11 @@
 - **كل ست ساعات** أثناء الاستخدام، وعند كل عودة من الخلفية إلى الواجهة.
 - **عند فشل الجلب أو انقطاع الاتصال** تبقى آخر حالة معروفة كما هي. «معطّل»
   و«تعذّر الجلب» ليسا الشيء نفسه، فلا يعود الجهاز للافتراضي من تلقاء نفسه.
+  ثم يُعاد الجلب في الجلسة نفسها ثلاث مرات بتراجع (15 ثم 45 ثم 120 ثانية).
+  السبب العملي: حافة Railway أمام `api.sabq.org` تردّ أحيانًا بـ`429 rate
+  limited` على دفعات تصيب معظم الطلبات لدقائق (مسجّل في 2026-09-17 و2026-09-19)،
+  وبدون إعادة المحاولة كان الجهاز الذي يُصادف الدفعة عند الإقلاع لا يستلم
+  التبديل حتى التشغيل التالي.
 - **لا دفع فوري.** الجهاز غير المتصل لا يستقبل التبديل حتى يتصل.
 
 ## شاشة الإقلاع مقابل الشاشة الترحيبية
@@ -67,7 +72,7 @@
 | الجانب | التفصيل |
 |---|---|
 | الأصول | `sabq/Assets.xcassets/NationalDayAppIcon.appiconset` — ١٣ ملفًا بنفس مقاسات `AppIcon` |
-| إعداد البناء | `ASSETCATALOG_COMPILER_ALTERNATE_APP_ICON_NAMES = NationalDayAppIcon` و`ASSETCATALOG_COMPILER_INCLUDE_ALL_APP_ICON_ASSETS = YES` في Debug وRelease |
+| إعداد البناء | `ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES = NationalDayAppIcon` و`ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES` في Debug وRelease |
 | التبديل | `SeasonalThemeStore.syncAppIcon` عبر `UIApplication.setAlternateIconName` |
 | الاسم المشترك | `NationalDayTheme.alternateIconName` — مثبَّت باختبار يقارن Swift والبناء والكتالوج |
 

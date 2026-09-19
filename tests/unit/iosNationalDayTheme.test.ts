@@ -111,13 +111,13 @@ describe("عقد المفتاح بين الطبقات", () => {
       "utf8",
     );
     const alternates = pbxproj.match(
-      /ASSETCATALOG_COMPILER_ALTERNATE_APP_ICON_NAMES = [^;]+;/g,
+      /ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES = [^;]+;/g,
     );
     // لا بد من ضبطه في Debug وRelease معًا، وإلا اختلف بناءٌ عن بناء.
     expect(alternates).toHaveLength(2);
     for (const line of alternates ?? []) expect(line).toContain(ICON);
     expect(
-      pbxproj.match(/ASSETCATALOG_COMPILER_INCLUDE_ALL_APP_ICON_ASSETS = YES;/g),
+      pbxproj.match(/ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;/g),
     ).toHaveLength(2);
 
     expect(
