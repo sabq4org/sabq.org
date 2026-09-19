@@ -960,7 +960,7 @@ struct ArticleDetailView: View {
     private var articleTitle: some View {
         SabqRTLText(
             displayArticle.title,
-            uiFont: SabqFonts.uiHeadline(size: CGFloat(fontSize + 8)),
+            uiFont: SabqFonts.uiHeadline(size: CGFloat(fontSize + 6)),
             color: SabqTheme.ink,
             lineLimit: 0,
             lineSpacing: 3

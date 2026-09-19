@@ -1696,57 +1696,26 @@ struct CompactArticleRow: View {
         }
     }
 
-    // MARK: - Classic (thumbnail on the side, original design)
+    // MARK: - Classic (thumbnail on the side)
 
     private var classicLayout: some View {
-        HStack(alignment: .top, spacing: 14) {
-            VStack(alignment: .leading, spacing: 8) {
-                if showsCategory || article.isBreaking || article.isReading || isNew {
-                    HStack(spacing: 8) {
-                        if showsCategory {
-                            StatusChip(title: article.categoryTitle, tint: article.category.tint)
-                        }
-                        if article.isBreaking { breakingPill }
-                        if article.isReading { readingPill }
-                        if isNew { newPill }
-                    }
-                }
+        HStack(alignment: .top, spacing: 12) {
+            compactThumbnail
 
+            VStack(alignment: .leading, spacing: 6) {
                 SabqRTLText(
                     article.title,
-                    uiFont: SabqFonts.uiSubhead(size: 16),
+                    uiFont: SabqFonts.uiApp(size: 15, weight: .semibold),
                     color: SabqTheme.ink,
                     lineLimit: 2,
-                    lineSpacing: 4
+                    lineSpacing: 3
                 )
 
                 metadataRow
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-
-            if let urlString = article.imageURL, let url = URL(string: urlString) {
-                FocalCachedAsyncImage(url: url, focalPoint: article.imageFocalPoint, maxPixelSize: 260) {
-                    thumbnailPlaceholder(size: 84)
-                }
-                .frame(width: 84, height: 84)
-                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                // شعارات الجهات البيضاء كانت تذوب في البطاقة فتبدو بلا قص؛ الإطار
-                // نفسه المستخدم في صفوف الحاوية الموحدة يحفظ الزوايا (مراجعة 10.3.3).
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .stroke(SabqTheme.ink.opacity(0.10), lineWidth: 1)
-                )
-                .aiImageBadgeOverlay(
-                    isVisible: article.isAiGeneratedImage,
-                    model: article.aiImageModel,
-                    inset: 4,
-                    sizeScale: 0.65
-                )
-            } else {
-                thumbnailPlaceholder(size: 84)
-            }
         }
-        .padding(.vertical, 6)
+        .padding(.vertical, 12)
     }
 
     // MARK: - Spacious (image on top, 16:10 hero)
@@ -1768,42 +1737,54 @@ struct CompactArticleRow: View {
         .padding(.vertical, 8)
     }
 
-    private var heroImage: some View {
-        ZStack(alignment: .topLeading) {
-            // 16:10 container — full row width. CachedAsyncImage fills.
-            Color.clear
-                .aspectRatio(16.0 / 10.0, contentMode: .fit)
-                .frame(maxWidth: .infinity)
-                .overlay(
-                    Group {
-                        if let urlString = article.imageURL, let url = URL(string: urlString) {
-                            FocalCachedAsyncImage(url: url, focalPoint: article.imageFocalPoint) {
-                                heroPlaceholder
-                            }
-                        } else {
-                            heroPlaceholder
-                        }
-                    }
-                )
-                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                .aiImageBadgeOverlay(
-                    isVisible: article.isAiGeneratedImage,
-                    model: article.aiImageModel,
-                    inset: 10
-                )
-
-            if showsCategory || article.isBreaking || article.isReading || isNew {
-                HStack(spacing: 6) {
-                    if article.isBreaking { breakingPill }
-                    if article.isReading { readingPill }
-                    if isNew { newPill }
-                    if showsCategory {
-                        StatusChip(title: article.categoryTitle, tint: article.category.tint)
-                    }
+    /// The compact row follows the sidebar row's fixed 104×84 thumbnail while
+    /// retaining focal-point cropping and the AI provenance badge.
+    private var compactThumbnail: some View {
+        Group {
+            if let urlString = article.imageURL, let url = URL(string: urlString) {
+                FocalCachedAsyncImage(url: url, focalPoint: article.imageFocalPoint, maxPixelSize: 260) {
+                    thumbnailPlaceholder(size: 104)
                 }
-                .padding(10)
+            } else {
+                thumbnailPlaceholder(size: 104)
             }
         }
+        .frame(width: 104, height: 84)
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(SabqTheme.ink.opacity(0.10), lineWidth: 1)
+        )
+        .aiImageBadgeOverlay(
+            isVisible: article.isAiGeneratedImage,
+            model: article.aiImageModel,
+            inset: 4,
+            sizeScale: 0.65
+        )
+    }
+
+    private var heroImage: some View {
+        // 16:10 container — full row width. CachedAsyncImage fills.
+        Color.clear
+            .aspectRatio(16.0 / 10.0, contentMode: .fit)
+            .frame(maxWidth: .infinity)
+            .overlay(
+                Group {
+                    if let urlString = article.imageURL, let url = URL(string: urlString) {
+                        FocalCachedAsyncImage(url: url, focalPoint: article.imageFocalPoint) {
+                            heroPlaceholder
+                        }
+                    } else {
+                        heroPlaceholder
+                    }
+                }
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .aiImageBadgeOverlay(
+                isVisible: article.isAiGeneratedImage,
+                model: article.aiImageModel,
+                inset: 10
+            )
     }
 
     private var heroPlaceholder: some View {
@@ -1821,40 +1802,6 @@ struct CompactArticleRow: View {
 
     // MARK: - Shared sub-views
 
-    private var breakingPill: some View {
-        HStack(spacing: 4) {
-            Circle()
-                .fill(SabqTheme.coral)
-                .frame(width: 5, height: 5)
-            Text("عاجل")
-                .font(SabqFonts.app(size: 10, weight: .medium))
-                .foregroundStyle(SabqTheme.coral)
-        }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
-        .background(
-            Capsule(style: .continuous)
-                .fill(SabqTheme.coral.opacity(0.10))
-        )
-    }
-
-    /// شارة «قراءة» التحريرية — نص وترتيب شارة البطاقة في الويب (#1420).
-    private var readingPill: some View {
-        HStack(spacing: 4) {
-            Image(systemName: "book")
-                .font(SabqFonts.app(size: 9, weight: .medium))
-            Text("قراءة")
-                .font(SabqFonts.app(size: 10, weight: .medium))
-        }
-        .foregroundStyle(SabqTheme.emerald)
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
-        .background(
-            Capsule(style: .continuous)
-                .fill(SabqTheme.emerald.opacity(0.12))
-        )
-    }
-
     private var newPill: some View {
         Text("جديد")
             .font(SabqFonts.app(size: 10, weight: .medium))
@@ -1868,34 +1815,51 @@ struct CompactArticleRow: View {
     }
 
     private var metadataRow: some View {
-        HStack(spacing: 12) {
-            HStack(spacing: 4) {
-                Image(systemName: "clock")
-                    .font(SabqFonts.app(size: 10, weight: .regular))
-                Text(article.readingTime)
-                    .font(SabqFonts.app(size: 10, weight: .regular))
-                    .monospacedDigit()
+        Group {
+            if showsCategory || isNew {
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .center, spacing: 6) {
+                        metadataBadges
+                        relativeDateLabel
+                    }
+                    .fixedSize(horizontal: true, vertical: false)
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        metadataBadges
+                        relativeDateLabel
+                    }
+                }
+            } else {
+                relativeDateLabel
             }
-            .foregroundStyle(SabqTheme.tertiaryInk)
-
-            Text(article.relativeDate)
-                .font(SabqFonts.app(size: 10, weight: .regular))
-                .foregroundStyle(SabqTheme.tertiaryInk)
-
-            Spacer(minLength: 0)
-
-            Button {
-                SabqHaptics.light()
-                onBookmark()
-            } label: {
-                Image(systemName: isBookmarked ? "bookmark.fill" : "bookmark")
-                    .font(SabqFonts.app(size: 13, weight: .medium))
-                    .foregroundStyle(isBookmarked ? SabqTheme.primaryEnd : SabqTheme.tertiaryInk)
-                    .scaleEffect(isBookmarked ? 1.1 : 1)
-                    .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isBookmarked)
-            }
-            .buttonStyle(.plain)
         }
+        .font(SabqFonts.app(size: 12, weight: .regular))
+        .foregroundStyle(SabqTheme.secondaryInk)
+        .fixedSize(horizontal: false, vertical: true)
+    }
+
+    @ViewBuilder
+    private var metadataBadges: some View {
+        HStack(alignment: .center, spacing: 6) {
+            if showsCategory {
+                StatusChip(title: article.categoryTitle, tint: article.category.tint)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if isNew {
+                newPill
+                    .fixedSize(horizontal: true, vertical: false)
+            }
+        }
+    }
+
+    private var relativeDateLabel: some View {
+        HStack(spacing: 4) {
+            Image(systemName: "clock")
+                .font(SabqFonts.app(size: 10, weight: .regular))
+            Text(article.relativeDate)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .foregroundStyle(SabqTheme.tertiaryInk)
     }
 
     private func thumbnailPlaceholder(size: CGFloat) -> some View {

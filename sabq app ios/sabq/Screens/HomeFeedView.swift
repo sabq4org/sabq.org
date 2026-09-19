@@ -1075,13 +1075,16 @@ struct HomeFeedView: View {
                             )
                         }
                         .buttonStyle(.plain)
-                        .padding(.vertical, 4)
                         .onAppear {
                             // Prefetch images for the next 5 articles
                             let allArticles = articlesStore.filteredArticles
                             let upcoming = allArticles.dropFirst(index + 1).prefix(5)
                             let urls = upcoming.compactMap { $0.imageURL.flatMap(URL.init(string:)) }
                             if !urls.isEmpty { ImageCache.prefetch(urls: urls, maxPixelSize: 260) }
+                        }
+
+                        if index < articlesStore.filteredArticles.count - 1 {
+                            SidebarRowDivider()
                         }
                     }
                 }
