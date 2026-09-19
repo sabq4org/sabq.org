@@ -78,6 +78,9 @@ struct SabqTabNavigation<Root: View, Sidebar: View, Detail: View>: View {
     /// الجديدة لـ «عريض». التبويبات التي تحمل حالة خارج المكدّس (الرئيسية:
     /// خبر القارئ) تجسرها هنا؛ راجع `SabqNavigationState.homeLayoutDidChange`.
     var onLayoutChange: ((_ isWide: Bool) -> Void)? = nil
+    /// ملاحظة مُتعلَّمة: رأينا نافذة هاتف بعرض قابل للطيّ مفتوحًا. تُحفظ
+    /// لتفعيل الحاوية الثابتة من الإقلاع التالي على طرازات غير مدرجة.
+    @AppStorage(FoldableDevice.observedDefaultsKey) private var foldableObserved = false
 
     /// أقل عرض (نقطة) يُعدّ «عريضًا». iPhone Max أفقيًا ≈ 932، Duo مفتوحًا
     /// رأسيًا ≈ 700، iPad mini رأسيًا 744؛ أي هاتف مطوي/عادي رأسيًا < 450.
@@ -87,8 +90,12 @@ struct SabqTabNavigation<Root: View, Sidebar: View, Detail: View>: View {
         GeometryReader { geo in
             let isWide = usesReaderColumns
                 && (sizeClass == .regular || geo.size.width >= Self.readerColumnsMinWidth)
+            // Duo فقط: حاوية واحدة ثابتة في الوضعين. غيره يبقى على التبديل.
+            let usesStableSplit = usesReaderColumns && FoldableDevice.isFoldable(observed: foldableObserved)
             Group {
-                if isWide {
+                if usesStableSplit {
+                    stableSplitLayout(isWide: isWide)
+                } else if isWide {
                     splitLayout
                         // Duo can retain compact traits while unfolded. Without
                         // this scoped override SwiftUI presents the sidebar over
@@ -102,8 +109,53 @@ struct SabqTabNavigation<Root: View, Sidebar: View, Detail: View>: View {
             // يُستدعى قبل أن يُبنى التخطيط الجديد بالمكدّس المشترك، فيجد
             // الفرع الضيق خبر القارئ مدفوعًا فوق الجذر مباشرة.
             .onChange(of: isWide) { _, nowWide in onLayoutChange?(nowWide) }
+            .onChange(of: geo.size, initial: true) { _, size in
+                if !foldableObserved, FoldableDevice.looksUnfolded(size) { foldableObserved = true }
+            }
         }
         .ignoresSafeArea(.keyboard)
+    }
+
+    /// iPhone Duo: `NavigationSplitView` واحد لا يُهدم عند الطيّ.
+    ///
+    /// بدل تبديل نوع الحاوية (Split ↔ Stack) الذي كان يعيد بناء شجرة التبويب
+    /// ويُسقط `@State` الداخلية، تبقى الحاوية نفسها و`NavigationStack` نفسه في
+    /// عمود القارئ، ويتغير أمران فقط:
+    /// - `columnVisibility`: `.all` مفتوحًا، `.detailOnly` مطويًا (العمود يُخفى
+    ///   ولا يُعرض طبقةً فوق المحتوى). الرابط لا يقبل تغييرًا من إيماءة السحب.
+    /// - جذر عمود القارئ: `detail()` مفتوحًا (القارئ يفتح أبرز خبر) و`root()`
+    ///   مطويًا (الصفحة الأولى الكاملة). ما دُفع فوقه في `path` يبقى في المكدّس
+    ///   نفسه فينجو تمريره وبياناته.
+    ///
+    /// صنف الحجم يُفرض `.regular` على الـ Split View نفسه كي لا ينهار إلى عمود
+    /// واحد على الشاشة الخارجية، ثم يُعاد القيمة الحقيقية لمحتوى العمودين حتى
+    /// لا تظن الشاشات (مثل `CategoryArticlesView`) أنها على عرض منتظم وهي على
+    /// 466 نقطة.
+    private func stableSplitLayout(isWide: Bool) -> some View {
+        let visibility = Binding<NavigationSplitViewVisibility>(
+            get: { isWide ? .all : .detailOnly },
+            set: { _ in }
+        )
+        let contentSizeClass: UserInterfaceSizeClass? = isWide ? .regular : sizeClass
+        return NavigationSplitView(columnVisibility: visibility) {
+            sidebar()
+                .modifier(SabqDestinations())
+                .navigationSplitViewColumnWidth(min: 340, ideal: 400, max: 520)
+                .toolbar(removing: .sidebarToggle)
+                .environment(\.horizontalSizeClass, .regular)
+        } detail: {
+            NavigationStack(path: $path) {
+                Group {
+                    if isWide { detail() } else { root() }
+                }
+                .background(SabqTheme.background)
+                .modifier(SabqDestinations())
+            }
+            .toolbar(removing: .sidebarToggle)
+            .environment(\.horizontalSizeClass, contentSizeClass)
+        }
+        .navigationSplitViewStyle(.balanced)
+        .environment(\.horizontalSizeClass, .regular)
     }
 
     private var splitLayout: some View {
