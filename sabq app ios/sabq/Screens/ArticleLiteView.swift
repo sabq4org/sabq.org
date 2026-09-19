@@ -177,18 +177,12 @@ struct ArticleLiteView: View {
         guard let urlString = displayArticle.articleURL ?? displayArticle.slug.map({ "https://sabq.org/article/\($0)" }),
               let url = URL(string: urlString) else { return }
         SabqAnalytics.shareIntent(articleId: displayArticle.id)
-        let activity = UIActivityViewController(activityItems: [displayArticle.title, url], applicationActivities: nil)
         let articleId = displayArticle.id
-        activity.completionWithItemsHandler = { _, completed, _, _ in
+        // الموضع الوحيد الذي كان يقدّم UIActivityViewController مباشرة بلا
+        // مرساة popover؛ على iPad/Duo مفتوحًا ذلك انهيار. المساعد يوحّد
+        // المرساة والتقديم فوق أعلى متحكم معروض.
+        SabqShareHelper.presentShareSheet(with: url, title: displayArticle.title) { completed in
             if completed { SabqAnalytics.shareCompleted(articleId: articleId, stage: "ios_lite_completion") }
-        }
-        if let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-           let root = scene.windows.first?.rootViewController {
-            // Walk to topmost presented controller so we don't try to
-            // present on a parent that already has a sheet up.
-            var presenter: UIViewController = root
-            while let next = presenter.presentedViewController { presenter = next }
-            presenter.present(activity, animated: true)
         }
     }
 }

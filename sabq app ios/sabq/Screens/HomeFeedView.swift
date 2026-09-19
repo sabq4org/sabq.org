@@ -969,7 +969,7 @@ struct HomeFeedView: View {
                     .buttonStyle(.plain)
                 }
             ) {
-                LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
+                LazyVGrid(columns: SabqGrid.adaptive(spacing: 10), spacing: 10) {
                     ForEach(opinions) { opinion in
                         NavigationLink(value: opinion) {
                             opinionMiniTile(opinion)

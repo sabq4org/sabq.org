@@ -201,7 +201,7 @@ struct NewsletterSheet: View {
     // MARK: - Feature grid (the AI value proposition)
 
     private var featureGrid: some View {
-        LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
+        LazyVGrid(columns: SabqGrid.adaptive(spacing: 10), spacing: 10) {
             featureCard(
                 icon: "brain.head.profile",
                 tint: SabqTheme.primaryEnd,

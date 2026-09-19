@@ -28,6 +28,12 @@ struct ContentView: View {
                     tabRoot(tab)
                 } sidebar: {
                     tabSidebar(tab)
+                } detail: {
+                    tabDetail(tab)
+                } onLayoutChange: { isWide in
+                    // «الرئيسية» وحدها تحمل خبر القارئ خارج المكدّس؛ بقية
+                    // التبويبات تتشارك المكدّس بين التخطيطين بلا جسر.
+                    if tab == .home { navigation.homeLayoutDidChange(isWide: isWide) }
                 }
                 .tabItem { Label(tab.title, systemImage: tab.systemImage) }
                 .tag(tab)
@@ -36,6 +42,7 @@ struct ContentView: View {
         .id(navigation.sessionID)
         .tint(SabqTheme.primaryEnd)
         .environment(articlesStore)
+        .environment(navigation)
         .environment(bookmarksStore)
         .environment(likesStore)
         .environment(authStore)
@@ -159,6 +166,16 @@ struct ContentView: View {
         switch tab {
         case .home: HomeSidebarView()
         default: tabRoot(tab)
+        }
+    }
+
+    /// جذر عمود القارئ على العرض العريض: «الرئيسية» تفتح أبرز خبر فورًا بدل
+    /// شاشة «اختر ما تود قراءته» الفارغة؛ بقية التبويبات تبقى على الرسالة.
+    @ViewBuilder
+    private func tabDetail(_ tab: AppTab) -> some View {
+        switch tab {
+        case .home: HomeReaderRoot()
+        default: ReaderPlaceholderView()
         }
     }
 
