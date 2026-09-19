@@ -25,6 +25,11 @@ nonisolated enum NationalDayTheme {
         UserDefaults.standard.bool(forKey: activeDefaultsKey)
     }
 
+    /// اسم الأيقونة البديلة في كتالوج الأصول: خضرة الهوية والشعار أبيض.
+    /// لا بد أن يطابق مجموعة `NationalDayAppIcon.appiconset` وإعداد البناء
+    /// `ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES`.
+    static let alternateIconName = "NationalDayAppIcon"
+
     // MARK: - Palette
 
     /// أخضر الهوية العميق ‏#0E5E43 — خلفية الشاشة الترحيبية.

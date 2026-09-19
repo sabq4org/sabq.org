@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -98,5 +98,61 @@ describe("عقد المفتاح بين الطبقات", () => {
       "utf8",
     );
     expect(theme).toContain("if NationalDayTheme.isActive");
+  });
+
+  it("اسم الأيقونة البديلة متطابق في Swift وإعداد البناء وكتالوج الأصول", () => {
+    // ثلاثة مواضع لا يربطها المترجم: خطأ مطبعي في أيٍّ منها يعني أن
+    // `setAlternateIconName` يفشل صامتًا وتبقى الأيقونة الزرقاء.
+    const ICON = "NationalDayAppIcon";
+    expect(swift).toContain(`alternateIconName = "${ICON}"`);
+
+    const pbxproj = readFileSync(
+      resolve("sabq app ios/sabq.xcodeproj/project.pbxproj"),
+      "utf8",
+    );
+    const alternates = pbxproj.match(
+      /ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES = [^;]+;/g,
+    );
+    // لا بد من ضبطه في Debug وRelease معًا، وإلا اختلف بناءٌ عن بناء.
+    expect(alternates).toHaveLength(2);
+    for (const line of alternates ?? []) expect(line).toContain(ICON);
+    expect(
+      pbxproj.match(/ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;/g),
+    ).toHaveLength(2);
+
+    expect(
+      existsSync(
+        resolve(`sabq app ios/sabq/Assets.xcassets/${ICON}.appiconset/Contents.json`),
+      ),
+    ).toBe(true);
+  });
+
+  it("مجموعة الأيقونة الخضراء تحمل كل الملفات التي يطلبها Contents.json", () => {
+    // ملف ناقص يجعل Xcode يفشل عند الأرشفة لا عند البناء العادي.
+    const dir = resolve(
+      "sabq app ios/sabq/Assets.xcassets/NationalDayAppIcon.appiconset",
+    );
+    const contents = JSON.parse(
+      readFileSync(resolve(dir, "Contents.json"), "utf8"),
+    ) as { images: Array<{ filename?: string }> };
+    const wanted = new Set(
+      contents.images.map((i) => i.filename).filter(Boolean) as string[],
+    );
+    expect(wanted.size).toBeGreaterThan(0);
+    for (const file of wanted) {
+      expect(existsSync(resolve(dir, file))).toBe(true);
+    }
+  });
+
+  it("تبديل الأيقونة يقارن بالحالة الفعلية لا بالنيّة", () => {
+    // من دون هذه المقارنة يعرض النظام تنبيه «تغيّرت الأيقونة» في كل جلب
+    // دوري، ولا يتعافى التطبيق من تبديل فشل وهو في الخلفية.
+    const store = readFileSync(
+      resolve("sabq app ios/sabq/Services/SeasonalThemeStore.swift"),
+      "utf8",
+    );
+    expect(store).toContain("supportsAlternateIcons");
+    expect(store).toContain("app.alternateIconName != desired");
+    expect(store).toContain("setAlternateIconName(desired)");
   });
 });
