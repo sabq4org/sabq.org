@@ -10,6 +10,11 @@ import {
   isDashboardThemeId,
   parseDashboardThemeId,
 } from "@shared/dashboard-theme";
+import {
+  IOS_NATIONAL_DAY_THEME_SETTING_KEY,
+  DEFAULT_IOS_NATIONAL_DAY_THEME,
+  parseIosNationalDayThemeConfig,
+} from "@shared/ios-national-day-theme";
 
 const router: Router = Router();
 router.use(summaryAudioSettingsRouter);
@@ -213,6 +218,51 @@ router.post(
     } catch (error) {
       console.error("Error updating dashboard theme:", error);
       res.status(500).json({ message: "Failed to update dashboard theme" });
+    }
+  },
+);
+
+// ثيم اليوم الوطني لتطبيق iOS — GET عام (التطبيق يقرأه بلا مصادقة)،
+// POST للإدارة فقط. يخص تطبيق iOS وحده: لا يمسّ ثيم الموقع
+// (NationalDay96Theme) ولا تطبيق أندرويد.
+router.get("/api/system/ios-national-day-theme", async (_req, res) => {
+  try {
+    const setting = await storage.getSystemSetting(IOS_NATIONAL_DAY_THEME_SETTING_KEY);
+    res.json(parseIosNationalDayThemeConfig(setting));
+  } catch (error) {
+    console.error("Error fetching iOS national day theme:", error);
+    // الفشل يسقط على «معطّل» بدل 500 — التطبيق يعامل أي خطأ كإبقاء آخر
+    // حالة مخزّنة عنده، فلا نريد أن يقرأ خطأً حيث تكفي قيمة آمنة.
+    res.json({ ...DEFAULT_IOS_NATIONAL_DAY_THEME });
+  }
+});
+
+router.post(
+  "/api/system/ios-national-day-theme",
+  requireAuth,
+  requirePermission("system.manage_settings"),
+  async (req, res) => {
+    try {
+      if (typeof req.body?.enabled !== "boolean") {
+        return res.status(400).json({ message: "enabled must be a boolean" });
+      }
+
+      const next = {
+        enabled: req.body.enabled,
+        updatedAt: new Date().toISOString(),
+      };
+
+      await storage.upsertSystemSetting(
+        IOS_NATIONAL_DAY_THEME_SETTING_KEY,
+        next,
+        "appearance",
+        true,
+      );
+
+      res.json({ success: true, ...next });
+    } catch (error) {
+      console.error("Error updating iOS national day theme:", error);
+      res.status(500).json({ message: "Failed to update iOS national day theme" });
     }
   },
 );

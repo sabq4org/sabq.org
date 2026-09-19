@@ -147,6 +147,11 @@ struct HomeFeedView: View {
 
                         headerSection
 
+                    // لمسة السدو الموسمية: شريط رفيع تحت الرأس وحده. لا يقع
+                    // خلف نصوص الأخبار، ولا يتكرّر في البطاقات. يختفي تمامًا
+                    // عند إطفاء المفتاح.
+                    NationalDayHeaderAccent()
+
                     // Tier-up celebration or periodic engagement nudge.
                     if let banner = loyaltyBanner {
                         LoyaltyCelebrationBanner(
@@ -530,11 +535,7 @@ struct HomeFeedView: View {
     private var headerSection: some View {
         HStack(alignment: .center, spacing: 14) {
             // 52 → 44 نقطة عند التمرير كما في الويب (الجوال 44×1.18 ثم 44)
-            Image("SabqLogo")
-                .renderingMode(.original)
-                .resizable()
-                .aspectRatio(contentMode: .fit)
-                .frame(height: isHeaderCompact ? 44 : 52)
+            SabqBrandLogo(height: isHeaderCompact ? 44 : 52)
 
             Spacer(minLength: 0)
 

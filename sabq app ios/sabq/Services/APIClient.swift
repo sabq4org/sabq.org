@@ -417,6 +417,17 @@ actor APIClient {
         try await get(APIPassport.self, path: "/articles/\(slug)/passport", apiRoot: publicAPIBaseURL)
     }
 
+    /// مفتاح ثيم اليوم الوطني لتطبيق iOS، يضبطه محرّر من لوحة التحكم.
+    /// عام بلا مصادقة، وخارج /v1، فيمرّ عبر publicAPIBaseURL.
+    func fetchIosNationalDayTheme() async throws -> IosNationalDayThemeFlag {
+        try await get(
+            IosNationalDayThemeFlag.self,
+            path: "/system/ios-national-day-theme",
+            ignoreCache: true,
+            apiRoot: publicAPIBaseURL
+        )
+    }
+
     func fetchComments(slug: String) async throws -> [APIComment] {
         // v1 mirror at `/api/v1/articles/:slug/comments` returns a bare array
         // of top-level comments with `replies: []` nested. We use v1 (not the

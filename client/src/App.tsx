@@ -232,6 +232,7 @@ const NationalDay96HeaderPreview = lazy(() => retryImport(() => import("@/pages/
 const LoyaltyTermsPage = lazy(() => retryImport(() => import("@/pages/LoyaltyTermsPage")));
 const HajjBlockSettings = lazy(() => retryImport(() => import("@/pages/dashboard/HajjBlockSettings")));
 const NationalDayBlockSettings = lazy(() => retryImport(() => import("@/pages/dashboard/NationalDayBlockSettings")));
+const IosNationalDayThemeSettings = lazy(() => retryImport(() => import("@/pages/dashboard/IosNationalDayThemeSettings")));
 const SahraaTvBlockSettings = lazy(() => retryImport(() => import("@/pages/dashboard/SahraaTvBlockSettings")));
 const ThemeManager = lazy(() => retryImport(() => import("@/pages/ThemeManager")));
 const ThemeEditor = lazy(() => retryImport(() => import("@/pages/ThemeEditor")));
@@ -1007,6 +1008,7 @@ function Router() {
         <Route path="/dashboard/loyalty-admin">{() => <LazyRoute component={LoyaltyAdminDashboard} />}</Route>
         <Route path="/dashboard/hajj-block">{() => <LazyRoute component={HajjBlockSettings} />}</Route>
         <Route path="/dashboard/national-day-block">{() => <LazyRoute component={NationalDayBlockSettings} />}</Route>
+        <Route path="/dashboard/ios-national-day-theme">{() => <LazyRoute component={IosNationalDayThemeSettings} />}</Route>
         <Route path="/dashboard/sahraa-tv-block">{() => <LazyRoute component={SahraaTvBlockSettings} />}</Route>
         <Route path="/settings/:section">{() => <LazyRoute component={SettingsCenter} />}</Route>
         <Route path="/settings">{() => <LazyRoute component={SettingsCenter} />}</Route>

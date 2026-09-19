@@ -246,11 +246,7 @@ struct LoginSheet: View {
     private var loginFormView: some View {
         VStack(alignment: .leading, spacing: 24) {
             VStack(spacing: 12) {
-                Image("SabqLogo")
-                    .renderingMode(.original)
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .frame(height: 48)
+                SabqBrandLogo(height: 48)
 
                 Text("تسجيل الدخول")
                     .font(SabqFonts.app(size: 24, weight: .bold))
