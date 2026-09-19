@@ -6,43 +6,219 @@ final class SabqNavigationState {
     var sessionID = UUID()
     var selectedTab: AppTab = .home
     var paths: [AppTab: NavigationPath] = [:]
+    /// الخبر المفتوح في عمود القارئ على العرض العريض (iPhone Duo مفتوحًا،
+    /// iPad). `nil` يعني «أبرز خبر الآن» — يختاره `HomeReaderRoot` تلقائيًا
+    /// حتى لا يستقبل القارئ شاشة فارغة عند الفتح.
+    var homeReaderArticle: Article?
+    /// هل دُفع خبر القارئ إلى مكدّس «الرئيسية» عند آخر طيّ؟ يُستخدم عند الفتح
+    /// التالي لإزالته من المكدّس بدل أن يظهر مرتين (في القارئ وفوقه).
+    private var bridgedReaderArticleIntoStack = false
 
     func reset() {
         sessionID = UUID()
         paths = [:]
         selectedTab = .home
+        homeReaderArticle = nil
+        bridgedReaderArticleIntoStack = false
+    }
+
+    /// يفتح خبرًا في عمود القارئ ويعيد مكدّس التبويب إلى جذره حتى لا تتراكم
+    /// صفحات خلفه (كلمة مفتاحية، كاتب…) من قراءة سابقة.
+    func openInReader(_ article: Article) {
+        homeReaderArticle = article
+        paths[.home] = NavigationPath()
+        bridgedReaderArticleIntoStack = false
+    }
+
+    /// جسر الطي/الفتح على iPhone Duo (وتقسيم الشاشة على iPad).
+    ///
+    /// التخطيطان العريض والضيق يتشاركان `paths[.home]`، لكن الخبر المفتوح في
+    /// عمود القارئ يعيش في `homeReaderArticle` لا في المكدّس. من دون هذا الجسر
+    /// كان الطيّ أثناء القراءة يعيد المستخدم إلى الصفحة الأولى ويُسقط الخبر
+    /// (مثبت على المحاكي 2026-09-19).
+    ///
+    /// - الطيّ (عريض → ضيق): إن كان المكدّس فارغًا والقارئ على خبر اختاره
+    ///   المستخدم، يُدفع الخبر إلى المكدّس فيبقى على الشاشة الخارجية.
+    /// - الفتح (ضيق → عريض): إن كان المكدّس ما زال يحمل ذلك الخبر وحده،
+    ///   يُزال لأن القارئ يعرضه أصلًا. إن تعمّق المستخدم بعده (كلمة مفتاحية،
+    ///   كاتب…) يبقى المكدّس كما هو فوق القارئ.
+    func homeLayoutDidChange(isWide: Bool) {
+        let path = paths[.home] ?? NavigationPath()
+        if isWide {
+            if bridgedReaderArticleIntoStack, path.count == 1 {
+                paths[.home] = NavigationPath()
+            }
+            bridgedReaderArticleIntoStack = false
+        } else if path.isEmpty, let article = homeReaderArticle {
+            paths[.home] = NavigationPath([article])
+            bridgedReaderArticleIntoStack = true
+        }
     }
 }
 
 /// Use the standard stack in compact windows so deep links and native back
 /// navigation share the same path. Wide windows keep the list beside the reader.
-struct SabqTabNavigation<Root: View>: View {
+///
+/// القرار «عريض/ضيق» لا يعتمد على `horizontalSizeClass` وحده: iPhone Duo
+/// مفتوحًا بالوضع الرأسي يبلّغ `.compact` رغم أن عرضه يتجاوز 650 نقطة، فكان
+/// التخطيط المزدوج لا يظهر إلا بالوضع الأفقي. نقيس عرض النافذة الفعلي أيضًا.
+struct SabqTabNavigation<Root: View, Sidebar: View, Detail: View>: View {
     @Binding var path: NavigationPath
     var usesReaderColumns = true
     @Environment(\.horizontalSizeClass) private var sizeClass
     @ViewBuilder var root: () -> Root
+    /// ما يُعرض في عمود القائمة على العرض العريض (iPhone Duo مفتوحًا، iPad).
+    /// الافتراضي `root` نفسه؛ «الرئيسية» تمرّر `HomeSidebarView` لأن الصفحة
+    /// الأولى الكاملة لا تصلح عمودًا بجوار القارئ.
+    @ViewBuilder var sidebar: () -> Sidebar
+    /// جذر عمود القارئ قبل أن يختار المستخدم شيئًا. الافتراضي رسالة
+    /// «اختر ما تود قراءته»؛ «الرئيسية» تمرّر `HomeReaderRoot` فيُفتح أبرز خبر فورًا.
+    @ViewBuilder var detail: () -> Detail
+    /// يُستدعى عند الانتقال بين التخطيطين (طيّ/فتح Duo، تقسيم الشاشة) بالقيمة
+    /// الجديدة لـ «عريض». التبويبات التي تحمل حالة خارج المكدّس (الرئيسية:
+    /// خبر القارئ) تجسرها هنا؛ راجع `SabqNavigationState.homeLayoutDidChange`.
+    var onLayoutChange: ((_ isWide: Bool) -> Void)? = nil
+    /// ملاحظة مُتعلَّمة: رأينا نافذة هاتف بعرض قابل للطيّ مفتوحًا. تُحفظ
+    /// لتفعيل الحاوية الثابتة من الإقلاع التالي على طرازات غير مدرجة.
+    @AppStorage(FoldableDevice.observedDefaultsKey) private var foldableObserved = false
+
+    /// أقل عرض (نقطة) يُعدّ «عريضًا». iPhone Max أفقيًا ≈ 932، Duo مفتوحًا
+    /// رأسيًا ≈ 700، iPad mini رأسيًا 744؛ أي هاتف مطوي/عادي رأسيًا < 450.
+    static var readerColumnsMinWidth: CGFloat { 640 }
 
     var body: some View {
-        if sizeClass == .regular && usesReaderColumns {
-            NavigationSplitView {
-                root()
-                    .modifier(SabqDestinations())
-                    .navigationSplitViewColumnWidth(min: 320, ideal: 390, max: 520)
-            } detail: {
-                NavigationStack(path: $path) {
-                    ContentUnavailableView("اختر ما تود قراءته", systemImage: "newspaper",
-                        description: Text("تصفّح الأخبار وافتح مقالًا لقراءته هنا."))
-                        .background(SabqTheme.background)
-                        .modifier(SabqDestinations())
+        GeometryReader { geo in
+            let isWide = usesReaderColumns
+                && (sizeClass == .regular || geo.size.width >= Self.readerColumnsMinWidth)
+            // Duo فقط: حاوية واحدة ثابتة في الوضعين. غيره يبقى على التبديل.
+            let usesStableSplit = usesReaderColumns && FoldableDevice.isFoldable(observed: foldableObserved)
+            Group {
+                if usesStableSplit {
+                    stableSplitLayout(isWide: isWide)
+                } else if isWide {
+                    splitLayout
+                        // Duo can retain compact traits while unfolded. Without
+                        // this scoped override SwiftUI presents the sidebar over
+                        // the reader, even when there is room for both columns.
+                        .environment(\.horizontalSizeClass, .regular)
+                } else {
+                    stackLayout
                 }
             }
-            .navigationSplitViewStyle(.balanced)
-        } else {
-            NavigationStack(path: $path) {
-                root()
-                    .modifier(SabqDestinations())
+            .frame(width: geo.size.width, height: geo.size.height)
+            // يُستدعى قبل أن يُبنى التخطيط الجديد بالمكدّس المشترك، فيجد
+            // الفرع الضيق خبر القارئ مدفوعًا فوق الجذر مباشرة.
+            .onChange(of: isWide) { _, nowWide in onLayoutChange?(nowWide) }
+            .onChange(of: geo.size, initial: true) { _, size in
+                if !foldableObserved, FoldableDevice.looksUnfolded(size) { foldableObserved = true }
             }
         }
+        .ignoresSafeArea(.keyboard)
+    }
+
+    /// iPhone Duo: `NavigationSplitView` واحد لا يُهدم عند الطيّ.
+    ///
+    /// بدل تبديل نوع الحاوية (Split ↔ Stack) الذي كان يعيد بناء شجرة التبويب
+    /// ويُسقط `@State` الداخلية، تبقى الحاوية نفسها و`NavigationStack` نفسه في
+    /// عمود القارئ، ويتغير أمران فقط:
+    /// - `columnVisibility`: `.all` مفتوحًا، `.detailOnly` مطويًا (العمود يُخفى
+    ///   ولا يُعرض طبقةً فوق المحتوى). الرابط لا يقبل تغييرًا من إيماءة السحب.
+    /// - جذر عمود القارئ: `detail()` مفتوحًا (القارئ يفتح أبرز خبر) و`root()`
+    ///   مطويًا (الصفحة الأولى الكاملة). ما دُفع فوقه في `path` يبقى في المكدّس
+    ///   نفسه فينجو تمريره وبياناته.
+    ///
+    /// صنف الحجم يُفرض `.regular` على الـ Split View نفسه كي لا ينهار إلى عمود
+    /// واحد على الشاشة الخارجية، ثم يُعاد القيمة الحقيقية لمحتوى العمودين حتى
+    /// لا تظن الشاشات (مثل `CategoryArticlesView`) أنها على عرض منتظم وهي على
+    /// 466 نقطة.
+    private func stableSplitLayout(isWide: Bool) -> some View {
+        let visibility = Binding<NavigationSplitViewVisibility>(
+            get: { isWide ? .all : .detailOnly },
+            set: { _ in }
+        )
+        let contentSizeClass: UserInterfaceSizeClass? = isWide ? .regular : sizeClass
+        return NavigationSplitView(columnVisibility: visibility) {
+            sidebar()
+                .modifier(SabqDestinations())
+                .navigationSplitViewColumnWidth(min: 340, ideal: 400, max: 520)
+                .toolbar(removing: .sidebarToggle)
+                .environment(\.horizontalSizeClass, .regular)
+        } detail: {
+            NavigationStack(path: $path) {
+                Group {
+                    if isWide { detail() } else { root() }
+                }
+                .background(SabqTheme.background)
+                .modifier(SabqDestinations())
+            }
+            .toolbar(removing: .sidebarToggle)
+            .environment(\.horizontalSizeClass, contentSizeClass)
+        }
+        .navigationSplitViewStyle(.balanced)
+        .environment(\.horizontalSizeClass, .regular)
+    }
+
+    private var splitLayout: some View {
+        NavigationSplitView(columnVisibility: .constant(.all)) {
+            sidebar()
+                .modifier(SabqDestinations())
+                .navigationSplitViewColumnWidth(min: 340, ideal: 400, max: 520)
+                .toolbar(removing: .sidebarToggle)
+        } detail: {
+            NavigationStack(path: $path) {
+                detail()
+                    .background(SabqTheme.background)
+                    .modifier(SabqDestinations())
+            }
+            .toolbar(removing: .sidebarToggle)
+        }
+        .navigationSplitViewStyle(.balanced)
+    }
+
+    private var stackLayout: some View {
+        NavigationStack(path: $path) {
+            root()
+                .modifier(SabqDestinations())
+        }
+    }
+}
+
+extension SabqTabNavigation where Sidebar == Root, Detail == ReaderPlaceholderView {
+    /// التبويبات التي تصلح جذورها عمودًا كما هي (قوائم وشبكات) لا تمرّر `sidebar`.
+    init(
+        path: Binding<NavigationPath>,
+        usesReaderColumns: Bool = true,
+        @ViewBuilder root: @escaping () -> Root
+    ) {
+        self._path = path
+        self.usesReaderColumns = usesReaderColumns
+        self.root = root
+        self.sidebar = root
+        self.detail = { ReaderPlaceholderView() }
+    }
+}
+
+extension SabqTabNavigation where Detail == ReaderPlaceholderView {
+    init(
+        path: Binding<NavigationPath>,
+        usesReaderColumns: Bool = true,
+        @ViewBuilder root: @escaping () -> Root,
+        @ViewBuilder sidebar: @escaping () -> Sidebar
+    ) {
+        self._path = path
+        self.usesReaderColumns = usesReaderColumns
+        self.root = root
+        self.sidebar = sidebar
+        self.detail = { ReaderPlaceholderView() }
+    }
+}
+
+/// عمود القارئ الفارغ للتبويبات التي لا تفتح شيئًا تلقائيًا.
+struct ReaderPlaceholderView: View {
+    var body: some View {
+        ContentUnavailableView("اختر ما تود قراءته", systemImage: "newspaper",
+            description: Text("تصفّح الأخبار وافتح مقالًا لقراءته هنا."))
+            .background(SabqTheme.background)
     }
 }
 

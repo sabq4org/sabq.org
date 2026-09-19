@@ -5,10 +5,7 @@ struct SectionsView: View {
     @Environment(BookmarksStore.self) private var bookmarksStore
     @State private var trendingTags: [String] = []
 
-    private let columns = [
-        GridItem(.flexible(), spacing: 14),
-        GridItem(.flexible(), spacing: 14)
-    ]
+    private let columns = SabqGrid.adaptive(spacing: 14)
 
     var body: some View {
         ScrollView(showsIndicators: false) {

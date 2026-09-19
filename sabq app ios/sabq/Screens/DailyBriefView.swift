@@ -405,7 +405,7 @@ struct DailyBriefView: View {
     }
 
     private var valueGrid: some View {
-        let columns = [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)]
+        let columns = SabqGrid.adaptive(spacing: 12)
         return LazyVGrid(columns: columns, spacing: 12) {
             featureTile(title: "موجز يومي", subtitle: "أهم ما يهمك في دقائق", icon: "doc.text.magnifyingglass", tint: SabqTheme.teal)
             featureTile(title: "اقتراحات ذكية", subtitle: "توصيات من سبق AI", icon: "sparkles", tint: SabqTheme.coral)

@@ -244,10 +244,7 @@ struct AdminDashboardView: View {
                 .font(SabqFonts.app(size: 16, weight: .semibold))
                 .foregroundStyle(SabqTheme.ink)
 
-            let columns = [
-                GridItem(.flexible(), spacing: 10),
-                GridItem(.flexible(), spacing: 10)
-            ]
+            let columns = SabqGrid.adaptive(spacing: 10)
             LazyVGrid(columns: columns, spacing: 10) {
                 NavigationLink(value: AdminContactMessagesRoute()) {
                     adminShortcut(
@@ -317,7 +314,7 @@ struct AdminDashboardView: View {
                 .font(SabqFonts.app(size: 18, weight: .heavy))
                 .foregroundStyle(SabqTheme.ink)
 
-            let columns = [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)]
+            let columns = SabqGrid.adaptive(spacing: 10)
             if let counts = vm.counts {
                 LazyVGrid(columns: columns, spacing: 10) {
                     AdminStatGridCard(

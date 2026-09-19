@@ -68,7 +68,7 @@ struct AITeamView: View {
     @State private var isLoading = true
     @State private var loadError: String?
 
-    private let columns = [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)]
+    private let columns = SabqGrid.adaptive(spacing: 10)
 
     var body: some View {
         ScrollView(showsIndicators: false) {

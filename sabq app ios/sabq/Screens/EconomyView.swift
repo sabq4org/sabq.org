@@ -151,7 +151,7 @@ struct EconomyView: View {
     }
 
     private func ticker(_ s: EconomySnapshot) -> some View {
-        LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
+        LazyVGrid(columns: SabqGrid.adaptive(spacing: 10), spacing: 10) {
             ForEach(tickerCards(s)) { c in
                 VStack(alignment: .leading, spacing: 4) {
                     Text(c.label)
@@ -355,7 +355,7 @@ struct EconomyWeeklyModule: View {
 
             // (ب) المؤشرات الأربعة
             if !kpis.isEmpty {
-                LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
+                LazyVGrid(columns: SabqGrid.adaptive(spacing: 10), spacing: 10) {
                     ForEach(kpis) { k in kpiCard(k) }
                 }
             }
@@ -363,7 +363,7 @@ struct EconomyWeeklyModule: View {
             // (ج) أرقام الأسبوع
             if !stories.isEmpty {
                 EconomySectionHead(title: "أرقام الأسبوع", description: "قصص يستخرجها النظام من الجدولين تلقائيًا — كل بطاقة عنوان خبر جاهز.")
-                LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
+                LazyVGrid(columns: SabqGrid.adaptive(spacing: 10), spacing: 10) {
                     ForEach(stories.prefix(6)) { st in storyCard(st) }
                 }
             }
@@ -703,13 +703,13 @@ struct EconomyMonthlyModule: View {
                     .foregroundStyle(SabqTheme.tertiaryInk)
             }
 
-            LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
+            LazyVGrid(columns: SabqGrid.adaptive(spacing: 10), spacing: 10) {
                 ForEach(cards) { card in EconomyMonthlyCardView(card: card) }
             }
 
             if !trackers.isEmpty {
                 EconomySectionHead(title: "مؤشرات تتراكم شهرًا بعد شهر", description: "آخر 13 شهرًا — تُحدَّث تلقائيًا مع كل نشرة.")
-                LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
+                LazyVGrid(columns: SabqGrid.adaptive(spacing: 10), spacing: 10) {
                     ForEach(trackers) { t in
                         economyCard {
                             Text(t.titleAr)
