@@ -1,0 +1,168 @@
+openapi: 3.0.3
+info:
+  title: Sabq Bot Drafts API
+  version: 1.0.0
+  description: |
+    مسودات فقط لبوتات «نشر سبق» ومهندّس (Grok Bot). الحالة draft دائماً — لا نشر ولا جدولة.
+    الدليل الكامل: docs/systems/editorial/BOT_DRAFTS_API.md
+servers:
+  - url: https://api.sabq.org
+    description: Production (Railway)
+  - url: http://localhost:5000
+    description: Local dev (npm run dev)
+security:
+  - botToken: []
+paths:
+  /api/internal/bot-drafts:
+    post:
+      operationId: createSabqDraft
+      summary: إنشاء مسودة عربية جديدة في لوحة تحكم سبق (status=draft)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BotDraftCreate"
+      responses:
+        "201":
+          description: المسودة أُنشئت
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BotDraft"
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "503": { $ref: "#/components/responses/NotConfigured" }
+  /api/internal/bot-drafts/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+        description: معرّف المسودة كما عاد من الإنشاء
+    get:
+      operationId: getSabqDraft
+      summary: حالة المسودة ومعرّفها ورابط التحرير الداخلي
+      responses:
+        "200":
+          description: المسودة
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BotDraft"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      operationId: updateSabqDraft
+      summary: تحديث مسودة أنشأها بوت وما زالت draft (الحقول المتغيرة فقط)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BotDraftUpdate"
+      responses:
+        "200":
+          description: المسودة بعد التحديث
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BotDraft"
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: not_a_draft (نُشرت/جُدولت) أو locked_by_editor (محرر يعمل عليها الآن)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "422": { $ref: "#/components/responses/Unprocessable" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+components:
+  securitySchemes:
+    botToken:
+      type: http
+      scheme: bearer
+      description: توكن البوت من BOT_DRAFTS_API_TOKENS (Railway). يُخزَّن في مدير أسرار البوت باسم SABQ_BOT_DRAFTS_TOKEN.
+  schemas:
+    DraftFields:
+      type: object
+      properties:
+        title: { type: string, minLength: 3, maxLength: 300, description: عنوان الخبر }
+        content: { type: string, minLength: 20, maxLength: 300000, description: HTML أو نص خام (يتحول لفقرات تلقائياً) }
+        contentFormat: { type: string, enum: [html, text] }
+        subtitle: { type: string, maxLength: 300, nullable: true }
+        excerpt: { type: string, maxLength: 1000, nullable: true, description: المقدمة/الموجز }
+        categoryId: { type: string }
+        categorySlug: { type: string, description: slug تصنيف نشط من GET /api/categories }
+        imageUrl: { type: string, format: uri, nullable: true, description: صورة الغلاف — https فقط }
+        keywords:
+          type: array
+          maxItems: 20
+          items: { type: string, maxLength: 60 }
+        sourceUrl: { type: string, format: uri, nullable: true }
+        clientReference: { type: string, maxLength: 120, description: معرّف البوت الداخلي للمادة }
+        notes: { type: string, maxLength: 2000, nullable: true, description: ملاحظة للمحررين }
+      additionalProperties: false
+    BotDraftCreate:
+      allOf:
+        - $ref: "#/components/schemas/DraftFields"
+        - required: [title, content]
+    BotDraftUpdate:
+      allOf:
+        - $ref: "#/components/schemas/DraftFields"
+        - minProperties: 1
+    BotDraft:
+      type: object
+      properties:
+        id: { type: string }
+        status: { type: string, description: الحالة الحالية في اللوحة (draft/published/scheduled/archived) }
+        updatable: { type: boolean, description: true فقط عندما تكون draft }
+        title: { type: string }
+        subtitle: { type: string, nullable: true }
+        slug: { type: string }
+        excerpt: { type: string, nullable: true }
+        categoryId: { type: string, nullable: true }
+        categorySlug: { type: string, nullable: true }
+        imageUrl: { type: string, nullable: true }
+        sourceUrl: { type: string, nullable: true }
+        keywords: { type: array, items: { type: string } }
+        source: { type: string, example: bot }
+        bot: { type: string, nullable: true, description: اسم البوت من التوكن }
+        clientReference: { type: string, nullable: true }
+        notes: { type: string, nullable: true }
+        editUrl: { type: string, format: uri, description: رابط التحرير الداخلي في اللوحة }
+        previewUrl: { type: string, format: uri }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          enum: [not_configured, unauthorized, forbidden_fields, validation_error, category_not_found, author_not_configured, not_found, not_a_draft, locked_by_editor, forbidden_action, rate_limited, server_error]
+        message: { type: string }
+        details: {}
+  responses:
+    ValidationError:
+      description: validation_error — حقل ناقص/غير صالح/غير معروف
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    Unauthorized:
+      description: unauthorized — توكن مفقود أو غير مطابق
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    NotFound:
+      description: not_found — المعرّف غير موجود أو ليس من إنشاء بوت
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    Unprocessable:
+      description: forbidden_fields (حقل نشر/حالة) أو category_not_found
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    RateLimited:
+      description: rate_limited — تجاوز سقف الكتابة للدقيقة لهذا البوت
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    NotConfigured:
+      description: not_configured — BOT_DRAFTS_API_TOKENS غير مضبوط
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }

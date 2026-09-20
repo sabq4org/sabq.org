@@ -1,6 +1,6 @@
 # نظام التحرير وغرف الأخبار (`editorial`)
 
-> آخر مراجعة: 2026-09-19 (حماية موجة قرّاء العاجل) | المالك: editorial
+> آخر مراجعة: 2026-09-20 (Bot Drafts API) | المالك: editorial
 
 ## الغرض
 غرفة الأخبار اليومية + أدوات التحرير بالذكاء الاصطناعي التي يستخدمها المحررون: عناوين، مقالات، تصنيف، SEO، روابط ذكية، صور، وكلاء بريد/واتساب، ومساعد كاتب الرأي، والإعلانات الداخلية الموجهة لفريق العمل.
@@ -18,6 +18,7 @@
 | غرفة الأخبار | `articleEditLocks`, `editorAlerts`, `dashboardPulse` |
 | الإعلانات الداخلية | `server/routes/announcements.ts`، `/api/announcements/*`، وصفحات `/dashboard/announcements` |
 | AI تحريري | `ai-content-tools`, `journalist-agent-ai`, `aiArticleGenerator`, `seo-generator` |
+| مسودات البوتات | `server/routes/botDrafts.ts` + `server/services/botDraftsService.ts` + `shared/botDrafts.ts` — `POST/GET/PATCH /api/internal/bot-drafts[/:id]`، Bearer لكل بوت من `BOT_DRAFTS_API_TOKENS`، `draft` فقط. الدليل: [`BOT_DRAFTS_API.md`](./BOT_DRAFTS_API.md) |
 | رادار الفجوات | `server/services/coverageGapMatcher.ts` (محرك المطابقة الدلالية), `server/routes/coverageGaps.ts` (`/api/admin/dashboard/coverage-gaps` + تعيين/مسودة/استبعاد) |
 | Web | `/dashboard`, Communications, Prompt Studio, Voice Management |
 | صفحة الكاتب بالاسم | `GET /api/authors/by-name` → `authorProfileService`؛ واجهة `/author/:name`؛ من مقال الرأي يُفضَّل `/reporter/:slug` إن وُجد `staff.slug` وإلا `/author/:name` (مثل iOS) |
@@ -206,3 +207,11 @@
 - حماية popstate في قياس الويب: Router وحده يبدأ الزيارة؛ إشارة metadata المؤجلة قابلة للإلغاء عند مغادرة الصفحة، لمنع إسناد عنوان الصفحة القديمة للرابط الجديد. اختبار Wouter يبدّل مكونات مستقلة ويحاكي الرجوع والتقدم.
 
 - انتظار القراءات المدمجة محدود بـ20 ثانية؛ التعليق يرفض الطلبات ويحرر المفتاح، دون ادعاء إلغاء استعلام DB الجاري.
+
+## مسودات البوتات (Bot Drafts API) — 2026-09-20
+
+- الغرض: بوت «نشر سبق» ومهندّس (Grok Bot) ينشئان ويحدّثان **مسودات عربية فقط** في اللوحة. العقد والتشغيل واختبارات القبول في [`BOT_DRAFTS_API.md`](./BOT_DRAFTS_API.md)، وملف استيراد للأدوات [`bot-drafts.openapi.yaml`](./bot-drafts.openapi.yaml)، وعميل CLI/TS في `scripts/bot-drafts-client.ts`.
+- المصادقة: `Authorization: Bearer <token>` من `BOT_DRAFTS_API_TOKENS="name:token,…"` على Railway (مقارنة ثابتة الزمن، لا لوج للتوكنات). المسار تحت `/api/internal/` فهو معفى أصلاً من CSRF ومحدد الكتابة العام — له محدد خاص بمفتاح اسم البوت (`BOT_DRAFTS_WRITE_RATE_LIMIT`، افتراضي 30/دقيقة). غياب المتغير = `503 not_configured` بلا أثر على التحرير.
+- ثوابت لا تأتي من الطلب: `status=draft`, `reviewStatus=null`, `publishType=instant`, `articleType=news`, `newsType=regular`, `source=bot`, `sourceMetadata.{bot,clientReference,notes}`. الإسناد `authorId` = `BOT_DRAFTS_AUTHOR_USER_ID` أو حساب «صحيفة سبق». الحقول الممنوعة (`status`/`scheduledAt`/`publishedAt`/`reviewStatus`/الإسناد/`newsType`/`slug`…) تُرفض `422 forbidden_fields` قبل أي معالجة؛ `/:id/publish` وأمثاله `403`.
+- التحديث يضرب فقط `status='draft' AND source='bot'` (`409 not_a_draft` وإلا)، ويحترم قفل التحرير النشط (`409 locked_by_editor`). `GET` لا يكشف إلا مواد `source='bot'` (`404` لغيرها). كل كتابة تُبطل كاش قوائم اللوحة (`^articles:`) محلياً كما يفعل `POST /api/admin/articles` للمسودات، بلا purge للـ CDN.
+- لا schema/DDL: التعديل في `shared/schema.ts` نوعي فقط لحقل `sourceMetadata` (jsonb). التحقق: `tests/unit/botDrafts.test.ts`.
