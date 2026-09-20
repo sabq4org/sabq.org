@@ -3,11 +3,30 @@ import type { AddressInfo } from "node:net";
 import express from "express";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-const state = vi.hoisted(() => ({ create: vi.fn(), get: vi.fn(), update: vi.fn(), invalidate: vi.fn() }));
+const state = vi.hoisted(() => ({
+  create: vi.fn(),
+  get: vi.fn(),
+  update: vi.fn(),
+  invalidate: vi.fn(),
+  uploadImage: vi.fn(),
+  isUploadAvailable: vi.fn(() => true),
+  isR2Configured: vi.fn(() => true),
+}));
 vi.mock("../../server/db", () => ({ db: {} }));
 vi.mock("../../server/rbac", () => ({ logActivity: vi.fn().mockResolvedValue(undefined) }));
 vi.mock("../../server/memoryCache", () => ({ memoryCache: { invalidatePattern: state.invalidate }, CACHE_TTL: {} }));
 vi.mock("../../server/services/articleEventsService", () => ({ logArticleEvent: vi.fn().mockResolvedValue([]) }));
+vi.mock("../../server/services/newsImageStorageService", async (original) => {
+  const actual = await original<typeof import("../../server/services/newsImageStorageService")>();
+  return {
+    ...actual,
+    newsImageStorageService: {
+      upload: (...args: unknown[]) => state.uploadImage(...args),
+      isUploadAvailable: () => state.isUploadAvailable(),
+      isR2Configured: () => state.isR2Configured(),
+    },
+  };
+});
 vi.mock("../../server/services/botDraftsService", async (original) => ({
   ...(await original<typeof import("../../server/services/botDraftsService")>()),
   createBotDraft: state.create,
@@ -28,8 +47,16 @@ import {
   reporterIdForBotDraftUpdate,
   toBotDraftResponse,
 } from "../../server/services/botDraftsService";
-import { BOT_DRAFT_FORBIDDEN_FIELDS, findForbiddenBotDraftFields } from "../../shared/botDrafts";
+import {
+  BOT_DRAFT_FORBIDDEN_FIELDS,
+  BOT_DRAFTS_IMAGE_FIELD,
+  BOT_DRAFTS_IMAGE_MAX_BYTES,
+  BOT_DRAFTS_IMAGE_PURPOSE,
+  BOT_DRAFTS_IMAGES_PATH,
+  findForbiddenBotDraftFields,
+} from "../../shared/botDrafts";
 import { isCsrfExemptRequest } from "../../server/csrf";
+import sharp from "sharp";
 
 const NASHR = "nashr-secret-token-0123456789abcdef-XYZ";
 const GROK = "grok-secret-token-0123456789abcdef-QWERTY";
@@ -62,6 +89,31 @@ function call(method: string, path: string, body?: unknown, token: string | null
   });
 }
 
+async function tinyJpeg(): Promise<Buffer> {
+  return sharp({
+    create: { width: 2, height: 2, channels: 3, background: { r: 200, g: 40, b: 40 } },
+  })
+    .jpeg()
+    .toBuffer();
+}
+
+function uploadCall(
+  file: Blob | undefined,
+  filename = "cover.jpg",
+  token: string | null = NASHR,
+  fieldName = BOT_DRAFTS_IMAGE_FIELD,
+) {
+  const form = new FormData();
+  if (file) form.append(fieldName, file, filename);
+  return fetch(`${base}${BOT_DRAFTS_IMAGES_PATH}`, {
+    method: "POST",
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: form,
+  });
+}
+
 beforeAll(async () => {
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
@@ -72,6 +124,8 @@ afterAll(async () => {
 });
 beforeEach(() => {
   vi.resetAllMocks();
+  state.isUploadAvailable.mockReturnValue(true);
+  state.isR2Configured.mockReturnValue(true);
   vi.stubEnv("BOT_DRAFTS_API_TOKENS", TOKENS);
   vi.stubEnv("BOT_DRAFTS_WRITE_RATE_LIMIT", "1000");
   vi.spyOn(console, "warn").mockImplementation(() => {});
@@ -120,6 +174,7 @@ describe("HTTP gate", () => {
   it("is CSRF-exempt through the existing /api/internal/ prefix", () => {
     expect(isCsrfExemptRequest("POST", "/internal/bot-drafts", "/api/internal/bot-drafts")).toBe(true);
     expect(isCsrfExemptRequest("PATCH", "/internal/bot-drafts/art-1", "/api/internal/bot-drafts/art-1")).toBe(true);
+    expect(isCsrfExemptRequest("POST", "/internal/bot-drafts/images", "/api/internal/bot-drafts/images")).toBe(true);
   });
 });
 
@@ -160,6 +215,125 @@ describe("POST /api/internal/bot-drafts", () => {
     const body = await unknown.text();
     expect(body).not.toContain(NASHR);
     expect(body).not.toContain("db down");
+  });
+});
+
+describe("POST /api/internal/bot-drafts/images", () => {
+  it("returns 401 and never reaches storage when the token is missing or wrong", async () => {
+    const jpeg = new Blob([await tinyJpeg()], { type: "image/jpeg" });
+    for (const token of [null, "wrong-token-that-is-long-enough-0123456789"]) {
+      const response = await uploadCall(jpeg, "cover.jpg", token);
+      expect(response.status).toBe(401);
+      expect(response.headers.get("cache-control")).toBe("private, no-store");
+      expect((await response.json()).code).toBe("unauthorized");
+    }
+    expect(state.uploadImage).not.toHaveBeenCalled();
+  });
+
+  it("rejects a missing file, a non-image, and forged jpeg bytes", async () => {
+    const missing = await uploadCall(undefined);
+    expect(missing.status).toBe(400);
+    expect((await missing.json()).code).toBe("validation_error");
+
+    const pdf = await uploadCall(new Blob([new Uint8Array([0x25, 0x50, 0x44, 0x46])], { type: "application/pdf" }), "doc.pdf");
+    expect(pdf.status).toBe(400);
+    expect((await pdf.json()).code).toBe("invalid_image");
+
+    const forged = await uploadCall(new Blob([Buffer.from("not-an-image")], { type: "image/jpeg" }), "fake.jpg");
+    expect(forged.status).toBe(400);
+    expect((await forged.json()).code).toBe("invalid_image");
+    expect(state.uploadImage).not.toHaveBeenCalled();
+  });
+
+  it("rejects files larger than the editorial 10MB cap", async () => {
+    const huge = new Blob([new Uint8Array(BOT_DRAFTS_IMAGE_MAX_BYTES + 1)], { type: "image/jpeg" });
+    const response = await uploadCall(huge, "huge.jpg");
+    expect(response.status).toBe(400);
+    expect((await response.json()).code).toBe("file_too_large");
+    expect(state.uploadImage).not.toHaveBeenCalled();
+  });
+
+  it("stores via newsImageStorageService and returns an https deliveryUrl", async () => {
+    state.uploadImage.mockResolvedValue({
+      success: true,
+      deliveryUrl: "https://media.sabq.org/news/2026/09/abc/w1600.webp",
+      imageId: "img-42",
+      filename: "cover.jpg",
+      provider: "r2",
+      thumbnailUrl: "https://media.sabq.org/news/2026/09/abc/w480.webp",
+      width: 1600,
+      height: 900,
+    });
+    const jpeg = await tinyJpeg();
+    const response = await uploadCall(new Blob([jpeg], { type: "image/jpeg" }), "غلاف.jpg");
+    expect(response.status).toBe(201);
+    expect(response.headers.get("cache-control")).toBe("private, no-store");
+    expect(await response.json()).toEqual({
+      deliveryUrl: "https://media.sabq.org/news/2026/09/abc/w1600.webp",
+      imageId: "img-42",
+      filename: "cover.jpg",
+      provider: "r2",
+      thumbnailUrl: "https://media.sabq.org/news/2026/09/abc/w480.webp",
+      width: 1600,
+      height: 900,
+      purpose: BOT_DRAFTS_IMAGE_PURPOSE,
+    });
+    expect(state.uploadImage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mimeType: "image/jpeg",
+        purpose: BOT_DRAFTS_IMAGE_PURPOSE,
+        forceR2: true,
+        metadata: { source: "bot-drafts", bot: "nashr-sabq" },
+      }),
+    );
+    const uploaded = state.uploadImage.mock.calls[0][0] as { buffer: Buffer };
+    expect(Buffer.isBuffer(uploaded.buffer)).toBe(true);
+    expect(uploaded.buffer.length).toBe(jpeg.length);
+  });
+
+  it("accepts a GIF by magic bytes and stores it", async () => {
+    state.uploadImage.mockResolvedValue({
+      success: true,
+      deliveryUrl: "https://media.sabq.org/news/2026/09/gif/original.gif",
+      imageId: "gif-1",
+      filename: "anim.gif",
+      provider: "r2",
+    });
+    const gif = Buffer.concat([Buffer.from("GIF89a"), Buffer.alloc(16, 0)]);
+    const response = await uploadCall(new Blob([gif], { type: "image/gif" }), "anim.gif");
+    expect(response.status).toBe(201);
+    expect(state.uploadImage).toHaveBeenCalledWith(expect.objectContaining({ mimeType: "image/gif", purpose: BOT_DRAFTS_IMAGE_PURPOSE }));
+  });
+
+  it("returns 503 when R2 news-image storage is not configured", async () => {
+    state.isR2Configured.mockReturnValue(false);
+    const response = await uploadCall(new Blob([await tinyJpeg()], { type: "image/jpeg" }));
+    expect(response.status).toBe(503);
+    expect((await response.json()).code).toBe("storage_unavailable");
+    expect(state.uploadImage).not.toHaveBeenCalled();
+  });
+
+  it("rejects a Cloudflare Images URL so bot covers stay on R2 / media.sabq.org", async () => {
+    state.uploadImage.mockResolvedValue({
+      success: true,
+      deliveryUrl: "https://imagedelivery.net/hash/img/public",
+      imageId: "cf-1",
+      provider: "cloudflare-images",
+    });
+    const response = await uploadCall(new Blob([await tinyJpeg()], { type: "image/jpeg" }));
+    expect(response.status).toBe(502);
+    expect((await response.json()).code).toBe("upload_failed");
+  });
+
+  it("rejects a non-https delivery URL from storage", async () => {
+    state.uploadImage.mockResolvedValue({
+      success: true,
+      deliveryUrl: "http://insecure.example/cover.jpg",
+      imageId: "img-1",
+    });
+    const response = await uploadCall(new Blob([await tinyJpeg()], { type: "image/jpeg" }));
+    expect(response.status).toBe(502);
+    expect((await response.json()).code).toBe("upload_failed");
   });
 });
 

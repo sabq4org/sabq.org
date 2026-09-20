@@ -2,6 +2,7 @@
 // «مسودات البوتات» — Bot Drafts API (HTTP فقط؛ البيانات في botDraftsService)
 //
 // POST  /api/internal/bot-drafts        إنشاء مسودة عربية (status=draft دائماً)
+// POST  /api/internal/bot-drafts/images رفع صورة غلاف إلى R2 / media.sabq.org (forceR2)
 // GET   /api/internal/bot-drafts/:id    حالة المسودة + معرّفها + رابط التحرير
 // PATCH /api/internal/bot-drafts/:id    تحديث مسودة أنشأها بوت وما زالت draft
 //
@@ -14,13 +15,22 @@
 
 import { Router, type NextFunction, type Request, type Response } from "express";
 import rateLimit from "express-rate-limit";
+import multer from "multer";
 import {
   BOT_DRAFTS_BASE_PATH,
+  BOT_DRAFTS_IMAGES_PATH,
+  BOT_DRAFTS_IMAGE_FIELD,
+  BOT_DRAFTS_IMAGE_MAX_BYTES,
+  BOT_DRAFTS_IMAGE_MIME_TYPES,
+  BOT_DRAFTS_IMAGE_PURPOSE,
   botDraftCreateSchema,
   botDraftUpdateSchema,
   findForbiddenBotDraftFields,
   type BotDraftErrorBody,
+  type BotDraftImageUploadResponse,
 } from "@shared/botDrafts";
+import { isNewsImageR2DeliveryUrl, newsImageStorageService } from "../services/newsImageStorageService";
+import { verifyImageMagicBytes } from "../utils/imageVerify";
 import {
   BotDraftError,
   authenticateBotToken,
@@ -91,6 +101,54 @@ function requestContext(req: Request) {
   return { ip: req.ip, userAgent: req.get("user-agent") };
 }
 
+const botImageUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: BOT_DRAFTS_IMAGE_MAX_BYTES, files: 1 },
+  fileFilter: (_req, file, cb) => {
+    if ((BOT_DRAFTS_IMAGE_MIME_TYPES as readonly string[]).includes(file.mimetype.toLowerCase())) {
+      cb(null, true);
+      return;
+    }
+    cb(new Error("نوع الملف غير مسموح. الأنواع المسموحة: JPEG, PNG, WEBP, GIF"));
+  },
+});
+
+function parseBotImageUpload(req: Request, res: Response, next: NextFunction) {
+  botImageUpload.single(BOT_DRAFTS_IMAGE_FIELD)(req, res, (error: unknown) => {
+    if (!error) return next();
+    if (error instanceof multer.MulterError && error.code === "LIMIT_FILE_SIZE") {
+      return sendError(res, 400, {
+        code: "file_too_large",
+        message: "الملف كبير جداً. الحد الأقصى 10MB",
+      });
+    }
+    if (error instanceof multer.MulterError && error.code === "LIMIT_UNEXPECTED_FILE") {
+      return sendError(res, 400, {
+        code: "validation_error",
+        message: `اسم الحقل يجب أن يكون ${BOT_DRAFTS_IMAGE_FIELD}`,
+      });
+    }
+    const message = error instanceof Error ? error.message : "تعذّر قراءة الملف المرفوع";
+    return sendError(res, 400, { code: "invalid_image", message });
+  });
+}
+
+function recoverUploadFilename(originalName: string | undefined): string {
+  const raw = originalName?.trim() || "image";
+  const recovered = /[À-ÿ]/.test(raw) ? Buffer.from(raw, "latin1").toString("utf8") : raw;
+  return recovered.replace(/[/\\]/g, "").slice(0, 180) || "image";
+}
+
+async function isAllowedBotDraftImage(buffer: Buffer, claimedMime: string): Promise<boolean> {
+  const mime = claimedMime.toLowerCase();
+  if (mime === "image/gif") {
+    const header = buffer.subarray(0, 6).toString("ascii");
+    return header === "GIF87a" || header === "GIF89a";
+  }
+  const verify = await verifyImageMagicBytes(buffer, mime);
+  return verify.ok;
+}
+
 router.post(
   BOT_DRAFTS_BASE_PATH,
   requireBotToken,
@@ -106,6 +164,70 @@ router.post(
       res.status(201).json(draft);
     } catch (error) {
       handleError(res, error, "create");
+    }
+  },
+);
+
+router.post(
+  BOT_DRAFTS_IMAGES_PATH,
+  requireBotToken,
+  botWriteLimiter,
+  parseBotImageUpload,
+  async (req: BotRequest, res: Response) => {
+    const file = req.file;
+    if (!file) {
+      return sendError(res, 400, {
+        code: "validation_error",
+        message: `لم يتم اختيار ملف. الحقل المطلوب: ${BOT_DRAFTS_IMAGE_FIELD}`,
+      });
+    }
+
+    const allowed = await isAllowedBotDraftImage(file.buffer, file.mimetype);
+    if (!allowed) {
+      return sendError(res, 400, {
+        code: "invalid_image",
+        message: "الملف ليس صورة صالحة (JPEG/PNG/WEBP/GIF)",
+      });
+    }
+
+    if (!newsImageStorageService.isR2Configured()) {
+      return sendError(res, 503, {
+        code: "storage_unavailable",
+        message: "تخزين R2 لصور الأخبار غير متاح حالياً",
+      });
+    }
+
+    const filename = recoverUploadFilename(file.originalname);
+    try {
+      const result = await newsImageStorageService.upload({
+        buffer: file.buffer,
+        filename,
+        mimeType: file.mimetype,
+        purpose: BOT_DRAFTS_IMAGE_PURPOSE,
+        metadata: { source: "bot-drafts", bot: req.bot!.name },
+        rolloutKey: `bot-drafts:${req.bot!.name}:${filename}:${file.size}`,
+        forceR2: true,
+      });
+      if (
+        !result.success ||
+        result.provider !== "r2" ||
+        !isNewsImageR2DeliveryUrl(result.deliveryUrl)
+      ) {
+        return sendError(res, 502, { code: "upload_failed", message: "تعذّر رفع الصورة إلى R2" });
+      }
+      const body: BotDraftImageUploadResponse = {
+        deliveryUrl: result.deliveryUrl,
+        imageId: result.imageId ?? null,
+        filename: result.filename ?? filename,
+        provider: result.provider ?? null,
+        thumbnailUrl: result.thumbnailUrl ?? null,
+        width: result.width ?? null,
+        height: result.height ?? null,
+        purpose: BOT_DRAFTS_IMAGE_PURPOSE,
+      };
+      res.status(201).json(body);
+    } catch (error) {
+      handleError(res, error, "upload-image");
     }
   },
 );
