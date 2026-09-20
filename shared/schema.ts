@@ -993,13 +993,18 @@ export const articles = pgTable("articles", {
   credibilityScore: integer("credibility_score"),
   credibilityAnalysis: text("credibility_analysis"),
   credibilityLastUpdated: timestamp("credibility_last_updated"),
-  source: text("source").default("manual").notNull(), // 'email' | 'whatsapp' | 'manual'
+  source: text("source").default("manual").notNull(), // 'email' | 'whatsapp' | 'manual' | 'bot' (+ ios-app/android-app/ai)
   sourceMetadata: jsonb("source_metadata").$type<{
-    type: 'email' | 'whatsapp' | 'manual';
+    type: 'email' | 'whatsapp' | 'manual' | 'bot';
     from?: string;
     token?: string;
     originalMessage?: string;
     webhookLogId?: string;
+    // Bot Drafts API (docs/systems/editorial/BOT_DRAFTS_API.md) — type-only, no DDL.
+    bot?: string;
+    clientReference?: string;
+    notes?: string;
+    receivedAt?: string;
   }>(),
   sourceUrl: text("source_url"), // URL of the original source
   
