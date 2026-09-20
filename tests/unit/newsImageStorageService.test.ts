@@ -52,6 +52,7 @@ describe("news image storage routing", () => {
     "mobile-article-revision",
     "email-article",
     "whatsapp-article",
+    "bot-article-image",
   ])("classifies %s as editorial news media", (purpose) => {
     expect(isNewsImagePurpose(purpose)).toBe(true);
   });

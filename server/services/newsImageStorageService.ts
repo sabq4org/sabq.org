@@ -82,7 +82,7 @@ interface PreparedObject {
 export function isNewsImagePurpose(value: unknown): boolean {
   if (typeof value !== "string") return false;
   const purpose = value.trim().toLowerCase();
-  return /^(article|en-article|ur-article|mobile-article|email-article|whatsapp-article)(?:-|$)/.test(
+  return /^(article|en-article|ur-article|mobile-article|email-article|whatsapp-article|bot-article)(?:-|$)/.test(
     purpose,
   );
 }

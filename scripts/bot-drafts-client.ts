@@ -14,9 +14,12 @@
  *   tsx scripts/bot-drafts-client.ts create --json=./draft.json
  *   tsx scripts/bot-drafts-client.ts update <id> --title="عنوان جديد" [--content-file=…] [--json=…]
  *   tsx scripts/bot-drafts-client.ts get <id>
+ *   tsx scripts/bot-drafts-client.ts upload --file=./cover.jpg
  */
 
 import { readFileSync } from "node:fs";
+import { basename } from "node:path";
+import type { BotDraftImageUploadResponse } from "../shared/botDrafts";
 
 export interface BotDraftClientOptions {
   /** مثال: https://api.sabq.org */
@@ -57,6 +60,14 @@ export interface BotDraft {
   previewUrl: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export type BotDraftImageUpload = BotDraftImageUploadResponse;
+
+export interface BotDraftImageUploadInput {
+  data: Buffer | Uint8Array | Blob;
+  filename: string;
+  contentType?: string;
 }
 
 export class BotDraftApiError extends Error {
@@ -103,6 +114,17 @@ export class BotDraftsClient {
     return this.request("GET", `/api/internal/bot-drafts/${encodeURIComponent(id)}`);
   }
 
+  /** رفع صورة غلاف (multipart field = file). مرّر `deliveryUrl` كـ `imageUrl` عند الإنشاء/التحديث. */
+  uploadImage(input: BotDraftImageUploadInput): Promise<BotDraftImageUpload> {
+    const blob =
+      input.data instanceof Blob
+        ? input.data
+        : new Blob([input.data], { type: input.contentType || "application/octet-stream" });
+    const form = new FormData();
+    form.append("file", blob, input.filename);
+    return this.request("POST", "/api/internal/bot-drafts/images", form);
+  }
+
   private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
     const response = await this.fetchImpl(`${this.base}${path}`, {
       method,
@@ -110,9 +132,9 @@ export class BotDraftsClient {
         Authorization: `Bearer ${this.token}`,
         Accept: "application/json",
         "User-Agent": this.userAgent,
-        ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
+        ...(body !== undefined && !(body instanceof FormData) ? { "Content-Type": "application/json" } : {}),
       },
-      body: body !== undefined ? JSON.stringify(body) : undefined,
+      body: body instanceof FormData ? body : body !== undefined ? JSON.stringify(body) : undefined,
     });
     const text = await response.text();
     let json: any = null;
@@ -178,7 +200,7 @@ async function main() {
     token: process.env.SABQ_BOT_DRAFTS_TOKEN || "",
   });
 
-  let result: BotDraft;
+  let result: BotDraft | BotDraftImageUpload;
   switch (command) {
     case "create": {
       const payload = payloadFromFlags(flags);
@@ -196,8 +218,13 @@ async function main() {
       result = await client.get(id);
       break;
     }
+    case "upload": {
+      if (!flags.file) throw new Error("upload needs --file=path");
+      result = await client.uploadImage({ data: readFileSync(flags.file), filename: basename(flags.file) });
+      break;
+    }
     default:
-      console.error("usage: bot-drafts-client.ts <create|update|get> [id] [--flags]  (see file header)");
+      console.error("usage: bot-drafts-client.ts <create|update|get|upload> [id] [--flags]  (see file header)");
       process.exit(2);
   }
   console.log(JSON.stringify(result, null, 2));

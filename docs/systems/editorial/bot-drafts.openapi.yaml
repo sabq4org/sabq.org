@@ -35,6 +35,44 @@ paths:
         "422": { $ref: "#/components/responses/Unprocessable" }
         "429": { $ref: "#/components/responses/RateLimited" }
         "503": { $ref: "#/components/responses/NotConfigured" }
+  /api/internal/bot-drafts/images:
+    post:
+      operationId: uploadSabqDraftImage
+      summary: رفع صورة غلاف واحدة عبر newsImageStorageService (مسودات فقط — لا نشر)
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: صورة واحدة JPEG/PNG/WEBP/GIF بحد أقصى 10MB
+      responses:
+        "201":
+          description: رُفعت الصورة — مرّر deliveryUrl كـ imageUrl عند إنشاء/تحديث المسودة
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BotDraftImageUpload"
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "502":
+          description: upload_failed — التخزين لم يُرجع رابط https
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "503":
+          description: not_configured (توكنات البوت) أو storage_unavailable (تخزين الصور)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
   /api/internal/bot-drafts/{id}:
     parameters:
       - name: id
@@ -138,13 +176,25 @@ components:
         previewUrl: { type: string, format: uri }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
+    BotDraftImageUpload:
+      type: object
+      required: [deliveryUrl, purpose]
+      properties:
+        deliveryUrl: { type: string, format: uri, description: رابط CDN https لتمريره كـ imageUrl }
+        imageId: { type: string, nullable: true }
+        filename: { type: string }
+        provider: { type: string, nullable: true, description: r2 أو cloudflare-images }
+        thumbnailUrl: { type: string, format: uri, nullable: true }
+        width: { type: integer, nullable: true }
+        height: { type: integer, nullable: true }
+        purpose: { type: string, example: bot-article-image }
     Error:
       type: object
       required: [code, message]
       properties:
         code:
           type: string
-          enum: [not_configured, unauthorized, forbidden_fields, validation_error, category_not_found, author_not_configured, not_found, not_a_draft, locked_by_editor, forbidden_action, rate_limited, server_error]
+          enum: [not_configured, unauthorized, forbidden_fields, validation_error, category_not_found, author_not_configured, not_found, not_a_draft, locked_by_editor, forbidden_action, rate_limited, invalid_image, file_too_large, storage_unavailable, upload_failed, server_error]
         message: { type: string }
         details: {}
   responses:

@@ -6,6 +6,7 @@
 
 1. **إنشاء مسودة:** `POST https://api.sabq.org/api/internal/bot-drafts` مع ترويسة `Authorization: Bearer <SABQ_BOT_DRAFTS_TOKEN>` وجسم JSON فيه `title` و`content` (وتصنيف اختياري `categorySlug`). الرد يحمل `id` و`editUrl`.
 2. **تحديث مسودة:** `PATCH https://api.sabq.org/api/internal/bot-drafts/<id>` بنفس الترويسة والحقول التي تغيّرت فقط. ممنوع إرسال `status` أو أي حقل نشر/جدولة — يُرفض 422، والنشر يبقى من لوحة التحكم بيد المحررين.
+3. **رفع صورة غلاف (اختياري):** `POST https://api.sabq.org/api/internal/bot-drafts/images` بنفس توكن Bot Drafts (`multipart/form-data`، الحقل `file`) ثم مرّر `deliveryUrl` كـ `imageUrl` في الإنشاء/التحديث.
 
 ---
 
@@ -26,6 +27,7 @@
 | الفعل | المسار | الغرض |
 |-------|--------|-------|
 | `POST` | `/api/internal/bot-drafts` | إنشاء مسودة عربية جديدة (الحالة `draft` دائماً) |
+| `POST` | `/api/internal/bot-drafts/images` | رفع صورة غلاف واحدة (`multipart`، الحقل `file`) عبر `newsImageStorageService` |
 | `GET` | `/api/internal/bot-drafts/:id` | قراءة حالة المسودة ومعرّفها ورابط التحرير |
 | `PATCH` | `/api/internal/bot-drafts/:id` | تحديث مسودة أنشأها بوت وما زالت `draft` |
 | أي فعل آخر | `/:id/publish` `/:id/schedule` `DELETE` `PUT` … | مرفوض عمداً: `403 forbidden_action` أو `405` |
@@ -54,7 +56,7 @@ User-Agent: Mozilla/5.0 (compatible; SabqBotDrafts/1.0)
 | `subtitle` | string ≤300 \| null | اختياري | عنوان فرعي |
 | `excerpt` | string ≤1000 \| null | اختياري | المقدمة/الموجز |
 | `categoryId` أو `categorySlug` | string | اختياري | تصنيف منشور للقرّاء (`status=visible` في الإنتاج، ويُقبل `active` تاريخياً) من `GET https://api.sabq.org/api/categories` (عام بلا مصادقة). غير موجود أو `inactive` → `422 category_not_found`. |
-| `imageUrl` | https URL \| null | اختياري | صورة الغلاف برابط `https://` فقط (رفع الملفات الثنائية غير مدعوم في هذا العقد — انظر «حدود»). |
+| `imageUrl` | https URL \| null | اختياري | صورة الغلاف برابط `https://` فقط. للحصول على رابط CDN ارفع أولاً عبر `POST /images` ثم ضع `deliveryUrl` هنا. |
 | `keywords` | string[] ≤20 | اختياري | تُحفظ في `seo.keywords` |
 | `sourceUrl` | http(s) URL \| null | اختياري | المصدر الأصلي |
 | `clientReference` | string ≤120 | اختياري | معرّف البوت الداخلي للمادة (يُعاد في الرد للمطابقة) |
@@ -137,6 +139,52 @@ User-Agent: Mozilla/5.0 (compatible; SabqBotDrafts/1.0)
 
 الرد `200` بنفس شكل الإنشاء. `slug` لا يتغير عند تعديل العنوان (المحرر يغيّره من اللوحة إن لزم).
 
+### رفع صورة غلاف — `POST /api/internal/bot-drafts/images`
+
+نفس توكنات `BOT_DRAFTS_API_TOKENS` (ليس SendGrid ولا أي سر بريد). مسار وسائط فقط: يخزّن عبر `newsImageStorageService` بالغرض `bot-article-image` ويعيد رابط CDN؛ لا ينشئ مسودة ولا ينشر.
+
+| العنصر | القيمة |
+|--------|--------|
+| Method / Path | `POST /api/internal/bot-drafts/images` |
+| Authorization | `Bearer <SABQ_BOT_DRAFTS_TOKEN>` |
+| Content-Type | `multipart/form-data` (يضبطه العميل تلقائياً مع الـ boundary) |
+| الحقل | `file` — ملف واحد |
+| الأنواع | `image/jpeg`, `image/png`, `image/webp`, `image/gif` — تُرفض غير الصور، ويُتحقق من البايتات السحرية |
+| الحجم | حد أقصى **10MB** (نفس `/api/media/upload`) |
+| CSRF | معفى عبر بادئة `/api/internal/` الحالية |
+| المحدد | نفس محدد كتابة البوت (`BOT_DRAFTS_WRITE_RATE_LIMIT`، افتراضي 30/دقيقة) |
+
+```http
+POST /api/internal/bot-drafts/images HTTP/1.1
+Host: api.sabq.org
+Authorization: Bearer ****
+Content-Type: multipart/form-data; boundary=----sabq
+User-Agent: Mozilla/5.0 (compatible; SabqBotDrafts/1.0)
+
+------sabq
+Content-Disposition: form-data; name="file"; filename="cover.jpg"
+Content-Type: image/jpeg
+
+<bytes>
+------sabq--
+```
+
+```json
+HTTP/1.1 201 Created
+{
+  "deliveryUrl": "https://media.sabq.org/news/2026/09/…/w1600.webp",
+  "imageId": "…",
+  "filename": "cover.jpg",
+  "provider": "r2",
+  "thumbnailUrl": "https://media.sabq.org/news/2026/09/…/w480.webp",
+  "width": 1600,
+  "height": 900,
+  "purpose": "bot-article-image"
+}
+```
+
+مرّر `deliveryUrl` كما هو إلى `imageUrl` في `POST/PATCH /api/internal/bot-drafts`. إن كان التخزين غير مضبوط: `503 storage_unavailable`. فشل الرفع بعد التحقق: `502 upload_failed`. ملف أكبر من 10MB: `400 file_too_large`. بايتات ليست صورة: `400 invalid_image`.
+
 ### مثال قراءة
 
 `GET /api/internal/bot-drafts/<id>` → `200` بنفس الشكل. إن نشر محرر المادة: `status: "published"`, `updatable: false`.
@@ -154,9 +202,13 @@ User-Agent: Mozilla/5.0 (compatible; SabqBotDrafts/1.0)
 | 409 | `locked_by_editor` | محرر يفتح المسودة الآن (قفل تحرير نشط، TTL 10 دقائق). `details.editor`, `details.lockExpiresAt` |
 | 422 | `forbidden_fields` | وجود حقل ممنوع. `details.fields` = القائمة |
 | 422 | `category_not_found` | تصنيف غير موجود أو غير قابل للإسناد (`inactive`؛ الإنتاج يستخدم `visible`) |
+| 400 | `invalid_image` | نوع غير مسموح أو البايتات ليست JPEG/PNG/WEBP/GIF |
+| 400 | `file_too_large` | الملف أكبر من 10MB |
 | 429 | `rate_limited` | تجاوز سقف الكتابة للدقيقة لهذا البوت (افتراضي 30) |
+| 502 | `upload_failed` | التخزين لم يُرجع `deliveryUrl` https |
 | 503 | `not_configured` | `BOT_DRAFTS_API_TOKENS` غير مضبوط على الخادم |
 | 503 | `author_not_configured` | حساب الإسناد غير موجود/غير نشط |
+| 503 | `storage_unavailable` | `newsImageStorageService` غير متاح (لا R2/Cloudflare Images) |
 | 500 | `server_error` | خطأ داخلي (بلا تفاصيل) |
 
 شكل الخطأ دائماً: `{ "code": "...", "message": "...", "details"?: {...} }`.
@@ -231,6 +283,15 @@ curl -sS -X PATCH "$B/api/internal/bot-drafts/<id>" \
   -H "Authorization: Bearer $SABQ_BOT_DRAFTS_TOKEN" -H "Content-Type: application/json" \
   -H "User-Agent: $UA" \
   -d '{"status":"published"}'
+
+# رفع صورة ثم إنشاء مسودة برابط الغلاف
+DELIVERY=$(curl -sS -X POST "$B/api/internal/bot-drafts/images" \
+  -H "Authorization: Bearer $SABQ_BOT_DRAFTS_TOKEN" -H "User-Agent: $UA" \
+  -F "file=@./cover.jpg;type=image/jpeg" | jq -r .deliveryUrl)
+curl -sS -X POST "$B/api/internal/bot-drafts" \
+  -H "Authorization: Bearer $SABQ_BOT_DRAFTS_TOKEN" -H "Content-Type: application/json" \
+  -H "User-Agent: $UA" \
+  -d "{\"title\":\"عنوان\",\"content\":\"فقرة أولى من الخبر التجريبي.\\n\\nفقرة ثانية.\",\"imageUrl\":\"$DELIVERY\"}"
 ```
 
 ### TypeScript / CLI
@@ -245,12 +306,15 @@ npx tsx scripts/bot-drafts-client.ts create --title="عنوان" --content-file=
 npx tsx scripts/bot-drafts-client.ts get <id>
 npx tsx scripts/bot-drafts-client.ts update <id> --title="عنوان جديد" --excerpt="مقدمة"
 npx tsx scripts/bot-drafts-client.ts create --json=./draft.json   # جسم كامل من ملف
+npx tsx scripts/bot-drafts-client.ts upload --file=./cover.jpg   # يعيد deliveryUrl
 ```
 
 ```ts
+import { readFileSync } from "node:fs";
 import { BotDraftsClient } from "./scripts/bot-drafts-client";
 const client = new BotDraftsClient({ baseUrl: "https://api.sabq.org", token: process.env.SABQ_BOT_DRAFTS_TOKEN! });
-const draft = await client.create({ title: "…", content: "…", categorySlug: "local", clientReference: "grok-001" });
+const uploaded = await client.uploadImage({ data: readFileSync("./cover.jpg"), filename: "cover.jpg" });
+const draft = await client.create({ title: "…", content: "…", categorySlug: "local", imageUrl: uploaded.deliveryUrl, clientReference: "grok-001" });
 await client.update(draft.id, { excerpt: "…" });
 const status = await client.get(draft.id); // status.updatable === false بعد النشر من اللوحة
 ```
@@ -258,10 +322,11 @@ const status = await client.get(draft.id); // status.updatable === false بعد 
 ### تعليمات تشغيل بوت «نشر سبق»
 
 1. اطلب من علي إضافة زوج `nashr-sabq:<token>` إلى `BOT_DRAFTS_API_TOKENS` على Railway، وضع التوكن نفسه في أسرار البوت باسم `SABQ_BOT_DRAFTS_TOKEN`.
-2. في تعريف أداة البوت استورد `docs/systems/editorial/bot-drafts.openapi.yaml` أو عرّف أداتين: `create_sabq_draft` (POST) و`update_sabq_draft` (PATCH) بالحقول أعلاه.
-3. تعليمة النظام للبوت (سطران):
+2. في تعريف أداة البوت استورد `docs/systems/editorial/bot-drafts.openapi.yaml` أو عرّف ثلاث أدوات: `create_sabq_draft` (POST) و`update_sabq_draft` (PATCH) و`upload_sabq_draft_image` (POST `/images`).
+3. تعليمة النظام للبوت:
    - «لإنشاء مسودة في سبق: `POST /api/internal/bot-drafts` مع `title` و`content` و`categorySlug` و`clientReference`، واحفظ `id` و`editUrl` من الرد وأرسلهما للمحرر.»
    - «لتحديث مسودة: `PATCH /api/internal/bot-drafts/{id}` بالحقول المتغيرة فقط. لا ترسل `status` أو أي حقل نشر؛ إن رجع 409 فالمادة نُشرت أو يحررها محرر — توقف وأبلغ.»
+   - «لرفع صورة غلاف: `POST /api/internal/bot-drafts/images` بنفس التوكن وحقل `file`، ثم ضع `deliveryUrl` في `imageUrl`.»
 4. اجعل البوت يُرفق دائماً `notes` بما يجب على المحرر التحقق منه.
 
 ### تعليمات تشغيل مهندّس (Grok Bot)
@@ -285,13 +350,13 @@ const status = await client.get(draft.id); // status.updatable === false بعد 
 | 9 | `GET` بمعرّف مسودة أنشأها محرر (ليست من بوت) | `404` — لا كشف لمسودات المحررين |
 | 10 | لوج Railway بعد الخطوات أعلاه | أسطر `[BotDrafts] created/updated draft <id> by bot=<name>` بلا توكنات |
 
-آلياً: `npm run test:unit -- tests/unit/botDrafts.test.ts` (45 اختباراً: التوكنات، الحقول الممنوعة كلها، 401/403/405/409/422/429/503، عدم تسريب الأسرار، إعفاء CSRF، تحويل النص إلى فقرات).
+آلياً: `npm run test:unit -- tests/unit/botDrafts.test.ts` (التوكنات، الحقول الممنوعة كلها، 401/403/405/409/422/429/503، رفع الصور مع تخزين وهمي، عدم تسريب الأسرار، إعفاء CSRF، تحويل النص إلى فقرات).
 
 ---
 
 ## الحدود المعروفة (v1)
 
-- **صورة الغلاف برابط فقط** (`imageUrl` https). رفع ملف ثنائي يحتاج مسار رفع منفصلاً (`newsImageStorageService`) — مرحلة لاحقة إن احتاجها البوت؛ حالياً يضع البوت رابطاً ويستبدله المحرر من اللوحة إن لزم.
+- **صورة الغلاف:** ارفع ملفاً عبر `POST /api/internal/bot-drafts/images` (10MB، JPEG/PNG/WEBP/GIF) ثم مرّر `deliveryUrl` https كـ `imageUrl`. لا نشر ولا جدول من مسار الرفع. GIF مقبول هنا فقط لأن المسار مصادق للبوت ومحدود الحجم؛ مسار `/api/media/upload` العام ما زال يرفض GIF (تدقيق M8).
 - **أخبار عربية `news` فقط**. لا رأي/تحليل/EN/UR من هذا العقد.
 - **لا idempotency على الإنشاء**: تكرار `POST` ينتج مسودتين؛ استخدم `clientReference` للمطابقة، ولا تعد المحاولة بعد `201`.
 - **لا حذف**: يحذف المحرر من اللوحة.

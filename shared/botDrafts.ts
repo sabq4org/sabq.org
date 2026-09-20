@@ -10,6 +10,26 @@ import { z } from "zod";
 
 export const BOT_DRAFTS_BASE_PATH = "/api/internal/bot-drafts";
 
+/** رفع صورة غلاف للمسودة — نفس توكنات Bot Drafts، بلا نشر. */
+export const BOT_DRAFTS_IMAGES_PATH = `${BOT_DRAFTS_BASE_PATH}/images`;
+
+/** اسم حقل multipart الذي يقبله مسار الرفع. */
+export const BOT_DRAFTS_IMAGE_FIELD = "file";
+
+/** سقف الملف — نفس حد مسار الوسائط التحريري `/api/media/upload`. */
+export const BOT_DRAFTS_IMAGE_MAX_BYTES = 10 * 1024 * 1024;
+
+/** الغرض الممرَّر إلى `newsImageStorageService` حتى يدخل رول-آوت R2. */
+export const BOT_DRAFTS_IMAGE_PURPOSE = "bot-article-image";
+
+export const BOT_DRAFTS_IMAGE_MIME_TYPES = [
+  "image/jpeg",
+  "image/jpg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+] as const;
+
 /** القيمة الوحيدة المسموح بها لحالة المادة عبر هذا العقد. */
 export const BOT_DRAFT_STATUS = "draft" as const;
 
@@ -156,6 +176,18 @@ export interface BotDraftResponse {
   updatedAt: string;
 }
 
+/** رد `POST /api/internal/bot-drafts/images` — البوت يمرّر `deliveryUrl` كـ `imageUrl`. */
+export interface BotDraftImageUploadResponse {
+  deliveryUrl: string;
+  imageId: string | null;
+  filename: string;
+  provider: string | null;
+  thumbnailUrl: string | null;
+  width: number | null;
+  height: number | null;
+  purpose: typeof BOT_DRAFTS_IMAGE_PURPOSE;
+}
+
 /** أكواد الأخطاء التي قد يرجعها العقد (تفاصيلها في التوثيق). */
 export const BOT_DRAFT_ERROR_CODES = [
   "not_configured",
@@ -169,6 +201,10 @@ export const BOT_DRAFT_ERROR_CODES = [
   "locked_by_editor",
   "forbidden_action",
   "rate_limited",
+  "invalid_image",
+  "file_too_large",
+  "storage_unavailable",
+  "upload_failed",
   "server_error",
 ] as const;
 
