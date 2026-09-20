@@ -71,6 +71,7 @@ User-Agent: Mozilla/5.0 (compatible; SabqBotDrafts/1.0)
 ### كيف تُضمن الحالة `draft` دائماً
 
 - الإدراج يكتب `status='draft'`, `reviewStatus=null`, `publishType='instant'`, `scheduledAt=null`, `publishedAt=null`, `articleType='news'`, `newsType='regular'`, `source='bot'` — قيم ثابتة في الخدمة لا تأتي من الطلب.
+- الإسناد من الخادم فقط: `authorId` و`reporterId` = حساب «صحيفة سبق» (`BOT_DRAFTS_AUTHOR_USER_ID` أو الافتراضي). البوت لا يرسلهما (`422 forbidden_fields`). عند `PATCH` يُملأ `reporterId` فقط إن كان فارغاً — اختيار المحرر لا يُستبدل. حساب الإسناد غير موجود/غير نشط → `503 author_not_configured` (نفس مسار الإنشاء).
 - التحديث يضرب فقط الصفوف التي `status='draft' AND source='bot'` (شرط SQL)؛ لو نشر محرر المادة بين القراءة والكتابة يُرجع `409 not_a_draft`.
 - لا يوجد أي مسار بهذا التوكن يصل إلى `publishGate` أو المجدول. المسارات الإدارية (`/api/admin/articles`) تتطلب جلسة Passport + CSRF ولا تقبل Bearer.
 - الحالة الحقيقية تُعاد في كل رد (`status` + `updatable`) حتى يعرف البوت إن نُشرت المادة لاحقاً.
@@ -175,7 +176,7 @@ User-Agent: Mozilla/5.0 (compatible; SabqBotDrafts/1.0)
 | المتغير | القيمة | أين |
 |---------|--------|-----|
 | `BOT_DRAFTS_API_TOKENS` | `nashr-sabq:<token>,grok-bot:<token>` — اسم صغير `[a-z0-9_-]` ثم `:` ثم توكن ≥32 حرفاً | Railway → خدمة API → Variables |
-| `BOT_DRAFTS_AUTHOR_USER_ID` | اختياري. حساب الإسناد (`articles.authorId`). الافتراضي حساب «صحيفة سبق» `RnP7eDOAl5T5rGpib9_8d` — نفس إسناد وكلاء البريد/الواتساب | Railway |
+| `BOT_DRAFTS_AUTHOR_USER_ID` | اختياري. حساب الإسناد (`articles.authorId` و`articles.reporterId`). الافتراضي حساب «صحيفة سبق» `RnP7eDOAl5T5rGpib9_8d` — نفس إسناد وكلاء البريد/الواتساب | Railway |
 | `BOT_DRAFTS_WRITE_RATE_LIMIT` | اختياري. كتابات/دقيقة لكل بوت (افتراضي 30) | Railway |
 
 توليد توكن:

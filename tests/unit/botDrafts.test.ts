@@ -18,11 +18,14 @@ vi.mock("../../server/services/botDraftsService", async (original) => ({
 import router from "../../server/routes/botDrafts";
 import {
   BotDraftError,
+  attributionForBotDraftCreate,
   authenticateBotToken,
   generateArabicSlug,
   isAssignableBotCategoryStatus,
+  isMissingBotDraftReporter,
   normalizeDraftContent,
   parseBotDraftTokens,
+  reporterIdForBotDraftUpdate,
   toBotDraftResponse,
 } from "../../server/services/botDraftsService";
 import { BOT_DRAFT_FORBIDDEN_FIELDS, findForbiddenBotDraftFields } from "../../shared/botDrafts";
@@ -214,6 +217,20 @@ describe("pure helpers", () => {
     expect(findForbiddenBotDraftFields({ title: "x", status: "draft", scheduledAt: "now" })).toEqual(["status", "scheduledAt"]);
     expect(findForbiddenBotDraftFields(null)).toEqual([]);
     expect(findForbiddenBotDraftFields([1])).toEqual([]);
+    expect(BOT_DRAFT_FORBIDDEN_FIELDS).toEqual(expect.arrayContaining(["authorId", "reporterId"]));
+    expect(findForbiddenBotDraftFields({ title: "x", authorId: "u1", reporterId: "u2" })).toEqual(["authorId", "reporterId"]);
+  });
+  it("attributes create as author+reporter = صحيفة سبق and fills reporter only when null", () => {
+    const sabq = "RnP7eDOAl5T5rGpib9_8d";
+    expect(attributionForBotDraftCreate(sabq)).toEqual({ authorId: sabq, reporterId: sabq });
+    expect(isMissingBotDraftReporter(null)).toBe(true);
+    expect(isMissingBotDraftReporter(undefined)).toBe(true);
+    expect(isMissingBotDraftReporter("")).toBe(true);
+    expect(isMissingBotDraftReporter("editor-choice")).toBe(false);
+    expect(reporterIdForBotDraftUpdate(null, sabq)).toBe(sabq);
+    expect(reporterIdForBotDraftUpdate(undefined, sabq)).toBe(sabq);
+    expect(reporterIdForBotDraftUpdate("", sabq)).toBe(sabq);
+    expect(reporterIdForBotDraftUpdate("editor-choice", sabq)).toBeUndefined();
   });
   it("wraps plain text into escaped paragraphs and passes HTML through the sanitizer", () => {
     expect(normalizeDraftContent("فقرة أولى a < b & c\n\nفقرة ثانية\nسطر")).toBe("<p>فقرة أولى a &lt; b &amp; c</p>\n<p>فقرة ثانية<br>سطر</p>");
