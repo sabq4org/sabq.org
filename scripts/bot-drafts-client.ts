@@ -71,16 +71,21 @@ export class BotDraftApiError extends Error {
   }
 }
 
+/** متصفّح عادي حتى لا يرد Cloudflare 1010 على طلبات الخوادم/الـ CLI. */
+export const BOT_DRAFTS_USER_AGENT = "Mozilla/5.0 (compatible; SabqBotDrafts/1.0)";
+
 export class BotDraftsClient {
   private readonly base: string;
   private readonly token: string;
   private readonly fetchImpl: typeof fetch;
+  private readonly userAgent: string;
 
   constructor(options: BotDraftClientOptions) {
     if (!options.token) throw new Error("SABQ_BOT_DRAFTS_TOKEN is required");
     this.base = options.baseUrl.replace(/\/+$/, "");
     this.token = options.token;
     this.fetchImpl = options.fetchImpl ?? fetch;
+    this.userAgent = BOT_DRAFTS_USER_AGENT;
   }
 
   /** إنشاء مسودة عربية — تظهر فوراً في /dashboard/articles (المسودات). الحالة draft دائماً. */
@@ -104,6 +109,7 @@ export class BotDraftsClient {
       headers: {
         Authorization: `Bearer ${this.token}`,
         Accept: "application/json",
+        "User-Agent": this.userAgent,
         ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
       },
       body: body !== undefined ? JSON.stringify(body) : undefined,

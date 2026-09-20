@@ -220,6 +220,16 @@ export function toBotDraftResponse(row: ArticleRow, categorySlug: string | null 
 // استعلامات مساعدة
 // ────────────────────────────────────────────────────────────────────
 
+/**
+ * تصنيفات قابلة للإسناد لمسودة بوت.
+ * الإنتاج يستخدم `visible` (GET /api/categories، الموبايل، edge SEO).
+ * `active` قيمة تاريخية في الـ enum وليست منشورة للعامة، لكن نقبلها حتى لا
+ * تُرفض تصنيفات قديمة إن وُجدت. `inactive` تُرفض.
+ */
+export function isAssignableBotCategoryStatus(status: string | null | undefined): boolean {
+  return status === "visible" || status === "active";
+}
+
 async function resolveCategory(input: { categoryId?: string; categorySlug?: string }): Promise<{ id: string; slug: string } | null> {
   if (!input.categoryId && !input.categorySlug) return null;
   const condition = input.categoryId
@@ -230,7 +240,7 @@ async function resolveCategory(input: { categoryId?: string; categorySlug?: stri
     .from(categories)
     .where(condition)
     .limit(1);
-  if (!row || row.status !== "active") {
+  if (!row || !isAssignableBotCategoryStatus(row.status)) {
     throw new BotDraftError(422, "category_not_found", "التصنيف غير موجود أو غير نشط", {
       categoryId: input.categoryId ?? null,
       categorySlug: input.categorySlug ?? null,
@@ -246,8 +256,8 @@ async function categorySlugFor(categoryId: string | null): Promise<string | null
 }
 
 /**
- * الحساب الذي تُسند إليه مسودات البوت (authorId إلزامي في الجدول). الافتراضي
- * حساب «صحيفة سبق» — نفس إسناد وكلاء البريد/الواتساب. يمكن تبديله عبر
+ * الحساب الذي تُسند إليه مسودات البوت (`authorId` إلزامي، و`reporterId` نفس الحساب).
+ * الافتراضي حساب «صحيفة سبق» — نفس إسناد وكلاء البريد/الواتساب. يمكن تبديله عبر
  * BOT_DRAFTS_AUTHOR_USER_ID لحساب خدمة مخصص.
  */
 export async function resolveBotAuthorId(): Promise<string> {
@@ -257,6 +267,27 @@ export async function resolveBotAuthorId(): Promise<string> {
     throw new BotDraftError(503, "author_not_configured", "حساب إسناد مسودات البوت غير موجود أو غير نشط");
   }
   return row.id;
+}
+
+/** إسناد الخادم فقط: المؤلف والمراسل = نفس حساب «صحيفة سبق». البوت لا يرسلهما. */
+export function attributionForBotDraftCreate(authorUserId: string): { authorId: string; reporterId: string } {
+  return { authorId: authorUserId, reporterId: authorUserId };
+}
+
+/** مراسل المسودة فارغ — يُملأ بحساب الإسناد؛ اختيار المحرر لا يُستبدل. */
+export function isMissingBotDraftReporter(existingReporterId: string | null | undefined): boolean {
+  return existingReporterId == null || existingReporterId === "";
+}
+
+/**
+ * عند التحديث: املأ المراسل فقط إن كان فارغاً. لا تستبدل اختيار محرر.
+ * يعيد المعرّف المراد كتابته، أو undefined إن بقي الاختيار القائم.
+ */
+export function reporterIdForBotDraftUpdate(
+  existingReporterId: string | null | undefined,
+  authorUserId: string,
+): string | undefined {
+  return isMissingBotDraftReporter(existingReporterId) ? authorUserId : undefined;
 }
 
 async function findBotArticle(articleId: string): Promise<ArticleRow | null> {
@@ -299,7 +330,7 @@ export async function createBotDraft(
   input: BotDraftCreateInput,
   ctx: BotRequestContext = {},
 ): Promise<BotDraftResponse> {
-  const authorId = await resolveBotAuthorId();
+  const { authorId, reporterId } = attributionForBotDraftCreate(await resolveBotAuthorId());
   const category = await resolveCategory(input);
   const slug = await resolveUniqueArticleSlug(generateArabicSlug(input.title) || `bot-${Date.now()}`);
   const now = new Date();
@@ -316,6 +347,7 @@ export async function createBotDraft(
       imageUrl: input.imageUrl ?? null,
       categoryId: category?.id ?? null,
       authorId,
+      reporterId,
       articleType: "news",
       newsType: "regular",
       publishType: "instant",
@@ -394,9 +426,14 @@ export async function updateBotDraft(
     };
   }
 
-  // الحالة والإسناد لا يُلمسان هنا مطلقاً — حتى لو تسرّبت من مكان ما.
+  // الحالة والإسناد لا يأتيان من الطلب — حتى لو تسرّبا من مكان ما.
   delete (patch as Record<string, unknown>).status;
   delete (patch as Record<string, unknown>).authorId;
+  delete (patch as Record<string, unknown>).reporterId;
+
+  if (isMissingBotDraftReporter(existing.reporterId)) {
+    patch.reporterId = await resolveBotAuthorId();
+  }
 
   const [row] = await db
     .update(articles)
