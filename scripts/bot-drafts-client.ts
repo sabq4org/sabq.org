@@ -114,7 +114,7 @@ export class BotDraftsClient {
     return this.request("GET", `/api/internal/bot-drafts/${encodeURIComponent(id)}`);
   }
 
-  /** رفع صورة غلاف (multipart field = file). مرّر `deliveryUrl` كـ `imageUrl` عند الإنشاء/التحديث. */
+  /** رفع صورة غلاف إلى R2 (multipart field = file). مرّر `deliveryUrl` (media.sabq.org) كـ `imageUrl`. */
   uploadImage(input: BotDraftImageUploadInput): Promise<BotDraftImageUpload> {
     const blob =
       input.data instanceof Blob

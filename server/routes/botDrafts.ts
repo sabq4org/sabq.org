@@ -2,7 +2,7 @@
 // «مسودات البوتات» — Bot Drafts API (HTTP فقط؛ البيانات في botDraftsService)
 //
 // POST  /api/internal/bot-drafts        إنشاء مسودة عربية (status=draft دائماً)
-// POST  /api/internal/bot-drafts/images رفع صورة غلاف (multipart) عبر newsImageStorage
+// POST  /api/internal/bot-drafts/images رفع صورة غلاف إلى R2 / media.sabq.org (forceR2)
 // GET   /api/internal/bot-drafts/:id    حالة المسودة + معرّفها + رابط التحرير
 // PATCH /api/internal/bot-drafts/:id    تحديث مسودة أنشأها بوت وما زالت draft
 //
@@ -29,7 +29,7 @@ import {
   type BotDraftErrorBody,
   type BotDraftImageUploadResponse,
 } from "@shared/botDrafts";
-import { newsImageStorageService } from "../services/newsImageStorageService";
+import { isNewsImageR2DeliveryUrl, newsImageStorageService } from "../services/newsImageStorageService";
 import { verifyImageMagicBytes } from "../utils/imageVerify";
 import {
   BotDraftError,
@@ -190,10 +190,10 @@ router.post(
       });
     }
 
-    if (!newsImageStorageService.isUploadAvailable()) {
+    if (!newsImageStorageService.isR2Configured()) {
       return sendError(res, 503, {
         code: "storage_unavailable",
-        message: "تخزين صور الأخبار غير متاح حالياً",
+        message: "تخزين R2 لصور الأخبار غير متاح حالياً",
       });
     }
 
@@ -206,9 +206,14 @@ router.post(
         purpose: BOT_DRAFTS_IMAGE_PURPOSE,
         metadata: { source: "bot-drafts", bot: req.bot!.name },
         rolloutKey: `bot-drafts:${req.bot!.name}:${filename}:${file.size}`,
+        forceR2: true,
       });
-      if (!result.success || !result.deliveryUrl?.startsWith("https://")) {
-        return sendError(res, 502, { code: "upload_failed", message: "تعذّر رفع الصورة" });
+      if (
+        !result.success ||
+        result.provider !== "r2" ||
+        !isNewsImageR2DeliveryUrl(result.deliveryUrl)
+      ) {
+        return sendError(res, 502, { code: "upload_failed", message: "تعذّر رفع الصورة إلى R2" });
       }
       const body: BotDraftImageUploadResponse = {
         deliveryUrl: result.deliveryUrl,

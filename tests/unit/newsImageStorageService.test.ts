@@ -2,11 +2,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cloudflareImagesService } from "../../server/services/cloudflareImagesService";
 import {
   LIVE_NEWS_IMAGE_CACHE_CONTROL,
+  NEWS_IMAGES_R2_PUBLIC_HOST,
   NewsImageStorageService,
   buildNewsImageObjectPrefix,
   getR2PutTimeoutMs,
   getUploadBudgetMs,
   isNewsImagePurpose,
+  isNewsImageR2DeliveryUrl,
   parseNewsImageRolloutPercent,
   shouldRouteNewsImageToR2,
 } from "../../server/services/newsImageStorageService";
@@ -129,6 +131,82 @@ describe("news image storage routing", () => {
 
     expect(fallback).toHaveBeenCalledOnce();
     expect(result.provider).toBe("cloudflare-images");
+  });
+
+  it("recognizes R2 / media.sabq.org delivery URLs and rejects Cloudflare Images", () => {
+    expect(isNewsImageR2DeliveryUrl("https://media.sabq.org/news/2026/09/abc/w1600.webp")).toBe(true);
+    expect(NEWS_IMAGES_R2_PUBLIC_HOST).toBe("https://media.sabq.org");
+    expect(isNewsImageR2DeliveryUrl("https://imagedelivery.net/hash/img/public")).toBe(false);
+    expect(isNewsImageR2DeliveryUrl("http://media.sabq.org/news/x.jpg")).toBe(false);
+  });
+
+  it("forceR2 bypasses a zero rollout and never falls back to Cloudflare Images", async () => {
+    process.env.NEWS_IMAGES_R2_ACCOUNT_ID = "account";
+    process.env.NEWS_IMAGES_R2_ACCESS_KEY_ID = "access-key";
+    process.env.NEWS_IMAGES_R2_SECRET_ACCESS_KEY = "secret-key";
+    process.env.NEWS_IMAGES_R2_BUCKET_NAME = "sabq-news-images";
+    process.env.NEWS_IMAGES_R2_PUBLIC_URL = "https://media.sabq.org";
+    process.env.NEWS_IMAGES_R2_ROLLOUT_PERCENT = "0";
+
+    const service = new NewsImageStorageService();
+    vi.spyOn(
+      service as unknown as { uploadToR2: () => Promise<{ success: boolean; provider: string; deliveryUrl: string }> },
+      "uploadToR2",
+    ).mockResolvedValue({
+      success: true,
+      provider: "r2",
+      deliveryUrl: "https://media.sabq.org/news/2026/09/abc/w1600.webp",
+    });
+    const fallback = vi.spyOn(cloudflareImagesService, "uploadToCloudflare").mockResolvedValue({
+      success: true,
+      deliveryUrl: "https://imagedelivery.net/example/cf-image/public",
+    });
+
+    const result = await service.upload({
+      buffer: Buffer.from("test-image"),
+      filename: "story.jpg",
+      mimeType: "image/jpeg",
+      purpose: "bot-article-image",
+      rolloutKey: "bot-drafts:nashr-sabq:story.jpg:10",
+      forceR2: true,
+    });
+
+    expect(result.provider).toBe("r2");
+    expect(result.deliveryUrl).toBe("https://media.sabq.org/news/2026/09/abc/w1600.webp");
+    expect(fallback).not.toHaveBeenCalled();
+  });
+
+  it("forceR2 fails closed when R2 is down instead of storing on Cloudflare Images", async () => {
+    process.env.NEWS_IMAGES_R2_ACCOUNT_ID = "account";
+    process.env.NEWS_IMAGES_R2_ACCESS_KEY_ID = "access-key";
+    process.env.NEWS_IMAGES_R2_SECRET_ACCESS_KEY = "secret-key";
+    process.env.NEWS_IMAGES_R2_BUCKET_NAME = "sabq-news-images";
+    process.env.NEWS_IMAGES_R2_PUBLIC_URL = "https://media.sabq.org";
+    process.env.NEWS_IMAGES_R2_ROLLOUT_PERCENT = "0";
+
+    const service = new NewsImageStorageService();
+    vi.spyOn(
+      service as unknown as { uploadToR2: () => Promise<never> },
+      "uploadToR2",
+    ).mockRejectedValue(new Error("simulated R2 outage"));
+    const fallback = vi.spyOn(cloudflareImagesService, "uploadToCloudflare").mockResolvedValue({
+      success: true,
+      deliveryUrl: "https://imagedelivery.net/example/fallback/public",
+    });
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    const result = await service.upload({
+      buffer: Buffer.from("test-image"),
+      filename: "story.jpg",
+      mimeType: "image/jpeg",
+      purpose: "bot-article-image",
+      forceR2: true,
+    });
+
+    expect(fallback).not.toHaveBeenCalled();
+    expect(result.success).toBe(false);
+    expect(result.provider).toBeUndefined();
+    expect(result.error).toContain("R2 upload failed");
   });
 
   it("falls back to Cloudflare when an R2 upload fails", async () => {

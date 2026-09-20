@@ -1,6 +1,6 @@
 # نظام التحرير وغرف الأخبار (`editorial`)
 
-> آخر مراجعة: 2026-09-20 (Bot Drafts: رفع صورة غلاف داخلية) | المالك: editorial
+> آخر مراجعة: 2026-09-20 (Bot Drafts: رفع الغلاف إلى R2 / media.sabq.org) | المالك: editorial
 
 ## الغرض
 غرفة الأخبار اليومية + أدوات التحرير بالذكاء الاصطناعي التي يستخدمها المحررون: عناوين، مقالات، تصنيف، SEO، روابط ذكية، صور، وكلاء بريد/واتساب، ومساعد كاتب الرأي، والإعلانات الداخلية الموجهة لفريق العمل.
@@ -216,4 +216,4 @@
 - التحديث يضرب فقط `status='draft' AND source='bot'` (`409 not_a_draft` وإلا)، ويحترم قفل التحرير النشط (`409 locked_by_editor`). `GET` لا يكشف إلا مواد `source='bot'` (`404` لغيرها). كل كتابة تُبطل كاش قوائم اللوحة (`^articles:`) محلياً كما يفعل `POST /api/admin/articles` للمسودات، بلا purge للـ CDN.
 - تصنيف المسودة: `resolveCategory` يقبل `status=visible` (قيمة الإنتاج في `GET /api/categories` ومسارات الموبايل/`mobileArticleEnrichment`) و`active` تاريخياً؛ `inactive` يُرفض `422 category_not_found`. طلبات الخوادم إلى `api.sabq.org` تحتاج `User-Agent` متصفّح عادي وإلا قد يرد Cloudflare 1010 — انظر [`BOT_DRAFTS_API.md`](./BOT_DRAFTS_API.md).
 - لا schema/DDL: التعديل في `shared/schema.ts` نوعي فقط لحقل `sourceMetadata` (jsonb). التحقق: `tests/unit/botDrafts.test.ts`.
-- **رفع صورة الغلاف (2026-09-20):** `POST /api/internal/bot-drafts/images` بنفس توكنات Bot Drafts (لا SendGrid). `multipart` حقل `file`، حد 10MB، JPEG/PNG/WEBP/GIF مع تحقق البايتات. التخزين عبر `newsImageStorageService` بالغرض `bot-article-image` (يدخل رول-آوت R2). الرد `{ deliveryUrl, imageId, … }` والبوت يمرّر `deliveryUrl` كـ `imageUrl`. لا مسودة ولا نشر من هذا المسار. `503 storage_unavailable` إن لم يكن التخزين جاهزاً.
+- **رفع صورة الغلاف (2026-09-20):** `POST /api/internal/bot-drafts/images` بنفس توكنات Bot Drafts (لا SendGrid). `multipart` حقل `file`، حد 10MB، JPEG/PNG/WEBP/GIF مع تحقق البايتات. التخزين **R2 إلزامي**: `newsImageStorageService.upload({ purpose: "bot-article-image", forceR2: true })` يتجاوز نسبة الرول-آوت ولا يسقط على Cloudflare Images. `deliveryUrl` هو رابط https على `media.sabq.org` (`sabq-news-images`). غياب إعداد R2 → `503 storage_unavailable`؛ فشل R2 → `502 upload_failed` بلا تخزين بديل. لا مسودة ولا نشر من هذا المسار.

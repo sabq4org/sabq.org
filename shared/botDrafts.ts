@@ -19,7 +19,7 @@ export const BOT_DRAFTS_IMAGE_FIELD = "file";
 /** سقف الملف — نفس حد مسار الوسائط التحريري `/api/media/upload`. */
 export const BOT_DRAFTS_IMAGE_MAX_BYTES = 10 * 1024 * 1024;
 
-/** الغرض الممرَّر إلى `newsImageStorageService` حتى يدخل رول-آوت R2. */
+/** الغرض الممرَّر إلى `newsImageStorageService` مع `forceR2` → sabq-news-images / media.sabq.org. */
 export const BOT_DRAFTS_IMAGE_PURPOSE = "bot-article-image";
 
 export const BOT_DRAFTS_IMAGE_MIME_TYPES = [

@@ -27,7 +27,7 @@
 | الفعل | المسار | الغرض |
 |-------|--------|-------|
 | `POST` | `/api/internal/bot-drafts` | إنشاء مسودة عربية جديدة (الحالة `draft` دائماً) |
-| `POST` | `/api/internal/bot-drafts/images` | رفع صورة غلاف واحدة (`multipart`، الحقل `file`) عبر `newsImageStorageService` |
+| `POST` | `/api/internal/bot-drafts/images` | رفع صورة غلاف واحدة إلى R2 (`sabq-news-images` / `media.sabq.org`) عبر `newsImageStorageService` |
 | `GET` | `/api/internal/bot-drafts/:id` | قراءة حالة المسودة ومعرّفها ورابط التحرير |
 | `PATCH` | `/api/internal/bot-drafts/:id` | تحديث مسودة أنشأها بوت وما زالت `draft` |
 | أي فعل آخر | `/:id/publish` `/:id/schedule` `DELETE` `PUT` … | مرفوض عمداً: `403 forbidden_action` أو `405` |
@@ -56,7 +56,7 @@ User-Agent: Mozilla/5.0 (compatible; SabqBotDrafts/1.0)
 | `subtitle` | string ≤300 \| null | اختياري | عنوان فرعي |
 | `excerpt` | string ≤1000 \| null | اختياري | المقدمة/الموجز |
 | `categoryId` أو `categorySlug` | string | اختياري | تصنيف منشور للقرّاء (`status=visible` في الإنتاج، ويُقبل `active` تاريخياً) من `GET https://api.sabq.org/api/categories` (عام بلا مصادقة). غير موجود أو `inactive` → `422 category_not_found`. |
-| `imageUrl` | https URL \| null | اختياري | صورة الغلاف برابط `https://` فقط. للحصول على رابط CDN ارفع أولاً عبر `POST /images` ثم ضع `deliveryUrl` هنا. |
+| `imageUrl` | https URL \| null | اختياري | صورة الغلاف برابط `https://` فقط. للحصول على رابط R2 (`https://media.sabq.org/news/…`) ارفع أولاً عبر `POST /images` ثم ضع `deliveryUrl` هنا. |
 | `keywords` | string[] ≤20 | اختياري | تُحفظ في `seo.keywords` |
 | `sourceUrl` | http(s) URL \| null | اختياري | المصدر الأصلي |
 | `clientReference` | string ≤120 | اختياري | معرّف البوت الداخلي للمادة (يُعاد في الرد للمطابقة) |
@@ -141,7 +141,7 @@ User-Agent: Mozilla/5.0 (compatible; SabqBotDrafts/1.0)
 
 ### رفع صورة غلاف — `POST /api/internal/bot-drafts/images`
 
-نفس توكنات `BOT_DRAFTS_API_TOKENS` (ليس SendGrid ولا أي سر بريد). مسار وسائط فقط: يخزّن عبر `newsImageStorageService` بالغرض `bot-article-image` ويعيد رابط CDN؛ لا ينشئ مسودة ولا ينشر.
+نفس توكنات `BOT_DRAFTS_API_TOKENS` (ليس SendGrid ولا أي سر بريد). مسار وسائط فقط: يخزّن **على Cloudflare R2** (`sabq-news-images` عبر `newsImageStorageService`، الغرض `bot-article-image` + `forceR2: true`) ويعيد رابط العرض العام `https://media.sabq.org/…`؛ لا ينشئ مسودة ولا ينشر. لا يُستخدم Cloudflare Images كمخزن أساسي هنا حتى لو كانت نسبة الرول-آوت أقل من 100٪.
 
 | العنصر | القيمة |
 |--------|--------|
@@ -151,6 +151,8 @@ User-Agent: Mozilla/5.0 (compatible; SabqBotDrafts/1.0)
 | الحقل | `file` — ملف واحد |
 | الأنواع | `image/jpeg`, `image/png`, `image/webp`, `image/gif` — تُرفض غير الصور، ويُتحقق من البايتات السحرية |
 | الحجم | حد أقصى **10MB** (نفس `/api/media/upload`) |
+| المخزن | R2 إلزامي: `forceR2` يتجاوز `NEWS_IMAGES_R2_ROLLOUT_PERCENT` ولا يسقط على Cloudflare Images |
+| `deliveryUrl` | رابط https على `https://media.sabq.org/news/…` (ليس `imagedelivery.net`) |
 | CSRF | معفى عبر بادئة `/api/internal/` الحالية |
 | المحدد | نفس محدد كتابة البوت (`BOT_DRAFTS_WRITE_RATE_LIMIT`، افتراضي 30/دقيقة) |
 
@@ -183,7 +185,7 @@ HTTP/1.1 201 Created
 }
 ```
 
-مرّر `deliveryUrl` كما هو إلى `imageUrl` في `POST/PATCH /api/internal/bot-drafts`. إن كان التخزين غير مضبوط: `503 storage_unavailable`. فشل الرفع بعد التحقق: `502 upload_failed`. ملف أكبر من 10MB: `400 file_too_large`. بايتات ليست صورة: `400 invalid_image`.
+مرّر `deliveryUrl` كما هو إلى `imageUrl` في `POST/PATCH /api/internal/bot-drafts`. هذا الرابط هو عنوان R2 العام (`media.sabq.org`) وليس Cloudflare Images. إن لم يكن R2 مضبوطاً: `503 storage_unavailable`. فشل الرفع إلى R2: `502 upload_failed` (بلا بديل Images). ملف أكبر من 10MB: `400 file_too_large`. بايتات ليست صورة: `400 invalid_image`.
 
 ### مثال قراءة
 
@@ -205,10 +207,10 @@ HTTP/1.1 201 Created
 | 400 | `invalid_image` | نوع غير مسموح أو البايتات ليست JPEG/PNG/WEBP/GIF |
 | 400 | `file_too_large` | الملف أكبر من 10MB |
 | 429 | `rate_limited` | تجاوز سقف الكتابة للدقيقة لهذا البوت (افتراضي 30) |
-| 502 | `upload_failed` | التخزين لم يُرجع `deliveryUrl` https |
+| 502 | `upload_failed` | فشل رفع R2 أو لم يُرجع `deliveryUrl` على `media.sabq.org` |
 | 503 | `not_configured` | `BOT_DRAFTS_API_TOKENS` غير مضبوط على الخادم |
 | 503 | `author_not_configured` | حساب الإسناد غير موجود/غير نشط |
-| 503 | `storage_unavailable` | `newsImageStorageService` غير متاح (لا R2/Cloudflare Images) |
+| 503 | `storage_unavailable` | إعدادات `NEWS_IMAGES_R2_*` ناقصة — المسار لا يستخدم Cloudflare Images بديلاً |
 | 500 | `server_error` | خطأ داخلي (بلا تفاصيل) |
 
 شكل الخطأ دائماً: `{ "code": "...", "message": "...", "details"?: {...} }`.
@@ -356,7 +358,7 @@ const status = await client.get(draft.id); // status.updatable === false بعد 
 
 ## الحدود المعروفة (v1)
 
-- **صورة الغلاف:** ارفع ملفاً عبر `POST /api/internal/bot-drafts/images` (10MB، JPEG/PNG/WEBP/GIF) ثم مرّر `deliveryUrl` https كـ `imageUrl`. لا نشر ولا جدول من مسار الرفع. GIF مقبول هنا فقط لأن المسار مصادق للبوت ومحدود الحجم؛ مسار `/api/media/upload` العام ما زال يرفض GIF (تدقيق M8).
+- **صورة الغلاف:** ارفع ملفاً عبر `POST /api/internal/bot-drafts/images` (10MB، JPEG/PNG/WEBP/GIF) إلى R2 (`sabq-news-images`) ثم مرّر `deliveryUrl` (`https://media.sabq.org/news/…`) كـ `imageUrl`. لا نشر ولا جدول من مسار الرفع، ولا تخزين أساسي على Cloudflare Images. GIF مقبول هنا فقط لأن المسار مصادق للبوت ومحدود الحجم؛ مسار `/api/media/upload` العام ما زال يرفض GIF (تدقيق M8).
 - **أخبار عربية `news` فقط**. لا رأي/تحليل/EN/UR من هذا العقد.
 - **لا idempotency على الإنشاء**: تكرار `POST` ينتج مسودتين؛ استخدم `clientReference` للمطابقة، ولا تعد المحاولة بعد `201`.
 - **لا حذف**: يحذف المحرر من اللوحة.

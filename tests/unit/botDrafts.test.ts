@@ -10,17 +10,23 @@ const state = vi.hoisted(() => ({
   invalidate: vi.fn(),
   uploadImage: vi.fn(),
   isUploadAvailable: vi.fn(() => true),
+  isR2Configured: vi.fn(() => true),
 }));
 vi.mock("../../server/db", () => ({ db: {} }));
 vi.mock("../../server/rbac", () => ({ logActivity: vi.fn().mockResolvedValue(undefined) }));
 vi.mock("../../server/memoryCache", () => ({ memoryCache: { invalidatePattern: state.invalidate }, CACHE_TTL: {} }));
 vi.mock("../../server/services/articleEventsService", () => ({ logArticleEvent: vi.fn().mockResolvedValue([]) }));
-vi.mock("../../server/services/newsImageStorageService", () => ({
-  newsImageStorageService: {
-    upload: (...args: unknown[]) => state.uploadImage(...args),
-    isUploadAvailable: () => state.isUploadAvailable(),
-  },
-}));
+vi.mock("../../server/services/newsImageStorageService", async (original) => {
+  const actual = await original<typeof import("../../server/services/newsImageStorageService")>();
+  return {
+    ...actual,
+    newsImageStorageService: {
+      upload: (...args: unknown[]) => state.uploadImage(...args),
+      isUploadAvailable: () => state.isUploadAvailable(),
+      isR2Configured: () => state.isR2Configured(),
+    },
+  };
+});
 vi.mock("../../server/services/botDraftsService", async (original) => ({
   ...(await original<typeof import("../../server/services/botDraftsService")>()),
   createBotDraft: state.create,
@@ -119,6 +125,7 @@ afterAll(async () => {
 beforeEach(() => {
   vi.resetAllMocks();
   state.isUploadAvailable.mockReturnValue(true);
+  state.isR2Configured.mockReturnValue(true);
   vi.stubEnv("BOT_DRAFTS_API_TOKENS", TOKENS);
   vi.stubEnv("BOT_DRAFTS_WRITE_RATE_LIMIT", "1000");
   vi.spyOn(console, "warn").mockImplementation(() => {});
@@ -275,6 +282,7 @@ describe("POST /api/internal/bot-drafts/images", () => {
       expect.objectContaining({
         mimeType: "image/jpeg",
         purpose: BOT_DRAFTS_IMAGE_PURPOSE,
+        forceR2: true,
         metadata: { source: "bot-drafts", bot: "nashr-sabq" },
       }),
     );
@@ -297,12 +305,24 @@ describe("POST /api/internal/bot-drafts/images", () => {
     expect(state.uploadImage).toHaveBeenCalledWith(expect.objectContaining({ mimeType: "image/gif", purpose: BOT_DRAFTS_IMAGE_PURPOSE }));
   });
 
-  it("returns 503 when news image storage is unavailable", async () => {
-    state.isUploadAvailable.mockReturnValue(false);
+  it("returns 503 when R2 news-image storage is not configured", async () => {
+    state.isR2Configured.mockReturnValue(false);
     const response = await uploadCall(new Blob([await tinyJpeg()], { type: "image/jpeg" }));
     expect(response.status).toBe(503);
     expect((await response.json()).code).toBe("storage_unavailable");
     expect(state.uploadImage).not.toHaveBeenCalled();
+  });
+
+  it("rejects a Cloudflare Images URL so bot covers stay on R2 / media.sabq.org", async () => {
+    state.uploadImage.mockResolvedValue({
+      success: true,
+      deliveryUrl: "https://imagedelivery.net/hash/img/public",
+      imageId: "cf-1",
+      provider: "cloudflare-images",
+    });
+    const response = await uploadCall(new Blob([await tinyJpeg()], { type: "image/jpeg" }));
+    expect(response.status).toBe(502);
+    expect((await response.json()).code).toBe("upload_failed");
   });
 
   it("rejects a non-https delivery URL from storage", async () => {
