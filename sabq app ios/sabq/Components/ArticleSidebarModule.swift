@@ -35,7 +35,9 @@ struct ArticleSidebarModule<Content: View, Action: View>: View {
         VStack(alignment: .leading, spacing: 0) {
             heading
                 .padding(.bottom, 14)
-            Divider().overlay(SabqTheme.outline)
+            Rectangle()
+                .fill(SabqTheme.outline.opacity(0.55))
+                .frame(height: 0.5)
                 .padding(.bottom, 2)
             VStack(alignment: .leading, spacing: 0) {
                 content()
@@ -44,12 +46,12 @@ struct ArticleSidebarModule<Content: View, Action: View>: View {
         .padding(18)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .fill(fill)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(SabqTheme.outline, lineWidth: 1)
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(SabqTheme.outline.opacity(0.75), lineWidth: 0.5)
         )
         .accessibilityElement(children: .contain)
         .accessibilityLabel(title)
@@ -90,7 +92,9 @@ struct ArticleSidebarModule<Content: View, Action: View>: View {
 /// الخط الشعري بين صفوف القائمة داخل الحاوية الموحدة.
 struct SidebarRowDivider: View {
     var body: some View {
-        Divider().overlay(SabqTheme.outline.opacity(0.8))
+        Rectangle()
+            .fill(SabqTheme.outline.opacity(0.55))
+            .frame(height: 0.5)
     }
 }
 
@@ -110,6 +114,7 @@ extension ArticleSidebarModule where Action == EmptyView {
 /// خفيف، عنوان سطرين، ثم سطر بيانات (صورة الكاتب الصغيرة + اسمه · الوقت).
 /// نقل `SidebarArticleCard` من الويب (#1610/#1612/#1624).
 struct SidebarArticleRow: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let title: String
     var imageURL: String? = nil
     /// اسم الكاتب لمقالات الرأي أو اسم القسم للتوصيات.
@@ -122,16 +127,16 @@ struct SidebarArticleRow: View {
     var placeholderTint: Color = SabqTheme.primaryEnd
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .top, spacing: NewsRowStyle.thumbnailGap) {
             thumbnail
 
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: NewsRowStyle.textStackSpacing) {
                 SabqRTLText(
                     title,
-                    uiFont: SabqFonts.uiApp(size: 15, weight: .semibold),
+                    uiFont: SabqFonts.uiApp(size: NewsRowStyle.titleSize, weight: .regular),
                     color: SabqTheme.ink,
-                    lineLimit: 2,
-                    lineSpacing: 3
+                    lineLimit: dynamicTypeSize.isAccessibilitySize ? 0 : 2,
+                    lineSpacing: NewsRowStyle.titleLineSpacing
                 )
 
                 if byline != nil || date != nil {
@@ -150,13 +155,12 @@ struct SidebarArticleRow: View {
                         }
                         if let date {
                             HStack(spacing: 4) {
-                                Image(systemName: "clock")
-                                    .font(SabqFonts.app(size: 10, weight: .regular))
                                 Text(date)
                             }
+                            .foregroundStyle(SabqTheme.tertiaryInk)
                         }
                     }
-                    .font(SabqFonts.app(size: 12, weight: .regular))
+                    .font(SabqFonts.app(size: NewsRowStyle.metadataSize, weight: .regular))
                     .foregroundStyle(SabqTheme.secondaryInk)
                 }
             }
@@ -177,16 +181,16 @@ struct SidebarArticleRow: View {
                 placeholder
             }
         }
-        .frame(width: 104, height: 84)
-        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .frame(width: NewsRowStyle.thumbnailWidth, height: NewsRowStyle.thumbnailHeight)
+        .clipShape(RoundedRectangle(cornerRadius: NewsRowStyle.thumbnailRadius, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .stroke(SabqTheme.ink.opacity(0.12), lineWidth: 1)
+            RoundedRectangle(cornerRadius: NewsRowStyle.thumbnailRadius, style: .continuous)
+                .stroke(SabqTheme.outline.opacity(0.55), lineWidth: NewsRowStyle.thumbnailStrokeWidth)
         )
     }
 
     private var placeholder: some View {
-        RoundedRectangle(cornerRadius: 10, style: .continuous)
+        RoundedRectangle(cornerRadius: NewsRowStyle.thumbnailRadius, style: .continuous)
             .fill(placeholderTint.opacity(0.10))
             .overlay {
                 Image(systemName: placeholderIcon)

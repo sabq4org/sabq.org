@@ -119,11 +119,10 @@ struct CategoryArticlesView: View {
                         subtitle: "لم نجد أخباراً في هذا القسم حالياً"
                     )
                 } else {
-                    SurfaceCard(lazy: true) {
+                    SurfaceCard(lazy: true, cornerRadius: 22, spacing: 0) {
                         ForEach(Array(categoryArticles.enumerated()), id: \.element.id) { index, article in
                             if index > 0 {
-                                Divider()
-                                    .foregroundStyle(SabqTheme.outline)
+                                SidebarRowDivider()
                             }
 
                             NavigationLink(value: article) {

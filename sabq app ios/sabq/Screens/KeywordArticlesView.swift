@@ -34,11 +34,10 @@ struct KeywordArticlesView: View {
                         subtitle: "لم نجد أخبارًا أو مقالات رأي تحمل هذا الوسم حاليًا"
                     )
                 } else {
-                    SurfaceCard(lazy: true) {
+                    SurfaceCard(lazy: true, cornerRadius: 22, spacing: 0) {
                         ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
                             if index > 0 {
-                                Divider()
-                                    .foregroundStyle(SabqTheme.outline)
+                                SidebarRowDivider()
                             }
 
                             switch item {
@@ -198,6 +197,7 @@ private enum KeywordContentItem: Hashable, Identifiable {
 }
 
 private struct CompactOpinionKeywordRow: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let opinion: OpinionArticle
 
     var body: some View {
@@ -208,17 +208,16 @@ private struct CompactOpinionKeywordRow: View {
                     StatusChip(title: opinion.authorName, tint: SabqTheme.secondaryInk)
                 }
 
-                Text(opinion.title)
-                    .font(SabqFonts.app(size: 16, weight: .bold))
-                    .foregroundStyle(SabqTheme.ink)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.leading)
-                    .lineSpacing(3)
+                SabqRTLText(
+                    opinion.title,
+                    uiFont: SabqFonts.uiApp(size: NewsRowStyle.titleSize, weight: .regular),
+                    color: SabqTheme.ink,
+                    lineLimit: dynamicTypeSize.isAccessibilitySize ? 0 : 2,
+                    lineSpacing: NewsRowStyle.titleLineSpacing
+                )
 
                 HStack(spacing: 12) {
                     HStack(spacing: 4) {
-                        Image(systemName: "clock")
-                            .font(SabqFonts.app(size: 10, weight: .regular))
                         Text(opinion.readingTime)
                             .font(SabqFonts.app(size: 10, weight: .regular))
                             .monospacedDigit()

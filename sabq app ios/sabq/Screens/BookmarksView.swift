@@ -123,11 +123,10 @@ struct BookmarksView: View {
     // MARK: - Articles List
 
     private var articlesListSection: some View {
-        SurfaceCard(lazy: true) {
+        SurfaceCard(lazy: true, cornerRadius: 22, spacing: 0) {
             ForEach(Array(bookmarkedArticles.enumerated()), id: \.element.id) { index, article in
                 if index > 0 {
-                    Divider()
-                        .foregroundStyle(SabqTheme.outline)
+                    SidebarRowDivider()
                 }
 
                 NavigationLink(value: article) {

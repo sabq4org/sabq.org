@@ -1187,10 +1187,22 @@ struct SurfaceCard<Content: View>: View {
     var accent: Color?
     /// كسولة للقوائم الطويلة — انظر تعليق body.
     var lazy: Bool = false
+    /// نصف قطر اختياري للحاويات ذات الكثافة الأعلى؛ يبقى الافتراضي هو هوية السطح العامة.
+    var cornerRadius: CGFloat = SabqTheme.cardRadius
+    /// المسافة بين عناصر المحتوى؛ تبقى 18 للحاويات العامة ويمكن تصفيرها للقوائم ذات الفواصل.
+    var spacing: CGFloat = 18
 
-    init(accent: Color? = nil, lazy: Bool = false, @ViewBuilder content: () -> Content) {
+    init(
+        accent: Color? = nil,
+        lazy: Bool = false,
+        cornerRadius: CGFloat = SabqTheme.cardRadius,
+        spacing: CGFloat = 18,
+        @ViewBuilder content: () -> Content
+    ) {
         self.accent = accent
         self.lazy = lazy
+        self.cornerRadius = cornerRadius
+        self.spacing = spacing
         self.content = content()
     }
 
@@ -1203,22 +1215,22 @@ struct SurfaceCard<Content: View>: View {
         // تُركّب 50 صفًا وصورها دفعة واحدة أثناء حركة الدفع (تدقيق 2026-08-02).
         return Group {
             if lazy {
-                LazyVStack(alignment: .leading, spacing: 18) { content }
+                LazyVStack(alignment: .leading, spacing: spacing) { content }
             } else {
-                VStack(alignment: .leading, spacing: 18) { content }
+                VStack(alignment: .leading, spacing: spacing) { content }
             }
         }
         .padding(20)
         .frame(maxWidth: .infinity, alignment: .leading)
         .multilineTextAlignment(.leading)
         .background(
-            RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                 .fill(SabqTheme.surface)
                 .shadow(color: topShadow, radius: 16, x: 0, y: 6)
                 .shadow(color: SabqTheme.deepShadow, radius: 1, x: 0, y: 1)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                 .stroke(strokeColor, lineWidth: strokeWidth)
         )
         .overlay(alignment: .topTrailing) {
@@ -1227,7 +1239,7 @@ struct SurfaceCard<Content: View>: View {
                     .fill(accent.opacity(0.08))
                     .frame(width: 120, height: 120)
                     .offset(x: 40, y: -40)
-                    .clipShape(RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous))
+                    .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
             }
         }
         .sabqRTL()
@@ -1668,7 +1680,24 @@ struct FeaturedArticleCard: View {
 
 // MARK: - Compact Article Row
 
+/// Shared geometry and typography for the compact news-list rows. Keeping
+/// these values here lets custom row consumers adopt the same visual rhythm
+/// without changing the global surface-card treatment.
+enum NewsRowStyle {
+    static let thumbnailWidth: CGFloat = 104
+    static let thumbnailHeight: CGFloat = 84
+    static let thumbnailRadius: CGFloat = 10
+    static let thumbnailStrokeWidth: CGFloat = 0.5
+    static let thumbnailGap: CGFloat = 12
+    static let textStackSpacing: CGFloat = 8
+    static let titleSize: CGFloat = 15
+    static let titleLineSpacing: CGFloat = 4
+    static let metadataSize: CGFloat = 11
+    static let metadataLineSpacing: CGFloat = 3
+}
+
 struct CompactArticleRow: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let article: Article
     let onBookmark: () -> Void
     let isBookmarked: Bool
@@ -1699,16 +1728,16 @@ struct CompactArticleRow: View {
     // MARK: - Classic (thumbnail on the side)
 
     private var classicLayout: some View {
-        HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .top, spacing: NewsRowStyle.thumbnailGap) {
             compactThumbnail
 
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: NewsRowStyle.textStackSpacing) {
                 SabqRTLText(
                     article.title,
-                    uiFont: SabqFonts.uiApp(size: 15, weight: .semibold),
+                    uiFont: SabqFonts.uiApp(size: NewsRowStyle.titleSize, weight: .regular),
                     color: SabqTheme.ink,
-                    lineLimit: 2,
-                    lineSpacing: 3
+                    lineLimit: dynamicTypeSize.isAccessibilitySize ? 0 : 2,
+                    lineSpacing: NewsRowStyle.titleLineSpacing
                 )
 
                 metadataRow
@@ -1726,10 +1755,10 @@ struct CompactArticleRow: View {
 
             SabqRTLText(
                 article.title,
-                uiFont: SabqFonts.uiSubhead(size: 17),
+                uiFont: SabqFonts.uiApp(size: 17, weight: .regular),
                 color: SabqTheme.ink,
-                lineLimit: 3,
-                lineSpacing: 4
+                lineLimit: dynamicTypeSize.isAccessibilitySize ? 0 : 3,
+                lineSpacing: NewsRowStyle.titleLineSpacing
             )
 
             metadataRow
@@ -1743,17 +1772,17 @@ struct CompactArticleRow: View {
         Group {
             if let urlString = article.imageURL, let url = URL(string: urlString) {
                 FocalCachedAsyncImage(url: url, focalPoint: article.imageFocalPoint, maxPixelSize: 260) {
-                    thumbnailPlaceholder(size: 104)
+                    thumbnailPlaceholder(size: NewsRowStyle.thumbnailWidth)
                 }
             } else {
                 thumbnailPlaceholder(size: 104)
             }
         }
-        .frame(width: 104, height: 84)
-        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .frame(width: NewsRowStyle.thumbnailWidth, height: NewsRowStyle.thumbnailHeight)
+        .clipShape(RoundedRectangle(cornerRadius: NewsRowStyle.thumbnailRadius, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .stroke(SabqTheme.ink.opacity(0.10), lineWidth: 1)
+            RoundedRectangle(cornerRadius: NewsRowStyle.thumbnailRadius, style: .continuous)
+                .stroke(SabqTheme.outline.opacity(0.55), lineWidth: NewsRowStyle.thumbnailStrokeWidth)
         )
         .aiImageBadgeOverlay(
             isVisible: article.isAiGeneratedImage,
@@ -1833,7 +1862,8 @@ struct CompactArticleRow: View {
                 relativeDateLabel
             }
         }
-        .font(SabqFonts.app(size: 12, weight: .regular))
+        .font(SabqFonts.app(size: NewsRowStyle.metadataSize, weight: .regular))
+        .lineSpacing(NewsRowStyle.metadataLineSpacing)
         .foregroundStyle(SabqTheme.secondaryInk)
         .fixedSize(horizontal: false, vertical: true)
     }
@@ -1846,7 +1876,7 @@ struct CompactArticleRow: View {
         HStack(alignment: .center, spacing: 6) {
             if showsCategory {
                 Text(article.categoryTitle)
-                    .font(SabqFonts.app(size: 12, weight: .medium))
+                    .font(SabqFonts.app(size: NewsRowStyle.metadataSize, weight: .medium))
                     .foregroundStyle(article.category.tint)
                     .lineLimit(1)
                     .fixedSize(horizontal: true, vertical: false)
@@ -1862,8 +1892,6 @@ struct CompactArticleRow: View {
 
     private var relativeDateLabel: some View {
         HStack(spacing: 4) {
-            Image(systemName: "clock")
-                .font(SabqFonts.app(size: 10, weight: .regular))
             Text(article.relativeDate)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -1871,7 +1899,7 @@ struct CompactArticleRow: View {
     }
 
     private func thumbnailPlaceholder(size: CGFloat) -> some View {
-        RoundedRectangle(cornerRadius: 16, style: .continuous)
+        RoundedRectangle(cornerRadius: NewsRowStyle.thumbnailRadius, style: .continuous)
             .fill(
                 LinearGradient(
                     colors: [article.category.tint.opacity(0.12), article.category.tint.opacity(0.04)],
