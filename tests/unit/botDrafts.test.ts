@@ -20,6 +20,7 @@ import {
   BotDraftError,
   authenticateBotToken,
   generateArabicSlug,
+  isAssignableBotCategoryStatus,
   normalizeDraftContent,
   parseBotDraftTokens,
   toBotDraftResponse,
@@ -222,6 +223,15 @@ describe("pure helpers", () => {
   it("builds Arabic slugs like the dashboard does", () => {
     expect(generateArabicSlug("  خبر: عاجل!! من الرياض  ")).toBe("خبر-عاجل-من-الرياض");
     expect(generateArabicSlug("Hello World 2026")).toBe("hello-world-2026");
+  });
+  it("accepts publishable category statuses visible and historical active", () => {
+    expect(isAssignableBotCategoryStatus("visible")).toBe(true);
+    expect(isAssignableBotCategoryStatus("active")).toBe(true);
+    expect(isAssignableBotCategoryStatus("inactive")).toBe(false);
+    expect(isAssignableBotCategoryStatus("deleted")).toBe(false);
+    expect(isAssignableBotCategoryStatus(null)).toBe(false);
+    expect(isAssignableBotCategoryStatus(undefined)).toBe(false);
+    expect(isAssignableBotCategoryStatus("")).toBe(false);
   });
   it("marks non-draft rows as not updatable and exposes the dashboard edit url", () => {
     vi.stubEnv("PUBLIC_SITE_URL", "https://sabq.org/");

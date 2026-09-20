@@ -220,6 +220,16 @@ export function toBotDraftResponse(row: ArticleRow, categorySlug: string | null 
 // استعلامات مساعدة
 // ────────────────────────────────────────────────────────────────────
 
+/**
+ * تصنيفات قابلة للإسناد لمسودة بوت.
+ * الإنتاج يستخدم `visible` (GET /api/categories، الموبايل، edge SEO).
+ * `active` قيمة تاريخية في الـ enum وليست منشورة للعامة، لكن نقبلها حتى لا
+ * تُرفض تصنيفات قديمة إن وُجدت. `inactive` تُرفض.
+ */
+export function isAssignableBotCategoryStatus(status: string | null | undefined): boolean {
+  return status === "visible" || status === "active";
+}
+
 async function resolveCategory(input: { categoryId?: string; categorySlug?: string }): Promise<{ id: string; slug: string } | null> {
   if (!input.categoryId && !input.categorySlug) return null;
   const condition = input.categoryId
@@ -230,7 +240,7 @@ async function resolveCategory(input: { categoryId?: string; categorySlug?: stri
     .from(categories)
     .where(condition)
     .limit(1);
-  if (!row || row.status !== "active") {
+  if (!row || !isAssignableBotCategoryStatus(row.status)) {
     throw new BotDraftError(422, "category_not_found", "التصنيف غير موجود أو غير نشط", {
       categoryId: input.categoryId ?? null,
       categorySlug: input.categorySlug ?? null,

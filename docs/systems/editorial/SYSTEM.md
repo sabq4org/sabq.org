@@ -1,6 +1,6 @@
 # نظام التحرير وغرف الأخبار (`editorial`)
 
-> آخر مراجعة: 2026-09-20 (Bot Drafts API) | المالك: editorial
+> آخر مراجعة: 2026-09-20 (Bot Drafts: visible categories + User-Agent) | المالك: editorial
 
 ## الغرض
 غرفة الأخبار اليومية + أدوات التحرير بالذكاء الاصطناعي التي يستخدمها المحررون: عناوين، مقالات، تصنيف، SEO، روابط ذكية، صور، وكلاء بريد/واتساب، ومساعد كاتب الرأي، والإعلانات الداخلية الموجهة لفريق العمل.
@@ -214,4 +214,5 @@
 - المصادقة: `Authorization: Bearer <token>` من `BOT_DRAFTS_API_TOKENS="name:token,…"` على Railway (مقارنة ثابتة الزمن، لا لوج للتوكنات). المسار تحت `/api/internal/` فهو معفى أصلاً من CSRF ومحدد الكتابة العام — له محدد خاص بمفتاح اسم البوت (`BOT_DRAFTS_WRITE_RATE_LIMIT`، افتراضي 30/دقيقة). غياب المتغير = `503 not_configured` بلا أثر على التحرير.
 - ثوابت لا تأتي من الطلب: `status=draft`, `reviewStatus=null`, `publishType=instant`, `articleType=news`, `newsType=regular`, `source=bot`, `sourceMetadata.{bot,clientReference,notes}`. الإسناد `authorId` = `BOT_DRAFTS_AUTHOR_USER_ID` أو حساب «صحيفة سبق». الحقول الممنوعة (`status`/`scheduledAt`/`publishedAt`/`reviewStatus`/الإسناد/`newsType`/`slug`…) تُرفض `422 forbidden_fields` قبل أي معالجة؛ `/:id/publish` وأمثاله `403`.
 - التحديث يضرب فقط `status='draft' AND source='bot'` (`409 not_a_draft` وإلا)، ويحترم قفل التحرير النشط (`409 locked_by_editor`). `GET` لا يكشف إلا مواد `source='bot'` (`404` لغيرها). كل كتابة تُبطل كاش قوائم اللوحة (`^articles:`) محلياً كما يفعل `POST /api/admin/articles` للمسودات، بلا purge للـ CDN.
+- تصنيف المسودة: `resolveCategory` يقبل `status=visible` (قيمة الإنتاج في `GET /api/categories` ومسارات الموبايل/`mobileArticleEnrichment`) و`active` تاريخياً؛ `inactive` يُرفض `422 category_not_found`. طلبات الخوادم إلى `api.sabq.org` تحتاج `User-Agent` متصفّح عادي وإلا قد يرد Cloudflare 1010 — انظر [`BOT_DRAFTS_API.md`](./BOT_DRAFTS_API.md).
 - لا schema/DDL: التعديل في `shared/schema.ts` نوعي فقط لحقل `sourceMetadata` (jsonb). التحقق: `tests/unit/botDrafts.test.ts`.

@@ -37,9 +37,12 @@
 ```
 Authorization: Bearer <token>
 Content-Type: application/json
+User-Agent: Mozilla/5.0 (compatible; SabqBotDrafts/1.0)
 ```
 
 كل الردود `Cache-Control: private, no-store`.
+
+طلبات الخوادم الصادرة إلى `api.sabq.org` يجب أن ترسل `User-Agent` متصفّح عادي؛ بدونها قد يرد Cloudflare الخطأ 1010. مثال: `User-Agent: Mozilla/5.0 (compatible; SabqBotDrafts/1.0)`. عميل `scripts/bot-drafts-client.ts` يضبط هذا الافتراضي تلقائياً.
 
 ### حقول الطلب (POST و PATCH)
 
@@ -50,7 +53,7 @@ Content-Type: application/json
 | `contentFormat` | `"html"` \| `"text"` | اختياري | يفرض التفسير بدل الاكتشاف التلقائي (وجود وسوم = HTML). |
 | `subtitle` | string ≤300 \| null | اختياري | عنوان فرعي |
 | `excerpt` | string ≤1000 \| null | اختياري | المقدمة/الموجز |
-| `categoryId` أو `categorySlug` | string | اختياري | تصنيف نشط من `GET https://api.sabq.org/api/categories` (عام بلا مصادقة). غير موجود → `422 category_not_found`. |
+| `categoryId` أو `categorySlug` | string | اختياري | تصنيف منشور للقرّاء (`status=visible` في الإنتاج، ويُقبل `active` تاريخياً) من `GET https://api.sabq.org/api/categories` (عام بلا مصادقة). غير موجود أو `inactive` → `422 category_not_found`. |
 | `imageUrl` | https URL \| null | اختياري | صورة الغلاف برابط `https://` فقط (رفع الملفات الثنائية غير مدعوم في هذا العقد — انظر «حدود»). |
 | `keywords` | string[] ≤20 | اختياري | تُحفظ في `seo.keywords` |
 | `sourceUrl` | http(s) URL \| null | اختياري | المصدر الأصلي |
@@ -79,6 +82,7 @@ POST /api/internal/bot-drafts HTTP/1.1
 Host: api.sabq.org
 Authorization: Bearer ****
 Content-Type: application/json
+User-Agent: Mozilla/5.0 (compatible; SabqBotDrafts/1.0)
 
 {
   "title": "أمانة الرياض تطلق مبادرة لتشجير 500 حديقة",
@@ -125,6 +129,7 @@ HTTP/1.1 201 Created
 PATCH /api/internal/bot-drafts/0d8c8a1e-6f2b-4b1e-9d2a-2f6f4f9d1a11 HTTP/1.1
 Authorization: Bearer ****
 Content-Type: application/json
+User-Agent: Mozilla/5.0 (compatible; SabqBotDrafts/1.0)
 
 { "title": "أمانة الرياض تطلق مبادرة لتشجير 500 حديقة خلال عام", "excerpt": "…" }
 ```
@@ -147,7 +152,7 @@ Content-Type: application/json
 | 409 | `not_a_draft` | المادة لم تعد `draft` (نُشرت/جُدولت/أُرشفت). `details.status` = الحالة الحالية |
 | 409 | `locked_by_editor` | محرر يفتح المسودة الآن (قفل تحرير نشط، TTL 10 دقائق). `details.editor`, `details.lockExpiresAt` |
 | 422 | `forbidden_fields` | وجود حقل ممنوع. `details.fields` = القائمة |
-| 422 | `category_not_found` | تصنيف غير موجود أو غير نشط |
+| 422 | `category_not_found` | تصنيف غير موجود أو غير قابل للإسناد (`inactive`؛ الإنتاج يستخدم `visible`) |
 | 429 | `rate_limited` | تجاوز سقف الكتابة للدقيقة لهذا البوت (افتراضي 30) |
 | 503 | `not_configured` | `BOT_DRAFTS_API_TOKENS` غير مضبوط على الخادم |
 | 503 | `author_not_configured` | حساب الإسناد غير موجود/غير نشط |
@@ -202,23 +207,28 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
 ```bash
 export SABQ_BOT_DRAFTS_TOKEN='…'   # من مدير الأسرار، لا من الشات
 B=https://api.sabq.org
+UA='Mozilla/5.0 (compatible; SabqBotDrafts/1.0)'   # بدون User-Agent عادي قد يرد Cloudflare 1010
 
 # إنشاء
 curl -sS -X POST "$B/api/internal/bot-drafts" \
   -H "Authorization: Bearer $SABQ_BOT_DRAFTS_TOKEN" -H "Content-Type: application/json" \
+  -H "User-Agent: $UA" \
   -d '{"title":"عنوان تجريبي من البوت","content":"فقرة أولى من الخبر التجريبي.\n\nفقرة ثانية.","categorySlug":"local","clientReference":"test-001"}'
 
 # قراءة
-curl -sS "$B/api/internal/bot-drafts/<id>" -H "Authorization: Bearer $SABQ_BOT_DRAFTS_TOKEN"
+curl -sS "$B/api/internal/bot-drafts/<id>" \
+  -H "Authorization: Bearer $SABQ_BOT_DRAFTS_TOKEN" -H "User-Agent: $UA"
 
 # تحديث
 curl -sS -X PATCH "$B/api/internal/bot-drafts/<id>" \
   -H "Authorization: Bearer $SABQ_BOT_DRAFTS_TOKEN" -H "Content-Type: application/json" \
+  -H "User-Agent: $UA" \
   -d '{"title":"عنوان محدث","excerpt":"مقدمة جديدة"}'
 
 # يجب أن يفشل (422 forbidden_fields)
 curl -sS -X PATCH "$B/api/internal/bot-drafts/<id>" \
   -H "Authorization: Bearer $SABQ_BOT_DRAFTS_TOKEN" -H "Content-Type: application/json" \
+  -H "User-Agent: $UA" \
   -d '{"status":"published"}'
 ```
 

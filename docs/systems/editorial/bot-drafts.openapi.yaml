@@ -97,7 +97,7 @@ components:
         subtitle: { type: string, maxLength: 300, nullable: true }
         excerpt: { type: string, maxLength: 1000, nullable: true, description: المقدمة/الموجز }
         categoryId: { type: string }
-        categorySlug: { type: string, description: slug تصنيف نشط من GET /api/categories }
+        categorySlug: { type: string, description: slug تصنيف منشور (status=visible في الإنتاج؛ يُقبل active تاريخياً) من GET /api/categories }
         imageUrl: { type: string, format: uri, nullable: true, description: صورة الغلاف — https فقط }
         keywords:
           type: array
