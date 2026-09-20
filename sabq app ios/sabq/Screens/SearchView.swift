@@ -331,11 +331,10 @@ struct SearchView: View {
                     subtitle: "جرّب البحث بكلمات مختلفة"
                 )
             } else {
-                SurfaceCard(lazy: true) {
+                SurfaceCard(lazy: true, cornerRadius: 22, spacing: 0) {
                     ForEach(Array(displayResults.enumerated()), id: \.element.id) { index, article in
                         if index > 0 {
-                            Divider()
-                                .foregroundStyle(SabqTheme.outline)
+                            SidebarRowDivider()
                         }
 
                         NavigationLink(value: article) {

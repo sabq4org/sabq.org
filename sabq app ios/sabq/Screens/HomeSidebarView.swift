@@ -346,6 +346,7 @@ struct HomeSidebarView: View {
 /// وصورة مصغّرة على الطرف البادئ. الصف المفتوح في القارئ يحمل خلفية زرقاء
 /// خفيفة وشريطًا على الطرف الختامي حتى يعرف القارئ أين هو في القائمة.
 struct HomeSidebarNewsRow: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let article: Article
     let isOpen: Bool
     var isNew: Bool = false
@@ -356,13 +357,14 @@ struct HomeSidebarNewsRow: View {
         HStack(alignment: .top, spacing: 12) {
             if showsThumbnail { thumbnail }
 
-            VStack(alignment: .leading, spacing: 8) {
-                Text(article.title)
-                    .font(SabqFonts.app(size: 15, weight: .bold))
-                    .foregroundStyle(SabqTheme.ink)
-                    .lineLimit(3)
-                    .multilineTextAlignment(.leading)
-                    .fixedSize(horizontal: false, vertical: true)
+            VStack(alignment: .leading, spacing: NewsRowStyle.textStackSpacing) {
+                SabqRTLText(
+                    article.title,
+                    uiFont: SabqFonts.uiApp(size: NewsRowStyle.titleSize, weight: .regular),
+                    color: SabqTheme.ink,
+                    lineLimit: dynamicTypeSize.isAccessibilitySize ? 0 : 3,
+                    lineSpacing: NewsRowStyle.titleLineSpacing
+                )
 
                 HStack(spacing: 6) {
                     if article.isBreaking {
@@ -380,15 +382,15 @@ struct HomeSidebarNewsRow: View {
                     Text("•")
                     Text(Self.relativeTime(article.publishDate))
                 }
-                .font(SabqFonts.app(size: 12, weight: .medium))
+                .font(SabqFonts.app(size: NewsRowStyle.metadataSize, weight: .regular))
                 .foregroundStyle(SabqTheme.secondaryInk)
-                .lineLimit(1)
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(12)
         .background(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .fill(isOpen ? SabqTheme.primaryEnd.opacity(0.10) : SabqTheme.surface)
         )
         .overlay(alignment: .trailing) {
@@ -399,7 +401,7 @@ struct HomeSidebarNewsRow: View {
                     .padding(.trailing, 6)
             }
         }
-        .contentShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .animation(.easeOut(duration: 0.18), value: isOpen)
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(isOpen ? .isSelected : [])

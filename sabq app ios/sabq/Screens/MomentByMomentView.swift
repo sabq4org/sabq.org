@@ -58,10 +58,10 @@ struct MomentByMomentView: View {
                     // CompactArticleRow with dividers, and an explicit
                     // "Load More" button at the bottom instead of the
                     // previous timeline rail + infinite-scroll behaviour.
-                    SurfaceCard {
+                    SurfaceCard(cornerRadius: 22, spacing: 0) {
                         ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
                             if index > 0 {
-                                Divider().foregroundStyle(SabqTheme.outline)
+                                SidebarRowDivider()
                             }
                             let article = articleFromUpdate(item)
                             NavigationLink(value: article) {

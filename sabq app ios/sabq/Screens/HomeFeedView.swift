@@ -1059,7 +1059,7 @@ struct HomeFeedView: View {
                 tint: articlesStore.selectedCategory?.tint ?? SabqTheme.primaryEnd
             )
 
-            SurfaceCard {
+            SurfaceCard(cornerRadius: 22, spacing: 0) {
                 // LazyVStack so the home feed only materialises rows
                 // for articles entering the viewport — previous plain
                 // VStack rendered all ~15-50 CompactArticleRow views
