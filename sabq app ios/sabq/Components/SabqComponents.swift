@@ -1692,7 +1692,7 @@ enum NewsRowStyle {
     static let textStackSpacing: CGFloat = 8
     static let titleSize: CGFloat = 15
     static let titleLineSpacing: CGFloat = 4
-    static let metadataSize: CGFloat = 11
+    static let metadataSize: CGFloat = 12
     static let metadataLineSpacing: CGFloat = 3
 }
 
@@ -1734,7 +1734,7 @@ struct CompactArticleRow: View {
             VStack(alignment: .leading, spacing: NewsRowStyle.textStackSpacing) {
                 SabqRTLText(
                     article.title,
-                    uiFont: SabqFonts.uiApp(size: NewsRowStyle.titleSize, weight: .regular),
+                    uiFont: SabqFonts.uiSubhead(size: NewsRowStyle.titleSize),
                     color: SabqTheme.ink,
                     lineLimit: dynamicTypeSize.isAccessibilitySize ? 0 : 2,
                     lineSpacing: NewsRowStyle.titleLineSpacing
@@ -1847,7 +1847,7 @@ struct CompactArticleRow: View {
         Group {
             if showsCategory || isNew {
                 ViewThatFits(in: .horizontal) {
-                    HStack(alignment: .center, spacing: 6) {
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
                         metadataBadges
                         relativeDateLabel
                     }
@@ -1868,30 +1868,40 @@ struct CompactArticleRow: View {
         .fixedSize(horizontal: false, vertical: true)
     }
 
-    /// اسم القسم نصًّا بلون القسم بلا كبسولة — على نسق سطر بيانات بطاقات
-    /// «اقرأ أيضًا» (الاسم · الوقت). الكبسولة الملوّنة كانت تثقل كل صف في
-    /// القائمة وتنافس العنوان (ملاحظة المالك 2026-09-19).
+    /// سطر بيانات واحد بحجم واحد وبلا كبسولات: «جديد» أخضر شبه عريض عند
+    /// الحاجة، ثم اسم القسم بلون هادئ، ثم الوقت. الألوان المتعددة للأقسام
+    /// وكبسولة «جديد» كانت تكسر إيقاع القائمة (ملاحظة المالك 2026-09-20).
     @ViewBuilder
     private var metadataBadges: some View {
-        HStack(alignment: .center, spacing: 6) {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            if isNew {
+                Text("جديد")
+                    .font(SabqFonts.app(size: NewsRowStyle.metadataSize, weight: .semibold))
+                    .foregroundStyle(SabqTheme.leaf)
+                    .fixedSize(horizontal: true, vertical: false)
+                metadataSeparator
+            }
             if showsCategory {
                 Text(article.categoryTitle)
                     .font(SabqFonts.app(size: NewsRowStyle.metadataSize, weight: .medium))
-                    .foregroundStyle(article.category.tint)
+                    .foregroundStyle(SabqTheme.secondaryInk)
                     .lineLimit(1)
                     .fixedSize(horizontal: true, vertical: false)
-                Text("·")
-                    .foregroundStyle(SabqTheme.tertiaryInk)
-            }
-            if isNew {
-                newPill
-                    .fixedSize(horizontal: true, vertical: false)
+                metadataSeparator
             }
         }
     }
 
+    private var metadataSeparator: some View {
+        Text("·")
+            .font(SabqFonts.app(size: NewsRowStyle.metadataSize, weight: .regular))
+            .foregroundStyle(SabqTheme.tertiaryInk)
+    }
+
     private var relativeDateLabel: some View {
-        HStack(spacing: 4) {
+        HStack(alignment: .firstTextBaseline, spacing: 4) {
+            Image(systemName: "clock")
+                .font(SabqFonts.app(size: NewsRowStyle.metadataSize - 2, weight: .regular))
             Text(article.relativeDate)
                 .fixedSize(horizontal: false, vertical: true)
         }
