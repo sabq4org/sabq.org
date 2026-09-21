@@ -1,6 +1,6 @@
 # مركز العضوية الموحد (`account-center`)
 
-> آخر مراجعة: 2026-09-18 (توثيق الجوال في إعدادات الحساب) | المالك: platform
+> آخر مراجعة: 2026-09-21 (قائمة الحساب على يمين الهيدر) | المالك: platform
 
 ## الغرض
 توحيد تجربة عضوية الويب حول جذرين: `/profile` (هوية ومحتوى ونشاط) و`/settings` (مركز إعدادات واحد بأقسام). القائمة المنسدلة مصدر تنقّل مختصر بلا قوائم فرعية.
@@ -48,6 +48,7 @@
 - `TwoFactorSettings` يُنقل كغلاف فقط — لا تُعاد كتابة منطق `/api/2fa/*`.
 - **`daily_digest` مهجور جزئيًا:** العمود الفعّال الذي يقرأه `digestService` هو `user_recommendation_prefs.daily_digest`. عمود `user_notification_prefs.daily_digest` **مهجور** — لا تكتب إليه من الواجهة، ولا تحذفه (Workflow C: additive only). واجهة الإشعارات تكتب عبر `PATCH /api/recommendations/preferences` (`enableDailyDigest`).
 - فحوص RBAC لـ«أدوات العمل» عبر `hasPermission` مع short-circuit على `"*"`.
+- قائمة الحساب في `Header` تُفتح بـ `dir="rtl"` على `DropdownMenu`. Radix يفترض LTR ولا يرث `<html dir>`؛ بدون ذلك تُحاذى اللوحة والعناصر لليسار. زر الحساب أول عنصر في مجموعة اليمين (أقصى يمين الصفحة) مع `align="start"` حتى تنزل اللوحة من اليمين.
 - «المحفظة» في الملف = بطاقات Apple Wallet (`/profile/cards`)؛ نقاط الولاء = `/loyalty` («نقاطي ومكافآتي»).
 - تفريق المسارات: `/profile/saved|activity|network|cards|overview` تبويبات؛ أي `:segment` آخر = ملف عام (`ProfileSegmentRouter`).
 - **رقم الجوال لا يُحفظ مباشرة:** حقل الجوال في قسم الحساب (`/settings/account`) يمرّ بمسار توثيق `auth-rbac` (`/api/account/phone/send|verify` مع OTP). لا تُعِد كتابة `phoneNumber` عبر `PATCH /api/auth/user` (يُسقطه الخادم).

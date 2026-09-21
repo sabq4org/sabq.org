@@ -182,7 +182,7 @@ export function UserAccountMenu({ user, onLogout, testIdSuffix = "" }: Props) {
               className="flex w-full items-center cursor-pointer"
               data-testid={`${item.testId}${suffix}`}
             >
-              <Icon className="ml-2 h-4 w-4" aria-hidden="true" />
+              <Icon className="me-2 h-4 w-4" aria-hidden="true" />
               {item.labelAr}
             </a>
           </DropdownMenuItem>
@@ -192,7 +192,7 @@ export function UserAccountMenu({ user, onLogout, testIdSuffix = "" }: Props) {
       {staffItems.length > 0 && (
         <>
           <DropdownMenuSeparator />
-          <DropdownMenuLabel className="text-[11px] font-semibold text-muted-foreground">
+          <DropdownMenuLabel className="text-right text-[11px] font-semibold text-muted-foreground">
             أدوات العمل
           </DropdownMenuLabel>
           {staffItems.map((item) => {
@@ -204,7 +204,7 @@ export function UserAccountMenu({ user, onLogout, testIdSuffix = "" }: Props) {
                   className="flex w-full items-center cursor-pointer"
                   data-testid={`${item.testId}${suffix}`}
                 >
-                  <Icon className="ml-2 h-4 w-4" aria-hidden="true" />
+                  <Icon className="me-2 h-4 w-4" aria-hidden="true" />
                   {item.labelAr}
                 </a>
               </DropdownMenuItem>
@@ -219,7 +219,7 @@ export function UserAccountMenu({ user, onLogout, testIdSuffix = "" }: Props) {
         className="flex w-full items-center cursor-pointer"
         data-testid={`link-logout${suffix}`}
       >
-        <LogOut className="ml-2 h-4 w-4" aria-hidden="true" />
+        <LogOut className="me-2 h-4 w-4" aria-hidden="true" />
         تسجيل الخروج
       </DropdownMenuItem>
     </>
