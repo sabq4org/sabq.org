@@ -132,8 +132,8 @@ export function Header({ user, onMenuClick, sticky = true }: HeaderProps) {
     { name: "عقل سبق", href: "/sabq-ai", icon: Brain },
   ];
 
-  // Radix يفترض LTR ولا يرث dir من <html>. dir="rtl" + align="start"
-  // يثبّت اللوحة على يمين الزر (بجانب الشعار) ويحاذي الصفوف لليمين.
+  // الزر يبقى مع أدوات الهيدر. dir="rtl" فقط يحاذي صفوف القائمة لليمين
+  // لأن Radix يفترض LTR ولا يرث dir من <html>.
   const accountMenu = user ? (
     <DropdownMenu dir="rtl">
       <DropdownMenuTrigger asChild>
@@ -156,7 +156,7 @@ export function Header({ user, onMenuClick, sticky = true }: HeaderProps) {
           </Avatar>
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-72 text-right" dir="rtl">
+      <DropdownMenuContent align="end" className="w-72 text-right" dir="rtl">
         <UserAccountMenu user={user} onLogout={handleLogout} />
       </DropdownMenuContent>
     </DropdownMenu>
@@ -191,9 +191,6 @@ export function Header({ user, onMenuClick, sticky = true }: HeaderProps) {
       {nd96.active && <NationalDay96ScopeStyles />}
       <div className="relative z-10 container mx-auto px-4 sm:px-6 lg:px-8">
         <div className="sabq-header-row flex h-16 items-center justify-between gap-4">
-          {/* الشعار + قائمة الحساب على اليمين. الزر أول عنصر في RTL فيصير أقصى اليمين وتنزل القائمة منه. */}
-          <div className="flex items-center gap-0.5 min-w-0 max-sm:gap-0 max-sm:[&_.w-9]:size-8">
-          {accountMenu}
           {/* Logo - Desktop */}
           <div className="hidden lg:flex items-center gap-3">
             <Link href="/" onClick={(e) => {
@@ -275,7 +272,6 @@ export function Header({ user, onMenuClick, sticky = true }: HeaderProps) {
               </Link>
             )}
           </div>
-          </div>
 
           {/* Main Navigation - Center (Desktop only) */}
           <nav id="main-nav" role="navigation" aria-label="القائمة الرئيسية" tabIndex={-1} className="hidden lg:flex items-center gap-5 flex-1 justify-center min-w-0">
@@ -315,7 +311,7 @@ export function Header({ user, onMenuClick, sticky = true }: HeaderProps) {
             {/* discover-users hidden */}
           </nav>
 
-          {/* أدوات الهيدر على الطرف البصري الأيسر. قائمة الحساب نفسها بجانب الشعار يمينًا. */}
+          {/* أدوات الهيدر بما فيها العضوية — الطرف البصري الأيسر */}
           {/* max-sm: shrink icon buttons (.w-9) to 32px + zero gap so the header fits narrow Android/Chrome widths; the EN language pill (size=sm, no .w-9) is left untouched */}
           <div className="flex items-center gap-0.5 max-sm:gap-0 max-sm:[&_.w-9]:size-8">
             {/* Mobile Menu Button */}
@@ -351,6 +347,7 @@ export function Header({ user, onMenuClick, sticky = true }: HeaderProps) {
               {/* Notification Bell - Desktop */}
               {user && <NotificationBell />}
             </div>
+            {accountMenu}
           </div>
         </div>
       </div>
