@@ -35,8 +35,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Edit, Trash2, Send, Star, Bell, Plus, Archive, Trash, GripVertical, Sparkles, Newspaper, Clock, CalendarClock, FilePenLine, Brain, PenLine, MessageCircle, Mail, ChevronLeft, ChevronRight, Camera, BarChart3, Images, Building2, Languages, Loader2, Smartphone, Share2, Tag, BookOpen, HeartPulse, Zap } from "lucide-react";
+import { Edit, Trash2, Send, Star, Bell, Plus, Archive, Trash, GripVertical, Sparkles, Newspaper, Clock, FilePenLine, Brain, MessageCircle, Mail, ChevronLeft, ChevronRight, Camera, BarChart3, Images, Building2, Languages, Loader2, Smartphone, Share2, BookOpen, HeartPulse, Zap } from "lucide-react";
 import { SocialPublishDialog } from "@/components/social/SocialPublishDialog";
 import { ViewsCount } from "@/components/ViewsCount";
 import { DashboardLayout } from "@/components/DashboardLayout";
@@ -201,34 +200,263 @@ function SortableRow({
   );
 }
 
-const TYPE_CHIP: Record<string, { label: string; className: string; icon?: typeof Camera }> = {
+const TYPE_CHIP: Record<string, { label: string; tone: string; icon?: typeof Camera }> = {
   news: {
     label: "خبر",
-    className: "border-sky-500/20 bg-sky-500/10 text-sky-700 dark:text-sky-300",
+    tone: "text-sky-700 dark:text-sky-300",
   },
   opinion: {
     label: "رأي",
-    className: "border-violet-500/20 bg-violet-500/10 text-violet-700 dark:text-violet-300",
+    tone: "text-violet-700 dark:text-violet-300",
   },
   analysis: {
     label: "تحليل",
-    className: "border-indigo-500/20 bg-indigo-500/10 text-indigo-700 dark:text-indigo-300",
+    tone: "text-indigo-700 dark:text-indigo-300",
   },
   column: {
     label: "عمود",
-    className: "border-fuchsia-500/20 bg-fuchsia-500/10 text-fuchsia-700 dark:text-fuchsia-300",
+    tone: "text-fuchsia-700 dark:text-fuchsia-300",
   },
   weekly_photos: {
     label: "صور",
-    className: "border-orange-500/20 bg-orange-500/10 text-orange-700 dark:text-orange-300",
+    tone: "text-orange-700 dark:text-orange-300",
     icon: Camera,
   },
   infographic: {
     label: "إنفوجرافيك",
-    className: "border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+    tone: "text-emerald-700 dark:text-emerald-300",
     icon: BarChart3,
   },
 };
+
+const AR_MONTHS = ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"] as const;
+
+function parseArticleDate(value: string | Date | null | undefined) {
+  if (!value) return null;
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function riyadhParts(date: Date) {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Riyadh",
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hourCycle: "h12",
+  }).formatToParts(date);
+  const get = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? "";
+  const monthIndex = Number(get("month")) - 1;
+  const suffix = /^a/i.test(get("dayPeriod")) ? "ص" : "م";
+  const day = String(Number(get("day")));
+  return {
+    dayKey: `${get("year")}-${get("month").padStart(2, "0")}-${get("day").padStart(2, "0")}`,
+    year: get("year"),
+    day,
+    monthName: AR_MONTHS[monthIndex] ?? get("month"),
+    clock: `${get("hour")}:${get("minute")} ${suffix}`,
+  };
+}
+
+function shiftDayKey(key: string, days: number) {
+  const [year, month, day] = key.split("-").map(Number);
+  const shifted = new Date(Date.UTC(year, month - 1, day + days));
+  const y = shifted.getUTCFullYear();
+  const m = String(shifted.getUTCMonth() + 1).padStart(2, "0");
+  const d = String(shifted.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function riyadhWireLabel(date: Date, now = new Date()) {
+  const current = riyadhParts(date);
+  const today = riyadhParts(now);
+  const full = `${current.day} ${current.monthName} ${current.year}، ${current.clock}`;
+  if (current.dayKey === today.dayKey) return { label: current.clock, full };
+  if (current.dayKey === shiftDayKey(today.dayKey, -1)) return { label: `أمس ${current.clock}`, full };
+  if (current.year === today.year) return { label: `${current.day} ${current.monthName}، ${current.clock}`, full };
+  return { label: full, full };
+}
+
+function wireMoment(article: Article, desktop: boolean) {
+  const id = desktop ? "desktop" : "mobile";
+  if (article.status === "scheduled") {
+    const when = parseArticleDate(article.scheduledAt);
+    if (!when) return null;
+    return {
+      ...riyadhWireLabel(when),
+      prefix: null as string | null,
+      testId: `scheduled-label-${id === "desktop" ? "desktop-" : ""}${article.id}`,
+    };
+  }
+  if (article.status === "draft") {
+    const weeklyAt = article.articleType === "opinion"
+      ? article.scheduledAt || article.writerWeeklySlot?.nextSlot || null
+      : null;
+    const weekly = parseArticleDate(weeklyAt);
+    if (weekly) {
+      const when = riyadhWireLabel(weekly);
+      return {
+        label: when.full,
+        full: when.full,
+        prefix: "أسبوعي",
+        testId: `weekly-slot-${id === "desktop" ? "desktop-" : ""}${article.id}`,
+      };
+    }
+    const created = parseArticleDate(article.createdAt);
+    if (!created) return null;
+    return {
+      ...riyadhWireLabel(created),
+      prefix: null,
+      testId: `draft-date-${id === "desktop" ? "desktop-" : ""}${article.id}`,
+    };
+  }
+  if (article.status === "published") {
+    const published = parseArticleDate(article.publishedAt);
+    if (!published) return null;
+    return {
+      ...riyadhWireLabel(published),
+      prefix: null,
+      testId: `published-date-${id === "desktop" ? "desktop-" : ""}${article.id}`,
+    };
+  }
+  return null;
+}
+
+function personName(article: Article) {
+  const meta = article.sourceMetadata;
+  if (meta?.firstName || meta?.lastName) return `${meta.firstName || ""} ${meta.lastName || ""}`.trim();
+  if (meta?.senderName) return meta.senderName;
+  if (article.author?.firstName && article.author?.lastName) return `${article.author.firstName} ${article.author.lastName}`;
+  return article.author?.firstName || article.author?.email || "المحرر";
+}
+
+function wireAttribution(article: Article) {
+  if (article.source === "email") {
+    const name = article.sourceMetadata?.senderName || article.sourceMetadata?.from || "بريد إلكتروني";
+    return { name, channel: "بريد", title: `البريد الذكي: ${name}`, testId: "badge-source-email", incoming: true, Icon: Mail };
+  }
+  if (article.source === "whatsapp") {
+    const name = article.sourceMetadata?.senderName || article.sourceMetadata?.from || "واتساب";
+    return { name, channel: "واتساب", title: `واتساب: ${name}`, testId: "badge-source-whatsapp", incoming: true, Icon: MessageCircle };
+  }
+  if (article.source === "ios-app" || article.source === "android-app") {
+    const name = personName(article);
+    const android = article.source === "android-app";
+    return {
+      name,
+      channel: android ? "أندرويد" : "iOS",
+      title: `${android ? "تطبيق Android" : "تطبيق iOS"}: ${name}`,
+      testId: android ? "badge-source-android" : "badge-source-ios",
+      incoming: true,
+      Icon: Smartphone,
+    };
+  }
+  if (article.publisher?.companyName) {
+    const name = article.publisher.companyName;
+    return { name, channel: "وكالة", title: `وكالة: ${name}`, testId: "badge-source-publisher", incoming: true, Icon: Building2 };
+  }
+  const name = personName(article);
+  return { name, channel: null as string | null, title: `المحرر: ${name}`, testId: "badge-source-manual", incoming: false, Icon: null };
+}
+
+function ArticleWireRow({
+  article,
+  desktop,
+  onTitleClick,
+}: {
+  article: Article;
+  desktop: boolean;
+  onTitleClick?: () => void;
+}) {
+  const moment = wireMoment(article, desktop);
+  const who = wireAttribution(article);
+  const type = article.articleType && article.articleType !== "news" ? TYPE_CHIP[article.articleType] : null;
+  const categoryName = article.category?.nameAr;
+  const categoryColor = article.category?.color && /^#([0-9a-fA-F]{6})$/.test(article.category.color)
+    ? article.category.color
+    : null;
+  const hasAlbum = (article as { albumImages?: unknown[] }).albumImages?.length
+    || (article as { mediaAssetsCount?: number }).mediaAssetsCount;
+  const aiImage = Boolean(article.isAiGeneratedThumbnail || (article as { isAiGeneratedImage?: boolean }).isAiGeneratedImage);
+  const WhoIcon = who.Icon;
+
+  return (
+    <div className="min-w-0">
+      <div className="flex items-start gap-1.5">
+        {hasAlbum ? (
+          <span title="يحتوي على ألبوم صور" className="mt-1 inline-flex">
+            <Images className="h-3.5 w-3.5 shrink-0 text-sky-600 dark:text-sky-400" aria-hidden="true" />
+          </span>
+        ) : null}
+        <h3
+          title={article.title}
+          onClick={onTitleClick}
+          className={cn(
+            "min-w-0 flex-1 text-[15px] font-medium leading-snug text-foreground line-clamp-2",
+            onTitleClick && "cursor-pointer hover:text-primary",
+          )}
+        >
+          {article.title}
+        </h3>
+        {desktop && aiImage ? (
+          <span title="صورة مولّدة بالذكاء الاصطناعي" data-testid={`badge-ai-image-${article.id}`}>
+            <Brain className="mt-0.5 h-3.5 w-3.5 shrink-0 text-purple-600 dark:text-purple-400" aria-hidden="true" />
+          </span>
+        ) : null}
+        <EditorialDraftReviewCue
+          article={article}
+          layout="inline"
+          testId={`badge-review-${desktop ? "desktop" : "mobile"}-${article.id}`}
+        />
+      </div>
+      <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-0.5 text-[12.5px] leading-5 text-muted-foreground">
+        {moment ? (
+          <time
+            dateTime={moment.full}
+            title={moment.full}
+            data-testid={moment.testId}
+            className="inline-flex shrink-0 items-baseline gap-1.5 text-foreground/70"
+          >
+            {moment.prefix ? (
+              <span className="font-medium text-violet-700 dark:text-violet-300">{moment.prefix}</span>
+            ) : null}
+            <span className="tabular-nums">{moment.label}</span>
+          </time>
+        ) : null}
+        <span
+          data-testid={who.testId}
+          title={who.title}
+          className={cn(
+            "inline-flex min-w-0 max-w-full items-center gap-1",
+            who.incoming ? "text-foreground/80" : "text-muted-foreground",
+          )}
+        >
+          {WhoIcon ? <WhoIcon className="h-3 w-3 shrink-0 opacity-70" aria-hidden="true" /> : null}
+          <span className="truncate">{who.name}</span>
+          {who.channel ? <span className="shrink-0 text-[11px] text-muted-foreground">{who.channel}</span> : null}
+        </span>
+        {type ? (
+          <span className={cn("inline-flex shrink-0 items-center gap-1 font-medium", type.tone)}>
+            {type.icon ? <type.icon className="h-3 w-3" aria-hidden="true" /> : null}
+            {type.label}
+          </span>
+        ) : null}
+        {categoryName ? (
+          <span className="inline-flex shrink-0 items-center gap-1.5 text-foreground/80">
+            <span
+              className="h-1.5 w-1.5 rounded-full"
+              style={{ backgroundColor: categoryColor ?? "currentColor" }}
+              aria-hidden="true"
+            />
+            {categoryName}
+          </span>
+        ) : null}
+      </div>
+    </div>
+  );
+}
 
 export default function ArticlesManagement() {
   const { user, isLoading: isUserLoading } = useAuth({ redirectToLogin: true });
@@ -902,214 +1130,6 @@ export default function ArticlesManagement() {
     return badges[status as keyof typeof badges] || <Badge>{status}</Badge>;
   };
 
-  const formatArticleDate = (date: string | Date | null | undefined) => {
-    if (!date) return null;
-    const d = date instanceof Date ? date : new Date(date);
-    if (Number.isNaN(d.getTime())) return null;
-
-    return new Intl.DateTimeFormat("en-GB", {
-      timeZone: "Asia/Riyadh",
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: true,
-    }).format(d);
-  };
-
-  const formatScheduledDate = formatArticleDate;
-  const formatDraftDate = formatArticleDate;
-  const formatPublishedDate = formatArticleDate;
-
-  const getTypeBadge = (type: string) => {
-    const meta = TYPE_CHIP[type] ?? { label: type, className: "border-border/70 bg-muted text-muted-foreground" };
-    const Icon = meta.icon;
-    return (
-      <Badge
-        variant="outline"
-        className={cn(
-          "gap-1 rounded-md px-2 py-0.5 text-xs font-semibold border shadow-xs",
-          meta.className,
-        )}
-      >
-        {Icon ? <Icon className="h-3 w-3 shrink-0" /> : null}
-        <span>{meta.label}</span>
-      </Badge>
-    );
-  };
-
-  const getCategoryChip = (category?: { nameAr?: string | null; color?: string | null } | null) => {
-    if (!category?.nameAr) return null;
-    const catColor = category.color && /^#([0-9a-fA-F]{6})$/.test(category.color) ? category.color : null;
-    
-    if (catColor) {
-      return (
-        <Badge
-          variant="outline"
-          className="gap-1 rounded-md font-semibold px-2.5 py-0.5 text-xs shadow-xs transition-colors"
-          style={{
-            borderColor: `${catColor}55`,
-            backgroundColor: `${catColor}18`,
-            color: catColor,
-          }}
-        >
-          <Tag className="h-3 w-3 shrink-0" style={{ color: catColor }} />
-          <span>{category.nameAr}</span>
-        </Badge>
-      );
-    }
-
-    return (
-      <Badge
-        variant="outline"
-        className="gap-1 rounded-md border-primary/25 bg-primary/10 text-primary hover:bg-primary/15 font-semibold px-2.5 py-0.5 text-xs shadow-xs"
-      >
-        <Tag className="h-3 w-3 opacity-75 shrink-0" />
-        <span>{category.nameAr}</span>
-      </Badge>
-    );
-  };
-
-  const isMobileAppSource = (source?: string) => source === 'ios-app' || source === 'android-app';
-  const getMobileSenderName = (article: Article) => {
-    const meta = article.sourceMetadata;
-    if (meta?.firstName || meta?.lastName) {
-      return `${meta.firstName || ''} ${meta.lastName || ''}`.trim();
-    }
-    if (meta?.senderName) return meta.senderName;
-    if (article.author?.firstName && article.author?.lastName) {
-      return `${article.author.firstName} ${article.author.lastName}`;
-    }
-    return article.author?.firstName || article.author?.email || 'مراسل';
-  };
-  const getMobilePlatformLabel = (source?: string) =>
-    source === 'android-app' ? 'تطبيق Android' : 'تطبيق iOS';
-
-  const getAuthorOrSourceBadge = (article: Article) => {
-    if (article.source === "email") {
-      const sender = article.sourceMetadata?.senderName || article.sourceMetadata?.from || "بريد إلكتروني";
-      return (
-        <span
-          className="inline-flex items-center gap-1.5 rounded-md border border-purple-500/25 bg-purple-50/70 dark:bg-purple-950/30 px-2 py-0.5 text-xs font-medium text-purple-700 dark:text-purple-300"
-          data-testid="badge-source-email"
-        >
-          <Mail className="h-3 w-3 text-purple-600 dark:text-purple-400 shrink-0" />
-          <span>البريد الذكي: {sender}</span>
-        </span>
-      );
-    }
-    if (article.source === "whatsapp") {
-      const sender = article.sourceMetadata?.senderName || article.sourceMetadata?.from || "واتساب";
-      return (
-        <span
-          className="inline-flex items-center gap-1.5 rounded-md border border-emerald-500/25 bg-emerald-50/70 dark:bg-emerald-950/30 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-300"
-          data-testid="badge-source-whatsapp"
-        >
-          <MessageCircle className="h-3 w-3 text-emerald-600 dark:text-emerald-400 shrink-0" />
-          <span>واتساب: {sender}</span>
-        </span>
-      );
-    }
-    if (isMobileAppSource(article.source)) {
-      return (
-        <span
-          className="inline-flex items-center gap-1.5 rounded-md border border-slate-400/25 bg-slate-100/70 dark:bg-slate-900/40 px-2 py-0.5 text-xs font-medium text-slate-700 dark:text-slate-300"
-          data-testid={article.source === "android-app" ? "badge-source-android" : "badge-source-ios"}
-        >
-          <Smartphone className="h-3 w-3 text-slate-600 dark:text-slate-400 shrink-0" />
-          <span>{getMobilePlatformLabel(article.source)}: {getMobileSenderName(article)}</span>
-        </span>
-      );
-    }
-    if ((article as any).publisher?.companyName) {
-      return (
-        <span className="inline-flex items-center gap-1.5 rounded-md border border-amber-500/25 bg-amber-50/70 dark:bg-amber-950/30 px-2 py-0.5 text-xs font-medium text-amber-800 dark:text-amber-300">
-          <Building2 className="h-3 w-3 text-amber-600 dark:text-amber-400 shrink-0" />
-          <span>وكالة: {(article as any).publisher.companyName}</span>
-        </span>
-      );
-    }
-    const authorName =
-      article.author?.firstName && article.author?.lastName
-        ? `${article.author.firstName} ${article.author.lastName}`
-        : article.author?.firstName || article.author?.email || "المحرر";
-
-    return (
-      <span
-        className="inline-flex items-center gap-1.5 rounded-md border border-blue-500/25 bg-blue-50/70 dark:bg-blue-950/30 px-2 py-0.5 text-xs font-medium text-blue-700 dark:text-blue-300"
-        data-testid="badge-source-manual"
-      >
-        <PenLine className="h-3 w-3 text-blue-600 dark:text-blue-400 shrink-0" />
-        <span>المحرر: {authorName}</span>
-      </span>
-    );
-  };
-
-  const getDateBadge = (article: Article, isDesktop = true) => {
-    if (article.status === "scheduled" && (article as any).scheduledAt) {
-      return (
-        <span
-          className="inline-flex items-center gap-1 rounded-md border border-sky-500/25 bg-sky-50/60 dark:bg-sky-950/25 px-2 py-0.5 text-xs font-medium text-sky-700 dark:text-sky-300"
-          data-testid={isDesktop ? `scheduled-label-desktop-${article.id}` : `scheduled-label-${article.id}`}
-        >
-          <Clock className="h-3 w-3 text-sky-600 dark:text-sky-400 shrink-0" />
-          <span dir="ltr" className="tabular-nums font-mono text-[11px]">
-            {formatScheduledDate((article as any).scheduledAt)}
-          </span>
-        </span>
-      );
-    }
-    if (article.status === "draft") {
-      const weeklyAt =
-        article.articleType === "opinion"
-          ? article.scheduledAt || article.writerWeeklySlot?.nextSlot || null
-          : null;
-      const weeklyFormatted = weeklyAt ? formatArticleDate(weeklyAt) : null;
-      if (weeklyFormatted) {
-        return (
-          <span
-            className="inline-flex items-center gap-1 rounded-md border border-violet-500/25 bg-violet-50/60 dark:bg-violet-950/25 px-2 py-0.5 text-xs font-medium text-violet-700 dark:text-violet-300"
-            title="موعد الجدول الأسبوعي للكاتب"
-            data-testid={isDesktop ? `weekly-slot-desktop-${article.id}` : `weekly-slot-${article.id}`}
-          >
-            <CalendarClock className="h-3 w-3 text-violet-600 dark:text-violet-400 shrink-0" />
-            <span>أسبوعي</span>
-            <span dir="ltr" className="tabular-nums font-mono text-[11px]">
-              {weeklyFormatted}
-            </span>
-          </span>
-        );
-      }
-      if (article.createdAt) {
-        return (
-          <span
-            className="inline-flex items-center gap-1 rounded-md border border-amber-500/25 bg-amber-50/60 dark:bg-amber-950/25 px-2 py-0.5 text-xs font-medium text-amber-800 dark:text-amber-300"
-            data-testid={isDesktop ? `draft-date-desktop-${article.id}` : `draft-date-${article.id}`}
-          >
-            <Clock className="h-3 w-3 text-amber-600 dark:text-amber-400 shrink-0" />
-            <span dir="ltr" className="tabular-nums font-mono text-[11px]">
-              {formatDraftDate(article.createdAt)}
-            </span>
-          </span>
-        );
-      }
-    }
-    if (article.status === "published" && article.publishedAt) {
-      return (
-        <span
-          className="inline-flex items-center gap-1 rounded-md border border-border/60 bg-muted/40 px-2 py-0.5 text-xs font-medium text-muted-foreground"
-          data-testid={isDesktop ? `published-date-desktop-${article.id}` : `published-date-${article.id}`}
-        >
-          <Clock className="h-3 w-3 shrink-0 opacity-70" />
-          <span dir="ltr" className="tabular-nums font-mono text-[11px]">
-            {formatPublishedDate(article.publishedAt)}
-          </span>
-        </span>
-      );
-    }
-    return null;
-  };
 
   const articlesTotal = articlesData?.total ?? 0;
 
@@ -1427,53 +1447,13 @@ export default function ArticlesManagement() {
                               data-testid={`checkbox-article-${article.id}`}
                             />
                           </td>
-                          <td className="min-w-[340px] px-4 py-3.5 align-middle">
+                          <td className="min-w-[340px] px-4 py-3 align-middle">
                             <div className="space-y-1.5">
-                              <div className="flex items-center gap-2">
-                                {((article as any).albumImages?.length > 0 ||
-                                  (article as any).mediaAssetsCount > 0) && (
-                                  <span title="يحتوي على ألبوم صور" className="inline-flex">
-                                    <Images className="h-4 w-4 shrink-0 text-sky-500" />
-                                  </span>
-                                )}
-                                <div className="flex min-w-0 flex-1 items-center gap-1.5">
-                                  <h3
-                                    title={article.title}
-                                    onClick={() => canEditArticle(article) ? handleEdit(article) : undefined}
-                                    className={cn(
-                                      "min-w-0 truncate text-[15px] sm:text-base font-normal sm:font-medium leading-relaxed tracking-normal text-foreground/90 hover:text-primary transition-colors",
-                                      canEditArticle(article) ? "cursor-pointer" : ""
-                                    )}
-                                  >
-                                    {article.title}
-                                  </h3>
-                                  <EditorialDraftReviewCue
-                                    article={article}
-                                    layout="inline"
-                                    testId={`badge-review-desktop-${article.id}`}
-                                  />
-                                </div>
-                              </div>
-
-                              <div className="flex flex-wrap items-center gap-1.5 text-xs">
-                                {getCategoryChip(article.category)}
-                                {getTypeBadge(article.articleType || "news")}
-                                {getAuthorOrSourceBadge(article)}
-                                {getDateBadge(article, true)}
-                                {(article.isAiGeneratedThumbnail ||
-                                  (article as any).isAiGeneratedImage) && (
-                                  <Badge
-                                    variant="outline"
-                                    className="gap-1 rounded-md border-purple-500/25 bg-purple-50/70 dark:bg-purple-950/30 text-purple-700 dark:text-purple-300 font-medium px-2 py-0.5 text-[11px] shadow-xs"
-                                    title="صورة مولدة بالذكاء الاصطناعي"
-                                    data-testid={`badge-ai-image-${article.id}`}
-                                  >
-                                    <Brain className="h-3 w-3 text-purple-600 dark:text-purple-400 shrink-0" />
-                                    <span>AI</span>
-                                  </Badge>
-                                )}
-                              </div>
-
+                              <ArticleWireRow
+                                article={article}
+                                desktop
+                                onTitleClick={canEditArticle(article) ? () => handleEdit(article) : undefined}
+                              />
                               <EditorialDraftReviewCue
                                 article={article}
                                 layout="banner"
@@ -1502,7 +1482,7 @@ export default function ArticlesManagement() {
                               )}
                             </div>
                           </td>
-                          <td className="w-[72px] px-2 py-3.5 text-center align-top">
+                          <td className="w-[72px] px-2 py-3 text-center align-middle">
                             {canPublishArticle ? (
                               <BreakingSwitch
                                 articleId={article.id}
@@ -1514,10 +1494,10 @@ export default function ArticlesManagement() {
                               </span>
                             )}
                           </td>
-                          <td className="w-[88px] px-2 py-3.5 text-center align-top">
+                          <td className="w-[88px] px-2 py-3 text-center align-middle">
                             <ViewsCount views={article.views} iconClassName="h-4 w-4" />
                           </td>
-                          <td className="w-[280px] px-2 py-3.5 align-top">
+                          <td className="w-[280px] px-2 py-3 align-middle">
                             <RowActions
                               articleId={article.id}
                               articleTitle={article.title}
@@ -1594,38 +1574,16 @@ export default function ArticlesManagement() {
                       />
                     </div>
                     <div className="flex-1 min-w-0 space-y-2">
-                      <div>
-                        <h3
-                          className={cn(
-                            "font-normal sm:font-medium text-[15px] sm:text-base break-words leading-relaxed text-foreground flex items-center gap-1.5 flex-wrap",
-                            canEditArticle(article) ? "cursor-pointer hover:text-primary transition-colors" : ""
-                          )}
-                          onClick={() => canEditArticle(article) ? handleEdit(article) : undefined}
-                        >
-                          {((article as any).albumImages?.length > 0 || (article as any).mediaAssetsCount > 0) && (
-                            <Images className="h-4 w-4 text-sky-500 flex-shrink-0" />
-                          )}
-                          {article.title}
-                          <EditorialDraftReviewCue
-                            article={article}
-                            layout="inline"
-                            testId={`badge-review-mobile-${article.id}`}
-                          />
-                        </h3>
-                        <EditorialDraftReviewCue
-                          article={article}
-                          layout="banner"
-                          testId={`banner-review-mobile-${article.id}`}
-                        />
-                      </div>
-
-                      {/* Distinct Meta Strip */}
-                      <div className="flex flex-wrap items-center gap-1.5 text-xs">
-                        {getCategoryChip(article.category)}
-                        {getTypeBadge(article.articleType || "news")}
-                        {getAuthorOrSourceBadge(article)}
-                        {getDateBadge(article, false)}
-                      </div>
+                      <ArticleWireRow
+                        article={article}
+                        desktop={false}
+                        onTitleClick={canEditArticle(article) ? () => handleEdit(article) : undefined}
+                      />
+                      <EditorialDraftReviewCue
+                        article={article}
+                        layout="banner"
+                        testId={`banner-review-mobile-${article.id}`}
+                      />
 
                       {article.status === "archived" && (article as any).reviewNotes && (
                         <div
@@ -1640,28 +1598,6 @@ export default function ArticlesManagement() {
                         </div>
                       )}
                     </div>
-                  </div>
-                  
-                  {/* Meta Info: Author + Publisher */}
-                  <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-                    <div className="flex items-center gap-2">
-                      <Avatar className="h-5 w-5">
-                        <AvatarImage src={article.author?.profileImageUrl || ""} />
-                        <AvatarFallback className="text-xs">
-                          {article.author?.firstName?.[0] || article.author?.email?.[0]?.toUpperCase()}
-                        </AvatarFallback>
-                      </Avatar>
-                      <span>{article.author?.firstName || article.author?.email}</span>
-                    </div>
-                    {article.publisher?.companyName && (
-                      <>
-                        <span>•</span>
-                        <div className="flex items-center gap-1">
-                          <Building2 className="h-3.5 w-3.5" />
-                          <span>{article.publisher.companyName}</span>
-                        </div>
-                      </>
-                    )}
                   </div>
                   
                   {/* Stats Row */}
