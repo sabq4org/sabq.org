@@ -35,7 +35,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Edit, Trash2, Send, Star, Bell, Plus, Archive, Trash, GripVertical, Sparkles, Newspaper, Clock, FilePenLine, Brain, MessageCircle, Mail, ChevronLeft, ChevronRight, Camera, BarChart3, Images, Building2, Languages, Loader2, Smartphone, Share2, BookOpen, HeartPulse, Zap } from "lucide-react";
+import { Edit, Trash2, Send, Star, Bell, Plus, Archive, Trash, GripVertical, Sparkles, Newspaper, Clock, FilePenLine, Brain, MessageCircle, Mail, ChevronLeft, ChevronRight, Camera, BarChart3, Images, Building2, Languages, Loader2, Smartphone, Share2, BookOpen, HeartPulse, Zap, UserRound } from "lucide-react";
 import { SocialPublishDialog } from "@/components/social/SocialPublishDialog";
 import { ViewsCount } from "@/components/ViewsCount";
 import { DashboardLayout } from "@/components/DashboardLayout";
@@ -176,8 +176,8 @@ function SortableRow({
       ref={setNodeRef}
       style={style}
       className={cn(
-        "border-b border-border/80 transition-colors",
-        "bg-card even:bg-muted/40 hover:bg-muted/60 dark:even:bg-muted/20 dark:hover:bg-muted/40",
+        "border-b border-border/70 border-r-[3px] border-r-sky-300/70 bg-card transition-colors hover:bg-sky-50/60 dark:border-r-sky-800 dark:hover:bg-sky-950/20",
+        article.articleType === "opinion" && "border-r-violet-400/80 hover:bg-violet-50/60 dark:border-r-violet-700 dark:hover:bg-violet-950/20",
         isDragging ? "bg-primary/15 shadow-lg" : "",
         isSaving ? "opacity-70" : "",
         highlightResubmitted === "resubmitted" ? "bg-amber-50/90 dark:bg-amber-950/30 border-r-4 border-r-amber-500" : "",
@@ -203,28 +203,28 @@ function SortableRow({
 const TYPE_CHIP: Record<string, { label: string; tone: string; icon?: typeof Camera }> = {
   news: {
     label: "خبر",
-    tone: "text-sky-700 dark:text-sky-300",
+    tone: "border-sky-200 bg-sky-50 text-sky-800 dark:border-sky-800 dark:bg-sky-950/45 dark:text-sky-200",
   },
   opinion: {
     label: "رأي",
-    tone: "text-violet-700 dark:text-violet-300",
+    tone: "border-violet-200 bg-violet-50 text-violet-800 dark:border-violet-800 dark:bg-violet-950/45 dark:text-violet-200",
   },
   analysis: {
     label: "تحليل",
-    tone: "text-indigo-700 dark:text-indigo-300",
+    tone: "border-indigo-200 bg-indigo-50 text-indigo-800 dark:border-indigo-800 dark:bg-indigo-950/45 dark:text-indigo-200",
   },
   column: {
     label: "عمود",
-    tone: "text-fuchsia-700 dark:text-fuchsia-300",
+    tone: "border-fuchsia-200 bg-fuchsia-50 text-fuchsia-800 dark:border-fuchsia-800 dark:bg-fuchsia-950/45 dark:text-fuchsia-200",
   },
   weekly_photos: {
     label: "صور",
-    tone: "text-orange-700 dark:text-orange-300",
+    tone: "border-orange-200 bg-orange-50 text-orange-800 dark:border-orange-800 dark:bg-orange-950/45 dark:text-orange-200",
     icon: Camera,
   },
   infographic: {
     label: "إنفوجرافيك",
-    tone: "text-emerald-700 dark:text-emerald-300",
+    tone: "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/45 dark:text-emerald-200",
     icon: BarChart3,
   },
 };
@@ -273,20 +273,27 @@ function riyadhWireLabel(date: Date, now = new Date()) {
   const current = riyadhParts(date);
   const today = riyadhParts(now);
   const full = `${current.day} ${current.monthName} ${current.year}، ${current.clock}`;
-  if (current.dayKey === today.dayKey) return { label: current.clock, full };
-  if (current.dayKey === shiftDayKey(today.dayKey, -1)) return { label: `أمس ${current.clock}`, full };
-  if (current.year === today.year) return { label: `${current.day} ${current.monthName}، ${current.clock}`, full };
-  return { label: full, full };
+  const iso = date.toISOString();
+  if (current.dayKey === today.dayKey) return { label: current.clock, full, iso };
+  if (current.dayKey === shiftDayKey(today.dayKey, -1)) return { label: `أمس ${current.clock}`, full, iso };
+  if (current.year === today.year) return { label: `${current.day} ${current.monthName}، ${current.clock}`, full, iso };
+  return { label: full, full, iso };
 }
 
 function wireMoment(article: Article, desktop: boolean) {
   const id = desktop ? "desktop" : "mobile";
   if (article.status === "scheduled") {
     const when = parseArticleDate(article.scheduledAt);
-    if (!when) return null;
+    if (!when) return {
+      label: "غير محدد",
+      full: "هذه المادة مجدولة بلا موعد نشر صالح",
+      iso: undefined,
+      prefix: "موعد النشر",
+      testId: `scheduled-label-${id === "desktop" ? "desktop-" : ""}${article.id}`,
+    };
     return {
       ...riyadhWireLabel(when),
-      prefix: null as string | null,
+      prefix: "موعد النشر",
       testId: `scheduled-label-${id === "desktop" ? "desktop-" : ""}${article.id}`,
     };
   }
@@ -297,10 +304,22 @@ function wireMoment(article: Article, desktop: boolean) {
     const weekly = parseArticleDate(weeklyAt);
     if (weekly) {
       const when = riyadhWireLabel(weekly);
+      const parts = riyadhParts(weekly);
+      const compactLabel = `${parts.day} ${parts.monthName}، ${parts.clock}`;
       return {
-        label: when.full,
+        label: desktop && parts.year === riyadhParts(new Date()).year ? compactLabel : when.full,
         full: when.full,
-        prefix: "أسبوعي",
+        iso: when.iso,
+        prefix: "موعد الكاتب",
+        testId: `weekly-slot-${id === "desktop" ? "desktop-" : ""}${article.id}`,
+      };
+    }
+    if (article.articleType === "opinion") {
+      return {
+        label: "غير محدد",
+        full: "لم يُحدد موعد نشر لهذا الكاتب",
+        iso: undefined,
+        prefix: "موعد الكاتب",
         testId: `weekly-slot-${id === "desktop" ? "desktop-" : ""}${article.id}`,
       };
     }
@@ -308,7 +327,7 @@ function wireMoment(article: Article, desktop: boolean) {
     if (!created) return null;
     return {
       ...riyadhWireLabel(created),
-      prefix: null,
+      prefix: "حُفظت",
       testId: `draft-date-${id === "desktop" ? "desktop-" : ""}${article.id}`,
     };
   }
@@ -317,7 +336,7 @@ function wireMoment(article: Article, desktop: boolean) {
     if (!published) return null;
     return {
       ...riyadhWireLabel(published),
-      prefix: null,
+      prefix: "نُشر",
       testId: `published-date-${id === "desktop" ? "desktop-" : ""}${article.id}`,
     };
   }
@@ -372,7 +391,10 @@ function ArticleWireRow({
 }) {
   const moment = wireMoment(article, desktop);
   const who = wireAttribution(article);
-  const type = article.articleType && article.articleType !== "news" ? TYPE_CHIP[article.articleType] : null;
+  const type = TYPE_CHIP[article.articleType] ?? {
+    label: "مادة",
+    tone: "border-border bg-muted/50 text-foreground/80",
+  };
   const categoryName = article.category?.nameAr;
   const categoryColor = article.category?.color && /^#([0-9a-fA-F]{6})$/.test(article.category.color)
     ? article.category.color
@@ -381,10 +403,43 @@ function ArticleWireRow({
     || (article as { mediaAssetsCount?: number }).mediaAssetsCount;
   const aiImage = Boolean(article.isAiGeneratedThumbnail || (article as { isAiGeneratedImage?: boolean }).isAiGeneratedImage);
   const WhoIcon = who.Icon;
+  const whoLabel = article.articleType === "opinion" ? "الكاتب"
+    : who.channel === "iOS" || who.channel === "أندرويد" ? "المراسل"
+      : who.channel === "وكالة" ? "الوكالة"
+        : who.channel ? "المرسل" : "المحرر";
+  const momentTone = article.status === "scheduled"
+    ? "border-sky-200 bg-sky-50 text-sky-800 dark:border-sky-800 dark:bg-sky-950/45 dark:text-sky-200"
+    : article.status === "draft" && article.articleType === "opinion"
+      ? "border-violet-200 bg-violet-50 text-violet-800 dark:border-violet-800 dark:bg-violet-950/45 dark:text-violet-200"
+      : article.status === "draft"
+        ? "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950/45 dark:text-amber-200"
+        : "border-border bg-muted/45 text-foreground/80";
+  const momentClass = cn("inline-flex min-h-6 max-w-full items-center gap-1.5 rounded-md border px-2 py-0.5 text-xs leading-5", momentTone);
+  const momentContent = moment && (
+    <>
+      <Clock className="h-3.5 w-3.5 shrink-0 opacity-75" aria-hidden="true" />
+      <span className="shrink-0 font-semibold">{moment.prefix}</span>
+      <span className="tabular-nums">{moment.label}</span>
+    </>
+  );
+  const categoryChip = categoryName ? (
+    <span className="inline-flex min-h-6 shrink-0 items-center gap-1.5 rounded-md border border-border bg-muted/35 px-2 py-0.5 text-xs leading-5 text-foreground/80">
+      <span
+        className="h-2 w-2 rounded-full"
+        style={{ backgroundColor: categoryColor ?? "currentColor" }}
+        aria-hidden="true"
+      />
+      {categoryName}
+    </span>
+  ) : null;
 
   return (
     <div className="min-w-0">
-      <div className="flex items-start gap-1.5">
+      <div className="flex items-start gap-2">
+        <span className={cn("mt-0.5 inline-flex shrink-0 items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] font-bold leading-5", type.tone)}>
+          {type.icon ? <type.icon className="h-3 w-3" aria-hidden="true" /> : null}
+          {type.label}
+        </span>
         {hasAlbum ? (
           <span title="يحتوي على ألبوم صور" className="mt-1 inline-flex">
             <Images className="h-3.5 w-3.5 shrink-0 text-sky-600 dark:text-sky-400" aria-hidden="true" />
@@ -394,7 +449,8 @@ function ArticleWireRow({
           title={article.title}
           onClick={onTitleClick}
           className={cn(
-            "min-w-0 flex-1 text-[15px] font-medium leading-snug text-foreground line-clamp-2",
+            "min-w-0 flex-1 text-[15px] font-semibold leading-snug text-foreground",
+            desktop ? "truncate" : "line-clamp-2",
             onTitleClick && "cursor-pointer hover:text-primary",
           )}
         >
@@ -411,48 +467,31 @@ function ArticleWireRow({
           testId={`badge-review-${desktop ? "desktop" : "mobile"}-${article.id}`}
         />
       </div>
-      <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-0.5 text-[12.5px] leading-5 text-muted-foreground">
-        {moment ? (
+      <div className={cn("mt-2 flex min-w-0 items-center gap-1.5", desktop ? "flex-nowrap" : "flex-wrap")}>
+        {moment?.iso ? (
           <time
-            dateTime={moment.full}
+            dateTime={moment.iso}
             title={moment.full}
             data-testid={moment.testId}
-            className="inline-flex shrink-0 items-baseline gap-1.5 text-foreground/70"
+            className={momentClass}
           >
-            {moment.prefix ? (
-              <span className="font-medium text-violet-700 dark:text-violet-300">{moment.prefix}</span>
-            ) : null}
-            <span className="tabular-nums">{moment.label}</span>
+            {momentContent}
           </time>
+        ) : moment ? (
+          <span title={moment.full} data-testid={moment.testId} className={momentClass}>
+            {momentContent}
+          </span>
         ) : null}
         <span
           data-testid={who.testId}
           title={who.title}
-          className={cn(
-            "inline-flex min-w-0 max-w-full items-center gap-1",
-            who.incoming ? "text-foreground/80" : "text-muted-foreground",
-          )}
+          className={cn("inline-flex min-h-6 min-w-0 max-w-full items-center gap-1 rounded-md border border-border bg-card px-2 py-0.5 text-xs leading-5 text-foreground/85", desktop && "flex-1")}
         >
-          {WhoIcon ? <WhoIcon className="h-3 w-3 shrink-0 opacity-70" aria-hidden="true" /> : null}
-          <span className="truncate">{who.name}</span>
-          {who.channel ? <span className="shrink-0 text-[11px] text-muted-foreground">{who.channel}</span> : null}
+          {WhoIcon ? <WhoIcon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" /> : <UserRound className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />}
+          <span className="shrink-0 text-muted-foreground">{whoLabel}</span>
+          <span className="truncate font-semibold">{who.name}</span>
         </span>
-        {type ? (
-          <span className={cn("inline-flex shrink-0 items-center gap-1 font-medium", type.tone)}>
-            {type.icon ? <type.icon className="h-3 w-3" aria-hidden="true" /> : null}
-            {type.label}
-          </span>
-        ) : null}
-        {categoryName ? (
-          <span className="inline-flex shrink-0 items-center gap-1.5 text-foreground/80">
-            <span
-              className="h-1.5 w-1.5 rounded-full"
-              style={{ backgroundColor: categoryColor ?? "currentColor" }}
-              aria-hidden="true"
-            />
-            {categoryName}
-          </span>
-        ) : null}
+        {categoryChip}
       </div>
     </div>
   );
@@ -1387,7 +1426,7 @@ export default function ArticlesManagement() {
 
           {/* Articles Table - Desktop View */}
           {!isMobile && (
-          <div className="overflow-x-auto rounded-xl border border-border/80 bg-card shadow-none"
+          <div className="overflow-x-auto rounded-xl border border-border/80 bg-card shadow-sm"
             data-testid="articles-desktop-results" aria-busy={articlesBusy}
             {...(articlesBusy ? { inert: "" } : {})}>
             {articlesLoading ? (
@@ -1405,7 +1444,7 @@ export default function ArticlesManagement() {
                 onDragEnd={handleDragEnd}
               >
                 <table className="w-full min-w-[920px] table-fixed">
-                  <thead className="border-b border-border bg-muted/40 text-muted-foreground">
+                  <thead className="border-b border-border bg-slate-50/80 text-slate-600 dark:bg-slate-900/60 dark:text-slate-300">
                     <tr>
                       <th className="w-8 px-1 py-3 text-center" data-testid="header-drag"></th>
                       <th className="w-10 px-2 py-3 text-center">
@@ -1415,10 +1454,10 @@ export default function ArticlesManagement() {
                           data-testid="checkbox-select-all"
                         />
                       </th>
-                      <th className="min-w-[340px] px-4 py-3 text-right text-xs font-bold uppercase tracking-wider text-muted-foreground">الخبر</th>
-                      <th className="w-20 px-2 py-3 text-center text-xs font-bold uppercase tracking-wider text-muted-foreground">عاجل</th>
-                      <th className="w-28 px-2 py-3 text-center text-xs font-bold uppercase tracking-wider text-muted-foreground">المشاهدات</th>
-                      <th className="w-72 px-3 py-3 text-center text-xs font-bold uppercase tracking-wider text-muted-foreground">الإجراءات</th>
+                      <th className="min-w-[340px] px-4 py-3 text-right text-xs font-bold">المادة وتفاصيلها</th>
+                      <th className="w-20 px-2 py-3 text-center text-xs font-bold">عاجل</th>
+                      <th className="w-28 px-2 py-3 text-center text-xs font-bold">القراءات</th>
+                      <th className={cn("px-3 py-3 text-center text-xs font-bold", activeStatus === "published" ? "w-72" : "w-44")}>الإجراءات</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1497,7 +1536,7 @@ export default function ArticlesManagement() {
                           <td className="w-[88px] px-2 py-3 text-center align-middle">
                             <ViewsCount views={article.views} iconClassName="h-4 w-4" />
                           </td>
-                          <td className="w-[280px] px-2 py-3 align-middle">
+                          <td className={cn("px-2 py-3 align-middle", activeStatus === "published" ? "w-[280px]" : "w-[176px]")}>
                             <RowActions
                               articleId={article.id}
                               articleTitle={article.title}
@@ -1545,12 +1584,14 @@ export default function ArticlesManagement() {
               articles.map((article) => (
                 <div 
                   key={article.id} 
-                  className={`space-y-2 rounded-2xl border p-3 shadow-sm transition-all hover-elevate active-elevate-2 ${
+                  className={`space-y-2 rounded-xl border border-r-4 p-3 shadow-sm transition-colors ${
                     isResubmittedAfterRevision(article)
-                      ? "border-amber-300 bg-amber-50 dark:border-border dark:bg-card"
+                      ? "border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30"
                       : isAwaitingContributorRevision(article)
-                        ? "border-orange-300 bg-orange-50 dark:border-border dark:bg-card"
-                        : "border-sky-200/55 bg-gradient-to-br from-sky-50/40 via-card to-card dark:border-sky-900/35 dark:from-sky-950/15"
+                        ? "border-orange-300 bg-orange-50 dark:border-orange-800 dark:bg-orange-950/30"
+                        : article.articleType === "opinion"
+                          ? "border-border border-r-violet-400 bg-card dark:border-r-violet-700"
+                          : "border-border border-r-sky-300 bg-card dark:border-r-sky-800"
                   }`}
                   data-testid={`card-article-${article.id}`}
                 >
