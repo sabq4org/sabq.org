@@ -132,8 +132,8 @@ export function Header({ user, onMenuClick, sticky = true }: HeaderProps) {
     { name: "عقل سبق", href: "/sabq-ai", icon: Brain },
   ];
 
-  // الزر يبقى مع أدوات الهيدر. dir="rtl" فقط يحاذي صفوف القائمة لليمين
-  // لأن Radix يفترض LTR ولا يرث dir من <html>.
+  // الزر يبقى مع أدوات الهيدر. dir على الجذر فقط: Radix يكتبه على لوحة
+  // القائمة ولا يرثه من <html>، ونوع DropdownMenuContent لا يقبل dir.
   const accountMenu = user ? (
     <DropdownMenu dir="rtl">
       <DropdownMenuTrigger asChild>
@@ -156,7 +156,7 @@ export function Header({ user, onMenuClick, sticky = true }: HeaderProps) {
           </Avatar>
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-72 text-right" dir="rtl">
+      <DropdownMenuContent align="end" className="w-72 text-right">
         <UserAccountMenu user={user} onLogout={handleLogout} />
       </DropdownMenuContent>
     </DropdownMenu>
