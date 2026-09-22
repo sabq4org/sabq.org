@@ -22,6 +22,9 @@ export const BOT_DRAFTS_IMAGE_MAX_BYTES = 10 * 1024 * 1024;
 /** الغرض الممرَّر إلى `newsImageStorageService` مع `forceR2` → sabq-news-images / media.sabq.org. */
 export const BOT_DRAFTS_IMAGE_PURPOSE = "bot-article-image";
 
+/** أقصى عدد صور تُلحَق بمتن المسودة في طلب واحد (`imageUrls`). */
+export const BOT_DRAFT_BODY_IMAGE_LIMIT = 20;
+
 export const BOT_DRAFTS_IMAGE_MIME_TYPES = [
   "image/jpeg",
   "image/jpg",
@@ -102,6 +105,9 @@ const excerpt = z.string().trim().max(1000, "المقدمة تتجاوز 1000 ح
 const categoryId = z.string().trim().min(1).max(64);
 const categorySlug = z.string().trim().min(1).max(150);
 const imageUrl = httpsUrl.nullable();
+const imageUrls = z
+  .array(httpsUrl)
+  .max(BOT_DRAFT_BODY_IMAGE_LIMIT, `الحد الأقصى ${BOT_DRAFT_BODY_IMAGE_LIMIT} صورة في المتن`);
 const keywords = z.array(z.string().trim().min(1).max(60)).max(20, "الحد الأقصى 20 كلمة مفتاحية");
 const sourceUrl = webUrl.nullable();
 const clientReference = z.string().trim().min(1).max(120);
@@ -118,6 +124,7 @@ export const botDraftCreateSchema = z
     categoryId: categoryId.optional(),
     categorySlug: categorySlug.optional(),
     imageUrl: imageUrl.optional(),
+    imageUrls: imageUrls.optional(),
     keywords: keywords.optional(),
     sourceUrl: sourceUrl.optional(),
     clientReference: clientReference.optional(),
@@ -136,6 +143,7 @@ export const botDraftUpdateSchema = z
     categoryId: categoryId.optional(),
     categorySlug: categorySlug.optional(),
     imageUrl: imageUrl.optional(),
+    imageUrls: imageUrls.optional(),
     keywords: keywords.optional(),
     sourceUrl: sourceUrl.optional(),
     clientReference: clientReference.optional(),
@@ -161,6 +169,11 @@ export interface BotDraftResponse {
   categoryId: string | null;
   categorySlug: string | null;
   imageUrl: string | null;
+  /**
+   * روابط صور المتن بالترتيب (وسوم `img`)، بلا نص المقال.
+   * الغلاف `imageUrl` لا يُنسخ إلى هنا إلا إذا وُضع أيضاً داخل المتن.
+   */
+  bodyImageUrls: string[];
   sourceUrl: string | null;
   keywords: string[];
   source: string;
@@ -176,7 +189,7 @@ export interface BotDraftResponse {
   updatedAt: string;
 }
 
-/** رد `POST /api/internal/bot-drafts/images` — البوت يمرّر `deliveryUrl` كـ `imageUrl`. */
+/** رد `POST /api/internal/bot-drafts/images` — `deliveryUrl` يصلح غلافاً (`imageUrl`) أو صورة متن (`imageUrls`). */
 export interface BotDraftImageUploadResponse {
   deliveryUrl: string;
   imageId: string | null;

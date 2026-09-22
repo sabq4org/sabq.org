@@ -1,12 +1,13 @@
 # Bot Drafts API — مسودات فقط لبوتات «نشر سبق» ومهندّس (Grok Bot)
 
-> آخر مراجعة: 2026-09-20 | المالك: editorial | الحالة: جاهز للدمج بعد موافقة علي الحازمي على المصادقة والإسناد (انظر «قرارات تحتاج موافقة»)
+> آخر مراجعة: 2026-09-22 | المالك: editorial | الحالة: جاهز للدمج بعد موافقة علي الحازمي على المصادقة والإسناد (انظر «قرارات تحتاج موافقة»)
 
 ## الملخص في سطرين (للبوت)
 
 1. **إنشاء مسودة:** `POST https://api.sabq.org/api/internal/bot-drafts` مع ترويسة `Authorization: Bearer <SABQ_BOT_DRAFTS_TOKEN>` وجسم JSON فيه `title` و`content` (وتصنيف اختياري `categorySlug`). الرد يحمل `id` و`editUrl`.
 2. **تحديث مسودة:** `PATCH https://api.sabq.org/api/internal/bot-drafts/<id>` بنفس الترويسة والحقول التي تغيّرت فقط. ممنوع إرسال `status` أو أي حقل نشر/جدولة — يُرفض 422، والنشر يبقى من لوحة التحكم بيد المحررين.
-3. **رفع صورة غلاف (اختياري):** `POST https://api.sabq.org/api/internal/bot-drafts/images` بنفس توكن Bot Drafts (`multipart/form-data`، الحقل `file`) ثم مرّر `deliveryUrl` كـ `imageUrl` في الإنشاء/التحديث.
+3. **رفع صورة (غلاف أو متن):** `POST https://api.sabq.org/api/internal/bot-drafts/images` بنفس توكن Bot Drafts (`multipart/form-data`، الحقل `file`). `deliveryUrl` على `https://media.sabq.org/…` يذهب إلى `imageUrl` إن كان غلافاً، أو إلى مصفوفة `imageUrls` إن كان داخل المتن / أسفله.
+4. **صور المتن ليست الغلاف.** `imageUrl` يظهر أعلى الخبر فقط. صور الجسم تُمرَّر في `imageUrls` فيلحقها الخادم أسفل المتن كوسوم `<img>` يراها المحرر والمعاينة صوراً لا كنص. لا تضع رابط https خام داخل فقرات النص.
 
 ---
 
@@ -51,12 +52,13 @@ User-Agent: Mozilla/5.0 (compatible; SabqBotDrafts/1.0)
 | الحقل | النوع | POST | ملاحظات |
 |-------|------|------|---------|
 | `title` | string 3–300 | مطلوب | عنوان الخبر |
-| `content` | string 20–300000 | مطلوب | HTML أو نص خام. النص الخام يتحول تلقائياً إلى فقرات `<p>` (فاصل الفقرة سطر فارغ). HTML يمر بتنقية المحرر القياسية. |
-| `contentFormat` | `"html"` \| `"text"` | اختياري | يفرض التفسير بدل الاكتشاف التلقائي (وجود وسوم = HTML). |
+| `content` | string 20–300000 | مطلوب | HTML أو نص خام. النص الخام يتحول تلقائياً إلى فقرات `<p>` (فاصل الفقرة سطر فارغ). HTML يمر بتنقية المحرر ثم تُعاد كتابة كل `<img src="https://…">` مغلق إلى شكل صورة المحرر. |
+| `contentFormat` | `"html"` \| `"text"` | اختياري | يفرض التفسير بدل الاكتشاف التلقائي (وجود وسوم = HTML). `text` يهرّب الوسوم؛ صور المتن عندها عبر `imageUrls` لا عبر لصق HTML. |
 | `subtitle` | string ≤300 \| null | اختياري | عنوان فرعي |
 | `excerpt` | string ≤1000 \| null | اختياري | المقدمة/الموجز |
 | `categoryId` أو `categorySlug` | string | اختياري | تصنيف منشور للقرّاء (`status=visible` في الإنتاج، ويُقبل `active` تاريخياً) من `GET https://api.sabq.org/api/categories` (عام بلا مصادقة). غير موجود أو `inactive` → `422 category_not_found`. |
-| `imageUrl` | https URL \| null | اختياري | صورة الغلاف برابط `https://` فقط. للحصول على رابط R2 (`https://media.sabq.org/news/…`) ارفع أولاً عبر `POST /images` ثم ضع `deliveryUrl` هنا. |
+| `imageUrl` | https URL \| null | اختياري | صورة **الغلاف** فقط (أعلى الخبر). ارفع عبر `POST /images` ثم ضع `deliveryUrl`. لا يُنسخ تلقائياً إلى المتن. |
+| `imageUrls` | https URL[] ≤20 | اختياري | صور **المتن**. كل عنصر `deliveryUrl` من `POST /images`. الخادم يلحقها أسفل الجسم بترتيب المصفوفة كعقدة TipTap `img` (انظر «صور المتن»). الرابط الموجود أصلاً داخل المتن لا يُكرَّر. |
 | `keywords` | string[] ≤20 | اختياري | تُحفظ في `seo.keywords` |
 | `sourceUrl` | http(s) URL \| null | اختياري | المصدر الأصلي |
 | `clientReference` | string ≤120 | اختياري | معرّف البوت الداخلي للمادة (يُعاد في الرد للمطابقة) |
@@ -92,7 +94,8 @@ User-Agent: Mozilla/5.0 (compatible; SabqBotDrafts/1.0)
   "content": "أعلنت أمانة منطقة الرياض اليوم عن انطلاق مبادرة...\n\nوتستهدف المبادرة...",
   "excerpt": "مبادرة جديدة لتشجير الحدائق في العاصمة.",
   "categorySlug": "local",
-  "imageUrl": "https://example.com/cover.jpg",
+  "imageUrl": "https://media.sabq.org/news/cover.webp",
+  "imageUrls": ["https://media.sabq.org/news/body-1.webp"],
   "keywords": ["الرياض", "تشجير"],
   "sourceUrl": "https://spa.gov.sa/...",
   "clientReference": "grok-2026-09-20-0042",
@@ -112,7 +115,8 @@ HTTP/1.1 201 Created
   "excerpt": "مبادرة جديدة لتشجير الحدائق في العاصمة.",
   "categoryId": "…",
   "categorySlug": "local",
-  "imageUrl": "https://example.com/cover.jpg",
+  "imageUrl": "https://media.sabq.org/news/cover.webp",
+  "bodyImageUrls": ["https://media.sabq.org/news/body-1.webp"],
   "sourceUrl": "https://spa.gov.sa/...",
   "keywords": ["الرياض", "تشجير"],
   "source": "bot",
@@ -185,7 +189,45 @@ HTTP/1.1 201 Created
 }
 ```
 
-مرّر `deliveryUrl` كما هو إلى `imageUrl` في `POST/PATCH /api/internal/bot-drafts`. هذا الرابط هو عنوان R2 العام (`media.sabq.org`) وليس Cloudflare Images. إن لم يكن R2 مضبوطاً: `503 storage_unavailable`. فشل الرفع إلى R2: `502 upload_failed` (بلا بديل Images). ملف أكبر من 10MB: `400 file_too_large`. بايتات ليست صورة: `400 invalid_image`.
+مرّر `deliveryUrl` كما هو إلى `imageUrl` (غلاف) أو أدخله في `imageUrls` (متن). هذا الرابط هو عنوان R2 العام (`media.sabq.org`) وليس Cloudflare Images. إن لم يكن R2 مضبوطاً: `503 storage_unavailable`. فشل الرفع إلى R2: `502 upload_failed` (بلا بديل Images). ملف أكبر من 10MB: `400 file_too_large`. بايتات ليست صورة: `400 invalid_image`.
+
+### صور المتن — أسفل الجسم أو داخله
+
+الغلاف (`imageUrl`) يظهر أعلى الخبر في المعاينة والمحرر، ولا يدخل المتن. صورة داخل المقال هي عقدة TipTap `image` (`client/src/components/editor-extensions/ResizableImage.ts`): وسم `<img src>` مع `class="sabq-article-image sabq-image--center"` و`data-align="center"` و`data-width="100%"`. المعاينة (`ArticlePreview`) تعرض هذا الوسم عبر DOMPurify كصورة. رابط https خام داخل فقرة `<p>` يبقى نصاً.
+
+المسار الرسمي للبوت — ارفع كل ملف عبر `POST /images` ثم:
+
+```json
+{
+  "content": "فقرة أولى من الخبر.\n\nفقرة ثانية.",
+  "imageUrl": "https://media.sabq.org/news/cover.webp",
+  "imageUrls": [
+    "https://media.sabq.org/news/body-1.webp",
+    "https://media.sabq.org/news/body-2.webp"
+  ]
+}
+```
+
+الخادم يحوّل النص إلى فقرات ثم يلحق الصور **أسفل المتن** بهذا الشكل (مختصراً):
+
+```html
+<p>فقرة أولى من الخبر.</p>
+<p>فقرة ثانية.</p>
+<img src="https://media.sabq.org/news/body-1.webp" alt="صورة" data-align="center" data-width="100%" class="sabq-article-image sabq-image--center" style="width: 100%; float: none; margin: 1.5rem auto; max-width: 100%; height: auto;">
+<img src="https://media.sabq.org/news/body-2.webp" alt="صورة" data-align="center" data-width="100%" class="sabq-article-image sabq-image--center" style="width: 100%; float: none; margin: 1.5rem auto; max-width: 100%; height: auto;">
+```
+
+ليس ألبوماً (`div[data-image-gallery]`). كل صورة عقدة `img` مستقلة مثل زر الصورة في المحرر.
+
+لوضع صورة **داخل** المتن (بين الفقرات) أرسل `contentFormat: "html"` ووسم `<img src="https://…">` مغلقاً حيث تريدها. الخادم يبقي النص ويعيد كتابة الوسم إلى الشكل أعلاه، ويحذف `onerror` وأي `src` ليس `https://`. ثم يلحق `imageUrls` في النهاية دون تكرار رابط موجود.
+
+`PATCH` بـ `imageUrls` وحدها (بلا `content`) يلحق الصور أسفل HTML المخزّن ولا يغيّر عرض أو محاذاة صور ضبطها المحرر. `PATCH` مع `content` يستبدل المتن ثم يلحق `imageUrls`.
+
+`GET` لا يعيد المتن. يعيد `bodyImageUrls`: روابط `img` في الجسم بالترتيب. الغلاف لا يظهر فيها إلا إذا وُضع أيضاً في المتن.
+
+لا تضع رابط الصورة كنص. الاستثناء الوحيد: في وضع النص، فقرة كاملة لا تحتوي إلا `https://media.sabq.org/…` تتحول إلى صورة في مكانها. جملة فيها الرابط تبقى نصاً.
+
+وسم `<img` غير المغلق (بلا `>`) كان يبتلع الفقرات التالية داخل محلّل المعاينة وTipTap فيبدو المتن فارغاً. الخادم يسقط هذه البداية المكسورة ويبقي النص. استخدم `imageUrls` أو `<img …>` مغلقاً.
 
 ### مثال قراءة
 
@@ -286,14 +328,17 @@ curl -sS -X PATCH "$B/api/internal/bot-drafts/<id>" \
   -H "User-Agent: $UA" \
   -d '{"status":"published"}'
 
-# رفع صورة ثم إنشاء مسودة برابط الغلاف
+# رفع غلاف وصورة متن ثم إنشاء مسودة
 DELIVERY=$(curl -sS -X POST "$B/api/internal/bot-drafts/images" \
   -H "Authorization: Bearer $SABQ_BOT_DRAFTS_TOKEN" -H "User-Agent: $UA" \
   -F "file=@./cover.jpg;type=image/jpeg" | jq -r .deliveryUrl)
+BODY=$(curl -sS -X POST "$B/api/internal/bot-drafts/images" \
+  -H "Authorization: Bearer $SABQ_BOT_DRAFTS_TOKEN" -H "User-Agent: $UA" \
+  -F "file=@./body.jpg;type=image/jpeg" | jq -r .deliveryUrl)
 curl -sS -X POST "$B/api/internal/bot-drafts" \
   -H "Authorization: Bearer $SABQ_BOT_DRAFTS_TOKEN" -H "Content-Type: application/json" \
   -H "User-Agent: $UA" \
-  -d "{\"title\":\"عنوان\",\"content\":\"فقرة أولى من الخبر التجريبي.\\n\\nفقرة ثانية.\",\"imageUrl\":\"$DELIVERY\"}"
+  -d "{\"title\":\"عنوان\",\"content\":\"فقرة أولى من الخبر التجريبي.\\n\\nفقرة ثانية.\",\"imageUrl\":\"$DELIVERY\",\"imageUrls\":[\"$BODY\"]}"
 ```
 
 ### TypeScript / CLI
@@ -304,7 +349,7 @@ curl -sS -X POST "$B/api/internal/bot-drafts" \
 export SABQ_BOT_DRAFTS_TOKEN='…'
 export SABQ_API_BASE=https://api.sabq.org   # افتراضي
 
-npx tsx scripts/bot-drafts-client.ts create --title="عنوان" --content-file=./body.txt --category-slug=local --ref=grok-001
+npx tsx scripts/bot-drafts-client.ts create --title="عنوان" --content-file=./body.txt --category-slug=local --image-urls="https://media.sabq.org/news/a.webp" --ref=grok-001
 npx tsx scripts/bot-drafts-client.ts get <id>
 npx tsx scripts/bot-drafts-client.ts update <id> --title="عنوان جديد" --excerpt="مقدمة"
 npx tsx scripts/bot-drafts-client.ts create --json=./draft.json   # جسم كامل من ملف
@@ -316,7 +361,8 @@ import { readFileSync } from "node:fs";
 import { BotDraftsClient } from "./scripts/bot-drafts-client";
 const client = new BotDraftsClient({ baseUrl: "https://api.sabq.org", token: process.env.SABQ_BOT_DRAFTS_TOKEN! });
 const uploaded = await client.uploadImage({ data: readFileSync("./cover.jpg"), filename: "cover.jpg" });
-const draft = await client.create({ title: "…", content: "…", categorySlug: "local", imageUrl: uploaded.deliveryUrl, clientReference: "grok-001" });
+const bodyImage = await client.uploadImage({ data: readFileSync("./body.jpg"), filename: "body.jpg" });
+const draft = await client.create({ title: "…", content: "…", categorySlug: "local", imageUrl: uploaded.deliveryUrl, imageUrls: [bodyImage.deliveryUrl], clientReference: "grok-001" });
 await client.update(draft.id, { excerpt: "…" });
 const status = await client.get(draft.id); // status.updatable === false بعد النشر من اللوحة
 ```
@@ -328,7 +374,7 @@ const status = await client.get(draft.id); // status.updatable === false بعد 
 3. تعليمة النظام للبوت:
    - «لإنشاء مسودة في سبق: `POST /api/internal/bot-drafts` مع `title` و`content` و`categorySlug` و`clientReference`، واحفظ `id` و`editUrl` من الرد وأرسلهما للمحرر.»
    - «لتحديث مسودة: `PATCH /api/internal/bot-drafts/{id}` بالحقول المتغيرة فقط. لا ترسل `status` أو أي حقل نشر؛ إن رجع 409 فالمادة نُشرت أو يحررها محرر — توقف وأبلغ.»
-   - «لرفع صورة غلاف: `POST /api/internal/bot-drafts/images` بنفس التوكن وحقل `file`، ثم ضع `deliveryUrl` في `imageUrl`.»
+   - «لرفع صورة: `POST /api/internal/bot-drafts/images` بنفس التوكن وحقل `file`. الغلاف = `deliveryUrl` في `imageUrl`. صور المتن = نفس الرابط داخل `imageUrls` (تظهر أسفل الجسم كصور لا كنص). لا تلصق رابط https داخل فقرات `content`.»
 4. اجعل البوت يُرفق دائماً `notes` بما يجب على المحرر التحقق منه.
 
 ### تعليمات تشغيل مهندّس (Grok Bot)
@@ -351,14 +397,16 @@ const status = await client.get(draft.id); // status.updatable === false بعد 
 | 8 | توكن خاطئ / بدون توكن | `401` مع `Cache-Control: private, no-store` ولا يظهر أي توكن في الرد أو اللوج |
 | 9 | `GET` بمعرّف مسودة أنشأها محرر (ليست من بوت) | `404` — لا كشف لمسودات المحررين |
 | 10 | لوج Railway بعد الخطوات أعلاه | أسطر `[BotDrafts] created/updated draft <id> by bot=<name>` بلا توكنات |
+| 11 | `POST` بمتن نصي و`imageUrls` من `deliveryUrl` | `201` و`bodyImageUrls` فيها الروابط بالترتيب؛ معاينة اللوحة تعرض صوراً أسفل المتن لا نص الرابط. الغلاف يبقى في `imageUrl` فقط |
 
-آلياً: `npm run test:unit -- tests/unit/botDrafts.test.ts` (التوكنات، الحقول الممنوعة كلها، 401/403/405/409/422/429/503، رفع الصور مع تخزين وهمي، عدم تسريب الأسرار، إعفاء CSRF، تحويل النص إلى فقرات).
+آلياً: `npm run test:unit -- tests/unit/botDrafts.test.ts` (التوكنات، الحقول الممنوعة كلها، 401/403/405/409/422/429/503، رفع الصور مع تخزين وهمي، عدم تسريب الأسرار، إعفاء CSRF، تحويل النص إلى فقرات، إلحاق `imageUrls` كوسوم محرر، بقاء المتن مع `<img>`، إسقاط `<img` المكسور).
 
 ---
 
 ## الحدود المعروفة (v1)
 
 - **صورة الغلاف:** ارفع ملفاً عبر `POST /api/internal/bot-drafts/images` (10MB، JPEG/PNG/WEBP/GIF) إلى R2 (`sabq-news-images`) ثم مرّر `deliveryUrl` (`https://media.sabq.org/news/…`) كـ `imageUrl`. لا نشر ولا جدول من مسار الرفع، ولا تخزين أساسي على Cloudflare Images. GIF مقبول هنا فقط لأن المسار مصادق للبوت ومحدود الحجم؛ مسار `/api/media/upload` العام ما زال يرفض GIF (تدقيق M8).
+- **صور المتن:** نفس الرفع، والروابط في `imageUrls` (حتى 20) أو `<img src="https://…">` مغلق داخل HTML. تُخزَّن كعقدة صورة المحرر أسفل المتن أو في موضع الوسم. `GET` يعيد `bodyImageUrls` لا المتن. لا ألبوم منفصل ولا نسخ تلقائي للغلاف إلى الجسم.
 - **أخبار عربية `news` فقط**. لا رأي/تحليل/EN/UR من هذا العقد.
 - **لا idempotency على الإنشاء**: تكرار `POST` ينتج مسودتين؛ استخدم `clientReference` للمطابقة، ولا تعد المحاولة بعد `201`.
 - **لا حذف**: يحذف المحرر من اللوحة.

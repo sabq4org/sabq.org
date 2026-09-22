@@ -38,7 +38,7 @@ paths:
   /api/internal/bot-drafts/images:
     post:
       operationId: uploadSabqDraftImage
-      summary: رفع صورة غلاف واحدة إلى R2 / media.sabq.org (مسودات فقط — لا نشر)
+      summary: رفع صورة واحدة إلى R2 / media.sabq.org لغلاف المسودة أو متنها (لا نشر)
       requestBody:
         required: true
         content:
@@ -53,7 +53,7 @@ paths:
                   description: صورة واحدة JPEG/PNG/WEBP/GIF بحد أقصى 10MB
       responses:
         "201":
-          description: رُفعت الصورة إلى R2 — deliveryUrl هو https://media.sabq.org/news/… يُمرَّر كـ imageUrl
+          description: رُفعت الصورة إلى R2 — deliveryUrl هو https://media.sabq.org/news/… يُمرَّر كـ imageUrl (غلاف) أو داخل imageUrls (متن)
           content:
             application/json:
               schema:
@@ -130,13 +130,18 @@ components:
       type: object
       properties:
         title: { type: string, minLength: 3, maxLength: 300, description: عنوان الخبر }
-        content: { type: string, minLength: 20, maxLength: 300000, description: HTML أو نص خام (يتحول لفقرات تلقائياً) }
+        content: { type: string, minLength: 20, maxLength: 300000, description: HTML أو نص خام (يتحول لفقرات). وسوم img https تُعاد كتابتها لشكل محرر TipTap }
         contentFormat: { type: string, enum: [html, text] }
         subtitle: { type: string, maxLength: 300, nullable: true }
         excerpt: { type: string, maxLength: 1000, nullable: true, description: المقدمة/الموجز }
         categoryId: { type: string }
         categorySlug: { type: string, description: slug تصنيف منشور (status=visible في الإنتاج؛ يُقبل active تاريخياً) من GET /api/categories }
-        imageUrl: { type: string, format: uri, nullable: true, description: صورة الغلاف — https فقط }
+        imageUrl: { type: string, format: uri, nullable: true, description: صورة الغلاف فقط — https. لا تُنسخ إلى المتن }
+        imageUrls:
+          type: array
+          maxItems: 20
+          description: صور المتن. تُلحَق أسفل الجسم كوسوم img بنفس عقد محرر TipTap (ليست ألبوماً). يُفضَّل deliveryUrl من POST /images
+          items: { type: string, format: uri }
         keywords:
           type: array
           maxItems: 20
@@ -166,6 +171,10 @@ components:
         categoryId: { type: string, nullable: true }
         categorySlug: { type: string, nullable: true }
         imageUrl: { type: string, nullable: true }
+        bodyImageUrls:
+          type: array
+          description: روابط صور المتن بالترتيب. الغلاف لا يدخل إلا إذا وُضع في الجسم. المتن نفسه لا يُعاد
+          items: { type: string, format: uri }
         sourceUrl: { type: string, nullable: true }
         keywords: { type: array, items: { type: string } }
         source: { type: string, example: bot }
@@ -180,7 +189,7 @@ components:
       type: object
       required: [deliveryUrl, purpose]
       properties:
-        deliveryUrl: { type: string, format: uri, description: رابط R2 العام https://media.sabq.org/news/… لتمريره كـ imageUrl }
+        deliveryUrl: { type: string, format: uri, description: رابط R2 العام https://media.sabq.org/news/… لتمريره كـ imageUrl (غلاف) أو داخل imageUrls (متن) }
         imageId: { type: string, nullable: true }
         filename: { type: string }
         provider: { type: string, nullable: true, description: r2 دائماً على هذا المسار }

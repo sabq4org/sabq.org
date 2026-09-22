@@ -42,12 +42,14 @@ import {
   generateArabicSlug,
   isAssignableBotCategoryStatus,
   isMissingBotDraftReporter,
+  appendBotDraftBodyImages,
   normalizeDraftContent,
   parseBotDraftTokens,
   reporterIdForBotDraftUpdate,
   toBotDraftResponse,
 } from "../../server/services/botDraftsService";
 import {
+  BOT_DRAFT_BODY_IMAGE_LIMIT,
   BOT_DRAFT_FORBIDDEN_FIELDS,
   BOT_DRAFTS_IMAGE_FIELD,
   BOT_DRAFTS_IMAGE_MAX_BYTES,
@@ -202,7 +204,34 @@ describe("POST /api/internal/bot-drafts", () => {
     expect(unknown.status).toBe(400);
     const http = await call("POST", "/api/internal/bot-drafts", { title: "عنوان تجريبي", content: "x".repeat(30), imageUrl: "http://insecure.example/a.jpg" });
     expect(http.status).toBe(400);
+    const bodyHttp = await call("POST", "/api/internal/bot-drafts", {
+      title: "عنوان تجريبي",
+      content: "x".repeat(30),
+      imageUrls: ["http://insecure.example/a.jpg"],
+    });
+    expect(bodyHttp.status).toBe(400);
+    const tooMany = await call("POST", "/api/internal/bot-drafts", {
+      title: "عنوان تجريبي",
+      content: "x".repeat(30),
+      imageUrls: Array.from({ length: BOT_DRAFT_BODY_IMAGE_LIMIT + 1 }, (_, i) => `https://media.sabq.org/news/${i}.webp`),
+    });
+    expect(tooMany.status).toBe(400);
     expect(state.create).not.toHaveBeenCalled();
+  });
+  it("accepts body image URLs without treating them as a cover", async () => {
+    state.create.mockResolvedValue(draft());
+    const imageUrls = ["https://media.sabq.org/news/body.webp"];
+    const response = await call("POST", "/api/internal/bot-drafts", {
+      title: "عنوان تجريبي",
+      content: "نص الخبر التجريبي الذي يتجاوز عشرين حرفاً.",
+      imageUrls,
+    });
+    expect(response.status).toBe(201);
+    expect(state.create).toHaveBeenCalledWith(
+      { name: "nashr-sabq" },
+      expect.objectContaining({ imageUrls }),
+      expect.anything(),
+    );
   });
   it("maps service errors to their status and code, and hides internal errors", async () => {
     state.create.mockRejectedValueOnce(new BotDraftError(422, "category_not_found", "التصنيف غير موجود", { categorySlug: "nope" }));
@@ -356,6 +385,18 @@ describe("GET and PATCH /api/internal/bot-drafts/:id", () => {
     expect(conflict.status).toBe(409);
     expect(await conflict.json()).toMatchObject({ code: "not_a_draft", details: { status: "published" } });
   });
+  it("accepts a body-image append without resending content", async () => {
+    state.update.mockResolvedValue(draft());
+    const imageUrls = ["https://media.sabq.org/news/extra.webp"];
+    const response = await call("PATCH", "/api/internal/bot-drafts/art-1", { imageUrls });
+    expect(response.status).toBe(200);
+    expect(state.update).toHaveBeenCalledWith(
+      { name: "nashr-sabq" },
+      "art-1",
+      { imageUrls },
+      expect.anything(),
+    );
+  });
   it("rejects an empty patch and any status change attempt", async () => {
     expect((await call("PATCH", "/api/internal/bot-drafts/art-1", {})).status).toBe(400);
     const publish = await call("PATCH", "/api/internal/bot-drafts/art-1", { status: "published" });
@@ -411,6 +452,83 @@ describe("pure helpers", () => {
     expect(normalizeDraftContent("<p>مرحبا</p>")).toBe("<p>مرحبا</p>");
     expect(normalizeDraftContent("<p>نص</p>", "text")).toBe("<p>&lt;p&gt;نص&lt;/p&gt;</p>");
   });
+  it("appends imageUrls under the body as editor images, not raw URL text", async () => {
+    const { sanitize } = await import("isomorphic-dompurify");
+    const first = "https://media.sabq.org/news/body-1.webp";
+    const second = "https://media.sabq.org/news/body-2.webp";
+    const html = normalizeDraftContent("فقرة أولى من الخبر.\n\nفقرة ثانية تكمل المتن.", undefined, [first, second, first]);
+    expect(html.startsWith("<p>فقرة أولى من الخبر.</p>")).toBe(true);
+    expect(html.indexOf("</p>")).toBeLessThan(html.indexOf("<img"));
+    expect(html.match(/<img\b/g)).toHaveLength(2);
+    for (const url of [first, second]) {
+      expect(html).toContain(
+        `<img src="${url}" alt="صورة" data-align="center" data-width="100%" class="sabq-article-image sabq-image--center" style="width: 100%; float: none; margin: 1.5rem auto; max-width: 100%; height: auto;">`,
+      );
+    }
+    const visible = sanitize(html, {
+      ADD_TAGS: ["iframe", "blockquote", "img", "figure", "figcaption"],
+      ADD_ATTR: ["src", "class", "data-align", "data-width", "data-caption", "alt", "style"],
+    }).replace(/\ssrc="[^"]*"/g, "");
+    expect(visible).not.toContain(first);
+    expect(visible).not.toContain(second);
+  });
+  it("keeps article text when HTML contains a closed img and drops handlers", async () => {
+    const { sanitizeArticleHtml } = await import("../../server/utils/sanitizeHtml");
+    const url = "https://media.sabq.org/news/inline.webp";
+    const html = normalizeDraftContent(
+      `<p>متن الخبر التجريبي الطويل.</p><img src="${url}" alt="ملعب" onerror="alert(1)">`,
+      "html",
+    );
+    expect(html).toContain("<p>متن الخبر التجريبي الطويل.</p>");
+    expect(html).toContain(`src="${url}"`);
+    expect(html).toContain('alt="ملعب"');
+    expect(html).toContain('class="sabq-article-image sabq-image--center"');
+    expect(html).not.toContain("onerror");
+    const published = sanitizeArticleHtml(html);
+    expect(published).toContain(`src="${url}"`);
+    expect(published).toContain('data-width="100%"');
+    expect(published).toContain('data-align="center"');
+    expect(published).not.toMatch(/onerror/i);
+    const stripped = normalizeDraftContent(
+      '<p>متن كافٍ للخبر التجريبي هنا.</p><img src="javascript:alert(1)">',
+      "html",
+    );
+    expect(stripped).toContain("متن كافٍ للخبر التجريبي هنا.");
+    expect(stripped).not.toContain("javascript:");
+    expect(stripped).not.toContain("<img");
+  });
+  it("drops an unclosed img tag instead of swallowing the following paragraphs", () => {
+    const html = normalizeDraftContent(
+      '<img src="https://media.sabq.org/news/broken.webp"\n<p>متن الخبر الذي يجب أن يبقى ظاهراً في المعاينة.</p>',
+      "html",
+    );
+    expect(html).toContain("<p>متن الخبر الذي يجب أن يبقى ظاهراً في المعاينة.</p>");
+    expect(html).not.toContain("<img");
+    expect(html).not.toContain("broken.webp");
+  });
+  it("turns a standalone media.sabq.org paragraph into an image and leaves URLs inside sentences as text", () => {
+    const url = "https://media.sabq.org/news/line.webp";
+    const fromLine = normalizeDraftContent(`فقرة الخبر التجريبي الأولى.\n\n${url}`);
+    expect(fromLine).toContain("<p>فقرة الخبر التجريبي الأولى.</p>");
+    expect(fromLine).toContain(`src="${url}"`);
+    expect(fromLine).not.toContain(`<p>${url}</p>`);
+    const sentence = normalizeDraftContent(`انظر ${url} داخل الخبر التجريبي الطويل.`);
+    expect(sentence).not.toContain("<img");
+    expect(sentence).toContain(url);
+  });
+  it("appends new body images without rewriting an editor image already in the draft", () => {
+    const existing =
+      '<p>محرر</p>\n<img src="https://media.sabq.org/news/old.webp" alt="قديم" data-width="25%" class="sabq-article-image sabq-image--left">';
+    const next = appendBotDraftBodyImages(existing, [
+      "https://media.sabq.org/news/old.webp",
+      "https://media.sabq.org/news/new.webp",
+    ]);
+    expect(next).toContain('data-width="25%"');
+    expect(next).toContain("sabq-image--left");
+    expect(next.indexOf("old.webp")).toBeLessThan(next.indexOf("new.webp"));
+    expect(next.match(/<img\b/g)).toHaveLength(2);
+    expect(appendBotDraftBodyImages(existing, ["https://media.sabq.org/news/old.webp"])).toBe(existing);
+  });
   it("builds Arabic slugs like the dashboard does", () => {
     expect(generateArabicSlug("  خبر: عاجل!! من الرياض  ")).toBe("خبر-عاجل-من-الرياض");
     expect(generateArabicSlug("Hello World 2026")).toBe("hello-world-2026");
@@ -435,6 +553,21 @@ describe("pure helpers", () => {
     expect(toBotDraftResponse(row, "local")).toMatchObject({
       status: "published", updatable: false, bot: "grok-bot", clientReference: "g-1", keywords: ["أ"], categorySlug: "local",
       editUrl: "https://sabq.org/dashboard/articles/art-9/edit", createdAt: now.toISOString(),
+      bodyImageUrls: [],
     });
+  });
+  it("returns body image URLs and keeps the article text out of the response", () => {
+    const now = new Date("2026-09-22T10:00:00Z");
+    const row = {
+      id: "art-9", status: "draft", title: "ت", subtitle: null, slug: "ت", excerpt: null, categoryId: null,
+      imageUrl: "https://media.sabq.org/news/cover.webp",
+      content: normalizeDraftContent("متن تجريبي طويل بما يكفي.", undefined, ["https://media.sabq.org/news/body.webp"]),
+      sourceUrl: null, seo: null, source: "bot", sourceMetadata: { type: "bot" },
+      createdAt: now, updatedAt: now,
+    } as any;
+    const response = toBotDraftResponse(row, null);
+    expect(response.bodyImageUrls).toEqual(["https://media.sabq.org/news/body.webp"]);
+    expect(response.imageUrl).toBe("https://media.sabq.org/news/cover.webp");
+    expect(JSON.stringify(response)).not.toContain("متن تجريبي");
   });
 });
