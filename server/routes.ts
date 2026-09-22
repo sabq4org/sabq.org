@@ -1,4 +1,5 @@
 import { adminScheduledOrder, getAdminPublishedPageIds } from "./services/adminArticleList";
+import { getArticleListSignals } from "./services/articleListSignalsService";
 import { getPublicEditorialModifiedAt } from "./utils/editorialDates";
 import { coalesceArticleReadOverlay } from "./services/articleReadOverlay";
 // Reference: javascript_object_storage blueprint
@@ -7361,9 +7362,20 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       const writerIds = collectOpinionDraftWriterIds(formattedArticles);
       const slotsByWriter = await getNextSlotsForWriters(writerIds);
       const articlesWithSlots = attachWriterWeeklySlots(formattedArticles, slotsByWriter);
+      // إشارات التوزيع (إشعار/X) للمنشور فقط — فشلها لا يُسقط القائمة
+      const signalsById = status === "published"
+        ? await getArticleListSignals(articlesWithSlots.map((a) => a.id)).catch((error) => {
+            console.warn("[admin-articles] list signals failed:", error);
+            return {} as Awaited<ReturnType<typeof getArticleListSignals>>;
+          })
+        : ({} as Awaited<ReturnType<typeof getArticleListSignals>>);
+      const articlesWithSignals = articlesWithSlots.map((a) => {
+        const signals = signalsById[a.id];
+        return signals ? { ...a, signals } : a;
+      });
 
       res.json({ 
-        articles: articlesWithSlots, 
+        articles: articlesWithSignals, 
         total,
         page: pageNum,
         limit: limitNum,

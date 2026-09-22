@@ -1,6 +1,7 @@
 import { useState, useEffect, type ComponentProps, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
-import { Edit, Star, Trash2, Send, Bell, Loader2, Languages, FilePenLine, HeartPulse, Share2 } from "lucide-react";
+import { Edit, Star, Trash2, Send, Bell, Loader2, Languages, FilePenLine, HeartPulse, Share2, Zap, Archive } from "lucide-react";
+import { useBreakingToggle } from "@/components/admin/BreakingSwitch";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -38,6 +39,13 @@ interface RowActionsProps {
   canSendNotification?: boolean;
   canTranslate?: boolean;
   canSocialPublish?: boolean;
+  /** «wire»: شكل قائمة الأخبار الموحّد — أحادي اللون، ثلاث مجموعات، وزر البرق بدل عمود «عاجل». */
+  variant?: "default" | "wire";
+  isBreaking?: boolean;
+  /** آخر إشعار خرج للخبر — نقطة خضراء على زر الجرس */
+  notifiedAt?: string | null;
+  /** آخر نشر على X — نقطة خضراء على زر X */
+  socialPublishedAt?: string | null;
 }
 
 function ActionBtn({
@@ -75,6 +83,36 @@ function ActionsDivider() {
   return <span aria-hidden="true" className="h-4 w-px shrink-0 bg-border" />;
 }
 
+/** زر صف القائمة الموحّد: رمادي هادئ، ولون الحالة فقط حين تكون فعّالة. */
+function WireBtn({
+  children,
+  className,
+  done,
+  ...props
+}: ComponentProps<typeof Button> & { done?: boolean }) {
+  return (
+    <Button
+      variant="ghost"
+      size="icon"
+      className={cn("relative h-8 w-8 shrink-0 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground", className)}
+      {...props}
+    >
+      {children}
+      {done ? (
+        <span
+          aria-hidden="true"
+          className="absolute left-1 top-1 h-1.5 w-1.5 rounded-full bg-emerald-500 ring-2 ring-card"
+          data-testid="action-done-dot"
+        />
+      ) : null}
+    </Button>
+  );
+}
+
+function WireDivider() {
+  return <span aria-hidden="true" className="mx-1 h-4 w-px shrink-0 bg-border" />;
+}
+
 export function RowActions({
   articleId,
   articleTitle,
@@ -91,7 +129,12 @@ export function RowActions({
   canSendNotification = true,
   canTranslate = true,
   canSocialPublish = false,
+  variant = "default",
+  isBreaking: initialIsBreaking = false,
+  notifiedAt = null,
+  socialPublishedAt = null,
 }: RowActionsProps) {
+  const breaking = useBreakingToggle(articleId, initialIsBreaking);
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const [isFeatured, setIsFeatured] = useState(initialIsFeatured);
@@ -289,8 +332,119 @@ export function RowActions({
       canSendNotification ||
       (canSocialPublish && !!onSocialPublish));
 
+  const doneAt = (iso: string | null) => {
+    if (!iso) return null;
+    const date = new Date(iso);
+    return Number.isNaN(date.getTime())
+      ? null
+      : date.toLocaleString("ar-SA-u-nu-latn", { timeZone: "Asia/Riyadh", day: "numeric", month: "long", hour: "numeric", minute: "2-digit" });
+  };
+  const notifiedLabel = doneAt(notifiedAt);
+  const socialLabel = doneAt(socialPublishedAt);
+  const isPublished = status === "published";
+
+  const wireRow = (
+    <div className="flex items-center justify-end gap-0.5" role="group" aria-label="إجراءات المقال">
+      {canEdit && (
+        <WireBtn onClick={onEdit} disabled={isLoading} data-testid={`button-action-edit-${articleId}`} title="تعديل">
+          <Edit className="h-4 w-4" />
+        </WireBtn>
+      )}
+      {canFeature && (
+        <WireBtn
+          onClick={handleFeature}
+          disabled={isLoading}
+          data-testid={`button-action-feature-${articleId}`}
+          title={isFeatured ? "إلغاء التمييز" : "تمييز"}
+          aria-pressed={isFeatured}
+          className={isFeatured ? "text-amber-500 hover:text-amber-600" : undefined}
+        >
+          <Star className={cn("h-4 w-4", isFeatured && "fill-current")} />
+        </WireBtn>
+      )}
+      {canPublish && (
+        <WireBtn
+          onClick={() => void breaking.toggle(!breaking.isBreaking)}
+          disabled={breaking.isPending}
+          data-testid={`switch-breaking-${articleId}`}
+          title={breaking.isBreaking ? "إلغاء العاجل" : "عاجل"}
+          aria-pressed={breaking.isBreaking}
+          className={breaking.isBreaking ? "text-red-600 hover:text-red-700 dark:text-red-400" : undefined}
+        >
+          <Zap className={cn("h-4 w-4", breaking.isBreaking && "fill-current")} />
+        </WireBtn>
+      )}
+      {isPublished && (canSocialPublish || canPublish || canSendNotification || canTranslate) && <WireDivider />}
+      {isPublished && canSocialPublish && onSocialPublish && (
+        <WireBtn
+          onClick={onSocialPublish}
+          disabled={isLoading}
+          data-testid={`button-action-social-publish-${articleId}`}
+          title={socialLabel ? `نُشر على X · ${socialLabel}` : "النشر على X"}
+          done={!!socialLabel}
+        >
+          <Share2 className="h-4 w-4" />
+        </WireBtn>
+      )}
+      {isPublished && canSendNotification && (
+        <WireBtn
+          onClick={() => setNotifyDialogOpen(true)}
+          disabled={isLoading}
+          data-testid={`button-action-notify-${articleId}`}
+          title={notifiedLabel ? `أُرسل إشعار · ${notifiedLabel}` : "إرسال إشعار"}
+          done={!!notifiedLabel}
+        >
+          <Bell className="h-4 w-4" />
+        </WireBtn>
+      )}
+      {isPublished && canTranslate && (
+        <WireBtn
+          onClick={() => setTranslateDialogOpen(true)}
+          disabled={isLoading || isTranslating}
+          data-testid={`button-action-translate-${articleId}`}
+          title="ترجم للإنجليزية"
+        >
+          {isTranslating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Languages className="h-4 w-4" />}
+        </WireBtn>
+      )}
+      {isPublished && canPublish && (
+        <WireBtn
+          onClick={() => setResurfaceDialogOpen(true)}
+          disabled={isLoading || isResurfacing}
+          data-testid={`button-action-resurface-${articleId}`}
+          title="إنعاش (عودة لصدارة الموجز)"
+        >
+          {isResurfacing ? <Loader2 className="h-4 w-4 animate-spin" /> : <HeartPulse className="h-4 w-4" />}
+        </WireBtn>
+      )}
+      {(onRequestRevision || canDelete) && <WireDivider />}
+      {onRequestRevision && (
+        <WireBtn
+          onClick={onRequestRevision}
+          disabled={isLoading}
+          data-testid={`button-action-revision-${articleId}`}
+          title="طلب تعديل (مع ملاحظات)"
+        >
+          <FilePenLine className="h-4 w-4" />
+        </WireBtn>
+      )}
+      {canDelete && (
+        <WireBtn
+          onClick={onDelete}
+          disabled={isLoading}
+          data-testid={`button-action-delete-${articleId}`}
+          title="أرشفة (مع ذكر السبب)"
+          className="hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40 dark:hover:text-red-400"
+        >
+          <Archive className="h-4 w-4" />
+        </WireBtn>
+      )}
+    </div>
+  );
+
   return (
     <>
+      {variant === "wire" ? wireRow : (
       <ActionsRow>
         {canEdit && (
           <ActionBtn
@@ -382,6 +536,7 @@ export function RowActions({
           </ActionBtn>
         )}
       </ActionsRow>
+      )}
 
       <AlertDialog open={translateDialogOpen} onOpenChange={setTranslateDialogOpen}>
         <AlertDialogContent>

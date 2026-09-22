@@ -758,3 +758,116 @@ export async function getWriterScheduleBanner(
     lastPublishedAt: lastPublishedAt ? lastPublishedAt.toISOString() : null,
   };
 }
+
+export type OpinionWeekBoardEntry = {
+  writerId: string;
+  name: string;
+  /** موعد النشر المخصص في هذا الأسبوع (ISO) */
+  slotAt: string;
+  /** published نُشر · scheduled جُدول · arrived وصلت المسودة · missing لم تصل · late فات الموعد بلا نشر */
+  state: "published" | "scheduled" | "arrived" | "missing" | "late";
+  /** مقال الأسبوع إن وُجد (للفتح من الشريط) */
+  articleId: string | null;
+};
+
+export type OpinionWeekBoardDay = {
+  /** YYYY-MM-DD بتوقيت الرياض */
+  date: string;
+  weekday: number;
+  entries: OpinionWeekBoardEntry[];
+};
+
+/** مسودة الكاتب تُحسب «وصلت» لموعد هذا الأسبوع إن حُفظت خلال هذه المدة */
+const WEEK_BOARD_DRAFT_WINDOW_MS = 10 * DAY_MS;
+
+/**
+ * شريط أسبوع كتّاب الرأي في قائمة المسودات: سبعة أيام تبدأ اليوم بتوقيت الرياض،
+ * وفي كل يوم الكتّاب المستحقون وحالة مقالهم. استعلامان فقط مهما كان عدد الكتّاب.
+ */
+export async function getOpinionWeekBoard(now: Date = new Date()): Promise<OpinionWeekBoardDay[]> {
+  const today = riyadhDateParts(now);
+  const days: OpinionWeekBoardDay[] = Array.from({ length: 7 }, (_, i) => {
+    const day = new Date(Date.UTC(today.y, today.m - 1, today.d + i));
+    const date = `${day.getUTCFullYear()}-${String(day.getUTCMonth() + 1).padStart(2, "0")}-${String(day.getUTCDate()).padStart(2, "0")}`;
+    return { date, weekday: day.getUTCDay(), entries: [] };
+  });
+
+  const schedules = await db
+    .select({
+      writerId: opinionWriterSchedules.writerId,
+      weekday: opinionWriterSchedules.weekday,
+      publishTime: opinionWriterSchedules.publishTime,
+      firstName: users.firstName,
+      lastName: users.lastName,
+      email: users.email,
+    })
+    .from(opinionWriterSchedules)
+    .innerJoin(users, eq(users.id, opinionWriterSchedules.writerId))
+    .where(eq(opinionWriterSchedules.active, true));
+  if (schedules.length === 0) return days;
+
+  const windowStart = riyadhDateTime(today.y, today.m, today.d, "00:00");
+  const windowEnd = new Date(windowStart.getTime() + 7 * DAY_MS);
+  const draftSince = new Date(now.getTime() - WEEK_BOARD_DRAFT_WINDOW_MS);
+  const writerIds = [...new Set(schedules.map((s) => s.writerId))];
+
+  const rows = await db
+    .select({
+      id: articles.id,
+      authorId: articles.authorId,
+      status: articles.status,
+      publishedAt: articles.publishedAt,
+      scheduledAt: articles.scheduledAt,
+      updatedAt: articles.updatedAt,
+    })
+    .from(articles)
+    .where(and(
+      eq(articles.articleType, "opinion"),
+      inArray(articles.authorId, writerIds),
+      or(
+        and(eq(articles.status, "published"), gte(articles.publishedAt, windowStart)),
+        and(eq(articles.status, "scheduled"), gte(articles.scheduledAt, windowStart)),
+        and(eq(articles.status, "draft"), gte(articles.updatedAt, draftSince)),
+      ),
+    ))
+    .orderBy(desc(articles.updatedAt));
+
+  const byWriter = new Map<string, typeof rows>();
+  for (const row of rows) {
+    if (!row.authorId) continue;
+    const list = byWriter.get(row.authorId) ?? [];
+    list.push(row);
+    byWriter.set(row.authorId, list);
+  }
+
+  const dayKey = (d: Date) => {
+    const p = riyadhDateParts(d);
+    return `${p.y}-${String(p.m).padStart(2, "0")}-${String(p.d).padStart(2, "0")}`;
+  };
+
+  for (const schedule of schedules) {
+    const day = days.find((d) => d.weekday === schedule.weekday);
+    if (!day) continue;
+    const [y, m, d] = day.date.split("-").map(Number);
+    const slotAt = riyadhDateTime(y, m, d, schedule.publishTime);
+    const own = byWriter.get(schedule.writerId) ?? [];
+    const published = own.find((a) => a.status === "published" && a.publishedAt && dayKey(a.publishedAt) === day.date);
+    const scheduled = own.find((a) => a.status === "scheduled" && a.scheduledAt && a.scheduledAt < windowEnd);
+    const draft = own.find((a) => a.status === "draft");
+    const hit = published ?? scheduled ?? draft ?? null;
+    const state: OpinionWeekBoardEntry["state"] = published
+      ? "published"
+      : scheduled
+        ? "scheduled"
+        : slotAt.getTime() <= now.getTime()
+          ? "late"
+          : draft
+            ? "arrived"
+            : "missing";
+    const name = `${schedule.firstName ?? ""} ${schedule.lastName ?? ""}`.trim() || schedule.email || "كاتب";
+    day.entries.push({ writerId: schedule.writerId, name, slotAt: slotAt.toISOString(), state, articleId: hit?.id ?? null });
+  }
+
+  for (const day of days) day.entries.sort((a, b) => a.slotAt.localeCompare(b.slotAt));
+  return days;
+}
