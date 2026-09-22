@@ -201,7 +201,7 @@ export function NationalDay96Block({
         </header>
 
         <div className="mt-5 grid grid-cols-1 sm:grid-cols-3 gap-3.5">
-          {articles.slice(0, 3).map((a, i) => {
+          {articles.map((a, i) => {
             const card = (
               <article
                 className="h-full rounded-xl overflow-hidden border transition-colors"
