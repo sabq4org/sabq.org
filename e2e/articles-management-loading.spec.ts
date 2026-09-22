@@ -63,6 +63,61 @@ async function setup(page: Page) {
   return { requests, writes };
 }
 
+for (const mobile of [false, true]) {
+  test(`article labels separate writer, category and opinion publishing slot (${mobile ? "mobile" : "desktop"})`, async ({ page }, info) => {
+    if (mobile) await page.setViewportSize({ width: 390, height: 844 });
+    await page.clock.setFixedTime(new Date("2026-09-22T18:00:00Z"));
+    await setup(page);
+    if (!mobile) {
+      const publishedRow = page.getByTestId("row-article-page-1-a");
+      const publishedTimeBox = (await page.getByTestId("published-date-desktop-page-1-a").boundingBox())!;
+      const publishedAuthorBox = (await publishedRow.getByTestId("badge-source-manual").boundingBox())!;
+      const publishedCategoryBox = (await publishedRow.getByText("رياضة", { exact: true }).boundingBox())!;
+      expect(Math.abs(publishedTimeBox.y - publishedAuthorBox.y)).toBeLessThan(8);
+      expect(Math.abs(publishedTimeBox.y - publishedCategoryBox.y)).toBeLessThan(8);
+      await publishedRow.screenshot({ path: info.outputPath("editorial-labels-published-desktop.png") });
+    }
+    await page.route("**/api/admin/articles?**", route => {
+      if (new URL(route.request().url()).searchParams.get("status") !== "draft") return route.fallback();
+      return route.fulfill({ json: {
+        articles: [
+          {
+            ...article("opinion-with-slot", "draft"), articleType: "opinion", title: "اليوم الوطني يرفع سقف الطموح ويمنح قطاع الأعمال فرصًا أوسع لصناعة المستقبل",
+            author: { id: "writer-1", firstName: "سارة", lastName: "الحربي", email: "writer@example.test" },
+            writerWeeklySlot: { weekday: 3, publishTime: "09:00", nextSlot: "2026-09-23T06:00:00.000Z" },
+          },
+          { ...article("opinion-without-slot", "draft"), articleType: "opinion", title: "مقال رأي بلا موعد" },
+        ],
+        page: 1, total: 2, limit: 30, totalPages: 1,
+      } });
+    });
+    await page.getByTestId("card-stat-draft").click();
+    const row = page.getByTestId(`${mobile ? "card" : "row"}-article-opinion-with-slot`);
+    const slot = page.getByTestId(`weekly-slot-${mobile ? "" : "desktop-"}opinion-with-slot`);
+    await expect(row).toContainText("رأي");
+    await expect(row.getByTestId("badge-source-manual")).toContainText(/الكاتب\s*سارة الحربي/);
+    await expect(row).toContainText("رياضة");
+    await expect(slot).toContainText("موعد الكاتب");
+    await expect(slot).toContainText(mobile ? "23 سبتمبر 2026، 9:00 ص" : "23 سبتمبر، 9:00 ص");
+    await expect(slot).toHaveAttribute("datetime", "2026-09-23T06:00:00.000Z");
+    if (!mobile) {
+      const titleBox = (await row.getByRole("heading", { name: "اليوم الوطني يرفع سقف الطموح ويمنح قطاع الأعمال فرصًا أوسع لصناعة المستقبل" }).boundingBox())!;
+      const categoryBox = (await row.getByText("رياضة", { exact: true }).boundingBox())!;
+      const slotBox = (await slot.boundingBox())!;
+      const authorBox = (await row.getByTestId("badge-source-manual").boundingBox())!;
+      expect(titleBox.height).toBeLessThan(25);
+      expect(Math.abs(slotBox.y - categoryBox.y)).toBeLessThan(8);
+      expect(Math.abs(slotBox.y - authorBox.y)).toBeLessThan(8);
+      expect(slotBox.y).toBeGreaterThan(titleBox.y);
+    }
+    const missing = page.getByTestId(`weekly-slot-${mobile ? "" : "desktop-"}opinion-without-slot`);
+    await expect(missing).toContainText("موعد الكاتب");
+    await expect(missing).toContainText("غير محدد");
+    await expect(missing).not.toHaveAttribute("datetime");
+    await row.screenshot({ path: info.outputPath(`editorial-labels-${mobile ? "mobile" : "desktop"}.png`) });
+  });
+}
+
 test("typing on page two sends one debounced search on page one", async ({ page }) => {
   const { requests } = await setup(page);
   await page.getByTestId("button-pagination-next").click();
