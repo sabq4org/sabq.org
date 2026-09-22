@@ -10,7 +10,7 @@
  *   SABQ_API_BASE           افتراضي https://api.sabq.org
  *
  * USAGE:
- *   tsx scripts/bot-drafts-client.ts create --title="عنوان" --content-file=./body.txt [--category-slug=local] [--excerpt="…"] [--image-url=https://…] [--ref=grok-123]
+ *   tsx scripts/bot-drafts-client.ts create --title="عنوان" --content-file=./body.txt [--category-slug=local] [--excerpt="…"] [--image-url=https://…] [--image-urls=https://media.sabq.org/…,https://media.sabq.org/…] [--ref=grok-123]
  *   tsx scripts/bot-drafts-client.ts create --json=./draft.json
  *   tsx scripts/bot-drafts-client.ts update <id> --title="عنوان جديد" [--content-file=…] [--json=…]
  *   tsx scripts/bot-drafts-client.ts get <id>
@@ -38,6 +38,8 @@ export interface BotDraftPayload {
   categoryId?: string;
   categorySlug?: string;
   imageUrl?: string | null;
+  /** صور المتن (أسفل الجسم). روابط https من `uploadImage().deliveryUrl`. */
+  imageUrls?: string[];
   keywords?: string[];
   sourceUrl?: string | null;
   clientReference?: string;
@@ -54,6 +56,8 @@ export interface BotDraft {
   categoryId: string | null;
   categorySlug: string | null;
   imageUrl: string | null;
+  /** صور المتن بالترتيب. الغلاف لا يدخل هنا إلا إذا أُدرج في الجسم أيضاً. */
+  bodyImageUrls?: string[];
   bot: string | null;
   clientReference: string | null;
   editUrl: string;
@@ -114,7 +118,7 @@ export class BotDraftsClient {
     return this.request("GET", `/api/internal/bot-drafts/${encodeURIComponent(id)}`);
   }
 
-  /** رفع صورة غلاف إلى R2 (multipart field = file). مرّر `deliveryUrl` (media.sabq.org) كـ `imageUrl`. */
+  /** رفع صورة إلى R2 (multipart field = file). مرّر `deliveryUrl` كـ `imageUrl` (غلاف) أو ضمن `imageUrls` (متن). */
   uploadImage(input: BotDraftImageUploadInput): Promise<BotDraftImageUpload> {
     const blob =
       input.data instanceof Blob
@@ -185,6 +189,9 @@ function payloadFromFlags(flags: Record<string, string>): BotDraftPayload {
   if (flags["category-id"]) payload.categoryId = flags["category-id"];
   if (flags["category-slug"]) payload.categorySlug = flags["category-slug"];
   if (flags["image-url"]) payload.imageUrl = flags["image-url"];
+  if (flags["image-urls"]) {
+    payload.imageUrls = flags["image-urls"].split(",").map((url) => url.trim()).filter(Boolean);
+  }
   if (flags.keywords) payload.keywords = flags.keywords.split(",").map((k) => k.trim()).filter(Boolean);
   if (flags["source-url"]) payload.sourceUrl = flags["source-url"];
   if (flags.ref) payload.clientReference = flags.ref;

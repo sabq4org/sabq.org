@@ -1,6 +1,6 @@
 # نظام التحرير وغرف الأخبار (`editorial`)
 
-> آخر مراجعة: 2026-09-21 (سطر قائمة المقالات في اللوحة) | المالك: editorial
+> آخر مراجعة: 2026-09-22 (صور متن مسودات البوتات) | المالك: editorial
 
 ## الغرض
 غرفة الأخبار اليومية + أدوات التحرير بالذكاء الاصطناعي التي يستخدمها المحررون: عناوين، مقالات، تصنيف، SEO، روابط ذكية، صور، وكلاء بريد/واتساب، ومساعد كاتب الرأي، والإعلانات الداخلية الموجهة لفريق العمل.
@@ -218,3 +218,4 @@
 - تصنيف المسودة: `resolveCategory` يقبل `status=visible` (قيمة الإنتاج في `GET /api/categories` ومسارات الموبايل/`mobileArticleEnrichment`) و`active` تاريخياً؛ `inactive` يُرفض `422 category_not_found`. طلبات الخوادم إلى `api.sabq.org` تحتاج `User-Agent` متصفّح عادي وإلا قد يرد Cloudflare 1010 — انظر [`BOT_DRAFTS_API.md`](./BOT_DRAFTS_API.md).
 - لا schema/DDL: التعديل في `shared/schema.ts` نوعي فقط لحقل `sourceMetadata` (jsonb). التحقق: `tests/unit/botDrafts.test.ts`.
 - **رفع صورة الغلاف (2026-09-20):** `POST /api/internal/bot-drafts/images` بنفس توكنات Bot Drafts (لا SendGrid). `multipart` حقل `file`، حد 10MB، JPEG/PNG/WEBP/GIF مع تحقق البايتات. التخزين **R2 إلزامي**: `newsImageStorageService.upload({ purpose: "bot-article-image", forceR2: true })` يتجاوز نسبة الرول-آوت ولا يسقط على Cloudflare Images. `deliveryUrl` هو رابط https على `media.sabq.org` (`sabq-news-images`). غياب إعداد R2 → `503 storage_unavailable`؛ فشل R2 → `502 upload_failed` بلا تخزين بديل. لا مسودة ولا نشر من هذا المسار.
+- **صور المتن (2026-09-22):** الغلاف يبقى `imageUrl` ولا يُنسخ إلى الجسم. صور المتن عبر `imageUrls` (حتى 20 رابط https، وتُلحَق أسفل HTML) أو `<img src="https://…">` مغلق داخل `content`. الخادم يكتب عقدة TipTap `image` نفسها (`sabq-article-image` / `data-align=center` / `data-width=100%`) بلا ألبوم. رابط خام داخل فقرة يبقى نصاً؛ الاستثناء فقرة كاملة هي `https://media.sabq.org/…`. `GET` لا يعيد المتن ويعيد `bodyImageUrls`. وسم `<img` غير المغلق كان يبتلع الفقرات في المعاينة — يُسقط الخادم البداية المكسورة ويبقي النص. `PATCH` بـ `imageUrls` وحدها يلحق دون إعادة كتابة صور المحرر. لا تغيير للنشر أو المصادقة أو المخطط.

@@ -13,6 +13,7 @@ import { db } from "../db";
 import { articleEditLocks, articles, categories, users } from "@shared/schema";
 import { SABQ_NEWSPAPER_ACCOUNT_ID } from "@shared/sabqNewspaper";
 import {
+  BOT_DRAFT_BODY_IMAGE_LIMIT,
   BOT_DRAFT_SOURCE,
   BOT_DRAFT_STATUS,
   type BotDraftCreateInput,
@@ -157,23 +158,191 @@ function escapeHtml(value: string): string {
     .replace(/"/g, "&quot;");
 }
 
+function decodeHtmlAttr(value: string): string {
+  return value
+    .replace(/&quot;/g, '"')
+    .replace(/&#0*39;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&");
+}
+
 const HTML_TAG_RE = /<\/?[a-z][^>]*>/i;
 
 /**
- * يحوّل النص الخام إلى فقرات <p> (فاصل الفقرة سطر فارغ)، ويمرر HTML كما هو بعد
- * التنقية القياسية للمحرر (`sanitizeArticleHtml`). `format` يفرض التفسير، وإلا
+ * شكل صورة المتن في محرر سبق (عقدة TipTap `image` / `ResizableImage`).
+ * المحاذاة وسط والعرض 100% حتى تظهر تحت المتن لا كنص، وتُقرأ في المعاينة
+ * والمحرر وصفحة الخبر من `img[src]` + `data-align` + `data-width`.
+ */
+const BODY_IMAGE_ALT = "صورة";
+const BODY_IMAGE_CLASS = "sabq-article-image sabq-image--center";
+const BODY_IMAGE_STYLE = "width: 100%; float: none; margin: 1.5rem auto; max-width: 100%; height: auto;";
+const MEDIA_SABQ_HOST = "media.sabq.org";
+
+export function canonicalHttpsImageUrl(value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed.startsWith("https://") || trimmed.length > 2000 || /\s/.test(trimmed)) return null;
+  try {
+    const url = new URL(trimmed);
+    if (url.protocol !== "https:" || !url.hostname || url.username || url.password) return null;
+    return url.href;
+  } catch {
+    return null;
+  }
+}
+
+/** وسم `<img>` مطابق لما يحفظه المحرر عند إدراج صورة في المتن. */
+export function renderBotDraftBodyImage(src: string, alt = BODY_IMAGE_ALT): string {
+  const safeAlt = alt.replace(/[\u0000-\u001F]/g, "").trim().slice(0, 200) || BODY_IMAGE_ALT;
+  return (
+    `<img src="${escapeHtml(src)}" alt="${escapeHtml(safeAlt)}"` +
+    ` data-align="center" data-width="100%" class="${BODY_IMAGE_CLASS}" style="${BODY_IMAGE_STYLE}">`
+  );
+}
+
+function readAttr(tag: string, name: string): string | null {
+  const quoted = tag.match(new RegExp(`\\b${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)')`, "i"));
+  if (quoted) return decodeHtmlAttr(quoted[1] ?? quoted[2] ?? "");
+  const bare = tag.match(new RegExp(`\\b${name}\\s*=\\s*([^\\s>]+)`, "i"));
+  return bare ? decodeHtmlAttr(bare[1]) : null;
+}
+
+type ImgTagEnd = { kind: "closed"; end: number } | { kind: "open"; resumeAt: number };
+
+function findImgTagEnd(html: string, start: number): ImgTagEnd {
+  let quote: '"' | "'" | null = null;
+  for (let j = start + 4; j < html.length; j++) {
+    const ch = html[j];
+    if (quote) {
+      if (ch === quote) quote = null;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      continue;
+    }
+    if (ch === ">") return { kind: "closed", end: j };
+    // وسم `<img` غير مغلق يبتلع المتن التالي داخل المحلّل (المعاينة وTipTap).
+    if (ch === "<") return { kind: "open", resumeAt: j };
+  }
+  return { kind: "open", resumeAt: html.length };
+}
+
+/**
+ * يمر على وسوم `<img>` فقط. الوسم غير المغلق يُحذف وتُستأنف القراءة عند الوسم
+ * التالي حتى لا يختفي متن الخبر.
+ */
+function transformImgTags(html: string, onTag: (tag: string) => string): string {
+  const lower = html.toLowerCase();
+  let out = "";
+  let i = 0;
+  while (i < html.length) {
+    const start = lower.indexOf("<img", i);
+    if (start < 0) {
+      out += html.slice(i);
+      break;
+    }
+    const boundary = html[start + 4];
+    if (boundary && /[a-z0-9]/i.test(boundary)) {
+      out += html.slice(i, start + 4);
+      i = start + 4;
+      continue;
+    }
+    out += html.slice(i, start);
+    const closed = findImgTagEnd(html, start);
+    if (closed.kind === "open") {
+      i = closed.resumeAt;
+      continue;
+    }
+    out += onTag(html.slice(start, closed.end + 1));
+    i = closed.end + 1;
+  }
+  return out;
+}
+
+function httpsSrcFromTag(tag: string): string | null {
+  return canonicalHttpsImageUrl(readAttr(tag, "src") ?? "");
+}
+
+function rewriteImgTag(tag: string): string {
+  const src = httpsSrcFromTag(tag);
+  if (!src) return "";
+  const alt = readAttr(tag, "alt")?.replace(/[\u0000-\u001F]/g, "").trim();
+  return renderBotDraftBodyImage(src, alt || BODY_IMAGE_ALT);
+}
+
+/** روابط `src` لصور المتن https بالترتيب، بما فيها المكرر إن تكرر في HTML. */
+export function extractBodyImageUrls(html: string | null | undefined): string[] {
+  if (!html) return [];
+  const urls: string[] = [];
+  transformImgTags(html, (tag) => {
+    const src = httpsSrcFromTag(tag);
+    if (src) urls.push(src);
+    return tag;
+  });
+  return urls;
+}
+
+/**
+ * يلحق صور `imageUrls` أسفل المتن كعقد `img` مستقلة (لا ألبوم).
+ * الرابط الموجود أصلاً في المتن لا يُكرَّر. HTML القائم لا يُعاد كتابته.
+ */
+export function appendBotDraftBodyImages(html: string, imageUrls: string[] | undefined): string {
+  if (!imageUrls?.length) return html;
+  const seen = new Set(extractBodyImageUrls(html));
+  const blocks: string[] = [];
+  for (const raw of imageUrls.slice(0, BOT_DRAFT_BODY_IMAGE_LIMIT)) {
+    const src = canonicalHttpsImageUrl(raw);
+    if (!src || seen.has(src)) continue;
+    seen.add(src);
+    blocks.push(renderBotDraftBodyImage(src));
+  }
+  if (!blocks.length) return html;
+  const base = html.trimEnd();
+  return base ? `${base}\n${blocks.join("\n")}` : blocks.join("\n");
+}
+
+/** فقرة نصية هي رابط media.sabq.org وحده — كانت تظهر كنص خام في المعاينة. */
+function standaloneMediaImageUrl(paragraph: string): string | null {
+  const trimmed = paragraph.trim();
+  if (/\s/.test(trimmed)) return null;
+  const src = canonicalHttpsImageUrl(trimmed);
+  if (!src) return null;
+  try {
+    if (new URL(src).hostname !== MEDIA_SABQ_HOST) return null;
+  } catch {
+    return null;
+  }
+  return src;
+}
+
+/**
+ * يحوّل النص الخام إلى فقرات `<p>` (فاصل الفقرة سطر فارغ). HTML يمر بتنقية
+ * المحرر ثم تُعاد كتابة كل `<img src="https://…">` مغلق إلى شكل عقدة الصورة
+ * في TipTap. `imageUrls` تُلحَق أسفل المتن. `format` يفرض التفسير، وإلا
  * يُكتشف تلقائياً من وجود وسوم.
  */
-export function normalizeDraftContent(content: string, format?: "html" | "text"): string {
+export function normalizeDraftContent(
+  content: string,
+  format?: "html" | "text",
+  imageUrls?: string[],
+): string {
   const trimmed = (content ?? "").trim();
   const isHtml = format ? format === "html" : HTML_TAG_RE.test(trimmed);
-  if (isHtml) return sanitizeArticleHtml(trimmed);
+  if (isHtml) {
+    const rewritten = transformImgTags(sanitizeArticleHtml(trimmed), rewriteImgTag);
+    return appendBotDraftBodyImages(rewritten, imageUrls);
+  }
   const paragraphs = trimmed
     .split(/\n\s*\n/)
     .map((paragraph) => paragraph.trim())
     .filter(Boolean)
-    .map((paragraph) => `<p>${escapeHtml(paragraph).replace(/\n/g, "<br>")}</p>`);
-  return paragraphs.join("\n");
+    .map((paragraph) => {
+      const media = standaloneMediaImageUrl(paragraph);
+      if (media) return renderBotDraftBodyImage(media);
+      return `<p>${escapeHtml(paragraph).replace(/\n/g, "<br>")}</p>`;
+    });
+  return appendBotDraftBodyImages(paragraphs.join("\n"), imageUrls);
 }
 
 function dashboardBaseUrl(): string {
@@ -203,6 +372,7 @@ export function toBotDraftResponse(row: ArticleRow, categorySlug: string | null 
     categoryId: row.categoryId ?? null,
     categorySlug,
     imageUrl: row.imageUrl ?? null,
+    bodyImageUrls: extractBodyImageUrls(row.content),
     sourceUrl: row.sourceUrl ?? null,
     keywords: Array.isArray(row.seo?.keywords) ? row.seo!.keywords! : [],
     source: row.source,
@@ -342,7 +512,7 @@ export async function createBotDraft(
       subtitle: input.subtitle ?? null,
       slug,
       englishSlug: generateEnglishSlug(input.title),
-      content: normalizeDraftContent(input.content, input.contentFormat),
+      content: normalizeDraftContent(input.content, input.contentFormat, input.imageUrls),
       excerpt: input.excerpt ?? null,
       imageUrl: input.imageUrl ?? null,
       categoryId: category?.id ?? null,
@@ -409,7 +579,12 @@ export async function updateBotDraft(
 
   if (input.title !== undefined) patch.title = input.title;
   if (input.subtitle !== undefined) patch.subtitle = input.subtitle;
-  if (input.content !== undefined) patch.content = normalizeDraftContent(input.content, input.contentFormat);
+  if (input.content !== undefined) {
+    patch.content = normalizeDraftContent(input.content, input.contentFormat, input.imageUrls);
+  } else if (input.imageUrls !== undefined) {
+    // إلحاق فقط: لا نعيد كتابة صور ضبطها المحرر (العرض/المحاذاة) داخل المسودة.
+    patch.content = appendBotDraftBodyImages(existing.content ?? "", input.imageUrls);
+  }
   if (input.excerpt !== undefined) patch.excerpt = input.excerpt;
   if (input.imageUrl !== undefined) patch.imageUrl = input.imageUrl;
   if (input.sourceUrl !== undefined) patch.sourceUrl = input.sourceUrl;
