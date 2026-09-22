@@ -7164,6 +7164,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       const offset = (pageNum - 1) * limitNum;
 
       const reporterAlias = aliasedTable(users, 'reporter');
+      const enteredByAlias = aliasedTable(users, 'entered_by');
 
       // Build where conditions array
       const whereConditions: (SQL<unknown> | undefined)[] = [];
@@ -7298,6 +7299,14 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
               email: reporterAlias.email,
               profileImageUrl: reporterAlias.profileImageUrl,
             },
+            // من أدخل المادة فعلًا: submitterId إن وُجد وإلا authorId (الموظف)،
+            // بخلاف الإسناد الظاهر للقارئ (reporter) الذي يكون غالبًا «صحيفة سبق».
+            enteredBy: {
+              id: enteredByAlias.id,
+              firstName: enteredByAlias.firstName,
+              lastName: enteredByAlias.lastName,
+              email: enteredByAlias.email,
+            },
             publisher: {
               id: publishers.id,
               companyName: publishers.agencyName,
@@ -7306,6 +7315,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
           .from(articles)
           .leftJoin(categories, eq(articles.categoryId, categories.id))
           .leftJoin(users, eq(articles.authorId, users.id))
+          .leftJoin(enteredByAlias, eq(sql`coalesce(${articles.submitterId}, ${articles.authorId})`, enteredByAlias.id))
           .leftJoin(reporterAlias, eq(articles.reporterId, reporterAlias.id))
           .leftJoin(publishers, eq(articles.publisherId, publishers.id))
           .$dynamic();
@@ -7356,6 +7366,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         ...row.article,
         category: row.category,
         author: row.reporter || row.author,
+        enteredBy: row.enteredBy?.id ? row.enteredBy : null,
         publisher: row.publisher,
       }));
 

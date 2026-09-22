@@ -35,7 +35,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Edit, Trash2, Send, Star, Bell, Plus, Archive, Trash, GripVertical, Sparkles, Newspaper, Clock, FilePenLine, Brain, MessageCircle, Mail, ChevronLeft, ChevronRight, Camera, BarChart3, Images, Building2, Languages, Loader2, Smartphone, Share2, BookOpen, HeartPulse, Zap, UserRound, ImageOff, AlertTriangle, EyeOff } from "lucide-react";
+import { Edit, Trash2, Send, Star, Bell, Plus, Archive, Trash, GripVertical, Sparkles, Newspaper, Clock, FilePenLine, Brain, MessageCircle, Mail, ChevronLeft, ChevronRight, Camera, BarChart3, Images, Building2, Languages, Loader2, Smartphone, Share2, BookOpen, HeartPulse, Zap, UserRound, ImageOff, AlertTriangle, EyeOff, Bot, Video } from "lucide-react";
 import { buildCloudflareUrl, normalizeImageSrc } from "@/lib/cdnImage";
 import { OpinionWeekBoard } from "@/components/admin/OpinionWeekBoard";
 import { SocialPublishDialog } from "@/components/social/SocialPublishDialog";
@@ -94,6 +94,10 @@ type Article = {
   imageUrl?: string | null;
   thumbnailUrl?: string | null;
   hideFromHomepage?: boolean | null;
+  videoUrl?: string | null;
+  isVideoTemplate?: boolean | null;
+  /** من أدخل المادة فعلًا (submitterId ثم authorId) — بخلاف الإسناد الظاهر */
+  enteredBy?: { id: string; firstName: string | null; lastName: string | null; email: string | null } | null;
   signals?: { notifiedAt: string | null; socialPublishedAt: string | null } | null;
   source?: string;
   sourceMetadata?: {
@@ -101,6 +105,7 @@ type Article = {
     from?: string;
     senderName?: string;
     senderId?: string;
+    bot?: string;
     platform?: 'ios' | 'android' | string;
     firstName?: string;
     lastName?: string;
@@ -360,33 +365,120 @@ function personName(article: Article) {
   return article.author?.firstName || article.author?.email || "المحرر";
 }
 
+function userName(user: { firstName?: string | null; lastName?: string | null; email?: string | null } | null | undefined) {
+  if (!user) return null;
+  const name = `${user.firstName ?? ""} ${user.lastName ?? ""}`.trim();
+  return name || user.email || null;
+}
+
+/** الحساب الافتراضي للإسناد الظاهر — لا يفيد تكراره في كل صف */
+const DEFAULT_BYLINE = "صحيفة سبق";
+
+/**
+ * من أضاف المادة إلى النظام: البريد الذكي، واتساب، بوت، تطبيق المراسل، وكالة،
+ * أو اسم الموظف. لمقالات الرأي يبقى الكاتب أولًا ومن أدخلها ثانيًا.
+ */
 function wireAttribution(article: Article) {
-  if (article.source === "email") {
-    const name = article.sourceMetadata?.senderName || article.sourceMetadata?.from || "بريد إلكتروني";
-    return { name, channel: "بريد", title: `البريد الذكي: ${name}`, testId: "badge-source-email", incoming: true, Icon: Mail };
+  const meta = article.sourceMetadata as (Article["sourceMetadata"] & { bot?: string }) | null | undefined;
+  const staff = userName(article.enteredBy);
+  if (article.source === "email" || article.source === "url") {
+    const name = meta?.senderName || meta?.from || null;
+    return { prefix: "البريد الذكي", name, channel: "بريد", title: `البريد الذكي${name ? `: ${name}` : ""}`, testId: "badge-source-email", incoming: true, Icon: Mail, enteredBy: null as string | null };
   }
   if (article.source === "whatsapp") {
-    const name = article.sourceMetadata?.senderName || article.sourceMetadata?.from || "واتساب";
-    return { name, channel: "واتساب", title: `واتساب: ${name}`, testId: "badge-source-whatsapp", incoming: true, Icon: MessageCircle };
+    const name = meta?.senderName || meta?.from || null;
+    return { prefix: "واتساب", name, channel: "واتساب", title: `واتساب${name ? `: ${name}` : ""}`, testId: "badge-source-whatsapp", incoming: true, Icon: MessageCircle, enteredBy: null as string | null };
+  }
+  if (article.source === "bot") {
+    const bot = meta?.bot || "نشر سبق";
+    return { prefix: "بوت", name: `«${bot}»`, channel: "بوت", title: `أضافه البوت «${bot}»`, testId: "badge-source-bot", incoming: true, Icon: Bot, enteredBy: null as string | null };
+  }
+  if (article.source === "ai") {
+    return { prefix: "مولّد آليًا", name: staff, channel: "آلي", title: `مولّد بالذكاء الاصطناعي${staff ? ` · ${staff}` : ""}`, testId: "badge-source-ai", incoming: true, Icon: Sparkles, enteredBy: null as string | null };
   }
   if (article.source === "ios-app" || article.source === "android-app") {
     const name = personName(article);
     const android = article.source === "android-app";
     return {
+      prefix: "المراسل",
       name,
       channel: android ? "أندرويد" : "iOS",
       title: `${android ? "تطبيق Android" : "تطبيق iOS"}: ${name}`,
       testId: android ? "badge-source-android" : "badge-source-ios",
       incoming: true,
       Icon: Smartphone,
+      enteredBy: null as string | null,
     };
   }
   if (article.publisher?.companyName) {
     const name = article.publisher.companyName;
-    return { name, channel: "وكالة", title: `وكالة: ${name}`, testId: "badge-source-publisher", incoming: true, Icon: Building2 };
+    return { prefix: "الوكالة", name, channel: "وكالة", title: `وكالة: ${name}`, testId: "badge-source-publisher", incoming: true, Icon: Building2, enteredBy: null as string | null };
   }
-  const name = personName(article);
-  return { name, channel: null as string | null, title: `المحرر: ${name}`, testId: "badge-source-manual", incoming: false, Icon: null };
+  const byline = personName(article);
+  if (article.articleType === "opinion") {
+    return {
+      prefix: "الكاتب",
+      name: byline,
+      channel: null as string | null,
+      title: `الكاتب: ${byline}${staff && staff !== byline ? ` · أدخله ${staff}` : ""}`,
+      testId: "badge-source-manual",
+      incoming: false,
+      Icon: null,
+      enteredBy: staff && staff !== byline ? staff : null,
+    };
+  }
+  const name = staff || byline;
+  return {
+    prefix: "أضافه",
+    name,
+    channel: null as string | null,
+    title: `أضافه: ${name}${byline && byline !== name ? ` · باسم ${byline}` : ""}`,
+    testId: "badge-source-manual",
+    incoming: false,
+    Icon: null,
+    // الإسناد الظاهر إن اختلف عن الموظف ولم يكن الحساب الافتراضي
+    enteredBy: null as string | null,
+    byline: byline && byline !== name && byline !== DEFAULT_BYLINE ? byline : null,
+  };
+}
+
+/** ملصقات حالة المادة في سطر البيانات */
+function articleFlags(article: Article) {
+  const flags: { key: string; label: string; tone: string; Icon: typeof Star; title?: string }[] = [];
+  const album = (article as { albumImages?: unknown[] }).albumImages?.length
+    || (article as { mediaAssetsCount?: number }).mediaAssetsCount
+    || 0;
+  const aiImage = Boolean(article.isAiGeneratedThumbnail || (article as { isAiGeneratedImage?: boolean }).isAiGeneratedImage);
+  const noImage = !article.thumbnailUrl && !article.imageUrl && article.articleType === "news" && article.status !== "archived";
+  if (article.isFeatured) flags.push({ key: "featured", label: "مميّز", tone: "bg-amber-50 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300", Icon: Star });
+  if (article.isReading) flags.push({ key: "reading", label: "قراءة", tone: "bg-sky-50 text-sky-800 dark:bg-sky-950/50 dark:text-sky-300", Icon: BookOpen });
+  if (album) flags.push({ key: "album", label: `ألبوم ${album} صور`, tone: "bg-muted text-foreground/75", Icon: Images, title: "يحتوي على ألبوم صور" });
+  if (article.videoUrl || article.isVideoTemplate) flags.push({ key: "video", label: "فيديو", tone: "bg-muted text-foreground/75", Icon: Video });
+  if (noImage) flags.push({ key: "no-image", label: "بلا صورة", tone: "bg-amber-50 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300", Icon: AlertTriangle });
+  if (aiImage) flags.push({ key: "ai-image", label: "صورة مولّدة", tone: "bg-violet-50 text-violet-800 dark:bg-violet-950/50 dark:text-violet-300", Icon: Brain, title: "صورة مولّدة بالذكاء الاصطناعي" });
+  if (article.hideFromHomepage) flags.push({ key: "hidden", label: "مخفي من الرئيسية", tone: "bg-muted text-foreground/75", Icon: EyeOff });
+  return flags;
+}
+
+function ArticleFlags({ article, omit = [] }: { article: Article; omit?: string[] }) {
+  // بطاقة الجوال تعرض «مميّز» و«قراءة» في شارات مستقلة، فتُستثنى هنا منعًا للتكرار
+  const flags = articleFlags(article).filter((flag) => !omit.includes(flag.key));
+  if (!flags.length) return null;
+  return (
+    <>
+      {flags.map((flag) => (
+        <span
+          key={flag.key}
+          title={flag.title ?? flag.label}
+          className={cn("inline-flex shrink-0 items-center gap-1 rounded-[5px] px-1.5 text-[11px] font-medium leading-5", flag.tone)}
+          data-testid={`flag-${flag.key}-${article.id}`}
+        >
+          <flag.Icon className={cn("h-3 w-3", flag.key === "featured" && "fill-current")} aria-hidden="true" />
+          {flag.label}
+        </span>
+      ))}
+    </>
+  );
 }
 
 function ArticleWireRow({
@@ -408,14 +500,9 @@ function ArticleWireRow({
   const categoryColor = article.category?.color && /^#([0-9a-fA-F]{6})$/.test(article.category.color)
     ? article.category.color
     : null;
-  const hasAlbum = (article as { albumImages?: unknown[] }).albumImages?.length
-    || (article as { mediaAssetsCount?: number }).mediaAssetsCount;
   const aiImage = Boolean(article.isAiGeneratedThumbnail || (article as { isAiGeneratedImage?: boolean }).isAiGeneratedImage);
   const WhoIcon = who.Icon;
-  const whoLabel = article.articleType === "opinion" ? "الكاتب"
-    : who.channel === "iOS" || who.channel === "أندرويد" ? "المراسل"
-      : who.channel === "وكالة" ? "الوكالة"
-        : who.channel ? "المرسل" : "المحرر";
+  const whoLabel = who.prefix;
   const momentTone = article.status === "scheduled"
     ? "border-sky-200 bg-sky-50 text-sky-800 dark:border-sky-800 dark:bg-sky-950/45 dark:text-sky-200"
     : article.status === "draft" && article.articleType === "opinion"
@@ -449,11 +536,6 @@ function ArticleWireRow({
           {type.icon ? <type.icon className="h-3 w-3" aria-hidden="true" /> : null}
           {type.label}
         </span>
-        {hasAlbum ? (
-          <span title="يحتوي على ألبوم صور" className="mt-1 inline-flex">
-            <Images className="h-3.5 w-3.5 shrink-0 text-sky-600 dark:text-sky-400" aria-hidden="true" />
-          </span>
-        ) : null}
         <h3
           title={article.title}
           onClick={onTitleClick}
@@ -501,6 +583,7 @@ function ArticleWireRow({
           <span className="truncate font-semibold">{who.name}</span>
         </span>
         {categoryChip}
+        {!desktop ? <ArticleFlags article={article} omit={["featured", "reading"]} /> : null}
       </div>
     </div>
   );
@@ -680,15 +763,7 @@ function ArticleDeskMain({
   const categoryColor = article.category?.color && /^#([0-9a-fA-F]{6})$/.test(article.category.color)
     ? article.category.color
     : null;
-  const hasAlbum = (article as { albumImages?: unknown[] }).albumImages?.length
-    || (article as { mediaAssetsCount?: number }).mediaAssetsCount;
-  const aiImage = Boolean(article.isAiGeneratedThumbnail || (article as { isAiGeneratedImage?: boolean }).isAiGeneratedImage);
-  const noImage = !article.thumbnailUrl && !article.imageUrl && article.articleType === "news" && article.status !== "archived";
-  const WhoIcon = who.Icon;
-  const whoLabel = article.articleType === "opinion" ? "الكاتب"
-    : who.channel === "iOS" || who.channel === "أندرويد" ? "المراسل"
-      : who.channel === "وكالة" ? "الوكالة"
-        : who.channel ? "المرسل" : null;
+  const WhoIcon = who.Icon ?? UserRound;
   const Sep = () => <span aria-hidden="true" className="text-border">|</span>;
 
   return (
@@ -724,23 +799,24 @@ function ArticleDeskMain({
         ) : null}
         {categoryName ? <Sep /> : null}
         <span data-testid={who.testId} title={who.title} className="inline-flex min-w-0 items-center gap-1">
-          {WhoIcon ? <WhoIcon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" /> : null}
-          {whoLabel ? <span className="shrink-0">{whoLabel}</span> : null}
-          <span className="truncate text-foreground/80">{who.name}</span>
-          {who.channel && who.channel !== "وكالة" ? <span className="shrink-0">· {who.channel}</span> : null}
+          <WhoIcon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+          <span className="shrink-0">{who.prefix}</span>
+          {who.name ? <span className="truncate font-medium text-foreground/85">{who.name}</span> : null}
+          {who.channel === "iOS" || who.channel === "أندرويد" ? <span className="shrink-0">· {who.channel}</span> : null}
         </span>
-        {noImage ? (
-          <><Sep /><span className="inline-flex shrink-0 items-center gap-1 text-amber-700 dark:text-amber-400"><AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />بلا صورة</span></>
+        {who.enteredBy ? (
+          <span className="inline-flex min-w-0 shrink items-center gap-1" data-testid={`entered-by-${article.id}`}>
+            <span className="shrink-0">· أدخله</span>
+            <span className="truncate text-foreground/80">{who.enteredBy}</span>
+          </span>
         ) : null}
-        {article.hideFromHomepage ? (
-          <><Sep /><span className="inline-flex shrink-0 items-center gap-1"><EyeOff className="h-3.5 w-3.5" aria-hidden="true" />مخفي من الرئيسية</span></>
+        {"byline" in who && who.byline ? (
+          <span className="inline-flex min-w-0 shrink items-center gap-1" data-testid={`byline-${article.id}`}>
+            <span className="shrink-0">· باسم</span>
+            <span className="truncate text-foreground/80">{who.byline}</span>
+          </span>
         ) : null}
-        {hasAlbum ? (
-          <><Sep /><span className="inline-flex shrink-0 items-center gap-1" title="يحتوي على ألبوم صور"><Images className="h-3.5 w-3.5" aria-hidden="true" />ألبوم</span></>
-        ) : null}
-        {aiImage ? (
-          <><Sep /><span className="inline-flex shrink-0 items-center gap-1" title="صورة مولّدة بالذكاء الاصطناعي" data-testid={`badge-ai-image-${article.id}`}><Brain className="h-3.5 w-3.5" aria-hidden="true" />صورة مولّدة</span></>
-        ) : null}
+        <ArticleFlags article={article} />
       </div>
     </div>
   );
