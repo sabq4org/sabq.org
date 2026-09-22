@@ -73,8 +73,16 @@ for (const mobile of [false, true]) {
       const publishedTimeBox = (await page.getByTestId("published-date-desktop-page-1-a").boundingBox())!;
       const publishedAuthorBox = (await publishedRow.getByTestId("badge-source-manual").boundingBox())!;
       const publishedCategoryBox = (await publishedRow.getByText("رياضة", { exact: true }).boundingBox())!;
-      expect(Math.abs(publishedTimeBox.y - publishedAuthorBox.y)).toBeLessThan(8);
-      expect(Math.abs(publishedTimeBox.y - publishedCategoryBox.y)).toBeLessThan(8);
+      // عمود الوقت أول الصف (يمينًا)، والتصنيف والكاتب في سطر واحد تحت العنوان
+      expect(publishedTimeBox.x).toBeGreaterThan(publishedAuthorBox.x + publishedAuthorBox.width);
+      expect(Math.abs(publishedAuthorBox.y - publishedCategoryBox.y)).toBeLessThan(8);
+      expect((await publishedRow.boundingBox())!.height).toBeLessThan(80);
+      // كل أزرار المنشور ظاهرة بلا قائمة مختصرة
+      for (const action of ["edit", "feature", "social-publish", "notify", "translate", "resurface", "revision", "delete"]) {
+        await expect(publishedRow.getByTestId(`button-action-${action}-page-1-a`)).toBeVisible();
+      }
+      await expect(publishedRow.getByTestId("switch-breaking-page-1-a")).toBeVisible();
+      await expect(page.getByTestId("group-2026-09-05-0")).toContainText("5 سبتمبر");
       await publishedRow.screenshot({ path: info.outputPath("editorial-labels-published-desktop.png") });
     }
     await page.route("**/api/admin/articles?**", route => {
@@ -98,7 +106,7 @@ for (const mobile of [false, true]) {
     await expect(row.getByTestId("badge-source-manual")).toContainText(/الكاتب\s*سارة الحربي/);
     await expect(row).toContainText("رياضة");
     await expect(slot).toContainText("موعد الكاتب");
-    await expect(slot).toContainText(mobile ? "23 سبتمبر 2026، 9:00 ص" : "23 سبتمبر، 9:00 ص");
+    await expect(slot).toContainText(mobile ? "23 سبتمبر 2026، 9:00 ص" : "غدًا 9:00 ص");
     await expect(slot).toHaveAttribute("datetime", "2026-09-23T06:00:00.000Z");
     if (!mobile) {
       const titleBox = (await row.getByRole("heading", { name: "اليوم الوطني يرفع سقف الطموح ويمنح قطاع الأعمال فرصًا أوسع لصناعة المستقبل" }).boundingBox())!;
@@ -106,9 +114,11 @@ for (const mobile of [false, true]) {
       const slotBox = (await slot.boundingBox())!;
       const authorBox = (await row.getByTestId("badge-source-manual").boundingBox())!;
       expect(titleBox.height).toBeLessThan(25);
-      expect(Math.abs(slotBox.y - categoryBox.y)).toBeLessThan(8);
-      expect(Math.abs(slotBox.y - authorBox.y)).toBeLessThan(8);
-      expect(slotBox.y).toBeGreaterThan(titleBox.y);
+      expect(Math.abs(categoryBox.y - authorBox.y)).toBeLessThan(8);
+      // موعد الكاتب في عمود الوقت يمين العنوان، ومقالات الرأي في مجموعتها
+      expect(slotBox.x).toBeGreaterThan(titleBox.x + titleBox.width);
+      await expect(slot).toContainText("بعد 12 س");
+      await expect(page.getByTestId("group-opinion")).toContainText("مقالات الرأي");
     }
     const missing = page.getByTestId(`weekly-slot-${mobile ? "" : "desktop-"}opinion-without-slot`);
     await expect(missing).toContainText("موعد الكاتب");
@@ -275,11 +285,11 @@ for (const fails of [false, true]) {
     await expect(page.getByRole("status").filter({ hasText: "page-1-b" })).toBeAttached();
     await page.mouse.up();
     await expect.poll(() => writes).toBeGreaterThan(0);
-    await expect(page.locator("tbody tr").first()).toHaveAttribute("data-testid", "row-article-page-1-b");
+    await expect(page.locator("tbody tr[data-testid^=\"row-article-\"]").first()).toHaveAttribute("data-testid", "row-article-page-1-b");
     await expect.poll(() => writes).toBe(fails ? 3 : 1);
     await expect.poll(() => completed).toBe(fails ? 3 : 1);
-    await expect(page.locator("tbody tr").first()).toHaveAttribute("data-testid", `row-article-page-1-${fails ? "a" : "b"}`);
-    await expect(page.locator("tbody tr").first()).not.toHaveClass(/opacity-70/);
+    await expect(page.locator("tbody tr[data-testid^=\"row-article-\"]").first()).toHaveAttribute("data-testid", `row-article-page-1-${fails ? "a" : "b"}`);
+    await expect(page.locator("tbody tr[data-testid^=\"row-article-\"]").first()).not.toHaveClass(/opacity-70/);
     await expect(page.getByTestId("text-pagination-info")).toContainText("الصفحة 1 من 2");
   });
 }

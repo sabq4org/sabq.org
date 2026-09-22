@@ -8,18 +8,21 @@ interface BreakingSwitchProps {
   initialValue: boolean;
 }
 
-export function BreakingSwitch({ articleId, initialValue }: BreakingSwitchProps) {
+/** منطق تبديل «عاجل» مشترك بين المفتاح وزر البرق في صف القائمة. */
+export function useBreakingToggle(articleId: string, initialValue: boolean) {
   const [isBreaking, setIsBreaking] = useState(initialValue);
+  const [isPending, setIsPending] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
     setIsBreaking(initialValue);
   }, [initialValue]);
 
-  const handleToggle = async (checked: boolean) => {
+  const toggle = async (checked: boolean) => {
     const previousValue = isBreaking;
     
     setIsBreaking(checked);
+    setIsPending(true);
     
     try {
       await apiRequest(`/api/admin/articles/${articleId}/toggle-breaking`, {
@@ -48,13 +51,21 @@ export function BreakingSwitch({ articleId, initialValue }: BreakingSwitchProps)
         description: error.message || "فشل تحديث حالة الخبر العاجل",
         variant: "destructive",
       });
+    } finally {
+      setIsPending(false);
     }
   };
+
+  return { isBreaking, isPending, toggle };
+}
+
+export function BreakingSwitch({ articleId, initialValue }: BreakingSwitchProps) {
+  const { isBreaking, toggle } = useBreakingToggle(articleId, initialValue);
 
   return (
     <Switch
       checked={isBreaking}
-      onCheckedChange={handleToggle}
+      onCheckedChange={toggle}
       className="h-5 w-9 data-[state=checked]:bg-red-600 dark:data-[state=checked]:bg-red-600 data-[state=unchecked]:bg-gray-300 dark:data-[state=unchecked]:bg-gray-600"
       data-testid={`switch-breaking-${articleId}`}
     />
