@@ -8335,12 +8335,12 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       // the edge — otherwise /api/articles/<englishSlug> stays stale for
       // sMaxAge=3600s (browser fetches by englishSlug after slugRedirect,
       // not the DB slug). oldSlug/oldEnglishSlug cover renames.
+      // invalidateArticleWrite() already targets this article's sidebar key by id/slug — no blanket wipe needed.
       invalidateArticleWrite(updatedArticle, {
         reason: 'admin-patch',
         oldSlug: existingArticle.slug,
         oldEnglishSlug: existingArticle.englishSlug,
       });
-      memoryCache.invalidatePattern('^sidebar:');
       memoryCache.delete('lite-feed');
 
       // Send response IMMEDIATELY — don't wait for background operations
@@ -8968,12 +8968,11 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       // Invalidate cache and broadcast to all connected clients for instant update (runs immediately).
       // Passing the article so its slug is purged at the Cloudflare edge — without
       // it, /article/<slug> stays cached for up to sMaxAge=3600s.
+      // invalidateArticleWrite() already targets this article's cache keys — the blanket
+      // `^article:detail:`/`^sidebar:` wipes that used to run here nuked EVERY article's
+      // warm cache on every publish (the 2026-08-06 stampede this PR fixes), so removed.
       invalidateArticleWrite(articleForNotification, { reason: "article-publish" });
       memoryCache.delete('lite-feed'); // Clear mobile app feed cache
-      memoryCache.invalidatePattern('^article:detail:');
-      memoryCache.invalidatePattern('^article:id:');
-      memoryCache.invalidatePattern('^articles:');
-      memoryCache.invalidatePattern('^sidebar:');
       console.log(`[Breaking News] Cache invalidated and SSE broadcast sent for article ${articleId}`);
 
       // Log article published event
@@ -9131,12 +9130,9 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
 
       // Invalidate cache and broadcast to all connected clients for instant update.
       // Pass the article so its slug is purged at the edge (sMaxAge=3600 otherwise).
+      // See article-publish above — invalidateArticleWrite() already scopes this article; no blanket wipe.
       invalidateArticleWrite(updatedArticle, { reason: "article-feature" });
       memoryCache.delete('lite-feed'); // Clear mobile app feed cache
-      memoryCache.invalidatePattern('^article:detail:');
-      memoryCache.invalidatePattern('^article:id:');
-      memoryCache.invalidatePattern('^articles:');
-      memoryCache.invalidatePattern('^sidebar:');
       console.log(`[Breaking News] Cache invalidated and SSE broadcast sent for article ${articleId}`);
 
       res.json(updatedArticle);
@@ -9276,12 +9272,9 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
 
       // Invalidate cache and broadcast to all connected clients for instant update.
       // Pass the article so its slug is purged at the edge (sMaxAge=3600 otherwise).
+      // See article-publish above — invalidateArticleWrite() already scopes this article; no blanket wipe.
       invalidateArticleWrite(updatedArticle, { reason: "article-archive" });
       memoryCache.delete('lite-feed'); // Clear mobile app feed cache
-      memoryCache.invalidatePattern('^article:detail:');
-      memoryCache.invalidatePattern('^article:id:');
-      memoryCache.invalidatePattern('^articles:');
-      memoryCache.invalidatePattern('^sidebar:');
       console.log(`[Breaking News] Cache invalidated and SSE broadcast sent for article ${articleId}`);
 
       res.json(updatedArticle);
@@ -9337,12 +9330,9 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
 
       // Invalidate cache and broadcast to all connected clients for instant update.
       // Pass the article so its slug is purged at the edge (sMaxAge=3600 otherwise).
+      // See article-publish above — invalidateArticleWrite() already scopes this article; no blanket wipe.
       invalidateArticleWrite(updatedArticle, { reason: "article-restore" });
       memoryCache.delete('lite-feed'); // Clear mobile app feed cache
-      memoryCache.invalidatePattern('^article:detail:');
-      memoryCache.invalidatePattern('^article:id:');
-      memoryCache.invalidatePattern('^articles:');
-      memoryCache.invalidatePattern('^sidebar:');
       console.log(`[Breaking News] Cache invalidated and SSE broadcast sent for article ${articleId}`);
 
       // Log article event
@@ -9620,12 +9610,10 @@ Respond in valid JSON format only:
 
       // Invalidate cache and broadcast to all connected clients for instant update.
       // Pass the article so its slug is purged at the edge (sMaxAge=3600 otherwise).
+      // See article-publish above — invalidateArticleWrite() already scopes this article; no blanket wipe.
+      // This is the exact toggle a breaking-news click flood hits, so keeping the targeting intact matters most.
       invalidateArticleWrite(updatedArticle, { reason: "article-toggle-breaking" });
       memoryCache.delete('lite-feed'); // Clear mobile app feed cache
-      memoryCache.invalidatePattern('^article:detail:');
-      memoryCache.invalidatePattern('^article:id:');
-      memoryCache.invalidatePattern('^articles:');
-      memoryCache.invalidatePattern('^sidebar:');
       console.log(`[Breaking News] Cache invalidated and SSE broadcast sent for article ${articleId}`);
 
       res.json(updatedArticle);
