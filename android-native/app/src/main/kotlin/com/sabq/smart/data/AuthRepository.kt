@@ -222,7 +222,12 @@ class AuthRepository @Inject constructor(
 
     /** تثبيت الجلسة بعد دخول بريد/جوال/OTP — نفس مسار OAuth بعد إصدار التوكن. */
     private suspend fun finishCredentialLogin(response: ApiLoginResponse): User {
-        val token = response.token
+        if (response.requires2FA == true) {
+            val challenge = response.challengeToken?.takeIf { it.isNotBlank() }
+                ?: throw AuthException("تعذّر بدء التحقق بخطوتين")
+            throw TwoFactorRequiredException(challenge)
+        }
+        val token = response.token?.takeIf { it.isNotBlank() }
             ?: throw AuthException(response.message ?: "لم يصدر السيرفر رمز دخول")
         tokenStore.set(token)
         // Seed `_user` from the login response so the UI has *something*
@@ -311,7 +316,12 @@ class AuthRepository @Inject constructor(
         response: com.sabq.smart.data.api.ApiLoginResponse,
         providerLabel: String,
     ): User {
-        val token = response.token
+        if (response.requires2FA == true) {
+            val challenge = response.challengeToken?.takeIf { it.isNotBlank() }
+                ?: throw AuthException("تعذّر بدء التحقق بخطوتين")
+            throw TwoFactorRequiredException(challenge)
+        }
+        val token = response.token?.takeIf { it.isNotBlank() }
             ?: throw AuthException(response.message ?: "لم يصدر السيرفر رمز دخول من $providerLabel")
         tokenStore.set(token)
         // See login(): the OAuth login envelope also omits `interests`,
