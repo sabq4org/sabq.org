@@ -24,6 +24,8 @@ export interface SahraaTvBlockConfig {
   xPostUrl: string;
   /** رابط MP4 مباشر للتشغيل الأصلي */
   videoUrl: string;
+  /** نسخة R2 عبر media.sabq.org — تُقدَّم من الحافة مباشرة بلا بروكسي Express */
+  mirroredVideoUrl: string;
   /** صورة غلاف الفيديو إن توفرت */
   posterUrl: string;
   updatedAt: string | null;
@@ -116,6 +118,7 @@ export function defaultSahraaTvBlockConfig(): SahraaTvBlockConfig {
     description: DEFAULT_SAHRAA_DESCRIPTION,
     xPostUrl: DEFAULT_SAHRAA_X_POST_URL,
     videoUrl: "",
+    mirroredVideoUrl: "",
     posterUrl: "",
     updatedAt: null,
   };
@@ -144,6 +147,8 @@ export function parseSahraaTvBlockConfig(value: unknown): SahraaTvBlockConfig {
   const xPostUrl =
     typeof v.xPostUrl === "string" ? v.xPostUrl.trim() : defaults.xPostUrl;
   const videoUrl = typeof v.videoUrl === "string" ? v.videoUrl.trim() : "";
+  const mirroredVideoUrl =
+    typeof v.mirroredVideoUrl === "string" ? v.mirroredVideoUrl.trim() : "";
   const posterUrl = typeof v.posterUrl === "string" ? v.posterUrl.trim() : "";
   const updatedAt =
     typeof v.updatedAt === "string" && Number.isFinite(Date.parse(v.updatedAt))
@@ -157,6 +162,7 @@ export function parseSahraaTvBlockConfig(value: unknown): SahraaTvBlockConfig {
     description,
     xPostUrl: xPostUrl || defaults.xPostUrl,
     videoUrl,
+    mirroredVideoUrl,
     posterUrl,
     updatedAt,
   };
@@ -221,6 +227,8 @@ export function mergeSahraaTvBlockConfig(
         : urlChanged
           ? ""
           : current.videoUrl,
+    // نسخة R2 تتبع الفيديو الأصلي — تغيّر الرابط يعني نسخًا جديدًا
+    mirroredVideoUrl: urlChanged ? "" : current.mirroredVideoUrl,
     posterUrl:
       input.posterUrl !== undefined
         ? String(input.posterUrl ?? "").trim()
