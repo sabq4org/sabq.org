@@ -308,3 +308,23 @@ describe("المحرك — الأعطال والحدود", () => {
     await expect(engine.resume(main.id, editor)).rejects.toMatchObject({ status: 409 });
   });
 });
+
+describe("استعادة خطوة غرفة العمليات بعد توقف العامل", () => {
+  it("recovers an expired last attempt to failed instead of leaving it running", async () => {
+    const { engine, store } = makeEngine({});
+    const main = await store.insertTask({ title: "recovery", taskType: "breaking", status: "running" });
+    await store.insertTask({ title: "step", taskType: "breaking", parentId: main.id, stepKey: "observe",
+      status: "running", agentSlug: "rased", attempts: 2, maxAttempts: 2, timeoutMs: 100,
+      startedAt: new Date(Date.now() - 60000) });
+    await engine.pumpAll();
+    expect((await store.listSteps(main.id))[0].status).toBe("failed");
+    expect((await store.getTask(main.id))!.status).toBe("failed");
+  });
+  it("rejects a completion from the old attempt generation", async () => {
+    const store = new MemoryOpsStore();
+    const old = await store.insertTask({ title: "step", taskType: "breaking", status: "running", attempts: 1, startedAt: new Date(1000) });
+    await store.updateTask(old.id, { attempts: 2, startedAt: new Date(2000) });
+    expect(await store.updateTask(old.id, { status: "completed" }, { status: "running", attempts: 1, startedAt: new Date(1000) })).toBeUndefined();
+    expect((await store.getTask(old.id))!.attempts).toBe(2);
+  });
+});

@@ -67,10 +67,8 @@ class AsianCupViewModel @Inject constructor(private val repo: AsianCupRepository
                 val overview = async { repo.overview() }; val fixtures = async { repo.fixtures() }
                 val groups = async { repo.standings() }; val teams = async { repo.teams() }
                 val scorers = async { repo.scorers() }; val bracket = async { repo.bracket() }
-                val predictions = async { runCatching { repo.predictions() }.getOrDefault(AcPredictionsTodayResponse()) }
-                val leaders = async { runCatching { repo.leaderboard() }.getOrDefault(emptyList()) }
                 State(false, false, null, _state.value.tab, overview.await(), fixtures.await(), groups.await(),
-                    teams.await(), scorers.await(), bracket.await(), predictions.await(), leaders.await())
+                    teams.await(), scorers.await(), bracket.await())
             }
         }.onSuccess { loaded -> _state.value = loaded }
             .onFailure { error -> _state.update { it.copy(loading = false, refreshing = false, error = error.localizedMessage) } }

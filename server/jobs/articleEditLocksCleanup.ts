@@ -1,4 +1,4 @@
-import cron from 'node-cron';
+import cron from '../leaderCron';
 import { db } from '../db';
 import { articleEditLocks } from '../../shared/schema';
 import { lt } from 'drizzle-orm';

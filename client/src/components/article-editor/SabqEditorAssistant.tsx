@@ -37,6 +37,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { sanitizeEditorialAiResult } from "@/lib/sanitizeEditorialAiResult";
 import { appendReviewedSources } from "@/lib/editorialSources";
 
 type EditorialTaskType =
@@ -132,7 +133,7 @@ export function SabqEditorAssistant({
         }),
         headers: { "Content-Type": "application/json" },
       }),
-    onSuccess: (data) => { setResearchResultOwner(null); setResult(data); },
+    onSuccess: (data) => { setResearchResultOwner(null); setResult(sanitizeEditorialAiResult(data)); },
     onError: (error: any) =>
       toast({
         title: "تعذر تنفيذ المهمة",
@@ -171,7 +172,7 @@ export function SabqEditorAssistant({
           <Button variant={researchOpen ? "outline" : "default"} size="sm" onClick={() => setResearchOpen(false)}>مهام التحرير</Button>
           <Button variant={researchOpen ? "default" : "outline"} size="sm" onClick={() => setResearchOpen(true)} data-testid="open-editorial-research">بحث وإعداد تقرير</Button>
         </div>}
-        {!result && canResearch && researchOpen ? <EditorialResearchPanel key={user?.id} onReview={data => { setResearchResultOwner(user!.id); setSelectedSourceIndexes([]); setResult(data); }} /> : !result ? (
+        {!result && canResearch && researchOpen ? <EditorialResearchPanel key={user?.id} onReview={data => { setResearchResultOwner(user!.id); setSelectedSourceIndexes([]); setResult(sanitizeEditorialAiResult(data)); }} /> : !result ? (
           <div className="space-y-4">
             <div className="grid gap-2">
               <Label>المهمة</Label>

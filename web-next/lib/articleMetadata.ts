@@ -22,6 +22,7 @@ export function articleMetadata(m: SeoBundleMeta): Metadata {
       process.env.STAGING_NO_INDEX === "true"
         ? { index: false, follow: false, nocache: true }
         : m.robots,
+    other: m.googlebotNews ? { "googlebot-news": m.googlebotNews } : undefined,
     openGraph: {
       type: "article",
       title: m.title,

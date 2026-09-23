@@ -41,7 +41,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "24.20.0"
       # Block new high/critical advisories in production dependencies. Moderate
       # findings remain tracked separately so they do not mask urgent regressions.
       - name: npm audit (production deps)

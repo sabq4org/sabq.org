@@ -152,6 +152,7 @@ export interface AdapterCompleteParams {
   temperature?: number;
   jsonMode?: boolean;
   timeoutMs: number;
+  signal?: AbortSignal;
 }
 
 export interface AdapterCompleteResult {
@@ -165,6 +166,7 @@ export interface AdapterEmbedParams {
   input: string[];
   dimensions?: number;
   timeoutMs: number;
+  signal?: AbortSignal;
 }
 
 export interface AdapterEmbedResult {
@@ -178,6 +180,7 @@ export interface AdapterImageParams {
   quality?: string;
   n?: number;
   timeoutMs: number;
+  signal?: AbortSignal;
 }
 
 export interface AdapterImageResult {
@@ -189,6 +192,7 @@ export interface AdapterTTSParams {
   voice?: string;
   format?: string;
   timeoutMs: number;
+  signal?: AbortSignal;
 }
 
 export interface AdapterTTSResult {

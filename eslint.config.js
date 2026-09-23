@@ -118,8 +118,13 @@ export default tseslint.config(
     // extractPgError, nanoid ids. Zero new endpoints; extractable logic reuses
     // authAttemptGuard / pgError. File is now 36445 lines. Next extraction of
     // the inline auth routes into an auth router MUST ratchet this back down.
+    // Re-baselined merging #1376 (breaking-publish stampede fix) onto main:
+    // the web GET /api/articles/:slug handler now shares the 2026-09-19
+    // single-flight read overlay instead of a bespoke per-request views
+    // lookup, and the redundant mediaAssets fallback block was removed —
+    // net shrink to 36366 lines. Ratchet follows the file down.
     files: ["server/routes.ts"],
-    rules: { "max-lines": ["error", { max: 36445 }] },
+    rules: { "max-lines": ["error", { max: 36366 }] },
   },
   {
     files: ["server/storage.ts"],
@@ -153,8 +158,13 @@ export default tseslint.config(
     // prefs seeding. Zero new endpoints (the MailerSend webhook is its OWN file,
     // routes/mailersendWebhook.ts). File is now 10133 lines; next extraction
     // must ratchet down.
+    // RAISED to 10157 merging #1376 (breaking-publish stampede fix): the
+    // push-notification landing endpoint GET /articles/:id gained a
+    // user-neutral withCache wrapper (breaking-push stampede was running 6
+    // uncached DB queries per click and exhausting the pool) — refactor
+    // inside the existing handler, no new endpoints. File is now 10083 lines.
     files: ["server/routes/mobileApiRoutes.ts"],
-    rules: { "max-lines": ["error", { max: 10133 }] },
+    rules: { "max-lines": ["error", { max: 10083 }] },
   },
   {
     // AI Hub (issue #589, Phase 3): every AI call goes through

@@ -294,7 +294,7 @@ export default function LogsTab() {
                 <PiggyBank className="w-4 h-4" />
                 الميزانيات الشهرية
               </CardTitle>
-              <p className="text-xs text-muted-foreground mt-1">تنبيه تلقائي عند 80% و100% من الحد</p>
+              <p className="text-xs text-muted-foreground mt-1">متابعة الاستهلاك التقديري؛ إرسال تنبيهات الميزانية غير مفعّل حاليًا</p>
             </div>
             <Button
               size="sm"
@@ -408,11 +408,11 @@ export default function LogsTab() {
               </div>
               <div className="flex items-center justify-between bg-muted/60 rounded-lg px-3 py-2">
                 <span className="text-xs font-semibold">تنبيه عند 80%</span>
-                <Switch checked={budgetEdit.alertAt80} onCheckedChange={(v) => setBudgetEdit({ ...budgetEdit, alertAt80: v })} />
+                <Switch disabled checked={budgetEdit.alertAt80} onCheckedChange={(v) => setBudgetEdit({ ...budgetEdit, alertAt80: v })} />
               </div>
               <div className="flex items-center justify-between bg-muted/60 rounded-lg px-3 py-2">
                 <span className="text-xs font-semibold">تنبيه عند 100%</span>
-                <Switch checked={budgetEdit.alertAt100} onCheckedChange={(v) => setBudgetEdit({ ...budgetEdit, alertAt100: v })} />
+                <Switch disabled checked={budgetEdit.alertAt100} onCheckedChange={(v) => setBudgetEdit({ ...budgetEdit, alertAt100: v })} />
               </div>
               <div className="flex items-center justify-between bg-muted/60 rounded-lg px-3 py-2">
                 <span className="text-xs font-semibold">مفعّلة</span>

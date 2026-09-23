@@ -53,6 +53,12 @@ vi.mock("../../server/services/apnsService", () => ({
 vi.mock("../../server/utils/logger", () => ({
   log: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
+// This suite drives processPendingCampaigns()/processCampaign() directly outside
+// server bootstrap, so leader election never ran; without this, isLeader()
+// defaults to false and every admission check below short-circuits away.
+vi.mock("../../server/leaderElection", () => ({
+  isLeader: () => true,
+}));
 
 import { processPendingCampaigns } from "../../server/jobs/pushWorker";
 import { pushBroadcastCoordinator } from "../../server/services/pushBroadcastCoordinator";
@@ -82,7 +88,11 @@ describe("scheduled push worker admission", () => {
 
     await processPendingCampaigns();
 
-    expect(state.updates).toHaveLength(0);
+    // Every processPendingCampaigns() run unconditionally sweeps stale
+    // "sending" campaigns first (a separate db.update() call, unrelated to
+    // this test's campaign), so `state.updates` is not expected to stay
+    // empty — only the tested campaign must never be moved to "sending".
+    expect(state.updates).not.toContainEqual({ status: "sending", updatedAt: expect.any(Date) });
     expect(pushBroadcastCoordinator.snapshot()).toMatchObject({ active: 1, pending: 0 });
     held.release();
   });
@@ -97,7 +107,10 @@ describe("scheduled push worker admission", () => {
     await processPendingCampaigns();
 
     expect(state.updates).toContainEqual({ status: "sending", updatedAt: expect.any(Date) });
-    expect(state.updates).toContainEqual({ status: "draft", updatedAt: expect.any(Date) });
+    // A crashed/failed sender may have already delivered some notifications, so
+    // the campaign is quarantined for manual reconciliation instead of being
+    // reset to "draft" for a blind automatic retry (which could double-send).
+    expect(state.updates).toContainEqual({ status: "delivery_unknown", updatedAt: expect.any(Date) });
     expect(pushBroadcastCoordinator.snapshot()).toMatchObject({ active: 0, pending: 0 });
 
     const next = pushBroadcastCoordinator.acquire();
@@ -117,7 +130,10 @@ describe("scheduled push worker admission", () => {
 
   it("does not mark a campaign draft when the atomic claim query fails", async () => {
     state.queries = [{ value: [campaign] }];
-    state.updateErrors = [new Error("synthetic claim failure")];
+    // The leading `undefined` is consumed by the always-on stale-sender sweep
+    // (its own db.update().set() call, before the campaign is even fetched);
+    // the real error targets the campaign's atomic claim update.
+    state.updateErrors = [undefined, new Error("synthetic claim failure")];
 
     await processPendingCampaigns();
 

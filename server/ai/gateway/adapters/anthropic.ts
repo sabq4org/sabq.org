@@ -40,7 +40,7 @@ export const anthropicAdapter: ProviderAdapter = {
         ...(systemParts.length ? { system: systemParts.join("\n\n") } : {}),
         messages: chat.length ? chat : [{ role: "user", content: "" }],
       },
-      { timeout: params.timeoutMs },
+      { timeout: params.timeoutMs, signal: params.signal, maxRetries: 0 },
     );
 
     const content = response.content[0];
