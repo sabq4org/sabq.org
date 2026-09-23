@@ -87,9 +87,10 @@ export function generateOtpCode(): string {
 export function buildOtpMessage(code: string, purpose: OtpPurpose): string {
   const lead =
     purpose === "2fa"
-      ? "رمز التحقق بخطوتين لحسابك في سبق"
+      ? "تحقق سبق بخطوتين"
       : "رمز التحقق من سبق";
-  return `${lead}: ${code}\nصالح لمدة 5 دقائق، ولا تشاركه مع أحد.\n\n@sabq.org #${code}`;
+  // Unicode SMS allows 70 UTF-16 code units in one part (Bevatel maxParts=1).
+  return `${lead}: ${code}\nصالح 5 دقائق. لا تشاركه.\n@sabq.org #${code}`;
 }
 
 export interface SendOtpResult {

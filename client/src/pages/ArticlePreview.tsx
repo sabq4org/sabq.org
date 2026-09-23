@@ -37,12 +37,16 @@ export default function ArticlePreview() {
   });
 
   useEffect(() => {
+    // أعد ما كان لا «ltr/en» ثابتة: كانت تسمّم بقية الجلسة (النوافذ المنبثقة
+    // المنقولة إلى body ترث اتجاه <html> فتظهر LTR في المحرر بعد المعاينة).
+    const previousDir = document.documentElement.dir;
+    const previousLang = document.documentElement.lang;
     document.documentElement.dir = "rtl";
     document.documentElement.lang = "ar";
-    
+
     return () => {
-      document.documentElement.dir = "ltr";
-      document.documentElement.lang = "en";
+      document.documentElement.dir = previousDir || "rtl";
+      document.documentElement.lang = previousLang || "ar";
     };
   }, []);
 

@@ -67,6 +67,8 @@ struct WorldCupView: View {
         .task { await loadAll() }
         // شبكة أمان عند انقطاع SSE؛ مع البث يكفي ~20ث أثناء المباشر.
         .task {
+            liveStream.acquire()
+            defer { liveStream.release() }
             var tick = 0
             while !Task.isCancelled {
                 let interval: UInt64 = liveStream.connected ? 20_000_000_000 : 8_000_000_000

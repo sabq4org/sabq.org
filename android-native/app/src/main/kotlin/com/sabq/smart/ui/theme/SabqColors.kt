@@ -61,6 +61,8 @@ data class SabqColors(
     // عائلة «الرأي والزوايا» بهوية سبق (دليل الهوية V2) — نظيرتها في iOS
     // sectionCard/sectionSeparator/brandSky/brandBlue بنفس المكوّنات.
     val sectionCard: Color,
+    /** سطح البلوكات الجانبية بدرجة الويب: #F4F8FB فاتح / #172330 داكن (نقل #1610). */
+    val publicSurface: Color,
     val sectionSeparator: Color,
     /** سماوي سبق #4CBCFD — ثابت في الوضعين، لون العلامة نفسه. */
     val brandSky: Color,
@@ -113,6 +115,7 @@ object SabqColorPalette {
         mediaScrim  = Color(0.04f, 0.04f, 0.06f, 0.55f),
         journeyGradientStart = Color(0.55f, 0.36f, 0.92f, 1f),
         sectionCard      = Color(0.86f, 0.95f, 1.00f, 1f),   // iOS sectionCard light #DCF1FE
+        publicSurface    = Color(0xFFF4F8FB),
         sectionSeparator = Color(0.72f, 0.84f, 0.92f, 1f),
         brandSky         = Color(0.30f, 0.74f, 0.99f, 1f),   // #4CBCFD
         brandBlue        = Color(0.05f, 0.46f, 0.72f, 1f),   // #0E76B8
@@ -149,6 +152,7 @@ object SabqColorPalette {
         mediaScrim  = Color(0.00f, 0.00f, 0.02f, 0.65f),
         journeyGradientStart = Color(0.55f, 0.36f, 0.92f, 1f),
         sectionCard      = Color(0.11f, 0.15f, 0.21f, 1f),   // iOS sectionCard dark
+        publicSurface    = Color(0xFF172330),
         sectionSeparator = Color(0.20f, 0.26f, 0.33f, 1f),
         brandSky         = Color(0.30f, 0.74f, 0.99f, 1f),   // #4CBCFD ثابت
         brandBlue        = Color(0.30f, 0.74f, 0.99f, 1f),   // سماوي في الداكن للتباين

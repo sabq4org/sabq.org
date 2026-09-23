@@ -19,6 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Loader2, CalendarClock, Eye, MessageSquare, ThumbsUp, X, BadgeCheck, Search, FileText } from "lucide-react";
+import { VerificationChips, VerificationSummary } from "@/components/account/VerificationChips";
 import { cn } from "@/lib/utils";
 import { MediaLicenseAdminActions } from "@/components/MediaLicenseAdminActions";
 import { OPINION_WRITERS_PER_DAY_CAP } from "@shared/opinionWriterConstants";
@@ -29,6 +30,9 @@ type WriterSummary = {
   id: string;
   name: string;
   email: string | null;
+  emailVerified?: boolean;
+  phoneNumber?: string | null;
+  phoneVerified?: boolean;
   profileImageUrl: string | null;
   jobTitle: string | null;
   gender: string | null;
@@ -587,6 +591,7 @@ export default function OpinionWritersPage() {
                 />
               </div>
             </div>
+            <VerificationSummary users={writers} />
             <div className="flex flex-wrap gap-2">
               {(
                 [
@@ -669,6 +674,9 @@ export default function OpinionWritersPage() {
                                   {writer.email ||
                                     writer.jobTitle ||
                                     (writer.gender === "female" ? "كاتبة رأي" : "كاتب رأي")}
+                                </div>
+                                <div className="mt-1">
+                                  <VerificationChips user={writer} idForTest={writer.id} />
                                 </div>
                               </div>
                             </div>

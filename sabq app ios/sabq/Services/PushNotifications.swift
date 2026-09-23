@@ -292,6 +292,10 @@ final class SabqAppDelegate: NSObject, UIApplicationDelegate, UNUserNotification
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
         let userInfo = response.notification.request.content.userInfo
+        // A notification tap must be acknowledged immediately. The unread
+        // count is best-effort UI state and must not hold Apple's completion
+        // callback behind a network request while the app is resuming.
+        completionHandler()
         Task { @MainActor in
             let link = NotificationsStore.shared.extractDeepLink(from: userInfo)
             print("[Push] tap keys=\(userInfo.keys) → link=\(String(describing: link))")
@@ -299,7 +303,6 @@ final class SabqAppDelegate: NSObject, UIApplicationDelegate, UNUserNotification
                 NotificationsStore.shared.pendingDeepLink = link
             }
             await NotificationsStore.shared.refreshUnreadCount()
-            completionHandler()
         }
     }
 }

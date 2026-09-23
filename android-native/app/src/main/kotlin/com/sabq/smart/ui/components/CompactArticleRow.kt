@@ -43,6 +43,8 @@ fun CompactArticleRow(
     onBookmark: () -> Unit,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    /** صفحة التصنيف تسمّي القسم في رأسها فلا تكرره البطاقات (#1642). */
+    showsCategory: Boolean = true,
 ) {
     val haptics = rememberSabqHaptics()
     val thumbShape = RoundedCornerShape(SabqTheme.dimens.thumbnailRadius)
@@ -61,12 +63,13 @@ fun CompactArticleRow(
             verticalArrangement = Arrangement.spacedBy(5.dp),
         ) {
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                StatusChip(
+                if (showsCategory) StatusChip(
                     title = article.categoryLabel.ifBlank { article.category.title },
                     tint = article.category.tint(),
                     compact = true,
                 )
                 if (article.isBreaking) BreakingPill()
+                if (article.isReading) ReadingPill()
             }
 
             Text(

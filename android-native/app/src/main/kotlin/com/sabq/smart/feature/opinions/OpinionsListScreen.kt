@@ -483,7 +483,18 @@ private fun OpinionLatestRow(article: Article, onClick: () -> Unit) {
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Medium,
                     color = SabqTheme.colors.tertiaryInk,
+                    modifier = Modifier.weight(1f),
                 )
+                // عدد المشاهدات بأرقام لاتينية مجمّعة في طرف الصف (نقل الويب #1605)
+                article.viewsCount?.let { views ->
+                    Text(
+                        text = "${java.text.NumberFormat.getIntegerInstance(java.util.Locale.US).format(views)} مشاهدة",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = SabqTheme.colors.tertiaryInk,
+                        maxLines = 1,
+                    )
+                }
             }
             Text(
                 text = article.title,

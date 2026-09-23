@@ -14,6 +14,9 @@ export type ReporterSummary = {
   id: string;
   name: string;
   email: string | null;
+  emailVerified: boolean;
+  phoneNumber: string | null;
+  phoneVerified: boolean;
   profileImageUrl: string | null;
   jobTitle: string | null;
   city: string | null;
@@ -49,6 +52,9 @@ async function fetchReporterUsers(reporterId?: string) {
       firstName: users.firstName,
       lastName: users.lastName,
       email: users.email,
+      emailVerified: users.emailVerified,
+      phoneNumber: users.phoneNumber,
+      phoneVerified: users.phoneVerified,
       profileImageUrl: users.profileImageUrl,
       jobTitle: users.jobTitle,
       city: users.city,
@@ -89,6 +95,9 @@ export async function listReporters(): Promise<ReporterSummary[]> {
       id: r.id,
       name: [r.firstName, r.lastName].filter(Boolean).join(" ") || r.email || r.id,
       email: r.email,
+      emailVerified: Boolean(r.emailVerified),
+      phoneNumber: r.phoneNumber,
+      phoneVerified: Boolean(r.phoneVerified),
       profileImageUrl: r.profileImageUrl,
       jobTitle: r.jobTitle,
       city: r.city,

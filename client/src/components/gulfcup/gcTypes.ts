@@ -305,6 +305,71 @@ export interface GcHistory {
   titles: GcTitleRow[];
 }
 
+export interface GcTeamStats {
+  groupName: string | null;
+  rank: number | null;
+  played: number;
+  win: number;
+  draw: number;
+  lose: number;
+  goalsFor: number;
+  goalsAgainst: number;
+  goalsDiff: number;
+  points: number;
+  form: ("W" | "D" | "L")[];
+}
+
+export interface GcSquadPlayer {
+  id: number;
+  name: string;
+  number: number | null;
+  position: string;
+  positionEn: string | null;
+  age: number | null;
+  photo: string | null;
+}
+
+export interface GcTeamLegacy {
+  titles: number;
+  runnerUps: number;
+  hosted: number;
+  titleYears: string[];
+  lastTitleYear: string | null;
+}
+
+export interface GcTeamProfile {
+  team: GcTeam;
+  isSaudi: boolean;
+  coach: string | null;
+  group: GcGroup | null;
+  stats: GcTeamStats;
+  nextMatch: GcFixture | null;
+  fixtures: GcFixture[];
+  squad: GcSquadPlayer[];
+  legacy: GcTeamLegacy | null;
+  fifaRank?: GcFifaRank | null;
+  injuries?: GcInjury[];
+}
+
+export interface GcFantasyPoolPlayer {
+  id: string;
+  name: string;
+  team: GcTeam | null;
+  position: string | null;
+  price: number;
+}
+
+export interface GcFantasySquadView {
+  players: (GcFantasyPoolPlayer & { isCaptain: boolean; points: number })[];
+  captainId: string;
+  spent: number;
+  budget: number;
+  totalPoints: number;
+}
+
+/** هامش التمرير حتى لا تُخفى العناوين خلف هيدر سبق + شريط الأقسام. */
+export const GC_SECTION_SCROLL_MT = "scroll-mt-[calc(var(--public-header-height,4rem)+3.75rem)] md:scroll-mt-[calc(var(--public-header-height,4rem)+6.5rem)]";
+
 /** عدّ تنازلي من سلسلة ISO (تصل بإزاحة +03:00 فالتحويل مباشر). */
 export function countdownFromIso(iso: string | null): {
   days: number;
@@ -352,10 +417,10 @@ export function groupFixturesByDay(fixtures: GcFixture[]): GcDayGroup[] {
     }));
 }
 
-/** نطاق تواريخ البطولة بصيغة عربية مختصرة (يوم البداية – يوم النهاية). */
+/** نطاق تواريخ البطولة بصيغة عربية مختصرة (يوم البداية – يوم النهاية) بأرقام لاتينية. */
 export function formatDateRange(startIso: string | null, endIso: string | null): string {
   if (!startIso) return "";
-  const fmt = new Intl.DateTimeFormat("ar-SA", {
+  const fmt = new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-latn", {
     timeZone: "Asia/Riyadh",
     day: "numeric",
     month: "long",

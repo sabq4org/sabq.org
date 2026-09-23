@@ -1,121 +1,47 @@
-import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { LayoutGrid } from "lucide-react";
+import { Link } from "wouter";
 import { cn } from "@/lib/utils";
-import type { CategoryWithStats, CategoryPulseLevel } from "@shared/schema";
+import type { CategoryWithStats } from "@shared/schema";
+import "@/styles/category-navigation.css";
 
 interface CategoryPillsProps {
   categories: CategoryWithStats[];
   selectedCategory?: string;
-  onSelectCategory?: (categoryId: string | undefined) => void;
-}
-
-const PULSE_LABELS: Record<CategoryPulseLevel, string> = {
-  calm: "هادئ",
-  normal: "معتاد",
-  active: "نشط",
-  hot: "نشط جداً",
-};
-
-const PULSE_DOT_COLORS: Record<CategoryPulseLevel, string> = {
-  calm: "bg-slate-400 dark:bg-slate-500",
-  normal: "bg-emerald-500",
-  active: "bg-amber-500",
-  hot: "bg-rose-500",
-};
-
-const PULSE_PING_COLORS: Record<CategoryPulseLevel, string> = {
-  calm: "bg-slate-400/0",
-  normal: "bg-emerald-500/60",
-  active: "bg-amber-500/60",
-  hot: "bg-rose-500/70",
-};
-
-function PulseDot({ category }: { category: CategoryWithStats }) {
-  const level: CategoryPulseLevel = category.hasPulseData
-    ? category.pulseLevel ?? "calm"
-    : "calm";
-  const percent = category.hasPulseData
-    ? Math.max(0, Math.min(150, Math.round(category.pulsePercent ?? 0)))
-    : null;
-  const label = PULSE_LABELS[level];
-  const showPing = category.hasPulseData && (level === "active" || level === "hot");
-
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <span
-          className="relative inline-flex h-2 w-2 flex-shrink-0"
-          data-testid={`pulse-pill-${category.id}`}
-          aria-label={percent !== null ? `${label} ${percent}%` : label}
-        >
-          {showPing && (
-            <span
-              className={`absolute inline-flex h-full w-full rounded-full opacity-75 animate-ping ${PULSE_PING_COLORS[level]}`}
-            />
-          )}
-          <span
-            className={`relative inline-flex h-2 w-2 rounded-full ${PULSE_DOT_COLORS[level]}`}
-          />
-        </span>
-      </TooltipTrigger>
-      <TooltipContent side="bottom" className="text-xs">
-        {percent !== null ? `${label} · ${percent}%` : label}
-      </TooltipContent>
-    </Tooltip>
-  );
 }
 
 export function CategoryPills({
   categories,
   selectedCategory,
-  onSelectCategory,
 }: CategoryPillsProps) {
-  const baseItem =
-    "cursor-pointer rounded-md px-3 py-1.5 text-sm whitespace-nowrap transition-colors hover-elevate active-elevate-2";
-  const activeItem = "bg-primary text-primary-foreground font-medium";
-  const inactiveItem =
-    "border border-border bg-card text-foreground/80 hover:border-primary/35 hover:bg-primary/10 hover:text-primary";
-
   return (
-    <div className="w-full border-b bg-background/95 backdrop-blur-sm sticky top-0 z-40">
-      <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-        <ScrollArea className="w-full whitespace-nowrap" dir="rtl">
-          <TooltipProvider delayDuration={150}>
-            <div className="flex items-center justify-center gap-1 py-2" dir="rtl">
-              <button
-                type="button"
-                className={cn(baseItem, !selectedCategory ? activeItem : inactiveItem)}
-                onClick={() => onSelectCategory?.(undefined)}
-                data-testid="badge-category-all"
+    <nav className="category-navigation" aria-label="تصنيفات الأخبار" dir="rtl">
+      <div className="category-navigation-inner container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="category-navigation-scroll">
+          <div className="category-navigation-items">
+            {(categories || []).map((category) => (
+              <Link
+                key={category.id}
+                href={`/category/${category.slug}`}
+                className={cn("category-navigation-link", selectedCategory === category.id && "is-active")}
+                aria-current={selectedCategory === category.id ? "page" : undefined}
+                data-testid={`badge-category-${category.slug}`}
               >
-                الكل
-              </button>
-              {(categories || []).map((category) => (
-                <button
-                  key={category.id}
-                  type="button"
-                  className={cn(
-                    baseItem,
-                    "inline-flex items-center gap-1.5",
-                    selectedCategory === category.id ? activeItem : inactiveItem,
-                  )}
-                  onClick={() => onSelectCategory?.(category.id)}
-                  data-testid={`badge-category-${category.slug}`}
-                >
-                  <span>{category.nameAr}</span>
-                  <PulseDot category={category} />
-                </button>
-              ))}
-            </div>
-          </TooltipProvider>
-          <ScrollBar orientation="horizontal" />
-        </ScrollArea>
+                {category.nameAr}
+              </Link>
+            ))}
+          </div>
+        </div>
+        <Link
+          href="/categories"
+          className="category-navigation-all"
+          aria-label="جميع التصنيفات"
+          data-testid="badge-category-all"
+        >
+          <LayoutGrid aria-hidden="true" />
+          <span className="hidden sm:inline">جميع التصنيفات</span>
+          <span className="sm:hidden">التصنيفات</span>
+        </Link>
       </div>
-    </div>
+    </nav>
   );
 }

@@ -1,7 +1,7 @@
 {
   "$schemaNote": "Machine-readable catalog of Sabq product systems. Consumed by scripts/systems-inventory.mjs and /api/admin/systems-catalog. aiFeatureKeys must be exclusive (one system owner) to avoid double-counting.",
   "version": 2,
-  "updatedAt": "2026-09-07",
+  "updatedAt": "2026-09-13",
   "systems": [
     {
       "id": "account-center",
@@ -35,7 +35,7 @@
       "owners": [
         "platform"
       ],
-      "lastReviewed": "2026-07-25"
+      "lastReviewed": "2026-09-21"
     },
     {
       "id": "official-letters",
@@ -140,7 +140,7 @@
       "owners": [
         "sports"
       ],
-      "lastReviewed": "2026-09-07"
+      "lastReviewed": "2026-09-15"
     },
     {
       "id": "editorial",
@@ -152,9 +152,19 @@
       "docPath": "docs/systems/editorial/SYSTEM.md",
       "relatedDocs": [
         "docs/editorial/sabq-unified-editorial-prompt.md",
-        "docs/ai-prompts-article-editor.md"
+        "docs/ai-prompts-article-editor.md",
+        "docs/systems/editorial/BOT_DRAFTS_API.md",
+        "docs/systems/editorial/bot-drafts.openapi.yaml"
       ],
       "pathGlobs": [
+        "server/services/mobileAdminSchedule.ts",
+        "tests/unit/mobileAdminSchedule.test.ts",
+        "sabq app ios/sabq/Models/AdminModels.swift",
+        "sabq app ios/sabq/Screens/AdminArticleEditorView.swift",
+        "sabq app ios/sabq/Screens/AdminDashboardView.swift",
+        "sabq app ios/sabq/Components/AdminDashboardComponents.swift",
+        "sabq app ios/sabqTests/AdminScheduleTests.swift",
+        "sabq app ios/sabqTests/AdminScheduleSnapshotTests.swift",
         "client/src/pages/ArticleDetail.tsx",
         "client/src/components/AiArticleStats.tsx",
         "client/src/components/AIRecommendationsBlock.tsx",
@@ -323,7 +333,22 @@
         "client/src/lib/applyProofreadIssue.ts",
         "tests/unit/proofreadService.test.ts",
         "tests/unit/proofreadService.live.test.ts",
-        "e2e/proofread-editor.spec.ts"
+        "e2e/proofread-editor.spec.ts",
+        "shared/editorialResearch.ts",
+        "server/services/editorialResearchProvider.ts",
+        "server/services/editorialResearchService.ts",
+        "server/routes/editorialResearch.ts",
+        "server/jobs/editorialResearchJob.ts",
+        "client/src/components/article-editor/EditorialResearchPanel.tsx",
+        "tests/unit/editorialResearch*.test.ts",
+        "e2e/editorial-research.spec.ts",
+        "scripts/sql/add-editorial-research-jobs-2026-09-12.sql",
+        "server/services/articleReadOverlay.ts",
+        "tests/unit/articleReadOverlay.test.ts",
+        "server/routes/botDrafts.ts",
+        "server/services/botDraftsService.ts",
+        "shared/botDrafts.ts",
+        "scripts/bot-drafts-client.ts"
       ],
       "aiFeatureKeys": [
         "content-tools",
@@ -354,13 +379,14 @@
         "opinion-writer-style-profile",
         "coverage-gap-matcher",
         "editor-openai-images",
-        "proofread"
+        "proofread",
+        "editorial-research"
       ],
       "dashboardPath": "/dashboard",
       "owners": [
         "editorial"
       ],
-      "lastReviewed": "2026-09-09"
+      "lastReviewed": "2026-09-23"
     },
     {
       "id": "ifox",
@@ -662,7 +688,9 @@
         "sports app ios/SabqSports/Services/AuthStore.swift",
         "sports app ios/SabqSports/Screens/MatchCenterView.swift",
         "android-native/vara/src/main/kotlin/com/sabq/vara/ui/MatchCenterScreen.kt",
-        "server/services/theSportsService.ts"
+        "server/services/theSportsService.ts",
+        "sabq app ios/sabq/Services/SabqLiveStream.swift",
+        "sabq app ios/sabqTests/SabqLiveStreamTests.swift"
       ],
       "aiFeatureKeys": [
         "world-cup-news",
@@ -685,7 +713,7 @@
       "owners": [
         "sports"
       ],
-      "lastReviewed": "2026-09-05"
+      "lastReviewed": "2026-09-19"
     },
     {
       "id": "push-notifications",
@@ -706,15 +734,22 @@
         "server/jobs/pushWorker.ts",
         "server/notificationBus.ts",
         "server/routes/pushNotificationRoutes.ts",
+        "android-native/app/src/main/kotlin/com/sabq/smart/data/push/**",
         "android-native/vara/src/main/kotlin/com/sabq/vara/push/**",
-        "docs/APPLE_PUSH_SETUP.md"
+        "docs/APPLE_PUSH_SETUP.md",
+        "server/services/pushBroadcast*.ts",
+        "tests/unit/pushBroadcast*.test.ts",
+        "server/utils/httpPressure.ts",
+        "tests/unit/httpPressure.test.ts",
+        "sabq app ios/sabq/Services/PushNotifications.swift",
+        "tests/unit/apnsBroadcastBatch.test.ts"
       ],
       "aiFeatureKeys": [],
       "dashboardPath": "/dashboard/notification-admin",
       "owners": [
         "platform"
       ],
-      "lastReviewed": "2026-08-21"
+      "lastReviewed": "2026-09-19"
     },
     {
       "id": "ads",
@@ -742,7 +777,7 @@
       "owners": [
         "monetization"
       ],
-      "lastReviewed": "2026-09-07"
+      "lastReviewed": "2026-09-13"
     },
     {
       "id": "auth-rbac",
@@ -753,7 +788,8 @@
       "summary": "Passport للويب، جلسات الأعضاء للموبايل، أدوار وصلاحيات.",
       "docPath": "docs/systems/auth-rbac/SYSTEM.md",
       "relatedDocs": [
-        "docs/architecture/AUTHENTICATION_FLOW.md"
+        "docs/architecture/AUTHENTICATION_FLOW.md",
+        "docs/architecture/PHONE_VERIFICATION_AND_MEMBERSHIP.md"
       ],
       "pathGlobs": [
         "server/auth.ts",
@@ -763,6 +799,12 @@
         "server/sessionFailoverStore.ts",
         "server/services/memberSessionService.ts",
         "server/services/phoneAuth.ts",
+        "server/services/otpService.ts",
+        "server/services/sms/**",
+        "tests/unit/otpService.test.ts",
+        "tests/unit/smsRouter.test.ts",
+        "tests/unit/bevatelProvider.test.ts",
+        "docs/SMS_OTP_BEVATEL.md",
         "shared/rbac-constants.ts",
         "tests/unit/phoneAuth.test.ts",
         "client/src/hooks/useAuth.ts",
@@ -787,14 +829,16 @@
         "cloudflare-worker/api-origin-worker.js",
         "cloudflare-worker/wrangler.api.toml",
         "client/src/components/EditUserDialog.tsx",
-        "e2e/edit-user-biography.spec.ts"
+        "e2e/edit-user-biography.spec.ts",
+        "cloudflare-worker/public-api-burst-cache.js",
+        "tests/unit/apiOriginWorkerBurst.test.ts"
       ],
       "aiFeatureKeys": [],
       "dashboardPath": "/dashboard/roles",
       "owners": [
         "platform"
       ],
-      "lastReviewed": "2026-09-08"
+      "lastReviewed": "2026-09-19"
     },
     {
       "id": "seo-ssr",
@@ -831,14 +875,15 @@
         "tests/web-next/**",
         "vitest.web-next.config.ts",
         "client/src/pages/CategoryPage.tsx",
-        "client/src/components/CategoryArchivePage.tsx"
+        "client/src/components/CategoryArchivePage.tsx",
+        "tests/unit/edgeApiSurge.test.ts"
       ],
       "aiFeatureKeys": [],
       "dashboardPath": null,
       "owners": [
         "platform"
       ],
-      "lastReviewed": "2026-09-08"
+      "lastReviewed": "2026-09-19"
     },
     {
       "id": "comments",
@@ -1110,6 +1155,35 @@
         "tests/unit/economyNumberGuard.test.ts",
         "tests/fixtures/sama/**"
       ]
+    },
+    {
+      "id": "mobile-analytics",
+      "nameAr": "قياس التطبيقات الأصلية",
+      "nameEn": "Native mobile analytics",
+      "status": "active",
+      "category": "infra",
+      "summary": "Firebase Analytics وموافقة المستخدم وأحداث تطبيقَي سبق iOS وأندرويد.",
+      "docPath": "docs/systems/mobile-analytics/SYSTEM.md",
+      "relatedDocs": [
+        "docs/setup/MOBILE_ANALYTICS.md",
+        "docs/setup/MOBILE_ANALYTICS_VALIDATION.md"
+      ],
+      "pathGlobs": [
+        "sabq app ios/sabq/Services/SabqAnalytics*.swift",
+        "sabq app ios/sabq/Services/Analytics*.swift",
+        "sabq app ios/sabq/Components/Analytics*.swift",
+        "sabq app ios/sabqTests/*Analytics*.swift",
+        "android-native/app/src/main/kotlin/com/sabq/smart/data/analytics/**",
+        "android-native/app/src/test/**/analytics/**",
+        "scripts/verify-mobile-firebase-config.py",
+        "tests/unit/test_mobile_firebase_config.py"
+      ],
+      "aiFeatureKeys": [],
+      "dashboardPath": null,
+      "owners": [
+        "platform"
+      ],
+      "lastReviewed": "2026-09-13"
     }
   ]
 }

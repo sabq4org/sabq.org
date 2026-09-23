@@ -24,7 +24,7 @@ struct HajjBlockView: View {
             if let block = loader.block, block.isVisible {
                 content(block: block)
             } else {
-                Color.clear.frame(width: 0, height: 0)
+                HomeStripAnchor()
             }
         }
         .task { await loader.load() }

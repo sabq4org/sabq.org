@@ -17,6 +17,7 @@ export function registerThemeRoutes(app: Express) {
       const theme = await withSWR(cacheKey, CACHE_TTL.LONG, CACHE_TTL.VERY_LONG, async () => {
         return await storage.getActiveTheme(scope);
       });
+      res.set("X-Sabq-Public-Cache", "1");
       res.json(theme || null);
     } catch (error) {
       console.error("Error fetching active theme:", error);

@@ -496,9 +496,11 @@ struct SignUpFlowView: View {
                 .foregroundStyle(SabqTheme.coral)
                 .multilineTextAlignment(.center)
             Button {
-                step = .askName
-                messages = []
-                Task { await startConversation() }
+                // إعادة المحاولة تعيد الإرسال بالبيانات نفسها — لا تمسح المحادثة
+                // ولا تعود إلى الاسم (ضمان «بياناتك ما زالت في النموذج»، نقل #1530).
+                SabqHaptics.light()
+                step = .submitting
+                Task { await submit() }
             } label: {
                 Text("إعادة المحاولة")
                     .font(SabqFonts.app(size: 13, weight: .bold))
@@ -506,6 +508,17 @@ struct SignUpFlowView: View {
                     .padding(.horizontal, 18)
                     .padding(.vertical, 10)
                     .background(Capsule().fill(SabqTheme.primaryEnd))
+            }
+            .buttonStyle(.plain)
+
+            Button {
+                step = .askName
+                messages = []
+                Task { await startConversation() }
+            } label: {
+                Text("تعديل البيانات والبدء من جديد")
+                    .font(SabqFonts.app(size: 12, weight: .medium))
+                    .foregroundStyle(SabqTheme.secondaryInk)
             }
             .buttonStyle(.plain)
         }

@@ -12,6 +12,7 @@ import {
   Send,
 } from "lucide-react";
 import { SiX } from "react-icons/si";
+import { trackShare as trackShareEvent } from "@/lib/analytics";
 
 interface SocialShareBarProps {
   title: string;
@@ -50,7 +51,7 @@ export function SocialShareBar({
     : shareUrl;
   const shareText = `${title}${description ? `\n\n${description}` : ""}`;
 
-  const trackShare = (platform: string) => {
+  const trackShareBehavior = (platform: string) => {
     if (articleId) {
       logBehavior("social_share", {
         articleId,
@@ -60,11 +61,17 @@ export function SocialShareBar({
     }
   };
 
+  const recordShare = (platform: string) => {
+    if (!articleId) return;
+    trackShareEvent(platform, articleId);
+    trackShareBehavior(platform);
+  };
+
   const handleCopyLink = async () => {
     try {
       await navigator.clipboard.writeText(clipboardUrl);
       setCopied(true);
-      trackShare("copy_link");
+      recordShare("copy_link");
       toast({
         title: "تم النسخ",
         description: "تم نسخ الرابط إلى الحافظة",
@@ -88,8 +95,10 @@ export function SocialShareBar({
   };
 
   const handlePlatformShare = (platform: keyof typeof shareLinks) => {
-    trackShare(platform);
     window.open(shareLinks[platform], "_blank", "noopener,noreferrer,width=600,height=600");
+    // noopener intentionally returns null even when a window opens. This
+    // measures choosing a share destination, not publication on that service.
+    recordShare(platform);
   };
 
   const handleNativeShare = async () => {
@@ -100,10 +109,9 @@ export function SocialShareBar({
           text: description,
           url: shareUrl,
         });
-        trackShare("native_share");
-      } catch (error) {
-        // User cancelled share or error occurred
-        console.log("Share cancelled or failed:", error);
+        recordShare("native_share");
+      } catch {
+        // A cancelled or failed native share is not a completed action.
       }
     }
   };

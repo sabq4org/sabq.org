@@ -106,11 +106,7 @@ fun ArticleLiteContent(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            StatusChip(
-                title = article.categoryLabel.ifBlank { article.category.title },
-                tint = article.category.tint(),
-                compact = true,
-            )
+            // شارة التصنيف حُذفت من مقال لايت كما في الويب (#1614) — التاريخ يكفي.
             Text(
                 text = formatRelativeDateAr(article.publishedAtIso)
                     .ifBlank { article.dateFormatted },

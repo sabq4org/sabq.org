@@ -188,6 +188,14 @@ curl -s -D - -o /dev/null -X POST https://sabq.org/api/v1/auth/login \
 3. عند إضافة rate limiter جديد، لا تعتمد على `cf-connecting-ip` وحده خلف proxy.
 4. راقب `ratelimit-remaining: 0` على `POST /api/v1/auth/login` من `sabq.org` كإنذار مبكر.
 
+### تكرار بآلية مختلفة — 429 من حافة Railway نفسها (2026-09-17)
+
+بعد خبر عاجل (12:35Z) عادت كل `/api/*` عبر sabq.org بـ **429 نصي `rate limited`** لعشر دقائق، والرئيسية علقت على هيكل التحميل. المصدر هذه المرة **حافة Railway (hikari, `x-railway-edge: cdg1`)** لا `express-rate-limit`: الرد بلا `x-railway-request-id` لأن الحاوية لم تره أصلًا، والنطاق المباشر كان يجيب 200 لأي عنوان آخر في اللحظة نفسها. حماية الطبقة السابعة لدى Railway تجمع كل زوار السعودية في عناوين خروج Cloudflare القليلة (MRS) وتراها عنوانًا واحدًا مسيئًا. إعدادات Edge للخدمة سليمة (لا Under Attack ولا قواعد).
+
+- **الإسعاف في `functions/_middleware.js`:** `isEdgeRateLimited()` (429 بلا `x-railway-request-id`) + `proxyToApiWithFallback()`: طلبات GET/HEAD تُعاد مرة واحدة عبر أصل بديل يدخل حافة Railway من خروج Cloudflare مختلف (`API_FALLBACK_ORIGIN`، افتراضيًا `api.sabq.org` إذا كان `API_ORIGIN` هو النطاق المباشر والعكس؛ `off` يعطّله)، وإن حُجب المساران تُقدَّم «آخر نسخة سليمة» للمسارات المكاشة بدل تمرير 429 للمتصفح. 429 الصادر من التطبيق نفسه (يحمل `x-railway-request-id`) لا يُعاد أبدًا، والكتابات لا تُعاد.
+- **العلاج الدائم:** تذكرة لدى Railway لإدراج نطاقات خروج Cloudflare في allowlist أو رفع حد L7 للخدمة `sabq.org`.
+- **الفحص السريع:** `curl -i https://sabq.org/api/homepage-lite` — 429 نصي بلا `x-railway-request-id` = حافة Railway؛ قارن فورًا بـ`https://sabqorg-production.up.railway.app/health`.
+
 ### مسارات مصادقة مستثناة (اختياري مستقبلي)
 
 إن لزم، يمكن استثناء `POST /api/v1/auth/*` من `writeLimiter` والاعتماد على `authLimiter` (5 محاولات / 15 دقيقة) في `mobileApiRoutes.ts` — **لم يُنفَّذ** في هذا الإصلاح؛ الحل الحالي يعالج السبب الجذري (مفتاح IP) دون تخفيف الأمان العام.

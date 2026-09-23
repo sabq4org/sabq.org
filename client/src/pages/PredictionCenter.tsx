@@ -243,7 +243,7 @@ export default function PredictionCenter() {
   }, [detailLoading, contests, deepTarget.contest, deepTarget.fixture]);
 
   return (
-    <div className="flex min-h-screen flex-col bg-background" dir="rtl">
+    <div className="flex min-h-screen flex-col bg-background" dir="rtl" lang="ar-SA-u-nu-latn">
       <Header user={user || undefined} />
       <NavigationBar />
 
@@ -400,7 +400,9 @@ function HeroCard({
         </span>
         <div>
           <h1 className="text-lg font-extrabold">{competition.nameAr}</h1>
-          <p className="text-[11.5px] text-white/60">موسم {competition.seasonKey}</p>
+          <p className="text-[11.5px] text-white/60">
+            موسم <span dir="ltr" className="tabular-nums">{competition.seasonKey}</span>
+          </p>
         </div>
       </div>
 
@@ -427,7 +429,7 @@ function HeroCard({
 function HeroStat({ value, label, gold }: { value: string; label: string; gold?: boolean }) {
   return (
     <div className="rounded-xl bg-white/10 px-3 py-2.5">
-      <div className={`text-lg font-extrabold tabular-nums ${gold ? "text-amber-400" : "text-white"}`}>
+      <div dir="ltr" className={`text-lg font-extrabold tabular-nums ${gold ? "text-amber-400" : "text-white"}`}>
         {value}
       </div>
       <div className="text-[10.5px] text-white/60">{label}</div>
@@ -658,7 +660,7 @@ function LeadersTab({
           <div className="text-[13px] font-extrabold text-foreground">{board.nameAr}</div>
           {totalCount != null && totalCount > 0 && (
             <span className="text-[11px] font-bold text-muted-foreground tabular-nums">
-              {formatNumber(totalCount)} مشارك
+              <span dir="ltr">{formatNumber(totalCount)}</span> مشارك
             </span>
           )}
         </div>
@@ -670,7 +672,7 @@ function LeadersTab({
       {board.myRank && (
         <div className="flex items-center justify-between rounded-xl bg-gradient-to-bl from-slate-900 to-slate-800 px-4 py-3 text-white">
           <span className="text-[12.5px] font-bold">ترتيبك الحالي</span>
-          <span className="text-sm font-extrabold tabular-nums">
+          <span dir="ltr" className="text-sm font-extrabold tabular-nums">
             #{formatNumber(board.myRank.rank)} · {formatNumber(board.myRank.points)}
           </span>
         </div>
@@ -682,6 +684,7 @@ function LeadersTab({
           className="flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-2.5"
         >
           <span
+            dir="ltr"
             className={`w-6 text-center text-[12.5px] font-extrabold tabular-nums ${
               entry.rank <= 3 ? "text-amber-500" : "text-muted-foreground"
             }`}
@@ -698,10 +701,10 @@ function LeadersTab({
           <div className="min-w-0 flex-1">
             <div className="truncate text-[12.5px] font-bold text-foreground">{entry.name}</div>
             <div className="text-[10px] text-muted-foreground">
-              {formatNumber(entry.exactCount)} نتيجة دقيقة
+              <span dir="ltr" className="tabular-nums">{formatNumber(entry.exactCount)}</span> نتيجة دقيقة
             </div>
           </div>
-          <span className="text-[13px] font-extrabold tabular-nums text-primary">
+          <span dir="ltr" className="text-[13px] font-extrabold tabular-nums text-primary">
             {formatNumber(entry.points)}
           </span>
         </div>

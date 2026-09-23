@@ -6,7 +6,6 @@ struct LiveCoverageView: View {
     @State private var isLoading = true
     @State private var loadFailed = false
     @State private var selectedCountry: String? = nil
-    @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
@@ -56,27 +55,8 @@ struct LiveCoverageView: View {
         .refreshable { await loadData() }
         .background(SabqTheme.background)
         .sabqRTL()
-        .navigationBarBackButtonHidden(true)
-        .toolbar {
-            // `.cancellationAction` — app-wide convention, leading edge
-            // (visual right in RTL). Matches Article, Opinion, Settings,
-            // and the rest of the navigation surfaces.
-            ToolbarItem(placement: .cancellationAction) {
-                Button { dismiss() } label: {
-                    Image(systemName: "chevron.right")
-                        .font(SabqFonts.app(size: 16, weight: .bold))
-                        .foregroundStyle(SabqTheme.ink)
-                }
-                .buttonStyle(.plain)
-            }
-            ToolbarItem(placement: .principal) {
-                // "لحظة بلحظة" is the brand label the user picked for live
-                // coverage on the homepage — surface the same wording here.
-                Text("لحظة بلحظة")
-                    .font(SabqFonts.app(size: 17, weight: .bold))
-                    .foregroundStyle(SabqTheme.ink)
-            }
-        }
+        .navigationTitle("لحظة بلحظة")
+        .navigationBarTitleDisplayMode(.inline)
         .task { await loadData() }
         // «لحظة بلحظة» كانت ثابتة تمامًا رغم شارة «مباشر» النابضة — لا تلتقط
         // أي حدث جديد إلا بسحب يدوي. استطلاع كل 30ث أثناء البث الحي فقط

@@ -35,8 +35,9 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Edit, Trash2, Send, Star, Bell, Plus, Archive, Trash, GripVertical, Sparkles, Newspaper, Clock, CalendarClock, FilePenLine, Brain, PenLine, MessageCircle, Mail, ChevronLeft, ChevronRight, Camera, BarChart3, Images, Building2, Languages, Loader2, Smartphone, Share2, Tag, BookOpen, HeartPulse, Zap } from "lucide-react";
+import { Edit, Trash2, Send, Star, Bell, Plus, Archive, Trash, GripVertical, Sparkles, Newspaper, Clock, FilePenLine, Brain, MessageCircle, Mail, ChevronLeft, ChevronRight, Camera, BarChart3, Images, Building2, Languages, Loader2, Smartphone, Share2, BookOpen, HeartPulse, Zap, UserRound, ImageOff, AlertTriangle, EyeOff, Bot, Video } from "lucide-react";
+import { buildCloudflareUrl, normalizeImageSrc } from "@/lib/cdnImage";
+import { OpinionWeekBoard } from "@/components/admin/OpinionWeekBoard";
 import { SocialPublishDialog } from "@/components/social/SocialPublishDialog";
 import { ViewsCount } from "@/components/ViewsCount";
 import { DashboardLayout } from "@/components/DashboardLayout";
@@ -90,12 +91,21 @@ type Article = {
     nextSlot: string;
   } | null;
   isAiGeneratedThumbnail?: boolean;
+  imageUrl?: string | null;
+  thumbnailUrl?: string | null;
+  hideFromHomepage?: boolean | null;
+  videoUrl?: string | null;
+  isVideoTemplate?: boolean | null;
+  /** من أدخل المادة فعلًا (submitterId ثم authorId) — بخلاف الإسناد الظاهر */
+  enteredBy?: { id: string; firstName: string | null; lastName: string | null; email: string | null } | null;
+  signals?: { notifiedAt: string | null; socialPublishedAt: string | null } | null;
   source?: string;
   sourceMetadata?: {
     type?: 'email' | 'whatsapp' | 'manual' | 'mobile';
     from?: string;
     senderName?: string;
     senderId?: string;
+    bot?: string;
     platform?: 'ios' | 'android' | string;
     firstName?: string;
     lastName?: string;
@@ -148,12 +158,15 @@ function SortableRow({
   isSaving,
   disableSorting,
   highlightResubmitted,
+  alert,
 }: {
   article: Article;
   children: React.ReactNode;
   isSaving?: boolean;
   disableSorting?: boolean;
   highlightResubmitted?: false | "resubmitted" | "awaiting";
+  /** خط أحمر على طرف الصف: عاجل، أو فات موعده */
+  alert?: boolean;
 }) {
   const {
     attributes,
@@ -177,8 +190,8 @@ function SortableRow({
       ref={setNodeRef}
       style={style}
       className={cn(
-        "border-b border-border/80 transition-colors",
-        "bg-card even:bg-muted/40 hover:bg-muted/60 dark:even:bg-muted/20 dark:hover:bg-muted/40",
+        "border-b border-border/70 border-r-[3px] border-r-transparent bg-card transition-colors hover:bg-muted/50",
+        alert && "border-r-red-500 dark:border-r-red-500",
         isDragging ? "bg-primary/15 shadow-lg" : "",
         isSaving ? "opacity-70" : "",
         highlightResubmitted === "resubmitted" ? "bg-amber-50/90 dark:bg-amber-950/30 border-r-4 border-r-amber-500" : "",
@@ -201,34 +214,702 @@ function SortableRow({
   );
 }
 
-const TYPE_CHIP: Record<string, { label: string; className: string; icon?: typeof Camera }> = {
+const TYPE_CHIP: Record<string, { label: string; tone: string; icon?: typeof Camera }> = {
   news: {
     label: "خبر",
-    className: "border-sky-500/20 bg-sky-500/10 text-sky-700 dark:text-sky-300",
+    tone: "border-sky-200 bg-sky-50 text-sky-800 dark:border-sky-800 dark:bg-sky-950/45 dark:text-sky-200",
   },
   opinion: {
     label: "رأي",
-    className: "border-violet-500/20 bg-violet-500/10 text-violet-700 dark:text-violet-300",
+    tone: "border-violet-200 bg-violet-50 text-violet-800 dark:border-violet-800 dark:bg-violet-950/45 dark:text-violet-200",
   },
   analysis: {
     label: "تحليل",
-    className: "border-indigo-500/20 bg-indigo-500/10 text-indigo-700 dark:text-indigo-300",
+    tone: "border-indigo-200 bg-indigo-50 text-indigo-800 dark:border-indigo-800 dark:bg-indigo-950/45 dark:text-indigo-200",
   },
   column: {
     label: "عمود",
-    className: "border-fuchsia-500/20 bg-fuchsia-500/10 text-fuchsia-700 dark:text-fuchsia-300",
+    tone: "border-fuchsia-200 bg-fuchsia-50 text-fuchsia-800 dark:border-fuchsia-800 dark:bg-fuchsia-950/45 dark:text-fuchsia-200",
   },
   weekly_photos: {
     label: "صور",
-    className: "border-orange-500/20 bg-orange-500/10 text-orange-700 dark:text-orange-300",
+    tone: "border-orange-200 bg-orange-50 text-orange-800 dark:border-orange-800 dark:bg-orange-950/45 dark:text-orange-200",
     icon: Camera,
   },
   infographic: {
     label: "إنفوجرافيك",
-    className: "border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+    tone: "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/45 dark:text-emerald-200",
     icon: BarChart3,
   },
 };
+
+const AR_MONTHS = ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"] as const;
+
+function parseArticleDate(value: string | Date | null | undefined) {
+  if (!value) return null;
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function riyadhParts(date: Date) {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Riyadh",
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hourCycle: "h12",
+  }).formatToParts(date);
+  const get = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? "";
+  const monthIndex = Number(get("month")) - 1;
+  const suffix = /^a/i.test(get("dayPeriod")) ? "ص" : "م";
+  const day = String(Number(get("day")));
+  return {
+    dayKey: `${get("year")}-${get("month").padStart(2, "0")}-${get("day").padStart(2, "0")}`,
+    year: get("year"),
+    day,
+    monthName: AR_MONTHS[monthIndex] ?? get("month"),
+    clock: `${get("hour")}:${get("minute")} ${suffix}`,
+  };
+}
+
+function shiftDayKey(key: string, days: number) {
+  const [year, month, day] = key.split("-").map(Number);
+  const shifted = new Date(Date.UTC(year, month - 1, day + days));
+  const y = shifted.getUTCFullYear();
+  const m = String(shifted.getUTCMonth() + 1).padStart(2, "0");
+  const d = String(shifted.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function riyadhWireLabel(date: Date, now = new Date()) {
+  const current = riyadhParts(date);
+  const today = riyadhParts(now);
+  const full = `${current.day} ${current.monthName} ${current.year}، ${current.clock}`;
+  const iso = date.toISOString();
+  if (current.dayKey === today.dayKey) return { label: current.clock, full, iso };
+  if (current.dayKey === shiftDayKey(today.dayKey, -1)) return { label: `أمس ${current.clock}`, full, iso };
+  if (current.year === today.year) return { label: `${current.day} ${current.monthName}، ${current.clock}`, full, iso };
+  return { label: full, full, iso };
+}
+
+function wireMoment(article: Article, desktop: boolean) {
+  const id = desktop ? "desktop" : "mobile";
+  if (article.status === "scheduled") {
+    const when = parseArticleDate(article.scheduledAt);
+    if (!when) return {
+      label: "غير محدد",
+      full: "هذه المادة مجدولة بلا موعد نشر صالح",
+      iso: undefined,
+      prefix: "موعد النشر",
+      testId: `scheduled-label-${id === "desktop" ? "desktop-" : ""}${article.id}`,
+    };
+    return {
+      ...riyadhWireLabel(when),
+      prefix: "موعد النشر",
+      testId: `scheduled-label-${id === "desktop" ? "desktop-" : ""}${article.id}`,
+    };
+  }
+  if (article.status === "draft") {
+    const weeklyAt = article.articleType === "opinion"
+      ? article.scheduledAt || article.writerWeeklySlot?.nextSlot || null
+      : null;
+    const weekly = parseArticleDate(weeklyAt);
+    if (weekly) {
+      const when = riyadhWireLabel(weekly);
+      const parts = riyadhParts(weekly);
+      const compactLabel = `${parts.day} ${parts.monthName}، ${parts.clock}`;
+      return {
+        label: desktop && parts.year === riyadhParts(new Date()).year ? compactLabel : when.full,
+        full: when.full,
+        iso: when.iso,
+        prefix: "موعد الكاتب",
+        testId: `weekly-slot-${id === "desktop" ? "desktop-" : ""}${article.id}`,
+      };
+    }
+    if (article.articleType === "opinion") {
+      return {
+        label: "غير محدد",
+        full: "لم يُحدد موعد نشر لهذا الكاتب",
+        iso: undefined,
+        prefix: "موعد الكاتب",
+        testId: `weekly-slot-${id === "desktop" ? "desktop-" : ""}${article.id}`,
+      };
+    }
+    const created = parseArticleDate(article.createdAt);
+    if (!created) return null;
+    return {
+      ...riyadhWireLabel(created),
+      prefix: "حُفظت",
+      testId: `draft-date-${id === "desktop" ? "desktop-" : ""}${article.id}`,
+    };
+  }
+  if (article.status === "published") {
+    const published = parseArticleDate(article.publishedAt);
+    if (!published) return null;
+    return {
+      ...riyadhWireLabel(published),
+      prefix: "نُشر",
+      testId: `published-date-${id === "desktop" ? "desktop-" : ""}${article.id}`,
+    };
+  }
+  return null;
+}
+
+function personName(article: Article) {
+  const meta = article.sourceMetadata;
+  if (meta?.firstName || meta?.lastName) return `${meta.firstName || ""} ${meta.lastName || ""}`.trim();
+  if (meta?.senderName) return meta.senderName;
+  if (article.author?.firstName && article.author?.lastName) return `${article.author.firstName} ${article.author.lastName}`;
+  return article.author?.firstName || article.author?.email || "المحرر";
+}
+
+function userName(user: { firstName?: string | null; lastName?: string | null; email?: string | null } | null | undefined) {
+  if (!user) return null;
+  const name = `${user.firstName ?? ""} ${user.lastName ?? ""}`.trim();
+  return name || user.email || null;
+}
+
+/** الحساب الافتراضي للإسناد الظاهر — لا يفيد تكراره في كل صف */
+const DEFAULT_BYLINE = "صحيفة سبق";
+
+/**
+ * من أضاف المادة إلى النظام: البريد الذكي، واتساب، بوت، تطبيق المراسل، وكالة،
+ * أو اسم الموظف. لمقالات الرأي يبقى الكاتب أولًا ومن أدخلها ثانيًا.
+ */
+function wireAttribution(article: Article) {
+  const meta = article.sourceMetadata as (Article["sourceMetadata"] & { bot?: string }) | null | undefined;
+  const staff = userName(article.enteredBy);
+  if (article.source === "email" || article.source === "url") {
+    const name = meta?.senderName || meta?.from || null;
+    return { prefix: "البريد الذكي", name, channel: "بريد", title: `البريد الذكي${name ? `: ${name}` : ""}`, testId: "badge-source-email", incoming: true, Icon: Mail, enteredBy: null as string | null };
+  }
+  if (article.source === "whatsapp") {
+    const name = meta?.senderName || meta?.from || null;
+    return { prefix: "واتساب", name, channel: "واتساب", title: `واتساب${name ? `: ${name}` : ""}`, testId: "badge-source-whatsapp", incoming: true, Icon: MessageCircle, enteredBy: null as string | null };
+  }
+  if (article.source === "bot") {
+    const bot = meta?.bot || "نشر سبق";
+    return { prefix: "بوت", name: `«${bot}»`, channel: "بوت", title: `أضافه البوت «${bot}»`, testId: "badge-source-bot", incoming: true, Icon: Bot, enteredBy: null as string | null };
+  }
+  if (article.source === "ai") {
+    return { prefix: "مولّد آليًا", name: staff, channel: "آلي", title: `مولّد بالذكاء الاصطناعي${staff ? ` · ${staff}` : ""}`, testId: "badge-source-ai", incoming: true, Icon: Sparkles, enteredBy: null as string | null };
+  }
+  if (article.source === "ios-app" || article.source === "android-app") {
+    const name = personName(article);
+    const android = article.source === "android-app";
+    return {
+      prefix: "المراسل",
+      name,
+      channel: android ? "أندرويد" : "iOS",
+      title: `${android ? "تطبيق Android" : "تطبيق iOS"}: ${name}`,
+      testId: android ? "badge-source-android" : "badge-source-ios",
+      incoming: true,
+      Icon: Smartphone,
+      enteredBy: null as string | null,
+    };
+  }
+  if (article.publisher?.companyName) {
+    const name = article.publisher.companyName;
+    return { prefix: "الوكالة", name, channel: "وكالة", title: `وكالة: ${name}`, testId: "badge-source-publisher", incoming: true, Icon: Building2, enteredBy: null as string | null };
+  }
+  const byline = personName(article);
+  if (article.articleType === "opinion") {
+    return {
+      prefix: "الكاتب",
+      name: byline,
+      channel: null as string | null,
+      title: `الكاتب: ${byline}${staff && staff !== byline ? ` · أدخله ${staff}` : ""}`,
+      testId: "badge-source-manual",
+      incoming: false,
+      Icon: null,
+      enteredBy: staff && staff !== byline ? staff : null,
+    };
+  }
+  const name = staff || byline;
+  return {
+    prefix: "أضافه",
+    name,
+    channel: null as string | null,
+    title: `أضافه: ${name}${byline && byline !== name ? ` · باسم ${byline}` : ""}`,
+    testId: "badge-source-manual",
+    incoming: false,
+    Icon: null,
+    // الإسناد الظاهر إن اختلف عن الموظف ولم يكن الحساب الافتراضي
+    enteredBy: null as string | null,
+    byline: byline && byline !== name && byline !== DEFAULT_BYLINE ? byline : null,
+  };
+}
+
+/** ملصقات حالة المادة في سطر البيانات */
+function articleFlags(article: Article) {
+  const flags: { key: string; label: string; tone: string; Icon: typeof Star; title?: string }[] = [];
+  const album = (article as { albumImages?: unknown[] }).albumImages?.length
+    || (article as { mediaAssetsCount?: number }).mediaAssetsCount
+    || 0;
+  const aiImage = Boolean(article.isAiGeneratedThumbnail || (article as { isAiGeneratedImage?: boolean }).isAiGeneratedImage);
+  const noImage = !article.thumbnailUrl && !article.imageUrl && article.articleType === "news" && article.status !== "archived";
+  if (article.isFeatured) flags.push({ key: "featured", label: "مميّز", tone: "bg-amber-50 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300", Icon: Star });
+  if (article.isReading) flags.push({ key: "reading", label: "قراءة", tone: "bg-sky-50 text-sky-800 dark:bg-sky-950/50 dark:text-sky-300", Icon: BookOpen });
+  if (album) flags.push({ key: "album", label: `ألبوم ${album} صور`, tone: "bg-muted text-foreground/75", Icon: Images, title: "يحتوي على ألبوم صور" });
+  if (article.videoUrl || article.isVideoTemplate) flags.push({ key: "video", label: "فيديو", tone: "bg-muted text-foreground/75", Icon: Video });
+  if (noImage) flags.push({ key: "no-image", label: "بلا صورة", tone: "bg-amber-50 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300", Icon: AlertTriangle });
+  if (aiImage) flags.push({ key: "ai-image", label: "صورة مولّدة", tone: "bg-violet-50 text-violet-800 dark:bg-violet-950/50 dark:text-violet-300", Icon: Brain, title: "صورة مولّدة بالذكاء الاصطناعي" });
+  if (article.hideFromHomepage) flags.push({ key: "hidden", label: "مخفي من الرئيسية", tone: "bg-muted text-foreground/75", Icon: EyeOff });
+  return flags;
+}
+
+function ArticleFlags({ article, omit = [] }: { article: Article; omit?: string[] }) {
+  // بطاقة الجوال تعرض «مميّز» و«قراءة» في شارات مستقلة، فتُستثنى هنا منعًا للتكرار
+  const flags = articleFlags(article).filter((flag) => !omit.includes(flag.key));
+  if (!flags.length) return null;
+  return (
+    <>
+      {flags.map((flag) => (
+        <span
+          key={flag.key}
+          title={flag.title ?? flag.label}
+          className={cn("inline-flex shrink-0 items-center gap-1 rounded-[5px] px-1.5 text-[11px] font-medium leading-5", flag.tone)}
+          data-testid={`flag-${flag.key}-${article.id}`}
+        >
+          <flag.Icon className={cn("h-3 w-3", flag.key === "featured" && "fill-current")} aria-hidden="true" />
+          {flag.label}
+        </span>
+      ))}
+    </>
+  );
+}
+
+function ArticleWireRow({
+  article,
+  desktop,
+  onTitleClick,
+}: {
+  article: Article;
+  desktop: boolean;
+  onTitleClick?: () => void;
+}) {
+  const moment = wireMoment(article, desktop);
+  const who = wireAttribution(article);
+  const type = TYPE_CHIP[article.articleType] ?? {
+    label: "مادة",
+    tone: "border-border bg-muted/50 text-foreground/80",
+  };
+  const categoryName = article.category?.nameAr;
+  const categoryColor = article.category?.color && /^#([0-9a-fA-F]{6})$/.test(article.category.color)
+    ? article.category.color
+    : null;
+  const aiImage = Boolean(article.isAiGeneratedThumbnail || (article as { isAiGeneratedImage?: boolean }).isAiGeneratedImage);
+  const WhoIcon = who.Icon;
+  const whoLabel = who.prefix;
+  const momentTone = article.status === "scheduled"
+    ? "border-sky-200 bg-sky-50 text-sky-800 dark:border-sky-800 dark:bg-sky-950/45 dark:text-sky-200"
+    : article.status === "draft" && article.articleType === "opinion"
+      ? "border-violet-200 bg-violet-50 text-violet-800 dark:border-violet-800 dark:bg-violet-950/45 dark:text-violet-200"
+      : article.status === "draft"
+        ? "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950/45 dark:text-amber-200"
+        : "border-border bg-muted/45 text-foreground/80";
+  const momentClass = cn("inline-flex min-h-6 max-w-full items-center gap-1.5 rounded-md border px-2 py-0.5 text-xs leading-5", momentTone);
+  const momentContent = moment && (
+    <>
+      <Clock className="h-3.5 w-3.5 shrink-0 opacity-75" aria-hidden="true" />
+      <span className="shrink-0 font-semibold">{moment.prefix}</span>
+      <span className="tabular-nums">{moment.label}</span>
+    </>
+  );
+  const categoryChip = categoryName ? (
+    <span className="inline-flex min-h-6 shrink-0 items-center gap-1.5 rounded-md border border-border bg-muted/35 px-2 py-0.5 text-xs leading-5 text-foreground/80">
+      <span
+        className="h-2 w-2 rounded-full"
+        style={{ backgroundColor: categoryColor ?? "currentColor" }}
+        aria-hidden="true"
+      />
+      {categoryName}
+    </span>
+  ) : null;
+
+  return (
+    <div className="min-w-0">
+      <div className="flex items-start gap-2">
+        <span className={cn("mt-0.5 inline-flex shrink-0 items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] font-bold leading-5", type.tone)}>
+          {type.icon ? <type.icon className="h-3 w-3" aria-hidden="true" /> : null}
+          {type.label}
+        </span>
+        <h3
+          title={article.title}
+          onClick={onTitleClick}
+          className={cn(
+            "min-w-0 flex-1 text-[15px] font-semibold leading-snug text-foreground",
+            desktop ? "truncate" : "line-clamp-2",
+            onTitleClick && "cursor-pointer hover:text-primary",
+          )}
+        >
+          {article.title}
+        </h3>
+        {desktop && aiImage ? (
+          <span title="صورة مولّدة بالذكاء الاصطناعي" data-testid={`badge-ai-image-${article.id}`}>
+            <Brain className="mt-0.5 h-3.5 w-3.5 shrink-0 text-purple-600 dark:text-purple-400" aria-hidden="true" />
+          </span>
+        ) : null}
+        <EditorialDraftReviewCue
+          article={article}
+          layout="inline"
+          testId={`badge-review-${desktop ? "desktop" : "mobile"}-${article.id}`}
+        />
+      </div>
+      <div className={cn("mt-2 flex min-w-0 items-center gap-1.5", desktop ? "flex-nowrap" : "flex-wrap")}>
+        {moment?.iso ? (
+          <time
+            dateTime={moment.iso}
+            title={moment.full}
+            data-testid={moment.testId}
+            className={momentClass}
+          >
+            {momentContent}
+          </time>
+        ) : moment ? (
+          <span title={moment.full} data-testid={moment.testId} className={momentClass}>
+            {momentContent}
+          </span>
+        ) : null}
+        <span
+          data-testid={who.testId}
+          title={who.title}
+          className={cn("inline-flex min-h-6 min-w-0 max-w-full items-center gap-1 rounded-md border border-border bg-card px-2 py-0.5 text-xs leading-5 text-foreground/85", desktop && "flex-1")}
+        >
+          {WhoIcon ? <WhoIcon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" /> : <UserRound className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />}
+          <span className="shrink-0 text-muted-foreground">{whoLabel}</span>
+          <span className="truncate font-semibold">{who.name}</span>
+        </span>
+        {categoryChip}
+        {!desktop ? <ArticleFlags article={article} omit={["featured", "reading"]} /> : null}
+      </div>
+    </div>
+  );
+}
+
+// ── صف القائمة على الديسكتوب: عمود وقت بارز، صورة مصغرة، سطر بيانات هادئ ──
+
+const AR_WEEKDAYS = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"] as const;
+const HOUR_MS = 60 * 60 * 1000;
+const STALE_DRAFT_MS = 24 * HOUR_MS;
+
+function weekdayOfKey(key: string) {
+  const [year, month, day] = key.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day)).getUTCDay();
+}
+
+/** مدة قصيرة بالعربية: «5 د»، «2س 15د»، «يومين» */
+function shortSpan(ms: number) {
+  const minutes = Math.max(0, Math.round(Math.abs(ms) / 60_000));
+  if (minutes < 1) return "لحظات";
+  if (minutes < 60) return `${minutes} د`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) {
+    const rest = minutes % 60;
+    return rest ? `${hours}س ${rest}د` : `${hours} س`;
+  }
+  const days = Math.round(hours / 24);
+  return days === 1 ? "يوم" : days === 2 ? "يومين" : `${days} أيام`;
+}
+
+/** تسمية الوقت داخل العمود: الساعة وحدها لليوم، واليوم والساعة لما سواه */
+function deskClock(date: Date, now: Date) {
+  const current = riyadhParts(date);
+  const today = riyadhParts(now);
+  if (current.dayKey === today.dayKey) return current.clock;
+  if (current.dayKey === shiftDayKey(today.dayKey, -1)) return `أمس ${current.clock}`;
+  if (current.dayKey === shiftDayKey(today.dayKey, 1)) return `غدًا ${current.clock}`;
+  const diffDays = Math.abs(date.getTime() - now.getTime()) / (24 * HOUR_MS);
+  if (diffDays < 6.5) return `${AR_WEEKDAYS[weekdayOfKey(current.dayKey)]} ${current.clock}`;
+  return current.year === today.year
+    ? `${current.day} ${current.monthName}، ${current.clock}`
+    : `${current.day} ${current.monthName} ${current.year}`;
+}
+
+type DeskTone = "neutral" | "sky" | "violet" | "amber" | "red";
+type DeskMoment = {
+  kicker: string;
+  clock: string;
+  sub: string | null;
+  tone: DeskTone;
+  subTone?: DeskTone;
+  iso?: string;
+  full: string;
+  testId: string;
+  /** فات الموعد — يُعلَّم الصف بخط أحمر */
+  overdue?: boolean;
+};
+
+function deskMoment(article: Article, now: Date): DeskMoment | null {
+  const id = article.id;
+  if (article.status === "scheduled") {
+    const when = parseArticleDate(article.scheduledAt);
+    const testId = `scheduled-label-desktop-${id}`;
+    if (!when) return { kicker: "موعد النشر", clock: "غير محدد", sub: "بلا موعد صالح", tone: "amber", full: "هذه المادة مجدولة بلا موعد نشر صالح", testId };
+    const diff = when.getTime() - now.getTime();
+    const base = { clock: deskClock(when, now), iso: when.toISOString(), full: riyadhWireLabel(when, now).full, testId };
+    return diff <= 0
+      ? { ...base, kicker: "فات الموعد", sub: `منذ ${shortSpan(diff)}`, tone: "red", subTone: "red", overdue: true }
+      : { ...base, kicker: "موعد النشر", sub: `بعد ${shortSpan(diff)}`, tone: "sky" };
+  }
+  if (article.status === "draft" && article.articleType === "opinion") {
+    const slot = parseArticleDate(article.scheduledAt || article.writerWeeklySlot?.nextSlot || null);
+    const testId = `weekly-slot-desktop-${id}`;
+    if (!slot) return { kicker: "موعد الكاتب", clock: "غير محدد", sub: "حدّده من لوحة الكتّاب", tone: "amber", full: "لم يُحدد موعد نشر لهذا الكاتب", testId };
+    const diff = slot.getTime() - now.getTime();
+    const base = { clock: deskClock(slot, now), iso: slot.toISOString(), full: riyadhWireLabel(slot, now).full, testId };
+    return diff <= 0
+      ? { ...base, kicker: "فات موعد الكاتب", sub: `منذ ${shortSpan(diff)}`, tone: "red", subTone: "red", overdue: true }
+      : { ...base, kicker: "موعد الكاتب", sub: `بعد ${shortSpan(diff)}`, tone: "violet" };
+  }
+  if (article.status === "draft") {
+    const saved = parseArticleDate(article.updatedAt) ?? parseArticleDate(article.createdAt);
+    if (!saved) return null;
+    const age = now.getTime() - saved.getTime();
+    return {
+      kicker: "حُفظت",
+      clock: deskClock(saved, now),
+      sub: age > STALE_DRAFT_MS ? `راكدة ${shortSpan(age)}` : `قبل ${shortSpan(age)}`,
+      subTone: age > STALE_DRAFT_MS ? "amber" : undefined,
+      tone: "neutral",
+      iso: saved.toISOString(),
+      full: riyadhWireLabel(saved, now).full,
+      testId: `draft-date-desktop-${id}`,
+    };
+  }
+  if (article.status === "published") {
+    const published = parseArticleDate(article.publishedAt);
+    if (!published) return null;
+    const age = now.getTime() - published.getTime();
+    return {
+      kicker: "نُشر",
+      clock: deskClock(published, now),
+      sub: age < 24 * HOUR_MS ? `قبل ${shortSpan(age)}` : null,
+      tone: "neutral",
+      iso: published.toISOString(),
+      full: riyadhWireLabel(published, now).full,
+      testId: `published-date-desktop-${id}`,
+    };
+  }
+  if (article.status === "archived") {
+    const archived = parseArticleDate(article.updatedAt);
+    if (!archived) return null;
+    return { kicker: "أُرشفت", clock: deskClock(archived, now), sub: null, tone: "neutral", iso: archived.toISOString(), full: riyadhWireLabel(archived, now).full, testId: `archived-date-desktop-${id}` };
+  }
+  return null;
+}
+
+const DESK_TONE: Record<DeskTone, string> = {
+  neutral: "text-foreground",
+  sky: "text-sky-700 dark:text-sky-300",
+  violet: "text-violet-700 dark:text-violet-300",
+  amber: "text-amber-700 dark:text-amber-300",
+  red: "text-red-600 dark:text-red-400",
+};
+
+function DeskTimeCell({ moment }: { moment: DeskMoment | null }) {
+  if (!moment) return <span className="text-xs text-muted-foreground">—</span>;
+  const tone = DESK_TONE[moment.tone];
+  const body = (
+    <>
+      <span className={cn("block text-[11px] leading-4", moment.tone === "neutral" ? "text-muted-foreground" : tone)}>{moment.kicker}</span>
+      <span className={cn("block text-[14.5px] font-semibold leading-5 tabular-nums", tone)}>{moment.clock}</span>
+      {moment.sub ? (
+        <span className={cn("block text-[11px] leading-4 tabular-nums", moment.subTone ? DESK_TONE[moment.subTone] : "text-muted-foreground")}>{moment.sub}</span>
+      ) : null}
+    </>
+  );
+  return moment.iso ? (
+    <time dateTime={moment.iso} title={moment.full} data-testid={moment.testId} className="block">{body}</time>
+  ) : (
+    <span title={moment.full} data-testid={moment.testId} className="block">{body}</span>
+  );
+}
+
+function DeskThumb({ article }: { article: Article }) {
+  const src = article.thumbnailUrl || article.imageUrl;
+  if (!src) {
+    return (
+      <div className="grid h-[42px] w-16 place-items-center rounded-md border border-dashed border-border text-muted-foreground" title="بلا صورة">
+        <ImageOff className="h-4 w-4" aria-hidden="true" />
+      </div>
+    );
+  }
+  return (
+    <img
+      src={buildCloudflareUrl(normalizeImageSrc(src), { width: 128, height: 84, quality: 70 })}
+      alt=""
+      loading="lazy"
+      decoding="async"
+      className="h-[42px] w-16 rounded-md bg-muted object-cover"
+      data-testid={`thumb-article-${article.id}`}
+    />
+  );
+}
+
+function ArticleDeskMain({
+  article,
+  onTitleClick,
+}: {
+  article: Article;
+  onTitleClick?: () => void;
+}) {
+  const who = wireAttribution(article);
+  const type = article.articleType && article.articleType !== "news" ? TYPE_CHIP[article.articleType] : null;
+  const isBreaking = article.newsType === "breaking";
+  const categoryName = article.category?.nameAr;
+  const categoryColor = article.category?.color && /^#([0-9a-fA-F]{6})$/.test(article.category.color)
+    ? article.category.color
+    : null;
+  const WhoIcon = who.Icon ?? UserRound;
+  const Sep = () => <span aria-hidden="true" className="text-border">|</span>;
+
+  return (
+    <div className="min-w-0">
+      <div className="flex min-w-0 items-center gap-1.5">
+        {isBreaking ? (
+          <span className="shrink-0 rounded-[5px] bg-red-50 px-1.5 text-[11px] font-bold leading-5 text-red-700 dark:bg-red-950/50 dark:text-red-300">عاجل</span>
+        ) : null}
+        {type ? (
+          <span className={cn("inline-flex shrink-0 items-center gap-1 rounded-[5px] border px-1.5 text-[11px] font-bold leading-5", type.tone)}>
+            {type.icon ? <type.icon className="h-3 w-3" aria-hidden="true" /> : null}
+            {type.label}
+          </span>
+        ) : null}
+        <h3
+          title={article.title}
+          onClick={onTitleClick}
+          className={cn(
+            "min-w-0 flex-1 truncate text-[14.5px] font-semibold leading-6 text-foreground",
+            onTitleClick && "cursor-pointer hover:text-primary",
+          )}
+        >
+          {article.title}
+        </h3>
+        <EditorialDraftReviewCue article={article} layout="inline" testId={`badge-review-desktop-${article.id}`} />
+      </div>
+      <div className="mt-1 flex min-w-0 items-center gap-2 overflow-hidden whitespace-nowrap text-xs text-muted-foreground">
+        {categoryName ? (
+          <span className="inline-flex shrink-0 items-center gap-1.5">
+            <span className="h-[7px] w-[7px] rounded-full" style={{ backgroundColor: categoryColor ?? "currentColor" }} aria-hidden="true" />
+            {categoryName}
+          </span>
+        ) : null}
+        {categoryName ? <Sep /> : null}
+        <span data-testid={who.testId} title={who.title} className="inline-flex min-w-0 items-center gap-1">
+          <WhoIcon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+          <span className="shrink-0">{who.prefix}</span>
+          {who.name ? <span className="truncate font-medium text-foreground/85">{who.name}</span> : null}
+          {who.channel === "iOS" || who.channel === "أندرويد" ? <span className="shrink-0">· {who.channel}</span> : null}
+        </span>
+        {who.enteredBy ? (
+          <span className="inline-flex min-w-0 shrink items-center gap-1" data-testid={`entered-by-${article.id}`}>
+            <span className="shrink-0">· أدخله</span>
+            <span className="truncate text-foreground/80">{who.enteredBy}</span>
+          </span>
+        ) : null}
+        {"byline" in who && who.byline ? (
+          <span className="inline-flex min-w-0 shrink items-center gap-1" data-testid={`byline-${article.id}`}>
+            <span className="shrink-0">· باسم</span>
+            <span className="truncate text-foreground/80">{who.byline}</span>
+          </span>
+        ) : null}
+        <ArticleFlags article={article} />
+      </div>
+    </div>
+  );
+}
+
+function DeskViewsCell({ article, now }: { article: Article; now: Date }) {
+  if (article.status !== "published") return null;
+  const views = Number(article.views) || 0;
+  const published = parseArticleDate(article.publishedAt);
+  const hours = published ? (now.getTime() - published.getTime()) / HOUR_MS : 0;
+  const perHour = hours >= 1 && hours <= 48 && views > 0 ? Math.round(views / hours) : null;
+  return (
+    <div className="text-left tabular-nums" data-testid={`views-article-${article.id}`}>
+      <span className="block text-sm font-semibold">{views.toLocaleString("en-US")}</span>
+      {perHour !== null ? (
+        <span className="block text-[11px] text-muted-foreground" title="متوسط القراءات في الساعة منذ النشر">{perHour.toLocaleString("en-US")} بالساعة</span>
+      ) : null}
+    </div>
+  );
+}
+
+type DeskListItem =
+  | { kind: "group"; key: string; label: string; tone?: DeskTone }
+  | { kind: "article"; article: Article };
+
+function deskDayLabel(key: string, todayKey: string) {
+  const [year, month, day] = key.split("-").map(Number);
+  const [todayYear] = todayKey.split("-").map(Number);
+  const date = `${AR_WEEKDAYS[weekdayOfKey(key)]} ${day} ${AR_MONTHS[month - 1] ?? month}${year !== todayYear ? ` ${year}` : ""}`;
+  if (key === todayKey) return `اليوم · ${date}`;
+  if (key === shiftDayKey(todayKey, -1)) return `أمس · ${date}`;
+  if (key === shiftDayKey(todayKey, 1)) return `غدًا · ${date}`;
+  return date;
+}
+
+/** يقسم الصفحة الحالية إلى مجموعات: باليوم للمنشور والمجدول، وبالنوع للمسودات. */
+function buildDeskList(articles: Article[], status: string, now: Date): DeskListItem[] {
+  const todayKey = riyadhParts(now).dayKey;
+  if (status === "draft") {
+    const opinion = articles.filter((a) => a.articleType === "opinion");
+    const news = articles.filter((a) => a.articleType !== "opinion");
+    const slotOf = (a: Article) => parseArticleDate(a.scheduledAt || a.writerWeeklySlot?.nextSlot || null)?.getTime() ?? Number.POSITIVE_INFINITY;
+    const sortedOpinion = [...opinion].sort((a, b) => slotOf(a) - slotOf(b));
+    const items: DeskListItem[] = [];
+    if (sortedOpinion.length) {
+      items.push({ kind: "group", key: "opinion", label: "مقالات الرأي · حسب موعد الكاتب" });
+      sortedOpinion.forEach((article) => items.push({ kind: "article", article }));
+    }
+    if (news.length) {
+      if (sortedOpinion.length) items.push({ kind: "group", key: "news", label: "مسودات الأخبار · الأحدث أولًا" });
+      news.forEach((article) => items.push({ kind: "article", article }));
+    }
+    return items;
+  }
+  if (status !== "published" && status !== "scheduled") {
+    return articles.map((article) => ({ kind: "article", article }));
+  }
+  const items: DeskListItem[] = [];
+  let lastKey: string | null = null;
+  for (const article of articles) {
+    let key: string;
+    let label: string;
+    let tone: DeskTone | undefined;
+    const when = parseArticleDate(status === "published" ? article.publishedAt : article.scheduledAt);
+    if (status === "scheduled" && (!when || when.getTime() <= now.getTime())) {
+      key = "overdue";
+      label = when ? "فات موعد نشرها" : "بلا موعد صالح";
+      tone = "red";
+    } else if (when) {
+      key = riyadhParts(when).dayKey;
+      label = deskDayLabel(key, todayKey);
+    } else {
+      key = "undated";
+      label = "بلا تاريخ";
+    }
+    if (key !== lastKey) {
+      items.push({ kind: "group", key: `${key}-${items.length}`, label, tone });
+      lastKey = key;
+    }
+    items.push({ kind: "article", article });
+  }
+  return items;
+}
+
+/** ساعة تتقدّم كل دقيقة لتحديث «قبل/بعد» دون إعادة الجلب */
+function useMinuteClock() {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(new Date()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
+  return now;
+}
 
 export default function ArticlesManagement() {
   const { user, isLoading: isUserLoading } = useAuth({ redirectToLogin: true });
@@ -401,6 +1082,9 @@ export default function ArticlesManagement() {
 
   const articles = useMemo(() => canViewArticles && Array.isArray(articlesData?.articles) ? articlesData.articles : [], [canViewArticles, articlesData?.articles]);
   const articlesBusy = articlesFetching || isPlaceholderData || searchTerm !== listParams.search;
+  const now = useMinuteClock();
+  const deskList = useMemo(() => buildDeskList(articles, activeStatus, now), [articles, activeStatus, now]);
+  const canSeeWeekBoard = !!user && hasAnyPermission(user, "opinion.review", "articles.schedule");
   const displayedPage = articlesData?.page ?? currentPage;
   const totalPages = articlesData?.totalPages || 1;
 
@@ -902,214 +1586,6 @@ export default function ArticlesManagement() {
     return badges[status as keyof typeof badges] || <Badge>{status}</Badge>;
   };
 
-  const formatArticleDate = (date: string | Date | null | undefined) => {
-    if (!date) return null;
-    const d = date instanceof Date ? date : new Date(date);
-    if (Number.isNaN(d.getTime())) return null;
-
-    return new Intl.DateTimeFormat("en-GB", {
-      timeZone: "Asia/Riyadh",
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: true,
-    }).format(d);
-  };
-
-  const formatScheduledDate = formatArticleDate;
-  const formatDraftDate = formatArticleDate;
-  const formatPublishedDate = formatArticleDate;
-
-  const getTypeBadge = (type: string) => {
-    const meta = TYPE_CHIP[type] ?? { label: type, className: "border-border/70 bg-muted text-muted-foreground" };
-    const Icon = meta.icon;
-    return (
-      <Badge
-        variant="outline"
-        className={cn(
-          "gap-1 rounded-md px-2 py-0.5 text-xs font-semibold border shadow-xs",
-          meta.className,
-        )}
-      >
-        {Icon ? <Icon className="h-3 w-3 shrink-0" /> : null}
-        <span>{meta.label}</span>
-      </Badge>
-    );
-  };
-
-  const getCategoryChip = (category?: { nameAr?: string | null; color?: string | null } | null) => {
-    if (!category?.nameAr) return null;
-    const catColor = category.color && /^#([0-9a-fA-F]{6})$/.test(category.color) ? category.color : null;
-    
-    if (catColor) {
-      return (
-        <Badge
-          variant="outline"
-          className="gap-1 rounded-md font-semibold px-2.5 py-0.5 text-xs shadow-xs transition-colors"
-          style={{
-            borderColor: `${catColor}55`,
-            backgroundColor: `${catColor}18`,
-            color: catColor,
-          }}
-        >
-          <Tag className="h-3 w-3 shrink-0" style={{ color: catColor }} />
-          <span>{category.nameAr}</span>
-        </Badge>
-      );
-    }
-
-    return (
-      <Badge
-        variant="outline"
-        className="gap-1 rounded-md border-primary/25 bg-primary/10 text-primary hover:bg-primary/15 font-semibold px-2.5 py-0.5 text-xs shadow-xs"
-      >
-        <Tag className="h-3 w-3 opacity-75 shrink-0" />
-        <span>{category.nameAr}</span>
-      </Badge>
-    );
-  };
-
-  const isMobileAppSource = (source?: string) => source === 'ios-app' || source === 'android-app';
-  const getMobileSenderName = (article: Article) => {
-    const meta = article.sourceMetadata;
-    if (meta?.firstName || meta?.lastName) {
-      return `${meta.firstName || ''} ${meta.lastName || ''}`.trim();
-    }
-    if (meta?.senderName) return meta.senderName;
-    if (article.author?.firstName && article.author?.lastName) {
-      return `${article.author.firstName} ${article.author.lastName}`;
-    }
-    return article.author?.firstName || article.author?.email || 'مراسل';
-  };
-  const getMobilePlatformLabel = (source?: string) =>
-    source === 'android-app' ? 'تطبيق Android' : 'تطبيق iOS';
-
-  const getAuthorOrSourceBadge = (article: Article) => {
-    if (article.source === "email") {
-      const sender = article.sourceMetadata?.senderName || article.sourceMetadata?.from || "بريد إلكتروني";
-      return (
-        <span
-          className="inline-flex items-center gap-1.5 rounded-md border border-purple-500/25 bg-purple-50/70 dark:bg-purple-950/30 px-2 py-0.5 text-xs font-medium text-purple-700 dark:text-purple-300"
-          data-testid="badge-source-email"
-        >
-          <Mail className="h-3 w-3 text-purple-600 dark:text-purple-400 shrink-0" />
-          <span>البريد الذكي: {sender}</span>
-        </span>
-      );
-    }
-    if (article.source === "whatsapp") {
-      const sender = article.sourceMetadata?.senderName || article.sourceMetadata?.from || "واتساب";
-      return (
-        <span
-          className="inline-flex items-center gap-1.5 rounded-md border border-emerald-500/25 bg-emerald-50/70 dark:bg-emerald-950/30 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-300"
-          data-testid="badge-source-whatsapp"
-        >
-          <MessageCircle className="h-3 w-3 text-emerald-600 dark:text-emerald-400 shrink-0" />
-          <span>واتساب: {sender}</span>
-        </span>
-      );
-    }
-    if (isMobileAppSource(article.source)) {
-      return (
-        <span
-          className="inline-flex items-center gap-1.5 rounded-md border border-slate-400/25 bg-slate-100/70 dark:bg-slate-900/40 px-2 py-0.5 text-xs font-medium text-slate-700 dark:text-slate-300"
-          data-testid={article.source === "android-app" ? "badge-source-android" : "badge-source-ios"}
-        >
-          <Smartphone className="h-3 w-3 text-slate-600 dark:text-slate-400 shrink-0" />
-          <span>{getMobilePlatformLabel(article.source)}: {getMobileSenderName(article)}</span>
-        </span>
-      );
-    }
-    if ((article as any).publisher?.companyName) {
-      return (
-        <span className="inline-flex items-center gap-1.5 rounded-md border border-amber-500/25 bg-amber-50/70 dark:bg-amber-950/30 px-2 py-0.5 text-xs font-medium text-amber-800 dark:text-amber-300">
-          <Building2 className="h-3 w-3 text-amber-600 dark:text-amber-400 shrink-0" />
-          <span>وكالة: {(article as any).publisher.companyName}</span>
-        </span>
-      );
-    }
-    const authorName =
-      article.author?.firstName && article.author?.lastName
-        ? `${article.author.firstName} ${article.author.lastName}`
-        : article.author?.firstName || article.author?.email || "المحرر";
-
-    return (
-      <span
-        className="inline-flex items-center gap-1.5 rounded-md border border-blue-500/25 bg-blue-50/70 dark:bg-blue-950/30 px-2 py-0.5 text-xs font-medium text-blue-700 dark:text-blue-300"
-        data-testid="badge-source-manual"
-      >
-        <PenLine className="h-3 w-3 text-blue-600 dark:text-blue-400 shrink-0" />
-        <span>المحرر: {authorName}</span>
-      </span>
-    );
-  };
-
-  const getDateBadge = (article: Article, isDesktop = true) => {
-    if (article.status === "scheduled" && (article as any).scheduledAt) {
-      return (
-        <span
-          className="inline-flex items-center gap-1 rounded-md border border-sky-500/25 bg-sky-50/60 dark:bg-sky-950/25 px-2 py-0.5 text-xs font-medium text-sky-700 dark:text-sky-300"
-          data-testid={isDesktop ? `scheduled-label-desktop-${article.id}` : `scheduled-label-${article.id}`}
-        >
-          <Clock className="h-3 w-3 text-sky-600 dark:text-sky-400 shrink-0" />
-          <span dir="ltr" className="tabular-nums font-mono text-[11px]">
-            {formatScheduledDate((article as any).scheduledAt)}
-          </span>
-        </span>
-      );
-    }
-    if (article.status === "draft") {
-      const weeklyAt =
-        article.articleType === "opinion"
-          ? article.scheduledAt || article.writerWeeklySlot?.nextSlot || null
-          : null;
-      const weeklyFormatted = weeklyAt ? formatArticleDate(weeklyAt) : null;
-      if (weeklyFormatted) {
-        return (
-          <span
-            className="inline-flex items-center gap-1 rounded-md border border-violet-500/25 bg-violet-50/60 dark:bg-violet-950/25 px-2 py-0.5 text-xs font-medium text-violet-700 dark:text-violet-300"
-            title="موعد الجدول الأسبوعي للكاتب"
-            data-testid={isDesktop ? `weekly-slot-desktop-${article.id}` : `weekly-slot-${article.id}`}
-          >
-            <CalendarClock className="h-3 w-3 text-violet-600 dark:text-violet-400 shrink-0" />
-            <span>أسبوعي</span>
-            <span dir="ltr" className="tabular-nums font-mono text-[11px]">
-              {weeklyFormatted}
-            </span>
-          </span>
-        );
-      }
-      if (article.createdAt) {
-        return (
-          <span
-            className="inline-flex items-center gap-1 rounded-md border border-amber-500/25 bg-amber-50/60 dark:bg-amber-950/25 px-2 py-0.5 text-xs font-medium text-amber-800 dark:text-amber-300"
-            data-testid={isDesktop ? `draft-date-desktop-${article.id}` : `draft-date-${article.id}`}
-          >
-            <Clock className="h-3 w-3 text-amber-600 dark:text-amber-400 shrink-0" />
-            <span dir="ltr" className="tabular-nums font-mono text-[11px]">
-              {formatDraftDate(article.createdAt)}
-            </span>
-          </span>
-        );
-      }
-    }
-    if (article.status === "published" && article.publishedAt) {
-      return (
-        <span
-          className="inline-flex items-center gap-1 rounded-md border border-border/60 bg-muted/40 px-2 py-0.5 text-xs font-medium text-muted-foreground"
-          data-testid={isDesktop ? `published-date-desktop-${article.id}` : `published-date-${article.id}`}
-        >
-          <Clock className="h-3 w-3 shrink-0 opacity-70" />
-          <span dir="ltr" className="tabular-nums font-mono text-[11px]">
-            {formatPublishedDate(article.publishedAt)}
-          </span>
-        </span>
-      );
-    }
-    return null;
-  };
 
   const articlesTotal = articlesData?.total ?? 0;
 
@@ -1365,9 +1841,13 @@ export default function ArticlesManagement() {
             </div>
           )}
 
+          {activeStatus === "draft" && canSeeWeekBoard && (typeFilter === "all" || typeFilter === "opinion") && !listParams.search && (
+            <OpinionWeekBoard onOpenArticle={(id) => setLocation(`/dashboard/articles/${id}`)} />
+          )}
+
           {/* Articles Table - Desktop View */}
           {!isMobile && (
-          <div className="overflow-x-auto rounded-xl border border-border/80 bg-card shadow-none"
+          <div className="overflow-x-auto rounded-xl border border-border/80 bg-card shadow-sm"
             data-testid="articles-desktop-results" aria-busy={articlesBusy}
             {...(articlesBusy ? { inert: "" } : {})}>
             {articlesLoading ? (
@@ -1384,21 +1864,22 @@ export default function ArticlesManagement() {
                 collisionDetection={closestCenter}
                 onDragEnd={handleDragEnd}
               >
-                <table className="w-full min-w-[920px] table-fixed">
+                <table className="w-full min-w-[1080px] table-fixed">
                   <thead className="border-b border-border bg-muted/40 text-muted-foreground">
                     <tr>
-                      <th className="w-8 px-1 py-3 text-center" data-testid="header-drag"></th>
-                      <th className="w-10 px-2 py-3 text-center">
+                      <th className="w-8 px-1 py-2.5 text-center" data-testid="header-drag"></th>
+                      <th className="w-10 px-2 py-2.5 text-center">
                         <Checkbox
                           checked={articles.length > 0 && selectedArticles.size === articles.length}
                           onCheckedChange={toggleSelectAll}
                           data-testid="checkbox-select-all"
                         />
                       </th>
-                      <th className="min-w-[340px] px-4 py-3 text-right text-xs font-bold uppercase tracking-wider text-muted-foreground">الخبر</th>
-                      <th className="w-20 px-2 py-3 text-center text-xs font-bold uppercase tracking-wider text-muted-foreground">عاجل</th>
-                      <th className="w-28 px-2 py-3 text-center text-xs font-bold uppercase tracking-wider text-muted-foreground">المشاهدات</th>
-                      <th className="w-72 px-3 py-3 text-center text-xs font-bold uppercase tracking-wider text-muted-foreground">الإجراءات</th>
+                      <th className="w-[132px] px-2 py-2.5 text-right text-xs font-semibold">الوقت</th>
+                      <th className="w-[84px] px-1 py-2.5"><span className="sr-only">الصورة</span></th>
+                      <th className="px-3 py-2.5 text-right text-xs font-semibold">المادة</th>
+                      <th className="w-24 px-2 py-2.5 text-left text-xs font-semibold">{activeStatus === "published" ? "القراءات" : ""}</th>
+                      <th className={cn("px-3 py-2.5 text-left text-xs font-semibold", activeStatus === "published" ? "w-[372px]" : "w-[212px]")}>الإجراءات</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1406,12 +1887,25 @@ export default function ArticlesManagement() {
                       items={articles.map((a) => a.id)}
                       strategy={verticalListSortingStrategy}
                     >
-                      {articles.map((article) => (
+                      {deskList.map((item) => {
+                        if (item.kind === "group") {
+                          return (
+                            <tr key={`group-${item.key}`} className="border-b border-border/70 bg-muted/30" data-testid={`group-${item.key}`}>
+                              <td colSpan={7} className={cn("px-4 py-2 text-xs font-semibold", item.tone ? DESK_TONE[item.tone] : "text-foreground")}>
+                                {item.label}
+                              </td>
+                            </tr>
+                          );
+                        }
+                        const article = item.article;
+                        const moment = deskMoment(article, now);
+                        return (
                         <SortableRow
                           key={article.id}
                           article={article}
                           isSaving={updateOrderMutation.isPending}
-                          disableSorting={activeStatus === "scheduled"}
+                          disableSorting={activeStatus !== "published"}
+                          alert={article.newsType === "breaking" || !!moment?.overdue}
                           highlightResubmitted={
                             isResubmittedAfterRevision(article)
                               ? "resubmitted"
@@ -1420,67 +1914,30 @@ export default function ArticlesManagement() {
                                 : false
                           }
                         >
-                          <td className="px-2 py-3.5 text-center align-middle">
+                          <td className="px-2 py-2.5 text-center align-middle">
                             <Checkbox
                               checked={selectedArticles.has(article.id)}
                               onCheckedChange={() => toggleArticleSelection(article.id)}
                               data-testid={`checkbox-article-${article.id}`}
                             />
                           </td>
-                          <td className="min-w-[340px] px-4 py-3.5 align-middle">
+                          <td className="px-2 py-2.5 align-middle">
+                            <DeskTimeCell moment={moment} />
+                          </td>
+                          <td className="px-1 py-2.5 align-middle">
+                            <DeskThumb article={article} />
+                          </td>
+                          <td className="px-3 py-2.5 align-middle">
                             <div className="space-y-1.5">
-                              <div className="flex items-center gap-2">
-                                {((article as any).albumImages?.length > 0 ||
-                                  (article as any).mediaAssetsCount > 0) && (
-                                  <span title="يحتوي على ألبوم صور" className="inline-flex">
-                                    <Images className="h-4 w-4 shrink-0 text-sky-500" />
-                                  </span>
-                                )}
-                                <div className="flex min-w-0 flex-1 items-center gap-1.5">
-                                  <h3
-                                    title={article.title}
-                                    onClick={() => canEditArticle(article) ? handleEdit(article) : undefined}
-                                    className={cn(
-                                      "min-w-0 truncate text-[15px] sm:text-base font-normal sm:font-medium leading-relaxed tracking-normal text-foreground/90 hover:text-primary transition-colors",
-                                      canEditArticle(article) ? "cursor-pointer" : ""
-                                    )}
-                                  >
-                                    {article.title}
-                                  </h3>
-                                  <EditorialDraftReviewCue
-                                    article={article}
-                                    layout="inline"
-                                    testId={`badge-review-desktop-${article.id}`}
-                                  />
-                                </div>
-                              </div>
-
-                              <div className="flex flex-wrap items-center gap-1.5 text-xs">
-                                {getCategoryChip(article.category)}
-                                {getTypeBadge(article.articleType || "news")}
-                                {getAuthorOrSourceBadge(article)}
-                                {getDateBadge(article, true)}
-                                {(article.isAiGeneratedThumbnail ||
-                                  (article as any).isAiGeneratedImage) && (
-                                  <Badge
-                                    variant="outline"
-                                    className="gap-1 rounded-md border-purple-500/25 bg-purple-50/70 dark:bg-purple-950/30 text-purple-700 dark:text-purple-300 font-medium px-2 py-0.5 text-[11px] shadow-xs"
-                                    title="صورة مولدة بالذكاء الاصطناعي"
-                                    data-testid={`badge-ai-image-${article.id}`}
-                                  >
-                                    <Brain className="h-3 w-3 text-purple-600 dark:text-purple-400 shrink-0" />
-                                    <span>AI</span>
-                                  </Badge>
-                                )}
-                              </div>
-
+                              <ArticleDeskMain
+                                article={article}
+                                onTitleClick={canEditArticle(article) ? () => handleEdit(article) : undefined}
+                              />
                               <EditorialDraftReviewCue
                                 article={article}
                                 layout="banner"
                                 testId={`banner-review-desktop-${article.id}`}
                               />
-
-
                               {article.status === "draft" && (
                                 <EditorialDraftReviewCue
                                   article={article}
@@ -1502,28 +1959,20 @@ export default function ArticlesManagement() {
                               )}
                             </div>
                           </td>
-                          <td className="w-[72px] px-2 py-3.5 text-center align-top">
-                            {canPublishArticle ? (
-                              <BreakingSwitch
-                                articleId={article.id}
-                                initialValue={article.newsType === "breaking"}
-                              />
-                            ) : (
-                              <span className="text-sm text-muted-foreground">
-                                {article.newsType === "breaking" ? "عاجل" : "-"}
-                              </span>
-                            )}
+                          <td className="px-2 py-2.5 align-middle">
+                            <DeskViewsCell article={article} now={now} />
                           </td>
-                          <td className="w-[88px] px-2 py-3.5 text-center align-top">
-                            <ViewsCount views={article.views} iconClassName="h-4 w-4" />
-                          </td>
-                          <td className="w-[280px] px-2 py-3.5 align-top">
+                          <td className="px-2 py-2.5 align-middle">
                             <RowActions
+                              variant="wire"
                               articleId={article.id}
                               articleTitle={article.title}
                               status={article.status}
                               onEdit={() => handleEdit(article)}
                               isFeatured={article.isFeatured}
+                              isBreaking={article.newsType === "breaking"}
+                              notifiedAt={article.signals?.notifiedAt ?? null}
+                              socialPublishedAt={article.signals?.socialPublishedAt ?? null}
                               onDelete={() => setDeletingArticle(article)}
                               onRequestRevision={
                                 activeStatus !== "archived"
@@ -1539,7 +1988,8 @@ export default function ArticlesManagement() {
                             />
                           </td>
                         </SortableRow>
-                      ))}
+                        );
+                      })}
                     </SortableContext>
                   </tbody>
                 </table>
@@ -1565,12 +2015,14 @@ export default function ArticlesManagement() {
               articles.map((article) => (
                 <div 
                   key={article.id} 
-                  className={`space-y-2 rounded-2xl border p-3 shadow-sm transition-all hover-elevate active-elevate-2 ${
+                  className={`space-y-2 rounded-xl border border-r-4 p-3 shadow-sm transition-colors ${
                     isResubmittedAfterRevision(article)
-                      ? "border-amber-300 bg-amber-50 dark:border-border dark:bg-card"
+                      ? "border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30"
                       : isAwaitingContributorRevision(article)
-                        ? "border-orange-300 bg-orange-50 dark:border-border dark:bg-card"
-                        : "border-sky-200/55 bg-gradient-to-br from-sky-50/40 via-card to-card dark:border-sky-900/35 dark:from-sky-950/15"
+                        ? "border-orange-300 bg-orange-50 dark:border-orange-800 dark:bg-orange-950/30"
+                        : article.articleType === "opinion"
+                          ? "border-border border-r-violet-400 bg-card dark:border-r-violet-700"
+                          : "border-border border-r-sky-300 bg-card dark:border-r-sky-800"
                   }`}
                   data-testid={`card-article-${article.id}`}
                 >
@@ -1594,38 +2046,16 @@ export default function ArticlesManagement() {
                       />
                     </div>
                     <div className="flex-1 min-w-0 space-y-2">
-                      <div>
-                        <h3
-                          className={cn(
-                            "font-normal sm:font-medium text-[15px] sm:text-base break-words leading-relaxed text-foreground flex items-center gap-1.5 flex-wrap",
-                            canEditArticle(article) ? "cursor-pointer hover:text-primary transition-colors" : ""
-                          )}
-                          onClick={() => canEditArticle(article) ? handleEdit(article) : undefined}
-                        >
-                          {((article as any).albumImages?.length > 0 || (article as any).mediaAssetsCount > 0) && (
-                            <Images className="h-4 w-4 text-sky-500 flex-shrink-0" />
-                          )}
-                          {article.title}
-                          <EditorialDraftReviewCue
-                            article={article}
-                            layout="inline"
-                            testId={`badge-review-mobile-${article.id}`}
-                          />
-                        </h3>
-                        <EditorialDraftReviewCue
-                          article={article}
-                          layout="banner"
-                          testId={`banner-review-mobile-${article.id}`}
-                        />
-                      </div>
-
-                      {/* Distinct Meta Strip */}
-                      <div className="flex flex-wrap items-center gap-1.5 text-xs">
-                        {getCategoryChip(article.category)}
-                        {getTypeBadge(article.articleType || "news")}
-                        {getAuthorOrSourceBadge(article)}
-                        {getDateBadge(article, false)}
-                      </div>
+                      <ArticleWireRow
+                        article={article}
+                        desktop={false}
+                        onTitleClick={canEditArticle(article) ? () => handleEdit(article) : undefined}
+                      />
+                      <EditorialDraftReviewCue
+                        article={article}
+                        layout="banner"
+                        testId={`banner-review-mobile-${article.id}`}
+                      />
 
                       {article.status === "archived" && (article as any).reviewNotes && (
                         <div
@@ -1640,28 +2070,6 @@ export default function ArticlesManagement() {
                         </div>
                       )}
                     </div>
-                  </div>
-                  
-                  {/* Meta Info: Author + Publisher */}
-                  <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-                    <div className="flex items-center gap-2">
-                      <Avatar className="h-5 w-5">
-                        <AvatarImage src={article.author?.profileImageUrl || ""} />
-                        <AvatarFallback className="text-xs">
-                          {article.author?.firstName?.[0] || article.author?.email?.[0]?.toUpperCase()}
-                        </AvatarFallback>
-                      </Avatar>
-                      <span>{article.author?.firstName || article.author?.email}</span>
-                    </div>
-                    {article.publisher?.companyName && (
-                      <>
-                        <span>•</span>
-                        <div className="flex items-center gap-1">
-                          <Building2 className="h-3.5 w-3.5" />
-                          <span>{article.publisher.companyName}</span>
-                        </div>
-                      </>
-                    )}
                   </div>
                   
                   {/* Stats Row */}

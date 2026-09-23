@@ -336,6 +336,7 @@ class AuthViewModel @Inject constructor(
             // still valid; otherwise Majlis pushes could reach the next user.
             runCatching { deviceRegistrationManager.unregister() }
             repo.logout()
+            com.sabq.smart.data.analytics.SabqAnalytics.setUserId(null)
             _form.value = AuthFormState.Idle
         }
     }

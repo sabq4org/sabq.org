@@ -111,6 +111,7 @@ function computeCompletion(
     firstName: string | null;
     lastName: string | null;
     phoneNumber: string | null;
+    phoneVerified?: boolean;
     profileImageUrl?: string | null;
     mediaLicenseNumber?: string | null;
     mediaLicenseExpiresAt?: Date | string | null;
@@ -408,6 +409,7 @@ export async function getStaffProfile(userId: string) {
       lastNameEn: user.lastNameEn,
       email: user.email,
       phoneNumber: user.phoneNumber,
+      phoneVerified: Boolean(user.phoneVerified),
       profileImageUrl: user.profileImageUrl,
       bio: user.bio,
       role: user.role,
@@ -569,6 +571,46 @@ export async function upsertStaffProfile(
     for (const [key, raw] of Object.entries(patch)) {
       if (raw === undefined) continue;
       if (USER_PATCH_KEYS.has(key)) {
+        if (key === "phoneNumber") {
+          // الجوال حقل حسّاس: يمنع ربط رقم يملكه حساب آخر (منع الازدواج
+          // والاستيلاء)، ويُطبّع E.164، ويُسقط التوثيق عند تغيير الرقم.
+          const { normalizePhone, classifyPhoneConflict } = await import("./phoneAuth");
+          const trimmed = raw === "" ? "" : String(raw).trim();
+          if (!trimmed) {
+            userUpdate.phoneNumber = null;
+            userUpdate.phoneVerified = false;
+            continue;
+          }
+          const e164 = normalizePhone(trimmed) ?? trimmed;
+          if (normalizePhone(user.phoneNumber) === e164) {
+            // نفس الرقم الحالي — لا تلمس حالة التوثيق.
+            continue;
+          }
+          if (opts.actorIsSelf) {
+            // إثبات الملكية إلزامي: الرقم لا يُغيَّر من نموذج الملف الذاتي،
+            // بل عبر توثيق OTP (/api/account/phone/*) الذي يثبت ملكية الرقم.
+            return {
+              success: false as const,
+              status: 409,
+              message:
+                "لا يمكن حفظ رقم جوال جديد من الملف الشخصي — وثّقه أولًا برمز SMS من زر «توثيق الرقم».",
+            };
+          }
+          const conflict = await classifyPhoneConflict(e164, userId);
+          if (conflict) {
+            return {
+              success: false as const,
+              status: 409,
+              message:
+                conflict.kind === "staff"
+                  ? "رقم الجوال مسجل على حساب منسوب آخر. راجع الإدارة لتسويته."
+                  : "الرقم مرتبط بحساب آخر. لا ندمج الحسابات تلقائيًا — تواصل مع الدعم لتوحيد العضوية دون فقدان بياناتك.",
+            };
+          }
+          userUpdate.phoneNumber = e164;
+          userUpdate.phoneVerified = false;
+          continue;
+        }
         userUpdate[key] = raw === "" ? null : String(raw).trim();
         continue;
       }

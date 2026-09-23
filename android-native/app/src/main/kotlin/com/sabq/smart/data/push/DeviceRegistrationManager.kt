@@ -97,10 +97,7 @@ class DeviceRegistrationManager @Inject constructor(
         store.clear()
     }
 
-    /**
-     * Tags the current FCM token for the Gulf Cup app-scoped outbox. The server
-     * filters Majlis deliveries by this bundle marker, including on Android.
-     */
+    /** Registers the signed-in member's token for app-scoped Majlis delivery. */
     suspend fun syncGulfCupToken() {
         if (authRepo.user.value == null) return
         val token = fetchFcmToken() ?: return
@@ -117,21 +114,23 @@ class DeviceRegistrationManager @Inject constructor(
             appVersion = "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
             locale = Locale.getDefault().toLanguageTag(),
             timezone = TimeZone.getDefault().id,
-            bundleId = GULF_CUP_BUNDLE_MARKER,
+            bundleId = BuildConfig.APPLICATION_ID,
             installationId = store.installationId(),
         )
         runCatching { api.registerMemberPushToken(request) }
             .onSuccess { response ->
-                if (response.success) Log.i(TAG, "Gulf Cup FCM token tagged for Majlis delivery")
-                else Log.w(TAG, "Gulf Cup token registration rejected: ${response.message.orEmpty()}")
+                if (response.success) Log.i(TAG, "FCM token registered for Majlis delivery")
+                else Log.w(TAG, "Majlis token registration rejected: ${response.message.orEmpty()}")
             }
-            .onFailure { Log.w(TAG, "Gulf Cup token registration failed", it) }
+            .onFailure { Log.w(TAG, "Majlis token registration failed", it) }
     }
 
     private suspend fun reconcile(userId: String?) {
         val token = fetchFcmToken() ?: return
         val cached = store.current()
-        val unchanged = cached.token == token && cached.userId == userId
+        val unchanged = cached.token == token &&
+            cached.userId == userId &&
+            cached.bundleId == BuildConfig.APPLICATION_ID
         if (unchanged) {
             Log.d(TAG, "Device already registered for user=$userId, skipping")
             // The app-scoped write is idempotent and deliberately retried once
@@ -155,7 +154,12 @@ class DeviceRegistrationManager @Inject constructor(
                         return@fold false
                     }
                     Log.i(TAG, "Device registered (deviceId=${response.deviceId}, userId=$userId)")
-                    store.set(token = token, userId = userId, deviceId = response.deviceId)
+                    store.set(
+                        token = token,
+                        userId = userId,
+                        deviceId = response.deviceId,
+                        bundleId = BuildConfig.APPLICATION_ID,
+                    )
                     true
                 },
                 onFailure = {
@@ -184,10 +188,10 @@ class DeviceRegistrationManager @Inject constructor(
             locale = Locale.getDefault().toLanguageTag(),
             timezone = TimeZone.getDefault().id,
             installationId = store.installationId(),
+            bundleId = BuildConfig.APPLICATION_ID,
         )
 
     companion object {
         private const val TAG = "DeviceRegistrationMgr"
-        const val GULF_CUP_BUNDLE_MARKER = "com.sabq.gulfcup"
     }
 }

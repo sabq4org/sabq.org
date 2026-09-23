@@ -1604,7 +1604,10 @@ html[data-dashboard-theme] .text-indigo-600,
   }
 
   .rich-text-editor {
-    overflow: hidden;
+    /* overflow: visible عمداً — hidden/clip هنا يمنع شريط الأدوات اللاصق من
+       العمل داخل حاوية التمرير على iOS Safari. الزوايا المدوّرة تُحفظ عبر
+       الشريط (أعلى) والسطح (أسفل) بدل القص. */
+    overflow: visible;
     background-color: hsl(var(--editor-background));
     border-color: hsl(var(--editor-border));
     color: hsl(var(--editor-foreground));
@@ -1619,6 +1622,32 @@ html[data-dashboard-theme] .text-indigo-600,
   .rich-text-editor__toolbar {
     background-color: hsl(var(--editor-toolbar));
     border-color: hsl(var(--editor-border));
+    border-start-start-radius: inherit;
+    border-start-end-radius: inherit;
+  }
+
+  .rich-text-editor__surface {
+    border-end-start-radius: inherit;
+    border-end-end-radius: inherit;
+  }
+
+  /* على الجوال: صف واحد قابل للتمرير أفقياً بدل 3-4 صفوف ملفوفة تأكل الشاشة
+     وهي لاصقة أعلى المحرر. */
+  @media (max-width: 639px) {
+    .rich-text-editor__toolbar {
+      flex-wrap: nowrap;
+      overflow-x: auto;
+      overflow-y: hidden;
+      overscroll-behavior-x: contain;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+    }
+    .rich-text-editor__toolbar::-webkit-scrollbar {
+      display: none;
+    }
+    .rich-text-editor__toolbar > * {
+      flex-shrink: 0;
+    }
   }
 
   .rich-text-editor__surface,

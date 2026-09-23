@@ -3,13 +3,20 @@ import * as Sentry from "@sentry/react";
 import App from "./App";
 import "./index.css";
 import "./mobile.css";
+import "./styles/public-design.css";
+import "./styles/public-opinion-card.css";
 import { installDeployRecovery } from "./lib/deployRecovery";
 import { startBuildVersionPolling } from "./lib/buildVersion";
+import { ensureAnalyticsReady } from "./lib/analytics-privacy";
 import {
   sentryBeforeSend,
   SENTRY_DENY_URLS,
   SENTRY_IGNORE_ERRORS,
 } from "./lib/sentryNoiseFilter";
+
+// GA4 is loaded only after the current host/route passes the privacy boundary.
+// Route-level event helpers call this again so SPA transitions are dynamic.
+ensureAnalyticsReady();
 
 // Sentry — أخطاء فقط (بلا tracing/replay/logs: تستهلك الحصة وتضخّم الحزمة).
 // PROD فقط حتى لا يضج التطوير. الـDSN عام بطبيعته (يظهر في حزمة المتصفح مهما

@@ -5,7 +5,10 @@
  * secret configured before binding the route. The origin is the Railway
  * generated hostname; never point this Worker at api.sabq.org itself.
  */
+import { createPublicApiBurstCache } from "./public-api-burst-cache.js";
+
 const DEFAULT_API_ORIGIN = "https://sabqorg-production.up.railway.app";
+const publicApiBurstCache = createPublicApiBurstCache();
 async function signedHeaders(request, secret) {
   const url = new URL(request.url);
   const realIp = request.headers.get("cf-connecting-ip");
@@ -45,13 +48,19 @@ function isStallAbort(err) {
   return name === "TimeoutError" || name === "AbortError";
 }
 
-async function fetchWithStallRetry(target, init) {
+async function fetchWithStallRetry(target, init, deadlineMs = 0) {
   const idempotent = init.method === "GET" || init.method === "HEAD";
   if (!idempotent) return { response: await fetch(target, init), attempts: 1 };
+  const startedAt = Date.now();
   let lastErr;
   for (let attempt = 0; attempt <= STALL_RETRIES; attempt++) {
     const isLast = attempt === STALL_RETRIES;
-    const attemptInit = isLast ? init : { ...init, signal: AbortSignal.timeout(STALL_RETRY_MS) };
+    const remaining = deadlineMs > 0 ? deadlineMs - (Date.now() - startedAt) : Infinity;
+    if (remaining <= 0) throw new Error("origin deadline exceeded");
+    const budget = isLast ? remaining : Math.min(STALL_RETRY_MS, remaining);
+    const attemptInit = (isLast && deadlineMs <= 0)
+      ? init
+      : { ...init, signal: AbortSignal.timeout(budget) };
     try {
       return { response: await fetch(target, attemptInit), attempts: attempt + 1 };
     } catch (err) {
@@ -65,8 +74,25 @@ async function fetchWithStallRetry(target, init) {
   throw lastErr;
 }
 
+async function fetchSignedOrigin(request, origin, secret, deadlineMs = 0) {
+  const url = new URL(request.url);
+  const headers = await signedHeaders(request, secret);
+  const init = { method: request.method, headers, redirect: "manual" };
+  if (request.method !== "GET" && request.method !== "HEAD") init.body = request.body;
+  const { response, attempts } = await fetchWithStallRetry(
+    `${origin}${url.pathname}${url.search}`,
+    init,
+    deadlineMs,
+  );
+  if (attempts === 1) return response;
+  // Surface retries to callers/monitors without buffering the body.
+  const out = new Response(response.body, response);
+  out.headers.set("X-Sabq-Origin-Attempts", String(attempts));
+  return out;
+}
+
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const secret = env.EDGE_PROXY_SHARED_SECRET;
     // A bound route without its shared secret would silently collapse all
     // visitors into one origin bucket. Refuse to proxy until configured.
@@ -87,14 +113,13 @@ export default {
         headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" },
       });
     }
-    const headers = await signedHeaders(request, secret);
-    const init = { method: request.method, headers, redirect: "manual" };
-    if (request.method !== "GET" && request.method !== "HEAD") init.body = request.body;
-    const { response, attempts } = await fetchWithStallRetry(`${origin}${url.pathname}${url.search}`, init);
-    if (attempts === 1) return response;
-    // Surface retries to callers/monitors without buffering the body.
-    const out = new Response(response.body, response);
-    out.headers.set("X-Sabq-Origin-Attempts", String(attempts));
-    return out;
+    const newPublicApiResponse = await publicApiBurstCache(request, {
+      cache: caches.default,
+      waitUntil: (promise) => ctx.waitUntil(promise),
+      fetchOrigin: (sourceRequest) => fetchSignedOrigin(sourceRequest, origin, secret, 10_000),
+    });
+    if (newPublicApiResponse) return newPublicApiResponse;
+
+    return fetchSignedOrigin(request, origin, secret);
   },
 };

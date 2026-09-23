@@ -13,8 +13,9 @@ import { SiApple } from "react-icons/si";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 import AuthLayout from "@/components/AuthLayout";
 import { GoogleIcon } from "@/components/GoogleIcon";
-import { trackLogin } from "@/lib/analytics";
+import { trackLoginStart } from "@/lib/analytics";
 import { consumePostAuthReturn, rememberPostAuthReturn } from "@/lib/postAuthRedirect";
+import { enqueueConversion } from "@/lib/analytics-conversion-queue";
 
 const loginSchema = z.object({
   email: z.string().email("البريد الإلكتروني غير صحيح"),
@@ -116,7 +117,7 @@ export default function Login() {
       staleTime: 0,
     });
     toast({ title: "مرحباً بك!", description: "تم تسجيل الدخول بنجاح" });
-    trackLogin(method);
+    enqueueConversion("login", method as "email" | "phone");
     const fallback = getDefaultRedirectPath(userData);
     const mustFinishAccount = fallback === "/complete-name" || userData.isProfileComplete === false;
     navigate(mustFinishAccount ? fallback : consumePostAuthReturn(fallback));
@@ -230,11 +231,11 @@ export default function Login() {
           confirmPassword: data.confirmPassword,
         }),
       });
+      enqueueConversion("sign_up", "phone");
       toast({ title: "تم إنشاء حسابك", description: "أرسلنا رابط تحقق إلى بريدك الإلكتروني" });
       // عضو جديد → نفس onboarding مسجّلي البريد (ترحيب ثم اهتمامات)،
       // بعد تهيئة كاش الجلسة كي لا تعيده الحراس إلى الدخول.
       await queryClient.fetchQuery<User>({ queryKey: ["/api/auth/user"], staleTime: 0 });
-      trackLogin("phone");
       navigate("/onboarding/welcome");
     } catch (error: any) {
       setPhoneLoading(false);
@@ -317,7 +318,7 @@ export default function Login() {
       {authMethod === "phone" ? (
         phoneStep === "register" ? (
           <Form {...registerForm}>
-            <form onSubmit={registerForm.handleSubmit(submitPhoneRegistration)} className="space-y-4">
+            <form onSubmit={registerForm.handleSubmit(submitPhoneRegistration)} className="public-auth-form space-y-4">
               <div className="rounded-lg bg-muted/50 px-3 py-2 text-center text-sm" dir="ltr">
                 ✓ +966 {phoneNumber}
               </div>
@@ -421,7 +422,7 @@ export default function Login() {
             </form>
           </Form>
         ) : phoneStep === "phone" ? (
-          <div className="space-y-4">
+          <div className="public-auth-form space-y-4">
             <div>
               <label className="mb-1.5 block text-right text-sm font-medium">رقم الجوال</label>
               {/* خانة LTR: المفتاح +966 يسار، الرقم يمينه */}
@@ -450,7 +451,7 @@ export default function Login() {
             </Button>
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className="public-auth-form space-y-4">
             <div className="space-y-1 text-center">
               <p className="text-sm text-muted-foreground">أرسلنا رمز التحقق إلى</p>
               <p dir="ltr" className="text-sm font-bold">
@@ -458,7 +459,7 @@ export default function Login() {
                 <button type="button" onClick={() => { setPhoneStep("phone"); setOtp(""); }} className="mr-2 text-xs text-primary hover:underline">تعديل</button>
               </p>
             </div>
-            <div dir="ltr" className="flex items-center justify-center gap-1.5 sm:gap-2">
+            <div dir="ltr" className="public-auth-otp flex items-center justify-center gap-1.5 sm:gap-2" aria-label="رمز التحقق المكوّن من 6 أرقام">
               {Array.from({ length: 6 }).map((_, i) => (
                 <input
                   key={i}
@@ -471,7 +472,8 @@ export default function Login() {
                   onKeyDown={(e) => handleOtpKey(i, e)}
                   disabled={phoneLoading}
                   data-testid={`input-otp-${i}`}
-                  className="h-12 w-10 rounded-lg border border-input bg-background text-center text-lg font-bold outline-none transition focus:border-ring focus:ring-2 focus:ring-ring sm:h-14 sm:w-11 sm:text-xl"
+                  aria-label={`رقم ${i + 1} من 6`}
+                  className="h-12 w-10 rounded-lg border-2 border-input bg-background text-center text-lg font-bold outline-none transition focus:border-ring focus:ring-2 focus:ring-ring sm:h-14 sm:w-11 sm:text-xl"
                 />
               ))}
             </div>
@@ -490,7 +492,7 @@ export default function Login() {
         )
       ) : (
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
+          <form onSubmit={form.handleSubmit(onSubmit)} className="public-auth-form space-y-5">
             <FormField
               control={form.control}
               name="email"
@@ -586,7 +588,7 @@ export default function Login() {
               type="button"
               variant="outline"
               onClick={() => {
-                trackLogin("google");
+                trackLoginStart("google");
                 window.location.href = '/api/auth/google';
               }}
               className="inline-flex w-full items-center justify-center gap-2"
@@ -599,7 +601,7 @@ export default function Login() {
               type="button"
               variant="outline"
               onClick={() => {
-                trackLogin("apple");
+                trackLoginStart("apple");
                 window.location.href = '/api/auth/apple';
               }}
               className="inline-flex w-full items-center justify-center gap-2"

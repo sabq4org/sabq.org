@@ -239,7 +239,7 @@ router.put(
       }
 
       const result = await upsertStaffProfile(userId, patch, userId, { actorIsSelf: true });
-      if (!result.success) return res.status(404).json({ message: result.message });
+      if (!result.success) return res.status(result.status ?? 404).json({ message: result.message });
       res.json(result);
     } catch (error: unknown) {
       console.error("[StaffProfiles] self upsert error:", error);
@@ -398,7 +398,7 @@ router.put(
         patch as StaffProfilePatch,
         (req.user as { id: string }).id,
       );
-      if (!result.success) return res.status(404).json({ message: result.message });
+      if (!result.success) return res.status(result.status ?? 404).json({ message: result.message });
       res.json(result);
     } catch (error: unknown) {
       console.error("[StaffProfiles] upsert error:", error);

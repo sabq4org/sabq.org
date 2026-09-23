@@ -485,6 +485,7 @@ export default function SocialPublishingPage() {
 
   const accountStatusPill = (status: string) => {
     switch (status) {
+      case "connected":
       case "active":
         return (
           <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30 text-xs font-semibold px-2.5 py-0.5 flex items-center gap-1.5 shadow-sm">
