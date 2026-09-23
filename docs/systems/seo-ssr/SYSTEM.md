@@ -15,6 +15,10 @@
 - **تقسيم AR (2026-09-07):** 500 خريطة عربية بدل 50 لتقليل كلفة القراءة الباردة؛ شرط `% 50` يحافظ على استخدام فهرس الإنتاج القائم، ثم `% 500` يختار الجزء الأصغر. كل خبر يخص جزءًا واحدًا. فهرس الخرائط يعلن الأجزاء كلها، مع مفاتيح كاش `index_archive_v3` و`__sitemapArticlesCanonicalV3`؛ الإنجليزية والأردية دون تغيير. لا تغيير Schema أو فهارس قاعدة البيانات.
 - **قوائم JSON المفهرسة رغم robots (2026-09-07):** `apiListingRobots.ts` يضيف `X-Robots-Tag: noindex, nofollow` إلى GET/HEAD لقائمتي `/api/articles` و`/api/v2/articles` فقط. robots يسمح بمساريهما التامين ومعاملات الاستعلام لرؤية الترويسة؛ التفاصيل وبقية API تبقى محظورة. تبقى بيانات JSON العامة وكاشها وصلاحياتها كما هي؛ قاعدة no-store أدناه تخص قوالب HTML الخاصة، ولا تستلزم إلغاء كاش قوائم API العامة.
 - مسارات noindex → `Cache-Control: private, no-store`.
+- **Railway staging:** يجب ضبط `STAGING_NO_INDEX=true` على `web-next`؛ يضيف
+  `X-Robots-Tag: noindex, nofollow, noarchive` وrobots meta ويمنع كاش CDN.
+- **تقييد staging:** وجود `STAGING_ACCESS_TOKEN` يفرض Basic Auth (المستخدم
+  `sabq`) على صفحات `web-next`، مع استثناء `/health` فقط لفحص Railway.
 - `SSR_ROUTES=on/off` مفتاح تراجع فوري.
 - **`/api/edge/seo-meta` (2026-07-25):** كاش ذاكرة `edgeSeoMetaCache` (MATCH 5د / MISS 30ث) + single-flight لنفس المسار + تطبيع المسار (بدون `?utm_*`) + CDN `s-maxage=300, stale-while-revalidate=600` (كان 60ث فيعيد ضرب الأصل كل دقيقة — ظهر كـ APM بطيء بعد كل إقلاع).
 - **hreflang AR↔EN (2026-07-30):** الربط عبر `en_articles.seoMetadata.sourceArticleId`؛ وإلا لا يُرسل رابط لغة شقيقة مكسور. الترجمات **الجديدة** تفضّل نفس `englishSlug` العربي إن كان متاحاً (`/article/X` ↔ `/en/article/X`). IndexNow بعد الترجمة يستهدف `/en/article/...` ويُبطل كاش Redis لـ `__sitemapEnArticles*` + كاش `sitemap-news` في الذاكرة.
