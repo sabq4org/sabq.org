@@ -12,7 +12,7 @@
 //    builds anyway); console.error lines are kept.
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { apiRequest, apiUrl } from "@/lib/queryClient";
+import { apiRequest, apiUrl, getCsrfToken } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
 export interface LockStatus {
@@ -202,6 +202,7 @@ export function useArticleEditLock({
       // Note: navigator.sendBeacon only supports POST, so we use fetch with keepalive instead
       fetch(apiUrl(`/api/admin/articles/${id}/lock`), {
         method: 'DELETE',
+        headers: { 'x-csrf-token': getCsrfToken() || '' },
         keepalive: true,
         credentials: 'include',
       });

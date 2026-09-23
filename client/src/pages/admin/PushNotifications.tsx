@@ -180,6 +180,7 @@ const CAMPAIGN_TYPES = [...TOPIC_CAMPAIGN_TYPES, ...DEVICE_CAMPAIGN_TYPES];
 const CAMPAIGN_STATUS_LABELS: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
   draft: { label: "مسودة", variant: "secondary" },
   scheduled: { label: "مجدولة", variant: "outline" },
+  delivery_unknown: { label: "التسليم غير مؤكد — يحتاج مراجعة", variant: "destructive" },
   sending: { label: "جاري الإرسال", variant: "default" },
   sent: { label: "مرسلة", variant: "default" },
   failed: { label: "فشلت", variant: "destructive" },
@@ -789,7 +790,7 @@ export default function PushNotifications() {
                                       </Button>
                                     </>
                                   )}
-                                  {campaign.status !== "sent" && campaign.status !== "sending" && (
+                                  {["draft", "scheduled", "cancelled"].includes(campaign.status) && (
                                     <Button
                                       variant="ghost"
                                       size="icon"
