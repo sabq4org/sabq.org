@@ -82,14 +82,18 @@ enum NewsService {
         }
     }
 
-    static func fetchArticles(page: Int = 1, perPage: Int = 50) async -> (articles: [Article], hasMore: Bool) {
+    /// `nil` يعني فشل شبكة/خادم — يميّزه المستدعي (`ArticlesStore.loadMore`)
+    /// عن "لا صفحات إضافية" حقًا. كان يعيد `([], false)` عند أي خطأ فيُخفي
+    /// زر «تحميل المزيد» بصمت كأن القائمة انتهت، بلا رسالة أو إعادة محاولة
+    /// (تدقيق الديون err-1، 2026-09-23).
+    static func fetchArticles(page: Int = 1, perPage: Int = 50) async -> (articles: [Article], hasMore: Bool)? {
         do {
             let result = try await APIClient.shared.fetchArticles(page: page, perPage: perPage)
             let all = nonOpinionArticles(from: result.items)
                 .sorted { $0.publishDate > $1.publishDate }
             return (all, result.hasMore)
         } catch {
-            return ([], false)
+            return nil
         }
     }
 

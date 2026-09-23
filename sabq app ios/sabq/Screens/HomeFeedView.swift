@@ -1090,23 +1090,32 @@ struct HomeFeedView: View {
                 }
 
                 if articlesStore.hasMore && articlesStore.selectedCategory == nil {
-                    Button {
-                        Task { await articlesStore.loadMore() }
-                    } label: {
-                        HStack(spacing: 8) {
-                            if articlesStore.isLoading {
-                                ProgressView()
-                                    .tint(SabqTheme.primaryEnd)
-                            }
-                            Text("تحميل المزيد")
-                                .font(SabqFonts.app(size: 14, weight: .semibold))
-                                .foregroundStyle(SabqTheme.primaryEnd)
+                    VStack(spacing: 4) {
+                        // فشل شبكي أثناء "تحميل المزيد": رسالة صريحة بدل
+                        // إخفاء الزر بصمت كأن القائمة انتهت (تدقيق err-1).
+                        if articlesStore.loadMoreFailed {
+                            Text("تعذر تحميل المزيد. تحقق من اتصالك")
+                                .font(SabqFonts.app(size: 12, weight: .medium))
+                                .foregroundStyle(SabqTheme.coral)
                         }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
+                        Button {
+                            Task { await articlesStore.loadMore() }
+                        } label: {
+                            HStack(spacing: 8) {
+                                if articlesStore.isLoading {
+                                    ProgressView()
+                                        .tint(SabqTheme.primaryEnd)
+                                }
+                                Text(articlesStore.loadMoreFailed ? "إعادة المحاولة" : "تحميل المزيد")
+                                    .font(SabqFonts.app(size: 14, weight: .semibold))
+                                    .foregroundStyle(articlesStore.loadMoreFailed ? SabqTheme.coral : SabqTheme.primaryEnd)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(articlesStore.isLoading)
                     }
-                    .buttonStyle(.plain)
-                    .disabled(articlesStore.isLoading)
                 }
             }
         }
