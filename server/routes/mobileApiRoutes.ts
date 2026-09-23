@@ -35,6 +35,7 @@ import {
   getWriterStyleProfile,
   reviewWriterArticle,
 } from "../services/opinionAuthorWorkspaceService";
+import { enrichMobileAdminSchedules, mobileScheduleError } from "../services/mobileAdminSchedule";
 import { db, pool } from "../db";
 import { log } from "../utils/logger";
 import {
@@ -7544,6 +7545,8 @@ function articleStatusWhere(status: AdminArticleStatusValue) {
 
 const adminArticleColumns = {
   id: articles.id,
+  articleType: articles.articleType,
+  authorId: articles.authorId,
   title: articles.title,
   excerpt: articles.excerpt,
   content: articles.content,
@@ -7572,7 +7575,11 @@ function mapAdminArticleRow(r: any) {
     status: normalizeAdminStatus(r.status || "draft"),
     reviewStatus: r.reviewStatus || null,
     reviewNotes: r.reviewNotes || null,
-    author: reporterName || authorName || "فريق سبق",
+    author: (r.articleType === "opinion" ? authorName : reporterName || authorName) || "فريق سبق",
+    articleType: r.articleType || "news",
+    authorId: r.authorId || null,
+    writerWeeklySlot: r.writerWeeklySlot || null,
+    publishedAt: r.publishedAt ? new Date(r.publishedAt).toISOString() : null,
     views: r.views || 0,
     scheduledAt: r.scheduledAt ? (r.scheduledAt instanceof Date ? r.scheduledAt : new Date(r.scheduledAt)).toISOString() : null,
     updatedAt: (updated instanceof Date ? updated : new Date(updated)).toISOString(),
@@ -7633,7 +7640,9 @@ async function fetchAdminArticleItem(id: string) {
     .leftJoin(reporterUsers, eq(articles.reporterId, reporterUsers.id))
     .where(eq(articles.id, id))
     .limit(1);
-  return r ? mapAdminArticleRow(r) : null;
+  if (!r) return null;
+  const [enriched] = await enrichMobileAdminSchedules([r]);
+  return mapAdminArticleRow(enriched);
 }
 
 // Full editor payload — every field the iOS editor reads/writes, plus the
@@ -7690,6 +7699,7 @@ function mapAdminArticleDetail(r: any) {
     reporterName: reporterName || null,
     authorId: r.authorId || null,
     authorName: authorName || null,
+    writerWeeklySlot: r.writerWeeklySlot || null,
     isFeatured: !!r.isFeatured,
     isReading: !!r.isReading,
     hideFromHomepage: !!r.hideFromHomepage,
@@ -7717,7 +7727,9 @@ async function fetchAdminArticleDetail(id: string) {
     .leftJoin(authorUsers, eq(articles.authorId, authorUsers.id))
     .where(eq(articles.id, id))
     .limit(1);
-  return r ? mapAdminArticleDetail(r) : null;
+  if (!r) return null;
+  const [enriched] = await enrichMobileAdminSchedules([r]);
+  return mapAdminArticleDetail(enriched);
 }
 
 // GET /api/v1/admin/dashboard/stats — real KPI snapshot
@@ -7871,7 +7883,7 @@ router.get("/admin/articles", async (req: Request, res: Response) => {
 
     res.json({
       success: true,
-      items: rows.map(mapAdminArticleRow),
+      items: (await enrichMobileAdminSchedules(rows)).map(mapAdminArticleRow),
       total,
       page,
       limit,
@@ -7916,6 +7928,9 @@ router.post("/admin/articles", async (req: Request, res: Response) => {
       ? b.status
       : "draft";
 
+    const scheduleError = mobileScheduleError(status, b.scheduledAt);
+    if (scheduleError) return res.status(400).json({ success: false, message: scheduleError });
+
     const articleData: any = {
       title,
       content: typeof b.content === "string" ? b.content : "",
@@ -7942,7 +7957,7 @@ router.post("/admin/articles", async (req: Request, res: Response) => {
         keywords: Array.isArray(b.seo.keywords) ? b.seo.keywords : [],
       };
     }
-    if (status === "scheduled" && typeof b.scheduledAt === "string" && b.scheduledAt) {
+    if ((status === "scheduled" || status === "draft") && typeof b.scheduledAt === "string" && b.scheduledAt) {
       const d = new Date(b.scheduledAt);
       if (!isNaN(d.getTime())) articleData.scheduledAt = d;
     }
@@ -8040,7 +8055,7 @@ router.patch("/admin/articles/:id", async (req: Request, res: Response) => {
 
     const id = req.params.id;
     const [existing] = await db
-      .select({ id: articles.id, publishedAt: articles.publishedAt, seo: articles.seo })
+      .select({ id: articles.id, publishedAt: articles.publishedAt, seo: articles.seo, status: articles.status, scheduledAt: articles.scheduledAt })
       .from(articles)
       .where(eq(articles.id, id))
       .limit(1);
@@ -8106,6 +8121,12 @@ router.patch("/admin/articles/:id", async (req: Request, res: Response) => {
         updates.publishedAt = new Date();
       }
     }
+
+    const scheduleError = mobileScheduleError(
+      updates.status ?? existing.status,
+      Object.prototype.hasOwnProperty.call(b, "scheduledAt") ? b.scheduledAt : existing.scheduledAt,
+    );
+    if (scheduleError) return res.status(400).json({ success: false, message: scheduleError });
 
     await db.update(articles).set(updates).where(eq(articles.id, id));
 
