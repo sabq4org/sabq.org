@@ -21,7 +21,8 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import "@/styles/header-brand.css";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -50,6 +51,27 @@ interface HeaderProps {
 
 export function Header({ user, onMenuClick, sticky = true }: HeaderProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [compactBrand, setCompactBrand] = useState(false);
+
+  useEffect(() => {
+    if (!sticky) return;
+    let frame = 0;
+    const update = () => {
+      frame = 0;
+      // Separate thresholds prevent the header's height change from toggling
+      // the state repeatedly near the collapse point (scroll anchoring).
+      setCompactBrand((compact) => window.scrollY > 72 ? true : window.scrollY <= 16 ? false : compact);
+    };
+    const onScroll = () => {
+      if (!frame) frame = window.requestAnimationFrame(update);
+    };
+    update();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      window.cancelAnimationFrame(frame);
+    };
+  }, [sticky]);
   const [location, navigate] = useLocation();
   const { toast } = useToast();
   const { theme, appTheme } = useTheme();
@@ -110,20 +132,67 @@ export function Header({ user, onMenuClick, sticky = true }: HeaderProps) {
     { name: "عقل سبق", href: "/sabq-ai", icon: Brain },
   ];
 
+  // الزر يبقى مع أدوات الهيدر. dir على الجذر فقط: Radix يكتبه على لوحة
+  // القائمة ولا يرثه من <html>، ونوع DropdownMenuContent لا يقبل dir.
+  const accountMenu = user ? (
+    <DropdownMenu dir="rtl">
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="hover-elevate active-elevate-2 shrink-0"
+          data-testid="button-user-menu"
+          aria-label="قائمة المستخدم"
+        >
+          <Avatar className="h-8 w-8">
+            <AvatarImage
+              src={user.profileImageUrl || ""}
+              alt={user.name || user.email || ""}
+              className="object-cover"
+            />
+            <AvatarFallback className="bg-primary text-primary-foreground text-sm">
+              {getInitials(user.name || undefined, user.email)}
+            </AvatarFallback>
+          </Avatar>
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-72 text-right">
+        <UserAccountMenu user={user} onLogout={handleLogout} />
+      </DropdownMenuContent>
+    </DropdownMenu>
+  ) : (
+    <>
+      <Button asChild size="icon" variant="ghost" className="lg:hidden shrink-0" data-testid="button-login-mobile" aria-label="تسجيل الدخول">
+        <a href="/login">
+          <User className="h-5 w-5" aria-hidden="true" />
+        </a>
+      </Button>
+      <Button asChild className="hidden lg:inline-flex shrink-0" data-testid="button-login">
+        <a href="/login">
+          تسجيل الدخول
+        </a>
+      </Button>
+    </>
+  );
+
   return (
     <>
     <header
       role="banner"
       aria-label="رأس الصفحة الرئيسي"
-      className={`${sticky ? "sticky top-0" : "relative"} z-50 w-full border-b bg-background/95 backdrop-blur-lg supports-[backdrop-filter]:bg-background/60 ${nd96.active ? ND96_SCOPE_CLASS : ""}`}
-      style={nd96.active ? ND96_SCOPE_STYLE : undefined}
+      data-compact-brand={sticky && compactBrand ? "true" : "false"}
+      className={`${sticky ? "sabq-adaptive-header sticky top-0" : "relative"} z-50 w-full border-b bg-background/95 backdrop-blur-lg supports-[backdrop-filter]:bg-background/60 ${nd96.active ? ND96_SCOPE_CLASS : ""}`}
+      style={{
+        ...(nd96.active ? ND96_SCOPE_STYLE : {}),
+        ...(sticky && compactBrand ? { "--public-header-height": "64px" } : {}),
+      } as React.CSSProperties}
       dir="rtl"
     >
       {nd96.active && <NationalDay96ScopeStyles />}
       <div className="relative z-10 container mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex h-16 items-center justify-between gap-4">
-          {/* Logo - Left side (Desktop only) */}
-          <div className="hidden md:flex items-center gap-3">
+        <div className="sabq-header-row flex h-16 items-center justify-between gap-4">
+          {/* Logo - Desktop */}
+          <div className="hidden lg:flex items-center gap-3">
             <Link href="/" onClick={(e) => {
               if (window.location.pathname === '/') {
                 e.preventDefault();
@@ -134,7 +203,7 @@ export function Header({ user, onMenuClick, sticky = true }: HeaderProps) {
                 <img 
                   src={currentLogo} 
                   alt="سبق - SABQ" 
-                  className="h-12 w-auto object-contain"
+                  className="sabq-header-logo sabq-header-logo-desktop h-12 w-auto object-contain"
                   width={751}
                   height={681}
                   loading="eager"
@@ -164,7 +233,7 @@ export function Header({ user, onMenuClick, sticky = true }: HeaderProps) {
           </div>
 
           {/* Mobile Logo */}
-          <div className="md:hidden flex items-center">
+          <div className="lg:hidden flex items-center">
             <Link href="/" onClick={(e) => {
               if (window.location.pathname === '/') {
                 e.preventDefault();
@@ -175,7 +244,7 @@ export function Header({ user, onMenuClick, sticky = true }: HeaderProps) {
                 <img 
                   src={currentLogo} 
                   alt="سبق - SABQ" 
-                  className="h-11 w-auto object-contain"
+                  className="sabq-header-logo sabq-header-logo-mobile h-11 w-auto object-contain"
                   width={751}
                   height={681}
                   loading="eager"
@@ -205,7 +274,7 @@ export function Header({ user, onMenuClick, sticky = true }: HeaderProps) {
           </div>
 
           {/* Main Navigation - Center (Desktop only) */}
-          <nav id="main-nav" role="navigation" aria-label="القائمة الرئيسية" tabIndex={-1} className="hidden md:flex items-center gap-6 flex-1 justify-center">
+          <nav id="main-nav" role="navigation" aria-label="القائمة الرئيسية" tabIndex={-1} className="hidden lg:flex items-center gap-5 flex-1 justify-center min-w-0">
             {mainSections.map((section) => (
               section.external ? (
                 <a 
@@ -242,14 +311,14 @@ export function Header({ user, onMenuClick, sticky = true }: HeaderProps) {
             {/* discover-users hidden */}
           </nav>
 
-          {/* Actions - Right side */}
+          {/* أدوات الهيدر بما فيها العضوية — الطرف البصري الأيسر */}
           {/* max-sm: shrink icon buttons (.w-9) to 32px + zero gap so the header fits narrow Android/Chrome widths; the EN language pill (size=sm, no .w-9) is left untouched */}
           <div className="flex items-center gap-0.5 max-sm:gap-0 max-sm:[&_.w-9]:size-8">
             {/* Mobile Menu Button */}
             <Button
               variant="ghost"
               size="icon"
-              className="md:hidden hover-elevate active-elevate-2"
+              className="lg:hidden hover-elevate active-elevate-2"
               onClick={() => setMobileMenuOpen(true)}
               data-testid="button-menu"
               aria-label="فتح القائمة"
@@ -258,55 +327,17 @@ export function Header({ user, onMenuClick, sticky = true }: HeaderProps) {
             </Button>
 
             {/* Mobile Actions */}
-            <div className="md:hidden flex items-center gap-0.5 max-sm:gap-0">
+            <div className="lg:hidden flex items-center gap-0.5 max-sm:gap-0">
               <SearchDialog />
               <LanguageSwitcher />
               <ThemeToggle />
 
               {/* Notification Bell - Mobile */}
               {user && <NotificationBell />}
-
-              {user ? (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button 
-                      variant="ghost" 
-                      size="icon"
-                      className="hover-elevate active-elevate-2"
-                      data-testid="button-user-menu-mobile"
-                      aria-label="قائمة المستخدم"
-                    >
-                      <Avatar className="h-8 w-8">
-                        <AvatarImage 
-                          src={user.profileImageUrl || ""} 
-                          alt={user.name || user.email || ""}
-                          className="object-cover"
-                        />
-                        <AvatarFallback className="bg-primary text-primary-foreground text-sm">
-                          {getInitials(user.name || undefined, user.email)}
-                        </AvatarFallback>
-                      </Avatar>
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-72">
-                    <UserAccountMenu
-                      user={user}
-                      onLogout={handleLogout}
-                      testIdSuffix="-mobile"
-                    />
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              ) : (
-                <Button asChild size="icon" variant="ghost" data-testid="button-login-mobile" aria-label="تسجيل الدخول">
-                  <a href="/login">
-                    <User className="h-5 w-5" aria-hidden="true" />
-                  </a>
-                </Button>
-              )}
             </div>
 
             {/* Desktop Actions */}
-            <div className="hidden md:flex items-center gap-1">
+            <div className="hidden lg:flex items-center gap-1">
               <SearchDialog />
               <AccessibilitySettings variant="desktop" />
               <LanguageSwitcher />
@@ -315,41 +346,8 @@ export function Header({ user, onMenuClick, sticky = true }: HeaderProps) {
               
               {/* Notification Bell - Desktop */}
               {user && <NotificationBell />}
-
-              {user ? (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button 
-                      variant="ghost" 
-                      size="icon"
-                      className="hover-elevate active-elevate-2"
-                      data-testid="button-user-menu"
-                      aria-label="قائمة المستخدم"
-                    >
-                      <Avatar className="h-8 w-8">
-                        <AvatarImage 
-                          src={user.profileImageUrl || ""} 
-                          alt={user.name || user.email || ""}
-                          className="object-cover"
-                        />
-                        <AvatarFallback className="bg-primary text-primary-foreground text-sm">
-                          {getInitials(user.name || undefined, user.email)}
-                        </AvatarFallback>
-                      </Avatar>
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="start" className="w-72">
-                    <UserAccountMenu user={user} onLogout={handleLogout} />
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              ) : (
-                <Button asChild data-testid="button-login">
-                  <a href="/login">
-                    تسجيل الدخول
-                  </a>
-                </Button>
-              )}
             </div>
+            {accountMenu}
           </div>
         </div>
       </div>

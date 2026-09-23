@@ -50,6 +50,7 @@ struct LoginSheet: View {
                 }
                 .padding(24)
             }
+            .sabqNavigationEdge()
             .background(SabqTheme.background)
             .sabqRTL()
             .interactiveDismissDisabled(awaitingName)
@@ -60,9 +61,8 @@ struct LoginSheet: View {
                             authStore.clearMessages()
                             dismiss()
                         } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .font(SabqFonts.app(size: 22))
-                                .foregroundStyle(SabqTheme.tertiaryInk)
+                            Label("إغلاق", systemImage: "xmark")
+                            .labelStyle(.iconOnly)
                         }
                     }
                 }
@@ -246,11 +246,7 @@ struct LoginSheet: View {
     private var loginFormView: some View {
         VStack(alignment: .leading, spacing: 24) {
             VStack(spacing: 12) {
-                Image("SabqLogo")
-                    .renderingMode(.original)
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .frame(height: 48)
+                SabqBrandLogo(height: 48)
 
                 Text("تسجيل الدخول")
                     .font(SabqFonts.app(size: 24, weight: .bold))

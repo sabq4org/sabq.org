@@ -36,6 +36,7 @@ import nationalDayBlockRouter from "./nationalDayBlock";
 import staffProfilesRouter from "./staffProfiles";
 import meetingsRouter from "./meetingsRoutes";
 import meetingMinutesRouter from "./meetingMinutesRoutes";
+import botDraftsRouter from "./botDrafts";
 import reportersAdminRouter from "./reportersAdmin";
 import replyPolishRouter from "./replyPolish";
 import deployWebhooksRouter from "./deployWebhooks";
@@ -97,6 +98,7 @@ import accountSecurityRouter from "./accountSecurity";
 import phoneRegistrationRouter from "./phoneRegistration";
 import audioNewsletterCompatibilityRouter from "./audioNewsletterCompatibility";
 import editorialAiRouter from "./editorialAi";
+import editorialResearchRouter from "./editorialResearch";
 import imageStylesRouter from "./imageStyles";
 import deepseekLabRouter from "./deepseekLab";
 import editorialImagesRouter from "./editorialImages";
@@ -146,6 +148,8 @@ export function registerSplitRoutes(app: Express) {
   app.use(staffProfilesRouter);
   app.use(meetingsRouter);
   app.use(meetingMinutesRouter);
+  // مسودات البوتات (نشر سبق / Grok) — /api/internal/bot-drafts، Bearer لكل بوت، draft فقط
+  app.use(botDraftsRouter);
   app.use(reportersAdminRouter);
   app.use(replyPolishRouter);
   app.use(correspondentApplicationsRouter);
@@ -211,6 +215,7 @@ export function registerSplitRoutes(app: Express) {
   app.use(audioNewsletterCompatibilityRouter);
   // نظام التحرير الموحد «محرر سبق» (docs/editorial-ai-unified-system-plan-2026-08-03.md)
   app.use(editorialAiRouter);
+  app.use(editorialResearchRouter);
   // أنماط توليد الصور (editorial)
   app.use(imageStylesRouter);
   app.use(deepseekLabRouter);

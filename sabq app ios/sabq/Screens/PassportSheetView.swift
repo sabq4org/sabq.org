@@ -624,10 +624,7 @@ private struct PassportAIImagesCard: View {
     let images: [APIPassport.AIImageGeneration]
     let isStaff: Bool
 
-    private let columns: [GridItem] = [
-        GridItem(.flexible(), spacing: 10),
-        GridItem(.flexible(), spacing: 10)
-    ]
+    private let columns: [GridItem] = SabqGrid.adaptive(spacing: 10)
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {

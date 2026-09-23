@@ -22,10 +22,10 @@ describe("keywordService SEO fallback", () => {
     }));
   }
 
-  it("keeps the indexed tag path free of the fallback transaction", async () => {
+  it("keeps the indexed paths free of the fallback transaction", async () => {
     const fallback = vi.fn();
     const { service, execute } = await loadService(
-      [{ rows: [{ id: "tag-hit" }] }, { rows: [] }],
+      [{ rows: [{ id: "tag-hit" }] }, { rows: [] }, { rows: [] }],
       fallback,
     );
 
@@ -33,7 +33,23 @@ describe("keywordService SEO fallback", () => {
 
     expect(result.articles).toEqual([{ id: "tag-hit" }]);
     expect(fallback).not.toHaveBeenCalled();
-    expect(execute).toHaveBeenCalledTimes(2);
+    // tag join + GIN SEO match + Muqtarab topics
+    expect(execute).toHaveBeenCalledTimes(3);
+  });
+
+  it("merges tag hits with SEO-keyword hits, newest first, without duplicates", async () => {
+    const fallback = vi.fn();
+    const old = { id: "old-tagged", publishedAt: "2026-01-08T04:01:05.613Z" };
+    const fresh = { id: "fresh-seo-only", publishedAt: "2026-09-12T04:23:25.698Z" };
+    const { service } = await loadService(
+      [{ rows: [old] }, { rows: [fresh, old] }, { rows: [] }],
+      fallback,
+    );
+
+    const result = await service.getArticlesByKeyword("المركز الوطني للأرصاد");
+
+    expect(result.articles).toEqual([fresh, old]);
+    expect(fallback).not.toHaveBeenCalled();
   });
 
   it("preserves case-insensitive fallback results and applies a 750ms server timeout", async () => {

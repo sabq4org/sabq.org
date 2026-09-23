@@ -308,6 +308,7 @@ export async function setupAuth(app: Express) {
               return done(null, {
                 id: existingUser.id,
                 email: existingUser.email,
+                isNewUser: false,
                 isProfileComplete: existingUser.isProfileComplete ?? true, // ✅ Pass profile status
                 twoFactorEnabled: false, // OAuth users don't need 2FA
                 twoFactorMethod: 'authenticator'
@@ -339,6 +340,7 @@ export async function setupAuth(app: Express) {
             return done(null, {
               id: newUserId,
               email: email.toLowerCase(),
+              isNewUser: true,
               isProfileComplete: false, // ✅ New users need to complete onboarding
               twoFactorEnabled: false,
               twoFactorMethod: 'authenticator'
@@ -462,6 +464,7 @@ export async function setupAuth(app: Express) {
               return done(null, {
                 id: existingUser.id,
                 email: existingUser.email,
+                isNewUser: false,
                 isProfileComplete: existingUser.isProfileComplete ?? true, // ✅ Pass profile status
                 twoFactorEnabled: false, // OAuth users don't need 2FA
                 twoFactorMethod: 'authenticator'
@@ -489,6 +492,7 @@ export async function setupAuth(app: Express) {
             return done(null, {
               id: newUserId,
               email: email.toLowerCase(),
+              isNewUser: true,
               isProfileComplete: false, // ✅ New users need to complete onboarding
               twoFactorEnabled: false,
               twoFactorMethod: 'authenticator'

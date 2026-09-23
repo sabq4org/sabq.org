@@ -1,253 +1,211 @@
 import Foundation
 import SwiftUI
+#if canImport(FirebaseCore) && canImport(FirebaseAnalytics)
+import FirebaseCore
+import FirebaseAnalytics
+#endif
 
-/// GA4 Measurement Protocol client — sends events to Google
-/// Analytics via a plain HTTPS POST to google-analytics.com/mp/collect.
-///
-/// No third-party SDK, no bundled framework, no privacy manifest
-/// gymnastics — just a network call. Same call-site surface as the
-/// previous no-op facade so we did not need to touch any screen.
-///
-/// Configuration lives in Info.plist (added as Xcode build settings):
-///   - GA4_MEASUREMENT_ID  → e.g. G-XXXXXXXXXX
-///   - GA4_API_SECRET      → from GA admin > Data Streams >
-///                             Measurement Protocol API secrets
-/// If either is missing, every call becomes a no-op silently — same
-/// behaviour as before this file was filled in, so a developer build
-/// without secrets does not error.
+/// The only native analytics sender. Collection is disabled until the user
+/// makes an explicit choice; this facade contains no Measurement Protocol.
 enum SabqAnalytics {
-    // ---------- Public API (call-site compatible) ----------
+    private static let consentKey = "sabq.analytics.consent"
+    static let collectionDidChange = Notification.Name("SabqAnalyticsCollectionDidChange")
+    private static let enabledKey = "sabq.analytics.enabled"
+    private static let debugFlag = "-SabqAnalyticsDebug"
+    private static let lock = NSLock()
+    private static var cachedUserID: String?
+    private static var reading = SabqReadingSessionState()
+    private static var screenVisit = SabqScreenVisitState()
+    private static var firebaseConfigured = false
+    private static var appActive = true
+    static var now: () -> Date = Date.init
 
-    static func screen(_ name: String, screenClass: String? = nil) {
+    static var hasAnalyticsConsent: Bool { UserDefaults.standard.object(forKey: consentKey) != nil }
+    static var consentGranted: Bool { UserDefaults.standard.bool(forKey: consentKey) }
+    static var analyticsCollectionEnabled: Bool {
+        SabqAnalyticsPrivacy.canCollect(consented: consentGranted, debug: isDebugBuild, debugOptIn: debugOptIn, configured: firebaseConfigured)
+    }
+    private static var isDebugBuild: Bool {
+        #if DEBUG
+        true
+        #else
+        false
+        #endif
+    }
+    private static var debugOptIn: Bool { ProcessInfo.processInfo.arguments.contains(debugFlag) }
+
+    static func configureIfAvailable() {
+        UserDefaults.standard.set(false, forKey: enabledKey)
+        #if DEBUG
+        guard debugOptIn else { return }
+        #endif
+        #if canImport(FirebaseCore) && canImport(FirebaseAnalytics)
+        guard FirebaseApp.app() == nil,
+              let path = Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist"),
+              let options = FirebaseOptions(contentsOfFile: path),
+              options.googleAppID.range(of: #"^1:[0-9]+:ios:[a-fA-F0-9]+$"#, options: .regularExpression) != nil,
+              let apiKey = options.apiKey, !apiKey.isEmpty,
+              let bundleID = Bundle.main.bundleIdentifier, options.bundleID == bundleID,
+              let projectID = options.projectID, !projectID.isEmpty else { return }
+        FirebaseApp.configure(options: options)
+        firebaseConfigured = true
+        Analytics.setAnalyticsCollectionEnabled(false)
+        // A prior explicit grant may be restored only after Firebase is
+        // configured; no event is replayed while collection is re-enabled.
+        setFirebaseConsent(consentGranted)
+        setAnalyticsCollectionEnabled(consentGranted)
+        #endif
+    }
+
+    /// Consent is persisted before collection is enabled. Rejecting/revoking
+    /// also clears the Firebase user identifier immediately.
+    static func setAnalyticsConsent(_ enabled: Bool) {
+        UserDefaults.standard.set(enabled, forKey: consentKey)
+        resetReading()
+        setFirebaseConsent(analyticsCollectionEnabled)
+        setAnalyticsCollectionEnabled(enabled)
+        setUserIDInSDK(analyticsCollectionEnabled ? cachedUserID : nil)
+        NotificationCenter.default.post(name: collectionDidChange, object: nil)
+    }
+
+    static func setAnalyticsCollectionEnabled(_ enabled: Bool) {
+        let value = enabled && consentGranted
+        UserDefaults.standard.set(value, forKey: enabledKey)
+        if !value { setUserIDInSDK(nil) }
+        #if canImport(FirebaseCore) && canImport(FirebaseAnalytics)
+        guard FirebaseApp.app() != nil else { return }
+        Analytics.setAnalyticsCollectionEnabled(value && analyticsCollectionEnabled)
+        #endif
+    }
+
+    /// Scene lifecycle boundary; background time is never counted as reading.
+    static func setAppActive(_ active: Bool) {
+        lock.lock(); defer { lock.unlock() }
+        appActive = active
+        reading.setActive(active, at: now())
+    }
+
+    static func screen(_ name: String, screenClass: String? = nil, ownerID: UUID? = nil) {
+        guard SabqAnalyticsPrivacy.isPublicScreen(name) else { return }
+        lock.lock()
+        guard screenVisit.enter(ownerID) else { lock.unlock(); return }
+        lock.unlock()
         var params: [String: Any] = ["screen_name": name]
-        if let cls = screenClass { params["screen_class"] = cls }
+        if let screenClass { params["screen_class"] = screenClass }
         log("screen_view", parameters: params)
     }
 
+    static func deactivateScreen(ownerID: UUID) {
+        lock.lock(); defer { lock.unlock() }
+        screenVisit.leave(ownerID)
+    }
+
     static func articleView(id: String, title: String, category: String?) {
-        var params: [String: Any] = [
-            "article_id": id,
-            "article_title": truncated(title, 100),
-            "content_type": "news",
-        ]
-        if let category, !category.isEmpty { params["category"] = category }
-        log("article_view", parameters: params)
+        var p: [String: Any] = ["article_id": id, "article_title": truncate(title, 100), "content_type": "news"]
+        if let category, !category.isEmpty { p["category"] = category }
+        log("article_view", parameters: p)
     }
-
     static func opinionView(id: String, title: String, authorName: String) {
-        log("opinion_view", parameters: [
-            "article_id": id,
-            "article_title": truncated(title, 100),
-            "author": truncated(authorName, 80),
-            "content_type": "opinion",
-        ])
+        log("opinion_view", parameters: ["article_id": id, "article_title": truncate(title, 100), "author": truncate(authorName, 80), "content_type": "opinion"])
     }
-
-    static func articleShare(id: String, platform: String) {
-        log("share", parameters: ["article_id": id, "method": platform])
-    }
-
-    static func bookmarkToggle(id: String, isBookmarked: Bool) {
-        log("bookmark_toggle", parameters: [
-            "article_id": id,
-            "bookmarked": isBookmarked,
-        ])
-    }
-
-    static func search(query: String) {
-        log("search", parameters: ["search_term": truncated(query, 100)])
-    }
-
-    // ---------- New events (added per user request, 2026-05-21) ----------
-
-    /// React/unreact on an article. Logged once per state change so a
-    /// double-tap that toggles off + on counts as two events.
-    static func articleLike(id: String, liked: Bool) {
-        log("article_like", parameters: [
-            "article_id": id,
-            "liked": liked,
-        ])
-    }
-
-    /// Comment submitted (any depth — reply or root).  only
-    /// included when present so threading is queryable in GA.
+    static func articleShare(id: String, platform: String) { log("share", parameters: ["article_id": id, "method": platform, "stage": "completed"]) }
+    static func bookmarkToggle(id: String, isBookmarked: Bool) { log("bookmark_toggle", parameters: ["article_id": id, "bookmarked": isBookmarked ? 1 : 0]) }
+    static func search(query: String) { searchSucceeded(query: query) }
+    static func articleLike(id: String, liked: Bool) { log("article_like", parameters: ["article_id": id, "liked": liked ? 1 : 0]) }
     static func articleComment(slug: String, parentId: String?) {
-        var params: [String: Any] = ["article_slug": truncated(slug, 100)]
-        if let parentId { params["parent_comment_id"] = parentId }
-        log("article_comment", parameters: params)
+        var p: [String: Any] = ["article_slug": truncate(slug, 100)]
+        if let parentId { p["parent_comment_id"] = parentId }
+        log("article_comment", parameters: p)
     }
-
-    /// Successful sign-in.  is the provider — "email", "apple",
-    /// "google" — matches the GA4 recommended "login" event shape.
-    static func login(method: String) {
-        log("login", parameters: ["method": method])
+    static func signUp(method: String) { log("sign_up", parameters: ["method": method]) }
+    static func searchSucceeded(query: String) { log("search", parameters: ["search_term": truncate(query, 100)]) }
+    static func shareIntent(articleId: String, method: String? = nil) {
+        var p: [String: Any] = ["article_id": articleId]; if let method { p["method"] = method }; log("share_intent", parameters: p)
     }
-
-    /// User tapped a push notification and the deep link routed them in.
-    ///  is the editorial event class ("published" / "scheduled" /
-    /// "needs_revision" / "rejected" / etc.) so we can see which
-    /// notifications actually drive opens.
-    /// "سبق Lite" mode lifecycle. `trigger` is "manual" or "auto".
-    /// Helps editorial see whether readers are opting in deliberately
-    /// vs. the auto-detector flipping them on.
-    static func liteModeActivated(trigger: String) {
-        log("lite_mode_activated", parameters: ["trigger": trigger])
+    static func shareCompleted(articleId: String, stage: String = "completed", method: String? = nil) {
+        var p: [String: Any] = ["article_id": articleId, "stage": (stage == "ios_lite_completion" || stage == "ios_completion") ? "completed" : stage]
+        if let method { p["method"] = method }; log("share", parameters: p)
     }
-
-    static func liteModeDeactivated() {
-        log("lite_mode_deactivated", parameters: nil)
+    static func deepLinkOpen(kind: String, source: String, articleId: String? = nil) {
+        var p: [String: Any] = ["kind": kind, "source": source]; if let articleId { p["article_id"] = articleId }; log("deep_link_open", parameters: p)
     }
-
+    static func beginReading(articleId: String) {
+        guard analyticsCollectionEnabled else { return }
+        lock.lock(); reading.begin(articleID: articleId, at: now()); reading.setActive(appActive, at: now()); lock.unlock()
+    }
+    static func updateReading(articleId: String, percent: Int) {
+        lock.lock(); reading.tick(at: now()); let crossed = reading.articleID == articleId ? reading.cross(percent: percent) : []; lock.unlock()
+        for threshold in crossed { log("scroll_depth", parameters: ["article_id": articleId, "percent_scrolled": threshold]) }
+    }
+    static func endReading(articleId: String) {
+        lock.lock(); let seconds = reading.articleID == articleId ? reading.end(at: now()) : nil; lock.unlock()
+        if let seconds { log("reading_time", parameters: ["article_id": articleId, "reading_time_seconds": seconds]) }
+    }
+    static func login(method: String) { log("login", parameters: ["method": method]) }
+    static func liteModeActivated(trigger: String) { log("lite_mode_activated", parameters: ["trigger": trigger]) }
+    static func liteModeDeactivated() { log("lite_mode_deactivated") }
     static func notificationOpen(type: String, articleId: String?) {
-        var params: [String: Any] = ["notification_type": type]
-        if let articleId { params["article_id"] = articleId }
-        log("notification_open", parameters: params)
+        var p: [String: Any] = ["notification_type": type]; if let articleId { p["article_id"] = articleId }; log("push_open", parameters: p)
     }
-
-    // ---------- Core: log() — fire-and-forget HTTPS POST ----------
 
     static func log(_ name: String, parameters: [String: Any]? = nil) {
-        guard let measurementId, let apiSecret else { return }
-        let cid = clientId
-        let uid = userId
-        let (sid, engagementMsec) = sessionInfo()
-
-        var params = sanitizedParams(parameters)
-        params["session_id"] = sid
-        params["engagement_time_msec"] = String(engagementMsec)
-        #if DEBUG
-        params["debug_mode"] = 1
+        guard analyticsCollectionEnabled else { return }
+        guard let safe = SabqAnalyticsPrivacy.sanitizeEvent(name, parameters: parameters) else { return }
+        #if canImport(FirebaseCore) && canImport(FirebaseAnalytics)
+        guard FirebaseApp.app() != nil, analyticsCollectionEnabled else { return }
+        Analytics.logEvent(name, parameters: safe)
         #endif
-
-        let event: [String: Any] = ["name": name, "params": params]
-        var payload: [String: Any] = [
-            "client_id": cid,
-            "events": [event],
-            "non_personalized_ads": true,
-            "timestamp_micros": Int(Date().timeIntervalSince1970 * 1_000_000),
-        ]
-        if let uid { payload["user_id"] = uid }
-        send(payload: payload, measurementId: measurementId, apiSecret: apiSecret)
     }
 
-    // ---------- Session management ----------
-
-    private static let sessionLock = NSLock()
-    private static var _sessionId: String?
-    private static var _lastEventDate: Date?
-    /// 30 min of inactivity rolls a new session — same default as GA4.
-    private static let sessionTimeout: TimeInterval = 30 * 60
-    /// Cap engagement_time_msec at 30s — a longer gap means the app was
-    /// backgrounded, not the user actively reading.
-    private static let maxEngagementMsec = 30_000
-
-    private static func sessionInfo() -> (sessionId: String, engagementMsec: Int) {
-        sessionLock.lock()
-        defer { sessionLock.unlock() }
-        let now = Date()
-        let lastDate = _lastEventDate
-        let idle = lastDate.map { now.timeIntervalSince($0) } ?? .infinity
-        if _sessionId == nil || idle > sessionTimeout {
-            _sessionId = String(Int(now.timeIntervalSince1970))
+    static func setUserId(_ id: String?) {
+        cachedUserID = id.flatMap { SabqAnalyticsPrivacy.safeIdentifier($0) ? $0 : nil }
+        if cachedUserID == nil {
+            // Clearing is safe and must not be blocked by the collection guard;
+            // otherwise logout/revocation leaves Firebase's previous UID set.
+            setUserIDInSDK(nil)
+            return
         }
-        let engagement: Int = {
-            guard let last = lastDate else { return 1 }
-            let ms = Int(now.timeIntervalSince(last) * 1000)
-            return max(1, min(ms, maxEngagementMsec))
-        }()
-        _lastEventDate = now
-        return (_sessionId!, engagement)
+        guard hasAnalyticsConsent, analyticsCollectionEnabled else { return }
+        setUserIDInSDK(cachedUserID)
     }
-
-    // ---------- Config helpers ----------
-
-    private static var measurementId: String? {
-        let id = Bundle.main.object(forInfoDictionaryKey: "GA4_MEASUREMENT_ID") as? String
-        return id?.isEmpty == false ? id : nil
+    private static func setFirebaseConsent(_ granted: Bool) {
+        #if canImport(FirebaseCore) && canImport(FirebaseAnalytics)
+        guard FirebaseApp.app() != nil else { return }
+        Analytics.setConsent([
+            .analyticsStorage: granted ? .granted : .denied,
+            .adStorage: .denied,
+            .adUserData: .denied,
+            .adPersonalization: .denied,
+        ])
+        #endif
     }
-
-    private static var apiSecret: String? {
-        let s = Bundle.main.object(forInfoDictionaryKey: "GA4_API_SECRET") as? String
-        return s?.isEmpty == false ? s : nil
+    private static func resetReading() { lock.lock(); reading = SabqReadingSessionState(); lock.unlock() }
+    private static func setUserIDInSDK(_ id: String?) {
+        #if canImport(FirebaseCore) && canImport(FirebaseAnalytics)
+        guard FirebaseApp.app() != nil else { return }
+        // The ID is only reached through an explicit consent + collection
+        // path. DebugView itself is opt-in via -SabqAnalyticsDebug.
+        Analytics.setUserID(id)
+        #endif
     }
-
-    /// Per-install UUID — persisted in UserDefaults so the same device
-    /// stays the same client_id across launches but no user/IDFA is
-    /// ever sent. No ATT prompt required.
-    private static var clientId: String {
-        let key = "sabq_ga4_client_id"
-        if let existing = UserDefaults.standard.string(forKey: key) { return existing }
-        let id = UUID().uuidString
-        UserDefaults.standard.set(id, forKey: key)
-        return id
-    }
-
-    /// First-party Sabq user id when signed in. Lets us connect events
-    /// across devices for the same logged-in member. Set externally so
-    /// AuthStore does not need to import this file.
-    private static var _userId: String?
-    static func setUserId(_ id: String?) { _userId = id?.isEmpty == false ? id : nil }
-    private static var userId: String? { _userId }
-
-    // ---------- HTTP ----------
-
-    private static let endpoint = URL(string: "https://www.google-analytics.com/mp/collect")!
-    private static let session: URLSession = {
-        let cfg = URLSessionConfiguration.ephemeral
-        cfg.timeoutIntervalForRequest = 6
-        cfg.timeoutIntervalForResource = 8
-        return URLSession(configuration: cfg)
-    }()
-
-    private static func send(payload: [String: Any], measurementId: String, apiSecret: String) {
-        var components = URLComponents(url: endpoint, resolvingAgainstBaseURL: false)!
-        components.queryItems = [
-            URLQueryItem(name: "measurement_id", value: measurementId),
-            URLQueryItem(name: "api_secret", value: apiSecret),
-        ]
-        guard let url = components.url else { return }
-        var req = URLRequest(url: url)
-        req.httpMethod = "POST"
-        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        req.httpBody = try? JSONSerialization.data(withJSONObject: payload, options: [])
-        // Fire-and-forget. We do not retry — losing the occasional event
-        // is fine, the system is for trend signal not auditing.
-        session.dataTask(with: req).resume()
-    }
-
-    private static func sanitizedParams(_ raw: [String: Any]?) -> [String: Any] {
-        guard let raw else { return [:] }
-        var out: [String: Any] = [:]
-        for (k, v) in raw {
-            // GA4 param keys must be alphanumeric/underscore, ≤40 chars.
-            let key = k.lowercased().replacingOccurrences(of: "-", with: "_")
-            if v is String || v is Int || v is Double || v is Bool {
-                out[key] = v
-            } else {
-                out[key] = String(describing: v)
-            }
-        }
-        return out
-    }
-
-    private static func truncated(_ s: String, _ max: Int) -> String {
-        s.count <= max ? s : String(s.prefix(max))
-    }
+    private static func truncate(_ value: String, _ max: Int) -> String { value.count <= max ? value : String(value.prefix(max)) }
 }
-
-// MARK: - SwiftUI screen-tracking modifier
 
 private struct SabqScreenModifier: ViewModifier {
-    let name: String
-    let screenClass: String?
-
+    let name: String; let screenClass: String?
+    @State private var ownerID = UUID()
+    @State private var isVisible = false
     func body(content: Content) -> some View {
-        content.onAppear { SabqAnalytics.screen(name, screenClass: screenClass) }
+        content
+            .onAppear { isVisible = true; SabqAnalytics.screen(name, screenClass: screenClass, ownerID: ownerID) }
+            .onDisappear { isVisible = false; SabqAnalytics.deactivateScreen(ownerID: ownerID) }
+            .onReceive(NotificationCenter.default.publisher(for: SabqAnalytics.collectionDidChange)) { _ in
+                guard isVisible, SabqAnalytics.analyticsCollectionEnabled else { return }
+                SabqAnalytics.deactivateScreen(ownerID: ownerID)
+                SabqAnalytics.screen(name, screenClass: screenClass, ownerID: ownerID)
+            }
     }
 }
-
 extension View {
-    func sabqScreen(_ name: String, class screenClass: String? = nil) -> some View {
-        modifier(SabqScreenModifier(name: name, screenClass: screenClass))
-    }
+    func sabqScreen(_ name: String, class screenClass: String? = nil) -> some View { modifier(SabqScreenModifier(name: name, screenClass: screenClass)) }
 }

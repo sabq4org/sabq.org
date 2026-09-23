@@ -17,6 +17,7 @@ private val Context.deviceStore by preferencesDataStore(name = "device_prefs")
 private val LAST_REGISTERED_TOKEN = stringPreferencesKey("last_registered_token")
 private val LAST_REGISTERED_USER = stringPreferencesKey("last_registered_user")
 private val LAST_REGISTERED_DEVICE_ID = stringPreferencesKey("last_registered_device_id")
+private val LAST_REGISTERED_BUNDLE_ID = stringPreferencesKey("last_registered_bundle_id")
 private val INSTALLATION_ID = stringPreferencesKey("installation_id")
 
 /**
@@ -34,6 +35,7 @@ class DeviceRegistrationStore @Inject constructor(
         val token: String?,
         val userId: String?,
         val deviceId: String?,
+        val bundleId: String?,
     )
 
     val snapshot: Flow<Snapshot> = context.deviceStore.data.map { prefs ->
@@ -41,16 +43,18 @@ class DeviceRegistrationStore @Inject constructor(
             token = prefs[LAST_REGISTERED_TOKEN],
             userId = prefs[LAST_REGISTERED_USER],
             deviceId = prefs[LAST_REGISTERED_DEVICE_ID],
+            bundleId = prefs[LAST_REGISTERED_BUNDLE_ID],
         )
     }
 
     suspend fun current(): Snapshot = snapshot.first()
 
-    suspend fun set(token: String, userId: String?, deviceId: String?) {
+    suspend fun set(token: String, userId: String?, deviceId: String?, bundleId: String) {
         context.deviceStore.edit { prefs ->
             prefs[LAST_REGISTERED_TOKEN] = token
             if (userId != null) prefs[LAST_REGISTERED_USER] = userId else prefs.remove(LAST_REGISTERED_USER)
             if (deviceId != null) prefs[LAST_REGISTERED_DEVICE_ID] = deviceId else prefs.remove(LAST_REGISTERED_DEVICE_ID)
+            prefs[LAST_REGISTERED_BUNDLE_ID] = bundleId
         }
     }
 
@@ -67,6 +71,7 @@ class DeviceRegistrationStore @Inject constructor(
             prefs.remove(LAST_REGISTERED_TOKEN)
             prefs.remove(LAST_REGISTERED_USER)
             prefs.remove(LAST_REGISTERED_DEVICE_ID)
+            prefs.remove(LAST_REGISTERED_BUNDLE_ID)
             // Keep INSTALLATION_ID stable across logout/account switches.
         }
     }

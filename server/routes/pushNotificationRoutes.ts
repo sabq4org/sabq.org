@@ -16,8 +16,12 @@ import {
 } from "@shared/schema";
 import { inArray, eq, desc, sql, count, gte, and, or, ilike } from "drizzle-orm";
 import { sendImmediatePush } from "../jobs/pushWorker";
-import { isFcmConfigured, sendToTopic, getPushStats, subscribeToTopic, sendToMultipleDevices } from "../services/fcmService";
+import { isAnyFcmConfigured, isFcmConfigured, sendToTopic, getPushStats, subscribeToTopic, sendToFcmTargets } from "../services/fcmService";
 import { isApnsConfigured, sendBatchPushNotifications as sendApnsBatch, createCustomNotificationPayload } from "../services/apnsService";
+import {
+  acquirePushBroadcast,
+  PushBroadcastCapacityError,
+} from "../services/pushBroadcastCoordinator";
 import { parseLimit, parseOffset } from "../utils/pagination";
 
 const router = Router();
@@ -28,7 +32,9 @@ const router = Router();
 // ==========================================
 router.get("/status", async (req: Request, res: Response) => {
   try {
-    const configured = isFcmConfigured();
+    const defaultConfigured = isFcmConfigured();
+    const sabqConfigured = isFcmConfigured("com.sabqorg.sabq");
+    const configured = defaultConfigured || sabqConfigured;
     
     const [deviceStats] = await db
       .select({
@@ -41,6 +47,7 @@ router.get("/status", async (req: Request, res: Response) => {
 
     res.json({
       configured,
+      profiles: { default: defaultConfigured, sabq: sabqConfigured },
       provider: "firebase",
       environment: process.env.NODE_ENV === "development" ? "development" : "production",
       devices: deviceStats,
@@ -66,7 +73,7 @@ router.post("/quick-send", async (req: Request, res: Response) => {
       return res.status(400).json({ error: "معرف المقال مطلوب" });
     }
 
-    const fcmEnabled = isFcmConfigured();
+    const fcmEnabled = isAnyFcmConfigured();
     const apnsEnabled = isApnsConfigured();
 
     if (!fcmEnabled && !apnsEnabled) {
@@ -116,60 +123,98 @@ router.post("/quick-send", async (req: Request, res: Response) => {
       });
     }
 
-    // Get all active devices split by platform
-    const allDevices = await db
-      .select({
-        deviceToken: pushDevices.deviceToken,
-        platform: pushDevices.platform
-      })
-      .from(pushDevices)
-      .where(eq(pushDevices.isActive, true));
-
-    if (allDevices.length === 0) {
-      return res.status(400).json({ error: "لا توجد أجهزة مسجلة" });
+    // Reserve the single process-local broadcast slot before loading the
+    // audience or creating a sending campaign. A second quick-send gets an
+    // explicit retryable response and is never reported as accepted.
+    let broadcastLease: ReturnType<typeof acquirePushBroadcast>;
+    try {
+      broadcastLease = acquirePushBroadcast("news");
+    } catch (error) {
+      if (error instanceof PushBroadcastCapacityError) {
+        res.set("Retry-After", String(error.retryAfterSeconds));
+        return res.status(429).json({
+          error: "push_broadcast_capacity",
+          message: "يوجد بث إشعارات قيد التنفيذ — أعد المحاولة لاحقًا",
+          retryAfterSeconds: error.retryAfterSeconds,
+        });
+      }
+      throw error;
     }
 
-    const iosDevices = allDevices.filter(d => d.platform === 'ios');
-    const androidDevices = allDevices.filter(d => d.platform === 'android');
-    const deeplink = `/article/${article.slug}`;
+    try {
+      // Get all active devices split by platform
+      const allDevices = await db
+        .select({
+          deviceToken: pushDevices.deviceToken,
+          platform: pushDevices.platform,
+          bundleId: pushDevices.bundleId,
+        })
+        .from(pushDevices)
+        .where(eq(pushDevices.isActive, true));
 
-    console.log(`[Push API] Quick-send: ${iosDevices.length} iOS + ${androidDevices.length} Android devices`);
-
-    // Create the campaign record up front so the broadcast is trackable
-    const now = new Date();
-    const [campaign] = await db
-      .insert(pushCampaigns)
-      .values({
-        name: article.title.substring(0, 100),
-        type: "topic_all_users",
-        title: "خبر جديد من سبق",
-        titleAr: "خبر جديد من سبق",
-        body: article.title,
-        bodyAr: article.title,
-        imageUrl: article.imageUrl || null,
-        deeplink,
-        articleId: article.id,
-        targetAll: true,
-        status: "sending",
-        scheduledAt: now,
-        totalDevices: allDevices.length,
-        createdBy: (req as any).user?.id || null,
-      })
-      .returning();
-
-    res.status(202).json({
-      success: true,
-      message: `بدأ إرسال الإشعار إلى ${allDevices.length} جهاز في الخلفية`,
-      campaignId: campaign.id,
-      stats: {
-        total: allDevices.length,
-        ios: iosDevices.length,
-        android: androidDevices.length,
+      if (allDevices.length === 0) {
+        broadcastLease.release();
+        return res.status(400).json({ error: "لا توجد أجهزة مسجلة" });
       }
-    });
 
-    // Background broadcast — deliberately not awaited by the request
-    void (async () => {
+      // Preserve the established quick-send audience contract: platform is
+      // the selector and legacy rows remain eligible. A separate bundle and
+      // provider audit is needed before narrowing this audience safely.
+      const iosDevices = allDevices.filter(d => d.platform === "ios");
+      const androidDevices = allDevices.filter(d => d.platform === "android");
+      const targetedDevices = [...iosDevices, ...androidDevices];
+      const deeplink = `/article/${article.slug}`;
+
+      console.log(
+        `[Push API] Quick-send: ${iosDevices.length} iOS + ${androidDevices.length} Android devices` +
+        ` (${allDevices.length} active rows)`,
+      );
+
+      if (targetedDevices.length === 0) {
+        broadcastLease.release();
+        return res.status(400).json({ error: "لا توجد أجهزة سبق متوافقة" });
+      }
+
+      // Create the campaign record up front so the accepted broadcast remains
+      // trackable while transport work continues after the 202 response.
+      const now = new Date();
+      const [campaign] = await db
+        .insert(pushCampaigns)
+        .values({
+          name: article.title.substring(0, 100),
+          type: "topic_all_users",
+          title: "خبر جديد من سبق",
+          titleAr: "خبر جديد من سبق",
+          body: article.title,
+          bodyAr: article.title,
+          imageUrl: article.imageUrl || null,
+          deeplink,
+          articleId: article.id,
+          targetAll: true,
+          status: "sending",
+          scheduledAt: now,
+          totalDevices: targetedDevices.length,
+          createdBy: (req as any).user?.id || null,
+        })
+        .returning();
+
+      broadcastLease.start();
+      const activeLease = broadcastLease;
+
+      res.status(202).json({
+        success: true,
+        message: `بدأ إرسال الإشعار إلى ${targetedDevices.length} جهاز في الخلفية`,
+        campaignId: campaign.id,
+        stats: {
+          total: targetedDevices.length,
+          ios: iosDevices.length,
+          android: androidDevices.length,
+        }
+      });
+
+      // Background broadcast — deliberately not awaited by the request.
+      // The lease is always returned, including transport and DB failures.
+      void (async () => {
       let totalSuccess = 0;
       let totalFailed = 0;
       try {
@@ -198,8 +243,9 @@ router.post("/quick-send", async (req: Request, res: Response) => {
 
         // Send to Android via FCM
         if (androidDevices.length > 0 && fcmEnabled) {
-          const androidTokens = androidDevices.map(d => d.deviceToken);
-          const fcmResults = await sendToMultipleDevices(androidTokens, {
+          const fcmResults = await sendToFcmTargets(
+            androidDevices.map(d => ({ token: d.deviceToken, bundleId: d.bundleId })),
+            {
             title: "خبر جديد من سبق",
             body: article.title,
             imageUrl: article.imageUrl || undefined,
@@ -208,7 +254,8 @@ router.post("/quick-send", async (req: Request, res: Response) => {
               articleId: String(article.id),
               deeplink,
             },
-          });
+            },
+          );
           console.log(`[Push API] FCM (Android): ${fcmResults.successCount}/${androidDevices.length}`);
           totalSuccess += fcmResults.successCount;
           totalFailed += fcmResults.failureCount;
@@ -228,7 +275,7 @@ router.post("/quick-send", async (req: Request, res: Response) => {
           })
           .where(eq(pushCampaigns.id, campaign.id));
 
-        console.log(`[Push API] Quick notification sent for article: ${article.id} (${totalSuccess}/${allDevices.length} devices, campaign: ${campaign.id})`);
+        console.log(`[Push API] Quick notification sent for article: ${article.id} (${totalSuccess}/${targetedDevices.length} devices, campaign: ${campaign.id})`);
       } catch (err) {
         console.error(`[Push API] quick-send background error (campaign: ${campaign.id}):`, err);
         await db
@@ -236,13 +283,19 @@ router.post("/quick-send", async (req: Request, res: Response) => {
           .set({
             status: "failed",
             sentCount: totalSuccess,
-            failedCount: allDevices.length - totalSuccess,
+            failedCount: targetedDevices.length - totalSuccess,
             updatedAt: new Date(),
           })
           .where(eq(pushCampaigns.id, campaign.id))
           .catch((updateErr) => console.error("[Push API] Failed to mark campaign as failed:", updateErr));
+      } finally {
+        activeLease.release();
       }
-    })();
+      })();
+    } catch (error) {
+      broadcastLease.release();
+      throw error;
+    }
   } catch (error) {
     console.error("[Push API] quick-send error:", error);
     res.status(500).json({ error: "Server error" });

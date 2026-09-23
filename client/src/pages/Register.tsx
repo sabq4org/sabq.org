@@ -13,6 +13,8 @@ import { SiApple } from "react-icons/si";
 import { ChevronLeft, Eye, EyeOff, Loader2, AlertCircle, Bookmark, Bell, Sparkles, History, Crown, Zap } from "lucide-react";
 import { GoogleIcon } from "@/components/GoogleIcon";
 import sabqLogo from "@assets/sabq-logo.png";
+import { trackLoginStart } from "@/lib/analytics";
+import { enqueueConversion } from "@/lib/analytics-conversion-queue";
 
 const registerSchema = z.object({
   email: z.string().email("البريد الإلكتروني غير صحيح"),
@@ -92,6 +94,7 @@ export default function Register() {
           lastName: data.lastName,
         }),
       });
+      enqueueConversion("sign_up", "email");
 
       // The server auto-logs-in the new user (sets the session). Prime the auth
       // cache with staleTime:0 BEFORE navigating (F-09) — otherwise the global
@@ -118,7 +121,7 @@ export default function Register() {
   };
 
   return (
-    <div className="relative min-h-screen bg-background" dir="rtl">
+    <div className="public-page public-auth-page relative min-h-screen bg-background" dir="rtl">
       <div className="flex flex-col lg:flex-row min-h-screen">
         {/* Right Side - Form Content */}
         <div className="flex flex-col w-full lg:w-1/2 overflow-y-auto px-4 sm:px-6 md:px-8">
@@ -187,7 +190,10 @@ export default function Register() {
                   <Button
                     type="button"
                     variant="outline"
-                    onClick={() => window.location.href = '/api/auth/google'}
+                    onClick={() => {
+                      trackLoginStart("google");
+                      window.location.href = '/api/auth/google';
+                    }}
                     className="w-full inline-flex items-center justify-center gap-2 sm:gap-3"
                     data-testid="button-google-register"
                   >
@@ -197,7 +203,10 @@ export default function Register() {
                   <Button
                     type="button"
                     variant="outline"
-                    onClick={() => window.location.href = '/api/auth/apple'}
+                    onClick={() => {
+                      trackLoginStart("apple");
+                      window.location.href = '/api/auth/apple';
+                    }}
                     className="w-full inline-flex items-center justify-center gap-2 sm:gap-3"
                     data-testid="button-apple-register"
                   >
@@ -216,7 +225,7 @@ export default function Register() {
                 </div>
 
               <Form {...form}>
-                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-3 sm:space-y-4">
+                <form onSubmit={form.handleSubmit(onSubmit)} className="public-auth-form space-y-3 sm:space-y-4">
                   <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
                     <FormField
                       control={form.control}

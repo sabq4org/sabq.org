@@ -32,8 +32,17 @@ final class AdminEditorViewModel: ObservableObject {
     @Published var reporterName: String?
     @Published var authorId: String?
     @Published var authorName: String?
-    @Published var scheduledAt = Date()
+    /// A saved or explicitly selected publish date. It stays optional so a
+    /// newly selected "scheduled" status can never silently submit Date().
+    @Published var scheduledAt: Date?
     @Published var hasSchedule = false
+    /// DatePicker's visible value before the editor has an explicit selection.
+    /// A writer suggestion is a useful starting point, but it is not saved
+    /// until the user changes/accepts it.
+    @Published var scheduleDateDraft = Date()
+    @Published var scheduleWasExplicitlySelected = false
+    @Published private(set) var writerWeeklySlot: AdminWriterWeeklySlot?
+    @Published private(set) var overdueSavedSchedule: Date?
     @Published var seoTitle = ""
     @Published var seoDescription = ""
     @Published var keywords: [String] = []
@@ -58,6 +67,8 @@ final class AdminEditorViewModel: ObservableObject {
     let articleId: String?
     let isNew: Bool
     private let service: AdminServicing
+    private var initialStatus: AdminArticleStatus = .draft
+    private var clearScheduleRequested = false
 
     init(articleId: String?, newArticleType: String? = nil, service: AdminServicing? = nil) {
         self.articleId = articleId
@@ -66,13 +77,14 @@ final class AdminEditorViewModel: ObservableObject {
         if articleId == nil {
             self.articleType = newArticleType ?? "news"
             self.status = .draft
+            self.scheduledAt = nil
+            self.writerWeeklySlot = nil
         }
     }
 
-    func load() async {
+    func load(includeCategories: Bool = true) async {
         isLoading = true
         error = nil
-        async let cats = Self.loadCategories()
         if let id = articleId {
             do {
                 let d = try await service.fetchDetail(id: id)
@@ -82,6 +94,7 @@ final class AdminEditorViewModel: ObservableObject {
                 contentHTML = d.content
                 liveHTMLLength = d.content.count
                 status = d.status
+                initialStatus = d.status
                 newsType = d.newsType
                 articleType = d.articleType
                 isFeatured = d.isFeatured
@@ -95,7 +108,13 @@ final class AdminEditorViewModel: ObservableObject {
                 reporterName = d.reporterName
                 authorId = d.authorId
                 authorName = d.authorName
-                if let s = d.scheduledAt { scheduledAt = s; hasSchedule = true }
+                scheduledAt = d.scheduledAt
+                writerWeeklySlot = d.writerWeeklySlot
+                scheduleDateDraft = d.scheduledAt ?? d.writerWeeklySlot?.nextSlot ?? Date()
+                scheduleWasExplicitlySelected = d.scheduledAt != nil
+                hasSchedule = d.status == .scheduled && d.scheduledAt != nil
+                overdueSavedSchedule = nil
+                clearScheduleRequested = false
                 seoTitle = d.seo.metaTitle
                 seoDescription = d.seo.metaDescription
                 keywords = d.seo.keywords
@@ -105,19 +124,169 @@ final class AdminEditorViewModel: ObservableObject {
             }
         } else {
             // New article — fields start blank (configured in init).
+            scheduledAt = nil
+            writerWeeklySlot = nil
+            overdueSavedSchedule = nil
+            scheduleDateDraft = Date()
+            scheduleWasExplicitlySelected = false
+            hasSchedule = false
             loaded = true
         }
-        categories = await cats
+        if includeCategories {
+            categories = await Self.loadCategories()
+        }
         isLoading = false
     }
 
     /// Persist using the freshest HTML pulled from the editor at save time.
-    func save(html: String) async -> Bool {
+    enum SaveGuard: Equatable {
+        case missingSchedule
+        case scheduleInPast
+    }
+
+    /// DatePicker binding that records an explicit user choice separately from
+    /// its initial display value.
+    var scheduleDateBinding: Binding<Date> {
+        Binding(
+            get: { self.scheduleDateDraft },
+            set: { self.selectScheduleDate($0) }
+        )
+    }
+
+    var schedulePresentation: AdminSchedulePresentation? {
+        if status == .draft && isOpinion {
+            return .opinionDraft(savedAt: scheduledAt, writerSlot: writerWeeklySlot)
+        }
+        if status == .scheduled {
+            if scheduleWasSelectedFromWriter, let scheduledAt {
+                return .writerSuggestion(scheduledAt)
+            }
+            return .actualSchedule(scheduledAt)
+        }
+        return nil
+    }
+
+    var isPublishNowAction: Bool {
+        status == .published && initialStatus != .published
+    }
+
+    private var scheduleWasSelectedFromWriter = false
+
+    func setStatus(_ next: AdminArticleStatus, now: Date = Date()) {
+        if status == next, next == .scheduled, let date = scheduledAt, date > now { return }
+        status = next
+        if next == .scheduled {
+            if let saved = scheduledAt, saved <= now,
+               let nextSlot = writerWeeklySlot?.nextSlot, nextSlot > now {
+                overdueSavedSchedule = saved
+                scheduledAt = nextSlot
+                scheduleDateDraft = nextSlot
+                hasSchedule = true
+                scheduleWasExplicitlySelected = true
+                scheduleWasSelectedFromWriter = true
+                clearScheduleRequested = false
+            } else if scheduledAt == nil,
+                      let nextSlot = writerWeeklySlot?.nextSlot, nextSlot > now {
+                scheduledAt = nextSlot
+                scheduleDateDraft = nextSlot
+                hasSchedule = true
+                scheduleWasExplicitlySelected = true
+                scheduleWasSelectedFromWriter = true
+                clearScheduleRequested = false
+            } else {
+                hasSchedule = scheduledAt != nil
+                scheduleDateDraft = scheduledAt ?? writerWeeklySlot?.nextSlot ?? Date()
+                scheduleWasSelectedFromWriter = false
+            }
+        } else {
+            if scheduleWasSelectedFromWriter, let overdueSavedSchedule {
+                scheduledAt = overdueSavedSchedule
+                scheduleDateDraft = overdueSavedSchedule
+                scheduleWasExplicitlySelected = true
+            }
+            hasSchedule = false
+            scheduleWasSelectedFromWriter = false
+        }
+    }
+
+    func selectScheduleDate(_ date: Date) {
+        scheduleDateDraft = date
+        scheduledAt = date
+        hasSchedule = true
+        scheduleWasExplicitlySelected = true
+        scheduleWasSelectedFromWriter = false
+        overdueSavedSchedule = nil
+        clearScheduleRequested = false
+    }
+
+    func useWriterSchedule() {
+        guard let nextSlot = writerWeeklySlot?.nextSlot else { return }
+        scheduleDateDraft = nextSlot
+        scheduledAt = nextSlot
+        hasSchedule = true
+        scheduleWasExplicitlySelected = true
+        scheduleWasSelectedFromWriter = true
+        overdueSavedSchedule = nil
+        clearScheduleRequested = false
+    }
+
+    /// Explicitly remove a saved schedule. Ordinary draft saves retain it so
+    /// an overdue saved appointment remains visible to the editorial team.
+    func clearSchedule() {
+        scheduledAt = nil
+        hasSchedule = false
+        scheduleWasExplicitlySelected = false
+        scheduleWasSelectedFromWriter = false
+        overdueSavedSchedule = nil
+        clearScheduleRequested = true
+    }
+
+    /// Changing the opinion author invalidates the old writer's suggestion and
+    /// any date that was selected for that author. There is no client-side
+    /// way to calculate another writer's slot safely.
+    func selectAuthor(_ user: AdminUser) {
+        guard authorId != user.id else { return }
+        authorId = user.id
+        authorName = user.name
+        writerWeeklySlot = nil
+        scheduledAt = nil
+        hasSchedule = false
+        scheduleWasExplicitlySelected = false
+        scheduleWasSelectedFromWriter = false
+        overdueSavedSchedule = nil
+        clearScheduleRequested = true
+        scheduleDateDraft = Date()
+    }
+
+    func saveGuard(now: Date = Date()) -> SaveGuard? {
+        guard status == .scheduled else { return nil }
+        guard hasSchedule, let scheduledAt, scheduleWasExplicitlySelected else {
+            return .missingSchedule
+        }
+        guard scheduledAt > now else { return .scheduleInPast }
+        return nil
+    }
+
+    func save(html: String, now: Date = Date()) async -> Bool {
         isSaving = true
         defer { isSaving = false }
-        let scheduledISO: String? = (status == .scheduled && hasSchedule)
-            ? SabqFormatters.iso8601Basic.string(from: scheduledAt)
-            : nil
+        if let guardFailure = saveGuard(now: now) {
+            error = guardFailure == .missingSchedule
+                ? "اختر موعدًا مستقبليًا صريحًا قبل الجدولة"
+                : "لا يمكن جدولة المادة في موعد مضى"
+            return false
+        }
+        let scheduledISO: String?
+        if status == .scheduled, let scheduledAt {
+            scheduledISO = SabqFormatters.iso8601Basic.string(from: scheduledAt)
+        } else if clearScheduleRequested || status == .published {
+            scheduledISO = nil
+        } else if let scheduledAt {
+            // Draft edits preserve the saved date, including an overdue one.
+            scheduledISO = SabqFormatters.iso8601Basic.string(from: scheduledAt)
+        } else {
+            scheduledISO = nil
+        }
         // The excerpt field was removed from the UI — the "smart summary" now
         // doubles as the excerpt (matches the web), falling back to the
         // original excerpt when no summary is set.
@@ -171,7 +340,8 @@ final class AdminEditorViewModel: ObservableObject {
             reporterId: isOpinion ? nil : reporterId,
             authorId: isOpinion ? authorId : nil,
             scheduledAt: scheduledISO,
-            seo: seo
+            seo: seo,
+            clearScheduledAt: clearScheduleRequested || status == .published
         )
         do {
             try await service.saveArticle(id: articleId ?? "", payload: payload)
@@ -330,13 +500,20 @@ struct AdminArticleEditorView: View {
     @State private var proofIssues: [AdminProofIssue] = []
     @State private var showProofSheet = false
     @State private var showUserPicker = false
+    @State private var pendingSaveHTML: String?
+    @State private var showSaveConfirmation = false
 
-    init(articleId: String?, articleType: String? = nil, title: String = "", onSaved: @escaping () -> Void) {
+    init(articleId: String?, articleType: String? = nil, title: String = "",
+         service: AdminServicing? = nil, onSaved: @escaping () -> Void) {
         self.articleId = articleId
         self.newArticleType = articleType
         self.initialTitle = title
         self.onSaved = onSaved
-        _vm = StateObject(wrappedValue: AdminEditorViewModel(articleId: articleId, newArticleType: articleType))
+        _vm = StateObject(wrappedValue: AdminEditorViewModel(
+            articleId: articleId,
+            newArticleType: articleType,
+            service: service
+        ))
     }
 
     var body: some View {
@@ -369,13 +546,38 @@ struct AdminArticleEditorView: View {
                 fetch: { q in await vm.fetchUsers(role: vm.isOpinion ? "opinion_author" : "reporter", query: q) }
             ) { picked in
                 if vm.isOpinion {
-                    vm.authorId = picked.id
-                    vm.authorName = picked.name
+                    vm.selectAuthor(picked)
                 } else {
                     vm.reporterId = picked.id
                     vm.reporterName = picked.name
                 }
             }
+        }
+        .alert(
+            vm.isPublishNowAction ? "تأكيد النشر الآن" : "تأكيد الجدولة",
+            isPresented: $showSaveConfirmation
+        ) {
+            Button("تأكيد") {
+                guard let html = pendingSaveHTML else { return }
+                Task { await completeSave(html: html) }
+            }
+            Button("إلغاء", role: .cancel) {
+                pendingSaveHTML = nil
+            }
+        } message: {
+            if vm.isPublishNowAction {
+                Text("سيُنشر المقال فورًا. هل تريد المتابعة؟")
+            } else {
+                Text("سيُنشر المقال تلقائيًا في الموعد الظاهر بتوقيت الرياض.")
+            }
+        }
+        .alert("تعذّر الحفظ", isPresented: Binding(
+            get: { vm.error != nil && !vm.isLoading },
+            set: { if !$0 { vm.error = nil } }
+        )) {
+            Button("حسنًا", role: .cancel) { vm.error = nil }
+        } message: {
+            Text(vm.error ?? "حاول مرة أخرى")
         }
         .task { await vm.load() }
         .sabqScreen("AdminArticleEditor")
@@ -689,36 +891,7 @@ struct AdminArticleEditorView: View {
 
     private var publishSection: some View {
         sectionCard("النشر", icon: "paperplane") {
-            VStack(alignment: .leading, spacing: 8) {
-                fieldLabel("الحالة")
-                AdminSegmentedControl(selected: vm.status) { vm.status = $0 }
-            }
-            if vm.status == .scheduled {
-                Toggle("تحديد موعد الجدولة", isOn: $vm.hasSchedule)
-                    .font(SabqFonts.app(size: 14, weight: .semibold))
-                    .tint(SabqTheme.sky)
-                if vm.hasSchedule {
-                    DatePicker("الموعد", selection: $vm.scheduledAt)
-                        .font(SabqFonts.app(size: 14))
-                        .environment(\.locale, Locale(identifier: "ar"))
-                }
-            }
-            if !vm.isOpinion {
-                VStack(alignment: .leading, spacing: 8) {
-                    fieldLabel("نوع الخبر")
-                    Picker("", selection: $vm.newsType) {
-                        Text("عادي").tag("regular")
-                        Text("عاجل").tag("breaking")
-                    }
-                    .pickerStyle(.segmented)
-                }
-            }
-            Toggle("خبر مميّز", isOn: $vm.isFeatured)
-                .font(SabqFonts.app(size: 14, weight: .semibold)).tint(SabqTheme.gold)
-            Toggle("قراءة من سبق", isOn: $vm.isReading)
-                .font(SabqFonts.app(size: 14, weight: .semibold)).tint(SabqTheme.teal)
-            Toggle("إخفاء من الصفحة الرئيسية", isOn: $vm.hideFromHomepage)
-                .font(SabqFonts.app(size: 14, weight: .semibold)).tint(SabqTheme.coral)
+            AdminPublishingOptions(vm: vm)
         }
     }
 
@@ -729,19 +902,35 @@ struct AdminArticleEditorView: View {
             Task {
                 let html = await htmlController.currentHTML()
                 let finalHTML = html.isEmpty ? vm.contentHTML : html
-                if await vm.save(html: finalHTML) {
-                    onSaved()
-                    dismiss()
+                if vm.isPublishNowAction || vm.status == .scheduled {
+                    if vm.saveGuard() != nil {
+                        _ = await vm.save(html: finalHTML)
+                    } else {
+                        pendingSaveHTML = finalHTML
+                        showSaveConfirmation = true
+                    }
+                } else {
+                    await completeSave(html: finalHTML)
                 }
             }
         } label: {
             if vm.isSaving {
                 ProgressView()
             } else {
-                Text("حفظ").font(SabqFonts.app(size: 16, weight: .bold))
+                Text(vm.isPublishNowAction ? "نشر الآن" : (vm.status == .scheduled ? "تأكيد الجدولة" : "حفظ"))
+                    .font(SabqFonts.app(size: 16, weight: .bold))
             }
         }
         .disabled(vm.isSaving || vm.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+    }
+
+    private func completeSave(html: String) async {
+        if await vm.save(html: html) {
+            pendingSaveHTML = nil
+            showSaveConfirmation = false
+            onSaved()
+            dismiss()
+        }
     }
 
     private var errorState: some View {
@@ -1100,4 +1289,110 @@ struct AdminUserPickerSheet: View {
         users = await fetch(query.trimmingCharacters(in: .whitespacesAndNewlines))
         isLoading = false
     }
+}
+
+/// Shared live publishing controls, also rendered by the schedule UI tests.
+struct AdminPublishingOptions: View {
+    @ObservedObject var vm: AdminEditorViewModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 8) {
+                fieldLabel("الحالة")
+                AdminSegmentedControl(selected: vm.status) { vm.setStatus($0) }
+            }
+            if vm.status == .scheduled {
+                Text("الجدولة تعني نشر المادة تلقائيًا في الموعد المختار. اختر موعدًا مستقبليًا واحفظ لتأكيدها.")
+                    .font(SabqFonts.app(size: 12, weight: .medium))
+                    .foregroundStyle(SabqTheme.secondaryInk)
+                    .fixedSize(horizontal: false, vertical: true)
+                DatePicker("موعد النشر", selection: vm.scheduleDateBinding)
+                    .font(SabqFonts.app(size: 14))
+                    .environment(\.locale, Locale(identifier: "ar"))
+                    .environment(\.calendar, Calendar(identifier: .gregorian))
+                    .environment(\.timeZone, TimeZone(identifier: "Asia/Riyadh")!)
+                if let overdue = vm.overdueSavedSchedule {
+                    Text("الموعد المحفوظ السابق فات: \(SabqFormatters.riyadhWeekdayDate.string(from: overdue)) · \(SabqFormatters.riyadhTime.string(from: overdue)). تم اختيار الموعد القادم حسب جدول الكاتب ويمكنك تعديله.")
+                        .font(SabqFonts.app(size: 11, weight: .medium))
+                        .foregroundStyle(SabqTheme.coral)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if let nextSlot = vm.writerWeeklySlot?.nextSlot, nextSlot > Date(),
+                   !vm.scheduleWasExplicitlySelected || vm.schedulePresentation?.isOverdue == true {
+                    Button {
+                        vm.setStatus(.scheduled)
+                    } label: {
+                        Label(
+                            "استخدام الموعد القادم للكاتب",
+                            systemImage: "calendar.badge.clock"
+                        )
+                        .font(SabqFonts.app(size: 12, weight: .bold))
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(SabqTheme.primaryEnd)
+                }
+                if !vm.scheduleWasExplicitlySelected {
+                    Text("لم يُعتمد الموعد بعد — غيّر التاريخ أو الوقت صراحةً قبل الحفظ.")
+                        .font(SabqFonts.app(size: 12, weight: .semibold))
+                        .foregroundStyle(SabqTheme.gold)
+                } else if let schedule = vm.schedulePresentation, schedule.isOverdue {
+                    Text("هذا الموعد محفوظ لكنه فات. اختر موعدًا مستقبليًا لإعادة الجدولة.")
+                        .font(SabqFonts.app(size: 12, weight: .semibold))
+                        .foregroundStyle(SabqTheme.coral)
+                }
+            }
+            if let schedule = vm.schedulePresentation {
+                editorScheduleCue(schedule)
+            }
+            if !vm.isOpinion {
+                VStack(alignment: .leading, spacing: 8) {
+                    fieldLabel("نوع الخبر")
+                    Picker("", selection: $vm.newsType) {
+                        Text("عادي").tag("regular")
+                        Text("عاجل").tag("breaking")
+                    }
+                    .pickerStyle(.segmented)
+                }
+            }
+            Toggle("خبر مميّز", isOn: $vm.isFeatured)
+                .font(SabqFonts.app(size: 14, weight: .semibold)).tint(SabqTheme.gold)
+            Toggle("قراءة من سبق", isOn: $vm.isReading)
+                .font(SabqFonts.app(size: 14, weight: .semibold)).tint(SabqTheme.teal)
+            Toggle("إخفاء من الصفحة الرئيسية", isOn: $vm.hideFromHomepage)
+                .font(SabqFonts.app(size: 14, weight: .semibold)).tint(SabqTheme.coral)
+        }
+    }
+
+    private func fieldLabel(_ text: String) -> some View {
+        Text(text).font(SabqFonts.app(size: 13, weight: .heavy)).foregroundStyle(SabqTheme.ink)
+    }
+
+    private func editorScheduleCue(_ schedule: AdminSchedulePresentation) -> some View {
+        let tint: Color = schedule.isOverdue
+            ? SabqTheme.coral
+            : (schedule.source == .writerSuggestion ? SabqTheme.primaryEnd : SabqTheme.sky)
+        return HStack(spacing: 8) {
+            Image(systemName: schedule.isOverdue ? "exclamationmark.triangle.fill" : "clock.fill")
+                .font(SabqFonts.app(size: 13, weight: .bold))
+            VStack(alignment: .leading, spacing: 3) {
+                Text(schedule.title)
+                    .font(SabqFonts.app(size: 12, weight: .heavy))
+                Text(schedule.fullLabel ?? schedule.detail)
+                    .font(SabqFonts.app(size: 11, weight: .medium))
+            }
+            Spacer(minLength: 0)
+            if schedule.source == .saved {
+                Button("مسح") { vm.clearSchedule() }
+                    .font(SabqFonts.app(size: 11, weight: .bold))
+                    .buttonStyle(.bordered)
+                    .tint(tint)
+            }
+        }
+        .foregroundStyle(tint)
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(tint.opacity(0.12)))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(tint.opacity(0.35), lineWidth: 0.5))
+    }
+
 }

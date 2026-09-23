@@ -4,7 +4,7 @@ import { Clock, Share2, Bookmark, BookmarkCheck, ChevronDown, Zap, Sparkles, Che
 import { formatDistanceToNow } from "date-fns";
 import { arSA } from "date-fns/locale";
 import { useQuery } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, apiUrl } from "@/lib/queryClient";
 import type { Article, Category, User } from "@shared/schema";
 import { ArticleQuiz } from "@/components/ArticleQuiz";
 import { WeeklyPhotosDisplay } from "@/components/WeeklyPhotosDisplay";
@@ -200,7 +200,7 @@ export function SwipeCard({
       
       // Pre-fetch short URL
       if (!cachedShortUrl) {
-        fetch(`/api/shortlinks/article/${article.id}`, { credentials: "include" })
+        fetch(apiUrl(`/api/shortlinks/article/${article.id}`), { credentials: "include" })
           .then(res => res.ok ? res.json() : null)
           .then(data => {
             if (data?.shortCode) {
@@ -472,14 +472,8 @@ export function SwipeCard({
                   إنفوجرافيك
                 </span>
               )}
-              {article.category && (
-                <span 
-                  className="px-2.5 py-1 rounded-md bg-white/20 backdrop-blur-sm text-white text-xs font-medium"
-                  data-testid="badge-category"
-                >
-                  {article.category.nameAr}
-                </span>
-              )}
+              {/* شارة التصنيف لا تُعرض في النسخة الخفيفة (سبق لايت) —
+                  التصنيفات تظهر فقط في النسخة الكاملة */}
               <span className="text-white/60 text-xs flex items-center gap-1">
                 <Clock className="h-3 w-3" />
                 {timeAgo}
@@ -615,15 +609,8 @@ export function SwipeCard({
                 <div className="w-12 h-1 bg-muted-foreground/30 rounded-full" />
               </div>
 
-              {/* Category, Time & Views */}
+              {/* Time & Views — بدون شارة التصنيف في النسخة الخفيفة */}
               <div className="flex items-center gap-3 mb-5 flex-wrap">
-                {article.category && (
-                  <span 
-                    className="px-3 py-1.5 rounded-md bg-primary/5 text-primary text-xs font-bold border border-primary/20"
-                  >
-                    {article.category.nameAr}
-                  </span>
-                )}
                 <span className="text-muted-foreground text-xs">
                   {formatDistanceToNow(publishedDate, { addSuffix: true, locale: arSA })}
                 </span>

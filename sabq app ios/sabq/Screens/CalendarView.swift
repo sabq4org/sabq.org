@@ -3,7 +3,6 @@ import SwiftUI
 // Public events calendar: world days, gulf/national commemorations, internal
 // editorial dates. Source: GET /api/calendar (+/upcoming for the home card).
 struct CalendarView: View {
-    @Environment(\.dismiss) private var dismiss
     @State private var events: [APICalendarEvent] = []
     @State private var isLoading = true
     @State private var errorMessage: String?
@@ -86,41 +85,13 @@ struct CalendarView: View {
         }
         .background(SabqTheme.background)
         .sabqRTL()
+        .navigationTitle("أحداث وأيام عالمية")
         .navigationBarTitleDisplayMode(.inline)
-        .navigationBarBackButtonHidden(true)
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button { dismiss() } label: {
-                    Image(systemName: "chevron.right")
-                        .font(SabqFonts.app(size: 16, weight: .semibold))
-                        .foregroundStyle(SabqTheme.ink)
-                }
-            }
-        }
         .task { await load() }
     }
 
     private var header: some View {
-        HStack(alignment: .top, spacing: 14) {
-            ZStack {
-                Circle()
-                    .fill(SabqTheme.gold.opacity(0.14))
-                    .frame(width: 56, height: 56)
-                Image(systemName: "calendar")
-                    .font(SabqFonts.app(size: 24, weight: .light))
-                    .foregroundStyle(SabqTheme.gold)
-                    .symbolRenderingMode(.hierarchical)
-            }
-            VStack(alignment: .leading, spacing: 4) {
-                Text("أحداث وأيام عالمية")
-                    .font(SabqFonts.app(size: 20, weight: .heavy))
-                    .foregroundStyle(SabqTheme.ink)
-                Text("ما يحدث في العالم خلال الأسبوع القادم")
-                    .font(SabqFonts.app(size: 12, weight: .medium))
-                    .foregroundStyle(SabqTheme.tertiaryInk)
-            }
-            Spacer(minLength: 0)
-        }
+        SabqPageIntro("ما يحدث في العالم خلال الأسبوع القادم")
     }
 
     private func eventRow(_ event: APICalendarEvent) -> some View {

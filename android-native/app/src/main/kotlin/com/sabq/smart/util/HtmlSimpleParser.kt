@@ -8,7 +8,13 @@ sealed interface BlockNode {
     data class Paragraph(val runs: List<InlineRun>) : BlockNode
     data class ListBlock(val ordered: Boolean, val items: List<List<InlineRun>>) : BlockNode
     data class Blockquote(val runs: List<InlineRun>) : BlockNode
-    data class Image(val url: String, val alt: String?, val caption: String?) : BlockNode
+    /** صورة من المحرر مع عرضها ومحاذاتها (`data-width`/`data-align`/`data-caption`) — نقل الويب #1512. */
+    data class Image(
+        val url: String,
+        val alt: String?,
+        val caption: String?,
+        val layout: ImageLayout = ImageLayout.Full,
+    ) : BlockNode
     data class ImageGallery(val images: List<GalleryImage>) : BlockNode
     data class TwitterEmbed(val tweetUrl: String) : BlockNode
     data class VideoEmbed(val provider: VideoProvider, val embedUrl: String, val sourceUrl: String?) : BlockNode
@@ -20,6 +26,42 @@ sealed interface BlockNode {
         val cardStyle: Boolean,
     ) : BlockNode
     object Divider : BlockNode
+}
+
+enum class ImageAlign { Center, Right, Left }
+
+/**
+ * عرض الصورة كنسبة من عمود القراءة ومحاذاتها — يطابق `ImageLayout` في iOS:
+ * `%` نسبة مباشرة، `px` تُنسب إلى عرض العمود الاسمي في الويب (760)، وقيمة
+ * ≥ 98٪ تعني العرض الكامل، وأقل من 20٪ تُرفع إلى 20٪.
+ */
+data class ImageLayout(
+    val widthFraction: Float? = null,
+    val align: ImageAlign = ImageAlign.Center,
+) {
+    companion object {
+        val Full = ImageLayout()
+        const val NOMINAL_COLUMN_WIDTH = 760f
+
+        fun parse(width: String?, align: String?): ImageLayout {
+            var fraction: Float? = null
+            val raw = width?.trim()?.lowercase()
+            if (!raw.isNullOrEmpty()) {
+                fraction = when {
+                    raw.endsWith("%") -> raw.dropLast(1).toFloatOrNull()?.let { it / 100f }
+                    raw.endsWith("px") -> raw.dropLast(2).toFloatOrNull()?.let { it / NOMINAL_COLUMN_WIDTH }
+                    else -> raw.toFloatOrNull()?.let { if (it <= 1f) it else it / NOMINAL_COLUMN_WIDTH }
+                }
+                fraction = fraction?.let { if (it >= 0.98f) null else maxOf(0.2f, it) }
+            }
+            val parsedAlign = when (align?.trim()?.lowercase()) {
+                "right" -> ImageAlign.Right
+                "left" -> ImageAlign.Left
+                else -> ImageAlign.Center
+            }
+            return ImageLayout(widthFraction = fraction, align = parsedAlign)
+        }
+    }
 }
 
 data class InlineRun(
@@ -204,7 +246,12 @@ object HtmlSimpleParser {
             scanner.consumeTag()
             val src = tag.attr("src")
             if (src != null) {
-                return BlockNode.Image(url = src, alt = tag.attr("alt"), caption = null)
+                return BlockNode.Image(
+                    url = src,
+                    alt = tag.attr("alt"),
+                    caption = tag.attr("data-caption")?.takeIf { it.isNotEmpty() },
+                    layout = ImageLayout.parse(tag.attr("data-width"), tag.attr("data-align")),
+                )
             }
             return null
         }
@@ -438,12 +485,24 @@ object HtmlSimpleParser {
     private fun tryExtractInlineImage(inner: String): BlockNode? {
         val trimmed = inner.trim()
         if (!trimmed.lowercase().startsWith("<img")) return null
-        val pattern = """<img[^>]*src="([^"]+)"[^>]*(?:alt="([^"]*)")?"""
-        val regex = Regex(pattern, RegexOption.IGNORE_CASE)
-        val match = regex.find(trimmed) ?: return null
-        val src = match.groupValues[1]
-        val alt = match.groupValues.getOrNull(2)?.takeIf { it.isNotEmpty() }
-        return BlockNode.Image(url = src, alt = alt, caption = null)
+        // السمات بأي ترتيب (كان النمط القديم يشترط alt بعد src فيفقده).
+        val src = inlineAttr("src", trimmed) ?: return null
+        val alt = inlineAttr("alt", trimmed)?.takeIf { it.isNotEmpty() }
+        return BlockNode.Image(
+            url = src,
+            alt = alt,
+            caption = inlineAttr("data-caption", trimmed)?.takeIf { it.isNotEmpty() },
+            layout = ImageLayout.parse(inlineAttr("data-width", trimmed), inlineAttr("data-align", trimmed)),
+        )
+    }
+
+    /** قيمة سمة داخل وسم خام (`<img … data-width="50%">`) للمسار الذي لا يملك HTMLTag. */
+    private fun inlineAttr(name: String, html: String): String? {
+        for (q in listOf("\"", "'")) {
+            val m = Regex("\\b$name\\s*=\\s*$q([^$q]*)$q", RegexOption.IGNORE_CASE).find(html)
+            if (m != null) return m.groupValues[1]
+        }
+        return null
     }
 
     data class MarkFrame(

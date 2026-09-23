@@ -993,13 +993,18 @@ export const articles = pgTable("articles", {
   credibilityScore: integer("credibility_score"),
   credibilityAnalysis: text("credibility_analysis"),
   credibilityLastUpdated: timestamp("credibility_last_updated"),
-  source: text("source").default("manual").notNull(), // 'email' | 'whatsapp' | 'manual'
+  source: text("source").default("manual").notNull(), // 'email' | 'whatsapp' | 'manual' | 'bot' (+ ios-app/android-app/ai)
   sourceMetadata: jsonb("source_metadata").$type<{
-    type: 'email' | 'whatsapp' | 'manual';
+    type: 'email' | 'whatsapp' | 'manual' | 'bot';
     from?: string;
     token?: string;
     originalMessage?: string;
     webhookLogId?: string;
+    // Bot Drafts API (docs/systems/editorial/BOT_DRAFTS_API.md) — type-only, no DDL.
+    bot?: string;
+    clientReference?: string;
+    notes?: string;
+    receivedAt?: string;
   }>(),
   sourceUrl: text("source_url"), // URL of the original source
   
@@ -4713,6 +4718,12 @@ export type ReporterArticle = {
   title: string;
   slug: string;
   englishSlug?: string | null;
+  excerpt?: string | null;
+  imageUrl?: string | null;
+  thumbnailUrl?: string | null;
+  imageFocalPoint?: { x: number; y: number } | null;
+  isAiGeneratedImage?: boolean;
+  updatedAt?: Date | null;
   publishedAt: Date | null;
   category: {
     name: string;
@@ -5404,7 +5415,7 @@ export type HajjBlockConfig = typeof hajjBlockConfig.$inferSelect;
 export const nationalDayBlockConfig = pgTable("national_day_block_config", {
   id: varchar("id").primaryKey().default("default"), // enforced singleton
   isActive: boolean("is_active").notNull().default(false),
-  title: varchar("title", { length: 80 }).notNull().default("اليوم الوطني السعودي الـ96"),
+  title: varchar("title", { length: 80 }).notNull().default("اليوم الوطني السعودي"),
   subtitle: varchar("subtitle", { length: 160 }),
   // كلمات الاكتشاف التلقائي — تشمل «عزنا بطبعنا» بالهمزة وبدونها لأن
   // المطابقة نصية (ilike) لا تطبيعية.
@@ -15417,3 +15428,23 @@ export const economyReports = pgTable("economy_reports", {
 
 export type EconomyObservation = typeof economyObservations.$inferSelect;
 export type EconomyReport = typeof economyReports.$inferSelect;
+
+// Durable editorial research jobs; Agents API sessions are private to the initiating editor.
+export const editorialResearchJobs = pgTable("editorial_research_jobs", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  topic: text("topic").notNull(),
+  status: varchar("status", { length: 20 }).notNull().default("queued"),
+  sessionId: text("session_id"),
+  research: jsonb("research").$type<import("./editorialResearch").ResearchBundle>(),
+  result: jsonb("result").$type<import("./editorialResearch").ResearchResult>(),
+  usage: jsonb("usage").$type<import("./editorialResearch").ResearchUsage>(),
+  error: text("error"),
+  leaseUntil: timestamp("lease_until", { withTimezone: true }),
+  remoteClosedAt: timestamp("remote_closed_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, table => [
+  index("editorial_research_jobs_owner_created_idx").on(table.userId, table.createdAt),
+  index("editorial_research_jobs_status_idx").on(table.status),
+]);

@@ -2,6 +2,15 @@
 // عبر مسارات الويب /api/predictions/* (جلسة Passport). كل البطولات ما عدا
 // مونديال 2026 (يبقى على صفحاته القديمة حتى نهايته).
 
+import { formatTime } from "@/lib/format";
+
+const AR_LATN_GREGORY = "ar-SA-u-nu-latn-ca-gregory";
+
+/** عزل الرقم لاتينيًا حتى لا يحوّله سفاري إلى هندية داخل جملة عربية. */
+function latn(n: number): string {
+  return `\u2066${n}\u2069`;
+}
+
 export type PredCompetitionSummary = {
   id: string;
   slug: string;
@@ -209,7 +218,7 @@ export function scoreRtlAr(score: string | null | undefined): string | null {
   return m ? `${m[2]}–${m[1]}` : score;
 }
 
-/** «يُقفل بعد ٢س ١٤د» — عدّ تنازلي حتى الإغلاق. */
+/** «يُقفل بعد 2س 14د» — عدّ تنازلي حتى الإغلاق بأرقام لاتينية. */
 export function lockCountdownAr(locksAt: string, now = Date.now()): string | null {
   const lockTime = Date.parse(locksAt);
   if (Number.isNaN(lockTime)) return null;
@@ -218,25 +227,19 @@ export function lockCountdownAr(locksAt: string, now = Date.now()): string | nul
   const days = Math.floor(seconds / 86_400);
   const hours = Math.floor((seconds % 86_400) / 3_600);
   const minutes = Math.floor((seconds % 3_600) / 60);
-  if (days > 0) return `يُقفل بعد ${days}ي ${hours}س`;
-  if (hours > 0) return `يُقفل بعد ${hours}س ${minutes}د`;
-  return `يُقفل بعد ${Math.max(minutes, 1)}د`;
+  if (days > 0) return `يُقفل بعد ${latn(days)}ي ${latn(hours)}س`;
+  if (hours > 0) return `يُقفل بعد ${latn(hours)}س ${latn(minutes)}د`;
+  return `يُقفل بعد ${latn(Math.max(minutes, 1))}د`;
 }
 
 export function kickoffTimeAr(locksAt: string): string {
-  const date = new Date(locksAt);
-  if (Number.isNaN(date.getTime())) return "—";
-  return new Intl.DateTimeFormat("ar-SA", {
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZone: "Asia/Riyadh",
-  }).format(date);
+  return formatTime(locksAt);
 }
 
 export function kickoffDayAr(locksAt: string): string {
   const date = new Date(locksAt);
   if (Number.isNaN(date.getTime())) return "";
-  return new Intl.DateTimeFormat("ar-SA", {
+  return new Intl.DateTimeFormat(AR_LATN_GREGORY, {
     weekday: "long",
     day: "numeric",
     month: "long",

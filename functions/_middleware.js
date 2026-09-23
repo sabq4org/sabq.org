@@ -54,6 +54,12 @@
  * callsites that bypass apiUrl().
  */
 
+import { createPublicApiBurstCache, newPublicApiCacheKey, newPublicApiPolicy } from "../cloudflare-worker/public-api-burst-cache.js";
+
+export { newPublicApiCacheKey, newPublicApiPolicy };
+
+const pagesPublicApiBurstCache = createPublicApiBurstCache();
+
 const DEFAULT_API_ORIGIN = "https://api.sabq.org";
 
 // Short TTLs so a freshly published/edited article's meta + slug canonical
@@ -509,6 +515,71 @@ export async function fetchSsrResponse(request, nextOrigin, timeoutMs = 5000) {
   return new Response([204, 205, 304].includes(response.status) ? null : body, { status: response.status, statusText: response.statusText, headers });
 }
 
+// Railway's edge (hikari) L7 protection answers 429 "rate limited" ITSELF,
+// before the request ever reaches the container, when the handful of
+// Cloudflare egress IPs that carry every Pages-Function subrequest look like a
+// single abusive client. Incident 2026-09-17: a breaking-news burst made every
+// /api/* on sabq.org answer 429 for ~10 minutes (homepage stuck on skeletons)
+// while the same origin served 200 to any other source IP. Such a response has
+// no `x-railway-request-id` (the container never saw it); our own limiter
+// (express-rate-limit in server/index.ts) always answers through the container
+// and therefore carries one — it must NOT be retried elsewhere.
+export function isEdgeRateLimited(res) {
+  return res.status === 429 && !res.headers.has("x-railway-request-id");
+}
+
+const DIRECT_RAILWAY_ORIGIN = "https://sabqorg-production.up.railway.app";
+const EDGE_429_FALLBACK_TIMEOUT_MS = 10_000;
+
+function originOf(value) {
+  try {
+    return new URL(value).origin;
+  } catch (_) {
+    return null;
+  }
+}
+
+// A second route into the same backend that enters Railway's edge from a
+// DIFFERENT Cloudflare egress (api.sabq.org is fronted by the sabq-api-origin
+// Worker, observed at another placement/PoP than the Pages Function). It is a
+// best-effort detour around a per-source-IP block, not a second backend.
+// `API_FALLBACK_ORIGIN=off` disables it; anything equal to API_ORIGIN is
+// ignored so a misconfiguration can never double-hit the blocked path.
+export function resolveFallbackOrigin(apiOrigin, env = {}) {
+  const configured = String(env.API_FALLBACK_ORIGIN || "").trim().replace(/\/+$/, "");
+  if (configured.toLowerCase() === "off") return null;
+  const primary = originOf(apiOrigin);
+  const candidate =
+    configured ||
+    (primary === originOf(DEFAULT_API_ORIGIN) ? DIRECT_RAILWAY_ORIGIN : DEFAULT_API_ORIGIN);
+  const fallback = originOf(candidate);
+  if (!fallback || fallback === primary) return null;
+  return fallback;
+}
+
+// GET/HEAD only: a request body is a one-shot stream, and a write that the
+// edge refused was never executed, so replaying it is pointless anyway.
+export async function proxyToApiWithFallback(request, apiOrigin, fallbackOrigin, timeoutMs = 0, proxySecret) {
+  const res = await proxyToApi(request, apiOrigin, timeoutMs, proxySecret);
+  const idempotent = request.method === "GET" || request.method === "HEAD";
+  if (!idempotent || !fallbackOrigin || !isEdgeRateLimited(res)) return res;
+  const path = new URL(request.url).pathname;
+  console.warn(`[pages-fn] edge 429 from ${apiOrigin} → retrying via ${fallbackOrigin}: ${path}`);
+  try {
+    const alt = await proxyToApi(
+      request,
+      fallbackOrigin,
+      timeoutMs > 0 ? timeoutMs : EDGE_429_FALLBACK_TIMEOUT_MS,
+      proxySecret,
+    );
+    if (!isEdgeRateLimited(alt)) return alt;
+    console.warn(`[pages-fn] fallback origin also edge-429: ${path}`);
+  } catch (err) {
+    console.error("[pages-fn] fallback origin error:", err);
+  }
+  return res;
+}
+
 // Edge-cached JSON GET (slug-redirect / seo-meta), keyed on the full URL.
 export async function cachedJson(url, ttl, context, sourceRequest, proxySecret) {
   const cache = caches.default;
@@ -733,6 +804,8 @@ export function apiCacheKey(requestUrl) {
   return new Request(u.toString(), { method: "GET" });
 }
 
+// Shared public API burst caching is initialized above; the Pages adapter below
+// supplies its proxy transport and waitUntil callback.
 // ── stale-if-error: «آخر نسخة سليمة» ────────────────────────────────────────
 // Dawn 2026-07-25 outage: the origin hung for ~4 hours and every anonymous
 // reader saw errors, even though the edge had served the exact same JSON
@@ -977,6 +1050,18 @@ async function handleRequest(context) {
 
   // 1) Proxy backend paths (every method).
   if (isProxyPath(path)) {
+    const newPublicApiResponse = await pagesPublicApiBurstCache(request, {
+      cache: caches.default,
+      waitUntil: (promise) => context.waitUntil(promise),
+      fetchOrigin: (sourceRequest) => proxyToApiWithFallback(
+        sourceRequest,
+        apiOrigin,
+        resolveFallbackOrigin(apiOrigin, env),
+        10_000,
+        env.EDGE_PROXY_SHARED_SECRET,
+      ),
+    });
+    if (newPublicApiResponse) return newPublicApiResponse;
     const apiCacheTtl = getApiCacheTtl(path, request);
     const useApiCache = apiCacheTtl > 0;
     const apiCacheKeyReq = useApiCache ? apiCacheKey(request.url) : null;
@@ -1015,9 +1100,10 @@ async function handleRequest(context) {
     }
 
     try {
-      const res = await proxyToApi(
+      const res = await proxyToApiWithFallback(
         request,
         apiOrigin,
+        resolveFallbackOrigin(apiOrigin, env),
         useApiCache ? API_PROXY_TIMEOUT_MS : 0,
         env.EDGE_PROXY_SHARED_SECRET,
       );
@@ -1105,9 +1191,12 @@ async function handleRequest(context) {
         }
       }
 
-      // Origin answered but is sick (5xx) → prefer the last-good copy.
-      if (useApiCache && apiCacheKeyReq && res.status >= 500) {
-        const stale = await serveApiLastGood(apiCacheKeyReq, `upstream-${res.status}`);
+      // Origin answered but is sick (5xx), or Railway's edge refused us on
+      // both routes (edge 429, incident 2026-09-17) → prefer the last-good
+      // copy over showing the reader an empty skeleton.
+      if (useApiCache && apiCacheKeyReq && (res.status >= 500 || isEdgeRateLimited(res))) {
+        const reason = isEdgeRateLimited(res) ? "edge-429" : `upstream-${res.status}`;
+        const stale = await serveApiLastGood(apiCacheKeyReq, reason);
         if (stale) return stale;
       }
 

@@ -972,6 +972,8 @@ export const SPORTS_APP_DEBUG_BUNDLE_ID = "com.sabq.sports.dev";
 const NEWS_APP_BUNDLE_IDS = new Set([
   "com.sabq.sabqorg",
   "com.sabq.smart",
+  "com.sabqorg.sabq",
+  "com.sabqorg.sabq.dev",
 ]);
 
 type PushDeviceRow = {

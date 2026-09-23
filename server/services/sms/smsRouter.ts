@@ -9,6 +9,7 @@
  */
 import { bevatelProvider } from "./bevatelProvider";
 import { twilioProvider } from "./twilioProvider";
+import { consoleProvider } from "./consoleProvider";
 import type { SmsProvider, SmsProviderName, SmsSendResult } from "./types";
 
 export interface SmsRouterDeps {
@@ -32,7 +33,7 @@ function bevatelCountryCodes(env: NodeJS.ProcessEnv): string[] {
 /** ترتيب المحاولة لرقم معيّن. */
 export function orderProviders(to: string, deps: SmsRouterDeps = {}): SmsProvider[] {
   const env = deps.env ?? process.env;
-  const all = deps.providers ?? [bevatelProvider, twilioProvider];
+  const all = deps.providers ?? [bevatelProvider, twilioProvider, consoleProvider];
   const configured = all.filter((p) => p.isConfigured());
   if (configured.length === 0) return [];
 
@@ -45,6 +46,7 @@ export function orderProviders(to: string, deps: SmsRouterDeps = {}): SmsProvide
   const sorted = [...configured].sort((a, b) => {
     const rank = (p: SmsProvider) => {
       // Bevatel لا يخدم هذه الدولة → آخر الترتيب مهما كان الأساس.
+      if (p.name === "console") return 3; // تطويري: آخر الطابور دائمًا
       if (p.name === "bevatel" && !bevatelServes) return 2;
       return p.name === primaryName ? 0 : 1;
     };
@@ -70,7 +72,7 @@ export async function sendSms(to: string, body: string, deps: SmsRouterDeps = {}
 }
 
 export function isAnySmsProviderConfigured(): boolean {
-  return [bevatelProvider, twilioProvider].some((p) => p.isConfigured());
+  return [bevatelProvider, twilioProvider, consoleProvider].some((p) => p.isConfigured());
 }
 
 export function maskPhone(phone: string): string {
