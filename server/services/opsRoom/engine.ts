@@ -94,14 +94,15 @@ export class OpsRoomEngine {
     data?: Record<string, unknown>,
   ): Promise<OpsTaskRow> {
     const from = row.status as OpsTaskStatus;
+    const expected = { status: row.status, attempts: row.attempts, startedAt: row.startedAt };
     if (from === to) {
-      const same = await this.store.updateTask(row.id, { ...patch, updatedAt: this.now() });
+      const same = await this.store.updateTask(row.id, { ...patch, updatedAt: this.now() }, expected);
       return same ?? row;
     }
     if (!canTransition(from, to)) {
       throw new OpsError(409, `انتقال غير مسموح: ${from} → ${to} (${row.stepKey ?? "main"})`);
     }
-    const updated = await this.store.updateTask(row.id, { ...patch, status: to, updatedAt: this.now() });
+    const updated = await this.store.updateTask(row.id, { ...patch, status: to, updatedAt: this.now() }, expected);
     if (!updated) throw new OpsError(404, "المهمة غير موجودة");
     await this.event(row.parentId ?? row.id, row.parentId ? row.id : null, actor.type, actor.id, eventType, messageAr, {
       statusFrom: from,
@@ -233,6 +234,16 @@ export class OpsRoomEngine {
     if (await this.deps.isPaused()) return false;
 
     const steps = await this.store.listSteps(mainId);
+    // Durable lease: startedAt + the declared agent timeout + a small grace.
+    // Recovery increments attempts through the normal claim path and fences
+    // late results with status/attempt/startedAt in the database update.
+    for (const step of steps) {
+      if (step.status === "running" && step.startedAt &&
+          this.now().getTime() > step.startedAt.getTime() + step.timeoutMs + 30000) {
+        await this.failStep(mainId, step, "انتهت مهلة التنفيذ دون نتيجة محفوظة؛ استعادة بعد توقف العامل", step.startedAt.getTime());
+        return true;
+      }
+    }
     const byKey = new Map(steps.map((s) => [s.stepKey!, s]));
     const completedKeys = new Set(steps.filter((s) => s.status === "completed").map((s) => s.stepKey!));
 
@@ -329,7 +340,7 @@ export class OpsRoomEngine {
       },
       isCancelled: async () => {
         const cur = await this.store.getTask(step.id);
-        return !cur || cur.status !== "running";
+        return !cur || cur.status !== "running" || cur.attempts !== step.attempts || cur.startedAt?.getTime() !== step.startedAt?.getTime();
       },
     };
 
@@ -346,22 +357,23 @@ export class OpsRoomEngine {
     };
 
     let result: Awaited<ReturnType<typeof handler.run>>;
+    let executionTimer: ReturnType<typeof setTimeout> | undefined;
     try {
       result = await Promise.race([
         handler.run(guardedCtx),
         new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new OpsError(504, `تجاوز الوكيل مهلة التنفيذ (${Math.round(step.timeoutMs / 1000)} ث)`)), step.timeoutMs),
+          executionTimer = setTimeout(() => reject(new OpsError(504, `تجاوز الوكيل مهلة التنفيذ (${Math.round(step.timeoutMs / 1000)} ث)`)), step.timeoutMs),
         ),
       ]);
     } catch (err) {
       await this.failStep(mainId, step, err instanceof Error ? err.message : String(err), startedAt);
       return;
-    }
+    } finally { clearTimeout(executionTimer); }
 
     // أوقف الإنسان المهمة أثناء التنفيذ، أو انتهت مهلتها وبدأت محاولة أحدث؟
     // نتجاهل هذا المخرج ولا نحفظه (رقم المحاولة هو رمز الجيل)
     const current = await this.store.getTask(step.id);
-    if (!current || current.status !== "running" || current.attempts !== step.attempts) {
+    if (!current || current.status !== "running" || current.attempts !== step.attempts || current.startedAt?.getTime() !== step.startedAt?.getTime()) {
       await this.event(mainId, step.id, "system", "coordinator", "stopped", `تجاهل المنسق مخرج ${this.agentName(slug)} لأن المهمة أُوقفت أثناء التنفيذ`);
       return;
     }
@@ -437,7 +449,7 @@ export class OpsRoomEngine {
     const durationMs = this.now().getTime() - startedAt;
     const current = await this.store.getTask(step.id);
     // محاولة أحدث قائمة؟ فشل هذه المحاولة القديمة لا يخصها
-    if (!current || current.status !== "running" || current.attempts !== step.attempts) return;
+    if (!current || current.status !== "running" || current.attempts !== step.attempts || current.startedAt?.getTime() !== step.startedAt?.getTime()) return;
     const slug = step.agentSlug as OpsAgentSlug;
     if (current.attempts < current.maxAttempts) {
       await this.transition(
@@ -463,8 +475,11 @@ export class OpsRoomEngine {
 
   /** كل المهام الرئيسية النشطة التي قد تملك خطوات مستحقة — للكرون. */
   async pumpAll(): Promise<number> {
-    const mains = await this.store.listMainTasks({ statuses: ["ready", "running", "waiting"], limit: 50 });
-    for (const m of mains) await this.pump(m.id);
+    const mains = await this.store.listMainTasks({ statuses: ["ready", "running", "waiting"], limit: 50, oldestFirst: true });
+    for (const m of mains) {
+      await this.pump(m.id);
+      await this.store.updateTask(m.id, { updatedAt: this.now() });
+    }
     return mains.length;
   }
 

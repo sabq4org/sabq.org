@@ -1,4 +1,4 @@
-import cron from 'node-cron';
+import cron from '../leaderCron';
 import { log } from "../utils/logger";
 import { db, pool } from '../db';
 import { sql } from 'drizzle-orm';

@@ -1,3 +1,5 @@
+import { registerShutdownHook } from "../shutdown";
+import { isLeader } from "../leaderElection";
 /**
  * Push Notification Worker
  * 
@@ -39,7 +41,8 @@ import {
 // Topic prefix - types starting with "topic_" are sent to Firebase Topics
 const TOPIC_PREFIX = "topic_";
 
-const PUSH_CHECK_INTERVAL = 600000; // Check every 10 minutes
+const PUSH_CHECK_INTERVAL = 15_000; // Bound send-now queue delay.
+let processing = false;
 let pushWorkerInterval: NodeJS.Timeout | null = null;
 let pendingCampaignRun = false;
 
@@ -48,6 +51,7 @@ let pendingCampaignRun = false;
  * Uses APNs for iOS and FCM for Android (hybrid mode)
  */
 export function startPushWorker(): void {
+  if (pushWorkerInterval) return;
   const fcmEnabled = isAnyFcmConfigured();
   const apnsEnabled = isApnsConfigured();
   
@@ -86,11 +90,16 @@ export function stopPushWorker(): void {
  */
 async function processPendingCampaigns(): Promise<void> {
   // setInterval can fire again while a large campaign is still pacing. Keep
-  // the database poll itself single-flight; the broadcast lease below is a
-  // second guard shared with quick-send.
-  if (pendingCampaignRun) return;
-  pendingCampaignRun = true;
+  // the database poll itself single-flight (and leader-only); the broadcast
+  // lease below is a second guard shared with quick-send.
+  if (!isLeader() || processing) return;
+  processing = true;
   try {
+    // A crashed sender may already have delivered notifications. Quarantine,
+    // never blindly retry; confirmed batch counts/events remain for review.
+    await db.update(pushCampaigns).set({ status: "delivery_unknown", updatedAt: new Date() })
+      .where(and(eq(pushCampaigns.status, "sending"),
+        sql`${pushCampaigns.updatedAt} < (clock_timestamp() at time zone 'UTC') - interval '30 minutes'`));
     const now = new Date();
     
     // Find campaigns that are scheduled and ready to send
@@ -111,13 +120,12 @@ async function processPendingCampaigns(): Promise<void> {
     log.info(`[PushWorker] Found ${pendingCampaigns.length} campaigns ready to send`);
 
     for (const campaign of pendingCampaigns) {
+      if (!isLeader()) break;
       await processCampaign(campaign);
     }
   } catch (error) {
     console.error("[PushWorker] Error processing campaigns:", error);
-  } finally {
-    pendingCampaignRun = false;
-  }
+  } finally { processing = false; }
 }
 
 /**
@@ -141,6 +149,9 @@ async function processCampaign(campaign: typeof pushCampaigns.$inferSelect): Pro
   let broadcastLease: ReturnType<typeof acquirePushBroadcast>;
   let ownsCampaign = false;
   try {
+    // Leadership may have flipped since the caller's per-iteration check;
+    // re-verify before acquiring the (process-local) broadcast capacity lease.
+    if (!isLeader()) return;
     broadcastLease = acquirePushBroadcast("news");
     broadcastLease.start();
   } catch (error) {
@@ -164,6 +175,7 @@ async function processCampaign(campaign: typeof pushCampaigns.$inferSelect): Pro
       .where(and(
         eq(pushCampaigns.id, campaign.id),
         eq(pushCampaigns.status, "scheduled"),
+        lte(pushCampaigns.scheduledAt, new Date()),
       ))
       .returning({ id: pushCampaigns.id });
 
@@ -218,7 +230,7 @@ async function processCampaign(campaign: typeof pushCampaigns.$inferSelect): Pro
               totalDevices: 0,
               updatedAt: new Date() 
             })
-            .where(eq(pushCampaigns.id, campaign.id));
+            .where(and(eq(pushCampaigns.id, campaign.id), eq(pushCampaigns.status, "sending")));
           return;
         }
         
@@ -246,7 +258,7 @@ async function processCampaign(campaign: typeof pushCampaigns.$inferSelect): Pro
           );
           
           const iosTokens = iosDevices.map(d => d.deviceToken);
-          const apnsResults = await sendApnsBatch(iosTokens, apnsPayload, campaign.id);
+          const apnsResults = await recordDelivery(campaign.id, "sendApnsBatch", () => sendApnsBatch(iosTokens, apnsPayload, campaign.id));
           log.info(`[PushWorker] APNs (iOS): ${apnsResults.success}/${iosDevices.length}`);
           totalSuccess += apnsResults.success;
           totalFailure += apnsResults.failed;
@@ -256,10 +268,10 @@ async function processCampaign(campaign: typeof pushCampaigns.$inferSelect): Pro
         
         // Send to Android via FCM
         if (androidDevices.length > 0 && isAnyFcmConfigured()) {
-          const fcmResults = await sendToFcmTargets(
+          const fcmResults = await recordDelivery(campaign.id, "sendToFcmTargets", () => sendToFcmTargets(
             androidDevices.map(d => ({ token: d.deviceToken, bundleId: d.bundleId })),
             message,
-          );
+          ));
           log.info(`[PushWorker] FCM (Android): ${fcmResults.successCount}/${androidDevices.length}`);
           totalSuccess += fcmResults.successCount;
           totalFailure += fcmResults.failureCount;
@@ -277,7 +289,7 @@ async function processCampaign(campaign: typeof pushCampaigns.$inferSelect): Pro
             failedCount: totalFailure,
             updatedAt: new Date(),
           })
-          .where(eq(pushCampaigns.id, campaign.id));
+          .where(and(eq(pushCampaigns.id, campaign.id), eq(pushCampaigns.status, "sending")));
 
         log.info(`[PushWorker] Campaign ${campaign.id} sent to ${totalSuccess}/${allDevices.length} devices`);
         return;
@@ -325,7 +337,7 @@ async function processCampaign(campaign: typeof pushCampaigns.$inferSelect): Pro
           );
           
           const iosTokens = iosTopicDevices.map(d => d.deviceToken);
-          const apnsResults = await sendApnsBatch(iosTokens, apnsPayload, campaign.id);
+          const apnsResults = await recordDelivery(campaign.id, "sendApnsBatch", () => sendApnsBatch(iosTokens, apnsPayload, campaign.id));
           log.info(`[PushWorker] APNs topic "${topicName}": ${apnsResults.success}/${iosDeviceCount}`);
           iosSuccess = apnsResults.success;
           iosFailure = apnsResults.failed;
@@ -353,7 +365,7 @@ async function processCampaign(campaign: typeof pushCampaigns.$inferSelect): Pro
       
       // Send to Android via FCM topic (only if FCM is configured)
       if (androidDeviceCount > 0 && isFcmConfigured()) {
-        const fcmResult = await sendToTopic(topicName, message);
+        const fcmResult = await recordDelivery(campaign.id, "sendToTopic", () => sendToTopic(topicName, message));
         if (fcmResult.success) {
           log.info(`[PushWorker] FCM topic "${topicName}": sent to ~${androidDeviceCount} Android devices`);
           androidSuccess = true;
@@ -379,7 +391,7 @@ async function processCampaign(campaign: typeof pushCampaigns.$inferSelect): Pro
           failedCount: totalFailure,
           updatedAt: new Date(),
         })
-        .where(eq(pushCampaigns.id, campaign.id));
+        .where(and(eq(pushCampaigns.id, campaign.id), eq(pushCampaigns.status, "sending")));
 
       log.info(`[PushWorker] Topic campaign ${campaign.id} sent to "${topicName}" - iOS: ${iosSuccess}/${iosDeviceCount}, Android: ${androidSuccess ? androidDeviceCount : 0}/${androidDeviceCount}`);
       return;
@@ -398,7 +410,7 @@ async function processCampaign(campaign: typeof pushCampaigns.$inferSelect): Pro
           totalDevices: 0,
           updatedAt: new Date() 
         })
-        .where(eq(pushCampaigns.id, campaign.id));
+        .where(and(eq(pushCampaigns.id, campaign.id), eq(pushCampaigns.status, "sending")));
       return;
     }
 
@@ -426,7 +438,7 @@ async function processCampaign(campaign: typeof pushCampaigns.$inferSelect): Pro
       );
       
       const iosTokens = iosDevices.map(d => d.deviceToken);
-      const apnsResults = await sendApnsBatch(iosTokens, apnsPayload, campaign.id);
+      const apnsResults = await recordDelivery(campaign.id, "sendApnsBatch", () => sendApnsBatch(iosTokens, apnsPayload, campaign.id));
       log.info(`[PushWorker] APNs (iOS): ${apnsResults.success}/${iosDevices.length}`);
       totalSuccess += apnsResults.success;
       totalFailure += apnsResults.failed;
@@ -436,10 +448,10 @@ async function processCampaign(campaign: typeof pushCampaigns.$inferSelect): Pro
     
     // Send to Android via FCM
     if (androidDevices.length > 0 && isAnyFcmConfigured()) {
-      const fcmResults = await sendToFcmTargets(
+      const fcmResults = await recordDelivery(campaign.id, "sendToFcmTargets", () => sendToFcmTargets(
         androidDevices.map(d => ({ token: d.deviceToken, bundleId: d.bundleId })),
         message,
-      );
+      ));
       log.info(`[PushWorker] FCM (Android): ${fcmResults.successCount}/${androidDevices.length}`);
       totalSuccess += fcmResults.successCount;
       totalFailure += fcmResults.failureCount;
@@ -458,7 +470,7 @@ async function processCampaign(campaign: typeof pushCampaigns.$inferSelect): Pro
         failedCount: totalFailure,
         updatedAt: new Date(),
       })
-      .where(eq(pushCampaigns.id, campaign.id));
+      .where(and(eq(pushCampaigns.id, campaign.id), eq(pushCampaigns.status, "sending")));
 
     log.info(`[PushWorker] Campaign ${campaign.id} sent: ${totalSuccess} success, ${totalFailure} failed`);
   } catch (error) {
@@ -472,10 +484,10 @@ async function processCampaign(campaign: typeof pushCampaigns.$inferSelect): Pro
     await db
       .update(pushCampaigns)
       .set({ 
-        status: "draft", // Reset to draft so it can be retried
+        status: "delivery_unknown", // Delivery may have happened; manual reconciliation required
         updatedAt: new Date() 
       })
-      .where(eq(pushCampaigns.id, campaign.id));
+      .where(and(eq(pushCampaigns.id, campaign.id), eq(pushCampaigns.status, "sending")));
   } finally {
     broadcastLease.release();
   }
@@ -769,3 +781,31 @@ export async function sendBreakingNewsPush(
 }
 
 export { processPendingCampaigns };
+
+/** Durable provider-attempt journal, without device tokens or message bodies. */
+async function recordDelivery<T>(campaignId: string, provider: string, send: () => Promise<T>): Promise<T> {
+  if (!isLeader()) throw new Error("Campaign leadership lost before dispatch");
+  const [active] = await db.update(pushCampaigns).set({ updatedAt: new Date() })
+    .where(and(eq(pushCampaigns.id, campaignId), eq(pushCampaigns.status, "sending")))
+    .returning({ id: pushCampaigns.id });
+  if (!active) throw new Error("Campaign is no longer owned by sender");
+  const [attempt] = await db.insert(pushCampaignEvents).values({ campaignId,
+    eventType: "dispatching", metadata: { action: provider } }).returning({ id: pushCampaignEvents.id });
+  const result = await send();
+  const counts = result as { success?: number | boolean; failed?: number; successCount?: number; failureCount?: number };
+  const sent = typeof counts.success === "number" ? counts.success : counts.successCount ?? 0;
+  const failed = counts.failed ?? counts.failureCount ?? 0;
+  await db.transaction(async tx => {
+    await tx.update(pushCampaignEvents).set({ eventType: "dispatch_complete" })
+      .where(eq(pushCampaignEvents.id, attempt.id));
+    await tx.update(pushCampaigns).set({ sentCount: sql`coalesce(${pushCampaigns.sentCount}, 0) + ${sent}`,
+      failedCount: sql`coalesce(${pushCampaigns.failedCount}, 0) + ${failed}`, updatedAt: new Date() })
+      .where(and(eq(pushCampaigns.id, campaignId), eq(pushCampaigns.status, "sending")));
+  });
+  return result;
+}
+
+registerShutdownHook("push-worker", async () => {
+  stopPushWorker();
+  while (processing) await new Promise(resolve => setTimeout(resolve, 25));
+}, "drain");

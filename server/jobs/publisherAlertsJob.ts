@@ -1,4 +1,4 @@
-import cron from "node-cron";
+import cron from "../leaderCron";
 import {
   runPublisherDailyAlerts,
   sendPublisherMonthlyReports,

@@ -1,3 +1,4 @@
+import { registerShutdownHook } from "../shutdown";
 import { pool } from "../db";
 
 /**
@@ -227,12 +228,12 @@ export function initArticleViewCounters(): void {
   }, MERGE_INTERVAL_MS);
   mergeTimer.unref?.();
 
-  const onExit = () => {
-    void (async () => {
-      await flushArticleViewCounters();
-      await mergeArticleViewDeltas();
-    })();
-  };
-  process.on("SIGTERM", onExit);
-  process.on("SIGINT", onExit);
+  registerShutdownHook("article-view-counters", async () => {
+    if (flushTimer) clearInterval(flushTimer);
+    if (mergeTimer) clearInterval(mergeTimer);
+    while (flushing || merging) await new Promise(resolve => setTimeout(resolve, 25));
+    await flushArticleViewCounters();
+    // Persisting deltas is sufficient: a successor can merge them later.
+    if (pending.size) throw new Error("Article view increments remain unflushed");
+  });
 }
