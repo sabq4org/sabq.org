@@ -260,6 +260,14 @@ async function countActiveEntriesByContest(contestIds: string[]): Promise<Map<st
   return map;
 }
 
+function resultWithPenalties(contest: PredictionContest): unknown {
+  if (contest.status !== "settled" || !contest.resultPayload) return null;
+  const res = contest.resultPayload as Record<string, unknown>;
+  const meta = (contest.metadata ?? {}) as Record<string, unknown>;
+  const penalties = res.penalties ?? meta.penalties ?? null;
+  return { ...res, penalties };
+}
+
 function serializeContest(
   contest: PredictionContest,
   myEntry?: PredictionEntry,
@@ -276,7 +284,7 @@ function serializeContest(
     settledAt: contest.settledAt,
     metadata: contest.metadata,
     // النتيجة تُعرض بعد التسوية فقط — لا تسريب قبل الإغلاق
-    result: contest.status === "settled" ? contest.resultPayload : null,
+    result: resultWithPenalties(contest),
     /** عدد المشاركين النشطين في توقّع هذه المسابقة — لإثبات اجتماعي على البطاقة. */
     entriesCount,
     myEntry: myEntry && myEntry.status === "active"
@@ -310,6 +318,17 @@ export async function upsertEntry(params: {
     .where(eq(predictionContests.id, params.contestId))
     .limit(1);
   if (!contest) throw new PredictionError(PREDICTION_ERROR_CODES.CONTEST_NOT_FOUND, 404);
+
+  // بطولة موقوفة/مسودة/منتهية لا تقبل توقعات جديدة حتى لو بقيت مسابقاتها open —
+  // بدون هذا الحارس كان الإيقاف التشغيلي (paused) يوقف العرض ولا يوقف الكتابة.
+  const [competition] = await db
+    .select({ status: predictionCompetitions.status })
+    .from(predictionCompetitions)
+    .where(eq(predictionCompetitions.id, contest.competitionId))
+    .limit(1);
+  if (!competition || competition.status !== "active") {
+    throw new PredictionError(PREDICTION_ERROR_CODES.COMPETITION_DISABLED, 409);
+  }
 
   const now = new Date();
   if (contest.status !== "open" || now < contest.opensAt) {
@@ -364,10 +383,15 @@ export async function withdrawEntry(contestId: string, userId: string) {
     throw new PredictionError(PREDICTION_ERROR_CODES.WITHDRAWAL_NOT_ALLOWED, 409);
   }
 
-  await db
+  const withdrawn = await db
     .update(predictionEntries)
     .set({ status: "withdrawn", updatedAt: new Date() })
-    .where(and(eq(predictionEntries.contestId, contestId), eq(predictionEntries.userId, userId)));
+    .where(and(eq(predictionEntries.contestId, contestId), eq(predictionEntries.userId, userId)))
+    .returning({ id: predictionEntries.id });
+  // سحب ما لا وجود له كان يعيد 200 صامتة — الآن 404 صريحة.
+  if (withdrawn.length === 0) {
+    throw new PredictionError(PREDICTION_ERROR_CODES.ENTRY_NOT_FOUND, 404);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -460,6 +484,108 @@ export async function getUserLedger(
   };
 }
 
+// ---------------------------------------------------------------------------
+// توقعاتي — كل ما توقّعه المستخدم مع نتيجته وجوائزه (تبويب المراجعة في الويب).
+// تفاصيل البطولة تقتطع المسوّاة لأحدث 20، فتضيع مراجعة التوقعات القديمة منتصف
+// الموسم — هذه النقطة تعيد تاريخ المستخدم كاملًا بكيرسور ثابت.
+// ---------------------------------------------------------------------------
+
+export async function getUserEntries(
+  userId: string,
+  options: { competitionSlug?: string; cursor?: string; limit?: number } = {},
+) {
+  const limit = Math.min(options.limit ?? 30, 100);
+  const conditions: SQL[] = [
+    eq(predictionEntries.userId, userId),
+    eq(predictionEntries.status, "active"),
+    sql`${predictionContests.status} <> 'draft'`,
+  ];
+  if (options.competitionSlug) {
+    const [comp] = await db
+      .select({ id: predictionCompetitions.id })
+      .from(predictionCompetitions)
+      .where(eq(predictionCompetitions.slug, options.competitionSlug))
+      .limit(1);
+    if (!comp) return { items: [], nextCursor: null };
+    conditions.push(eq(predictionContests.competitionId, comp.id));
+  }
+  // Keyset على (locksAt, contestId) تنازليًا — الأحدث موعدًا أولًا وصفحات ثابتة
+  if (options.cursor) {
+    const decoded = decodeCursor(options.cursor);
+    if (decoded) {
+      conditions.push(
+        sql`(${predictionContests.locksAt}, ${predictionContests.id}) < (${decoded.createdAt}, ${decoded.id})`,
+      );
+    }
+  }
+
+  const rows = await db
+    .select({ entry: predictionEntries, contest: predictionContests })
+    .from(predictionEntries)
+    .innerJoin(predictionContests, eq(predictionContests.id, predictionEntries.contestId))
+    .where(and(...conditions))
+    .orderBy(desc(predictionContests.locksAt), desc(predictionContests.id))
+    .limit(limit + 1);
+  const page = rows.slice(0, limit);
+  const nextCursor = rows.length > limit
+    ? encodeCursor({
+        createdAt: page[page.length - 1].contest.locksAt,
+        id: page[page.length - 1].contest.id,
+      })
+    : null;
+
+  // جوائز الدفتر لكل مسابقة في الصفحة — المبرر («نتيجة دقيقة») مع النقاط
+  const awardsByContest = new Map<
+    string,
+    { points: number; reasonCode: string; reasonLabelAr: string; breakdown: unknown }[]
+  >();
+  const contestIds = page.map((r) => r.contest.id);
+  if (contestIds.length > 0) {
+    const awardRows = await db
+      .select()
+      .from(predictionPointsLedger)
+      .where(and(
+        eq(predictionPointsLedger.userId, userId),
+        inArray(predictionPointsLedger.contestId, contestIds),
+      ))
+      .orderBy(desc(predictionPointsLedger.createdAt));
+    for (const row of awardRows) {
+      if (!row.contestId) continue;
+      const list = awardsByContest.get(row.contestId) ?? [];
+      list.push({
+        points: row.points,
+        reasonCode: row.reasonCode,
+        reasonLabelAr: REASON_LABELS_AR[row.reasonCode as ReasonCode] ?? row.reasonCode,
+        breakdown: row.breakdown,
+      });
+      awardsByContest.set(row.contestId, list);
+    }
+  }
+
+  return {
+    items: page.map(({ entry, contest }) => {
+      const awards = awardsByContest.get(contest.id) ?? [];
+      return {
+        contestId: contest.id,
+        contestType: contest.contestType,
+        status: contest.status,
+        externalRef: contest.externalRef,
+        locksAt: contest.locksAt,
+        settledAt: contest.settledAt,
+        metadata: contest.metadata,
+        // نفس قاعدة serializeContest: النتيجة بعد التسوية فقط
+        result: resultWithPenalties(contest),
+        payload: entry.predictionPayload,
+        submittedAt: entry.submittedAt,
+        updatedAt: entry.updatedAt,
+        awards,
+        totalPoints: awards.reduce((sum, award) => sum + award.points, 0),
+      };
+    }),
+    nextCursor,
+  };
+}
+
 function encodeCursor(cursor: { createdAt: Date; id: string }): string {
   return Buffer.from(`${cursor.createdAt.toISOString()}|${cursor.id}`).toString("base64url");
 }
@@ -485,7 +611,7 @@ export async function getLeaderboard(params: {
   offset?: number;
   limit?: number;
 }) {
-  const limit = Math.min(params.limit ?? 20, 100);
+  const limit = Math.min(params.limit ?? 50, 100);
   const offset = Math.max(params.offset ?? 0, 0);
 
   const [competition] = await db
@@ -510,35 +636,50 @@ export async function getLeaderboard(params: {
       .groupBy(predictionPointsLedger.userId),
   );
 
-  const rows = await db
-    .with(totals)
-    .select({
-      userId: totals.userId,
-      points: totals.points,
-      exactCount: totals.exactCount,
-      rank: sql<number>`rank() over (order by ${totals.points} desc, ${totals.exactCount} desc, ${totals.userId} asc)::int`,
-      firstName: users.firstName,
-      lastName: users.lastName,
-      profileImageUrl: users.profileImageUrl,
-    })
-    .from(totals)
-    .innerJoin(users, eq(users.id, totals.userId))
-    .orderBy(desc(totals.points), desc(totals.exactCount), asc(totals.userId))
-    .limit(limit)
-    .offset(offset);
-
-  // ترتيب المستخدم الحالي حتى لو لم يظهر في الصفحة
-  let myRank: { rank: number; points: number } | null = null;
-  if (params.userId) {
-    const [mine] = await db
+  const [countResult, rows] = await Promise.all([
+    db
+      .with(totals)
+      .select({ total: sql<number>`count(*)::int` })
+      .from(totals),
+    db
       .with(totals)
       .select({
         userId: totals.userId,
         points: totals.points,
+        exactCount: totals.exactCount,
         rank: sql<number>`rank() over (order by ${totals.points} desc, ${totals.exactCount} desc, ${totals.userId} asc)::int`,
+        firstName: users.firstName,
+        lastName: users.lastName,
+        profileImageUrl: users.profileImageUrl,
       })
       .from(totals)
-      .where(sql`${totals.userId} = ${params.userId}`);
+      .innerJoin(users, eq(users.id, totals.userId))
+      .orderBy(desc(totals.points), desc(totals.exactCount), asc(totals.userId))
+      .limit(limit)
+      .offset(offset),
+  ]);
+
+  const totalCount = countResult[0]?.total ?? rows.length;
+
+  // ترتيب المستخدم الحالي حتى لو لم يظهر في الصفحة.
+  // rank() نافذة تُحسب بعد WHERE، ففلترة totals على المستخدم مباشرة تترك صفًا
+  // واحدًا وتعيد #1 دائمًا — الترتيب يُحسب على كامل المشاركين ثم تأتي الفلترة فوقه.
+  let myRank: { rank: number; points: number } | null = null;
+  if (params.userId) {
+    const ranked = db.$with("ranked").as(
+      db
+        .select({
+          userId: totals.userId,
+          points: totals.points,
+          rank: sql<number>`rank() over (order by ${totals.points} desc, ${totals.exactCount} desc, ${totals.userId} asc)::int`.as("rank"),
+        })
+        .from(totals),
+    );
+    const [mine] = await db
+      .with(totals, ranked)
+      .select({ points: ranked.points, rank: ranked.rank })
+      .from(ranked)
+      .where(eq(ranked.userId, params.userId));
     if (mine) myRank = { rank: mine.rank, points: mine.points };
   }
 
@@ -556,6 +697,7 @@ export async function getLeaderboard(params: {
       points: row.points,
       exactCount: row.exactCount,
     })),
+    totalCount,
     myRank,
     offset,
     limit,
@@ -632,7 +774,7 @@ export async function getContestSettlement(contestId: string, userId?: string) {
 
   return {
     contestId,
-    result: contest.resultPayload,
+    result: resultWithPenalties(contest),
     settledAt: contest.settledAt,
     summary: settlement?.summary ?? null,
     myAwards,

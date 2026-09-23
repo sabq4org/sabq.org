@@ -74,6 +74,24 @@ describe("articleViewCounterService", () => {
     expect(insertCalls[1][1]).toEqual(["article-a", 9]);
   });
 
+  it("getLiveArticleViews caches the read for the micro-TTL window (single flight)", async () => {
+    const query = vi.fn().mockResolvedValue({ rows: [{ views: 7 }] });
+    vi.doMock("../../server/db", () => ({ pool: { query } }));
+
+    const counter = await import("../../server/services/articleViewCounterService");
+    const [first, second] = await Promise.all([
+      counter.getLiveArticleViews("article-a"),
+      counter.getLiveArticleViews("article-a"),
+    ]);
+    const third = await counter.getLiveArticleViews("article-a");
+
+    expect(first).toBe(7);
+    expect(second).toBe(7);
+    expect(third).toBe(7);
+    // طلبان متزامنان + طلب لاحق داخل النافذة = استعلام واحد فقط
+    expect(query).toHaveBeenCalledTimes(1);
+  });
+
   it("merges deltas into articles.views with SKIP LOCKED and short local timeouts", async () => {
     const { pool, query } = mockPoolWithClient(async (sql) => {
       if (String(sql).includes("WITH picked")) {
@@ -95,23 +113,5 @@ describe("articleViewCounterService", () => {
     expect(
       query.mock.calls.some(([sql]) => String(sql).includes("SET LOCAL statement_timeout")),
     ).toBe(true);
-  });
-
-  it("getLiveArticleViews caches the read for the micro-TTL window (single flight)", async () => {
-    const query = vi.fn().mockResolvedValue({ rows: [{ views: 7 }] });
-    vi.doMock("../../server/db", () => ({ pool: { query } }));
-
-    const counter = await import("../../server/services/articleViewCounterService");
-    const [first, second] = await Promise.all([
-      counter.getLiveArticleViews("article-a"),
-      counter.getLiveArticleViews("article-a"),
-    ]);
-    const third = await counter.getLiveArticleViews("article-a");
-
-    expect(first).toBe(7);
-    expect(second).toBe(7);
-    expect(third).toBe(7);
-    // طلبان متزامنان + طلب لاحق داخل النافذة = استعلام واحد فقط
-    expect(query).toHaveBeenCalledTimes(1);
   });
 });

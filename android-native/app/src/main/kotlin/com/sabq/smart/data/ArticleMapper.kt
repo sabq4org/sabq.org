@@ -29,6 +29,15 @@ fun ApiArticle.toDomain(webOrigin: String = "https://sabq.org"): Article {
         else -> ArticleCategory.fromArabicSection(category?.name ?: categoryName)
     }
 
+    // A missing/unrecognised category may use the local colour, but must not
+    // claim that the article belongs to local news.
+    val resolvedCategoryLabel = sequenceOf(category?.name, categoryName)
+        .firstOrNull { !it.isNullOrBlank() }?.trim()
+        ?: ArticleCategory.entries.firstOrNull {
+            it.key == (category?.slug ?: categorySlug)
+        }?.title
+        ?: "أخبار"
+
     val resolvedTitle = title.ifBlank { "(بدون عنوان)" }
     val resolvedExcerpt = excerpt
         ?: aiSummary
@@ -47,6 +56,12 @@ fun ApiArticle.toDomain(webOrigin: String = "https://sabq.org"): Article {
     val breaking = isBreaking == true || newsType?.equals("breaking", ignoreCase = true) == true
 
     val resolvedAuthor = authorName?.takeIf { it.isNotBlank() } ?: resolveAuthor(author)
+
+    // الصورة قد تصل حقلًا مسطّحًا (authorImage) أو داخل كائن author المتداخل
+    // (profileImageUrl — شكل /api/opinion). iOS يقرأ الشكلين (APIModels.swift
+    // ‏685-701) وبدون البديل المتداخل تظهر أحرف بدل صور الكتّاب.
+    val absoluteAuthorImage = (authorImage?.takeIf { it.isNotBlank() } ?: resolveAuthorImage(author))
+        ?.let { if (it.startsWith("http")) it else webOrigin + (if (it.startsWith("/")) it else "/$it") }
 
     val resolvedTags: List<String> = extractTags(seo, tags)
         .map { it.trim() }
@@ -81,15 +96,23 @@ fun ApiArticle.toDomain(webOrigin: String = "https://sabq.org"): Article {
         title = resolvedTitle,
         excerpt = resolvedExcerpt,
         category = resolvedCategory,
-        categoryLabel = (category?.name ?: categoryName ?: resolvedCategory.title).trim(),
+        categoryLabel = resolvedCategoryLabel,
         imageUrl = absoluteImageUrl,
         focalPoint = focal,
         readingTime = formatReadingMinutes(readingMinutes) ?: estimateReadingTime(resolvedExcerpt),
         dateFormatted = formatRelativeDate(parsedDate),
         isBreaking = breaking,
         isFeatured = isFeatured == true,
+        isReading = isReading == true,
+        categoryId = (category?.id?.takeIf { it.isNotBlank() } ?: sectionId?.takeIf { it.isNotBlank() }),
+        viewsCount = viewsCount?.takeIf { it >= 0 },
         slug = slug,
         authorName = resolvedAuthor,
+        authorImageUrl = absoluteAuthorImage,
+        authorRole = ArticleByline.resolveAuthorRole(resolvedAuthor, authorId, reporterId, staff?.title),
+        authorSlug = staff?.slug?.takeIf { it.isNotBlank() },
+        isAuthorVerified = staff?.isVerified == true,
+        editorialModifiedAtIso = (seoMetadata?.editorialModifiedAt ?: editorialModifiedAt)?.takeIf { it.isNotBlank() },
         body = body?.takeIf { it.isNotBlank() },
         articleType = articleType,
         authorGender = authorGender,
@@ -147,6 +170,18 @@ private fun resolveAuthor(element: kotlinx.serialization.json.JsonElement?): Str
     }
 }
 
+/**
+ * صورة الكاتب من كائن `author` المتداخل — نفس مفاتيح iOS
+ * (profileImageUrl / profile_image_url / avatar / avatar_url).
+ */
+private fun resolveAuthorImage(element: kotlinx.serialization.json.JsonElement?): String? {
+    val obj = (element as? JsonObject)?.jsonObject ?: return null
+    return listOf("profileImageUrl", "profile_image_url", "avatar", "avatar_url")
+        .firstNotNullOfOrNull { key ->
+            obj[key]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
+        }
+}
+
 private fun formatReadingMinutes(minutes: Int?): String? {
     if (minutes == null || minutes <= 0) return null
     return when (minutes) {
@@ -157,8 +192,9 @@ private fun formatReadingMinutes(minutes: Int?): String? {
     }
 }
 
-/** Backend ships ISO-8601 in publishedAt. Tolerate missing or malformed input. */
-private fun parseDate(raw: String?): ZonedDateTime? {
+/** Backend ships ISO-8601 in publishedAt. Tolerate missing or malformed input.
+ *  Internal لأن شريط الزوايا يعيد استخدامه لتاريخ MuqTopic النسبي. */
+internal fun parseDate(raw: String?): ZonedDateTime? {
     if (raw.isNullOrBlank()) return null
     return runCatching { OffsetDateTime.parse(raw).atZoneSameInstant(ZoneId.of("Asia/Riyadh")) }
         .recoverCatching { ZonedDateTime.parse(raw) }
@@ -179,7 +215,7 @@ private fun parseDate(raw: String?): ZonedDateTime? {
  * `RelativeDateTimeFormatter` doesn't perfectly round-trip the iOS
  * output for Arabic.
  */
-private fun formatRelativeDate(date: ZonedDateTime?): String {
+internal fun formatRelativeDate(date: ZonedDateTime?): String {
     if (date == null) return ""
     val now = ZonedDateTime.now(ZoneId.of("Asia/Riyadh"))
     val diff = Duration.between(date, now)

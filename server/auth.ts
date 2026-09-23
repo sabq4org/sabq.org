@@ -220,7 +220,8 @@ export async function setupAuth(app: Express) {
 
           if (authDebug) console.log("🔑 LocalStrategy: Password valid? true");
 
-          // Check if user can login (not banned or deleted)
+          // Block hard-negative account states (banned/deleted/suspended/locked;
+          // "pending"/unverified stays allowed) — see canUserLogin in schema.
           if (!canUserLogin(user)) {
             const statusMessage = getUserStatusMessage(user);
             console.log("❌ LocalStrategy: User cannot login:", statusMessage);
@@ -267,13 +268,17 @@ export async function setupAuth(app: Express) {
               return done(null, false, { message: "لم نتمكن من الحصول على البريد الإلكتروني من Google" });
             }
 
-            // Check if user exists with this Google ID or email
+            // Check if user exists with this Google ID or email.
+            // المطابقة بـlower(email) لا بالعمود حرفيًا: حسابات قديمة مخزّنة
+            // بأحرف كبيرة لا يجدها الشرط الحرفي، فيُحاوَل الإدراج ويصطدم
+            // بقيد users_email_lower_unique — وصاحب الحساب لا يستطيع الدخول
+            // بـGoogle إطلاقًا (حادثة NODE-EXPRESS-G في Sentry).
             const [existingUser] = await db
               .select()
               .from(users)
               .where(or(
                 eq(users.googleId, googleId),
-                eq(users.email, email.toLowerCase())
+                sql`lower(${users.email}) = ${email.toLowerCase()}`
               ))
               .limit(1);
 
@@ -299,6 +304,7 @@ export async function setupAuth(app: Express) {
               return done(null, {
                 id: existingUser.id,
                 email: existingUser.email,
+                isNewUser: false,
                 isProfileComplete: existingUser.isProfileComplete ?? true, // ✅ Pass profile status
                 twoFactorEnabled: false, // OAuth users don't need 2FA
                 twoFactorMethod: 'authenticator'
@@ -330,6 +336,7 @@ export async function setupAuth(app: Express) {
             return done(null, {
               id: newUserId,
               email: email.toLowerCase(),
+              isNewUser: true,
               isProfileComplete: false, // ✅ New users need to complete onboarding
               twoFactorEnabled: false,
               twoFactorMethod: 'authenticator'
@@ -411,13 +418,15 @@ export async function setupAuth(app: Express) {
               }
             }
 
-            // Check if user exists with this Apple ID or email
+            // Check if user exists with this Apple ID or email.
+            // lower(email) كما في استراتيجية Google أعلاه — الشرط الحرفي يفوّت
+            // الحسابات المخزّنة بأحرف كبيرة فينفجر الإدراج بقيد الفرادة.
             const [existingUser] = await db
               .select()
               .from(users)
               .where(or(
                 eq(users.appleId, appleId),
-                eq(users.email, email.toLowerCase())
+                sql`lower(${users.email}) = ${email.toLowerCase()}`
               ))
               .limit(1);
 
@@ -451,6 +460,7 @@ export async function setupAuth(app: Express) {
               return done(null, {
                 id: existingUser.id,
                 email: existingUser.email,
+                isNewUser: false,
                 isProfileComplete: existingUser.isProfileComplete ?? true, // ✅ Pass profile status
                 twoFactorEnabled: false, // OAuth users don't need 2FA
                 twoFactorMethod: 'authenticator'
@@ -478,6 +488,7 @@ export async function setupAuth(app: Express) {
             return done(null, {
               id: newUserId,
               email: email.toLowerCase(),
+              isNewUser: true,
               isProfileComplete: false, // ✅ New users need to complete onboarding
               twoFactorEnabled: false,
               twoFactorMethod: 'authenticator'

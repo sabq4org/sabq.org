@@ -21,6 +21,7 @@ import {
   insertCalendarReminderSchema,
   updateCalendarAssignmentSchema,
 } from "@shared/schema";
+import { paginationOrReject } from "../utils/pagination";
 
 export function registerCalendarRoutes(app: Express) {
   // ============================================================
@@ -43,8 +44,10 @@ export function registerCalendarRoutes(app: Express) {
           : [req.query.tags];
       }
       if (req.query.searchQuery) filters.searchQuery = req.query.searchQuery;
-      if (req.query.page) filters.page = parseInt(req.query.page as string);
-      if (req.query.limit) filters.limit = parseInt(req.query.limit as string);
+      const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 20, maxLimit: 100, allowPage: true });
+      if (!pg) return;
+      if (req.query.page) filters.page = pg.page;
+      if (req.query.limit) filters.limit = pg.limit;
 
       const result = await storage.getAllCalendarEvents(filters);
       res.json(result);

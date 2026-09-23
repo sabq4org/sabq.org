@@ -857,13 +857,13 @@ export default function EnglishArticlesPage() {
               No articles found
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto rounded-xl border border-border/80 bg-card shadow-none">
               <DndContext
                 sensors={sensors}
                 collisionDetection={closestCenter}
                 onDragEnd={handleDragEnd}
               >
-                <table className="w-full">
+                <table className="w-full min-w-[850px]">
                   <thead className="bg-muted/50 border-b border-border">
                     <tr>
                       {allowDragReorder && (

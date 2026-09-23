@@ -1464,6 +1464,11 @@ export default function UrduArticleEditor() {
         open={showAIImageDialog}
         onClose={() => setShowAIImageDialog(false)}
         initialPrompt={title ? `مضمون کے لیے نمایاں تصویر: ${title}` : "مضمون کے لیے نمایاں تصویر"}
+        articleContext={{
+          title,
+          excerpt,
+          category: allCategories.find((cat) => cat.id === categoryId)?.slug,
+        }}
         onImageGenerated={(url) => {
           setImageUrl(url);
           setShowAIImageDialog(false);

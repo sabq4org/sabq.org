@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
@@ -63,6 +64,7 @@ import com.sabq.smart.feature.settings.SettingsViewModel
 import com.sabq.smart.feature.settings.TermsOfUseScreen
 import com.sabq.smart.ui.components.SabqTabBar
 import com.sabq.smart.ui.theme.SabqTheme
+import com.sabq.smart.data.analytics.SabqAnalytics
 
 /**
  * App routes — one per visible tab plus the inner article detail.
@@ -90,6 +92,9 @@ object SabqRoutes {
     const val RevisionEditor = "revisions/{id}"
     fun revisionEditor(id: String): String = "revisions/${android.net.Uri.encode(id)}"
     const val Opinions = "opinions"
+    /** «الاقتصاد بالأرقام» — نقل الويب /economy (#1493–#1506). */
+    const val Economy = "economy"
+    const val AiTeam = "about/ai-team"
     const val Trending = "trending"
     const val DailyBrief = "brief"
     const val InterestsPicker = "interests/picker"
@@ -227,6 +232,9 @@ fun SabqApp(
     // تحديث مسودات الكاتب عند الدخول وعند عودة التطبيق للواجهة —
     // المخزن يمسح نفسه عند الخروج بمراقبة AuthRepository داخليًا.
     val appContext = androidx.compose.ui.platform.LocalContext.current.applicationContext
+    var showAnalyticsConsent by androidx.compose.runtime.remember {
+        androidx.compose.runtime.mutableStateOf(SabqAnalytics.consentState(appContext) == SabqAnalytics.Consent.UNKNOWN)
+    }
     val revisionsStore = androidx.compose.runtime.remember {
         dagger.hilt.android.EntryPointAccessors.fromApplication(
             appContext,
@@ -246,6 +254,24 @@ fun SabqApp(
         val currentEntry by navController.currentBackStackEntryAsState()
         val currentRoute = currentEntry?.destination?.route
         val currentTab = SabqRoutes.tabFor(currentRoute)
+
+        // One owner for native screen_view events. Sensitive account,
+        // auth, dashboard and editor routes are intentionally excluded.
+        val analyticsEnabled by SabqAnalytics.collectionEnabled.collectAsStateWithLifecycle()
+        androidx.compose.runtime.LaunchedEffect(currentEntry?.id, currentRoute, analyticsEnabled) {
+            val route = currentRoute.orEmpty()
+            val publicRoute = route in setOf(
+                SabqRoutes.Home, SabqRoutes.Explore, SabqRoutes.Search,
+                SabqRoutes.Opinions, SabqRoutes.Trending, SabqRoutes.DailyBrief,
+                SabqRoutes.MomentByMoment, SabqRoutes.LiveCoverage,
+                SabqRoutes.Calendar,
+                SabqRoutes.ArticleDetail, SabqRoutes.CategoryArticles,
+                SabqRoutes.KeywordArticles, SabqRoutes.AuthorArticles,
+                SabqRoutes.WorldCup, SabqRoutes.Predictions, SabqRoutes.GulfCup,
+                SabqRoutes.AsianCup, SabqRoutes.Roshn, SabqRoutes.KingsCup,
+            )
+            if (publicRoute) SabqAnalytics.screen(route)
+        }
 
         // Push-notification deep link. When a notification tap fires
         // MainActivity → PendingPushDeepLink → this VM, navigate to the
@@ -375,6 +401,9 @@ fun SabqApp(
                         onRoshnClick = {
                             navController.navigate(SabqRoutes.Roshn)
                         },
+                        onEconomyClick = {
+                            navController.navigate(SabqRoutes.Economy)
+                        },
                         onCalendarAllClick = {
                             navController.navigate(SabqRoutes.Calendar)
                         },
@@ -493,6 +522,7 @@ fun SabqApp(
                         onNewsletterClick = { navController.navigate(SabqRoutes.Newsletter) },
                         onPrivacyClick = { navController.navigate(SabqRoutes.PrivacyPolicy) },
                         onTermsClick = { navController.navigate(SabqRoutes.TermsOfUse) },
+                        onAiTeamClick = { navController.navigate(SabqRoutes.AiTeam) },
                         onOpenWebsite = { openUrl("https://sabq.org") },
                         onOpenTwitter = { openUrl("https://x.com/sabqorg") },
                         onSubmitOpinionClick = { navController.navigate(SabqRoutes.SubmitOpinion) },
@@ -580,6 +610,17 @@ fun SabqApp(
                 ) {
                     com.sabq.smart.feature.revisions.RevisionEditorScreen(
                         onBack = { navController.popBackStack() },
+                    )
+                }
+                composable(SabqRoutes.AiTeam) {
+                    com.sabq.smart.feature.settings.AiTeamScreen(onBack = { navController.popBackStack() })
+                }
+                composable(SabqRoutes.Economy) {
+                    com.sabq.smart.feature.economy.EconomyScreen(
+                        onBack = { navController.popBackStack() },
+                        onBusinessNewsClick = {
+                            navController.navigate(SabqRoutes.categoryArticles("business", "اقتصاد"))
+                        },
                     )
                 }
                 composable(SabqRoutes.Opinions) {
@@ -1003,6 +1044,7 @@ fun SabqApp(
                         onAuthorClick = { name ->
                             navController.navigate(SabqRoutes.authorArticles(name))
                         },
+                        onOpinionsSeeAll = { navController.navigate(SabqRoutes.Opinions) },
                     )
                 }
                 composable(
@@ -1027,6 +1069,12 @@ fun SabqApp(
                     arguments = listOf(navArgument("keyword") { type = NavType.StringType }),
                 ) { entry ->
                     KeywordArticlesScreen(
+                        onSearchClick = {
+                            navController.navigate(SabqRoutes.Search) {
+                                popUpTo(SabqRoutes.KeywordArticles) { inclusive = true }
+                                launchSingleTop = true
+                            }
+                        },
                         onBack = { navController.popBackStack() },
                         onArticleClick = { article ->
                             article.slug?.let { slug ->
@@ -1099,6 +1147,29 @@ fun SabqApp(
                 CompleteNameScreen(
                     onDone = { /* AuthRepository cache updates → needsDisplayName flips */ },
                     phoneHint = currentUser?.phone,
+                )
+            }
+
+            if (showAnalyticsConsent) {
+                androidx.compose.material3.AlertDialog(
+                    onDismissRequest = {
+                        SabqAnalytics.setConsent(appContext, granted = false)
+                        showAnalyticsConsent = false
+                    },
+                    title = { androidx.compose.material3.Text("تحسين تجربة سبق") },
+                    text = { androidx.compose.material3.Text("السماح بإرسال بيانات استخدام لتحسين التطبيق اختياري، ويمكن سحبه من الإعدادات. يبقى جمع بيانات الإعلانات معطلاً.") },
+                    confirmButton = {
+                        androidx.compose.material3.TextButton(onClick = {
+                            SabqAnalytics.setConsent(appContext, granted = true)
+                            showAnalyticsConsent = false
+                        }) { androidx.compose.material3.Text("السماح") }
+                    },
+                    dismissButton = {
+                        androidx.compose.material3.TextButton(onClick = {
+                            SabqAnalytics.setConsent(appContext, granted = false)
+                            showAnalyticsConsent = false
+                        }) { androidx.compose.material3.Text("رفض") }
+                    },
                 )
             }
         }

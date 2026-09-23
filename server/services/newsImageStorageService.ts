@@ -15,6 +15,28 @@ const LIVE_BROWSER_TTL_SECONDS = 2 * 24 * 60 * 60;
 const LIVE_STALE_WHILE_REVALIDATE_SECONDS = 2 * 60 * 60;
 const VARIANT_WIDTHS = [480, 960, 1600] as const;
 
+// Request-path deadlines. The whole provider step (R2 attempt + Cloudflare
+// Images fallback) must finish well inside Railway's edge timeout, otherwise
+// the editor sees a bare 502 after a minute instead of a clean error in
+// seconds. Each R2 PUT is a few MB at most, so 10s per object is generous.
+const DEFAULT_R2_PUT_TIMEOUT_MS = 10_000;
+const DEFAULT_UPLOAD_BUDGET_MS = 20_000;
+const R2_CLEANUP_TIMEOUT_MS = 8_000;
+const MIN_FALLBACK_BUDGET_MS = 3_000;
+
+function readPositiveIntEnv(name: string, fallback: number): number {
+  const parsed = Number.parseInt(String(process.env[name] ?? ""), 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+export function getR2PutTimeoutMs(): number {
+  return readPositiveIntEnv("NEWS_IMAGES_R2_PUT_TIMEOUT_MS", DEFAULT_R2_PUT_TIMEOUT_MS);
+}
+
+export function getUploadBudgetMs(): number {
+  return readPositiveIntEnv("NEWS_IMAGES_UPLOAD_BUDGET_MS", DEFAULT_UPLOAD_BUDGET_MS);
+}
+
 export const LIVE_NEWS_IMAGE_CACHE_CONTROL =
   `public, max-age=${LIVE_BROWSER_TTL_SECONDS}, s-maxage=${LIVE_BROWSER_TTL_SECONDS}, ` +
   `stale-while-revalidate=${LIVE_STALE_WHILE_REVALIDATE_SECONDS}`;
@@ -28,12 +50,21 @@ export interface NewsImageUploadInput {
   purpose: string;
   metadata?: Record<string, string>;
   rolloutKey?: string;
+  /**
+   * Bypass NEWS_IMAGES_R2_ROLLOUT_PERCENT and never fall back to Cloudflare
+   * Images. Used by Bot Drafts so cover files land on sabq-news-images /
+   * media.sabq.org when R2 is configured.
+   */
+  forceR2?: boolean;
 }
 
 export interface NewsImageUploadResult extends CloudflareUploadResult {
   provider?: NewsImageProvider;
   thumbnailUrl?: string;
   objectKey?: string;
+  /** Source pixel dimensions read while preparing variants (R2 path only). */
+  width?: number;
+  height?: number;
 }
 
 interface R2NewsImageConfig {
@@ -57,7 +88,7 @@ interface PreparedObject {
 export function isNewsImagePurpose(value: unknown): boolean {
   if (typeof value !== "string") return false;
   const purpose = value.trim().toLowerCase();
-  return /^(article|en-article|ur-article|mobile-article|email-article|whatsapp-article)(?:-|$)/.test(
+  return /^(article|en-article|ur-article|mobile-article|email-article|whatsapp-article|bot-article)(?:-|$)/.test(
     purpose,
   );
 }
@@ -124,6 +155,29 @@ function publicObjectUrl(publicUrl: string, key: string): string {
   return `${publicUrl}/${key.split("/").map(encodeURIComponent).join("/")}`;
 }
 
+/** Production R2 public host for news images (`NEWS_IMAGES_R2_PUBLIC_URL`). */
+export const NEWS_IMAGES_R2_PUBLIC_HOST = "https://media.sabq.org";
+
+/**
+ * True when `url` is an https news-image URL on the configured R2 public
+ * origin (media.sabq.org in production) — not Cloudflare Images.
+ */
+export function isNewsImageR2DeliveryUrl(rawUrl: string | undefined | null): rawUrl is string {
+  if (typeof rawUrl !== "string" || !rawUrl.startsWith("https://")) return false;
+  try {
+    const parsed = new URL(rawUrl);
+    if (parsed.hostname === "imagedelivery.net" || parsed.hostname.endsWith(".imagedelivery.net")) {
+      return false;
+    }
+    const allowed = new Set<string>([new URL(NEWS_IMAGES_R2_PUBLIC_HOST).origin]);
+    const config = getR2Config();
+    if (config) allowed.add(new URL(config.publicUrl).origin);
+    return allowed.has(parsed.origin);
+  } catch {
+    return false;
+  }
+}
+
 function safeMetadataValue(value: string): string {
   return value.replace(/[^\x20-\x7E]/g, "_").slice(0, 256);
 }
@@ -131,7 +185,13 @@ function safeMetadataValue(value: string): string {
 async function prepareR2Objects(
   input: NewsImageUploadInput,
   prefix: string,
-): Promise<{ objects: PreparedObject[]; deliveryKey: string; thumbnailKey: string }> {
+): Promise<{
+  objects: PreparedObject[];
+  deliveryKey: string;
+  thumbnailKey: string;
+  width?: number;
+  height?: number;
+}> {
   const originalExtension = extensionForMimeType(input.mimeType);
   const originalKey = `${prefix}/original.${originalExtension}`;
   const original: PreparedObject = {
@@ -172,6 +232,8 @@ async function prepareR2Objects(
     objects: [original, ...variants],
     deliveryKey: variants[variants.length - 1]?.key || originalKey,
     thumbnailKey: variants[0]?.key || originalKey,
+    width: metadata.width,
+    height: metadata.height,
   };
 }
 
@@ -195,11 +257,18 @@ export class NewsImageStorageService {
   }
 
   async upload(input: NewsImageUploadInput): Promise<NewsImageUploadResult> {
-    const rolloutPercent = this.getRolloutPercent();
+    const startedAt = Date.now();
+    const budgetMs = getUploadBudgetMs();
+    const rolloutPercent = input.forceR2 ? 100 : this.getRolloutPercent();
     const rolloutKey = input.rolloutKey || input.metadata?.uploadedBy || input.filename;
+    const editorialPurpose = isNewsImagePurpose(input.purpose);
     const shouldUseR2 =
-      isNewsImagePurpose(input.purpose) &&
-      shouldRouteNewsImageToR2(rolloutKey, rolloutPercent);
+      editorialPurpose &&
+      (input.forceR2 ? this.isR2Configured() : shouldRouteNewsImageToR2(rolloutKey, rolloutPercent));
+
+    if (input.forceR2 && (!editorialPurpose || !this.isR2Configured())) {
+      return { success: false, error: "R2 news-image storage is required but not available" };
+    }
 
     if (shouldUseR2) {
       const config = getR2Config();
@@ -208,8 +277,27 @@ export class NewsImageStorageService {
           return await this.uploadToR2(input, config);
         } catch (error) {
           const message = error instanceof Error ? error.message : "unknown R2 error";
-          console.error(`[News Images] R2 upload failed; using Cloudflare fallback: ${message}`);
+          if (input.forceR2) {
+            console.error(`[News Images] R2-only upload failed (no Cloudflare Images fallback): ${message}`);
+            return { success: false, error: `R2 upload failed (${message})` };
+          }
+          const elapsedMs = Date.now() - startedAt;
+          const remainingMs = budgetMs - elapsedMs;
+          if (remainingMs < MIN_FALLBACK_BUDGET_MS) {
+            // The R2 attempt already consumed the request budget. Chaining a
+            // second 25s provider call here is what turned a slow upload into
+            // a minute-long hang; fail fast instead so the editor can retry.
+            console.error(
+              `[News Images] R2 upload failed after ${elapsedMs}ms; no budget left for Cloudflare fallback: ${message}`,
+            );
+            return { success: false, error: `R2 upload failed (${message}); upload budget exhausted` };
+          }
+          console.error(
+            `[News Images] R2 upload failed after ${elapsedMs}ms; using Cloudflare fallback (${remainingMs}ms left): ${message}`,
+          );
         }
+      } else if (input.forceR2) {
+        return { success: false, error: "R2 news-image storage is required but not available" };
       } else {
         console.error(
           "[News Images] R2 rollout selected but NEWS_IMAGES_R2_* is incomplete; using Cloudflare fallback",
@@ -217,11 +305,16 @@ export class NewsImageStorageService {
       }
     }
 
+    if (input.forceR2) {
+      return { success: false, error: "R2 upload did not complete" };
+    }
+
     const fallback = await cloudflareImagesService.uploadToCloudflare(
       input.buffer,
       input.filename,
       { ...input.metadata, type: input.purpose },
       input.mimeType,
+      { timeoutMs: budgetMs - (Date.now() - startedAt) },
     );
     return {
       ...fallback,
@@ -288,6 +381,14 @@ export class NewsImageStorageService {
           accessKeyId: config.accessKeyId,
           secretAccessKey: config.secretAccessKey,
         },
+        // The SDK default is no socket timeout and 3 attempts; a stalled R2
+        // connection could sit for the full abort window and then retry.
+        // Bound both so the per-PUT abort below is the real ceiling.
+        maxAttempts: 2,
+        requestHandler: {
+          connectionTimeout: 5_000,
+          requestTimeout: getR2PutTimeoutMs(),
+        },
       });
       this.r2ClientFingerprint = fingerprint;
     }
@@ -300,12 +401,16 @@ export class NewsImageStorageService {
   ): Promise<NewsImageUploadResult> {
     const imageId = randomUUID();
     const prefix = buildNewsImageObjectPrefix(new Date(), imageId);
+    const prepareStartedAt = Date.now();
     const prepared = await prepareR2Objects(input, prefix);
+    const prepareMs = Date.now() - prepareStartedAt;
     const client = this.getClient(config);
     const metadata = {
       purpose: safeMetadataValue(input.purpose),
       source: safeMetadataValue(input.metadata?.source || "sabq"),
     };
+    const putTimeoutMs = getR2PutTimeoutMs();
+    const putStartedAt = Date.now();
 
     const results = await Promise.allSettled(
       prepared.objects.map((object) =>
@@ -319,10 +424,11 @@ export class NewsImageStorageService {
             CacheControl: LIVE_NEWS_IMAGE_CACHE_CONTROL,
             Metadata: metadata,
           }),
-          { abortSignal: AbortSignal.timeout(25_000) },
+          { abortSignal: AbortSignal.timeout(putTimeoutMs) },
         ),
       ),
     );
+    const putMs = Date.now() - putStartedAt;
 
     const failed = results.find((result) => result.status === "rejected");
     if (failed) {
@@ -330,20 +436,27 @@ export class NewsImageStorageService {
         .filter((_, index) => results[index]?.status === "fulfilled")
         .map((object) => ({ Key: object.key }));
       if (uploadedKeys.length > 0) {
-        try {
-          await client.send(
+        // Best-effort, off the request path: the editor is already waiting on
+        // the fallback, and orphaned variants under a UUID prefix are harmless.
+        void client
+          .send(
             new DeleteObjectsCommand({
               Bucket: config.bucketName,
               Delete: { Objects: uploadedKeys, Quiet: true },
             }),
-            { abortSignal: AbortSignal.timeout(15_000) },
-          );
-        } catch (cleanupError) {
-          console.error("[News Images] Failed to clean up partial R2 upload", cleanupError);
-        }
+            { abortSignal: AbortSignal.timeout(R2_CLEANUP_TIMEOUT_MS) },
+          )
+          .catch((cleanupError) => {
+            console.error("[News Images] Failed to clean up partial R2 upload", cleanupError);
+          });
       }
       throw failed.reason;
     }
+
+    const totalBytes = prepared.objects.reduce((sum, object) => sum + object.body.length, 0);
+    console.log(
+      `[News Images] r2 ok objects=${prepared.objects.length} bytes=${totalBytes} prepare=${prepareMs}ms put=${putMs}ms`,
+    );
 
     return {
       success: true,
@@ -354,6 +467,8 @@ export class NewsImageStorageService {
       thumbnailUrl: publicObjectUrl(config.publicUrl, prepared.thumbnailKey),
       filename: input.filename,
       uploaded: new Date().toISOString(),
+      width: prepared.width,
+      height: prepared.height,
     };
   }
 }

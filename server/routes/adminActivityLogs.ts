@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { storage } from "../storage";
 import { requireAuth, requirePermission } from "../rbac";
+import { parsePage, parseLimit } from "../utils/pagination";
 
 const router: Router = Router();
 
@@ -41,8 +42,8 @@ router.get("/api/admin/activity-logs", requireAuth, requirePermission("system.vi
     }
 
     if (searchQuery) filters.searchQuery = searchQuery;
-    if (page) filters.page = parseInt(page);
-    if (limit) filters.limit = parseInt(limit);
+    if (page) filters.page = parsePage(page);
+    if (limit) filters.limit = parseLimit(limit, 50, 200);
 
     const result = await storage.getActivityLogs(filters);
 

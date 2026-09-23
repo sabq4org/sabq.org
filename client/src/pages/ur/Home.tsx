@@ -11,6 +11,7 @@ import { UrduQuadCategoriesBlock } from "@/components/ur/UrduQuadCategoriesBlock
 import { UrduSmartSummaryBlock } from "@/components/ur/UrduSmartSummaryBlock";
 import { useAuth } from "@/hooks/useAuth";
 import { useCanonical } from "@/hooks/useCanonical";
+import { useAnalyticsPageMetadata } from "@/hooks/use-analytics";
 import type { UrArticleWithDetails } from "@shared/schema";
 import { formatDistanceToNow } from "date-fns";
 
@@ -27,6 +28,7 @@ export default function UrduHome() {
   const { user } = useAuth();
   
   useCanonical("https://sabq.org/ur");
+  useAnalyticsPageMetadata("سبق سمارٹ - ذہین خبروں کا پلیٹ فارم");
   
   const { data: articlesRaw, isLoading: articlesLoading } = useQuery<UrArticleWithDetails[]>({
     queryKey: ["/api/ur/articles"],

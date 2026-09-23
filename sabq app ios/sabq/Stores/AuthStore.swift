@@ -62,7 +62,7 @@ final class AuthStore {
     // فحص الجلسة ينطلق من كل نسخة مهملة. ContentView.task يستدعي checkAuth.
 
     func checkAuth() async {
-        guard await APIClient.shared.hasSession else { return }
+        guard APIClient.shared.hasSession else { return }
 
         // مهلة الجلسة — نافذة منزلقة من آخر نشاط موثّق لا من آخر تسجيل دخول:
         // كانت تُحسب من الدخول التفاعلي فقط فيُطرد المستخدم النشط يوميًّا في
@@ -411,7 +411,7 @@ final class AuthStore {
                 currentUser = loginUser
                 isLoggedIn = true
                 SabqAnalytics.setUserId(loginUser.id)
-                SabqAnalytics.login(method: "register")
+                SabqAnalytics.signUp(method: "email")
                 successMessage = response.message ?? "تم إنشاء الحساب بنجاح"
                 // Pull the full profile so role/interests populate ASAP.
                 await fetchFullProfile()
@@ -424,7 +424,9 @@ final class AuthStore {
                 registrationPending = true
             }
         } catch {
-            errorMessage = error.localizedDescription
+            // نص بحسب الحالة (429/413/انقطاع/5xx) بدل localizedDescription الخام،
+            // مع تأكيد بقاء البيانات في النموذج (نقل الويب #1530).
+            errorMessage = RegistrationErrorMessage.message(for: error)
         }
         isLoading = false
     }

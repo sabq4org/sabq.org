@@ -20,6 +20,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Check, SpellCheck } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { ProofreadIssue } from "@/hooks/useArticleAiTools";
+import { applyProofreadIssue } from "@/lib/applyProofreadIssue";
 
 interface ProofreadDialogProps {
   open: boolean;
@@ -50,7 +51,7 @@ export function ProofreadDialog({
           </DialogTitle>
           <DialogDescription>
             {issues.length === 0
-              ? "النص سليم إملائياً، لا توجد أخطاء."
+              ? "لا توجد اقتراحات متبقية في هذه المراجعة. يمكنك إعادة التدقيق بعد تعديل النص."
               : `تم العثور على ${issues.length} ملاحظة. اضغط "تطبيق" لاستبدال الكلمة في المقال، أو "تجاهل" لتجاوزها.`}
           </DialogDescription>
         </DialogHeader>
@@ -106,7 +107,8 @@ export function ProofreadDialog({
                         variant="default"
                         size="sm"
                         onClick={() => {
-                          if (!content.includes(issue.original)) {
+                          const corrected = applyProofreadIssue(content, issue.original, issue.suggestion);
+                          if (corrected === null) {
                             toast({
                               title: "الكلمة لم تعد في النص",
                               description: "ربما تم تعديل المقال. أعد التدقيق.",
@@ -115,16 +117,8 @@ export function ProofreadDialog({
                             setIssues((prev) => prev.filter((_, i) => i !== idx));
                             return;
                           }
-                          setContent(content.replace(issue.original, issue.suggestion));
-                          setIssues((prev) =>
-                            prev
-                              .filter((_, i) => i !== idx)
-                              .map((it) =>
-                                it.original === issue.original
-                                  ? { ...it, original: issue.suggestion }
-                                  : it
-                              )
-                          );
+                          setContent(corrected);
+                          setIssues((prev) => prev.filter((_, i) => i !== idx));
                           toast({ title: "تم التطبيق", description: `${issue.original} ← ${issue.suggestion}` });
                         }}
                         data-testid={`button-apply-proofread-${idx}`}
@@ -147,19 +141,22 @@ export function ProofreadDialog({
               onClick={() => {
                 let newContent = content;
                 let appliedCount = 0;
+                const unapplied: ProofreadIssue[] = [];
                 for (const issue of issues) {
-                  if (newContent.includes(issue.original)) {
-                    newContent = newContent.replace(issue.original, issue.suggestion);
+                  const corrected = applyProofreadIssue(newContent, issue.original, issue.suggestion);
+                  if (corrected !== null) {
+                    newContent = corrected;
                     appliedCount++;
-                  }
+                  } else unapplied.push(issue);
                 }
                 setContent(newContent);
-                setIssues([]);
+                // Keep unmatched suggestions for review instead of claiming all were applied.
+                setIssues(unapplied);
                 toast({
                   title: "تم تطبيق التصحيحات",
                   description: `تم تطبيق ${appliedCount} تصحيح${appliedCount === 1 ? "" : "اً"} على النص.`,
                 });
-                onOpenChange(false);
+                if (appliedCount === issues.length) onOpenChange(false);
               }}
               data-testid="button-apply-all-proofread"
               className="gap-1"

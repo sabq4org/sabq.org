@@ -4,12 +4,14 @@ vi.mock("../../server/db", () => ({ db: {} }));
 
 import {
   activeSocialTransport,
+  extractMediaIdFromJobPayload,
   listPublerAccounts,
   pollPublerJob,
   publerConfigured,
   publishToPublerAccount,
   resolvePublishedPostLink,
   uploadImageToPubler,
+  uploadVideoToPublerFromUrl,
 } from "../../server/services/socialPublishing/publerApiClient";
 import { getProvider } from "../../server/services/socialPublishing/socialPublishingService";
 import { SocialProviderError } from "../../server/services/socialPublishing/types";
@@ -163,6 +165,52 @@ describe("publerApiClient — الوسائط والنشر", () => {
       expect(pErr.opts.retryable).toBe(false);
       expect(pErr.message).toContain("PUBLER_API_KEY");
     }
+  });
+
+  it("فيديو واحد: النوع video والوسائط entry واحدة", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(200, { data: { job_id: "job-v" } }))
+      .mockResolvedValueOnce(jsonResponse(200, { data: { status: "complete" } }));
+    vi.stubGlobal("fetch", fetchMock);
+    await publishToPublerAccount("acc-1", {
+      text: "فيديو",
+      videoMediaId: "vid-1",
+      pollOptions: { intervalMs: 1 },
+    });
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(body.bulk.posts[0].networks.twitter.type).toBe("video");
+    expect(body.bulk.posts[0].networks.twitter.media).toEqual([{ id: "vid-1", type: "video" }]);
+  });
+
+  it("رفع الفيديو من رابط: from-url ثم poll واستخراج معرف الوسائط", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(200, { job_id: "job-m" }))
+      .mockResolvedValueOnce(
+        jsonResponse(200, {
+          data: { status: "complete", result: { payload: { media: [{ id: "media-vid" }] } } },
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    const id = await uploadVideoToPublerFromUrl("https://storage.googleapis.com/x/v.mp4", {
+      intervalMs: 1,
+      timeoutMs: 1000,
+    });
+    expect(id).toBe("media-vid");
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(String(url)).toContain("/media/from-url");
+    const body = JSON.parse(init.body as string);
+    expect(body.media[0].url).toContain("v.mp4");
+  });
+
+  it("extractMediaIdFromJobPayload يغطي الأشكال المحتملة ويعيد null عند الغياب", () => {
+    expect(
+      extractMediaIdFromJobPayload({ result: { payload: { media: [{ id: "a" }] } } }),
+    ).toBe("a");
+    expect(extractMediaIdFromJobPayload({ payload: { ids: ["b"] } })).toBe("b");
+    expect(extractMediaIdFromJobPayload({ payload: { id: 7 } })).toBe("7");
+    expect(extractMediaIdFromJobPayload({ payload: { failures: {} } })).toBeNull();
   });
 
   it("حل رابط المنشور: مطابقة النص تعيد post_link والفشل يعيد null بلا رمي", async () => {

@@ -2,6 +2,15 @@
 // عبر مسارات الويب /api/predictions/* (جلسة Passport). كل البطولات ما عدا
 // مونديال 2026 (يبقى على صفحاته القديمة حتى نهايته).
 
+import { formatTime } from "@/lib/format";
+
+const AR_LATN_GREGORY = "ar-SA-u-nu-latn-ca-gregory";
+
+/** عزل الرقم لاتينيًا حتى لا يحوّله سفاري إلى هندية داخل جملة عربية. */
+function latn(n: number): string {
+  return `\u2066${n}\u2069`;
+}
+
 export type PredCompetitionSummary = {
   id: string;
   slug: string;
@@ -18,6 +27,8 @@ export type PredTeamMeta = { name?: string | null; logo?: string | null };
 /** خيار اختيار جاهز لمسابقات الموسم (بطل/هدّاف) — يُدمج في metadata عند الإنشاء. */
 export type PredPickOption = { id: string; name: string; logo?: string | null };
 
+export type PredPenalties = { home?: number | null; away?: number | null } | null;
+
 export type PredContestMeta = {
   home?: PredTeamMeta | null;
   away?: PredTeamMeta | null;
@@ -25,6 +36,7 @@ export type PredContestMeta = {
   venue?: string | null;
   title?: string | null;
   options?: PredPickOption[] | null;
+  penalties?: PredPenalties;
 };
 
 export type PredScorePayload = { predHome?: number; predAway?: number };
@@ -35,12 +47,14 @@ export type PredEntryPayload = PredScorePayload & PredPickPayload;
 export type PredContest = {
   id: string;
   contestType: string;
+  /** معرّف المباراة عند المصدر (API-Football) — للروابط العميقة من مركز المباراة. */
+  externalRef?: string | null;
   status: "open" | "locked" | "ready" | "settled" | "void" | string;
   opensAt?: string | null;
   locksAt: string;
   settledAt?: string | null;
   metadata?: PredContestMeta | null;
-  result?: { finalHome?: number; finalAway?: number; winningPickIds?: string[] } | null;
+  result?: { finalHome?: number; finalAway?: number; penalties?: PredPenalties; winningPickIds?: string[] } | null;
   /** عدد المشاركين النشطين في توقّع هذه المسابقة. */
   entriesCount?: number;
   myEntry?: { id: string; payload?: PredEntryPayload | null } | null;
@@ -93,8 +107,42 @@ export type PredLeaderboardResponse = {
   nameAr: string;
   seasonKey?: string;
   entries: PredLeaderEntry[];
+  totalCount?: number;
   myRank: { rank: number; points: number } | null;
+  offset?: number;
+  limit?: number;
 };
+
+/** جائزة واحدة من دفتر النقاط داخل عنصر «توقعاتي» — المبرر مع النقاط. */
+export type PredMyEntryAward = {
+  points: number;
+  reasonCode: string;
+  reasonLabelAr: string;
+  breakdown?: {
+    prediction?: string;
+    finalScore?: string;
+    pool?: { base?: number; carriedIn?: number; tierShare?: number; tierPoints?: number; winners?: number };
+  } | null;
+};
+
+/** عنصر تبويب «توقعاتي» — توقّع المستخدم ومعه حالة المسابقة ونتيجتها وجوائزه. */
+export type PredMyEntryItem = {
+  contestId: string;
+  contestType: string;
+  status: PredContest["status"];
+  externalRef?: string | null;
+  locksAt: string;
+  settledAt?: string | null;
+  metadata?: PredContestMeta | null;
+  result?: PredContest["result"];
+  payload?: PredEntryPayload | null;
+  submittedAt?: string | null;
+  updatedAt?: string | null;
+  awards: PredMyEntryAward[];
+  totalPoints: number;
+};
+
+export type PredMyEntriesResponse = { items: PredMyEntryItem[]; nextCursor: string | null };
 
 export type PredMyAward = {
   points: number;
@@ -111,7 +159,7 @@ export type PredMyAward = {
 
 export type PredSettlementResponse = {
   contestId: string;
-  result?: { finalHome?: number; finalAway?: number } | null;
+  result?: { finalHome?: number; finalAway?: number; penalties?: PredPenalties } | null;
   settledAt?: string | null;
   myAwards: PredMyAward[];
 };
@@ -170,7 +218,7 @@ export function scoreRtlAr(score: string | null | undefined): string | null {
   return m ? `${m[2]}–${m[1]}` : score;
 }
 
-/** «يُقفل بعد ٢س ١٤د» — عدّ تنازلي حتى الإغلاق. */
+/** «يُقفل بعد 2س 14د» — عدّ تنازلي حتى الإغلاق بأرقام لاتينية. */
 export function lockCountdownAr(locksAt: string, now = Date.now()): string | null {
   const lockTime = Date.parse(locksAt);
   if (Number.isNaN(lockTime)) return null;
@@ -179,25 +227,19 @@ export function lockCountdownAr(locksAt: string, now = Date.now()): string | nul
   const days = Math.floor(seconds / 86_400);
   const hours = Math.floor((seconds % 86_400) / 3_600);
   const minutes = Math.floor((seconds % 3_600) / 60);
-  if (days > 0) return `يُقفل بعد ${days}ي ${hours}س`;
-  if (hours > 0) return `يُقفل بعد ${hours}س ${minutes}د`;
-  return `يُقفل بعد ${Math.max(minutes, 1)}د`;
+  if (days > 0) return `يُقفل بعد ${latn(days)}ي ${latn(hours)}س`;
+  if (hours > 0) return `يُقفل بعد ${latn(hours)}س ${latn(minutes)}د`;
+  return `يُقفل بعد ${latn(Math.max(minutes, 1))}د`;
 }
 
 export function kickoffTimeAr(locksAt: string): string {
-  const date = new Date(locksAt);
-  if (Number.isNaN(date.getTime())) return "—";
-  return new Intl.DateTimeFormat("ar-SA", {
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZone: "Asia/Riyadh",
-  }).format(date);
+  return formatTime(locksAt);
 }
 
 export function kickoffDayAr(locksAt: string): string {
   const date = new Date(locksAt);
   if (Number.isNaN(date.getTime())) return "";
-  return new Intl.DateTimeFormat("ar-SA", {
+  return new Intl.DateTimeFormat(AR_LATN_GREGORY, {
     weekday: "long",
     day: "numeric",
     month: "long",

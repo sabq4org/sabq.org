@@ -5,9 +5,53 @@ import { users, roles, permissions, rolePermissions, userRoles, userPermissionOv
 import { eq, and, inArray } from "drizzle-orm";
 import { memoryCache, CACHE_TTL } from "./memoryCache";
 import { SUPERUSER_ROLE_NAMES, resolveEffectivePermissions, ROLE_NAMES, canAssignRole } from "@shared/rbac-constants";
+import { mergeRoleSignals } from "@shared/effectiveRoles";
 
 // Type definitions
 export type PermissionCode = string; // e.g., "articles.create"
+
+async function loadEffectivePermData(
+  userId: string,
+): Promise<{ isSuperuser: boolean; permissions: string[] }> {
+  const cacheKey = `rbac:${userId}`;
+  let permData = memoryCache.get<{ isSuperuser: boolean; permissions: string[] }>(cacheKey);
+
+  if (!permData) {
+    // Check superuser status — single source of truth in shared constants.
+    const [user] = await db
+      .select({ role: users.role })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+
+    let isSuperuser = user ? (SUPERUSER_ROLE_NAMES as readonly string[]).includes(user.role) : false;
+    let rbacRoleNames: string[] = [];
+
+    if (!isSuperuser) {
+      const rbacRoles = await db
+        .select({ roleName: roles.name })
+        .from(userRoles)
+        .innerJoin(roles, eq(userRoles.roleId, roles.id))
+        .where(eq(userRoles.userId, userId));
+      rbacRoleNames = rbacRoles.map(r => r.roleName);
+      isSuperuser = rbacRoles.some(r => (SUPERUSER_ROLE_NAMES as readonly string[]).includes(r.roleName));
+    }
+
+    if (isSuperuser) {
+      permData = { isSuperuser, permissions: [] };
+    } else {
+      const allRoles = rbacRoleNames.length > 0 ? rbacRoleNames : [user?.role || "reader"];
+      const dbPerms = await getUserPermissions(userId);
+      permData = {
+        isSuperuser,
+        permissions: resolveEffectivePermissions(allRoles, dbPerms),
+      };
+    }
+    memoryCache.set(cacheKey, permData, 5 * 60 * 1000); // 5 min cache
+  }
+
+  return permData;
+}
 
 // Check if a user has a specific permission using cached permissions
 // Supports user-level permission overrides for fine-grained control
@@ -16,48 +60,28 @@ export async function userHasPermission(
   permissionCode: PermissionCode
 ): Promise<boolean> {
   try {
-    const cacheKey = `rbac:${userId}`;
-    let permData = memoryCache.get<{ isSuperuser: boolean; permissions: string[] }>(cacheKey);
-
-    if (!permData) {
-      // Check superuser status — single source of truth in shared constants.
-      const [user] = await db
-        .select({ role: users.role })
-        .from(users)
-        .where(eq(users.id, userId))
-        .limit(1);
-
-      let isSuperuser = user ? (SUPERUSER_ROLE_NAMES as readonly string[]).includes(user.role) : false;
-      let rbacRoleNames: string[] = [];
-
-      if (!isSuperuser) {
-        const rbacRoles = await db
-          .select({ roleName: roles.name })
-          .from(userRoles)
-          .innerJoin(roles, eq(userRoles.roleId, roles.id))
-          .where(eq(userRoles.userId, userId));
-        rbacRoleNames = rbacRoles.map(r => r.roleName);
-        isSuperuser = rbacRoles.some(r => (SUPERUSER_ROLE_NAMES as readonly string[]).includes(r.roleName));
-      }
-
-      if (isSuperuser) {
-        permData = { isSuperuser, permissions: [] };
-      } else {
-        const allRoles = rbacRoleNames.length > 0 ? rbacRoleNames : [user?.role || "reader"];
-        const dbPerms = await getUserPermissions(userId);
-        permData = {
-          isSuperuser,
-          permissions: resolveEffectivePermissions(allRoles, dbPerms),
-        };
-      }
-      memoryCache.set(cacheKey, permData, 5 * 60 * 1000); // 5 min cache
-    }
-
+    const permData = await loadEffectivePermData(userId);
     if (permData.isSuperuser) return true;
     return permData.permissions.includes(permissionCode);
   } catch (error) {
     console.error("Error checking permission:", error);
     return false;
+  }
+}
+
+// الصلاحيات «الفعلية» = DB ∪ خريطة ROLE_PERMISSIONS_MAP — نفس المجموعة التي تحكم
+// بوابات requireAnyPermission وما تراه الواجهة عبر /api/auth/user. الفحوص الداخلية
+// في المسارات كانت تقرأ getUserPermissions (DB فقط) فتتعارض مع البوابة عندما تختلف
+// المجموعتان؛ استخدم هذه الدالة للفحوص الداخلية. الحساب الإداري يُعاد كـ["*"]،
+// فافحص includes("*") قبل أي includes(code).
+export async function getEffectiveUserPermissions(userId: string): Promise<string[]> {
+  try {
+    const permData = await loadEffectivePermData(userId);
+    if (permData.isSuperuser) return ["*"];
+    return permData.permissions;
+  } catch (error) {
+    console.error("Error getting effective permissions:", error);
+    return [];
   }
 }
 
@@ -72,22 +96,23 @@ export async function userHasPermission(
 // userHasPermission() which already short-circuits superusers.
 /** All role names for a user (RBAC user_roles, falling back to users.role). */
 export async function getUserRoleNames(userId: string): Promise<string[]> {
-  const rbacRoles = await db
-    .select({ roleName: roles.name })
-    .from(userRoles)
-    .innerJoin(roles, eq(userRoles.roleId, roles.id))
-    .where(eq(userRoles.userId, userId));
+  const [rbacRoles, [user]] = await Promise.all([
+    db
+      .select({ roleName: roles.name })
+      .from(userRoles)
+      .innerJoin(roles, eq(userRoles.roleId, roles.id))
+      .where(eq(userRoles.userId, userId)),
+    db
+      .select({ role: users.role })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1),
+  ]);
 
-  const names = rbacRoles.map((r) => r.roleName);
-  if (names.length > 0) return names;
-
-  const [user] = await db
-    .select({ role: users.role })
-    .from(users)
-    .where(eq(users.id, userId))
-    .limit(1);
-
-  return user?.role ? [user.role] : [];
+  return mergeRoleSignals(
+    rbacRoles.map((r) => r.roleName),
+    user?.role,
+  );
 }
 
 export async function userHasAnyRole(

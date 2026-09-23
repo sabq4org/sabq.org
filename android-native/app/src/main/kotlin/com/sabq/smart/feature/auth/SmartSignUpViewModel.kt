@@ -144,6 +144,7 @@ class SmartSignUpViewModel @Inject constructor(
             ok.onSuccess { outcome ->
                 when (outcome) {
                     is RegisterOutcome.Authenticated -> {
+                        com.sabq.smart.data.analytics.SabqAnalytics.signUp("email")
                         if (snap.selectedInterestIds.isNotEmpty()) {
                             runCatching {
                                 val ordered = snap.categories
@@ -171,8 +172,9 @@ class SmartSignUpViewModel @Inject constructor(
                 }
             }
             ok.onFailure { e ->
-                val msg = if (e is AuthException) e.message ?: "تعذّر إنشاء الحساب"
-                else e.localizedMessage ?: "حدث خطأ، حاول مجدداً"
+                // نصوص بحسب الحالة (413/429/403/5xx/انقطاع) بلا أكواد خام، والبيانات
+                // تبقى في النموذج فتعيد «إعادة المحاولة» الإرسال نفسه (نقل #1530).
+                val msg = com.sabq.smart.data.RegistrationErrorMessage.message(e)
                 _state.update {
                     it.copy(
                         step = Step.AskPassword,

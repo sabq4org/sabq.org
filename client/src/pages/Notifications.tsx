@@ -26,6 +26,8 @@ interface Notification {
     articleId?: string;
     imageUrl?: string;
     categorySlug?: string;
+    commentId?: string;
+    automated?: boolean;
   } | null;
   createdAt: string;
 }
@@ -119,6 +121,32 @@ export default function Notifications() {
       toast({
         variant: "destructive",
         description: "تعذّر مسح الإشعارات، حاول مجددًا",
+      });
+    },
+  });
+
+  // اعتراض صاحب التعليق على رفض آلي — يعيد التعليق لمراجعة بشرية (مرة واحدة لكل تعليق)
+  const [appealedCommentIds, setAppealedCommentIds] = useState<Set<string>>(new Set());
+  const appealMutation = useMutation({
+    mutationFn: async (commentId: string) => {
+      await apiRequest(`/api/comments/${commentId}/appeal`, { method: "POST" });
+      return commentId;
+    },
+    onSuccess: (commentId) => {
+      setAppealedCommentIds((prev) => new Set(prev).add(commentId));
+      toast({
+        title: "استلمنا اعتراضك",
+        description: "سيراجع تعليقك مشرف بشري وستصلك النتيجة.",
+      });
+    },
+    onError: (error: Error, commentId) => {
+      // «سبق تقديم اعتراض» تصل كخطأ 409 — نعطّل الزر ونعرض الرسالة كما هي
+      if (error.message.includes("سبق تقديم اعتراض")) {
+        setAppealedCommentIds((prev) => new Set(prev).add(commentId));
+      }
+      toast({
+        variant: "destructive",
+        description: error.message || "تعذّر تقديم الاعتراض، حاول مجددًا.",
       });
     },
   });
@@ -345,6 +373,29 @@ export default function Notifications() {
                       >
                         {notification.body}
                       </p>
+
+                      {/* اعتراض على رفض آلي لتعليق — قناة مراجعة بشرية */}
+                      {notification.type === "comment_rejected" && notification.metadata?.commentId && (
+                        <div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              appealMutation.mutate(notification.metadata!.commentId!);
+                            }}
+                            disabled={
+                              appealMutation.isPending ||
+                              appealedCommentIds.has(notification.metadata.commentId)
+                            }
+                            data-testid={`button-appeal-${notification.id}`}
+                          >
+                            {appealedCommentIds.has(notification.metadata.commentId)
+                              ? "الاعتراض قيد المراجعة"
+                              : "طلب مراجعة بشرية"}
+                          </Button>
+                        </div>
+                      )}
 
                     </div>
                   </div>

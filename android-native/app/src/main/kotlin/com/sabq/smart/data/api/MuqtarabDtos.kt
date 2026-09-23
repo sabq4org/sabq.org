@@ -104,6 +104,8 @@ data class ApiMuqTopic(
     /** Present in feed responses (`featured`/`latest-topics`), absent
      *  in the per-angle topic list. */
     val angle: ApiMuqTopicAngle? = null,
+    /** كاتب الزاوية — أرفقه الخادم في خلاصات الرئيسية بتوسعة 2026-08. */
+    val writer: ApiMuqWriter? = null,
 )
 
 @OptIn(ExperimentalSerializationApi::class)

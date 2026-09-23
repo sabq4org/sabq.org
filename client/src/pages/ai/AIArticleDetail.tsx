@@ -418,7 +418,16 @@ export default function AIArticleDetail() {
           {/* Article Content */}
           <div 
             className="prose prose-invert prose-lg max-w-none mb-12"
-            dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(article.content || '') }}
+            dangerouslySetInnerHTML={{ 
+              __html: DOMPurify.sanitize(article.content || '', {
+                ADD_TAGS: ['iframe', 'blockquote', 'img', 'figure', 'figcaption'],
+                ADD_ATTR: [
+                  'allow', 'allowfullscreen', 'frameborder', 'scrolling', 'src',
+                  'class', 'data-align', 'data-width', 'data-caption', 'style',
+                  'alt', 'title', 'loading', 'width', 'height', 'srcset', 'sizes',
+                ],
+              }) 
+            }}
           />
 
 

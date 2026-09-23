@@ -6,8 +6,10 @@ import {
   assertValidScheduleTime,
   buildArticleUrl,
   decideFailureTransition,
+  MAX_POST_IMAGES,
   MAX_PUBLISH_ATTEMPTS,
   SocialPublishValidationError,
+  validateComposeMedia,
 } from "../../server/services/socialPublishing/socialPublishingService";
 
 describe("socialPublishingService — قرارات الفشل وإعادة المحاولة", () => {
@@ -67,6 +69,30 @@ describe("socialPublishingService — التحقق من وقت الجدولة", 
     expect(() => assertValidScheduleTime(new Date("غير صالح"))).toThrow(
       SocialPublishValidationError,
     );
+  });
+});
+
+describe("socialPublishingService — وسائط التأليف المستقل", () => {
+  it("بلا وسائط: القائمة يجب أن تكون فارغة", () => {
+    expect(() => validateComposeMedia("none", [])).not.toThrow();
+    expect(() => validateComposeMedia("none", ["https://a"])).toThrow(SocialPublishValidationError);
+  });
+
+  it("الصور من 1 إلى 4", () => {
+    expect(() => validateComposeMedia("image", ["u1"])).not.toThrow();
+    expect(() =>
+      validateComposeMedia("image", Array.from({ length: MAX_POST_IMAGES }, (_, i) => `u${i}`)),
+    ).not.toThrow();
+    expect(() => validateComposeMedia("image", [])).toThrow();
+    expect(() =>
+      validateComposeMedia("image", Array.from({ length: MAX_POST_IMAGES + 1 }, (_, i) => `u${i}`)),
+    ).toThrow();
+  });
+
+  it("الفيديو رابط واحد بالضبط", () => {
+    expect(() => validateComposeMedia("video", ["v1"])).not.toThrow();
+    expect(() => validateComposeMedia("video", [])).toThrow();
+    expect(() => validateComposeMedia("video", ["v1", "v2"])).toThrow();
   });
 });
 

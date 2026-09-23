@@ -12,7 +12,7 @@ import { SkipLinks } from "@/components/SkipLinks";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { lazy, Suspense, useEffect, Component, ErrorInfo, ReactNode } from "react";
 import { useVoiceCommands } from "@/hooks/useVoiceCommands";
-import { useAnalytics } from "@/hooks/use-analytics";
+import { AnalyticsRouteCommit, useAnalytics } from "@/hooks/use-analytics";
 import { resetAdsTriggerFlag } from "@/components/DmsAdSlot";
 import { needsAccountCompletion, useAuth } from "@/hooks/useAuth";
 import {
@@ -25,6 +25,7 @@ import { useWebMCP } from "@/hooks/useWebMCP";
 import { syncGuestFocusSessionsToUser } from "@/hooks/useFocusSession";
 import { attemptChunkRecoveryReload, forceDeployRecoveryReload } from "@/lib/deployRecovery";
 import { isChunkErrorMessage, retryImport } from "@/lib/retryImport";
+import { AuthAnalyticsMarker } from "@/components/AuthAnalyticsMarker";
 
 function WebMCPProvider() {
   useWebMCP();
@@ -195,10 +196,12 @@ const ArchivePage = lazy(() => retryImport(() => import("@/pages/ArchivePage")))
 
 // === LAZY IMPORTS (Dashboard Core) ===
 const Dashboard = lazy(() => retryImport(() => import("@/pages/Dashboard")));
+const Dashboard2 = lazy(() => retryImport(() => import("@/pages/Dashboard2")));
 const AnalyticsDashboard = lazy(() => retryImport(() => import("@/pages/AnalyticsDashboard")));
 const ArticleEditor = lazy(() => retryImport(() => import("@/pages/ArticleEditor")));
 const ArticlePreview = lazy(() => retryImport(() => import("@/pages/ArticlePreview")));
 const ArticlesManagement = lazy(() => retryImport(() => import("@/pages/ArticlesManagement")));
+const ArticlesManagementPreview = lazy(() => retryImport(() => import("@/pages/ArticlesManagementPreview")));
 const CategoriesManagement = lazy(() => retryImport(() => import("@/pages/CategoriesManagement")));
 const UsersManagement = lazy(() => retryImport(() => import("@/pages/UsersManagement")));
 const RolesManagement = lazy(() => retryImport(() => import("@/pages/RolesManagement")));
@@ -214,9 +217,7 @@ const MyServicesPage = lazy(() => retryImport(() => import("@/pages/dashboard/My
 const VerifyLetter = lazy(() => retryImport(() => import("@/pages/VerifyLetter")));
 const PublicProfile = lazy(() => retryImport(() => import("@/pages/PublicProfile")));
 const DiscoverUsers = lazy(() => retryImport(() => import("@/pages/DiscoverUsers")));
-const CompleteProfile = lazy(() => retryImport(() => import("@/pages/CompleteProfile")));
 const CompleteName = lazy(() => retryImport(() => import("@/pages/CompleteName")));
-const SelectInterests = lazy(() => retryImport(() => import("@/pages/SelectInterests")));
 const EditInterests = lazy(() => retryImport(() => import("@/pages/EditInterests")));
 const NotificationSettings = lazy(() => retryImport(() => import("@/pages/NotificationSettings")));
 const MyFollows = lazy(() => retryImport(() => import("@/pages/MyFollows")));
@@ -231,6 +232,7 @@ const NationalDay96HeaderPreview = lazy(() => retryImport(() => import("@/pages/
 const LoyaltyTermsPage = lazy(() => retryImport(() => import("@/pages/LoyaltyTermsPage")));
 const HajjBlockSettings = lazy(() => retryImport(() => import("@/pages/dashboard/HajjBlockSettings")));
 const NationalDayBlockSettings = lazy(() => retryImport(() => import("@/pages/dashboard/NationalDayBlockSettings")));
+const IosNationalDayThemeSettings = lazy(() => retryImport(() => import("@/pages/dashboard/IosNationalDayThemeSettings")));
 const SahraaTvBlockSettings = lazy(() => retryImport(() => import("@/pages/dashboard/SahraaTvBlockSettings")));
 const ThemeManager = lazy(() => retryImport(() => import("@/pages/ThemeManager")));
 const ThemeEditor = lazy(() => retryImport(() => import("@/pages/ThemeEditor")));
@@ -342,6 +344,7 @@ const SportmonksNewsImporter = lazy(() => retryImport(() => import("@/pages/dash
 const SportsNamesManager = lazy(() => retryImport(() => import("@/pages/dashboard/SportsNamesManager")));
 const MediaLibrary = lazy(() => retryImport(() => import("@/pages/dashboard/MediaLibrary")));
 const PromptStudio = lazy(() => retryImport(() => import("@/pages/PromptStudio")));
+const DeepSeekLab = lazy(() => retryImport(() => import("@/pages/dashboard/DeepSeekLab")));
 const PromptStudioPublic = lazy(() => retryImport(() => import("@/pages/PromptStudioPublic")));
 const DeepAnalysis = lazy(() => retryImport(() => import("@/pages/dashboard/DeepAnalysis")));
 const DeepAnalysisList = lazy(() => retryImport(() => import("@/pages/dashboard/DeepAnalysisList")));
@@ -463,6 +466,9 @@ const IFoxSettings = lazy(() => retryImport(() => import("@/pages/admin/ifox/IFo
 const IFoxAITasks = lazy(() => retryImport(() => import("@/pages/admin/ifox/IFoxAITasks")));
 const AIManagementDashboard = lazy(() => retryImport(() => import("@/pages/admin/ifox/ai-management")));
 const AiHubPage = lazy(() => retryImport(() => import("@/pages/dashboard/AiHub")));
+const AiStaffPage = lazy(() => retryImport(() => import("@/pages/dashboard/AiStaff")));
+const AiStaffProfilePage = lazy(() => retryImport(() => import("@/pages/dashboard/AiStaff/Profile")));
+const OpsRoomPage = lazy(() => retryImport(() => import("@/pages/dashboard/OpsRoom")));
 const IntegrationsSettingsPage = lazy(() => retryImport(() => import("@/pages/dashboard/IntegrationsSettings")));
 const SystemsCatalogPage = lazy(() => retryImport(() => import("@/pages/dashboard/SystemsCatalogPage")));
 const ImageStudio = lazy(() => retryImport(() => import("@/pages/ifox/ImageStudio")));
@@ -479,6 +485,8 @@ const AsianCupTeam = lazy(() => retryImport(() => import("@/pages/AsianCupTeam")
 const AsianCupPlayer = lazy(() => retryImport(() => import("@/pages/AsianCupPlayer")));
 const AsianCupVenues = lazy(() => retryImport(() => import("@/pages/AsianCupVenues")));
 const GulfCup = lazy(() => retryImport(() => import("@/pages/GulfCup")));
+const GulfCupTeam = lazy(() => retryImport(() => import("@/pages/GulfCupTeam")));
+const GulfCupFantasy = lazy(() => retryImport(() => import("@/pages/GulfCupFantasy")));
 const PredictionCenter = lazy(() => retryImport(() => import("@/pages/PredictionCenter")));
 const GulfCupMajlis = lazy(() => retryImport(() => import("@/pages/GulfCupMajlis")));
 const KingsCup = lazy(() => retryImport(() => import("@/pages/KingsCup")));
@@ -486,6 +494,7 @@ const KingsCupTeam = lazy(() => retryImport(() => import("@/pages/KingsCupTeam")
 const KingsCupPlayer = lazy(() => retryImport(() => import("@/pages/KingsCupPlayer")));
 // البوابة الرياضية المعتمدة على /sports (تصميم Dashboard بعمودين)
 const SportsDashboard = lazy(() => retryImport(() => import("@/pages/SportsDashboard")));
+const EconomyLive = lazy(() => retryImport(() => import("@/pages/EconomyLive")));
 // لوحة "مباريات اليوم" (مجمّعة حسب البطولة + فلترة) على /sports/matches
 const SportsMatchesBoard = lazy(() => retryImport(() => import("@/pages/SportsMatchesBoard")));
 // البث المباشر · العالم (كل مباريات العالم المباشرة، مجمّعة حسب الدولة) على /sports/live
@@ -512,6 +521,11 @@ function PageLoader() {
       <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" />
     </div>
   );
+}
+
+function GulfCupPredictionsRedirect() {
+  const tab = typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("tab");
+  return <Redirect to={tab === "fantasy" ? "/gulf-cup/fantasy" : "/predictions?competition=gulf-cup-27"} />;
 }
 
 class ErrorBoundary extends Component<
@@ -576,6 +590,7 @@ function LazyRoute({ component: Component }: { component: React.LazyExoticCompon
     <ErrorBoundary>
       <Suspense fallback={<PageLoader />}>
         <Component />
+        <AnalyticsRouteCommit />
       </Suspense>
     </ErrorBoundary>
   );
@@ -615,6 +630,8 @@ function VoiceCommandsManager() {
   );
 }
 
+const PublicDesignGallery = lazy(() => import("@/pages/PublicDesignGallery"));
+
 function Router() {
   useAnalytics();
   
@@ -623,6 +640,7 @@ function Router() {
       <ScrollRestoration />
       <AdsTriggerResetter />
       <Switch>
+        {import.meta.env.DEV && <Route path="/__preview/public-design">{() => <LazyRoute component={PublicDesignGallery} />}</Route>}
         {/* English Version Routes */}
         <Route path="/en">{() => <LazyRoute component={EnglishHome} />}</Route>
         <Route path="/en/news">{() => <LazyRoute component={EnglishNewsPage} />}</Route>
@@ -793,6 +811,9 @@ function Router() {
         <Route path="/admin/ifox/ai-tasks">{() => <LazyRoute component={IFoxAITasks} />}</Route>
         <Route path="/admin/ifox/ai-management">{() => <LazyRoute component={AIManagementDashboard} />}</Route>
         <Route path="/admin/ai-hub">{() => <LazyRoute component={AiHubPage} />}</Route>
+        <Route path="/admin/ai/staff/:slug">{() => <LazyRoute component={AiStaffProfilePage} />}</Route>
+        <Route path="/admin/ai/staff">{() => <LazyRoute component={AiStaffPage} />}</Route>
+        <Route path="/admin/ops-room">{() => <LazyRoute component={OpsRoomPage} />}</Route>
 
         <Route path="/reporter/:slug">{() => <LazyRoute component={ReporterProfile} />}</Route>
         <Route path="/author/:name">{() => <LazyRoute component={AuthorArticlesPage} />}</Route>
@@ -882,6 +903,8 @@ function Router() {
         </Route>
         
         <Route path="/dashboard">{() => <LazyRoute component={Dashboard} />}</Route>
+        {/* مركز قيادة سبق التحريري — صفحة موازية لا تمس اللوحة الحالية */}
+        <Route path="/dashboard2">{() => <LazyRoute component={Dashboard2} />}</Route>
         <Route path="/dashboard/analytics">{() => <LazyRoute component={AnalyticsDashboard} />}</Route>
         {/* Article Analytics - requires analytics.view permission */}
         <Route path="/dashboard/article-analytics">
@@ -893,13 +916,15 @@ function Router() {
             </ProtectedRoute>
           )}
         </Route>
+        <Route path="/dashboard/articles">{() => <LazyRoute component={ArticlesManagement} />}</Route>
+        {/* معاينة مستقلة لإعادة تصميم إدارة المقالات — لا تلمس الصفحة الحالية */}
+        <Route path="/dashboard/articles-preview">{() => <LazyRoute component={ArticlesManagementPreview} />}</Route>
         <Route path="/dashboard/articles/new">{() => <LazyRoute component={ArticleEditor} />}</Route>
         <Route path="/dashboard/article/new">{() => <LazyRoute component={ArticleEditor} />}</Route>
         <Route path="/dashboard/article/:id/preview">{() => <LazyRoute component={ArticlePreview} />}</Route>
         <Route path="/dashboard/articles/:id/preview">{() => <LazyRoute component={ArticlePreview} />}</Route>
         <Route path="/dashboard/articles/:id/edit">{() => <LazyRoute component={ArticleEditor} />}</Route>
         <Route path="/dashboard/articles/:id">{() => <LazyRoute component={ArticleEditor} />}</Route>
-        <Route path="/dashboard/articles">{() => <LazyRoute component={ArticlesManagement} />}</Route>
         {/* النشر الاجتماعي (X) — social_publish.view */}
         <Route path="/dashboard/social-publishing">
           {() => (
@@ -983,14 +1008,16 @@ function Router() {
         <Route path="/dashboard/loyalty-admin">{() => <LazyRoute component={LoyaltyAdminDashboard} />}</Route>
         <Route path="/dashboard/hajj-block">{() => <LazyRoute component={HajjBlockSettings} />}</Route>
         <Route path="/dashboard/national-day-block">{() => <LazyRoute component={NationalDayBlockSettings} />}</Route>
+        <Route path="/dashboard/ios-national-day-theme">{() => <LazyRoute component={IosNationalDayThemeSettings} />}</Route>
         <Route path="/dashboard/sahraa-tv-block">{() => <LazyRoute component={SahraaTvBlockSettings} />}</Route>
         <Route path="/settings/:section">{() => <LazyRoute component={SettingsCenter} />}</Route>
         <Route path="/settings">{() => <LazyRoute component={SettingsCenter} />}</Route>
         <Route path="/preferences">{() => <LazyRoute component={PreferencesCenter} />}</Route>
         {/* discover-users hidden */}
-        <Route path="/complete-profile">{() => <LazyRoute component={CompleteProfile} />}</Route>
+        {/* F-28: /complete-profile (unreachable, saved nothing) and /select-interests
+            (POSTed to a non-existent route + read the wrong endpoint) removed —
+            onboarding lives at /onboarding/* and interests at /interests/edit. */}
         <Route path="/complete-name">{() => <LazyRoute component={CompleteName} />}</Route>
-        <Route path="/select-interests">{() => <LazyRoute component={SelectInterests} />}</Route>
         <Route path="/interests/edit">{() => <LazyRoute component={EditInterests} />}</Route>
         <Route path="/notification-settings">{() => <LazyRoute component={NotificationSettings} />}</Route>
         <Route path="/ur/notification-settings">{() => <Redirect to="/settings/notifications" />}</Route>
@@ -1046,6 +1073,9 @@ function Router() {
         <Route path="/dashboard/admin/ifox/settings">{() => <LazyRoute component={IFoxSettings} />}</Route>
         <Route path="/dashboard/admin/ifox/ai-management">{() => <LazyRoute component={AIManagementDashboard} />}</Route>
         <Route path="/dashboard/ai-hub">{() => <LazyRoute component={AiHubPage} />}</Route>
+        <Route path="/dashboard/ai/staff/:slug">{() => <LazyRoute component={AiStaffProfilePage} />}</Route>
+        <Route path="/dashboard/ai/staff">{() => <LazyRoute component={AiStaffPage} />}</Route>
+        <Route path="/dashboard/ops-room">{() => <LazyRoute component={OpsRoomPage} />}</Route>
         <Route path="/dashboard/integrations">{() => <LazyRoute component={IntegrationsSettingsPage} />}</Route>
         <Route path="/dashboard/admin/ifox/ai-tasks">{() => <LazyRoute component={IFoxAITasks} />}</Route>
         
@@ -1081,7 +1111,9 @@ function Router() {
         <Route path="/asian-cup">{() => <LazyRoute component={AsianCup} />}</Route>
         <Route path="/gulf-cup/majlis/:id">{() => <LazyRoute component={GulfCupMajlis} />}</Route>
         <Route path="/gulf-cup/majlis">{() => <LazyRoute component={GulfCupMajlis} />}</Route>
-        <Route path="/gulf-cup/predictions">{() => <Redirect to="/predictions?competition=gulf-cup-27" />}</Route>
+        <Route path="/gulf-cup/team/:id">{() => <LazyRoute component={GulfCupTeam} />}</Route>
+        <Route path="/gulf-cup/fantasy">{() => <LazyRoute component={GulfCupFantasy} />}</Route>
+        <Route path="/gulf-cup/predictions">{() => <GulfCupPredictionsRedirect />}</Route>
         <Route path="/gulf-cup">{() => <LazyRoute component={GulfCup} />}</Route>
 
         {/* المنصة المركزية للتوقعات — كل البطولات ما عدا مونديال 2026 */}
@@ -1124,6 +1156,7 @@ function Router() {
         <Route path="/sports/transfers/story/:playerId">{() => <LazyRoute component={TransferStory} />}</Route>
         <Route path="/sports/transfers">{() => <LazyRoute component={SportsTransfers} />}</Route>
         <Route path="/sports">{() => <LazyRoute component={SportsDashboard} />}</Route>
+        <Route path="/economy">{() => <LazyRoute component={EconomyLive} />}</Route>
         {/* تحويلات من المسارات التجريبية القديمة (/sports2../sports5) إلى /sports */}
         <Route path="/sports2/competition/:slug">{(p) => <Redirect to={`/sports/competition/${p.slug}`} />}</Route>
         <Route path="/sports2/team/:id">{(p) => <Redirect to={`/sports/team/${p.id}`} />}</Route>
@@ -1141,6 +1174,7 @@ function Router() {
         <Route path="/dashboard/sentiment-insights">{() => <LazyRoute component={SentimentInsights} />}</Route>
         <Route path="/admin/comments/suspicious-words">{() => <LazyRoute component={SuspiciousWordsManagement} />}</Route>
         <Route path="/dashboard/prompt-studio">{() => <LazyRoute component={PromptStudio} />}</Route>
+        <Route path="/dashboard/deepseek-lab">{() => <LazyRoute component={DeepSeekLab} />}</Route>
         <Route path="/dashboard/tasks">{() => <LazyRoute component={TasksPage} />}</Route>
         <Route path="/dashboard/ai/summaries">{() => <LazyRoute component={ComingSoon} />}</Route>
         <Route path="/dashboard/ai/deep-analysis-list">{() => <LazyRoute component={DeepAnalysisList} />}</Route>
@@ -1295,6 +1329,7 @@ function App() {
                   <VoiceCommandsManager />
                   <ReadingHistorySync />
                   <FocusSessionSync />
+                  <AuthAnalyticsMarker />
                   <PostAuthResumeGuard />
                   <NameCompletionGuard />
                   <CapacitorDeepLinks />

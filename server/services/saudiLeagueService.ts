@@ -8,7 +8,7 @@
  * كل ما يصل للواجهة معرَّب، وكل نقطة بيانات خلف كاش SWR ليخدم آلاف الزوار
  * من طلب واحد للمزود.
  */
-import { withSWR, swrCache, CACHE_TTL } from "../memoryCache";
+import { withSWR, swrCache, swrCacheFor, CACHE_TTL } from "../memoryCache";
 import { isEnglishSports, runWithSportsLang } from "./sportsLang";
 import pLimit from "p-limit";
 import { apiFootballGet } from "./apiFootballClient";
@@ -25,7 +25,28 @@ import { getFixtures as getWorldCupMergedFixtures } from "./worldCupService";
 import { getAcFixtures as getAsianCupMergedFixtures, type AcFixture } from "./asianCupService";
 import { getGcFixtures as getGulfCupMergedFixtures, type GcFixture } from "./gulfCupService";
 import { isSyntheticFixtureId } from "./wc2026Bracket";
-import { getPlayerForm as smGetPlayerForm, isSportmonksConfigured } from "./sportmonksService";
+import {
+  KC_R16_SEASON,
+  isKcSyntheticFixtureId,
+  isKingsCupR16Round,
+  mergeKingsCupR16Schedule,
+} from "./kingsCupR16Schedule";
+import {
+  isWithinLiveOverlayWindow,
+  latestPositiveEventMinute,
+  mergeLiveMatchProgress,
+} from "./sportsMatchStatus";
+import {
+  creditedGoalCounts,
+  isGoalCancellationText,
+  reconcileMatchGoalEvents,
+} from "./matchGoalEvents";
+import {
+  computeSeasonDateStatus,
+  refineCompetitionStatus,
+  type CompetitionStatus,
+} from "./competitionStatus";
+import { getPlayerForm as smGetPlayerForm, getSmSquad, isSportmonksConfigured } from "./sportmonksService";
 import {
   getTheSportsFastScore,
   getTheSportsLiveBoard,
@@ -42,12 +63,14 @@ import {
   getTsPlayerMarketHistory,
   getTsTeamInjuries,
   getTsTeamSquad,
+  isTheSportsConfigured,
   resolveTsMatchId,
   resolveTsNames,
   TS_I18N_TYPE,
   TS_VAR_RESULT_AR,
   type TsEvent,
   type TsLineup,
+  type TsLineupPlayer,
   type TsLiveBoardItem,
   type TsLiveStats,
   type TsPlayerMatchStat,
@@ -73,6 +96,7 @@ import {
 } from "./saudiLeagueNames";
 import { resolveSportsNames, type NameLookup } from "./sportsNamesService";
 import { pickActiveRoundKey } from "./pickActiveRound";
+import { correctSportsPlayerName, resolveTsEventPlayerName } from "./sportsPlayerNameFixes";
 
 const TIMEZONE = "Asia/Riyadh";
 
@@ -121,7 +145,7 @@ export interface SaudiCompetition {
 }
 
 export const SAUDI_COMPETITIONS: SaudiCompetition[] = [
-  { id: 307, slug: "pro-league", name: "دوري روشن السعودي", type: "league", hasStandings: true, hasScorers: true, hasStats: true, fallbackSeason: 2025, category: "saudi" },
+  { id: 307, slug: "pro-league", name: "دوري روشن السعودي", type: "league", hasStandings: true, hasScorers: true, hasStats: true, fallbackSeason: 2026, category: "saudi" },
   { id: 308, slug: "division-1", name: "دوري يلو لأندية الدرجة الأولى", type: "league", hasStandings: true, hasScorers: true, hasStats: false, fallbackSeason: 2025, category: "saudi" },
   { id: 309, slug: "division-2", name: "دوري الدرجة الثانية السعودي", type: "league", hasStandings: true, hasScorers: false, hasStats: false, fallbackSeason: 2025, category: "saudi" },
   { id: 504, slug: "kings-cup", name: "كأس خادم الحرمين الشريفين", type: "cup", hasStandings: false, hasScorers: true, hasStats: false, fallbackSeason: 2027, category: "saudi" },
@@ -136,6 +160,9 @@ export const SAUDI_COMPETITIONS: SaudiCompetition[] = [
   { id: 7, slug: "asian-cup", name: "كأس آسيا", type: "cup", hasStandings: false, hasScorers: true, hasStats: false, fallbackSeason: 2027, category: "world" },
   { id: 17, slug: "afc-champions-league", name: "دوري أبطال آسيا للنخبة", type: "cup", hasStandings: false, hasScorers: true, hasStats: false, fallbackSeason: 2025, category: "world" },
   { id: 15, slug: "club-world-cup", name: "كأس العالم للأندية", type: "cup", hasStandings: false, hasScorers: true, hasStats: false, fallbackSeason: 2025, category: "world" },
+  // كأس الإنتركونتيننتال السنوية (أبطال القارات) — ليست كأس العالم للأندية الموسّعة.
+  // API-Football 1168 · SportMonks 1452 · TheSports kjw2r09h26krz84.
+  { id: 1168, slug: "intercontinental-cup", name: "كأس الإنتركونتيننتال", type: "cup", hasStandings: false, hasScorers: true, hasStats: false, fallbackSeason: 2026, category: "world" },
   // الدوريات الأوروبية الكبرى الخمسة — تغطية كاملة (ترتيب/هدّافون/تشكيلات/أحداث).
   { id: 39, slug: "premier-league", name: "الدوري الإنجليزي", type: "league", hasStandings: true, hasScorers: true, hasStats: true, fallbackSeason: 2025, category: "european" },
   { id: 140, slug: "la-liga", name: "الدوري الإسباني", type: "league", hasStandings: true, hasScorers: true, hasStats: true, fallbackSeason: 2025, category: "european" },
@@ -192,6 +219,7 @@ const COMP_NAME_EN: Record<string, string> = {
   "asian-cup": "Asian Cup",
   "afc-champions-league": "AFC Champions League Elite",
   "club-world-cup": "FIFA Club World Cup",
+  "intercontinental-cup": "FIFA Intercontinental Cup",
   "premier-league": "Premier League",
   "la-liga": "La Liga",
   "serie-a": "Serie A",
@@ -240,7 +268,7 @@ export function listCompetitions() {
  * سابقًا كان هنا كاش `spl:season:*` مستقل يستدعي `leagues?current=true` ويلتقط
  * الخطأ داخل الـfetcher فيُخزّن `fallbackSeason` لـ6 ساعات. عند انتقال أغسطس
  * 2026 بقي دوري الأبطال/يوروبا على 2025 المنتهي (نتائج نهائية بلا قادمة) بينما
- * الميتا (`spl:compmeta:v2`) تعرض 2026 الصحيح — فاختفت التصفيات من VARA.
+ * الميتا (`spl:compmeta:v3`) تعرض 2026 الصحيح — فاختفت التصفيات من VARA.
  * لا تُعِد كاشًا منفصلًا ولا تُخزّن fallback عند فشل المزوّد.
  */
 async function seasonFor(comp: SaudiCompetition): Promise<number> {
@@ -376,19 +404,28 @@ function localizeTeam(raw: any, tr?: FxTranslators): SplTeam {
 function localizeFixture(item: any, tr: FxTranslators = FX_NOOP_TR): SplFixture {
   const fx = item.fixture ?? {};
   const statusCode: string = fx.status?.short ?? "TBD";
+  const elapsed = fx.status?.elapsed ?? null;
+  const extra = fx.status?.extra ?? null;
+  const status = mergeLiveMatchProgress(
+    {
+      code: statusCode,
+      label: isEnglishSports()
+        ? WC_STATUS_EN[statusCode] ?? statusCode
+        : WC_STATUS_AR[statusCode] ?? statusCode,
+      elapsed,
+      extra,
+      live: WC_LIVE_STATUSES.has(statusCode),
+      finished: WC_FINISHED_STATUSES.has(statusCode),
+    },
+    { kickoffTs: fx.timestamp ?? null },
+  );
   return {
     id: fx.id,
     date: fx.date,
     timestamp: fx.timestamp,
     status: {
-      code: statusCode,
-      label: isEnglishSports()
-        ? WC_STATUS_EN[statusCode] ?? statusCode
-        : WC_STATUS_AR[statusCode] ?? statusCode,
-      elapsed: fx.status?.elapsed ?? null,
-      extra: fx.status?.extra ?? null,
-      live: WC_LIVE_STATUSES.has(statusCode),
-      finished: WC_FINISHED_STATUSES.has(statusCode),
+      ...status,
+      extra: status.extra ?? extra,
     },
     round: localizeSplRound(item.league?.round ?? ""),
     // الوضع الإنجليزي: اسم الملعب/المدينة الأصلي من المزوّد بلا تعريب.
@@ -416,11 +453,15 @@ export async function getFixtures(comp: SaudiCompetition, seasonOverride?: numbe
     return getWorldCupMergedFixtures();
   }
   const season = seasonOverride ?? await seasonFor(comp);
-  return withSWR(`spl:fixtures:${comp.id}:${season}`, FIXTURES_TTL, FIXTURES_TTL * 2, async () => {
-    const rows = await apiGet("fixtures", { league: comp.id, season, timezone: TIMEZONE });
-    const tr = await fixtureTranslators(rows);
-    return rows.map((r: any) => localizeFixture(r, tr)).sort((a: SplFixture, b: SplFixture) => a.timestamp - b.timestamp);
+  const rows = await withSWR(`spl:fixtures:${comp.id}:${season}`, FIXTURES_TTL, FIXTURES_TTL * 2, async () => {
+    const fetched = await apiGet("fixtures", { league: comp.id, season, timezone: TIMEZONE });
+    const tr = await fixtureTranslators(fetched);
+    return fetched.map((r: any) => localizeFixture(r, tr)).sort((a: SplFixture, b: SplFixture) => a.timestamp - b.timestamp);
   });
+  if (comp.slug === "kings-cup" && season === KC_R16_SEASON) {
+    return mergeKingsCupR16Schedule(rows);
+  }
+  return rows;
 }
 
 export async function getLiveFixtures(comp: SaudiCompetition): Promise<SplFixture[]> {
@@ -477,13 +518,25 @@ export async function getCompetitionRounds(
   } catch {
     // غياب الجدول → نكتفي بإشارة المزود.
   }
-  const current = pickActiveRoundKey(listed.rounds, listed.apiCurrent, fixtures);
-  return { rounds: listed.rounds, current };
+  let rounds = listed.rounds;
+  if (
+    comp.slug === "kings-cup" &&
+    fixtures.some((f) => isKingsCupR16Round(f.round)) &&
+    !rounds.some((r) => r.key === "Round of 16")
+  ) {
+    rounds = [...rounds, { key: "Round of 16", label: localizeSplRound("Round of 16") }];
+  }
+  const current = pickActiveRoundKey(rounds, listed.apiCurrent, fixtures);
+  return { rounds, current };
 }
 
 /** مباريات جولة محدّدة (round الخام كما يعود من getCompetitionRounds). */
 export async function getFixturesByRound(comp: SaudiCompetition, round: string, seasonOverride?: number): Promise<SplFixture[]> {
   const season = seasonOverride ?? await seasonFor(comp);
+  if (comp.slug === "kings-cup" && (round === "Round of 16" || isKingsCupR16Round(round))) {
+    const merged = (await getFixtures(comp, season)).filter((f) => isKingsCupR16Round(f.round));
+    if (merged.length) return merged;
+  }
   return withSWR(`spl:roundfx:${comp.id}:${season}:${round}`, FIXTURES_TTL, FIXTURES_TTL * 2, async () => {
     const rows = await apiGet("fixtures", { league: comp.id, season, round, timezone: TIMEZONE });
     const tr = await fixtureTranslators(rows);
@@ -1152,16 +1205,219 @@ async function raceBoardCache(
   const hot = (await getLiveFixtures(comp).catch(() => [])).some((f) => f.status.live);
   return {
     cacheKey: `${baseKey}:${comp.id}:${season}${hot ? ":live" : ""}`,
-    ttl: hot ? CACHE_TTL.SHORT : CACHE_TTL.LONG,
+    ttl: hot ? CACHE_TTL.SHORT : 5 * 60_000,
   };
+}
+
+interface EventRaceTally {
+  id: number;
+  name: string;
+  photo: string;
+  team: SplTeam;
+  goals: number;
+  assists: number;
+  penalties: number;
+  yellow: number;
+  red: number;
+  matchIds: Set<number>;
+}
+
+async function getFixtureEventsRaw(fixtureId: number): Promise<any[]> {
+  return withSWR(`spl:rawEvents:v1:${fixtureId}`, 60_000, 300_000, async () => {
+    return apiGet("fixtures/events", { fixture: fixtureId }).catch(() => []);
+  });
+}
+
+/**
+ * تجميع سباقات الموسم (هدّافون/صنّاع/بطاقات) لحظياً من أحداث المباريات التي لُعبت.
+ * يضمن ظهور الهدّافين والبطاقات من أول هدف/كارت في الجولة الأولى قبل تحديث جداول المزود players/top*.
+ */
+async function aggregateSeasonRacesFromEvents(
+  comp: SaudiCompetition,
+  season: number,
+): Promise<{
+  scorers: SplScorer[];
+  assists: SplAssister[];
+  yellow: SplCardLeader[];
+  red: SplCardLeader[];
+}> {
+  return withSWR(
+    `spl:racesFromEvents:v1:${comp.id}:${season}`,
+    60_000,
+    180_000,
+    async () => {
+      const fixtures = await getFixtures(comp, season).catch(() => []);
+      const started = fixtures.filter((f) => f.status.live || f.status.finished);
+      if (!started.length) {
+        return { scorers: [], assists: [], yellow: [], red: [] };
+      }
+
+      const teamById = new Map<number, SplTeam>();
+      for (const f of started) {
+        teamById.set(f.home.id, f.home);
+        teamById.set(f.away.id, f.away);
+      }
+
+      const tallies = new Map<string, EventRaceTally>();
+
+      const getOrCreateTally = (
+        pId: number | null | undefined,
+        pName: string | null | undefined,
+        teamId: number,
+        fixtureId: number,
+      ): EventRaceTally | null => {
+        if (!pName && !pId) return null;
+        const key = pId ? `id:${pId}` : `name:${teamId}:${pName}`;
+        let t = tallies.get(key);
+        if (!t) {
+          const team = teamById.get(teamId) ?? { id: teamId, name: "", logo: "", winner: null };
+          const photo = pId ? `https://media.api-sports.io/football/players/${pId}.png` : "";
+          t = {
+            id: pId ?? 0,
+            name: pName ?? "",
+            photo,
+            team,
+            goals: 0,
+            assists: 0,
+            penalties: 0,
+            yellow: 0,
+            red: 0,
+            matchIds: new Set<number>([fixtureId]),
+          };
+          tallies.set(key, t);
+        } else {
+          t.matchIds.add(fixtureId);
+          if (!t.photo && pId) {
+            t.id = pId;
+            t.photo = `https://media.api-sports.io/football/players/${pId}.png`;
+          }
+        }
+        return t;
+      };
+
+      const limit = pLimit(4);
+      const fixtureEvents = await Promise.all(
+        started.map((f) =>
+          limit(async () => {
+            const events = await getFixtureEventsRaw(f.id);
+            return { fixture: f, events };
+          }),
+        ),
+      );
+
+      for (const { fixture, events } of fixtureEvents) {
+        for (const ev of events) {
+          const teamId = ev.team?.id ?? 0;
+          const evType = String(ev.type || "").toLowerCase();
+          const evDetail = String(ev.detail || "").toLowerCase();
+
+          if (evType === "goal" && !evDetail.includes("missed") && !evDetail.includes("own goal")) {
+            const scorer = getOrCreateTally(ev.player?.id, ev.player?.name, teamId, fixture.id);
+            if (scorer) {
+              scorer.goals += 1;
+              if (evDetail.includes("penalty")) scorer.penalties += 1;
+            }
+            if (ev.assist?.id || ev.assist?.name) {
+              const assister = getOrCreateTally(ev.assist?.id, ev.assist?.name, teamId, fixture.id);
+              if (assister) {
+                assister.assists += 1;
+              }
+            }
+          } else if (evType === "card") {
+            const carded = getOrCreateTally(ev.player?.id, ev.player?.name, teamId, fixture.id);
+            if (carded) {
+              if (evDetail.includes("yellow card")) {
+                carded.yellow += 1;
+              } else if (evDetail.includes("red") || evDetail.includes("second yellow")) {
+                carded.red += 1;
+              }
+            }
+          }
+        }
+      }
+
+      const allTallies = Array.from(tallies.values());
+      const rawNames = allTallies.map((t) => t.name);
+      const tr = await resolveNames(rawNames, { skipAi: true });
+
+      const scorers: SplScorer[] = allTallies
+        .filter((t) => t.goals > 0)
+        .sort((a, b) => b.goals - a.goals || a.penalties - b.penalties || a.matchIds.size - b.matchIds.size)
+        .slice(0, 15)
+        .map((t, idx) => ({
+          rank: idx + 1,
+          id: t.id,
+          name: localizeSplPlayerName(t.id, t.name, tr),
+          photo: t.photo,
+          team: t.team,
+          goals: t.goals,
+          assists: t.assists,
+          penalties: t.penalties,
+          matches: t.matchIds.size,
+        }));
+
+      const assists: SplAssister[] = allTallies
+        .filter((t) => t.assists > 0)
+        .sort((a, b) => b.assists - a.assists || b.goals - a.goals || a.matchIds.size - b.matchIds.size)
+        .slice(0, 15)
+        .map((t, idx) => ({
+          rank: idx + 1,
+          id: t.id,
+          name: localizeSplPlayerName(t.id, t.name, tr),
+          photo: t.photo,
+          team: t.team,
+          goals: t.goals,
+          assists: t.assists,
+          matches: t.matchIds.size,
+        }));
+
+      const yellow: SplCardLeader[] = allTallies
+        .filter((t) => t.yellow > 0)
+        .sort((a, b) => b.yellow - a.yellow || a.matchIds.size - b.matchIds.size)
+        .slice(0, 10)
+        .map((t, idx) => ({
+          rank: idx + 1,
+          id: t.id,
+          name: localizeSplPlayerName(t.id, t.name, tr),
+          photo: t.photo,
+          team: localizeSplTeamName(t.team.id, t.team.name),
+          teamLogo: t.team.logo,
+          yellow: t.yellow,
+          red: t.red,
+          matches: t.matchIds.size,
+        }));
+
+      const red: SplCardLeader[] = allTallies
+        .filter((t) => t.red > 0)
+        .sort((a, b) => b.red - a.red || a.matchIds.size - b.matchIds.size)
+        .slice(0, 10)
+        .map((t, idx) => ({
+          rank: idx + 1,
+          id: t.id,
+          name: localizeSplPlayerName(t.id, t.name, tr),
+          photo: t.photo,
+          team: localizeSplTeamName(t.team.id, t.team.name),
+          teamLogo: t.team.logo,
+          yellow: t.yellow,
+          red: t.red,
+          matches: t.matchIds.size,
+        }));
+
+      return { scorers, assists, yellow, red };
+    },
+  );
 }
 
 export async function getTopScorers(comp: SaudiCompetition, seasonOverride?: number): Promise<SplScorer[]> {
   if (!comp.hasScorers) return [];
-  const season = seasonOverride ?? await seasonFor(comp);
-  const { cacheKey, ttl } = await raceBoardCache(comp, seasonOverride, "spl:scorers");
+  const season = seasonOverride ?? (await seasonFor(comp));
+  const { cacheKey, ttl } = await raceBoardCache(comp, seasonOverride, "spl:scorers:v4");
   return withSWR(cacheKey, ttl, ttl * 2, async () => {
-    const rows = await apiGet("players/topscorers", { league: comp.id, season });
+    const rows = await apiGet("players/topscorers", { league: comp.id, season }).catch(() => []);
+    if (!rows.length) {
+      const fromEvents = await aggregateSeasonRacesFromEvents(comp, season);
+      if (fromEvents.scorers.length > 0) return fromEvents.scorers;
+    }
     const nameList = rows.map((r: any) => r.player?.name);
     // لا نحبس على ترجمة AI داخل الطلب — كانت تضيف ثواني فوق طابور API-Football
     // عند فتح لوحة الهدّافين (خصوصًا مع /assists بالتوازي).
@@ -1376,8 +1632,96 @@ function localizeLineups(rows: any[], tr: NameTranslator): SplLineup[] {
   }));
 }
 
+// ---------- احتياطي تشكيلات TheSports (نمط المونديال) ----------
+// API-Football يتأخّر/يغيب عن تشكيلات بعض التصفيات (مثل دوري أبطال آسيا)، بينما
+// TheSports ينشرها أبكر. نحوّل قوائمه إلى SplLineup[] بنفس عقد الواجهة.
+// معرّفات اللاعبين تبقى 0 (لا تطابق AF) — يُعطّل فتح بطاقة اللاعب كما في المونديال.
+
+/** x/y → شبكة "صف:عمود" لرسم الملعب؛ بلا إحداثيات موثوقة → خريطة فارغة. */
+function tsPlayersToSplGrid(players: TsLineupPlayer[]): Map<string, string> {
+  const grid = new Map<string, string>();
+  const withXy = players.filter((p) => p.starter && (p.x != null || p.y != null) && (p.x || p.y));
+  if (withXy.length < 7) return grid;
+  const sorted = [...withXy].sort((a, b) => (a.x ?? 0) - (b.x ?? 0));
+  const rows: TsLineupPlayer[][] = [];
+  for (const p of sorted) {
+    const last = rows[rows.length - 1];
+    if (last && Math.abs((last[0].x ?? 0) - (p.x ?? 0)) <= 6) last.push(p);
+    else rows.push([p]);
+  }
+  rows.forEach((row, ri) => {
+    row.sort((a, b) => (a.y ?? 0) - (b.y ?? 0));
+    row.forEach((p, ci) => grid.set(p.id, `${ri + 1}:${ci + 1}`));
+  });
+  return grid;
+}
+
+function tsSideToSplLineup(
+  side: TsLineupPlayer[],
+  formation: string | null,
+  team: SplFixture["home"],
+): SplLineup {
+  const gridMap = tsPlayersToSplGrid(side);
+  // name_aa يمرّ على التصحيح التحريري — كان خامًا فتسربت أخطاؤه (حمام الحمامي).
+  const toPlayer = (p: TsLineupPlayer): SplLineupPlayer => ({
+    id: 0,
+    number: p.shirtNumber,
+    name: correctSportsPlayerName(p.name, p.nameAr || p.name, { teamId: team.id }),
+    pos: p.position ?? "",
+    grid: gridMap.get(p.id) ?? null,
+  });
+  return {
+    team: { id: team.id, name: team.name, logo: team.logo },
+    formation,
+    coach: null,
+    startXI: side.filter((p) => p.starter).map(toPlayer),
+    substitutes: side.filter((p) => !p.starter).map(toPlayer),
+  };
+}
+
+/**
+ * تشكيلتا المباراة من TheSports بشكل SplLineup[] — [] إن تعذّر الجسر/الجلب.
+ * تُستدعى خارج كاش AF حتى لا تُجمَّد تشكيلة فارغة بينما المزوّد الاحتياطي يملكها.
+ *
+ * جولة روشن المتزامنة (عدة مباريات 21:00) تفشل بالمطابقة الزمنية وحدها —
+ * نفضّ الالتباس بجسر معرّفات الفريقين.
+ */
+async function resolveSplTsMatchUuid(detail: SplMatchDetail): Promise<string | null> {
+  const comp = detail.leagueId != null ? getCompetitionByLeagueId(detail.leagueId) : undefined;
+  const tsCompId = getTsCompetitionId(comp?.slug);
+  if (!comp || !tsCompId) return null;
+  const unique = await resolveTsMatchId(detail.fixture.id, detail.fixture.timestamp, tsCompId).catch(() => null);
+  if (unique) return unique;
+  const bridge = await getSplTeamBridge(comp).catch(() => new Map<number, string>());
+  const homeTsId = bridge.get(detail.fixture.home.id) ?? null;
+  const awayTsId = bridge.get(detail.fixture.away.id) ?? null;
+  if (!homeTsId || !awayTsId) return null;
+  return resolveTsMatchId(detail.fixture.id, detail.fixture.timestamp, tsCompId, { homeTsId, awayTsId }).catch(() => null);
+}
+
+async function getSplLineupsFromTs(detail: SplMatchDetail): Promise<SplLineup[]> {
+  if (!isTheSportsConfigured()) return [];
+  const uuid = await resolveSplTsMatchUuid(detail);
+  if (!uuid) return [];
+  const lineup = await getTsLineup(uuid).catch(() => null as TsLineup | null);
+  if (!lineup) return [];
+  const out: SplLineup[] = [];
+  if (lineup.home.length > 0) {
+    out.push(tsSideToSplLineup(lineup.home, lineup.homeFormation, detail.fixture.home));
+  }
+  if (lineup.away.length > 0) {
+    out.push(tsSideToSplLineup(lineup.away, lineup.awayFormation, detail.fixture.away));
+  }
+  return out;
+}
+
 function localizeEventRow(e: any, tr: NameTranslator): SplMatchEvent {
-  const loc = localizeEvent(e.type ?? "", e.detail ?? "");
+  const comments = String(e.comments ?? "");
+  let loc = localizeEvent(e.type ?? "", e.detail ?? "");
+  // هدف أبقاه المزود بعد الإلغاء (comments=Cancelled) — لا يُعرض كهدف.
+  if (loc.type === "goal" && isGoalCancellationText(`${loc.label} ${comments}`)) {
+    loc = localizeEvent("var", "Goal cancelled");
+  }
   // تبديل: API-Football يعكس الحقلين — e.player = الخارج، e.assist = الداخل. نعرض
   // الداخل في «player» (العنوان) والخارج في «assist» («بديلًا عن»)، مطابقةً لمسار
   // TheSports. الأهداف/البطاقات تبقى كما هي (player=الفاعل، assist=الصانع).
@@ -1389,26 +1733,29 @@ function localizeEventRow(e: any, tr: NameTranslator): SplMatchEvent {
     extra: e.time?.extra ?? null,
     teamId: e.team?.id ?? 0,
     team: localizeSplTeamName(e.team?.id, e.team?.name ?? ""),
-    player: tr(inSide?.name),
+    player: localizeSplPlayerName(
+      typeof inSide?.id === "number" ? inSide.id : null,
+      inSide?.name ?? "",
+      tr,
+    ),
     playerId: typeof inSide?.id === "number" ? inSide.id : undefined,
-    assist: outSide?.name ? tr(outSide.name) : null,
+    assist: outSide?.name
+      ? localizeSplPlayerName(
+          typeof outSide?.id === "number" ? outSide.id : null,
+          outSide.name,
+          tr,
+        )
+      : null,
     type: loc.type,
     label: loc.label,
   };
 }
 
-function creditedGoalCounts(events: SplMatchEvent[], homeId: number): { home: number; away: number } {
-  let home = 0;
-  let away = 0;
-  for (const e of events) {
-    if (e.type !== "goal") continue;
-    const scoredByHome = e.teamId === homeId;
-    const ownGoal = e.label.includes("عكسي");
-    const creditHome = ownGoal ? !scoredByHome : scoredByHome;
-    if (creditHome) home += 1;
-    else away += 1;
-  }
-  return { home, away };
+function finalizeMatchEvents(fixture: SplFixture, events: SplMatchEvent[]): SplMatchEvent[] {
+  return appendScoreSummaryEvents(
+    fixture,
+    reconcileMatchGoalEvents(events, fixture.goals, fixture.home.id),
+  );
 }
 
 function appendScoreSummaryEvents(fixture: SplFixture, events: SplMatchEvent[]): SplMatchEvent[] {
@@ -1495,6 +1842,12 @@ export async function getMatchDetail(fixtureId: number): Promise<SplMatchDetail 
   // مباراة مونديال اصطناعية (خانة إقصائية قبل نشر المزوّد): لا وجود لها عنده —
   // نخدم بطاقتها الأساسية من الجدول المُكمّل بلا أحداث/إحصاءات/تشكيلات، فيفتح
   // مركز المباراة على الويب والتطبيق بدل «المباراة غير موجودة».
+  if (isKcSyntheticFixtureId(fixtureId)) {
+    const kc = getCompetition("kings-cup");
+    const fx = kc ? (await getFixtures(kc, KC_R16_SEASON)).find((f) => f.id === fixtureId) : undefined;
+    if (!fx) return null;
+    return { fixture: fx, events: [], statistics: null, lineups: [], leagueId: 504 };
+  }
   if (isSyntheticFixtureId(fixtureId)) {
     const fx = (await getWorldCupMergedFixtures()).find((f) => f.id === fixtureId);
     if (!fx) return null;
@@ -1545,9 +1898,14 @@ export async function getMatchDetail(fixtureId: number): Promise<SplMatchDetail 
     namesComplete = !rawNames.some((n) => n && tr(n) === n);
     if (!namesComplete) void resolveNames(rawNames).catch(() => {});
     const events = eventsRaw.map((e: any) => localizeEventRow(e, tr));
+    const withEvents = finalizeMatchEvents(fixture, events);
+    const status = mergeLiveMatchProgress(fixture.status, {
+      kickoffTs: fixture.timestamp,
+      latestEventMinute: latestPositiveEventMinute(withEvents),
+    });
     return {
-      fixture,
-      events: appendScoreSummaryEvents(fixture, events),
+      fixture: { ...fixture, status: { ...fixture.status, ...status } },
+      events: withEvents,
       statistics: localizeStats(statsRaw),
       lineups: localizeLineups(lineupsRaw, tr),
       leagueId: item.league?.id ?? null,
@@ -1575,6 +1933,20 @@ export async function getMatchDetail(fixtureId: number): Promise<SplMatchDetail 
   ) {
     swrCache.set(preKey, detail, PRE_MATCH_DETAIL_TTL, PRE_MATCH_DETAIL_TTL);
   }
+
+  // تشكيلات API-Football تتأخّر/تغيب لبعض التصفيات والكؤوس → احتياطي TheSports
+  // (نفس نمط getMatchDetail في المونديال). خارج كاش AF حتى لا تتجمّد [] بينما
+  // lineup/detail جاهز لدى TheSports قبل ساعة الانطلاق.
+  if (
+    detail &&
+    !detail.lineups.some((lu) => lu.startXI.length > 0) &&
+    isTheSportsConfigured()
+  ) {
+    const tsLineups = await getSplLineupsFromTs(detail).catch(() => [] as SplLineup[]);
+    if (tsLineups.some((lu) => lu.startXI.length > 0)) {
+      return { ...detail, lineups: tsLineups };
+    }
+  }
   return detail;
 }
 
@@ -1601,6 +1973,10 @@ export async function getMatchEventsOnly(fixtureId: number): Promise<SplMatchEve
  * كي تطابق القائمة الرئيسية (التي تستخدم overlay) ولا تتأخّر النتيجة 10–20ث.
  */
 export async function getMatchLite(fixtureId: number): Promise<SplFixture | null> {
+  if (isKcSyntheticFixtureId(fixtureId)) {
+    const kc = getCompetition("kings-cup");
+    return kc ? (await getFixtures(kc, KC_R16_SEASON)).find((f) => f.id === fixtureId) ?? null : null;
+  }
   if (isSyntheticFixtureId(fixtureId)) {
     const fx = (await getWorldCupMergedFixtures()).find((f) => f.id === fixtureId) ?? null;
     if (!fx?.status.live) return fx;
@@ -1684,13 +2060,15 @@ async function mapTsEventsToSpl(events: TsEvent[], fx: SplFixture): Promise<SplM
     if (e.type === "sub") {
       out.push({
         minute: e.minute, extra: null, teamId, team,
-        player: arById(e.playerId) ?? tr(e.inPlayer), assist: e.outPlayer ? tr(e.outPlayer) : null,
+        player: resolveTsEventPlayerName(e.inPlayer, arById(e.playerId), tr(e.inPlayer), teamId),
+        assist: e.outPlayer ? resolveTsEventPlayerName(e.outPlayer, null, tr(e.outPlayer), teamId) : null,
         type: meta.type, label: meta.label,
       });
     } else {
       out.push({
         minute: e.minute, extra: null, teamId, team,
-        player: arById(e.playerId) ?? tr(e.player), assist: e.assist ? tr(e.assist) : null,
+        player: resolveTsEventPlayerName(e.player, arById(e.playerId), tr(e.player), teamId),
+        assist: e.assist ? resolveTsEventPlayerName(e.assist, null, tr(e.assist), teamId) : null,
         type: meta.type, label: tsEventLabel(e, meta),
       });
     }
@@ -1741,7 +2119,8 @@ function mapTsStatsToSpl(ts: TsLiveStats, detail: SplMatchDetail): SplMatchDetai
 
 // جوهر مشترك: ركّب نتيجة TheSports الحيّة على أي SplFixture بمعرّف بطولة معروف.
 async function overlayFastScoreOnFixture<T extends SplFixture>(f: T, tsCompId: string): Promise<T> {
-  if (!f.status.live) return f;
+  const nowSec = Math.floor(Date.now() / 1000);
+  if (!f.status.live && !isWithinLiveOverlayWindow(f.timestamp, nowSec)) return f;
   try {
     const ts = await getTheSportsFastScore(f.id, f.timestamp, tsCompId);
     if (!ts || (!ts.live && !ts.finished)) return f;
@@ -1755,11 +2134,14 @@ async function overlayFastScoreOnFixture<T extends SplFixture>(f: T, tsCompId: s
           ? { home: ts.penHome, away: ts.penAway }
           : f.penalties,
       status: {
-        ...f.status,
-        elapsed: ts.elapsed ?? f.status.elapsed,
-        extra: ts.extra ?? f.status.extra,
-        live: ts.live,
-        finished: ts.finished || f.status.finished,
+        ...mergeLiveMatchProgress(f.status, {
+          live: ts.live,
+          finished: ts.finished,
+          elapsed: ts.elapsed,
+          extra: ts.extra,
+          statusId: ts.statusId,
+          kickoffTs: f.timestamp,
+        }),
         clockStartEpoch: ts.clockStartEpoch ?? f.status.clockStartEpoch,
       },
     };
@@ -1801,7 +2183,8 @@ export async function overlayLiveFixturesForComp<T extends SplFixture>(
  */
 export async function overlayLiveMatchDetail(detail: SplMatchDetail): Promise<SplMatchDetail> {
   const fx = detail.fixture;
-  if (!fx.status.live) return detail;
+  const nowSec = Math.floor(Date.now() / 1000);
+  if (!fx.status.live && !isWithinLiveOverlayWindow(fx.timestamp, nowSec)) return detail;
   const comp = detail.leagueId != null ? getCompetitionByLeagueId(detail.leagueId) : undefined;
   const tsCompId = getTsCompetitionId(comp?.slug);
   if (!tsCompId) return detail;
@@ -1816,15 +2199,23 @@ export async function overlayLiveMatchDetail(detail: SplMatchDetail): Promise<Sp
           ? { home: ts.penHome, away: ts.penAway }
           : fx.penalties,
       status: {
-        ...fx.status,
-        elapsed: ts.elapsed ?? fx.status.elapsed,
-        extra: ts.extra ?? fx.status.extra,
-        live: ts.live,
-        finished: ts.finished || fx.status.finished,
+        ...mergeLiveMatchProgress(fx.status, {
+          live: ts.live,
+          finished: ts.finished,
+          elapsed: ts.elapsed,
+          extra: ts.extra,
+          statusId: ts.statusId,
+          latestEventMinute: latestPositiveEventMinute([
+            ...ts.events,
+            ...(detail.events ?? []),
+          ]),
+          kickoffTs: fx.timestamp,
+        }),
         clockStartEpoch: ts.clockStartEpoch ?? fx.status.clockStartEpoch,
       },
     };
-    const events = ts.events.length ? await mapTsEventsToSpl(ts.events, fx) : detail.events;
+    const rawEvents = ts.events.length ? await mapTsEventsToSpl(ts.events, fx) : detail.events;
+    const events = finalizeMatchEvents(fixture, rawEvents);
     const statistics = ts.stats ? mapTsStatsToSpl(ts.stats, detail) : detail.statistics;
     return { ...detail, fixture, events, statistics };
   } catch {
@@ -1887,13 +2278,20 @@ export async function getWorldLiveMatchDetail(
           ? { home: ts.penHome, away: ts.penAway }
           : mapped.penalties,
       status: {
-        ...mapped.status,
-        live: ts.live,
-        finished: ts.finished || mapped.status.finished,
+        ...mergeLiveMatchProgress(mapped.status, {
+          live: ts.live,
+          finished: ts.finished,
+          elapsed: ts.elapsed,
+          extra: ts.extra,
+          statusId: ts.statusId,
+          latestEventMinute: latestPositiveEventMinute(ts.events),
+          kickoffTs: mapped.timestamp,
+        }),
       },
     };
     const withFx: SplMatchDetail = { ...detail, fixture };
-    const events = ts.events.length ? await mapTsEventsToSpl(ts.events, fixture) : [];
+    const rawEvents = ts.events.length ? await mapTsEventsToSpl(ts.events, fixture) : [];
+    const events = finalizeMatchEvents(fixture, rawEvents);
     const statistics = ts.stats ? mapTsStatsToSpl(ts.stats, withFx) : null;
     return { ...withFx, events, statistics };
   } catch {
@@ -1925,7 +2323,7 @@ export async function getMatchTvChannels(fixtureId: number): Promise<SplMatchTv>
     const comp = detail.leagueId != null ? getCompetitionByLeagueId(detail.leagueId) : undefined;
     const tsCompId = getTsCompetitionId(comp?.slug);
     if (!tsCompId) return { available: false, channels: [] };
-    const uuid = await resolveTsMatchId(fixtureId, detail.fixture.timestamp, tsCompId);
+    const uuid = await resolveSplTsMatchUuid(detail);
     if (!uuid) return { available: false, channels: [] };
     const tv = await getTsMatchTv(uuid);
     const channels = tv.map((c) => ({ name: c.name, url: c.url })).filter((c) => c.name);
@@ -1978,7 +2376,7 @@ export async function getMatchTeamStats(fixtureId: number): Promise<SplMatchTeam
     const comp = detail.leagueId != null ? getCompetitionByLeagueId(detail.leagueId) : undefined;
     const tsCompId = getTsCompetitionId(comp?.slug);
     if (!comp || !tsCompId) return { available: false, rows: [] };
-    const uuid = await resolveTsMatchId(fixtureId, detail.fixture.timestamp, tsCompId);
+    const uuid = await resolveSplTsMatchUuid(detail);
     if (!uuid) return { available: false, rows: [] };
     const sides = await getTsMatchTeamStats(uuid).catch(() => [] as TsTeamStatSide[]);
     if (sides.length < 2) return { available: false, rows: [] };
@@ -2048,7 +2446,7 @@ export async function getMatchPlayerStatsTs(fixtureId: number): Promise<SplMatch
     const comp = detail.leagueId != null ? getCompetitionByLeagueId(detail.leagueId) : undefined;
     const tsCompId = getTsCompetitionId(comp?.slug);
     if (!comp || !tsCompId) return empty;
-    const uuid = await resolveTsMatchId(fixtureId, detail.fixture.timestamp, tsCompId);
+    const uuid = await resolveSplTsMatchUuid(detail);
     if (!uuid) return empty;
 
     const [rows, lineup] = await Promise.all([
@@ -2334,6 +2732,12 @@ export interface SplSquadPlayer {
   positionEn: string;
   age: number | null;
   photo: string;
+  captain?: boolean;
+  nationality?: { name: string; flag?: string | null; code?: string | null } | null;
+  height?: number | null;
+  weight?: number | null;
+  contract?: { start?: string | null; end?: string | null } | null;
+  detailedPosition?: string | null;
 }
 
 export interface SplSquad {
@@ -2420,54 +2824,135 @@ async function getTeamInfo(teamId: number): Promise<SplTeamInfo | null> {
   });
 }
 
-/** تشكيلة النادي مرتّبة حسب المركز ثم الرقم */
+/** تشكيلة النادي مرتّبة حسب المركز ثم الرقم ومعززة ببيانات SportMonks عند توفرها */
 export async function getSquad(teamId: number): Promise<SplSquad | null> {
-  const cacheKey = `spl:squad:${teamId}`;
+  const cacheKey = `spl:squad:v2:${teamId}`;
   const squad = await withSWR(cacheKey, SQUAD_TTL, SQUAD_TTL * 2, async () => {
-    const rows = await apiGet("players/squads", { team: teamId });
-    const entry = rows[0];
-    if (!entry) return null;
-    const nameList = (entry.players ?? []).map((p: any) => p.name);
-    const tr = await resolveNames(nameList, { skipAi: true });
-    const mapPlayers = (translator: typeof tr): SplSquadPlayer[] =>
-      (entry.players ?? [])
-        .map((p: any): SplSquadPlayer => ({
-          id: p.id ?? 0,
-          name: localizeSplPlayerName(p.id, p.name ?? "", translator),
-          number: p.number ?? null,
-          position: isEnglishSports() ? (p.position ?? "") : (SPL_POSITION_AR[p.position] ?? p.position ?? ""),
-          positionEn: p.position ?? "",
-          age: p.age ?? null,
-          photo: p.photo ?? "",
+    const [apiFootballResp, smSquad] = await Promise.all([
+      apiGet("players/squads", { team: teamId }).catch(() => []),
+      isSportmonksConfigured() ? getSmSquad(teamId).catch(() => null) : Promise.resolve(null),
+    ]);
+    const entry = apiFootballResp[0];
+    if (!entry && (!smSquad?.available || !smSquad.players.length)) return null;
+
+    // خريطة بمطابقة لاعبي SportMonks (بالرقم أو تطبيع الاسم) لإثراء بيانات الكابتن والجنسية والعقد
+    const smByNumber = new Map<number, any>();
+    const smByName = new Map<string, any>();
+    if (smSquad?.available && smSquad.players.length > 0) {
+      for (const sp of smSquad.players) {
+        if (sp.jerseyNumber != null) smByNumber.set(sp.jerseyNumber, sp);
+        const k = (sp.name || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+        if (k) smByName.set(k, sp);
+        const ck = (sp.commonName || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+        if (ck) smByName.set(ck, sp);
+      }
+    }
+
+    if (entry && Array.isArray(entry.players) && entry.players.length > 0) {
+      const nameList = (entry.players ?? []).map((p: any) => p.name);
+      const tr = await resolveNames(nameList, { skipAi: true });
+      const mapPlayers = (translator: typeof tr): SplSquadPlayer[] =>
+        (entry.players ?? [])
+          .map((p: any): SplSquadPlayer => {
+            const num = p.number ?? null;
+            const norm = (p.name || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+            const smMatch = (num != null ? smByNumber.get(num) : null) || smByName.get(norm);
+            return {
+              id: p.id ?? 0,
+              name: localizeSplPlayerName(p.id, p.name ?? "", translator),
+              number: num,
+              position: isEnglishSports() ? (p.position ?? "") : (SPL_POSITION_AR[p.position] ?? p.position ?? ""),
+              positionEn: p.position ?? "",
+              age: p.age ?? smMatch?.age ?? null,
+              photo: p.photo ?? smMatch?.photo ?? "",
+              captain: smMatch?.captain ?? false,
+              nationality: smMatch?.nationality
+                ? {
+                    name: smMatch.nationality.nameAr || smMatch.nationality.name,
+                    flag: smMatch.nationality.flagUrl,
+                    code: smMatch.nationality.fifaName || smMatch.nationality.iso2,
+                  }
+                : null,
+              height: smMatch?.height ?? null,
+              weight: smMatch?.weight ?? null,
+              contract: smMatch?.contractStart || smMatch?.contractEnd
+                ? { start: smMatch.contractStart, end: smMatch.contractEnd }
+                : null,
+              detailedPosition: isEnglishSports()
+                ? smMatch?.position || null
+                : smMatch?.detailedPositionAr || null,
+            };
+          })
+          .sort(
+            (a: SplSquadPlayer, b: SplSquadPlayer) =>
+              (SPL_POSITION_ORDER[a.positionEn] ?? 9) - (SPL_POSITION_ORDER[b.positionEn] ?? 9) ||
+              (a.number ?? 99) - (b.number ?? 99)
+          );
+      const team: SplTeamInfo = {
+        id: entry.team?.id ?? teamId,
+        name: localizeSplTeamName(entry.team?.id, entry.team?.name ?? ""),
+        logo: entry.team?.logo ?? "",
+        country: null,
+        founded: null,
+        venue: null,
+      };
+      const result = { team, players: mapPlayers(tr) };
+      const storeKey = `${cacheKey}${isEnglishSports() ? ":en" : ""}`;
+      const incomplete = !isEnglishSports() && nameList.some((n: string | null | undefined) => n && tr(n) === n);
+      if (incomplete) {
+        void resolveNames(nameList)
+          .then((tr2) => {
+            swrCache.set(storeKey, { team, players: mapPlayers(tr2) }, SQUAD_TTL, SQUAD_TTL * 2);
+          })
+          .catch(() => {});
+      }
+      return result;
+    }
+
+    // احتياطي SportMonks الكامل إن غاب مزود API-Football
+    if (smSquad?.available && smSquad.players.length > 0) {
+      const smMapped: SplSquadPlayer[] = smSquad.players
+        .map((sp: any) => ({
+          id: sp.playerId,
+          name: sp.displayName || sp.name,
+          number: sp.jerseyNumber,
+          position: isEnglishSports() ? sp.position : sp.positionAr,
+          positionEn: sp.position,
+          age: sp.age,
+          photo: sp.photo,
+          captain: sp.captain,
+          nationality: sp.nationality
+            ? {
+                name: sp.nationality.nameAr || sp.nationality.name,
+                flag: sp.nationality.flagUrl,
+                code: sp.nationality.fifaName || sp.nationality.iso2,
+              }
+            : null,
+          height: sp.height,
+          weight: sp.weight,
+          contract: { start: sp.contractStart, end: sp.contractEnd },
+          detailedPosition: isEnglishSports() ? sp.position : sp.detailedPositionAr,
         }))
         .sort(
           (a: SplSquadPlayer, b: SplSquadPlayer) =>
             (SPL_POSITION_ORDER[a.positionEn] ?? 9) - (SPL_POSITION_ORDER[b.positionEn] ?? 9) ||
             (a.number ?? 99) - (b.number ?? 99)
         );
-    const team: SplTeamInfo = {
-      id: entry.team?.id ?? teamId,
-      name: localizeSplTeamName(entry.team?.id, entry.team?.name ?? ""),
-      logo: entry.team?.logo ?? "",
-      country: null,
-      founded: null,
-      venue: null,
-    };
-    const result = { team, players: mapPlayers(tr) };
-    const storeKey = `${cacheKey}${isEnglishSports() ? ":en" : ""}`;
-    const incomplete = !isEnglishSports() && nameList.some((n: string | null | undefined) => n && tr(n) === n);
-    if (incomplete) {
-      void resolveNames(nameList)
-        .then((tr2) => {
-          swrCache.set(storeKey, { team, players: mapPlayers(tr2) }, SQUAD_TTL, SQUAD_TTL * 2);
-        })
-        .catch(() => {});
+      return {
+        team: {
+          id: teamId,
+          name: localizeSplTeamName(teamId, smSquad.teamName),
+          logo: smSquad.teamLogo,
+          country: null,
+          founded: null,
+          venue: null,
+        },
+        players: smMapped,
+      };
     }
-    return result;
+
+    return null;
   });
-  // تسخين بطاقات اللاعبين بعد كل جلب للتشكيلة (طازجة كانت أو مجدَّدة) —
-  // كاش البطاقة (ساعة) أقصر من كاش التشكيلة (يوم) فالزيارات اللاحقة تجد
-  // بطاقات منتهية؛ النداءات الطازجة رخيصة (فحص ذاكرة) والمنتهية وحدها تجلب.
   if (squad?.players?.length) warmSquadPlayerCards(squad.players);
   return squad;
 }
@@ -2875,7 +3360,8 @@ export async function getPlayerCard(playerId: number): Promise<SplPlayerCard | n
     if (incomplete) {
       void resolveNames(nameList)
         .then((tr2) => {
-          swrCache.set(storeKey, buildCard(tr2), PLAYER_CARD_TTL, PLAYER_CARD_TTL * 2);
+          // مفتاح لاعب → لازم يكتب في نفس الكاش الذي تقرأ منه withSWR
+          swrCacheFor(storeKey).set(storeKey, buildCard(tr2), PLAYER_CARD_TTL, PLAYER_CARD_TTL * 2);
         })
         .catch(() => {});
     }
@@ -3107,10 +3593,14 @@ export interface SplAssister {
  */
 export async function getTopAssists(comp: SaudiCompetition, seasonOverride?: number): Promise<SplAssister[]> {
   if (!comp.hasScorers) return [];
-  const season = seasonOverride ?? await seasonFor(comp);
-  const { cacheKey, ttl } = await raceBoardCache(comp, seasonOverride, "spl:assists");
+  const season = seasonOverride ?? (await seasonFor(comp));
+  const { cacheKey, ttl } = await raceBoardCache(comp, seasonOverride, "spl:assists:v4");
   return withSWR(cacheKey, ttl, ttl * 2, async () => {
-    const rows = await apiGet("players/topassists", { league: comp.id, season });
+    const rows = await apiGet("players/topassists", { league: comp.id, season }).catch(() => []);
+    if (!rows.length) {
+      const fromEvents = await aggregateSeasonRacesFromEvents(comp, season);
+      if (fromEvents.assists.length > 0) return fromEvents.assists;
+    }
     const nameList = rows.map((r: any) => r.player?.name);
     const tr = await resolveNames(nameList, { skipAi: true });
     const mapRows = (translator: typeof tr): SplAssister[] =>
@@ -3506,23 +3996,7 @@ const COMP_META_TTL = SEASON_TTL;
 
 // ---------- البند 9: ترويسة البطولة (شعار + موسم) ----------
 
-/**
- * حالة موسم البطولة:
- * - `ongoing`: انطلق الموسم ولم ينتهِ بعد (اليوم بين start و end).
- * - `upcoming`: موسم محدّد لكنه لم يبدأ بعد (today < start) — مثل الدوريات
- *    الأوروبية صيفًا التي يصبح موسمها current قبل انطلاقها بأسابيع.
- * - `finished`: انتهى الموسم (today > end).
- * - `unknown`: لا تتوفر تواريخ start/end من المزود.
- */
-export type CompetitionStatus = "ongoing" | "upcoming" | "finished" | "unknown";
-
-function computeStatus(start: string | null, end: string | null): CompetitionStatus {
-  if (!start || !end) return "unknown";
-  const today = new Date().toISOString().slice(0, 10); // بتوقيت UTC؛ تواريخ المزود يومية فلا حاجة لدقّة المنطقة
-  if (today < start) return "upcoming";
-  if (today > end) return "finished";
-  return "ongoing";
-}
+export type { CompetitionStatus };
 
 export interface SplCompetitionMeta {
   logo: string | null;
@@ -3535,12 +4009,12 @@ export interface SplCompetitionMeta {
 
 export async function getCompetitionMeta(comp: SaudiCompetition): Promise<SplCompetitionMeta> {
   try {
-    // المفتاح موسوم بنسخة (v2) لأن شكل القيمة تغيّر (إضافة start/end/status)؛
-    // رفع النسخة يُبطل القيم القديمة فورًا بدل انتظار TTL.
+    // المفتاح موسوم بنسخة (v3): تصحيح كأس لم يُحسم نهائيها بعد دور مبكر.
+    // رفع النسخة يُبطل «منتهٍ» الكاذب فورًا بدل انتظار TTL.
     // ملاحظة مهمة: لا نلتقط الخطأ داخل الـ fetcher — نتركه يُرمى حتى لا يخزّن
     // withSWR نتيجة fallback خاطئة (start/end=null) لـ 6 ساعات عند فشل/تحديد
     // معدّل من API-Football (يحدث وقت النشر مع رشقة الطلبات المتوازية).
-    return await withSWR(`spl:compmeta:v2:${comp.id}`, COMP_META_TTL, COMP_META_TTL * 2, async () => {
+    return await withSWR(`spl:compmeta:v3:${comp.id}`, COMP_META_TTL, COMP_META_TTL * 2, async () => {
       const rows = await apiGet("leagues", { id: comp.id });
       if (!rows.length) throw new Error(`[SaudiLeague] no league data for ${comp.id}`);
       const lg = rows[0]?.league ?? {};
@@ -3548,17 +4022,28 @@ export async function getCompetitionMeta(comp: SaudiCompetition): Promise<SplCom
       const current = seasons.find((s: any) => s.current) ?? seasons[seasons.length - 1];
       const start = typeof current?.start === "string" ? current.start : null;
       const end = typeof current?.end === "string" ? current.end : null;
-      let status = computeStatus(start, end);
-      // المزود قد يُبقي موسمًا قديمًا بعلم current بينما انطلقت مباريات الموسم
-      // الجديد فعلًا (شائع في الدوريات العربية)، فيظهر «انتهى الموسم» خطأً.
-      // وجود مباراة قادمة وشيكة دلالة كافية أن الموسم جارٍ — نطلب التالية فقط
-      // حين تحتسب الحالة finished (تكلفة محدودة بطلب واحد للحالات النادرة).
+      let status = computeSeasonDateStatus(start, end);
+      // المزود قد يقصّر تاريخ النهاية إلى آخر مباراة نُشرت (كأس بعد دور الـ32)
+      // أو يُبقي موسمًا قديمًا بعلم current. نصحّح قبل تثبيت الشارة.
       if (status === "finished") {
         const next = await apiGet("fixtures", { league: comp.id, next: 1 }).catch(() => []);
         const ts = next[0]?.fixture?.timestamp;
-        if (typeof ts === "number" && (ts * 1000 - Date.now()) / 86_400_000 <= 21) {
-          status = "ongoing";
+        const hasUpcomingWithinDays =
+          typeof ts === "number" && (ts * 1000 - Date.now()) / 86_400_000 <= 21;
+        let recentRounds: { round?: string | null; finished: boolean }[] = [];
+        if (!hasUpcomingWithinDays && comp.type === "cup") {
+          const last = await apiGet("fixtures", { league: comp.id, last: 10 }).catch(() => []);
+          recentRounds = (last ?? []).map((r: any) => ({
+            round: r?.league?.round ?? null,
+            finished: WC_FINISHED_STATUSES.has(String(r?.fixture?.status?.short ?? "")),
+          }));
         }
+        status = refineCompetitionStatus({
+          dateStatus: status,
+          type: comp.type,
+          hasUpcomingWithinDays,
+          recentRounds,
+        });
       }
       return {
         logo: lg.logo ?? null,
@@ -4226,11 +4711,16 @@ export interface SplCardLeader {
 }
 
 async function getCardLeaders(comp: SaudiCompetition, kind: "yellow" | "red", seasonOverride?: number): Promise<SplCardLeader[]> {
-  const season = seasonOverride ?? await seasonFor(comp);
+  const season = seasonOverride ?? (await seasonFor(comp));
   const path = kind === "yellow" ? "players/topyellowcards" : "players/topredcards";
-  const { cacheKey, ttl } = await raceBoardCache(comp, seasonOverride, `spl:${path}`);
+  const { cacheKey, ttl } = await raceBoardCache(comp, seasonOverride, `spl:${path}:v4`);
   return withSWR(cacheKey, ttl, ttl * 2, async () => {
-    const rows = await apiGet(path, { league: comp.id, season });
+    const rows = await apiGet(path, { league: comp.id, season }).catch(() => []);
+    if (!rows.length) {
+      const fromEvents = await aggregateSeasonRacesFromEvents(comp, season);
+      const list = kind === "yellow" ? fromEvents.yellow : fromEvents.red;
+      if (list.length > 0) return list;
+    }
     const nameList = rows.map((r: any) => r.player?.name);
     const tr = await resolveNames(nameList, { skipAi: true });
     const mapRows = (translator: typeof tr): SplCardLeader[] =>

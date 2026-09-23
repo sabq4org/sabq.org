@@ -10,6 +10,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { useCanonical } from "@/hooks/useCanonical";
+import { useAnalyticsPageMetadata } from "@/hooks/use-analytics";
 import { apiRequest, queryClient, apiUrl } from "@/lib/queryClient";
 import {
   Heart,
@@ -168,15 +169,7 @@ export default function EnglishArticleDetail() {
     }
   }, [article?.id]);
 
-  // Update document.title for SEO (GA4 auto-tracks page views)
-  useEffect(() => {
-    if (article?.title) {
-      document.title = `${article.title} | Sabq`;
-    }
-    return () => {
-      document.title = 'Sabq - Saudi Electronic Newspaper';
-    };
-  }, [article?.title]);
+  useAnalyticsPageMetadata(article?.title ? `${article.title} | Sabq` : isLoading ? null : "Article Not Found | Sabq");
 
   useCanonical(article ? `https://sabq.org/en/article/${article.englishSlug || params.slug}` : null);
 
@@ -214,8 +207,12 @@ export default function EnglishArticleDetail() {
 
   // Sanitize HTML content with XSS protection
   const sanitizedContent = DOMPurify.sanitize(article.content, {
-    ADD_TAGS: ['iframe', 'blockquote', 'img'],
-    ADD_ATTR: ['allow', 'allowfullscreen', 'frameborder', 'scrolling', 'src'],
+    ADD_TAGS: ['iframe', 'blockquote', 'img', 'figure', 'figcaption'],
+    ADD_ATTR: [
+      'allow', 'allowfullscreen', 'frameborder', 'scrolling', 'src',
+      'class', 'data-align', 'data-width', 'data-caption', 'style',
+      'alt', 'title', 'loading', 'width', 'height', 'srcset', 'sizes',
+    ],
     ALLOWED_URI_REGEXP: /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|sms|cid|xmpp):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i,
   });
 

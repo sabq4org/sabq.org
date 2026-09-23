@@ -90,6 +90,8 @@ interface GroupMember {
   addedAt: string;
 }
 
+type LicenseFilter = "all" | "with_valid" | "without_valid";
+
 interface Campaign {
   id: string;
   title: string;
@@ -105,10 +107,17 @@ interface Campaign {
   recipientCount?: number;
   sentCount?: number;
   failedCount?: number;
+  metadata?: { licenseFilter?: LicenseFilter } | null;
   createdBy: string;
   createdAt: string;
   updatedAt: string;
 }
+
+const LICENSE_FILTER_LABELS: Record<LicenseFilter, string> = {
+  all: "كل حالات الترخيص",
+  with_valid: "يملكون ترخيصاً سارياً",
+  without_valid: "بلا ترخيص ساري",
+};
 
 interface CampaignDelivery {
   id: string;
@@ -238,6 +247,7 @@ function CampaignsTab() {
     targetGroups: [] as string[],
     targetRoles: [] as string[],
     targetUserIds: [] as string[],
+    licenseFilter: "all" as LicenseFilter,
     scheduleEnabled: false,
     scheduledAt: "",
   });
@@ -266,6 +276,7 @@ function CampaignsTab() {
           targetGroups: data.audienceType === "groups" ? data.targetGroups : undefined,
           targetRoles: data.audienceType === "roles" ? data.targetRoles : undefined,
           targetUserIds: data.audienceType === "custom" ? data.targetUserIds : undefined,
+          metadata: { licenseFilter: data.licenseFilter },
           scheduledAt: data.scheduleEnabled ? data.scheduledAt : undefined,
         }),
       });
@@ -292,6 +303,7 @@ function CampaignsTab() {
           targetGroups: data.audienceType === "groups" ? data.targetGroups : undefined,
           targetRoles: data.audienceType === "roles" ? data.targetRoles : undefined,
           targetUserIds: data.audienceType === "custom" ? data.targetUserIds : undefined,
+          metadata: { licenseFilter: data.licenseFilter },
           scheduledAt: data.scheduleEnabled ? data.scheduledAt : undefined,
         }),
       });
@@ -345,6 +357,7 @@ function CampaignsTab() {
       targetGroups: [],
       targetRoles: [],
       targetUserIds: [],
+      licenseFilter: "all",
       scheduleEnabled: false,
       scheduledAt: "",
     });
@@ -353,6 +366,7 @@ function CampaignsTab() {
   };
 
   const handleEdit = (campaign: Campaign) => {
+    const licenseFilter = campaign.metadata?.licenseFilter;
     setEditingCampaign(campaign);
     setFormData({
       title: campaign.title,
@@ -362,6 +376,10 @@ function CampaignsTab() {
       targetGroups: campaign.targetGroups || [],
       targetRoles: campaign.targetRoles || [],
       targetUserIds: campaign.targetUserIds || [],
+      licenseFilter:
+        licenseFilter === "with_valid" || licenseFilter === "without_valid"
+          ? licenseFilter
+          : "all",
       scheduleEnabled: !!campaign.scheduledAt,
       scheduledAt: campaign.scheduledAt || "",
     });
@@ -449,6 +467,12 @@ function CampaignsTab() {
                     {campaign.audienceType === "groups" && "حسب المجموعات"}
                     {campaign.audienceType === "custom" && "مخصص"}
                   </span>
+                  {campaign.metadata?.licenseFilter &&
+                    campaign.metadata.licenseFilter !== "all" && (
+                      <span data-testid={`text-license-filter-${campaign.id}`}>
+                        {LICENSE_FILTER_LABELS[campaign.metadata.licenseFilter]}
+                      </span>
+                    )}
                   {campaign.sentAt && (
                     <span>
                       أُرسلت: {format(new Date(campaign.sentAt), "dd MMMM yyyy, HH:mm", { locale: ar })}
@@ -604,6 +628,28 @@ function CampaignsTab() {
                 </div>
               </div>
             )}
+
+            <div className="space-y-2">
+              <Label>الترخيص المهني</Label>
+              <Select
+                value={formData.licenseFilter}
+                onValueChange={(value: LicenseFilter) =>
+                  setFormData((prev) => ({ ...prev, licenseFilter: value }))
+                }
+              >
+                <SelectTrigger data-testid="select-license-filter">
+                  <SelectValue placeholder="فلتر الترخيص" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{LICENSE_FILTER_LABELS.all}</SelectItem>
+                  <SelectItem value="with_valid">{LICENSE_FILTER_LABELS.with_valid}</SelectItem>
+                  <SelectItem value="without_valid">{LICENSE_FILTER_LABELS.without_valid}</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                «بلا ترخيص ساري» يشمل من لم يرفع ملفاً، أو منتهياً، أو تحت المراجعة، أو يحتاج تصحيحاً — مناسب لحث الكتاب والمراسلين على استخراج الترخيص.
+              </p>
+            </div>
 
             <div className="flex items-center gap-3">
               <Switch

@@ -45,6 +45,7 @@ import {
   type TsMatchLive,
 } from "./theSportsService";
 import { resolveNames } from "./worldCupNameTranslator";
+import { resolveTsEventPlayerName } from "./sportsPlayerNameFixes";
 import {
   filterUsersByEventPref,
   type SportsAlertEventKey,
@@ -58,6 +59,12 @@ import {
   sendToMultipleDevices,
   isFcmConfigured,
 } from "./fcmService";
+import {
+  isPlausibleFootballFullTime,
+  isWithinLiveOverlayWindow,
+  latestPositiveEventMinute,
+  mergeLiveMatchProgress,
+} from "./sportsMatchStatus";
 
 interface MatchSnapshot {
   homeGoals: number;
@@ -755,6 +762,20 @@ function detectAlerts(matches: SplLiveBoardItem[], detailedGoalFixtureIds: Set<n
 
     // نهاية المباراة
     if (!prev.finished && cur.finished) {
+      // ومضة FT عند الاستراحة/بداية الشوط الثاني (~د45–47) ليست نهاية.
+      // نُبقي اللقطة جارية حتى تصمد ساعة ≥90 (أو رمز إداري) وتتجاوز حائط الومضة المبكرة.
+      if (
+        !isPlausibleFootballFullTime({
+          elapsed: m.status.elapsed,
+          extra: m.status.extra,
+          statusCode: m.status.code,
+          kickoffTs: m.timestamp,
+        })
+      ) {
+        cur.finished = false;
+        cur.live = true;
+        continue;
+      }
       // حذر الأدوار الإقصائية: تعادل بلا ترجيح لا يُنهي مباراة إقصائية — الغالب
       // FT خاطفة قبل الأشواط الإضافية. نُبقي اللقطة «غير منتهية» فيُعاد فحص
       // التحوّل كل دورة، ولا نُعلن إلا إن صمدت «النهاية» المهلة كاملة.
@@ -951,6 +972,8 @@ export const SPORTS_APP_DEBUG_BUNDLE_ID = "com.sabq.sports.dev";
 const NEWS_APP_BUNDLE_IDS = new Set([
   "com.sabq.sabqorg",
   "com.sabq.smart",
+  "com.sabqorg.sabq",
+  "com.sabqorg.sabq.dev",
 ]);
 
 type PushDeviceRow = {
@@ -1079,8 +1102,8 @@ export async function pushToUserDevices(
       await Promise.all(
         apnsDevices.map(async (d) => {
           try {
-            // دائماً topic فارا للتنبيهات الرياضية — حتى للتوكنات القديمة بلا bundleId.
-            const topic = SPORTS_APP_BUNDLE_ID;
+            // Topic فارا للتنبيهات الرياضية (يدعم حزمة debug للمحاكي/التطوير)
+            const topic = d.bundleId === SPORTS_APP_DEBUG_BUNDLE_ID ? SPORTS_APP_DEBUG_BUNDLE_ID : SPORTS_APP_BUNDLE_ID;
             const resp = await sendPushNotification(
               d.token,
               createCustomNotificationPayload(title, body, {
@@ -1191,9 +1214,7 @@ async function collectTsLive(matches: SplLiveBoardItem[]): Promise<Map<number, T
     matches.map(async (m) => {
       const tsCompId = getTsCompetitionId(m.competitionSlug);
       if (!tsCompId) return; // بطولة غير مربوطة بـTheSports → المصدر الحالي
-      const nearKickoff =
-        !m.status.finished && m.timestamp <= now + 600 && m.timestamp >= now - 3 * 3600;
-      if (!m.status.live && !nearKickoff) return;
+      if (!m.status.live && !isWithinLiveOverlayWindow(m.timestamp, now)) return;
       try {
         const ts = await getTheSportsMatchLive(m.id, m.timestamp, tsCompId);
         if (ts && (ts.live || ts.finished)) out.set(m.id, ts);
@@ -1226,11 +1247,15 @@ function applyTsOverlay(
           ? { home: ts.penHome, away: ts.penAway }
           : m.penalties,
       status: {
-        ...m.status,
-        elapsed: ts.elapsed ?? m.status.elapsed,
-        extra: ts.extra ?? m.status.extra,
-        live: ts.live,
-        finished: ts.finished || m.status.finished,
+        ...mergeLiveMatchProgress(m.status, {
+          live: ts.live,
+          finished: ts.finished,
+          elapsed: ts.elapsed,
+          extra: ts.extra,
+          statusId: ts.statusId,
+          latestEventMinute: latestPositiveEventMinute(ts.events),
+          kickoffTs: m.timestamp,
+        }),
       },
     };
   });
@@ -1321,7 +1346,13 @@ async function detectTsEventAlerts(
         for (const a of aliases) nextSeen.add(a);
         const minute = e.minute ? ` · د${e.minute}` : "";
         const teamName = TEAM_NAME(m, e.team);
-        const who = arById(e.playerId) ?? (e.player ? tr(e.player) : teamName || matchName);
+        const teamId = e.team === "home" ? m.home.id : e.team === "away" ? m.away.id : 0;
+        const who = resolveTsEventPlayerName(
+          e.player,
+          arById(e.playerId),
+          e.player ? tr(e.player) : teamName || matchName,
+          teamId,
+        );
         const score =
           e.homeScore != null && e.awayScore != null
             ? `${m.home.name} ${e.homeScore}-${e.awayScore} ${m.away.name}`
@@ -1330,7 +1361,7 @@ async function detectTsEventAlerts(
           e.type === "own_goal"
             ? `هدف عكسي${who ? ` من ${who}` : ""}${minute}`
             : `هدف ${who}${e.type === "penalty_goal" ? " (ركلة جزاء)" : ""}${minute}${
-                e.assist ? ` · صناعة ${tr(e.assist)}` : ""
+                e.assist ? ` · صناعة ${resolveTsEventPlayerName(e.assist, null, tr(e.assist), teamId)}` : ""
               }`;
         out.push({
           fixtureId: m.id,
@@ -1381,9 +1412,15 @@ async function detectTsEventAlerts(
       for (const a of aliases) nextSeen.add(a);
       const minute = e.minute ? ` · د${e.minute}` : "";
       const teamName = TEAM_NAME(m, e.team);
+      const teamId = e.team === "home" ? m.home.id : e.team === "away" ? m.away.id : 0;
+      const who = resolveTsEventPlayerName(
+        e.player,
+        arById(e.playerId),
+        e.player ? tr(e.player) : "",
+        teamId,
+      );
 
       if (e.type === "red" || e.type === "yellow_red") {
-        const who = arById(e.playerId) ?? (e.player ? tr(e.player) : "");
         out.push({
           fixtureId: m.id,
           kind: "card",
@@ -1399,7 +1436,6 @@ async function detectTsEventAlerts(
           ),
         });
       } else if (e.type === "yellow") {
-        const who = arById(e.playerId) ?? (e.player ? tr(e.player) : "");
         out.push({
           fixtureId: m.id,
           kind: "card",

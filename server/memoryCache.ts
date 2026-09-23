@@ -843,6 +843,36 @@ export class StaleWhileRevalidateCache {
 export const swrCache = new StaleWhileRevalidateCache();
 
 /**
+ * كاش منفصل لأُسر مفاتيح اللاعبين غير محدودة العدد (مفتاح لكل playerId من
+ * مئات الآلاف الممكنة). قبل العزل كانت صفحات اللاعبين تُبقي swrCache العام
+ * عند سقفه (5000/5000) فتطرد المفاتيح الساخنة — قوائم المقالات والتصنيفات —
+ * ويعود حِملها لقاعدة البيانات (حادثة بطء 2026-08-07). هنا الطرد يقع بين
+ * مفاتيح اللاعبين أنفسهم فقط.
+ */
+export const playerSwrCache = new StaleWhileRevalidateCache(4000, "playerSwrCache");
+
+// بادئات الأُسر غير المحدودة فقط — الفرق (teamId) والجولات محدودة العدد فتبقى
+// في الكاش العام. أي أسرة جديدة بمفتاح لكل لاعب تُضاف هنا.
+const PLAYER_KEY_PREFIXES = [
+  "spl:player", // spl:player: / spl:player-identity: / spl:player-bridge: / spl:playerseason:
+  "spl:market:",
+  "spl:form:",
+  "spl:transfers:player:",
+  "spl:injuries:player:",
+  "wc:player", // wc:player: / wc:playeridEn: / wc:playermarket: / wc:playerform:
+  "tc:story:",
+  "ts:market:",
+];
+
+/** يعيد الكاش الصحيح للمفتاح — استخدمه أيضًا عند أي set يدوي خارج withSWR. */
+export function swrCacheFor(key: string): StaleWhileRevalidateCache {
+  for (const prefix of PLAYER_KEY_PREFIXES) {
+    if (key.startsWith(prefix)) return playerSwrCache;
+  }
+  return swrCache;
+}
+
+/**
  * أحجام كل الكاشات الحيّة مرتّبة تنازليًا — يستهلكها قياس الموارد لطباعة
  * أكبرها في سطر [Runtime]. كاش يقترب حجمه من سقفه ويحمل قيمًا كبيرة هو أول
  * المشتبهين في تسرّب الذاكرة.
@@ -879,24 +909,28 @@ export async function withSWR<T>(
   // التطبيق تبقى مفاتيحها كما هي تمامًا — توافق رجعي كامل، بلا تبريد كاش.
   if (isEnglishSports()) cacheKey = `${cacheKey}:en`;
 
+  // مفاتيح اللاعبين غير المحدودة تُعزل في playerSwrCache (اللاحقة ‎:en لا
+  // تؤثر على مطابقة البادئات).
+  const cache = swrCacheFor(cacheKey);
+
   // single-flight: جلب واحد فقط جارٍ لكل مفتاح، وكل المتنافسين عليه ينتظرون
   // نفس الوعد. سابقًا كان المنتظرون يستقصون isRefreshing حتى 6 ثوانٍ ثم
   // يستسلمون ويبدؤون جلبًا مكررًا — مضخّم thundering-herd تحت طوابير rate-limit
   // عند المزوّد. الرفض يصل لكل المنتظرين ولا يلوّث الكاش (لا set عند الفشل).
   const startFetch = (logLabel: string): Promise<T> => {
-    swrCache.markRefreshing(cacheKey);
+    cache.markRefreshing(cacheKey);
     const promise = (async () => {
       try {
         const data = await fetcher();
-        swrCache.set(cacheKey, data, ttl, staleWhileRevalidate);
+        cache.set(cacheKey, data, ttl, staleWhileRevalidate);
         return data;
       } catch (err) {
         console.error(`[SWR] ${logLabel} fetch failed for ${cacheKey}:`, err);
-        swrCache.clearRefreshing(cacheKey);
+        cache.clearRefreshing(cacheKey);
         throw err;
       }
     })();
-    return swrCache.trackInflight(cacheKey, promise);
+    return cache.trackInflight(cacheKey, promise);
   };
 
   // Explicit force-refresh (e.g. the native iOS pull-to-refresh, which sends a
@@ -909,12 +943,12 @@ export async function withSWR<T>(
   // app" bug. Concurrent force-refreshes are coalesced via the shared in-flight
   // promise so a burst of pulls never stampedes the DB.
   if (forceFresh) {
-    const inflight = swrCache.getInflight<T>(cacheKey);
+    const inflight = cache.getInflight<T>(cacheKey);
     if (inflight) return awaitWithDeadline(inflight, cacheKey);
     return awaitWithDeadline(startFetch('Force-fresh'), cacheKey);
   }
 
-  const cached = swrCache.get<T>(cacheKey);
+  const cached = cache.get<T>(cacheKey);
 
   // Fresh cache hit - return immediately
   if (cached.data !== null && !cached.isStale) {
@@ -940,7 +974,7 @@ export async function withSWR<T>(
   // No cache - must fetch. نتشارك الوعد الجاري إن وُجد، وإلا نبدأ الجلب الوحيد.
   // المستدعي مقيّد بسقف انتظار: يرفض بعده (502 سريع بدل احتجاز المقبس) بينما
   // الجلب نفسه يستمر بالخلفية ويملأ الكاش إن نجح متأخرًا.
-  const inflight = swrCache.getInflight<T>(cacheKey);
+  const inflight = cache.getInflight<T>(cacheKey);
   if (inflight) return awaitWithDeadline(inflight, cacheKey);
   return awaitWithDeadline(startFetch('Initial'), cacheKey);
 }

@@ -20,7 +20,7 @@ import {
   localizeRound,
   localizeTeamName,
 } from "./worldCupNames";
-import { localizeGcTeam, localizeGcVenue } from "./gulfCupNames";
+import { dedupeGcVenues, localizeGcTeam, localizeGcVenue } from "./gulfCupNames";
 import {
   GC_FIXTURES,
   GC_GROUPS,
@@ -36,6 +36,11 @@ import {
 import { GC_EDITIONS, getGcTeamLegacy, type GcTeamLegacy } from "./gulfCupHistory";
 import { resolveNames } from "./worldCupNameTranslator";
 import { apiFootballGet } from "./apiFootballClient";
+import {
+  isWithinLiveOverlayWindow,
+  latestPositiveEventMinute,
+  mergeLiveMatchProgress,
+} from "./sportsMatchStatus";
 import {
   getCommentary,
   getExpectedLineups,
@@ -473,14 +478,7 @@ export async function getGcOverview(): Promise<GcOverview> {
     const now = Date.now();
     const started = sorted.some((f) => f.status.live || f.status.finished);
 
-    const venueSeen = new Set<string>();
-    const venues: { name: string; city: string }[] = [];
-    for (const f of sorted) {
-      const key = `${f.venue.name}|${f.venue.city}`;
-      if (!f.venue.name || venueSeen.has(key)) continue;
-      venueSeen.add(key);
-      venues.push(f.venue);
-    }
+    const venues = dedupeGcVenues(sorted.map((f) => f.venue));
 
     const saudiTeam = teams.find((t) => t.id === SAUDI_TEAM_ID) ?? null;
     const saudiGroup =
@@ -1095,9 +1093,21 @@ export async function getGcMatchDetail(fixtureId: number): Promise<GcMatchDetail
           goals: { home: liveTs.home, away: liveTs.away },
           status: {
             ...fixture.status,
-            elapsed: liveTs.elapsed ?? fixture.status.elapsed,
-            live: liveTs.live,
-            finished: liveTs.finished || fixture.status.finished,
+            ...mergeLiveMatchProgress(
+              {
+                ...fixture.status,
+                extra: null,
+              },
+              {
+                live: liveTs.live,
+                finished: liveTs.finished,
+                elapsed: liveTs.elapsed,
+                extra: liveTs.extra,
+                statusId: liveTs.statusId,
+                latestEventMinute: latestPositiveEventMinute(liveTs.events),
+                kickoffTs: fixture.timestamp,
+              },
+            ),
           },
         };
       }
@@ -1354,10 +1364,10 @@ async function getGcMatchTsId(fx: GcFixture): Promise<string | null> {
 /** نتيجة TheSports اللحظية فوق المباريات الجارية فقط (الجسر الزمني ±دقيقتين). */
 async function overlayGcLiveScores(fixtures: GcFixture[]): Promise<GcFixture[]> {
   if (!GC_TS_COMPETITION_ID) return fixtures;
-  if (!fixtures.some((f) => f.status.live && !f.status.finished)) return fixtures;
+  if (!fixtures.some((f) => f.status.live || isWithinLiveOverlayWindow(f.timestamp))) return fixtures;
   return Promise.all(
     fixtures.map(async (f) => {
-      if (!f.status.live || f.status.finished) return f;
+      if (!f.status.live && !isWithinLiveOverlayWindow(f.timestamp)) return f;
       const ts = await getTheSportsFastScore(f.id, f.timestamp, GC_TS_COMPETITION_ID).catch(
         () => null,
       );
@@ -1367,9 +1377,20 @@ async function overlayGcLiveScores(fixtures: GcFixture[]): Promise<GcFixture[]> 
         goals: { home: ts.home, away: ts.away },
         status: {
           ...f.status,
-          elapsed: ts.elapsed ?? f.status.elapsed,
-          live: ts.live,
-          finished: ts.finished || f.status.finished,
+          ...mergeLiveMatchProgress(
+            {
+              ...f.status,
+              extra: null,
+            },
+            {
+              live: ts.live,
+              finished: ts.finished,
+              elapsed: ts.elapsed,
+              extra: ts.extra,
+              statusId: ts.statusId,
+              kickoffTs: f.timestamp,
+            },
+          ),
         },
       };
     }),

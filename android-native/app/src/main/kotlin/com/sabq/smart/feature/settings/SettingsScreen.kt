@@ -53,6 +53,7 @@ import androidx.compose.material.icons.filled.PersonOff
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material.icons.filled.WarningAmber
@@ -89,6 +90,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sabq.smart.R
 import com.sabq.smart.data.User
+import com.sabq.smart.data.analytics.SabqAnalytics
 import com.sabq.smart.feature.auth.AuthViewModel
 import com.sabq.smart.ui.components.SurfaceCard
 import com.sabq.smart.ui.theme.SabqAccent
@@ -128,6 +130,7 @@ fun SettingsScreen(
     onNewsletterClick: () -> Unit = {},
     onPrivacyClick: () -> Unit = {},
     onTermsClick: () -> Unit = {},
+    onAiTeamClick: () -> Unit = {},
     onOpenWebsite: () -> Unit = {},
     onOpenTwitter: () -> Unit = {},
     onSubmitOpinionClick: () -> Unit = {},
@@ -142,6 +145,9 @@ fun SettingsScreen(
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val currentUser by authViewModel.currentUser.collectAsStateWithLifecycle()
     val settingsContext = androidx.compose.ui.platform.LocalContext.current
+    var analyticsAllowed by remember {
+        mutableStateOf(SabqAnalytics.consentState(settingsContext) == SabqAnalytics.Consent.GRANTED)
+    }
     val revisionsStore = remember {
         dagger.hilt.android.EntryPointAccessors.fromApplication(
             settingsContext.applicationContext,
@@ -229,6 +235,14 @@ fun SettingsScreen(
         // 5) Display
         DisplaySection(viewModel = viewModel, settings = settings)
 
+        AnalyticsConsentSection(
+            allowed = analyticsAllowed,
+            onChange = { enabled ->
+                analyticsAllowed = enabled
+                SabqAnalytics.setConsent(settingsContext, enabled)
+            },
+        )
+
         // 5.5) تجربة التصفح (وضع Lite)
         com.sabq.smart.feature.lite.BrowsingExperienceSection(
             settings = settings,
@@ -242,6 +256,7 @@ fun SettingsScreen(
         AboutSection(
             onPrivacyClick = onPrivacyClick,
             onTermsClick = onTermsClick,
+            onAiTeamClick = onAiTeamClick,
             onOpenWebsite = onOpenWebsite,
             onOpenTwitter = onOpenTwitter,
             onContactClick = onContactClick,
@@ -1583,6 +1598,52 @@ private fun AccentDot(
     }
 }
 
+@Composable
+private fun AnalyticsConsentSection(
+    allowed: Boolean,
+    onChange: (Boolean) -> Unit,
+) {
+    SurfaceCard(accent = SabqTheme.colors.teal) {
+        SectionHeader(
+            title = "الخصوصية والقياس",
+            subtitle = "تحكم في قياس الاستخدام لتحسين التطبيق",
+            icon = Icons.Filled.BarChart,
+            tint = SabqTheme.colors.teal,
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            SmallSquareBadge(icon = Icons.Filled.Security, tint = SabqTheme.colors.teal)
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text(
+                    text = "السماح بتحليلات الاستخدام",
+                    style = SabqTheme.typography.cardTitle.copy(
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = SabqTheme.colors.ink,
+                    ),
+                )
+                Text(
+                    text = "قد يرتبط بمعرف حسابك عند تسجيل الدخول، ولا يرسل الاسم أو البريد أو الهاتف",
+                    style = SabqTheme.typography.metaSmall.copy(fontSize = 13.sp, color = SabqTheme.colors.secondaryInk),
+                )
+            }
+            Switch(
+                checked = allowed,
+                onCheckedChange = onChange,
+                colors = SwitchDefaults.colors(
+                    checkedThumbColor = Color.White,
+                    checkedTrackColor = SabqTheme.colors.teal,
+                    uncheckedThumbColor = Color.White,
+                    uncheckedTrackColor = SabqTheme.colors.outline,
+                ),
+            )
+        }
+    }
+}
+
 // MARK: - Subscription
 
 @Composable
@@ -1610,6 +1671,7 @@ private fun SubscriptionSection(onNewsletterClick: () -> Unit) {
 private fun AboutSection(
     onPrivacyClick: () -> Unit,
     onTermsClick: () -> Unit,
+    onAiTeamClick: () -> Unit,
     onOpenWebsite: () -> Unit,
     onOpenTwitter: () -> Unit,
     onContactClick: () -> Unit,
@@ -1627,6 +1689,13 @@ private fun AboutSection(
                 fontSize = 15.sp,
                 color = SabqTheme.colors.secondaryInk,
             ),
+        )
+        SettingsRow(
+            title = "فريق سبق الذكي",
+            subtitle = "زملاؤنا الرقميون بأسمائهم وأدوارهم — تحت إشراف بشري",
+            icon = Icons.Filled.Groups,
+            tint = SabqTheme.colors.primaryEnd,
+            onClick = onAiTeamClick,
         )
         SettingsRow(
             title = "خصوصيتك أولاً",

@@ -64,7 +64,12 @@ nonisolated enum ArticleHtmlParser {
         if tag.name == "img" {
             scanner.consumeTag()
             if let src = tag.attr("src"), let url = URL(string: src) {
-                return .image(url: url, alt: tag.attr("alt"), caption: nil)
+                return .image(
+                    url: url,
+                    alt: tag.attr("alt"),
+                    caption: tag.attr("data-caption").flatMap { $0.isEmpty ? nil : $0 },
+                    layout: ImageLayout.parse(width: tag.attr("data-width"), align: tag.attr("data-align"))
+                )
             }
             return nil
         }
@@ -117,6 +122,10 @@ nonisolated enum ArticleHtmlParser {
             return parseList(scanner: &scanner, ordered: tag.name == "ol")
         }
 
+        if tag.name == "table" {
+            return parseTable(scanner: &scanner, tag: tag)
+        }
+
         if tag.name == "p" {
             let inner = scanner.consumeContainer()
             if let img = tryExtractInlineImage(inner) { return img }
@@ -144,6 +153,43 @@ nonisolated enum ArticleHtmlParser {
             if !runsAreEmpty(runs) { items.append(runs) }
         }
         return .list(ordered: ordered, items: items)
+    }
+
+    /// `<table class="sabq-table"><tbody><tr><th>…</th></tr><tr><td>…</td></tr>…`
+    /// كان الجدول يسقط إلى «وسم مجهول» فتتناثر خلاياه كفقرات مستقلة.
+    /// الصف الأول يُعدّ رأسًا إذا كانت كل خلاياه <th>. colgroup/thead/tbody تُتجاوز.
+    private static func parseTable(scanner: inout HTMLScanner, tag: HTMLTag) -> ArticleBlock? {
+        let inner = scanner.consumeContainer()
+        let cardStyle = tag.classes.contains("sabq-table--card")
+        var header: [[InlineRun]]? = nil
+        var rows: [[[InlineRun]]] = []
+        var s = HTMLScanner(input: inner)
+        while !s.isAtEnd {
+            s.skipWhitespace()
+            guard let t = s.peekTag() else { s.advance(1); continue }
+            guard t.name == "tr", !t.isClosing else { s.consumeTag(); continue }
+            let rowHTML = s.consumeContainer()
+            var cells: [[InlineRun]] = []
+            var allHeader = true
+            var c = HTMLScanner(input: rowHTML)
+            while !c.isAtEnd {
+                c.skipWhitespace()
+                guard let ct = c.peekTag() else { c.advance(1); continue }
+                guard (ct.name == "td" || ct.name == "th"), !ct.isClosing else { c.consumeTag(); continue }
+                if ct.name == "td" { allHeader = false }
+                // فقرات متعددة داخل الخلية → أسطر
+                let cellHTML = c.consumeContainer().replacingOccurrences(of: "</p><p", with: "<br><p")
+                cells.append(parseInlineRuns(cellHTML))
+            }
+            guard !cells.isEmpty else { continue }
+            if allHeader, header == nil, rows.isEmpty {
+                header = cells
+            } else {
+                rows.append(cells)
+            }
+        }
+        guard header != nil || !rows.isEmpty else { return nil }
+        return .table(header: header, rows: rows, cardStyle: cardStyle)
     }
 
     private static func parseImageGallery(scanner: inout HTMLScanner, tag: HTMLTag) -> ArticleBlock {
@@ -276,6 +322,19 @@ nonisolated enum ArticleHtmlParser {
         return .other
     }
 
+    /// قيمة سمة داخل وسم خام (`<img … data-width="50%">`) — للمسار الذي لا يملك HTMLTag.
+    private static func inlineAttr(_ name: String, in raw: String) -> String? {
+        for q in ["\"", "'"] {
+            let pattern = "\\b\(name)\\s*=\\s*\(q)([^\(q)]*)\(q)"
+            if let regex = HTMLRegexCache.regex(pattern, options: .caseInsensitive),
+               let m = regex.firstMatch(in: raw, range: NSRange(raw.startIndex..., in: raw)),
+               let r = Range(m.range(at: 1), in: raw) {
+                return String(raw[r])
+            }
+        }
+        return nil
+    }
+
     private static func tryExtractInlineImage(_ inner: String) -> ArticleBlock? {
         let trimmed = inner.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.lowercased().hasPrefix("<img") else { return nil }
@@ -287,7 +346,12 @@ nonisolated enum ArticleHtmlParser {
         let alt: String? = match.numberOfRanges > 2
             ? Range(match.range(at: 2), in: trimmed).map { String(trimmed[$0]) }
             : nil
-        return .image(url: url, alt: alt, caption: nil)
+        return .image(
+            url: url,
+            alt: alt,
+            caption: inlineAttr("data-caption", in: trimmed).flatMap { $0.isEmpty ? nil : $0 },
+            layout: ImageLayout.parse(width: inlineAttr("data-width", in: trimmed), align: inlineAttr("data-align", in: trimmed))
+        )
     }
 
     // MARK: - Inline runs

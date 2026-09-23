@@ -1,6 +1,7 @@
 import { ReactNode, useState, useEffect, useMemo, useRef } from "react";
 import { Link, useLocation } from "wouter";
-import { useAuth, getHighestRole } from "@/hooks/useAuth";
+import { useQuery } from "@tanstack/react-query";
+import { useAuth, getHighestRole, hasPermission, hasRole } from "@/hooks/useAuth";
 import { LogOut, ChevronDown, Globe, User, Search, Star, Plus, PenLine, Mic, Newspaper, BadgeCheck, BadgeAlert } from "lucide-react";
 import { useDashboardFavorites } from "@/hooks/useDashboardFavorites";
 import {
@@ -52,6 +53,7 @@ import type { NavItem } from "@/nav/types";
 import { cn } from "@/lib/utils";
 import { MEDIA_LICENSE_DASHBOARD_WARNING } from "@shared/mediaLicense";
 import { useMediaLicenseGate } from "@/hooks/useMediaLicenseGate";
+import { DashboardSessionLoading } from "./DashboardSessionLoading";
 
 interface DashboardLayoutProps {
   children: ReactNode;
@@ -61,7 +63,7 @@ const OPEN_GROUP_STORAGE_KEY = "sabq.sidebar.open-group.v2";
 
 export function DashboardLayout({ children }: DashboardLayoutProps) {
   const [location, navigate] = useLocation();
-  const { user, isLoading } = useAuth({ redirectToLogin: true });
+  const { user, isLoading, isUnavailable, isRetrying, retryAuth } = useAuth({ redirectToLogin: true });
   const { toast } = useToast();
   
   const [openGroupId, setOpenGroupId] = useState<string | null>(() => {
@@ -90,6 +92,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
     const handleSearchShortcut = (event: KeyboardEvent) => {
       if (event.key.toLowerCase() === "k" && (event.metaKey || event.ctrlKey)) {
         event.preventDefault();
+        if (window.matchMedia("(max-width: 767px)").matches) return;
         searchInputRef.current?.focus();
       }
     };
@@ -166,6 +169,17 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
         .slice(0, 8)
     : [];
 
+  const canViewSocial = Boolean(
+    user && (hasPermission(user, "social_publish.view") || hasRole(user, "admin", "system_admin", "editor"))
+  );
+  const { data: socialStats } = useQuery<{ pendingAuthorProposals?: number }>({
+    queryKey: ["/api/social-publishing/stats"],
+    enabled: canViewSocial,
+    refetchInterval: 60_000,
+    staleTime: 30_000,
+  });
+  const pendingAuthorSocialProposals = socialStats?.pendingAuthorProposals ?? 0;
+
   // بطاقة هوية أعلى الشريط — كتّاب الرأي/الزاوية والمراسل ومدير المحتوى
   const isIdentitySidebar =
     role === "opinion_author" || role === "angle_writer" || role === "reporter" || role === "content_manager";
@@ -184,12 +198,12 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   if (isLoading || !user) {
     return (
       <DashboardThemeProvider>
-        <div className="flex h-screen w-full items-center justify-center" dir="rtl">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
-            <p className="mt-4 text-muted-foreground">جاري التحميل...</p>
-          </div>
-        </div>
+        <DashboardSessionLoading
+          isUnavailable={isUnavailable}
+          isRetrying={isRetrying}
+          onRetry={() => { void retryAuth(); }}
+          onReload={() => window.location.reload()}
+        />
       </DashboardThemeProvider>
     );
   }
@@ -304,6 +318,10 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       );
     }
 
+    const isSocialPublishing =
+      item.id === "social_publishing" || item.path === "/dashboard/social-publishing";
+    const badgeCount = isSocialPublishing ? pendingAuthorSocialProposals : (item.badge?.count ?? 0);
+
     return (
       <SidebarMenuItem key={item.id}>
         <SidebarMenuButton
@@ -315,9 +333,20 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
             href={item.path || "#"}
             onClick={() => handleNavClick(item)}
           >
-            <span className="flex min-w-0 items-center gap-3">
-              {Icon && <Icon className="h-4 w-4 shrink-0" />}
-              <span className="truncate">{item.labelAr || item.labelKey}</span>
+            <span className="flex w-full min-w-0 items-center justify-between gap-2">
+              <span className="flex min-w-0 items-center gap-3">
+                {Icon && <Icon className="h-4 w-4 shrink-0" />}
+                <span className="truncate">{item.labelAr || item.labelKey}</span>
+              </span>
+              {badgeCount > 0 && (
+                <Badge
+                  variant="secondary"
+                  className="h-5 min-w-5 shrink-0 rounded-full bg-primary/15 px-1.5 text-[10px] font-bold tabular-nums text-primary border-0"
+                  data-testid={`badge-nav-${item.id}`}
+                >
+                  {badgeCount > 99 ? "+99" : badgeCount}
+                </Badge>
+              )}
             </span>
           </Link>
         </SidebarMenuButton>
@@ -527,11 +556,12 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                     value={searchQuery}
                     onChange={(event) => setSearchQuery(event.target.value)}
                     placeholder="ابحث في لوحة التحكم"
-                    className="h-9 w-full rounded-md border border-sidebar-border bg-sidebar-accent/40 pr-9 pl-12 text-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-primary focus:bg-background"
+                    autoFocus={false}
+                    className="h-9 w-full rounded-md border border-sidebar-border bg-sidebar-accent/40 pr-9 pl-3 text-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-primary focus:bg-background md:pl-12"
                     aria-label="البحث في لوحة التحكم"
                     data-testid="sidebar-navigation-search"
                   />
-                  <kbd className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 rounded border bg-background px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                  <kbd className="pointer-events-none absolute left-2 top-1/2 hidden -translate-y-1/2 rounded border bg-background px-1.5 py-0.5 text-[10px] text-muted-foreground md:inline">
                     ⌘K
                   </kbd>
                 </div>

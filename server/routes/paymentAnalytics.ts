@@ -12,6 +12,7 @@ import {
 } from "@shared/schema";
 import { eq, and, gte, lte, sql, desc, asc, count, sum, between } from "drizzle-orm";
 import { z } from "zod";
+import { parsePage, parseLimit } from "../utils/pagination";
 
 const router = Router();
 
@@ -251,8 +252,8 @@ router.get("/transactions", async (req: Request, res: Response) => {
       limit = "50" 
     } = req.query;
     
-    const pageNum = parseInt(page as string) || 1;
-    const limitNum = Math.min(parseInt(limit as string) || 50, 100);
+    const pageNum = parsePage(page);
+    const limitNum = parseLimit(limit, 50, 100);
     const offset = (pageNum - 1) * limitNum;
     
     const results: any[] = [];
@@ -430,7 +431,7 @@ router.get("/failed", async (req: Request, res: Response) => {
 router.get("/alerts", async (req: Request, res: Response) => {
   try {
     const { unreadOnly = "true", limit = "20" } = req.query;
-    const limitNum = Math.min(parseInt(limit as string) || 20, 50);
+    const limitNum = parseLimit(limit, 20, 50);
     
     const conditions = [];
     if (unreadOnly === "true") {

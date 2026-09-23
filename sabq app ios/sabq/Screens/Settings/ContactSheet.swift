@@ -187,14 +187,14 @@ struct ContactSheet: View {
                     }
                 }
             }
+            .sabqNavigationEdge()
             .background(SabqTheme.background)
             .sabqRTL()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button { dismiss() } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(SabqFonts.app(size: 22))
-                            .foregroundStyle(SabqTheme.tertiaryInk)
+                        Label("إغلاق", systemImage: "xmark")
+                            .labelStyle(.iconOnly)
                     }
                 }
                 ToolbarItemGroup(placement: .keyboard) {

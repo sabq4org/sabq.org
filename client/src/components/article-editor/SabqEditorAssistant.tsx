@@ -2,6 +2,9 @@
 // تستهلك POST /api/editorial-ai/task (docs/editorial-ai-unified-system-plan-2026-08-03.md).
 // المخرج مسودة دائماً: لا شيء يُطبق على المقال إلا بضغطة تطبيق صريحة من المحرر.
 import { useState } from "react";
+import { useAuth, hasRole } from "@/hooks/useAuth";
+import { EDITORIAL_RESEARCH_ROLES } from "@shared/editorialResearch";
+import { EditorialResearchPanel } from "./EditorialResearchPanel";
 import { useMutation } from "@tanstack/react-query";
 import {
   Dialog,
@@ -34,6 +37,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { appendReviewedSources } from "@/lib/editorialSources";
 
 type EditorialTaskType =
   | "edit"
@@ -99,11 +103,17 @@ export function SabqEditorAssistant({
   onApplyBody,
 }: SabqEditorAssistantProps) {
   const { toast } = useToast();
+  const { user } = useAuth();
+  const canResearch = hasRole(user, ...EDITORIAL_RESEARCH_ROLES);
+  const [researchOpen, setResearchOpen] = useState(false);
   const [task, setTask] = useState<EditorialTaskType>("edit");
   const [material, setMaterial] = useState("");
   const [material2, setMaterial2] = useState("");
   const [instructions, setInstructions] = useState("");
-  const [result, setResult] = useState<EditorialTaskResult | null>(null);
+  const [storedResult, setResult] = useState<EditorialTaskResult | null>(null);
+  const [researchResultOwner, setResearchResultOwner] = useState<string | null>(null);
+  const result = researchResultOwner === null || (canResearch && researchResultOwner === user?.id) ? storedResult : null;
+  const [selectedSourceIndexes, setSelectedSourceIndexes] = useState<number[]>([]);
 
   const fromEditor = TASKS_FROM_EDITOR.has(task);
   const editorMaterial = [articleTitle, articleContent].filter(Boolean).join("\n\n");
@@ -122,7 +132,7 @@ export function SabqEditorAssistant({
         }),
         headers: { "Content-Type": "application/json" },
       }),
-    onSuccess: (data) => setResult(data),
+    onSuccess: (data) => { setResearchResultOwner(null); setResult(data); },
     onError: (error: any) =>
       toast({
         title: "تعذر تنفيذ المهمة",
@@ -133,6 +143,8 @@ export function SabqEditorAssistant({
 
   const reset = () => {
     setResult(null);
+    setResearchResultOwner(null);
+    setSelectedSourceIndexes([]);
     taskMutation.reset();
   };
 
@@ -144,9 +156,9 @@ export function SabqEditorAssistant({
         if (!next) reset();
       }}
     >
-      <DialogContent className="max-w-3xl" data-testid="dialog-sabq-assistant">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
+      <DialogContent dir="rtl" className="max-w-3xl max-h-[90dvh] overflow-y-auto" data-testid="dialog-sabq-assistant">
+        <DialogHeader className="text-right sm:text-right">
+          <DialogTitle className="flex items-center gap-2 ps-8">
             <NotebookPen className="h-5 w-5" />
             محرر سبق
           </DialogTitle>
@@ -155,7 +167,11 @@ export function SabqEditorAssistant({
           </DialogDescription>
         </DialogHeader>
 
-        {!result ? (
+        {!result && canResearch && <div className="flex flex-wrap gap-2">
+          <Button variant={researchOpen ? "outline" : "default"} size="sm" onClick={() => setResearchOpen(false)}>مهام التحرير</Button>
+          <Button variant={researchOpen ? "default" : "outline"} size="sm" onClick={() => setResearchOpen(true)} data-testid="open-editorial-research">بحث وإعداد تقرير</Button>
+        </div>}
+        {!result && canResearch && researchOpen ? <EditorialResearchPanel key={user?.id} onReview={data => { setResearchResultOwner(user!.id); setSelectedSourceIndexes([]); setResult(data); }} /> : !result ? (
           <div className="space-y-4">
             <div className="grid gap-2">
               <Label>المهمة</Label>
@@ -243,7 +259,7 @@ export function SabqEditorAssistant({
             </Button>
           </div>
         ) : (
-          <ScrollArea className="max-h-[65vh] pr-2">
+          <ScrollArea dir="rtl" className="max-h-[65vh] pl-2 text-right">
             <div className="space-y-4">
               {result.meta.verificationRecommended && (
                 <Alert variant="destructive">
@@ -300,10 +316,12 @@ export function SabqEditorAssistant({
                       size="sm"
                       className="gap-1"
                       onClick={() => {
-                        onApplyBody(result.body);
+                        onApplyBody(appendReviewedSources(result.body, result.sources, selectedSourceIndexes));
                         toast({
                           title: "طُبق المتن في المحرر",
-                          description: "راجعه قبل الحفظ — الذكاء لا ينشر.",
+                          description: selectedSourceIndexes.length > 0
+                            ? "أُدرجت المصادر التي اخترتها — راجع المتن قبل الحفظ."
+                            : "لم تُدرج مصادر تلقائياً — راجع المتن قبل الحفظ.",
                         });
                       }}
                       data-testid="button-sabq-apply-body"
@@ -356,18 +374,30 @@ export function SabqEditorAssistant({
 
               {result.sources.length > 0 && (
                 <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">المصادر</Label>
+                  <Label className="text-xs text-muted-foreground">المصادر — اختر ما راجعته لإدراجه في المتن</Label>
                   {result.sources.map((s, i) => (
-                    <a
+                    <label
                       key={i}
-                      href={s.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-1.5 text-xs text-primary hover:underline"
+                      className="flex items-center gap-2 text-xs"
                     >
-                      <Link2 className="h-3 w-3 shrink-0" />
-                      {s.title}
-                    </a>
+                      <input
+                        type="checkbox"
+                        checked={selectedSourceIndexes.includes(i)}
+                        onChange={(event) => setSelectedSourceIndexes((current) => event.target.checked
+                          ? [...current, i]
+                          : current.filter((index) => index !== i))}
+                        aria-label={`إدراج المصدر: ${s.title}`}
+                      />
+                      <a
+                        href={/^https?:\/\//i.test(s.url) ? s.url : undefined}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-1.5 text-primary hover:underline"
+                      >
+                        <Link2 className="h-3 w-3 shrink-0" />
+                        {s.title}
+                      </a>
+                    </label>
                   ))}
                 </div>
               )}

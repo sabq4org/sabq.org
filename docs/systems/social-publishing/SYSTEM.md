@@ -1,11 +1,12 @@
 # النشر الاجتماعي (`social-publishing`)
 
-> آخر مراجعة: 2026-08-06 | المالك: editorial + platform
+> آخر مراجعة: 2026-08-19 (ترقية واجهة سجل المنشورات بهوية بطاقات اجتماعية تفاعلية، إبراز الهاشتاقات، نسخ فوري وبحث سريع) | المالك: editorial + platform
 
 ## الغرض
 نشر أخبار سبق على منصة X من لوحة التحكم: فوري أو مجدول، بنص من العنوان أو
 مخصص أو مقترح بالذكاء، مع صورة اختيارية (صورة الخبر / مكتبة الوسائط / رفع)،
-وسجل محاولات كامل. المعمارية provider-based — v1 تطبّق X فقط، وإضافة منصة
+وسجل محاولات كامل، مع دعم استقبال مقترحات كتّاب الرأي لمقالاتهم المنشورة
+خلال أول 24 ساعة ومراجعتها واعتمادها من فريق سبق. المعمارية provider-based — v1 تطبّق X فقط، وإضافة منصة
 لاحقاً = تطبيق جديد لعقد `SocialPublishProvider` دون مسّ الخدمة أو العامل.
 
 ## الحدود
@@ -33,6 +34,11 @@
   `SOCIAL_PUBLISH_TOKEN_SECRET` (وإلا `SESSION_SECRET`). لا يُعاد للعميل أبداً.
 - `social_posts` — المنشور وحالته: `draft | scheduled | processing |
   published | failed | canceled` + `attempts` + `lockedAt` + المعرف/الرابط الخارجي.
+  `article_id` **nullable** منذ 2026-08-07 (null = تغريدة مستقلة من زر
+  «تغريدة جديدة»)، مع `media_kind` (`none|image|video`) و`media_urls`
+  (حتى 4 صور أو فيديو واحد — `validateComposeMedia`). الفيديو يُرفع
+  للتخزين برابط موقّع (`/api/social-publishing/media/upload-url`) ثم
+  عبر Publer `/media/from-url` — **الوسيلة المباشرة لا تدعم الفيديو v1**.
 - `social_post_attempts` — سجل append-only لكل محاولة (طور، نتيجة، HTTP،
   رسالة منظفة من الأسرار، مدة).
 
@@ -77,6 +83,16 @@
   `POST /api/social-publishing/publer/sync` (صف الحساب بـ
   `credentialsEncrypted=null` — 401/403 من Publer خلل مفتاح/خطة ولا
   يعلّم الحساب `expired`).
+
+- **مقترحات كتّاب الرأي (منذ 2026-08-18):** يستطيع كاتب الرأي، بعد نشر مقالته
+  فعلياً (`status=published` و`publishedAt <= now`) وخلال أول **24 ساعة** فقط
+  من وقت النشر الفعلي الموثوق في الخادم (`SOCIAL_POST_OPINION_WINDOW_MS`)،
+  إعداد مقترح لمنشور على X عبر `POST /api/opinion-author/articles/:id/social-proposal`.
+  المقترح يُحفظ كمسودة (`status=draft` مع `createdByUserId = authorId`) برابط المقال
+  وصورته المعتمدين حصراً وبلا صلاحية نشر مباشر أو جدولة للكاتب. يظهر المقترح
+  في `/dashboard/social-publishing` بشارة «مقترح كاتب رأي»، ويملك فريق سبق
+  المخوّل تعديل النص واعتماد النشر الفوري أو الجدولة أو الرفض (`status=canceled`).
+  انتهاء الـ24 ساعة بعد الإرسال لا يحذف المقترح من نظام مراجعة فريق سبق.
 
 ## متغيرات البيئة
 `X_CLIENT_ID`, `X_CLIENT_SECRET`, `X_OAUTH_REDIRECT_URI` (اختياري)،

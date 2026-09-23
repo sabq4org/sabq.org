@@ -195,6 +195,11 @@ function Sidebar({
           }
           side={side}
           dir={side === "right" ? "rtl" : "ltr"}
+          onOpenAutoFocus={(event) => {
+            // Radix Sheet يضع التركيز على أول حقل قابل للكتابة (محرك البحث)
+            // فيفتح لوحة مفاتيح الموبايل فور فتح القائمة.
+            event.preventDefault()
+          }}
         >
           <SheetHeader className="sr-only">
             <SheetTitle>Sidebar</SheetTitle>

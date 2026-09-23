@@ -1,5 +1,6 @@
 package com.sabq.smart.feature.author
 
+import com.sabq.smart.data.readerErrorMessage
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -62,7 +63,7 @@ class AuthorArticlesViewModel @Inject constructor(
                 }
                 .onFailure { e ->
                     _state.value = AuthorProfileUiState.Error(
-                        e.localizedMessage ?: "تعذر تحميل بيانات الكاتب"
+                        readerErrorMessage(e, "تعذر تحميل بيانات الكاتب")
                     )
                 }
         }

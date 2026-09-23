@@ -1,3 +1,5 @@
+> **تصحيح تشغيلي — 2026-09-08:** هذا سجل سابق. لا تستخدم Google Indexing API للأخبار العامة، ولا تعتبر مدد الفهرسة أو نسب النمو أدناه ضمانًا أو معيار قبول. المرجع الحالي: [تنفيذ جاهزية اكتشاف الأخبار](editorial/seo-readiness-delivery-ar.md).
+
 # دليل تشغيل Technical SEO — سبق (يونيو 2026)
 
 مرجع تنفيذي لأبو محمد والفريق التقني بعد تطبيق P1/P2 في الكود.
@@ -76,20 +78,14 @@ GOOGLE_INDEXING_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n..."
 2. إضافة Service Account كـ **Owner** في Search Console لملكية `sabq.org`
 3. إعادة نشر Railway
 
-**عند كل نشر خبر:** `notifySearchEngines()` تلقائياً (IndexNow + Indexing API).
+**عند كل نشر خبر:** `notifySearchEngines()` تلقائياً (IndexNow للمحركات الداعمة).
 
-**إعادة فهرسة دفعة (بعد إصلاح المفتاح):**
-
-```bash
-tsx scripts/reindex-recent-articles.ts
-```
-
-حصة Google: ~200 طلب/يوم — السكربت يحذّر إن تجاوزت ~180 URL.
+لا تُستخدم إعادة الإرسال الجماعي إلى Google Indexing API للأخبار العامة.
 
 ### ج) ما لا نستخدمه
 
 - ❌ `https://www.google.com/ping?sitemap=...` — ملغى من Google (2023)
-- ✅ IndexNow (Bing/Yandex) + Indexing API (Google عند التفعيل)
+- ✅ IndexNow للمحركات الداعمة؛ خرائط الموقع وSearch Console لـGoogle
 
 ### د) إبطال CDN بعد النشر
 
@@ -107,8 +103,8 @@ tsx scripts/reindex-recent-articles.ts
 | المقياس | أين | هدف |
 |---------|-----|-----|
 | TTFB مقالة | `curl` أعلاه | < 200ms (HIT) |
-| Indexing delay | GSC → Pages | عاجل < 15 دقيقة (مع API) |
-| Impressions | GSC Performance | +50% خلال 30 يوم (طموح) |
+| Indexing delay | GSC → Pages | قياس آخر زحف والفهرسة الفعلية |
+| Impressions | GSC Performance | مقارنة بخط الأساس |
 | CTR News/Discover | GSC | +30% بعد 30 يوم (طموح) |
 | Core Web Vitals | GSC + Lighthouse | > 90 |
 

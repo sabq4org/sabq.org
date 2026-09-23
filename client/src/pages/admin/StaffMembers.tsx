@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { VerificationChips, VerificationSummary } from "@/components/account/VerificationChips";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   Select,
@@ -76,6 +77,8 @@ interface StaffUser {
   profileImageUrl: string | null;
   status: string;
   emailVerified: boolean;
+  phoneNumber?: string | null;
+  phoneVerified?: boolean;
   role: string;
   roleName: string | null;
   roleNameAr: string | null;
@@ -239,7 +242,7 @@ export default function StaffMembers() {
   }, [userRolesMap]);
 
   const suspendMutation = useMutation({
-    mutationFn: async ({ userId, reason, duration }: { userId: string; reason: string; duration: string }) => {
+    mutationFn: async ({ userId, reason, duration }: { userId: string; reason: string; duration?: number }) => {
       return await apiRequest(`/api/dashboard/users/${userId}/suspend`, {
         method: "POST",
         body: JSON.stringify({ reason, duration }),
@@ -258,7 +261,7 @@ export default function StaffMembers() {
   });
 
   const banMutation = useMutation({
-    mutationFn: async ({ userId, reason, isPermanent, duration }: { userId: string; reason: string; isPermanent: boolean; duration?: string }) => {
+    mutationFn: async ({ userId, reason, isPermanent, duration }: { userId: string; reason: string; isPermanent: boolean; duration?: number }) => {
       return await apiRequest(`/api/dashboard/users/${userId}/ban`, {
         method: "POST",
         body: JSON.stringify({ reason, isPermanent, duration }),
@@ -374,6 +377,11 @@ export default function StaffMembers() {
       cell: (info) => (
         <span data-testid={`text-staff-email-${info.row.original.id}`}>{info.getValue()}</span>
       ),
+    }),
+    columnHelper.display({
+      id: "verification",
+      header: "التوثيق",
+      cell: (info) => <VerificationChips user={info.row.original} idForTest={info.row.original.id} />,
     }),
     columnHelper.accessor("roleNameAr", {
       header: "الدور",
@@ -668,6 +676,7 @@ export default function StaffMembers() {
                     data-testid="input-staff-search"
                   />
                 </div>
+                <VerificationSummary users={allUsers} className="mt-2" />
               </div>
               <div className="flex flex-wrap gap-2">
                 <Select value={roleFilter} onValueChange={setRoleFilter}>
@@ -845,7 +854,7 @@ export default function StaffMembers() {
                   suspendMutation.mutate({
                     userId: selectedUser.id,
                     reason: suspendReason,
-                    duration: suspendDuration,
+                    duration: suspendDuration === "permanent" ? undefined : Number(suspendDuration),
                   });
                 }
               }}
@@ -915,7 +924,7 @@ export default function StaffMembers() {
                     userId: selectedUser.id,
                     reason: banReason,
                     isPermanent: banIsPermanent,
-                    duration: banIsPermanent ? undefined : banDuration,
+                    duration: banIsPermanent ? undefined : Number(banDuration),
                   });
                 }
               }}

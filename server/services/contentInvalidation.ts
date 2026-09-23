@@ -1,6 +1,7 @@
 import Redis from "ioredis";
 import { memoryCache, sseConnectionManager } from "../memoryCache";
 import { purgeHomepage, purgeBreakingNews, purgeArticle } from "./cloudflarePurge";
+import { bumpSeoCacheGeneration } from "./seoCacheInvalidation";
 
 /**
  * Feed-style keys affected by ANY article publish/unpublish/schedule/approve —
@@ -20,6 +21,9 @@ const FEED_CONTENT_PATTERNS = [
   "^lite-feed",         // lite-feed
   "^news-",             // news-paginated-total, news-analytics-ar/en/ur
   "^mobile:",           // mobile:sections, mobile:trending, mobile:homepage
+  "^seo:",              // bounded SEO projection bundles
+  "^author:web:",        // public author page projections
+  "^category-articles:", // public category archive projections
 ];
 
 /**
@@ -114,7 +118,10 @@ function initPubSub(): void {
         // Apply local-only invalidation (no re-broadcast, no Cloudflare —
         // the originating pod already handled both globally). Newer pods send
         // the exact (possibly article-targeted) patterns; older messages
-        // without them fall back to the blanket wipe.
+        // without them fall back to the blanket wipe. edgeMetaCache is
+        // deliberately isolated from memoryCache, so its generation bump
+        // happens unconditionally regardless of which pattern set applies.
+        bumpSeoCacheGeneration("remote-publish");
         const remotePatterns: string[] =
           Array.isArray(msg.patterns) && msg.patterns.length > 0 && msg.patterns.every((p: unknown) => typeof p === "string")
             ? msg.patterns
@@ -185,6 +192,9 @@ export function invalidatePublishedContent(
   );
 
   try {
+    // edgeMetaCache is deliberately isolated from memoryCache; advance its
+    // generation before any in-flight SEO projection can be committed.
+    bumpSeoCacheGeneration(reason || "published-content");
     memoryCache.invalidatePatterns(patterns);
   } catch (e: any) {
     console.error("[ContentInvalidation] memory invalidation failed:", e?.message);

@@ -132,12 +132,12 @@ export default function MuqtarabDetail() {
   // Loading state
   if (isLoadingAngle) {
     return (
-      <div className="min-h-screen bg-background flex flex-col" dir="rtl">
+      <div className="public-page min-h-screen bg-background flex flex-col" dir="rtl">
         <Header user={user} />
         
         {/* Breadcrumbs skeleton */}
         <div className="border-b bg-muted/30">
-          <div className="container mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-3">
+          <div className="public-container container mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-3">
             <Skeleton className="h-4 w-48" />
           </div>
         </div>
@@ -168,12 +168,12 @@ export default function MuqtarabDetail() {
   // Error or not found state
   if (angleError || !angle) {
     return (
-      <div className="min-h-screen bg-background flex flex-col" dir="rtl">
+      <div className="public-page min-h-screen bg-background flex flex-col" dir="rtl">
         <Header user={user} />
         
         {/* Breadcrumbs */}
         <div className="border-b bg-muted/30">
-          <div className="container mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-3">
+          <div className="public-container container mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-3">
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Link href="/muqtarab">
                 <a className="hover:text-foreground transition-colors" data-testid="link-breadcrumb-muqtarab">
@@ -186,7 +186,7 @@ export default function MuqtarabDetail() {
           </div>
         </div>
 
-        <main className="flex-1 container mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-20">
+        <main className="public-container flex-1 container mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-20">
           <div className="text-center">
             <h1 className="text-3xl font-bold mb-4" data-testid="text-error-title">
               الزاوية غير موجودة
@@ -214,7 +214,7 @@ export default function MuqtarabDetail() {
   const writer = angle.writer ?? null;
 
   return (
-    <div className="relative min-h-screen bg-background flex flex-col" dir="rtl" style={theme.vars}>
+    <div className="public-page relative min-h-screen bg-background flex flex-col" dir="rtl" style={theme.vars}>
       {/* Glassmorphism — هالات ملوّنة بلون الزاوية في خلفية الصفحة */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
         <div
@@ -231,8 +231,8 @@ export default function MuqtarabDetail() {
       <Header user={user} />
 
       {/* Breadcrumbs */}
-      <div className="border-b bg-muted/30">
-        <div className="container mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-3">
+      <div className="public-page-header border-b bg-muted/30">
+        <div className="public-container container mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-3">
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Link href="/muqtarab">
               <a className="hover:text-foreground transition-colors" data-testid="link-breadcrumb-muqtarab">
@@ -275,7 +275,7 @@ export default function MuqtarabDetail() {
           />
         )}
         
-        <div className="container relative z-10 mx-auto max-w-7xl px-4 py-10 sm:px-6 md:py-12 lg:px-8">
+        <div className="public-container container relative z-10 mx-auto max-w-7xl px-4 py-10 sm:px-6 md:py-12 lg:px-8">
           <div className="mx-auto max-w-3xl text-center text-white">
             {/* Icon */}
             <div 
@@ -461,7 +461,7 @@ export default function MuqtarabDetail() {
                   <CardContent className="p-3 space-y-2">
                     {/* Title */}
                     <h3 
-                      className="font-bold text-base line-clamp-2 transition-colors group-hover:text-[color:var(--angle)]"
+                      className="public-card-title font-bold text-base line-clamp-2 transition-colors group-hover:text-[color:var(--angle)]"
                       data-testid={`text-topic-title-${topic.id}`}
                     >
                       {topic.title}
@@ -470,7 +470,7 @@ export default function MuqtarabDetail() {
                     {/* Excerpt */}
                     {topic.excerpt && (
                       <p 
-                        className="text-muted-foreground text-xs line-clamp-2"
+                        className="public-card-excerpt text-muted-foreground text-xs line-clamp-2"
                         data-testid={`text-topic-excerpt-${topic.id}`}
                       >
                         {topic.excerpt}
@@ -480,7 +480,7 @@ export default function MuqtarabDetail() {
                     {/* Published Date */}
                     {topic.publishedAt && (
                       <div 
-                        className="flex items-center gap-1.5 text-[11px] text-muted-foreground"
+                        className="public-meta flex items-center gap-1.5 text-[11px] text-muted-foreground"
                         data-testid={`text-topic-date-${topic.id}`}
                       >
                         <Calendar className="h-3 w-3" />

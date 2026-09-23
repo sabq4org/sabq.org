@@ -201,7 +201,7 @@ export default function EnglishUsersPage() {
 
   // Suspend mutation
   const suspendMutation = useMutation({
-    mutationFn: async ({ userId, reason, duration }: { userId: string; reason: string; duration: string }) => {
+    mutationFn: async ({ userId, reason, duration }: { userId: string; reason: string; duration?: number }) => {
       return await apiRequest(`/api/dashboard/users/${userId}/suspend`, {
         method: "POST",
         body: JSON.stringify({ reason, duration }),
@@ -222,7 +222,7 @@ export default function EnglishUsersPage() {
 
   // Ban mutation
   const banMutation = useMutation({
-    mutationFn: async ({ userId, reason, isPermanent, duration }: { userId: string; reason: string; isPermanent: boolean; duration?: string }) => {
+    mutationFn: async ({ userId, reason, isPermanent, duration }: { userId: string; reason: string; isPermanent: boolean; duration?: number }) => {
       return await apiRequest(`/api/dashboard/users/${userId}/ban`, {
         method: "POST",
         body: JSON.stringify({ reason, isPermanent, duration }),
@@ -829,7 +829,7 @@ export default function EnglishUsersPage() {
                   suspendMutation.mutate({
                     userId: selectedUser.id,
                     reason: suspendReason,
-                    duration: suspendDuration,
+                    duration: suspendDuration ? Number(suspendDuration) : undefined,
                   });
                 }
               }}
@@ -902,7 +902,7 @@ export default function EnglishUsersPage() {
                     userId: selectedUser.id,
                     reason: banReason,
                     isPermanent: banIsPermanent,
-                    duration: banIsPermanent ? undefined : banDuration,
+                    duration: banIsPermanent || !banDuration ? undefined : Number(banDuration),
                   });
                 }
               }}

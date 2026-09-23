@@ -5,7 +5,7 @@ import { Router, type Request, type Response } from "express";
 import rateLimit from "express-rate-limit";
 import { z } from "zod";
 import { PERMISSION_CODES } from "@shared/rbac-constants";
-import { requireAuth, requirePermission } from "../rbac";
+import { requireAuth, requireAnyPermission, requirePermission } from "../rbac";
 import {
   cancelPost,
   claimPostForImmediatePublish,
@@ -15,6 +15,7 @@ import {
   getConnectedAccount,
   getPost,
   getPostAttempts,
+  getPublishStats,
   listAccounts,
   listPostsForArticle,
   listRecentPosts,
@@ -189,9 +190,18 @@ router.post(
       }
       // v1: حساب واحد لكل منصة — نأخذ الأول ونعيد القائمة للشفافية
       const picked = xAccounts[0];
+      // name لدى Publer اسم عرض (قد يكون عربياً) لا username — لا نعتمده
+      // معرفاً إلا إذا طابق شكل معرفات X، وإلا نبقي المعرف المخزن سابقاً
+      const isValidXHandle = (h: string) => /^[A-Za-z0-9_]{1,15}$/.test(h);
+      const nameAsHandle = picked.name.replace(/^@/, "");
+      const existing = await getConnectedAccount("x");
+      // المخزن سابقاً قد يكون ملوثاً باسم عرض من مزامنة قديمة — لا نبقيه إلا صالحاً
+      const storedHandle =
+        existing?.handle && isValidXHandle(existing.handle) ? existing.handle : "";
+      const handle = isValidXHandle(nameAsHandle) ? nameAsHandle : storedHandle;
       const saved = await saveConnectedAccount({
         platform: "x",
-        handle: picked.name.replace(/^@/, ""),
+        handle,
         externalAccountId: picked.id,
         displayName: picked.name,
         credentialsEncrypted: null,
@@ -268,15 +278,35 @@ router.post(
   },
 );
 
+// رابط رفع موقّع لفيديو التغريدة المستقلة — نفس مسار كائنات التخزين
+// المستخدم في الشورتس؛ العميل يرفع مباشرة ثم يمرر الرابط العام للمنشور.
+router.post(
+  "/api/social-publishing/media/upload-url",
+  requireAuth,
+  requirePermission(PERMISSION_CODES.SOCIAL_PUBLISH_CREATE),
+  async (_req, res) => {
+    try {
+      const { ObjectStorageService } = await import("../objectStorage");
+      const uploadURL = await new ObjectStorageService().getObjectEntityUploadURL();
+      res.json({ uploadURL });
+    } catch (error) {
+      handleError(res, error, "تعذر إنشاء رابط الرفع");
+    }
+  },
+);
+
 // ── المنشورات ──────────────────────────────────────────────────────
 
 const createPostSchema = z.object({
-  articleId: z.string().min(1),
+  // غيابه = تغريدة مستقلة من صفحة النشر الاجتماعي
+  articleId: z.string().min(1).nullish(),
   text: z.string().min(1).max(2000),
   textSource: z.enum(["title", "title_link", "custom", "ai"]),
   includeLink: z.boolean(),
   imageSource: z.enum(["article", "upload", "library", "none"]),
   imageUrl: z.string().max(2000).nullish(),
+  mediaKind: z.enum(["none", "image", "video"]).optional(),
+  mediaUrls: z.array(z.string().min(1).max(2000)).max(4).optional(),
 });
 
 router.post(
@@ -288,6 +318,7 @@ router.post(
       const body = createPostSchema.parse(req.body);
       const post = await createDraftPost({
         ...body,
+        articleId: body.articleId ?? null,
         imageUrl: body.imageUrl ?? null,
         createdByUserId: requestUserId(req),
       });
@@ -320,6 +351,19 @@ router.get(
 );
 
 router.get(
+  "/api/social-publishing/stats",
+  requireAuth,
+  requirePermission(PERMISSION_CODES.SOCIAL_PUBLISH_VIEW_LOG),
+  async (_req, res) => {
+    try {
+      res.json(await getPublishStats());
+    } catch (error) {
+      handleError(res, error, "تعذر جلب الإحصائيات");
+    }
+  },
+);
+
+router.get(
   "/api/social-publishing/posts/:id",
   requireAuth,
   requirePermission(PERMISSION_CODES.SOCIAL_PUBLISH_VIEW_LOG),
@@ -344,7 +388,10 @@ const updatePostSchema = z.object({
 router.patch(
   "/api/social-publishing/posts/:id",
   requireAuth,
-  requirePermission(PERMISSION_CODES.SOCIAL_PUBLISH_MANAGE_SCHEDULED),
+  requireAnyPermission(
+    PERMISSION_CODES.SOCIAL_PUBLISH_MANAGE_SCHEDULED,
+    PERMISSION_CODES.SOCIAL_PUBLISH_CREATE,
+  ),
   async (req, res) => {
     try {
       const body = updatePostSchema.parse(req.body);
@@ -411,13 +458,22 @@ router.post(
   },
 );
 
+const cancelPostSchema = z.object({
+  reason: z.string().max(1000).nullish(),
+});
+
 router.post(
   "/api/social-publishing/posts/:id/cancel",
   requireAuth,
-  requirePermission(PERMISSION_CODES.SOCIAL_PUBLISH_MANAGE_SCHEDULED),
+  requireAnyPermission(
+    PERMISSION_CODES.SOCIAL_PUBLISH_MANAGE_SCHEDULED,
+    PERMISSION_CODES.SOCIAL_PUBLISH_CREATE,
+  ),
   async (req, res) => {
     try {
-      const post = await cancelPost(req.params.id, requestUserId(req));
+      const parsed = cancelPostSchema.safeParse(req.body);
+      const reason = parsed.success ? parsed.data.reason : undefined;
+      const post = await cancelPost(req.params.id, requestUserId(req), reason);
       res.json(post);
     } catch (error) {
       handleError(res, error, "تعذر الإلغاء");

@@ -57,7 +57,7 @@ const PIPELINE = [
   { icon: Satellite, title: "رصد الإشارة", desc: "وكالات، مصادر عالمية، بيانات المباريات الرسمية", human: false },
   { icon: Brain, title: "فهم وتقييم", desc: "تصنيف آلي، درجة أهمية، تحقق من البيانات", human: false },
   { icon: PenLine, title: "صياغة سبق", desc: "عربية أولًا، بأسلوب الدار — وبلا معلومة مخترعة", human: false },
-  { icon: Eye, title: "عين المحرر", desc: "مراجعة وإجازة أو ردّ — لا استثناءات", human: true },
+  { icon: Eye, title: "عين المحرر", desc: "مراجعة وإجازة أو ردّ — والمحتوى الآلي يمرّ ببوابة جودة ووسم واضح", human: true },
   { icon: Send, title: "النشر والقياس", desc: "ويب وتطبيقات وصوت بثلاث لغات، وقياس مستمر للجودة", human: false },
 ];
 
@@ -65,7 +65,7 @@ const STATS = [
   { value: "+60", label: "خدمة ذكية تعمل في المنظومة" },
   { value: "5", label: "بطولات تُغطّى بمحرّكات آلية" },
   { value: "3", label: "لغات نشر من منظومة واحدة" },
-  { value: "100%", label: "من المواد بمسؤولية تحريرية بشرية" },
+  { value: "100%", label: "مسؤولية تحريرية عن كل ما يُنشر — بشريًا كان أو آليًا" },
 ];
 
 /* ==================== «تحت الغطاء» — الرسم الهيكلي للمنظومة ==================== */
@@ -111,7 +111,7 @@ const PUBLISH_CHANNELS = ["الويب والتطبيقات", "صوت وبودك�
 const GOVERNANCE = [
   { kicker: "صحة النماذج", title: "قاطع دائرة آلي", desc: "ثلاثة إخفاقات متتالية تعزل النموذج مؤقتًا وتحوّل المسار لبديله — ويُعاد فحصه آليًا كل خمس دقائق." },
   { kicker: "إنذار مبكر", title: "تنبيه يصل الإنسان", desc: "أي تدهور في مزوّد ذكاء يصل رئيس التحرير برسالة فورية — الآلة لا تتعثر بصمت." },
-  { kicker: "انضباط مالي", title: "ميزانيات بعتبات إنذار", desc: "حدود إنفاق شهرية لكل مزوّد وكل خدمة، بإنذارين عند 80% و100% من السقف." },
+  { kicker: "انضباط مالي", title: "ميزانيات تحت المراقبة", desc: "حدود إنفاق شهرية لكل مزوّد وكل خدمة، وتكلفة كل عملية تُقيَّد وتُراقب من لوحة موحّدة." },
   { kicker: "مساءلة", title: "سجل تدقيق كامل", desc: "كل تغيير في إعدادات النماذج مقيّد: من غيّر، وماذا غيّر، ومتى — لا إعداد بلا مسؤول." },
   { kicker: "تعلم من البشر", title: "معايرة بشرية مستمرة", desc: "قرارات المشرفين على التعليقات تعود أمثلةً تضبط بها الرقابة الذكية أحكامها التالية." },
   { kicker: "صرامة المصدر", title: "لا رقم بلا مصدر", desc: "في التغطيات الرياضية: كل رقم في النص المولّد يجب أن يرد حرفيًا في بيانات المباراة الرسمية." },
@@ -153,7 +153,7 @@ const DOMAINS = [
 
 /** ميثاق سبق للذكاء الاصطناعي — ثماني مواد معتمدة من الإدارة */
 const CHARTER = [
-  { no: "1", title: "الإنسان يقرّر", desc: "كل مادة تمرّ بمسؤولية تحريرية بشرية، قبل النشر وبعده." },
+  { no: "1", title: "الإنسان يقرّر", desc: "كل مادة تمرّ بمراجعة بشرية قبل النشر، أو تصدر موسومةً كمحتوى آلي تحت بوابات جودة مبرمجة وإشراف تحريري." },
   { no: "2", title: "لا اختلاق", desc: "النموذج يصوغ من بيانات ومصادر موثّقة فقط، ولا يضيف معلومة من عنده." },
   { no: "3", title: "الشفافية", desc: "نُبيّن للقارئ دور الذكاء حيث يكون جوهريًا في إنتاج المادة." },
   { no: "4", title: "الرأي للإنسان", desc: "الذكاء لا يكتب رأيًا ولا يتبنّى موقفًا؛ الموقف لكتّابنا." },
@@ -391,6 +391,86 @@ function StatsBand() {
             <div className="text-[11px] md:text-sm text-muted-foreground mt-1 leading-snug">{s.label}</div>
           </div>
         ))}
+      </div>
+    </section>
+  );
+}
+
+
+/* ==================== فريق سبق الذكي — الزملاء الرقميون ==================== */
+
+interface AiTeamPublicPayload {
+  generatedAt: string;
+  team: { slug: string; nameAr: string; titleAr: string; departmentAr: string; avatarUrl: string }[];
+  counters: { monthOps: number; teamCount: number };
+}
+
+/**
+ * شريحة الفريق: أول غرفة أخبار سعودية تعرّف بزملائها الرقميين بأسمائهم.
+ * نسخة استعراض وحوكمة منقّاة — أسماء وأدوار ومجاميع شهرية فقط؛ التكاليف
+ * والنماذج والأعطال تبقى داخل اللوحة. أي فشل في الجلب → تسقط الشريحة
+ * بصمت (قاعدة المصداقية: لا أرقام وهمية).
+ */
+function TeamBand() {
+  const { data: teamRaw } = useQuery<AiTeamPublicPayload>({
+    queryKey: ["/api/public/ai-team"],
+    staleTime: 5 * 60_000,
+  });
+  const payload = teamRaw && Array.isArray(teamRaw.team) && teamRaw.team.length > 0 ? teamRaw : null;
+  if (!payload) return null;
+
+  return (
+    <section className="bg-[#0E2233] text-white px-4 py-7 md:py-12 overflow-x-hidden" data-testid="sabqai-team">
+      <div className="max-w-5xl mx-auto text-center min-w-0">
+        <div className="text-[11px] md:text-xs font-bold tracking-wide text-[#4CBCFD] mb-2">داخل عقل سبق</div>
+        <h2 className="text-xl md:text-3xl font-extrabold mb-2">فريق سبق الذكي</h2>
+        <p className="text-xs md:text-sm text-[#8CA3B5] max-w-xl mx-auto mb-6">
+          أول غرفة أخبار سعودية تعرّفك بزملائها الرقميين بأسمائهم وأدوارهم — يعملون على مدار الساعة،
+          ولا يُنشر لهم حرف قبل اعتماد محرر بشري.
+        </p>
+        {/* الوعد يُوفى: كل زميل باسمه ومسماه وإدارته — لا دوائر مجهولة */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5 md:gap-3 mb-7 text-right">
+          {payload.team.map((m) => (
+            <div
+              key={m.slug}
+              className="flex items-center gap-2.5 md:gap-3 rounded-xl border border-[#1E3448] bg-[#12293B] px-2.5 py-2 md:px-3 md:py-2.5 min-w-0"
+            >
+              <span className="w-11 h-11 md:w-14 md:h-14 rounded-full overflow-hidden bg-[#0E76B8] shrink-0 flex items-center justify-center">
+                {m.avatarUrl ? (
+                  <img src={m.avatarUrl} alt={m.nameAr} className="w-full h-full object-cover" loading="lazy" />
+                ) : (
+                  <span className="text-white font-bold">{m.nameAr.slice(0, 1)}</span>
+                )}
+              </span>
+              <span className="min-w-0">
+                <span className="block text-sm md:text-base font-extrabold leading-tight truncate">{m.nameAr}</span>
+                <span className="block text-[11px] md:text-xs text-[#DCF1FE]/80 leading-tight truncate">{m.titleAr}</span>
+                <span className="block text-[10px] text-[#4CBCFD] leading-tight truncate">{m.departmentAr}</span>
+              </span>
+            </div>
+          ))}
+        </div>
+        <div className="flex justify-center gap-8 md:gap-12 flex-wrap mb-6">
+          {payload.counters.monthOps > 0 && (
+            <div>
+              <div className="text-2xl md:text-3xl font-extrabold text-[#4CBCFD] tabular-nums">
+                {payload.counters.monthOps.toLocaleString("en-US")}
+              </div>
+              <div className="text-[11px] text-[#8CA3B5]">عملًا هذا الشهر</div>
+            </div>
+          )}
+          <div>
+            <div className="text-2xl md:text-3xl font-extrabold text-[#4CBCFD] tabular-nums">{payload.counters.teamCount}</div>
+            <div className="text-[11px] text-[#8CA3B5]">زميلًا رقميًا</div>
+          </div>
+          <div>
+            <div className="text-2xl md:text-3xl font-extrabold text-[#4CBCFD] tabular-nums">100%</div>
+            <div className="text-[11px] text-[#8CA3B5]">تحت إشراف بشري</div>
+          </div>
+        </div>
+        <span className="inline-block text-[11px] md:text-xs border border-[#4CBCFD]/40 bg-[#4CBCFD]/10 text-[#DCF1FE] rounded-full px-5 py-1.5">
+          🛡 الإنسان يعتمد كل شيء — سياسة سبق للذكاء الاصطناعي
+        </span>
       </div>
     </section>
   );
@@ -894,6 +974,7 @@ export default function SabqAI() {
         <Pipeline />
         <UnderHood />
         <LiveStatsBand />
+        <TeamBand />
         <SportsBand />
         <DomainsGrid />
         <GovernanceBand />

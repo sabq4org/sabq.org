@@ -65,6 +65,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.drawOutline
@@ -127,6 +128,7 @@ fun HomeFeedScreen(
     onAsianCupClick: () -> Unit = {},
     onKingsCupClick: () -> Unit = {},
     onRoshnClick: () -> Unit = {},
+    onEconomyClick: () -> Unit = {},
     onCalendarAllClick: () -> Unit = {},
     onGreetingClick: () -> Unit = {},
     onLoyaltyClick: () -> Unit = {},
@@ -190,6 +192,7 @@ fun HomeFeedScreen(
                 onAsianCupClick = onAsianCupClick,
                 onKingsCupClick = onKingsCupClick,
                 onRoshnClick = onRoshnClick,
+                onEconomyClick = onEconomyClick,
                 onCalendarAllClick = onCalendarAllClick,
                 onGreetingClick = onGreetingClick,
                 onLoyaltyClick = onLoyaltyClick,
@@ -241,6 +244,7 @@ private fun LoadedFeed(
     onAsianCupClick: () -> Unit,
     onKingsCupClick: () -> Unit,
     onRoshnClick: () -> Unit,
+    onEconomyClick: () -> Unit,
     onCalendarAllClick: () -> Unit,
     onGreetingClick: () -> Unit,
     onLoyaltyClick: () -> Unit,
@@ -254,6 +258,16 @@ private fun LoadedFeed(
     onRefresh: () -> Unit,
 ) {
     val listState = rememberLazyListState()
+    // عتبتان (72/16 dp) تمنعان الارتجاف حول نقطة واحدة — نظير HomeHeaderCompact في iOS.
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    var headerCompact by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    val scrolledDp by androidx.compose.runtime.remember {
+        androidx.compose.runtime.derivedStateOf {
+            if (listState.firstVisibleItemIndex > 0) 1000f
+            else with(density) { listState.firstVisibleItemScrollOffset.toDp().value }
+        }
+    }
+    headerCompact = HomeHeaderCompact.next(headerCompact, scrolledDp)
     val uriHandler = LocalUriHandler.current
     // «المزيد اليوم» — الكتل الثانوية خلف زر إفصاح واحد، مطوي افتراضيًا
     // (iOS HomeFeedView.swift:690 moreTodaySection + showMoreToday).
@@ -299,6 +313,7 @@ private fun LoadedFeed(
     ) {
         sectionItem {
             HomeHeaderBar(
+                compact = headerCompact,
                 isDarkMode = isDarkMode,
                 showNotificationsBell = showNotificationsBell,
                 notificationsUnreadCount = notificationsUnreadCount,
@@ -368,6 +383,13 @@ private fun LoadedFeed(
             }
         }
 
+        // الاقتصاد الحي: بطاقة برقم واحد بعد الهيرو وقبل أشرطة البطولات (قرار
+        // المالك #1641/#1642)؛ تختفي بلا بيانات (نقل الويب #1493–#1506).
+        if (com.sabq.smart.feature.economy.EconomyFormat.homeMode(state.economySnapshot) != com.sabq.smart.feature.economy.EconomyFormat.HomeMode.Hidden) {
+            sectionItem {
+                com.sabq.smart.feature.economy.EconomyHomeBlock(snapshot = state.economySnapshot, onClick = onEconomyClick)
+            }
+        }
         // شريط كأس العالم 2026 — يختفي كليًا عند غياب البيانات.
         // (خليجي 27 غير معروض في الرئيسية مطابقةً لتطبيق iOS.)
         sectionItem {
@@ -533,7 +555,7 @@ private fun LoadedFeed(
         // (HomeFeedView.swift: opinionsPreviewSection ثم MuqtarabHomeStrip
         // بعد latestArticlesSection).
 
-        // Opinions preview — horizontal rail of up to 5 cards +
+        // Opinions preview — vertical brand-styled list of up to 5 rows +
         // "الكل" link to the full Opinions list.
         if (state.opinions.isNotEmpty()) {
             sectionItem {
@@ -545,7 +567,7 @@ private fun LoadedFeed(
             }
         }
 
-        // مُقترب — featured analytical topics strip + "الكل" link.
+        // الزوايا (مُقترب) — vertical text-only list + "كل الزوايا" link.
         // Hidden entirely when the backend returns no featured topics.
         if (state.muqtarabTopics.isNotEmpty()) {
             sectionItem {
@@ -807,7 +829,14 @@ private fun HomeHeaderBar(
     onMomentByMomentClick: () -> Unit,
     onNotificationsClick: () -> Unit,
     onToggleDarkMode: () -> Unit,
+    compact: Boolean = false,
 ) {
+    // تصغير الشعار عند التمرير (نقل الويب #1600): 48 → 40 خلال 180ms.
+    val logoHeight by androidx.compose.animation.core.animateDpAsState(
+        targetValue = if (compact) 40.dp else 48.dp,
+        animationSpec = androidx.compose.animation.core.tween(180),
+        label = "home-logo",
+    )
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
@@ -817,7 +846,7 @@ private fun HomeHeaderBar(
             painter = painterResource(id = R.drawable.sabq_logo),
             contentDescription = "سبق",
             contentScale = ContentScale.Fit,
-            modifier = Modifier.height(48.dp),
+            modifier = Modifier.height(logoHeight),
         )
         Spacer(modifier = Modifier.weight(1f))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -1169,7 +1198,9 @@ private fun PulsingDot(color: Color) {
     }
 }
 
-// MARK: - Opinions preview rail
+// MARK: - قسم «الرأي» — قائمة رأسية بهوية سبق (بطاقة سماوية فاتحة،
+// صورة الكاتب دائرية، الاسم بأزرق سبق والتاريخ النسبي بجانبه).
+// نظير iOS opinionsPreviewSection في HomeFeedView.swift.
 
 @Composable
 private fun OpinionsPreviewRail(
@@ -1177,215 +1208,194 @@ private fun OpinionsPreviewRail(
     onArticleClick: (Article) -> Unit,
     onSeeAllClick: () -> Unit = {},
 ) {
-    val gold = SabqTheme.colors.gold
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        // Header row with title on the leading edge (right in RTL) and
-        // an "الكل" link on the trailing edge — same pattern iOS uses
-        // for omqPreviewSection (HomeFeedView.swift line 1232-1239).
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.weight(1f),
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(28.dp)
-                        .clip(CircleShape)
-                        .background(gold.copy(alpha = 0.15f)),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    androidx.compose.material3.Icon(
-                        imageVector = Icons.Filled.FormatQuote,
-                        contentDescription = null,
-                        tint = gold,
-                        modifier = Modifier.size(12.dp),
-                    )
-                }
-                Text(
-                    text = "آراء وأقلام",
-                    style = SabqTheme.typography.cardTitle.copy(
-                        fontSize = 17.sp,
-                        fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
-                        color = SabqTheme.colors.ink,
-                    ),
-                )
-            }
+    // «آراء تستحق القراءة» — الحاوية الموحدة نفسها (بلوك تفاصيل الخبر) بقرار
+    // المالك: ست بطاقات متماثلة في شبكة عمودين بلا تمييز لمقال عن البقية،
+    // والحاوية بيضاء فوق خلفية الرئيسية والبطاقات بالدرجة الزرقاء (عكس صفحة الخبر).
+    com.sabq.smart.ui.components.ArticleSidebarModule(
+        title = "آراء تستحق القراءة",
+        description = "أحدث ما كتبه كتّاب سبق",
+        icon = Icons.Filled.FormatQuote,
+        fill = SabqTheme.colors.surface,
+        action = {
             Row(
                 modifier = Modifier.clickable { onSeeAllClick() },
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(2.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                Text(
-                    text = "الكل",
-                    style = SabqTheme.typography.metaSmall.copy(
-                        fontSize = 12.sp,
-                        fontWeight = androidx.compose.ui.text.font.FontWeight.Black,
-                        color = gold,
-                    ),
-                )
+                Text("المزيد", fontSize = 13.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Medium, color = SabqTheme.colors.primaryEnd)
                 androidx.compose.material3.Icon(
                     imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                     contentDescription = null,
-                    tint = gold,
-                    modifier = Modifier.size(11.dp),
+                    tint = SabqTheme.colors.primaryEnd,
+                    modifier = Modifier.size(12.dp),
                 )
             }
-        }
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(SabqTheme.dimens.railGap)) {
-            items(opinions, key = { it.id }) { opinion ->
-                OpinionCard(opinion = opinion, onClick = { onArticleClick(opinion) })
+        },
+    ) {
+        Spacer(Modifier.height(12.dp))
+        val items = opinions.take(6)
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            var i = 0
+            while (i < items.size) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().height(androidx.compose.foundation.layout.IntrinsicSize.Max),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Box(Modifier.weight(1f).fillMaxSize()) { OpinionMiniTile(items[i], onClick = { onArticleClick(items[i]) }) }
+                    if (i + 1 < items.size) {
+                        Box(Modifier.weight(1f).fillMaxSize()) { OpinionMiniTile(items[i + 1], onClick = { onArticleClick(items[i + 1]) }) }
+                    } else Spacer(Modifier.weight(1f))
+                }
+                i += 2
             }
         }
     }
 }
 
 @Composable
-private fun OpinionCard(opinion: Article, onClick: () -> Unit) {
-    val gold = SabqTheme.colors.gold
-    val primary = SabqTheme.colors.primaryEnd
-    val cardShape = androidx.compose.foundation.shape.RoundedCornerShape(SabqTheme.dimens.mediaCardRadius)
+private fun OpinionMiniTile(opinion: Article, onClick: () -> Unit) {
+    val shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp)
     Column(
         modifier = Modifier
-            .width(200.dp)
-            // Subtle elevation per iOS — `shadow(.black.opacity(0.06),
-            // radius: 8, y: 2)`. Keeps each opinion card "popping"
-            // out of the rail.
-            .shadow(
-                elevation = 4.dp,
-                shape = cardShape,
-                ambientColor = Color.Transparent,
-                spotColor = Color.Black.copy(alpha = 0.06f),
-            )
-            .clip(cardShape)
-            .background(SabqTheme.colors.surface, cardShape)
-            .clickable { onClick() },
+            .fillMaxSize()
+            .clip(shape)
+            .background(SabqTheme.colors.publicSurface, shape)
+            .border(1.dp, SabqTheme.colors.outline, shape)
+            .clickable { onClick() }
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Box(
-            modifier = Modifier
-                .width(200.dp)
-                .height(120.dp),
-        ) {
-            if (!opinion.imageUrl.isNullOrBlank()) {
-                coil.compose.SubcomposeAsyncImage(
-                    model = opinion.imageUrl,
-                    contentDescription = null,
-                    contentScale = androidx.compose.ui.layout.ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize(),
-                    loading = { OpinionPlaceholder(gold = gold, primary = primary) },
-                    error = { OpinionPlaceholder(gold = gold, primary = primary) },
-                )
-            } else {
-                OpinionPlaceholder(gold = gold, primary = primary)
-            }
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(
-                        androidx.compose.ui.graphics.Brush.verticalGradient(
-                            listOf(Color.Transparent, SabqTheme.colors.mediaScrim),
-                        ),
-                    ),
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OpinionAuthorAvatar(opinion = opinion, size = 36.dp)
+            Text(
+                text = opinion.authorName?.takeIf { it.isNotBlank() } ?: "كاتب رأي",
+                fontSize = 12.sp,
+                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                color = SabqTheme.colors.brandBlue,
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
             )
-            opinion.authorName?.takeIf { it.isNotBlank() }?.let { name ->
-                Row(
-                    modifier = Modifier
-                        .align(Alignment.BottomStart)
-                        .padding(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(24.dp)
-                            .clip(CircleShape)
-                            .background(
-                                androidx.compose.ui.graphics.Brush.linearGradient(
-                                    listOf(gold, primary),
-                                ),
-                            ),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            text = name.take(1),
-                            style = SabqTheme.typography.metaSmall.copy(
-                                fontSize = 11.sp,
-                                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
-                                color = Color.White,
-                            ),
-                        )
-                    }
-                    Text(
-                        text = name,
-                        style = SabqTheme.typography.metaSmall.copy(
-                            fontSize = 11.sp,
-                            fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
-                            color = Color.White,
-                        ),
-                        maxLines = 1,
-                    )
-                }
-            }
         }
+        Text(
+            text = opinion.title,
+            fontSize = 13.sp,
+            fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+            color = SabqTheme.colors.ink,
+            maxLines = 2,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            lineHeight = 19.sp,
+        )
+        Spacer(Modifier.weight(1f))
+        Text(
+            text = com.sabq.smart.util.formatRelativeDateAr(opinion.publishedAtIso).ifBlank { opinion.dateFormatted },
+            fontSize = 10.sp,
+            color = SabqTheme.colors.tertiaryInk,
+        )
+    }
+}
+
+@Composable
+private fun OpinionListRow(opinion: Article, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.Top,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        OpinionAuthorAvatar(opinion = opinion, size = 52.dp)
         Column(
-            modifier = Modifier.padding(10.dp),
+            modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             Text(
                 text = opinion.title,
                 style = SabqTheme.typography.cardTitle.copy(
-                    fontSize = 13.sp,
-                    fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                    fontSize = 16.sp,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
                     color = SabqTheme.colors.ink,
                 ),
                 maxLines = 2,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                lineHeight = 23.sp,
             )
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                Text(
-                    text = opinion.readingTime,
-                    style = SabqTheme.typography.metaSmall.copy(
-                        fontSize = 10.sp,
-                        fontWeight = androidx.compose.ui.text.font.FontWeight.Medium,
-                        color = SabqTheme.colors.tertiaryInk,
-                    ),
-                )
+                opinion.authorName?.takeIf { it.isNotBlank() }?.let { name ->
+                    Text(
+                        text = name,
+                        style = SabqTheme.typography.metaSmall.copy(
+                            fontSize = 13.sp,
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                            color = SabqTheme.colors.brandBlue,
+                        ),
+                        maxLines = 1,
+                    )
+                    Text(
+                        text = "•",
+                        style = SabqTheme.typography.metaSmall.copy(
+                            fontSize = 10.sp,
+                            color = SabqTheme.colors.tertiaryInk,
+                        ),
+                    )
+                }
                 Text(
                     text = opinion.dateFormatted,
                     style = SabqTheme.typography.metaSmall.copy(
-                        fontSize = 10.sp,
+                        fontSize = 13.sp,
                         fontWeight = androidx.compose.ui.text.font.FontWeight.Medium,
                         color = SabqTheme.colors.tertiaryInk,
                     ),
+                    maxLines = 1,
                 )
             }
         }
     }
 }
 
+/** صورة كاتب الرأي؛ وعند غيابها دائرة بتدرج ذهبي تحمل أول حرف من اسمه. */
 @Composable
-private fun OpinionPlaceholder(gold: Color, primary: Color) {
+private fun OpinionAuthorAvatar(opinion: Article, size: androidx.compose.ui.unit.Dp) {
+    val url = opinion.authorImageUrl
+    if (!url.isNullOrBlank()) {
+        coil.compose.SubcomposeAsyncImage(
+            model = url,
+            contentDescription = null,
+            contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+            modifier = Modifier
+                .size(size)
+                .clip(CircleShape),
+            loading = { OpinionInitialsAvatar(name = opinion.authorName, size = size) },
+            error = { OpinionInitialsAvatar(name = opinion.authorName, size = size) },
+        )
+    } else {
+        OpinionInitialsAvatar(name = opinion.authorName, size = size)
+    }
+}
+
+@Composable
+private fun OpinionInitialsAvatar(name: String?, size: androidx.compose.ui.unit.Dp) {
     Box(
         modifier = Modifier
-            .fillMaxSize()
+            .size(size)
+            .clip(CircleShape)
             .background(
                 androidx.compose.ui.graphics.Brush.linearGradient(
-                    listOf(gold.copy(alpha = 0.2f), primary.copy(alpha = 0.1f)),
+                    listOf(SabqTheme.colors.gold, SabqTheme.colors.primaryEnd),
                 ),
             ),
         contentAlignment = Alignment.Center,
     ) {
-        androidx.compose.material3.Icon(
-            imageVector = Icons.Filled.FormatQuote,
-            contentDescription = null,
-            tint = gold.copy(alpha = 0.4f),
-            modifier = Modifier.size(32.dp),
+        Text(
+            text = (name?.trim()?.takeIf { it.isNotEmpty() } ?: "؟").take(1),
+            style = SabqTheme.typography.metaSmall.copy(
+                fontSize = 20.sp,
+                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                color = Color.White,
+            ),
         )
     }
 }
@@ -1906,6 +1916,29 @@ private fun androidx.compose.foundation.lazy.LazyListScope.sectionItem(
     content: @androidx.compose.runtime.Composable () -> Unit,
 ) {
     item(key = key, contentType = contentType) {
-        Box(Modifier.padding(bottom = SabqTheme.dimens.sectionGap)) { content() }
+        // الشرائط التي تختفي ذاتيًا (البطولات/الاقتصاد) ترسم صفرًا؛ لا نحجز
+        // لها فجوة وإلا تراكمت الفراغات تحت بطاقة الاقتصاد (نظير iOS #1644).
+        val gap = SabqTheme.dimens.sectionGap
+        Box(
+            Modifier.layout { measurable, constraints ->
+                val placeable = measurable.measure(constraints)
+                if (placeable.height == 0) {
+                    layout(placeable.width, 0) {}
+                } else {
+                    val extra = gap.roundToPx()
+                    layout(placeable.width, placeable.height + extra) { placeable.placeRelative(0, 0) }
+                }
+            },
+        ) { content() }
+    }
+}
+
+
+/** قاعدة تصغير الشعار بعتبتين — نظير `HomeHeaderCompact` في iOS (نقل الويب #1600). */
+object HomeHeaderCompact {
+    fun next(current: Boolean, y: Float): Boolean = when {
+        y > 72f -> true
+        y <= 16f -> false
+        else -> current
     }
 }

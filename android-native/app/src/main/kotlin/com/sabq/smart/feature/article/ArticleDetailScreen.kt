@@ -1,6 +1,8 @@
 package com.sabq.smart.feature.article
 
 import android.content.Intent
+import android.app.PendingIntent
+import android.os.SystemClock
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -60,6 +62,8 @@ import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -78,8 +82,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
+import com.sabq.smart.util.ImageAlign
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -91,10 +101,15 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import com.sabq.smart.data.Article
 import com.sabq.smart.data.BookmarksStore
 import com.sabq.smart.data.LikesStore
 import com.sabq.smart.data.BehaviorTracker
+import com.sabq.smart.data.analytics.SabqAnalytics
+import com.sabq.smart.data.analytics.AnalyticsPolicy
+import com.sabq.smart.data.analytics.AnalyticsReadingSession
 import com.sabq.smart.data.Comment
 import com.sabq.smart.feature.auth.AuthViewModel
 import com.sabq.smart.feature.settings.SettingsViewModel
@@ -113,10 +128,12 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.filled.Collections
 import android.net.Uri
+import java.util.UUID
 import com.sabq.smart.util.InlineRun
 import com.sabq.smart.util.GalleryImage
 import com.sabq.smart.util.VideoProvider
 import com.sabq.smart.ui.components.BreakingPill
+import com.sabq.smart.ui.components.ReadingPill
 import com.sabq.smart.ui.components.CommentComposer
 import com.sabq.smart.ui.components.CommentRow
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -131,6 +148,10 @@ import androidx.compose.ui.platform.LocalContext
 import com.sabq.smart.ui.components.SmallActionButton
 import com.sabq.smart.ui.components.StatusChip
 import com.sabq.smart.ui.theme.SabqTheme
+import com.sabq.smart.ui.components.ArticleSidebarModule
+import com.sabq.smart.ui.components.SidebarArticleRow
+import com.sabq.smart.ui.components.SidebarRowDivider
+import com.sabq.smart.util.formatRelativeDateAr
 import com.sabq.smart.ui.theme.IbmPlexSansArabic
 import com.sabq.smart.util.BlockNode
 import com.sabq.smart.util.HtmlSimpleParser
@@ -173,6 +194,7 @@ fun ArticleDetailScreen(
     onTagClick: (String) -> Unit = {},
     onAuthorClick: (String) -> Unit = {},
     onRelatedClick: (Article) -> Unit = {},
+    onOpinionsSeeAll: () -> Unit = {},
     viewModel: ArticleDetailViewModel = hiltViewModel(),
     commentsViewModel: CommentsViewModel = hiltViewModel(),
     authViewModel: AuthViewModel = hiltViewModel(),
@@ -214,6 +236,7 @@ fun ArticleDetailScreen(
                         onTagClick = onTagClick,
                         onAuthorClick = onAuthorClick,
                         onRelatedClick = onRelatedClick,
+                onOpinionsSeeAll = onOpinionsSeeAll,
                     )
                     com.sabq.smart.feature.opinions.OpinionFallbackState.Idle,
                     com.sabq.smart.feature.opinions.OpinionFallbackState.Loading,
@@ -235,6 +258,8 @@ fun ArticleDetailScreen(
                 article = s.article,
                 hydrating = s.hydrating,
                 related = s.related,
+                relatedOpinions = s.relatedOpinions,
+                reporterTitle = s.reporterTitle,
                 mediaAssets = s.mediaAssets,
                 fontSize = settings.articleFontSize,
                 lineSpacing = settings.articleLineSpacing,
@@ -247,6 +272,7 @@ fun ArticleDetailScreen(
                 onTagClick = onTagClick,
                 onAuthorClick = onAuthorClick,
                 onRelatedClick = onRelatedClick,
+                onOpinionsSeeAll = onOpinionsSeeAll,
             )
         }
     }
@@ -257,6 +283,8 @@ private fun ArticleBody(
     article: Article,
     hydrating: Boolean = false,
     related: List<Article>,
+    relatedOpinions: List<Article> = emptyList(),
+    reporterTitle: String? = null,
     mediaAssets: List<com.sabq.smart.data.MediaAsset>,
     fontSize: Float,
     lineSpacing: Float,
@@ -269,6 +297,7 @@ private fun ArticleBody(
     onTagClick: (String) -> Unit,
     onAuthorClick: (String) -> Unit,
     onRelatedClick: (Article) -> Unit,
+    onOpinionsSeeAll: () -> Unit = {},
 ) {
     android.util.Log.d("ArticleBody", "Article: ${article.title}, tags: ${article.tags}, related size: ${related.size}")
     val context = LocalContext.current
@@ -295,13 +324,47 @@ private fun ArticleBody(
 
     val behaviorTracker = remember { entryPoint.behaviorTracker() }
 
+    // GA4 reading signals are scoped to this article's visible body. The
+    // existing BehaviorTracker remains the backend/loyalty counter; these
+    // events are deliberately independent and only flush foreground time.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val analyticsEnabled by SabqAnalytics.collectionEnabled.collectAsStateWithLifecycle()
+    val readingSession = remember(article.id, analyticsEnabled) {
+        AnalyticsReadingSession { SystemClock.elapsedRealtime() }
+    }
+    var bodyBlockCount by remember(article.id) { mutableStateOf(0) }
+
+    DisposableEffect(article.id, lifecycleOwner, readingSession) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_RESUME -> if (analyticsEnabled) readingSession.active(true)
+                Lifecycle.Event.ON_PAUSE -> readingSession.active(false)
+                else -> Unit
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        if (analyticsEnabled && lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+            readingSession.active(true)
+        }
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            val seconds = readingSession.finish()
+            // Read the current gate at disposal so revocation or a consent
+            // transition cannot flush time collected before consent.
+            if (analyticsEnabled && SabqAnalytics.collectionEnabled.value && seconds != null) {
+                SabqAnalytics.log(
+                    "reading_time",
+                    mapOf("article_id" to article.id, "reading_time_seconds" to seconds),
+                )
+            }
+        }
+    }
+
     // Behavior tracking session lifecycle
     DisposableEffect(article.id) {
         behaviorTracker.startSession(article.id)
-        // Analytics event — mirrors iOS `SabqAnalytics.articleView(...)`
-        // / `.opinionView(...)`. No-op today (provider TBD); call-site
-        // stays stable so a future analytics provider lands without
-        // touching every screen.
+        // Content view event — exactly one owner for this article screen,
+        // mirrored by the iOS analytics contract.
         if (article.isOpinion) {
             com.sabq.smart.data.analytics.SabqAnalytics.opinionView(
                 id = article.id,
@@ -321,17 +384,31 @@ private fun ArticleBody(
     }
 
     // Scroll progress collection to track max scroll percentage
-    LaunchedEffect(listState) {
+    LaunchedEffect(listState, readingSession, analyticsEnabled, lifecycleOwner) {
         snapshotFlow {
             val info = listState.layoutInfo
             val total = info.totalItemsCount
-            if (total <= 0) 0f
-            else {
-                val last = info.visibleItemsInfo.lastOrNull()?.index ?: 0
-                (last.toFloat() / (total - 1).coerceAtLeast(1).toFloat()).coerceIn(0f, 1f)
+            val last = info.visibleItemsInfo.lastOrNull()?.index ?: 0
+            val fullProgress = if (total <= 1) 0f
+            else (last.toFloat() / (total - 1).toFloat()).coerceIn(0f, 1f)
+            val bodyProgress = info.visibleItemsInfo.mapNotNull { item ->
+                val index = (item.key as? String)?.removePrefix("article_body_")?.toIntOrNull()
+                    ?: return@mapNotNull null
+                val visibleFraction = ((info.viewportEndOffset - item.offset).toFloat() /
+                    item.size.coerceAtLeast(1)).coerceIn(0f, 1f)
+                AnalyticsPolicy.readingDepth(index, bodyBlockCount, visibleFraction)
+            }.maxOrNull() ?: 0f
+            fullProgress to bodyProgress
+        }.collect { (fullProgress, bodyProgress) ->
+            behaviorTracker.updateScroll(fullProgress.toDouble())
+            if (analyticsEnabled && lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+                readingSession.depth((bodyProgress * 100f).toInt()).forEach { threshold ->
+                    SabqAnalytics.log(
+                        "scroll_depth",
+                        mapOf("article_id" to article.id, "percent_scrolled" to threshold.toLong()),
+                    )
+                }
             }
-        }.collect { progress ->
-            behaviorTracker.updateScroll(progress.toDouble())
         }
     }
 
@@ -382,6 +459,7 @@ private fun ArticleBody(
     ) {
         value = withContext(Dispatchers.Default) { HtmlSimpleParser.parse(article.body) }
     }
+    LaunchedEffect(blocks.size) { bodyBlockCount = blocks.size }
 
     // Reader controls — `fontSize`, `lineSpacing`, `useSerif` arrive
     // pre-resolved from the parent (SettingsViewModel.settings flow,
@@ -458,7 +536,7 @@ private fun ArticleBody(
             item { ArticleTitle(article = article, fontSize = fontSize, useSerif = useSerif) }
 
             // 4. Meta row (author · reading time · date).
-            item { MetaRow(article = article, onAuthorClick = onAuthorClick) }
+            item { MetaRow(article = article, reporterTitle = reporterTitle, onAuthorClick = onAuthorClick) }
 
             // 5. Smart Summary Card.
             if (!isFocusMode) {
@@ -474,7 +552,7 @@ private fun ArticleBody(
             }
 
             // 7. Article body.
-            itemsIndexed(blocks) { index, block ->
+            itemsIndexed(blocks, key = { index, _ -> "article_body_$index" }) { index, block ->
                 BodyBlock(
                     block = block,
                     fontSize = fontSize,
@@ -597,6 +675,22 @@ private fun ArticleBody(
                 }
             }
 
+            // 10.2 — «مقالات قد تهمك»: رأي من تصنيف الخبر (نقل الويب #1609/#1624).
+            if (!isFocusMode && !article.isOpinion && relatedOpinions.isNotEmpty()) {
+                item {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    RelatedOpinionsSection(
+                        article = article,
+                        opinions = relatedOpinions,
+                        onClick = { opinion ->
+                            com.sabq.smart.data.ArticleHandoff.put(opinion)
+                            onRelatedClick(opinion)
+                        },
+                        onSeeAll = onOpinionsSeeAll,
+                    )
+                }
+            }
+
             // 10.5 — «مقالات أخرى» لصفحات الرأي: حتى 4 مقالات رأي أخرى
             // تحل محل ذات-الصلة والتعليقات (مطابقة iOS OpinionDetail).
             if (!isFocusMode && article.isOpinion) {
@@ -658,10 +752,10 @@ private fun ArticleBody(
                 if (!isLikeBusy) {
                     haptics.medium()
                     isLikeBusy = true
-                    val newLiked = !isLiked
                     scope.launch {
-                        likesStore.toggle(article.id)
-                        com.sabq.smart.data.analytics.SabqAnalytics.articleLike(article.id, newLiked)
+                        likesStore.toggle(article.id)?.let { (liked, _) ->
+                            SabqAnalytics.articleLike(article.id, liked)
+                        }
                         isLikeBusy = false
                     }
                 }
@@ -669,7 +763,6 @@ private fun ArticleBody(
             onBookmark = { scope.launch { bookmarks.toggle(article.bookmarkKey) } },
             onShare = {
                 shareArticle(context, article)
-                com.sabq.smart.data.analytics.SabqAnalytics.articleShare(article.id, "system_share")
             },
         )
 
@@ -842,6 +935,7 @@ private fun LabelsRow(
             OpinionMarkerPill()
         } else {
             StatusChip(title = article.categoryLabel.ifBlank { article.category.title }, tint = article.category.tint())
+            if (article.isReading) ReadingPill(compact = false)
             if (article.isBreaking) BreakingPill()
         }
 
@@ -954,45 +1048,145 @@ private fun ArticleTitle(article: Article, fontSize: Float, useSerif: Boolean) {
 // ============================================================
 
 @Composable
-private fun MetaRow(article: Article, onAuthorClick: (String) -> Unit) {
+private fun MetaRow(article: Article, reporterTitle: String?, onAuthorClick: (String) -> Unit) {
     if (article.isOpinion) {
         OpinionMetaRow(article = article, onAuthorClick = onAuthorClick)
     } else {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
+        NewsBylineRow(article = article, reporterTitle = reporterTitle, onAuthorClick = onAuthorClick)
+    }
+}
+
+/**
+ * سطر الكاتب كما في الويب (#1598) بتصميم iOS المضغوط (#1642/#1644): صورة 34،
+ * الاسم (رابط) + شارة التوثيق · الصفة، ثم التاريخ | الوقت | «قراءة N دقيقة»
+ * بأيقونات صغيرة، ثم «آخر تحديث» سطرًا ظاهرًا عند وجود تعديل تحريري فقط.
+ */
+@Composable
+private fun NewsBylineRow(article: Article, reporterTitle: String?, onAuthorClick: (String) -> Unit) {
+    val name = article.authorName?.takeIf { it.isNotBlank() } ?: "صحيفة سبق"
+    val role = reporterTitle ?: article.authorRole ?: "كاتب الخبر"
+    val date = com.sabq.smart.data.ArticleByline.publicationDate(article.publishedAtIso)
+    val clock = com.sabq.smart.data.ArticleByline.publicationClock(article.publishedAtIso)
+    // تفاصيل الخبر العامة بلا reading_minutes؛ نقدّرها من طول النص كما في iOS (800 حرف/دقيقة).
+    val readingMinutes = article.readingMinutesInt
+        ?: article.body?.takeIf { it.isNotBlank() }?.let { maxOf(1, it.length / 800) }
+    val reading = com.sabq.smart.data.ArticleByline.readingLabel(readingMinutes)
+    val updated = com.sabq.smart.data.ArticleByline.lastUpdatedLabel(article.editorialModifiedAtIso)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        BylineAvatar(name = name, imageUrl = article.authorImageUrl, size = 34.dp)
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(3.dp),
         ) {
-            article.authorName?.takeIf { it.isNotBlank() }?.let { name ->
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(5.dp),
+            ) {
+                Row(
+                    modifier = Modifier
+                        .weight(1f, fill = false)
+                        .clickable { onAuthorClick(name) },
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(3.dp),
+                ) {
+                    Text(
+                        text = name,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = SabqTheme.colors.ink,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    if (article.isAuthorVerified) {
+                        Icon(
+                            imageVector = Icons.Filled.Verified,
+                            contentDescription = "موثّق",
+                            tint = SabqTheme.colors.primaryEnd,
+                            modifier = Modifier.size(12.dp),
+                        )
+                    }
+                }
+                Text("·", fontSize = 11.sp, color = SabqTheme.colors.secondaryInk)
                 Text(
-                    text = name,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = SabqTheme.colors.primaryEnd,
+                    text = role,
+                    fontSize = 11.sp,
+                    color = SabqTheme.colors.secondaryInk,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.clickable { onAuthorClick(name) }
                 )
-                MiddleDot()
             }
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                if (date != null) BylineItem(text = date, icon = Icons.Outlined.CalendarMonth)
+                if (clock != null) BylineItem(text = clock, icon = Icons.Outlined.Schedule)
+                BylineItem(text = reading, icon = Icons.Outlined.AutoStories)
+            }
+            if (updated != null) {
+                BylineItem(text = "آخر تحديث: $updated", icon = Icons.Outlined.Refresh)
+            }
+        }
+    }
+}
+
+@Composable
+private fun BylineItem(text: String, icon: ImageVector) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(3.dp),
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = SabqTheme.colors.secondaryInk,
+            modifier = Modifier.size(11.dp),
+        )
+        Text(
+            text = text,
+            fontSize = 11.sp,
+            color = SabqTheme.colors.secondaryInk,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+@Composable
+private fun BylineAvatar(name: String, imageUrl: String?, size: androidx.compose.ui.unit.Dp) {
+    val initials: @Composable () -> Unit = {
+        Box(
+            modifier = Modifier
+                .size(size)
+                .clip(CircleShape)
+                .background(SabqTheme.colors.primaryEnd.copy(alpha = 0.12f)),
+            contentAlignment = Alignment.Center,
+        ) {
             Text(
-                text = article.readingTime,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Medium,
-                color = SabqTheme.colors.tertiaryInk,
-                maxLines = 1,
-            )
-            MiddleDot()
-            Text(
-                text = article.dateFormatted,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Medium,
-                color = SabqTheme.colors.tertiaryInk,
-                maxLines = 1,
+                text = name.trim().take(1),
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                color = SabqTheme.colors.primaryEnd,
             )
         }
+    }
+    if (!imageUrl.isNullOrBlank()) {
+        SubcomposeAsyncImage(
+            model = imageUrl,
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.size(size).clip(CircleShape),
+            loading = { initials() },
+            error = { initials() },
+        )
+    } else {
+        initials()
     }
 }
 
@@ -1055,6 +1249,7 @@ private fun SmartSummaryCard(article: Article) {
             // ExoPlayer (AudioPlayerController). Mirrors iOS
             // `listenButton` (ArticleDetailView.swift:712-732).
             article.slug?.takeIf { it.isNotBlank() }?.let { slug ->
+                SummaryAudioAttribution(slug = slug)
                 ListenPill(slug = slug)
             }
         }
@@ -1103,6 +1298,30 @@ private fun SmartSummaryCard(article: Article) {
  *   - "إيقاف" + pause.fill when playing
  *   - emerald-ish brand pill backdrop + shadow
  */
+/**
+ * إسناد المزوّد بعبارة الويب حرفيًا (`SummaryAudioAttribution.tsx`) — يظهر فقط
+ * عندما يكون مقطع هذا الخبر عبر HUMAIN (رأس `X-TTS-Provider`).
+ */
+@Composable
+private fun SummaryAudioAttribution(slug: String) {
+    val context = LocalContext.current
+    val controller = remember {
+        dagger.hilt.android.EntryPointAccessors
+            .fromApplication(context.applicationContext, AudioPlayerEntryPoint::class.java)
+            .audioPlayerController()
+    }
+    val playerState by controller.state.collectAsState()
+    if (playerState.playingSlug == slug && playerState.isHumain) {
+        Text(
+            text = "الصوت عبر HUMAIN",
+            fontSize = 11.sp,
+            color = Color(0.016f, 0.47f, 0.34f),
+            maxLines = 1,
+            modifier = Modifier.semantics { contentDescription = "الصوت عبر هيومن" },
+        )
+    }
+}
+
 @Composable
 private fun ListenPill(slug: String) {
     val context = LocalContext.current
@@ -1348,55 +1567,64 @@ private fun BodyBlock(
             }
             is BlockNode.Image -> {
                 // Inline body images render at their NATURAL aspect
-                // ratio — never force-cropped to 16:10. Portrait shots
-                // (e.g. press-conference vertical photos) used to get
-                // their tops/bottoms chopped off; the user fix on iOS
-                // is `.fill + min-height` which lets the image grow
-                // to its true height. We mirror that here with
-                // `ContentScale.Fit` + `Modifier.fillMaxWidth` (no
-                // fixed aspectRatio). See memory [[ui-design-system]]:
-                // "hero+inline image natural aspect ratios".
-                Column(
+                // ratio — never force-cropped to 16:10 (`ContentScale.Fit`,
+                // no fixed aspectRatio). عرض جزئي من المحرر (25/33/50/75٪)
+                // يضيّق الصورة إلى نسبة العمود ويحاذيها إلى الجهة المطلوبة
+                // (نقل الويب #1512) — بلا التفاف نص كما في iOS.
+                val fraction = block.layout.widthFraction ?: 1f
+                val isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl
+                val boxAlignment = when (block.layout.align) {
+                    ImageAlign.Center -> Alignment.Center
+                    ImageAlign.Right -> if (isRtl) Alignment.CenterStart else Alignment.CenterEnd
+                    ImageAlign.Left -> if (isRtl) Alignment.CenterEnd else Alignment.CenterStart
+                }
+                Box(
                     modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    contentAlignment = if (fraction < 1f) boxAlignment else Alignment.CenterStart,
                 ) {
-                    val shape = RoundedCornerShape(SabqTheme.dimens.tileRadius)
-                    SubcomposeAsyncImage(
-                        model = block.url,
-                        contentDescription = block.alt,
-                        contentScale = ContentScale.Fit,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(shape)
-                            .background(SabqTheme.colors.paleFill, shape)
-                            .pointerInput(block.url) {
-                                detectTapGestures(onTap = { onImageTap(block.url) })
+                    Column(
+                        modifier = Modifier.fillMaxWidth(fraction),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        val shape = RoundedCornerShape(SabqTheme.dimens.tileRadius)
+                        val placeholderHeight = (220f * fraction).dp
+                        SubcomposeAsyncImage(
+                            model = block.url,
+                            contentDescription = block.alt,
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(shape)
+                                .background(SabqTheme.colors.paleFill, shape)
+                                .pointerInput(block.url) {
+                                    detectTapGestures(onTap = { onImageTap(block.url) })
+                                },
+                            loading = {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(placeholderHeight)
+                                        .background(SabqTheme.colors.paleFill),
+                                )
                             },
-                        loading = {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(220.dp)
-                                    .background(SabqTheme.colors.paleFill),
-                            )
-                        },
-                        error = {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(220.dp)
-                                    .background(SabqTheme.colors.paleFill),
-                            )
-                        },
-                    )
-                    if (!block.caption.isNullOrEmpty()) {
-                        Text(
-                            text = block.caption,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = SabqTheme.colors.tertiaryInk,
-                            lineHeight = 16.sp,
+                            error = {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(placeholderHeight)
+                                        .background(SabqTheme.colors.paleFill),
+                                )
+                            },
                         )
+                        if (!block.caption.isNullOrEmpty()) {
+                            Text(
+                                text = block.caption,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = SabqTheme.colors.tertiaryInk,
+                                lineHeight = 16.sp,
+                            )
+                        }
                     }
                 }
             }
@@ -1557,6 +1785,14 @@ private fun BodyBlock(
             is BlockNode.WhatsAppCta -> {
                 WhatsAppCtaCard(phrase = block.phrase, url = block.url)
             }
+            is BlockNode.Table -> {
+                com.sabq.smart.ui.components.ArticleTableBlock(
+                    block = block,
+                    fontSize = fontSize,
+                    lineSpacing = lineSpacing,
+                    useSerif = useSerif,
+                )
+            }
             is BlockNode.Divider -> {
                 HorizontalDivider(
                     color = SabqTheme.colors.outline.copy(alpha = 0.5f)
@@ -1698,22 +1934,7 @@ private fun ActionBar(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(0.dp),
     ) {
-        ActionCell(
-            icon = Icons.Filled.Share,
-            label = "مشاركة",
-            isActive = false,
-            modifier = Modifier.weight(1f),
-            onClick = onShare,
-        )
-        VerticalSeparator()
-        ActionCell(
-            icon = if (isBookmarked) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder,
-            label = if (isBookmarked) "تم الحفظ" else "حفظ",
-            isActive = isBookmarked,
-            modifier = Modifier.weight(1f),
-            onClick = onBookmark,
-        )
-        VerticalSeparator()
+        // المشاركة والحفظ في الشريط العلوي فقط — لا زر في موضعين (مراجعة 10.3.3 #1651).
         ActionCell(
             icon = Icons.Filled.TextFields,
             label = "تنسيق",
@@ -1834,80 +2055,77 @@ private fun TagChip(tag: String, onClick: () -> Unit) {
 
 @Composable
 private fun RelatedSection(related: List<Article>, onClick: (Article) -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 20.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
+    // الحاوية الموحدة (نقل #1610): تسمية الويب (4ad1892) — القائمة آخر ما
+    // نُشر في القسم لا تشابهًا.
+    ArticleSidebarModule(
+        title = "اقرأ أيضاً",
+        description = "آخر ما نُشر في القسم",
+        icon = Icons.Outlined.Link,
+        modifier = Modifier.padding(horizontal = 20.dp),
     ) {
-        HorizontalDivider(color = SabqTheme.colors.outline)
-        SectionHeaderRow(
-            title = "أخبار ذات صلة",
-            subtitle = "مقالات مشابهة قد تهمك",
-            icon = Icons.Outlined.Link,
-            tint = SabqTheme.colors.primaryEnd,
-        )
         related.forEachIndexed { idx, item ->
+            if (idx > 0) SidebarRowDivider()
+            SidebarArticleRow(
+                title = item.title,
+                imageUrl = item.imageUrl,
+                date = formatRelativeDateAr(item.publishedAtIso).ifBlank { item.dateFormatted },
+                placeholderIcon = Icons.Outlined.AutoStories,
+                placeholderTint = item.category.tint(),
+                onClick = { onClick(item) },
+            )
+        }
+    }
+}
+
+/**
+ * «مقالات قد تهمك»: مقالات رأي من تصنيف الخبر — صورة الكاتب الصغيرة قبل اسمه
+ * وبلا توقيت (تُقرأ كقائمة كتّاب لا خطًّا زمنيًا)، ومقال الرأي بلا صورة يعرض
+ * صورة الكاتب داخل الإطار نفسه، و«عرض المزيد» يفتح قسم الرأي.
+ */
+@Composable
+private fun RelatedOpinionsSection(
+    article: Article,
+    opinions: List<Article>,
+    onClick: (Article) -> Unit,
+    onSeeAll: () -> Unit,
+) {
+    val categoryTitle = article.categoryLabel.ifBlank { article.category.title }
+    ArticleSidebarModule(
+        title = "مقالات قد تهمك",
+        description = "من تصنيف «$categoryTitle»",
+        icon = Icons.Outlined.AutoStories,
+        modifier = Modifier.padding(horizontal = 20.dp),
+        action = {
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { onClick(item) }
-                    .padding(vertical = 4.dp),
+                modifier = Modifier.clickable { onSeeAll() },
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    Text(
-                        text = item.title,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = SabqTheme.colors.ink,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        text = item.dateFormatted,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = SabqTheme.colors.tertiaryInk,
-                    )
-                }
-                if (!item.imageUrl.isNullOrBlank()) {
-                    Box(
-                        modifier = Modifier
-                            .size(56.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(SabqTheme.colors.paleFill),
-                    ) {
-                        FocalCachedAsyncImage(
-                            url = item.imageUrl,
-                            focalPoint = item.focalPoint,
-                            modifier = Modifier.fillMaxSize(),
-                        )
-                    }
-                } else {
-                    Box(
-                        modifier = Modifier
-                            .size(56.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(item.category.tint().copy(alpha = 0.1f)),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.AutoStories,
-                            contentDescription = null,
-                            tint = item.category.tint().copy(alpha = 0.4f),
-                            modifier = Modifier.size(18.dp),
-                        )
-                    }
-                }
+                Text(
+                    text = "عرض المزيد",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = SabqTheme.colors.primaryEnd,
+                )
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+                    contentDescription = null,
+                    tint = SabqTheme.colors.primaryEnd,
+                    modifier = Modifier.size(14.dp),
+                )
             }
-            if (idx != related.lastIndex) {
-                HorizontalDivider(color = SabqTheme.colors.outline.copy(alpha = 0.5f))
-            }
+        },
+    ) {
+        opinions.take(5).forEachIndexed { idx, opinion ->
+            if (idx > 0) SidebarRowDivider()
+            SidebarArticleRow(
+                title = opinion.title,
+                imageUrl = opinion.imageUrl?.takeIf { it.isNotBlank() } ?: opinion.authorImageUrl,
+                byline = opinion.authorName?.takeIf { it.isNotBlank() } ?: "كاتب رأي",
+                bylineAvatarUrl = opinion.authorImageUrl,
+                placeholderIcon = Icons.Filled.FormatQuote,
+                onClick = { onClick(opinion) },
+            )
         }
     }
 }
@@ -2092,9 +2310,24 @@ private fun shareArticle(context: android.content.Context, article: Article) {
         putExtra(Intent.EXTRA_TEXT, "${article.title}\n$url")
         putExtra(Intent.EXTRA_SUBJECT, article.title)
     }
-    val chooser = Intent.createChooser(intent, "مشاركة المقال").apply {
+    val nonce = UUID.randomUUID().toString()
+    val callback = Intent(context, ShareDestinationReceiver::class.java).apply {
+        putExtra(ShareDestinationReceiver.EXTRA_NONCE, nonce)
+        putExtra(ShareDestinationReceiver.EXTRA_ARTICLE_ID, article.id)
+    }
+    val callbackPendingIntent = PendingIntent.getBroadcast(
+        context,
+        nonce.hashCode(),
+        callback,
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE,
+    )
+    val chooser = Intent.createChooser(intent, "مشاركة المقال", callbackPendingIntent.intentSender).apply {
         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     }
+    com.sabq.smart.data.analytics.SabqAnalytics.log(
+        "share_intent",
+        mapOf("article_id" to article.id, "method" to "system_share"),
+    )
     context.startActivity(chooser)
 }
 

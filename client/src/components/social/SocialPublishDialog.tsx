@@ -9,6 +9,7 @@ import {
   CalendarClock,
   ExternalLink,
   ImageOff,
+  Info,
   Loader2,
   RefreshCcw,
   Send,
@@ -42,7 +43,12 @@ import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAuth, hasPermission } from "@/hooks/useAuth";
-import { validateXPostText, X_MAX_WEIGHTED_LENGTH } from "@shared/socialPostText";
+import {
+  validateXPostText,
+  X_MAX_PREMIUM_WEIGHTED_LENGTH,
+  X_MAX_WEIGHTED_LENGTH,
+} from "@shared/socialPostText";
+import { fmtSocialDateTime } from "@/components/social/socialFormat";
 import { MediaLibraryPicker } from "@/components/dashboard/MediaLibraryPicker";
 
 interface SocialPublishDialogProps {
@@ -72,6 +78,9 @@ interface SocialPostRow {
   id: string;
   status: string;
   text: string;
+  textSource?: string;
+  createdByName?: string | null;
+  isAuthorProposal?: boolean;
   scheduledAt: string | null;
   publishedAt: string | null;
   externalPostUrl: string | null;
@@ -146,15 +155,24 @@ export function SocialPublishDialog({
   });
   const posts = Array.isArray(postsRaw?.posts) ? postsRaw!.posts : [];
 
-  // تهيئة النص من العنوان عند فتح النافذة أو وصول السياق
+  const existingDraft = useMemo(() => {
+    return posts.find((p) => p.status === "draft") ?? null;
+  }, [posts]);
+
+  // تهيئة النص من المسودة أو العنوان عند فتح النافذة أو وصول السياق
   useEffect(() => {
     if (!open) return;
+    if (existingDraft && !text) {
+      setText(existingDraft.text);
+      setTextSource("custom");
+      return;
+    }
     if (context && (textSource === "title" || textSource === "title_link")) {
       setText(context.title);
       setIncludeLink(textSource === "title_link");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, context?.title, textSource]);
+  }, [open, context?.title, textSource, existingDraft]);
 
   useEffect(() => {
     if (!open) {
@@ -210,6 +228,18 @@ export function SocialPublishDialog({
   });
 
   async function createDraft(): Promise<SocialPostRow> {
+    if (existingDraft) {
+      return apiRequest<SocialPostRow>(`/api/social-publishing/posts/${existingDraft.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text,
+          includeLink,
+          imageSource: effectiveImage.source,
+          imageUrl: effectiveImage.url,
+        }),
+      });
+    }
     return apiRequest<SocialPostRow>(`/api/social-publishing/posts`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -239,6 +269,8 @@ export function SocialPublishDialog({
         title: "نُشر على X",
         description: data.post.externalPostUrl || "تم النشر بنجاح",
       });
+      // النجاح يغلق النافذة — السجل متاح في صفحة النشر الاجتماعي
+      onOpenChange(false);
     },
     onError: (error: any) => {
       setConfirmPublishOpen(false);
@@ -265,6 +297,7 @@ export function SocialPublishDialog({
       queryClient.invalidateQueries({ queryKey: postsQueryKey });
       setScheduleMode(false);
       toast({ title: "تمت الجدولة", description: "سيُنشر المنشور تلقائياً في الموعد" });
+      onOpenChange(false);
     },
     onError: (error: any) => {
       toast({ title: "تعذرت الجدولة", description: error.message || "حاول مجدداً", variant: "destructive" });
@@ -318,7 +351,11 @@ export function SocialPublishDialog({
   return (
     <>
       <Dialog open={open} onOpenChange={(o) => !busy && onOpenChange(o)}>
-        <DialogContent className="max-w-2xl max-h-[92vh] overflow-y-auto" dir="rtl">
+        {/* dvh لا vh — شريط أدوات سفاري الجوال يقتطع من vh؛ وعرض داخل الحواف مع حشوة أصغر للشاشات الصغيرة */}
+        <DialogContent
+          className="w-[calc(100vw-1.25rem)] max-w-2xl max-h-[86dvh] overflow-y-auto overflow-x-hidden scrollbar-hide rounded-lg p-4 sm:p-6"
+          dir="rtl"
+        >
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <XIcon className="w-5 h-5" />
@@ -347,6 +384,21 @@ export function SocialPublishDialog({
             </div>
           ) : (
             <div className="space-y-4">
+              {existingDraft && (
+                <div className="flex items-start gap-2 rounded-lg border border-purple-200 bg-purple-50 p-3 text-xs text-purple-900 dark:border-purple-900/50 dark:bg-purple-950/30 dark:text-purple-200">
+                  <Info className="h-4 w-4 mt-0.5 text-purple-600 shrink-0" />
+                  <div>
+                    <span className="font-semibold">
+                      {existingDraft.isAuthorProposal
+                        ? "يوجد مقترح منشور محفوظ من كاتب المقال"
+                        : "توجد مسودة محفوظة لهذا المقال"}
+                    </span>
+                    {existingDraft.createdByName && <> ({existingDraft.createdByName})</>}
+                    . يمكنك مراجعته وتعديل النص واعتماده للنشر أو الجدولة.
+                  </div>
+                </div>
+              )}
+
               {/* مصدر النص */}
               <div className="space-y-2">
                 <Label>مصدر النص</Label>
@@ -406,16 +458,20 @@ export function SocialPublishDialog({
                 <div className="flex items-center justify-between text-xs">
                   <span
                     className={
-                      validation.remaining < 0
+                      !validation.valid
                         ? "text-destructive font-bold"
-                        : validation.remaining < 20
+                        : validation.overStandard || validation.remaining < 20
                           ? "text-amber-600"
                           : "text-muted-foreground"
                     }
                     data-testid="text-char-counter"
                   >
-                    {validation.weightedLength} / {X_MAX_WEIGHTED_LENGTH}
-                    {validation.remaining < 0 && " — تجاوزت الحد"}
+                    {validation.weightedLength} /{" "}
+                    {validation.overStandard
+                      ? X_MAX_PREMIUM_WEIGHTED_LENGTH.toLocaleString("en-US")
+                      : X_MAX_WEIGHTED_LENGTH}
+                    {!validation.valid && " — تجاوزت الحد"}
+                    {validation.valid && validation.overStandard && " — أطول من 280: يظهر مطوياً (Premium)"}
                   </span>
                   <label className="flex items-center gap-2 cursor-pointer">
                     <Switch
@@ -595,25 +651,25 @@ export function SocialPublishDialog({
                         >
                           <Badge className={badge.className}>{badge.label}</Badge>
                           <div className="flex-1 min-w-0 space-y-1">
-                            <div className="truncate">{p.text}</div>
+                            <div className="line-clamp-2 break-words">{p.text}</div>
                             {p.status === "scheduled" && p.scheduledAt && (
                               <div className="text-xs text-muted-foreground">
-                                موعد النشر: {new Date(p.scheduledAt).toLocaleString("ar-SA")}
+                                موعد النشر: {fmtSocialDateTime(p.scheduledAt)}
                               </div>
                             )}
                             {p.status === "failed" && p.lastError && (
-                              <div className="text-xs text-destructive truncate">{p.lastError}</div>
+                              <div className="text-xs text-destructive line-clamp-2 break-words">{p.lastError}</div>
                             )}
                             {p.externalPostUrl && (
                               <a
                                 href={p.externalPostUrl}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="text-xs text-sky-600 inline-flex items-center gap-1"
+                                className="text-xs text-sky-600 inline-flex items-center gap-1 max-w-full"
                                 dir="ltr"
                               >
-                                <ExternalLink className="w-3 h-3" />
-                                {p.externalPostUrl}
+                                <ExternalLink className="w-3 h-3 shrink-0" />
+                                <span className="truncate">{p.externalPostUrl}</span>
                               </a>
                             )}
                           </div>
@@ -673,7 +729,7 @@ export function SocialPublishDialog({
 
       {/* تأكيد النشر الفوري */}
       <AlertDialog open={confirmPublishOpen} onOpenChange={setConfirmPublishOpen}>
-        <AlertDialogContent dir="rtl">
+        <AlertDialogContent className="w-[calc(100vw-1.25rem)] max-w-md rounded-lg" dir="rtl">
           <AlertDialogHeader>
             <AlertDialogTitle>تأكيد النشر على X</AlertDialogTitle>
             <AlertDialogDescription className="text-right">
