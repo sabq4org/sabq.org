@@ -33,7 +33,7 @@ import { shouldAutoTag, enqueueAutoTag } from "./services/mediaAutoTagService";
 import { recordArticleView, initArticleViewStats } from "./services/articleViewStatsService";
 import { varaSendOtp, varaVerifyOtp } from "./services/varaPhoneOtp";
 import { normalizePhone, findExistingPhoneUser } from "./services/phoneAuth";
-import { bufferArticleViewIncrement, initArticleViewCounters } from "./services/articleViewCounterService";
+import { bufferArticleViewIncrement, initArticleViewCounters, getLiveArticleViews } from "./services/articleViewCounterService";
 import { getArticleReadingOverrides, resolveReadingMetrics } from "./services/adminToolsService";
 import { evaluatePressIdNumberChange } from "./services/pressCardNumberService";
 import { getNextSlotsForWriters } from "./services/opinionWritersService";
@@ -8353,12 +8353,12 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       // the edge — otherwise /api/articles/<englishSlug> stays stale for
       // sMaxAge=3600s (browser fetches by englishSlug after slugRedirect,
       // not the DB slug). oldSlug/oldEnglishSlug cover renames.
+      // invalidateArticleWrite() already targets this article's sidebar key by id/slug — no blanket wipe needed.
       invalidateArticleWrite(updatedArticle, {
         reason: 'admin-patch',
         oldSlug: existingArticle.slug,
         oldEnglishSlug: existingArticle.englishSlug,
       });
-      memoryCache.invalidatePattern('^sidebar:');
       memoryCache.delete('lite-feed');
 
       // Send response IMMEDIATELY — don't wait for background operations
@@ -8986,12 +8986,11 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       // Invalidate cache and broadcast to all connected clients for instant update (runs immediately).
       // Passing the article so its slug is purged at the Cloudflare edge — without
       // it, /article/<slug> stays cached for up to sMaxAge=3600s.
+      // invalidateArticleWrite() already targets this article's cache keys — the blanket
+      // `^article:detail:`/`^sidebar:` wipes that used to run here nuked EVERY article's
+      // warm cache on every publish (the 2026-08-06 stampede this PR fixes), so removed.
       invalidateArticleWrite(articleForNotification, { reason: "article-publish" });
       memoryCache.delete('lite-feed'); // Clear mobile app feed cache
-      memoryCache.invalidatePattern('^article:detail:');
-      memoryCache.invalidatePattern('^article:id:');
-      memoryCache.invalidatePattern('^articles:');
-      memoryCache.invalidatePattern('^sidebar:');
       console.log(`[Breaking News] Cache invalidated and SSE broadcast sent for article ${articleId}`);
 
       // Log article published event
@@ -9149,12 +9148,9 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
 
       // Invalidate cache and broadcast to all connected clients for instant update.
       // Pass the article so its slug is purged at the edge (sMaxAge=3600 otherwise).
+      // See article-publish above — invalidateArticleWrite() already scopes this article; no blanket wipe.
       invalidateArticleWrite(updatedArticle, { reason: "article-feature" });
       memoryCache.delete('lite-feed'); // Clear mobile app feed cache
-      memoryCache.invalidatePattern('^article:detail:');
-      memoryCache.invalidatePattern('^article:id:');
-      memoryCache.invalidatePattern('^articles:');
-      memoryCache.invalidatePattern('^sidebar:');
       console.log(`[Breaking News] Cache invalidated and SSE broadcast sent for article ${articleId}`);
 
       res.json(updatedArticle);
@@ -9294,12 +9290,9 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
 
       // Invalidate cache and broadcast to all connected clients for instant update.
       // Pass the article so its slug is purged at the edge (sMaxAge=3600 otherwise).
+      // See article-publish above — invalidateArticleWrite() already scopes this article; no blanket wipe.
       invalidateArticleWrite(updatedArticle, { reason: "article-archive" });
       memoryCache.delete('lite-feed'); // Clear mobile app feed cache
-      memoryCache.invalidatePattern('^article:detail:');
-      memoryCache.invalidatePattern('^article:id:');
-      memoryCache.invalidatePattern('^articles:');
-      memoryCache.invalidatePattern('^sidebar:');
       console.log(`[Breaking News] Cache invalidated and SSE broadcast sent for article ${articleId}`);
 
       res.json(updatedArticle);
@@ -9355,12 +9348,9 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
 
       // Invalidate cache and broadcast to all connected clients for instant update.
       // Pass the article so its slug is purged at the edge (sMaxAge=3600 otherwise).
+      // See article-publish above — invalidateArticleWrite() already scopes this article; no blanket wipe.
       invalidateArticleWrite(updatedArticle, { reason: "article-restore" });
       memoryCache.delete('lite-feed'); // Clear mobile app feed cache
-      memoryCache.invalidatePattern('^article:detail:');
-      memoryCache.invalidatePattern('^article:id:');
-      memoryCache.invalidatePattern('^articles:');
-      memoryCache.invalidatePattern('^sidebar:');
       console.log(`[Breaking News] Cache invalidated and SSE broadcast sent for article ${articleId}`);
 
       // Log article event
@@ -9638,12 +9628,10 @@ Respond in valid JSON format only:
 
       // Invalidate cache and broadcast to all connected clients for instant update.
       // Pass the article so its slug is purged at the edge (sMaxAge=3600 otherwise).
+      // See article-publish above — invalidateArticleWrite() already scopes this article; no blanket wipe.
+      // This is the exact toggle a breaking-news click flood hits, so keeping the targeting intact matters most.
       invalidateArticleWrite(updatedArticle, { reason: "article-toggle-breaking" });
       memoryCache.delete('lite-feed'); // Clear mobile app feed cache
-      memoryCache.invalidatePattern('^article:detail:');
-      memoryCache.invalidatePattern('^article:id:');
-      memoryCache.invalidatePattern('^articles:');
-      memoryCache.invalidatePattern('^sidebar:');
       console.log(`[Breaking News] Cache invalidated and SSE broadcast sent for article ${articleId}`);
 
       res.json(updatedArticle);
@@ -13609,6 +13597,20 @@ Respond in valid JSON format only:
         const fetchedArticle = await storage.getArticleBySlug(slug, undefined, userRole);
         // Only cache published articles
         if (fetchedArticle && fetchedArticle.status === 'published') {
+          // mediaAssets تُدمج داخل الحمولة المكيّشة (محايدة للمستخدم) — كانت
+          // استعلامًا مستقلًا لكل طلب، وهذه النقطة تستقبل طوفة نقرات العاجل.
+          try {
+            const cachedMediaAssets = await storage.getArticleMediaAssetWithDetails?.(fetchedArticle.id);
+            (fetchedArticle as any).mediaAssets = (cachedMediaAssets || [])
+              .filter((a: any) => a.mediaFile?.url)
+              .map((a: any) => ({
+                url: a.mediaFile.url,
+                altText: a.altText || "",
+                displayOrder: a.displayOrder ?? 0,
+              }));
+          } catch {
+            (fetchedArticle as any).mediaAssets = [];
+          }
           return fetchedArticle;
         }
         return null; // Don't cache non-published articles
@@ -13635,17 +13637,25 @@ Respond in valid JSON format only:
       // their own like/bookmark and an up-to-date count (also keeps web + iOS
       // + Android consistent since they all read this endpoint).
       // Always overlay the LIVE view count so the 5-10 boost shows immediately
-      // on refresh — the cached payload's `views` is up to 5 min stale. The
-      // heavy article query stays cached; this is just one PK-indexed lookup.
+      // on refresh — the cached payload's `views` is up to 5 min stale.
+      // Two layers now guard the breaking-push stampede on this endpoint:
+      // (1) getLiveArticleViews reads through a 10s micro-cache that matches
+      // the counter merge window (2026-08-06) instead of one PK lookup per
+      // request, and (2) coalesceArticleReadOverlay single-flights any
+      // concurrent misses on the same article so a cold cache doesn't turn
+      // into N parallel DB round-trips (2026-09-19). mediaAssets are only
+      // re-fetched here for articles the base cache above didn't already
+      // embed them for (i.e. non-published reads) — published reads got
+      // mediaAssets embedded in the cached payload already.
       const readArticleId = finalArticle.id;
+      const needsMediaAssets = !Array.isArray((finalArticle as any).mediaAssets);
       const overlay = await coalesceArticleReadOverlay(readArticleId, async () => {
-        const [[viewsRow], assets] = await Promise.all([
-          db.select({ views: articles.views }).from(articles)
-            .where(eq(articles.id, readArticleId)).limit(1),
-          storage.getArticleMediaAssetWithDetails?.(readArticleId),
+        const [liveViews, assets] = await Promise.all([
+          getLiveArticleViews(readArticleId),
+          needsMediaAssets ? storage.getArticleMediaAssetWithDetails?.(readArticleId) : Promise.resolve(undefined),
         ]);
         return {
-          views: viewsRow?.views == null ? null : Number(viewsRow.views),
+          views: liveViews,
           mediaAssets: (assets || [])
             .filter((a: any) => a.mediaFile?.url)
             .map((a: any) => ({ url: a.mediaFile.url, altText: a.altText || "", displayOrder: a.displayOrder ?? 0 })),
@@ -13654,31 +13664,38 @@ Respond in valid JSON format only:
       finalArticle = {
         ...finalArticle,
         ...(overlay.views !== null ? { views: overlay.views } : {}),
-        ...(overlay.mediaAssets.length > 0 ? { mediaAssets: overlay.mediaAssets } : {}),
+        ...(needsMediaAssets && overlay.mediaAssets.length > 0 ? { mediaAssets: overlay.mediaAssets } : {}),
       };
 
       if (userId) {
         const articleId = finalArticle.id;
-        const [reactionRow, bookmarkRow, [countRow]] = await Promise.all([
+        // العدّاد المشترك (reactionsCount) عبر micro-cache قصير — محايد
+        // للمستخدم؛ يبقى الاستعلامان الشخصيان (hasReacted/isBookmarked) فقط.
+        const [reactionRow, bookmarkRow, reactionsCountShared] = await Promise.all([
           db.select({ id: reactions.id }).from(reactions)
             .where(and(eq(reactions.userId, userId), eq(reactions.articleId, articleId)))
             .limit(1),
           db.select({ id: bookmarks.id }).from(bookmarks)
             .where(and(eq(bookmarks.userId, userId), eq(bookmarks.articleId, articleId)))
             .limit(1),
-          db.select({ count: sql<number>`count(*)::int` }).from(reactions)
-            .where(eq(reactions.articleId, articleId)),
+          withCache(`article:reactions-count:${articleId}`, 10_000, async () => {
+            const [countRow] = await db.select({ count: sql<number>`count(*)::int` }).from(reactions)
+              .where(eq(reactions.articleId, articleId));
+            return Number(countRow?.count ?? 0);
+          }),
         ]);
         finalArticle = {
           ...finalArticle,
           hasReacted: reactionRow.length > 0,
           isBookmarked: bookmarkRow.length > 0,
-          reactionsCount: Number(countRow?.count ?? (finalArticle as any).reactionsCount ?? 0),
+          reactionsCount: Number(reactionsCountShared ?? (finalArticle as any).reactionsCount ?? 0),
         };
       }
 
       if (userId) {
-        await storage.recordArticleRead(userId, finalArticle.id);
+        // fire-and-forget: كتابة سجل القراءة لا تحجب الرد — كانت تضيف كتابة
+        // متزامنة لكل مشاهدة مسجّلة أثناء ذروة العاجل.
+        storage.recordArticleRead(userId, finalArticle.id).catch(() => {});
       }
 
       res.json(finalArticle);
