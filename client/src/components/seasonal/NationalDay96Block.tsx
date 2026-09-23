@@ -58,7 +58,7 @@ function daysUntilNationalDay(now: Date = new Date()): number | null {
 }
 
 function countdownLabel(days: number): string {
-  if (days === 0) return "🇸🇦 اليوم عيدنا الوطني الـ96";
+  if (days === 0) return "🇸🇦 اليوم عيدنا الوطني";
   if (days === 1) return "باقي يوم واحد";
   if (days === 2) return "باقي يومين";
   if (days <= 10) return `باقي ${days} أيام`;
@@ -141,7 +141,7 @@ export function NationalDay96Block({
   const live = !isPreview && data?.isVisible ? data : null;
   const articles =
     previewArticles ?? (live?.articles ?? []).map(toBlockArticle);
-  const title = live?.title ?? "اليوم الوطني السعودي الـ96";
+  const title = live?.title ?? "اليوم الوطني السعودي";
   const days = live ? live.daysRemaining : daysUntilNationalDay();
 
   return (

@@ -5415,7 +5415,7 @@ export type HajjBlockConfig = typeof hajjBlockConfig.$inferSelect;
 export const nationalDayBlockConfig = pgTable("national_day_block_config", {
   id: varchar("id").primaryKey().default("default"), // enforced singleton
   isActive: boolean("is_active").notNull().default(false),
-  title: varchar("title", { length: 80 }).notNull().default("اليوم الوطني السعودي الـ96"),
+  title: varchar("title", { length: 80 }).notNull().default("اليوم الوطني السعودي"),
   subtitle: varchar("subtitle", { length: 160 }),
   // كلمات الاكتشاف التلقائي — تشمل «عزنا بطبعنا» بالهمزة وبدونها لأن
   // المطابقة نصية (ilike) لا تطبيعية.
