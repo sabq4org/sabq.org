@@ -80,6 +80,17 @@ nonisolated enum SabqFormatters {
         return f
     }()
 
+    /// اليوم والتاريخ الميلاديان بتوقيت الرياض، للاستخدام في مواعيد التحرير
+    /// التي يجب أن تكون واضحة للكاتب والمحرر (مثال: «الثلاثاء 23 سبتمبر 2026»).
+    static let riyadhWeekdayDate: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = saudiArabicLatinDigits
+        f.calendar = Calendar(identifier: .gregorian)
+        f.timeZone = TimeZone(identifier: "Asia/Riyadh")
+        f.dateFormat = "EEEE d MMMM yyyy"
+        return f
+    }()
+
     static let arabicFullDate: DateFormatter = {
         let f = DateFormatter()
         f.locale = saudiArabicLatinDigits
