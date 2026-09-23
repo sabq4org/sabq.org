@@ -13,6 +13,10 @@ final class ArticlesStore {
     private(set) var isLoading = false
     private(set) var errorMessage: String?
     private(set) var hasMore = true
+    /// آخر محاولة `loadMore()` (تحميل صفحة تالية من «آخر الأخبار») فشلت
+    /// شبكيًا — يبقى `hasMore` صحيحًا فيستمر ظرف إعادة المحاولة عند
+    /// المستخدم بدل أن يُقرأ الفشل كـ "انتهت القائمة" (تدقيق err-1).
+    private(set) var loadMoreFailed = false
     var selectedCategory: ArticleCategory?
 
     /// الأخبار الجديدة المكتشفة بصمت ولم تُعرض بعد (تنتظر ضغط المستخدم على الشريط)
@@ -95,6 +99,7 @@ final class ArticlesStore {
             trendingKeywords = result.trending
             nextArticlesPage = 1
             hasMoreFromAPI = true
+            loadMoreFailed = false
             displayedCount = min(pageSize, allFetchedArticles.count)
             allArticles = Array(allFetchedArticles.prefix(displayedCount))
             hasMore = displayedCount < allFetchedArticles.count || hasMoreFromAPI
@@ -219,7 +224,16 @@ final class ArticlesStore {
             hasMore = displayedCount < allFetchedArticles.count || hasMoreFromAPI
         } else if hasMoreFromAPI {
             let page = nextArticlesPage
-            let result = await NewsService.fetchArticles(page: page, perPage: remotePageSize)
+            guard let result = await NewsService.fetchArticles(page: page, perPage: remotePageSize) else {
+                // فشل شبكة/خادم — يبقى hasMore صحيحاً حتى يرى المستخدم زر
+                // "إعادة المحاولة" بدل أن يُقرأ الفشل الصامت كنهاية القائمة
+                // (تدقيق الديون err-1، 2026-09-23). لا نزيد nextArticlesPage
+                // حتى تُعاد نفس الصفحة الفاشلة عند إعادة المحاولة.
+                loadMoreFailed = true
+                isLoading = false
+                return
+            }
+            loadMoreFailed = false
             nextArticlesPage += 1
             hasMoreFromAPI = result.hasMore
             let existingIDs = Set(allFetchedArticles.map(\.id))

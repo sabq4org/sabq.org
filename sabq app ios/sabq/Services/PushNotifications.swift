@@ -121,18 +121,50 @@ final class NotificationsStore {
             return parsed
         }
         if let slug = (userInfo["articleSlug"] ?? userInfo["article_slug"]) as? String,
-           !slug.isEmpty {
+           isValidSlug(slug) {
             return .article(slug: slug)
         }
-        if let id = userInfo["articleId"] as? String, !id.isEmpty {
+        if let id = userInfo["articleId"] as? String, isValidToken(id) {
             return .draft(id: id)
         }
         return nil
     }
 
+    /// حراسة صيغة الـ slug. **لم يعد يطابق `generateSlug` فقط** —
+    /// فحص خرائط الموقع الفعلية (567,787 slug، 2026-09-23) أظهر أن
+    /// `^[\p{Arabic}a-z0-9-]{1,200}$` (المطابق لـ `generateSlug` في
+    /// `server/services/smartLinks.ts`) يرفض 96.3% من الأرشيف الحقيقي:
+    /// أغلب المقالات المفهرسة تستخدم أبجدية nanoid (أحرف **كبيرة** A-Z
+    /// وشرطة سفلية `_`)، وبعض العناوين العربية الحديثة تحمل تشكيلاً
+    /// (fatḥatan/kasra إلخ., مدى U+064B–U+065F وU+0670) وهو خارج
+    /// `\p{Arabic}` لأن Unicode يصنّفه Script=Inherited لا Arabic.
+    /// النمط أدناه يوسّع القبول لهذه الحالات مع إبقاء الرفض الصارم لاقتحام
+    /// المسارات (`.`، `/`) والمحارف الخاصة/الفارغة (تدقيق sec-1، تحديث
+    /// 2026-09-23 — انظر `docs/iOS-TECH-DEBT.md`).
+    private static let slugPattern = "^[\\p{Arabic}A-Za-z0-9_\\u064B-\\u065F\\u0670-]{1,200}$"
+    /// حراسة المعرّفات الرقمية/النصية (draft/feedback ids, survey tokens):
+    /// أحرف/أرقام لاتينية وشرطة/underscore فقط، بحد 128.
+    private static let tokenPattern = "^[A-Za-z0-9_-]{1,128}$"
+
+    private func isValidSlug(_ value: String) -> Bool {
+        value.range(of: Self.slugPattern, options: .regularExpression) != nil
+    }
+
+    private func isValidToken(_ value: String) -> Bool {
+        value.range(of: Self.tokenPattern, options: .regularExpression) != nil
+    }
+
     /// internal (لا private): يُستدعى أيضًا من onOpenURL في ContentView —
     /// ضغطة الـ Live Activity/Dynamic Island تصل كرابط sabq:// عبر النظام
     /// لا عبر userInfo الإشعارات، وكانت طريقًا مسدودًا قبل ربطها.
+    ///
+    /// **مصدر/صحة الرابط (تدقيق sec-1، 2026-09-23):** أي مستدعي — Universal
+    /// Link موقَّع من AASA، رابط `sabq://` مخصّص (يمكن لأي تطبيق آخر تسجيل
+    /// نفس المخطط وتزييف الرابط)، أو حقل `deeplink` داخل حمولة إشعار — يمر
+    /// من هنا. لذلك: (1) المضيف/المخطط محصوران بقائمة صريحة (لا حالة
+    /// افتراضية تقبل أي شيء)، (2) كل slug/id/token يُغربل بنمط صارم يرفض
+    /// اقتحام المسارات ("../")، المحارف الخاصة، والقيم الفارغة. توقيع APNs
+    /// على حمولة الإشعار نفسها مهمة منفصلة أكبر (moved: `docs/iOS-TECH-DEBT.md` sec-1).
     func parseSabqDeepLink(url: URL) -> NotificationDeepLink? {
         // sabq://article/<slug>   — news article detail
         // sabq://opinion/<slug>   — opinion article detail
@@ -145,25 +177,27 @@ final class NotificationsStore {
         // الأصلية بدل بدء التطبيق على الرئيسية.
         if url.scheme == "https", ["sabq.org", "www.sabq.org"].contains(url.host ?? "") {
             let parts = url.pathComponents.filter { $0 != "/" }
-            if parts.count >= 2, parts[0] == "article", !parts[1].isEmpty {
+            if parts.count >= 2, parts[0] == "article", isValidSlug(parts[1]) {
                 return .article(slug: parts[1])
             }
             if parts.first == "roshn" {
-                if parts.count >= 3, parts[1] == "match", let id = Int(parts[2]) {
+                if parts.count >= 3, parts[1] == "match", let id = Int(parts[2]), id > 0 {
                     return .roshnMatch(id: id)
                 }
                 return .roshn
             }
-            if parts.count >= 3, parts[0] == "sports", parts[1] == "team", let id = Int(parts[2]) {
+            if parts.count >= 3, parts[0] == "sports", parts[1] == "team", let id = Int(parts[2]), id > 0 {
                 return .roshnTeam(id: id)
             }
             return nil
         }
 
         // مسار نسبي بلا scheme — صيغة حملات اللوحة القياسية "/article/{slug}"
+        // (تصل فقط من حقل `deeplink` في حمولة إشعار APNs موثوقة، لا من
+        // onOpenURL الذي يزوّد النظام رابطاً كاملاً بمخطط دائماً).
         if url.scheme == nil {
             let parts = url.pathComponents.filter { $0 != "/" }
-            if parts.count >= 2, parts[0] == "article", !parts[1].isEmpty {
+            if parts.count >= 2, parts[0] == "article", isValidSlug(parts[1]) {
                 return .article(slug: parts[1])
             }
             return nil
@@ -174,26 +208,26 @@ final class NotificationsStore {
         let path = url.pathComponents.filter { $0 != "/" }
         let value = path.first ?? ""
         switch host {
-        case "article" where !value.isEmpty: return .article(slug: value)
-        case "opinion" where !value.isEmpty: return .opinion(slug: value)
-        case "draft" where !value.isEmpty:   return .draft(id: value)
-        case "feedback" where !value.isEmpty: return .feedback(id: value)
-        case "survey" where !value.isEmpty: return .survey(token: value)
+        case "article" where isValidSlug(value): return .article(slug: value)
+        case "opinion" where isValidSlug(value): return .opinion(slug: value)
+        case "draft" where isValidToken(value):   return .draft(id: value)
+        case "feedback" where isValidToken(value): return .feedback(id: value)
+        case "survey" where isValidToken(value): return .survey(token: value)
         case "match":
-            if let id = Int(value) { return .match(id: id) }
+            if let id = Int(value), id > 0 { return .match(id: id) }
             return nil
         case "asian-cup":
             // sabq://asian-cup/match/<id>
-            if path.count >= 2, path[0] == "match", let id = Int(path[1]) {
+            if path.count >= 2, path[0] == "match", let id = Int(path[1]), id > 0 {
                 return .asianCupMatch(id: id)
             }
             return nil
         case "roshn":
             // sabq://roshn أو sabq://roshn/team/<id> أو /match/<id>
-            if path.count >= 2, path[0] == "team", let id = Int(path[1]) {
+            if path.count >= 2, path[0] == "team", let id = Int(path[1]), id > 0 {
                 return .roshnTeam(id: id)
             }
-            if path.count >= 2, path[0] == "match", let id = Int(path[1]) {
+            if path.count >= 2, path[0] == "match", let id = Int(path[1]), id > 0 {
                 return .roshnMatch(id: id)
             }
             return .roshn
