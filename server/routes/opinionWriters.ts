@@ -16,6 +16,7 @@ import { ObjectStorageService } from "../objectStorage";
 import {
   canSelfAssignSchedule,
   getNextSlotForWriter,
+  getOpinionWeekBoard,
   getWriterArticlesWithStats,
   getWriterDayLoads,
   isWriterDayFull,
@@ -216,6 +217,22 @@ router.post(
     } catch (error) {
       console.error("[opinion-writers] schedule article failed:", error);
       res.status(500).json({ message: "تعذر جدولة المقال" });
+    }
+  },
+);
+
+// شريط أسبوع الكتّاب فوق قائمة المسودات: من المستحق كل يوم وهل وصل مقاله
+router.get(
+  "/api/admin/opinion-writers/week-board",
+  requireAuth,
+  requireAnyPermission(PERMISSION_CODES.OPINION_REVIEW, PERMISSION_CODES.ARTICLES_SCHEDULE),
+  async (_req: Request, res: Response) => {
+    try {
+      res.setHeader("Cache-Control", "private, no-store");
+      res.json({ days: await getOpinionWeekBoard() });
+    } catch (error) {
+      console.error("[opinion-writers] week-board failed:", error);
+      res.status(500).json({ message: "تعذر جلب مواعيد الأسبوع" });
     }
   },
 );

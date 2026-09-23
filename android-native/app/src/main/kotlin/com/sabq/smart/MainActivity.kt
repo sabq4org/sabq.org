@@ -12,6 +12,7 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import com.sabq.smart.data.push.PendingPushDeepLink
 import com.sabq.smart.data.push.SabqMessagingService
+import com.sabq.smart.data.analytics.SabqAnalytics
 import com.sabq.smart.feature.gulfcup.GcMajlisLocalStore
 import com.sabq.smart.nav.SabqApp
 import dagger.hilt.android.AndroidEntryPoint
@@ -27,6 +28,7 @@ class MainActivity : ComponentActivity() {
         installSplashScreen()
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        if (savedInstanceState == null) trackLaunchAnalytics(intent)
         if (!captureMajlisLink(intent)) capturePushExtras(intent)
         setContent {
             // The whole app runs RTL. We force LayoutDirection.Rtl
@@ -51,7 +53,28 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        trackLaunchAnalytics(intent)
         if (!captureMajlisLink(intent)) capturePushExtras(intent)
+    }
+
+    private fun trackLaunchAnalytics(intent: Intent?) {
+        if (intent == null) return
+        val uri = intent.data
+        // Query IDs occur in ordinary links too; only push-specific extras or
+        // the dedicated push URI establish notification provenance.
+        val push = intent.hasExtra(SabqMessagingService.EXTRA_NOTIFICATION_ID) ||
+            intent.hasExtra("google.message_id") || intent.hasExtra("notification_id") ||
+            (uri?.scheme == "sabq" && uri.host == "push")
+        val recognizedLink = uri?.scheme in setOf("sabq", "sabqgulfcup") ||
+            (uri?.scheme == "https" && uri.host in setOf("sabq.org", "www.sabq.org"))
+        val rawKind = intent.getStringExtra(SabqMessagingService.EXTRA_KIND)
+            ?: intent.getStringExtra("kind") ?: uri?.host
+        val allowedKinds = setOf("article", "opinion", "draft", "feedback", "survey", "match",
+            "majlis", "roshn", "roshn_team", "roshn_match", "asian_cup_match", "breaking")
+        val kind = rawKind?.takeIf { it in allowedKinds }
+            ?: uri?.pathSegments?.firstOrNull()?.takeIf { it in allowedKinds } ?: "unknown"
+        if (push) SabqAnalytics.notificationOpen(kind, null)
+        else if (recognizedLink) SabqAnalytics.deepLinkOpen(kind, "url")
     }
 
     private fun captureMajlisLink(intent: Intent?): Boolean {

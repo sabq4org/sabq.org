@@ -71,7 +71,7 @@ function MatchHeader({ item }: { item: PredMyEntryItem }) {
             )}
           </div>
         ) : (
-          <span className="text-sm font-bold tabular-nums text-muted-foreground">
+          <span dir="ltr" className="text-sm font-bold tabular-nums text-muted-foreground">
             {kickoffTimeAr(item.locksAt)}
           </span>
         )}

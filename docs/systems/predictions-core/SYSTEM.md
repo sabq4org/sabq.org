@@ -1,6 +1,6 @@
 # نظام التوقعات المركزي (`predictions-core`)
 
-> آخر مراجعة: 2026-09-07 | المالك: sports
+> آخر مراجعة: 2026-09-15 | المالك: sports
 
 ## الغرض
 محرك توقعات موحّد + ملفات نقاط versioned + دفتر append-only يخدم البطولات — **عدا** كأس العالم 2026 الذي يبقى على محرك `wc*` القديم حتى نهاية البطولة.
@@ -35,6 +35,7 @@
 - **ترويج روشن (ويب):** عند `predictionsEnabled` تظهر بطاقة دائمة في هيرو `/roshn` (`RslPredictionsHeroPromo`) وشريط في مركز المباراة للمباريات القادمة فقط (`RslPredictionsMatchPromo`). مشاركة عبر `navigator.share` أو نسخ للحافظة. ليس من نظام `ads`.
 - **رابط عميق للمباراة:** `/predictions?competition=rsl-2026&fixture=<apiFootballId>` أو `&contest=<contestId>`. الصفحة تختار البطولة وتمرّر لبطاقة `match_score` ذات `externalRef` المطابق وتُميّزها مؤقتاً.
 - Android VARA يستهلك النظائر تحت `/api/v1/predictions/*` بنماذج typed مطابقة لعقود `PredictionCoreModels` في iOS: يقرأ `contestType` (بطاقات النتيجة لـ`match_score` فقط)، و`myRank` من رد leaderboards (لا حقل `isMe` — غير موجود في العقد)، ويعرض التسوية ببطاقة مزدوجة (نقاط البطولة / محفظة ×N من `award.wallet`) وتفكيك «كيف حُسبت نقاطي؟» بأربع خطوات من `breakdown`. صفحة «لك» تقرأ `/api/v1/sports/predictions/mine` الموحدة (لا مسار `/world-cup/predictions/mine` القديم).
+- **أرقام الواجهة (2026-09-15):** مركز التوقعات يعرض الوقت والعدّ التنازلي والإحصاءات بأرقام لاتينية (`formatTime` + `ar-SA-u-nu-latn`). لا تستخدم `Intl.DateTimeFormat("ar-SA")` بلا `nu-latn` — سفاري يحوّل الأرقام إلى هندية.
 
 ## صحة وتشغيل
 - راجع `docs/PREDICTION_CORE.md` لمسارات الصحة والـ outbox

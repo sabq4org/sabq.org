@@ -4,8 +4,10 @@ import { Archive, Home, Newspaper, ArrowRight, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import type { Category } from "@shared/schema";
+import { useAnalyticsPageMetadata } from "@/hooks/use-analytics";
 
 export default function ArchivePage() {
+  useAnalyticsPageMetadata("من الأرشيف | سبق");
   const { data: categoriesRaw } = useQuery<Category[]>({
     queryKey: ["/api/categories"],
   });

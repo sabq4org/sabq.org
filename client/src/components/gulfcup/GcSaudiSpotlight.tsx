@@ -17,7 +17,7 @@ export function GcSaudiSpotlight({
     <section
       id="gc-saudi"
       dir="rtl"
-      className="container mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-10 lg:px-8"
+      className="container mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-10 lg:px-8 scroll-mt-[calc(var(--public-header-height,4rem)+3.75rem)] md:scroll-mt-[calc(var(--public-header-height,4rem)+6.5rem)]"
     >
       <motion.div
         initial={{ opacity: 0, y: 16 }}

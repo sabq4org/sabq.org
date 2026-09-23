@@ -123,7 +123,7 @@ export function PredictionMatchCard({
               })()}
             </div>
           ) : (
-            <span className="text-sm font-bold tabular-nums text-muted-foreground">
+            <span dir="ltr" className="text-sm font-bold tabular-nums text-muted-foreground">
               {kickoffTimeAr(contest.locksAt)}
             </span>
           )}
@@ -142,9 +142,13 @@ export function PredictionMatchCard({
             data-testid={`contest-entries-count-${contest.id}`}
           >
             <Users className="h-3 w-3 shrink-0 opacity-70" aria-hidden />
-            {(contest.entriesCount ?? 0) > 0
-              ? `${formatNumber(contest.entriesCount ?? 0)} متوقّع`
-              : "كن أول المتوقّعين"}
+            {(contest.entriesCount ?? 0) > 0 ? (
+              <>
+                <span dir="ltr">{formatNumber(contest.entriesCount ?? 0)}</span> متوقّع
+              </>
+            ) : (
+              "كن أول المتوقّعين"
+            )}
           </p>
         </div>
         <StatusChip

@@ -2,10 +2,11 @@
  * دفع موجّه لتطبيق بعينه عند وجود أكثر من تطبيق على حساب العضو نفسه.
  *
  * لا نستعمل sportsAlertsService هنا لأنه يحصر التوصيل في حزمة VARA. هذه
- * الطبقة لا تستهدف إلا الصفوف التي تحمل bundleId مطابقًا صراحةً، حتى لا يصل
- * إشعار مجلس خليجي إلى تطبيق سبق الإخباري أو تطبيق رياضي آخر على الجهاز.
+ * الطبقة لا تستهدف إلا الصفوف التي تحمل bundleId مطابقًا صراحةً. أثناء
+ * ترحيل Android نقبل وسم المجلس القديم وحزم تطبيق سبق الأصلية الجديدة، مع
+ * إبقاء VARA خارج هذا الجمهور.
  */
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { pushDevices } from "@shared/schema";
 import { db } from "../db";
 import {
@@ -14,9 +15,9 @@ import {
   sendPushNotification,
 } from "./apnsService";
 import {
-  isFcmConfigured,
-  sendDataOnlyToMultipleDevices,
+  sendToFcmTargets,
 } from "./fcmService";
+import { SABQ_ANDROID_BUNDLE_IDS } from "./fcmRouting";
 import { GULF_CUP_BUNDLE_ID } from "./deviceRegistrationPolicy";
 
 export { GULF_CUP_BUNDLE_ID };
@@ -44,16 +45,25 @@ export async function sendPushToUserApp(
   bundleId: string,
   message: UserAppPushMessage,
 ): Promise<UserAppPushResult> {
+  return sendPushToUserApps(userId, [bundleId], message);
+}
+
+async function sendPushToUserApps(
+  userId: string,
+  bundleIds: string[],
+  message: UserAppPushMessage,
+): Promise<UserAppPushResult> {
   const rows = await db
     .select({
       token: pushDevices.deviceToken,
       provider: pushDevices.tokenProvider,
+      bundleId: pushDevices.bundleId,
     })
     .from(pushDevices)
     .where(
       and(
         eq(pushDevices.userId, userId),
-        eq(pushDevices.bundleId, bundleId),
+        inArray(pushDevices.bundleId, bundleIds),
         eq(pushDevices.isActive, true),
       ),
     );
@@ -83,7 +93,7 @@ export async function sendPushToUserApp(
     const responses = await Promise.all(
       apns.map((row) =>
         sendPushNotification(row.token, payload, {
-          topic: bundleId,
+          topic: row.bundleId ?? bundleIds[0],
           pushType: "alert",
           // APNs alert pushes use immediate transport priority; the user-facing
           // interruption level (active/time-sensitive) remains in aps separately.
@@ -108,39 +118,35 @@ export async function sendPushToUserApp(
 
   const fcm = devices.filter((row) => row.provider === "fcm");
   if (fcm.length > 0) {
-    if (!isFcmConfigured()) {
-      result.failed += fcm.length;
-      result.errors.push("FCM not configured");
-    } else {
-      const response = await sendDataOnlyToMultipleDevices(
-        fcm.map((row) => row.token),
-        {
-          title: message.title,
-          body: message.body,
-          data: {
-            type: message.type,
-            deeplink: message.deeplink,
-            ...message.data,
-          },
+    const response = await sendToFcmTargets(
+      fcm.map((row) => ({ token: row.token, bundleId: row.bundleId })),
+      {
+        title: message.title,
+        body: message.body,
+        data: {
+          type: message.type,
+          deeplink: message.deeplink,
+          ...message.data,
         },
-        undefined,
-        {
-          // A kickoff reminder that was offline for hours is misinformation;
-          // the inbox copy remains available without a stale tray banner.
-          ttlSeconds: message.type === "gc.majlis.reminder" ? 15 * 60 : 24 * 60 * 60,
-          collapseKey: message.collapseId,
-        },
-      );
-      result.sent += response.successCount;
-      result.failed += response.failureCount;
-      result.errors.push(
-        ...response.results.flatMap((item) => (item.error ? [item.error] : [])),
-      );
-      const invalidTokens = response.results
-        .filter((item) => item.errorCategory === "invalid_token" || item.errorCategory === "unregistered")
-        .map((item) => item.token);
-      if (invalidTokens.length > 0) await deactivateInvalidDevices(invalidTokens);
-    }
+      },
+      undefined,
+      {
+        androidDataOnly: true,
+        // A kickoff reminder that was offline for hours is misinformation;
+        // the inbox copy remains available without a stale tray banner.
+        ttlSeconds: message.type === "gc.majlis.reminder" ? 15 * 60 : 24 * 60 * 60,
+        collapseKey: message.collapseId,
+      },
+    );
+    result.sent += response.successCount;
+    result.failed += response.failureCount;
+    result.errors.push(
+      ...response.results.flatMap((item) => (item.error ? [item.error] : [])),
+    );
+    const invalidTokens = response.results
+      .filter((item) => item.errorCategory === "invalid_token" || item.errorCategory === "unregistered")
+      .map((item) => item.token);
+    if (invalidTokens.length > 0) await deactivateInvalidDevices(invalidTokens);
   }
 
   return result;
@@ -150,5 +156,9 @@ export function sendGulfCupPush(
   userId: string,
   message: UserAppPushMessage,
 ): Promise<UserAppPushResult> {
-  return sendPushToUserApp(userId, GULF_CUP_BUNDLE_ID, message);
+  return sendPushToUserApps(
+    userId,
+    [GULF_CUP_BUNDLE_ID, ...SABQ_ANDROID_BUNDLE_IDS],
+    message,
+  );
 }

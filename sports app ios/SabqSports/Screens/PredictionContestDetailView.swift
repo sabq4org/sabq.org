@@ -136,12 +136,19 @@ struct PredictionContestDetailView: View {
     @ViewBuilder
     private func openSection(_ detail: PredContestDetailResponse) -> some View {
         if let rule = detail.rule {
-            Text(rule.summaryAr)
-                .font(SportsFonts.app(size: 11.5, weight: .semibold))
-                .foregroundStyle(SpTheme.green)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(12)
-                .background(RoundedRectangle(cornerRadius: SpTheme.chipRadius, style: .continuous).fill(SpTheme.green.opacity(0.10)))
+            VStack(alignment: .leading, spacing: 6) {
+                Text(rule.summaryAr)
+                    .font(SportsFonts.app(size: 11.5, weight: .semibold))
+                    .foregroundStyle(SpTheme.green)
+                // قاعدة الأدوار الإقصائية كما في بطاقة القواعد في الويب (#1439)
+                Text(L("· في مباريات الكؤوس وخروج المغلوب: يُعتمد التوقّع على نتيجة الوقتين الأصلي والإضافي (قبل ركلات الترجيح)."))
+                    .font(SportsFonts.app(size: 10.5, weight: .medium))
+                    .foregroundStyle(SpTheme.green.opacity(0.85))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(12)
+            .background(RoundedRectangle(cornerRadius: SpTheme.chipRadius, style: .continuous).fill(SpTheme.green.opacity(0.10)))
         }
 
         // ثلاث حالات ثابتة للزر: «توقّعك محفوظ ✓» (الأرقام تطابق المحفوظ —

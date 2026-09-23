@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Loader2, Mic, BadgeCheck, Search, FileText } from "lucide-react";
+import { VerificationChips, VerificationSummary } from "@/components/account/VerificationChips";
 import { cn } from "@/lib/utils";
 import { MediaLicenseAdminActions } from "@/components/MediaLicenseAdminActions";
 
@@ -18,6 +19,9 @@ type ReporterSummary = {
   id: string;
   name: string;
   email: string | null;
+  emailVerified?: boolean;
+  phoneNumber?: string | null;
+  phoneVerified?: boolean;
   profileImageUrl: string | null;
   jobTitle: string | null;
   city: string | null;
@@ -223,6 +227,7 @@ export default function ReportersPage() {
                 data-testid="input-reporters-search"
               />
             </div>
+            <VerificationSummary users={reporters} />
             <div className="flex flex-wrap gap-2">
               {(
                 [
@@ -288,6 +293,9 @@ export default function ReportersPage() {
                                 <div className="whitespace-nowrap font-bold">{reporter.name}</div>
                                 <div className="text-xs text-muted-foreground">
                                   {reporter.email || reporter.jobTitle || "مراسل"}
+                                </div>
+                                <div className="mt-1">
+                                  <VerificationChips user={reporter} idForTest={reporter.id} />
                                 </div>
                               </div>
                             </div>

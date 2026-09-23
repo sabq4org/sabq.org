@@ -40,6 +40,15 @@ afterEach(() => {
 });
 
 describe("isChunkErrorMessage", () => {
+  it("يتعرّف صيغة Firefox «error loading dynamically imported module»", async () => {
+    const { isChunkErrorMessage } = await import("@/lib/retryImport");
+    expect(
+      isChunkErrorMessage(
+        "error loading dynamically imported module: https://cdn.sabq.org/assets/Dashboard-6FoR7-6s.js",
+      ),
+    ).toBe(true);
+  });
+
   it("matches the WebKit bracket-form poison (no dot in the message)", async () => {
     const { isChunkErrorMessage } = await import("@/lib/retryImport");
     // Minified lazyNamed evaluating a swallowed (undefined) module namespace —

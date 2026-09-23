@@ -99,7 +99,7 @@ struct WorldCupHomeStrip: View {
         // حامل مكان Color.clear يمنع SwiftUI من إلغاء العرض (وبالتالي .task)
         // عندما لا تكون البيانات قد وصلت بعد — فخ Group+EmptyView المعروف.
         ZStack {
-            Color.clear.frame(width: 0, height: 0)
+            HomeStripAnchor()
             if let ov = store.overview, !stripHidden {
                 // البطل (بعد حسم النهائي) يتقدّم على مربع المباراة — يبقي البانر
                 // حيًّا بعد انتهاء آخر مباراة حتى يُطفأ البلوك من لوحة التحكم.
@@ -120,7 +120,24 @@ struct WorldCupHomeStrip: View {
         .task {
             // تحميل أولي ثم استطلاع كشبكة أمان؛ SSE يحدّث فور تغيّر الموجز.
             await store.loadIfNeeded()
+            var streamAcquired = false
+            defer {
+                if streamAcquired { liveStream.release() }
+            }
             while !Task.isCancelled {
+                let needsLiveStream = !stripHidden && (store.matchOfTheDayLive || {
+                    guard let ts = store.nextKickoffTimestamp else { return false }
+                    let untilKickoff = TimeInterval(ts) - Date().timeIntervalSince1970
+                    return untilKickoff <= 600 && untilKickoff >= -900
+                }())
+                if needsLiveStream, !streamAcquired {
+                    liveStream.acquire()
+                    streamAcquired = true
+                } else if !needsLiveStream, streamAcquired {
+                    liveStream.release()
+                    streamAcquired = false
+                }
+
                 let interval: UInt64
                 var lightRefresh = false
                 if store.matchOfTheDayLive {

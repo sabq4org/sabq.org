@@ -1,5 +1,7 @@
 import { adminScheduledOrder, getAdminPublishedPageIds } from "./services/adminArticleList";
+import { getArticleListSignals } from "./services/articleListSignalsService";
 import { getPublicEditorialModifiedAt } from "./utils/editorialDates";
+import { coalesceArticleReadOverlay } from "./services/articleReadOverlay";
 // Reference: javascript_object_storage blueprint
 import type { Express, NextFunction, Request, Response } from "express";
 import { createServer, type Server } from "http";
@@ -738,6 +740,24 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       return res.redirect(`/ar/login?error=${name}_auth_failed`);
     };
 
+  // The callback is the only reliable web signal that OAuth completed: it runs
+  // after Passport has authenticated and created the session. Keep the marker
+  // short-lived and free of identity data; the SPA consumes it once only after
+  // confirming /api/auth/user, then removes it from the URL.
+  const oauthLanding = (req: any, res: Response) => {
+    const user = req.user as { isProfileComplete?: boolean; isNewUser?: boolean } | undefined;
+    // Preserve the existing onboarding destination for incomplete existing
+    // accounts; isNewUser only controls the conversion event semantics.
+    const destination = user?.isProfileComplete === false ? "/onboarding/welcome" : "/dashboard";
+    const event = user?.isNewUser ? "sign_up" : "login";
+    const marker = new URLSearchParams({
+      sabq_auth_event: event,
+      method: req.path.includes("google") ? "google" : "apple",
+      nonce: randomUUID(),
+    });
+    return res.redirect(`${destination}?${marker.toString()}`);
+  };
+
   // Google OAuth Routes
   app.get("/api/auth/google",
     requireOAuthStrategy("google"),
@@ -752,13 +772,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
     }),
     (req, res) => {
       console.log("✅ Google OAuth callback successful");
-      // Redirect to onboarding or dashboard based on isProfileComplete
-      const user = req.user as any;
-      if (user && !user.isProfileComplete) {
-        res.redirect("/onboarding/welcome");
-      } else {
-        res.redirect("/dashboard");
-      }
+      oauthLanding(req, res);
     }
   );
 
@@ -776,13 +790,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
     }),
     (req, res) => {
       console.log("✅ Apple OAuth callback successful");
-      // Redirect to onboarding or dashboard based on isProfileComplete
-      const user = req.user as any;
-      if (user && !user.isProfileComplete) {
-        res.redirect("/onboarding/welcome");
-      } else {
-        res.redirect("/dashboard");
-      }
+      oauthLanding(req, res);
     }
   );
 
@@ -1635,6 +1643,26 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       }
       if (existing?.lastName && existing.lastName.trim().length > 0) {
         delete data.lastName;
+      }
+
+      // الجوال لا يُكتب خامًا من هنا: يُدار حصرًا عبر مسار التوثيق
+      // /api/account/phone/send + /verify (OTP + فحص تفرّد)، حتى لا يربط
+      // عضو رقمًا لا يملكه أو يزاحم حسابًا آخر.
+      // رقم مطابق للمخزّن (نماذج قديمة تعيد إرسال الحقل كاملًا) يُسقط بصمت؛
+      // أما رقم **مختلف** فيُرفض صراحةً بدل «نجاح كاذب» أوهم المنسوبين
+      // بأن الرقم حُفظ بينما لم يُربط شيء (حادثة 2026-09-18).
+      const rawPhone = (data as { phoneNumber?: unknown }).phoneNumber;
+      delete (data as { phoneNumber?: unknown }).phoneNumber;
+      if (typeof rawPhone === "string" && rawPhone.trim()) {
+        const wanted = normalizePhone(rawPhone);
+        const current = normalizePhone(existing?.phoneNumber);
+        if (wanted !== current) {
+          return res.status(400).json({
+            code: "phone_requires_verification",
+            message:
+              "رقم الجوال لا يُحفظ من هنا. استخدم «إضافة/تغيير الرقم» ليصلك رمز تحقق يثبت ملكيتك للرقم ويربطه بحسابك.",
+          });
+        }
       }
 
       const user = await storage.updateUser(userId, data);
@@ -7136,6 +7164,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       const offset = (pageNum - 1) * limitNum;
 
       const reporterAlias = aliasedTable(users, 'reporter');
+      const enteredByAlias = aliasedTable(users, 'entered_by');
 
       // Build where conditions array
       const whereConditions: (SQL<unknown> | undefined)[] = [];
@@ -7270,6 +7299,14 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
               email: reporterAlias.email,
               profileImageUrl: reporterAlias.profileImageUrl,
             },
+            // من أدخل المادة فعلًا: submitterId إن وُجد وإلا authorId (الموظف)،
+            // بخلاف الإسناد الظاهر للقارئ (reporter) الذي يكون غالبًا «صحيفة سبق».
+            enteredBy: {
+              id: enteredByAlias.id,
+              firstName: enteredByAlias.firstName,
+              lastName: enteredByAlias.lastName,
+              email: enteredByAlias.email,
+            },
             publisher: {
               id: publishers.id,
               companyName: publishers.agencyName,
@@ -7278,6 +7315,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
           .from(articles)
           .leftJoin(categories, eq(articles.categoryId, categories.id))
           .leftJoin(users, eq(articles.authorId, users.id))
+          .leftJoin(enteredByAlias, eq(sql`coalesce(${articles.submitterId}, ${articles.authorId})`, enteredByAlias.id))
           .leftJoin(reporterAlias, eq(articles.reporterId, reporterAlias.id))
           .leftJoin(publishers, eq(articles.publisherId, publishers.id))
           .$dynamic();
@@ -7328,15 +7366,27 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         ...row.article,
         category: row.category,
         author: row.reporter || row.author,
+        enteredBy: row.enteredBy?.id ? row.enteredBy : null,
         publisher: row.publisher,
       }));
 
       const writerIds = collectOpinionDraftWriterIds(formattedArticles);
       const slotsByWriter = await getNextSlotsForWriters(writerIds);
       const articlesWithSlots = attachWriterWeeklySlots(formattedArticles, slotsByWriter);
+      // إشارات التوزيع (إشعار/X) للمنشور فقط — فشلها لا يُسقط القائمة
+      const signalsById = status === "published"
+        ? await getArticleListSignals(articlesWithSlots.map((a) => a.id)).catch((error) => {
+            console.warn("[admin-articles] list signals failed:", error);
+            return {} as Awaited<ReturnType<typeof getArticleListSignals>>;
+          })
+        : ({} as Awaited<ReturnType<typeof getArticleListSignals>>);
+      const articlesWithSignals = articlesWithSlots.map((a) => {
+        const signals = signalsById[a.id];
+        return signals ? { ...a, signals } : a;
+      });
 
       res.json({ 
-        articles: articlesWithSlots, 
+        articles: articlesWithSignals, 
         total,
         page: pageNum,
         limit: limitNum,
@@ -13414,7 +13464,7 @@ Respond in valid JSON format only:
 
 
   // Lightweight helper to get article ID by slug (cached for performance)
-  async function getArticleIdBySlug(slug: string): Promise<{ id: string; categoryId: string | null } | null> {
+  async function getArticleIdBySlug(slug: string): Promise<{ id: string; categoryId: string | null; status: string | null; publishedAt: Date | null } | null> {
     const cacheKey = `article:id:${slug}`;
     return withCache(cacheKey, CACHE_TTL.LONG, async () => {
       // Match by slug or englishSlug. If the param looks like a UUID, also match
@@ -13424,11 +13474,11 @@ Respond in valid JSON format only:
       const matcher = isUuid
         ? or(eq(articles.slug, slug), eq(articles.englishSlug, slug), eq(articles.id, slug))
         : or(eq(articles.slug, slug), eq(articles.englishSlug, slug));
-      const result = await db.select({ id: articles.id, categoryId: articles.categoryId })
+      const result = await db.select({ id: articles.id, categoryId: articles.categoryId, status: articles.status, publishedAt: articles.publishedAt })
         .from(articles)
         .where(matcher)
         .limit(1);
-      return result.length > 0 ? { id: result[0].id, categoryId: result[0].categoryId } : null;
+      return result[0] ?? null;
     });
   }
 
@@ -13569,13 +13619,25 @@ Respond in valid JSON format only:
       // Always overlay the LIVE view count so the 5-10 boost shows immediately
       // on refresh — the cached payload's `views` is up to 5 min stale. The
       // heavy article query stays cached; this is just one PK-indexed lookup.
-      {
-        const [viewsRow] = await db.select({ views: articles.views }).from(articles)
-          .where(eq(articles.id, finalArticle.id)).limit(1);
-        if (viewsRow) {
-          finalArticle = { ...finalArticle, views: Number(viewsRow.views ?? (finalArticle as any).views ?? 0) };
-        }
-      }
+      const readArticleId = finalArticle.id;
+      const overlay = await coalesceArticleReadOverlay(readArticleId, async () => {
+        const [[viewsRow], assets] = await Promise.all([
+          db.select({ views: articles.views }).from(articles)
+            .where(eq(articles.id, readArticleId)).limit(1),
+          storage.getArticleMediaAssetWithDetails?.(readArticleId),
+        ]);
+        return {
+          views: viewsRow?.views == null ? null : Number(viewsRow.views),
+          mediaAssets: (assets || [])
+            .filter((a: any) => a.mediaFile?.url)
+            .map((a: any) => ({ url: a.mediaFile.url, altText: a.altText || "", displayOrder: a.displayOrder ?? 0 })),
+        };
+      });
+      finalArticle = {
+        ...finalArticle,
+        ...(overlay.views !== null ? { views: overlay.views } : {}),
+        ...(overlay.mediaAssets.length > 0 ? { mediaAssets: overlay.mediaAssets } : {}),
+      };
 
       if (userId) {
         const articleId = finalArticle.id;
@@ -13599,18 +13661,6 @@ Respond in valid JSON format only:
 
       if (userId) {
         await storage.recordArticleRead(userId, finalArticle.id);
-      }
-
-      // Attach media assets (email agent images) so mobile apps can render them
-      const mediaAssets = await storage.getArticleMediaAssetWithDetails?.(finalArticle.id);
-      if (mediaAssets && mediaAssets.length > 0) {
-        (finalArticle as any).mediaAssets = mediaAssets
-          .filter((a: any) => a.mediaFile?.url)
-          .map((a: any) => ({
-            url: a.mediaFile.url,
-            altText: a.altText || "",
-            displayOrder: a.displayOrder ?? 0,
-          }));
       }
 
       res.json(finalArticle);
@@ -13656,7 +13706,8 @@ Respond in valid JSON format only:
 
   // News Analytics Endpoint - Smart statistics and insights
 
-  app.get("/api/articles/:slug/comments", cacheControl({ maxAge: CACHE_DURATIONS.REALTIME, sMaxAge: 60, staleWhileRevalidate: 30 }), async (req: any, res) => {
+  app.get("/api/articles/:slug/comments", async (req: any, res) => {
+    res.set("Cache-Control", "private, no-store");
     try {
       const userRole = req.user?.role;
       const slug = req.params.slug;
@@ -13677,6 +13728,13 @@ Respond in valid JSON format only:
         const comments = await withCache(cacheKey, CACHE_TTL.SHORT, async () => {
           return storage.getCommentsByArticle(articleInfo.id, false);
         });
+        // Only anonymous, approved comments on a published article can opt in
+        // to the short edge burst cache. Staff/pending responses stay private.
+        if (!req.user && articleInfo.status === "published" && articleInfo.publishedAt &&
+            articleInfo.publishedAt.getTime() <= Date.now()) {
+          res.set("X-Sabq-Public-Cache", "1");
+          res.set("Cache-Control", "public, max-age=0, s-maxage=15");
+        }
         return res.json(comments);
       }
       

@@ -51,9 +51,9 @@ class SearchViewModel @Inject constructor(
             } else {
                 flow<SearchUiState> {
                     emit(SearchUiState.Searching(trimmed))
-                    SabqAnalytics.search(trimmed)
                     runCatching { repo.search(trimmed) }
                         .onSuccess {
+                            SabqAnalytics.search(trimmed)
                             emit(
                                 SearchUiState.Results(
                                     query = it.query,

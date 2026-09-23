@@ -91,7 +91,7 @@ export default function PrivacyPage() {
   useCanonical("https://sabq.org/ar/privacy");
 
   return (
-    <div className="min-h-screen bg-background flex flex-col overflow-x-hidden" dir="rtl">
+    <div className="public-page min-h-screen bg-background flex flex-col overflow-x-hidden" dir="rtl">
       <Header user={user || undefined} />
 
       {/* Hero — تكوين واحد: اسم سبق + العنوان + جملة قصيرة */}
@@ -100,18 +100,18 @@ export default function PrivacyPage() {
           className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_hsl(var(--primary)/0.12),_transparent_55%)]"
           aria-hidden="true"
         />
-        <div className="relative mx-auto max-w-3xl px-4 pt-12 pb-10 md:pt-16 md:pb-14">
+        <div className="public-page-header relative mx-auto max-w-3xl px-4 pt-12 pb-10 md:pt-16 md:pb-14">
           <p className="text-sm font-bold text-primary mb-3" data-testid="text-privacy-subtitle">
             سبق
           </p>
           <h1
-            className="text-3xl sm:text-4xl md:text-5xl font-extrabold tracking-tight max-w-2xl leading-[1.25]"
+            className="public-page-title text-3xl sm:text-4xl md:text-5xl font-extrabold tracking-tight max-w-2xl leading-[1.25]"
             data-testid="heading-privacy-title"
           >
             سياسة الخصوصية
           </h1>
           <p
-            className="mt-4 max-w-2xl text-muted-foreground text-base md:text-lg leading-relaxed"
+            className="public-page-description mt-4 max-w-2xl text-muted-foreground text-base md:text-lg leading-relaxed"
             data-testid="text-intro-content"
           >
             كيف نجمع بياناتك ونستخدمها ونحميها — بما في ذلك خدمات الذكاء الاصطناعي
@@ -147,7 +147,7 @@ export default function PrivacyPage() {
         </div>
       </section>
 
-      <div className="mx-auto w-full max-w-3xl px-4 py-10 md:py-14 flex-1">
+      <div className="public-container mx-auto w-full max-w-3xl px-4 py-10 md:py-14 flex-1">
           <article className="min-w-0 space-y-12 md:space-y-14">
             {/* 1 */}
             <section>
