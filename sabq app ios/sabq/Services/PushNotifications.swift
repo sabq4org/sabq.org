@@ -130,11 +130,18 @@ final class NotificationsStore {
         return nil
     }
 
-    /// حراسة صيغة الـ slug — نفس نطاق `generateSlug` في الخادم
-    /// (`server/services/smartLinks.ts`): عربي + a-z0-9 وشرطة، بحد 200 حرف.
-    /// يرفض أي مسار/معامل هجين (اقتحام مسار، سكربت، محارف تحكّم) قبل أن
-    /// يصل لأي طلب شبكة أو تنقّل (تدقيق الديون sec-1، 2026-09-23).
-    private static let slugPattern = "^[\\p{Arabic}a-z0-9-]{1,200}$"
+    /// حراسة صيغة الـ slug. **لم يعد يطابق `generateSlug` فقط** —
+    /// فحص خرائط الموقع الفعلية (567,787 slug، 2026-09-23) أظهر أن
+    /// `^[\p{Arabic}a-z0-9-]{1,200}$` (المطابق لـ `generateSlug` في
+    /// `server/services/smartLinks.ts`) يرفض 96.3% من الأرشيف الحقيقي:
+    /// أغلب المقالات المفهرسة تستخدم أبجدية nanoid (أحرف **كبيرة** A-Z
+    /// وشرطة سفلية `_`)، وبعض العناوين العربية الحديثة تحمل تشكيلاً
+    /// (fatḥatan/kasra إلخ., مدى U+064B–U+065F وU+0670) وهو خارج
+    /// `\p{Arabic}` لأن Unicode يصنّفه Script=Inherited لا Arabic.
+    /// النمط أدناه يوسّع القبول لهذه الحالات مع إبقاء الرفض الصارم لاقتحام
+    /// المسارات (`.`، `/`) والمحارف الخاصة/الفارغة (تدقيق sec-1، تحديث
+    /// 2026-09-23 — انظر `docs/iOS-TECH-DEBT.md`).
+    private static let slugPattern = "^[\\p{Arabic}A-Za-z0-9_\\u064B-\\u065F\\u0670-]{1,200}$"
     /// حراسة المعرّفات الرقمية/النصية (draft/feedback ids, survey tokens):
     /// أحرف/أرقام لاتينية وشرطة/underscore فقط، بحد 128.
     private static let tokenPattern = "^[A-Za-z0-9_-]{1,128}$"
