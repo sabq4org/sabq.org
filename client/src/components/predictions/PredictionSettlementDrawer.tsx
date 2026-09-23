@@ -55,8 +55,12 @@ export function PredictionSettlementDrawer({ contestId, onClose }: Props) {
 function scoreText(data: PredSettlementResponse | undefined): string | null {
   const result = data?.result;
   if (result?.finalHome === undefined || result?.finalAway === undefined) return null;
-  // قاعدة العرض الموحّدة: داخل span dir="ltr" الضيف أولًا فيلاصق رقم المضيف اليمين.
-  return `${result.finalAway}–${result.finalHome}`;
+  const pen = result.penalties;
+  const base = `${result.finalAway}–${result.finalHome}`;
+  if (pen && (pen.home != null || pen.away != null)) {
+    return `${base} (${pen.away ?? 0}–${pen.home ?? 0} ر.ت)`;
+  }
+  return base;
 }
 
 function AwardDetails({ award, finalScore }: { award: PredMyAward; finalScore: string | null }) {

@@ -25,6 +25,7 @@ import {
   claimEmailDedup,
   extractEmailAddress,
 } from "../services/emailAgentDedup";
+import { parsePage, parseLimit } from "../utils/pagination";
 
 const router = Router();
 
@@ -2225,8 +2226,8 @@ router.get("/badge-stats", isAuthenticated, requirePermission('admin.manage_sett
 // GET /api/email-agent/logs - Get email webhook logs with pagination (admin only)
 router.get("/logs", isAuthenticated, requirePermission('admin.manage_settings'), async (req: Request, res: Response) => {
   try {
-    const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 50;
+    const page = parsePage(req.query.page);
+    const limit = parseLimit(req.query.limit, 50, 200);
     const status = req.query.status as string;
     const offset = (page - 1) * limit;
     

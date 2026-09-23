@@ -1,6 +1,6 @@
 # المصادقة والصلاحيات (`auth-rbac`)
 
-> آخر مراجعة: 2026-07-31 | المالك: platform
+> آخر مراجعة: 2026-09-19 (حماية قراءات API العامة مع حفظ عزل المصادقة) | المالك: platform
 
 ## الغرض
 مصادقة الويب (Passport) وموبايل (Bearer member session) + طبقتا RBAC (DB + constants).
@@ -27,6 +27,7 @@
   - **الحسابات القديمة ذات البريد الاصطناعي:** لا تُحذف ولا تُعدل آليًا؛ الويب يجبر الاستكمال عبر حارس `needsAccountCompletion` → `/complete-name` (بريد حقيقي + كلمة مرور + الاسم الناقص). لوحة المستخدمين تعرض «لم يُضف بريد» بدل الاصطناعي ولا تُظهر علامة توثيق البريد إلا لبريد حقيقي، والبحث يشمل رقم الجوال (regexp على الأرقام).
   - **استعادة كلمة المرور:** forgot-password (ويب + v1) لا يرسل إلى بريد اصطناعي/مفقود ولا إلى بريد غير موثق إلا لحسابات `authProvider=local` (بريدها هويتها التاريخية)، والاستجابة عامة موحدة. مسارات كلمة المرور في v1 (register/reset/change) توحدت على `validatePassword`.
   - `findOrCreatePhoneUser`/`findExistingPhoneUser` يفضّلان حساب المنسوب على القارئ لنفس الرقم، ويُلغيان عضوية القارئ المكررة (`status=deleted` + تفريغ `phoneNumber`). عند قبول مراسل/كاتب رأي يُنسخ الجوال إلى `users.phoneNumber` بصيغة E.164؛ وإلا يفشل OTP في إيجاد المنسوب وينشئ قارئاً جديداً. التسجيل/التحديث يرفض الجوال الموجود مسبقاً عبر `assertPhoneAvailable` (كل الصيغ).
+- **دور العرض والبوابات (`shared/effectiveRoles.ts`):** `getUserRoleNames` و`/api/auth/user` و`buildUserRolePayload` يدمجون `user_roles` مع `users.role` ويسقطون `reader` إن وُجد دور منسوب. سابقاً صف RBAC `reader` كان يحجب عمود `users.role=reporter` فيظهر المراسل «قارئ» ويُرفض `/api/staff-profiles/me`. `updateUserRole` يضيف صف RBAC، و`updateUserRoles`/`createUserWithRoles` يزامنان العمود. ترقية صريحة: `POST /api/admin/users/:id/promote-reporter` (صلاحية `users.change_role` أو `users.update`) + زر في `/dashboard/users` + `scripts/promote-correspondent.ts`. إن بقيت الطبقتان قارئاً يُستنتج المراسل من `staff.staffType` أو وجود خبر بـ`articles.reporter_id`.
 - `ROLE_PERMISSIONS_MAP` للأدمن يحمل `"*"` حرفياً — لا تستبدله بتوسيع `PERMISSION_CODES`.
 - فلاتر التنقل يجب أن short-circuit على `permissions.includes("*")`.
 - `hasRole(..., "admin")` يقبل أيضاً `system_admin` / `system.admin` / `superadmin` / `super_admin`. أي بوابة أدوار في الواجهة (`ProtectedRoute`, `useRoleProtection`) يجب أن تمر عبر `hasRole` — مطابقة نصية لـ `role === "admin"` تطرد مسؤول النظام من صفحات مثل `/dashboard/admin/publishers` وiFox.
@@ -36,8 +37,42 @@
 - Postgres الخاص بالجلسات يستخدم pool مستقلاً صغيراً (`SESSION_FALLBACK_POOL_MAX`، الافتراضي 4، والسقف 10) بمهلات قصيرة؛ لا تعيده إلى pool المحتوى لأن انقطاع Redis قد يستنزف كل اتصالات الأخبار.
 
 ## صحة وتشغيل
+- نوع رسالة Bevatel يترك افتراضيًا بحذف `msgClass` من الطلب وفق توجيه الدعم بعد رفض `transactional` بالخطأ 6208 (Issue #1665). تبقى حماية النص والمرسل والصلاحية كما هي.
+- OTP: توليد وتحقق في `server/services/otpService.ts`، وإرسال عبر `server/services/sms/`؛ اسم Bevatel الافتراضي المعتمد `SABQ News`. قوالب الدخول/توثيق الجوال/2FA لا تتجاوز 70 وحدة UTF-16 حتى تلائم `maxParts: 1`، وصلاحية طابور الإرسال 5 دقائق. تفاصيل الإعداد والاختبار في [دليل Bevatel](../../SMS_OTP_BEVATEL.md)؛ قبول الطلب لا يثبت التسليم. Issue #1663؛ لا تغيير لعقود الويب أو الموبايل.
 - راجع CLAUDE.md § RBAC قبل أي تغيير
 - عند 500 على `/api/login` مع `Command timed out` من ioredis: تحقق من Upstash ثم من سجل `[Session Pool]` ومن أن الفايل أوفر يكتب على جدول `sessions`.
 
 ## عند التعديل
 - [ ] قرأت هذا الملف + قسم RBAC في `CLAUDE.md`
+- تقارير CSP المجهولة مستثناة من CSRF فقط للطريقة `POST` والمسار الدقيق
+  `/api/security/csp-report`، مع حد body ‏16KB ومحدد معدل مستقل؛ المسارات
+  الشقيقة تظل محمية.
+
+## تمهيد توقيع البوابات — 2026-09-07
+- طلبات Pages/Worker لا تُرسل `X-Sabq-Client-IP` كقيمة موثوقة إلا مع `EDGE_PROXY_SHARED_SECRET` وتوقيع HMAC حديث مربوط بالطريقة والمسار والاستعلام والعنوان، وبعد تفعيل `EDGE_PROXY_IP_ACCEPT=on` في التشغيل. غياب السر يتجاهل الترويسة المخصصة لكنه قد يسبب انهيار buckets خلف Pages؛ ليس عزلًا للأصل.
+- في API، `EDGE_PROXY_GATE_REQUIRED=on` يرفض طلبات API غير الموقعة قبل محددات المعدل (403)، ويعيد503 عند غياب إعدادات التوقيع. في Pages يحرس تهيئة السر. تبقى health والموارد غير API خارج هذا القيد؛ هذا تقييد على مستوى التطبيق وليس جدار شبكة Railway.
+- الترويسات المخصصة غير الموقعة، و`cf-connecting-ip`، و`X-Forwarded-For` القادمة من العميل لا تُستخدم كمفتاح rate-limit. لا يُستخدم Bearer غير متحقق لتوليد bucket جديد قبل تنفيذ المصادقة داخل المسار.
+- مسار `api.sabq.org` المباشر ومسار Railway generated hostname يعتمدان على سلسلة البروكسي المهيأة في Express عند غياب التوقيع. تفاصيل التهيئة والتراجع في `docs/ratelimit-edge-ip-rollout-2026-09-07.md`.
+- utility التحقق مفعلة الآن في backend عند `EDGE_PROXY_IP_ACCEPT=on`، بينما رفض الأصل يتطلب `EDGE_PROXY_GATE_REQUIRED=on` كعلم مستقل.
+- لا يُفعّل رفض الأصل حتى اكتمال نشر المرسلين واختبارهم، وفق `docs/ratelimit-edge-ip-rollout-2026-09-07.md`.
+
+## تحميل بيانات تعديل المنسوب — 2026-09-08
+- `EditUserDialog` ينتظر بيانات المستخدم والموظف قبل تعبئة النموذج، ويستخدم `staff.bioAr` ثم `users.bio` للسيرة العربية. خطأ قراءة الموظف لا يُعامل كسيرة فارغة ويمنع الحفظ مع إتاحة إعادة المحاولة.
+- تُعبّأ الحقول مرة واحدة عند فتح التعديل؛ إعادة الجلب الخلفية لا تمحو تعديلات المستخدم غير المحفوظة. إعادة فتح النافذة تجلب البيانات الحالية.
+- عند حفظ السيرة أو بيانات أخرى، لا يُرسل `phoneNumber` إذا طابق قيمة بداية جلسة التعديل. تغيير الرقم أو مسحه يُرسل صراحةً ويخضع لتحقق الخادم؛ تكرار رقم تاريخي لا يمنع حفظ تعديل لا يمس الجوال.
+
+## أحداث نجاح المصادقة للويب — 2026-09-13
+- Issue #1646: نتيجة Google/Apple strategy تميّز الحساب المنشأ الآن عن القائم بـisNewUser دون تغيير serialization أو APIs الموبايل. callback الناجح بعد Passport يرفق sabq_auth_event/method/nonce بلا بيانات هوية؛ failureRedirect لا يرفق نجاحًا، ووجهة onboarding تبقى حسب اكتمال الملف.
+- AuthAnalyticsMarker ينظف الرابط ويتحقق من جلسة الويب قبل إرسال conversion؛ الأحداث مؤجلة عند صفحات الحساب الحساسة، ومحدودة بعمر وبصمة لمنع العد المكرر. login نجاح حساب قائم، sign_up إنشاء جديد. لا تتغير RBAC أو Schema.
+
+## توثيق جوال الحساب المسجّل — 2026-09-18
+> الدليل الكامل (التدفّق، الكتابة الخام، التعارض، الاختبارات): [`docs/architecture/PHONE_VERIFICATION_AND_MEMBERSHIP.md`](../../architecture/PHONE_VERIFICATION_AND_MEMBERSHIP.md).
+- مسار جديد للعضو/المنسوب المسجّل: `POST /api/account/phone/send` ثم `POST /api/account/phone/verify` (Passport + CSRF، محدِّد `registrationLimiter`، وغرض OTP مستقل `phone_verify` — أول استخدام فعلي له). لا يُحفظ الرقم إلا بعد التحقق، ويُطبّع إلى E.164 عبر `normalizePhone`.
+- `classifyPhoneConflict` و`claimVerifiedAccountPhone` في `services/phoneAuth.ts`: قفل استشاري على الرقم + إعادة فحص داخل معاملة. تعارض مع **منسوب آخر** → رفض؛ تعارض مع **عضوية قارئ سابقة** → رفض برسالة توجيه للدعم. **لا حذف ولا دمج تلقائي** (يختلف عن `retireDuplicateReaderPhoneAccounts` المستخدم في اعتماد المنسوبين/الدخول).
+- `PATCH /api/auth/user` لم يعد يكتب `phoneNumber` خامًا (يُسقطه صراحةً)؛ الواجهة (إعدادات → الحساب) توثّق الرقم بالـOTP. وفي ملف المنسوب: `upsertStaffProfile` في **الوضع الذاتي** يرفض أي تغيير لرقم الجوال (409) ويوجّه لتوثيق OTP، وفي الوضع الإداري يمنع ربط رقم يملكه حساب آخر (`classifyPhoneConflict` → 409). تغيير الرقم يُسقط `phoneVerified`. واجهة ملف المنسوب (self) تعرض الرقم للقراءة فقط مع زر توثيق SMS عبر `/api/account/phone/*`.
+- الدخول بالجوال كما هو (`findExistingPhoneUser` يفضّل المنسوب). الموبايل v1 (`findOrCreatePhoneUser`) لم يتغير في هذا التحديث.
+
+## حماية القراءات العامة عند وسيط API — 2026-09-19
+- وسيط `api.sabq.org` يستخدم سياسة الكاش المحدودة المشتركة مع Pages للمسارات العامة المصرح بها فقط. تفعيلها لا يغير مسارات تطبيق iOS الحالي ولا يحتاج إصدار تطبيق.
+- يبقى توقيع HMAC وتمرير IP الموثوق والتحقق من وجود السر ومنع حلقة البروكسي كما هو. Cookie وAuthorization وx-session-id تتجاوز المشاركة، وكذلك الكتابات وSSE. الرد المشترك يحتاج علامة صريحة من الأصل وعقدًا عامًا؛ مفاتيح الكاش تفصل Origin واللغة ومعاملات الطلب.
+- هذه الحماية لا تشمل مصادقة الحساب ولا الردود الشخصية ولا تغيّر عقد حداثة متن الخبر. نشر API Worker مستقل عن نشر Pages وعن حزمة Railway؛ نجاح بناء الخادم وحده لا يفعّلها.

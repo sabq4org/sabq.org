@@ -323,18 +323,49 @@ struct RoshnTeamView: View {
                             .foregroundStyle(RoshnTheme.sky)
                         ForEach(groups[key] ?? []) { player in
                             HStack(spacing: 10) {
-                                WCRemoteImage(url: player.photo)
-                                    .frame(width: 38, height: 38)
-                                    .background(Circle().fill(RoshnTheme.skySoft))
-                                    .clipShape(Circle())
+                                ZStack(alignment: .topTrailing) {
+                                    WCRemoteImage(url: player.photo)
+                                        .frame(width: 38, height: 38)
+                                        .background(Circle().fill(RoshnTheme.skySoft))
+                                        .clipShape(Circle())
+                                    if player.captain == true {
+                                        Text("C")
+                                            .font(SabqFonts.app(size: 8, weight: .black))
+                                            .foregroundStyle(Color.black)
+                                            .frame(width: 14, height: 14)
+                                            .background(RoshnTheme.gold)
+                                            .clipShape(Circle())
+                                            .offset(x: 2, y: -2)
+                                    }
+                                }
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text(player.name)
-                                        .font(SabqFonts.app(size: 13, weight: .semibold))
-                                        .foregroundStyle(RoshnTheme.ink)
-                                    if let age = player.age {
-                                        Text("\(RsFormat.latin(age)) سنة")
-                                            .font(SabqFonts.app(size: 9.5))
-                                            .foregroundStyle(RoshnTheme.inkSoft)
+                                    HStack(spacing: 5) {
+                                        if let flag = player.nationality?.flag, let flagURL = URL(string: flag) {
+                                            AsyncImage(url: flagURL) { phase in
+                                                if let img = phase.image {
+                                                    img.resizable().scaledToFill()
+                                                } else {
+                                                    Color.clear
+                                                }
+                                            }
+                                            .frame(width: 14, height: 10)
+                                            .clipShape(RoundedRectangle(cornerRadius: 1.5))
+                                        }
+                                        Text(player.name)
+                                            .font(SabqFonts.app(size: 13, weight: .semibold))
+                                            .foregroundStyle(RoshnTheme.ink)
+                                    }
+                                    HStack(spacing: 4) {
+                                        if let det = player.detailedPosition, det != player.position {
+                                            Text(det)
+                                                .font(SabqFonts.app(size: 9.5))
+                                                .foregroundStyle(RoshnTheme.inkSoft)
+                                        }
+                                        if let age = player.age {
+                                            Text("\(RsFormat.latin(age)) سنة")
+                                                .font(SabqFonts.app(size: 9.5))
+                                                .foregroundStyle(RoshnTheme.inkSoft)
+                                        }
                                     }
                                 }
                                 Spacer()

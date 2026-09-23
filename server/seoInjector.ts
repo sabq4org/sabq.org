@@ -18,7 +18,8 @@ import path from "path";
 import { withCache, CACHE_TTL } from "./memoryCache";
 import { VALID_PREFIXES } from "./utils/spaRouteMatcher";
 import { isNoindexPath } from "./utils/noindexPaths";
-import { buildNewsArticleSchemaExtras } from "./utils/newsArticleSchema";
+import { buildNewsArticleSchemaExtras, getArticleSchemaType } from "./utils/newsArticleSchema";
+import { getPublicEditorialModifiedAt } from "./utils/editorialDates";
 import {
   buildPersonJsonLd,
   buildProfilePageJsonLd,
@@ -253,6 +254,8 @@ async function handleArticlePage(slug: string, baseUrl: string, urlPrefix: strin
         publishedAt: articles.publishedAt,
         updatedAt: articles.updatedAt,
         seo: articles.seo,
+        seoMetadata: articles.seoMetadata,
+        articleType: articles.articleType,
         status: articles.status,
         categoryName: categories.nameAr,
         authorId: articles.authorId,
@@ -268,8 +271,8 @@ async function handleArticlePage(slug: string, baseUrl: string, urlPrefix: strin
       .leftJoin(categories, eq(articles.categoryId, categories.id))
       .leftJoin(users, eq(articles.authorId, users.id))
       .leftJoin(reporterUsers, eq(articles.reporterId, reporterUsers.id))
-      .leftJoin(reporterStaff, eq(articles.reporterId, reporterStaff.userId))
-      .leftJoin(authorStaff, eq(articles.authorId, authorStaff.userId))
+      .leftJoin(reporterStaff, and(eq(articles.reporterId, reporterStaff.userId), eq(reporterStaff.isActive, true), inArray(reporterStaff.staffType, ["reporter", "writer", "opinion_author", "content_creator"])))
+      .leftJoin(authorStaff, and(eq(articles.authorId, authorStaff.userId), eq(authorStaff.isActive, true), inArray(authorStaff.staffType, ["reporter", "writer", "opinion_author", "content_creator"])))
       .where(or(eq(articles.slug, slug), eq(articles.englishSlug, slug)))
       .limit(1)
   );
@@ -295,16 +298,7 @@ async function handleArticlePage(slug: string, baseUrl: string, urlPrefix: strin
   const editorName = [a.authorFirstName, a.authorLastName].filter(Boolean).join(' ');
   const authorName = reporterName || editorName || 'صحيفة سبق الإلكترونية';
   const publishedTime = a.publishedAt ? new Date(a.publishedAt).toISOString() : undefined;
-  let modifiedTime = a.updatedAt ? new Date(a.updatedAt).toISOString() : publishedTime;
-  if (publishedTime && modifiedTime && a.publishedAt && a.updatedAt) {
-    const pubMs = new Date(a.publishedAt).getTime();
-    const updMs = new Date(a.updatedAt).getTime();
-    const articleAgeMs = Date.now() - pubMs;
-    const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
-    if (articleAgeMs > thirtyDaysMs && (updMs - pubMs) > 7 * 24 * 60 * 60 * 1000) {
-      modifiedTime = publishedTime;
-    }
-  }
+  const modifiedTime = getPublicEditorialModifiedAt(a.publishedAt, a.seoMetadata) || publishedTime;
   const keywords = seoData.keywords || [];
   const schemaExtras = buildNewsArticleSchemaExtras(a.content, image, baseUrl);
   const authorPerson = buildArticleAuthorPerson(baseUrl, {
@@ -318,7 +312,7 @@ async function handleArticlePage(slug: string, baseUrl: string, urlPrefix: strin
 
   const jsonLd = {
     "@context": "https://schema.org",
-    "@type": "NewsArticle",
+    "@type": getArticleSchemaType(a.articleType),
     "mainEntityOfPage": { "@type": "WebPage", "@id": canonicalUrl },
     "headline": title,
     "description": description,
@@ -792,7 +786,7 @@ const INDEXABLE_SECTION_PREFIXES = new Map<string, { title: string; desc: string
   ['saudia', { title: 'السعودية — سبق', desc: 'أخبار السعودية والمحافظات على صحيفة سبق الإلكترونية.' }],
   ['world', { title: 'العالم — سبق', desc: 'الأخبار العالمية وأهم أحداث الدول من حول العالم على صحيفة سبق الإلكترونية.' }],
   ['business', { title: 'الأعمال — سبق', desc: 'أخبار الأعمال والشركات والاقتصاد على صحيفة سبق الإلكترونية.' }],
-  ['economy', { title: 'الاقتصاد — سبق', desc: 'الأخبار الاقتصادية والمالية على صحيفة سبق الإلكترونية.' }],
+  ['economy', { title: 'الاقتصاد بالأرقام — بيانات البنك المركزي السعودي حيًا | سبق', desc: 'الاقتصاد السعودي بالأرقام: إنفاق الأسبوع، أسعار الصرف، الفائدة والتضخم — أرقام رسمية تتحدث تلقائيًا لحظة صدورها من البنك المركزي السعودي.' }],
   ['technology', { title: 'التقنية — سبق', desc: 'أخبار التقنية والذكاء الاصطناعي والابتكار على صحيفة سبق الإلكترونية.' }],
   ['sports', { title: 'رياضة سبق — مباريات مباشرة وانتقالات وترتيب الدوريات | سبق', desc: 'بوابة سبق الرياضية: نتائج مباشرة وجدول المباريات بتوقيت الرياض، ترتيب دوري روشن وكبرى الدوريات العالمية، ومركز الانتقالات لحظة بلحظة.' }],
   ['sport', { title: 'رياضة سبق — مباريات مباشرة وانتقالات وترتيب الدوريات | سبق', desc: 'بوابة سبق الرياضية: نتائج مباشرة وجدول المباريات بتوقيت الرياض، ترتيب دوري روشن وكبرى الدوريات العالمية، ومركز الانتقالات لحظة بلحظة.' }],

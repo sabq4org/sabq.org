@@ -1,4 +1,9 @@
+import { useAnalyticsPageMetadata } from "@/hooks/use-analytics";
+import "@/styles/article-detail.css";
+import { ArticleSummary } from "@/components/public/ArticleSummary";
+import { useArticleSummaryAudio } from "@/hooks/useArticleSummaryAudio";
 import { useParams } from "wouter";
+import { useArticleInsights, useArticleRecommendations } from "@/hooks/useArticleSidebarData";
 import { getObjectPosition, getCacheBustedImageUrl } from "@/lib/imageUtils";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { CommentsTeaser } from "@/components/CommentsTeaser";
@@ -7,7 +12,7 @@ import { Footer } from "@/components/Footer";
 import { CommentSection } from "@/components/CommentSection";
 import { ArticlePoll } from "@/components/ArticlePoll";
 import { RecommendationsWidget } from "@/components/RecommendationsWidget";
-import { AIRecommendationsBlock } from "@/components/AIRecommendationsBlock";
+import { AIRecommendationsPanel } from "@/components/AIRecommendationsBlock";
 import { RelatedOpinionsSection } from "@/components/RelatedOpinionsSection";
 import { Paywall } from "@/components/Paywall";
 import StoryTimeline from "@/components/StoryTimeline";
@@ -34,6 +39,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useToast } from "@/hooks/use-toast";
 import { useBehaviorTracking } from "@/hooks/useBehaviorTracking";
 import { useArticleReadTracking } from "@/hooks/useArticleReadTracking";
+import { useAnalyticsReadingEngagement } from "@/hooks/useAnalyticsReadingEngagement";
 import { useCanonical } from "@/hooks/useCanonical";
 import { apiRequest, apiUrl, queryClient } from "@/lib/queryClient";
 import { signalContentPainted } from "@/lib/contentPaintedSignal";
@@ -43,25 +49,22 @@ import {
   trackArticleLike,
   trackBookmarkToggle,
   trackArticleComment,
+  trackReadingEngagement,
 } from "@/lib/analytics";
 import {
   Heart,
   Bookmark,
-  Share2,
   Clock,
   Sparkles,
   ChevronRight,
-  ChevronDown,
-  Volume2,
-  VolumeX,
   CheckCircle2,
   Loader2,
-  Eye,
   MessageSquare,
   Archive,
   Zap,
   Lock,
   User,
+  BookOpen,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { formatArticleTimestamp } from "@/lib/formatTime";
@@ -70,6 +73,7 @@ import { useEffect, useState, useRef, useCallback, useMemo, lazy, Suspense } fro
 import DOMPurify from "isomorphic-dompurify";
 import { transformArticleHtml } from "@/lib/legacyHtmlTransformer";
 import { useHeroPreload } from "@/hooks/useHeroPreload";
+import { ARTICLE_HERO_QUALITY, ARTICLE_HERO_FALLBACK_WIDTH } from "@shared/articleHeroPreload";
 import { useNaturalAspectRatio } from "@/hooks/useNaturalAspectRatio";
 
 // الإعلان البارز أعلى صفحة المقال (تحت الهيدر). أُعيد إظهاره 2026-07-09 (بعد إخفاء المونديال). للإخفاء: بدّل إلى false.
@@ -81,20 +85,13 @@ const AiArticleStats = lazy(() =>
 
 export default function ArticleDetail() {
   const { slug } = useParams<{ slug: string }>();
+  // Start sidebar data before the article-loading return (the chart can stay lazy).
+  const insightsQuery = useArticleInsights(slug);
+  const recommendationsQuery = useArticleRecommendations(slug);
   const { toast } = useToast();
   const { logBehavior } = useBehaviorTracking();
   const [, setLocation] = useLocation();
   
-  // Audio player state
-  const [isLoadingAudio, setIsLoadingAudio] = useState(false);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  
-  // الموجز مطوي افتراضياً (3 أسطر) عند فتح الخبر — مثل iOS/Android
-  const [isSummaryExpanded, setIsSummaryExpanded] = useState(false);
-  useEffect(() => {
-    setIsSummaryExpanded(false);
-  }, [slug]);
 
   const { data: user } = useQuery<{ id: string; name?: string; email?: string; role?: string }>({
     queryKey: ["/api/auth/user"],
@@ -115,26 +112,6 @@ export default function ArticleDetail() {
     if (article) signalContentPainted();
   }, [article]);
 
-  // Parse stored aiSummary text into up to 3 bullets (no extra request needed)
-  const storedBullets = useMemo<string[]>(() => {
-    const raw = article?.aiSummary;
-    if (!raw || typeof raw !== "string") return [];
-    const text = raw.trim();
-    if (!text) return [];
-    const byLine = text
-      .split(/\r?\n+/)
-      .map((l) => l.replace(/^\s*[-•*–·\d.)\s]+/, "").trim())
-      .filter((l) => l.length > 4);
-    if (byLine.length >= 2) return byLine.slice(0, 3);
-    const cleaned = text.replace(/\s+/g, " ").trim();
-    const bySentence = cleaned
-      .split(/(?<=[\.!\?؟])\s+/)
-      .map((s) => s.trim())
-      .filter((s) => s.length > 4);
-    if (bySentence.length >= 1) return bySentence.slice(0, 3);
-    return [cleaned];
-  }, [article?.aiSummary]);
-
   // If no stored summary, generate bullets in the background via API.
   // The endpoint no longer blocks on OpenAI — on a cold miss it kicks off
   // generation server-side and returns { source: "pending", bullets: [] }.
@@ -142,7 +119,7 @@ export default function ArticleDetail() {
   // seconds without ever blocking the request. Polling stops as soon as
   // bullets arrive (or the server reports a non-pending source), and is hard-
   // capped so a persistent generation failure can't loop forever.
-  const shouldFetchBullets = !!article?.id && storedBullets.length === 0;
+  const shouldFetchBullets = !!article?.id && !article?.aiSummary?.trim();
   const { data: bulletsData, isLoading: isLoadingBullets } = useQuery<{ bullets: string[]; source?: string }>({
     queryKey: ["/api/articles", slug, "ai-bullets"],
     enabled: shouldFetchBullets,
@@ -154,27 +131,8 @@ export default function ArticleDetail() {
       return stillPending && query.state.dataUpdateCount < 5 ? 3500 : false;
     },
   });
-  const aiBullets = storedBullets.length > 0 ? storedBullets : (bulletsData?.bullets || []);
-  // الفقرة الموسّعة غالباً نفس نص النقاط (تقسيم جُمل) — لا نكررها تحت «عرض المزيد»
-  const summaryDetailText = (article?.aiSummary || article?.excerpt || "").trim();
-  const showSummaryDetail = useMemo(() => {
-    if (!summaryDetailText) return false;
-    if (aiBullets.length === 0) return true;
-    const normalize = (s: string) => s.replace(/\s+/g, " ").trim();
-    const joined = normalize(aiBullets.join(" "));
-    const detail = normalize(summaryDetailText);
-    if (!joined) return true;
-    if (joined === detail) return false;
-    const shorter = joined.length <= detail.length ? joined : detail;
-    const longer = joined.length <= detail.length ? detail : joined;
-    return !longer.includes(shorter) || longer.length > shorter.length * 1.35;
-  }, [summaryDetailText, aiBullets]);
-
-  // طي إلى 3 أسطر عند الحاجة (نفس عتبة iOS/Android ≈ 120 حرفاً)
-  const summaryNeedsToggle = useMemo(() => {
-    const text = (aiBullets.length > 0 ? aiBullets.join(" ") : summaryDetailText).trim();
-    return text.length > 120 || showSummaryDetail;
-  }, [aiBullets, summaryDetailText, showSummaryDetail]);
+  const aiBullets = Array.isArray(bulletsData?.bullets) ? bulletsData.bullets : [];
+  const summaryText = article?.aiSummary?.trim() || aiBullets.join("\n\n") || article?.excerpt || "";
 
   // DMS Ad tracking for article page
   useAdTracking(article?.category?.nameAr || '', article?.id);
@@ -188,17 +146,19 @@ export default function ArticleDetail() {
     () => (article?.imageUrl ? getCacheBustedImageUrl(article.imageUrl, article.updatedAt) : null),
     [article?.imageUrl, article?.updatedAt],
   );
-  useHeroPreload(!isVideoTemplate && heroImageUrl ? heroImageUrl : null);
+  useHeroPreload(!isVideoTemplate && heroImageUrl ? heroImageUrl : null, ARTICLE_HERO_QUALITY, ARTICLE_HERO_FALLBACK_WIDTH);
 
   const sanitizedArticleHtml = useMemo(() => {
     if (!article?.content) return "";
     const sanitized = DOMPurify.sanitize(article.content, {
-      ADD_TAGS: ['iframe', 'blockquote', 'img'],
+      ADD_TAGS: ['iframe', 'blockquote', 'img', 'figure', 'figcaption'],
       ADD_ATTR: [
         'allow', 'allowfullscreen', 'frameborder', 'scrolling', 'src',
         'data-lang', 'data-theme', 'data-video-embed', 'data-url', 'data-embed-url',
         'data-whatsapp-cta', 'data-phone', 'data-phrase', 'data-message',
+        'data-align', 'data-width', 'data-caption',
         'class', 'alt', 'loading', 'width', 'height', 'srcset', 'sizes',
+        'style',
         'fetchpriority', 'decoding', 'target', 'rel', 'aria-label', 'aria-hidden',
       ],
       ALLOWED_URI_REGEXP: /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|sms|cid|xmpp):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i,
@@ -312,6 +272,17 @@ export default function ArticleDetail() {
     [article?.articleType, article?.opinionAuthor, article?.author]
   );
 
+  const { data: bylineProfile } = useQuery<{ title?: string | null }>({
+    queryKey: ["/api/reporters", article?.staff?.slug],
+    enabled: !!article?.staff?.slug && article?.articleType !== "infographic",
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+  });
+  const bylineName = [resolvedAuthor?.firstName, resolvedAuthor?.lastName].filter(Boolean).join(" ").trim()
+    || article?.staff?.nameAr || "";
+  const bylineTitle = bylineProfile?.title?.trim()
+    || (bylineName === "صحيفة سبق" ? "صحيفة إلكترونية سعودية" : article?.reporterId === resolvedAuthor?.id ? "مراسل صحفي" : "كاتب الخبر");
+
   // Fetch existing short link for article (idempotent GET first)
   const { data: existingShortLink, isLoading: isLoadingShortLink, error: shortLinkError } = useQuery<{ shortCode: string; originalUrl: string } | null>({
     queryKey: ["/api/shortlinks/article", article?.id],
@@ -397,11 +368,6 @@ export default function ArticleDetail() {
     enabled: !!article && !!user,
   });
 
-  useEffect(() => {
-    if (!article?.id) return;
-    const categoryName = article.category?.nameAr ?? article.category?.nameEn;
-    trackArticleView(article.id, article.title || "", categoryName);
-  }, [article?.id, article?.title, article?.category?.nameAr, article?.category?.nameEn]);
 
   // Focus mode (Task #80)
   const [focusOpen, setFocusOpen] = useState(false);
@@ -416,7 +382,7 @@ export default function ArticleDetail() {
     
     // Cleanup: restore previous values when unmounting
     return () => {
-      document.documentElement.dir = previousDir || "ltr";
+      document.documentElement.dir = previousDir || "rtl";
       document.documentElement.lang = previousLang || "en";
     };
   }, []);
@@ -427,15 +393,22 @@ export default function ArticleDetail() {
     }
   }, [article?.id, user?.id]);
 
-  // Update document.title for SEO (GA4 auto-tracks page views)
+  useAnalyticsPageMetadata(article?.title ? `${article.title} | سبق` : isLoading ? null : "تعذر عرض الخبر | سبق");
+  const lastAnalyticsArticle = useRef<string | null>(null);
   useEffect(() => {
-    if (article?.title) {
-      document.title = `${article.title} | سبق`;
-    }
-    return () => {
-      document.title = 'سبق - صحيفة إلكترونية سعودية';
-    };
-  }, [article?.title]);
+    if (!article?.id) return;
+    const visit = `${slug}:${article.id}`;
+    if (lastAnalyticsArticle.current === visit) return;
+    lastAnalyticsArticle.current = visit;
+    trackArticleView(article.id, article.title || "", article.category?.nameAr ?? article.category?.nameEn);
+  }, [slug, article?.id, article?.title, article?.category?.nameAr, article?.category?.nameEn]);
+
+  useAnalyticsReadingEngagement({
+    articleId: article?.id || "",
+    contentRef: articleBodyRef,
+    enabled: !!article?.id,
+    onEvent: (event) => trackReadingEngagement(event.name, event.params),
+  });
 
   useCanonical(article ? `https://sabq.org/article/${article.englishSlug || slug}` : null);
 
@@ -912,111 +885,30 @@ export default function ArticleDetail() {
     commentMutation.mutate({ content, parentId });
   }, [commentMutation]);
 
-  const handlePlayAudio = useCallback(async () => {
-    if (!article?.aiSummary && !article?.excerpt) {
-      toast({
-        title: "لا يوجد محتوى",
-        description: "الموجز الذكي غير متوفر لهذا المقال",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    // If currently playing, stop playback
-    if (audioRef.current && !audioRef.current.paused) {
-      audioRef.current.pause();
-      audioRef.current.currentTime = 0; // Reset to beginning
-      setIsPlaying(false);
-      return;
-    }
-
-    // If audio is already loaded but paused, resume playback
-    if (audioRef.current && audioRef.current.src) {
-      try {
-        await audioRef.current.play();
-        setIsPlaying(true);
-      } catch (error) {
-        console.error('Error resuming audio:', error);
-        toast({
-          title: "خطأ",
-          description: "فشل تشغيل الموجز الصوتي",
-          variant: "destructive",
-        });
-      }
-      return;
-    }
-
-    // Load and play new audio
-    try {
-      setIsLoadingAudio(true);
-      
-      // Cache busting: include article updatedAt + TTS version (bump when normalize/provider changes)
-      const timestamp = article?.updatedAt ? new Date(article.updatedAt).toISOString() : new Date().toISOString();
-      const audioUrl = `/api/articles/${slug}/summary-audio?v=${encodeURIComponent(timestamp)}&tts=tafqit-v2`;
-      
-      // Create audio element
-      audioRef.current = new Audio(audioUrl);
-      
-      // Add event listeners
-      audioRef.current.addEventListener('ended', () => {
-        setIsPlaying(false);
-      });
-      
-      audioRef.current.addEventListener('error', (e) => {
-        console.error('Audio playback error:', e);
-        toast({
-          title: "خطأ",
-          description: "فشل تشغيل الموجز الصوتي",
-          variant: "destructive",
-        });
-        setIsPlaying(false);
-        setIsLoadingAudio(false);
-      });
-      
-      // Wait for audio to be ready, then play
-      audioRef.current.addEventListener('canplaythrough', async () => {
-        if (audioRef.current) {
-          try {
-            await audioRef.current.play();
-            setIsPlaying(true);
-            setIsLoadingAudio(false);
-          } catch (playError) {
-            console.error('Error playing audio:', playError);
-            toast({
-              title: "خطأ",
-              description: "فشل تشغيل الموجز الصوتي",
-              variant: "destructive",
-            });
-            setIsLoadingAudio(false);
-          }
-        }
-      }, { once: true }); // Only fire once
-      
-      // Start loading the audio
-      audioRef.current.load();
-    } catch (error) {
-      console.error('Error loading audio:', error);
-      toast({
-        title: "خطأ",
-        description: "فشل تحميل الموجز الصوتي",
-        variant: "destructive",
-      });
-      setIsLoadingAudio(false);
-    }
-  }, [article?.aiSummary, article?.excerpt, article?.updatedAt, slug, toast]);
-
-  // Cleanup audio on unmount
-  useEffect(() => {
-    return () => {
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current = null;
-      }
-    };
-  }, [slug]);
+  const { isLoadingAudio, isPlaying, provider: audioProvider, handlePlayAudio } = useArticleSummaryAudio(
+    slug, String(article?.updatedAt ?? ''), Boolean(article?.aiSummary || article?.excerpt),
+  );
 
   const timeAgo = article?.publishedAt
     ? formatArticleTimestamp(article.publishedAt, { format: 'relative', locale: 'ar' })
+    : null;
+  const publishedDateLabel = article?.publishedAt
+    ? formatArticleTimestamp(article.publishedAt, { format: 'absolute', locale: 'ar' })
+    : null;
+  const publicationParts = useMemo(() => {
+    if (!article?.publishedAt) return null;
+    const date = new Date(article.publishedAt);
+    if (Number.isNaN(date.getTime())) return null;
+    const locale = "ar-SA-u-ca-gregory-nu-latn";
+    return {
+      iso: date.toISOString(),
+      date: new Intl.DateTimeFormat(locale, { day: "numeric", month: "long", year: "numeric", timeZone: "Asia/Riyadh" }).format(date),
+      time: new Intl.DateTimeFormat(locale, { hour: "2-digit", minute: "2-digit", hour12: true, timeZone: "Asia/Riyadh" }).format(date),
+    };
+  }, [article?.publishedAt]);
+  const editorialModifiedAt = (article as any)?.seoMetadata?.editorialModifiedAt as string | undefined;
+  const meaningfulUpdatedDateLabel = editorialModifiedAt
+    ? formatArticleTimestamp(editorialModifiedAt, { format: 'absolute', locale: 'ar' })
     : null;
 
   const getInitials = useCallback((firstName?: string | null, lastName?: string | null, email?: string | null) => {
@@ -1169,7 +1061,7 @@ export default function ArticleDetail() {
   }
 
   return (
-    <div className="min-h-screen bg-background/95 relative z-10" dir="rtl">
+    <div className="article-detail public-page min-h-screen bg-background relative z-10" dir="rtl">
       <Header user={user} />
 
       {/* الإعلان البارز أعلى المقال — الإطفاء الفوري من اللوحة: إعدادات النظام ← إعلانات DMS أعلى الصفحات. SHOW_TOP_AD بقي كقاطع طوارئ في الكود. */}
@@ -1180,19 +1072,24 @@ export default function ArticleDetail() {
         </div>
       )}
 
-      <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-8 max-w-7xl">
+      <main className="article-detail-main container mx-auto px-4 sm:px-6 lg:px-8 py-8 max-w-7xl">
+        <nav aria-label="مسار التنقل" className="article-breadcrumbs">
+          <Link href="/">الرئيسية</Link>
+          {article.category && <><ChevronRight aria-hidden="true" /><Link href={`/category/${article.category.slug}`}>{article.category.nameAr}</Link></>}
+          <ChevronRight aria-hidden="true" />
+          <span aria-current="page">تفاصيل الخبر</span>
+        </nav>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="article-detail-layout">
           {/* Main Content */}
-          <article className="lg:col-span-2 space-y-6">
-            {/* Article Header Card - TailAdmin Style */}
-            <div className="bg-card border rounded-lg p-6 space-y-4">
-              <div className="flex flex-wrap items-center gap-2">
+          <article className="article-detail-content min-w-0">
+            {/* Editorial header: typography and spacing carry the hierarchy. */}
+            <header className="article-detail-header">
+              <div className="article-detail-labels flex flex-wrap items-center gap-2">
                 {article.category && (
                   <Badge
                     variant="secondary"
-                    className="gap-1 text-black"
-                    style={{ borderRight: `3px solid ${article.category.color || 'hsl(var(--primary))'}`, backgroundColor: '#e5e5e6' }}
+                    className="article-category-label gap-1"
                     data-testid="badge-article-category"
                   >
                     {article.category.icon} {article.category.nameAr}
@@ -1211,6 +1108,16 @@ export default function ArticleDetail() {
                   language="ar"
                   className="!min-h-0 !h-auto !py-0.5 !px-2.5 !text-xs !font-semibold !gap-1 !rounded-md [&_svg]:!size-3 !shadow-none"
                 />
+                {article.isReading && (
+                  <Badge
+                    variant="secondary"
+                    className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/25 hover:bg-emerald-500/15 gap-1 font-bold text-xs px-2.5 py-0.5 rounded-md"
+                    data-testid="badge-article-reading"
+                  >
+                    <BookOpen className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+                    قراءة
+                  </Badge>
+                )}
                 {article.newsType === 'breaking' && (
                   <Badge className="bg-red-600 hover:bg-red-700 text-white border-red-600 gap-1" data-testid="badge-article-urgent">
                     <Zap className="h-3 w-3" />
@@ -1236,21 +1143,19 @@ export default function ArticleDetail() {
                 */}
               </div>
 
-              {/* Subtitle above main title */}
+              <h1 className="article-detail-title" data-testid="text-article-title">
+                {article.title}
+              </h1>
               {article.subtitle && (
-                <p className="text-sm sm:text-base text-muted-foreground font-medium" data-testid="text-article-subtitle">
+                <p className="article-detail-subtitle" data-testid="text-article-subtitle">
                   {article.subtitle}
                 </p>
               )}
 
-              <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold leading-snug" data-testid="text-article-title">
-                {article.title}
-              </h1>
-
-              {/* Author Byline - Clean Inline Version */}
-              {resolvedAuthor && (
-                <div className="flex items-center gap-3 flex-wrap">
-                  <Avatar className="h-10 w-10 border border-primary/20 shrink-0">
+              <div className="article-detail-byline">
+                {resolvedAuthor && (
+                <div className="article-detail-author flex items-center gap-3">
+                  <Avatar className="article-byline-avatar h-12 w-12 shrink-0">
                     <AvatarImage 
                       src={resolvedAuthor?.profileImageUrl || ""} 
                       alt={`${resolvedAuthor?.firstName || ""} ${resolvedAuthor?.lastName || ""}`.trim() || resolvedAuthor?.email || ""}
@@ -1270,9 +1175,7 @@ export default function ArticleDetail() {
                         data-testid="link-reporter-profile"
                       >
                         <span data-testid="text-author-name">
-                          {resolvedAuthor?.firstName && resolvedAuthor?.lastName
-                            ? `${resolvedAuthor.firstName} ${resolvedAuthor.lastName}`
-                            : resolvedAuthor?.email}
+                          {bylineName}
                         </span>
                         {article.staff.isVerified && (
                           <CheckCircle2 className="h-3.5 w-3.5 text-primary shrink-0" />
@@ -1280,41 +1183,39 @@ export default function ArticleDetail() {
                       </Link>
                     ) : (
                       <span className="text-sm font-bold" data-testid="text-author-name">
-                        {resolvedAuthor?.firstName && resolvedAuthor?.lastName
-                          ? `${resolvedAuthor.firstName} ${resolvedAuthor.lastName}`
-                          : resolvedAuthor?.email}
+                        {bylineName}
                       </span>
                     )}
-                    {(article.staff as any)?.title && (
-                      <span className="text-xs text-muted-foreground block">
-                        {(article.staff as any).title}
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Separator */}
-                  <span className="text-muted-foreground/40 hidden sm:inline">|</span>
-                  
-                  {/* Metadata - Plain Text */}
-                  <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
-                    {timeAgo && (
-                      <span className="flex items-center gap-1">
-                        <Clock className="h-3 w-3 opacity-70" />
-                        {timeAgo}
-                      </span>
-                    )}
-                    <span className="flex items-center gap-1">
-                      <Eye className="h-3 w-3 opacity-70" />
-                      {readingTime} د قراءة
-                    </span>
+                    <span className="article-byline-title" data-testid="text-author-title">{bylineTitle}</span>
                   </div>
 
                 </div>
-              )}
+                )}
+                <div className="article-detail-metadata">
+                  {publicationParts && (
+                    <div className="article-publication-row">
+                      <Clock aria-hidden="true" />
+                      <time dateTime={publicationParts.iso} title={[publishedDateLabel, timeAgo].filter(Boolean).join(" — ")} aria-label={`نُشر في ${publishedDateLabel}`}>
+                        <span>{publicationParts.date}</span>
+                        <span className="article-publication-time">{publicationParts.time}</span>
+                      </time>
+                    </div>
+                  )}
+                  {meaningfulUpdatedDateLabel && (
+                    <div className="article-publication-row article-updated-row">
+                      <span className="article-metadata-label">آخر تحديث</span>
+                      <time dateTime={editorialModifiedAt}>{meaningfulUpdatedDateLabel}</time>
+                    </div>
+                  )}
+                  <div className="article-reading-meta">
+                    <span><BookOpen aria-hidden="true" /> قراءة {readingTime} دقيقة</span>
+                  </div>
+                </div>
 
-            </div>
+              </div>
+            </header>
 
-            {/* Featured Image or Video - Clean TailAdmin Style */}
+            {/* Featured Image or Video */}
             {(article as any).isVideoTemplate && (article as any).videoUrl ? (
               <VideoPlayer
                 videoUrl={(article as any).videoUrl}
@@ -1323,7 +1224,7 @@ export default function ArticleDetail() {
                   article.updatedAt,
                 )}
                 title={article.title}
-                className="rounded-lg"
+                className="article-detail-hero rounded-xl"
               />
             ) : article.imageUrl && (() => {
               const heroImageAsset = mediaAssets?.find(
@@ -1349,129 +1250,38 @@ export default function ArticleDetail() {
                   keywordTags={heroImageAsset?.keywordTags}
                   priority={true}
                   aspectRatio={heroAspectRatio}
-                  className=""
+                  className="article-detail-hero"
                   objectPosition={getObjectPosition(article)}
                 />
               );
             })()}
 
-            {/* Unified AI Summary - الموجز (3 أسطر مطوية + توسيع + استماع) */}
-            {(aiBullets.length > 0 || (shouldFetchBullets && isLoadingBullets) || article.aiSummary || article.excerpt) && (
-              <div
-                dir="rtl"
-                className="bg-muted/30 border rounded-lg p-3 sm:p-4"
-                data-testid="block-ai-summary"
-              >
-                <div className="flex items-start gap-2">
-                  <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
-                    <Sparkles className="h-3 w-3 text-primary" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between gap-2 mb-2">
-                      <h3 className="text-sm font-bold" data-testid="text-ai-summary-title">
-                        الموجز
-                      </h3>
-                      <Button
-                        variant={isPlaying ? "default" : "ghost"}
-                        size="sm"
-                        className="h-7 w-7 p-0"
-                        onClick={handlePlayAudio}
-                        disabled={isLoadingAudio}
-                        data-testid="button-listen-summary"
-                        aria-label={isPlaying ? "إيقاف الاستماع" : "استماع للموجز"}
-                      >
-                        {isLoadingAudio ? (
-                          <Loader2 className="h-3 w-3 animate-spin" />
-                        ) : isPlaying ? (
-                          <VolumeX className="h-3 w-3" />
-                        ) : (
-                          <Volume2 className="h-3 w-3" />
-                        )}
-                      </Button>
-                    </div>
+            {(summaryText || (shouldFetchBullets && isLoadingBullets)) && (
+              <ArticleSummary
+                key={article.id}
+                text={summaryText}
+                loading={!summaryText && shouldFetchBullets && isLoadingBullets}
+                audioProvider={audioProvider}
+                isLoadingAudio={isLoadingAudio}
+                isPlaying={isPlaying}
+                onPlayAudio={handlePlayAudio}
+              />
+            )}
 
-                    {shouldFetchBullets && isLoadingBullets && aiBullets.length === 0 ? (
-                      <ul className="space-y-2 list-none m-0 p-0" data-testid="list-ai-summary-bullets">
-                        <li><Skeleton className="h-3 w-11/12" /></li>
-                        <li><Skeleton className="h-3 w-10/12" /></li>
-                        <li><Skeleton className="h-3 w-9/12" /></li>
-                      </ul>
-                    ) : !isSummaryExpanded && summaryNeedsToggle ? (
-                      /* مطوي: 3 أسطر فقط */
-                      <p
-                        className="line-clamp-3 text-xs sm:text-sm leading-relaxed text-foreground"
-                        data-testid="text-ai-summary-collapsed"
-                      >
-                        {aiBullets.length > 0 ? aiBullets.join(" ") : summaryDetailText}
-                      </p>
-                    ) : (
-                      <>
-                        {aiBullets.length > 0 ? (
-                          <ul
-                            className="space-y-2 list-none m-0 p-0"
-                            data-testid="list-ai-summary-bullets"
-                          >
-                            {aiBullets.slice(0, 3).map((bullet, i) => (
-                              <li
-                                key={i}
-                                className="flex items-start gap-2 text-xs sm:text-sm leading-relaxed text-foreground"
-                                data-testid={`text-ai-summary-bullet-${i}`}
-                              >
-                                <span
-                                  aria-hidden="true"
-                                  className="mt-2 inline-block w-1.5 h-1.5 rounded-full bg-primary shrink-0"
-                                />
-                                <span>{bullet}</span>
-                              </li>
-                            ))}
-                          </ul>
-                        ) : (
-                          <p
-                            className="text-xs sm:text-sm leading-relaxed text-foreground"
-                            data-testid="text-smart-summary"
-                          >
-                            {summaryDetailText}
-                          </p>
-                        )}
-
-                        {/* فقرة إضافية عند التوسيع إن اختلفت عن النقاط */}
-                        {isSummaryExpanded && showSummaryDetail && aiBullets.length > 0 && (
-                          <p
-                            className="mt-3 pt-3 border-t text-xs sm:text-sm text-muted-foreground leading-relaxed"
-                            data-testid="text-smart-summary"
-                          >
-                            {summaryDetailText}
-                          </p>
-                        )}
-                      </>
-                    )}
-
-                    {summaryNeedsToggle && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 px-0 mt-2 gap-1 text-xs text-primary hover:text-primary/80"
-                        onClick={() => setIsSummaryExpanded((v) => !v)}
-                        data-testid="button-toggle-summary"
-                        aria-expanded={isSummaryExpanded}
-                        aria-label={isSummaryExpanded ? "طي الموجز" : "عرض المزيد من الموجز"}
-                      >
-                        {isSummaryExpanded ? "طيّ" : "عرض المزيد"}
-                        <ChevronDown
-                          className={`h-3 w-3 transition-transform duration-200 ${isSummaryExpanded ? "rotate-180" : ""}`}
-                        />
-                      </Button>
-                    )}
-                  </div>
+            <div className="article-detail-toolbar" data-testid="article-top-share">
+              <div className="article-detail-toolbar-row">
+                <div className="article-share-group" onMouseEnter={ensureShortLink} onTouchStart={ensureShortLink} onFocus={ensureShortLink}>
+                  <span className="article-share-label">شارك:</span>
+                  <SocialShareBar title={article.title} url={`https://sabq.org/article/${slug}`} copyUrl={`https://sabq.org/article/${slug}`} description={article.excerpt || ""} articleId={article.id} className="article-social-links" />
                 </div>
               </div>
-            )}
+            </div>
 
             {/* DMS MPU Ad (mobile, under الموجز) — أُعيد إظهاره 2026-07-09 (أُخفي 2026-06-05 بطلب المستخدم). جوال فقط. */}
             <DmsMpuAd id="MPU" lazyLoad={true} />
 
             {/* Article Content or Paywall */}
-            <div className="bg-card border rounded-lg p-6">
+            <div className="article-detail-body">
               {isLoadingPurchaseStatus ? (
                 <div className="flex flex-col items-center justify-center py-12 gap-4">
                   <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -1495,7 +1305,7 @@ export default function ArticleDetail() {
               ) : (
                 <div 
                   ref={articleBodyRef}
-                  className="prose prose-lg dark:prose-invert max-w-none leading-loose text-justify"
+                  className="article-prose prose prose-lg dark:prose-invert max-w-none"
                   dangerouslySetInnerHTML={{ __html: sanitizedArticleHtml }}
                   data-testid="content-article-body"
                 />
@@ -1504,7 +1314,7 @@ export default function ArticleDetail() {
 
             {/* Weekly Photos Section */}
             {article.articleType === 'weekly_photos' && (article as any).weeklyPhotosData?.photos && (
-              <div className="bg-card border rounded-lg p-6">
+              <div className="article-detail-gallery">
                 <WeeklyPhotosDisplay 
                   photos={(article as any).weeklyPhotosData.photos}
                   title="صور الأسبوع"
@@ -1528,7 +1338,7 @@ export default function ArticleDetail() {
               if (mediaAdditionalImages.length === 0 && albumImages.length === 0) return null;
               
               return (
-                <div className="bg-card border rounded-lg p-6 space-y-8">
+                <div className="article-detail-gallery space-y-8">
                   <h3 className="text-lg font-bold mb-4">الصور المرفقة</h3>
                   <div className="space-y-8">
                     {/* Display mediaAssets first */}
@@ -1562,65 +1372,49 @@ export default function ArticleDetail() {
 
             {/* Keywords - from SEO field OR article_tags table (after attached images) */}
             {((article.seo?.keywords && article.seo.keywords.length > 0) || articleTags.length > 0) && (
-              <div className="space-y-3">
+              <section className="article-detail-keywords">
                 <h3 className="text-sm font-semibold text-muted-foreground">الكلمات المفتاحية</h3>
                 <div className="flex flex-wrap gap-2">
                   {/* Display article tags first (from article_tags table - WhatsApp/Email) */}
                   {articleTags.map((tag, index) => (
-                    <Badge 
+                    <Link
                       key={`tag-${tag.id}`}
-                      variant="secondary"
-                      className="cursor-pointer hover-elevate active-elevate-2 transition-all duration-300 hover:scale-105"
-                      onClick={() => setLocation(`/keyword/${encodeURIComponent(tag.nameAr)}`)}
+                      className="article-keyword"
+                      href={`/keyword/${encodeURIComponent(tag.nameAr)}`}
                       data-testid={`badge-tag-${index}`}
                     >
                       {tag.nameAr}
-                    </Badge>
+                    </Link>
                   ))}
                   {/* Display SEO keywords if no article tags (from SEO field - editor) */}
                   {articleTags.length === 0 && article.seo?.keywords?.map((keyword, index) => (
-                    <Badge 
+                    <Link
                       key={`seo-${index}`}
-                      variant="secondary"
-                      className="cursor-pointer hover-elevate active-elevate-2 transition-all duration-300 hover:scale-105"
-                      onClick={() => setLocation(`/keyword/${encodeURIComponent(keyword)}`)}
+                      className="article-keyword"
+                      href={`/keyword/${encodeURIComponent(keyword)}`}
                       data-testid={`badge-keyword-${index}`}
                     >
                       {keyword}
-                    </Badge>
+                    </Link>
                   ))}
                 </div>
-              </div>
+              </section>
             )}
 
-            {/* Engagement & Share Section - Combined.
-                Laid out as two full-width rows (header+actions, then
-                share) with `justify-between` so the card fills its width
-                instead of leaving a large empty gutter on the side. */}
-            <div className="bg-card border rounded-lg p-4 sm:p-5 space-y-4">
-              {/* Row 1: title (start) + engagement actions (end) */}
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-green-500/10 flex items-center justify-center shrink-0">
-                    {isLoadingShortLink ? (
-                      <Loader2 className="h-5 w-5 animate-spin text-green-500" />
-                    ) : (
-                      <Share2 className="h-5 w-5 text-green-500" />
-                    )}
-                  </div>
-                  <div className="leading-tight">
-                    <h3 className="text-lg font-bold">شارك المقال</h3>
-                    <p className="text-xs text-muted-foreground">تفاعل مع الخبر وشاركه مع غيرك</p>
-                  </div>
+            <div className="article-detail-toolbar article-bottom-share" data-testid="article-actions">
+              <div className="article-detail-toolbar-row">
+                <div className="article-share-group" onMouseEnter={ensureShortLink} onTouchStart={ensureShortLink} onFocus={ensureShortLink}>
+                  <span className="article-share-label">شارك:</span>
+                  <SocialShareBar title={article.title} url={`https://sabq.org/article/${slug}`} copyUrl={`https://sabq.org/article/${slug}`} description={article.excerpt || ""} articleId={article.id} className="article-social-links" />
                 </div>
-
                 {/* Engagement Actions */}
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="article-engagement-actions flex flex-wrap items-center gap-2">
                   <Button
                     variant={article.hasReacted ? "default" : "outline"}
                     size="sm"
-                    className="gap-2 transition-colors"
+                    className="article-action gap-2 transition-colors"
                     onClick={handleReact}
+                    disabled={reactMutation.isPending}
                     aria-pressed={!!article.hasReacted}
                     data-testid="button-article-react"
                   >
@@ -1631,8 +1425,9 @@ export default function ArticleDetail() {
                   <Button
                     variant={article.isBookmarked ? "default" : "outline"}
                     size="sm"
-                    className="gap-2 transition-colors"
+                    className="article-action gap-2 transition-colors"
                     onClick={handleBookmark}
+                    disabled={bookmarkMutation.isPending}
                     aria-pressed={!!article.isBookmarked}
                     data-testid="button-article-bookmark"
                   >
@@ -1643,6 +1438,7 @@ export default function ArticleDetail() {
                   {/* Focus Mode trigger (Task #80) */}
                   <FocusReaderTrigger
                     language="ar"
+                    className="article-action"
                     onClick={() => setFocusOpen(true)}
                   />
                 </div>
@@ -1667,35 +1463,6 @@ export default function ArticleDetail() {
                 </div>
               )}
 
-              <Separator />
-
-              {/* Row 2: share label (start) + social buttons (end).
-                  Lazy-trigger short-link creation on user intent
-                  (hover/touch/focus). Falls back to the canonical URL
-                  immediately so the share buttons are always usable, even
-                  before (or if) the short link finishes generating. */}
-              <div
-                className="flex flex-wrap items-center justify-between gap-3"
-                onMouseEnter={ensureShortLink}
-                onTouchStart={ensureShortLink}
-                onFocus={ensureShortLink}
-              >
-                <span className="text-sm font-medium text-muted-foreground">انشر الخبر عبر</span>
-                <SocialShareBar
-                  title={article.title}
-                  // Always share the canonical /article/<slug> URL — the
-                  // /s/<code> shortlink path was hard to read, looked
-                  // like a tracker to recipients, and broke previews on
-                  // WhatsApp because the redirect chain stripped the
-                  // OG meta. The shortLink object stays generated for
-                  // analytics/QR uses elsewhere on the page.
-                  url={`https://sabq.org/article/${slug}`}
-                  copyUrl={`https://sabq.org/article/${slug}`}
-                  description={article.excerpt || ""}
-                  articleId={article.id}
-                  className="justify-end"
-                />
-              </div>
             </div>
 
             {/* Focus mode overlay (Task #80) */}
@@ -1759,35 +1526,36 @@ export default function ArticleDetail() {
           </article>
 
           {/* Sidebar */}
-          <aside className="space-y-6">
+          <aside className="article-detail-sidebar" aria-label="المزيد عن الخبر">
             {/* AI Article Analytics */}
+            <div className="article-sidebar-stats">
             <Suspense fallback={<Skeleton className="h-48 w-full" />}>
-              <AiArticleStats slug={slug} />
+              <AiArticleStats query={insightsQuery} />
             </Suspense>
+            </div>
 
             {/* Advertisement Slot - Article Sidebar */}
             <AdSlot slotId="sidebar" className="my-6" />
 
             {/* AI-Powered Smart Recommendations */}
-            <AIRecommendationsBlock articleSlug={slug} />
+            <div className="article-sidebar-recommendations"><AIRecommendationsPanel query={recommendationsQuery} /></div>
 
             {/* Related Opinion Articles */}
             {article?.category && (
-              <RelatedOpinionsSection
+              <div className="article-sidebar-opinions"><RelatedOpinionsSection
                 categoryId={article.category.id}
                 categoryName={article.category.nameAr}
-                categoryColor={article.category.color || undefined}
                 excludeArticleId={article.id}
                 limit={5}
-              />
+              /></div>
             )}
 
             {relatedArticles.length > 0 && (
-              <RecommendationsWidget
+              <div className="article-sidebar-related"><RecommendationsWidget
                 articles={relatedArticles}
-                title="أخبار مشابهة"
-                reason="قد تعجبك أيضاً"
-              />
+                title="اقرأ أيضاً"
+                reason="آخر ما نُشر في القسم"
+              /></div>
             )}
           </aside>
         </div>

@@ -1,5 +1,6 @@
 package com.sabq.smart.feature.home
 
+import com.sabq.smart.data.readerErrorMessage
 import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -22,6 +23,7 @@ import com.sabq.smart.data.TodayInsights
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -78,6 +80,8 @@ sealed interface HomeFeedUiState {
          *  with an "الكل" link to the Muqtarab landing. Empty hides
          *  the whole block. */
         val muqtarabTopics: List<MuqTopic> = emptyList(),
+        /** لقطة «الاقتصاد الحي» — بطاقة الرقم الواحد بعد الهيرو؛ null تخفيها. */
+        val economySnapshot: com.sabq.smart.feature.economy.EconomySnapshot? = null,
     ) : HomeFeedUiState
 }
 
@@ -89,6 +93,7 @@ class HomeFeedViewModel @Inject constructor(
     private val insightsRepo: InsightsRepository,
     private val loyaltyRepo: LoyaltyRepository,
     private val muqtarabRepo: MuqtarabRepository,
+    private val economyRepo: com.sabq.smart.feature.economy.EconomyRepository,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow<HomeFeedUiState>(HomeFeedUiState.Loading)
@@ -173,10 +178,12 @@ class HomeFeedViewModel @Inject constructor(
         viewModelScope.launch {
             _state.value = HomeFeedUiState.Loading
             runCatching {
-                val featuredJob = async { repo.getArticles(page = 1, limit = 5, featuredOnly = true) }
-                val articlesJob = async { repo.getArticles(page = 1, limit = 20) }
-                val sectionsJob = async { repo.getSections() }
-                Triple(featuredJob.await(), articlesJob.await(), sectionsJob.await())
+                coroutineScope {
+                    val featuredJob = async { repo.getArticles(page = 1, limit = 5, featuredOnly = true) }
+                    val articlesJob = async { repo.getArticles(page = 1, limit = 20) }
+                    val sectionsJob = async { repo.getSections() }
+                    Triple(featuredJob.await(), articlesJob.await(), sectionsJob.await())
+                }
             }
                 .onSuccess { (featured, articles, sections) ->
                     _state.value = HomeFeedUiState.Loaded(
@@ -194,40 +201,10 @@ class HomeFeedViewModel @Inject constructor(
                 }
                 .onFailure { e ->
                     _state.value = HomeFeedUiState.Error(
-                        message = friendlyNetworkMessage(e),
+                        message = readerErrorMessage(e, "تعذّر تحميل الأخبار. حاول مرة أخرى."),
                     )
                 }
         }
-    }
-
-    /**
-     * Map a thrown failure to an Arabic, reader-facing message.
-     * The default `e.localizedMessage` surfaces developer-facing
-     * strings ("Parent job is Cancelling", "Unable to resolve host
-     * sabq.org") that confused users on the home-feed error card
-     * (reported 2026-05-20 from an emulator DNS outage). We
-     * collapse the common network/cancellation cases here and keep
-     * the original message for genuinely unknown failures so we
-     * don't hide real bugs.
-     */
-    private fun friendlyNetworkMessage(t: Throwable): String {
-        var c: Throwable? = t
-        while (c != null) {
-            when (c) {
-                is java.net.UnknownHostException,
-                is java.net.ConnectException ->
-                    return "تعذّر الاتصال بالإنترنت. تحقّق من الشبكة وحاول مجدداً."
-                is java.net.SocketTimeoutException ->
-                    return "تعذّر الاتصال بسبب بطء الشبكة. حاول مجدداً."
-                is java.io.IOException ->
-                    return "تعذّر تحميل الأخبار. تحقّق من الشبكة وحاول مجدداً."
-                is kotlinx.coroutines.CancellationException ->
-                    return "تعذّر تحميل الأخبار. حاول مجدداً."
-            }
-            c = c.cause
-        }
-        return t.localizedMessage?.takeIf { it.isNotBlank() }
-            ?: "تعذّر تحميل الأخبار"
     }
 
     /** Fetch the secondary Home blocks (breaking pill, opinions rail,
@@ -240,13 +217,15 @@ class HomeFeedViewModel @Inject constructor(
             // بار العاجل من لوحة التحكم — الخادم يرجع `null` حرفيًا عند عدم
             // وجود موضوع نشط ففشلُ الترميز هنا يعني «لا شريط» (سقوط للبطاقة).
             val tickerJob = async { runCatching { extrasRepo.getBreakingTicker() }.getOrDefault(emptyList()) }
-            val opinionsJob = async { runCatching { repo.getOpinions(page = 1, limit = 5) }.getOrNull()?.items ?: emptyList() }
+            val opinionsJob = async { runCatching { repo.getOpinions(page = 1, limit = 6) }.getOrNull()?.items ?: emptyList() }
             val trendingJob = async { runCatching { repo.getTrending() }.getOrDefault(emptyList()) }
             val storiesJob = async { runCatching { extrasRepo.getStories() }.getOrDefault(emptyList()) }
             val calendarJob = async { runCatching { extrasRepo.getCalendarUpcoming() }.getOrDefault(emptyList()) }
             val audioJob = async { runCatching { extrasRepo.getLatestAudioNewsletter() }.getOrNull() }
             val hajjJob = async { runCatching { extrasRepo.getHajjBlock() }.getOrNull() }
             val muqtarabJob = async { runCatching { muqtarabRepo.getFeaturedTopics(limit = 6) }.getOrDefault(emptyList()) }
+            // الاقتصاد الحي: إيقاع الرئيسية 5 دقائق؛ الفشل صامت (البطاقة تختفي).
+            val economyJob = async { runCatching { economyRepo.loadSnapshotIfNeeded(300_000) }.getOrNull() }
             // Auth-required side-fetches. Anonymous users will 401 here;
             // we swallow that and the personal-journey block stays
             // hidden because [journeyInsights] remains null.
@@ -266,6 +245,7 @@ class HomeFeedViewModel @Inject constructor(
             val audioNewsletter = audioJob.await()
             val hajjBlock = hajjJob.await()
             val muqtarabTopics = muqtarabJob.await()
+            val economySnapshot = economyJob.await()
             val insights = insightsJob.await()
             val loyalty = loyaltyJob.await()
 
@@ -281,6 +261,7 @@ class HomeFeedViewModel @Inject constructor(
                         audioNewsletter = audioNewsletter,
                         hajjBlock = hajjBlock,
                         muqtarabTopics = muqtarabTopics,
+                        economySnapshot = economySnapshot,
                         journeyInsights = insights,
                         loyaltySummary = loyalty,
                     )

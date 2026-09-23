@@ -4,9 +4,9 @@ struct KeywordArticlesView: View {
     let keyword: String
     @Environment(BookmarksStore.self) private var bookmarksStore
     @Environment(FollowedKeywordsStore.self) private var followedKeywords
-    @Environment(\.dismiss) private var dismiss
     @State private var items: [KeywordContentItem] = []
     @State private var isLoading = true
+    @State private var loadError: String? = nil
 
     var body: some View {
         ScrollView(showsIndicators: false) {
@@ -21,6 +21,11 @@ struct KeywordArticlesView: View {
                             .padding(.top, 40)
                     }
                     .frame(maxWidth: .infinity)
+                } else if items.isEmpty, let loadError {
+                    // كان الفشل يُبتلع إلى «لا توجد مواد» حتى بلا إنترنت (نقل أندرويد #1573).
+                    ErrorStateView(message: loadError) {
+                        Task { await loadArticles() }
+                    }
                 } else if items.isEmpty {
                     EmptyStateView(
                         icon: "tag",
@@ -29,11 +34,10 @@ struct KeywordArticlesView: View {
                         subtitle: "لم نجد أخبارًا أو مقالات رأي تحمل هذا الوسم حاليًا"
                     )
                 } else {
-                    SurfaceCard(lazy: true) {
+                    SurfaceCard(lazy: true, cornerRadius: 22, spacing: 0) {
                         ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
                             if index > 0 {
-                                Divider()
-                                    .foregroundStyle(SabqTheme.outline)
+                                SidebarRowDivider()
                             }
 
                             switch item {
@@ -64,17 +68,8 @@ struct KeywordArticlesView: View {
         }
         .background(SabqTheme.background)
         .sabqRTL()
+        .navigationTitle(keyword)
         .navigationBarTitleDisplayMode(.inline)
-        .navigationBarBackButtonHidden(true)
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button { dismiss() } label: {
-                    Image(systemName: "chevron.right")
-                        .font(SabqFonts.app(size: 16, weight: .semibold))
-                        .foregroundStyle(SabqTheme.ink)
-                }
-            }
-        }
         .task { await loadArticles() }
     }
 
@@ -91,8 +86,10 @@ struct KeywordArticlesView: View {
                     return seen.insert(item.id).inserted ? item : nil
                 }
                 .sorted { $0.publishDate > $1.publishDate }
+            loadError = nil
         } catch {
             items = []
+            loadError = ReaderErrorMessage.message(for: error, fallback: "تعذّر تحميل مواد هذا الوسم. حاول مرة أخرى.")
         }
         isLoading = false
     }
@@ -200,6 +197,7 @@ private enum KeywordContentItem: Hashable, Identifiable {
 }
 
 private struct CompactOpinionKeywordRow: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let opinion: OpinionArticle
 
     var body: some View {
@@ -210,17 +208,16 @@ private struct CompactOpinionKeywordRow: View {
                     StatusChip(title: opinion.authorName, tint: SabqTheme.secondaryInk)
                 }
 
-                Text(opinion.title)
-                    .font(SabqFonts.app(size: 16, weight: .bold))
-                    .foregroundStyle(SabqTheme.ink)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.leading)
-                    .lineSpacing(3)
+                SabqRTLText(
+                    opinion.title,
+                    uiFont: SabqFonts.uiApp(size: NewsRowStyle.titleSize, weight: .regular),
+                    color: SabqTheme.ink,
+                    lineLimit: dynamicTypeSize.isAccessibilitySize ? 0 : 2,
+                    lineSpacing: NewsRowStyle.titleLineSpacing
+                )
 
                 HStack(spacing: 12) {
                     HStack(spacing: 4) {
-                        Image(systemName: "clock")
-                            .font(SabqFonts.app(size: 10, weight: .regular))
                         Text(opinion.readingTime)
                             .font(SabqFonts.app(size: 10, weight: .regular))
                             .monospacedDigit()

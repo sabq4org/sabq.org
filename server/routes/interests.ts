@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { db } from "../db";
 import { isAuthenticated } from "../auth";
 import { storage } from "../storage";
@@ -43,14 +43,35 @@ router.post("/api/interests", isAuthenticated, async (req: any, res) => {
       return res.status(400).json({ message: "يجب اختيار اهتمام واحد على الأقل" });
     }
 
-    await db.delete(userInterests).where(eq(userInterests.userId, userId));
+    // Dedupe + keep only strings (F-12). Previously duplicates and bad IDs
+    // flowed straight to the insert.
+    const requested = Array.from(
+      new Set(interestIds.filter((id): id is string => typeof id === "string" && id.length > 0)),
+    );
 
-    const interestsToInsert = interestIds.map(categoryId => ({
-      userId,
-      categoryId,
-    }));
+    // Validate against the real category catalog — an unknown ID used to throw
+    // a FK violation AFTER the delete had already run, wiping the user's
+    // interests (F-12). Intersect with existing categories instead.
+    const validRows = requested.length
+      ? await db
+          .select({ id: categories.id })
+          .from(categories)
+          .where(inArray(categories.id, requested))
+      : [];
+    const validIds = validRows.map((r) => r.id);
 
-    await db.insert(userInterests).values(interestsToInsert);
+    if (validIds.length === 0) {
+      return res.status(400).json({ message: "لا توجد اهتمامات صالحة للحفظ" });
+    }
+
+    // Replace-all inside a transaction so a failure can't leave the user with
+    // zero interests (F-12).
+    await db.transaction(async (tx) => {
+      await tx.delete(userInterests).where(eq(userInterests.userId, userId));
+      await tx.insert(userInterests).values(
+        validIds.map((categoryId) => ({ userId, categoryId })),
+      );
+    });
 
     res.json({ success: true, message: "تم حفظ الاهتمامات بنجاح" });
   } catch (error) {

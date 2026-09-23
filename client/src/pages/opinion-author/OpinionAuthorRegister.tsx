@@ -12,6 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiUrl } from "@/lib/queryClient";
 import { Camera, Loader2, CheckCircle, PenTool, BadgeCheck, Upload } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { prepareRegistrationImage, readRegistrationResponse, REGISTRATION_CONNECTION_ERROR } from "./registrationUpload";
 
 const registrationSchema = z.object({
   arabicName: z.string().min(3, "الاسم بالعربية يجب أن يكون 3 أحرف على الأقل"),
@@ -41,6 +42,7 @@ type RegistrationFormData = z.infer<typeof registrationSchema>;
 export default function OpinionAuthorRegister() {
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
+  const [isPreparingFiles, setIsPreparingFiles] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [profilePhoto, setProfilePhoto] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
@@ -113,10 +115,17 @@ export default function OpinionAuthorRegister() {
 
     try {
       setIsLoading(true);
+      setIsPreparingFiles(true);
+
+      // Process sequentially to limit memory use on iPhones. Keep more detail
+      // in the license document so its text remains readable during review.
+      const preparedPhoto = await prepareRegistrationImage(profilePhoto, 1200);
+      const preparedLicense = await prepareRegistrationImage(licenseFile, 2400);
+      setIsPreparingFiles(false);
 
       const formData = new FormData();
-      formData.append("profilePhoto", profilePhoto);
-      formData.append("licenseFile", licenseFile);
+      formData.append("profilePhoto", preparedPhoto);
+      formData.append("licenseFile", preparedLicense);
       formData.append("arabicName", data.arabicName);
       formData.append("englishName", data.englishName);
       formData.append("email", data.email);
@@ -134,27 +143,26 @@ export default function OpinionAuthorRegister() {
       const response = await fetch(apiUrl("/api/opinion-author-applications"), {
         method: "POST",
         body: formData,
+      }).catch(() => {
+        throw new Error(REGISTRATION_CONNECTION_ERROR);
       });
 
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.message || "حدث خطأ في تقديم الطلب");
-      }
+      const result = await readRegistrationResponse(response);
 
       setIsSubmitted(true);
       toast({
         title: "تم تقديم الطلب بنجاح",
         description: result.message,
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         variant: "destructive",
         title: "فشل في تقديم الطلب",
-        description: error.message || "حدث خطأ غير متوقع",
+        description: error instanceof Error ? error.message : "حدث خطأ غير متوقع",
       });
     } finally {
       setIsLoading(false);
+      setIsPreparingFiles(false);
     }
   };
 
@@ -458,7 +466,7 @@ export default function OpinionAuthorRegister() {
                 {isLoading ? (
                   <>
                     <Loader2 className="ml-2 h-4 w-4 animate-spin" />
-                    جاري تقديم الطلب...
+                    {isPreparingFiles ? "جارٍ تجهيز المرفقات..." : "جارٍ تقديم الطلب..."}
                   </>
                 ) : (
                   "تقديم الطلب"

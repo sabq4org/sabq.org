@@ -66,11 +66,23 @@ struct HomeFeedView: View {
     /// wrapper that SwiftUI tracks by reference (and therefore never
     /// re-renders on mutation) is the right shape.
     @State private var scrollOffsetRef = ScrollOffsetRef()
+    /// تصغير الشعار عند التمرير (#1600) — يتغيّر عند عبور العتبة فقط، لا مع كل بكسل.
+    @State private var isHeaderCompact = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// Drives the custom page-indicator row under the featured carousel.
     /// We hide TabView's built-in dots (they sit at the bottom of the
     /// TabView frame, which leaves a visible gap above them on short
     /// cards) and render our own tight against the card bottom.
     @State private var featuredIndex: Int = 0
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    /// لقطة الاقتصاد الحي — تُحمَّل مع الرئيسية كي يظهر البلوك من أول رسم بعد الجلب.
+    private let economyStore = EconomyStore.shared
+    /// عرض عمود المحتوى مقيسًا من الحاوية لا من `UIScreen` — عرض الشاشة ليس
+    /// مساحة النافذة على iPad المقسّم أو Stage Manager (تدقيق iOS 27، F11).
+    @State private var feedContentWidth: CGFloat = 0
+    /// ميزانية كتلة النص تحت الهيرو (عنوان 3 أسطر + موجز سطرين + بيانات +
+    /// حشو 20×2) — تتدرّج مع Dynamic Type كما تتدرّج خطوط البطاقة نفسها.
+    @ScaledMetric(relativeTo: .body) private var featuredTextBudget: CGFloat = 260
     /// Drives the modal push to "حسابي / نقاطي" when the user taps the
     /// LoyaltyStripView inside the personal-journey block.
     @State private var showLoyaltyAccount = false
@@ -117,21 +129,28 @@ struct HomeFeedView: View {
         // ScrollView فيتعطّل سحب التحديث (.refreshable) بالكامل على iOS.
         // منع السحب الأفقي يتم بتقييد عرض الأبناء داخل القائمة نفسها.
         .frame(maxWidth: .infinity)
+        .task { await economyStore.loadSnapshotIfNeeded(maxAge: 300) }
     }
 
     private var fullBody: some View {
+        GeometryReader { container in
         ScrollViewReader { scrollProxy in
             ScrollView(showsIndicators: false) {
                 if isContentReady {
                     // Newspaper-first home: عاجل → هيرو → رياضة → رحلة → آخر الأخبار.
                     // Secondary blocks (ستوريز، تقويم، نشرة، ترند…) live in
                     // a collapsed «المزيد اليوم» disclosure.
-                    VStack(alignment: .leading, spacing: 20) {
+                    CollapsingVStack(spacing: 20) {
                         Color.clear
                             .frame(height: 0)
                             .id(Self.scrollTopID)
 
                         headerSection
+
+                    // لمسة السدو الموسمية: شريط رفيع تحت الرأس وحده. لا يقع
+                    // خلف نصوص الأخبار، ولا يتكرّر في البطاقات. يختفي تمامًا
+                    // عند إطفاء المفتاح.
+                    NationalDayHeaderAccent()
 
                     // Tier-up celebration or periodic engagement nudge.
                     if let banner = loyaltyBanner {
@@ -164,7 +183,16 @@ struct HomeFeedView: View {
                     featuredSection
                         .animatedAppear(index: 2)
 
-                    // رياضة مباشرة تحت الهيرو — ظاهرة دائماً (تختفي ذاتياً بلا بيانات)
+                    // الاقتصاد الحي: «أين أنفق السعوديون…» أو «السعوديون في شهر بالأرقام»
+                    // عند نشرة جديدة — يختفي ذاتيًا بلا بيانات (نقل الويب #1493–#1506).
+                    // الشرط هنا لا داخل البلوك: Group بمحتوى EmptyView لا يشغّل .task
+                    // ولا يجب أن يحجز فراغ VStack عندما لا بيانات.
+                    if EconomyFormat.homeMode(economyStore.snapshot) != .hidden {
+                        EconomyHomeBlock()
+                            .animatedAppear(index: 3)
+                    }
+
+                    // بطاقات البطولات تأتي بعد بطاقة الاقتصاد، وتختفي ذاتيًا بلا بيانات.
                     WorldCupHomeStrip()
                         .animatedAppear(index: 3)
 
@@ -196,8 +224,11 @@ struct HomeFeedView: View {
                     moreTodaySection
                         .animatedAppear(index: 8)
                 }
+                .frame(width: max(0, container.size.width - 32), alignment: .leading)
                 .padding(.horizontal, 16)
-                .padding(.top, 18)
+                // 18 + مسافة العمود (20) التي كان VStack يحجزها بعد مرساة التمرير
+                // الصفرية؛ CollapsingVStack لا يحجزها فنعوّضها هنا لبقاء الرأس مكانه.
+                .padding(.top, 38)
                 .padding(.bottom, 40)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 } else {
@@ -229,6 +260,10 @@ struct HomeFeedView: View {
             }
             .sabqScrollOffsetTracker { y in
                 scrollOffsetRef.value = y
+                let compact = HomeHeaderCompact.next(current: isHeaderCompact, y: y)
+                if compact != isHeaderCompact {
+                    withAnimation(reduceMotion ? nil : .easeOut(duration: 0.18)) { isHeaderCompact = compact }
+                }
             }
             .sabqAutoHideTabBar()
             .refreshable {
@@ -340,6 +375,7 @@ struct HomeFeedView: View {
                         }
                     }
             }
+        }
         }
     }
 
@@ -498,11 +534,8 @@ struct HomeFeedView: View {
 
     private var headerSection: some View {
         HStack(alignment: .center, spacing: 14) {
-            Image("SabqLogo")
-                .renderingMode(.original)
-                .resizable()
-                .aspectRatio(contentMode: .fit)
-                .frame(height: 48)
+            // 52 → 44 نقطة عند التمرير كما في الويب (الجوال 44×1.18 ثم 44)
+            SabqBrandLogo(height: isHeaderCompact ? 44 : 52)
 
             Spacer(minLength: 0)
 
@@ -532,7 +565,7 @@ struct HomeFeedView: View {
                                     )
                                     .frame(width: 44, height: 44)
                                 Image(systemName: "bell.fill")
-                                    .font(SabqFonts.app(size: 17, weight: .semibold))
+                                    .font(.system(size: 17, weight: .semibold))
                                     .foregroundStyle(SabqTheme.primaryEnd)
                             }
                             // Red unread dot — driven by NotificationsStore's
@@ -573,7 +606,7 @@ struct HomeFeedView: View {
                             .frame(width: 44, height: 44)
 
                         Image(systemName: "dot.radiowaves.left.and.right")
-                            .font(SabqFonts.app(size: 18, weight: .semibold))
+                            .font(.system(size: 18, weight: .semibold))
                             .foregroundStyle(SabqTheme.primaryEnd)
                     }
                 }
@@ -612,7 +645,7 @@ struct HomeFeedView: View {
             .frame(width: 44, height: 44)
             .overlay {
                 Image(systemName: systemName)
-                    .font(SabqFonts.app(size: 18, weight: .semibold))
+                    .font(.system(size: 18, weight: .semibold))
                     .foregroundStyle(SabqTheme.primaryEnd)
             }
     }
@@ -683,6 +716,16 @@ struct HomeFeedView: View {
     private var featuredSection: some View {
         let featured = Array(articlesStore.featuredArticles.prefix(3))
         return VStack(spacing: 10) {
+            if dynamicTypeSize.isAccessibilitySize {
+                ForEach(featured) { article in
+                    NavigationLink(value: article) {
+                        FeaturedArticleCard(article: article,
+                            onBookmark: { bookmarksStore.toggle(article.id, article: article) },
+                            isBookmarked: bookmarksStore.isBookmarked(article.id))
+                    }
+                    .buttonStyle(.plain)
+                }
+            } else {
             TabView(selection: $featuredIndex) {
                 ForEach(Array(featured.enumerated()), id: \.element.id) { idx, article in
                     // VStack + trailing Spacer anchors the card to the top
@@ -713,8 +756,15 @@ struct HomeFeedView: View {
             // compressed the aspectRatio(.fit) hero horizontally while the
             // text block kept the card full-width → white side gutters.
             .frame(height: featuredCarouselHeight)
+            .onGeometryChange(for: CGFloat.self) { proxy in
+                proxy.size.width
+            } action: { width in
+                if width > 0 { feedContentWidth = width }
+            }
 
-            if featured.count > 1 {
+            }
+
+            if featured.count > 1 && !dynamicTypeSize.isAccessibilitySize {
                 HStack(spacing: 7) {
                     ForEach(featured.indices, id: \.self) { i in
                         Circle()
@@ -733,11 +783,10 @@ struct HomeFeedView: View {
     /// TabView page height = full-width 16:10 hero + text block budget.
     /// Outer feed padding is 16pt each side (see `fullBody`).
     private var featuredCarouselHeight: CGFloat {
-        let contentWidth = UIScreen.main.bounds.width - 32
+        // أول تخطيط يقتصر على النص؛ القياس التالي يأتي من الحاوية نفسها.
+        let contentWidth = max(0, feedContentWidth)
         let heroHeight = contentWidth * (10.0 / 16.0)
-        // title (3 lines) + excerpt (2) + meta + 20pt padding × 2 + spacing
-        let textBlock: CGFloat = 230
-        return ceil(heroHeight + textBlock)
+        return ceil(heroHeight + featuredTextBudget)
     }
 
     // MARK: - More Today (collapsed secondary blocks)
@@ -898,139 +947,74 @@ struct HomeFeedView: View {
 
     // MARK: - Opinions Preview
 
+    // «آراء تستحق القراءة» — الحاوية الموحدة نفسها (بلوك تفاصيل الخبر) وست
+    // بطاقات متماثلة في شبكة عمودين بلا تمييز لمقال عن البقية (قرار المالك
+    // 2026-09-12): صورة الكاتب الدائرية + الاسم + العنوان في سطرين + الوقت.
     @ViewBuilder
     private var opinionsPreviewSection: some View {
-        if !articlesStore.opinions.isEmpty {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack {
-                    HStack(spacing: 8) {
-                        ZStack {
-                            Circle()
-                                .fill(SabqTheme.gold.opacity(0.15))
-                                .frame(width: 28, height: 28)
-                            Image(systemName: "quote.opening")
-                                .font(SabqFonts.app(size: 10, weight: .regular))
-                                .foregroundStyle(SabqTheme.gold)
-                        }
-                        Text("آراء وأقلام")
-                            .font(SabqFonts.app(size: 17, weight: .bold))
-                            .foregroundStyle(SabqTheme.ink)
-                    }
-
-                    Spacer()
-
+        let opinions = Array(articlesStore.opinions.prefix(6))
+        if !opinions.isEmpty {
+            ArticleSidebarModule(
+                title: "آراء تستحق القراءة",
+                description: "أحدث ما كتبه كتّاب سبق",
+                icon: "text.quote",
+                fill: SabqTheme.surface,
+                action: {
                     NavigationLink(value: OpinionsRoute()) {
                         HStack(spacing: 4) {
-                            Text("جميع المقالات")
-                                .font(SabqFonts.app(size: 12, weight: .medium))
+                            Text("المزيد")
                             Image(systemName: "chevron.left")
-                                .font(SabqFonts.app(size: 11, weight: .regular))
+                                .font(SabqFonts.app(size: 11, weight: .medium))
                         }
-                        .foregroundStyle(SabqTheme.primaryEnd)
                     }
                     .buttonStyle(.plain)
                 }
-
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 14) {
-                        ForEach(articlesStore.opinions.prefix(5)) { opinion in
-                            NavigationLink(value: opinion) {
-                                opinionCard(opinion)
-                            }
-                            .buttonStyle(.plain)
+            ) {
+                LazyVGrid(columns: SabqGrid.adaptive(spacing: 10), spacing: 10) {
+                    ForEach(opinions) { opinion in
+                        NavigationLink(value: opinion) {
+                            opinionMiniTile(opinion)
                         }
+                        .buttonStyle(.plain)
                     }
-                    .padding(.vertical, 2)
                 }
+                .padding(.top, 12)
             }
         }
     }
 
-    private func opinionCard(_ opinion: OpinionArticle) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            ZStack(alignment: .bottomLeading) {
-                if let urlString = opinion.imageURL, let url = URL(string: urlString) {
-                    FocalCachedAsyncImage(url: url, focalPoint: opinion.imageFocalPoint) {
-                        opinionCardPlaceholder
-                    }
-                    .frame(width: 200, height: 120)
-                    .clipped()
-                } else {
-                    opinionCardPlaceholder
-                }
-
-                LinearGradient(
-                    colors: [.black.opacity(0.7), .clear],
-                    startPoint: .bottom,
-                    endPoint: .top
-                )
-                .frame(height: 60)
-
-                HStack(spacing: 6) {
-                    opinionAuthorAvatar(opinion, size: 24)
-                    Text(opinion.authorName)
-                        .font(SabqFonts.app(size: 11, weight: .regular))
-                        .foregroundStyle(.white)
-                        .lineLimit(1)
-                }
-                .padding(8)
+    /// بطاقة صغيرة: صورة الكاتب الدائرية واسمه ثم العنوان في سطرين — على السطح الأبيض
+    /// داخل الحاوية الزرقاء كي تُقرأ كعائلة بطاقات تفاصيل الخبر نفسها.
+    private func opinionMiniTile(_ opinion: OpinionArticle) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                opinionAuthorAvatar(opinion, size: 36)
+                Text(opinion.authorName)
+                    .font(SabqFonts.app(size: 12, weight: .bold))
+                    .foregroundStyle(SabqTheme.brandBlue)
+                    .lineLimit(1)
             }
-            .frame(width: 200, height: 120)
-            .clipShape(UnevenRoundedRectangle(topLeadingRadius: 12, bottomLeadingRadius: 0, bottomTrailingRadius: 0, topTrailingRadius: 12))
-            .aiImageBadgeOverlay(
-                isVisible: opinion.isAiGeneratedImage,
-                model: opinion.aiImageModel,
-                inset: 6,
-                sizeScale: 0.7
+            SabqRTLText(
+                opinion.title,
+                uiFont: SabqFonts.uiApp(size: 13, weight: .semibold),
+                color: SabqTheme.ink,
+                lineLimit: 2,
+                lineSpacing: 2
             )
-
-            VStack(alignment: .leading, spacing: 6) {
-                Text(opinion.title)
-                    .font(SabqFonts.app(size: 12, weight: .medium))
-                    .foregroundStyle(SabqTheme.ink)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.leading)
-                    .frame(height: 36, alignment: .top)
-
-                HStack(spacing: 8) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "clock")
-                            .font(SabqFonts.app(size: 10, weight: .regular))
-                        Text(opinion.readingTime)
-                            .font(SabqFonts.app(size: 10, weight: .regular))
-                    }
-                    .foregroundStyle(SabqTheme.tertiaryInk)
-
-                    Spacer()
-
-                    Text(opinion.relativeDate)
-                        .font(SabqFonts.app(size: 10, weight: .regular))
-                        .foregroundStyle(SabqTheme.tertiaryInk)
-                }
-            }
-            .padding(10)
-            .frame(width: 200)
-            .background(SabqTheme.surface)
+            Spacer(minLength: 0)
+            Text(opinion.relativeDate)
+                .font(SabqFonts.app(size: 10, weight: .regular))
+                .foregroundStyle(SabqTheme.tertiaryInk)
         }
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .shadow(color: .black.opacity(0.06), radius: 8, x: 0, y: 2)
-    }
-
-    private var opinionCardPlaceholder: some View {
-        Rectangle()
-            .fill(
-                LinearGradient(
-                    colors: [SabqTheme.gold.opacity(0.2), SabqTheme.primaryEnd.opacity(0.1)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            )
-            .frame(width: 200, height: 120)
-            .overlay {
-                Image(systemName: "text.quote")
-                    .font(SabqFonts.app(size: 32, weight: .light))
-                    .foregroundStyle(SabqTheme.gold.opacity(0.4))
-            }
+        .padding(12)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(
+            // بطاقات فاتحة داخل حاوية بيضاء (عكس ترتيب صفحة الخبر) كي لا تذوب في خلفية الرئيسية
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(SabqTheme.publicSurface)
+                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(SabqTheme.outline, lineWidth: 1))
+        )
+        .contentShape(Rectangle())
     }
 
     private func opinionAuthorAvatar(_ opinion: OpinionArticle, size: CGFloat) -> some View {
@@ -1075,7 +1059,7 @@ struct HomeFeedView: View {
                 tint: articlesStore.selectedCategory?.tint ?? SabqTheme.primaryEnd
             )
 
-            SurfaceCard {
+            SurfaceCard(cornerRadius: 22, spacing: 0) {
                 // LazyVStack so the home feed only materialises rows
                 // for articles entering the viewport — previous plain
                 // VStack rendered all ~15-50 CompactArticleRow views
@@ -1091,13 +1075,16 @@ struct HomeFeedView: View {
                             )
                         }
                         .buttonStyle(.plain)
-                        .padding(.vertical, 4)
                         .onAppear {
                             // Prefetch images for the next 5 articles
                             let allArticles = articlesStore.filteredArticles
                             let upcoming = allArticles.dropFirst(index + 1).prefix(5)
                             let urls = upcoming.compactMap { $0.imageURL.flatMap(URL.init(string:)) }
                             if !urls.isEmpty { ImageCache.prefetch(urls: urls, maxPixelSize: 260) }
+                        }
+
+                        if index < articlesStore.filteredArticles.count - 1 {
+                            SidebarRowDivider()
                         }
                     }
                 }
@@ -1184,19 +1171,25 @@ struct HomeFeedView: View {
 
         let tip = Self.sabqTips[dayOfYear % Self.sabqTips.count]
 
-        return HStack(alignment: .top, spacing: 14) {
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 14))
+            : AnyLayout(HStackLayout(alignment: .top, spacing: 14))
+        return layout {
             ZStack {
                 Circle()
                     .fill(tint.opacity(0.14))
                     .frame(width: 52, height: 52)
                 Image(systemName: icon)
-                    .font(SabqFonts.app(size: 22, weight: .semibold))
+                    .font(.system(size: 22, weight: .semibold))
                     .foregroundStyle(tint)
                     .symbolRenderingMode(.hierarchical)
             }
 
             VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 6) {
+                let labelLayout = dynamicTypeSize.isAccessibilitySize
+                    ? AnyLayout(VStackLayout(alignment: .leading, spacing: 6))
+                    : AnyLayout(HStackLayout(spacing: 6))
+                labelLayout {
                     Text(greeting)
                         .font(SabqFonts.app(size: 12, weight: .medium))
                         .foregroundStyle(SabqTheme.secondaryInk)
@@ -1225,14 +1218,14 @@ struct HomeFeedView: View {
                 Text(headline)
                     .font(SabqFonts.app(size: 15, weight: .semibold))
                     .foregroundStyle(SabqTheme.ink)
-                    .lineLimit(2)
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
                     .multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)
 
                 Text(tip)
                     .font(SabqFonts.app(size: 11, weight: .regular))
                     .foregroundStyle(SabqTheme.tertiaryInk)
-                    .lineLimit(1)
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
                     .multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -1701,4 +1694,14 @@ struct StoryBubble: View {
 extension Notification.Name {
     /// Posted when the user re-taps the Home tab while already on the feed.
     static let sabqHomeScrollToTop = Notification.Name("sabq.home.scrollToTop")
+}
+
+/// عتبتان لتصغير شعار الرأس (72 للتصغير، 16 للعودة) كي لا يعيد تغيّر ارتفاع
+/// الرأس نفسه تفعيل التبديل عبر تثبيت التمرير — نقل Header.tsx (#1600).
+nonisolated enum HomeHeaderCompact {
+    static func next(current: Bool, y: CGFloat) -> Bool {
+        if y > 72 { return true }
+        if y <= 16 { return false }
+        return current
+    }
 }

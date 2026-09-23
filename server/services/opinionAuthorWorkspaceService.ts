@@ -133,12 +133,18 @@ export async function getOpinionAuthorWorkspace(userId: string) {
 
   const trackingPriority = (article: WriterArticle) => {
     if (article.reviewStatus === "needs_changes") return 0;
-    if (article.reviewStatus === "rejected" || article.status === "archived" || article.status === "rejected") return 1;
-    if (article.reviewStatus === "pending_review") return 2;
-    if (article.status === "scheduled") return 3;
-    if (article.reviewStatus === "approved") return 4;
+    if (article.reviewStatus === "pending_review") return 1;
+    if (article.status === "scheduled") return 2;
+    if (article.reviewStatus === "approved") return 3;
+    if (article.status === "published") return 4;
     if (article.status === "draft") return 5;
-    return 6;
+    if (article.reviewStatus === "rejected" || article.status === "archived" || article.status === "rejected") return 6;
+    return 7;
+  };
+
+  const articleEffectiveTime = (art: WriterArticle) => {
+    const d = art.publishedAt || art.updatedAt || art.createdAt;
+    return d ? new Date(d).getTime() : 0;
   };
 
   return {
@@ -147,7 +153,7 @@ export async function getOpinionAuthorWorkspace(userId: string) {
       .sort((a, b) => {
         const priorityDifference = trackingPriority(a) - trackingPriority(b);
         if (priorityDifference !== 0) return priorityDifference;
-        return (b.updatedAt || b.createdAt).getTime() - (a.updatedAt || a.createdAt).getTime();
+        return articleEffectiveTime(b) - articleEffectiveTime(a);
       })
       .map((article) => ({
         id: article.id,

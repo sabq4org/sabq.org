@@ -3,7 +3,7 @@ import crypto from "crypto";
 import rateLimit from "express-rate-limit";
 import { OAuth2Client } from "google-auth-library";
 import appleSignin from "apple-signin-auth";
-import { eq, or } from "drizzle-orm";
+import { eq, or, sql } from "drizzle-orm";
 import {
   users,
   appMemberSessions,
@@ -202,7 +202,10 @@ router.post("/auth/google", async (req: Request, res: Response) => {
     const [existing] = await db
       .select()
       .from(users)
-      .where(or(eq(users.googleId, googleId), eq(users.email, email)))
+      // lower(email) لا العمود حرفيًا — الحسابات المخزّنة بأحرف كبيرة يفوّتها
+      // الشرط الحرفي فيصطدم الإدراج بقيد users_email_lower_unique
+      // (حادثة NODE-EXPRESS-G في نظيره الويب).
+      .where(or(eq(users.googleId, googleId), sql`lower(${users.email}) = ${email}`))
       .limit(1);
 
     let user: typeof users.$inferSelect;
@@ -363,7 +366,8 @@ router.post("/auth/apple", async (req: Request, res: Response) => {
       [existing] = await db
         .select()
         .from(users)
-        .where(eq(users.email, rawEmail))
+        // lower(email) — كما في مسار Google أعلاه.
+        .where(sql`lower(${users.email}) = ${rawEmail}`)
         .limit(1);
     }
 
@@ -455,7 +459,8 @@ router.post("/auth/phone/send", phoneSendLimiter, async (req: Request, res: Resp
       });
     }
     const result = await varaSendOtp(e164);
-    return res.status(result.success ? 200 : 502).json(result);
+    // 422 لا 502 — كي تصل رسالة السبب الفعلية للتطبيق بدل «الخادم غير متاح».
+    return res.status(result.success ? 200 : 422).json(result);
   } catch (error) {
     console.error("[v1 OAuth] /auth/phone/send error:", error);
     return res.status(500).json({ success: false, message: "تعذّر إرسال رمز التحقق" });

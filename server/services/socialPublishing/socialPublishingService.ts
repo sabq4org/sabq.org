@@ -28,6 +28,7 @@ import { sanitizeSecretText } from "./tokenCrypto";
 import { SocialProviderError, type SocialPublishProvider } from "./types";
 import { xProvider } from "./xApiClient";
 import { activeSocialTransport, publerProvider } from "./publerApiClient";
+import { notifyAuthorOfSocialPostStatus } from "../editorialNotifications";
 
 export const MAX_PUBLISH_ATTEMPTS = 3;
 const STALE_LOCK_MINUTES = 10;
@@ -363,13 +364,27 @@ export async function schedulePost(postId: string, scheduledAt: Date): Promise<S
   if (!updated) {
     throw new SocialPublishValidationError("تعذرت الجدولة — تحقق من حالة المنشور", 409);
   }
+  if (updated.articleId) {
+    void notifyAuthorOfSocialPostStatus(updated.id, "social_scheduled").catch((err) => {
+      console.error(`${LOG_PREFIX} فشل إشعار الكاتب بجدولة X:`, err);
+    });
+  }
   return updated;
 }
 
-export async function cancelPost(postId: string, canceledByUserId: string): Promise<SocialPost> {
+export async function cancelPost(
+  postId: string,
+  canceledByUserId: string,
+  reason?: string | null,
+): Promise<SocialPost> {
   const [updated] = await db
     .update(socialPosts)
-    .set({ status: "canceled", canceledByUserId, updatedAt: new Date() })
+    .set({
+      status: "canceled",
+      canceledByUserId,
+      lastError: reason ? sanitizeSecretText(reason) : null,
+      updatedAt: new Date(),
+    })
     .where(and(eq(socialPosts.id, postId), inArray(socialPosts.status, ["draft", "scheduled"])))
     .returning();
   if (!updated) {
@@ -377,6 +392,13 @@ export async function cancelPost(postId: string, canceledByUserId: string): Prom
       "تعذر الإلغاء — المنشور نُشر أو دخل مرحلة النشر بالفعل",
       409,
     );
+  }
+  if (updated.articleId) {
+    void notifyAuthorOfSocialPostStatus(updated.id, "social_rejected", {
+      reviewerNote: reason,
+    }).catch((err) => {
+      console.error(`${LOG_PREFIX} فشل إشعار الكاتب بإلغاء X:`, err);
+    });
   }
   return updated;
 }
@@ -397,13 +419,39 @@ export async function getPostAttempts(postId: string): Promise<SocialPostAttempt
     .limit(50);
 }
 
-export async function listPostsForArticle(articleId: string): Promise<SocialPost[]> {
-  return db
-    .select()
+export async function listPostsForArticle(articleId: string): Promise<SocialPostListItem[]> {
+  const creator = alias(users, "social_post_creator");
+  const publisher = alias(users, "social_post_publisher");
+  const rows = await db
+    .select({
+      post: socialPosts,
+      articleTitle: articles.title,
+      articleImageUrl: articles.imageUrl,
+      articleAuthorId: articles.authorId,
+      creatorFirst: creator.firstName,
+      creatorLast: creator.lastName,
+      publisherFirst: publisher.firstName,
+      publisherLast: publisher.lastName,
+    })
     .from(socialPosts)
+    .leftJoin(articles, eq(socialPosts.articleId, articles.id))
+    .leftJoin(creator, eq(socialPosts.createdByUserId, creator.id))
+    .leftJoin(publisher, eq(socialPosts.publishedByUserId, publisher.id))
     .where(eq(socialPosts.articleId, articleId))
     .orderBy(desc(socialPosts.createdAt))
     .limit(50);
+  const fullName = (first: string | null, last: string | null) =>
+    [first, last].filter(Boolean).join(" ") || null;
+  return rows.map((r) => ({
+    ...r.post,
+    articleTitle: r.articleTitle,
+    articleImageUrl: r.articleImageUrl,
+    createdByName: fullName(r.creatorFirst, r.creatorLast),
+    publishedByName: fullName(r.publisherFirst, r.publisherLast),
+    isAuthorProposal: Boolean(
+      r.post.articleId && r.articleAuthorId && r.post.createdByUserId === r.articleAuthorId,
+    ),
+  }));
 }
 
 export type SocialPostListItem = SocialPost & {
@@ -411,6 +459,7 @@ export type SocialPostListItem = SocialPost & {
   articleImageUrl: string | null;
   createdByName: string | null;
   publishedByName: string | null;
+  isAuthorProposal?: boolean;
 };
 
 export async function listRecentPosts(limit = 50): Promise<SocialPostListItem[]> {
@@ -421,6 +470,7 @@ export async function listRecentPosts(limit = 50): Promise<SocialPostListItem[]>
       post: socialPosts,
       articleTitle: articles.title,
       articleImageUrl: articles.imageUrl,
+      articleAuthorId: articles.authorId,
       creatorFirst: creator.firstName,
       creatorLast: creator.lastName,
       publisherFirst: publisher.firstName,
@@ -440,6 +490,9 @@ export async function listRecentPosts(limit = 50): Promise<SocialPostListItem[]>
     articleImageUrl: r.articleImageUrl,
     createdByName: fullName(r.creatorFirst, r.creatorLast),
     publishedByName: fullName(r.publisherFirst, r.publisherLast),
+    isAuthorProposal: Boolean(
+      r.post.articleId && r.articleAuthorId && r.post.createdByUserId === r.articleAuthorId,
+    ),
   }));
 }
 
@@ -448,6 +501,8 @@ export interface SocialPublishStats {
   publishedToday: number;
   scheduledUpcoming: number;
   failed: number;
+  pendingDrafts: number;
+  pendingAuthorProposals: number;
 }
 
 /** عدادات لوحة النشر الاجتماعي — استعلام تجميعي واحد */
@@ -456,12 +511,19 @@ export async function getPublishStats(): Promise<SocialPublishStats> {
     SELECT
       count(*)::int AS total,
       count(*) FILTER (
-        WHERE status = 'published'
-          AND published_at >= (now() AT TIME ZONE 'Asia/Riyadh')::date AT TIME ZONE 'Asia/Riyadh'
+        WHERE p.status = 'published'
+          AND p.published_at >= (now() AT TIME ZONE 'Asia/Riyadh')::date AT TIME ZONE 'Asia/Riyadh'
       )::int AS published_today,
-      count(*) FILTER (WHERE status = 'scheduled')::int AS scheduled_upcoming,
-      count(*) FILTER (WHERE status = 'failed')::int AS failed
-    FROM social_posts
+      count(*) FILTER (WHERE p.status = 'scheduled')::int AS scheduled_upcoming,
+      count(*) FILTER (WHERE p.status = 'failed')::int AS failed,
+      count(*) FILTER (WHERE p.status = 'draft')::int AS pending_drafts,
+      count(*) FILTER (
+        WHERE p.status = 'draft'
+          AND p.article_id IS NOT NULL
+          AND (p.created_by_user_id = a.author_id OR p.created_by_user_id = a.submitter_id)
+      )::int AS pending_author_proposals
+    FROM social_posts AS p
+    LEFT JOIN articles AS a ON p.article_id = a.id
   `);
   const row = (result.rows?.[0] ?? {}) as Record<string, number>;
   return {
@@ -469,6 +531,8 @@ export async function getPublishStats(): Promise<SocialPublishStats> {
     publishedToday: Number(row.published_today ?? 0),
     scheduledUpcoming: Number(row.scheduled_upcoming ?? 0),
     failed: Number(row.failed ?? 0),
+    pendingDrafts: Number(row.pending_drafts ?? 0),
+    pendingAuthorProposals: Number(row.pending_author_proposals ?? 0),
   };
 }
 
@@ -717,6 +781,13 @@ export async function publishClaimedPost(
       .where(eq(socialPosts.id, claimed.id))
       .returning();
     console.log(`${LOG_PREFIX} نُشر ${claimed.id} → ${result.externalPostUrl}`);
+
+    if (updated?.articleId) {
+      void notifyAuthorOfSocialPostStatus(updated.id, "social_published").catch((err) => {
+        console.error(`${LOG_PREFIX} فشل إشعار الكاتب بالنشر على X:`, err);
+      });
+    }
+
     return updated;
   } catch (err) {
     const pErr = err instanceof SocialProviderError ? err : null;
@@ -732,4 +803,265 @@ export async function publishClaimedPost(
     });
     return failWith(err);
   }
+}
+
+// ── مقترحات كتّاب الرأي (نافذة 24 ساعة) ───────────────────────────────
+
+export const SOCIAL_POST_OPINION_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+export interface OpinionSocialWindowCheck {
+  eligible: boolean;
+  reason?: "NOT_PUBLISHED" | "FUTURE_PUBLISHED" | "EXPIRED_24H" | "INVALID_DATE";
+  remainingMs: number;
+  windowExpiresAt: Date | null;
+}
+
+export function isWithinOpinionSocialWindow(
+  publishedAt: Date | string | null | undefined,
+  now = Date.now(),
+): OpinionSocialWindowCheck {
+  if (!publishedAt) {
+    return { eligible: false, reason: "NOT_PUBLISHED", remainingMs: 0, windowExpiresAt: null };
+  }
+  const pubTime = new Date(publishedAt).getTime();
+  if (Number.isNaN(pubTime)) {
+    return { eligible: false, reason: "INVALID_DATE", remainingMs: 0, windowExpiresAt: null };
+  }
+  if (pubTime > now) {
+    return { eligible: false, reason: "FUTURE_PUBLISHED", remainingMs: 0, windowExpiresAt: null };
+  }
+  const diffMs = now - pubTime;
+  const remainingMs = SOCIAL_POST_OPINION_WINDOW_MS - diffMs;
+  const windowExpiresAt = new Date(pubTime + SOCIAL_POST_OPINION_WINDOW_MS);
+  if (diffMs > SOCIAL_POST_OPINION_WINDOW_MS) {
+    return { eligible: false, reason: "EXPIRED_24H", remainingMs: 0, windowExpiresAt };
+  }
+  return { eligible: true, remainingMs: Math.max(0, remainingMs), windowExpiresAt };
+}
+
+export interface AuthorSocialProposalStatus {
+  eligible: boolean;
+  reason?: string;
+  publishedAt: Date | null;
+  windowExpiresAt: Date | null;
+  remainingMs: number;
+  article: {
+    id: string;
+    title: string;
+    url: string;
+    imageUrl: string | null;
+  };
+  existingProposal: SocialPost | null;
+}
+
+export async function getAuthorSocialProposalStatus(
+  articleId: string,
+  authorUserId: string,
+): Promise<AuthorSocialProposalStatus> {
+  const [article] = await db
+    .select({
+      id: articles.id,
+      title: articles.title,
+      slug: articles.slug,
+      englishSlug: articles.englishSlug,
+      imageUrl: articles.imageUrl,
+      status: articles.status,
+      articleType: articles.articleType,
+      authorId: articles.authorId,
+      submitterId: articles.submitterId,
+      publishedAt: articles.publishedAt,
+    })
+    .from(articles)
+    .where(eq(articles.id, articleId))
+    .limit(1);
+
+  if (!article) {
+    throw new SocialPublishValidationError("المقال غير موجود", 404);
+  }
+  if (article.articleType !== "opinion") {
+    throw new SocialPublishValidationError("هذه الميزة مخصصة لمقالات الرأي فقط", 400);
+  }
+  if (article.authorId !== authorUserId && article.submitterId !== authorUserId) {
+    throw new SocialPublishValidationError("لا تملك صلاحية على هذا المقال", 403);
+  }
+
+  const articleSummary = {
+    id: article.id,
+    title: article.title,
+    url: buildArticleUrl(article),
+    imageUrl: article.imageUrl || null,
+  };
+
+  const [existingProposal] = await db
+    .select()
+    .from(socialPosts)
+    .where(
+      and(
+        eq(socialPosts.articleId, articleId),
+        eq(socialPosts.createdByUserId, authorUserId),
+      ),
+    )
+    .orderBy(desc(socialPosts.createdAt))
+    .limit(1);
+
+  if (article.status !== "published" || !article.publishedAt) {
+    return {
+      eligible: false,
+      reason: "NOT_PUBLISHED",
+      publishedAt: article.publishedAt ?? null,
+      windowExpiresAt: null,
+      remainingMs: 0,
+      article: articleSummary,
+      existingProposal: existingProposal ?? null,
+    };
+  }
+
+  const windowCheck = isWithinOpinionSocialWindow(article.publishedAt);
+  return {
+    eligible: windowCheck.eligible,
+    reason: windowCheck.reason,
+    publishedAt: article.publishedAt,
+    windowExpiresAt: windowCheck.windowExpiresAt,
+    remainingMs: windowCheck.remainingMs,
+    article: articleSummary,
+    existingProposal: existingProposal ?? null,
+  };
+}
+
+export interface CreateAuthorSocialProposalInput {
+  articleId: string;
+  authorUserId: string;
+  text: string;
+  textSource: "title" | "custom";
+}
+
+export async function createOrUpdateAuthorSocialProposal(
+  input: CreateAuthorSocialProposalInput,
+): Promise<SocialPost> {
+  const [article] = await db
+    .select({
+      id: articles.id,
+      title: articles.title,
+      slug: articles.slug,
+      englishSlug: articles.englishSlug,
+      imageUrl: articles.imageUrl,
+      status: articles.status,
+      articleType: articles.articleType,
+      authorId: articles.authorId,
+      submitterId: articles.submitterId,
+      publishedAt: articles.publishedAt,
+    })
+    .from(articles)
+    .where(eq(articles.id, input.articleId))
+    .limit(1);
+
+  if (!article) {
+    throw new SocialPublishValidationError("المقال غير موجود", 404);
+  }
+  if (article.articleType !== "opinion") {
+    throw new SocialPublishValidationError("هذه الميزة مخصصة لمقالات الرأي فقط", 400);
+  }
+  if (article.authorId !== input.authorUserId && article.submitterId !== input.authorUserId) {
+    throw new SocialPublishValidationError("لا تملك صلاحية على هذا المقال", 403);
+  }
+  if (article.status !== "published" || !article.publishedAt) {
+    throw new SocialPublishValidationError("لا يمكن تقديم مقترح لمقال غير منشور بعد", 400);
+  }
+
+  const windowCheck = isWithinOpinionSocialWindow(article.publishedAt);
+  if (!windowCheck.eligible) {
+    if (windowCheck.reason === "EXPIRED_24H") {
+      throw new SocialPublishValidationError(
+        "انتهت مهلة الـ24 ساعة لتقديم مقترح النشر الاجتماعي لهذا المقال",
+        400,
+      );
+    }
+    throw new SocialPublishValidationError("المقال لم يُنشر بعد", 400);
+  }
+
+  const linkUrl = buildArticleUrl(article);
+  const validation = validateXPostText(input.text, linkUrl);
+  if (validation.empty) {
+    throw new SocialPublishValidationError("نص المنشور فارغ");
+  }
+  if (!validation.valid) {
+    throw new SocialPublishValidationError(
+      `النص يتجاوز الحد الأقصى لمنصة X (${validation.weightedLength}/25000)`,
+    );
+  }
+
+  const imageUrl = article.imageUrl || null;
+  const imageSource = imageUrl ? "article" : "none";
+  const account = await getConnectedAccount("x");
+  const accountId = account?.id || null;
+
+  // التحقق من وجود مسودة سابقة للكاتب لنفس المقال لتحديثها ومنع التكرار
+  const [existingDraft] = await db
+    .select()
+    .from(socialPosts)
+    .where(
+      and(
+        eq(socialPosts.articleId, input.articleId),
+        eq(socialPosts.createdByUserId, input.authorUserId),
+        eq(socialPosts.status, "draft"),
+      ),
+    )
+    .limit(1);
+
+  if (existingDraft) {
+    const [updated] = await db
+      .update(socialPosts)
+      .set({
+        text: input.text.trim(),
+        textSource: input.textSource,
+        linkUrl,
+        imageSource,
+        imageUrl,
+        accountId: accountId || existingDraft.accountId,
+        updatedAt: new Date(),
+      })
+      .where(eq(socialPosts.id, existingDraft.id))
+      .returning();
+    return updated;
+  }
+
+  // إذا كان هناك منشور نُشر أو جُدول مسبقاً، نمنع إنشاء مسودة مكررة
+  const [activePost] = await db
+    .select()
+    .from(socialPosts)
+    .where(
+      and(
+        eq(socialPosts.articleId, input.articleId),
+        eq(socialPosts.createdByUserId, input.authorUserId),
+        inArray(socialPosts.status, ["scheduled", "processing", "published"]),
+      ),
+    )
+    .limit(1);
+
+  if (activePost) {
+    throw new SocialPublishValidationError(
+      "تمت معالجة أو جدولة مقترح هذا المقال بالفعل",
+      409,
+    );
+  }
+
+  const [post] = await db
+    .insert(socialPosts)
+    .values({
+      articleId: article.id,
+      platform: "x",
+      accountId,
+      textSource: input.textSource,
+      text: input.text.trim(),
+      linkUrl,
+      imageSource,
+      imageUrl,
+      mediaKind: "none",
+      mediaUrls: [],
+      status: "draft",
+      createdByUserId: input.authorUserId,
+    })
+    .returning();
+
+  return post;
 }

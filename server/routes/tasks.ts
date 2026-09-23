@@ -24,6 +24,7 @@ import {
   subtasks,
 } from "@shared/schema";
 import { pickTableColumns } from "../utils/sanitizeBody";
+import { parsePage, parseLimit } from "../utils/pagination";
 
 const taskLimiter = rateLimit({
   windowMs: 60 * 1000,
@@ -58,8 +59,8 @@ export function registerTaskRoutes(app: Express) {
         limit = "20"
       } = req.query;
       
-      const pageNum = parseInt(page as string);
-      const limitNum = parseInt(limit as string);
+      const pageNum = parsePage(page);
+      const limitNum = parseLimit(limit, 20, 200);
       const offset = (pageNum - 1) * limitNum;
       
       // Build base filters

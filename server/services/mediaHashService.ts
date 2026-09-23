@@ -55,9 +55,12 @@ function displayUrl(id: string, url: string): string {
 export async function assignPerceptualHash(
   mediaFileId: string,
   buffer: Buffer,
+  precomputedHash?: string | null,
 ): Promise<DuplicateInfo | null> {
   try {
-    const hash = await computeDHash(buffer);
+    // The upload route computes the hash concurrently with the storage PUT so
+    // the decode pass is off the critical path; undefined means "compute here".
+    const hash = precomputedHash === undefined ? await computeDHash(buffer) : precomputedHash;
     await db
       .update(mediaFiles)
       .set({ perceptualHash: hash ?? UNHASHABLE })

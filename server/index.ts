@@ -35,8 +35,10 @@ import compression from "compression";
 import cookieParser from "cookie-parser";
 import fs from "fs";
 import path from "path";
-import { randomBytes, createHash } from "crypto";
+import { randomBytes } from "crypto";
+import { getRealIp, originGate, signProxyHeaders } from "./utils/trustedProxyIp";
 import { isNoindexPath } from "./utils/noindexPaths";
+import { httpPressure } from "./utils/httpPressure";
 
 process.on('uncaughtException', (error) => {
   console.error('[CRITICAL] Uncaught Exception:', error.message);
@@ -463,6 +465,16 @@ app.use(express.json({
                  // raw photo, so a couple of phone images need headroom.
                  // Bumped 10mb → 25mb to stop /articles/submit 413s.
   verify: (req: any, _res: any, buf: Buffer) => {
+    // The CSP report endpoint has its own small parser, but this global parser
+    // runs first. Enforce the same cap here so the 25 MB upload limit cannot
+    // be used to bypass the report endpoint's 16 KB budget.
+    const requestPath = String(req.originalUrl || req.url || "").split("?", 1)[0];
+    if (requestPath === "/api/security/csp-report" && buf.length > 16 * 1024) {
+      const error: any = new Error("CSP report payload too large");
+      error.status = 413;
+      error.type = "entity.too.large";
+      throw error;
+    }
     // Stash the exact raw bytes before JSON parsing so webhook handlers
     // can verify HMAC signatures against the original payload.
     req.rawBody = buf;
@@ -584,33 +596,21 @@ function hasSessionCookie(req: Request): boolean {
 //     handler — so `req.user` is unset when the limiter runs. Without this branch
 //     every app user behind the same carrier-grade NAT public IP shares ONE
 //     write bucket and intermittently gets HTTP 429 (e.g. when posting a
-//     comment). Keying by the token (hashed) gives each session its own bucket.
+//     comment). Route authentication may establish a user key later; an
+//     unverified token must never mint a bucket here.
 //  3. Anonymous requests → CDN/real client IP.
 function rateLimitKey(req: Request): string {
   const userId = (req as any).user?.id;
   if (userId) return `u:${userId}`;
-  const auth = req.headers.authorization;
-  if (auth && auth.startsWith('Bearer ')) {
-    return `b:${createHash('sha256').update(auth.slice(7)).digest('hex').slice(0, 32)}`;
-  }
-  // Real visitor IP resolution. When traffic is proxied through our Cloudflare
-  // Worker (frontend-edge-worker.js, route sabq.org/*), the worker re-issues
-  // the request with `fetch(request)`, which makes Cloudflare REWRITE
-  // `cf-connecting-ip` on the origin subrequest to the worker's single egress
-  // IP. The result: every visitor collapses into ONE rate-limit bucket and the
-  // whole site's anonymous writes (logins, comments, reactions) share the
-  // writeLimiter's 1000/15min ceiling → permanent HTTP 429 for everyone.
-  //
-  // Fix: the worker forwards the genuine client IP it sees in a trusted custom
-  // header (`x-sabq-client-ip`; `true-client-ip` is also honored for parity
-  // with Cloudflare Enterprise). We prefer that, then fall back to
-  // `cf-connecting-ip` (correct for DIRECT origin pulls like api.sabq.org),
-  // then the leftmost X-Forwarded-For, then req.ip.
-  const forwardedReal = (req.headers['x-sabq-client-ip'] || req.headers['true-client-ip']) as string | undefined;
-  const cfIp = req.headers['cf-connecting-ip'] as string;
-  const xForwardedFor = req.headers['x-forwarded-for'] as string;
-  return forwardedReal?.split(',')[0]?.trim() || cfIp || xForwardedFor?.split(',')[0]?.trim() || req.ip || 'unknown';
+  // Bearer authentication runs inside the route handler. An arbitrary Bearer
+  // value must not mint a fresh bucket before it has been verified.
+  return getRealIp(req);
 }
+
+// Optional origin gate. It is deliberately off until api.sabq.org is routed
+// through the signing Worker for mobile, web-next, meetings, and webhooks.
+// Health endpoints remain reachable for Railway healthchecks and diagnostics.
+app.use(originGate);
 
 // Fire-and-forget TELEMETRY beacons (view counter, behavior/accessibility logs)
 // are high-frequency, anonymous, and harmless to over-count — they must NOT be
@@ -644,22 +644,9 @@ const generalApiLimiter = rateLimit({
   },
 });
 
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // 5 login attempts per window
-  message: { message: "تم تجاوز حد محاولات تسجيل الدخول. يرجى المحاولة بعد 15 دقيقة" },
-  standardHeaders: true,
-  legacyHeaders: false,
-  skipSuccessfulRequests: true, // Don't count successful logins
-});
-
-const strictLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 10, // 10 requests per window for sensitive operations
-  message: { message: "تم تجاوز حد الطلبات للعمليات الحساسة. يرجى المحاولة بعد قليل" },
-  standardHeaders: true,
-  legacyHeaders: false,
-});
+// (F-22) Removed two dead limiter definitions here — `authLimiter` and
+// `strictLimiter` were never applied in this file (the live ones with the same
+// names live in server/routes.ts) and only served to confuse maintenance.
 
 const writeLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -1003,6 +990,7 @@ app.use((req, res, next) => {
 const isProduction = process.env.NODE_ENV === "production";
 const port = (globalThis as any).__sabqPort || parseInt(process.env.PORT || '5000', 10);
 const server = (globalThis as any).__sabqServer || createServer(app);
+httpPressure.attach(server);
 
 if (!(globalThis as any).__sabqServer) {
   // reusePort is unsupported on macOS/Darwin; only enable on Linux
@@ -1493,9 +1481,12 @@ if (!(globalThis as any).__sabqServer) {
           try {
             const port = parseInt(process.env.PORT || '5000', 10);
             console.log(`[Cache Warmup] 🔄 Pre-loading homepage cache...`);
+            const warmupHeaders = signProxyHeaders("GET", "/api/homepage-lite");
             const [homepageRes, categoriesRes] = await Promise.all([
-              fetch(`http://localhost:${port}/api/homepage-lite`),
-              fetch(`http://localhost:${port}/api/categories`),
+              fetch(`http://localhost:${port}/api/homepage-lite`, { headers: warmupHeaders }),
+              fetch(`http://localhost:${port}/api/categories`, {
+                headers: signProxyHeaders("GET", "/api/categories"),
+              }),
             ]);
             if (homepageRes.ok) {
               console.log(`[Cache Warmup] ✅ Homepage cache loaded successfully`);
@@ -1680,6 +1671,13 @@ if (!(globalThis as any).__sabqServer) {
         console.log('[Server] Newsletter scheduler delegated to newsletter-worker');
       }
       
+      // SQL leases coordinate every worker replica, including after leader failover.
+      // Separate admission and worker flags permit draining before disabling the feature.
+      if (enableBackgroundWorkers && process.env.EDITORIAL_RESEARCH_WORKER_ENABLED === "true") {
+        const { startEditorialResearchJob } = await import("./jobs/editorialResearchJob");
+        startEditorialResearchJob();
+      }
+
       const enableAITasksScheduler = process.env.ENABLE_AI_TASKS_SCHEDULER !== 'false';
       const enableIfoxGenerator = process.env.ENABLE_IFOX_GENERATOR !== 'false';
       
@@ -1740,6 +1738,9 @@ if (!(globalThis as any).__sabqServer) {
             startAiProviderHealthCheckJob();
             const { startAiUsageRollupJob } = await import("./jobs/aiUsageRollup");
             startAiUsageRollupJob();
+            // غرفة عمليات سبق الذكية — نبضة التوزيع (تجريبية، القائد فقط)
+            const { startOpsRoomJob } = await import("./jobs/opsRoomJob");
+            startOpsRoomJob();
           } catch (error) {
             console.error("[Server] Error starting AI Hub jobs:", error);
           }
@@ -2006,6 +2007,18 @@ if (!(globalThis as any).__sabqServer) {
             startRadarJob();
           } catch (error) {
             console.error("[Server] Error starting radar job:", error);
+          }
+        }, BACKGROUND_JOB_DELAY);
+      }
+
+      // رصد البنك المركزي السعودي (اقتصاد سبق الحي): نفس النمط — فحص القيادة داخل الدورة
+      if (enableBackgroundWorkers) {
+        setTimeout(async () => {
+          try {
+            const { startSamaWatchJob } = await import("./jobs/samaWatchJob");
+            startSamaWatchJob();
+          } catch (error) {
+            console.error("[Server] Error starting SAMA watch job:", error);
           }
         }, BACKGROUND_JOB_DELAY);
       }

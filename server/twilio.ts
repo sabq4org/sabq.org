@@ -48,10 +48,31 @@ export async function getTwilioFromPhoneNumber() {
   return phoneNumber;
 }
 
+import { sendOtp, verifyOtp } from "./services/otpService";
+
+/**
+ * OTP التحقق بخطوتين — رمز مولَّد داخل سبق ويُرسل عبر Bevatel (SABQ) أساسًا
+ * وTwilio تراجعًا (server/services/otpService.ts). إن لم يكن أي موصل SMS مهيّأً
+ * نعود لمسار Twilio Verify القديم أدناه.
+ */
+export async function sendSMSOTP(phoneNumber: string): Promise<{ success: boolean; message: string }> {
+  const own = await sendOtp(phoneNumber, "2fa");
+  if (own.configured) return { success: own.success, message: own.message };
+  return legacySendSMSOTP(phoneNumber);
+}
+
+export async function verifySMSOTP(phoneNumber: string, code: string): Promise<{ valid: boolean; message: string }> {
+  const own = await verifyOtp(phoneNumber, code, "2fa");
+  if (own.valid || !own.notFound) return { valid: own.valid, message: own.message };
+  // لا رمز محلي (أو انتهى): إن كان Verify القديم مهيّأً فربما أُرسل عبره.
+  if (process.env.TWILIO_VERIFY_SID) return legacyVerifySMSOTP(phoneNumber, code);
+  return { valid: false, message: own.message };
+}
+
 /**
  * Send OTP via SMS using Twilio Verify
  */
-export async function sendSMSOTP(phoneNumber: string): Promise<{ success: boolean; message: string }> {
+async function legacySendSMSOTP(phoneNumber: string): Promise<{ success: boolean; message: string }> {
   try {
     if (!process.env.TWILIO_VERIFY_SID) {
       console.error('❌ TWILIO_VERIFY_SID is not configured');
@@ -120,7 +141,7 @@ export async function sendSMSOTP(phoneNumber: string): Promise<{ success: boolea
 /**
  * Verify OTP code sent via SMS
  */
-export async function verifySMSOTP(phoneNumber: string, code: string): Promise<{ valid: boolean; message: string }> {
+async function legacyVerifySMSOTP(phoneNumber: string, code: string): Promise<{ valid: boolean; message: string }> {
   try {
     if (!process.env.TWILIO_VERIFY_SID) {
       throw new Error('TWILIO_VERIFY_SID environment variable is not configured');

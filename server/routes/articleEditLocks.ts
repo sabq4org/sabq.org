@@ -22,6 +22,8 @@ import { Router } from "express";
 import { db } from "../db";
 import { articleEditLocks, users } from "@shared/schema";
 import { eq } from "drizzle-orm";
+import { authorizeArticleWrite } from "../services/articleAccessService";
+import { getEffectiveUserPermissions } from "../rbac";
 
 const router = Router();
 const LOCK_TTL_MS = 10 * 60 * 1000;
@@ -77,6 +79,19 @@ router.post("/api/admin/articles/:id/lock", requireAuth, async (req: any, res) =
   try {
     const articleId = req.params.id;
     const userId = req.user.id;
+
+    // القفل تصريحُ تحرير: لا يُمنح إلا لمن يستطيع فعلًا تعديل هذه المادة
+    // (edit_any، أو opinion.edit_any لمواد الرأي، أو مالكها). كان requireAuth
+    // وحده يكفي فيستولي أي حساب مسجّل على قفل أي مقال ويرى «حق التحرير
+    // الحصري» على مواد غيره (حادثة 2026-08-08).
+    const access = await authorizeArticleWrite(
+      userId,
+      articleId,
+      await getEffectiveUserPermissions(userId),
+    );
+    if (!access.ok) {
+      return res.status(access.httpStatus).json({ message: access.message });
+    }
 
     const [existing] = await db
       .select()

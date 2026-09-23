@@ -37,6 +37,82 @@ export type PublishGateState = {
   publisher: { autoPublish?: boolean | null } | null;
 };
 
+/** حالة المادة بعد «إرسال للمراجعة»: الحية (مجدولة/منشورة) تبقى على حالتها،
+ * وما دونها يعود مسودة. كانت نقاط submit-review تُسقط المادة الحية إلى مسودة
+ * بلا شرط فتموت الجدولة بصمت (حادثة 2026-08-08). */
+export function statusAfterSubmitForReview(currentStatus: string): string {
+  return isPublishingStatus(currentStatus) ? currentStatus : "draft";
+}
+
+export type ArticleEditFlags = {
+  hasAllPerms: boolean;
+  canEditOwn: boolean;
+  canEditAny: boolean;
+};
+
+/** أعلام التحرير من الصلاحيات الفعلية لـgetEffectiveUserPermissions — تفهم
+ * "*" (صيغة الحساب الإداري) ومكافئات opinion.* على مواد الرأي. */
+export function resolveArticleEditFlags(
+  permissions: string[],
+  articleType: unknown,
+): ArticleEditFlags {
+  const isOpinion = articleType === "opinion";
+  const hasAllPerms = permissions.includes("*") || permissions.includes("system.admin");
+  return {
+    hasAllPerms,
+    canEditOwn:
+      permissions.includes("articles.edit_own") ||
+      (isOpinion && permissions.includes("opinion.edit_own")),
+    canEditAny:
+      hasAllPerms ||
+      permissions.includes("articles.edit_any") ||
+      (isOpinion && permissions.includes("opinion.edit_any")),
+  };
+}
+
+export type DemotionDecision =
+  | { action: "pass" }
+  | { action: "ignore" }
+  | { action: "forbid"; httpStatus: number; message: string; code: string };
+
+/**
+ * حارس الهبوط: مادة مجدولة/منشورة لا تُنزَّل إلى «مسودة» ضمنيًا. زر «حفظ
+ * كمسودة» على مادة حية كان يرسل status:"draft" حرفيًا فيقتل الجدولة بصمت —
+ * وكرون النشر (notificationWorker.publishScheduledArticles) يستعلم عن
+ * status='scheduled' فقط فلا تُنشر المادة أبدًا ولا يُنبَّه أحد (حادثة
+ * 2026-08-08). الحفظ الاعتيادي يُبقي الحالة (ignore = احذف status من
+ * التحديث)، والإنزال الصريح يمرّ فقط بعلم confirmStatusDowngrade مع صلاحية
+ * نشر/إلغاء نشر.
+ */
+export function decideStatusDemotion(input: {
+  requestedStatus: unknown;
+  currentStatus: string;
+  confirmed: boolean;
+  permissions: string[];
+  articleType: unknown;
+}): DemotionDecision {
+  const { requestedStatus, currentStatus, confirmed, permissions, articleType } = input;
+  if (requestedStatus !== "draft" || !isPublishingStatus(currentStatus)) {
+    return { action: "pass" };
+  }
+  if (!confirmed) return { action: "ignore" };
+  const canDowngrade =
+    permissions.includes("*") ||
+    permissions.includes("system.admin") ||
+    permissions.includes("articles.unpublish") ||
+    permissions.includes("articles.publish") ||
+    (articleType === "opinion" && permissions.includes("opinion.edit_any"));
+  if (!canDowngrade) {
+    return {
+      action: "forbid",
+      httpStatus: 403,
+      message: "سحب مادة مجدولة/منشورة إلى مسودة يتطلب صلاحية نشر",
+      code: "STATUS_DOWNGRADE_FORBIDDEN",
+    };
+  }
+  return { action: "pass" };
+}
+
 export function decidePublish(input: {
   nextStatus: unknown;
   gate: PublishGateState;

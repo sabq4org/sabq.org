@@ -137,7 +137,7 @@ struct AdminNewsRow: View {
             HStack(alignment: .top, spacing: 10) {
                 AdminStatusBadge(status: item.status)
                 Spacer(minLength: 0)
-                Text(SabqFormatters.arabicDate.string(from: item.updatedAt))
+                Text("\(rowTimestampLabel): \(SabqFormatters.riyadhDateTime.string(from: rowTimestampDate))")
                     .font(SabqFonts.app(size: 11, weight: .medium))
                     .foregroundStyle(SabqTheme.tertiaryInk)
             }
@@ -152,8 +152,8 @@ struct AdminNewsRow: View {
                 revisionCue
             }
 
-            if item.status == .scheduled, let scheduled = item.scheduledAt {
-                scheduledCue(scheduled)
+            if let schedule = item.schedulePresentation() {
+                scheduleCue(schedule)
             }
 
             if !item.excerpt.isEmpty {
@@ -192,7 +192,7 @@ struct AdminNewsRow: View {
                                     .fill(SabqTheme.teal.opacity(0.10))
                             )
                         } else {
-                            actionLabel(title: "نشر", systemImage: "paperplane.fill", tint: SabqTheme.teal)
+                            actionLabel(title: "نشر الآن", systemImage: "paperplane.fill", tint: SabqTheme.teal)
                         }
                     }
                     .buttonStyle(.plain)
@@ -247,26 +247,35 @@ struct AdminNewsRow: View {
         )
     }
 
-    /// Sky-tinted banner showing the scheduled publish date + time.
-    private func scheduledCue(_ date: Date) -> some View {
-        HStack(spacing: 7) {
-            Image(systemName: "clock.fill")
+    /// Shows the actual saved schedule separately from the writer's suggested
+    /// weekly slot. Only saved dates can be overdue.
+    private func scheduleCue(_ schedule: AdminSchedulePresentation) -> some View {
+        let tint: Color = schedule.isOverdue
+            ? SabqTheme.coral
+            : (schedule.source == .writerSuggestion ? SabqTheme.primaryEnd : SabqTheme.sky)
+        return HStack(spacing: 7) {
+            Image(systemName: schedule.isOverdue ? "exclamationmark.triangle.fill" : "clock.fill")
                 .font(SabqFonts.app(size: 12, weight: .bold))
-            Text("مجدول للنشر: \(SabqFormatters.arabicDate.string(from: date)) — \(SabqFormatters.riyadhTime.string(from: date))")
-                .font(SabqFonts.app(size: 12, weight: .bold))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(schedule.title)
+                    .font(SabqFonts.app(size: 12, weight: .heavy))
+                Text(schedule.fullLabel ?? schedule.detail)
+                    .font(SabqFonts.app(size: 11, weight: .semibold))
+                    .foregroundStyle(tint.opacity(0.86))
+            }
                 .multilineTextAlignment(.leading)
             Spacer(minLength: 0)
         }
-        .foregroundStyle(SabqTheme.sky)
+        .foregroundStyle(tint)
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(SabqTheme.sky.opacity(0.12))
+                .fill(tint.opacity(0.12))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(SabqTheme.sky.opacity(0.35), lineWidth: 0.5)
+                .stroke(tint.opacity(0.35), lineWidth: 0.5)
         )
     }
 
@@ -300,6 +309,14 @@ struct AdminNewsRow: View {
             Text(text).font(SabqFonts.app(size: 12, weight: .medium))
         }
         .foregroundStyle(SabqTheme.secondaryInk)
+    }
+
+    private var rowTimestampLabel: String {
+        item.status == .published && item.publishedAt != nil ? "نُشر" : "حُفظت"
+    }
+
+    private var rowTimestampDate: Date {
+        item.status == .published ? (item.publishedAt ?? item.updatedAt) : item.updatedAt
     }
 
     private func actionLabel(title: String, systemImage: String, tint: Color) -> some View {

@@ -4,7 +4,7 @@
 
 ## الحالة الحالية
 
-- الإصدار المضبوط في `main`: **10.1.6** (`versionCode = 147`) — `targetSdk = 36`.
+- الإصدار المضبوط حاليًا: **10.3.5** (`versionCode = 153`) — `targetSdk = 36`.
 - نحو **50 شاشة Compose** تحت `feature/`، تشمل القراءة، البحث، الأقسام، الحساب، الولاء، الإشعارات، الصوت، وكؤوس العالم والخليج وآسيا.
 - اتصال مباشر بـ `https://api.sabq.org/api/v1/*` عبر Retrofit ومصادقة Bearer.
 - تسجيل أجهزة FCM واستقبال الإشعارات وفتح الوجهة داخل التطبيق.
@@ -49,7 +49,7 @@ android-native/
 
 ```bash
 cd android-native
-./gradlew :app:assembleDebug
+./gradlew :app:testDebugUnitTest :app:assembleDebug
 ./gradlew :app:installDebug
 ```
 
@@ -75,7 +75,7 @@ release.keyPassword=...
 - `AndroidManifest.xml` يعلن App Links لـ `sabq.org` و`www.sabq.org`.
 - يلزم وجود `/.well-known/assetlinks.json` على الموقع، ويجب أن يحتوي `com.sabqorg.sabq` وبصمة SHA-256 من **Play App Signing**.
 - التطبيق يسجل توكن FCM عبر `/api/v1/devices/register` ويعالجه في `SabqMessagingService`.
-- الإرسال من السيرفر يعتمد على ضبط `FCM_PROJECT_ID` و`FCM_PRIVATE_KEY` و`FCM_CLIENT_EMAIL` في Railway. وجود الكود لا يثبت أن متغيرات الإنتاج مضبوطة.
+- إرسال إشعارات سبق من السيرفر يعتمد على `FCM_SABQ_PROJECT_ID` و`FCM_SABQ_PRIVATE_KEY` و`FCM_SABQ_CLIENT_EMAIL` في Railway. تبقى متغيرات `FCM_*` الافتراضية لـVARA والتطبيقات القديمة.
 
 ## بوابات الجودة قبل أي إصدار
 
@@ -89,6 +89,9 @@ release.keyPassword=...
 
 ## ملاحظات حالية
 
-- لا توجد حاليًا حزمة اختبارات `src/test` أو `src/androidTest` فعلية؛ إضافة smoke tests للمسارات الحرجة أولوية.
+- اختبارات JVM في `app/src/test`: عقود قوائم الأخبار والكلمات المفتاحية والبحث والأقسام، أسماء التصنيفات، ورسائل أخطاء القراءة. CI يشغّل `:app:testDebugUnitTest` مع البناء ويرفع تقارير النجاح والفشل.
+- صفحات القراءة تستخدم `readerErrorMessage`: نص عربي ثابت للمستخدم وتشخيص محلي بنوع الخطأ وحالة HTTP فقط؛ لا تُعرض رسائل JSON أو تُسجَّل أجسام الاستجابات. إلغاء coroutine يُمرَّر كما هو.
+- `/api/keyword/{keyword}` مسار عام للقراءة؛ استجابته `{ articles, muqtarabTopics }`. يقرأ Android حقل `articles`؛ `category` أو `categoryName`/`categorySlug` يحددان الشارة. البيانات المفقودة تُعرض «أخبار» ولا تُصنّف «محلية» افتراضيًا. التصنيف الدقيق يتطلب نشر إضافة بيانات التصنيف في الخادم أولًا.
+- صفحة الوسم الفارغة تعرض حالة «لا توجد مواد» مع زر البحث، وفق مكوّن EmptyStateView المستخدم في iOS. التصفح لأكثر من 20 نتيجة ومزامنة المتابعة خارج هذه الدفعة.
 - لا تطوّر ميزات جديدة داخل `android/`؛ هو غلاف Capacitor تاريخي فقط وفق `AGENTS.md`.
 - لا تستدعِ نقاط `/api/*` الخاصة بجلسة الويب من التطبيق؛ استخدم `/api/v1/*` وBearer دائمًا.

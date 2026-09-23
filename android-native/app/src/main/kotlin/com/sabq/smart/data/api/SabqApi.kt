@@ -331,6 +331,26 @@ interface SabqApi {
     @GET("api/trending-keywords")
     suspend fun getTrendingKeywords(): List<ApiTrendingKeyword>
 
+    /**
+     * مقالات رأي من تصنيف الخبر — بلوك «مقالات قد تهمك» (نقل الويب #1609/#1624).
+     * المسار عام فقط (`/api/opinion/...`) ولا نظير له تحت v1؛ نفس غلاف
+     * `{ articles, total }`. iOS: `APIClient.fetchRelatedOpinions`.
+     */
+    /** «فريق سبق الذكي» — عام، كاش 5 دقائق على الخادم (نقل e1dc9c7). */
+    @GET("api/public/ai-team")
+    suspend fun getAiTeam(): ApiAiTeam
+
+    /** ملف المراسل الموحد — صفته تُستبدل بها صفة الخبر (نقل #1598). عام لا v1. */
+    @GET("api/reporters/{slug}")
+    suspend fun getReporterProfile(@Path("slug") slug: String): ApiReporterProfile
+
+    @GET("api/opinion/related/category/{categoryId}")
+    suspend fun getRelatedOpinions(
+        @Path("categoryId") categoryId: String,
+        @Query("excludeId") excludeId: String? = null,
+        @Query("limit") limit: Int = 5,
+    ): ApiArticlesResponse
+
     @GET("api/opinion")
     suspend fun getOpinions(
         @Query("page") page: Int = 1,
@@ -501,7 +521,7 @@ interface SabqApi {
     // -- keyword & authors -------------------------------------------
 
     @GET("api/keyword/{keyword}")
-    suspend fun getArticlesByKeyword(@Path("keyword") keyword: String): List<ApiArticle>
+    suspend fun getArticlesByKeyword(@Path("keyword") keyword: String): ApiArticlesResponse
 
     @GET("api/v1/authors/by-name")
     suspend fun getAuthorPage(

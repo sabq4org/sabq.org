@@ -1,41 +1,9 @@
+import { getCacheBustedImageUrl } from "@shared/articleHeroPreload";
+export { getCacheBustedImageUrl };
+
 /**
  * Image utility functions for cache busting and URL handling
  */
-
-/**
- * Adds cache busting parameter to image URL based on update timestamp
- * This ensures browsers fetch fresh images when content is updated
- * 
- * @param imageUrl - The original image URL
- * @param updatedAt - The timestamp when the image/content was last updated
- * @returns URL with cache busting parameter
- */
-export function getCacheBustedImageUrl(
-  imageUrl: string | null | undefined,
-  updatedAt?: string | Date | null
-): string {
-  if (!imageUrl) return '';
-  
-  // Don't add cache busting to data URLs or blob URLs
-  if (imageUrl.startsWith('data:') || imageUrl.startsWith('blob:')) {
-    return imageUrl;
-  }
-  
-  // Generate version based on updatedAt or current time
-  let version: string;
-  if (updatedAt) {
-    const date = typeof updatedAt === 'string' ? new Date(updatedAt) : updatedAt;
-    version = Math.floor(date.getTime() / 1000).toString(36); // Convert to base36 for shorter URL
-  } else {
-    // If no updatedAt, use a daily cache (changes once per day)
-    version = Math.floor(Date.now() / 86400000).toString(36);
-  }
-  
-  // Check if URL already has query parameters
-  const separator = imageUrl.includes('?') ? '&' : '?';
-  
-  return `${imageUrl}${separator}v=${version}`;
-}
 
 /**
  * Get optimized image URL with optional resizing parameters for GCS
@@ -126,3 +94,47 @@ export function getFocalPointStyle(article: any, defaultPosition: string = 'cent
     objectPosition: position,
   };
 }
+
+/**
+ * Resolves the display image URL for an article, properly prioritizing:
+ * 1. Explicit imageUrl
+ * 2. Explicit videoThumbnailUrl (for video articles)
+ * 3. Auto-derived video thumbnail from YouTube / Dailymotion if videoUrl exists
+ * 4. thumbnailUrl
+ * 5. infographicBannerUrl
+ */
+export function getArticleDisplayImageUrl(article: any): string | null {
+  if (!article) return null;
+  
+  if (typeof article.imageUrl === 'string' && article.imageUrl.trim()) {
+    return article.imageUrl.trim();
+  }
+  if (typeof article.videoThumbnailUrl === 'string' && article.videoThumbnailUrl.trim()) {
+    return article.videoThumbnailUrl.trim();
+  }
+  if (typeof article.thumbnailUrl === 'string' && article.thumbnailUrl.trim()) {
+    return article.thumbnailUrl.trim();
+  }
+  if (typeof article.infographicBannerUrl === 'string' && article.infographicBannerUrl.trim()) {
+    return article.infographicBannerUrl.trim();
+  }
+  
+  // If videoUrl is provided, auto-extract thumbnail for YouTube / Dailymotion
+  const vUrl = article.videoUrl || article.video_url;
+  if (typeof vUrl === 'string' && vUrl.trim()) {
+    const trimmed = vUrl.trim();
+    // YouTube
+    const ytMatch = trimmed.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/|youtube\.com\/shorts\/)([^"&?\/\s]{11})/i);
+    if (ytMatch && ytMatch[1]) {
+      return `https://img.youtube.com/vi/${ytMatch[1]}/maxresdefault.jpg`;
+    }
+    // Dailymotion
+    const dmMatch = trimmed.match(/(?:dailymotion\.com\/video\/|dai\.ly\/|dailymotion\.com\/embed\/video\/)([^_\n?#\/]+)/i);
+    if (dmMatch && dmMatch[1]) {
+      return `https://www.dailymotion.com/thumbnail/video/${dmMatch[1]}`;
+    }
+  }
+  
+  return null;
+}
+

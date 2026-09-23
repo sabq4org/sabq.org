@@ -1,3 +1,5 @@
+import { useAnalyticsPageMetadata } from "@/hooks/use-analytics";
+import "@/styles/home-surfaces.css";
 import { useState, useEffect, useRef, useCallback, useMemo, Component, ReactNode, startTransition, Suspense } from "react";
 import { lazyDefault, lazyNamed } from "@/lib/lazyChunk";
 import { useLocation } from "wouter";
@@ -16,7 +18,6 @@ import type { User } from "@/hooks/useAuth";
 
 // === CRITICAL PATH (Eager) - Above the fold content ===
 import { Header } from "@/components/Header";
-import { NavigationBar } from "@/components/NavigationBar";
 import { CategoryPills } from "@/components/CategoryPills";
 import { Footer } from "@/components/Footer";
 import { HeroCarousel } from "@/components/HeroCarousel";
@@ -29,11 +30,9 @@ const SHOW_TOP_ADS = true;
 
 // === LAZY LOADED - Below the fold content (retryImport + deploy recovery) ===
 const AIInsightsBlock = lazyNamed(() => import("@/components/AIInsightsBlock"), "AIInsightsBlock");
-const TrendingKeywords = lazyNamed(() => import("@/components/TrendingKeywords"), "TrendingKeywords");
 const SmartSummaryBlock = lazyNamed(() => import("@/components/SmartSummaryBlock"), "SmartSummaryBlock");
 const PersonalizedFeed = lazyNamed(() => import("@/components/PersonalizedFeed"), "PersonalizedFeed");
 const ContinueReadingWidget = lazyNamed(() => import("@/components/ContinueReadingWidget"), "ContinueReadingWidget");
-const TrendingTopics = lazyNamed(() => import("@/components/TrendingTopics"), "TrendingTopics");
 const OpinionArticlesBlock = lazyNamed(() => import("@/components/OpinionArticlesBlock"), "OpinionArticlesBlock");
 const TrendingWeekSection = lazyNamed(() => import("@/components/TrendingWeekSection"), "TrendingWeekSection");
 const MuqtarabTopicsShowcase = lazyNamed(() => import("@/components/MuqtarabTopicsShowcase"), "MuqtarabTopicsShowcase");
@@ -47,6 +46,7 @@ const AsianCupHomeSection = lazyDefault(() => import("@/components/asiancup/Asia
 const HajjBlock = lazyNamed(() => import("@/components/HajjBlock"), "HajjBlock");
 const NationalDay96Block = lazyNamed(() => import("@/components/seasonal/NationalDay96Block"), "NationalDay96Block");
 const SahraaTvBlock = lazyNamed(() => import("@/components/SahraaTvBlock"), "SahraaTvBlock");
+const EconomyNumbersBlock = lazyNamed(() => import("@/components/economy/EconomyNumbersBlock"), "EconomyNumbersBlock");
 const NewsMap = lazyDefault(() => import("@/components/NewsMap"));
 
 // Smart Blocks: معطّلة على واجهة الزائر حالياً (لوحة التحكم فقط).
@@ -242,10 +242,7 @@ export default function Home() {
     }
   }, [homepage, isPlaceholderData]);
 
-  // Set document.title for SEO (GA4 auto-tracks page views)
-  useEffect(() => {
-    document.title = 'سبق - صحيفة إلكترونية سعودية';
-  }, []);
+  useAnalyticsPageMetadata("سبق - صحيفة إلكترونية سعودية");
 
   useCanonical("https://sabq.org");
 
@@ -329,9 +326,9 @@ export default function Home() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-background flex flex-col" dir="rtl">
+      <div className="public-page home-surface-theme min-h-screen bg-background flex flex-col" dir="rtl">
         <Header user={user || undefined} />
-        <NavigationBar />
+        <CategoryPills categories={visibleCategories} />
         <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-12 flex-1">
           <Skeleton className="w-full h-[400px] md:h-[500px] rounded-lg" />
           <div className="space-y-4">
@@ -355,9 +352,9 @@ export default function Home() {
   // This is the core fix: a transient blip must never blank a populated page.
   if (error && !homepage) {
     return (
-      <div className="min-h-screen bg-background flex flex-col" dir="rtl">
+      <div className="public-page home-surface-theme min-h-screen bg-background flex flex-col" dir="rtl">
         <Header user={user || undefined} />
-        <NavigationBar />
+        <CategoryPills categories={visibleCategories} />
         <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1">
           <div className="text-center py-20">
             <p className="text-destructive text-lg mb-4">
@@ -383,9 +380,9 @@ export default function Home() {
 
   if (!homepage) {
     return (
-      <div className="min-h-screen bg-background flex flex-col" dir="rtl">
+      <div className="public-page home-surface-theme min-h-screen bg-background flex flex-col" dir="rtl">
         <Header user={user || undefined} />
-        <NavigationBar />
+        <CategoryPills categories={visibleCategories} />
         <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1">
           <div className="text-center py-20">
             <p className="text-lg font-medium text-foreground/70">
@@ -399,7 +396,7 @@ export default function Home() {
   }
 
   return (
-    <div className="min-h-screen bg-background flex flex-col" dir="rtl">
+    <div className="public-page home-surface-theme min-h-screen bg-background flex flex-col" dir="rtl">
       <Header user={user || undefined} />
       {/* Non-blocking "refresh failed / retrying" pill. Only appears when a
           background refetch errored while we keep showing the last-good feed —
@@ -428,19 +425,7 @@ export default function Home() {
         </div>
       )}
       {visibleCategories.length > 0 && (
-        <div className="hidden md:block">
-        <CategoryPills
-          categories={visibleCategories}
-          onSelectCategory={(categoryId) => {
-            if (!categoryId) {
-              navigate("/categories");
-              return;
-            }
-            const target = visibleCategories.find((c) => c.id === categoryId);
-            if (target?.slug) navigate(`/category/${target.slug}`);
-          }}
-        />
-        </div>
+        <CategoryPills categories={visibleCategories} />
       )}
 
       <main className="flex-1">
@@ -517,6 +502,13 @@ export default function Home() {
             </Suspense>
           </ErrorBoundary>
 
+          {/* الاقتصاد بالأرقام — شريط بيانات البنك المركزي (يختفي ذاتيًا بلا بيانات) */}
+          <ErrorBoundary fallback={null}>
+            <Suspense fallback={null}>
+              <EconomyNumbersBlock />
+            </Suspense>
+          </ErrorBoundary>
+
           {/* الإعلان البارز أسفل الهيدر — الإطفاء الفوري من اللوحة: إعدادات النظام ← إعلانات DMS أعلى الصفحات. SHOW_TOP_ADS بقي كقاطع طوارئ في الكود. */}
           {SHOW_TOP_ADS && (
             <>
@@ -530,15 +522,12 @@ export default function Home() {
           )}
         </div>
 
-        {/* AI Section with soft gradient background - Lazy loaded */}
+        {/* AI Summary Section — shared homepage surface, lazy loaded */}
         <LazySection>
-          <div className="bg-ai-gradient-soft py-8">
-            <div className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
+          <div className="home-surface-band py-8">
+            <div className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
               <div className="scroll-fade-in">
                 <SmartSummaryBlock />
-              </div>
-              <div className="scroll-fade-in">
-                <AIInsightsBlock enabled={true} />
               </div>
             </div>
           </div>
@@ -572,6 +561,17 @@ export default function Home() {
           <QuadCategoriesBlock enabled={true} />
         </LazySection>
 
+        {/* Weekly AI Insights - directly below the quad categories block */}
+        <LazySection>
+          <div className="home-surface-band py-8">
+            <div className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+              <div className="scroll-fade-in">
+                <AIInsightsBlock enabled={true} />
+              </div>
+            </div>
+          </div>
+        </LazySection>
+
         {/* Trending Week Section - Top viewed articles - Below All News */}
         <LazySection>
           <TrendingWeekSection />
@@ -585,10 +585,8 @@ export default function Home() {
         </LazySection>
 
         <LazySection>
-          <div className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8 py-8">
-            <div className="scroll-fade-in">
-              <OpinionArticlesBlock enabled={true} />
-            </div>
+          <div className="scroll-fade-in">
+            <OpinionArticlesBlock enabled={true} />
           </div>
         </LazySection>
 
@@ -597,26 +595,6 @@ export default function Home() {
         <LazySection>
           <ContinueReadingWidget />
         </LazySection>
-
-        {/* Trending Topics + Trending Keywords — desktop only (hidden on mobile). */}
-        {!isMobile && (
-          <LazySection>
-            <div className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8 py-8">
-              <div className="space-y-8">
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                  {homepage.trending && homepage.trending.length > 0 && (
-                    <div className="scroll-fade-in">
-                      <TrendingTopics topics={homepage.trending} />
-                    </div>
-                  )}
-                  <div className="scroll-fade-in">
-                    <TrendingKeywords />
-                  </div>
-                </div>
-              </div>
-            </div>
-          </LazySection>
-        )}
 
         {/* News Map (Leaflet) — desktop only. The map library is heavy
             (~150KB+); skipping the section on mobile means the chunk never

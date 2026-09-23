@@ -11,13 +11,13 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Loader2, Mail, Phone, Upload } from "lucide-react";
+import { Loader2, Mail, Upload } from "lucide-react";
+import { PhoneVerificationCard } from "@/components/account/PhoneVerificationCard";
 
 const profileSchema = z.object({
   firstName: z.string().min(1, "الاسم الأول مطلوب").max(50),
   lastName: z.string().max(50).optional().or(z.literal("")),
   bio: z.string().max(500).optional().or(z.literal("")),
-  phoneNumber: z.string().max(20).optional().or(z.literal("")),
 });
 
 type ProfileForm = z.infer<typeof profileSchema>;
@@ -29,6 +29,7 @@ type AuthUser = {
   lastName?: string | null;
   bio?: string | null;
   phoneNumber?: string | null;
+  phoneVerified?: boolean;
   profileImageUrl?: string | null;
   emailVerified?: boolean;
 };
@@ -47,7 +48,6 @@ export function AccountSection() {
       firstName: "",
       lastName: "",
       bio: "",
-      phoneNumber: "",
     },
   });
 
@@ -57,7 +57,6 @@ export function AccountSection() {
       firstName: user.firstName ?? "",
       lastName: user.lastName ?? "",
       bio: user.bio ?? "",
-      phoneNumber: user.phoneNumber ?? "",
     });
   }, [user, form]);
 
@@ -239,22 +238,6 @@ export function AccountSection() {
                   </FormItem>
                 )}
               />
-              <FormField
-                control={form.control}
-                name="phoneNumber"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel className="inline-flex items-center gap-1.5">
-                      <Phone className="h-3.5 w-3.5" />
-                      رقم الجوال
-                    </FormLabel>
-                    <FormControl>
-                      <Input {...field} dir="ltr" className="text-left" data-testid="input-settings-phone" />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
               <Button
                 type="submit"
                 disabled={updateMutation.isPending}
@@ -273,6 +256,8 @@ export function AccountSection() {
           </Form>
         </CardContent>
       </Card>
+
+      <PhoneVerificationCard phoneNumber={user.phoneNumber} phoneVerified={user.phoneVerified} />
 
       <Card>
         <CardHeader>

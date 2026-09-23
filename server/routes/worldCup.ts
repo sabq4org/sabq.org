@@ -57,6 +57,7 @@ import {
   isSportmonksConfigured,
   WC_LEAGUE_ID as SM_WC_LEAGUE_ID,
 } from "../services/sportmonksService";
+import { isWithinLiveOverlayWindow, mergeLiveMatchProgress } from "../services/sportsMatchStatus";
 import {
   getTheSportsFastScore,
   getTheSportsMatchLive,
@@ -68,6 +69,8 @@ import {
   type TsEventType,
   type TsLiveStats,
 } from "../services/theSportsService";
+import { resolveTsEventPlayerName } from "../services/sportsPlayerNameFixes";
+import { paginationOrReject } from "../utils/pagination";
 
 const NOT_CONFIGURED = {
   configured: false,
@@ -78,7 +81,7 @@ const NOT_CONFIGURED = {
 // تأخّر كاش API-Football فتظهر النتيجة/الدقيقة في الوقت الحقيقي في كل النقاط
 // (نظرة عامة، مباشر، جدول، مركز المباراة). لا نُحوّر كائنات الكاش: نُرجّع نسخًا.
 async function overlayLiveScore(fx: WcFixture): Promise<WcFixture> {
-  if (!fx?.status?.live) return fx;
+  if (!fx?.status?.live && !isWithinLiveOverlayWindow(fx.timestamp)) return fx;
 
   // 1) TheSports أولًا — النتيجة الفائقة (sub-minute). أفضل جهد: يرجع null في
   //    الإنتاج حتى يُدرَج عنوان Railway ويُضبط THESPORTS_* فنتراجع لـSportMonks.
@@ -96,11 +99,14 @@ async function overlayLiveScore(fx: WcFixture): Promise<WcFixture> {
             ? { home: ts.penHome, away: ts.penAway }
             : fx.penalties,
         status: {
-          ...fx.status,
-          elapsed: ts.elapsed ?? fx.status.elapsed,
-          extra: ts.extra ?? fx.status.extra,
-          live: ts.live,
-          finished: ts.finished || fx.status.finished,
+          ...mergeLiveMatchProgress(fx.status, {
+            live: ts.live,
+            finished: ts.finished,
+            elapsed: ts.elapsed,
+            extra: ts.extra,
+            statusId: ts.statusId,
+            kickoffTs: fx.timestamp,
+          }),
         },
       };
     }
@@ -116,10 +122,13 @@ async function overlayLiveScore(fx: WcFixture): Promise<WcFixture> {
       ...fx,
       goals: { home: live.home, away: live.away },
       status: {
-        ...fx.status,
-        elapsed: live.minute > 0 ? live.minute : fx.status.elapsed,
-        live: live.live,
-        finished: live.finished || fx.status.finished,
+        ...mergeLiveMatchProgress(fx.status, {
+          live: live.live,
+          finished: live.finished,
+          elapsed: live.minute > 0 ? live.minute : fx.status.elapsed,
+          statusCode: live.stateDevName,
+          kickoffTs: fx.timestamp,
+        }),
       },
     };
   } catch {
@@ -172,9 +181,9 @@ function mapTsEventsToWc(
         detail: "Substitution",
         // الاسم بمعرّف اللاعب (name_aa الكامل) أولًا لتفادي تصادم الاختصارات
         // ("H. Hassan" للاعبين مختلفين)؛ يتراجع لتعريب سلسلة الاسم.
-        player: arById(e.playerId) ?? tr(e.inPlayer), // الداخل
+        player: resolveTsEventPlayerName(e.inPlayer, arById(e.playerId), tr(e.inPlayer), teamId), // الداخل
         playerId: null, // معرّف TheSports نصّي لا يطابق بطاقة اللاعب (API-Football)
-        assist: e.outPlayer ? tr(e.outPlayer) : null, // «بديلًا عن»
+        assist: e.outPlayer ? resolveTsEventPlayerName(e.outPlayer, null, tr(e.outPlayer), teamId) : null, // «بديلًا عن»
         assistId: null,
       });
     } else {
@@ -198,9 +207,9 @@ function mapTsEventsToWc(
                 ? "Second Yellow card"
                 : "",
         // الاسم بمعرّف اللاعب (name_aa الكامل) أولًا — يحلّ تصادم الاختصارات.
-        player: arById(e.playerId) ?? tr(e.player),
+        player: resolveTsEventPlayerName(e.player, arById(e.playerId), tr(e.player), teamId),
         playerId: null,
-        assist: e.assist ? tr(e.assist) : null,
+        assist: e.assist ? resolveTsEventPlayerName(e.assist, null, tr(e.assist), teamId) : null,
         assistId: null,
       });
     }
@@ -348,7 +357,9 @@ export function registerWorldCupRoutes(app: Express) {
   app.get("/api/world-cup/news", async (req, res) => {
     if (!guard(res)) return;
     try {
-      const limit = Number(req.query.limit) || 6;
+      const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 6, maxLimit: 20 });
+      if (!pg) return;
+      const limit = pg.limit;
       res.set("Cache-Control", "public, max-age=60, s-maxage=120, stale-while-revalidate=300");
       res.json({ news: await getWorldCupNews(limit) });
     } catch (error) {

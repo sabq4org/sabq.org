@@ -2,7 +2,7 @@
 import { useEditor, EditorContent, Editor, useEditorState } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Link from "@tiptap/extension-link";
-import Image from "@tiptap/extension-image";
+import { ResizableImage } from "./editor-extensions/ResizableImage";
 import TextAlign from "@tiptap/extension-text-align";
 import Underline from "@tiptap/extension-underline";
 import Placeholder from "@tiptap/extension-placeholder";
@@ -75,11 +75,7 @@ import { useTheme } from "./ThemeProvider";
 // Twitter widgets type declaration
 declare global {
   interface Window {
-    twttr?: {
-      widgets: {
-        load: (element?: HTMLElement) => void;
-      };
-    };
+    twttr?: any;
   }
 }
 
@@ -164,9 +160,9 @@ export function RichTextEditor({
           rel: "noopener noreferrer",
         },
       }),
-      Image.configure({
+      ResizableImage.configure({
         HTMLAttributes: {
-          class: "max-w-full h-auto rounded-md my-4",
+          class: "sabq-article-image rounded-md",
         },
       }),
       TextAlign.configure({
@@ -215,7 +211,11 @@ export function RichTextEditor({
   });
 
   useEffect(() => {
-    if (!editor) return;
+    // isDestroyed إلزامي: تحديث حالة من مكوّن شقيق أثناء رندر التركيب (مثل
+    // جلب بيانات عند التحميل) يجعل React 18 يتخلص من محاولة الرندر الأولى،
+    // فيغلق هذا الـeffect على نسخة TipTap مُتلفة — getHTML عليها ينهار
+    // بـ"reading 'cached'" ويُسقط المحرر كاملًا في ErrorBoundary.
+    if (!editor || editor.isDestroyed) return;
     // صدى تغيير صادر من المحرر نفسه — لا تعد ضبط المستند
     if (content === lastEmittedHtmlRef.current) return;
     if (content !== editor.getHTML()) {

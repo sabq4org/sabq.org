@@ -5,7 +5,6 @@ import SwiftUI
 /// تدور عبر `GET` / `PUT /api/v1/sports/alert-prefs`. تطفئة نوع تكتمه فورًا.
 /// تتبع نمط NotificationPreferencesView (تحميل عند الظهور + حفظ عند كل تبديل).
 struct WCMatchEventNotificationsView: View {
-    @Environment(\.dismiss) private var dismiss
     @State private var prefs: SportsAlertPreferences = .allOn
     @State private var loaded = false
     @State private var saving = false
@@ -73,24 +72,8 @@ struct WCMatchEventNotificationsView: View {
         }
         .background(SabqTheme.background)
         .sabqRTL()
+        .navigationTitle("تنبيهات المباريات")
         .navigationBarTitleDisplayMode(.inline)
-        .navigationBarBackButtonHidden(true)
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button { dismiss() } label: {
-                    Image(systemName: "chevron.right")
-                        .font(SabqFonts.app(size: 14, weight: .semibold))
-                        .foregroundStyle(SabqTheme.ink)
-                        .padding(8)
-                        .background(Circle().fill(.ultraThinMaterial))
-                }
-            }
-            ToolbarItem(placement: .principal) {
-                Text("تنبيهات المباريات")
-                    .font(SabqFonts.app(size: 15, weight: .semibold))
-                    .foregroundStyle(SabqTheme.ink)
-            }
-        }
         .task {
             if let p = try? await APIClient.shared.fetchSportsAlertPreferences() {
                 prefs = p

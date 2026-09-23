@@ -20,8 +20,9 @@ function fallbackFor(slug: string): number | null {
   return m ? Number(m[1]) : null;
 }
 
-describe("fallbackSeason — كؤوس أوروبا الجارية", () => {
-  it("دوري أبطال أوروبا والدوري الأوروبي على موسم 2026", () => {
+describe("fallbackSeason — كؤوس ودوريات الموسم الجاري", () => {
+  it("دوري روشن ودوري أبطال أوروبا والدوري الأوروبي على موسم 2026", () => {
+    expect(fallbackFor("pro-league")).toBe(2026);
     expect(fallbackFor("champions-league")).toBe(2026);
     expect(fallbackFor("europa-league")).toBe(2026);
   });

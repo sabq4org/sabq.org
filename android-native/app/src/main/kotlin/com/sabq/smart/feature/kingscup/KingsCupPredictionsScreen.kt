@@ -629,6 +629,11 @@ private fun KcPredHowSection(state: KingsCupPredictionsViewModel.State) {
                 state.rule?.summaryAr() ?: "تُحتسب النقاط بعد صافرة نهاية كل مباراة وتُضاف لرصيدك تلقائيًا",
                 color = KingsCupColors.onDark, fontSize = 13.sp, lineHeight = 22.sp,
             )
+            // قاعدة الأدوار الإقصائية كما في بطاقة القواعد في الويب (#1439)
+            Text(
+                "· في مباريات الكؤوس وخروج المغلوب: يُعتمد التوقّع على نتيجة الوقتين الأصلي والإضافي (قبل ركلات الترجيح).",
+                color = KingsCupColors.onDarkDim, fontSize = 12.sp, lineHeight = 20.sp,
+            )
         }
 
         Column(
@@ -799,6 +804,14 @@ private fun KcPredSettledRow(contest: PredContest) {
             val r = contest.result
             if (r?.finalHome != null && r.finalAway != null) {
                 KcSplitScore(home = r.finalHome, away = r.finalAway)
+                // ركلات الترجيح تحت النتيجة النهائية (نقل الويب #1439)
+                com.sabq.smart.feature.predictions.PredScoreResult.penaltiesLabel(r.penalties ?: contest.metadata?.penalties)?.let { pen ->
+                    androidx.compose.runtime.CompositionLocalProvider(
+                        androidx.compose.ui.platform.LocalLayoutDirection provides androidx.compose.ui.unit.LayoutDirection.Ltr,
+                    ) {
+                        Text(pen, color = KingsCupColors.onDarkDim, fontSize = 9.5.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
             } else {
                 Text("بانتظار النتيجة", color = KingsCupColors.onDarkDim, fontSize = 10.sp)
             }

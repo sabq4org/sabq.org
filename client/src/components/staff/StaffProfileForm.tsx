@@ -25,6 +25,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { ImageUpload } from "@/components/ImageUpload";
 import { DateField } from "@/components/staff/DateField";
+import { PhoneVerificationCard } from "@/components/account/PhoneVerificationCard";
 import {
   IdCard, Briefcase, Newspaper, Phone, Globe, FolderLock, Eye, Loader2, Plus, Upload, ExternalLink,
   ChevronRight, ChevronLeft,
@@ -39,7 +40,7 @@ type Lookups = {
 type ProfileResponse = {
   user: {
     id: string; firstName: string | null; lastName: string | null;
-    email: string; phoneNumber: string | null; profileImageUrl: string | null; role: string;
+    email: string; phoneNumber: string | null; phoneVerified?: boolean; profileImageUrl: string | null; role: string;
   };
   profile: (Record<string, unknown> & {
     employeeNumber?: string | null;
@@ -173,6 +174,8 @@ export function StaffProfileForm({
       const editable = sectionsToSave.flatMap(([, keys]) => keys);
       for (const key of editable) {
         if (key === "nationalId") continue;
+        // الجوال في الوضع الذاتي يُدار بالتوثيق لا بهذا الحفظ.
+        if (isSelf && key === "phoneNumber") continue;
         if (form[key] !== undefined) {
           payload[key] = key === "yearsOfExperience"
             ? (form[key] === "" || form[key] === null ? undefined : Number(form[key]))
@@ -454,9 +457,20 @@ export function StaffProfileForm({
           {field("lastName", "اسم العرض — اسم العائلة",
             <Input className={missingClass("lastName")} value={String(form.lastName ?? "")} onChange={(e) => set("lastName", e.target.value)} />,
             { required: true, hint: "يظهر في المقالات والملف العام فقط" })}
-          {field("phoneNumber", "رقم الجوال",
-            <Input dir="ltr" className={missingClass("phoneNumber")} value={String(form.phoneNumber ?? "")} onChange={(e) => set("phoneNumber", e.target.value)} />,
-            { required: true })}
+          {isSelf
+            ? field("phoneNumber", "رقم الجوال",
+                <PhoneVerificationCard
+                  variant="inline"
+                  phoneNumber={data.user.phoneNumber}
+                  phoneVerified={data.user.phoneVerified}
+                  testIdPrefix="staff-phone"
+                  className={missingClass("phoneNumber") ? "rounded-lg ring-1 ring-destructive/40 p-2" : undefined}
+                  onVerified={() => queryClient.invalidateQueries({ queryKey: [apiBase] })}
+                />,
+                { required: true, hint: "يُوثَّق برمز SMS — لا يُحفظ الرقم قبل إثبات الملكية" })
+            : field("phoneNumber", "رقم الجوال",
+                <Input dir="ltr" className={missingClass("phoneNumber")} value={String(form.phoneNumber ?? "")} onChange={(e) => set("phoneNumber", e.target.value)} />,
+                { required: true })}
           {field("nationalId", "الهوية الوطنية / الإقامة",
             <div className="flex min-w-0 gap-2">
               <Input

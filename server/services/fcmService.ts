@@ -5,6 +5,12 @@ import {
   buildFcmDevicePayload,
   type FcmDeliveryOptions,
 } from './fcmPayload';
+import {
+  groupFcmTargetsByProfile,
+  resolveFcmProfile,
+  type FcmProfile,
+  type FcmTarget,
+} from './fcmRouting';
 
 // ============================================================================
 // أنواع البيانات
@@ -64,19 +70,36 @@ interface LogContext {
 // متغيرات الـ Token
 // ============================================================================
 
-let fcmAccessToken: string | null = null;
-let tokenExpiry: number = 0;
+const accessTokenCache = new Map<FcmProfile, { token: string; expiry: number }>();
 
 // ============================================================================
 // وظائف مساعدة
 // ============================================================================
 
-function isFcmConfigured(): boolean {
+function getFcmConfig(profile: FcmProfile): {
+  projectId?: string;
+  privateKey?: string;
+  clientEmail?: string;
+} {
+  const prefix = profile === "sabq" ? "FCM_SABQ" : "FCM";
+  return {
+    projectId: process.env[`${prefix}_PROJECT_ID`],
+    privateKey: process.env[`${prefix}_PRIVATE_KEY`]?.replace(/\\n/g, '\n'),
+    clientEmail: process.env[`${prefix}_CLIENT_EMAIL`],
+  };
+}
+
+function isFcmConfigured(bundleId?: string | null): boolean {
+  const config = getFcmConfig(resolveFcmProfile(bundleId));
   return !!(
-    process.env.FCM_PROJECT_ID &&
-    process.env.FCM_PRIVATE_KEY &&
-    process.env.FCM_CLIENT_EMAIL
+    config.projectId &&
+    config.privateKey &&
+    config.clientEmail
   );
+}
+
+function isAnyFcmConfigured(): boolean {
+  return isFcmConfigured() || isFcmConfigured("com.sabqorg.sabq");
 }
 
 // تصنيف الخطأ من رسالة FCM
@@ -212,21 +235,21 @@ async function logPushOperation(
 // الحصول على Access Token
 // ============================================================================
 
-async function getAccessToken(): Promise<string> {
+async function getAccessToken(profile: FcmProfile = "default"): Promise<string> {
   const now = Date.now();
+  const cached = accessTokenCache.get(profile);
   
-  if (fcmAccessToken && tokenExpiry > now + 60000) {
-    return fcmAccessToken;
+  if (cached && cached.expiry > now + 60000) {
+    return cached.token;
   }
 
-  const privateKey = process.env.FCM_PRIVATE_KEY?.replace(/\\n/g, '\n');
-  const clientEmail = process.env.FCM_CLIENT_EMAIL;
+  const { privateKey, clientEmail } = getFcmConfig(profile);
   
   if (!privateKey || !clientEmail) {
     throw new Error('FCM credentials not configured');
   }
 
-  console.log('[FCM] Refreshing access token...');
+  console.log(`[FCM] Refreshing ${profile} access token...`);
   const jwt = await createJWT(clientEmail, privateKey);
   
   const response = await fetch('https://oauth2.googleapis.com/token', {
@@ -247,11 +270,13 @@ async function getAccessToken(): Promise<string> {
   }
 
   const data = await response.json() as { access_token: string; expires_in: number };
-  fcmAccessToken = data.access_token;
-  tokenExpiry = now + (data.expires_in * 1000);
+  accessTokenCache.set(profile, {
+    token: data.access_token,
+    expiry: now + (data.expires_in * 1000),
+  });
   
-  console.log('[FCM] Access token refreshed, expires in:', data.expires_in, 'seconds');
-  return fcmAccessToken;
+  console.log(`[FCM] ${profile} access token refreshed, expires in:`, data.expires_in, 'seconds');
+  return data.access_token;
 }
 
 async function createJWT(clientEmail: string, privateKey: string): Promise<string> {
@@ -292,20 +317,22 @@ async function sendToDevice(
   message: FCMMessage,
   context?: Partial<LogContext>,
   deliveryOptions: FcmDeliveryOptions = {},
+  bundleId?: string | null,
 ): Promise<FCMResponse> {
   const startTime = Date.now();
+  const profile = resolveFcmProfile(bundleId);
   
-  if (!isFcmConfigured()) {
-    const result = { success: false, error: 'FCM not configured', errorCategory: 'config_error' as ErrorCategory };
-    console.warn('[FCM] Send failed: FCM not configured');
+  if (!isFcmConfigured(bundleId)) {
+    const result = { success: false, error: `FCM ${profile} not configured`, errorCategory: 'config_error' as ErrorCategory };
+    console.warn(`[FCM] Send failed: ${profile} profile not configured`);
     return result;
   }
 
   let httpStatus: number | undefined;
   
   try {
-    const accessToken = await getAccessToken();
-    const projectId = process.env.FCM_PROJECT_ID;
+    const accessToken = await getAccessToken(profile);
+    const projectId = getFcmConfig(profile).projectId;
 
     const fcmMessage = buildFcmDevicePayload(token, message, deliveryOptions);
 
@@ -419,20 +446,22 @@ async function sendToMultipleDevices(
   message: FCMMessage,
   context?: Partial<LogContext>,
   deliveryOptions: FcmDeliveryOptions = {},
+  bundleId?: string | null,
 ): Promise<BatchFCMResult> {
   const startTime = Date.now();
   
   console.log(`[FCM] Starting batch send to ${tokens.length} devices...`);
   
-  if (!isFcmConfigured()) {
-    console.error('[FCM] Batch send failed: FCM not configured');
+  if (!isFcmConfigured(bundleId)) {
+    const profile = resolveFcmProfile(bundleId);
+    console.error(`[FCM] Batch send failed: ${profile} profile not configured`);
     return {
       successCount: 0,
       failureCount: tokens.length,
       results: tokens.map(token => ({
         token,
         success: false,
-        error: 'FCM not configured',
+        error: `FCM ${profile} not configured`,
         errorCategory: 'config_error' as ErrorCategory,
       })),
     };
@@ -453,7 +482,7 @@ async function sendToMultipleDevices(
     
     const batchResults = await Promise.all(
       batch.map(async (token) => {
-        const result = await sendToDevice(token, message, context, deliveryOptions);
+        const result = await sendToDevice(token, message, context, deliveryOptions, bundleId);
         if (result.success) {
           successCount++;
         } else {
@@ -517,14 +546,39 @@ async function sendToMultipleDevices(
   return { successCount, failureCount, results };
 }
 
+/** Route each device through the Firebase project that issued its token. */
+async function sendToFcmTargets(
+  targets: FcmTarget[],
+  message: FCMMessage,
+  context?: Partial<LogContext>,
+  deliveryOptions: FcmDeliveryOptions = {},
+): Promise<BatchFCMResult> {
+  const combined: BatchFCMResult = { successCount: 0, failureCount: 0, results: [] };
+  for (const [profile, group] of groupFcmTargetsByProfile(targets)) {
+    const representativeBundle = profile === "sabq" ? "com.sabqorg.sabq" : group[0]?.bundleId;
+    const result = await sendToMultipleDevices(
+      group.map((target) => target.token),
+      message,
+      context,
+      deliveryOptions,
+      representativeBundle,
+    );
+    combined.successCount += result.successCount;
+    combined.failureCount += result.failureCount;
+    combined.results.push(...result.results);
+  }
+  return combined;
+}
+
 /** Majlis-only Android delivery: preserves the public editorial API unchanged. */
 async function sendDataOnlyToMultipleDevices(
   tokens: string[],
   message: FCMMessage,
   context?: Partial<LogContext>,
   options: Omit<FcmDeliveryOptions, 'androidDataOnly'> = {},
+  bundleId?: string | null,
 ): Promise<BatchFCMResult> {
-  return sendToMultipleDevices(tokens, message, context, { ...options, androidDataOnly: true });
+  return sendToMultipleDevices(tokens, message, context, { ...options, androidDataOnly: true }, bundleId);
 }
 
 // ============================================================================
@@ -868,8 +922,10 @@ async function subscribeToMultipleTopics(token: string, topics: string[]): Promi
 
 export {
   isFcmConfigured,
+  isAnyFcmConfigured,
   sendToDevice,
   sendToMultipleDevices,
+  sendToFcmTargets,
   sendDataOnlyToMultipleDevices,
   sendToTopic,
   getPushStats,

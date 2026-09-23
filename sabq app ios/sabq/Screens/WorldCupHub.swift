@@ -237,7 +237,7 @@ struct WCQualifiedSoFar: View {
 
     private let rounds = ["دور الـ32", "دور الـ16", "دور الـ8", "دور الـ4", "النهائي"]
     private var total: Int { qualifiedGroups.reduce(0) { $0 + $1.qualifiers.count } }
-    private let columns = [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)]
+    private let columns = SabqGrid.adaptive(spacing: 10)
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {

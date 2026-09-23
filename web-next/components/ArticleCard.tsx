@@ -55,9 +55,11 @@ function CategoryBadge({ item }: { item: ArticleListItem }) {
 export function ArticleCard({
   item,
   priority = false,
+  unframedMobile = false,
 }: {
   item: ArticleListItem;
   priority?: boolean;
+  unframedMobile?: boolean;
 }) {
   const time = timeAgoAr(item.publishedAt);
   const isBreaking = item.newsType === "breaking";
@@ -65,10 +67,14 @@ export function ArticleCard({
   return (
     <a
       href={item.href}
-      className="group block overflow-hidden rounded-xl border border-card-border bg-card transition-shadow hover:shadow-md"
+      className={
+        unframedMobile
+          ? "group block overflow-hidden md:rounded-xl md:border md:border-card-border md:bg-card md:transition-shadow md:hover:shadow-md"
+          : "group block overflow-hidden rounded-xl border border-card-border bg-card transition-shadow hover:shadow-md"
+      }
     >
       {/* Mobile: compact horizontal layout */}
-      <div className="flex gap-3 p-4 md:hidden">
+      <div className={unframedMobile ? "flex gap-3 py-3 md:hidden" : "flex gap-3 p-4 md:hidden"}>
         {item.imageUrl && (
           // eslint-disable-next-line @next/next/no-img-element
           <img

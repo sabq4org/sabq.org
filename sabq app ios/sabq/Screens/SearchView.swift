@@ -1,10 +1,10 @@
 import SwiftUI
+// Search analytics is emitted only after the API returns successfully.
 
 struct SearchView: View {
     @Environment(ArticlesStore.self) private var articlesStore
     @Environment(BookmarksStore.self) private var bookmarksStore
     @State private var searchText = ""
-    @FocusState private var isSearchFocused: Bool
     
     // لا قيم افتراضية وهمية: كانت «نيوم، رؤية 2030…» تظهر للمستخدم الجديد
     // بعنوان «عمليات بحث سابقة» وهو لم يبحث قط — القسم يختفي حتى أول بحث فعلي.
@@ -35,17 +35,10 @@ struct SearchView: View {
     var body: some View {
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 20) {
-                CompactScreenHeader(
-                    title: "البحث",
-                    subtitle: "ابحث في آلاف الأخبار المحلية والعالمية"
-                )
-
-                SabqSearchBar(
-                    text: $searchText,
-                    placeholder: "ابحث عن خبر أو موضوع...",
-                    onSubmit: { performSearch() },
-                    focusState: $isSearchFocused
-                )
+                Text("ابحث في آلاف الأخبار المحلية والعالمية")
+                    .font(SabqFonts.editorial(.subheadline, size: 14))
+                    .foregroundStyle(SabqTheme.secondaryInk)
+                    .fixedSize(horizontal: false, vertical: true)
 
                 if searchText.isEmpty {
                     if !suggestions.isEmpty {
@@ -69,6 +62,12 @@ struct SearchView: View {
         .background(SabqTheme.background)
         .sabqRTL()
         .sabqScreen("Search")
+        .navigationTitle("البحث")
+        .navigationBarTitleDisplayMode(.inline)
+        .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always),
+                    prompt: "ابحث عن خبر أو موضوع…")
+        .onSubmit(of: .search) { performSearch() }
+        .scrollDismissesKeyboard(.interactively)
         .task {
             trendingKeywords = await NewsService.fetchTrending()
             if trendingKeywords.isEmpty {
@@ -128,6 +127,7 @@ struct SearchView: View {
                 apiResults = result.articles
                 searchTotal = result.total
                 isSearching = false
+                SabqAnalytics.searchSucceeded(query: query)
             }
         }
     }
@@ -331,11 +331,10 @@ struct SearchView: View {
                     subtitle: "جرّب البحث بكلمات مختلفة"
                 )
             } else {
-                SurfaceCard(lazy: true) {
+                SurfaceCard(lazy: true, cornerRadius: 22, spacing: 0) {
                     ForEach(Array(displayResults.enumerated()), id: \.element.id) { index, article in
                         if index > 0 {
-                            Divider()
-                                .foregroundStyle(SabqTheme.outline)
+                            SidebarRowDivider()
                         }
 
                         NavigationLink(value: article) {

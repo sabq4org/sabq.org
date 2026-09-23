@@ -1,6 +1,7 @@
 import Redis from "ioredis";
 import { memoryCache, sseConnectionManager } from "../memoryCache";
 import { purgeHomepage, purgeBreakingNews, purgeArticle } from "./cloudflarePurge";
+import { bumpSeoCacheGeneration } from "./seoCacheInvalidation";
 
 /**
  * Patterns that match every cache key affected when an article is published,
@@ -22,6 +23,9 @@ const PUBLISHED_CONTENT_PATTERNS = [
   "^lite-feed",         // lite-feed
   "^news-",             // news-paginated-total, news-analytics-ar/en/ur
   "^mobile:",           // mobile:sections, mobile:trending, mobile:homepage
+  "^seo:",              // bounded SEO projection bundles
+  "^author:web:",        // public author page projections
+  "^category-articles:", // public category archive projections
 ];
 
 const CH_CACHE_INVALIDATE = "cache-invalidation:published";
@@ -77,6 +81,7 @@ function initPubSub(): void {
 
         // Apply local-only invalidation (no re-broadcast, no Cloudflare —
         // the originating pod already handled both globally).
+        bumpSeoCacheGeneration("remote-publish");
         memoryCache.invalidatePatterns(PUBLISHED_CONTENT_PATTERNS);
         console.log("[ContentInvalidation] ⟲ Applied remote invalidation from pod", msg.podId);
       } catch (e: any) {
@@ -131,6 +136,9 @@ export function invalidatePublishedContent(
   const { articleSlug, isBreaking, skipCloudflare, reason } = options;
 
   try {
+    // edgeMetaCache is deliberately isolated from memoryCache; advance its
+    // generation before any in-flight SEO projection can be committed.
+    bumpSeoCacheGeneration(reason || "published-content");
     memoryCache.invalidatePatterns(PUBLISHED_CONTENT_PATTERNS);
   } catch (e: any) {
     console.error("[ContentInvalidation] memory invalidation failed:", e?.message);

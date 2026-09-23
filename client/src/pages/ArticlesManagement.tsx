@@ -35,8 +35,9 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Edit, Trash2, Send, Star, Bell, Plus, Archive, Trash, GripVertical, Sparkles, Newspaper, Clock, FilePenLine, Brain, PenLine, MessageCircle, Mail, ChevronLeft, ChevronRight, Camera, BarChart3, Images, Building2, Languages, Loader2, Smartphone, Share2, Tag } from "lucide-react";
+import { Edit, Trash2, Send, Star, Bell, Plus, Archive, Trash, GripVertical, Sparkles, Newspaper, Clock, FilePenLine, Brain, MessageCircle, Mail, ChevronLeft, ChevronRight, Camera, BarChart3, Images, Building2, Languages, Loader2, Smartphone, Share2, BookOpen, HeartPulse, Zap, UserRound, ImageOff, AlertTriangle, EyeOff, Bot, Video } from "lucide-react";
+import { buildCloudflareUrl, normalizeImageSrc } from "@/lib/cdnImage";
+import { OpinionWeekBoard } from "@/components/admin/OpinionWeekBoard";
 import { SocialPublishDialog } from "@/components/social/SocialPublishDialog";
 import { ViewsCount } from "@/components/ViewsCount";
 import { DashboardLayout } from "@/components/DashboardLayout";
@@ -46,6 +47,7 @@ import { BreakingSwitch } from "@/components/admin/BreakingSwitch";
 import { RowActions } from "@/components/admin/RowActions";
 import { EditorialDraftReviewCue } from "@/components/admin/EditorialDraftReviewCue";
 import { isAwaitingContributorRevision, isResubmittedAfterRevision } from "@/lib/articleRevision";
+import { fmtSocialDateTime } from "@/components/social/socialFormat";
 import { cn } from "@/lib/utils";
 import {
   DndContext,
@@ -77,17 +79,33 @@ type Article = {
   articleType: string;
   newsType: string;
   isFeatured: boolean;
+  isReading?: boolean;
   views: number;
   publishedAt: string | null;
+  scheduledAt?: string | null;
   createdAt: string;
   updatedAt: string;
+  writerWeeklySlot?: {
+    weekday: number;
+    publishTime: string;
+    nextSlot: string;
+  } | null;
   isAiGeneratedThumbnail?: boolean;
+  imageUrl?: string | null;
+  thumbnailUrl?: string | null;
+  hideFromHomepage?: boolean | null;
+  videoUrl?: string | null;
+  isVideoTemplate?: boolean | null;
+  /** من أدخل المادة فعلًا (submitterId ثم authorId) — بخلاف الإسناد الظاهر */
+  enteredBy?: { id: string; firstName: string | null; lastName: string | null; email: string | null } | null;
+  signals?: { notifiedAt: string | null; socialPublishedAt: string | null } | null;
   source?: string;
   sourceMetadata?: {
     type?: 'email' | 'whatsapp' | 'manual' | 'mobile';
     from?: string;
     senderName?: string;
     senderId?: string;
+    bot?: string;
     platform?: 'ios' | 'android' | string;
     firstName?: string;
     lastName?: string;
@@ -96,6 +114,7 @@ type Article = {
     id: string;
     nameAr: string;
     nameEn: string;
+    color?: string | null;
   } | null;
   author?: {
     id: string;
@@ -117,16 +136,37 @@ type Category = {
   nameEn: string;
 };
 
+type ArticlesPage = {
+  articles: Article[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+};
+
+// جوال = عرض أقل من md، أو هاتف بالوضع الأفقي (شاشة لمس قصيرة الارتفاع
+// يتجاوز عرضها 768 فتُعامَل خطأً كديسكتوب لو اعتمدنا على العرض وحده)
+function isMobileViewport() {
+  if (typeof window === "undefined") return false;
+  if (window.innerWidth < 768) return true;
+  return window.matchMedia("(pointer: coarse)").matches && window.innerHeight < 500;
+}
+
 function SortableRow({
   article,
   children,
   isSaving,
+  disableSorting,
   highlightResubmitted,
+  alert,
 }: {
   article: Article;
   children: React.ReactNode;
   isSaving?: boolean;
+  disableSorting?: boolean;
   highlightResubmitted?: false | "resubmitted" | "awaiting";
+  /** خط أحمر على طرف الصف: عاجل، أو فات موعده */
+  alert?: boolean;
 }) {
   const {
     attributes,
@@ -135,7 +175,7 @@ function SortableRow({
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: article.id });
+  } = useSortable({ id: article.id, disabled: disableSorting });
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -149,52 +189,727 @@ function SortableRow({
     <tr
       ref={setNodeRef}
       style={style}
-      className={`border-b border-border/80 hover:bg-muted/25 odd:bg-muted/[0.12] ${isDragging ? 'bg-primary/10 shadow-lg' : ''} ${isSaving ? 'opacity-70' : ''} ${highlightResubmitted === 'resubmitted' ? 'bg-amber-50/80 dark:bg-muted/60 border-r-4 border-r-amber-500' : ''} ${highlightResubmitted === 'awaiting' ? 'bg-orange-50/80 dark:bg-muted/60 border-r-4 border-r-orange-500' : ''}`}
+      className={cn(
+        "border-b border-border/70 border-r-[3px] border-r-transparent bg-card transition-colors hover:bg-muted/50",
+        alert && "border-r-red-500 dark:border-r-red-500",
+        isDragging ? "bg-primary/15 shadow-lg" : "",
+        isSaving ? "opacity-70" : "",
+        highlightResubmitted === "resubmitted" ? "bg-amber-50/90 dark:bg-amber-950/30 border-r-4 border-r-amber-500" : "",
+        highlightResubmitted === "awaiting" ? "bg-orange-50/90 dark:bg-orange-950/30 border-r-4 border-r-orange-500" : ""
+      )}
       data-testid={`row-article-${article.id}`}
     >
       <td 
-        className="hidden md:table-cell py-3 px-2 text-center cursor-grab active:cursor-grabbing touch-none select-none" 
+        className={cn("hidden md:table-cell w-9 py-3 px-1 text-center", !disableSorting && "cursor-grab active:cursor-grabbing touch-none select-none")}
         {...attributes} 
         {...listeners}
       >
-        <GripVertical 
+        {!disableSorting && <GripVertical
           className={`h-4 w-4 mx-auto ${isDragging ? 'text-primary' : 'text-muted-foreground'} ${isSaving ? 'animate-pulse' : ''}`} 
           data-testid={`drag-handle-${article.id}`} 
-        />
+        />}
       </td>
       {children}
     </tr>
   );
 }
 
-const TYPE_CHIP: Record<string, { label: string; className: string; icon?: typeof Camera }> = {
+const TYPE_CHIP: Record<string, { label: string; tone: string; icon?: typeof Camera }> = {
   news: {
     label: "خبر",
-    className: "bg-sky-500/10 text-sky-700 dark:text-sky-300",
+    tone: "border-sky-200 bg-sky-50 text-sky-800 dark:border-sky-800 dark:bg-sky-950/45 dark:text-sky-200",
   },
   opinion: {
     label: "رأي",
-    className: "bg-violet-500/10 text-violet-700 dark:text-violet-300",
+    tone: "border-violet-200 bg-violet-50 text-violet-800 dark:border-violet-800 dark:bg-violet-950/45 dark:text-violet-200",
   },
   analysis: {
     label: "تحليل",
-    className: "bg-indigo-500/10 text-indigo-700 dark:text-indigo-300",
+    tone: "border-indigo-200 bg-indigo-50 text-indigo-800 dark:border-indigo-800 dark:bg-indigo-950/45 dark:text-indigo-200",
   },
   column: {
     label: "عمود",
-    className: "bg-fuchsia-500/10 text-fuchsia-700 dark:text-fuchsia-300",
+    tone: "border-fuchsia-200 bg-fuchsia-50 text-fuchsia-800 dark:border-fuchsia-800 dark:bg-fuchsia-950/45 dark:text-fuchsia-200",
   },
   weekly_photos: {
     label: "صور",
-    className: "bg-orange-500/15 text-orange-700 dark:text-orange-300",
+    tone: "border-orange-200 bg-orange-50 text-orange-800 dark:border-orange-800 dark:bg-orange-950/45 dark:text-orange-200",
     icon: Camera,
   },
   infographic: {
     label: "إنفوجرافيك",
-    className: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+    tone: "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/45 dark:text-emerald-200",
     icon: BarChart3,
   },
 };
+
+const AR_MONTHS = ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"] as const;
+
+function parseArticleDate(value: string | Date | null | undefined) {
+  if (!value) return null;
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function riyadhParts(date: Date) {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Riyadh",
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hourCycle: "h12",
+  }).formatToParts(date);
+  const get = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? "";
+  const monthIndex = Number(get("month")) - 1;
+  const suffix = /^a/i.test(get("dayPeriod")) ? "ص" : "م";
+  const day = String(Number(get("day")));
+  return {
+    dayKey: `${get("year")}-${get("month").padStart(2, "0")}-${get("day").padStart(2, "0")}`,
+    year: get("year"),
+    day,
+    monthName: AR_MONTHS[monthIndex] ?? get("month"),
+    clock: `${get("hour")}:${get("minute")} ${suffix}`,
+  };
+}
+
+function shiftDayKey(key: string, days: number) {
+  const [year, month, day] = key.split("-").map(Number);
+  const shifted = new Date(Date.UTC(year, month - 1, day + days));
+  const y = shifted.getUTCFullYear();
+  const m = String(shifted.getUTCMonth() + 1).padStart(2, "0");
+  const d = String(shifted.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function riyadhWireLabel(date: Date, now = new Date()) {
+  const current = riyadhParts(date);
+  const today = riyadhParts(now);
+  const full = `${current.day} ${current.monthName} ${current.year}، ${current.clock}`;
+  const iso = date.toISOString();
+  if (current.dayKey === today.dayKey) return { label: current.clock, full, iso };
+  if (current.dayKey === shiftDayKey(today.dayKey, -1)) return { label: `أمس ${current.clock}`, full, iso };
+  if (current.year === today.year) return { label: `${current.day} ${current.monthName}، ${current.clock}`, full, iso };
+  return { label: full, full, iso };
+}
+
+function wireMoment(article: Article, desktop: boolean) {
+  const id = desktop ? "desktop" : "mobile";
+  if (article.status === "scheduled") {
+    const when = parseArticleDate(article.scheduledAt);
+    if (!when) return {
+      label: "غير محدد",
+      full: "هذه المادة مجدولة بلا موعد نشر صالح",
+      iso: undefined,
+      prefix: "موعد النشر",
+      testId: `scheduled-label-${id === "desktop" ? "desktop-" : ""}${article.id}`,
+    };
+    return {
+      ...riyadhWireLabel(when),
+      prefix: "موعد النشر",
+      testId: `scheduled-label-${id === "desktop" ? "desktop-" : ""}${article.id}`,
+    };
+  }
+  if (article.status === "draft") {
+    const weeklyAt = article.articleType === "opinion"
+      ? article.scheduledAt || article.writerWeeklySlot?.nextSlot || null
+      : null;
+    const weekly = parseArticleDate(weeklyAt);
+    if (weekly) {
+      const when = riyadhWireLabel(weekly);
+      const parts = riyadhParts(weekly);
+      const compactLabel = `${parts.day} ${parts.monthName}، ${parts.clock}`;
+      return {
+        label: desktop && parts.year === riyadhParts(new Date()).year ? compactLabel : when.full,
+        full: when.full,
+        iso: when.iso,
+        prefix: "موعد الكاتب",
+        testId: `weekly-slot-${id === "desktop" ? "desktop-" : ""}${article.id}`,
+      };
+    }
+    if (article.articleType === "opinion") {
+      return {
+        label: "غير محدد",
+        full: "لم يُحدد موعد نشر لهذا الكاتب",
+        iso: undefined,
+        prefix: "موعد الكاتب",
+        testId: `weekly-slot-${id === "desktop" ? "desktop-" : ""}${article.id}`,
+      };
+    }
+    const created = parseArticleDate(article.createdAt);
+    if (!created) return null;
+    return {
+      ...riyadhWireLabel(created),
+      prefix: "حُفظت",
+      testId: `draft-date-${id === "desktop" ? "desktop-" : ""}${article.id}`,
+    };
+  }
+  if (article.status === "published") {
+    const published = parseArticleDate(article.publishedAt);
+    if (!published) return null;
+    return {
+      ...riyadhWireLabel(published),
+      prefix: "نُشر",
+      testId: `published-date-${id === "desktop" ? "desktop-" : ""}${article.id}`,
+    };
+  }
+  return null;
+}
+
+function personName(article: Article) {
+  const meta = article.sourceMetadata;
+  if (meta?.firstName || meta?.lastName) return `${meta.firstName || ""} ${meta.lastName || ""}`.trim();
+  if (meta?.senderName) return meta.senderName;
+  if (article.author?.firstName && article.author?.lastName) return `${article.author.firstName} ${article.author.lastName}`;
+  return article.author?.firstName || article.author?.email || "المحرر";
+}
+
+function userName(user: { firstName?: string | null; lastName?: string | null; email?: string | null } | null | undefined) {
+  if (!user) return null;
+  const name = `${user.firstName ?? ""} ${user.lastName ?? ""}`.trim();
+  return name || user.email || null;
+}
+
+/** الحساب الافتراضي للإسناد الظاهر — لا يفيد تكراره في كل صف */
+const DEFAULT_BYLINE = "صحيفة سبق";
+
+/**
+ * من أضاف المادة إلى النظام: البريد الذكي، واتساب، بوت، تطبيق المراسل، وكالة،
+ * أو اسم الموظف. لمقالات الرأي يبقى الكاتب أولًا ومن أدخلها ثانيًا.
+ */
+function wireAttribution(article: Article) {
+  const meta = article.sourceMetadata as (Article["sourceMetadata"] & { bot?: string }) | null | undefined;
+  const staff = userName(article.enteredBy);
+  if (article.source === "email" || article.source === "url") {
+    const name = meta?.senderName || meta?.from || null;
+    return { prefix: "البريد الذكي", name, channel: "بريد", title: `البريد الذكي${name ? `: ${name}` : ""}`, testId: "badge-source-email", incoming: true, Icon: Mail, enteredBy: null as string | null };
+  }
+  if (article.source === "whatsapp") {
+    const name = meta?.senderName || meta?.from || null;
+    return { prefix: "واتساب", name, channel: "واتساب", title: `واتساب${name ? `: ${name}` : ""}`, testId: "badge-source-whatsapp", incoming: true, Icon: MessageCircle, enteredBy: null as string | null };
+  }
+  if (article.source === "bot") {
+    const bot = meta?.bot || "نشر سبق";
+    return { prefix: "بوت", name: `«${bot}»`, channel: "بوت", title: `أضافه البوت «${bot}»`, testId: "badge-source-bot", incoming: true, Icon: Bot, enteredBy: null as string | null };
+  }
+  if (article.source === "ai") {
+    return { prefix: "مولّد آليًا", name: staff, channel: "آلي", title: `مولّد بالذكاء الاصطناعي${staff ? ` · ${staff}` : ""}`, testId: "badge-source-ai", incoming: true, Icon: Sparkles, enteredBy: null as string | null };
+  }
+  if (article.source === "ios-app" || article.source === "android-app") {
+    const name = personName(article);
+    const android = article.source === "android-app";
+    return {
+      prefix: "المراسل",
+      name,
+      channel: android ? "أندرويد" : "iOS",
+      title: `${android ? "تطبيق Android" : "تطبيق iOS"}: ${name}`,
+      testId: android ? "badge-source-android" : "badge-source-ios",
+      incoming: true,
+      Icon: Smartphone,
+      enteredBy: null as string | null,
+    };
+  }
+  if (article.publisher?.companyName) {
+    const name = article.publisher.companyName;
+    return { prefix: "الوكالة", name, channel: "وكالة", title: `وكالة: ${name}`, testId: "badge-source-publisher", incoming: true, Icon: Building2, enteredBy: null as string | null };
+  }
+  const byline = personName(article);
+  if (article.articleType === "opinion") {
+    return {
+      prefix: "الكاتب",
+      name: byline,
+      channel: null as string | null,
+      title: `الكاتب: ${byline}${staff && staff !== byline ? ` · أدخله ${staff}` : ""}`,
+      testId: "badge-source-manual",
+      incoming: false,
+      Icon: null,
+      enteredBy: staff && staff !== byline ? staff : null,
+    };
+  }
+  const name = staff || byline;
+  return {
+    prefix: "أضافه",
+    name,
+    channel: null as string | null,
+    title: `أضافه: ${name}${byline && byline !== name ? ` · باسم ${byline}` : ""}`,
+    testId: "badge-source-manual",
+    incoming: false,
+    Icon: null,
+    // الإسناد الظاهر إن اختلف عن الموظف ولم يكن الحساب الافتراضي
+    enteredBy: null as string | null,
+    byline: byline && byline !== name && byline !== DEFAULT_BYLINE ? byline : null,
+  };
+}
+
+/** ملصقات حالة المادة في سطر البيانات */
+function articleFlags(article: Article) {
+  const flags: { key: string; label: string; tone: string; Icon: typeof Star; title?: string }[] = [];
+  const album = (article as { albumImages?: unknown[] }).albumImages?.length
+    || (article as { mediaAssetsCount?: number }).mediaAssetsCount
+    || 0;
+  const aiImage = Boolean(article.isAiGeneratedThumbnail || (article as { isAiGeneratedImage?: boolean }).isAiGeneratedImage);
+  const noImage = !article.thumbnailUrl && !article.imageUrl && article.articleType === "news" && article.status !== "archived";
+  if (article.isFeatured) flags.push({ key: "featured", label: "مميّز", tone: "bg-amber-50 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300", Icon: Star });
+  if (article.isReading) flags.push({ key: "reading", label: "قراءة", tone: "bg-sky-50 text-sky-800 dark:bg-sky-950/50 dark:text-sky-300", Icon: BookOpen });
+  if (album) flags.push({ key: "album", label: `ألبوم ${album} صور`, tone: "bg-muted text-foreground/75", Icon: Images, title: "يحتوي على ألبوم صور" });
+  if (article.videoUrl || article.isVideoTemplate) flags.push({ key: "video", label: "فيديو", tone: "bg-muted text-foreground/75", Icon: Video });
+  if (noImage) flags.push({ key: "no-image", label: "بلا صورة", tone: "bg-amber-50 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300", Icon: AlertTriangle });
+  if (aiImage) flags.push({ key: "ai-image", label: "صورة مولّدة", tone: "bg-violet-50 text-violet-800 dark:bg-violet-950/50 dark:text-violet-300", Icon: Brain, title: "صورة مولّدة بالذكاء الاصطناعي" });
+  if (article.hideFromHomepage) flags.push({ key: "hidden", label: "مخفي من الرئيسية", tone: "bg-muted text-foreground/75", Icon: EyeOff });
+  return flags;
+}
+
+function ArticleFlags({ article, omit = [] }: { article: Article; omit?: string[] }) {
+  // بطاقة الجوال تعرض «مميّز» و«قراءة» في شارات مستقلة، فتُستثنى هنا منعًا للتكرار
+  const flags = articleFlags(article).filter((flag) => !omit.includes(flag.key));
+  if (!flags.length) return null;
+  return (
+    <>
+      {flags.map((flag) => (
+        <span
+          key={flag.key}
+          title={flag.title ?? flag.label}
+          className={cn("inline-flex shrink-0 items-center gap-1 rounded-[5px] px-1.5 text-[11px] font-medium leading-5", flag.tone)}
+          data-testid={`flag-${flag.key}-${article.id}`}
+        >
+          <flag.Icon className={cn("h-3 w-3", flag.key === "featured" && "fill-current")} aria-hidden="true" />
+          {flag.label}
+        </span>
+      ))}
+    </>
+  );
+}
+
+function ArticleWireRow({
+  article,
+  desktop,
+  onTitleClick,
+}: {
+  article: Article;
+  desktop: boolean;
+  onTitleClick?: () => void;
+}) {
+  const moment = wireMoment(article, desktop);
+  const who = wireAttribution(article);
+  const type = TYPE_CHIP[article.articleType] ?? {
+    label: "مادة",
+    tone: "border-border bg-muted/50 text-foreground/80",
+  };
+  const categoryName = article.category?.nameAr;
+  const categoryColor = article.category?.color && /^#([0-9a-fA-F]{6})$/.test(article.category.color)
+    ? article.category.color
+    : null;
+  const aiImage = Boolean(article.isAiGeneratedThumbnail || (article as { isAiGeneratedImage?: boolean }).isAiGeneratedImage);
+  const WhoIcon = who.Icon;
+  const whoLabel = who.prefix;
+  const momentTone = article.status === "scheduled"
+    ? "border-sky-200 bg-sky-50 text-sky-800 dark:border-sky-800 dark:bg-sky-950/45 dark:text-sky-200"
+    : article.status === "draft" && article.articleType === "opinion"
+      ? "border-violet-200 bg-violet-50 text-violet-800 dark:border-violet-800 dark:bg-violet-950/45 dark:text-violet-200"
+      : article.status === "draft"
+        ? "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950/45 dark:text-amber-200"
+        : "border-border bg-muted/45 text-foreground/80";
+  const momentClass = cn("inline-flex min-h-6 max-w-full items-center gap-1.5 rounded-md border px-2 py-0.5 text-xs leading-5", momentTone);
+  const momentContent = moment && (
+    <>
+      <Clock className="h-3.5 w-3.5 shrink-0 opacity-75" aria-hidden="true" />
+      <span className="shrink-0 font-semibold">{moment.prefix}</span>
+      <span className="tabular-nums">{moment.label}</span>
+    </>
+  );
+  const categoryChip = categoryName ? (
+    <span className="inline-flex min-h-6 shrink-0 items-center gap-1.5 rounded-md border border-border bg-muted/35 px-2 py-0.5 text-xs leading-5 text-foreground/80">
+      <span
+        className="h-2 w-2 rounded-full"
+        style={{ backgroundColor: categoryColor ?? "currentColor" }}
+        aria-hidden="true"
+      />
+      {categoryName}
+    </span>
+  ) : null;
+
+  return (
+    <div className="min-w-0">
+      <div className="flex items-start gap-2">
+        <span className={cn("mt-0.5 inline-flex shrink-0 items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] font-bold leading-5", type.tone)}>
+          {type.icon ? <type.icon className="h-3 w-3" aria-hidden="true" /> : null}
+          {type.label}
+        </span>
+        <h3
+          title={article.title}
+          onClick={onTitleClick}
+          className={cn(
+            "min-w-0 flex-1 text-[15px] font-semibold leading-snug text-foreground",
+            desktop ? "truncate" : "line-clamp-2",
+            onTitleClick && "cursor-pointer hover:text-primary",
+          )}
+        >
+          {article.title}
+        </h3>
+        {desktop && aiImage ? (
+          <span title="صورة مولّدة بالذكاء الاصطناعي" data-testid={`badge-ai-image-${article.id}`}>
+            <Brain className="mt-0.5 h-3.5 w-3.5 shrink-0 text-purple-600 dark:text-purple-400" aria-hidden="true" />
+          </span>
+        ) : null}
+        <EditorialDraftReviewCue
+          article={article}
+          layout="inline"
+          testId={`badge-review-${desktop ? "desktop" : "mobile"}-${article.id}`}
+        />
+      </div>
+      <div className={cn("mt-2 flex min-w-0 items-center gap-1.5", desktop ? "flex-nowrap" : "flex-wrap")}>
+        {moment?.iso ? (
+          <time
+            dateTime={moment.iso}
+            title={moment.full}
+            data-testid={moment.testId}
+            className={momentClass}
+          >
+            {momentContent}
+          </time>
+        ) : moment ? (
+          <span title={moment.full} data-testid={moment.testId} className={momentClass}>
+            {momentContent}
+          </span>
+        ) : null}
+        <span
+          data-testid={who.testId}
+          title={who.title}
+          className={cn("inline-flex min-h-6 min-w-0 max-w-full items-center gap-1 rounded-md border border-border bg-card px-2 py-0.5 text-xs leading-5 text-foreground/85", desktop && "flex-1")}
+        >
+          {WhoIcon ? <WhoIcon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" /> : <UserRound className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />}
+          <span className="shrink-0 text-muted-foreground">{whoLabel}</span>
+          <span className="truncate font-semibold">{who.name}</span>
+        </span>
+        {categoryChip}
+        {!desktop ? <ArticleFlags article={article} omit={["featured", "reading"]} /> : null}
+      </div>
+    </div>
+  );
+}
+
+// ── صف القائمة على الديسكتوب: عمود وقت بارز، صورة مصغرة، سطر بيانات هادئ ──
+
+const AR_WEEKDAYS = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"] as const;
+const HOUR_MS = 60 * 60 * 1000;
+const STALE_DRAFT_MS = 24 * HOUR_MS;
+
+function weekdayOfKey(key: string) {
+  const [year, month, day] = key.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day)).getUTCDay();
+}
+
+/** مدة قصيرة بالعربية: «5 د»، «2س 15د»، «يومين» */
+function shortSpan(ms: number) {
+  const minutes = Math.max(0, Math.round(Math.abs(ms) / 60_000));
+  if (minutes < 1) return "لحظات";
+  if (minutes < 60) return `${minutes} د`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) {
+    const rest = minutes % 60;
+    return rest ? `${hours}س ${rest}د` : `${hours} س`;
+  }
+  const days = Math.round(hours / 24);
+  return days === 1 ? "يوم" : days === 2 ? "يومين" : `${days} أيام`;
+}
+
+/** تسمية الوقت داخل العمود: الساعة وحدها لليوم، واليوم والساعة لما سواه */
+function deskClock(date: Date, now: Date) {
+  const current = riyadhParts(date);
+  const today = riyadhParts(now);
+  if (current.dayKey === today.dayKey) return current.clock;
+  if (current.dayKey === shiftDayKey(today.dayKey, -1)) return `أمس ${current.clock}`;
+  if (current.dayKey === shiftDayKey(today.dayKey, 1)) return `غدًا ${current.clock}`;
+  const diffDays = Math.abs(date.getTime() - now.getTime()) / (24 * HOUR_MS);
+  if (diffDays < 6.5) return `${AR_WEEKDAYS[weekdayOfKey(current.dayKey)]} ${current.clock}`;
+  return current.year === today.year
+    ? `${current.day} ${current.monthName}، ${current.clock}`
+    : `${current.day} ${current.monthName} ${current.year}`;
+}
+
+type DeskTone = "neutral" | "sky" | "violet" | "amber" | "red";
+type DeskMoment = {
+  kicker: string;
+  clock: string;
+  sub: string | null;
+  tone: DeskTone;
+  subTone?: DeskTone;
+  iso?: string;
+  full: string;
+  testId: string;
+  /** فات الموعد — يُعلَّم الصف بخط أحمر */
+  overdue?: boolean;
+};
+
+function deskMoment(article: Article, now: Date): DeskMoment | null {
+  const id = article.id;
+  if (article.status === "scheduled") {
+    const when = parseArticleDate(article.scheduledAt);
+    const testId = `scheduled-label-desktop-${id}`;
+    if (!when) return { kicker: "موعد النشر", clock: "غير محدد", sub: "بلا موعد صالح", tone: "amber", full: "هذه المادة مجدولة بلا موعد نشر صالح", testId };
+    const diff = when.getTime() - now.getTime();
+    const base = { clock: deskClock(when, now), iso: when.toISOString(), full: riyadhWireLabel(when, now).full, testId };
+    return diff <= 0
+      ? { ...base, kicker: "فات الموعد", sub: `منذ ${shortSpan(diff)}`, tone: "red", subTone: "red", overdue: true }
+      : { ...base, kicker: "موعد النشر", sub: `بعد ${shortSpan(diff)}`, tone: "sky" };
+  }
+  if (article.status === "draft" && article.articleType === "opinion") {
+    const slot = parseArticleDate(article.scheduledAt || article.writerWeeklySlot?.nextSlot || null);
+    const testId = `weekly-slot-desktop-${id}`;
+    if (!slot) return { kicker: "موعد الكاتب", clock: "غير محدد", sub: "حدّده من لوحة الكتّاب", tone: "amber", full: "لم يُحدد موعد نشر لهذا الكاتب", testId };
+    const diff = slot.getTime() - now.getTime();
+    const base = { clock: deskClock(slot, now), iso: slot.toISOString(), full: riyadhWireLabel(slot, now).full, testId };
+    return diff <= 0
+      ? { ...base, kicker: "فات موعد الكاتب", sub: `منذ ${shortSpan(diff)}`, tone: "red", subTone: "red", overdue: true }
+      : { ...base, kicker: "موعد الكاتب", sub: `بعد ${shortSpan(diff)}`, tone: "violet" };
+  }
+  if (article.status === "draft") {
+    const saved = parseArticleDate(article.updatedAt) ?? parseArticleDate(article.createdAt);
+    if (!saved) return null;
+    const age = now.getTime() - saved.getTime();
+    return {
+      kicker: "حُفظت",
+      clock: deskClock(saved, now),
+      sub: age > STALE_DRAFT_MS ? `راكدة ${shortSpan(age)}` : `قبل ${shortSpan(age)}`,
+      subTone: age > STALE_DRAFT_MS ? "amber" : undefined,
+      tone: "neutral",
+      iso: saved.toISOString(),
+      full: riyadhWireLabel(saved, now).full,
+      testId: `draft-date-desktop-${id}`,
+    };
+  }
+  if (article.status === "published") {
+    const published = parseArticleDate(article.publishedAt);
+    if (!published) return null;
+    const age = now.getTime() - published.getTime();
+    return {
+      kicker: "نُشر",
+      clock: deskClock(published, now),
+      sub: age < 24 * HOUR_MS ? `قبل ${shortSpan(age)}` : null,
+      tone: "neutral",
+      iso: published.toISOString(),
+      full: riyadhWireLabel(published, now).full,
+      testId: `published-date-desktop-${id}`,
+    };
+  }
+  if (article.status === "archived") {
+    const archived = parseArticleDate(article.updatedAt);
+    if (!archived) return null;
+    return { kicker: "أُرشفت", clock: deskClock(archived, now), sub: null, tone: "neutral", iso: archived.toISOString(), full: riyadhWireLabel(archived, now).full, testId: `archived-date-desktop-${id}` };
+  }
+  return null;
+}
+
+const DESK_TONE: Record<DeskTone, string> = {
+  neutral: "text-foreground",
+  sky: "text-sky-700 dark:text-sky-300",
+  violet: "text-violet-700 dark:text-violet-300",
+  amber: "text-amber-700 dark:text-amber-300",
+  red: "text-red-600 dark:text-red-400",
+};
+
+function DeskTimeCell({ moment }: { moment: DeskMoment | null }) {
+  if (!moment) return <span className="text-xs text-muted-foreground">—</span>;
+  const tone = DESK_TONE[moment.tone];
+  const body = (
+    <>
+      <span className={cn("block text-[11px] leading-4", moment.tone === "neutral" ? "text-muted-foreground" : tone)}>{moment.kicker}</span>
+      <span className={cn("block text-[14.5px] font-semibold leading-5 tabular-nums", tone)}>{moment.clock}</span>
+      {moment.sub ? (
+        <span className={cn("block text-[11px] leading-4 tabular-nums", moment.subTone ? DESK_TONE[moment.subTone] : "text-muted-foreground")}>{moment.sub}</span>
+      ) : null}
+    </>
+  );
+  return moment.iso ? (
+    <time dateTime={moment.iso} title={moment.full} data-testid={moment.testId} className="block">{body}</time>
+  ) : (
+    <span title={moment.full} data-testid={moment.testId} className="block">{body}</span>
+  );
+}
+
+function DeskThumb({ article }: { article: Article }) {
+  const src = article.thumbnailUrl || article.imageUrl;
+  if (!src) {
+    return (
+      <div className="grid h-[42px] w-16 place-items-center rounded-md border border-dashed border-border text-muted-foreground" title="بلا صورة">
+        <ImageOff className="h-4 w-4" aria-hidden="true" />
+      </div>
+    );
+  }
+  return (
+    <img
+      src={buildCloudflareUrl(normalizeImageSrc(src), { width: 128, height: 84, quality: 70 })}
+      alt=""
+      loading="lazy"
+      decoding="async"
+      className="h-[42px] w-16 rounded-md bg-muted object-cover"
+      data-testid={`thumb-article-${article.id}`}
+    />
+  );
+}
+
+function ArticleDeskMain({
+  article,
+  onTitleClick,
+}: {
+  article: Article;
+  onTitleClick?: () => void;
+}) {
+  const who = wireAttribution(article);
+  const type = article.articleType && article.articleType !== "news" ? TYPE_CHIP[article.articleType] : null;
+  const isBreaking = article.newsType === "breaking";
+  const categoryName = article.category?.nameAr;
+  const categoryColor = article.category?.color && /^#([0-9a-fA-F]{6})$/.test(article.category.color)
+    ? article.category.color
+    : null;
+  const WhoIcon = who.Icon ?? UserRound;
+  const Sep = () => <span aria-hidden="true" className="text-border">|</span>;
+
+  return (
+    <div className="min-w-0">
+      <div className="flex min-w-0 items-center gap-1.5">
+        {isBreaking ? (
+          <span className="shrink-0 rounded-[5px] bg-red-50 px-1.5 text-[11px] font-bold leading-5 text-red-700 dark:bg-red-950/50 dark:text-red-300">عاجل</span>
+        ) : null}
+        {type ? (
+          <span className={cn("inline-flex shrink-0 items-center gap-1 rounded-[5px] border px-1.5 text-[11px] font-bold leading-5", type.tone)}>
+            {type.icon ? <type.icon className="h-3 w-3" aria-hidden="true" /> : null}
+            {type.label}
+          </span>
+        ) : null}
+        <h3
+          title={article.title}
+          onClick={onTitleClick}
+          className={cn(
+            "min-w-0 flex-1 truncate text-[14.5px] font-semibold leading-6 text-foreground",
+            onTitleClick && "cursor-pointer hover:text-primary",
+          )}
+        >
+          {article.title}
+        </h3>
+        <EditorialDraftReviewCue article={article} layout="inline" testId={`badge-review-desktop-${article.id}`} />
+      </div>
+      <div className="mt-1 flex min-w-0 items-center gap-2 overflow-hidden whitespace-nowrap text-xs text-muted-foreground">
+        {categoryName ? (
+          <span className="inline-flex shrink-0 items-center gap-1.5">
+            <span className="h-[7px] w-[7px] rounded-full" style={{ backgroundColor: categoryColor ?? "currentColor" }} aria-hidden="true" />
+            {categoryName}
+          </span>
+        ) : null}
+        {categoryName ? <Sep /> : null}
+        <span data-testid={who.testId} title={who.title} className="inline-flex min-w-0 items-center gap-1">
+          <WhoIcon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+          <span className="shrink-0">{who.prefix}</span>
+          {who.name ? <span className="truncate font-medium text-foreground/85">{who.name}</span> : null}
+          {who.channel === "iOS" || who.channel === "أندرويد" ? <span className="shrink-0">· {who.channel}</span> : null}
+        </span>
+        {who.enteredBy ? (
+          <span className="inline-flex min-w-0 shrink items-center gap-1" data-testid={`entered-by-${article.id}`}>
+            <span className="shrink-0">· أدخله</span>
+            <span className="truncate text-foreground/80">{who.enteredBy}</span>
+          </span>
+        ) : null}
+        {"byline" in who && who.byline ? (
+          <span className="inline-flex min-w-0 shrink items-center gap-1" data-testid={`byline-${article.id}`}>
+            <span className="shrink-0">· باسم</span>
+            <span className="truncate text-foreground/80">{who.byline}</span>
+          </span>
+        ) : null}
+        <ArticleFlags article={article} />
+      </div>
+    </div>
+  );
+}
+
+function DeskViewsCell({ article, now }: { article: Article; now: Date }) {
+  if (article.status !== "published") return null;
+  const views = Number(article.views) || 0;
+  const published = parseArticleDate(article.publishedAt);
+  const hours = published ? (now.getTime() - published.getTime()) / HOUR_MS : 0;
+  const perHour = hours >= 1 && hours <= 48 && views > 0 ? Math.round(views / hours) : null;
+  return (
+    <div className="text-left tabular-nums" data-testid={`views-article-${article.id}`}>
+      <span className="block text-sm font-semibold">{views.toLocaleString("en-US")}</span>
+      {perHour !== null ? (
+        <span className="block text-[11px] text-muted-foreground" title="متوسط القراءات في الساعة منذ النشر">{perHour.toLocaleString("en-US")} بالساعة</span>
+      ) : null}
+    </div>
+  );
+}
+
+type DeskListItem =
+  | { kind: "group"; key: string; label: string; tone?: DeskTone }
+  | { kind: "article"; article: Article };
+
+function deskDayLabel(key: string, todayKey: string) {
+  const [year, month, day] = key.split("-").map(Number);
+  const [todayYear] = todayKey.split("-").map(Number);
+  const date = `${AR_WEEKDAYS[weekdayOfKey(key)]} ${day} ${AR_MONTHS[month - 1] ?? month}${year !== todayYear ? ` ${year}` : ""}`;
+  if (key === todayKey) return `اليوم · ${date}`;
+  if (key === shiftDayKey(todayKey, -1)) return `أمس · ${date}`;
+  if (key === shiftDayKey(todayKey, 1)) return `غدًا · ${date}`;
+  return date;
+}
+
+/** يقسم الصفحة الحالية إلى مجموعات: باليوم للمنشور والمجدول، وبالنوع للمسودات. */
+function buildDeskList(articles: Article[], status: string, now: Date): DeskListItem[] {
+  const todayKey = riyadhParts(now).dayKey;
+  if (status === "draft") {
+    const opinion = articles.filter((a) => a.articleType === "opinion");
+    const news = articles.filter((a) => a.articleType !== "opinion");
+    const slotOf = (a: Article) => parseArticleDate(a.scheduledAt || a.writerWeeklySlot?.nextSlot || null)?.getTime() ?? Number.POSITIVE_INFINITY;
+    const sortedOpinion = [...opinion].sort((a, b) => slotOf(a) - slotOf(b));
+    const items: DeskListItem[] = [];
+    if (sortedOpinion.length) {
+      items.push({ kind: "group", key: "opinion", label: "مقالات الرأي · حسب موعد الكاتب" });
+      sortedOpinion.forEach((article) => items.push({ kind: "article", article }));
+    }
+    if (news.length) {
+      if (sortedOpinion.length) items.push({ kind: "group", key: "news", label: "مسودات الأخبار · الأحدث أولًا" });
+      news.forEach((article) => items.push({ kind: "article", article }));
+    }
+    return items;
+  }
+  if (status !== "published" && status !== "scheduled") {
+    return articles.map((article) => ({ kind: "article", article }));
+  }
+  const items: DeskListItem[] = [];
+  let lastKey: string | null = null;
+  for (const article of articles) {
+    let key: string;
+    let label: string;
+    let tone: DeskTone | undefined;
+    const when = parseArticleDate(status === "published" ? article.publishedAt : article.scheduledAt);
+    if (status === "scheduled" && (!when || when.getTime() <= now.getTime())) {
+      key = "overdue";
+      label = when ? "فات موعد نشرها" : "بلا موعد صالح";
+      tone = "red";
+    } else if (when) {
+      key = riyadhParts(when).dayKey;
+      label = deskDayLabel(key, todayKey);
+    } else {
+      key = "undated";
+      label = "بلا تاريخ";
+    }
+    if (key !== lastKey) {
+      items.push({ kind: "group", key: `${key}-${items.length}`, label, tone });
+      lastKey = key;
+    }
+    items.push({ kind: "article", article });
+  }
+  return items;
+}
+
+/** ساعة تتقدّم كل دقيقة لتحديث «قبل/بعد» دون إعادة الجلب */
+function useMinuteClock() {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(new Date()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
+  return now;
+}
 
 export default function ArticlesManagement() {
   const { user, isLoading: isUserLoading } = useAuth({ redirectToLogin: true });
@@ -243,6 +958,8 @@ export default function ArticlesManagement() {
   const [deletingArticle, setDeletingArticle] = useState<Article | null>(null);
   const [revisionArticle, setRevisionArticle] = useState<Article | null>(null);
   const [socialPublishArticle, setSocialPublishArticle] = useState<Article | null>(null);
+  const [notifyArticle, setNotifyArticle] = useState<Article | null>(null);
+  const [isSendingNotification, setIsSendingNotification] = useState(false);
   const [revisionNotes, setRevisionNotes] = useState("");
   const [revisionNotesError, setRevisionNotesError] = useState<string | null>(null);
   // Reason captured in the archive dialog. Required by the backend
@@ -251,12 +968,25 @@ export default function ArticlesManagement() {
   const [archiveReason, setArchiveReason] = useState("");
   const [archiveReasonError, setArchiveReasonError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
-  const [activeStatus, setActiveStatus] = useState<"published" | "scheduled" | "draft" | "archived">("published");
-  const [typeFilter, setTypeFilter] = useState("all");
-  const [categoryFilter, setCategoryFilter] = useState("all");
-  
-  // State for pagination
-  const [currentPage, setCurrentPage] = useState(1);
+  // Commit filters and page together: never fetch a new filter on the old page.
+  const [listParams, setListParams] = useState({
+    search: "",
+    status: "published" as "published" | "scheduled" | "draft" | "archived",
+    type: "all",
+    category: "all",
+    page: 1,
+  });
+  const { status: activeStatus, type: typeFilter, category: categoryFilter, page: currentPage } = listParams;
+  const changeFilters = (filters: Partial<Omit<typeof listParams, "page">>) => {
+    setListParams(previous => ({ ...previous, search: searchTerm, ...filters, page: 1 }));
+  };
+  useEffect(() => {
+    if (searchTerm === listParams.search) return;
+    const timer = window.setTimeout(() => {
+      setListParams(previous => ({ ...previous, search: searchTerm, page: 1 }));
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [searchTerm, listParams.search]);
   
   // State for bulk selection
   const [selectedArticles, setSelectedArticles] = useState<Set<string>>(new Set());
@@ -267,23 +997,22 @@ export default function ArticlesManagement() {
   const [bulkArchiveReason, setBulkArchiveReason] = useState("");
   const [bulkArchiveReasonError, setBulkArchiveReasonError] = useState<string | null>(null);
 
-  // State for drag and drop
-  const [localArticles, setLocalArticles] = useState<Article[]>([]);
-
   // State for AI classification
   const [classificationResult, setClassificationResult] = useState<any>(null);
   const [showClassificationDialog, setShowClassificationDialog] = useState(false);
 
   // State for mobile detection
-  const [isMobile, setIsMobile] = useState(
-    typeof window !== 'undefined' ? window.innerWidth < 768 : false
-  );
+  const [isMobile, setIsMobile] = useState(isMobileViewport);
 
   // Mobile detection effect
   useEffect(() => {
-    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    const handleResize = () => setIsMobile(isMobileViewport());
     window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+    window.addEventListener('orientationchange', handleResize);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('orientationchange', handleResize);
+    };
   }, []);
 
   // DnD sensors
@@ -300,7 +1029,7 @@ export default function ArticlesManagement() {
 
   // Fetch metrics
   const { data: metrics, isLoading: metricsLoading, error: metricsError } = useQuery({
-    queryKey: ["/api/admin/articles/metrics"],
+    queryKey: ["/api/admin/articles/metrics", user?.id],
     queryFn: async () => {
       const response = await fetch(apiUrl("/api/admin/articles/metrics"), { credentials: "include" });
       if (!response.ok) {
@@ -310,26 +1039,24 @@ export default function ArticlesManagement() {
       const data = await response.json();
       return data;
     },
-    enabled: !!user,
+    enabled: !!canViewArticles,
+    staleTime: 0,
+    refetchOnWindowFocus: true,
+    refetchInterval: 60_000,
   });
 
-  // Reset page to 1 when filters change
+  // Selection belongs only to the visible account/filter/page.
   useEffect(() => {
-    setCurrentPage(1);
-  }, [searchTerm, activeStatus, typeFilter, categoryFilter]);
+    setSelectedArticles(new Set());
+  }, [user?.id, searchTerm, activeStatus, typeFilter, categoryFilter, currentPage]);
 
   // Fetch articles with filters and pagination
-  const { data: articlesData, isLoading: articlesLoading } = useQuery<{
-    articles: Article[];
-    total: number;
-    page: number;
-    limit: number;
-    totalPages: number;
-  }>({
-    queryKey: ["/api/admin/articles", searchTerm, activeStatus, typeFilter, categoryFilter, currentPage],
-    queryFn: async () => {
+  const articlesQueryKey = ["/api/admin/articles", user?.id, listParams.search, activeStatus, typeFilter, categoryFilter, currentPage];
+  const { data: articlesData, isLoading: articlesLoading, isFetching: articlesFetching, isPlaceholderData, isError: articlesError, refetch: refetchArticles } = useQuery<ArticlesPage>({
+    queryKey: articlesQueryKey,
+    queryFn: async ({ signal }) => {
       const params = new URLSearchParams();
-      if (searchTerm) params.append("search", searchTerm);
+      if (listParams.search) params.append("search", listParams.search);
       if (activeStatus) params.append("status", activeStatus);
       if (typeFilter && typeFilter !== "all") params.append("articleType", typeFilter);
       if (categoryFilter && categoryFilter !== "all") params.append("categoryId", categoryFilter);
@@ -337,17 +1064,45 @@ export default function ArticlesManagement() {
       params.append("limit", "30");
       
       const url = `/api/admin/articles?${params.toString()}`;
-      const response = await fetch(url, { credentials: "include" });
+      const response = await fetch(apiUrl(url), { credentials: "include", signal });
       if (!response.ok) {
-        throw new Error(`Failed to fetch articles: ${response.statusText}`);
+        // Preserve the HTTP status for the shared retry policy (4xx must fail fast).
+        throw new Error(`${response.status}: ${response.statusText}`);
       }
       return response.json();
     },
-    enabled: !!user,
+    enabled: !!canViewArticles,
+    staleTime: 0,
+    refetchOnWindowFocus: true,
+    refetchInterval: activeStatus === "published" || activeStatus === "scheduled" ? 60_000 : false,
+    // Keep the table in place during transitions, but never carry another account's rows.
+    placeholderData: (previousData, previousQuery) =>
+      user?.id && previousQuery?.queryKey[1] === user.id ? previousData : undefined,
   });
 
-  const articles = useMemo(() => articlesData?.articles || [], [articlesData?.articles]);
+  const articles = useMemo(() => canViewArticles && Array.isArray(articlesData?.articles) ? articlesData.articles : [], [canViewArticles, articlesData?.articles]);
+  const articlesBusy = articlesFetching || isPlaceholderData || searchTerm !== listParams.search;
+  const now = useMinuteClock();
+  const deskList = useMemo(() => buildDeskList(articles, activeStatus, now), [articles, activeStatus, now]);
+  const canSeeWeekBoard = !!user && hasAnyPermission(user, "opinion.review", "articles.schedule");
+  const displayedPage = articlesData?.page ?? currentPage;
   const totalPages = articlesData?.totalPages || 1;
+
+  // A scheduled row may publish, or move to another page, during a refresh.
+  // Bulk actions must never retain IDs that are no longer in the visible result.
+  useEffect(() => {
+    if (articlesFetching || isPlaceholderData || articlesError) return;
+    const visible = new Set(articles.map(article => article.id));
+    setSelectedArticles(previous => {
+      const next = new Set(Array.from(previous).filter(id => visible.has(id)));
+      return next.size === previous.size ? previous : next;
+    });
+  }, [articles, articlesFetching, isPlaceholderData, articlesError]);
+  useEffect(() => {
+    if (selectedArticles.size > 0) return;
+    setShowBulkArchiveDialog(false);
+    setShowBulkDeleteDialog(false);
+  }, [selectedArticles]);
 
   // Fetch categories for filter
   const { data: categoriesRaw } = useQuery<Category[]>({
@@ -355,13 +1110,6 @@ export default function ArticlesManagement() {
     enabled: !!user,
   });
   const categories = Array.isArray(categoriesRaw) ? categoriesRaw : [];
-
-  // Update local articles when articles change
-  useEffect(() => {
-    if (articlesData?.articles) {
-      setLocalArticles(articlesData.articles);
-    }
-  }, [articlesData?.articles]);
 
   // Publish mutation
   const publishMutation = useMutation({
@@ -515,22 +1263,22 @@ export default function ArticlesManagement() {
     },
     onMutate: async ({ id, currentState }) => {
       // Store the exact query key being modified
-      const queryKey = ["/api/admin/articles", searchTerm, activeStatus, typeFilter, categoryFilter];
+      const queryKey = articlesQueryKey;
       
       // Cancel any outgoing refetches
       await queryClient.cancelQueries({ queryKey: ["/api/admin/articles"] });
       
       // Snapshot the previous value with its query key
-      const previousArticles = queryClient.getQueryData(queryKey);
+      const previousArticles = queryClient.getQueryData<ArticlesPage>(queryKey);
       
       // Optimistically update to the new value
-      queryClient.setQueryData(queryKey, (old: Article[] | undefined) => {
+      queryClient.setQueryData(queryKey, (old: ArticlesPage | undefined) => {
         if (!old) return old;
-        return old.map(article => 
+        return { ...old, articles: old.articles.map(article =>
           article.id === id 
             ? { ...article, newsType: currentState ? "regular" : "breaking" }
             : article
-        );
+        ) };
       });
       
       return { previousArticles, queryKey };
@@ -640,15 +1388,14 @@ export default function ArticlesManagement() {
       await queryClient.cancelQueries({ queryKey: ["/api/admin/articles"] });
 
       // Store the previous state for rollback
-      const previousData = queryClient.getQueryData<{ articles: Article[]; total: number; page: number; limit: number; totalPages: number }>(data.queryKey);
-      const previousLocalArticles = [...localArticles];
+      const previousData = queryClient.getQueryData<ArticlesPage>(data.queryKey);
 
       // Optimistically update the cache, preserving the paginated response shape
       if (previousData) {
         queryClient.setQueryData(data.queryKey, { ...previousData, articles: [...data.newOrderedArticles] });
       }
 
-      return { previousData, previousLocalArticles, queryKey: data.queryKey };
+      return { previousData, queryKey: data.queryKey };
     },
     onSuccess: () => {
       // Invalidate homepage and related caches for instant update
@@ -665,9 +1412,6 @@ export default function ArticlesManagement() {
       // Rollback to the previous state with fresh copies
       if (context?.previousData && context?.queryKey) {
         queryClient.setQueryData(context.queryKey, { ...context.previousData, articles: [...context.previousData.articles] });
-      }
-      if (context?.previousLocalArticles) {
-        setLocalArticles([...context.previousLocalArticles]);
       }
       toast({
         title: "خطأ في حفظ الترتيب",
@@ -704,8 +1448,56 @@ export default function ArticlesManagement() {
     },
   });
 
+  const resurfaceMutation = useMutation({
+    mutationFn: async (articleId: string) => {
+      return await apiRequest(`/api/articles/${articleId}/resurface`, {
+        method: "POST",
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/articles"] });
+      toast({
+        title: "تم الإنعاش",
+        description: "عاد الخبر إلى صدارة الموجز وبدأ دورة جديدة",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "خطأ",
+        description: error.message || "فشل إنعاش الخبر",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleSendNotification = async (article: Article) => {
+    setIsSendingNotification(true);
+    try {
+      const data = await apiRequest<{ message?: string }>(`/api/admin/push/quick-send`, {
+        method: "POST",
+        body: JSON.stringify({ articleId: article.id }),
+        headers: { "Content-Type": "application/json" },
+      });
+
+      toast({
+        title: "بدأ الإرسال",
+        description: data?.message || "جارٍ إرسال الإشعار للمستخدمين في الخلفية",
+      });
+      setNotifyArticle(null);
+    } catch (error: any) {
+      toast({
+        title: "خطأ",
+        description: error.message || "فشل إرسال الإشعار",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSendingNotification(false);
+    }
+  };
+
   // Selection handlers
   const toggleArticleSelection = (articleId: string) => {
+    if (articlesBusy) return;
     setSelectedArticles(prev => {
       const newSet = new Set(prev);
       if (newSet.has(articleId)) {
@@ -718,6 +1510,7 @@ export default function ArticlesManagement() {
   };
 
   const toggleSelectAll = () => {
+    if (articlesBusy) return;
     if (selectedArticles.size === articles.length) {
       setSelectedArticles(new Set());
     } else {
@@ -726,50 +1519,55 @@ export default function ArticlesManagement() {
   };
 
   const handleBulkArchive = () => {
-    if (selectedArticles.size === 0) return;
+    if (articlesBusy || selectedArticles.size === 0) return;
     setBulkArchiveReason("");
     setBulkArchiveReasonError(null);
     setShowBulkArchiveDialog(true);
   };
 
   const handleBulkPermanentDelete = () => {
-    if (selectedArticles.size === 0) return;
+    if (articlesBusy || selectedArticles.size === 0) return;
     setShowBulkDeleteDialog(true);
   };
 
   const handleEdit = (article: Article) => {
+    if (articlesBusy) return;
     setLocation(`/dashboard/articles/${article.id}`);
   };
 
   // Drag end handler
   const handleDragEnd = (event: DragEndEvent) => {
+    if (articlesBusy || updateOrderMutation.isPending || activeStatus === "scheduled") return;
     const { active, over } = event;
 
     if (!over || active.id === over.id) {
       return;
     }
 
-    const oldIndex = localArticles.findIndex((article) => article.id === active.id);
-    const newIndex = localArticles.findIndex((article) => article.id === over.id);
+    const oldIndex = articles.findIndex((article) => article.id === active.id);
+    const newIndex = articles.findIndex((article) => article.id === over.id);
 
     if (oldIndex === -1 || newIndex === -1) {
       return;
     }
 
     // Create a new array with the reordered items
-    const newArticles = arrayMove([...localArticles], oldIndex, newIndex);
-    setLocalArticles(newArticles);
+    const newArticles = arrayMove([...articles], oldIndex, newIndex);
 
-    // Generate unique descending displayOrder values using high-precision timestamp
-    // Each article gets a unique value: baseTimestamp * 1000 - (index * 1000) ensures no collisions
-    const baseTimestamp = Date.now();
+    // Every manual rank must exceed every publication second on this page;
+    // otherwise a just-published row could snap back above its drag target.
+    const publicationSeconds = newArticles.map(article => {
+      const time = article.publishedAt ? new Date(article.publishedAt).getTime() : 0;
+      return Number.isFinite(time) ? Math.floor(time / 1000) : 0;
+    });
+    const baseOrder = Math.max(Math.floor(Date.now() / 1000), ...publicationSeconds) + newArticles.length;
     const articleOrders = newArticles.map((article, index) => ({
       id: article.id,
-      displayOrder: Math.floor((baseTimestamp - index * 1000) / 1000),
+      displayOrder: baseOrder - index,
     }));
 
     // Build the current query key at call time to avoid stale closures
-    const currentQueryKey = ["/api/admin/articles", searchTerm, activeStatus, typeFilter, categoryFilter, currentPage];
+    const currentQueryKey = articlesQueryKey;
 
     updateOrderMutation.mutate({
       articleOrders,
@@ -788,101 +1586,6 @@ export default function ArticlesManagement() {
     return badges[status as keyof typeof badges] || <Badge>{status}</Badge>;
   };
 
-  const formatArticleDate = (date: string | Date | null | undefined) => {
-    if (!date) return null;
-    try {
-      return new Date(date).toLocaleString("ar-SA-u-ca-gregory-nu-latn", {
-        day: "numeric",
-        month: "long",
-        year: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-      });
-    } catch {
-      return null;
-    }
-  };
-
-  const formatScheduledDate = formatArticleDate;
-  const formatDraftDate = formatArticleDate;
-  const formatPublishedDate = formatArticleDate;
-
-  const getTypeBadge = (type: string) => {
-    const meta = TYPE_CHIP[type] ?? { label: type, className: "bg-muted text-muted-foreground" };
-    const Icon = meta.icon;
-    return (
-      <Badge
-        className={cn(
-          "gap-1 border-0 px-2 py-0.5 text-xs font-semibold",
-          meta.className,
-        )}
-      >
-        {Icon ? <Icon className="h-3 w-3" /> : null}
-        {meta.label}
-      </Badge>
-    );
-  };
-
-  const getCategoryChip = (nameAr?: string | null) => {
-    if (!nameAr) return null;
-    return (
-      <span className="inline-flex items-center gap-1 rounded-full border border-border/70 bg-muted/60 px-2 py-0.5 text-xs font-medium text-foreground/80">
-        <Tag className="h-3 w-3 text-muted-foreground" />
-        {nameAr}
-      </span>
-    );
-  };
-
-  const getSourceBadge = (source?: string) => {
-    const badges = {
-      manual: (
-        <Badge variant="outline" className="gap-1 border-blue-200/80 bg-blue-50/80 text-xs font-medium text-blue-700 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-300" data-testid="badge-source-manual">
-          <PenLine className="h-3 w-3" />
-          المحرر
-        </Badge>
-      ),
-      whatsapp: (
-        <Badge variant="outline" className="gap-1 border-green-200/80 bg-green-50/80 text-xs font-medium text-green-700 dark:border-green-800 dark:bg-green-950/30 dark:text-green-300" data-testid="badge-source-whatsapp">
-          <MessageCircle className="h-3 w-3" />
-          واتساب
-        </Badge>
-      ),
-      email: (
-        <Badge variant="outline" className="gap-1 border-purple-200/80 bg-purple-50/80 text-xs font-medium text-purple-700 dark:border-purple-800 dark:bg-purple-950/30 dark:text-purple-300" data-testid="badge-source-email">
-          <Mail className="h-3 w-3" />
-          البريد الذكي
-        </Badge>
-      ),
-      "ios-app": (
-        <Badge variant="outline" className="gap-1 border-slate-300/80 bg-slate-100/80 text-xs font-medium text-slate-700 dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-200" data-testid="badge-source-ios">
-          <Smartphone className="h-3 w-3" />
-          تطبيق iOS
-        </Badge>
-      ),
-      "android-app": (
-        <Badge variant="outline" className="gap-1 border-emerald-200/80 bg-emerald-50/80 text-xs font-medium text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300" data-testid="badge-source-android">
-          <Smartphone className="h-3 w-3" />
-          تطبيق Android
-        </Badge>
-      ),
-    };
-    return badges[(source || "manual") as keyof typeof badges] || badges.manual;
-  };
-
-  const isMobileAppSource = (source?: string) => source === 'ios-app' || source === 'android-app';
-  const getMobileSenderName = (article: Article) => {
-    const meta = article.sourceMetadata;
-    if (meta?.firstName || meta?.lastName) {
-      return `${meta.firstName || ''} ${meta.lastName || ''}`.trim();
-    }
-    if (meta?.senderName) return meta.senderName;
-    if (article.author?.firstName && article.author?.lastName) {
-      return `${article.author.firstName} ${article.author.lastName}`;
-    }
-    return article.author?.firstName || article.author?.email || 'مراسل';
-  };
-  const getMobilePlatformLabel = (source?: string) =>
-    source === 'android-app' ? 'تطبيق Android' : 'تطبيق iOS';
 
   const articlesTotal = articlesData?.total ?? 0;
 
@@ -910,10 +1613,10 @@ export default function ArticlesManagement() {
 
         {/* Status KPIs — compact selectable chips */}
         {metricsLoading ? (
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             {[1, 2, 3, 4].map((i) => (
-              <Card key={i} className="rounded-xl border-border/60 shadow-none">
-                <CardContent className="p-3">
+              <Card key={i} className="rounded-2xl border-border/80 bg-card shadow-xs">
+                <CardContent className="p-3.5">
                   <Skeleton className="mb-2 h-3.5 w-14" />
                   <Skeleton className="h-7 w-16" />
                 </CardContent>
@@ -921,17 +1624,18 @@ export default function ArticlesManagement() {
             ))}
           </div>
         ) : metrics ? (
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4" role="tablist" aria-label="تصفية حسب الحالة">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4" role="tablist" aria-label="تصفية حسب الحالة">
             {([
               {
                 key: "published" as const,
                 label: "منشورة",
                 value: metrics.published,
                 Icon: Newspaper,
-                idle: "border-emerald-200/70 bg-emerald-50/40 text-emerald-900 dark:border-emerald-900/40 dark:bg-emerald-950/20 dark:text-emerald-100",
-                active: "border-emerald-700 bg-emerald-700 text-white shadow-sm dark:border-emerald-500 dark:bg-emerald-600",
-                iconIdle: "bg-emerald-100/90 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300",
-                iconActive: "bg-white/20 text-white",
+                idle: "border-border/80 bg-card/90 hover:border-emerald-500/40 hover:bg-emerald-500/[0.04] text-foreground",
+                active: "border-emerald-500/50 bg-emerald-500/10 text-emerald-950 dark:text-emerald-100 ring-2 ring-emerald-500/20 shadow-xs",
+                iconIdle: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+                iconActive: "bg-emerald-500 text-white dark:bg-emerald-500 dark:text-white shadow-xs",
+                valueClass: "text-emerald-600 dark:text-emerald-400",
                 testId: "card-stat-published",
               },
               {
@@ -939,10 +1643,11 @@ export default function ArticlesManagement() {
                 label: "مجدولة",
                 value: metrics.scheduled,
                 Icon: Clock,
-                idle: "border-sky-200/70 bg-sky-50/40 text-sky-900 dark:border-sky-900/40 dark:bg-sky-950/20 dark:text-sky-100",
-                active: "border-sky-700 bg-sky-700 text-white shadow-sm dark:border-sky-500 dark:bg-sky-600",
-                iconIdle: "bg-sky-100/90 text-sky-700 dark:bg-sky-950/50 dark:text-sky-300",
-                iconActive: "bg-white/20 text-white",
+                idle: "border-border/80 bg-card/90 hover:border-sky-500/40 hover:bg-sky-500/[0.04] text-foreground",
+                active: "border-sky-500/50 bg-sky-500/10 text-sky-950 dark:text-sky-100 ring-2 ring-sky-500/20 shadow-xs",
+                iconIdle: "bg-sky-500/10 text-sky-600 dark:text-sky-400",
+                iconActive: "bg-sky-500 text-white dark:bg-sky-500 dark:text-white shadow-xs",
+                valueClass: "text-sky-600 dark:text-sky-400",
                 testId: "card-stat-scheduled",
               },
               {
@@ -950,10 +1655,11 @@ export default function ArticlesManagement() {
                 label: "مسودة",
                 value: metrics.draft,
                 Icon: FilePenLine,
-                idle: "border-amber-200/70 bg-amber-50/40 text-amber-950 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-100",
-                active: "border-amber-700 bg-amber-700 text-white shadow-sm dark:border-amber-500 dark:bg-amber-600",
-                iconIdle: "bg-amber-100/90 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300",
-                iconActive: "bg-white/20 text-white",
+                idle: "border-border/80 bg-card/90 hover:border-amber-500/40 hover:bg-amber-500/[0.04] text-foreground",
+                active: "border-amber-500/50 bg-amber-500/10 text-amber-950 dark:text-amber-100 ring-2 ring-amber-500/20 shadow-xs",
+                iconIdle: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+                iconActive: "bg-amber-500 text-white dark:bg-amber-500 dark:text-white shadow-xs",
+                valueClass: "text-amber-600 dark:text-amber-400",
                 testId: "card-stat-draft",
               },
               {
@@ -961,10 +1667,11 @@ export default function ArticlesManagement() {
                 label: "مؤرشفة",
                 value: metrics.archived,
                 Icon: Archive,
-                idle: "border-rose-200/70 bg-rose-50/40 text-rose-950 dark:border-rose-900/40 dark:bg-rose-950/20 dark:text-rose-100",
-                active: "border-rose-800 bg-rose-800 text-white shadow-sm dark:border-rose-500 dark:bg-rose-700",
-                iconIdle: "bg-rose-100/90 text-rose-800 dark:bg-rose-950/50 dark:text-rose-300",
-                iconActive: "bg-white/20 text-white",
+                idle: "border-border/80 bg-card/90 hover:border-rose-500/40 hover:bg-rose-500/[0.04] text-foreground",
+                active: "border-rose-500/50 bg-rose-500/10 text-rose-950 dark:text-rose-100 ring-2 ring-rose-500/20 shadow-xs",
+                iconIdle: "bg-rose-500/10 text-rose-600 dark:text-rose-400",
+                iconActive: "bg-rose-500 text-white dark:bg-rose-500 dark:text-white shadow-xs",
+                valueClass: "text-rose-600 dark:text-rose-400",
                 testId: "card-stat-archived",
               },
             ]).map((card) => {
@@ -975,20 +1682,25 @@ export default function ArticlesManagement() {
                   type="button"
                   role="tab"
                   aria-selected={isActive}
-                  onClick={() => setActiveStatus(card.key)}
+                  onClick={() => changeFilters({ status: card.key })}
                   className={cn(
-                    "rounded-xl border px-3 py-2.5 text-start transition-colors",
+                    "rounded-2xl border p-3.5 sm:p-4 text-start transition-all duration-200 cursor-pointer select-none",
                     isActive ? card.active : card.idle,
                   )}
                   data-testid={card.testId}
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <span className="truncate text-sm font-semibold">{card.label}</span>
-                    <span className={cn("rounded-lg p-1.5", isActive ? card.iconActive : card.iconIdle)}>
-                      <card.Icon className="h-3.5 w-3.5" aria-hidden="true" />
+                    <span className="truncate text-xs sm:text-sm font-semibold text-muted-foreground">{card.label}</span>
+                    <span className={cn("rounded-xl p-1.5 transition-colors", isActive ? card.iconActive : card.iconIdle)}>
+                      <card.Icon className="h-4 w-4" aria-hidden="true" />
                     </span>
                   </div>
-                  <div className="mt-1.5 text-2xl font-bold tabular-nums tracking-tight leading-none">
+                  <div
+                    className={cn(
+                      "mt-2 text-2xl sm:text-3xl font-bold tabular-nums tracking-tight leading-none transition-colors",
+                      isActive ? card.valueClass : "text-foreground"
+                    )}
+                  >
                     {card.value.toLocaleString("en-US")}
                   </div>
                 </button>
@@ -1012,7 +1724,7 @@ export default function ArticlesManagement() {
               className="h-10 flex-1 text-sm"
             />
             <div className="grid grid-cols-3 gap-2 lg:flex lg:shrink-0">
-              <Select value={typeFilter} onValueChange={setTypeFilter}>
+              <Select value={typeFilter} onValueChange={type => changeFilters({ type })}>
                 <SelectTrigger data-testid="select-type-filter" className="h-10 lg:w-[140px]">
                   <SelectValue placeholder="النوع" />
                 </SelectTrigger>
@@ -1025,7 +1737,7 @@ export default function ArticlesManagement() {
                 </SelectContent>
               </Select>
 
-              <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+              <Select value={categoryFilter} onValueChange={category => changeFilters({ category })}>
                 <SelectTrigger data-testid="select-category-filter" className="h-10 lg:w-[150px]">
                   <SelectValue placeholder="التصنيف" />
                 </SelectTrigger>
@@ -1044,8 +1756,7 @@ export default function ArticlesManagement() {
                 className="h-10"
                 onClick={() => {
                   setSearchTerm("");
-                  setTypeFilter("all");
-                  setCategoryFilter("all");
+                  changeFilters({ search: "", type: "all", category: "all" });
                 }}
                 data-testid="button-clear-filters"
               >
@@ -1063,15 +1774,30 @@ export default function ArticlesManagement() {
               <p className="mt-0.5 text-sm text-muted-foreground tabular-nums">
                 {articlesLoading
                   ? "جاري التحميل…"
-                  : `${articlesTotal.toLocaleString("en-US")} نتيجة · الصفحة ${currentPage.toLocaleString("en-US")}`}
+                  : `${articlesTotal.toLocaleString("en-US")} نتيجة · الصفحة ${displayedPage.toLocaleString("en-US")}`}
               </p>
             </div>
           </div>
 
-          {/* Bulk Actions Toolbar */}
-          {selectedArticles.size > 0 && (
+          {articlesBusy && !articlesLoading && (
+            <div role="status" className="flex items-center gap-2 text-sm text-muted-foreground" data-testid="articles-updating">
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+              جارٍ تحديث النتائج…
+            </div>
+          )}
+          {articlesError && (
+            <div role="alert" className="flex items-center gap-3 text-sm text-destructive">
+              تعذّر تحديث قائمة المقالات. حاول مرة أخرى.
+              <Button variant="outline" size="sm" disabled={articlesBusy} onClick={() => void refetchArticles()}>
+                إعادة المحاولة
+              </Button>
+            </div>
+          )}
+
+          {/* Bulk Actions Toolbar — الجوال يكتفي بالشريط السفلي الثابت */}
+          {selectedArticles.size > 0 && !isMobile && (
             <div className="rounded-2xl border border-sky-200/55 bg-gradient-to-br from-sky-50/40 via-card to-card p-3 shadow-sm dark:border-sky-900/35 dark:from-sky-950/15 md:p-4">
-              <div className="flex items-center justify-between gap-4">
+              <div className="flex flex-wrap items-center justify-between gap-2 md:gap-4">
                 <div className="text-sm text-muted-foreground tabular-nums">
                   تم تحديد {selectedArticles.size.toLocaleString("en-US")} مقال
                 </div>
@@ -1081,7 +1807,7 @@ export default function ArticlesManagement() {
                       variant="outline"
                       size="sm"
                       onClick={handleBulkArchive}
-                      disabled={bulkArchiveMutation.isPending}
+                      disabled={articlesBusy || bulkArchiveMutation.isPending}
                       data-testid="button-bulk-archive"
                       className="gap-2"
                     >
@@ -1094,7 +1820,7 @@ export default function ArticlesManagement() {
                       variant="destructive"
                       size="sm"
                       onClick={handleBulkPermanentDelete}
-                      disabled={bulkPermanentDeleteMutation.isPending}
+                      disabled={articlesBusy || bulkPermanentDeleteMutation.isPending}
                       data-testid="button-bulk-delete-permanent"
                       className="gap-2"
                     >
@@ -1115,50 +1841,71 @@ export default function ArticlesManagement() {
             </div>
           )}
 
+          {activeStatus === "draft" && canSeeWeekBoard && (typeFilter === "all" || typeFilter === "opinion") && !listParams.search && (
+            <OpinionWeekBoard onOpenArticle={(id) => setLocation(`/dashboard/articles/${id}`)} />
+          )}
+
           {/* Articles Table - Desktop View */}
-          <div className="hidden overflow-hidden rounded-xl border border-border/80 bg-card shadow-none md:block">
+          {!isMobile && (
+          <div className="overflow-x-auto rounded-xl border border-border/80 bg-card shadow-sm"
+            data-testid="articles-desktop-results" aria-busy={articlesBusy}
+            {...(articlesBusy ? { inert: "" } : {})}>
             {articlesLoading ? (
               <div className="p-8 text-center text-muted-foreground">
                 جاري التحميل...
               </div>
-            ) : localArticles.length === 0 ? (
+            ) : articles.length === 0 ? (
               <div className="p-8 text-center text-muted-foreground">
-                لا توجد مقالات
+                {articlesError ? "تعذّر تحميل المقالات" : "لا توجد مقالات"}
               </div>
             ) : (
               <DndContext
-                sensors={isMobile ? [] : sensors}
+                sensors={sensors}
                 collisionDetection={closestCenter}
                 onDragEnd={handleDragEnd}
               >
-                <table className="w-full table-fixed">
-                  <thead className="border-b border-border bg-muted/40">
+                <table className="w-full min-w-[1080px] table-fixed">
+                  <thead className="border-b border-border bg-muted/40 text-muted-foreground">
                     <tr>
-                      <th className="w-9 px-1 py-3 text-center" data-testid="header-drag"></th>
-                      <th className="w-11 px-2 py-3 text-center">
+                      <th className="w-8 px-1 py-2.5 text-center" data-testid="header-drag"></th>
+                      <th className="w-10 px-2 py-2.5 text-center">
                         <Checkbox
-                          checked={localArticles.length > 0 && selectedArticles.size === localArticles.length}
+                          checked={articles.length > 0 && selectedArticles.size === articles.length}
                           onCheckedChange={toggleSelectAll}
                           data-testid="checkbox-select-all"
                         />
                       </th>
-                      <th className="px-3 py-3 text-right text-sm font-semibold">الخبر</th>
-                      <th className="hidden w-[140px] px-3 py-3 text-right text-sm font-semibold lg:table-cell">الكاتب</th>
-                      <th className="w-[72px] px-2 py-3 text-center text-sm font-semibold">عاجل</th>
-                      <th className="w-[88px] px-2 py-3 text-center text-sm font-semibold">المشاهدات</th>
-                      <th className="w-[152px] px-2 py-3 text-center text-sm font-semibold">الإجراءات</th>
+                      <th className="w-[132px] px-2 py-2.5 text-right text-xs font-semibold">الوقت</th>
+                      <th className="w-[84px] px-1 py-2.5"><span className="sr-only">الصورة</span></th>
+                      <th className="px-3 py-2.5 text-right text-xs font-semibold">المادة</th>
+                      <th className="w-24 px-2 py-2.5 text-left text-xs font-semibold">{activeStatus === "published" ? "القراءات" : ""}</th>
+                      <th className={cn("px-3 py-2.5 text-left text-xs font-semibold", activeStatus === "published" ? "w-[372px]" : "w-[212px]")}>الإجراءات</th>
                     </tr>
                   </thead>
                   <tbody>
                     <SortableContext
-                      items={localArticles.map((a) => a.id)}
+                      items={articles.map((a) => a.id)}
                       strategy={verticalListSortingStrategy}
                     >
-                      {localArticles.map((article) => (
+                      {deskList.map((item) => {
+                        if (item.kind === "group") {
+                          return (
+                            <tr key={`group-${item.key}`} className="border-b border-border/70 bg-muted/30" data-testid={`group-${item.key}`}>
+                              <td colSpan={7} className={cn("px-4 py-2 text-xs font-semibold", item.tone ? DESK_TONE[item.tone] : "text-foreground")}>
+                                {item.label}
+                              </td>
+                            </tr>
+                          );
+                        }
+                        const article = item.article;
+                        const moment = deskMoment(article, now);
+                        return (
                         <SortableRow
                           key={article.id}
                           article={article}
                           isSaving={updateOrderMutation.isPending}
+                          disableSorting={activeStatus !== "published"}
+                          alert={article.newsType === "breaking" || !!moment?.overdue}
                           highlightResubmitted={
                             isResubmittedAfterRevision(article)
                               ? "resubmitted"
@@ -1167,128 +1914,30 @@ export default function ArticlesManagement() {
                                 : false
                           }
                         >
-                          <td className="px-2 py-3.5 text-center align-top">
+                          <td className="px-2 py-2.5 text-center align-middle">
                             <Checkbox
                               checked={selectedArticles.has(article.id)}
                               onCheckedChange={() => toggleArticleSelection(article.id)}
                               data-testid={`checkbox-article-${article.id}`}
                             />
                           </td>
-                          <td className="min-w-0 px-3 py-3.5 align-top">
-                            <div className="space-y-2">
-                              <div className="flex items-start gap-2">
-                                {((article as any).albumImages?.length > 0 ||
-                                  (article as any).mediaAssetsCount > 0) && (
-                                  <Images className="mt-0.5 h-4 w-4 shrink-0 text-sky-500" />
-                                )}
-                                <div className="min-w-0 flex-1">
-                                  <div className="flex flex-wrap items-center gap-1.5">
-                                    <h3 className="break-words text-[15px] font-bold leading-snug tracking-tight text-foreground sm:text-base">
-                                      {article.title}
-                                    </h3>
-                                    <EditorialDraftReviewCue
-                                      article={article}
-                                      layout="inline"
-                                      testId={`badge-review-desktop-${article.id}`}
-                                    />
-                                  </div>
-                                </div>
-                              </div>
-
-                              <div className="flex flex-wrap items-center gap-1.5">
-                                {getTypeBadge(article.articleType || "news")}
-                                {getCategoryChip(article.category?.nameAr)}
-                                {getSourceBadge(article.source)}
-                              </div>
-
+                          <td className="px-2 py-2.5 align-middle">
+                            <DeskTimeCell moment={moment} />
+                          </td>
+                          <td className="px-1 py-2.5 align-middle">
+                            <DeskThumb article={article} />
+                          </td>
+                          <td className="px-3 py-2.5 align-middle">
+                            <div className="space-y-1.5">
+                              <ArticleDeskMain
+                                article={article}
+                                onTitleClick={canEditArticle(article) ? () => handleEdit(article) : undefined}
+                              />
                               <EditorialDraftReviewCue
                                 article={article}
                                 layout="banner"
                                 testId={`banner-review-desktop-${article.id}`}
                               />
-
-                              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
-                                <span className="inline-flex items-center gap-1 text-sky-700 dark:text-sky-400">
-                                  {article.source === "email" ? (
-                                    <>
-                                      <Mail className="h-3.5 w-3.5 shrink-0" />
-                                      <span>
-                                        أُرسل بواسطة:{" "}
-                                        {article.sourceMetadata?.senderName ||
-                                          article.sourceMetadata?.from ||
-                                          "بريد إلكتروني"}
-                                      </span>
-                                    </>
-                                  ) : article.source === "whatsapp" ? (
-                                    <>
-                                      <MessageCircle className="h-3.5 w-3.5 shrink-0" />
-                                      <span>
-                                        أُرسل بواسطة:{" "}
-                                        {article.sourceMetadata?.senderName ||
-                                          article.sourceMetadata?.from ||
-                                          "واتساب"}
-                                      </span>
-                                    </>
-                                  ) : isMobileAppSource(article.source) ? (
-                                    <>
-                                      <Smartphone className="h-3.5 w-3.5 shrink-0" />
-                                      <span>
-                                        أُرسل من {getMobilePlatformLabel(article.source)}:{" "}
-                                        {getMobileSenderName(article)}
-                                      </span>
-                                    </>
-                                  ) : (article as any).publisher?.companyName ? (
-                                    <>
-                                      <Building2 className="h-3.5 w-3.5 shrink-0" />
-                                      <span>
-                                        أُرسل بواسطة: {(article as any).publisher.companyName}
-                                      </span>
-                                    </>
-                                  ) : (
-                                    <>
-                                      <PenLine className="h-3.5 w-3.5 shrink-0" />
-                                      <span>
-                                        نُشر بواسطة:{" "}
-                                        {article.author?.firstName && article.author?.lastName
-                                          ? `${article.author.firstName} ${article.author.lastName}`
-                                          : article.author?.firstName ||
-                                            article.author?.email ||
-                                            "المحرر"}
-                                      </span>
-                                    </>
-                                  )}
-                                </span>
-                                {article.status === "scheduled" && (article as any).scheduledAt && (
-                                  <span
-                                    className="inline-flex items-center gap-1 text-green-700 dark:text-green-300"
-                                    data-testid={`scheduled-label-desktop-${article.id}`}
-                                  >
-                                    <Clock className="h-3.5 w-3.5 shrink-0" />
-                                    {formatScheduledDate((article as any).scheduledAt)}
-                                  </span>
-                                )}
-                                {article.status === "draft" && article.createdAt && (
-                                  <span
-                                    className="inline-flex items-center gap-1 text-green-700 dark:text-green-300"
-                                    data-testid={`draft-date-desktop-${article.id}`}
-                                  >
-                                    <Clock className="h-3.5 w-3.5 shrink-0" />
-                                    {formatDraftDate(article.createdAt)}
-                                  </span>
-                                )}
-                                {article.status === "published" && article.publishedAt && (
-                                  <span
-                                    className="inline-flex items-center gap-1 text-emerald-700 dark:text-emerald-400"
-                                    data-testid={`published-date-desktop-${article.id}`}
-                                  >
-                                    <Clock className="h-3.5 w-3.5 shrink-0" />
-                                    <span dir="ltr" className="font-medium tabular-nums">
-                                      {formatPublishedDate(article.publishedAt)}
-                                    </span>
-                                  </span>
-                                )}
-                              </div>
-
                               {article.status === "draft" && (
                                 <EditorialDraftReviewCue
                                   article={article}
@@ -1310,225 +1959,117 @@ export default function ArticlesManagement() {
                               )}
                             </div>
                           </td>
-                          <td className="hidden px-3 py-3.5 align-top lg:table-cell">
-                            <div className="flex flex-col gap-1">
-                              <div className="flex items-center gap-2">
-                                <Avatar className="h-7 w-7">
-                                  <AvatarImage src={article.author?.profileImageUrl || ""} />
-                                  <AvatarFallback className="text-xs">
-                                    {article.author?.firstName?.[0] ||
-                                      article.author?.email?.[0]?.toUpperCase()}
-                                  </AvatarFallback>
-                                </Avatar>
-                                <span className="truncate text-sm font-medium">
-                                  {article.author?.firstName || article.author?.email}
-                                </span>
-                              </div>
-                              {article.publisher?.companyName && (
-                                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                                  <Building2 className="h-3 w-3 shrink-0" />
-                                  <span className="truncate">{article.publisher.companyName}</span>
-                                </div>
-                              )}
-                            </div>
+                          <td className="px-2 py-2.5 align-middle">
+                            <DeskViewsCell article={article} now={now} />
                           </td>
-                          <td className="px-2 py-3.5 text-center align-top">
-                            {canPublishArticle ? (
-                              <BreakingSwitch
-                                articleId={article.id}
-                                initialValue={article.newsType === "breaking"}
-                              />
-                            ) : (
-                              <span className="text-sm text-muted-foreground">
-                                {article.newsType === "breaking" ? "عاجل" : "-"}
-                              </span>
-                            )}
-                          </td>
-                          <td className="px-2 py-3.5 text-center align-top">
-                            <ViewsCount views={article.views} iconClassName="h-4 w-4" />
-                          </td>
-                          <td className="px-2 py-3.5 align-top">
-                            <div className="flex flex-col items-center gap-1">
-                              {(article.isAiGeneratedThumbnail ||
-                                (article as any).isAiGeneratedImage) && (
-                                <div
-                                  className="flex h-6 w-6 items-center justify-center"
-                                  title="صورة مولدة بالذكاء الاصطناعي"
-                                  data-testid={`badge-ai-image-${article.id}`}
-                                >
-                                  <Brain className="h-4 w-4 text-purple-500" />
-                                </div>
-                              )}
-                              <RowActions
-                                articleId={article.id}
-                                articleTitle={article.title}
-                                status={article.status}
-                                onEdit={() => handleEdit(article)}
-                                isFeatured={article.isFeatured}
-                                onDelete={() => setDeletingArticle(article)}
-                                onRequestRevision={
-                                  activeStatus !== "archived"
-                                    ? () => setRevisionArticle(article)
-                                    : undefined
-                                }
-                                onSocialPublish={() => setSocialPublishArticle(article)}
-                                canEdit={canEditArticle(article)}
-                                canDelete={!!(canDeleteArticle || canArchiveArticle)}
-                                canFeature={!!canFeatureArticle}
-                                canPublish={!!canPublishArticle}
-                                canSocialPublish={!!canSocialPublish}
-                              />
-                            </div>
+                          <td className="px-2 py-2.5 align-middle">
+                            <RowActions
+                              variant="wire"
+                              articleId={article.id}
+                              articleTitle={article.title}
+                              status={article.status}
+                              onEdit={() => handleEdit(article)}
+                              isFeatured={article.isFeatured}
+                              isBreaking={article.newsType === "breaking"}
+                              notifiedAt={article.signals?.notifiedAt ?? null}
+                              socialPublishedAt={article.signals?.socialPublishedAt ?? null}
+                              onDelete={() => setDeletingArticle(article)}
+                              onRequestRevision={
+                                activeStatus !== "archived"
+                                  ? () => setRevisionArticle(article)
+                                  : undefined
+                              }
+                              onSocialPublish={() => setSocialPublishArticle(article)}
+                              canEdit={canEditArticle(article)}
+                              canDelete={!!(canDeleteArticle || canArchiveArticle)}
+                              canFeature={!!canFeatureArticle}
+                              canPublish={!!canPublishArticle}
+                              canSocialPublish={!!canSocialPublish}
+                            />
                           </td>
                         </SortableRow>
-                      ))}
+                        );
+                      })}
                     </SortableContext>
                   </tbody>
                 </table>
               </DndContext>
             )}
           </div>
+          )}
 
-          {/* Articles Cards - Mobile View */}
-          <div className="md:hidden space-y-2">
+          {/* Articles Cards - Mobile View (عمود واحد رأسيًا، وعمودان على الجوال الأفقي) */}
+          {isMobile && (
+          <div className="grid grid-cols-1 items-start gap-2.5 min-[820px]:grid-cols-2"
+            data-testid="articles-mobile-results" aria-busy={articlesBusy}
+            {...(articlesBusy ? { inert: "" } : {})}>
             {articlesLoading ? (
-              <div className="p-8 text-center text-muted-foreground text-sm">
+              <div className="col-span-full p-8 text-center text-muted-foreground text-sm">
                 جاري التحميل...
               </div>
             ) : articles.length === 0 ? (
-              <div className="p-8 text-center text-muted-foreground text-sm">
-                لا توجد مقالات
+              <div className="col-span-full p-8 text-center text-muted-foreground text-sm">
+                {articlesError ? "تعذّر تحميل المقالات" : "لا توجد مقالات"}
               </div>
             ) : (
               articles.map((article) => (
                 <div 
                   key={article.id} 
-                  className={`space-y-2 rounded-2xl border p-3 shadow-sm transition-all hover-elevate active-elevate-2 ${
+                  className={`space-y-2 rounded-xl border border-r-4 p-3 shadow-sm transition-colors ${
                     isResubmittedAfterRevision(article)
-                      ? "border-amber-300 bg-amber-50 dark:border-border dark:bg-card"
+                      ? "border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30"
                       : isAwaitingContributorRevision(article)
-                        ? "border-orange-300 bg-orange-50 dark:border-border dark:bg-card"
-                        : "border-sky-200/55 bg-gradient-to-br from-sky-50/40 via-card to-card dark:border-sky-900/35 dark:from-sky-950/15"
+                        ? "border-orange-300 bg-orange-50 dark:border-orange-800 dark:bg-orange-950/30"
+                        : article.articleType === "opinion"
+                          ? "border-border border-r-violet-400 bg-card dark:border-r-violet-700"
+                          : "border-border border-r-sky-300 bg-card dark:border-r-sky-800"
                   }`}
                   data-testid={`card-article-${article.id}`}
                 >
                   {/* Header: Checkbox + Title + Status */}
-                  <div className="flex items-start gap-2">
-                    <Checkbox 
-                      className="mt-0.5"
-                      checked={selectedArticles.has(article.id)}
-                      onCheckedChange={() => toggleArticleSelection(article.id)}
-                      data-testid={`checkbox-article-mobile-${article.id}`}
-                    />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between gap-2 mb-1">
-                        <div className="flex-1">
-                          <h3 className="font-semibold text-base break-words leading-snug flex items-center gap-1.5 flex-wrap">
-                            {((article as any).albumImages?.length > 0 || (article as any).mediaAssetsCount > 0) && (
-                              <Images className="h-4 w-4 text-blue-500 flex-shrink-0" />
-                            )}
-                            {article.title}
-                            <EditorialDraftReviewCue
-                              article={article}
-                              layout="inline"
-                              testId={`badge-review-mobile-${article.id}`}
-                            />
-                          </h3>
-                          <EditorialDraftReviewCue
-                            article={article}
-                            layout="banner"
-                            testId={`banner-review-mobile-${article.id}`}
-                          />
-                          <div className="text-xs text-blue-600 dark:text-blue-400 flex items-center gap-1 mt-0.5">
-                            {article.source === 'email' ? (
-                              <>
-                                <Mail className="h-3 w-3" />
-                                <span>أُرسل بواسطة: {article.sourceMetadata?.senderName || article.sourceMetadata?.from || 'بريد إلكتروني'}</span>
-                              </>
-                            ) : article.source === 'whatsapp' ? (
-                              <>
-                                <MessageCircle className="h-3 w-3" />
-                                <span>أُرسل بواسطة: {article.sourceMetadata?.senderName || article.sourceMetadata?.from || 'واتساب'}</span>
-                              </>
-                            ) : isMobileAppSource(article.source) ? (
-                              <>
-                                <Smartphone className="h-3 w-3" />
-                                <span>أُرسل من {getMobilePlatformLabel(article.source)}: {getMobileSenderName(article)}</span>
-                              </>
-                            ) : (article as any).publisher?.companyName ? (
-                              <>
-                                <Building2 className="h-3 w-3" />
-                                <span>أُرسل بواسطة: {(article as any).publisher.companyName}</span>
-                              </>
-                            ) : (
-                              <>
-                                <PenLine className="h-3 w-3" />
-                                <span>نُشر بواسطة: {article.author?.firstName && article.author?.lastName 
-                                  ? `${article.author.firstName} ${article.author.lastName}` 
-                                  : article.author?.firstName || article.author?.email || 'المحرر'}</span>
-                              </>
-                            )}
-                          </div>
-                          {article.status === "scheduled" && (article as any).scheduledAt && (
-                            <div className="text-xs text-green-700 dark:text-green-300 flex items-center gap-1 mt-1" data-testid={`scheduled-label-${article.id}`}>
-                              <Clock className="h-3 w-3" />
-                              <span>تمت الجدولة في: {formatScheduledDate((article as any).scheduledAt)}</span>
-                            </div>
-                          )}
-                          {article.status === "draft" && article.createdAt && (
-                            <div className="text-xs text-green-700 dark:text-green-300 flex items-center gap-1 mt-1" data-testid={`draft-date-${article.id}`}>
-                              <Clock className="h-3 w-3" />
-                              <span>أُرسلت بتاريخ: {formatDraftDate(article.createdAt)}</span>
-                            </div>
-                          )}
-                          {article.status === "published" && article.publishedAt && (
-                            <div className="text-xs text-emerald-600 dark:text-emerald-400 flex items-center gap-1 mt-1" data-testid={`published-date-${article.id}`}>
-                              <Clock className="h-3 w-3" />
-                              <span dir="ltr" className="font-medium">{formatPublishedDate(article.publishedAt)}</span>
-                            </div>
-                          )}
-                          {article.status === "archived" && (article as any).reviewNotes && (
-                            <div
-                              className="text-xs text-red-600 dark:text-red-400 flex items-start gap-1 mt-1"
-                              data-testid={`archive-reason-${article.id}`}
-                            >
-                              <Archive className="h-3 w-3 flex-shrink-0 mt-0.5" />
-                              <span>
-                                <span className="font-semibold">سبب الأرشفة:</span>{" "}
-                                {(article as any).reviewNotes}
-                              </span>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                      <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                        {getTypeBadge(article.articleType || "news")}
-                        {getCategoryChip(article.category?.nameAr)}
-                        {getSourceBadge(article.source)}
-                      </div>
+                  <div className="flex items-start gap-2.5">
+                    {/* هدف اللمس 44px يوفره الغلاف؛ بدونه قاعدة الـWCAG العامة
+                        تضخّم المربع نفسه إلى 44px فيبدو كصورة مكسورة */}
+                    <div
+                      className="-m-2.5 shrink-0 cursor-pointer p-2.5"
+                      onClick={(e) => {
+                        // نقرات الفأرة/اللمس تصل للغلاف فقط (المربع pointer-events-none)،
+                        // أما click المصطنع من كيبورد المربع فيتكفل به onCheckedChange
+                        if (e.target === e.currentTarget) toggleArticleSelection(article.id);
+                      }}
+                    >
+                      <Checkbox
+                        className="no-min-touch-size pointer-events-none mt-1"
+                        checked={selectedArticles.has(article.id)}
+                        onCheckedChange={() => toggleArticleSelection(article.id)}
+                        data-testid={`checkbox-article-mobile-${article.id}`}
+                      />
                     </div>
-                  </div>
-                  
-                  {/* Meta Info: Author + Publisher */}
-                  <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-                    <div className="flex items-center gap-2">
-                      <Avatar className="h-5 w-5">
-                        <AvatarImage src={article.author?.profileImageUrl || ""} />
-                        <AvatarFallback className="text-xs">
-                          {article.author?.firstName?.[0] || article.author?.email?.[0]?.toUpperCase()}
-                        </AvatarFallback>
-                      </Avatar>
-                      <span>{article.author?.firstName || article.author?.email}</span>
-                    </div>
-                    {article.publisher?.companyName && (
-                      <>
-                        <span>•</span>
-                        <div className="flex items-center gap-1">
-                          <Building2 className="h-3.5 w-3.5" />
-                          <span>{article.publisher.companyName}</span>
+                    <div className="flex-1 min-w-0 space-y-2">
+                      <ArticleWireRow
+                        article={article}
+                        desktop={false}
+                        onTitleClick={canEditArticle(article) ? () => handleEdit(article) : undefined}
+                      />
+                      <EditorialDraftReviewCue
+                        article={article}
+                        layout="banner"
+                        testId={`banner-review-mobile-${article.id}`}
+                      />
+
+                      {article.status === "archived" && (article as any).reviewNotes && (
+                        <div
+                          className="text-xs text-red-600 dark:text-red-400 bg-red-500/10 border border-red-500/20 rounded-md p-2 flex items-start gap-1 mt-1"
+                          data-testid={`archive-reason-${article.id}`}
+                        >
+                          <Archive className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" />
+                          <span>
+                            <span className="font-semibold">سبب الأرشفة:</span>{" "}
+                            {(article as any).reviewNotes}
+                          </span>
                         </div>
-                      </>
-                    )}
+                      )}
+                    </div>
                   </div>
                   
                   {/* Stats Row */}
@@ -1546,6 +2087,12 @@ export default function ArticlesManagement() {
                           مميز
                         </Badge>
                       )}
+                      {article.isReading && (
+                        <Badge variant="outline" className="text-xs text-emerald-600 dark:text-emerald-400 border-emerald-500/30 bg-emerald-500/10">
+                          <BookOpen className="h-3 w-3 ml-1" />
+                          قراءة
+                        </Badge>
+                      )}
                       {(article.isAiGeneratedThumbnail || (article as any).isAiGeneratedImage) && (
                         <Badge className="text-xs bg-violet-500/90 hover:bg-violet-600 text-white border-0">
                           <Brain className="h-3 w-3 ml-1" />
@@ -1561,107 +2108,167 @@ export default function ArticlesManagement() {
                   </div>
                   
                   {/* Action Buttons - Permission-based visibility */}
-                  <div className="flex gap-2 pt-2 border-t">
-                    {canEditArticle(article) && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleEdit(article)}
-                        className="flex-1"
-                        data-testid={`button-edit-mobile-${article.id}`}
-                      >
-                        <Edit className="ml-2 h-3.5 w-3.5" />
-                        تعديل
-                      </Button>
-                    )}
-                    
-                    {canPublishArticle && (
-                      <Button
-                        size="sm"
-                        variant={article.newsType === "breaking" ? "destructive" : "outline"}
-                        onClick={() => toggleBreakingMutation.mutate({ 
-                          id: article.id, 
-                          currentState: article.newsType === "breaking"
-                        })}
-                        disabled={toggleBreakingMutation.isPending}
-                        className="flex-1"
-                        data-testid={`button-breaking-mobile-${article.id}`}
-                      >
-                        <Bell className="ml-2 h-3.5 w-3.5" />
-                        {article.newsType === "breaking" ? "إلغاء العاجل" : "عاجل"}
-                      </Button>
-                    )}
-                    
-                    {canFeatureArticle && (
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        onClick={() => featureMutation.mutate({ id: article.id, featured: !article.isFeatured })}
-                        disabled={featureMutation.isPending}
-                        data-testid={`button-feature-mobile-${article.id}`}
-                      >
-                        <Star className={`h-4 w-4 ${article.isFeatured ? 'text-yellow-500 fill-yellow-500' : ''}`} />
-                      </Button>
-                    )}
-                    
-                    {article.status === "published" && (
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        onClick={() => translateMutation.mutate(article.id)}
-                        disabled={translateMutation.isPending}
-                        data-testid={`button-translate-mobile-${article.id}`}
-                        title="ترجم للإنجليزية"
-                      >
-                        {translateMutation.isPending ? (
-                          <Loader2 className="h-4 w-4 animate-spin text-emerald-500" />
-                        ) : (
-                          <Languages className="h-4 w-4 text-emerald-500" />
+                  <div className="space-y-2 pt-2 border-t">
+                    {/* Primary Action Buttons Grid */}
+                    <div className="grid grid-cols-2 gap-2">
+                      {canEditArticle(article) && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleEdit(article)}
+                          className="h-9 font-medium text-xs sm:text-sm"
+                          data-testid={`button-edit-mobile-${article.id}`}
+                        >
+                          <Edit className="ml-1.5 h-3.5 w-3.5" />
+                          تعديل
+                        </Button>
+                      )}
+                      
+                      {canPublishArticle && (
+                        <Button
+                          size="sm"
+                          variant={article.newsType === "breaking" ? "destructive" : "outline"}
+                          onClick={() => toggleBreakingMutation.mutate({ 
+                            id: article.id, 
+                            currentState: article.newsType === "breaking"
+                          })}
+                          disabled={toggleBreakingMutation.isPending}
+                          className="h-9 font-medium text-xs sm:text-sm"
+                          data-testid={`button-breaking-mobile-${article.id}`}
+                        >
+                          <Zap className="ml-1.5 h-3.5 w-3.5" />
+                          {article.newsType === "breaking" ? "إلغاء العاجل" : "عاجل"}
+                        </Button>
+                      )}
+
+                      {canSocialPublish && article.status === "published" && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setSocialPublishArticle(article)}
+                          className="h-9 font-medium text-xs sm:text-sm text-sky-700 dark:text-sky-400 border-sky-200 dark:border-sky-800 hover:bg-sky-50 dark:hover:bg-sky-950/50"
+                          data-testid={`button-social-publish-mobile-${article.id}`}
+                        >
+                          <Share2 className="ml-1.5 h-3.5 w-3.5 text-sky-600 dark:text-sky-400" />
+                          نشر على X
+                        </Button>
+                      )}
+
+                      {canPublishArticle && article.status === "published" && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setNotifyArticle(article)}
+                          className="h-9 font-medium text-xs sm:text-sm text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-800 hover:bg-blue-50 dark:hover:bg-blue-950/50"
+                          data-testid={`button-notify-mobile-${article.id}`}
+                        >
+                          <Bell className="ml-1.5 h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+                          إرسال إشعار
+                        </Button>
+                      )}
+                    </div>
+
+                    {/* Secondary Action Icons Row */}
+                    <div className="flex items-center justify-between gap-1 pt-1 border-t border-border/40">
+                      <div className="flex items-center gap-1">
+                        {canFeatureArticle && (
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-8 w-8"
+                            onClick={() => featureMutation.mutate({ id: article.id, featured: !article.isFeatured })}
+                            disabled={featureMutation.isPending}
+                            data-testid={`button-feature-mobile-${article.id}`}
+                            title={article.isFeatured ? "إلغاء التمييز" : "تمييز"}
+                          >
+                            <Star className={`h-4 w-4 ${article.isFeatured ? 'text-yellow-500 fill-yellow-500' : 'text-muted-foreground'}`} />
+                          </Button>
                         )}
-                      </Button>
-                    )}
-                    {canSocialPublish && article.status === "published" && (
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        onClick={() => setSocialPublishArticle(article)}
-                        data-testid={`button-social-publish-mobile-${article.id}`}
-                        title="النشر على X"
-                      >
-                        <Share2 className="h-4 w-4 text-sky-600" />
-                      </Button>
-                    )}
-                    {canArchiveArticle && article.status !== "archived" && (
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        // Route through the same confirmation dialog as the
-                        // desktop trash button so the editor is forced to
-                        // capture an archive reason. The previous direct
-                        // POST to `/archive` was silent — the author got
-                        // zero feedback when their content disappeared.
-                        onClick={() => setDeletingArticle(article)}
-                        data-testid={`button-archive-mobile-${article.id}`}
-                        title="أرشفة"
-                      >
-                        <Archive className="h-4 w-4" />
-                      </Button>
-                    )}
-                    {canDeleteArticle && (
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        onClick={() => setDeletingArticle(article)}
-                        data-testid={`button-delete-mobile-${article.id}`}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    )}
+                        
+                        {article.status === "published" && (
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-8 w-8"
+                            onClick={() => translateMutation.mutate(article.id)}
+                            disabled={translateMutation.isPending}
+                            data-testid={`button-translate-mobile-${article.id}`}
+                            title="ترجم للإنجليزية"
+                          >
+                            {translateMutation.isPending ? (
+                              <Loader2 className="h-4 w-4 animate-spin text-emerald-500" />
+                            ) : (
+                              <Languages className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                            )}
+                          </Button>
+                        )}
+
+                        {canPublishArticle && article.status === "published" && (
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-8 w-8"
+                            onClick={() => resurfaceMutation.mutate(article.id)}
+                            disabled={resurfaceMutation.isPending}
+                            data-testid={`button-resurface-mobile-${article.id}`}
+                            title="إنعاش (عودة لصدارة الموجز)"
+                          >
+                            {resurfaceMutation.isPending ? (
+                              <Loader2 className="h-4 w-4 animate-spin text-rose-500" />
+                            ) : (
+                              <HeartPulse className="h-4 w-4 text-rose-500" />
+                            )}
+                          </Button>
+                        )}
+
+                        {activeStatus !== "archived" && article.status !== "archived" && (
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-8 w-8"
+                            onClick={() => setRevisionArticle(article)}
+                            data-testid={`button-revision-mobile-${article.id}`}
+                            title="طلب تعديل"
+                          >
+                            <FilePenLine className="h-4 w-4 text-amber-600" />
+                          </Button>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-1">
+                        {canArchiveArticle && article.status !== "archived" && (
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-8 w-8"
+                            onClick={() => setDeletingArticle(article)}
+                            data-testid={`button-archive-mobile-${article.id}`}
+                            title="أرشفة"
+                          >
+                            <Archive className="h-4 w-4 text-muted-foreground hover:text-destructive" />
+                          </Button>
+                        )}
+                        
+                        {canDeleteArticle && (
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-8 w-8"
+                            onClick={() => setDeletingArticle(article)}
+                            data-testid={`button-delete-mobile-${article.id}`}
+                            title="حذف"
+                          >
+                            <Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" />
+                          </Button>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </div>
               ))
             )}
           </div>
+          )}
 
           {/* Pagination */}
           {totalPages > 1 && (
@@ -1669,21 +2276,21 @@ export default function ArticlesManagement() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                disabled={currentPage === 1 || articlesLoading}
+                onClick={() => setListParams(previous => ({ ...previous, page: Math.max(1, previous.page - 1) }))}
+                disabled={currentPage === 1 || articlesBusy || articlesLoading}
                 data-testid="button-pagination-prev"
               >
                 <ChevronRight className="h-4 w-4 ml-1" />
                 السابق
               </Button>
               <span className="text-sm tabular-nums text-muted-foreground" data-testid="text-pagination-info">
-                الصفحة {currentPage.toLocaleString("en-US")} من {totalPages.toLocaleString("en-US")}
+                الصفحة {displayedPage.toLocaleString("en-US")} من {totalPages.toLocaleString("en-US")}
               </span>
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                disabled={currentPage >= totalPages || totalPages <= 1 || articlesLoading}
+                onClick={() => setListParams(previous => ({ ...previous, page: Math.min(totalPages, previous.page + 1) }))}
+                disabled={currentPage >= totalPages || totalPages <= 1 || articlesBusy || articlesLoading}
                 data-testid="button-pagination-next"
               >
                 التالي
@@ -1695,8 +2302,8 @@ export default function ArticlesManagement() {
       </DashboardPageShell>
 
       {/* Bulk Action Bar - Mobile Only */}
-      {selectedArticles.size > 0 && (
-        <div className="md:hidden fixed bottom-0 left-0 right-0 bg-card border-t shadow-lg p-3 z-50">
+      {selectedArticles.size > 0 && isMobile && (
+        <div className="fixed bottom-0 left-0 right-0 bg-card border-t shadow-lg p-3 z-50">
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm font-medium tabular-nums">
               {selectedArticles.size.toLocaleString("en-US")} مقال محدد
@@ -1716,7 +2323,7 @@ export default function ArticlesManagement() {
                 size="default"
                 variant="outline"
                 onClick={handleBulkArchive}
-                disabled={bulkArchiveMutation.isPending}
+                disabled={articlesBusy || bulkArchiveMutation.isPending}
                 className="flex-1"
                 data-testid="button-bulk-archive-mobile"
               >
@@ -1728,8 +2335,9 @@ export default function ArticlesManagement() {
               <Button
                 size="default"
                 variant="destructive"
-                onClick={() => setShowBulkDeleteDialog(true)}
+                onClick={handleBulkPermanentDelete}
                 className="flex-1"
+                disabled={articlesBusy || bulkPermanentDeleteMutation.isPending}
                 data-testid="button-bulk-delete-mobile"
               >
                 <Trash className="ml-2 h-4 w-4" />
@@ -1925,7 +2533,7 @@ export default function ArticlesManagement() {
           <AlertDialogFooter>
             <AlertDialogCancel data-testid="button-cancel-bulk-archive">إلغاء</AlertDialogCancel>
             <AlertDialogAction
-              disabled={bulkArchiveMutation.isPending}
+              disabled={articlesBusy || bulkArchiveMutation.isPending}
               onClick={(e) => {
                 e.preventDefault();
                 const trimmed = bulkArchiveReason.trim();
@@ -1994,7 +2602,7 @@ export default function ArticlesManagement() {
           <AlertDialogFooter>
             <AlertDialogCancel data-testid="button-cancel-bulk-delete">إلغاء</AlertDialogCancel>
             <AlertDialogAction
-              disabled={bulkPermanentDeleteMutation.isPending}
+              disabled={articlesBusy || bulkPermanentDeleteMutation.isPending}
               onClick={(e) => {
                 e.preventDefault();
                 const trimmed = bulkDeleteReason.trim();
@@ -2091,6 +2699,63 @@ export default function ArticlesManagement() {
           }}
         />
       )}
+
+      {/* إرسال إشعار للمستخدمين - موبايل */}
+      <AlertDialog
+        open={!!notifyArticle}
+        onOpenChange={(open) => {
+          if (!open && !isSendingNotification) {
+            setNotifyArticle(null);
+          }
+        }}
+      >
+        <AlertDialogContent dir="rtl" className="sm:max-w-md w-[95vw] rounded-2xl p-4 sm:p-6">
+          <AlertDialogHeader className="text-right space-y-1.5">
+            <AlertDialogTitle className="text-base sm:text-lg font-bold flex items-center gap-2">
+              <Bell className="h-5 w-5 text-blue-600" />
+              <span>إرسال إشعار للمستخدمين</span>
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-xs sm:text-sm text-muted-foreground text-right">
+              سيتم إرسال إشعار فوري بهذا الخبر لجميع مستخدمي التطبيق ومتابعي سبق.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {notifyArticle && (
+            <div className="py-2">
+              <div className="p-3 rounded-xl border bg-muted/40 text-xs sm:text-sm font-semibold text-foreground leading-relaxed">
+                "{notifyArticle.title}"
+              </div>
+            </div>
+          )}
+          <AlertDialogFooter className="flex flex-row items-center justify-end gap-2 pt-2 border-t border-border/60">
+            <AlertDialogCancel disabled={isSendingNotification} className="text-xs h-9 px-3 mt-0">
+              إلغاء
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                if (notifyArticle) {
+                  handleSendNotification(notifyArticle);
+                }
+              }}
+              disabled={isSendingNotification}
+              className="text-xs font-bold h-9 px-4 bg-blue-600 hover:bg-blue-700 text-white"
+              data-testid="button-confirm-send-notification"
+            >
+              {isSendingNotification ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 ml-1.5 animate-spin" />
+                  جاري الإرسال...
+                </>
+              ) : (
+                <>
+                  <Bell className="w-3.5 h-3.5 ml-1.5" />
+                  إرسال الإشعار
+                </>
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </DashboardLayout>
   );
 }

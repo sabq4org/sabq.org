@@ -18,6 +18,8 @@
  * كلها قراءات رخيصة: readdir على /proc/self/fd ومؤشرات في الذاكرة.
  */
 import fs from "fs";
+import { httpPressure } from "./httpPressure";
+import { getPushBroadcastState } from "../services/pushBroadcastCoordinator";
 
 const SAMPLE_INTERVAL_MS = 30_000;
 const LAG_PROBE_MS = 500;
@@ -65,6 +67,8 @@ export interface RuntimeSnapshot {
   handles: number;
   sockets: number;
   handlesByType: Record<string, number>;
+  http: ReturnType<typeof httpPressure.snapshot>;
+  pushBroadcast: ReturnType<typeof getPushBroadcastState>;
   pool: { total: number; idle: number; waiting: number } | null;
   caches: { name: string; size: number; max: number; inflight?: number }[];
   loopLagMs: number;
@@ -106,6 +110,8 @@ export function runtimeSnapshot(): RuntimeSnapshot {
     handles: h.total,
     sockets: h.sockets,
     handlesByType: h.byType,
+    http: httpPressure.snapshot(),
+    pushBroadcast: getPushBroadcastState(),
     pool,
     caches,
     loopLagMs: Math.round(loopLagMs),
@@ -133,6 +139,8 @@ export function startRuntimeDiagnostics(): void {
     console.log(
       `[Runtime] up=${s.uptimeS}s rss=${s.rssMb}MB heap=${s.heapUsedMb}/${s.heapTotalMb}MB ext=${s.externalMb}MB ` +
         `fd=${s.openFds ?? "?"} sockets=${s.sockets} handles=${s.handles} ` +
+        `http=${s.http.inboundSockets}in/${s.http.activeRequests}active/${s.http.activeSportsStreams}sse ` +
+        `broadcast=${s.pushBroadcast.active}active/${s.pushBroadcast.pending}pending ` +
         `pool=${s.pool ? `${s.pool.total}/${s.pool.idle}idle/${s.pool.waiting}wait` : "?"} ` +
         `loopLag=${s.loopLagMs}ms peak=${s.maxLoopLagMs}ms ` +
         `caches=[${s.caches

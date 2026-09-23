@@ -5,7 +5,7 @@ import { Router, type Request, type Response } from "express";
 import rateLimit from "express-rate-limit";
 import { z } from "zod";
 import { PERMISSION_CODES } from "@shared/rbac-constants";
-import { requireAuth, requirePermission } from "../rbac";
+import { requireAuth, requireAnyPermission, requirePermission } from "../rbac";
 import {
   cancelPost,
   claimPostForImmediatePublish,
@@ -388,7 +388,10 @@ const updatePostSchema = z.object({
 router.patch(
   "/api/social-publishing/posts/:id",
   requireAuth,
-  requirePermission(PERMISSION_CODES.SOCIAL_PUBLISH_MANAGE_SCHEDULED),
+  requireAnyPermission(
+    PERMISSION_CODES.SOCIAL_PUBLISH_MANAGE_SCHEDULED,
+    PERMISSION_CODES.SOCIAL_PUBLISH_CREATE,
+  ),
   async (req, res) => {
     try {
       const body = updatePostSchema.parse(req.body);
@@ -455,13 +458,22 @@ router.post(
   },
 );
 
+const cancelPostSchema = z.object({
+  reason: z.string().max(1000).nullish(),
+});
+
 router.post(
   "/api/social-publishing/posts/:id/cancel",
   requireAuth,
-  requirePermission(PERMISSION_CODES.SOCIAL_PUBLISH_MANAGE_SCHEDULED),
+  requireAnyPermission(
+    PERMISSION_CODES.SOCIAL_PUBLISH_MANAGE_SCHEDULED,
+    PERMISSION_CODES.SOCIAL_PUBLISH_CREATE,
+  ),
   async (req, res) => {
     try {
-      const post = await cancelPost(req.params.id, requestUserId(req));
+      const parsed = cancelPostSchema.safeParse(req.body);
+      const reason = parsed.success ? parsed.data.reason : undefined;
+      const post = await cancelPost(req.params.id, requestUserId(req), reason);
       res.json(post);
     } catch (error) {
       handleError(res, error, "تعذر الإلغاء");

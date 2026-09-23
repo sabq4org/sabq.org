@@ -32,10 +32,22 @@ interface DayGroup {
   items: RslFixture[];
 }
 
+function phaseRank(f: RslFixture): number {
+  if (f.status.live) return 0;
+  if (f.status.finished) return 2;
+  return 1;
+}
+
 function groupByDay(fixtures: RslFixture[], newestFirst = false): DayGroup[] {
-  const sorted = [...fixtures].sort((a, b) =>
-    newestFirst ? b.timestamp - a.timestamp : a.timestamp - b.timestamp,
-  );
+  const sorted = [...fixtures].sort((a, b) => {
+    if (!newestFirst) {
+      const ra = phaseRank(a);
+      const rb = phaseRank(b);
+      if (ra !== rb) return ra - rb;
+      if (ra === 2) return b.timestamp - a.timestamp;
+    }
+    return newestFirst ? b.timestamp - a.timestamp : a.timestamp - b.timestamp;
+  });
   const groups: DayGroup[] = [];
   for (const fx of sorted) {
     const key = riyadhDayKey(fx.date);

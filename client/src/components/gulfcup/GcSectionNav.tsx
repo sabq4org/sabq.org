@@ -1,24 +1,54 @@
+import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { Sparkles } from "lucide-react";
+import { Sparkles, UsersRound } from "lucide-react";
 import gulfCupLogoHorizontal from "@assets/gulf-cup-27-logo-horizontal.svg";
+import type { GcFixture, GcOverview, GcScorersBoard, GcStarPlayer } from "./gcTypes";
 
 /**
- * شريط تنقّل لاصق: أقسام الصفحة + مدخل ثابت للتوقعات
- * (هوية ليليّة باردة مطابقة للتطبيق).
+ * شريط تنقّل لاصق تحت هيدر سبق (ومسار التصنيفات على سطح المكتب):
+ * الأقسام الظاهرة فقط + التوقعات والمجلس.
  */
 
-const SECTIONS: { id: string; label: string }[] = [
-  { id: "gc-saudi", label: "الأخضر" },
-  { id: "gc-schedule", label: "المباريات" },
-  { id: "gc-groups", label: "المجموعات" },
-  { id: "gc-knockout", label: "الطريق إلى اللقب" },
-  { id: "gc-scorers", label: "الهدّافون" },
-  { id: "gc-stars", label: "النجوم" },
-  { id: "gc-history", label: "سجلّ البطولة" },
-  { id: "gc-teams", label: "المنتخبات" },
-];
+type Section = { id: string; label: string };
 
-export function GcSectionNav() {
+export function GcSectionNav({
+  overview,
+  fixtures,
+}: {
+  overview: GcOverview | undefined;
+  fixtures: GcFixture[];
+}) {
+  const { data: starsData } = useQuery<{ stars: GcStarPlayer[] }>({
+    queryKey: ["/api/gulf-cup/stars"],
+    staleTime: 30 * 60_000,
+  });
+  const { data: scorersData } = useQuery<GcScorersBoard>({
+    queryKey: ["/api/gulf-cup/scorers"],
+    staleTime: 5 * 60_000,
+  });
+
+  const hasStars = (starsData?.stars ?? []).length > 0;
+  const hasScorers =
+    (scorersData?.scorers ?? []).some((s) => s.goals > 0) ||
+    (scorersData?.assists ?? []).some((s) => s.assists > 0);
+  const hasKnockout = fixtures.some((f) => {
+    const round = (f.roundEn ?? "").toLowerCase();
+    return round.includes("semi") || round.trim().startsWith("final");
+  });
+  const hasVenues = (overview?.venues?.length ?? 0) > 0;
+
+  const sections: Section[] = [
+    overview?.saudi?.team ? { id: "gc-saudi", label: "الأخضر" } : null,
+    { id: "gc-schedule", label: "المباريات" },
+    { id: "gc-groups", label: "المجموعات" },
+    hasKnockout ? { id: "gc-knockout", label: "الطريق إلى اللقب" } : null,
+    hasScorers ? { id: "gc-scorers", label: "الهدّافون" } : null,
+    hasStars ? { id: "gc-stars", label: "النجوم" } : null,
+    { id: "gc-history", label: "سجلّ البطولة" },
+    { id: "gc-teams", label: "المنتخبات" },
+    hasVenues ? { id: "gc-venues", label: "دليل الحضور" } : null,
+  ].filter((s): s is Section => Boolean(s));
+
   const jump = (id: string) => {
     document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
@@ -27,7 +57,7 @@ export function GcSectionNav() {
     <nav
       dir="rtl"
       aria-label="أقسام صفحة خليجي 27"
-      className="sticky top-0 z-30 border-b border-white/10 bg-[#041C22]/95 backdrop-blur-md supports-[backdrop-filter]:bg-[#041C22]/90"
+      className="sticky z-40 border-b border-white/10 bg-[#041C22]/95 backdrop-blur-md supports-[backdrop-filter]:bg-[#041C22]/90 top-[var(--public-header-height,4rem)] md:top-[calc(var(--public-header-height,4rem)+2.75rem)]"
     >
       <div className="container mx-auto flex max-w-6xl items-center gap-0.5 overflow-x-auto px-4 py-2.5 sm:px-6 lg:px-8">
         <span className="ml-1.5 hidden shrink-0 rounded-lg bg-white px-1.5 py-1 shadow-sm sm:block">
@@ -38,7 +68,7 @@ export function GcSectionNav() {
             loading="lazy"
           />
         </span>
-        {SECTIONS.map((s) => (
+        {sections.map((s) => (
           <button
             key={s.id}
             type="button"
@@ -55,6 +85,13 @@ export function GcSectionNav() {
         >
           <Sparkles className="h-3.5 w-3.5" />
           توقّع واربح
+        </Link>
+        <Link
+          href="/gulf-cup/majlis"
+          className="flex shrink-0 items-center gap-1 rounded-full border border-white/20 bg-white/5 px-4 py-1.5 text-[13px] font-bold text-sky-100 transition-colors hover:bg-white/10"
+        >
+          <UsersRound className="h-3.5 w-3.5" />
+          المجلس
         </Link>
       </div>
     </nav>

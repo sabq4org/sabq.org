@@ -1,0 +1,66 @@
+{
+  "deploymentSha": "8480337f6e3ff833dfa2a789dcd42a938b3f07db",
+  "runtime": {
+    "samples": 415,
+    "first": "2026-09-07T07:31:56.486764343Z",
+    "last": "2026-09-07T10:58:56.671576244Z",
+    "maxWaiting": 0,
+    "maxEventLoopPeakMs": 196,
+    "allConnectionsBusySamples": 1
+  },
+  "apmSlowSample": {
+    "logLines": 1500,
+    "first": "2026-09-07T08:01:57.920830777Z",
+    "last": "2026-09-07T10:57:32.661624891Z",
+    "routes": {
+      "/api/edge/seo-meta": {
+        "count": 186,
+        "minMs": 1002,
+        "maxMs": 6000,
+        "medianMs": 1201.0
+      },
+      "/api/edge/slug-redirect": {
+        "count": 97,
+        "minMs": 1004,
+        "maxMs": 1629,
+        "medianMs": 1119
+      },
+      "/api/homepage-lite": {
+        "count": 17,
+        "minMs": 1012,
+        "maxMs": 2983,
+        "medianMs": 1283
+      },
+      "/api/admin/articles": {
+        "count": 9,
+        "minMs": 1336,
+        "maxMs": 2152,
+        "medianMs": 1588
+      },
+      "/api/admin/articles/metrics": {
+        "count": 8,
+        "minMs": 1333,
+        "maxMs": 2154,
+        "medianMs": 1586.0
+      },
+      "/api/public/ai-stats": {
+        "count": 16,
+        "minMs": 2288,
+        "maxMs": 9739,
+        "medianMs": 7436.5
+      },
+      "/api/news/stats": {
+        "count": 11,
+        "minMs": 1107,
+        "maxMs": 2380,
+        "medianMs": 1564
+      },
+      "/api/notifications": {
+        "count": 11,
+        "minMs": 1096,
+        "maxMs": 2586,
+        "medianMs": 1341
+      }
+    }
+  }
+}

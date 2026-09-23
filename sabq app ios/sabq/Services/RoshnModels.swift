@@ -377,6 +377,12 @@ nonisolated struct RsTeamInfo: Decodable, Hashable {
     let venue: RsTeamVenue?
 }
 
+nonisolated struct RsPlayerNationality: Decodable, Hashable {
+    let name: String?
+    let flag: String?
+    let code: String?
+}
+
 nonisolated struct RsSquadPlayer: Decodable, Identifiable, Hashable {
     let id: Int
     let name: String
@@ -385,6 +391,11 @@ nonisolated struct RsSquadPlayer: Decodable, Identifiable, Hashable {
     let positionEn: String
     let age: Int?
     let photo: String
+    let captain: Bool?
+    let nationality: RsPlayerNationality?
+    let height: Int?
+    let weight: Int?
+    let detailedPosition: String?
 }
 
 nonisolated struct RsStatTriple: Decodable, Hashable {
@@ -716,11 +727,18 @@ nonisolated struct PredTeamMeta: Decodable, Hashable {
     let logo: String?
 }
 
+/// ركلات الترجيح (نقل الويب #1439): تُعرض تحت النتيجة النهائية «(الضيف–المضيف ر.ت)».
+nonisolated struct PredPenaltiesMeta: Decodable, Hashable {
+    let home: Int?
+    let away: Int?
+}
+
 nonisolated struct PredContestMeta: Decodable, Hashable {
     let home: PredTeamMeta?
     let away: PredTeamMeta?
     let round: String?
     let venue: String?
+    let penalties: PredPenaltiesMeta?
 }
 
 nonisolated struct PredScorePayload: Codable, Hashable {
@@ -736,6 +754,13 @@ nonisolated struct PredMyEntry: Decodable, Hashable {
 nonisolated struct PredScoreResult: Decodable, Hashable {
     let finalHome: Int?
     let finalAway: Int?
+    let penalties: PredPenaltiesMeta?
+
+    /// «(3–4 ر.ت)» بالضيف أولًا داخل زوج LTR معزول — كما في الويب وVARA.
+    nonisolated static func penaltiesLabel(_ pen: PredPenaltiesMeta?) -> String? {
+        guard let pen, let ph = pen.home, let pa = pen.away else { return nil }
+        return "(\(pa)–\(ph) ر.ت)"
+    }
 }
 
 nonisolated struct PredContest: Decodable, Identifiable, Hashable {

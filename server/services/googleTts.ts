@@ -78,7 +78,8 @@ export class GoogleTTSService {
     });
   }
 
-  async textToSpeech(options: TTSOptions, timeoutMs: number = 30000): Promise<Buffer> {
+  async textToSpeech(options: TTSOptions, timeoutMs: number = 30000, retry = true): Promise<Buffer> {
+    if (!retry) return this._synthesize(options, timeoutMs);
     return retryWithBackoff(
       () => this._synthesize(options, timeoutMs),
       'Google TTS',
@@ -107,12 +108,8 @@ export class GoogleTTSService {
       },
     };
 
-    const synthesizePromise = this.client.synthesizeSpeech(request);
-    const timeoutPromise = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error(`Google TTS timeout after ${timeoutMs}ms`)), timeoutMs)
-    );
-
-    const [response] = (await Promise.race([synthesizePromise, timeoutPromise])) as Awaited<typeof synthesizePromise>;
+    // gRPC deadline covers the response and cancels the request on timeout.
+    const [response] = await this.client.synthesizeSpeech(request, { timeout: timeoutMs, retry: null });
 
     if (!response.audioContent) {
       throw new Error('Google TTS returned empty audio');

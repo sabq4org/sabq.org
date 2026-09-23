@@ -29,6 +29,18 @@ async function waitForArticleLinks(page: Page) {
 }
 
 test.describe("smoke: public critical paths", () => {
+  test("health endpoint returns a JSON 2xx response", async ({ request }) => {
+    // Pages serves HTML at PW_BASE_URL; probe the API origin independently.
+    // Local runs fall back to the local Express port, while production/preview
+    // workflows set PW_API_BASE_URL explicitly.
+    const apiBaseUrl = process.env.PW_API_BASE_URL || "http://localhost:5000";
+    const response = await request.get(`${apiBaseUrl.replace(/\/$/, "")}/health`, { timeout: 15_000 });
+    expect(response.status()).toBeGreaterThanOrEqual(200);
+    expect(response.status()).toBeLessThan(300);
+    expect(response.headers()["content-type"] || "").toContain("application/json");
+    const body = await response.json();
+    expect(body).toMatchObject({ status: expect.any(String) });
+  });
   test("homepage renders with article links", async ({ page }) => {
     const response = await page.goto("/");
     expect(response?.status()).toBeLessThan(400);

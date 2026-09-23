@@ -66,6 +66,11 @@ function resizeForSchema(src: string, siteUrl: string, width: number, height: nu
     try {
       const u = new URL(src);
       if (!u.hostname.endsWith("sabq.org")) return src;
+      // News R2 assets are served from media.sabq.org.  That host already
+      // exposes the original, valid WebP and is not backed by the Pages
+      // /cdn-cgi/image transformer.  Rewriting it to siteUrl produces a
+      // 415 response from the HTML origin, so preserve the source URL.
+      if (u.hostname !== new URL(siteUrl).hostname) return src;
       imagePath = u.pathname + u.search;
     } catch {
       return src;
@@ -98,6 +103,13 @@ export function buildSpeakableSpecification(): Record<string, unknown> {
     "@type": "SpeakableSpecification",
     cssSelector: ["h1", ".article-title", ".article-summary", ".article-lead"],
   };
+}
+
+/** Map the stored editorial type to the most specific Schema.org article type. */
+export function getArticleSchemaType(articleType?: string | null): string {
+  if (articleType === "opinion") return "OpinionNewsArticle";
+  if (articleType === "analysis") return "AnalysisNewsArticle";
+  return "NewsArticle";
 }
 
 export interface NewsArticleSchemaExtras {

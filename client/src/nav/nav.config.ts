@@ -44,6 +44,7 @@ import {
   LayoutGrid,
   MapPin,
   Wand2,
+  FlaskConical,
   BarChart,
   ListTodo,
   Globe,
@@ -67,6 +68,8 @@ import {
   HeartPulse,
   Headphones,
   Briefcase,
+  Bot,
+  Radio,
 } from "lucide-react";
 import type { NavItem } from "./types";
 
@@ -644,6 +647,27 @@ export const navConfig: NavItem[] = [
     ],
   },
 
+  // ===== فريق سبق الذكي / AI Staff Team =====
+  {
+    id: "ai_staff",
+    labelKey: "nav.ai_staff",
+    labelAr: "فريق سبق الذكي",
+    path: "/dashboard/ai/staff",
+    icon: Bot,
+    roles: ["admin", "system_admin", "editor", "analyst"],
+  },
+
+  // ===== غرفة عمليات سبق الذكية (تجريبية) =====
+  {
+    id: "ops_room",
+    labelKey: "nav.ops_room",
+    labelAr: "غرفة العمليات الذكية",
+    path: "/dashboard/ops-room",
+    icon: Radio,
+    roles: ["admin", "system_admin", "editor"],
+    permissions: ["ops_room.view"],
+  },
+
   // ===== مركز التحكم بالذكاء الاصطناعي / AI Hub (admin) =====
   {
     id: "ai_hub",
@@ -680,6 +704,15 @@ export const navConfig: NavItem[] = [
         labelAr: "مختبر البرومبت",
         path: "/dashboard/prompt-studio",
         icon: Wand2,
+        roles: ["admin", "editor"],
+        permissions: ["ai.view", "ai.manage", "tools.view"],
+      },
+      {
+        id: "deepseek_lab",
+        labelKey: "nav.deepseek_lab",
+        labelAr: "مختبر DeepSeek",
+        path: "/dashboard/deepseek-lab",
+        icon: FlaskConical,
         roles: ["admin", "editor"],
         permissions: ["ai.view", "ai.manage", "tools.view"],
       },
@@ -841,6 +874,17 @@ export const navConfig: NavItem[] = [
     icon: Flag,
     path: "/dashboard/national-day-block",
     roles: ["admin"],
+  },
+
+  // ===== ثيم اليوم الوطني لتطبيق iOS / iOS National Day theme =====
+  {
+    id: "ios_national_day_theme",
+    labelKey: "nav.ios_national_day_theme",
+    labelAr: "ثيم اليوم الوطني — تطبيق iOS",
+    icon: Flag,
+    path: "/dashboard/ios-national-day-theme",
+    roles: ["admin"],
+    permissions: ["system.manage_settings"],
   },
 
   // ===== بلوك قناة الصحراء / Al-Sahraa TV =====
