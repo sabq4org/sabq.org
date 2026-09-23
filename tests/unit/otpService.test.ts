@@ -16,6 +16,7 @@ vi.mock("../../server/services/sms/smsRouter", () => ({
 
 import {
   __resetOtpMemory,
+  buildOtpMessage,
   OTP_MAX_ATTEMPTS,
   OTP_RESEND_COOLDOWN_SECONDS,
   sendOtp,
@@ -26,6 +27,19 @@ const PHONE = "+966501234567";
 const codeFromBody = (body: string) => body.match(/#(\d{6})/)![1];
 
 describe("otpService", () => {
+  it.each(["login", "2fa", "phone_verify"] as const)(
+    "%s fits a single Unicode SMS while retaining expiry, warning, and autofill",
+    (purpose) => {
+      for (const code of ["000000", "123456", "999999"]) {
+        const body = buildOtpMessage(code, purpose);
+        expect(body.length).toBeLessThanOrEqual(70);
+        expect(body).toContain("5 دقائق");
+        expect(body).toContain("لا تشاركه");
+        expect(body.endsWith(`@sabq.org #${code}`)).toBe(true);
+      }
+    },
+  );
+
   beforeEach(() => {
     __resetOtpMemory();
     sent.length = 0;

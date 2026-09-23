@@ -61,6 +61,17 @@ describe("CSP report endpoint", () => {
     });
   });
 
+  it("discards malformed best-effort reports without surfacing a server error", async () => {
+    await withServer(async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/api/security/csp-report`, {
+        method: "POST",
+        headers: { "content-type": "application/csp-report" },
+        body: '{"csp-report":',
+      });
+      expect(response.status).toBe(204);
+    });
+  });
+
   it("rate-limits repeated reports", async () => {
     await withServer(async (baseUrl) => {
       const requests = Array.from({ length: 61 }, () => fetch(`${baseUrl}/api/security/csp-report`, {

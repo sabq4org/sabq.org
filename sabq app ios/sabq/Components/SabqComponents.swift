@@ -27,32 +27,37 @@ enum SabqHaptics {
 // MARK: - Shimmer Effect
 
 struct ShimmerModifier: ViewModifier {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var phase: CGFloat = 0
 
     func body(content: Content) -> some View {
-        content
-            .overlay(
-                GeometryReader { geo in
-                    LinearGradient(
-                        colors: [
-                            .clear,
-                            Color.white.opacity(0.25),
-                            .clear
-                        ],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    )
-                    .frame(width: geo.size.width * 0.6)
-                    .offset(x: phase * (geo.size.width * 1.6) - geo.size.width * 0.3)
-                    .blendMode(.softLight)
+        if reduceMotion {
+            content
+        } else {
+            content
+                .overlay(
+                    GeometryReader { geo in
+                        LinearGradient(
+                            colors: [
+                                .clear,
+                                Color.white.opacity(0.25),
+                                .clear
+                            ],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                        .frame(width: geo.size.width * 0.6)
+                        .offset(x: phase * (geo.size.width * 1.6) - geo.size.width * 0.3)
+                        .blendMode(.softLight)
+                    }
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .onAppear {
+                    withAnimation(.linear(duration: 1.5).repeatForever(autoreverses: false)) {
+                        phase = 1
+                    }
                 }
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-            .onAppear {
-                withAnimation(.linear(duration: 1.5).repeatForever(autoreverses: false)) {
-                    phase = 1
-                }
-            }
+        }
     }
 }
 
@@ -178,15 +183,16 @@ struct HomeFeedSkeleton: View {
 // MARK: - Animated Appear Modifier
 
 struct AnimatedAppear: ViewModifier {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let index: Int
     @State private var isVisible = false
 
     func body(content: Content) -> some View {
         content
-            .opacity(isVisible ? 1 : 0)
-            .offset(y: isVisible ? 0 : 18)
+            .opacity(isVisible || reduceMotion ? 1 : 0)
+            .offset(y: isVisible || reduceMotion ? 0 : 18)
             .onAppear {
-                withAnimation(.spring(response: 0.45, dampingFraction: 0.82).delay(Double(index) * 0.05)) {
+                withAnimation(reduceMotion ? nil : .spring(response: 0.45, dampingFraction: 0.82).delay(Double(index) * 0.05)) {
                     isVisible = true
                 }
             }
@@ -1047,9 +1053,13 @@ nonisolated enum SabqTheme {
             : UIColor(red: 0.38, green: 0.40, blue: 0.46, alpha: 1)
     })
     static let tertiaryInk = Color(UIColor { t in
-        t.userInterfaceStyle == .dark
-            ? UIColor(red: 0.50, green: 0.50, blue: 0.55, alpha: 1)
-            : UIColor(red: 0.56, green: 0.58, blue: 0.64, alpha: 1)
+        if t.accessibilityContrast == .high {
+            return t.userInterfaceStyle == .dark
+                ? UIColor(white: 0.88, alpha: 1) : UIColor(white: 0.25, alpha: 1)
+        }
+        return t.userInterfaceStyle == .dark
+            ? UIColor(red: 0.68, green: 0.68, blue: 0.72, alpha: 1)
+            : UIColor(red: 0.42, green: 0.44, blue: 0.49, alpha: 1)
     })
     static let outline = Color(UIColor { t in
         t.userInterfaceStyle == .dark
@@ -1078,7 +1088,15 @@ nonisolated enum SabqTheme {
         return accent
     }
 
+    // ثيم اليوم الوطني الموسمي يعلو على لون التمييز الذي اختاره القارئ،
+    // فيصبغ الأزرار الأساسية وعناصر التنقل النشطة واللمسات البصرية دفعة
+    // واحدة (نقطة واحدة تغذّي ~395 موضعًا). إطفاء المفتاح يُسقط الشرط
+    // فتعود هوية `AppAccent` الأصلية كما هي — لا بقايا ولا حالة إضافية.
+    //
+    // الألوان الدلالية (coral للأخطاء، gold للتنبيهات…) خارج هذا المسار
+    // عمدًا، فتبقى دلالتها مقروءة أثناء الموسم.
     static var primaryStart: Color {
+        if NationalDayTheme.isActive { return NationalDayTheme.accentSoft }
         let accent = resolvedAccent
         return Color(UIColor { t in
             t.userInterfaceStyle == .dark
@@ -1087,6 +1105,7 @@ nonisolated enum SabqTheme {
         })
     }
     static var primaryEnd: Color {
+        if NationalDayTheme.isActive { return NationalDayTheme.accent }
         let accent = resolvedAccent
         return Color(UIColor { t in
             t.userInterfaceStyle == .dark
@@ -1099,10 +1118,20 @@ nonisolated enum SabqTheme {
     nonisolated static let gold        = Color(red: 0.92, green: 0.68, blue: 0.20)
     nonisolated static let coral       = Color(red: 0.90, green: 0.35, blue: 0.32)
     nonisolated static let leaf        = Color(red: 0.40, green: 0.73, blue: 0.22)
+    /// زمردي شارات «قراءة» في الويب (#047857).
+    nonisolated static let emerald     = Color(red: 0.016, green: 0.47, blue: 0.34)
+    /// درجة الأزرق الفاتح المعتمدة في الويب (`--public-surface` ‏#f4f8fb، داكن #172330)
+    /// لحاويات البلوكات الجانبية وبنود الرئيسية — اعتمدها المالك لتطبيق iOS 2026-09-12.
+    static let publicSurface = Color(UIColor { t in
+        t.userInterfaceStyle == .dark
+            ? UIColor(red: 0x17 / 255.0, green: 0x23 / 255.0, blue: 0x30 / 255.0, alpha: 1)
+            : UIColor(red: 0xF4 / 255.0, green: 0xF8 / 255.0, blue: 0xFB / 255.0, alpha: 1)
+    })
+    /// الفاتح يطابق درجة الويب #f4f8fb (كان #f0f7fc)؛ الداكن يبقى محايدًا.
     static let paleFill = Color(UIColor { t in
         t.userInterfaceStyle == .dark
             ? UIColor(red: 0.14, green: 0.14, blue: 0.16, alpha: 1)
-            : UIColor(red: 0.94, green: 0.97, blue: 0.99, alpha: 1)
+            : UIColor(red: 0xF4 / 255.0, green: 0xF8 / 255.0, blue: 0xFB / 255.0, alpha: 1)
     })
     static let softFill = Color(UIColor { t in
         t.userInterfaceStyle == .dark
@@ -1120,11 +1149,9 @@ nonisolated enum SabqTheme {
     // بالأزرق العميق #0E76B8 (يُستبدل بالسماوي في الداكن للتباين).
     // الفاتح #DCF1FE من لوحة الهوية — أوضح تمايزًا عن خلفية التطبيق
     // #F2F7FC بعد ملاحظة المالك أن الصبغة الأخف كانت تذوب فيها.
-    static let sectionCard = Color(UIColor { t in
-        t.userInterfaceStyle == .dark
-            ? UIColor(red: 0.11, green: 0.15, blue: 0.21, alpha: 1)
-            : UIColor(red: 0.86, green: 0.95, blue: 1.00, alpha: 1)
-    })
+    /// بطاقات بنود الرئيسية (الرأي، الرحلة…) — درجة الويب نفسها #f4f8fb / #172330
+    /// (كانت سماوية أقوى #dbf2ff). اعتمدها المالك 2026-09-12.
+    static let sectionCard = publicSurface
     static let sectionSeparator = Color(UIColor { t in
         t.userInterfaceStyle == .dark
             ? UIColor(red: 0.20, green: 0.26, blue: 0.33, alpha: 1)
@@ -1160,10 +1187,22 @@ struct SurfaceCard<Content: View>: View {
     var accent: Color?
     /// كسولة للقوائم الطويلة — انظر تعليق body.
     var lazy: Bool = false
+    /// نصف قطر اختياري للحاويات ذات الكثافة الأعلى؛ يبقى الافتراضي هو هوية السطح العامة.
+    var cornerRadius: CGFloat = SabqTheme.cardRadius
+    /// المسافة بين عناصر المحتوى؛ تبقى 18 للحاويات العامة ويمكن تصفيرها للقوائم ذات الفواصل.
+    var spacing: CGFloat = 18
 
-    init(accent: Color? = nil, lazy: Bool = false, @ViewBuilder content: () -> Content) {
+    init(
+        accent: Color? = nil,
+        lazy: Bool = false,
+        cornerRadius: CGFloat = SabqTheme.cardRadius,
+        spacing: CGFloat = 18,
+        @ViewBuilder content: () -> Content
+    ) {
         self.accent = accent
         self.lazy = lazy
+        self.cornerRadius = cornerRadius
+        self.spacing = spacing
         self.content = content()
     }
 
@@ -1176,22 +1215,22 @@ struct SurfaceCard<Content: View>: View {
         // تُركّب 50 صفًا وصورها دفعة واحدة أثناء حركة الدفع (تدقيق 2026-08-02).
         return Group {
             if lazy {
-                LazyVStack(alignment: .leading, spacing: 18) { content }
+                LazyVStack(alignment: .leading, spacing: spacing) { content }
             } else {
-                VStack(alignment: .leading, spacing: 18) { content }
+                VStack(alignment: .leading, spacing: spacing) { content }
             }
         }
         .padding(20)
         .frame(maxWidth: .infinity, alignment: .leading)
         .multilineTextAlignment(.leading)
         .background(
-            RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                 .fill(SabqTheme.surface)
                 .shadow(color: topShadow, radius: 16, x: 0, y: 6)
                 .shadow(color: SabqTheme.deepShadow, radius: 1, x: 0, y: 1)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                 .stroke(strokeColor, lineWidth: strokeWidth)
         )
         .overlay(alignment: .topTrailing) {
@@ -1200,7 +1239,7 @@ struct SurfaceCard<Content: View>: View {
                     .fill(accent.opacity(0.08))
                     .frame(width: 120, height: 120)
                     .offset(x: 40, y: -40)
-                    .clipShape(RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous))
+                    .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
             }
         }
         .sabqRTL()
@@ -1209,7 +1248,21 @@ struct SurfaceCard<Content: View>: View {
 
 // MARK: - Screen Header
 
+struct SabqPageIntro: View {
+    let text: String
+    init(_ text: String) { self.text = text }
+
+    var body: some View {
+        Text(text)
+            .font(SabqFonts.editorial(.subheadline, size: 14))
+            .foregroundStyle(SabqTheme.secondaryInk)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
 struct CompactScreenHeader: View {
+    @Environment(\.legibilityWeight) private var legibilityWeight
     let title: String
     let subtitle: String
     var actionTitle: String?
@@ -1221,7 +1274,8 @@ struct CompactScreenHeader: View {
         HStack(alignment: .top, spacing: 14) {
             VStack(alignment: .leading, spacing: 6) {
                 Text(title)
-                    .font(SabqFonts.app(size: 28, weight: .semibold))
+                    .font(SabqFonts.editorial(.title, size: 28, weight: .semibold, boldText: legibilityWeight == .bold))
+                    .accessibilityAddTraits(.isHeader)
                     .foregroundStyle(SabqTheme.ink)
 
                 Text(subtitle)
@@ -1470,6 +1524,7 @@ struct DetailLabelPill: View {
 // MARK: - Featured Article Card
 
 struct FeaturedArticleCard: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let article: Article
     let onBookmark: () -> Void
     let isBookmarked: Bool
@@ -1533,7 +1588,7 @@ struct FeaturedArticleCard: View {
                     article.title,
                     uiFont: SabqFonts.uiApp(size: 19, weight: .semibold),
                     color: SabqTheme.ink,
-                    lineLimit: 3,
+                    lineLimit: dynamicTypeSize.isAccessibilitySize ? 0 : 3,
                     lineSpacing: 4
                 )
 
@@ -1541,11 +1596,14 @@ struct FeaturedArticleCard: View {
                     article.excerpt,
                     uiFont: SabqFonts.uiApp(size: 14, weight: .regular),
                     color: SabqTheme.secondaryInk,
-                    lineLimit: 2,
+                    lineLimit: dynamicTypeSize.isAccessibilitySize ? 0 : 2,
                     lineSpacing: 3
                 )
 
-                HStack(spacing: 12) {
+                let metadataLayout = dynamicTypeSize.isAccessibilitySize
+                    ? AnyLayout(VStackLayout(alignment: .leading, spacing: 12))
+                    : AnyLayout(HStackLayout(spacing: 12))
+                metadataLayout {
                     HStack(spacing: 5) {
                         Image(systemName: "clock")
                             .font(SabqFonts.app(size: 11, weight: .regular))
@@ -1576,6 +1634,8 @@ struct FeaturedArticleCard: View {
                             .animation(.spring(response: 0.3, dampingFraction: 0.5), value: isBookmarked)
                     }
                     .buttonStyle(.plain)
+                    .frame(minWidth: 44, minHeight: 44)
+                    .accessibilityLabel(isBookmarked ? "إزالة من المحفوظات" : "حفظ المقال")
                 }
             }
             .padding(20)
@@ -1620,7 +1680,24 @@ struct FeaturedArticleCard: View {
 
 // MARK: - Compact Article Row
 
+/// Shared geometry and typography for the compact news-list rows. Keeping
+/// these values here lets custom row consumers adopt the same visual rhythm
+/// without changing the global surface-card treatment.
+enum NewsRowStyle {
+    static let thumbnailWidth: CGFloat = 104
+    static let thumbnailHeight: CGFloat = 84
+    static let thumbnailRadius: CGFloat = 10
+    static let thumbnailStrokeWidth: CGFloat = 0.5
+    static let thumbnailGap: CGFloat = 12
+    static let textStackSpacing: CGFloat = 8
+    static let titleSize: CGFloat = 15
+    static let titleLineSpacing: CGFloat = 4
+    static let metadataSize: CGFloat = 12
+    static let metadataLineSpacing: CGFloat = 3
+}
+
 struct CompactArticleRow: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let article: Article
     let onBookmark: () -> Void
     let isBookmarked: Bool
@@ -1628,6 +1705,8 @@ struct CompactArticleRow: View {
     /// / the live "أخبار جديدة" banner (`ArticlesStore.isRecentlyAdded`).
     /// Defaulted so the eight non-home call sites stay source-compatible.
     var isNew: Bool = false
+    /// The category page already names the section in its header.
+    var showsCategory: Bool = true
 
     // Reader can flip between the legacy thumbnail-on-the-side layout
     // ("classic") and the experimental image-on-top hero layout
@@ -1646,46 +1725,26 @@ struct CompactArticleRow: View {
         }
     }
 
-    // MARK: - Classic (thumbnail on the side, original design)
+    // MARK: - Classic (thumbnail on the side)
 
     private var classicLayout: some View {
-        HStack(alignment: .top, spacing: 14) {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 8) {
-                    StatusChip(title: article.category.title, tint: article.category.tint)
-                    if article.isBreaking { breakingPill }
-                    if isNew { newPill }
-                }
+        HStack(alignment: .top, spacing: NewsRowStyle.thumbnailGap) {
+            compactThumbnail
 
+            VStack(alignment: .leading, spacing: NewsRowStyle.textStackSpacing) {
                 SabqRTLText(
                     article.title,
-                    uiFont: SabqFonts.uiSubhead(size: 16),
+                    uiFont: SabqFonts.uiSubhead(size: NewsRowStyle.titleSize),
                     color: SabqTheme.ink,
-                    lineLimit: 2,
-                    lineSpacing: 4
+                    lineLimit: dynamicTypeSize.isAccessibilitySize ? 0 : 2,
+                    lineSpacing: NewsRowStyle.titleLineSpacing
                 )
 
                 metadataRow
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-
-            if let urlString = article.imageURL, let url = URL(string: urlString) {
-                FocalCachedAsyncImage(url: url, focalPoint: article.imageFocalPoint, maxPixelSize: 260) {
-                    thumbnailPlaceholder(size: 84)
-                }
-                .frame(width: 84, height: 84)
-                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                .aiImageBadgeOverlay(
-                    isVisible: article.isAiGeneratedImage,
-                    model: article.aiImageModel,
-                    inset: 4,
-                    sizeScale: 0.65
-                )
-            } else {
-                thumbnailPlaceholder(size: 84)
-            }
         }
-        .padding(.vertical, 6)
+        .padding(.vertical, 12)
     }
 
     // MARK: - Spacious (image on top, 16:10 hero)
@@ -1696,10 +1755,10 @@ struct CompactArticleRow: View {
 
             SabqRTLText(
                 article.title,
-                uiFont: SabqFonts.uiSubhead(size: 17),
+                uiFont: SabqFonts.uiApp(size: 17, weight: .regular),
                 color: SabqTheme.ink,
-                lineLimit: 3,
-                lineSpacing: 4
+                lineLimit: dynamicTypeSize.isAccessibilitySize ? 0 : 3,
+                lineSpacing: NewsRowStyle.titleLineSpacing
             )
 
             metadataRow
@@ -1707,37 +1766,54 @@ struct CompactArticleRow: View {
         .padding(.vertical, 8)
     }
 
+    /// The compact row follows the sidebar row's fixed 104×84 thumbnail while
+    /// retaining focal-point cropping and the AI provenance badge.
+    private var compactThumbnail: some View {
+        Group {
+            if let urlString = article.imageURL, let url = URL(string: urlString) {
+                FocalCachedAsyncImage(url: url, focalPoint: article.imageFocalPoint, maxPixelSize: 260) {
+                    thumbnailPlaceholder(size: NewsRowStyle.thumbnailWidth)
+                }
+            } else {
+                thumbnailPlaceholder(size: 104)
+            }
+        }
+        .frame(width: NewsRowStyle.thumbnailWidth, height: NewsRowStyle.thumbnailHeight)
+        .clipShape(RoundedRectangle(cornerRadius: NewsRowStyle.thumbnailRadius, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: NewsRowStyle.thumbnailRadius, style: .continuous)
+                .stroke(SabqTheme.outline.opacity(0.55), lineWidth: NewsRowStyle.thumbnailStrokeWidth)
+        )
+        .aiImageBadgeOverlay(
+            isVisible: article.isAiGeneratedImage,
+            model: article.aiImageModel,
+            inset: 4,
+            sizeScale: 0.65
+        )
+    }
+
     private var heroImage: some View {
-        ZStack(alignment: .topLeading) {
-            // 16:10 container — full row width. CachedAsyncImage fills.
-            Color.clear
-                .aspectRatio(16.0 / 10.0, contentMode: .fit)
-                .frame(maxWidth: .infinity)
-                .overlay(
-                    Group {
-                        if let urlString = article.imageURL, let url = URL(string: urlString) {
-                            FocalCachedAsyncImage(url: url, focalPoint: article.imageFocalPoint) {
-                                heroPlaceholder
-                            }
-                        } else {
+        // 16:10 container — full row width. CachedAsyncImage fills.
+        Color.clear
+            .aspectRatio(16.0 / 10.0, contentMode: .fit)
+            .frame(maxWidth: .infinity)
+            .overlay(
+                Group {
+                    if let urlString = article.imageURL, let url = URL(string: urlString) {
+                        FocalCachedAsyncImage(url: url, focalPoint: article.imageFocalPoint) {
                             heroPlaceholder
                         }
+                    } else {
+                        heroPlaceholder
                     }
-                )
-                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                .aiImageBadgeOverlay(
-                    isVisible: article.isAiGeneratedImage,
-                    model: article.aiImageModel,
-                    inset: 10
-                )
-
-            HStack(spacing: 6) {
-                if article.isBreaking { breakingPill }
-                if isNew { newPill }
-                StatusChip(title: article.category.title, tint: article.category.tint)
-            }
-            .padding(10)
-        }
+                }
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .aiImageBadgeOverlay(
+                isVisible: article.isAiGeneratedImage,
+                model: article.aiImageModel,
+                inset: 10
+            )
     }
 
     private var heroPlaceholder: some View {
@@ -1755,23 +1831,6 @@ struct CompactArticleRow: View {
 
     // MARK: - Shared sub-views
 
-    private var breakingPill: some View {
-        HStack(spacing: 4) {
-            Circle()
-                .fill(SabqTheme.coral)
-                .frame(width: 5, height: 5)
-            Text("عاجل")
-                .font(SabqFonts.app(size: 10, weight: .medium))
-                .foregroundStyle(SabqTheme.coral)
-        }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
-        .background(
-            Capsule(style: .continuous)
-                .fill(SabqTheme.coral.opacity(0.10))
-        )
-    }
-
     private var newPill: some View {
         Text("جديد")
             .font(SabqFonts.app(size: 10, weight: .medium))
@@ -1785,38 +1844,72 @@ struct CompactArticleRow: View {
     }
 
     private var metadataRow: some View {
-        HStack(spacing: 12) {
-            HStack(spacing: 4) {
-                Image(systemName: "clock")
-                    .font(SabqFonts.app(size: 10, weight: .regular))
-                Text(article.readingTime)
-                    .font(SabqFonts.app(size: 10, weight: .regular))
-                    .monospacedDigit()
+        Group {
+            if showsCategory || isNew {
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        metadataBadges
+                        relativeDateLabel
+                    }
+                    .fixedSize(horizontal: true, vertical: false)
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        metadataBadges
+                        relativeDateLabel
+                    }
+                }
+            } else {
+                relativeDateLabel
             }
-            .foregroundStyle(SabqTheme.tertiaryInk)
+        }
+        .font(SabqFonts.app(size: NewsRowStyle.metadataSize, weight: .regular))
+        .lineSpacing(NewsRowStyle.metadataLineSpacing)
+        .foregroundStyle(SabqTheme.secondaryInk)
+        .fixedSize(horizontal: false, vertical: true)
+    }
 
-            Text(article.relativeDate)
-                .font(SabqFonts.app(size: 10, weight: .regular))
-                .foregroundStyle(SabqTheme.tertiaryInk)
-
-            Spacer(minLength: 0)
-
-            Button {
-                SabqHaptics.light()
-                onBookmark()
-            } label: {
-                Image(systemName: isBookmarked ? "bookmark.fill" : "bookmark")
-                    .font(SabqFonts.app(size: 13, weight: .medium))
-                    .foregroundStyle(isBookmarked ? SabqTheme.primaryEnd : SabqTheme.tertiaryInk)
-                    .scaleEffect(isBookmarked ? 1.1 : 1)
-                    .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isBookmarked)
+    /// سطر بيانات واحد بحجم واحد وبلا كبسولات: «جديد» أخضر شبه عريض عند
+    /// الحاجة، ثم اسم القسم بلون هادئ، ثم الوقت. الألوان المتعددة للأقسام
+    /// وكبسولة «جديد» كانت تكسر إيقاع القائمة (ملاحظة المالك 2026-09-20).
+    @ViewBuilder
+    private var metadataBadges: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            if isNew {
+                Text("جديد")
+                    .font(SabqFonts.app(size: NewsRowStyle.metadataSize, weight: .semibold))
+                    .foregroundStyle(SabqTheme.leaf)
+                    .fixedSize(horizontal: true, vertical: false)
+                metadataSeparator
             }
-            .buttonStyle(.plain)
+            if showsCategory {
+                Text(article.categoryTitle)
+                    .font(SabqFonts.app(size: NewsRowStyle.metadataSize, weight: .medium))
+                    .foregroundStyle(SabqTheme.secondaryInk)
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+                metadataSeparator
+            }
         }
     }
 
+    private var metadataSeparator: some View {
+        Text("·")
+            .font(SabqFonts.app(size: NewsRowStyle.metadataSize, weight: .regular))
+            .foregroundStyle(SabqTheme.tertiaryInk)
+    }
+
+    private var relativeDateLabel: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 4) {
+            Image(systemName: "clock")
+                .font(SabqFonts.app(size: NewsRowStyle.metadataSize - 2, weight: .regular))
+            Text(article.relativeDate)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .foregroundStyle(SabqTheme.tertiaryInk)
+    }
+
     private func thumbnailPlaceholder(size: CGFloat) -> some View {
-        RoundedRectangle(cornerRadius: 16, style: .continuous)
+        RoundedRectangle(cornerRadius: NewsRowStyle.thumbnailRadius, style: .continuous)
             .fill(
                 LinearGradient(
                     colors: [article.category.tint.opacity(0.12), article.category.tint.opacity(0.04)],
@@ -1836,6 +1929,8 @@ struct CompactArticleRow: View {
 // MARK: - Category Tile
 
 struct CategoryTile: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.legibilityWeight) private var legibilityWeight
     let category: ArticleCategory
 
     init(category: ArticleCategory) {
@@ -1859,13 +1954,13 @@ struct CategoryTile: View {
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(category.title)
-                    .font(SabqFonts.app(size: 16, weight: .semibold))
+                    .font(SabqFonts.editorial(.headline, size: 16, weight: .semibold, boldText: legibilityWeight == .bold))
                     .foregroundStyle(SabqTheme.ink)
 
                 Text(category.subtitle)
                     .font(SabqFonts.app(size: 11, weight: .regular))
                     .foregroundStyle(SabqTheme.tertiaryInk)
-                    .lineLimit(2)
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
                     .fixedSize(horizontal: false, vertical: true)
                     .multilineTextAlignment(.leading)
             }
@@ -1890,69 +1985,39 @@ struct EmptyStateView: View {
     var action: (() -> Void)? = nil
     var actionTitle: String? = nil
 
-    @State private var isAnimating = false
-
     var body: some View {
-        VStack(spacing: 20) {
-            ZStack {
-                Circle()
-                    .fill(
-                        RadialGradient(
-                            colors: [tint.opacity(0.12), tint.opacity(0.03)],
-                            center: .center,
-                            startRadius: 20,
-                            endRadius: 60
-                        )
-                    )
-                    .frame(width: 120, height: 120)
-                    .scaleEffect(isAnimating ? 1.05 : 0.95)
-                    .animation(.easeInOut(duration: 2).repeatForever(autoreverses: true), value: isAnimating)
+        VStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.system(size: 28, weight: .regular))
+                .symbolRenderingMode(.hierarchical)
+                .foregroundStyle(tint)
+                .frame(width: 56, height: 56)
+                .background(tint.opacity(0.08), in: RoundedRectangle(cornerRadius: 16))
+                .accessibilityHidden(true)
 
-                Image(systemName: icon)
-                    .font(SabqFonts.app(size: 42, weight: .semibold))
-                    .foregroundStyle(tint)
-                    .symbolEffect(.pulse, isActive: isAnimating)
-            }
-
-            VStack(spacing: 8) {
-                Text(title)
-                    .font(SabqFonts.app(size: 20, weight: .bold))
-                    .foregroundStyle(SabqTheme.ink)
-                    .multilineTextAlignment(.center)
-
-                Text(subtitle)
-                    .font(SabqFonts.app(size: 15, weight: .regular))
-                    .foregroundStyle(SabqTheme.secondaryInk)
-                    .multilineTextAlignment(.center)
-                    .lineSpacing(4)
-                    .frame(maxWidth: 300)
-            }
+            Text(title)
+                .font(SabqFonts.editorial(.headline, size: 18, weight: .semibold))
+                .foregroundStyle(SabqTheme.ink)
+                .accessibilityAddTraits(.isHeader)
+            Text(subtitle)
+                .font(SabqFonts.editorial(.subheadline, size: 14))
+                .foregroundStyle(SabqTheme.secondaryInk)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: 360)
 
             if let action, let actionTitle {
-                Button {
+                Button(actionTitle) {
                     SabqHaptics.light()
                     action()
-                } label: {
-                    HStack(spacing: 8) {
-                        Image(systemName: "arrow.clockwise")
-                            .font(SabqFonts.app(size: 14, weight: .semibold))
-                        Text(actionTitle)
-                            .font(SabqFonts.app(size: 14, weight: .bold))
-                    }
-                    .foregroundStyle(tint)
-                    .padding(.horizontal, 24)
-                    .padding(.vertical, 12)
-                    .background(
-                        Capsule(style: .continuous)
-                            .fill(tint.opacity(0.10))
-                    )
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.bordered)
+                .tint(tint)
+                .controlSize(.large)
             }
         }
+        .multilineTextAlignment(.center)
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 40)
-        .onAppear { isAnimating = true }
+        .padding(.vertical, 24)
     }
 }
 
@@ -2176,6 +2241,20 @@ struct FlowLayout: Layout {
             subview.place(at: CGPoint(x: currentX, y: currentY), proposal: .unspecified)
             currentX += size.width + spacing
             rowHeight = max(rowHeight, size.height)
+        }
+    }
+}
+
+struct SabqAdaptivePickerStyle: ViewModifier {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            content.pickerStyle(.menu)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            content.pickerStyle(.segmented)
         }
     }
 }

@@ -2565,9 +2565,11 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
             width: 100% !important;
             max-width: none !important;
           }
-          /* clip preserves rounded corners without trapping sticky in a scroll container. */
+          /* لا overflow على غلاف المحرر إطلاقاً: أي قيمة (hidden/clip) تحبس
+             sticky على iOS Safari فلا يتحرك شريط الأدوات مع النزول على الجوال.
+             الزوايا المدوّرة تُحفظ عبر الأبناء (الشريط والسطح) بدل القص. */
           .article-editor-stage .rich-text-editor {
-            overflow: clip;
+            overflow: visible;
           }
           .article-editor-stage .rich-text-editor__toolbar {
             position: sticky;
@@ -2575,6 +2577,12 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
             top: 0;
             z-index: 20;
             box-shadow: 0 2px 4px hsl(var(--foreground) / 0.08);
+            border-start-start-radius: inherit;
+            border-start-end-radius: inherit;
+          }
+          .article-editor-stage .rich-text-editor__surface {
+            border-end-start-radius: inherit;
+            border-end-end-radius: inherit;
           }
         `}</style>
        <div className="w-full min-w-0">
@@ -3165,11 +3173,19 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                   </div>
                 )}
                 <div className="space-y-3">
-                  <div className={cn("flex flex-wrap gap-2", isOpinionAuthor && "flex-col sm:flex-row")}>
+                  {/* على الجوال: شبكة عمودين بعرض ثابت حتى لا تتزاحم العبارات أو تُقصّ؛
+                      من sm فما فوق: صف مرن كالمعتاد. */}
+                  <div
+                    className={cn(
+                      "grid gap-2 sm:flex sm:flex-wrap sm:items-center",
+                      isOpinionAuthor ? "grid-cols-1" : "grid-cols-2",
+                    )}
+                    data-testid="hero-image-actions"
+                  >
                     {!isOpinionAuthor ? (
                       <Button
                         onClick={() => setShowMediaPicker(true)}
-                        className="gap-2 flex-1 sm:flex-none min-w-[10rem]"
+                        className="gap-2 w-full min-w-0 px-3 text-sm sm:w-auto sm:min-w-[10rem]"
                         data-testid="button-choose-from-library"
                       >
                         <ImageIcon className="h-4 w-4" />
@@ -3180,7 +3196,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                       variant={isOpinionAuthor ? "default" : "outline"}
                       onClick={() => document.getElementById("image-upload")?.click()}
                       disabled={isUploadingImage}
-                      className={cn("gap-2", isOpinionAuthor ? "w-full sm:w-auto" : "flex-1 sm:flex-none")}
+                      className="gap-2 w-full min-w-0 px-3 text-sm sm:w-auto"
                       data-testid="button-upload-image"
                     >
                       {isUploadingImage ? (
@@ -3190,12 +3206,24 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                       )}
                       {isOpinionAuthor ? (imageUrl ? "تغيير الصورة" : "رفع صورة") : "رفع من الجهاز"}
                     </Button>
+                    {!isOpinionAuthor && canGenerateImages && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setShowOpenAIImageDialog(true)}
+                        className="gap-2 w-full min-w-0 px-3 text-sm sm:w-auto border-sky-300 bg-sky-50 text-sky-900 hover:bg-sky-100 dark:border-sky-800 dark:bg-sky-950 dark:text-sky-100"
+                        data-testid="button-generate-openai-image"
+                      >
+                        <ImagePlus className="h-4 w-4" />
+                        صور GPT
+                      </Button>
+                    )}
                     {!isOpinionAuthor && (
                       <Button
                         type="button"
                         variant="ghost"
                         onClick={() => setImageToolsOpen((open) => !open)}
-                        className="gap-2 text-muted-foreground"
+                        className="gap-2 w-full min-w-0 px-3 text-sm text-muted-foreground sm:w-auto"
                         data-testid="button-toggle-image-tools"
                       >
                         <MoreHorizontal className="h-4 w-4" />
@@ -3211,7 +3239,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                     </div>
                   )}
                   {!isOpinionAuthor && imageToolsOpen && (
-                    <div className="flex flex-wrap gap-2 rounded-xl border border-border/70 bg-muted/30 p-3">
+                    <div className="grid grid-cols-2 gap-2 rounded-xl border border-border/70 bg-muted/30 p-3 sm:flex sm:flex-wrap [&>button]:w-full [&>button]:min-w-0 [&>span]:min-w-0 [&>span>button]:w-full sm:[&>button]:w-auto sm:[&>span>button]:w-auto">
                       {imageUrl && (
                         <span title={!article?.id ? "متاح بعد حفظ الخبر" : undefined}>
                           <Button
@@ -3252,19 +3280,6 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                         >
                           <Sparkles className="h-4 w-4 text-primary" />
                           توليد بالذكاء الاصطناعي
-                        </Button>
-                      )}
-                      {canGenerateImages && (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setShowOpenAIImageDialog(true)}
-                          className="gap-2 border-sky-300 bg-sky-50 text-sky-900 hover:bg-sky-100 dark:border-sky-800 dark:bg-sky-950 dark:text-sky-100"
-                          data-testid="button-generate-openai-image"
-                        >
-                          <ImagePlus className="h-4 w-4" />
-                          صور GPT
                         </Button>
                       )}
                       {canUseInfographics && (

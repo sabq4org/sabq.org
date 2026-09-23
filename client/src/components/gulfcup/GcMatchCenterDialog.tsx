@@ -752,7 +752,7 @@ export function GcMatchCenterDialog({ fixtureId, onClose }: GcMatchCenterDialogP
         </div>
 
         <div className="p-4">
-          <Tabs defaultValue={started ? "events" : "h2h"} dir="rtl">
+          <Tabs defaultValue="events" dir="rtl">
             <TabsList className="grid w-full grid-cols-4 bg-muted/60">
               <TabsTrigger
                 value="events"

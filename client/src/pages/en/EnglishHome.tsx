@@ -12,6 +12,7 @@ import { EnglishSmartSummaryBlock } from "@/components/en/EnglishSmartSummaryBlo
 import { EnglishFooter } from "@/components/en/EnglishFooter";
 import { useAuth } from "@/hooks/useAuth";
 import { useCanonical } from "@/hooks/useCanonical";
+import { useAnalyticsPageMetadata } from "@/hooks/use-analytics";
 import type { EnArticleWithDetails } from "@shared/schema";
 import { formatDistanceToNow } from "date-fns";
 
@@ -28,6 +29,7 @@ export default function EnglishHome() {
   const { user } = useAuth();
   
   useCanonical("https://sabq.org/en");
+  useAnalyticsPageMetadata("Sabq Smart - Intelligent News Platform");
   
   const { data: articlesRaw, isLoading: articlesLoading } = useQuery<EnArticleWithDetails[]>({
     queryKey: ["/api/en/articles"],

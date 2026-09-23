@@ -10,6 +10,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { useCanonical } from "@/hooks/useCanonical";
+import { useAnalyticsPageMetadata } from "@/hooks/use-analytics";
 import { apiRequest, queryClient, apiUrl } from "@/lib/queryClient";
 import {
   Heart,
@@ -153,15 +154,7 @@ export default function UrduArticleDetail() {
     }
   }, [article?.id]);
 
-  // Update document.title for SEO (GA4 auto-tracks page views)
-  useEffect(() => {
-    if (article?.title) {
-      document.title = `${article.title} | سبق`;
-    }
-    return () => {
-      document.title = 'سبق - سعودی الیکٹرانک اخبار';
-    };
-  }, [article?.title]);
+  useAnalyticsPageMetadata(article?.title ? `${article.title} | سبق` : isLoading ? null : "مضمون نہیں ملا | سبق");
 
   useCanonical(article ? `https://sabq.org/ur/article/${article.englishSlug || params.slug}` : null);
 

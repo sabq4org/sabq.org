@@ -1,11 +1,12 @@
 import { motion } from "framer-motion";
 import { Star, Users } from "lucide-react";
+import { Link } from "wouter";
 import { Skeleton } from "@/components/ui/skeleton";
-import { SAUDI_TEAM_ID, type GcTeam } from "./gcTypes";
+import { GC_SECTION_SCROLL_MT, SAUDI_TEAM_ID, type GcTeam } from "./gcTypes";
 
 export function GcTeams({ teams, isLoading }: { teams: GcTeam[]; isLoading: boolean }) {
   return (
-    <section id="gc-teams" dir="rtl" className="container max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+    <section id="gc-teams" dir="rtl" className={`container max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10 ${GC_SECTION_SCROLL_MT}`}>
       <div className="mb-6 flex items-center gap-2">
         <Users className="h-6 w-6 text-sky-600 dark:text-sky-400" />
         <h2 className="text-2xl font-black text-foreground">المنتخبات المشاركة</h2>
@@ -37,24 +38,29 @@ export function GcTeams({ teams, isLoading }: { teams: GcTeam[]; isLoading: bool
                 whileInView={{ opacity: 1, scale: 1 }}
                 viewport={{ once: true }}
                 transition={{ duration: 0.3, delay: Math.min(idx * 0.03, 0.4) }}
-                className={`group relative flex flex-col items-center gap-2 rounded-2xl border p-4 transition-shadow hover:shadow-md ${
-                  isHost
-                    ? "border-emerald-400/60 bg-gradient-to-b from-emerald-50 to-card dark:from-emerald-950/30"
-                    : "border-border bg-card"
-                }`}
               >
-                {isHost && (
-                  <span className="absolute right-2 top-2 inline-flex items-center gap-0.5 rounded-full bg-emerald-500 px-1.5 py-0.5 text-[9px] font-bold text-white">
-                    <Star className="h-2.5 w-2.5 fill-white" />
-                    مضيف
-                  </span>
-                )}
-                <div className="h-14 w-14 rounded-full bg-white p-1.5 ring-1 ring-black/5 transition-transform group-hover:scale-110">
-                  {team.logo ? (
-                    <img src={team.logo} alt={team.name} className="h-full w-full object-contain" loading="lazy" />
-                  ) : null}
-                </div>
-                <span className="text-center text-xs font-bold text-foreground">{team.name}</span>
+                <Link
+                  href={`/gulf-cup/team/${team.id}`}
+                  className={`group relative flex h-full flex-col items-center gap-2 rounded-2xl border p-4 transition-shadow hover:shadow-md ${
+                    isHost
+                      ? "border-emerald-400/60 bg-gradient-to-b from-emerald-50 to-card dark:from-emerald-950/30"
+                      : "border-border bg-card"
+                  }`}
+                >
+                  {isHost && (
+                    <span className="absolute right-2 top-2 inline-flex items-center gap-0.5 rounded-full bg-emerald-500 px-1.5 py-0.5 text-[9px] font-bold text-white">
+                      <Star className="h-2.5 w-2.5 fill-white" />
+                      مضيف
+                    </span>
+                  )}
+                  <div className="h-14 w-14 rounded-full bg-white p-1.5 ring-1 ring-black/5 transition-transform group-hover:scale-110">
+                    {team.logo ? (
+                      <img src={team.logo} alt={team.name} className="h-full w-full object-contain" loading="lazy" />
+                    ) : null}
+                  </div>
+                  <span className="text-center text-xs font-bold text-foreground">{team.name}</span>
+                  <span className="text-[10px] font-bold text-sky-700 dark:text-sky-300">الملف ‹</span>
+                </Link>
               </motion.div>
             );
           })}

@@ -14,6 +14,7 @@
 		5A11110000000000000000B3 /* SabqWidgetsBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A11110000000000000000A3 /* SabqWidgetsBundle.swift */; };
 		5A11110000000000000000B4 /* LiveMatchAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A11110000000000000000A1 /* LiveMatchAttributes.swift */; };
 		5A11110000000000000000B5 /* SabqWidgetsExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 5A11110000000000000000A5 /* SabqWidgetsExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		FBAA00000000000000000001 /* FirebaseAnalyticsWithoutAdIdSupport in Frameworks */ = {isa = PBXBuildFile; productRef = FBAA00000000000000000002 /* FirebaseAnalyticsWithoutAdIdSupport */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -101,6 +102,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				FBAA00000000000000000001 /* FirebaseAnalyticsWithoutAdIdSupport in Frameworks */,
 				3AFD17212FC1BC640025FACF /* GoogleSignIn in Frameworks */,
 				3AFD17232FC1BC6D0025FACF /* GoogleSignInSwift in Frameworks */,
 			);
@@ -181,6 +183,7 @@
 				3AFE5FD42F60C121006270F8 /* Sources */,
 				3AFE5FD52F60C121006270F8 /* Frameworks */,
 				3AFE5FD62F60C121006270F8 /* Resources */,
+				FBAA00000000000000000004 /* Validate Firebase config */,
 				5A11110000000000000000C4 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
@@ -193,6 +196,7 @@
 			);
 			name = sabq;
 			packageProductDependencies = (
+				FBAA00000000000000000002 /* FirebaseAnalyticsWithoutAdIdSupport */,
 				3AFD17202FC1BC640025FACF /* GoogleSignIn */,
 				3AFD17222FC1BC6D0025FACF /* GoogleSignInSwift */,
 			);
@@ -302,6 +306,7 @@
 			mainGroup = 3AFE5FCF2F60C121006270F8;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
+				FBAA00000000000000000003 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
 				3AFD171E2FC1BAD70025FACF /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */,
 			);
 			preferredProjectObjectVersion = 77;
@@ -347,6 +352,23 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		FBAA00000000000000000004 /* Validate Firebase config */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+			);
+			name = "Validate Firebase config";
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "if [ \"$CONFIGURATION\" = \"Release\" ]; then\n  python3 \"$SRCROOT/../scripts/verify-mobile-firebase-config.py\" --platform ios --config \"$SRCROOT/sabq/GoogleService-Info.plist\" --identity com.sabq.sabqorg\nfi";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		3AFE5FD42F60C121006270F8 /* Sources */ = {
@@ -521,12 +543,14 @@
 		3AFE5FFC2F60C123006270F8 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES = NationalDayAppIcon;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_ENTITLEMENTS = sabq/sabq.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2026081502;
+				CURRENT_PROJECT_VERSION = 2026092004;
 				DEVELOPMENT_TEAM = CBU7MJEC5R;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -540,13 +564,16 @@
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.magazines-and-newspapers";
 				INFOPLIST_KEY_NSCameraUsageDescription = "نحتاج إذن الكاميرا لالتقاط صورة شخصية أو صورة عن المقال";
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "لعرض خطواتك وساعات نومك في رحلتك المعرفية";
+				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "لعرض خطواتك وساعات نومك في رحلتك المعرفية";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "نحتاج الإذن لحفظ الصور في معرض جهازك";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "نحتاج الوصول لمكتبة الصور لاختيار صورتك الشخصية أو صورة عن المقال";
+				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
+				INFOPLIST_KEY_NSSupportsLiveActivitiesFrequentUpdates = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphonesimulator*]" = YES;
-				INFOPLIST_KEY_UIBackgroundModes = "remote-notification";
 				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphoneos*]" = UIStatusBarStyleDefault;
@@ -558,7 +585,11 @@
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 10.2.3;
+				MARKETING_VERSION = 10.3.7;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-ObjC",
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.sabq.sabqorg;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -578,12 +609,14 @@
 		3AFE5FFD2F60C123006270F8 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES = NationalDayAppIcon;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_ENTITLEMENTS = sabq/sabq.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2026081502;
+				CURRENT_PROJECT_VERSION = 2026092004;
 				DEVELOPMENT_TEAM = CBU7MJEC5R;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -597,13 +630,16 @@
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.magazines-and-newspapers";
 				INFOPLIST_KEY_NSCameraUsageDescription = "نحتاج إذن الكاميرا لالتقاط صورة شخصية أو صورة عن المقال";
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "لعرض خطواتك وساعات نومك في رحلتك المعرفية";
+				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "لعرض خطواتك وساعات نومك في رحلتك المعرفية";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "نحتاج الإذن لحفظ الصور في معرض جهازك";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "نحتاج الوصول لمكتبة الصور لاختيار صورتك الشخصية أو صورة عن المقال";
+				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
+				INFOPLIST_KEY_NSSupportsLiveActivitiesFrequentUpdates = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphonesimulator*]" = YES;
-				INFOPLIST_KEY_UIBackgroundModes = "remote-notification";
 				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphoneos*]" = UIStatusBarStyleDefault;
@@ -615,7 +651,11 @@
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 10.2.3;
+				MARKETING_VERSION = 10.3.7;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-ObjC",
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.sabq.sabqorg;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -637,7 +677,7 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2026081502;
+				CURRENT_PROJECT_VERSION = 2026092004;
 				DEVELOPMENT_TEAM = CBU7MJEC5R;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -663,7 +703,7 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2026081502;
+				CURRENT_PROJECT_VERSION = 2026092004;
 				DEVELOPMENT_TEAM = CBU7MJEC5R;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -688,7 +728,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2026081502;
+				CURRENT_PROJECT_VERSION = 2026092004;
 				DEVELOPMENT_TEAM = CBU7MJEC5R;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -713,7 +753,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2026081502;
+				CURRENT_PROJECT_VERSION = 2026092004;
 				DEVELOPMENT_TEAM = CBU7MJEC5R;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -739,7 +779,7 @@
 			buildSettings = {
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2026081502;
+				CURRENT_PROJECT_VERSION = 2026092004;
 				DEVELOPMENT_TEAM = CBU7MJEC5R;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = SabqWidgets/Info.plist;
@@ -750,7 +790,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 10.2.3;
+				MARKETING_VERSION = 10.3.7;
 				PRODUCT_BUNDLE_IDENTIFIER = com.sabq.sabqorg.SabqWidgets;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = auto;
@@ -769,7 +809,7 @@
 			buildSettings = {
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2026081502;
+				CURRENT_PROJECT_VERSION = 2026092004;
 				DEVELOPMENT_TEAM = CBU7MJEC5R;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = SabqWidgets/Info.plist;
@@ -780,7 +820,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 10.2.3;
+				MARKETING_VERSION = 10.3.7;
 				PRODUCT_BUNDLE_IDENTIFIER = com.sabq.sabqorg.SabqWidgets;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = auto;
@@ -852,6 +892,14 @@
 				minimumVersion = 9.1.0;
 			};
 		};
+		FBAA00000000000000000003 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/firebase/firebase-ios-sdk";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 11.15.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -864,6 +912,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 3AFD171E2FC1BAD70025FACF /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */;
 			productName = GoogleSignInSwift;
+		};
+		FBAA00000000000000000002 /* FirebaseAnalyticsWithoutAdIdSupport */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = FBAA00000000000000000003 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAnalyticsWithoutAdIdSupport;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

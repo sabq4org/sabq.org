@@ -11,7 +11,7 @@ import { formatKickoffDay, type RslHero } from "./rslTypes";
 
 // أخضر الملعب الليلي بلمسة روشن الزرقاء — نفس هوية هيرو /roshn
 const RSL_THEME: CupStripTheme = {
-  band: "bg-sky-50 dark:bg-sky-950/25 border-sky-600/10 dark:border-sky-400/10",
+  band: "bg-transparent border-transparent",
   card: "bg-gradient-to-bl from-emerald-950 via-[#04261b] to-[#063828]",
   ring: "ring-emerald-900/40",
   soft: "text-emerald-100/80",

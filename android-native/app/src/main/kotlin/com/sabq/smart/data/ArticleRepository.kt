@@ -122,6 +122,17 @@ class ArticleRepository @Inject constructor(
     suspend fun getRelated(slug: String): List<Article> =
         api.getRelatedArticles(slug).map { it.toDomain() }.take(5)
 
+    /** صفة المراسل من ملفه الموحد (null عند غيابها أو فراغها). */
+    suspend fun getReporterTitle(slug: String): String? =
+        api.getReporterProfile(slug).title?.trim()?.takeIf { it.isNotEmpty() }
+
+    /** مقالات رأي من تصنيف الخبر لبلوك «مقالات قد تهمك» (حتى 5). */
+    suspend fun getRelatedOpinions(categoryId: String, excludeId: String?): List<Article> =
+        api.getRelatedOpinions(categoryId = categoryId, excludeId = excludeId, limit = 5)
+            .articles.map { it.toDomain() }
+            .filterNot { excludeId != null && it.id == excludeId }
+            .take(5)
+
     suspend fun getMediaAssets(articleId: String): List<MediaAsset> =
         api.getMediaAssets(articleId)
             .filter { it.displayOrder != 0 && it.mediaFile?.url?.isNotBlank() == true }

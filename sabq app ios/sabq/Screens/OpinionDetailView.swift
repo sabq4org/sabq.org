@@ -3,7 +3,6 @@ import AVFoundation
 
 struct OpinionDetailView: View {
     let opinion: OpinionArticle
-    @Environment(\.dismiss) private var dismiss
     @Environment(BookmarksStore.self) private var bookmarksStore
 
     @State private var fullOpinion: OpinionArticle?
@@ -16,6 +15,7 @@ struct OpinionDetailView: View {
     /// body. Without this, every scroll tick re-rendered the entire
     /// opinion reader (including its JustifiedText paragraphs).
     @State private var scrollProgress = ArticleScrollProgress()
+    @State private var isAnalyticsVisible = false
     @State private var showReaderControls = false
     @State private var isFocusMode = false
     /// Drives the hero `ImageLightbox` fullScreenCover when the reader
@@ -27,8 +27,9 @@ struct OpinionDetailView: View {
     @Environment(LikesStore.self) private var likesStore
     @State private var likesCount: Int = 0
     @State private var isLikeBusy: Bool = false
-    @State private var audioPlayer: AVPlayer?
-    @State private var isPlayingAudio = false
+    /// حالة الاستماع من المشغّل المشترك (Now Playing + شاشة القفل) — F03.
+    private var audioKey: String { "opinion:\(displayOpinion.slug ?? displayOpinion.id)" }
+    private var isPlayingAudio: Bool { SabqAudioPlayer.shared.isPlaying(key: audioKey) }
 
     @AppStorage("articleFontSize") private var fontSize: Double = 17
     @AppStorage("articleLineSpacing") private var lineSpacing: Double = 6
@@ -83,6 +84,7 @@ struct OpinionDetailView: View {
 
                         Divider().foregroundStyle(SabqTheme.outline.opacity(0.6))
                         opinionBody
+                            .analyticsReadingBody()
 
                         // Mirrors ArticleDetailView's spacing pass —
                         // the lower share / keywords / more-opinions
@@ -103,16 +105,20 @@ struct OpinionDetailView: View {
                                 .padding(.top, 24)
                         }
                     }
-                    .frame(width: max(0, proxy.size.width - 40), alignment: .leading)
+                    .frame(width: min(720, max(0, proxy.size.width - 40)), alignment: .leading)
                     .padding(.horizontal, 20)
                     .padding(.top, 24)
                     .padding(.bottom, 60)
                 }
-                .frame(width: proxy.size.width, alignment: .leading)
+                .frame(width: proxy.size.width, alignment: .center)
             }
+            .sabqNavigationEdge()
             .sabqScrollProgressTracker { progress in
                 scrollProgress.value = progress
                 BehaviorTracker.shared.updateScroll(percent: Double(progress))
+            }
+            .analyticsReadingProgress { progress in
+                SabqAnalytics.updateReading(articleId: opinion.id, percent: Int(progress * 100))
             }
             .sabqAutoHideTabBar()
             .overlay(alignment: .top) {
@@ -123,7 +129,6 @@ struct OpinionDetailView: View {
         .sabqRTL()
         .sabqScreen("OpinionDetail")
         .navigationBarTitleDisplayMode(.inline)
-        .navigationBarBackButtonHidden(true)
         .fullScreenCover(isPresented: $isHeroLightboxPresented) {
             ImageLightbox(
                 url: displayOpinion.imageURL.flatMap(URL.init(string:)),
@@ -150,54 +155,41 @@ struct OpinionDetailView: View {
             // Unified tracker — opinion reads feed both the home
             // "Reading Journey" card and the weighted trending score.
             BehaviorTracker.shared.startSession(articleId: opinion.id)
+            isAnalyticsVisible = true
+            SabqAnalytics.beginReading(articleId: opinion.id)
         }
         .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                likeButton
+
+                Button {
+                    SabqHaptics.medium()
+                    // Pass an Article-shaped bookmark payload so the
+                    // bookmarks list can render this opinion offline
+                    // — passing `nil` only saves the ID, and the
+                    // BookmarksView lookup then has nothing to show.
+                    bookmarksStore.toggle(opinion.id, article: displayOpinion.asArticleForBookmark())
+                } label: {
+                    Image(systemName: bookmarksStore.isBookmarked(opinion.id) ? "bookmark.fill" : "bookmark")
+                        .font(SabqFonts.app(size: 16, weight: .semibold))
+                        .foregroundStyle(
+                            bookmarksStore.isBookmarked(opinion.id) ? SabqTheme.primaryEnd : SabqTheme.secondaryInk
+                        )
+
+                }
+                .accessibilityLabel(bookmarksStore.isBookmarked(opinion.id) ? "إزالة من المحفوظات" : "حفظ المقال")
+
                 Button {
                     SabqHaptics.light()
-                    dismiss()
+                    shareOpinion()
                 } label: {
-                    Image(systemName: "chevron.right")
-                        .font(SabqFonts.app(size: 14, weight: .bold))
-                        .foregroundStyle(SabqTheme.ink)
-                        .padding(8)
-                        .background(Circle().fill(.ultraThinMaterial))
-                }
-            }
-            ToolbarItem(placement: .primaryAction) {
-                HStack(spacing: 8) {
-                    likeButton
+                    Image(systemName: "square.and.arrow.up")
+                        .font(SabqFonts.app(size: 16, weight: .semibold))
+                        .foregroundStyle(SabqTheme.secondaryInk)
 
-                    Button {
-                        SabqHaptics.medium()
-                        // Pass an Article-shaped bookmark payload so the
-                        // bookmarks list can render this opinion offline
-                        // — passing `nil` only saves the ID, and the
-                        // BookmarksView lookup then has nothing to show.
-                        bookmarksStore.toggle(opinion.id, article: displayOpinion.asArticleForBookmark())
-                    } label: {
-                        Image(systemName: bookmarksStore.isBookmarked(opinion.id) ? "bookmark.fill" : "bookmark")
-                            .font(SabqFonts.app(size: 16, weight: .semibold))
-                            .foregroundStyle(
-                                bookmarksStore.isBookmarked(opinion.id) ? SabqTheme.primaryEnd : SabqTheme.secondaryInk
-                            )
-                            .padding(8)
-                            .background(Circle().fill(.ultraThinMaterial))
-                    }
-                    .buttonStyle(.plain)
-
-                    Button {
-                        SabqHaptics.light()
-                        shareOpinion()
-                    } label: {
-                        Image(systemName: "square.and.arrow.up")
-                            .font(SabqFonts.app(size: 16, weight: .semibold))
-                            .foregroundStyle(SabqTheme.secondaryInk)
-                            .padding(8)
-                            .background(Circle().fill(.ultraThinMaterial))
-                    }
-                    .buttonStyle(.plain)
                 }
+                .accessibilityLabel("مشاركة")
+
             }
         }
         .task {
@@ -205,22 +197,16 @@ struct OpinionDetailView: View {
             await refreshLikeStatus()
         }
         .onDisappear {
+            isAnalyticsVisible = false
             copyFeedbackTask?.cancel()
             BehaviorTracker.shared.endSession()
-            if audioPlayer != nil {
-                audioPlayer?.pause()
-                audioPlayer = nil
-                SabqAudioSession.deactivate()
-            }
-            isPlayingAudio = false
+            SabqAnalytics.endReading(articleId: opinion.id)
+            // مغادرة المقال توقف ملخصه فقط؛ نهاية المقطع يعالجها المشغّل المشترك.
+            SabqAudioPlayer.shared.stopIfCurrent(key: audioKey)
         }
-        // انتهاء الملخص الصوتي: بدون هذا كان الزر يبقى على «إيقاف» وجلسة
-        // الصوت محتجزة، فتبقى موسيقى المستخدم موقوفة بعد انتهاء المقطع.
-        .onReceive(NotificationCenter.default.publisher(for: AVPlayerItem.didPlayToEndTimeNotification)) { note in
-            guard let item = note.object as? AVPlayerItem, item === audioPlayer?.currentItem else { return }
-            isPlayingAudio = false
-            audioPlayer = nil
-            SabqAudioSession.deactivate()
+        .onReceive(NotificationCenter.default.publisher(for: SabqAnalytics.collectionDidChange)) { _ in
+            guard isAnalyticsVisible, SabqAnalytics.analyticsCollectionEnabled else { return }
+            SabqAnalytics.beginReading(articleId: opinion.id)
         }
         .navigationDestination(for: OpinionArticle.self) { opinion in
             OpinionDetailView(opinion: opinion)
@@ -253,11 +239,10 @@ struct OpinionDetailView: View {
             Image(systemName: isLiked ? "heart.fill" : "heart")
                 .font(SabqFonts.app(size: 16, weight: .semibold))
                 .foregroundStyle(isLiked ? Color(red: 0.95, green: 0.30, blue: 0.36) : SabqTheme.secondaryInk)
-                .padding(8)
-                .background(Circle().fill(.ultraThinMaterial))
+
         }
         .disabled(isLikeBusy)
-        .buttonStyle(.plain)
+        .accessibilityLabel(isLiked ? "إلغاء الإعجاب" : "إعجاب")
     }
 
     @MainActor
@@ -270,8 +255,18 @@ struct OpinionDetailView: View {
 
     // MARK: - Audio Summary
 
-    /// Compact play/pause pill that drives ElevenLabs TTS for the
-    /// "الموجز الذكي" card. Mirrors ArticleDetailView's listenButton.
+    /// إسناد المزوّد بعبارة الويب حرفيًا — يظهر عندما يكون المقطع عبر HUMAIN.
+    private var summaryAudioAttribution: some View {
+        Text("الصوت عبر HUMAIN")
+            .font(SabqFonts.app(size: 11, weight: .regular))
+            .foregroundStyle(SabqTheme.emerald)
+            .lineLimit(1)
+            .accessibilityLabel("الصوت عبر هيومن")
+    }
+
+    /// Compact play/pause pill that drives the summary TTS (HUMAIN, with
+    /// ElevenLabs/Google fallback) for the "الموجز الذكي" card. Mirrors
+    /// ArticleDetailView's listenButton.
     private var listenButton: some View {
         Button {
             SabqHaptics.light()
@@ -295,12 +290,6 @@ struct OpinionDetailView: View {
     }
 
     private func toggleAudio() {
-        if isPlayingAudio {
-            audioPlayer?.pause()
-            isPlayingAudio = false
-            SabqAudioSession.deactivate()
-            return
-        }
         // Same TTS endpoint as articles — backend's
         // /api/articles/:slug/summary-audio streams ElevenLabs MP3
         // bytes. Opinions live in the same `articles` table, so the
@@ -309,10 +298,14 @@ struct OpinionDetailView: View {
               let url = URL(string: "\(URLConstants.publicAPI)/articles/\(slug)/summary-audio?tts=tafqit-v2")
         else { return }
         SabqHaptics.medium()
-        SabqAudioSession.activate()
-        audioPlayer = AVPlayer(url: url)
-        audioPlayer?.play()
-        isPlayingAudio = true
+        SabqAudioPlayer.shared.toggle(SabqAudioPlayer.Item(
+            key: audioKey,
+            url: url,
+            title: displayOpinion.title,
+            subtitle: displayOpinion.authorName.isEmpty ? "مقال رأي · سبق" : displayOpinion.authorName,
+            artworkURL: displayOpinion.imageURL.flatMap { URL(string: $0) },
+            delivery: .download
+        ))
     }
 
     private func toggleLike() {
@@ -420,7 +413,9 @@ struct OpinionDetailView: View {
                     Image(systemName: "applepencil")
                         .font(SabqFonts.app(size: 11, weight: .regular))
                         .foregroundStyle(SabqTheme.primaryEnd)
-                    Text("\(displayOpinion.bylineLabel):")
+                    // علامة RTL في أول النص كي تُرسم النقطتان بعد الكلمة لا قبلها
+                    // (القطعة وحدها تُقرأ LTR فتنقلب: «:الكاتب»).
+                    Text("\u{200F}\(displayOpinion.bylineLabel):")
                         .font(SabqFonts.app(size: 11, weight: .regular))
                         .foregroundStyle(SabqTheme.primaryEnd)
                     Text(displayOpinion.authorName)
@@ -485,6 +480,9 @@ struct OpinionDetailView: View {
                         .foregroundStyle(SabqTheme.ink)
                     Spacer(minLength: 0)
                     if canListen {
+                        if SabqAudioPlayer.shared.provider(for: audioKey) == "humain" {
+                            summaryAudioAttribution
+                        }
                         listenButton
                     }
                 }
@@ -692,59 +690,29 @@ struct OpinionDetailView: View {
 
     // MARK: - More Opinions
 
+    // الحاوية الموحدة للبلوكات الجانبية كما في الويب (#1610): سطح أزرق فاتح،
+    // عنوان واحد، وصفوف بشكل بطاقة الخبر المضغوطة. مقال الرأي بلا صورة يعرض
+    // صورة الكاتب داخل الإطار نفسه.
     private var moreOpinionsSection: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Divider().foregroundStyle(SabqTheme.outline)
-
-            SectionHeader(
-                title: "مقالات أخرى",
-                subtitle: "مقالات رأي قد ترغب بقراءتها بعد هذا المقال",
-                icon: "text.quote",
-                tint: SabqTheme.primaryEnd
-            )
-
-            ForEach(moreOpinions) { opinion in
+        ArticleSidebarModule(
+            title: "مقالات أخرى",
+            description: "مقالات رأي قد ترغب بقراءتها بعد هذا المقال",
+            icon: "text.quote"
+        ) {
+            ForEach(Array(moreOpinions.enumerated()), id: \.element.id) { index, opinion in
+                if index > 0 { SidebarRowDivider() }
                 NavigationLink(value: opinion) {
-                    HStack(spacing: 12) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(opinion.title)
-                                .font(SabqFonts.app(size: 14, weight: .semibold))
-                                .foregroundStyle(SabqTheme.ink)
-                                .lineLimit(2)
-                                .multilineTextAlignment(.leading)
-
-                            HStack(spacing: 5) {
-                                Image(systemName: "applepencil")
-                                    .font(SabqFonts.app(size: 10, weight: .regular))
-                                    .foregroundStyle(SabqTheme.secondaryInk)
-                                Text("\(opinion.bylineLabel):")
-                                    .font(SabqFonts.app(size: 12, weight: .medium))
-                                    .foregroundStyle(SabqTheme.secondaryInk)
-                                Text(opinion.authorName)
-                                    .font(SabqFonts.app(size: 12, weight: .medium))
-                                    .foregroundStyle(SabqTheme.secondaryInk)
-                                    .lineLimit(1)
-                            }
-
-                            Text(opinion.relativeDate)
-                                .font(SabqFonts.app(size: 10, weight: .regular))
-                                .foregroundStyle(SabqTheme.tertiaryInk)
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-
-                        OpinionAuthorAvatar(
-                            name: opinion.authorName,
-                            imageURL: opinion.authorImageURL,
-                            size: 48
-                        )
-                    }
-                    .padding(.vertical, 4)
+                    SidebarArticleRow(
+                        title: opinion.title,
+                        imageURL: opinion.imageURL.flatMap { $0.isEmpty ? nil : $0 } ?? opinion.authorImageURL,
+                        byline: opinion.authorName,
+                        bylineAvatarURL: opinion.authorImageURL,
+                        date: opinion.relativeDate,
+                        placeholderIcon: "text.quote",
+                        placeholderTint: SabqTheme.primaryEnd
+                    )
                 }
                 .buttonStyle(.plain)
-
-                if opinion.id != moreOpinions.last?.id {
-                    Divider().foregroundStyle(SabqTheme.outline.opacity(0.5))
-                }
             }
         }
     }
@@ -760,7 +728,11 @@ struct OpinionDetailView: View {
 
     private func shareOpinion() {
         let url = fallbackShareURL
-        SabqShareHelper.presentShareSheet(with: url)
+        SabqAnalytics.shareIntent(articleId: opinion.id)
+        let id = opinion.id
+        SabqShareHelper.presentShareSheet(with: url) { completed in
+            if completed { SabqAnalytics.shareCompleted(articleId: id, stage: "ios_completion") }
+        }
     }
 
     private func copyShareLink() {

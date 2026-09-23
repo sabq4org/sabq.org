@@ -55,6 +55,7 @@ it("KC fallback reads current hide and manual champion settings; old clients ret
   const request = await handler("/api/kings-cup/overview");
   const first = await request({ resilient: "1" });
   expect(first.status).toBe(200); expect(first.body.freshness.state).toBe("fresh");
+  expect(first.headers["X-Sabq-Public-Cache"]).toBeUndefined();
   mocks.cooldown.mockReturnValue(30_000);
   mocks.settings.mockResolvedValue({ hidden: true, manualChampionTeamId: 42 });
   mocks.manual.mockReturnValue({ team: { id: 42 }, source: "manual" });
@@ -63,6 +64,7 @@ it("KC fallback reads current hide and manual champion settings; old clients ret
   expect(stale.headers["Cache-Control"]).toBe("no-store");
   expect(mocks.overview).toHaveBeenCalledTimes(1); expect(mocks.settings).toHaveBeenCalledTimes(2);
   const legacy = await request({}); expect(legacy.status).toBe(200);
+  expect(legacy.headers["X-Sabq-Public-Cache"]).toBe("1");
   expect(legacy.body).not.toHaveProperty("freshness"); expect(mocks.overview).toHaveBeenCalledTimes(2);
 });
 
@@ -72,6 +74,7 @@ it("cold KC failure returns 503 with retry timing and does not cache a false emp
   for (let i = 0; i < 10; i++) {
     const result = await request({ resilient: "1" });
     expect(result.status).toBe(503); expect(result.headers["Retry-After"]).toBe("15");
+    expect(result.headers["X-Sabq-Public-Cache"]).toBeUndefined();
     expect(result.headers["Cache-Control"]).toBe("no-store");
   }
   expect(mocks.overview).toHaveBeenCalledTimes(1);

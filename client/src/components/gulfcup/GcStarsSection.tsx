@@ -24,7 +24,7 @@ export function GcStarsSection() {
   if (stars.length === 0) return null;
 
   return (
-    <section id="gc-stars" dir="rtl" className="container max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+    <section id="gc-stars" dir="rtl" className="container max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10 scroll-mt-[calc(var(--public-header-height,4rem)+3.75rem)] md:scroll-mt-[calc(var(--public-header-height,4rem)+6.5rem)]">
       <div className="mb-6 flex items-center gap-2">
         <Gem className="h-6 w-6 text-sky-600 dark:text-sky-400" />
         <h2 className="text-2xl font-black text-foreground">نجوم البطولة</h2>

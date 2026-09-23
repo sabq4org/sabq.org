@@ -2,7 +2,7 @@
  * عقد موصل SMS — موصل واحد = «أرسل نصًا لرقم». لا يعرف شيئًا عن OTP:
  * توليد الرمز وتخزينه والتحقق منه مسؤولية server/services/otpService.ts.
  */
-export type SmsProviderName = "bevatel" | "twilio";
+export type SmsProviderName = "bevatel" | "twilio" | "console";
 
 export interface SmsSendResult {
   ok: boolean;

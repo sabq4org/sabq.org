@@ -64,7 +64,12 @@ nonisolated enum ArticleHtmlParser {
         if tag.name == "img" {
             scanner.consumeTag()
             if let src = tag.attr("src"), let url = URL(string: src) {
-                return .image(url: url, alt: tag.attr("alt"), caption: nil)
+                return .image(
+                    url: url,
+                    alt: tag.attr("alt"),
+                    caption: tag.attr("data-caption").flatMap { $0.isEmpty ? nil : $0 },
+                    layout: ImageLayout.parse(width: tag.attr("data-width"), align: tag.attr("data-align"))
+                )
             }
             return nil
         }
@@ -317,6 +322,19 @@ nonisolated enum ArticleHtmlParser {
         return .other
     }
 
+    /// قيمة سمة داخل وسم خام (`<img … data-width="50%">`) — للمسار الذي لا يملك HTMLTag.
+    private static func inlineAttr(_ name: String, in raw: String) -> String? {
+        for q in ["\"", "'"] {
+            let pattern = "\\b\(name)\\s*=\\s*\(q)([^\(q)]*)\(q)"
+            if let regex = HTMLRegexCache.regex(pattern, options: .caseInsensitive),
+               let m = regex.firstMatch(in: raw, range: NSRange(raw.startIndex..., in: raw)),
+               let r = Range(m.range(at: 1), in: raw) {
+                return String(raw[r])
+            }
+        }
+        return nil
+    }
+
     private static func tryExtractInlineImage(_ inner: String) -> ArticleBlock? {
         let trimmed = inner.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.lowercased().hasPrefix("<img") else { return nil }
@@ -328,7 +346,12 @@ nonisolated enum ArticleHtmlParser {
         let alt: String? = match.numberOfRanges > 2
             ? Range(match.range(at: 2), in: trimmed).map { String(trimmed[$0]) }
             : nil
-        return .image(url: url, alt: alt, caption: nil)
+        return .image(
+            url: url,
+            alt: alt,
+            caption: inlineAttr("data-caption", in: trimmed).flatMap { $0.isEmpty ? nil : $0 },
+            layout: ImageLayout.parse(width: inlineAttr("data-width", in: trimmed), align: inlineAttr("data-align", in: trimmed))
+        )
     }
 
     // MARK: - Inline runs

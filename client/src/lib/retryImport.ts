@@ -31,6 +31,10 @@ export function isChunkErrorMessage(message: string | undefined | null): boolean
   const m = message.toLowerCase();
   return (
     m.includes("failed to fetch dynamically imported module") ||
+    // Firefox phrasing (2026-09-18): "error loading dynamically imported module:
+    // https://cdn.sabq.org/assets/Dashboard-xxxx.js". Was missing, so Firefox
+    // skipped retry + deploy-recovery and fell straight to the generic "حدث خطأ".
+    m.includes("error loading dynamically imported module") ||
     m.includes("importing a module script failed") ||
     m.includes("loading chunk") ||
     m.includes("loading css chunk") ||

@@ -123,6 +123,7 @@ export function registerKingsCupRoutes(app: Express) {
           : "public, max-age=30, s-maxage=60, stale-while-revalidate=300",
       );
       if (resilient) res.set("Cache-Control", "no-store");
+      else res.set("X-Sabq-Public-Cache", "1");
       res.json({ ...ov, blockHidden: isBlockHidden(settings), champion, matchday,
         ...(snapshot.freshness ? { freshness: snapshot.freshness } : {}),
       });

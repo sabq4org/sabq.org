@@ -12,7 +12,7 @@ import { SkipLinks } from "@/components/SkipLinks";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { lazy, Suspense, useEffect, Component, ErrorInfo, ReactNode } from "react";
 import { useVoiceCommands } from "@/hooks/useVoiceCommands";
-import { useAnalytics } from "@/hooks/use-analytics";
+import { AnalyticsRouteCommit, useAnalytics } from "@/hooks/use-analytics";
 import { resetAdsTriggerFlag } from "@/components/DmsAdSlot";
 import { needsAccountCompletion, useAuth } from "@/hooks/useAuth";
 import {
@@ -25,6 +25,7 @@ import { useWebMCP } from "@/hooks/useWebMCP";
 import { syncGuestFocusSessionsToUser } from "@/hooks/useFocusSession";
 import { attemptChunkRecoveryReload, forceDeployRecoveryReload } from "@/lib/deployRecovery";
 import { isChunkErrorMessage, retryImport } from "@/lib/retryImport";
+import { AuthAnalyticsMarker } from "@/components/AuthAnalyticsMarker";
 
 function WebMCPProvider() {
   useWebMCP();
@@ -231,6 +232,7 @@ const NationalDay96HeaderPreview = lazy(() => retryImport(() => import("@/pages/
 const LoyaltyTermsPage = lazy(() => retryImport(() => import("@/pages/LoyaltyTermsPage")));
 const HajjBlockSettings = lazy(() => retryImport(() => import("@/pages/dashboard/HajjBlockSettings")));
 const NationalDayBlockSettings = lazy(() => retryImport(() => import("@/pages/dashboard/NationalDayBlockSettings")));
+const IosNationalDayThemeSettings = lazy(() => retryImport(() => import("@/pages/dashboard/IosNationalDayThemeSettings")));
 const SahraaTvBlockSettings = lazy(() => retryImport(() => import("@/pages/dashboard/SahraaTvBlockSettings")));
 const ThemeManager = lazy(() => retryImport(() => import("@/pages/ThemeManager")));
 const ThemeEditor = lazy(() => retryImport(() => import("@/pages/ThemeEditor")));
@@ -483,6 +485,8 @@ const AsianCupTeam = lazy(() => retryImport(() => import("@/pages/AsianCupTeam")
 const AsianCupPlayer = lazy(() => retryImport(() => import("@/pages/AsianCupPlayer")));
 const AsianCupVenues = lazy(() => retryImport(() => import("@/pages/AsianCupVenues")));
 const GulfCup = lazy(() => retryImport(() => import("@/pages/GulfCup")));
+const GulfCupTeam = lazy(() => retryImport(() => import("@/pages/GulfCupTeam")));
+const GulfCupFantasy = lazy(() => retryImport(() => import("@/pages/GulfCupFantasy")));
 const PredictionCenter = lazy(() => retryImport(() => import("@/pages/PredictionCenter")));
 const GulfCupMajlis = lazy(() => retryImport(() => import("@/pages/GulfCupMajlis")));
 const KingsCup = lazy(() => retryImport(() => import("@/pages/KingsCup")));
@@ -517,6 +521,11 @@ function PageLoader() {
       <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" />
     </div>
   );
+}
+
+function GulfCupPredictionsRedirect() {
+  const tab = typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("tab");
+  return <Redirect to={tab === "fantasy" ? "/gulf-cup/fantasy" : "/predictions?competition=gulf-cup-27"} />;
 }
 
 class ErrorBoundary extends Component<
@@ -581,6 +590,7 @@ function LazyRoute({ component: Component }: { component: React.LazyExoticCompon
     <ErrorBoundary>
       <Suspense fallback={<PageLoader />}>
         <Component />
+        <AnalyticsRouteCommit />
       </Suspense>
     </ErrorBoundary>
   );
@@ -620,6 +630,8 @@ function VoiceCommandsManager() {
   );
 }
 
+const PublicDesignGallery = lazy(() => import("@/pages/PublicDesignGallery"));
+
 function Router() {
   useAnalytics();
   
@@ -628,6 +640,7 @@ function Router() {
       <ScrollRestoration />
       <AdsTriggerResetter />
       <Switch>
+        {import.meta.env.DEV && <Route path="/__preview/public-design">{() => <LazyRoute component={PublicDesignGallery} />}</Route>}
         {/* English Version Routes */}
         <Route path="/en">{() => <LazyRoute component={EnglishHome} />}</Route>
         <Route path="/en/news">{() => <LazyRoute component={EnglishNewsPage} />}</Route>
@@ -995,6 +1008,7 @@ function Router() {
         <Route path="/dashboard/loyalty-admin">{() => <LazyRoute component={LoyaltyAdminDashboard} />}</Route>
         <Route path="/dashboard/hajj-block">{() => <LazyRoute component={HajjBlockSettings} />}</Route>
         <Route path="/dashboard/national-day-block">{() => <LazyRoute component={NationalDayBlockSettings} />}</Route>
+        <Route path="/dashboard/ios-national-day-theme">{() => <LazyRoute component={IosNationalDayThemeSettings} />}</Route>
         <Route path="/dashboard/sahraa-tv-block">{() => <LazyRoute component={SahraaTvBlockSettings} />}</Route>
         <Route path="/settings/:section">{() => <LazyRoute component={SettingsCenter} />}</Route>
         <Route path="/settings">{() => <LazyRoute component={SettingsCenter} />}</Route>
@@ -1097,7 +1111,9 @@ function Router() {
         <Route path="/asian-cup">{() => <LazyRoute component={AsianCup} />}</Route>
         <Route path="/gulf-cup/majlis/:id">{() => <LazyRoute component={GulfCupMajlis} />}</Route>
         <Route path="/gulf-cup/majlis">{() => <LazyRoute component={GulfCupMajlis} />}</Route>
-        <Route path="/gulf-cup/predictions">{() => <Redirect to="/predictions?competition=gulf-cup-27" />}</Route>
+        <Route path="/gulf-cup/team/:id">{() => <LazyRoute component={GulfCupTeam} />}</Route>
+        <Route path="/gulf-cup/fantasy">{() => <LazyRoute component={GulfCupFantasy} />}</Route>
+        <Route path="/gulf-cup/predictions">{() => <GulfCupPredictionsRedirect />}</Route>
         <Route path="/gulf-cup">{() => <LazyRoute component={GulfCup} />}</Route>
 
         {/* المنصة المركزية للتوقعات — كل البطولات ما عدا مونديال 2026 */}
@@ -1313,6 +1329,7 @@ function App() {
                   <VoiceCommandsManager />
                   <ReadingHistorySync />
                   <FocusSessionSync />
+                  <AuthAnalyticsMarker />
                   <PostAuthResumeGuard />
                   <NameCompletionGuard />
                   <CapacitorDeepLinks />

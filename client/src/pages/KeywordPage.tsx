@@ -1,35 +1,32 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useParams, Link } from "wouter";
+import { useAnalyticsPageMetadata } from "@/hooks/use-analytics";
 import { useState, useMemo } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { 
-  Clock, Tag, Flame, Zap, Eye, BarChart3,
-  Bell, BellOff, Filter, SortDesc, Newspaper, FileText,
-  PenTool, Brain, Sparkles
+import {
+  Clock, Tag, Zap, Eye, BarChart3,
+  Bell, BellOff, Filter, Newspaper, FileText,
+  PenTool, Sparkles, Home,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { arSA } from "date-fns/locale";
 import type { ArticleWithDetails } from "@shared/schema";
 import { Header } from "@/components/Header";
 import { OptimizedImage } from "@/components/OptimizedImage";
-
-// Format numbers with commas (English numerals)
-const formatNumber = (num: number): string => {
-  return num.toLocaleString('en-US');
-};
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { NewsArticleCard } from "@/components/NewsArticleCard";
+import { queryClient, apiRequest, apiUrl } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { formatNumber, formatRelativeTime } from "@/lib/format";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-  DropdownMenuSeparator,
-  DropdownMenuLabel,
-} from "@/components/ui/dropdown-menu";
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 const isNewArticle = (publishedAt: Date | string | null | undefined) => {
   if (!publishedAt) return false;
@@ -63,6 +60,7 @@ type KeywordResponse = {
 export default function KeywordPage() {
   const params = useParams();
   const keyword = decodeURIComponent(params.keyword || "");
+  useAnalyticsPageMetadata(keyword ? `أخبار ${keyword} | سبق` : "الكلمات المفتاحية | سبق");
   const { toast } = useToast();
   
   const [sortBy, setSortBy] = useState<SortOption>('newest');
@@ -76,7 +74,7 @@ export default function KeywordPage() {
   const { data: keywordData, isLoading } = useQuery<KeywordResponse>({
     queryKey: ["/api/keyword", keyword],
     queryFn: async () => {
-      const res = await fetch(`/api/keyword/${encodeURIComponent(keyword)}`, {
+      const res = await fetch(apiUrl(`/api/keyword/${encodeURIComponent(keyword)}`), {
         credentials: "include",
       });
       if (!res.ok) throw new Error("Failed to fetch articles");
@@ -210,72 +208,52 @@ export default function KeywordPage() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-background" dir="rtl">
+    <div className="public-page keyword-listing-page min-h-screen flex flex-col bg-background" dir="rtl">
       <Header user={user} />
 
       <main className="flex-1">
-        {/* Hero Section - Clean & Simple */}
-        <div className="border-b bg-card/50">
-          <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-8">
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-              {/* Keyword Info */}
-              <div className="space-y-2">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-primary/10">
-                    <Tag className="h-5 w-5 text-primary" />
-                  </div>
-                  <h1 className="text-2xl md:text-3xl font-bold text-foreground" data-testid="text-keyword-title">
-                    {keyword}
-                  </h1>
+        <div
+          className="public-page-header keyword-page-header relative overflow-hidden border-b border-[#e3ebf2] bg-[#f4f8fb] text-[#10202e] dark:border-border dark:bg-[#171e29] dark:text-foreground"
+          data-testid="keyword-header"
+        >
+          <div className="public-container container relative mx-auto px-4 sm:px-6 lg:px-8">
+            <nav
+              className="mb-2 flex items-center text-xs text-[#6b7c8a] sm:text-sm dark:text-muted-foreground"
+              aria-label="مسار الصفحة"
+            >
+              <Link
+                href="/"
+                className="inline-flex items-center gap-1.5 leading-none hover:text-primary transition-colors"
+              >
+                <Home className="h-3.5 w-3.5" />
+                الرئيسية
+              </Link>
+            </nav>
+
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex min-w-0 items-center gap-2.5">
+                <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-primary/10 sm:h-11 sm:w-11">
+                  <Tag className="h-4 w-4 text-primary sm:h-5 sm:w-5" />
                 </div>
-                
-                {/* Stats - Inline */}
-                {!isLoading && (
-                  <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
-                    <span className="flex items-center gap-1.5">
-                      <Newspaper className="h-4 w-4" />
-                      <strong className="text-foreground">{formatNumber(stats.articleCount)}</strong> مقال
-                    </span>
-                    {stats.topicCount > 0 && (
-                      <span className="flex items-center gap-1.5">
-                        <Sparkles className="h-4 w-4" />
-                        <strong className="text-foreground">{formatNumber(stats.topicCount)}</strong> موضوع مُقترب
-                      </span>
-                    )}
-                    <span className="flex items-center gap-1.5">
-                      <Eye className="h-4 w-4" />
-                      <strong className="text-foreground">{formatNumber(stats.views)}</strong> مشاهدة
-                    </span>
-                    {stats.breaking > 0 && (
-                      <span className="flex items-center gap-1.5 text-destructive">
-                        <Zap className="h-4 w-4" />
-                        <strong>{formatNumber(stats.breaking)}</strong> عاجل
-                      </span>
-                    )}
-                    {stats.latest && (
-                      <span className="flex items-center gap-1.5">
-                        <Clock className="h-4 w-4" />
-                        آخر تحديث: {formatDistanceToNow(new Date(stats.latest), { addSuffix: true, locale: arSA })}
-                      </span>
-                    )}
-                  </div>
-                )}
+                <h1 className="public-page-title" data-testid="text-keyword-title">
+                  {keyword}
+                </h1>
               </div>
 
-              {/* Follow Button */}
               {user && (
                 <Button
-                  size="default"
+                  size="sm"
                   variant={isFollowing ? "outline" : "default"}
                   onClick={() => isFollowing ? unfollowMutation.mutate() : followMutation.mutate()}
                   disabled={followMutation.isPending || unfollowMutation.isPending}
-                  className="gap-2"
+                  className="h-10 shrink-0 gap-2"
                   data-testid="button-follow-keyword"
                 >
                   {isFollowing ? (
                     <>
                       <BellOff className="h-4 w-4" />
-                      إلغاء المتابعة
+                      <span className="hidden sm:inline">إلغاء المتابعة</span>
+                      <span className="sm:hidden">إلغاء</span>
                     </>
                   ) : (
                     <>
@@ -286,73 +264,90 @@ export default function KeywordPage() {
                 </Button>
               )}
             </div>
-          </div>
-        </div>
 
-        {/* Filter & Sort Bar */}
-        <div className="sticky top-0 z-40 bg-background/95 backdrop-blur-md border-b">
-          <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-3">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              {/* Filter Pills */}
-              <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-hide">
-                {(Object.keys(filterLabels) as FilterOption[]).map((filter) => {
-                  const { label, icon: Icon } = filterLabels[filter];
-                  const count = filter === 'all' ? stats.total : (articleTypeCounts[filter] || 0);
-                  if (filter !== 'all' && count === 0) return null;
-                  
-                  return (
-                    <Button
-                      key={filter}
-                      size="sm"
-                      variant={filterBy === filter ? "default" : "outline"}
-                      onClick={() => setFilterBy(filter)}
-                      className="gap-1.5 whitespace-nowrap"
-                      data-testid={`button-filter-${filter}`}
-                    >
-                      <Icon className="h-3.5 w-3.5" />
-                      {label}
-                      {count > 0 && (
-                        <Badge variant="secondary" className="mr-1 h-5 px-1.5 text-xs">
-                          {formatNumber(count)}
-                        </Badge>
-                      )}
-                    </Button>
-                  );
-                })}
+            {!isLoading && (
+              <div className="mt-2 flex items-center gap-x-3 gap-y-1 overflow-x-auto text-xs text-[#6b7c8a] sm:mt-3 sm:gap-x-4 sm:text-sm dark:text-muted-foreground [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                <span className="flex shrink-0 items-center gap-1.5">
+                  <Newspaper className="h-3.5 w-3.5" />
+                  <strong className="tabular-nums text-foreground">{formatNumber(stats.articleCount)}</strong> مقال
+                </span>
+                {stats.topicCount > 0 && (
+                  <span className="flex shrink-0 items-center gap-1.5">
+                    <Sparkles className="h-3.5 w-3.5" />
+                    <strong className="tabular-nums text-foreground">{formatNumber(stats.topicCount)}</strong> موضوع مُقترب
+                  </span>
+                )}
+                <span className="flex shrink-0 items-center gap-1.5">
+                  <Eye className="h-3.5 w-3.5" />
+                  <strong className="tabular-nums text-foreground">{formatNumber(stats.views)}</strong> مشاهدة
+                </span>
+                {stats.breaking > 0 && (
+                  <span className="flex shrink-0 items-center gap-1.5 text-destructive">
+                    <Zap className="h-3.5 w-3.5" />
+                    <strong className="tabular-nums">{formatNumber(stats.breaking)}</strong> عاجل
+                  </span>
+                )}
+                {stats.latest && (
+                  <span className="hidden shrink-0 items-center gap-1.5 sm:flex">
+                    <Clock className="h-3.5 w-3.5" />
+                    آخر تحديث {formatRelativeTime(stats.latest)}
+                  </span>
+                )}
               </div>
-
-              {/* Sort Dropdown */}
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="sm" className="gap-2" data-testid="button-sort">
-                    <SortDesc className="h-4 w-4" />
-                    {sortLabels[sortBy]}
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuLabel>ترتيب حسب</DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  {(Object.keys(sortLabels) as SortOption[]).map((sort) => (
-                    <DropdownMenuItem
-                      key={sort}
-                      onClick={() => setSortBy(sort)}
-                      className={sortBy === sort ? "bg-accent" : ""}
-                      data-testid={`menu-sort-${sort}`}
-                    >
-                      {sortLabels[sort]}
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
+            )}
           </div>
         </div>
 
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="public-container container mx-auto px-4 sm:px-6 lg:px-8 pb-4 pt-3 sm:pt-4">
+          <div
+            className="flex items-center gap-2 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            data-testid="keyword-filter-bar"
+          >
+            {(Object.keys(filterLabels) as FilterOption[]).map((filter) => {
+              const { label, icon: Icon } = filterLabels[filter];
+              const count = filter === "all" ? stats.total : (articleTypeCounts[filter] || 0);
+              if (filter !== "all" && count === 0) return null;
+
+              return (
+                <Button
+                  key={filter}
+                  size="sm"
+                  variant={filterBy === filter ? "default" : "outline"}
+                  onClick={() => setFilterBy(filter)}
+                  className="h-10 shrink-0 gap-1.5 whitespace-nowrap"
+                  data-testid={`button-filter-${filter}`}
+                >
+                  <Icon className="h-3.5 w-3.5" />
+                  {label}
+                  {count > 0 && (
+                    <Badge variant="secondary" className="mr-1 h-5 px-1.5 text-xs">
+                      {formatNumber(count)}
+                    </Badge>
+                  )}
+                </Button>
+              );
+            })}
+
+            <Select value={sortBy} onValueChange={(value: SortOption) => setSortBy(value)}>
+              <SelectTrigger className="h-10 w-[9rem] shrink-0" data-testid="button-sort">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {(Object.keys(sortLabels) as SortOption[]).map((sort) => (
+                  <SelectItem key={sort} value={sort} data-testid={`menu-sort-${sort}`}>
+                    {sortLabels[sort]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        <div className="public-container container mx-auto px-4 sm:px-6 lg:px-8 pb-8">
           {/* Loading State */}
           {isLoading && (
             <div className="space-y-8">
-              <Skeleton className="aspect-[21/9] w-full rounded-2xl" />
+              <Skeleton className="h-28 w-full rounded-xl" />
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                 {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
                   <Card key={i} className="overflow-hidden">
@@ -371,220 +366,10 @@ export default function KeywordPage() {
           {/* Articles - Mobile List + Desktop Grid */}
           {!isLoading && filteredAndSortedArticles.length > 0 && (
             <>
-              {/* Mobile View: Vertical List */}
-              <Card className="overflow-hidden lg:hidden border-0 dark:border dark:border-card-border" data-testid="keyword-articles-mobile">
-                <CardContent className="p-0">
-                  <div className="divide-y dark:divide-y">
-                    {filteredAndSortedArticles.map((article) => {
-                      const timeAgo = article.publishedAt
-                        ? formatDistanceToNow(new Date(article.publishedAt), {
-                            addSuffix: true,
-                            locale: arSA,
-                          })
-                        : null;
-                      const displayImage = (article as any).infographicBannerUrl || article.imageUrl || article.thumbnailUrl;
-
-                      return (
-                        <Link key={article.id} href={`/article/${article.englishSlug || article.slug}`}>
-                          <div 
-                            className="block group cursor-pointer"
-                            data-testid={`link-keyword-article-mobile-${article.id}`}
-                          >
-                            <div className="p-4 hover-elevate active-elevate-2 transition-all">
-                              <div className="flex gap-3">
-                                {/* Image */}
-                                {displayImage && (
-                                  <div className="relative flex-shrink-0 w-24 h-20 rounded-lg overflow-hidden">
-                                    <OptimizedImage
-                                      src={displayImage}
-                                      alt={article.title}
-                                      className="w-full h-full object-cover rounded-lg transition-transform duration-500 group-hover:scale-110"
-                                      wrapperClassName="w-full h-full"
-                                      priority={false}
-                                    />
-                                  </div>
-                                )}
-
-                                {/* Content */}
-                                <div className="flex-1 min-w-0 space-y-1.5">
-                                  {/* Badges */}
-                                  <div className="flex items-center gap-1.5">
-                                    {article.newsType === "breaking" ? (
-                                      <Badge 
-                                        variant="destructive" 
-                                        className="text-[10px] h-4 gap-0.5 shrink-0"
-                                        data-testid={`badge-keyword-mobile-breaking-${article.id}`}
-                                      >
-                                        <Zap className="h-2 w-2" />
-                                        عاجل
-                                      </Badge>
-                                    ) : isNewArticle(article.publishedAt) ? (
-                                      <Badge 
-                                        className="text-[10px] h-4 gap-0.5 bg-emerald-500 hover:bg-emerald-600 text-white border-emerald-600 shrink-0"
-                                        data-testid={`badge-keyword-mobile-new-${article.id}`}
-                                      >
-                                        <Flame className="h-2 w-2" />
-                                        جديد
-                                      </Badge>
-                                    ) : article.category ? (
-                                      <Badge 
-                                        variant="secondary"
-                                        className="text-[10px] h-4 shrink-0 text-black"
-                                        style={{ borderRight: `3px solid ${article.category.color || 'hsl(var(--primary))'}`, backgroundColor: '#e5e5e6' }}
-                                        data-testid={`badge-keyword-mobile-category-${article.id}`}
-                                      >
-                                        {article.category.nameAr}
-                                      </Badge>
-                                    ) : null}
-                                    {/* AI Generated Content Badge */}
-                                    {(article as any).aiGenerated && (
-                                      <Badge 
-                                        className="text-[10px] h-4 gap-0.5 bg-violet-500/90 hover:bg-violet-600 text-white border-0 shrink-0"
-                                        data-testid={`badge-keyword-mobile-ai-${article.id}`}
-                                      >
-                                        <Brain className="h-2 w-2" aria-hidden="true" />
-                                        AI
-                                      </Badge>
-                                    )}
-                                  </div>
-
-                                  {/* Title */}
-                                  <h4 className={`font-bold text-sm line-clamp-2 leading-snug transition-colors ${
-                                    article.newsType === "breaking"
-                                      ? "text-destructive"
-                                      : "group-hover:text-primary"
-                                  }`} data-testid={`text-keyword-mobile-title-${article.id}`}>
-                                    {article.title}
-                                  </h4>
-
-                                  {/* Meta Info */}
-                                  <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-                                    {timeAgo && (
-                                      <span className="flex items-center gap-1">
-                                        <Clock className="h-3 w-3" />
-                                        {timeAgo}
-                                      </span>
-                                    )}
-                                    <span className="flex items-center gap-1">
-                                      <Eye className="h-3 w-3" />
-                                      {formatNumber(article.views || 0)}
-                                    </span>
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        </Link>
-                      );
-                    })}
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Desktop View: Grid */}
-              <div className="hidden lg:grid grid-cols-4 gap-6">
-                {filteredAndSortedArticles.map((article) => {
-                  const timeAgo = article.publishedAt
-                    ? formatDistanceToNow(new Date(article.publishedAt), {
-                        addSuffix: true,
-                        locale: arSA,
-                      })
-                    : null;
-                  const displayImage = (article as any).infographicBannerUrl || article.imageUrl || article.thumbnailUrl;
-
-                  return (
-                    <Link key={article.id} href={`/article/${article.englishSlug || article.slug}`}>
-                      <Card className={`hover-elevate active-elevate-2 h-full cursor-pointer group border-0 dark:border dark:border-card-border ${
-                        article.newsType === "breaking" ? "bg-destructive/5" : ""
-                      }`} data-testid={`card-keyword-article-${article.id}`}>
-                        {displayImage && (
-                          <div className="relative aspect-[16/9] overflow-hidden">
-                            <OptimizedImage
-                              src={displayImage}
-                              alt={article.title}
-                              className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-                              priority={false}
-                            />
-                          </div>
-                        )}
-                        <CardContent className="p-5 space-y-3">
-                          {/* Badges */}
-                          <div className="flex items-center gap-2">
-                            {article.newsType === "breaking" ? (
-                              <Badge 
-                                variant="destructive" 
-                                className="text-xs h-5 gap-1 shrink-0" 
-                                data-testid={`badge-keyword-breaking-${article.id}`}
-                              >
-                                <Zap className="h-2.5 w-2.5" />
-                                عاجل
-                              </Badge>
-                            ) : isNewArticle(article.publishedAt) ? (
-                              <Badge 
-                                className="text-xs h-5 gap-1 bg-emerald-500 hover:bg-emerald-600 text-white border-emerald-600 shrink-0" 
-                                data-testid={`badge-keyword-new-${article.id}`}
-                              >
-                                <Flame className="h-2.5 w-2.5" />
-                                جديد
-                              </Badge>
-                            ) : article.category ? (
-                              <Badge 
-                                variant="secondary"
-                                className="text-xs h-5 shrink-0 text-black" 
-                                style={{ borderRight: `3px solid ${article.category.color || 'hsl(var(--primary))'}`, backgroundColor: '#e5e5e6' }}
-                                data-testid={`badge-keyword-category-${article.id}`}
-                              >
-                                {article.category.nameAr}
-                              </Badge>
-                            ) : null}
-                            {/* AI Generated Content Badge */}
-                            {(article as any).aiGenerated && (
-                              <Badge 
-                                className="text-xs h-5 gap-1 bg-violet-500/90 hover:bg-violet-600 text-white border-0 shrink-0"
-                                data-testid={`badge-keyword-ai-${article.id}`}
-                              >
-                                <Brain className="h-2.5 w-2.5" aria-hidden="true" />
-                                محتوى AI
-                              </Badge>
-                            )}
-                          </div>
-                          
-                          {/* Title */}
-                          <h3 className={`text-lg font-bold line-clamp-2 transition-colors ${
-                            article.newsType === "breaking"
-                              ? "text-destructive"
-                              : "group-hover:text-primary"
-                          }`} data-testid={`text-keyword-article-title-${article.id}`}>
-                            {article.title}
-                          </h3>
-                          
-                          {/* Excerpt */}
-                          {article.excerpt && (
-                            <p className="text-sm text-muted-foreground line-clamp-3">
-                              {article.excerpt}
-                            </p>
-                          )}
-                          
-                          {/* Meta */}
-                          <div className="flex flex-col gap-2 pt-2 border-t">
-                            <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                              {timeAgo && (
-                                <div className="flex items-center gap-1">
-                                  <Clock className="h-3 w-3" />
-                                  <span>{timeAgo}</span>
-                                </div>
-                              )}
-                              <div className="flex items-center gap-1">
-                                <Eye className="h-3 w-3" />
-                                <span>{formatNumber(article.views || 0)}</span>
-                              </div>
-                            </div>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    </Link>
-                  );
-                })}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                {filteredAndSortedArticles.map((article, index) => (
+                  <NewsArticleCard key={article.id} article={article} viewMode="grid" metadata={{ views: true }} priority={index < 4} />
+                ))}
               </div>
             </>
           )}
@@ -639,7 +424,7 @@ export default function KeywordPage() {
                             {topic.title}
                           </h3>
                           {topic.excerpt && (
-                            <p className="text-sm text-muted-foreground line-clamp-3">
+                            <p className="hidden text-sm text-muted-foreground line-clamp-3 sm:block">
                               {topic.excerpt}
                             </p>
                           )}

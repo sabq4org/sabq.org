@@ -50,6 +50,12 @@ export interface NewsImageUploadInput {
   purpose: string;
   metadata?: Record<string, string>;
   rolloutKey?: string;
+  /**
+   * Bypass NEWS_IMAGES_R2_ROLLOUT_PERCENT and never fall back to Cloudflare
+   * Images. Used by Bot Drafts so cover files land on sabq-news-images /
+   * media.sabq.org when R2 is configured.
+   */
+  forceR2?: boolean;
 }
 
 export interface NewsImageUploadResult extends CloudflareUploadResult {
@@ -82,7 +88,7 @@ interface PreparedObject {
 export function isNewsImagePurpose(value: unknown): boolean {
   if (typeof value !== "string") return false;
   const purpose = value.trim().toLowerCase();
-  return /^(article|en-article|ur-article|mobile-article|email-article|whatsapp-article)(?:-|$)/.test(
+  return /^(article|en-article|ur-article|mobile-article|email-article|whatsapp-article|bot-article)(?:-|$)/.test(
     purpose,
   );
 }
@@ -147,6 +153,29 @@ function extensionForMimeType(mimeType: string): string {
 
 function publicObjectUrl(publicUrl: string, key: string): string {
   return `${publicUrl}/${key.split("/").map(encodeURIComponent).join("/")}`;
+}
+
+/** Production R2 public host for news images (`NEWS_IMAGES_R2_PUBLIC_URL`). */
+export const NEWS_IMAGES_R2_PUBLIC_HOST = "https://media.sabq.org";
+
+/**
+ * True when `url` is an https news-image URL on the configured R2 public
+ * origin (media.sabq.org in production) — not Cloudflare Images.
+ */
+export function isNewsImageR2DeliveryUrl(rawUrl: string | undefined | null): rawUrl is string {
+  if (typeof rawUrl !== "string" || !rawUrl.startsWith("https://")) return false;
+  try {
+    const parsed = new URL(rawUrl);
+    if (parsed.hostname === "imagedelivery.net" || parsed.hostname.endsWith(".imagedelivery.net")) {
+      return false;
+    }
+    const allowed = new Set<string>([new URL(NEWS_IMAGES_R2_PUBLIC_HOST).origin]);
+    const config = getR2Config();
+    if (config) allowed.add(new URL(config.publicUrl).origin);
+    return allowed.has(parsed.origin);
+  } catch {
+    return false;
+  }
 }
 
 function safeMetadataValue(value: string): string {
@@ -230,11 +259,16 @@ export class NewsImageStorageService {
   async upload(input: NewsImageUploadInput): Promise<NewsImageUploadResult> {
     const startedAt = Date.now();
     const budgetMs = getUploadBudgetMs();
-    const rolloutPercent = this.getRolloutPercent();
+    const rolloutPercent = input.forceR2 ? 100 : this.getRolloutPercent();
     const rolloutKey = input.rolloutKey || input.metadata?.uploadedBy || input.filename;
+    const editorialPurpose = isNewsImagePurpose(input.purpose);
     const shouldUseR2 =
-      isNewsImagePurpose(input.purpose) &&
-      shouldRouteNewsImageToR2(rolloutKey, rolloutPercent);
+      editorialPurpose &&
+      (input.forceR2 ? this.isR2Configured() : shouldRouteNewsImageToR2(rolloutKey, rolloutPercent));
+
+    if (input.forceR2 && (!editorialPurpose || !this.isR2Configured())) {
+      return { success: false, error: "R2 news-image storage is required but not available" };
+    }
 
     if (shouldUseR2) {
       const config = getR2Config();
@@ -243,6 +277,10 @@ export class NewsImageStorageService {
           return await this.uploadToR2(input, config);
         } catch (error) {
           const message = error instanceof Error ? error.message : "unknown R2 error";
+          if (input.forceR2) {
+            console.error(`[News Images] R2-only upload failed (no Cloudflare Images fallback): ${message}`);
+            return { success: false, error: `R2 upload failed (${message})` };
+          }
           const elapsedMs = Date.now() - startedAt;
           const remainingMs = budgetMs - elapsedMs;
           if (remainingMs < MIN_FALLBACK_BUDGET_MS) {
@@ -258,11 +296,17 @@ export class NewsImageStorageService {
             `[News Images] R2 upload failed after ${elapsedMs}ms; using Cloudflare fallback (${remainingMs}ms left): ${message}`,
           );
         }
+      } else if (input.forceR2) {
+        return { success: false, error: "R2 news-image storage is required but not available" };
       } else {
         console.error(
           "[News Images] R2 rollout selected but NEWS_IMAGES_R2_* is incomplete; using Cloudflare fallback",
         );
       }
+    }
+
+    if (input.forceR2) {
+      return { success: false, error: "R2 upload did not complete" };
     }
 
     const fallback = await cloudflareImagesService.uploadToCloudflare(
