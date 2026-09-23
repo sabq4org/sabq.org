@@ -11,7 +11,10 @@ export const metadata: Metadata = {
   description:
     "سبق الذكية - منصة الأخبار السعودية الأولى المدعومة بالذكاء الاصطناعي. أخبار عاجلة ومحلية ورياضية وعالمية على مدار الساعة.",
   alternates: { canonical: "https://sabq.org" },
-  robots: { index: true, follow: true },
+  robots:
+    process.env.STAGING_NO_INDEX === "true"
+      ? { index: false, follow: false, nocache: true }
+      : { index: true, follow: true },
 };
 
 const EMPTY_HOME: HomeBundle = {

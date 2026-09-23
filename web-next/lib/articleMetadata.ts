@@ -18,7 +18,10 @@ export function articleMetadata(m: SeoBundleMeta): Metadata {
     title: { absolute: m.title },
     description: m.description,
     alternates: alternatesFrom(m),
-    robots: m.robots,
+    robots:
+      process.env.STAGING_NO_INDEX === "true"
+        ? { index: false, follow: false, nocache: true }
+        : m.robots,
     openGraph: {
       type: "article",
       title: m.title,
