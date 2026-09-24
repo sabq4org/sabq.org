@@ -125,8 +125,9 @@ export default tseslint.config(
     // net shrink to 36366 lines. Ratchet follows the file down.
     // 2026-09-24: derived-column writes (lite image, parsed bullets) and the
     // 409 conflict body moved to services/articleDerivedWrites.ts → 36353.
+    // 2026-09-24: robots.txt body moved to utils/robotsTxt.ts (Content-Signal) → 36329.
     files: ["server/routes.ts"],
-    rules: { "max-lines": ["error", { max: 36353 }] },
+    rules: { "max-lines": ["error", { max: 36329 }] },
   },
   {
     files: ["server/storage.ts"],
