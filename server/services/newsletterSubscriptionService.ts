@@ -115,6 +115,16 @@ export function hasConfirmedNewsletterMarker(subscription: NewsletterSubscriptio
   return metadata.newsletterConsentVersion === 1 && typeof metadata.confirmedAt === "string";
 }
 
+// Keep the database predicate in step with hasConfirmedNewsletterMarker().
+// JSONB null/missing values must count as an absent marker, while a string
+// version or non-string confirmedAt must not be treated as a valid marker.
+const missingConfirmedNewsletterMarker = sql`NOT (
+  COALESCE(${newsletterSubscriptions.metadata} @> '{"newsletterConsentVersion":1}'::jsonb, false)
+  AND COALESCE(jsonb_typeof(${newsletterSubscriptions.metadata}->'confirmedAt') = 'string', false)
+)`;
+
+const TERMINAL_NEWSLETTER_STATUSES = ["unsubscribed", "bounced", "junk"] as const;
+
 async function assertNotSuppressed(email: string): Promise<void> {
   try {
     const [row] = await db.select({ email: emailSuppressions.email })
@@ -137,10 +147,21 @@ export async function createPendingNewsletterSubscription(
     where: sql`lower(${newsletterSubscriptions.email}) = ${email}`,
   });
 
-  // Unsubscribed/bounced addresses are terminal. Keep the response generic so
-  // this endpoint cannot be used as a subscriber-enumeration oracle.
-  if (existing && ["unsubscribed", "bounced"].includes(existing.status)) {
+  // Unsubscribed/bounced/junk addresses are terminal. Keep the response
+  // generic so this endpoint cannot be used as a subscriber-enumeration oracle.
+  if (existing && TERMINAL_NEWSLETTER_STATUSES.includes(existing.status as (typeof TERMINAL_NEWSLETTER_STATUSES)[number])) {
     return { subscription: null, confirmationSent: false };
+  }
+
+  // A legacy active row may have verifiedAt from the retired flow without an
+  // explicit DOI marker. It can be moved back to pending only after a new
+  // opt-in request. Rows with the current marker stay active and untouched.
+  const existingCanRequestConfirmation = existing && (
+    existing.status === "pending_confirmation" ||
+    (existing.status === "active" && !hasConfirmedNewsletterMarker(existing))
+  );
+  if (existing && !existingCanRequestConfirmation) {
+    return { subscription: existing, confirmationSent: false };
   }
 
   const token = crypto.randomBytes(CONFIRMATION_TOKEN_BYTES).toString("hex");
@@ -179,7 +200,11 @@ export async function createPendingNewsletterSubscription(
           .set(values)
           .where(and(
             eq(newsletterSubscriptions.id, existing.id),
-            eq(newsletterSubscriptions.status, "pending_confirmation"),
+            eq(
+              newsletterSubscriptions.status,
+              existing.status === "active" ? "active" : "pending_confirmation",
+            ),
+            missingConfirmedNewsletterMarker,
             sql`${newsletterSubscriptions.updatedAt} < now() - interval '10 minutes'`,
           ))
           .returning()
@@ -196,8 +221,9 @@ export async function createPendingNewsletterSubscription(
     return { subscription: null, confirmationSent: false };
   }
 
-  // An active row is deliberately not reactivated or mutated. This keeps a
-  // second subscription request from bypassing the explicit confirmation step.
+  // The status and marker predicates are intentionally repeated in SQL. The
+  // initial read is only a decision hint; a confirmation or unsubscribe may
+  // win the race before this update is evaluated.
   if (!subscription) return { subscription: existing || null, confirmationSent: false };
 
   const mailResult = await sendNewsletterConfirmationEmail({
