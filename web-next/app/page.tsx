@@ -3,6 +3,7 @@ import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
 import { ArticleCard } from "@/components/ArticleCard";
 import { getHomeBundle, type HomeBundle } from "@/lib/seoBundle";
+import { NewsletterSignup } from "@/components/NewsletterSignup";
 
 export const revalidate = 60;
 
@@ -88,10 +89,14 @@ export default async function HomePage() {
         )}
 
         <section className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {bundle.articles.map((item, i) => (
+          {bundle.articles.slice(0, 6).map((item, i) => (
             <ArticleCard key={item.href} item={item} priority={i === 0} />
           ))}
         </section>
+        <NewsletterSignup source="home-first-group" />
+        {bundle.articles.length > 6 && <section className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          {bundle.articles.slice(6).map((item) => <ArticleCard key={item.href} item={item} />)}
+        </section>}
       </main>
       <SiteFooter sections={bundle.sections} />
       <script

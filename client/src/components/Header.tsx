@@ -1,4 +1,4 @@
-import { Menu, User, LogOut, Newspaper, Brain, Sparkles, ExternalLink, Zap, Home, Clock, BookOpen, Boxes, ChevronLeft, FolderOpen, Search } from "lucide-react";
+import { Menu, User, LogOut, Newspaper, Brain, Sparkles, ExternalLink, Zap, Home, Clock, BookOpen, Boxes, ChevronLeft, FolderOpen, Search, Mail } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "./ThemeToggle";
@@ -130,6 +130,7 @@ export function Header({ user, onMenuClick, sticky = true }: HeaderProps) {
     { name: "مُقترب", href: "/muqtarab" },
     { name: "لحظة بلحظة", href: "/moment-by-moment" },
     { name: "عقل سبق", href: "/sabq-ai", icon: Brain },
+    { name: "النشرة", href: "/newsletter", icon: Mail },
   ];
 
   // الزر يبقى مع أدوات الهيدر. dir على الجذر فقط: Radix يكتبه على لوحة
@@ -462,6 +463,16 @@ export function Header({ user, onMenuClick, sticky = true }: HeaderProps) {
                   >
                     <Zap className="h-5 w-5 text-primary" aria-hidden="true" />
                     تصفح سريع
+                  </span>
+                </Link>
+                <Link href="/newsletter">
+                  <span
+                    className="flex items-center gap-3 rounded-md border border-primary/20 bg-primary/5 px-3 py-2.5 text-sm font-semibold text-primary hover-elevate active-elevate-2 cursor-pointer"
+                    onClick={() => setMobileMenuOpen(false)}
+                    data-testid="link-mobile-newsletter"
+                  >
+                    <Mail className="h-5 w-5" aria-hidden="true" />
+                    سبق في ٣ دقائق
                   </span>
                 </Link>
               </div>

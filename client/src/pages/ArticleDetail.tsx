@@ -9,6 +9,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { CommentsTeaser } from "@/components/CommentsTeaser";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
+import SmartNewsletterForm from "@/components/SmartNewsletterForm";
 import { CommentSection } from "@/components/CommentSection";
 import { ArticlePoll } from "@/components/ArticlePoll";
 import { RecommendationsWidget } from "@/components/RecommendationsWidget";
@@ -1508,6 +1509,8 @@ export default function ArticleDetail() {
               keywords={articleTags?.map(tag => tag.nameAr) || []}
               limit={4}
             />
+
+            <SmartNewsletterForm variant="compact" source="article" className="my-8" />
 
             {/* Article Poll */}
             <div className="mb-8">

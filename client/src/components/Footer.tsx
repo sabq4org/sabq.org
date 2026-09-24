@@ -55,6 +55,7 @@ export function Footer() {
   const categories = Array.isArray(categoriesRaw) ? categoriesRaw : [];
 
   const infoLinks = [
+    { label: "النشرة البريدية", href: "/newsletter" },
     { label: "من نحن", href: "/about" },
     { label: "سياسة الخصوصية", href: "/ar/privacy" },
     { label: "شروط الاستخدام", href: "/ar/terms" },
