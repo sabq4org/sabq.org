@@ -273,7 +273,7 @@ export interface GcScorer {
 }
 
 export interface GcScorersBoard {
-  /** الموسم الذي جاءت منه البيانات (2026 = النسخة الحالية، 2024 = خليجي 26). */
+  /** موسم البيانات لدى المزوّد — دائمًا النسخة الحالية (2026 = خليجي 27). */
   season: number;
   isCurrent: boolean;
   scorers: GcScorer[];

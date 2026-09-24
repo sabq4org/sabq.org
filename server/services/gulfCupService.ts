@@ -35,6 +35,7 @@ import {
 } from "./gulfCupFixtureIdentity";
 import { GC_EDITIONS, getGcTeamLegacy, type GcTeamLegacy } from "./gulfCupHistory";
 import { resolveNames } from "./worldCupNameTranslator";
+import { tallyGcScorersFromFixtures } from "./gulfCupScorerTally";
 import { apiFootballGet } from "./apiFootballClient";
 import {
   isWithinLiveOverlayWindow,
@@ -781,16 +782,17 @@ export interface GcScorer {
 }
 
 export interface GcScorersBoard {
-  /** الموسم الذي جاءت منه البيانات (2026 = النسخة الحالية، 2024 = خليجي 26). */
+  /** موسم البيانات لدى المزوّد — دائمًا النسخة الحالية (خليجي 27 = 2026). */
   season: number;
-  /** هل هذه أرقام النسخة الحالية أم آخر نسخة منتهية؟ */
+  /** يبقى true دائمًا: لا تُعرض أرقام نسخة سابقة (يُبقى الحقل لتوافق تطبيق iOS). */
   isCurrent: boolean;
   scorers: GcScorer[];
   assists: GcScorer[];
 }
 
-const SCORERS_TTL = 10 * 60 * 1000;
-const SCORERS_FALLBACK_SEASON = 2024; // خليجي 26 (الكويت 2024–25)
+const SCORERS_TTL = 5 * 60 * 1000;
+/** حدّ API-Football لعدد المعرّفات في طلب `fixtures?ids=` الواحد. */
+const FIXTURE_IDS_PER_REQUEST = 20;
 
 function mapScorerRows(rows: any[], tr: (n: string | null | undefined) => string): GcScorer[] {
   return rows.map((row: any, index: number): GcScorer => {
@@ -816,29 +818,61 @@ function mapScorerRows(rows: any[], tr: (n: string | null | undefined) => string
 }
 
 /**
- * لوحتا الهدّافين وصنّاع الأهداف — موسم 2026 أولًا، وإن لم يتوفّر لدى المزوّد بعد
- * تُعرض أرقام خليجي 26 (موسم 2024) بوسمها صراحةً `isCurrent=false`.
+ * يبني اللوحتين من أحداث أهداف مباريات النسخة الحالية التي بدأت (منتهية أو جارية)
+ * حين تتأخر قائمة `players/topscorers` لدى المزوّد عن النتائج.
+ */
+async function tallyGcScorersFromEvents(): Promise<Pick<GcScorersBoard, "scorers" | "assists">> {
+  const fixtures = await getGcFixtures().catch(() => [] as GcFixture[]);
+  const providerIds = fixtures
+    .filter((f) => (f.status.finished || f.status.live) && f.providerId)
+    .map((f) => f.providerId as number);
+  if (providerIds.length === 0) return { scorers: [], assists: [] };
+
+  const batches: number[][] = [];
+  for (let i = 0; i < providerIds.length; i += FIXTURE_IDS_PER_REQUEST) {
+    batches.push(providerIds.slice(i, i + FIXTURE_IDS_PER_REQUEST));
+  }
+  const rawFixtures = (
+    await Promise.all(
+      batches.map((ids) =>
+        apiGet("fixtures", { ids: ids.join("-"), timezone: TIMEZONE }).catch(() => [] as any[]),
+      ),
+    )
+  ).flat();
+
+  const names = rawFixtures.flatMap((raw: any) =>
+    (raw?.events ?? [])
+      .filter((ev: any) => ev?.type === "Goal")
+      .flatMap((ev: any) => [ev?.player?.name, ev?.assist?.name]),
+  );
+  const tr = await resolveNames(names).catch(() => (n: string | null | undefined) => n ?? "");
+  const tally = tallyGcScorersFromFixtures(rawFixtures, (n) => tr(n), seedTeam);
+  return { scorers: tally.scorers.slice(0, 15), assists: tally.assists.slice(0, 10) };
+}
+
+/**
+ * لوحتا الهدّافين وصنّاع الأهداف لخليجي 27 فقط: قائمة المزوّد متى توفّرت، وإلا
+ * تجميع من أحداث المباريات. لا رجوع لأرقام نسخة سابقة إطلاقًا — عند غياب أي
+ * أهداف تعود اللوحتان فارغتين فيختفي القسم في الواجهة.
  */
 export async function getGcScorers(): Promise<GcScorersBoard> {
   const empty: GcScorersBoard = { season: SEASON, isCurrent: true, scorers: [], assists: [] };
   if (!apiFootballEnabled()) return empty;
-  return withSWR("gc:scorers", SCORERS_TTL, SCORERS_TTL * 3, async () => {
-    for (const season of [SEASON, SCORERS_FALLBACK_SEASON]) {
-      const [goalRows, assistRows] = await Promise.all([
-        apiGet("players/topscorers", { league: LEAGUE_ID, season }).catch(() => [] as any[]),
-        apiGet("players/topassists", { league: LEAGUE_ID, season }).catch(() => [] as any[]),
-      ]);
-      if (goalRows.length === 0 && assistRows.length === 0) continue;
+  return withSWR("gc:scorers:current", SCORERS_TTL, SCORERS_TTL * 3, async () => {
+    const [goalRows, assistRows] = await Promise.all([
+      apiGet("players/topscorers", { league: LEAGUE_ID, season: SEASON }).catch(() => [] as any[]),
+      apiGet("players/topassists", { league: LEAGUE_ID, season: SEASON }).catch(() => [] as any[]),
+    ]);
+    if (goalRows.length > 0 || assistRows.length > 0) {
       const names = [...goalRows, ...assistRows].map((r: any) => r.player?.name);
       const tr = await resolveNames(names).catch(() => (n: string | null | undefined) => n ?? "");
       return {
-        season,
-        isCurrent: season === SEASON,
+        ...empty,
         scorers: mapScorerRows(goalRows.slice(0, 15), tr),
         assists: mapScorerRows(assistRows.slice(0, 10), tr),
       };
     }
-    return empty;
+    return { ...empty, ...(await tallyGcScorersFromEvents()) };
   }).catch(() => empty);
 }
 
