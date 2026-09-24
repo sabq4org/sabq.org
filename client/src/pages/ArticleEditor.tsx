@@ -506,6 +506,12 @@ export default function ArticleEditor() {
     onSuccess: (data, articleId) => {
       const resolvedId = articleId || id;
       setReviewStatus("pending_review");
+      // submit-review bumps updatedAt; track it so the next save isn't a false version conflict.
+      if (data?.updatedAt) {
+        setArticleUpdatedAt(
+          typeof data.updatedAt === "string" ? data.updatedAt : new Date(data.updatedAt).toISOString(),
+        );
+      }
       if (resolvedId) {
         markArticleSubmittedInAnalyticsCache(queryClient, {
           id: resolvedId,
@@ -2019,6 +2025,11 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
         }
 
         setReviewStatus("pending_review");
+        if (confirmed?.updatedAt) {
+          setArticleUpdatedAt(
+            typeof confirmed.updatedAt === "string" ? confirmed.updatedAt : new Date(confirmed.updatedAt).toISOString(),
+          );
+        }
         markArticleSubmittedInAnalyticsCache(queryClient, {
           id: articleId,
           reviewStatus: "pending_review",
