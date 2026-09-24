@@ -1,10 +1,11 @@
 openapi: 3.0.3
 info:
   title: Sabq Bot Drafts API
-  version: 1.0.0
+  version: 1.1.0
   description: |
-    مسودات لبوتات «نشر سبق» ومهندّس (Grok Bot). الإنشاء draft.
-    PATCH /{id}/ready ينقل إلى ready_to_publish فقط — لا نشر ولا جدولة.
+    مسودات لبوت «نشر سبق» ومهندّس (Grok Bot). الإنشاء draft.
+    POST /{id}/publish ينشر فوراً. POST /{id}/schedule يجدول بـ publishAt.
+    PATCH /{id}/ready ينقل إلى ready_to_publish دون نشر.
     الدليل الكامل: docs/systems/editorial/BOT_DRAFTS_API.md
 servers:
   - url: https://api.sabq.org
@@ -155,6 +156,94 @@ paths:
                 $ref: "#/components/schemas/Error"
         "422": { $ref: "#/components/responses/Unprocessable" }
         "429": { $ref: "#/components/responses/RateLimited" }
+  /api/internal/bot-drafts/{id}/publish:
+    post:
+      operationId: publishSabqDraft
+      summary: نشر فوري لمسودة بوت (draft أو ready_to_publish)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              description: جسم فارغ. أي حقل يُرفض. status أو authorId يُرفضان 422.
+      responses:
+        "200":
+          description: نُشرت. status=published وupdatable=false وpublicUrl
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BotDraft"
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403":
+          description: license_required إن كان صاحب الاسم بلا ترخيص. PATCH على هذا المسار forbidden_action
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: not_a_draft (ليست draft ولا ready_to_publish) أو locked_by_editor
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "422": { $ref: "#/components/responses/Unprocessable" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /api/internal/bot-drafts/{id}/schedule:
+    post:
+      operationId: scheduleSabqDraft
+      summary: جدولة مسودة بوت حتى يلتقطها ناشر المواد المجدولة
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [publishAt]
+              properties:
+                publishAt:
+                  type: string
+                  format: date-time
+                  description: ISO-8601 مستقبلي مع منطقة زمنية. الرياض +03:00 أو ما يعادله UTC. بلا إزاحة أو في الماضي = 400.
+                  example: "2026-09-24T18:30:00+03:00"
+      responses:
+        "200":
+          description: جُدولت. status=scheduled وscheduledAt وeditUrl
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BotDraft"
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403":
+          description: license_required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: not_a_draft أو locked_by_editor
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "422": { $ref: "#/components/responses/Unprocessable" }
+        "429": { $ref: "#/components/responses/RateLimited" }
 components:
   securitySchemes:
     botToken:
@@ -199,7 +288,7 @@ components:
       properties:
         id: { type: string }
         status: { type: string, description: الحالة الحالية في اللوحة (draft/ready_to_publish/published/scheduled/archived) }
-        updatable: { type: boolean, description: true فقط عندما تكون draft. false بعد ready_to_publish }
+        updatable: { type: boolean, description: true فقط عندما تكون draft. false بعد الجاهزية أو النشر أو الجدولة }
         title: { type: string }
         subtitle: { type: string, nullable: true }
         slug: { type: string }
@@ -219,6 +308,13 @@ components:
         notes: { type: string, nullable: true }
         editUrl: { type: string, format: uri, description: رابط التحرير الداخلي في اللوحة }
         previewUrl: { type: string, format: uri }
+        publicUrl:
+          type: string
+          format: uri
+          nullable: true
+          description: رابط القارئ https://sabq.org/article/{englishSlug}. الصفحة العامة تعرضه عندما status=published. أثناء scheduled نفس الرابط يُفتح بعد الموعد.
+        publishedAt: { type: string, format: date-time, nullable: true }
+        scheduledAt: { type: string, format: date-time, nullable: true, description: موعد الجدولة المؤكد }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
     BotDraftImageUpload:
@@ -239,7 +335,7 @@ components:
       properties:
         code:
           type: string
-          enum: [not_configured, unauthorized, forbidden_fields, validation_error, category_not_found, author_not_configured, not_found, not_a_draft, locked_by_editor, forbidden_action, rate_limited, invalid_image, file_too_large, storage_unavailable, upload_failed, server_error]
+          enum: [not_configured, unauthorized, forbidden_fields, validation_error, category_not_found, author_not_configured, not_found, not_a_draft, locked_by_editor, license_required, forbidden_action, rate_limited, invalid_image, file_too_large, storage_unavailable, upload_failed, server_error]
         message: { type: string }
         details: {}
   responses:

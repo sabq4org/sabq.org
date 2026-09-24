@@ -1,23 +1,25 @@
 // ----------------------------------------------------------------------------
 // خدمة «مسودات البوتات» — Bot Drafts (ADR-001: كل استعلامات Drizzle هنا)
 //
-// تُنشئ وتحدّث وتقرأ مسودات عربية فقط لصالح بوت «نشر سبق» ومهندّس (Grok Bot).
-// الإنشاء والحالة الابتدائية `draft`. البوت قد يعلّم المسودة `ready_to_publish`
-// عبر markBotDraftReady فقط — لا نشر ولا جدولة ولا تغيير إسناد من هذا المسار.
+// تُنشئ وتحدّث وتقرأ مسودات عربية لصالح بوت «نشر سبق» ومهندّس (Grok Bot).
+// الإنشاء يبقى `draft`. البوت قد يعلّم الجاهزية، أو ينشر فوراً، أو يجدول.
+// الإسناد يبقى حساب «صحيفة سبق» ولا يأتي من جسم الطلب.
 // المصادقة: توكن Bearer لكل بوت من BOT_DRAFTS_API_TOKENS (name:token,…).
 // التوثيق: docs/systems/editorial/BOT_DRAFTS_API.md
 // ----------------------------------------------------------------------------
 
 import crypto from "node:crypto";
-import { and, eq, gt } from "drizzle-orm";
+import { and, eq, gt, inArray } from "drizzle-orm";
 import { db } from "../db";
 import { articleEditLocks, articles, categories, users } from "@shared/schema";
 import { SABQ_NEWSPAPER_ACCOUNT_ID } from "@shared/sabqNewspaper";
 import {
   BOT_DRAFT_BODY_IMAGE_LIMIT,
+  BOT_DRAFT_PUBLISHABLE_STATUSES,
   BOT_DRAFT_READY_STATUS,
   BOT_DRAFT_SOURCE,
   BOT_DRAFT_STATUS,
+  isBotDraftPublishableStatus,
   type BotDraftCreateInput,
   type BotDraftErrorCode,
   type BotDraftResponse,
@@ -359,6 +361,25 @@ export function botDraftPreviewUrl(articleId: string): string {
   return `${dashboardBaseUrl()}/dashboard/articles/${articleId}/preview`;
 }
 
+/**
+ * الرابط العام الذي يفتحه القارئ. `englishSlug` هو المسار النهائي بعد تحويل
+ * الرابط العربي 301 (slugRedirect + IndexNow). إن غاب يُستخدم `slug`.
+ */
+export function botDraftPublicUrl(
+  englishSlug: string | null | undefined,
+  slug: string | null | undefined,
+): string | null {
+  const canonical = (englishSlug || "").trim() || (slug || "").trim();
+  if (!canonical) return null;
+  return `${dashboardBaseUrl()}/article/${encodeURIComponent(canonical)}`;
+}
+
+function isoOrNull(value: Date | string | null | undefined): string | null {
+  if (!value) return null;
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
 type ArticleRow = typeof articles.$inferSelect;
 
 /** بعد الاعتماد لا يُعدَّل المحتوى. الرسالة تُعاد مع 409 `not_a_draft`. */
@@ -375,6 +396,77 @@ export function botDraftReadyBlockedMessage(status: string): string {
     return "المادة جاهزة للنشر بالفعل ولا يمكن للبوت تعديلها";
   }
   return "المادة لم تعد مسودة ولا يمكن تعليمها جاهزة للنشر";
+}
+
+/** النشر والجدولة مسموحان من `draft` أو `ready_to_publish` فقط. */
+export function botDraftPublishBlockedMessage(status: string): string {
+  if (status === "published") return "المادة منشورة بالفعل";
+  if (status === "scheduled") return "المادة مجدولة بالفعل";
+  if (status === "archived") return "المادة مؤرشفة ولا يمكن نشرها أو جدولتها من البوت";
+  return "المادة ليست مسودة أو جاهزة للنشر";
+}
+
+/**
+ * صف ليس `source=bot` (أو غائب) يُخفى كـ 404. حالة غير قابلة للنشر → 409.
+ * القفل يُفحص بعده في الخدمة.
+ */
+export function botDraftReleaseBlock(
+  row: { source?: string | null; status: string } | null,
+): { httpStatus: 404 | 409; code: "not_found" | "not_a_draft"; message: string; details?: { status: string } } | null {
+  if (!row || row.source !== BOT_DRAFT_SOURCE) {
+    return { httpStatus: 404, code: "not_found", message: "المسودة غير موجودة" };
+  }
+  if (!isBotDraftPublishableStatus(row.status)) {
+    return {
+      httpStatus: 409,
+      code: "not_a_draft",
+      message: botDraftPublishBlockedMessage(row.status),
+      details: { status: row.status },
+    };
+  }
+  return null;
+}
+
+/** نفس أعمدة أول نشر من محرر اللوحة: published + publishedAt + ترتيب الظهور. بلا إسناد. */
+export interface BotDraftPublishUpdate {
+  status: "published";
+  publishType: "instant";
+  publishedAt: Date;
+  scheduledAt: null;
+  updatedAt: Date;
+  displayOrder: number;
+}
+
+export function buildBotDraftPublishUpdate(
+  now: Date,
+  existingPublishedAt: Date | string | null | undefined,
+): BotDraftPublishUpdate {
+  const parsed = existingPublishedAt ? new Date(existingPublishedAt) : now;
+  return {
+    status: "published",
+    publishType: "instant",
+    publishedAt: Number.isNaN(parsed.getTime()) ? now : parsed,
+    scheduledAt: null,
+    updatedAt: now,
+    displayOrder: Math.floor(now.getTime() / 1000),
+  };
+}
+
+/** يدخل صف `status=scheduled` الذي يلتقطه `publishScheduledArticles` بلا فحص صلاحيات لاحق. */
+export interface BotDraftScheduleUpdate {
+  status: "scheduled";
+  publishType: "scheduled";
+  scheduledAt: Date;
+  updatedAt: Date;
+}
+
+export function buildBotDraftScheduleUpdate(publishAt: Date, now: Date): BotDraftScheduleUpdate {
+  return {
+    status: "scheduled",
+    publishType: "scheduled",
+    scheduledAt: publishAt,
+    updatedAt: now,
+  };
 }
 
 export function toBotDraftResponse(row: ArticleRow, categorySlug: string | null = null): BotDraftResponse {
@@ -399,6 +491,9 @@ export function toBotDraftResponse(row: ArticleRow, categorySlug: string | null 
     notes: meta.notes ?? null,
     editUrl: botDraftEditUrl(row.id),
     previewUrl: botDraftPreviewUrl(row.id),
+    publicUrl: botDraftPublicUrl(row.englishSlug, row.slug),
+    publishedAt: isoOrNull(row.publishedAt),
+    scheduledAt: isoOrNull(row.scheduledAt),
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
@@ -696,10 +791,151 @@ export async function markBotDraftReady(
   return toBotDraftResponse(row, await categorySlugFor(row.categoryId));
 }
 
+function throwIfNotReleasable(row: ArticleRow | null): asserts row is ArticleRow {
+  const block = botDraftReleaseBlock(row);
+  if (block) {
+    throw new BotDraftError(block.httpStatus, block.code, block.message, block.details);
+  }
+}
+
+async function throwIfEditLocked(articleId: string): Promise<void> {
+  const lock = await findActiveEditLock(articleId);
+  if (!lock) return;
+  throw new BotDraftError(409, "locked_by_editor", "محرر يعمل على المسودة الآن — أعد المحاولة لاحقاً", {
+    editor: lock.userName,
+    lockExpiresAt: lock.expiresAt.toISOString(),
+  });
+}
+
+/**
+ * بوابة الترخيص نفسها التي يمر بها نشر المحرر. حساب «صحيفة سبق» مؤسسي ومُعفى.
+ * لا نستدعي `denyPublish`: ذلك الفحص لجلسة Passport وصلاحية `articles.publish`
+ * ونافذة الوكالة. تفويض البوت هو توكن Bearer على صف `source=bot` فقط.
+ */
+async function assertBotDraftBylineMayPublish(row: ArticleRow): Promise<void> {
+  const [{ assertMediaLicenseAllowsSubmission }, { resolveContentBylineUserId }] = await Promise.all([
+    import("./mediaLicenseService"),
+    import("@shared/mediaLicense"),
+  ]);
+  const bylineUserId = resolveContentBylineUserId({
+    articleType: row.articleType,
+    authorId: row.authorId,
+    reporterId: row.reporterId,
+  });
+  const gate = await assertMediaLicenseAllowsSubmission(bylineUserId);
+  if (!gate.ok) {
+    throw new BotDraftError(403, "license_required", gate.message, { licenseCode: gate.code });
+  }
+}
+
+function releasableWhere(articleId: string) {
+  return and(
+    eq(articles.id, articleId),
+    eq(articles.source, BOT_DRAFT_SOURCE),
+    inArray(articles.status, [...BOT_DRAFT_PUBLISHABLE_STATUSES]),
+  );
+}
+
+/**
+ * نشر فوري بنفس أعمدة زر «نشر» في اللوحة، ثم إبطال الكاش وIndexNow والتنبيهات.
+ * لا يكتب authorId ولا reporterId.
+ */
+export async function publishBotDraft(
+  bot: BotIdentity,
+  articleId: string,
+  ctx: BotRequestContext = {},
+): Promise<BotDraftResponse> {
+  const existing = await findBotArticle(articleId);
+  throwIfNotReleasable(existing);
+  await throwIfEditLocked(articleId);
+  await assertBotDraftBylineMayPublish(existing);
+
+  const now = new Date();
+  const patch: BotDraftPublishUpdate & { englishSlug?: string } = buildBotDraftPublishUpdate(now, existing.publishedAt);
+  if (!existing.englishSlug) {
+    patch.englishSlug = generateEnglishSlug(existing.title);
+  }
+
+  const [row] = await db.update(articles).set(patch).where(releasableWhere(articleId)).returning();
+  if (!row) {
+    throw new BotDraftError(409, "not_a_draft", "تغيّرت حالة المادة أثناء النشر", { status: "unknown" });
+  }
+
+  invalidateAdminListCaches();
+  const { queueBotDraftPublishEffects } = await import("./botDraftPublishEffects");
+  queueBotDraftPublishEffects(row, bot.name);
+  await recordEvent(
+    row.id,
+    row.authorId,
+    "published",
+    `نشر البوت «${bot.name}» الخبر`,
+    bot,
+    existing.sourceMetadata?.clientReference,
+    ctx,
+    row,
+    existing,
+  );
+  console.log(`[BotDrafts] published ${row.id} by bot=${bot.name}`);
+  return toBotDraftResponse(row, await categorySlugFor(row.categoryId));
+}
+
+/**
+ * جدولة: `status=scheduled` و`scheduledAt` حتى يلتقطها ناشر المواد المجدولة
+ * (`publishScheduledArticles`) كما لو جدولها محرر. لا نشر فوري.
+ */
+export async function scheduleBotDraft(
+  bot: BotIdentity,
+  articleId: string,
+  publishAt: Date,
+  ctx: BotRequestContext = {},
+): Promise<BotDraftResponse> {
+  if (!(publishAt instanceof Date) || Number.isNaN(publishAt.getTime()) || publishAt.getTime() <= Date.now()) {
+    throw new BotDraftError(
+      400,
+      "validation_error",
+      "موعد النشر في الماضي أو اللحظة الحالية. أرسل وقت الرياض بإزاحة +03:00 أو ما يعادله UTC.",
+      { publishAt: publishAt instanceof Date && !Number.isNaN(publishAt.getTime()) ? publishAt.toISOString() : null },
+    );
+  }
+
+  const existing = await findBotArticle(articleId);
+  throwIfNotReleasable(existing);
+  await throwIfEditLocked(articleId);
+  await assertBotDraftBylineMayPublish(existing);
+
+  const now = new Date();
+  const patch: BotDraftScheduleUpdate & { englishSlug?: string } = buildBotDraftScheduleUpdate(publishAt, now);
+  if (!existing.englishSlug) {
+    patch.englishSlug = generateEnglishSlug(existing.title);
+  }
+
+  const [row] = await db.update(articles).set(patch).where(releasableWhere(articleId)).returning();
+  if (!row) {
+    throw new BotDraftError(409, "not_a_draft", "تغيّرت حالة المادة أثناء الجدولة", { status: "unknown" });
+  }
+
+  invalidateAdminListCaches();
+  const { queueBotDraftScheduleEffects } = await import("./botDraftPublishEffects");
+  queueBotDraftScheduleEffects(row, bot.name);
+  await recordEvent(
+    row.id,
+    row.authorId,
+    "updated",
+    `جدول البوت «${bot.name}» النشر`,
+    bot,
+    existing.sourceMetadata?.clientReference,
+    ctx,
+    row,
+    existing,
+  );
+  console.log(`[BotDrafts] scheduled ${row.id} by bot=${bot.name} at=${row.scheduledAt?.toISOString?.() ?? ""}`);
+  return toBotDraftResponse(row, await categorySlugFor(row.categoryId));
+}
+
 async function recordEvent(
   articleId: string,
   actorId: string,
-  action: "created" | "updated",
+  action: "created" | "updated" | "published",
   summary: string,
   bot: BotIdentity,
   clientReference: string | undefined,

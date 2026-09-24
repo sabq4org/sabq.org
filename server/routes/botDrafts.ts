@@ -5,12 +5,14 @@
 // POST  /api/internal/bot-drafts/images رفع صورة غلاف إلى R2 / media.sabq.org (forceR2)
 // GET   /api/internal/bot-drafts/:id    حالة المسودة + معرّفها + رابط التحرير
 // PATCH /api/internal/bot-drafts/:id    تحديث مسودة أنشأها بوت وما زالت draft
-// PATCH /api/internal/bot-drafts/:id/ready  draft → ready_to_publish فقط (لا نشر)
+// PATCH /api/internal/bot-drafts/:id/ready     draft → ready_to_publish (لا نشر)
+// POST  /api/internal/bot-drafts/:id/publish  نشر فوري لجسم فارغ
+// POST  /api/internal/bot-drafts/:id/schedule جدولة بجسم { publishAt }
 //
 // المصادقة: Authorization: Bearer <token> من BOT_DRAFTS_API_TOKENS (لكل بوت اسم
 // وتوكن). المسار تحت /api/internal/* فهو معفى من CSRF ومن محدد الكتابة العام
 // (server/csrf.ts + server/index.ts) — لذلك له محدد خاص هنا بمفتاح اسم البوت.
-// لا نشر/جدولة/تغيير حالة من هذا المسار: الحقول الممنوعة تُرفض بـ 422.
+// جسم الإنشاء والتحديث لا يكتب الحالة: الحقول الممنوعة تُرفض بـ 422.
 // التوثيق: docs/systems/editorial/BOT_DRAFTS_API.md
 // ----------------------------------------------------------------------------
 
@@ -25,9 +27,12 @@ import {
   BOT_DRAFTS_IMAGE_MIME_TYPES,
   BOT_DRAFTS_IMAGE_PURPOSE,
   botDraftCreateSchema,
+  botDraftPublishSchema,
   botDraftReadySchema,
+  botDraftScheduleSchema,
   botDraftUpdateSchema,
   findForbiddenBotDraftFields,
+  parseBotDraftPublishAt,
   type BotDraftErrorBody,
   type BotDraftImageUploadResponse,
 } from "@shared/botDrafts";
@@ -40,6 +45,8 @@ import {
   getBotDraft,
   isBotDraftsConfigured,
   markBotDraftReady,
+  publishBotDraft,
+  scheduleBotDraft,
   updateBotDraft,
   type BotIdentity,
 } from "../services/botDraftsService";
@@ -289,10 +296,62 @@ router.patch(
   },
 );
 
-// أي فعل آخر على المسار (PUT/DELETE/publish/schedule…) مرفوض عمداً وبوضوح.
-// /ready مُسجَّل أعلاه؛ /publish يبقى هنا 403 — البوت لا ينشر.
+router.post(
+  `${BOT_DRAFTS_BASE_PATH}/:id/publish`,
+  requireBotToken,
+  botWriteLimiter,
+  rejectForbiddenFields,
+  async (req: BotRequest, res: Response) => {
+    const parsed = botDraftPublishSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      return sendError(res, 400, {
+        code: "validation_error",
+        message: "النشر الفوري لا يقبل حقولاً — أرسل جسماً فارغاً",
+        details: parsed.error.flatten(),
+      });
+    }
+    try {
+      const draft = await publishBotDraft(req.bot!, req.params.id, requestContext(req));
+      res.json(draft);
+    } catch (error) {
+      handleError(res, error, "publish");
+    }
+  },
+);
+
+router.post(
+  `${BOT_DRAFTS_BASE_PATH}/:id/schedule`,
+  requireBotToken,
+  botWriteLimiter,
+  rejectForbiddenFields,
+  async (req: BotRequest, res: Response) => {
+    const parsed = botDraftScheduleSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      return sendError(res, 400, {
+        code: "validation_error",
+        message: "الجدولة تتطلب publishAt بصيغة ISO-8601 مع منطقة زمنية",
+        details: parsed.error.flatten(),
+      });
+    }
+    const when = parseBotDraftPublishAt(parsed.data.publishAt);
+    if (!when.ok) {
+      return sendError(res, 400, { code: "validation_error", message: when.message, details: when.details });
+    }
+    try {
+      const draft = await scheduleBotDraft(req.bot!, req.params.id, when.publishAt, requestContext(req));
+      res.json(draft);
+    } catch (error) {
+      handleError(res, error, "schedule");
+    }
+  },
+);
+
+// أفعال غير معروفة، أو فعل نشر/جدولة بغير POST. المساران الحقيقيان مُسجَّلان أعلاه.
 router.all(`${BOT_DRAFTS_BASE_PATH}/:id/:action`, requireBotToken, (_req: Request, res: Response) => {
-  sendError(res, 403, { code: "forbidden_action", message: "هذا المسار للمسودات فقط — لا نشر ولا جدولة عبر البوت" });
+  sendError(res, 403, {
+    code: "forbidden_action",
+    message: "هذا الفعل غير متاح. النشر: POST /publish بجسم فارغ، الجدولة: POST /schedule مع publishAt، الجاهزية: PATCH /ready",
+  });
 });
 router.all(`${BOT_DRAFTS_BASE_PATH}/:id`, requireBotToken, (_req: Request, res: Response) => {
   res.setHeader("Allow", "GET, PATCH");

@@ -369,6 +369,7 @@
         "tests/unit/articleReadOverlay.test.ts",
         "server/routes/botDrafts.ts",
         "server/services/botDraftsService.ts",
+        "server/services/botDraftPublishEffects.ts",
         "shared/botDrafts.ts",
         "scripts/bot-drafts-client.ts"
       ],
