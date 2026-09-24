@@ -1,7 +1,7 @@
 {
   "$schemaNote": "Machine-readable catalog of Sabq product systems. Consumed by scripts/systems-inventory.mjs and /api/admin/systems-catalog. aiFeatureKeys must be exclusive (one system owner) to avoid double-counting.",
   "version": 2,
-  "updatedAt": "2026-09-13",
+  "updatedAt": "2026-09-24",
   "systems": [
     {
       "id": "account-center",
@@ -484,7 +484,7 @@
       "owners": [
         "ai"
       ],
-      "lastReviewed": "2026-09-09"
+      "lastReviewed": "2026-09-24"
     },
     {
       "id": "muqtarab",
@@ -560,7 +560,9 @@
       "summary": "موجز المقال الصوتي بأصوات HUMAIN السعودية وإعدادات إدارة واحتياط ElevenLabs ثم Google، إضافة إلى النشرة البريدية الباقية بعد إيقاف منتج النشرات الصوتية.",
       "docPath": "docs/systems/audio-newsletter/SYSTEM.md",
       "relatedDocs": [
-        "docs/AUDIO_NEWSLETTER_SYSTEM.md"
+        "docs/AUDIO_NEWSLETTER_SYSTEM.md",
+        "docs/systems/audio-newsletter/NEWSLETTER_PRODUCT.md",
+        "docs/systems/audio-newsletter/OPERATIONS.md"
       ],
       "pathGlobs": [
         "server/services/aiNewsletterService.ts",
@@ -591,16 +593,27 @@
         "server/routes/mailerliteWebhookHandler.ts",
         "server/services/mailerlite.ts",
         "server/services/mailerliteWebhookSignature.ts",
-        "tests/unit/mailerlite*.test.ts"
+        "tests/unit/mailerlite*.test.ts",
+        "server/services/newsletterSubscriptionService.ts",
+        "server/services/newsletterEditorial*.ts",
+        "server/routes/newsletterEditorial*.ts",
+        "server/services/newsletterDeliveryQueue.ts",
+        "client/src/components/SmartNewsletterForm.tsx",
+        "client/src/components/newsletter/**",
+        "client/src/pages/NewsletterPage.tsx",
+        "tests/unit/newsletter*.test.ts",
+        "e2e/newsletter-*.spec.ts",
+        "e2e/fixtures/newsletter.*"
       ],
       "aiFeatureKeys": [
-        "audio-newsletter"
+        "audio-newsletter",
+        "newsletter-editorial"
       ],
       "dashboardPath": "/dashboard/system-settings",
       "owners": [
         "content"
       ],
-      "lastReviewed": "2026-09-07"
+      "lastReviewed": "2026-09-24"
     },
     {
       "id": "media-library",

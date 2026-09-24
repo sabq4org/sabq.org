@@ -75,6 +75,7 @@ export const DEFAULT_FEATURES: DefaultFeature[] = [
   // Direct Agents API session runner; no gateway fallback. Usage retained per research job.
   { featureKey: "editorial-research", displayName: "البحث التحريري الموثق", category: "editorial", primary: { provider: "openai", modelId: "gpt-6-astra" }, fallbackChain: [], allowFailover: false },
   // ── Editorial generation ──
+  { featureKey: "newsletter-editorial", displayName: "تحرير سبق في ٣ دقائق", category: "editorial", primary: SONNET, fallbackChain: [GPT_5_1], maxTokens: 3000, temperature: 0.2 },
   { featureKey: "content-tools", displayName: "أدوات المحتوى الذكية", category: "editorial", primary: GPT_5_1, fallbackChain: CHAIN_AFTER_GPT },
   // التدقيق اللغوي للمحرر (نص + عنوان): بدائل خفيفة وسريعة لأن المهمة قصيرة، والمهلة
   // تُضبط في proofreadService (25ث) بدل الافتراضي.

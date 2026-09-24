@@ -74,6 +74,7 @@ import sharp from "sharp";
 import { registerInfographicAiRoutes } from "./routes/infographicAi";
 import { broadcastArticlePublished } from "./routes/editorPresence";
 import { registerSmartNewsletterRoutes } from "./routes/smartNewsletterRoutes";
+import newsletterEditorialRoutes from "./routes/newsletterEditorialRoutes";
 import { registerTagRoutes } from "./routes/tags";
 import { registerGulfEventRoutes } from "./routes/gulfEvents";
 import { registerTestEmailTemplatesRoutes } from "./routes/testEmailTemplates";
@@ -125,6 +126,7 @@ import {
 import { getUnifiedAdminComments } from "./services/commentModerationService";
 import { hybridRecommendationEngine } from "./recommendation-engine";
 import { sendVerificationEmail, verifyEmailToken, resendVerificationEmail, sendPasswordResetEmail, sendEmailNotification } from "./services/email";
+import { createPendingNewsletterSubscription, newsletterSubscribeInputSchema } from "./services/newsletterSubscriptionService";
 import { provisionAngleFromSubmission, resendAngleWriterCredentials } from "./services/muqtarabProvisioning";
 import { resendOpinionAuthorCredentials } from "./services/opinionAuthorProvisioning";
 import { sendSubmissionReceivedEmail, sendTopicPublishedEmail, sendTopicRejectedEmail, buildTopicUrl, MUQTARAB_EDIT_URL } from "./services/muqtarabEmails";
@@ -30537,6 +30539,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   // INFOGRAPHIC AI - مولد اقتراحات الإنفوجرافيك
   registerInfographicAiRoutes(app);
   registerSmartNewsletterRoutes(app);
+  app.use(newsletterEditorialRoutes);
   registerTestEmailTemplatesRoutes(app, requireAuth, requireRole);
   // ============================================================
   // SMART JOURNALIST AGENT - وكيل الصحفي الذكي
@@ -31596,62 +31599,34 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   // =================================================================
 
   // POST /api/newsletter/subscribe - Subscribe to newsletter (public)
-  app.post("/api/newsletter/subscribe", async (req: any, res) => {
+  app.post("/api/newsletter/subscribe", emailDispatchLimiter, async (req: any, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('Pragma', 'no-cache');
     try {
-      const { email, language = "ar", preferences, source = "footer" } = req.body;
-      
-      if (!email || !email.includes('@')) {
-        return res.status(400).json({ message: "يرجى إدخال بريد إلكتروني صحيح" });
-      }
-      
-      // Check if already subscribed
-      const existing = await storage.getNewsletterSubscription(email);
-      if (existing) {
-        if (existing.status === 'active') {
-          return res.status(400).json({ message: "هذا البريد مشترك بالفعل في النشرة البريدية" });
-        } else {
-          // Reactivate subscription
-          await storage.updateNewsletterSubscription(existing.id, {
-            status: 'active',
-            language,
-            preferences,
-            unsubscribedAt: null,
-            unsubscribeReason: null,
-          });
-          return res.json({ message: "تم تفعيل اشتراكك بنجاح", subscription: existing });
-        }
-      }
-      
-      // Get client info
+      const parsed = newsletterSubscribeInputSchema.parse({ ...req.body, source: req.body?.source || "footer" });
+      const { email, frequency, language, consent, source, interests } = parsed;
       const ipAddress = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
-      const userAgent = req.headers['user-agent'];
-      
-      // Create new subscription
-      const subscription = await storage.createNewsletterSubscription({
+      await createPendingNewsletterSubscription({
         email,
-        status: 'active',
+        frequency,
         language,
         userId: req.user?.id || null,
-        preferences,
         ipAddress: typeof ipAddress === 'string' ? ipAddress : ipAddress?.[0] || null,
-        userAgent: userAgent || null,
+        userAgent: req.headers['user-agent'] || null,
         source,
-        verifiedAt: new Date(), // Auto-verify for now
+        consent,
+        interests: Array.isArray(interests) ? interests : undefined,
       });
-      
-      res.status(201).json({
-        message: "تم الاشتراك بنجاح في النشرة البريدية",
-        subscription: {
-          id: subscription.id,
-          email: subscription.email,
-          language: subscription.language,
-        },
+      res.status(202).json({
+        success: true,
+        pendingConfirmation: true,
+        message: "إذا كان العنوان مؤهلًا، ستصلك رسالة لتأكيد الاشتراك.",
       });
     } catch (error: any) {
-      console.error("Error subscribing to newsletter:", error);
-      if (error.message?.includes('unique')) {
-        return res.status(400).json({ message: "هذا البريد مشترك بالفعل" });
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "بيانات الاشتراك غير صحيحة" });
       }
+      console.error("Error subscribing to newsletter");
       res.status(500).json({ message: "فشل في الاشتراك في النشرة البريدية" });
     }
   });

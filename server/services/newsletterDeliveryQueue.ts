@@ -8,6 +8,7 @@ import {
   newsletterDeliveryJobs,
   newsletterDeliveryRecipients,
   newsletterSubscriptions,
+  audioNewsletters,
   type Article,
   type NewsletterDeliveryJob,
   type NewsletterSubscription,
@@ -212,6 +213,27 @@ async function loadJobArticles(newsletterId: string): Promise<Article[]> {
   return rows.map((row) => row.article);
 }
 
+export function newsletterDeliveryGuard(record: Pick<typeof audioNewsletters.$inferSelect, "status" | "customContent">): { allowed: boolean; reason?: string } {
+  // Mail delivery is fail-closed at this cut: only a legacy newsletter that
+  // was explicitly published can pass. Editorial envelopes are manual-export
+  // artifacts and are never sent by this worker, even after approval.
+  if (record.status !== "published") {
+    return { allowed: false, reason: `newsletter_status_${record.status}_is_not_published` };
+  }
+  if (record.customContent) {
+    try {
+      const parsed = JSON.parse(record.customContent) as { kind?: string };
+      if (parsed.kind === "newsletter-editorial") {
+        return { allowed: false, reason: "editorial_newsletters_require_manual_mailerlite_import" };
+      }
+    } catch {
+      // Legacy customContent is not an editorial envelope; status=published is
+      // still the final guard for the old path.
+    }
+  }
+  return { allowed: true };
+}
+
 async function refreshJobCounts(jobId: string): Promise<{
   pending: number;
   processing: number;
@@ -373,6 +395,16 @@ async function processRecipient(
 }
 
 export async function processNewsletterDeliveryJob(job: NewsletterDeliveryJob): Promise<void> {
+  const [newsletter] = await db
+    .select({ status: audioNewsletters.status, customContent: audioNewsletters.customContent })
+    .from(audioNewsletters)
+    .where(eq(audioNewsletters.id, job.newsletterId))
+    .limit(1);
+  if (!newsletter) throw new Error("NEWSLETTER_DELIVERY_BLOCKED: newsletter_record_missing");
+  const deliveryGuard = newsletterDeliveryGuard(newsletter);
+  if (!deliveryGuard.allowed) {
+    throw new Error(`NEWSLETTER_DELIVERY_BLOCKED: ${deliveryGuard.reason}`);
+  }
   resetNewsletterAiCircuit();
   const allArticles = await loadJobArticles(job.newsletterId);
   if (allArticles.length === 0) {
@@ -479,7 +511,8 @@ async function processNextJob(): Promise<void> {
     console.error(`[NewsletterDeliveryWorker] Job failed: ${message}`);
     if (job) {
       // claimNextJob already increments attempts before returning the job.
-      const terminal = job.attempts >= MAX_RECIPIENT_ATTEMPTS;
+      const blocked = message.startsWith("NEWSLETTER_DELIVERY_BLOCKED:");
+      const terminal = blocked || job.attempts >= MAX_RECIPIENT_ATTEMPTS;
       await db
         .update(newsletterDeliveryJobs)
         .set({

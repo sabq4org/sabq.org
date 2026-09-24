@@ -12,6 +12,7 @@ function fakeDependencies(initialStatus = "active") {
   let status = initialStatus;
   let updatedAt: Date | undefined;
   const updates: Array<{ values: Record<string, unknown>; predicate: string }> = [];
+  const suppressions: Array<Record<string, unknown>> = [];
   const db = {
     update: () => ({
       set(values: Record<string, unknown>) {
@@ -27,6 +28,12 @@ function fakeDependencies(initialStatus = "active") {
         };
       },
     }),
+    insert: () => ({
+      values(values: Record<string, unknown>) {
+        suppressions.push(values);
+        return { onConflictDoUpdate: async () => undefined };
+      },
+    }),
   } as any;
   return {
     db,
@@ -34,6 +41,7 @@ function fakeDependencies(initialStatus = "active") {
     get status() { return status; },
     get updatedAt() { return updatedAt; },
     updates,
+    suppressions,
   };
 }
 
@@ -82,6 +90,7 @@ describe("MailerLite webhook handler", () => {
       expect(deps.status).toBe("unsubscribed");
       expect(deps.updatedAt).toBe(firstUpdatedAt);
       expect(deps.updates[0].predicate).toContain('"newsletter_subscriptions"."status" not in');
+      expect(deps.suppressions[0]).toMatchObject({ reason: "unsubscribe", source: "mailerlite_webhook" });
     });
   });
 
@@ -106,6 +115,7 @@ describe("MailerLite webhook handler", () => {
       expect(response.status).toBe(200);
       expect(deps.status).toBe("unsubscribed");
       expect(deps.updatedAt).toBeUndefined();
+      expect(deps.suppressions).toHaveLength(1);
     });
   });
 

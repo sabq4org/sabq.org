@@ -6,20 +6,16 @@ import { eq, desc, gte, and, isNotNull, sql } from 'drizzle-orm';
 import {
   articles,
   audioNewsletters,
-  audioNewsletterArticles,
   users,
   notificationsInbox,
   type Article,
-  type InsertAudioNewsletter,
-  type NotificationInbox,
 } from '@shared/schema';
-import { nanoid } from 'nanoid';
 import { sendEmailNotification } from './email';
 import { subHours, format } from 'date-fns';
-import { enqueueNewsletterDelivery } from './newsletterDeliveryQueue';
+import { createNewsletterEditorialDraft } from './newsletterEditorialService';
 
 interface ScheduleConfig {
-  type: 'morning_brief' | 'evening_digest' | 'weekly_roundup';
+  type: 'morning_brief' | 'weekly_roundup';
   title: string;
   description: string;
   articleCount: number;
@@ -43,22 +39,13 @@ const SCHEDULES: ScheduleConfig[] = [
     enabled: true
   },
   {
-    type: 'evening_digest',
-    title: 'نشرة سبق المسائية - {date}',
-    description: 'ملخص أهم أحداث اليوم',
-    articleCount: 5,
-    timeWindow: 12, // Last 12 hours
-    cronSchedule: '0 18 * * *', // 6:00 PM every day
-    enabled: true
-  },
-  {
     type: 'weekly_roundup',
     title: 'النشرة الأسبوعية - أسبوع {week}',
     description: 'تحليل معمق لأبرز أحداث الأسبوع',
-    articleCount: 10,
+    articleCount: 5,
     timeWindow: 168, // Last 7 days
     cronSchedule: '0 10 * * 0', // 10:00 AM on Sundays
-    enabled: false // Disabled - weekly newsletter removed
+    enabled: true
   }
 ];
 
@@ -199,7 +186,7 @@ class NewsletterScheduler {
           and(
             gte(audioNewsletters.createdAt, todayStart),
             sql`${audioNewsletters.createdAt} <= ${todayEnd}`,
-            sql`${audioNewsletters.metadata}->>'scheduledType' = ${config.type}`
+            eq(audioNewsletters.template, config.type)
           )
         )
         .limit(1);
@@ -220,6 +207,8 @@ class NewsletterScheduler {
       
       if (topArticles.length === 0) {
         log.info(`[NewsletterScheduler] No articles found for ${config.type}, skipping`);
+        await releaseLock();
+        globalThis._newsletterExecutingJobs.delete(lockKey);
         return;
       }
 
@@ -234,57 +223,18 @@ class NewsletterScheduler {
       
       // Get system user for automated newsletters
       const systemUser = await this.getSystemUser();
-      
-      // Create the newsletter record + its article selection.
-      //
-      // This used to go through audioNewsletterService, which also produced a
-      // TTS audio file. The audio-newsletter feature was removed (2026-07-25);
-      // the scheduled EMAIL newsletter kept its storage — the `audio_newsletters`
-      // / `audio_newsletter_articles` tables are now simply where a scheduled
-      // newsletter and its article selection live, and the delivery queue reads
-      // the selection from there (newsletterDeliveryQueue.loadJobArticles).
-      const slug = `${title
-        .toLowerCase()
-        .replace(/[\s\u0600-\u06FF]+/g, '-')
-        .replace(/[^\w\-]+/g, '')
-        .replace(/\-\-+/g, '-')
-        .replace(/^-+|-+$/g, '') || 'newsletter'}-${now.getTime()}`;
-
-      const [newsletter] = await db.insert(audioNewsletters).values({
+      // This scheduler now creates an AI-assisted editorial draft only. It does
+      // not create a delivery job; a human must review/approve and export HTML
+      // for a manual MailerLite import.
+      const newsletter = await createNewsletterEditorialDraft({
+        type: config.type === 'weekly_roundup' ? 'weekly' : 'daily',
+        userId: systemUser.id,
+        articleIds: topArticles.slice(0, config.articleCount).map((article) => article.id),
         title,
         description: config.description,
-        slug,
-        generatedBy: systemUser.id,
-        status: 'draft',
-        publishedAt: null,
-        // `template` records which schedule produced this; `metadata` has a
-        // narrow declared shape (retry/recurrence only) so scheduling details
-        // go in the real columns rather than being forced into the jsonb.
-        template: config.type,
-      }).returning();
-
-      if (topArticles.length > 0) {
-        await db.insert(audioNewsletterArticles).values(
-          topArticles.map((a, index) => ({
-            newsletterId: newsletter.id,
-            articleId: a.id,
-            order: index
-          }))
-        );
-      }
-
-      log.info(`[NewsletterScheduler] Created newsletter: ${newsletter.id}`);
-      
-      // التسليم لا يعمل داخل عملية الـ API. نسجل job دائمًا يلتقطه
-      // newsletter-worker على دفعات قابلة للاستئناف ومن دون تكرار المستلمين المنجزين.
-      const deliveryJob = await enqueueNewsletterDelivery({
-        newsletterId: newsletter.id,
-        newsletterType: config.type,
-        title,
-        description: config.description,
-        articlesPerSubscriber: config.articleCount,
       });
-      log.info(`[NewsletterScheduler] Queued delivery job ${deliveryJob.id}`);
+
+      log.info(`[NewsletterScheduler] Created editorial draft only: ${newsletter.id}`);
 
       // Send notifications to admins
       await this.notifyAdmins(newsletter.id, config.type, 'success');
@@ -294,11 +244,12 @@ class NewsletterScheduler {
       
       await releaseLock();
       globalThis._newsletterExecutingJobs.delete(lockKey);
-      log.info(`[NewsletterScheduler] Successfully prepared and queued ${config.type}`);
+      log.info(`[NewsletterScheduler] Successfully prepared draft-only ${config.type}`);
       
     } catch (error) {
       console.error(`[NewsletterScheduler] Error executing ${config.type}:`, error);
       await releaseLock().catch(() => {}); // Release lock on error
+      globalThis._newsletterExecutingJobs.delete(lockKey);
       
       // Handle retry logic
       const retryCount = this.retryAttempts.get(config.type) || 0;
@@ -421,7 +372,7 @@ class NewsletterScheduler {
         : `فشل إنشاء النشرة ${this.getScheduleTypeName(scheduleType)}`;
       
       const notificationBody = status === 'success'
-        ? `تم إنشاء وجدولة النشرة الصوتية تلقائياً`
+        ? `تم إنشاء مسودة تحريرية للنشرة. يلزم اعتماد بشري قبل تصدير HTML؛ لم يُرسل أي بريد.`
         : `حدث خطأ أثناء إنشاء النشرة: ${error?.message || 'خطأ غير معروف'}`;
       
       // Create notifications for all admins
@@ -444,7 +395,10 @@ class NewsletterScheduler {
       await Promise.all(notificationPromises);
       
       // Send email notifications to admins (if any transactional provider is configured)
-      if (process.env.MAILERSEND_API_KEY || process.env.SENDGRID_API_KEY) {
+      // Draft-only mode must not emit email side effects. Operators can still
+      // inspect the dashboard notification; an explicit future opt-in is
+      // required before sending any admin notification email.
+      if (process.env.NEWSLETTER_DRAFT_NOTIFY_EMAIL === "true" && (process.env.MAILERSEND_API_KEY || process.env.SENDGRID_API_KEY)) {
         const frontendUrl = process.env.FRONTEND_URL || process.env.APP_URL || 'https://sabq.org';
         const emailPromises = adminUsers.filter(admin => admin.email).map(admin =>
           sendEmailNotification({
@@ -457,7 +411,7 @@ class NewsletterScheduler {
                 <p>${notificationBody}</p>
                 ${status === 'success' && newsletterId ? `
                   <p>
-                    <a href="${frontendUrl}/admin/audio-newsletters/${newsletterId}" 
+                    <a href="${frontendUrl}/dashboard/newsletter-analytics"
                        style="background: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">
                       عرض النشرة
                     </a>
