@@ -1,9 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { PgDialect } from "drizzle-orm/pg-core";
 
 const mocks = vi.hoisted(() => ({
   findFirst: vi.fn(),
   insertValues: vi.fn(),
   updateValues: vi.fn(),
+  updateWhere: vi.fn(),
+  updateReturning: vi.fn(),
   transaction: vi.fn(),
   sendConfirmation: vi.fn(),
   subscribeToMailerLite: vi.fn(),
@@ -21,9 +24,15 @@ vi.mock("../../server/db", () => ({
     query: { newsletterSubscriptions: { findFirst: mocks.findFirst } },
     insert: () => ({ values: mocks.insertValues }),
     update: () => ({
-      set: () => ({
-        where: () => ({ returning: vi.fn().mockResolvedValue([]) }),
-      }),
+      set: (values: unknown) => {
+        mocks.updateValues(values);
+        return {
+          where: (condition: unknown) => {
+            mocks.updateWhere(condition);
+            return { returning: mocks.updateReturning };
+          },
+        };
+      },
     }),
     select: () => ({ from: () => ({ where: () => ({ limit: mocks.selectSuppression }) }) }),
     transaction: mocks.transaction,
@@ -53,6 +62,7 @@ describe("newsletter subscription confirmation", () => {
     vi.stubEnv("MAILERLITE_DAILY_GROUP_ID", "daily-group");
     vi.stubEnv("MAILERLITE_WEEKLY_GROUP_ID", "weekly-group");
     mocks.sendConfirmation.mockResolvedValue({ success: true });
+    mocks.updateReturning.mockResolvedValue([]);
     mocks.subscribeToMailerLite.mockResolvedValue({ success: true, data: { id: "ml-1" } });
     mocks.isMailerLiteConfigured.mockReturnValue(false);
     mocks.reconcileMailerLiteCadenceGroups.mockResolvedValue({ success: true });
@@ -105,6 +115,129 @@ describe("newsletter subscription confirmation", () => {
     expect(second.confirmationSent).toBe(false);
   });
 
+  it("moves a legacy active row without the DOI marker to pending and sends a fresh confirmation", async () => {
+    const legacy = {
+      id: "legacy-1",
+      email: "reader@example.invalid",
+      status: "active",
+      verifiedAt: new Date("2025-12-01T00:00:00.000Z"),
+      updatedAt: new Date(Date.now() - 11 * 60 * 1000),
+      metadata: null,
+      preferences: { frequency: "weekly", categories: ["local"] },
+    };
+    const pending = { ...legacy, status: "pending_confirmation" };
+    mocks.findFirst.mockResolvedValue(legacy);
+    mocks.updateReturning.mockResolvedValue([pending]);
+
+    const { createPendingNewsletterSubscription } = await import("../../server/services/newsletterSubscriptionService");
+    const result = await createPendingNewsletterSubscription({
+      email: legacy.email,
+      frequency: "daily",
+      language: "ar",
+      consent: true,
+    });
+
+    expect(result.subscription).toEqual(pending);
+    expect(result.confirmationSent).toBe(true);
+    expect(mocks.insertValues).not.toHaveBeenCalled();
+    expect(mocks.sendConfirmation).toHaveBeenCalledOnce();
+    expect(mocks.updateValues).toHaveBeenCalledWith(expect.objectContaining({
+      status: "pending_confirmation",
+      verifiedAt: null,
+      metadata: expect.objectContaining({ consent: true }),
+    }));
+    const updateQuery = new PgDialect().sqlToQuery(mocks.updateWhere.mock.calls[0][0]);
+    const updateSql = updateQuery.sql;
+    expect(updateSql).toContain('"status" =');
+    expect(updateSql).toContain("newsletterConsentVersion");
+    expect(updateSql).toContain("10 minutes");
+    expect(updateQuery.params).toContain("active");
+  });
+
+  it("leaves a currently confirmed active row untouched", async () => {
+    const confirmed = {
+      id: "sub-1",
+      email: "reader@example.invalid",
+      status: "active",
+      verifiedAt: new Date(),
+      updatedAt: new Date(Date.now() - 11 * 60 * 1000),
+      metadata: {
+        newsletterConsentVersion: 1,
+        confirmedAt: new Date().toISOString(),
+      },
+      preferences: { frequency: "weekly" },
+    };
+    mocks.findFirst.mockResolvedValue(confirmed);
+
+    const { createPendingNewsletterSubscription } = await import("../../server/services/newsletterSubscriptionService");
+    const result = await createPendingNewsletterSubscription({
+      email: confirmed.email,
+      frequency: "daily",
+      language: "ar",
+      consent: true,
+    });
+
+    expect(result.subscription).toBe(confirmed);
+    expect(result.confirmationSent).toBe(false);
+    expect(mocks.updateValues).not.toHaveBeenCalled();
+    expect(mocks.sendConfirmation).not.toHaveBeenCalled();
+  });
+
+  it("keeps the ten minute resend throttle for a legacy active row", async () => {
+    const legacy = {
+      id: "legacy-1",
+      email: "reader@example.invalid",
+      status: "active",
+      verifiedAt: new Date("2025-12-01T00:00:00.000Z"),
+      updatedAt: new Date(),
+      metadata: {},
+      preferences: { frequency: "weekly" },
+    };
+    mocks.findFirst.mockResolvedValue(legacy);
+    // Simulates the SQL cooldown predicate rejecting the update.
+    mocks.updateReturning.mockResolvedValue([]);
+
+    const { createPendingNewsletterSubscription } = await import("../../server/services/newsletterSubscriptionService");
+    const result = await createPendingNewsletterSubscription({
+      email: legacy.email,
+      frequency: "weekly",
+      language: "ar",
+      consent: true,
+    });
+
+    expect(result.subscription).toBe(legacy);
+    expect(result.confirmationSent).toBe(false);
+    expect(mocks.sendConfirmation).not.toHaveBeenCalled();
+    expect(mocks.updateValues).toHaveBeenCalledOnce();
+  });
+
+  it("does not send when confirmation or unsubscribe wins the atomic state transition", async () => {
+    const legacy = {
+      id: "legacy-1",
+      email: "reader@example.invalid",
+      status: "active",
+      verifiedAt: new Date("2025-12-01T00:00:00.000Z"),
+      updatedAt: new Date(Date.now() - 11 * 60 * 1000),
+      metadata: {},
+      preferences: { frequency: "weekly" },
+    };
+    mocks.findFirst.mockResolvedValue(legacy);
+    // A zero-row RETURNING result means a concurrent writer changed status or
+    // added the confirmed marker before this guarded UPDATE acquired its lock.
+    mocks.updateReturning.mockResolvedValue([]);
+
+    const { createPendingNewsletterSubscription } = await import("../../server/services/newsletterSubscriptionService");
+    const result = await createPendingNewsletterSubscription({
+      email: legacy.email,
+      frequency: "weekly",
+      language: "ar",
+      consent: true,
+    });
+
+    expect(result.confirmationSent).toBe(false);
+    expect(mocks.sendConfirmation).not.toHaveBeenCalled();
+  });
+
   it("atomically activates a pending row and syncs its frequency group", async () => {
     const token = "a".repeat(64);
     const candidate = {
@@ -150,8 +283,8 @@ describe("newsletter subscription confirmation", () => {
     }));
   });
 
-  it("does not reactivate terminal unsubscribed rows", async () => {
-    mocks.findFirst.mockResolvedValue({ id: "sub-1", status: "unsubscribed" });
+  it.each(["unsubscribed", "bounced", "junk"])("does not reactivate terminal %s rows", async status => {
+    mocks.findFirst.mockResolvedValue({ id: "sub-1", status });
     const { createPendingNewsletterSubscription } = await import("../../server/services/newsletterSubscriptionService");
     const result = await createPendingNewsletterSubscription({
       email: "reader@example.invalid",
