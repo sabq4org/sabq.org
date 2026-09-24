@@ -1,6 +1,6 @@
 # النشرات الصوتية (`audio-newsletter`)
 
-> آخر مراجعة: 2026-09-05 | المالك: content
+> آخر مراجعة: 2026-09-24 | المالك: content
 
 ## الغرض
 موجز المقالات والأخبار الصوتي وإعدادات أصواته، والنشرة البريدية المجدولة الباقية بعد إيقاف منتج النشرات الصوتية وتوليد ملفاته في 2026-07-25.
@@ -12,8 +12,8 @@
 ## نقاط الدخول
 | الطبقة | المسار |
 |--------|--------|
-| Backend | `newsletterScheduler`, `newsletterDeliveryQueue`, `newsletterWorker`, `ttsProviderRegistry`, `audioNewsletterCompatibility` |
-| Web | `/dashboard/system-settings` → `SummaryAudioSettings`؛ لا توجد واجهة منتج النشرات الصوتية المتوقف |
+| Backend | `newsletterScheduler`, `newsletterEditorialRoutes`, `newsletterEditorialService`, `newsletterSubscriptionService`, `newsletterDeliveryQueue`, `newsletterWorker`, `ttsProviderRegistry`, `audioNewsletterCompatibility` |
+| Web | `/newsletter` و`/dashboard/newsletter-analytics` للنشرات البريدية؛ `/dashboard/system-settings` → `SummaryAudioSettings` للصوت؛ لا إعادة لمنتج النشرات الصوتية المتوقف |
 | Backend / summary | `/api/articles/:slug/summary-audio` → `summaryAudioService`؛ `/api/system/summary-audio-settings` و`/preview` → `summaryAudioSettings` |
 | Docs | `docs/AUDIO_NEWSLETTER_SYSTEM.md` |
 
@@ -46,3 +46,13 @@
   `subscriber.bounced`. التحديث الشرطي يحافظ على الحالات النهائية ولا يغير
   `updatedAt` عند إعادة الحدث؛ التنفيذ المباشر ينتظر كتابة Postgres بمهلة
   statement قدرها 1800ms، والفشل يعيد non-2xx كي يعيد MailerLite المحاولة.
+
+## سبق في ٣ دقائق — 2026-09-24
+
+- [عقد المنتج](NEWSLETTER_PRODUCT.md) و[إجراءات التشغيل](OPERATIONS.md). التغيير لا يثبت نشرًا أو إطلاق إرسال.
+- مسارا الاشتراك العام القديم والجديد يطلبان موافقة صريحة ووتيرة `daily | weekly`، ويعيدان استجابة انتظار موحدة لا تكشف وجود البريد. لا تفعيل فوري ولا مزامنة MailerLite قبل التأكيد.
+- التأكيد POST صريح برمز عشوائي مخزن كبصمة ومحدود الصلاحية. الحالات المحظورة لا يعيد فورم عام تفعيلها. التفضيلات تتطلب إثبات ملكية، ومجموعتا MailerLite تعكسان الوتيرة.
+- مسارات التحرير تحتاج جلسة و`articles.publish` عبر RBAC الفعلي، لا اسم دور مفترض.
+- المسودات تحفظ في `audio_newsletters.customContent` بغلاف JSON مرقّم؛ لا Schema جديد ولا توليد صوت. المراجعة والاعتماد يسبقان تصدير HTML؛ التعديل يبطل الاعتماد. لا إنشاء حملة بعيدة أو إرسال من زر التصدير.
+- واجهة الاشتراك العربية موجودة في SPA وSSR؛ الروابط في التنقل والتذييل، والفورم في الرئيسية وبعد المقال. صفحة التأكيد/التفضيلات `/newsletter` صامتة للتحليلات والإعلانات الخارجية؛ قياس مواضع الدعوة في المقال والرئيسية بلا بريد أو رموز ملكية.
+- عقود `/api/v1` للموبايل لم تتغير، وإدراج النموذج داخل iOS وAndroid مؤجل إلى مرحلة منتج مستقلة.

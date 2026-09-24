@@ -1,6 +1,6 @@
 import type { Request, Response } from "express";
-import { and, eq, notInArray } from "drizzle-orm";
-import { newsletterSubscriptions } from "@shared/schema";
+import { and, eq, notInArray, sql } from "drizzle-orm";
+import { emailSuppressions, newsletterSubscriptions } from "@shared/schema";
 import { parseMailerLiteWebhooks } from "../services/mailerlite";
 import {
   readMailerLiteSignature,
@@ -18,8 +18,13 @@ type UpdateBuilder = {
   set(values: Record<string, unknown>): UpdateQuery;
 };
 
+type InsertQuery = {
+  onConflictDoUpdate(values: any): Promise<unknown>;
+};
+
 export type MailerLiteWebhookDb = {
   update(table: typeof newsletterSubscriptions): UpdateBuilder;
+  insert(table: typeof emailSuppressions): { values(values: Record<string, unknown>): InsertQuery };
 };
 
 export type MailerLiteWebhookDependencies = {
@@ -71,9 +76,23 @@ export function createMailerLiteWebhookHandler({
           .update(newsletterSubscriptions)
           .set(values)
           .where(and(
-            eq(newsletterSubscriptions.email, email),
+            sql`lower(${newsletterSubscriptions.email}) = ${email.trim().toLowerCase()}`,
             notInArray(newsletterSubscriptions.status, [...TERMINAL_SUBSCRIPTION_STATUSES]),
           ));
+        await tx.insert(emailSuppressions).values({
+          email: email.trim().toLowerCase(),
+          reason: type === "subscriber.unsubscribed" ? "unsubscribe" : "hard_bounce",
+          source: "mailerlite_webhook",
+          detail: type,
+        }).onConflictDoUpdate({
+          target: emailSuppressions.email,
+          set: {
+            reason: type === "subscriber.unsubscribed" ? "unsubscribe" : "hard_bounce",
+            source: "mailerlite_webhook",
+            detail: type,
+            createdAt: changedAt,
+          },
+        });
       });
 
       return res.json({ success: true, received: type });

@@ -654,14 +654,54 @@ ${greeting} في النشرة الذكية!
       html: htmlContent,
       text: textContent,
     });
-    console.log(`✅ Newsletter welcome email sent to ${to}`);
+    console.log('✅ Newsletter welcome email sent');
     
     return { success: true };
   } catch (error) {
-    console.error(`❌ Failed to send newsletter welcome email to ${options.to}:`, error);
+    console.error('❌ Failed to send newsletter welcome email');
     return { 
       success: false, 
       error: error instanceof Error ? error.message : 'Failed to send email' 
+    };
+  }
+}
+
+/**
+ * Send the explicit confirmation email required before a newsletter address
+ * can become active. The raw token only appears in this link; the database
+ * stores its SHA-256 digest.
+ */
+export async function sendNewsletterConfirmationEmail(options: {
+  to: string;
+  confirmationUrl: string;
+  language?: 'ar';
+}): Promise<{ success: boolean; error?: string }> {
+  try {
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html dir="rtl" lang="ar">
+      <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+      <body style="font-family:Arial,sans-serif;direction:rtl;line-height:1.8">
+        <h2>تأكيد اشتراكك في نشرات سبق</h2>
+        <p>اضغط على الزر أدناه لتأكيد رغبتك في استلام النشرة اليومية أو الأسبوعية.</p>
+        <p><a href="${options.confirmationUrl}" style="display:inline-block;background:#0066cc;color:#fff;padding:12px 22px;border-radius:8px;text-decoration:none">تأكيد الاشتراك</a></p>
+        <p style="color:#666;font-size:13px">صلاحية الرابط 24 ساعة. إذا لم تطلب الاشتراك فتجاهل الرسالة.</p>
+      </body>
+      </html>
+    `.trim();
+    const textContent = `تأكيد اشتراكك في نشرات سبق\n\nلتأكيد الاشتراك افتح الرابط:\n${options.confirmationUrl}\n\nصلاحية الرابط 24 ساعة.`;
+    await sendTransactionalEmail({
+      to: options.to,
+      subject: 'تأكيد اشتراكك في نشرات سبق',
+      html: htmlContent,
+      text: textContent,
+    });
+    return { success: true };
+  } catch (error) {
+    console.error('❌ Newsletter confirmation email delivery failed');
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to send email',
     };
   }
 }
@@ -935,7 +975,7 @@ ${FRONTEND_URL}/newsletter
       html: htmlContent,
       text: textContent,
     });
-    console.log(`✅ Unsubscribe confirmation email sent to ${to}`);
+    console.log('✅ Unsubscribe confirmation email sent');
     
     return { success: true };
   } catch (error) {
