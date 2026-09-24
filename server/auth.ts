@@ -549,6 +549,9 @@ export async function setupAuth(app: Express) {
       const serializedUser = {
         id: user.id,
         email: user.email,
+        // Ownership checks need the database verification state on both the
+        // initial request and cached sessions; signing in alone is not proof.
+        emailVerified: user.emailVerified === true,
         role: user.role,
         firstName: user.firstName ?? null,
         lastName: user.lastName ?? null,

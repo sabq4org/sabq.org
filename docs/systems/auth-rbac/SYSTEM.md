@@ -1,6 +1,6 @@
 # المصادقة والصلاحيات (`auth-rbac`)
 
-> آخر مراجعة: 2026-09-19 (حماية قراءات API العامة مع حفظ عزل المصادقة) | المالك: platform
+> آخر مراجعة: 2026-09-24 (تمرير حالة توثيق البريد في جلسة الويب) | المالك: platform
 
 ## الغرض
 مصادقة الويب (Passport) وموبايل (Bearer member session) + طبقتا RBAC (DB + constants).
@@ -19,6 +19,7 @@
 | Docs | `docs/architecture/AUTHENTICATION_FLOW.md` |
 
 ## عقود مهمة / Gotchas
+- إسقاط بيانات مستخدم Passport في `deserializeUser` يحتفظ بـ`emailVerified` كقيمة boolean مشتقة من حالة قاعدة البيانات فقط؛ تتطلبه بوابات ملكية اشتراك النشرة. تسجيل الدخول لا يثبت توثيق البريد، والقيم المفقودة أو null تبقى false. كاش المستخدم والإبطال يحتفظان بالعقد نفسه، دون تغيير جلسات Bearer.
 - Mobile auth ≠ Web auth — لا تخلط `/api/v1` مع Passport. جلسات الموبايل `app_member_sessions` لمدة 30 يومًا (Bearer). في VARA: لا تُرفق Bearer على `/api/sports/*` العامة — بعض مساراتها (preview/story) محمية بـPassport وترجع 401 فكانت تُفسَّر خطأً كخروج من العضوية.
 - عميل Android VARA يخزن Bearer مشفراً بـAndroid Keystore (AES/GCM) مع كاش ذاكرة للتوكن المفكوك، ويدعم البريد/الجوال وOTP (6 أرقام + عداد إعادة إرسال 60ث) وبوابة 2FA برمز احتياطي وزر رجوع، ولا يمسح الجلسة عند فشل شبكة عابر؛ يؤكد 401/403 بطلب ملف ثانٍ قبل الإزالة **أثناء التشغيل كله** (hook `onUnauthorized` في `VaraApi`) لا عند الإقلاع فقط، مستثنيًا مسارات `/auth/` و`/members/account` و`/members/change-password`. البريد الاصطناعي `@phone.sabq.org` لا يُعرض (`Member.displayEmail`) ولا يُعاد إرساله في `PUT /members/profile`.
 - **دخول الجوال (OTP) — تدفق 2026-07-31:** لا يُولَّد بريد اصطناعي `p<digits>@phone.sabq.org` بعد الآن، و`users.email` صار nullable (الفرادة عبر `users_email_lower_unique`؛ قاعدة البريد الاصطناعي التاريخي في `shared/authEmail.ts` مشتركة خادمًا وواجهات).
