@@ -358,3 +358,14 @@ test("polling removes invisible scheduled selections and closes their bulk actio
   await expect(page.getByTestId("button-bulk-archive")).toHaveCount(0);
   expect(writes).toEqual([]);
 });
+
+test("ready-to-publish filter lists approved bot drafts for manual publish or revert", async ({ page }) => {
+  const { requests } = await setup(page);
+  await expect(page.getByTestId("card-stat-ready")).toContainText("جاهز للنشر");
+  await page.getByTestId("card-stat-ready").click();
+  await expect(page.getByTestId("badge-ready-page-1-a")).toBeVisible();
+  await expect(page.getByTestId("button-action-publish-page-1-a")).toBeVisible();
+  await expect(page.getByTestId("button-action-revert-draft-page-1-a")).toBeVisible();
+  await expect(page.getByText("جاهزة للنشر · بانتظار محرر الوردية")).toBeVisible();
+  expect(requests.some((url) => url.searchParams.get("status") === "ready_to_publish" && url.searchParams.get("page") === "1")).toBe(true);
+});

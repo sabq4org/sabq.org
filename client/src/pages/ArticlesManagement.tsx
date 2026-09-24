@@ -35,7 +35,8 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Edit, Trash2, Send, Star, Bell, Plus, Archive, Trash, GripVertical, Sparkles, Newspaper, Clock, FilePenLine, Brain, MessageCircle, Mail, ChevronLeft, ChevronRight, Camera, BarChart3, Images, Building2, Languages, Loader2, Smartphone, Share2, BookOpen, HeartPulse, Zap, UserRound, ImageOff, AlertTriangle, EyeOff, Bot, Video } from "lucide-react";
+import { Edit, Trash2, Send, Star, Bell, Plus, Archive, Trash, GripVertical, Sparkles, Newspaper, Clock, FilePenLine, Brain, MessageCircle, Mail, ChevronLeft, ChevronRight, Camera, BarChart3, Images, Building2, Languages, Loader2, Smartphone, Share2, BookOpen, HeartPulse, Zap, UserRound, ImageOff, AlertTriangle, EyeOff, Bot, Video, Undo2 } from "lucide-react";
+import { BOT_DRAFT_READY_STATUS } from "@shared/botDrafts";
 import { buildCloudflareUrl, normalizeImageSrc } from "@/lib/cdnImage";
 import { OpinionWeekBoard } from "@/components/admin/OpinionWeekBoard";
 import { SocialPublishDialog } from "@/components/social/SocialPublishDialog";
@@ -311,6 +312,15 @@ function wireMoment(article: Article, desktop: boolean) {
       testId: `scheduled-label-${id === "desktop" ? "desktop-" : ""}${article.id}`,
     };
   }
+  if (article.status === BOT_DRAFT_READY_STATUS) {
+    const saved = parseArticleDate(article.updatedAt) ?? parseArticleDate(article.createdAt);
+    if (!saved) return null;
+    return {
+      ...riyadhWireLabel(saved),
+      prefix: "جاهزة",
+      testId: `ready-date-${id === "desktop" ? "desktop-" : ""}${article.id}`,
+    };
+  }
   if (article.status === "draft") {
     const weeklyAt = article.articleType === "opinion"
       ? article.scheduledAt || article.writerWeeklySlot?.nextSlot || null
@@ -505,6 +515,8 @@ function ArticleWireRow({
   const whoLabel = who.prefix;
   const momentTone = article.status === "scheduled"
     ? "border-sky-200 bg-sky-50 text-sky-800 dark:border-sky-800 dark:bg-sky-950/45 dark:text-sky-200"
+    : article.status === BOT_DRAFT_READY_STATUS
+      ? "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/45 dark:text-emerald-200"
     : article.status === "draft" && article.articleType === "opinion"
       ? "border-violet-200 bg-violet-50 text-violet-800 dark:border-violet-800 dark:bg-violet-950/45 dark:text-violet-200"
       : article.status === "draft"
@@ -536,6 +548,11 @@ function ArticleWireRow({
           {type.icon ? <type.icon className="h-3 w-3" aria-hidden="true" /> : null}
           {type.label}
         </span>
+        {article.status === BOT_DRAFT_READY_STATUS ? (
+          <span className="mt-0.5 shrink-0 rounded-md bg-emerald-50 px-2 py-0.5 text-[11px] font-bold leading-5 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-200" data-testid={`badge-ready-mobile-${article.id}`}>
+            جاهز للنشر
+          </span>
+        ) : null}
         <h3
           title={article.title}
           onClick={onTitleClick}
@@ -664,6 +681,19 @@ function deskMoment(article: Article, now: Date): DeskMoment | null {
       ? { ...base, kicker: "فات موعد الكاتب", sub: `منذ ${shortSpan(diff)}`, tone: "red", subTone: "red", overdue: true }
       : { ...base, kicker: "موعد الكاتب", sub: `بعد ${shortSpan(diff)}`, tone: "violet" };
   }
+  if (article.status === BOT_DRAFT_READY_STATUS) {
+    const saved = parseArticleDate(article.updatedAt) ?? parseArticleDate(article.createdAt);
+    if (!saved) return null;
+    return {
+      kicker: "جاهزة",
+      clock: deskClock(saved, now),
+      sub: "بانتظار النشر",
+      tone: "neutral",
+      iso: saved.toISOString(),
+      full: riyadhWireLabel(saved, now).full,
+      testId: `ready-date-desktop-${id}`,
+    };
+  }
   if (article.status === "draft") {
     const saved = parseArticleDate(article.updatedAt) ?? parseArticleDate(article.createdAt);
     if (!saved) return null;
@@ -778,6 +808,11 @@ function ArticleDeskMain({
             {type.label}
           </span>
         ) : null}
+        {article.status === BOT_DRAFT_READY_STATUS ? (
+          <span className="shrink-0 rounded-[5px] bg-emerald-50 px-1.5 text-[11px] font-bold leading-5 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-200" data-testid={`badge-ready-${article.id}`}>
+            جاهز للنشر
+          </span>
+        ) : null}
         <h3
           title={article.title}
           onClick={onTitleClick}
@@ -855,6 +890,13 @@ function deskDayLabel(key: string, todayKey: string) {
 /** يقسم الصفحة الحالية إلى مجموعات: باليوم للمنشور والمجدول، وبالنوع للمسودات. */
 function buildDeskList(articles: Article[], status: string, now: Date): DeskListItem[] {
   const todayKey = riyadhParts(now).dayKey;
+  if (status === BOT_DRAFT_READY_STATUS) {
+    if (!articles.length) return [];
+    return [
+      { kind: "group", key: "ready", label: "جاهزة للنشر · بانتظار محرر الوردية" },
+      ...articles.map((article) => ({ kind: "article" as const, article })),
+    ];
+  }
   if (status === "draft") {
     const opinion = articles.filter((a) => a.articleType === "opinion");
     const news = articles.filter((a) => a.articleType !== "opinion");
@@ -971,7 +1013,7 @@ export default function ArticlesManagement() {
   // Commit filters and page together: never fetch a new filter on the old page.
   const [listParams, setListParams] = useState({
     search: "",
-    status: "published" as "published" | "scheduled" | "draft" | "archived",
+    status: "published" as "published" | "scheduled" | "draft" | "archived" | typeof BOT_DRAFT_READY_STATUS,
     type: "all",
     category: "all",
     page: 1,
@@ -1120,6 +1162,7 @@ export default function ArticlesManagement() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/articles"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/articles/metrics"] });
       toast({
         title: "تم النشر",
         description: "تم نشر المقال بنجاح",
@@ -1129,6 +1172,31 @@ export default function ArticlesManagement() {
       toast({
         title: "خطأ",
         description: error.message || "فشل نشر المقال",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const revertReadyMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return await apiRequest(`/api/admin/articles/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "draft" }),
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/articles"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/articles/metrics"] });
+      toast({
+        title: "أُعيدت مسودة",
+        description: "عادت المادة إلى المسودات ويمكن للبوت تعديلها من جديد",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "تعذر الإرجاع",
+        description: error.message || "لم تُرجع المادة إلى المسودة",
         variant: "destructive",
       });
     },
@@ -1579,6 +1647,7 @@ export default function ArticlesManagement() {
   const getStatusBadge = (status: string) => {
     const badges = {
       draft: <Badge variant="secondary" data-testid="badge-draft">مسودة</Badge>,
+      [BOT_DRAFT_READY_STATUS]: <Badge variant="outline" className="border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-200" data-testid="badge-ready">جاهز للنشر</Badge>,
       scheduled: <Badge variant="outline" className="bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 border-green-300 dark:border-green-700 gap-1" data-testid="badge-scheduled"><Clock className="h-3 w-3" /> مجدول</Badge>,
       published: <Badge variant="default" data-testid="badge-published">منشور</Badge>,
       archived: <Badge variant="secondary" className="bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-200 border-yellow-300 dark:border-yellow-700 gap-1" data-testid="badge-archived"><Archive className="h-3 w-3" /> مؤرشف</Badge>,
@@ -1613,8 +1682,8 @@ export default function ArticlesManagement() {
 
         {/* Status KPIs — compact selectable chips */}
         {metricsLoading ? (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            {[1, 2, 3, 4].map((i) => (
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
+            {[1, 2, 3, 4, 5].map((i) => (
               <Card key={i} className="rounded-2xl border-border/80 bg-card shadow-xs">
                 <CardContent className="p-3.5">
                   <Skeleton className="mb-2 h-3.5 w-14" />
@@ -1624,7 +1693,7 @@ export default function ArticlesManagement() {
             ))}
           </div>
         ) : metrics ? (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4" role="tablist" aria-label="تصفية حسب الحالة">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5" role="tablist" aria-label="تصفية حسب الحالة">
             {([
               {
                 key: "published" as const,
@@ -1661,6 +1730,18 @@ export default function ArticlesManagement() {
                 iconActive: "bg-amber-500 text-white dark:bg-amber-500 dark:text-white shadow-xs",
                 valueClass: "text-amber-600 dark:text-amber-400",
                 testId: "card-stat-draft",
+              },
+              {
+                key: BOT_DRAFT_READY_STATUS,
+                label: "جاهز للنشر",
+                value: metrics.readyToPublish ?? 0,
+                Icon: Send,
+                idle: "border-border/80 bg-card/90 hover:border-emerald-500/40 hover:bg-emerald-500/[0.04] text-foreground",
+                active: "border-emerald-500/50 bg-emerald-500/10 text-emerald-950 dark:text-emerald-100 ring-2 ring-emerald-500/20 shadow-xs",
+                iconIdle: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+                iconActive: "bg-emerald-500 text-white dark:bg-emerald-500 dark:text-white shadow-xs",
+                valueClass: "text-emerald-700 dark:text-emerald-300",
+                testId: "card-stat-ready",
               },
               {
                 key: "archived" as const,
@@ -2121,6 +2202,33 @@ export default function ArticlesManagement() {
                         >
                           <Edit className="ml-1.5 h-3.5 w-3.5" />
                           تعديل
+                        </Button>
+                      )}
+
+                      {canPublishArticle && article.status === BOT_DRAFT_READY_STATUS && (
+                        <Button
+                          size="sm"
+                          onClick={() => publishMutation.mutate(article.id)}
+                          disabled={publishMutation.isPending}
+                          className="h-9 font-medium text-xs sm:text-sm"
+                          data-testid={`button-publish-mobile-${article.id}`}
+                        >
+                          <Send className="ml-1.5 h-3.5 w-3.5" />
+                          نشر
+                        </Button>
+                      )}
+
+                      {canEditArticle(article) && article.status === BOT_DRAFT_READY_STATUS && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => revertReadyMutation.mutate(article.id)}
+                          disabled={revertReadyMutation.isPending}
+                          className="h-9 font-medium text-xs sm:text-sm"
+                          data-testid={`button-revert-draft-mobile-${article.id}`}
+                        >
+                          <Undo2 className="ml-1.5 h-3.5 w-3.5" />
+                          إرجاع لمسودة
                         </Button>
                       )}
                       

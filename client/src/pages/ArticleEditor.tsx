@@ -118,6 +118,7 @@ import { useArticleEditLock } from "@/hooks/useArticleEditLock";
 import { useEditorPresence } from "@/hooks/useEditorPresence";
 import { PERMISSION_CODES, SUPERUSER_ROLE_NAMES } from "@shared/rbac-constants";
 import { apiRequest, apiUrl, queryClient, getCsrfToken } from "@/lib/queryClient";
+import { BOT_DRAFT_READY_STATUS } from "@shared/botDrafts";
 import {
   markArticleSubmittedInAnalyticsCache,
   invalidateContributorAnalytics,
@@ -287,7 +288,7 @@ export default function ArticleEditor() {
   const [metaTitle, setMetaTitle] = useState("");
   const [metaDescription, setMetaDescription] = useState("");
   
-  const [status, setStatus] = useState<"draft" | "published" | "scheduled" | "archived">("draft");
+  const [status, setStatus] = useState<"draft" | "published" | "scheduled" | "archived" | typeof BOT_DRAFT_READY_STATUS>("draft");
   const [reviewStatus, setReviewStatus] = useState<string | null>(null);
   const [reviewNotes, setReviewNotes] = useState<string | null>(null);
   const [reviewedAt, setReviewedAt] = useState<string | null>(null);
@@ -1533,7 +1534,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
         // (حادثة 2026-08-08). الخادم يتجاهل الهبوط الضمني من جهته أيضًا.
         status: publishNow
           ? (publishType === "scheduled" ? "scheduled" : "published")
-          : (!isNewArticle && (status === "scheduled" || status === "published"))
+          : (!isNewArticle && (status === "scheduled" || status === "published" || status === BOT_DRAFT_READY_STATUS))
             ? status
             : "draft",
         ...(submitForReview ? { submitForReview: true } : {}),
@@ -2049,6 +2050,30 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
         });
       }
       return { ok: false };
+    }
+  };
+
+  const revertReadyToDraft = async () => {
+    if (!id || status !== BOT_DRAFT_READY_STATUS) return;
+    try {
+      await apiRequest(`/api/admin/articles/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "draft" }),
+      });
+      setStatus("draft");
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/articles"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/articles/metrics"] });
+      toast({
+        title: "أُعيدت مسودة",
+        description: "عادت المادة إلى المسودات ويمكن للبوت تعديلها من جديد",
+      });
+    } catch (error) {
+      toast({
+        title: "تعذر الإرجاع",
+        description: error instanceof Error ? error.message : "لم تُرجع المادة إلى المسودة",
+        variant: "destructive",
+      });
     }
   };
 
@@ -2774,10 +2799,23 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
               >
                 {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                 <span className="hidden xs:inline">
-                  {status === "scheduled" || status === "published" ? "حفظ التعديلات" : "حفظ كمسودة"}
+                  {status === "scheduled" || status === "published" || status === BOT_DRAFT_READY_STATUS ? "حفظ التعديلات" : "حفظ كمسودة"}
                 </span>
                 <span className="xs:hidden">حفظ</span>
               </Button>
+              {status === BOT_DRAFT_READY_STATUS && !isNewArticle && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void revertReadyToDraft()}
+                  disabled={isSaving || isLockedByOther}
+                  className="gap-1.5 sm:gap-2 w-full sm:w-auto justify-center"
+                  data-testid="button-revert-ready-draft"
+                >
+                  <RotateCcw className="h-4 w-4" />
+                  <span className="hidden xs:inline">إرجاع لمسودة</span>
+                </Button>
+              )}
               {reviewStatus === "needs_changes" && isContributorRole && !canPublish && (
                 <Button
                   size="sm"
@@ -5340,7 +5378,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
               data-testid="button-save-draft-mobile-bar"
             >
               {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-              {status === "scheduled" || status === "published" ? "حفظ" : "مسودة"}
+              {status === "scheduled" || status === "published" || status === BOT_DRAFT_READY_STATUS ? "حفظ" : "مسودة"}
             </Button>
             <Button
               size="sm"

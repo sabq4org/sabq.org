@@ -86,10 +86,10 @@ suite("editorial lists — actual PostgreSQL in an isolated local schema", () =>
       ('draft','draft','news','2099-09-09',1001),('archived','archived','news',NULL,2000)`);
     const scheduled = () => state.db.select({id:articles.id}).from(articles).where(eq(articles.status,"scheduled")).orderBy(adminScheduledOrder);
     expect((await scheduled()).map((r: {id:string})=>r.id)).toEqual(["due-opinion","future-news","missing-date"]);
-    expect(await getAdminArticleMetrics()).toEqual({published:0,scheduled:3,draft:1,archived:1});
+    expect(await getAdminArticleMetrics()).toEqual({published:0,scheduled:3,draft:1,archived:1,readyToPublish:0});
     await pool.query("UPDATE articles SET status='published',published_at='2026-09-09 06:16' WHERE id='due-opinion'");
     expect(await getAdminPublishedPageIds(undefined,30,0)).toEqual(["due-opinion"]);
     expect((await scheduled()).map((r: {id:string})=>r.id)).toEqual(["future-news","missing-date"]);
-    expect(await getAdminArticleMetrics()).toEqual({published:1,scheduled:2,draft:1,archived:1});
+    expect(await getAdminArticleMetrics()).toEqual({published:1,scheduled:2,draft:1,archived:1,readyToPublish:0});
   });
 });

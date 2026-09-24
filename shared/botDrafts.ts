@@ -33,8 +33,18 @@ export const BOT_DRAFTS_IMAGE_MIME_TYPES = [
   "image/gif",
 ] as const;
 
-/** القيمة الوحيدة المسموح بها لحالة المادة عبر هذا العقد. */
+/** الحالة الوحيدة التي يُنشئها البوت ويُسمح له بتعديل محتواها. */
 export const BOT_DRAFT_STATUS = "draft" as const;
+
+/**
+ * حالة تحريرية بعد اعتماد المحرر في المحادثة: المادة في طابور الوردية.
+ * البوت يعلّمها عبر `PATCH /:id/ready` فقط، ولا ينشرها ولا يعدّل محتواها بعدها.
+ * العمود `articles.status` نصّي (ليس enum في Postgres) فلا يحتاج ترحيل مخطط.
+ */
+export const BOT_DRAFT_READY_STATUS = "ready_to_publish" as const;
+
+/** جسم `PATCH /:id/ready` فارغ عمداً — المسار يغيّر الحالة ولا يقبل محتوى. */
+export const botDraftReadySchema = z.object({}).strict();
 
 /** قيمة `articles.source` لكل مادة أنشأها بوت عبر هذا العقد. */
 export const BOT_DRAFT_SOURCE = "bot" as const;
@@ -158,9 +168,12 @@ export type BotDraftUpdateInput = z.infer<typeof botDraftUpdateSchema>;
 /** شكل الاستجابة الموحد لكل مسارات المسودات. */
 export interface BotDraftResponse {
   id: string;
-  /** حالة المادة الحالية في اللوحة. البوت لا يستطيع تغييرها. */
+  /**
+   * حالة المادة في اللوحة. للبوت: `draft` ثم `ready_to_publish` بعد الاعتماد،
+   * أو `published` / `scheduled` / `archived` بعد إجراء بشري.
+   */
   status: string;
-  /** `true` فقط عندما تكون المادة مسودة ويمكن للبوت تحديثها. */
+  /** `true` فقط عندما تكون المادة `draft`. بعد `ready_to_publish` تصبح `false`. */
   updatable: boolean;
   title: string;
   subtitle: string | null;

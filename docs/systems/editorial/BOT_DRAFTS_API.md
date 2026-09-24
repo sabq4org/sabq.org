@@ -1,13 +1,14 @@
 # Bot Drafts API — مسودات فقط لبوتات «نشر سبق» ومهندّس (Grok Bot)
 
-> آخر مراجعة: 2026-09-22 | المالك: editorial | الحالة: جاهز للدمج بعد موافقة علي الحازمي على المصادقة والإسناد (انظر «قرارات تحتاج موافقة»)
+> آخر مراجعة: 2026-09-24 | المالك: editorial | الحالة: مسودات + تعليم «جاهز للنشر» فقط. البوت لا ينشر.
 
 ## الملخص في سطرين (للبوت)
 
 1. **إنشاء مسودة:** `POST https://api.sabq.org/api/internal/bot-drafts` مع ترويسة `Authorization: Bearer <SABQ_BOT_DRAFTS_TOKEN>` وجسم JSON فيه `title` و`content` (وتصنيف اختياري `categorySlug`). الرد يحمل `id` و`editUrl`.
-2. **تحديث مسودة:** `PATCH https://api.sabq.org/api/internal/bot-drafts/<id>` بنفس الترويسة والحقول التي تغيّرت فقط. ممنوع إرسال `status` أو أي حقل نشر/جدولة — يُرفض 422، والنشر يبقى من لوحة التحكم بيد المحررين.
-3. **رفع صورة (غلاف أو متن):** `POST https://api.sabq.org/api/internal/bot-drafts/images` بنفس توكن Bot Drafts (`multipart/form-data`، الحقل `file`). `deliveryUrl` على `https://media.sabq.org/…` يذهب إلى `imageUrl` إن كان غلافاً، أو إلى مصفوفة `imageUrls` إن كان داخل المتن / أسفله.
-4. **صور المتن ليست الغلاف.** `imageUrl` يظهر أعلى الخبر فقط. صور الجسم تُمرَّر في `imageUrls` فيلحقها الخادم أسفل المتن كوسوم `<img>` يراها المحرر والمعاينة صوراً لا كنص. لا تضع رابط https خام داخل فقرات النص.
+2. **تحديث مسودة:** `PATCH https://api.sabq.org/api/internal/bot-drafts/<id>` بنفس الترويسة والحقول التي تغيّرت فقط، ما دامت `draft`. ممنوع إرسال `status` أو أي حقل نشر/جدولة — يُرفض 422.
+3. **جاهز للنشر (بعد اعتماد علي في المحادثة):** `PATCH https://api.sabq.org/api/internal/bot-drafts/<id>/ready` بجسم فارغ `{}`. الحالة تصبح `ready_to_publish` و`updatable: false`. هذا ليس نشراً. محرر الوردية ينشر يدوياً من لوحة «جاهز للنشر»، أو يُرجع المادة إلى `draft`.
+4. **رفع صورة (غلاف أو متن):** `POST https://api.sabq.org/api/internal/bot-drafts/images` بنفس توكن Bot Drafts (`multipart/form-data`، الحقل `file`). `deliveryUrl` على `https://media.sabq.org/…` يذهب إلى `imageUrl` إن كان غلافاً، أو إلى مصفوفة `imageUrls` إن كان داخل المتن / أسفله.
+5. **صور المتن ليست الغلاف.** `imageUrl` يظهر أعلى الخبر فقط. صور الجسم تُمرَّر في `imageUrls` فيلحقها الخادم أسفل المتن كوسوم `<img>` يراها المحرر والمعاينة صوراً لا كنص. لا تضع رابط https خام داخل فقرات النص.
 
 ---
 
@@ -31,7 +32,8 @@
 | `POST` | `/api/internal/bot-drafts/images` | رفع صورة غلاف واحدة إلى R2 (`sabq-news-images` / `media.sabq.org`) عبر `newsImageStorageService` |
 | `GET` | `/api/internal/bot-drafts/:id` | قراءة حالة المسودة ومعرّفها ورابط التحرير |
 | `PATCH` | `/api/internal/bot-drafts/:id` | تحديث مسودة أنشأها بوت وما زالت `draft` |
-| أي فعل آخر | `/:id/publish` `/:id/schedule` `DELETE` `PUT` … | مرفوض عمداً: `403 forbidden_action` أو `405` |
+| `PATCH` | `/api/internal/bot-drafts/:id/ready` | انتقال واحد: `draft` → `ready_to_publish`. جسم فارغ. لا نشر |
+| أي فعل آخر | `/:id/publish` `/:id/schedule` `DELETE` `PUT` … | مرفوض عمداً: `403 forbidden_action` أو `405`. لا يوجد مسار نشر للبوت |
 
 الكود: [`server/routes/botDrafts.ts`](../../../server/routes/botDrafts.ts) (HTTP) و[`server/services/botDraftsService.ts`](../../../server/services/botDraftsService.ts) (البيانات) و[`shared/botDrafts.ts`](../../../shared/botDrafts.ts) (العقد/Zod). ملف OpenAPI للاستيراد في أدوات البوتات: [`bot-drafts.openapi.yaml`](./bot-drafts.openapi.yaml).
 
@@ -72,13 +74,17 @@ User-Agent: Mozilla/5.0 (compatible; SabqBotDrafts/1.0)
 
 القائمة المرجعية: `BOT_DRAFT_FORBIDDEN_FIELDS` في `shared/botDrafts.ts`.
 
-### كيف تُضمن الحالة `draft` دائماً
+### الحالة: `draft` ثم `ready_to_publish` — والبوت لا ينشر
+
+`articles.status` عمود نصّي (ليس enum في Postgres). القيمة الجديدة `ready_to_publish` لا تحتاج ترحيل مخطط. `reviewStatus` يبقى لمسار مراجعة الرأي (`pending_review` …) ولا يُستخدم هنا؛ رد البوت يعرض الجاهزية في الحقل `status`.
 
 - الإدراج يكتب `status='draft'`, `reviewStatus=null`, `publishType='instant'`, `scheduledAt=null`, `publishedAt=null`, `articleType='news'`, `newsType='regular'`, `source='bot'` — قيم ثابتة في الخدمة لا تأتي من الطلب.
-- الإسناد من الخادم فقط: `authorId` و`reporterId` = حساب «صحيفة سبق» (`BOT_DRAFTS_AUTHOR_USER_ID` أو الافتراضي). البوت لا يرسلهما (`422 forbidden_fields`). عند `PATCH` يُملأ `reporterId` فقط إن كان فارغاً — اختيار المحرر لا يُستبدل. حساب الإسناد غير موجود/غير نشط → `503 author_not_configured` (نفس مسار الإنشاء).
-- التحديث يضرب فقط الصفوف التي `status='draft' AND source='bot'` (شرط SQL)؛ لو نشر محرر المادة بين القراءة والكتابة يُرجع `409 not_a_draft`.
-- لا يوجد أي مسار بهذا التوكن يصل إلى `publishGate` أو المجدول. المسارات الإدارية (`/api/admin/articles`) تتطلب جلسة Passport + CSRF ولا تقبل Bearer.
-- الحالة الحقيقية تُعاد في كل رد (`status` + `updatable`) حتى يعرف البوت إن نُشرت المادة لاحقاً.
+- الإسناد من الخادم فقط: `authorId` و`reporterId` = حساب «صحيفة سبق» (`BOT_DRAFTS_AUTHOR_USER_ID` أو الافتراضي). البوت لا يرسلهما (`422 forbidden_fields`). عند `PATCH` المحتوى يُملأ `reporterId` فقط إن كان فارغاً — اختيار المحرر لا يُستبدل. حساب الإسناد غير موجود/غير نشط → `503 author_not_configured`.
+- تحديث المحتوى يضرب فقط `status='draft' AND source='bot'`. بعد `ready_to_publish` (أو النشر/الجدولة/الأرشفة) يُرجع `409 not_a_draft` و`updatable: false` — البوت لا يكتب فوق مادة اعتمدها المحرر.
+- `PATCH /:id/ready` هو الانتقال الوحيد الذي يغيّره البوت: `draft` → `ready_to_publish`، بشرط ألا يكون هناك قفل تحرير نشط (`409 locked_by_editor`). جسم فيه حقول يُرفض `400`، وحقل ممنوع مثل `status` يُرفض `422`. استدعاؤه على مادة جاهزة أو منشورة → `409 not_a_draft`.
+- `/:id/publish` وأي فعل نشر/جدولة يبقى `403 forbidden_action`. لا مسار بهذا التوكن يصل إلى `publishGate` أو المجدول. النشر من لوحة التحكم بجلسة Passport فقط (`POST /api/admin/articles/:id/publish` أو زر «نشر» في المحرر).
+- من `ready_to_publish` المحرر ينشر، أو يُرجع إلى `draft` (زر «إرجاع لمسودة» في قائمة «جاهز للنشر» وفي المحرر). الإرجاع يعيد `updatable: true` فيستطيع البوت التعديل من جديد. حفظ التعديلات في المحرر يُبقي `ready_to_publish` ولا يُسقطها إلى مسودة بصمت.
+- القائمة: `GET /api/admin/articles?status=ready_to_publish` وشريحة «جاهز للنشر» في إدارة الأخبار. العداد `readyToPublish` في `/api/admin/articles/metrics` (مفتاح الكاش `articles:admin:metrics:v4`) ولا يُحسب ضمن المسودات. المادة لا تظهر للقرّاء لأن الواجهة العامة تشترط `published`.
 
 ### مثال إنشاء
 
@@ -229,9 +235,41 @@ HTTP/1.1 201 Created
 
 وسم `<img` غير المغلق (بلا `>`) كان يبتلع الفقرات التالية داخل محلّل المعاينة وTipTap فيبدو المتن فارغاً. الخادم يسقط هذه البداية المكسورة ويبقي النص. استخدم `imageUrls` أو `<img …>` مغلقاً.
 
+### تعليم «جاهز للنشر» — `PATCH /api/internal/bot-drafts/:id/ready`
+
+بعد أن يعتمد علي المسودة في المحادثة، البوت يستدعي هذا المسار بجسم فارغ. لا يرسل `status` ولا متنًا.
+
+```http
+PATCH /api/internal/bot-drafts/0d8c8a1e-6f2b-4b1e-9d2a-2f6f4f9d1a11/ready HTTP/1.1
+Host: api.sabq.org
+Authorization: Bearer ****
+Content-Type: application/json
+User-Agent: Mozilla/5.0 (compatible; SabqBotDrafts/1.0)
+
+{}
+```
+
+```json
+{
+  "id": "0d8c8a1e-6f2b-4b1e-9d2a-2f6f4f9d1a11",
+  "status": "ready_to_publish",
+  "updatable": false,
+  "editUrl": "https://sabq.org/dashboard/articles/0d8c8a1e-6f2b-4b1e-9d2a-2f6f4f9d1a11/edit",
+  "previewUrl": "https://sabq.org/dashboard/articles/0d8c8a1e-6f2b-4b1e-9d2a-2f6f4f9d1a11/preview"
+}
+```
+
+| الحالة الحالية | النتيجة |
+|----------------|---------|
+| `draft` وبلا قفل | `200` و`status: "ready_to_publish"` و`updatable: false` |
+| `draft` وعليها قفل محرر | `409 locked_by_editor` |
+| `ready_to_publish` أو `published` / `scheduled` / `archived` | `409 not_a_draft` مع `details.status` |
+| ليست من إنشاء بوت | `404 not_found` |
+| `PATCH /:id/publish` | `403 forbidden_action` |
+
 ### مثال قراءة
 
-`GET /api/internal/bot-drafts/<id>` → `200` بنفس الشكل. إن نشر محرر المادة: `status: "published"`, `updatable: false`.
+`GET /api/internal/bot-drafts/<id>` → `200` بنفس الشكل. بعد التعليم: `status: "ready_to_publish"`, `updatable: false`. إن نشر محرر المادة: `status: "published"`, `updatable: false`.
 
 ### أكواد الأخطاء
 
@@ -239,10 +277,10 @@ HTTP/1.1 201 Created
 |------|--------|-----|
 | 400 | `validation_error` | حقل ناقص/غير صالح/غير معروف. `details` = `zod.flatten()` |
 | 401 | `unauthorized` | توكن مفقود أو غير مطابق (مع `WWW-Authenticate: Bearer`) |
-| 403 | `forbidden_action` | محاولة `/:id/publish` أو `/:id/schedule` أو أي فعل فرعي |
+| 403 | `forbidden_action` | محاولة `/:id/publish` أو `/:id/schedule` أو أي فعل فرعي غير `PATCH /:id/ready` |
 | 404 | `not_found` | المعرّف غير موجود **أو** المادة ليست من إنشاء بوت (`source != 'bot'`) — لا نكشف مسودات المحررين |
 | 405 | `forbidden_action` | `PUT`/`DELETE` على `/:id` |
-| 409 | `not_a_draft` | المادة لم تعد `draft` (نُشرت/جُدولت/أُرشفت). `details.status` = الحالة الحالية |
+| 409 | `not_a_draft` | تحديث محتوى أو `PATCH /ready` والمادة ليست `draft` (جاهزة بالفعل، أو نُشرت/جُدولت/أُرشفت). `details.status` = الحالة الحالية |
 | 409 | `locked_by_editor` | محرر يفتح المسودة الآن (قفل تحرير نشط، TTL 10 دقائق). `details.editor`, `details.lockExpiresAt` |
 | 422 | `forbidden_fields` | وجود حقل ممنوع. `details.fields` = القائمة |
 | 422 | `category_not_found` | تصنيف غير موجود أو غير قابل للإسناد (`inactive`؛ الإنتاج يستخدم `visible`) |
@@ -264,7 +302,7 @@ HTTP/1.1 201 Created
 **التصميم المختار: توكن Bearer ثابت لكل بوت، من متغير بيئة على Railway، بلا جلسة متصفح.** وهو أصغر مسار آمن متاح لأن:
 
 - المشروع يستخدم النمط نفسه فعلاً لعامل محاضر الاجتماعات (`/api/internal/meetings-agent/*` + سر مشترك)؛ البادئة `/api/internal/` **معفاة أصلاً من CSRF** (`server/csrf.ts`) ومن محدد الكتابة العام (`server/index.ts`)، فلم نلمس أياً منهما.
-- لا جدول جديد ولا `db:push` ولا صلاحيات RBAC جديدة: التوكن لا يملك أي صلاحية سوى ما تنفذه الخدمة (إدراج/تحديث مسودة)، ولا يُترجم لمستخدم Passport ولا `articles.publish`.
+- لا جدول جديد ولا `db:push` ولا صلاحيات RBAC جديدة: `ready_to_publish` قيمة نصية في `articles.status` القائم. التوكن لا يُترجم لمستخدم Passport ولا يملك `articles.publish`.
 - التوكن **لا يمكنه** الوصول للمسارات الإدارية (`/api/admin/*` تتطلب جلسة) ولا لمسارات الموبايل (`/api/v1/*` تتطلب جلسة عضو).
 
 ### المتغيرات
@@ -297,7 +335,7 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
 
 ## 3) الربط للبوتات
 
-الخيار المنفّذ: **(ب) عميل HTTP موثّق + curl + TypeScript + ملف OpenAPI**. لا يوجد Composio/MCP جاهز على CMS سبق، وملف OpenAPI يسمح باستيراد المسارات الثلاثة كأداة مخصصة (Custom Tool / OpenAPI action) في أي منصة بوتات تدعم ذلك.
+الخيار المنفّذ: **(ب) عميل HTTP موثّق + curl + TypeScript + ملف OpenAPI**. لا يوجد Composio/MCP جاهز على CMS سبق، وملف OpenAPI يسمح باستيراد المسارات (بما فيها `PATCH /ready`) كأداة مخصصة (Custom Tool / OpenAPI action) في أي منصة بوتات تدعم ذلك.
 
 ### curl
 
@@ -321,6 +359,18 @@ curl -sS -X PATCH "$B/api/internal/bot-drafts/<id>" \
   -H "Authorization: Bearer $SABQ_BOT_DRAFTS_TOKEN" -H "Content-Type: application/json" \
   -H "User-Agent: $UA" \
   -d '{"title":"عنوان محدث","excerpt":"مقدمة جديدة"}'
+
+# تعليم جاهز للنشر — جسم فارغ، لا ينشر
+curl -sS -X PATCH "$B/api/internal/bot-drafts/<id>/ready" \
+  -H "Authorization: Bearer $SABQ_BOT_DRAFTS_TOKEN" -H "Content-Type: application/json" \
+  -H "User-Agent: $UA" \
+  -d '{}'
+
+# يجب أن يفشل (403) — لا نشر عبر البوت
+curl -sS -o /dev/null -w "%{http_code}\n" -X PATCH "$B/api/internal/bot-drafts/<id>/publish" \
+  -H "Authorization: Bearer $SABQ_BOT_DRAFTS_TOKEN" -H "Content-Type: application/json" \
+  -H "User-Agent: $UA" \
+  -d '{}'
 
 # يجب أن يفشل (422 forbidden_fields)
 curl -sS -X PATCH "$B/api/internal/bot-drafts/<id>" \
@@ -351,6 +401,7 @@ export SABQ_API_BASE=https://api.sabq.org   # افتراضي
 
 npx tsx scripts/bot-drafts-client.ts create --title="عنوان" --content-file=./body.txt --category-slug=local --image-urls="https://media.sabq.org/news/a.webp" --ref=grok-001
 npx tsx scripts/bot-drafts-client.ts get <id>
+npx tsx scripts/bot-drafts-client.ts ready <id>
 npx tsx scripts/bot-drafts-client.ts update <id> --title="عنوان جديد" --excerpt="مقدمة"
 npx tsx scripts/bot-drafts-client.ts create --json=./draft.json   # جسم كامل من ملف
 npx tsx scripts/bot-drafts-client.ts upload --file=./cover.jpg   # يعيد deliveryUrl
@@ -390,13 +441,16 @@ const status = await client.get(draft.id); // status.updatable === false بعد 
 | 1 | `POST` بعنوان ومتن وتصنيف | `201` + `status: "draft"` + `editUrl`؛ تظهر المادة فوراً في `/dashboard/articles` تبويب المسودات ويفتحها `editUrl` في المحرر |
 | 2 | `PATCH` بعنوان جديد ثم فتح المسودة في اللوحة | `200` والعنوان الجديد ظاهر مباشرة (كاش قوائم اللوحة يُبطل مع كل كتابة) |
 | 3 | `PATCH` بـ `{"status":"published"}` أو `{"scheduledAt":…}` | `422 forbidden_fields` ولا تغيير في القاعدة |
-| 4 | `POST /api/internal/bot-drafts/<id>/publish` | `403 forbidden_action` |
+| 4 | `POST` أو `PATCH /api/internal/bot-drafts/<id>/publish` | `403 forbidden_action` |
+| 4b | `PATCH /:id/ready` بجسم `{}` على مسودة بلا قفل | `200` و`status: "ready_to_publish"` و`updatable: false`؛ تظهر في لوحة «جاهز للنشر» لا في المسودات |
+| 4c | `PATCH` محتوى بعد الجاهزية، أو `PATCH /ready` مرة ثانية | `409 not_a_draft` |
+| 4d | من اللوحة: نشر المادة الجاهزة، أو «إرجاع لمسودة» | النشر عبر جلسة المحرر فقط؛ الإرجاع يعيد `draft` و`updatable: true` |
 | 5 | بنفس التوكن: `PATCH /api/admin/articles/<id>` أو `POST /api/admin/articles` | `401` (لا جلسة) — التوكن لا يعمل على المسارات الإدارية |
 | 6 | افتح المسودة في اللوحة (قفل تحرير نشط) ثم `PATCH` من البوت | `409 locked_by_editor` |
 | 7 | انشر المسودة من اللوحة ثم `PATCH` من البوت | `409 not_a_draft` و`GET` يرجع `status: "published"`, `updatable: false` |
 | 8 | توكن خاطئ / بدون توكن | `401` مع `Cache-Control: private, no-store` ولا يظهر أي توكن في الرد أو اللوج |
 | 9 | `GET` بمعرّف مسودة أنشأها محرر (ليست من بوت) | `404` — لا كشف لمسودات المحررين |
-| 10 | لوج Railway بعد الخطوات أعلاه | أسطر `[BotDrafts] created/updated draft <id> by bot=<name>` بلا توكنات |
+| 10 | لوج Railway بعد الخطوات أعلاه | أسطر `[BotDrafts] created/updated draft` و`marked ready` بلا توكنات |
 | 11 | `POST` بمتن نصي و`imageUrls` من `deliveryUrl` | `201` و`bodyImageUrls` فيها الروابط بالترتيب؛ معاينة اللوحة تعرض صوراً أسفل المتن لا نص الرابط. الغلاف يبقى في `imageUrl` فقط |
 
 آلياً: `npm run test:unit -- tests/unit/botDrafts.test.ts` (التوكنات، الحقول الممنوعة كلها، 401/403/405/409/422/429/503، رفع الصور مع تخزين وهمي، عدم تسريب الأسرار، إعفاء CSRF، تحويل النص إلى فقرات، إلحاق `imageUrls` كوسوم محرر، بقاء المتن مع `<img>`، إسقاط `<img` المكسور).
@@ -418,4 +472,4 @@ const status = await client.get(draft.id); // status.updatable === false بعد 
 2. **الإسناد الافتراضي** لحساب «صحيفة سبق». البديل: حساب خدمة مخصص عبر `BOT_DRAFTS_AUTHOR_USER_ID`.
 3. **ضبط الأسرار على Railway** (`BOT_DRAFTS_API_TOKENS`) وإعادة النشر — بدونها المسار يرد `503` ولا أثر له على التحرير الحالي.
 
-لا تغييرات schema ولا `db:push`: التعديل الوحيد في `shared/schema.ts` نوعي (TypeScript) لحقل `sourceMetadata` (jsonb).
+لا تغييرات schema ولا `db:push`: `ready_to_publish` قيمة جديدة في عمود `articles.status` النصي، وتعليق الحقل وZod لوحة التحكم فقط. `sourceMetadata` يبقى jsonb بلا DDL.

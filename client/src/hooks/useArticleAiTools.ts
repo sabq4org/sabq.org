@@ -126,7 +126,7 @@ interface UseArticleAiToolsArgs {
   newsletterExcerpt: string;
   imageUrl: string;
   thumbnailUrl: string;
-  status: "draft" | "published" | "scheduled" | "archived";
+  status: "draft" | "published" | "scheduled" | "archived" | "ready_to_publish";
   generatedSocialCards: SocialCards | null;
   // State setters (written by the mutations)
   setTitle: Dispatch<SetStateAction<string>>;

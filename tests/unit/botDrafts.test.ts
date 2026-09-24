@@ -7,6 +7,7 @@ const state = vi.hoisted(() => ({
   create: vi.fn(),
   get: vi.fn(),
   update: vi.fn(),
+  ready: vi.fn(),
   invalidate: vi.fn(),
   uploadImage: vi.fn(),
   isUploadAvailable: vi.fn(() => true),
@@ -32,6 +33,7 @@ vi.mock("../../server/services/botDraftsService", async (original) => ({
   createBotDraft: state.create,
   getBotDraft: state.get,
   updateBotDraft: state.update,
+  markBotDraftReady: state.ready,
 }));
 
 import router from "../../server/routes/botDrafts";
@@ -44,6 +46,8 @@ import {
   isMissingBotDraftReporter,
   appendBotDraftBodyImages,
   normalizeDraftContent,
+  botDraftContentBlockedMessage,
+  botDraftReadyBlockedMessage,
   parseBotDraftTokens,
   reporterIdForBotDraftUpdate,
   toBotDraftResponse,
@@ -51,6 +55,7 @@ import {
 import {
   BOT_DRAFT_BODY_IMAGE_LIMIT,
   BOT_DRAFT_FORBIDDEN_FIELDS,
+  BOT_DRAFT_READY_STATUS,
   BOT_DRAFTS_IMAGE_FIELD,
   BOT_DRAFTS_IMAGE_MAX_BYTES,
   BOT_DRAFTS_IMAGE_PURPOSE,
@@ -419,11 +424,47 @@ describe("GET and PATCH /api/internal/bot-drafts/:id", () => {
       expect(response.status).toBe(403);
       expect((await response.json()).code).toBe("forbidden_action");
     }
+    for (const method of ["POST", "PUT", "PATCH"]) {
+      const response = await call(method, "/api/internal/bot-drafts/art-1/publish", {});
+      expect(response.status).toBe(403);
+      expect((await response.json()).code).toBe("forbidden_action");
+    }
     const del = await call("DELETE", "/api/internal/bot-drafts/art-1");
     expect(del.status).toBe(405);
     expect(del.headers.get("allow")).toBe("GET, PATCH");
     const put = await call("PUT", "/api/internal/bot-drafts/art-1", { title: "x" });
     expect(put.status).toBe(405);
+  });
+});
+
+describe("PATCH /api/internal/bot-drafts/:id/ready", () => {
+  it("marks a draft ready with the same bearer token and an empty body", async () => {
+    state.ready.mockResolvedValueOnce(draft({ status: BOT_DRAFT_READY_STATUS, updatable: false }));
+    const response = await call("PATCH", "/api/internal/bot-drafts/art-1/ready", {});
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ status: BOT_DRAFT_READY_STATUS, updatable: false });
+    expect(state.ready).toHaveBeenCalledWith({ name: "nashr-sabq" }, "art-1", expect.anything());
+    expect(state.update).not.toHaveBeenCalled();
+  });
+  it("rejects missing auth, content fields, and a status smuggled in the body", async () => {
+    expect((await call("PATCH", "/api/internal/bot-drafts/art-1/ready", {}, null)).status).toBe(401);
+    const content = await call("PATCH", "/api/internal/bot-drafts/art-1/ready", { title: "عنوان جديد" });
+    expect(content.status).toBe(400);
+    expect((await content.json()).code).toBe("validation_error");
+    const forbidden = await call("PATCH", "/api/internal/bot-drafts/art-1/ready", { status: "published" });
+    expect(forbidden.status).toBe(422);
+    expect((await forbidden.json()).code).toBe("forbidden_fields");
+    expect(state.ready).not.toHaveBeenCalled();
+  });
+  it("maps lock and not-a-draft conflicts to 409 without a publish path", async () => {
+    state.ready.mockRejectedValueOnce(new BotDraftError(409, "locked_by_editor", "محرر يعمل على المسودة الآن", { editor: "علي" }));
+    const locked = await call("PATCH", "/api/internal/bot-drafts/art-1/ready", {});
+    expect(locked.status).toBe(409);
+    expect(await locked.json()).toMatchObject({ code: "locked_by_editor" });
+    state.ready.mockRejectedValueOnce(new BotDraftError(409, "not_a_draft", "ليست مسودة", { status: "published" }));
+    const published = await call("PATCH", "/api/internal/bot-drafts/art-1/ready", {});
+    expect(published.status).toBe(409);
+    expect(await published.json()).toMatchObject({ code: "not_a_draft", details: { status: "published" } });
   });
 });
 
@@ -542,6 +583,12 @@ describe("pure helpers", () => {
     expect(isAssignableBotCategoryStatus(undefined)).toBe(false);
     expect(isAssignableBotCategoryStatus("")).toBe(false);
   });
+  it("explains why a ready or published row cannot be updated or marked ready again", () => {
+    expect(botDraftContentBlockedMessage(BOT_DRAFT_READY_STATUS)).toContain("جاهزة للنشر");
+    expect(botDraftReadyBlockedMessage(BOT_DRAFT_READY_STATUS)).toContain("بالفعل");
+    expect(botDraftReadyBlockedMessage("published")).toContain("لم تعد مسودة");
+    expect(botDraftContentBlockedMessage("archived")).toContain("لم تعد مسودة");
+  });
   it("marks non-draft rows as not updatable and exposes the dashboard edit url", () => {
     vi.stubEnv("PUBLIC_SITE_URL", "https://sabq.org/");
     const now = new Date("2026-09-20T10:00:00Z");
@@ -555,6 +602,8 @@ describe("pure helpers", () => {
       editUrl: "https://sabq.org/dashboard/articles/art-9/edit", createdAt: now.toISOString(),
       bodyImageUrls: [],
     });
+    const ready = toBotDraftResponse({ ...row, status: BOT_DRAFT_READY_STATUS }, "local");
+    expect(ready).toMatchObject({ status: BOT_DRAFT_READY_STATUS, updatable: false, editUrl: ready.editUrl, previewUrl: expect.stringContaining("/preview") });
   });
   it("returns body image URLs and keeps the article text out of the response", () => {
     const now = new Date("2026-09-22T10:00:00Z");

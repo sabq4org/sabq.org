@@ -1,6 +1,7 @@
 import { useState, useEffect, type ComponentProps, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
-import { Edit, Star, Trash2, Send, Bell, Loader2, Languages, FilePenLine, HeartPulse, Share2, Zap, Archive } from "lucide-react";
+import { Edit, Star, Trash2, Send, Bell, Loader2, Languages, FilePenLine, HeartPulse, Share2, Zap, Archive, Undo2 } from "lucide-react";
+import { BOT_DRAFT_READY_STATUS } from "@shared/botDrafts";
 import { useBreakingToggle } from "@/components/admin/BreakingSwitch";
 import {
   AlertDialog,
@@ -221,6 +222,33 @@ export function RowActions({
     }
   };
 
+  const handleRevertToDraft = async () => {
+    setIsLoading(true);
+    try {
+      await apiRequest(`/api/admin/articles/${articleId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "draft" }),
+      });
+      queryClient.removeQueries({ queryKey: ["/api/admin/articles"] });
+      queryClient.removeQueries({ queryKey: ["/api/admin/articles/metrics"] });
+      await queryClient.refetchQueries({ queryKey: ["/api/admin/articles"] });
+      await queryClient.refetchQueries({ queryKey: ["/api/admin/articles/metrics"] });
+      toast({
+        title: "أُعيدت مسودة",
+        description: "عادت المادة إلى المسودات ويمكن للبوت تعديلها من جديد",
+      });
+    } catch (error: any) {
+      toast({
+        title: "تعذر الإرجاع",
+        description: error.message || "لم تُرجع المادة إلى المسودة",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handlePublish = async () => {
     setIsLoading(true);
     try {
@@ -342,12 +370,34 @@ export function RowActions({
   const notifiedLabel = doneAt(notifiedAt);
   const socialLabel = doneAt(socialPublishedAt);
   const isPublished = status === "published";
+  const isReadyToPublish = status === BOT_DRAFT_READY_STATUS;
 
   const wireRow = (
     <div className="flex items-center justify-end gap-0.5" role="group" aria-label="إجراءات المقال">
       {canEdit && (
         <WireBtn onClick={onEdit} disabled={isLoading} data-testid={`button-action-edit-${articleId}`} title="تعديل">
           <Edit className="h-4 w-4" />
+        </WireBtn>
+      )}
+      {isReadyToPublish && canPublish && (
+        <WireBtn
+          onClick={handlePublish}
+          disabled={isLoading}
+          data-testid={`button-action-publish-${articleId}`}
+          title="نشر"
+          className="text-emerald-700 hover:text-emerald-800 dark:text-emerald-400"
+        >
+          <Send className="h-4 w-4" />
+        </WireBtn>
+      )}
+      {isReadyToPublish && canEdit && (
+        <WireBtn
+          onClick={() => void handleRevertToDraft()}
+          disabled={isLoading}
+          data-testid={`button-action-revert-draft-${articleId}`}
+          title="إرجاع لمسودة"
+        >
+          <Undo2 className="h-4 w-4" />
         </WireBtn>
       )}
       {canFeature && (
@@ -454,6 +504,26 @@ export function RowActions({
             title="تعديل"
           >
             <Edit className="w-4 h-4" />
+          </ActionBtn>
+        )}
+        {isReadyToPublish && canPublish && (
+          <ActionBtn
+            onClick={handlePublish}
+            disabled={isLoading}
+            data-testid={`button-action-publish-${articleId}`}
+            title="نشر"
+          >
+            <Send className="w-4 h-4" />
+          </ActionBtn>
+        )}
+        {isReadyToPublish && canEdit && (
+          <ActionBtn
+            onClick={() => void handleRevertToDraft()}
+            disabled={isLoading}
+            data-testid={`button-action-revert-draft-${articleId}`}
+            title="إرجاع لمسودة"
+          >
+            <Undo2 className="w-4 h-4" />
           </ActionBtn>
         )}
         {canFeature && (

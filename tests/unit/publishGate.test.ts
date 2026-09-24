@@ -35,7 +35,7 @@ describe("isPublishingStatus", () => {
     expect(isPublishingStatus("published")).toBe(true);
   });
 
-  it.each(["draft", "pending", "archived", "review", ""])(
+  it.each(["draft", "ready_to_publish", "pending", "archived", "review", ""])(
     "leaves %s alone — the gate is only about reaching readers",
     (status) => {
       expect(isPublishingStatus(status)).toBe(false);

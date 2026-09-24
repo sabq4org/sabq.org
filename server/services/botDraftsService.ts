@@ -2,7 +2,8 @@
 // خدمة «مسودات البوتات» — Bot Drafts (ADR-001: كل استعلامات Drizzle هنا)
 //
 // تُنشئ وتحدّث وتقرأ مسودات عربية فقط لصالح بوت «نشر سبق» ومهندّس (Grok Bot).
-// الحالة ثابتة `draft`؛ لا نشر ولا جدولة ولا تغيير إسناد من هذا المسار مطلقاً.
+// الإنشاء والحالة الابتدائية `draft`. البوت قد يعلّم المسودة `ready_to_publish`
+// عبر markBotDraftReady فقط — لا نشر ولا جدولة ولا تغيير إسناد من هذا المسار.
 // المصادقة: توكن Bearer لكل بوت من BOT_DRAFTS_API_TOKENS (name:token,…).
 // التوثيق: docs/systems/editorial/BOT_DRAFTS_API.md
 // ----------------------------------------------------------------------------
@@ -14,6 +15,7 @@ import { articleEditLocks, articles, categories, users } from "@shared/schema";
 import { SABQ_NEWSPAPER_ACCOUNT_ID } from "@shared/sabqNewspaper";
 import {
   BOT_DRAFT_BODY_IMAGE_LIMIT,
+  BOT_DRAFT_READY_STATUS,
   BOT_DRAFT_SOURCE,
   BOT_DRAFT_STATUS,
   type BotDraftCreateInput,
@@ -359,6 +361,22 @@ export function botDraftPreviewUrl(articleId: string): string {
 
 type ArticleRow = typeof articles.$inferSelect;
 
+/** بعد الاعتماد لا يُعدَّل المحتوى. الرسالة تُعاد مع 409 `not_a_draft`. */
+export function botDraftContentBlockedMessage(status: string): string {
+  if (status === BOT_DRAFT_READY_STATUS) {
+    return "المادة جاهزة للنشر ولا يمكن للبوت تعديلها بعد اعتماد المحرر";
+  }
+  return "المادة لم تعد مسودة ولا يمكن للبوت تعديلها";
+}
+
+/** انتقال الجاهزية مسموح من `draft` فقط. */
+export function botDraftReadyBlockedMessage(status: string): string {
+  if (status === BOT_DRAFT_READY_STATUS) {
+    return "المادة جاهزة للنشر بالفعل ولا يمكن للبوت تعديلها";
+  }
+  return "المادة لم تعد مسودة ولا يمكن تعليمها جاهزة للنشر";
+}
+
 export function toBotDraftResponse(row: ArticleRow, categorySlug: string | null = null): BotDraftResponse {
   const meta = (row.sourceMetadata ?? {}) as NonNullable<ArticleRow["sourceMetadata"]>;
   return {
@@ -562,7 +580,7 @@ export async function updateBotDraft(
     throw new BotDraftError(404, "not_found", "المسودة غير موجودة");
   }
   if (existing.status !== BOT_DRAFT_STATUS) {
-    throw new BotDraftError(409, "not_a_draft", "المادة لم تعد مسودة ولا يمكن للبوت تعديلها", {
+    throw new BotDraftError(409, "not_a_draft", botDraftContentBlockedMessage(existing.status), {
       status: existing.status,
     });
   }
@@ -625,6 +643,57 @@ export async function updateBotDraft(
   await recordEvent(row.id, row.authorId, "updated", `حدّث البوت «${bot.name}» المسودة`, bot, reference, ctx, row, existing);
   console.log(`[BotDrafts] updated draft ${row.id} by bot=${bot.name} fields=${Object.keys(input).join(",")}`);
   return toBotDraftResponse(row, category?.slug ?? (await categorySlugFor(row.categoryId)));
+}
+
+/**
+ * تعليم مسودة بوت «جاهزة للنشر». الانتقال الوحيد: draft → ready_to_publish.
+ * لا يكتب publishedAt ولا يمر على publishGate. بعد النجاح updatable=false.
+ */
+export async function markBotDraftReady(
+  bot: BotIdentity,
+  articleId: string,
+  ctx: BotRequestContext = {},
+): Promise<BotDraftResponse> {
+  const existing = await findBotArticle(articleId);
+  if (!existing) {
+    throw new BotDraftError(404, "not_found", "المسودة غير موجودة");
+  }
+  if (existing.status !== BOT_DRAFT_STATUS) {
+    throw new BotDraftError(409, "not_a_draft", botDraftReadyBlockedMessage(existing.status), {
+      status: existing.status,
+    });
+  }
+  const lock = await findActiveEditLock(articleId);
+  if (lock) {
+    throw new BotDraftError(409, "locked_by_editor", "محرر يعمل على المسودة الآن — أعد المحاولة لاحقاً", {
+      editor: lock.userName,
+      lockExpiresAt: lock.expiresAt.toISOString(),
+    });
+  }
+
+  const [row] = await db
+    .update(articles)
+    .set({ status: BOT_DRAFT_READY_STATUS, updatedAt: new Date() })
+    .where(and(eq(articles.id, articleId), eq(articles.status, BOT_DRAFT_STATUS), eq(articles.source, BOT_DRAFT_SOURCE)))
+    .returning();
+  if (!row) {
+    throw new BotDraftError(409, "not_a_draft", "تغيّرت حالة المادة أثناء التعليم", { status: "unknown" });
+  }
+
+  invalidateAdminListCaches();
+  await recordEvent(
+    row.id,
+    row.authorId,
+    "updated",
+    `علّم البوت «${bot.name}» المسودة جاهزة للنشر`,
+    bot,
+    existing.sourceMetadata?.clientReference,
+    ctx,
+    row,
+    existing,
+  );
+  console.log(`[BotDrafts] marked ready ${row.id} by bot=${bot.name}`);
+  return toBotDraftResponse(row, await categorySlugFor(row.categoryId));
 }
 
 async function recordEvent(
