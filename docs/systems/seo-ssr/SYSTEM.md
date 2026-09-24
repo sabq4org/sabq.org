@@ -90,6 +90,6 @@
 
 ## إشارات المحتوى للذكاء الاصطناعي وllms.txt — 2026-09-24
 
-- robots.txt (`server/routes.ts`) يعلن داخل مجموعة `User-agent: *` السطر `Content-Signal: search=yes, ai-input=yes, ai-train=no` وفق contentsignals.org. القيم تطابق سياسة `/ai-policy` (Sabq-AI-Use-1.0): الاستدلال والاستشهاد مع الإسناد مسموحان، والتدريب والضبط الدقيق دون اتفاق مكتوب ممنوعان. لا تغيّر `ai-train` دون تعديل صفحة السياسة في نفس الـ PR.
+- robots.txt (`server/utils/robotsTxt.ts`، يستدعيه `server/routes.ts`) يعلن داخل مجموعة `User-agent: *` السطر `Content-Signal: search=yes, ai-input=yes, ai-train=no` وفق contentsignals.org. القيم تطابق سياسة `/ai-policy` (Sabq-AI-Use-1.0): الاستدلال والاستشهاد مع الإسناد مسموحان، والتدريب والضبط الدقيق دون اتفاق مكتوب ممنوعان. لا تغيّر `ai-train` دون تعديل صفحة السياسة في نفس الـ PR.
 - `client/public/llms.txt` ملف ثابت (امتداد `.txt` ضمن `STATIC_EXTENSIONS` فيُخدم من طبقة Pages الثابتة). يلخّص السياسة ويربط الأقسام العربية النشطة وخرائط الموقع وRSS. عند إضافة قسم رئيسي أو إيقافه حدّث الملف.
 - لا تغيير على قواعد Allow/Disallow أو على مسارات noindex؛ إعدادات Cloudflare للبوتات تسمح للزواحف الموثقة (Verified Bots) ولا تحظر فئات الذكاء الاصطناعي.
