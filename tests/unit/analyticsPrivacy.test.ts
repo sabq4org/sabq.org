@@ -66,6 +66,9 @@ describe("analytics privacy boundary", () => {
       "https://sabq.org/advertise/dashboard",
       "https://sabq.org/advertise/payment/callback",
       "https://sabq.org/notifications",
+      "https://sabq.org/newsletter#confirm=private-confirmation-token",
+      "https://sabq.org/newsletter?confirm=private-confirmation-token",
+      "https://sabq.org/newsletter",
     ]) {
       setLocation(href);
       expect(isAnalyticsAllowed()).toBe(false);

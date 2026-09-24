@@ -3,7 +3,7 @@
 const SENSITIVE_KEY = /(?:^|[_-])(?:token|auth|pass(?:word)?|secret|session|sid|jwt|code|otp|verification|verify|reset|credential|email|phone|mobile|tel|address|user[_-]?id)(?:$|[_-])/i;
 const EMAIL_VALUE = /[^\s@]+@[^\s@]+\.[^\s@]+/i;
 
-const SENSITIVE_PATH = /\/(?:login|register|signup|sign-up|auth|reset-password|forgot-password|set-password|2fa-verify|verify-email|complete-name|onboarding|account)(?:\/|$)/i;
+const SENSITIVE_PATH = /\/(?:login|register|signup|sign-up|auth|reset-password|forgot-password|set-password|2fa-verify|verify-email|complete-name|onboarding|account|newsletter)(?:\/|$)/i;
 const LOCAL_HOST = /^(?:localhost|127(?:\.\d{1,3}){3}|0\.0\.0\.0|::1|\[::1\])$/i;
 
 declare global {

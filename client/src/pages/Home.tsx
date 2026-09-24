@@ -20,6 +20,7 @@ import type { User } from "@/hooks/useAuth";
 import { Header } from "@/components/Header";
 import { CategoryPills } from "@/components/CategoryPills";
 import { Footer } from "@/components/Footer";
+import SmartNewsletterForm from "@/components/SmartNewsletterForm";
 import { HeroCarousel } from "@/components/HeroCarousel";
 import { useHeroPreload } from "@/hooks/useHeroPreload";
 import { AdSlot } from "@/components/AdSlot";
@@ -432,6 +433,10 @@ export default function Home() {
         <div className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-8">
           {/* Hero Section */}
           {homepage.hero && homepage.hero.length > 0 && <HeroCarousel articles={homepage.hero} />}
+        </div>
+
+        <div className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-8">
+          <SmartNewsletterForm variant="compact" source="home-first-group" className="mx-auto max-w-3xl" />
         </div>
 
         {/* شريط المدخل إلى البوابة الرياضية — الباب الوحيد إلى /sports من الرئيسية.

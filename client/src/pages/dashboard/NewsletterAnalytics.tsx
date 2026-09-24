@@ -72,6 +72,8 @@ import {
 import { format } from "date-fns";
 import { arSA } from "date-fns/locale";
 import { formatNumber } from "@/lib/format";
+import { apiUrl } from "@/lib/queryClient";
+import { NewsletterEditorialPanel } from "@/components/newsletter/NewsletterEditorialPanel";
 
 interface Campaign {
   id: string;
@@ -211,7 +213,7 @@ function CampaignDetailsDialog({
   const { data: campaign, isLoading } = useQuery<CampaignDetail>({
     queryKey: ["/api/newsletter/analytics/campaigns", campaignId],
     queryFn: async () => {
-      const res = await fetch(`/api/newsletter/analytics/campaigns/${campaignId}`, {
+      const res = await fetch(apiUrl(`/api/newsletter/analytics/campaigns/${campaignId}`), {
         credentials: "include",
       });
       if (!res.ok) throw new Error("Failed to fetch campaign");
@@ -449,7 +451,7 @@ export default function NewsletterAnalytics() {
   const { data: campaignsData, isLoading: isLoadingCampaigns } = useQuery<CampaignsResponse>({
     queryKey: ["/api/newsletter/analytics/campaigns", limit, offset],
     queryFn: async () => {
-      const res = await fetch(`/api/newsletter/analytics/campaigns?limit=${limit}&offset=${offset}`, {
+      const res = await fetch(apiUrl(`/api/newsletter/analytics/campaigns?limit=${limit}&offset=${offset}`), {
         credentials: "include",
       });
       if (!res.ok) throw new Error("Failed to fetch campaigns");
@@ -692,6 +694,8 @@ export default function NewsletterAnalytics() {
             color="purple"
           />
         </div>
+
+        <NewsletterEditorialPanel />
 
         <div className="grid gap-6 md:grid-cols-2">
           <Card>

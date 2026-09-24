@@ -13,12 +13,13 @@ interface ToolResult {
   message?: string;
   navigated_to?: string;
   status?: number;
+  pendingConfirmation?: boolean;
   theme?: "light" | "dark";
 }
 
 interface SearchInput { query: string }
 interface SlugInput { slug: string }
-interface EmailInput { email: string }
+interface EmailInput { email: string; frequency: "daily" | "weekly"; consent: boolean }
 interface ThemeInput { theme?: "light" | "dark" | "toggle" }
 
 interface WebMCPTool<I> {
@@ -111,24 +112,31 @@ export function useWebMCP() {
 
     const subscribeNewsletter: WebMCPTool<EmailInput> = {
       name: "subscribe_newsletter",
-      description: "Subscribe an email address to the Sabq newsletter. Requires explicit user consent.",
+      description: "Request a Sabq newsletter subscription after explicit user consent. Email confirmation is required before activation.",
       inputSchema: {
         type: "object",
-        properties: { email: { type: "string", description: "Subscriber email" } },
-        required: ["email"],
+        properties: {
+          email: { type: "string", description: "Subscriber email" },
+          frequency: { type: "string", enum: ["daily", "weekly"] },
+          consent: { type: "boolean", description: "True only after explicit user consent" },
+        },
+        required: ["email", "frequency", "consent"],
       },
-      execute: async ({ email }) => {
+      execute: async ({ email, frequency, consent }) => {
         const e = String(email ?? "").trim();
         if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)) {
           return { ok: false, message: "invalid email" };
         }
+        if (consent !== true || !["daily", "weekly"].includes(frequency)) {
+          return { ok: false, message: "Explicit consent and daily/weekly frequency are required" };
+        }
         try {
-          await apiRequest("/api/newsletter/subscribe", {
+          const result = await apiRequest<{ pendingConfirmation?: boolean }>("/api/newsletter/subscribe", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ email: e }),
+            body: JSON.stringify({ email: e, frequency, consent, language: "ar", source: "web-mcp" }),
           });
-          return { ok: true, status: 200 };
+          return { ok: result.pendingConfirmation === true, status: 202, pendingConfirmation: result.pendingConfirmation === true, message: "Check email to confirm; this request does not activate the subscription." };
         } catch (err) {
           return { ok: false, message: errorMessage(err) };
         }

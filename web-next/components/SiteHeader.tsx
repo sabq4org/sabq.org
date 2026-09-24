@@ -14,6 +14,7 @@ const MAIN_SECTIONS: { name: string; href: string }[] = [
   { name: "مقالات", href: "/opinion" },
   { name: "مُقترب", href: "/muqtarab" },
   { name: "لحظة بلحظة", href: "/moment-by-moment" },
+  { name: "النشرة", href: "/newsletter" },
 ];
 
 export function SiteHeader() {

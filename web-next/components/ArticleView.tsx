@@ -2,6 +2,7 @@ import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
 import { ShareButtons } from "@/components/ShareButtons";
 import type { SeoBundle, Lang } from "@/lib/seoBundle";
+import { NewsletterSignup } from "@/components/NewsletterSignup";
 
 const LOCALE: Record<Lang, string> = {
   ar: "ar-SA",
@@ -183,6 +184,8 @@ export function ArticleView({
           )}
 
           <ShareButtons url={bundle.meta.canonical} title={bundle.title} />
+
+          {lang === "ar" && <NewsletterSignup source="article" />}
 
           {bundle.categoryLatest && bundle.categoryLatest.length > 0 && (
             <section
