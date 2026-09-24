@@ -623,7 +623,7 @@ export interface IStorage {
   incrementArticleViews(id: string): Promise<void>;
   getFeaturedArticle(userId?: string): Promise<ArticleWithDetails | undefined>;
   getRelatedArticles(articleId: string, categoryId?: string): Promise<ArticleWithDetails[]>;
-  getArticlesMetrics(): Promise<{ published: number; scheduled: number; draft: number; archived: number }>;
+  getArticlesMetrics(): Promise<{ published: number; scheduled: number; draft: number; archived: number; readyToPublish: number }>;
   archiveArticle(id: string, userId: string): Promise<Article>;
   restoreArticle(id: string, userId: string): Promise<Article>;
   toggleArticleBreaking(id: string, userId: string): Promise<Article>;
@@ -4588,11 +4588,12 @@ export class DatabaseStorage implements IStorage {
     })) as unknown as ArticleWithDetails[];
   }
 
-  async getArticlesMetrics(): Promise<{ published: number; scheduled: number; draft: number; archived: number }> {
+  async getArticlesMetrics(): Promise<{ published: number; scheduled: number; draft: number; archived: number; readyToPublish: number }> {
     // كل عدّ مستقل يدفع شرط status إلى فهرسه. صيغة FILTER الواحدة كانت تمسح
     // صف المقال كاملًا (~199k blocks في قياس الإنتاج) كلما انتهى الكاش.
     // المفتاح يبدأ بـ articles: كي تمسحه بوابة إبطال المقالات بعد أي كتابة.
-    return withSWR("articles:admin:metrics:v3", CACHE_TTL.SHORT, CACHE_TTL.MEDIUM, getAdminArticleMetrics);
+    // v4 يضيف readyToPublish حتى لا تُقدَّم لقطة v3 بلا العداد الجديد.
+    return withSWR("articles:admin:metrics:v4", CACHE_TTL.SHORT, CACHE_TTL.MEDIUM, getAdminArticleMetrics);
   }
 
   async archiveArticle(id: string, userId: string): Promise<Article> {

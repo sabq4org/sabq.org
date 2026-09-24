@@ -7246,7 +7246,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       let orderClauses;
       if (status === "archived") {
         orderClauses = [desc(articles.displayOrder), desc(articles.updatedAt), desc(articles.createdAt)];
-      } else if (status === "draft") {
+      } else if (status === "draft" || status === "ready_to_publish") {
         orderClauses = [desc(articles.displayOrder), desc(articles.updatedAt), desc(articles.createdAt)];
       } else if (status === "scheduled") {
         orderClauses = [adminScheduledOrder];
@@ -7334,10 +7334,10 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         // Get total count for pagination — عند البحث يكفينا عدد المرشحين
         // المحسوب مسبقًا بدل count(*) ثانٍ بنفس تكلفة المسح. في القائمة
         // العادية لا يعتمد العد على صفوف الصفحة، لذلك نشغّلهما بالتوازي.
-        const requestedMetricsStatus: 'published' | 'draft' | 'archived' | null =
+        const requestedMetricsStatus: 'published' | 'draft' | 'archived' | 'readyToPublish' | null =
           status === 'published' ? 'published' :
           status === 'draft' ? 'draft' :
-          status === 'archived' ? 'archived' : null;
+          status === 'archived' ? 'archived' : status === 'ready_to_publish' ? 'readyToPublish' : null;
         const metricsTotalStatus = !shouldFilterByUser && whereConditions.length === 1
           ? requestedMetricsStatus
           : null;

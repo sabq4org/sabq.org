@@ -941,7 +941,7 @@ export const articles = pgTable("articles", {
   newsType: text("news_type").default("regular").notNull(), // breaking, featured, regular
   publishType: text("publish_type").default("instant").notNull(), // instant, scheduled
   scheduledAt: timestamp("scheduled_at"),
-  status: text("status").notNull().default("draft"), // draft, scheduled, published, archived
+  status: text("status").notNull().default("draft"), // draft, ready_to_publish, scheduled, published, archived
   reviewStatus: text("review_status"), // null, pending_review, approved, rejected, needs_changes (for opinion articles)
   reviewedBy: varchar("reviewed_by").references(() => users.id),
   reviewedAt: timestamp("reviewed_at"),
@@ -4361,7 +4361,7 @@ export const updateArticleSchema = z.object({
     z.string().datetime(),
     z.null()
   ]).optional(),
-  status: z.enum(["draft", "scheduled", "published", "archived"]).optional(),
+  status: z.enum(["draft", "ready_to_publish", "scheduled", "published", "archived"]).optional(),
   aiSummary: z.union([
     z.string(),
     z.null()
@@ -4438,7 +4438,7 @@ export const updateArticleSchema = z.object({
 });
 
 export const adminArticleFiltersSchema = z.object({
-  status: z.enum(["draft", "scheduled", "published", "archived", "all"]).optional(),
+  status: z.enum(["draft", "ready_to_publish", "scheduled", "published", "archived", "all"]).optional(),
   articleType: z.enum(["news", "opinion", "analysis", "column", "infographic", "weekly_photos", "all"]).optional(),
   categoryId: z.string().uuid().optional(),
   authorId: z.string().optional(),

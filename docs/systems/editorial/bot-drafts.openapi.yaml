@@ -3,7 +3,8 @@ info:
   title: Sabq Bot Drafts API
   version: 1.0.0
   description: |
-    مسودات فقط لبوتات «نشر سبق» ومهندّس (Grok Bot). الحالة draft دائماً — لا نشر ولا جدولة.
+    مسودات لبوتات «نشر سبق» ومهندّس (Grok Bot). الإنشاء draft.
+    PATCH /{id}/ready ينقل إلى ready_to_publish فقط — لا نشر ولا جدولة.
     الدليل الكامل: docs/systems/editorial/BOT_DRAFTS_API.md
 servers:
   - url: https://api.sabq.org
@@ -119,6 +120,41 @@ paths:
                 $ref: "#/components/schemas/Error"
         "422": { $ref: "#/components/responses/Unprocessable" }
         "429": { $ref: "#/components/responses/RateLimited" }
+  /api/internal/bot-drafts/{id}/ready:
+    patch:
+      operationId: markSabqDraftReady
+      summary: تعليم المسودة جاهزة للنشر (draft → ready_to_publish) دون نشر
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              description: جسم فارغ. أي حقل يُرفض، وحقل ممنوع مثل status يُرفض 422.
+      responses:
+        "200":
+          description: أصبحت ready_to_publish وupdatable=false
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BotDraft"
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: not_a_draft (ليست draft، بما فيها الجاهزة مسبقاً أو المنشورة) أو locked_by_editor
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "422": { $ref: "#/components/responses/Unprocessable" }
+        "429": { $ref: "#/components/responses/RateLimited" }
 components:
   securitySchemes:
     botToken:
@@ -162,8 +198,8 @@ components:
       type: object
       properties:
         id: { type: string }
-        status: { type: string, description: الحالة الحالية في اللوحة (draft/published/scheduled/archived) }
-        updatable: { type: boolean, description: true فقط عندما تكون draft }
+        status: { type: string, description: الحالة الحالية في اللوحة (draft/ready_to_publish/published/scheduled/archived) }
+        updatable: { type: boolean, description: true فقط عندما تكون draft. false بعد ready_to_publish }
         title: { type: string }
         subtitle: { type: string, nullable: true }
         slug: { type: string }

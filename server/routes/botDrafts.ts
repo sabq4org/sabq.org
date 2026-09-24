@@ -5,6 +5,7 @@
 // POST  /api/internal/bot-drafts/images رفع صورة غلاف إلى R2 / media.sabq.org (forceR2)
 // GET   /api/internal/bot-drafts/:id    حالة المسودة + معرّفها + رابط التحرير
 // PATCH /api/internal/bot-drafts/:id    تحديث مسودة أنشأها بوت وما زالت draft
+// PATCH /api/internal/bot-drafts/:id/ready  draft → ready_to_publish فقط (لا نشر)
 //
 // المصادقة: Authorization: Bearer <token> من BOT_DRAFTS_API_TOKENS (لكل بوت اسم
 // وتوكن). المسار تحت /api/internal/* فهو معفى من CSRF ومن محدد الكتابة العام
@@ -24,6 +25,7 @@ import {
   BOT_DRAFTS_IMAGE_MIME_TYPES,
   BOT_DRAFTS_IMAGE_PURPOSE,
   botDraftCreateSchema,
+  botDraftReadySchema,
   botDraftUpdateSchema,
   findForbiddenBotDraftFields,
   type BotDraftErrorBody,
@@ -37,6 +39,7 @@ import {
   createBotDraft,
   getBotDraft,
   isBotDraftsConfigured,
+  markBotDraftReady,
   updateBotDraft,
   type BotIdentity,
 } from "../services/botDraftsService";
@@ -263,7 +266,31 @@ router.patch(
   },
 );
 
+router.patch(
+  `${BOT_DRAFTS_BASE_PATH}/:id/ready`,
+  requireBotToken,
+  botWriteLimiter,
+  rejectForbiddenFields,
+  async (req: BotRequest, res: Response) => {
+    const parsed = botDraftReadySchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      return sendError(res, 400, {
+        code: "validation_error",
+        message: "تعليم الجاهزية لا يقبل حقولاً — أرسل جسماً فارغاً",
+        details: parsed.error.flatten(),
+      });
+    }
+    try {
+      const draft = await markBotDraftReady(req.bot!, req.params.id, requestContext(req));
+      res.json(draft);
+    } catch (error) {
+      handleError(res, error, "ready");
+    }
+  },
+);
+
 // أي فعل آخر على المسار (PUT/DELETE/publish/schedule…) مرفوض عمداً وبوضوح.
+// /ready مُسجَّل أعلاه؛ /publish يبقى هنا 403 — البوت لا ينشر.
 router.all(`${BOT_DRAFTS_BASE_PATH}/:id/:action`, requireBotToken, (_req: Request, res: Response) => {
   sendError(res, 403, { code: "forbidden_action", message: "هذا المسار للمسودات فقط — لا نشر ولا جدولة عبر البوت" });
 });

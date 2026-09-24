@@ -37,15 +37,37 @@ export async function getAdminPublishedPageIds(filter: SQL | undefined, limit: n
 
 export const adminScheduledOrder = sql`${articles.scheduledAt} ASC NULLS LAST, ${articles.createdAt} DESC, ${articles.id} DESC`;
 
+export type AdminArticleMetrics = {
+  published: number;
+  scheduled: number;
+  draft: number;
+  archived: number;
+  /** مسودات البوت التي علّمها المحرر جاهزة. ليست ضمن `draft`. */
+  readyToPublish: number;
+};
+
 /** Count the same status set as the list, including overdue/undated schedules. */
-export async function getAdminArticleMetrics() {
-  const result = await db.execute<{ published: string | number; scheduled: string | number; draft: string | number; archived: string | number }>(sql`
+export async function getAdminArticleMetrics(): Promise<AdminArticleMetrics> {
+  const result = await db.execute<{
+    published: string | number;
+    scheduled: string | number;
+    draft: string | number;
+    archived: string | number;
+    ready_to_publish: string | number;
+  }>(sql`
     SELECT
       (SELECT count(*) FROM ${articles} WHERE ${articles.status} = 'published') AS published,
       (SELECT count(*) FROM ${articles} WHERE ${articles.status} = 'draft') AS draft,
       (SELECT count(*) FROM ${articles} WHERE ${articles.status} = 'archived') AS archived,
-      (SELECT count(*) FROM ${articles} WHERE ${articles.status} = 'scheduled') AS scheduled
+      (SELECT count(*) FROM ${articles} WHERE ${articles.status} = 'scheduled') AS scheduled,
+      (SELECT count(*) FROM ${articles} WHERE ${articles.status} = 'ready_to_publish') AS ready_to_publish
   `);
   const row = result.rows[0];
-  return { published: Number(row?.published ?? 0), scheduled: Number(row?.scheduled ?? 0), draft: Number(row?.draft ?? 0), archived: Number(row?.archived ?? 0) };
+  return {
+    published: Number(row?.published ?? 0),
+    scheduled: Number(row?.scheduled ?? 0),
+    draft: Number(row?.draft ?? 0),
+    archived: Number(row?.archived ?? 0),
+    readyToPublish: Number(row?.ready_to_publish ?? 0),
+  };
 }

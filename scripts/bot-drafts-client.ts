@@ -14,6 +14,7 @@
  *   tsx scripts/bot-drafts-client.ts create --json=./draft.json
  *   tsx scripts/bot-drafts-client.ts update <id> --title="عنوان جديد" [--content-file=…] [--json=…]
  *   tsx scripts/bot-drafts-client.ts get <id>
+ *   tsx scripts/bot-drafts-client.ts ready <id>
  *   tsx scripts/bot-drafts-client.ts upload --file=./cover.jpg
  */
 
@@ -111,6 +112,14 @@ export class BotDraftsClient {
   /** تحديث مسودة أنشأها بوت وما زالت draft. 409 إن نُشرت/جُدولت أو يحررها محرر الآن. */
   update(id: string, payload: BotDraftPayload): Promise<BotDraft> {
     return this.request("PATCH", `/api/internal/bot-drafts/${encodeURIComponent(id)}`, payload);
+  }
+
+  /**
+   * تعليم المسودة جاهزة للنشر (`ready_to_publish`). لا ينشر.
+   * بعد النجاح `updatable` تصبح false ولا يُقبل تحديث المحتوى حتى يُرجعها محرر إلى draft.
+   */
+  markReady(id: string): Promise<BotDraft> {
+    return this.request("PATCH", `/api/internal/bot-drafts/${encodeURIComponent(id)}/ready`, {});
   }
 
   /** حالة المسودة ومعرفها ورابط التحرير الداخلي. */
@@ -225,13 +234,18 @@ async function main() {
       result = await client.get(id);
       break;
     }
+    case "ready": {
+      if (!id) throw new Error("ready needs <id>");
+      result = await client.markReady(id);
+      break;
+    }
     case "upload": {
       if (!flags.file) throw new Error("upload needs --file=path");
       result = await client.uploadImage({ data: readFileSync(flags.file), filename: basename(flags.file) });
       break;
     }
     default:
-      console.error("usage: bot-drafts-client.ts <create|update|get|upload> [id] [--flags]  (see file header)");
+      console.error("usage: bot-drafts-client.ts <create|update|get|ready|upload> [id] [--flags]  (see file header)");
       process.exit(2);
   }
   console.log(JSON.stringify(result, null, 2));
