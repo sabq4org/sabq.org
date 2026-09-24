@@ -1,0 +1,51 @@
+# صحيفة سبق الإلكترونية (Sabq)
+
+> سبق صحيفة إخبارية سعودية إلكترونية تأسست عام 2007، مقرها الرياض، وتنشر الأخبار المحلية والإقليمية والدولية بالعربية، مع نسختين بالإنجليزية والأردية.
+> Sabq is a Saudi Arabic-language digital newspaper (founded 2007, Riyadh) covering Saudi, Gulf and world news, with English and Urdu editions.
+
+## سياسة الاستخدام في الذكاء الاصطناعي / AI usage policy
+
+- [سياسة استخدام المحتوى في الذكاء الاصطناعي](https://sabq.org/ai-policy): الترخيص المرجعي Sabq-AI-Use-1.0.
+- مسموح: الاستشهاد في إجابات المساعدات الذكية ومحركات البحث، والملخصات القصيرة (حتى نحو 150 كلمة)، بشرط الإسناد إلى «سبق» ورابط مباشر للمقال على sabq.org.
+- غير مسموح دون اتفاق مكتوب: تدريب النماذج أو ضبطها الدقيق، وإعادة نشر النص الكامل، وتحريف المحتوى أو اقتطاعه بما يغيّر معناه.
+- Allowed: citation in AI answers and search, short summaries (~150 words) with attribution to "Sabq" and a direct link. Not allowed without a written agreement: model training or fine-tuning, full-text republication. Licensing: partnerships@sabq.org
+- الإشارة الآلية في robots.txt: `Content-Signal: search=yes, ai-input=yes, ai-train=no`
+
+## الأخبار / News
+
+- [الرئيسية](https://sabq.org/): آخر الأخبار والعاجل
+- [لحظة بلحظة](https://sabq.org/moment-by-moment): التغطية الحية والعاجل
+- [مقالات الرأي](https://sabq.org/opinion)
+- [الموجز اليومي](https://sabq.org/daily-brief)
+
+## الأقسام / Sections
+
+- [محليات](https://sabq.org/category/saudi): أخبار المملكة العربية السعودية
+- [مناطق](https://sabq.org/category/regions): أخبار مناطق المملكة
+- [العالم](https://sabq.org/category/world)
+- [أعمال](https://sabq.org/category/business)
+- [رياضة](https://sabq.org/category/sports)
+- [تقنية](https://sabq.org/category/technology)
+- [ثقافة](https://sabq.org/category/culture)
+- [مجتمع](https://sabq.org/category/community)
+- [سياحة](https://sabq.org/category/tourism)
+- [حياتنا](https://sabq.org/category/life)
+- [سيارات](https://sabq.org/category/cars)
+- [محطات](https://sabq.org/category/stations)
+
+## اللغات الأخرى / Other editions
+
+- [Sabq English](https://sabq.org/en)
+- [سبق اردو](https://sabq.org/ur)
+
+## الاكتشاف الآلي / Machine-readable
+
+- [Sitemap](https://sabq.org/sitemap.xml)
+- [Google News sitemap](https://sabq.org/sitemap-news.xml): آخر 48 ساعة
+- [RSS](https://sabq.org/api/rss/articles) · [JSON Feed](https://sabq.org/api/rss/articles.json)
+
+## Optional
+
+- [عن سبق](https://sabq.org/about)
+- [تواصل](https://sabq.org/contact)
+- [سياسة الخصوصية](https://sabq.org/privacy)

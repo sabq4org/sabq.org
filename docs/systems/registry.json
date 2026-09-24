@@ -905,6 +905,8 @@
         "web-next/lib/articleMetadata.ts",
         "server/services/archiveSeo.ts",
         "server/utils/apiListingRobots.ts",
+        "server/utils/robotsTxt.ts",
+        "tests/unit/robotsTxt.test.ts",
         "shared/articleHeroPreload.ts",
         "tests/unit/edgeMetadataBudget.test.ts",
         "server/utils/creatorSchema.ts",
@@ -926,7 +928,7 @@
       "owners": [
         "platform"
       ],
-      "lastReviewed": "2026-09-19"
+      "lastReviewed": "2026-09-24"
     },
     {
       "id": "comments",
