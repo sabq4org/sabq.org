@@ -10,6 +10,7 @@ import { CommentsTeaser } from "@/components/CommentsTeaser";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import SmartNewsletterForm from "@/components/SmartNewsletterForm";
+import { INLINE_NEWSLETTER_SIGNUP_ENABLED } from "@/config/newsletter";
 import { CommentSection } from "@/components/CommentSection";
 import { ArticlePoll } from "@/components/ArticlePoll";
 import { RecommendationsWidget } from "@/components/RecommendationsWidget";
@@ -1510,7 +1511,7 @@ export default function ArticleDetail() {
               limit={4}
             />
 
-            <SmartNewsletterForm variant="compact" source="article" className="my-8" />
+            {INLINE_NEWSLETTER_SIGNUP_ENABLED && <SmartNewsletterForm variant="compact" source="article" className="my-8" />}
 
             {/* Article Poll */}
             <div className="mb-8">

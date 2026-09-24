@@ -4,6 +4,7 @@ import { SiteFooter } from "@/components/SiteFooter";
 import { ArticleCard } from "@/components/ArticleCard";
 import { getHomeBundle, type HomeBundle } from "@/lib/seoBundle";
 import { NewsletterSignup } from "@/components/NewsletterSignup";
+import { INLINE_NEWSLETTER_SIGNUP_ENABLED } from "@/lib/newsletter";
 
 export const revalidate = 60;
 
@@ -93,7 +94,7 @@ export default async function HomePage() {
             <ArticleCard key={item.href} item={item} priority={i === 0} />
           ))}
         </section>
-        <NewsletterSignup source="home-first-group" />
+        {INLINE_NEWSLETTER_SIGNUP_ENABLED && <NewsletterSignup source="home-first-group" />}
         {bundle.articles.length > 6 && <section className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
           {bundle.articles.slice(6).map((item) => <ArticleCard key={item.href} item={item} />)}
         </section>}
