@@ -1,7 +1,8 @@
 // ----------------------------------------------------------------------------
 // عقد «مسودات البوتات» — Bot Drafts API (shared between server, tests, client)
 //
-// المسار: /api/internal/bot-drafts — مسودات عربية فقط، لا نشر ولا جدولة.
+// المسار: /api/internal/bot-drafts — مسودات عربية، ثم نشر فوري أو جدولة
+// بمسارين صريحين. جسم الإنشاء/التحديث لا يكتب الحالة.
 // المستهلكون: بوت «نشر سبق»، مهندّس (Grok Bot)، وأي وكيل يحمل توكن مسودات.
 // التوثيق الكامل: docs/systems/editorial/BOT_DRAFTS_API.md
 // ----------------------------------------------------------------------------
@@ -50,8 +51,19 @@ export const botDraftReadySchema = z.object({}).strict();
 export const BOT_DRAFT_SOURCE = "bot" as const;
 
 /**
- * حقول يُرفض وجودها في أي طلب من البوت (422 `forbidden_fields`).
- * تغييرها من اختصاص المحررين عبر لوحة التحكم فقط — أي مسار نشر/جدولة/إسناد.
+ * الحالات التي يجوز للبوت أن ينشرها أو يجدولها.
+ * `draft` قبل الاعتماد، و`ready_to_publish` بعده. ما عدا ذلك `409 not_a_draft`.
+ */
+export const BOT_DRAFT_PUBLISHABLE_STATUSES = [BOT_DRAFT_STATUS, BOT_DRAFT_READY_STATUS] as const;
+
+export function isBotDraftPublishableStatus(status: string | null | undefined): boolean {
+  return status === BOT_DRAFT_STATUS || status === BOT_DRAFT_READY_STATUS;
+}
+
+/**
+ * حقول يُرفض وجودها في جسم أي طلب من البوت (422 `forbidden_fields`)،
+ * بما فيها `POST /publish` و`POST /schedule`. الحالة والموعد يضبطهما الخادم
+ * في هذين المسارين، ولا يُكتبان من الجسم. الإسناد ممنوع دائماً.
  */
 export const BOT_DRAFT_FORBIDDEN_FIELDS = [
   "status",
@@ -162,18 +174,71 @@ export const botDraftUpdateSchema = z
   .strict()
   .refine((value) => Object.keys(value).length > 0, { message: "لا توجد حقول للتحديث" });
 
+/** POST /api/internal/bot-drafts/:id/publish — جسم فارغ. الحالة يكتبها الخادم. */
+export const botDraftPublishSchema = z.object({}).strict();
+
+/**
+ * POST /api/internal/bot-drafts/:id/schedule.
+ * `publishAt` وقت ISO-8601 بمنطقة زمنية. وقت الرياض يُرسل `+03:00` أو ما يعادله UTC.
+ * الماضي والفوري بلا إزاحة يُرفضان في `parseBotDraftPublishAt`.
+ */
+export const botDraftScheduleSchema = z
+  .object({
+    publishAt: z.string().trim().min(1, "publishAt مطلوب"),
+  })
+  .strict();
+
 export type BotDraftCreateInput = z.infer<typeof botDraftCreateSchema>;
 export type BotDraftUpdateInput = z.infer<typeof botDraftUpdateSchema>;
+export type BotDraftScheduleInput = z.infer<typeof botDraftScheduleSchema>;
+
+/** مثال موثّق للبوت: جدار الرياض يُرسل بإزاحة +03:00 لا كوقت عارٍ. */
+export const BOT_DRAFT_PUBLISH_AT_HINT =
+  "أرسل وقت الرياض بإزاحة +03:00 (مثال 2026-09-24T18:30:00+03:00) أو ما يعادله بتوقيت UTC (…Z). الوقت بلا منطقة زمنية مرفوض حتى لا يُفسَّر كتوقيت الخادم.";
+
+const TIMEZONE_AWARE_ISO =
+  /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(\.\d{1,9})?(Z|[+-]\d{2}:\d{2})$/;
+
+export type BotDraftPublishAtResult =
+  | { ok: true; publishAt: Date }
+  | { ok: false; message: string; details?: { publishAt?: string; now: string } };
+
+/**
+ * يقبل طابعاً زمنياً مستقبلياً بمنطقة زمنية فقط.
+ * `<= now` مرفوض (400 عند الاستدعاء). الوقت بلا `Z` أو `±hh:mm` مرفوض.
+ */
+export function parseBotDraftPublishAt(value: string, now: Date = new Date()): BotDraftPublishAtResult {
+  const trimmed = typeof value === "string" ? value.trim() : "";
+  if (!TIMEZONE_AWARE_ISO.test(trimmed)) {
+    return {
+      ok: false,
+      message: `publishAt يجب أن يكون ISO-8601 مع منطقة زمنية. ${BOT_DRAFT_PUBLISH_AT_HINT}`,
+      details: { now: now.toISOString() },
+    };
+  }
+  const publishAt = new Date(trimmed);
+  if (Number.isNaN(publishAt.getTime())) {
+    return { ok: false, message: "publishAt تاريخ غير صالح", details: { now: now.toISOString() } };
+  }
+  if (publishAt.getTime() <= now.getTime()) {
+    return {
+      ok: false,
+      message: `موعد النشر في الماضي أو اللحظة الحالية. ${BOT_DRAFT_PUBLISH_AT_HINT}`,
+      details: { publishAt: publishAt.toISOString(), now: now.toISOString() },
+    };
+  }
+  return { ok: true, publishAt };
+}
 
 /** شكل الاستجابة الموحد لكل مسارات المسودات. */
 export interface BotDraftResponse {
   id: string;
   /**
-   * حالة المادة في اللوحة. للبوت: `draft` ثم `ready_to_publish` بعد الاعتماد،
-   * أو `published` / `scheduled` / `archived` بعد إجراء بشري.
+   * حالة المادة في اللوحة: `draft`، `ready_to_publish`، `published`، `scheduled`، `archived`.
+   * النشر والجدولة من البوت يكتبان `published` أو `scheduled` عبر مساريهما لا عبر الجسم.
    */
   status: string;
-  /** `true` فقط عندما تكون المادة `draft`. بعد `ready_to_publish` تصبح `false`. */
+  /** `true` فقط عندما تكون المادة `draft`. بعد الجاهزية أو النشر أو الجدولة تصبح `false`. */
   updatable: boolean;
   title: string;
   subtitle: string | null;
@@ -198,6 +263,17 @@ export interface BotDraftResponse {
   editUrl: string;
   /** رابط المعاينة الداخلية (يتطلب جلسة محرر). */
   previewUrl: string;
+  /**
+   * الرابط العام للقرّاء: `{أصل الموقع}/article/{englishSlug}`.
+   * يُفضَّل `englishSlug` لأن الرابط العربي يُحوَّل 301 إليه.
+   * يظهر أيضاً قبل النشر؛ الصفحة العامة لا تعرض المادة إلا عندما تصبح `published`.
+   * أثناء `scheduled` نفس الرابط يُفتح عند حلول الموعد عبر ناشر المواد المجدولة.
+   */
+  publicUrl: string | null;
+  /** وقت النشر الفعلي، أو null قبل أن تُنشر المادة. */
+  publishedAt: string | null;
+  /** موعد الجدولة المخزّن، أو null إن لم تُجدول. */
+  scheduledAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -225,6 +301,7 @@ export const BOT_DRAFT_ERROR_CODES = [
   "not_found",
   "not_a_draft",
   "locked_by_editor",
+  "license_required",
   "forbidden_action",
   "rate_limited",
   "invalid_image",

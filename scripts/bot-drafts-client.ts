@@ -15,6 +15,8 @@
  *   tsx scripts/bot-drafts-client.ts update <id> --title="عنوان جديد" [--content-file=…] [--json=…]
  *   tsx scripts/bot-drafts-client.ts get <id>
  *   tsx scripts/bot-drafts-client.ts ready <id>
+ *   tsx scripts/bot-drafts-client.ts publish <id>
+ *   tsx scripts/bot-drafts-client.ts schedule <id> --publish-at=2026-09-24T18:30:00+03:00
  *   tsx scripts/bot-drafts-client.ts upload --file=./cover.jpg
  */
 
@@ -63,6 +65,10 @@ export interface BotDraft {
   clientReference: string | null;
   editUrl: string;
   previewUrl: string;
+  /** رابط القارئ: https://sabq.org/article/{englishSlug}. حيّ عندما status=published. */
+  publicUrl?: string | null;
+  publishedAt?: string | null;
+  scheduledAt?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -120,6 +126,22 @@ export class BotDraftsClient {
    */
   markReady(id: string): Promise<BotDraft> {
     return this.request("PATCH", `/api/internal/bot-drafts/${encodeURIComponent(id)}/ready`, {});
+  }
+
+  /**
+   * نشر فوري لمسودة `draft` أو `ready_to_publish`. جسم فارغ.
+   * الرد: `status=published` و`updatable=false` و`publicUrl`.
+   */
+  publish(id: string): Promise<BotDraft> {
+    return this.request("POST", `/api/internal/bot-drafts/${encodeURIComponent(id)}/publish`, {});
+  }
+
+  /**
+   * جدولة النشر. `publishAt` يجب أن يكون مستقبلياً وبمنطقة زمنية.
+   * وقت الرياض: `2026-09-24T18:30:00+03:00` أو ما يعادله UTC.
+   */
+  schedule(id: string, publishAt: string): Promise<BotDraft> {
+    return this.request("POST", `/api/internal/bot-drafts/${encodeURIComponent(id)}/schedule`, { publishAt });
   }
 
   /** حالة المسودة ومعرفها ورابط التحرير الداخلي. */
@@ -239,13 +261,25 @@ async function main() {
       result = await client.markReady(id);
       break;
     }
+    case "publish": {
+      if (!id) throw new Error("publish needs <id>");
+      result = await client.publish(id);
+      break;
+    }
+    case "schedule": {
+      if (!id) throw new Error("schedule needs <id>");
+      const publishAt = flags["publish-at"] || flags.publishAt;
+      if (!publishAt) throw new Error("schedule needs --publish-at=2026-09-24T18:30:00+03:00");
+      result = await client.schedule(id, publishAt);
+      break;
+    }
     case "upload": {
       if (!flags.file) throw new Error("upload needs --file=path");
       result = await client.uploadImage({ data: readFileSync(flags.file), filename: basename(flags.file) });
       break;
     }
     default:
-      console.error("usage: bot-drafts-client.ts <create|update|get|ready|upload> [id] [--flags]  (see file header)");
+      console.error("usage: bot-drafts-client.ts <create|update|get|ready|publish|schedule|upload> [id] [--flags]  (see file header)");
       process.exit(2);
   }
   console.log(JSON.stringify(result, null, 2));
