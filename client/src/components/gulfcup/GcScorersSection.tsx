@@ -6,8 +6,8 @@ import { GC_SECTION_SCROLL_MT } from "./gcTypes";
 
 /**
  * «الهدّافون وصنّاع اللعب» — منصة تتويج للثلاثة الأوائل + جدول للبقية،
- * وعمود جانبي لصنّاع الأهداف. قبل توفر أرقام 2026 لدى المزوّد تُعرض
- * أرقام خليجي 26 موسومة صراحةً. يختفي القسم كليًا عند غياب البيانات.
+ * وعمود جانبي لصنّاع الأهداف. أرقام خليجي 27 وحدها (لا تُعرض نسخة سابقة)،
+ * ويختفي القسم كليًا قبل تسجيل أول هدف.
  */
 
 function PodiumCard({ scorer, place }: { scorer: GcScorer; place: 1 | 2 | 3 }) {
@@ -51,8 +51,10 @@ export function GcScorersSection() {
     staleTime: 5 * 60_000,
   });
 
-  // صفوف الأصفار ضجيج بصري (تظهر في أرقام الأرشيف) — نعرض المُنتِجين فقط،
-  // وإن خلت قائمة الصنّاع بالكامل يختفي عمودها ويتمدّد الهدّافون.
+  // حماية إضافية: لا نعرض أرقام نسخة سابقة ولو ردّ بها خادم أقدم.
+  if (data && data.isCurrent === false) return null;
+  // صفوف الأصفار ضجيج بصري — نعرض المُنتِجين فقط، وإن خلت قائمة الصنّاع
+  // بالكامل يختفي عمودها ويتمدّد الهدّافون.
   const scorers = (Array.isArray(data?.scorers) ? data.scorers : []).filter((s) => s.goals > 0);
   const assists = (Array.isArray(data?.assists) ? data.assists : []).filter((s) => s.assists > 0);
   if (scorers.length === 0 && assists.length === 0) return null;
@@ -66,11 +68,6 @@ export function GcScorersSection() {
         <Target className="h-6 w-6 text-sky-600 dark:text-sky-400" />
         <h2 className="text-2xl font-black text-foreground">الهدّافون وصنّاع اللعب</h2>
       </div>
-      {data && !data.isCurrent && (
-        <p className="mb-5 rounded-2xl border border-sky-400/40 bg-sky-50 px-4 py-3 text-sm font-bold text-sky-900 dark:border-sky-400/30 dark:bg-sky-950/40 dark:text-sky-100">
-          أرقام خليجي 26 — تظهر هنا إلى حين تسجيل أول أهداف خليجي 27.
-        </p>
-      )}
 
       <div className={assists.length > 0 ? "grid gap-6 lg:grid-cols-[1fr_300px]" : ""}>
         {/* الهدّافون: منصة + جدول */}

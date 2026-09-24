@@ -29,8 +29,9 @@ export function GcSectionNav({
 
   const hasStars = (starsData?.stars ?? []).length > 0;
   const hasScorers =
-    (scorersData?.scorers ?? []).some((s) => s.goals > 0) ||
-    (scorersData?.assists ?? []).some((s) => s.assists > 0);
+    scorersData?.isCurrent !== false &&
+    ((scorersData?.scorers ?? []).some((s) => s.goals > 0) ||
+      (scorersData?.assists ?? []).some((s) => s.assists > 0));
   const hasKnockout = fixtures.some((f) => {
     const round = (f.roundEn ?? "").toLowerCase();
     return round.includes("semi") || round.trim().startsWith("final");
