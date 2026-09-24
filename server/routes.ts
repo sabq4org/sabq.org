@@ -1,5 +1,6 @@
 import { registerShutdownHook } from "./shutdown";
 import { matchesArticleVersion, nextArticleVersion, articleLockAllowsWriter } from "./services/articleWriteVersion";
+import { setArticleDerivedFields, articleWriteConflict, refreshArticleLiteImage } from "./services/articleDerivedWrites";
 import { adminScheduledOrder, getAdminPublishedPageIds } from "./services/adminArticleList";
 import { getArticleListSignals } from "./services/articleListSignalsService";
 import { getPublicEditorialModifiedAt } from "./utils/editorialDates";
@@ -67,7 +68,7 @@ import { registerSplitRoutes } from './routes/splitRoutesIndex';
 import { ObjectStorageService, ObjectNotFoundError, objectStorageClient, isPrivateObjectStorageConfigured } from "./objectStorage";
 import newsletterAnalyticsRoutes from './routes/newsletterAnalyticsRoutes';
 import pushNotificationRoutes from './routes/pushNotificationRoutes';
-import imageOptimizationService, { optimizeImage, getOptimizedImage, generateSrcSet, getBestFormat, supportsWebP, IMAGE_SIZES, generateLiteOptimizedImage } from "./services/imageOptimizationService";
+import imageOptimizationService, { optimizeImage, getOptimizedImage, generateSrcSet, getBestFormat, supportsWebP, IMAGE_SIZES } from "./services/imageOptimizationService";
 import sharp from "sharp";
 import { registerInfographicAiRoutes } from "./routes/infographicAi";
 import { broadcastArticlePublished } from "./routes/editorPresence";
@@ -7991,18 +7992,8 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
             }
           }
 
-          // Generate Lite optimized image for swipe feed
-          if (articleForNotification.imageUrl) {
-            try {
-              const liteImageUrl = await generateLiteOptimizedImage(articleForNotification.imageUrl);
-              if (liteImageUrl) {
-                await storage.updateArticle(articleForNotification.id, { liteOptimizedImageUrl: liteImageUrl });
-                console.log(`[Lite Image] Generated for article: ${articleForNotification.id}`);
-              }
-            } catch (liteError) {
-              console.error(`[Lite Image] Failed for article ${articleForNotification.id}:`, liteError);
-            }
-          }
+          // Generate Lite optimized image for swipe feed (derived column: no updatedAt bump)
+          await refreshArticleLiteImage(articleForNotification.id, articleForNotification.imageUrl);
 
           // Auto-generate thumbnail for faster card loading
           if (articleForNotification.imageUrl && !articleForNotification.thumbnailUrl) {
@@ -8345,7 +8336,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         .returning();
 
       if (!updatedArticle) {
-        return res.status(409).json({ code: "ARTICLE_VERSION_CONFLICT", message: "تغير المقال منذ فتحه. احتفظ بمسودتك وأعد تحميل النسخة الحالية قبل الحفظ." });
+        return res.status(409).json(await articleWriteConflict(articleId, userId));
       }
 
       // Invalidate caches immediately (in-memory + Redis + Cloudflare CDN).
@@ -8678,18 +8669,8 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
             console.error("❌ [UPDATE ARTICLE] Error creating legacy notification:", legacyNotifyError);
           }
 
-          // Generate Lite optimized image for swipe feed
-          if (articleForNotification.imageUrl) {
-            try {
-              const liteImageUrl = await generateLiteOptimizedImage(articleForNotification.imageUrl);
-              if (liteImageUrl) {
-                await storage.updateArticle(articleForNotification.id, { liteOptimizedImageUrl: liteImageUrl });
-                console.log(`[Lite Image] Generated for article: ${articleForNotification.id}`);
-              }
-            } catch (liteError: any) {
-              console.error(`[Lite Image] Failed for article ${articleForNotification.id}:`, liteError);
-            }
-          }
+          // Generate Lite optimized image for swipe feed (derived column: no updatedAt bump)
+          await refreshArticleLiteImage(articleForNotification.id, articleForNotification.imageUrl);
 
           // Auto-generate thumbnail for faster card loading
           if (articleForNotification.imageUrl && !articleForNotification.thumbnailUrl) {
@@ -14173,7 +14154,7 @@ Respond in valid JSON format only:
         const bullets = parseToBullets(existing);
         if (bullets.length > 0) {
           // Persist parsed bullets so future requests skip parsing
-          storage.updateArticle(article.id, { aiBullets: bullets, aiBulletsGeneratedAt: new Date() } as Parameters<typeof storage.updateArticle>[1])
+          setArticleDerivedFields(article.id, { aiBullets: bullets, aiBulletsGeneratedAt: new Date() }) // no updatedAt bump
             .catch((e) => console.error("[ai-bullets] failed to persist parsed bullets:", e instanceof Error ? e.message : e));
           cacheBullets();
           return res.json({ bullets, source: "stored" });

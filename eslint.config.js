@@ -123,8 +123,10 @@ export default tseslint.config(
     // single-flight read overlay instead of a bespoke per-request views
     // lookup, and the redundant mediaAssets fallback block was removed —
     // net shrink to 36366 lines. Ratchet follows the file down.
+    // 2026-09-24: derived-column writes (lite image, parsed bullets) and the
+    // 409 conflict body moved to services/articleDerivedWrites.ts → 36353.
     files: ["server/routes.ts"],
-    rules: { "max-lines": ["error", { max: 36366 }] },
+    rules: { "max-lines": ["error", { max: 36353 }] },
   },
   {
     files: ["server/storage.ts"],
