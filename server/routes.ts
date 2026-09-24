@@ -27208,7 +27208,14 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   // variants are handled via canonical + meta robots, not Disallow.
   app.get("/robots.txt", (_req, res) => {
     const robotsTxt = `# صحيفة سبق الإلكترونية — robots.txt
+# سياسة استخدام المحتوى في الذكاء الاصطناعي: https://sabq.org/ai-policy (Sabq-AI-Use-1.0)
+# Content-Signal (contentsignals.org) يعلن السياسة نفسها للزواحف:
+#   search=yes   الفهرسة والظهور في نتائج البحث
+#   ai-input=yes الاستشهاد في إجابات المساعدات الذكية مع الإسناد والرابط (الاستدلال)
+#   ai-train=no  لا تدريب أو ضبط دقيق للنماذج دون اتفاق مكتوب (partnerships@sabq.org)
+# دليل للنماذج اللغوية: https://sabq.org/llms.txt
 User-agent: *
+Content-Signal: search=yes, ai-input=yes, ai-train=no
 Allow: /
 Disallow: /api/
 ${apiListingRobotsRules}
