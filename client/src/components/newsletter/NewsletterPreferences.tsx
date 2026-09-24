@@ -3,7 +3,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { apiRequest } from "@/lib/queryClient";
 
 type SubscriptionStatus = {
-  local: { status: string; preferences?: { frequency?: string } } | null;
+  local: { status: string; confirmed?: boolean; preferences?: { frequency?: string } } | null;
 };
 
 export function NewsletterPreferences() {
@@ -18,15 +18,20 @@ export function NewsletterPreferences() {
     let cancelled = false;
     setActive(false);
     setMessage("");
+    setLoading(false);
     if (!user?.email || !user.emailVerified) return;
     setLoading(true);
-    void apiRequest<SubscriptionStatus>(`/api/smart-newsletter/status/${encodeURIComponent(user.email)}`)
+    // This optional panel handles its own loading/errors. A failed ownership
+    // lookup must not show a global invalid-link warning over the signup form.
+    void apiRequest<SubscriptionStatus>(`/api/smart-newsletter/status/${encodeURIComponent(user.email)}`, { silent: true })
       .then(result => {
         if (cancelled) return;
         const value = result.local?.preferences?.frequency;
         if (value === "daily" || value === "weekly") setFrequency(value);
-        setActive(result.local?.status === "active");
-        if (result.local?.status !== "active") setMessage("لا يوجد اشتراك نشط مرتبط ببريد حسابك. أكمل تأكيد الاشتراك أولًا.");
+        const confirmedActive = result.local?.status === "active" && result.local.confirmed !== false;
+        setActive(confirmedActive);
+        if (!result.local) setMessage("لا يوجد اشتراك مرتبط ببريد حسابك بعد. يمكنك الاشتراك من النموذج أعلاه.");
+        else if (!confirmedActive) setMessage("لا يوجد اشتراك مؤكّد ونشط مرتبط ببريد حسابك. أكمل تأكيد الاشتراك أولًا.");
       })
       .catch(() => { if (!cancelled) setMessage("تعذر تحميل اشتراكك. تحقق من تأكيد بريد الاشتراك ثم أعد المحاولة."); })
       .finally(() => { if (!cancelled) setLoading(false); });

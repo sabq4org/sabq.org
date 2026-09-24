@@ -8,13 +8,16 @@ import { ThemeProvider } from "@/components/ThemeProvider";
 import { LanguageProvider } from "@/contexts/LanguageContext";
 import NewsletterPage from "@/pages/NewsletterPage";
 import { NewsletterEditorialPanel } from "@/components/newsletter/NewsletterEditorialPanel";
+import { Toaster } from "@/components/ui/toaster";
+import { LiveRegionProvider } from "@/contexts/LiveRegionContext";
 import "@/index.css";
 const editorial = new URLSearchParams(window.location.search).has("editorial");
 const route = memoryLocation({ path: "/newsletter" });
 createRoot(document.getElementById("root")!).render(
   <QueryClientProvider client={queryClient}>
-    <LanguageProvider><ThemeProvider defaultTheme="light">
+    <LanguageProvider><ThemeProvider defaultTheme="light"><LiveRegionProvider>
       <Router hook={route.hook}>{editorial ? <div className="mx-auto max-w-6xl p-5"><NewsletterEditorialPanel /></div> : <NewsletterPage />}</Router>
-    </ThemeProvider></LanguageProvider>
+      <Toaster />
+    </LiveRegionProvider></ThemeProvider></LanguageProvider>
   </QueryClientProvider>,
 );

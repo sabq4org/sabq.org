@@ -12,7 +12,7 @@
 ## نقاط الدخول
 | الطبقة | المسار |
 |--------|--------|
-| Backend | `newsletterScheduler`, `newsletterEditorialRoutes`, `newsletterEditorialService`, `newsletterSubscriptionService`, `newsletterDeliveryQueue`, `newsletterWorker`, `ttsProviderRegistry`, `audioNewsletterCompatibility` |
+| Backend | `newsletterScheduler`, `newsletterEditorialRoutes`, `newsletterEditorialService`, `newsletterSubscriptionService`, `smartNewsletterRoutes`, `newsletterDeliveryQueue`, `newsletterWorker`, `ttsProviderRegistry`, `audioNewsletterCompatibility` |
 | Web | `/newsletter` و`/dashboard/newsletter-analytics` للنشرات البريدية؛ `/dashboard/system-settings` → `SummaryAudioSettings` للصوت؛ لا إعادة لمنتج النشرات الصوتية المتوقف |
 | Backend / summary | `/api/articles/:slug/summary-audio` → `summaryAudioService`؛ `/api/system/summary-audio-settings` و`/preview` → `summaryAudioSettings` |
 | Docs | `docs/AUDIO_NEWSLETTER_SYSTEM.md` |
@@ -53,6 +53,7 @@
 - مسارا الاشتراك العام القديم والجديد يطلبان موافقة صريحة ووتيرة `daily | weekly`، ويعيدان استجابة انتظار موحدة لا تكشف وجود البريد. لا تفعيل فوري ولا مزامنة MailerLite قبل التأكيد.
 - الاشتراك التاريخي `active` الذي يفتقد marker الموافقة الحالي لا يُعد موافقة صالحة: طلب opt-in جديد وصريح فقط ينقله إلى `pending_confirmation` ويرسل رابط DOI جديدًا، مع الحفاظ على مهلة إعادة الإرسال 10 دقائق. الصف النشط ذي `newsletterConsentVersion: 1` و`confirmedAt` النصي يبقى كما هو، والحالات `unsubscribed` و`bounced` و`junk` نهائية.
 - التأكيد POST صريح برمز عشوائي مخزن كبصمة ومحدود الصلاحية. الحالات المحظورة لا يعيد فورم عام تفعيلها. التفضيلات تتطلب إثبات ملكية، ومجموعتا MailerLite تعكسان الوتيرة.
+- `GET /api/smart-newsletter/status/:email` يعيد حالة فارغة (`200` مع `local: null` و`mailerlite: null`) فقط للحساب الموثق الذي يطلب عنوانه نفسه؛ غياب السجل المحلي لا يستدعي MailerLite. الطلب المجهول أو غير الموثق أو العابر لحساب آخر، وكذلك التوكن غير الصالح، يبقى مرفوضًا. عند وجود سجل محلي، يوضح `local.confirmed` اجتماع `verifiedAt` مع علامة التأكيد الحالية لتحديد الحاجة إلى DOI.
 - مسارات التحرير تحتاج جلسة و`articles.publish` عبر RBAC الفعلي، لا اسم دور مفترض.
 - المسودات تحفظ في `audio_newsletters.customContent` بغلاف JSON مرقّم؛ لا Schema جديد ولا توليد صوت. المراجعة والاعتماد يسبقان تصدير HTML؛ التعديل يبطل الاعتماد. لا إنشاء حملة بعيدة أو إرسال من زر التصدير.
 - واجهة الاشتراك العربية موجودة في SPA وSSR؛ الروابط في التنقل والتذييل، والفورم في الرئيسية وبعد المقال. صفحة التأكيد/التفضيلات `/newsletter` صامتة للتحليلات والإعلانات الخارجية؛ قياس مواضع الدعوة في المقال والرئيسية بلا بريد أو رموز ملكية.
