@@ -52,29 +52,44 @@ import { cfKeyGenerator, cfValidate } from '../utils/rateLimiting';
  *    subscriber.id`), or
  *  - being signed in as the owner of that address.
  *
- * Returns the subscription row, or a ready-to-send denial. The denial is
- * deliberately uniform so it cannot be used to test whether an address exists.
+ * Returns the subscription row, or a ready-to-send denial. The status route
+ * may additionally receive an empty result after a verified owner is proved;
+ * mutations never use that mode. The denial is deliberately uniform so it
+ * cannot be used to test whether an address exists.
  */
+type SubscriberResolution =
+  | { ok: true; subscription: typeof newsletterSubscriptions.$inferSelect }
+  | { ok: false; httpStatus: number; message: string };
+
+type SubscriberResolutionWithEmptyOwner =
+  | SubscriberResolution
+  | { ok: true; subscription: null };
+
+function resolveSubscriber(
+  req: any,
+  emailFromRequest?: string,
+): Promise<SubscriberResolution>;
+function resolveSubscriber(
+  req: any,
+  emailFromRequest: string | undefined,
+  options: { allowMissingVerifiedOwner: true },
+): Promise<SubscriberResolutionWithEmptyOwner>;
 async function resolveSubscriber(
   req: any,
   emailFromRequest?: string,
-): Promise<
-  | { ok: true; subscription: typeof newsletterSubscriptions.$inferSelect }
-  | { ok: false; httpStatus: number; message: string }
-> {
+  options?: { allowMissingVerifiedOwner?: boolean },
+): Promise<SubscriberResolutionWithEmptyOwner> {
   const denied = {
     ok: false as const,
     httpStatus: 403,
     message: 'رابط غير صالح. استخدم رابط إلغاء الاشتراك من رسالة النشرة، أو سجّل الدخول.',
   };
 
-  const token = typeof req.body?.token === 'string'
-    ? req.body.token
-    : typeof req.query?.token === 'string'
-      ? req.query.token
-      : null;
+  const bodyToken = typeof req.body?.token === 'string' ? req.body.token : null;
+  const queryToken = typeof req.query?.token === 'string' ? req.query.token : null;
+  const token = bodyToken ?? queryToken;
 
-  if (token) {
+  if (token !== null) {
     const [row] = await db
       .select()
       .from(newsletterSubscriptions)
@@ -87,7 +102,7 @@ async function resolveSubscriber(
   if (sessionEmail && req.user?.emailVerified === true) {
     // A signed-in reader may only act on their own address, whether or not
     // they also passed one in the body.
-    if (emailFromRequest && emailFromRequest.toLowerCase() !== sessionEmail.toLowerCase()) {
+    if (emailFromRequest && emailFromRequest.trim().toLowerCase() !== sessionEmail) {
       return denied;
     }
     const [row] = await db
@@ -95,7 +110,8 @@ async function resolveSubscriber(
       .from(newsletterSubscriptions)
       .where(sql`lower(${newsletterSubscriptions.email}) = ${sessionEmail}`)
       .limit(1);
-    return row ? { ok: true, subscription: row } : denied;
+    if (row) return { ok: true, subscription: row };
+    return options?.allowMissingVerifiedOwner ? { ok: true, subscription: null } : denied;
   }
 
   return denied;
@@ -257,7 +273,7 @@ export function registerSmartNewsletterRoutes(app: Express) {
       // This answered "is <email> subscribed?" for any address, which is a
       // subscriber-enumeration oracle over the whole reader base. Require the
       // same proof of ownership as unsubscribe/update.
-      const resolved = await resolveSubscriber(req, email);
+      const resolved = await resolveSubscriber(req, email, { allowMissingVerifiedOwner: true });
       if (!resolved.ok) {
         return res.status(resolved.httpStatus).json({
           success: false,
@@ -265,6 +281,19 @@ export function registerSmartNewsletterRoutes(app: Express) {
         });
       }
       const localSub = resolved.subscription;
+
+      // A verified account may not have a local newsletter row yet. This is a
+      // normal empty state for the preferences page, not an invalid link. The
+      // ownership proof above is still required, and no provider lookup is
+      // meaningful without a local subscription address.
+      if (!localSub) {
+        return res.json({
+          success: true,
+          subscribed: false,
+          local: null,
+          mailerlite: null,
+        });
+      }
 
       // Check MailerLite status — for the resolved subscription's own address.
       let mailerliteSub = null;
@@ -287,6 +316,7 @@ export function registerSmartNewsletterRoutes(app: Express) {
           language: localSub.language,
           preferences: localSub.preferences,
           subscribedAt: localSub.createdAt,
+          confirmed: Boolean(localSub.verifiedAt && hasConfirmedNewsletterMarker(localSub)),
         } : null,
         mailerlite: mailerliteSub,
       });

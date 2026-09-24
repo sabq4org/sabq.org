@@ -50,11 +50,11 @@ for (const mobile of [false, true]) {
     await page.keyboard.press("Space");
     await expect(page.getByRole("radio", { name: /أسبوعيًا/ })).toBeChecked();
     await page.getByRole("button", { name: "أرسل لي النشرة" }).click();
-    await expect(page.getByRole("alert")).toContainText("وافق");
+    await expect(page.locator("form").getByRole("alert")).toContainText("وافق");
     expect(writes).toHaveLength(0);
     await page.getByRole("checkbox", { name: /أوافق على تلقي/ }).check();
     await page.getByRole("button", { name: "أرسل لي النشرة" }).click();
-    await expect(page.getByRole("status")).toContainText("تحقق من بريدك");
+    await expect(page.getByTestId("newsletter-confirmation")).toContainText("تحقق من بريدك");
     expect(writes).toEqual([{ path: "/api/smart-newsletter/subscribe", body: expect.objectContaining({ email: "reader@example.com", frequency: "weekly", consent: true, language: "ar" }) }]);
     await expect(page.getByText("تم تأكيد اشتراكك", { exact: true })).toHaveCount(0);
     expect(errors).toEqual([]);
@@ -78,7 +78,7 @@ test("failed signup keeps the form usable and never claims confirmation", async 
   await page.getByRole("textbox", { name: /البريد الإلكتروني/ }).fill("reader@example.com");
   await page.getByRole("checkbox", { name: /أوافق على تلقي/ }).check();
   await page.getByRole("button", { name: "أرسل لي النشرة" }).click();
-  await expect(page.getByRole("alert")).toBeVisible();
+  await expect(page.locator("form").getByRole("alert")).toContainText("الخادم غير متاح");
   await expect(page.getByRole("button", { name: "أرسل لي النشرة" })).toBeEnabled();
   await expect(page.getByText("تم تأكيد اشتراكك", { exact: true })).toHaveCount(0);
 });
@@ -102,6 +102,41 @@ test("signed-in reader loads and updates only their own cadence", async ({ page 
   await page.getByTestId("newsletter-preferences-save").click();
   await expect(panel.getByRole("status")).toContainText("حُفظ");
   expect(updates).toEqual([expect.objectContaining({ email: "reader@example.com", frequency: "daily" })]);
+});
+
+test("verified account without a subscription can open the landing page and sign up", async ({ page }, info) => {
+  const { writes } = await setup(page);
+  await page.route("**/api/auth/user", route => route.fulfill({ json: { id: "reader-1", email: "reader@example.com", emailVerified: true } }));
+  await page.route("**/api/smart-newsletter/status/**", route => route.fulfill({ json: { success: true, subscribed: false, local: null, mailerlite: null } }));
+  await page.reload();
+  await expect(page.getByTestId("newsletter-preferences").getByRole("status")).toContainText("يمكنك الاشتراك من النموذج أعلاه");
+  await expect(page.getByText("رابط غير صالح", { exact: false })).toHaveCount(0);
+  await expect(page.getByTestId("newsletter-preferences-save")).toBeDisabled();
+  await page.screenshot({ path: info.outputPath("newsletter-empty-account.png"), fullPage: true });
+  await page.getByRole("textbox", { name: /البريد الإلكتروني/ }).fill("reader@example.com");
+  await page.getByRole("checkbox", { name: /أوافق على تلقي/ }).check();
+  await page.getByRole("button", { name: "أرسل لي النشرة" }).click();
+  await expect(page.getByTestId("newsletter-confirmation")).toContainText("تحقق من بريدك");
+  expect(writes).toEqual([{ path: "/api/smart-newsletter/subscribe", body: expect.objectContaining({ email: "reader@example.com", consent: true }) }]);
+});
+
+test("a denied preferences lookup stays local and does not show an invalid-link toast", async ({ page }) => {
+  await setup(page);
+  await page.route("**/api/auth/user", route => route.fulfill({ json: { id: "reader-1", email: "reader@example.com", emailVerified: true } }));
+  await page.route("**/api/smart-newsletter/status/**", route => route.fulfill({ status: 403, json: { success: false, message: "رابط غير صالح. استخدم رابط إلغاء الاشتراك من رسالة النشرة، أو سجّل الدخول." } }));
+  await page.reload();
+  await expect(page.getByTestId("newsletter-preferences").getByRole("status")).toContainText("تعذر تحميل اشتراكك");
+  await expect(page.getByText("رابط غير صالح", { exact: false })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "أرسل لي النشرة" })).toBeEnabled();
+});
+
+test("legacy active subscription needs confirmation before editing preferences", async ({ page }) => {
+  await setup(page);
+  await page.route("**/api/auth/user", route => route.fulfill({ json: { id: "reader-1", email: "reader@example.com", emailVerified: true } }));
+  await page.route("**/api/smart-newsletter/status/**", route => route.fulfill({ json: { success: true, local: { status: "active", confirmed: false, preferences: { frequency: "weekly" } } } }));
+  await page.reload();
+  await expect(page.getByTestId("newsletter-preferences").getByRole("status")).toContainText("أكمل تأكيد الاشتراك أولًا");
+  await expect(page.getByTestId("newsletter-preferences-save")).toBeDisabled();
 });
 
 test("provider failure never claims preferences or cancellation have reached the sender", async ({ page }) => {
