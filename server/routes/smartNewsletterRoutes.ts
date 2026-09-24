@@ -281,7 +281,7 @@ export function registerSmartNewsletterRoutes(app: Express) {
 
       res.json({
         success: true,
-        subscribed: localSub?.status === 'active' || mailerliteSub?.status === 'active',
+        subscribed: localSub?.status === 'active',
         local: localSub ? {
           status: localSub.status,
           language: localSub.language,
