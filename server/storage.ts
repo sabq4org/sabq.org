@@ -4775,10 +4775,12 @@ export class DatabaseStorage implements IStorage {
     
     await db
       .update(table)
+      // No updatedAt bump: it is the open editor's save version, and the editor
+      // applies these AI results to its own state, so bumping it here made the
+      // next save fail with a false ARTICLE_VERSION_CONFLICT.
       .set({
         seo,
         seoMetadata: metadata,
-        updatedAt: new Date(),
       })
       .where(eq(table.id, articleId));
   }
