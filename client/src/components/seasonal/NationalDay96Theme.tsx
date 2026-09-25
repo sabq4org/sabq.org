@@ -7,23 +7,12 @@ const SADU_GREEN = "#2FA46B";
 const GREETING_GRADIENT = "linear-gradient(90deg,#0E4A36,#187653 55%,#0E4A36)";
 
 const DISMISS_KEY = "sabq:nd96-greeting-dismissed:2026";
-// نافذة السمة بتوقيت الرياض: ليلة 21 سبتمبر حتى نهاية 25 سبتمبر 2026
-const SEASON_FIRST_DAY = "2026-09-21";
-const SEASON_LAST_DAY = "2026-09-25";
+// نافذة السمة بتوقيت الرياض (+03:00): ليلة 21 سبتمبر حتى 8:00 مساء 25 سبتمبر 2026
+const SEASON_START = new Date("2026-09-21T00:00:00+03:00").getTime();
+const SEASON_END = new Date("2026-09-25T20:00:00+03:00").getTime();
 
-function isWithinSeasonWindow(now: Date = new Date()): boolean {
-  try {
-    // en-CA يعطي YYYY-MM-DD فتصلح المقارنة النصية مباشرة
-    const ymd = new Intl.DateTimeFormat("en-CA", {
-      timeZone: "Asia/Riyadh",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    }).format(now);
-    return ymd >= SEASON_FIRST_DAY && ymd <= SEASON_LAST_DAY;
-  } catch {
-    return false;
-  }
+function isWithinSeasonWindow(now: number = Date.now()): boolean {
+  return now >= SEASON_START && now < SEASON_END;
 }
 
 /**
@@ -49,6 +38,11 @@ export function useNationalDay96Season(force = false) {
     } catch {
       // private mode / quota — نتجاهل
     }
+    // الصفحة المفتوحة وقت انتهاء النافذة تعود للهيدر الأصلي دون إعادة تحميل
+    const remaining = SEASON_END - Date.now();
+    if (forced || remaining <= 0 || remaining > 2 ** 31 - 1) return;
+    const timer = window.setTimeout(() => setActive(false), remaining);
+    return () => window.clearTimeout(timer);
   }, [force]);
 
   const dismiss = () => {
