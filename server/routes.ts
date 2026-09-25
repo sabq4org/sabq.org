@@ -13,6 +13,7 @@ import { notifySearchEngines, INDEXNOW_KEY } from "./indexNow";
 import { storage } from "./storage";
 import { sanitizeArticleHtml } from "./utils/sanitizeArticleHtml";
 import { validatePassword } from "./utils/passwordPolicy";
+import { findCategoryBySlugOrEnglishSlug } from "./utils/categorySlug";
 import {
   needsWebpTranscode,
   normalizeImageForUpload,
@@ -3805,7 +3806,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
   app.get("/api/categories/slug/:slug", async (req, res) => {
     try {
       const categories = await storage.getAllCategories();
-      const category = categories.find(c => c.slug === req.params.slug);
+      const category = findCategoryBySlugOrEnglishSlug(categories, req.params.slug);
       
       if (!category) {
         return res.status(404).json({ message: "Category not found" });
@@ -3833,7 +3834,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         CACHE_TTL.SHORT * 2,
         async () => {
           const categoriesList = await storage.getAllCategories();
-          const category = categoriesList.find(c => c.slug === slug);
+          const category = findCategoryBySlugOrEnglishSlug(categoriesList, slug);
           
           if (!category) return null;
 
@@ -3885,7 +3886,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
   app.get("/api/categories/:slug/analytics", async (req, res) => {
     try {
       const categories = await storage.getAllCategories();
-      const category = categories.find(c => c.slug === req.params.slug);
+      const category = findCategoryBySlugOrEnglishSlug(categories, req.params.slug);
       
       if (!category) {
         return res.status(404).json({ message: "Category not found" });
