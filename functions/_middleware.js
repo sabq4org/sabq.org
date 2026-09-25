@@ -283,6 +283,20 @@ function goneHtmlResponse() {
   });
 }
 
+// /api/edge/seo-meta answers `status: 404` for a path whose first segment no
+// SPA route declares (server/utils/spaTopLevelRoutes.ts) — the browser would
+// only ever render NotFound there. Serve the injected shell with a REAL 404
+// instead of a 200 + index,follow soft 404. Exported for unit tests.
+export function isEdgeNotFoundMeta(meta) {
+  return !!meta && meta.status === 404;
+}
+
+function notFoundHtml(res) {
+  const headers = new Headers(res.headers);
+  headers.set("X-Robots-Tag", "noindex, follow");
+  return new Response(res.body, { status: 404, statusText: "Not Found", headers });
+}
+
 function isHtml(res) {
   return (res.headers.get("content-type") || "").toLowerCase().includes("text/html");
 }
@@ -1371,7 +1385,8 @@ async function handleRequest(context) {
     if (wantsSsr && !metaNoindex && (!meta.semanticHtml || (/^\/(?:en\/|ur\/)?article\//.test(path) && !meta.jsonLd?.articleBody))) {
       return crawlerSsrFailureResponse();
     }
-    const injectedCacheable = htmlCacheable && !metaNoindex;
+    const notFound = isEdgeNotFoundMeta(meta);
+    const injectedCacheable = htmlCacheable && !metaNoindex && !notFound;
 
     // Strip the shell's generic tags first so crawlers that read the FIRST
     // duplicate (Twitter, some Slack/Telegram) don't see homepage tags.
@@ -1397,6 +1412,7 @@ async function handleRequest(context) {
     if (shellLocale) {
       rewriter = rewriter.on("html", new HtmlLangSetter(shellLocale));
     }
+    if (notFound) return finalizeHtml(notFoundHtml(rewriter.transform(shell)), { cacheable: false });
     return deliverHtml(rewriter.transform(shell), { cacheable: injectedCacheable });
   } catch (err) {
     console.error("[pages-fn] html error:", err);

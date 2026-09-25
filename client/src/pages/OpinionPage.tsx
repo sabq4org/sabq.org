@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Header } from "@/components/Header";
 import { NavigationBar } from "@/components/NavigationBar";
@@ -33,6 +33,10 @@ type OpinionArticle = {
 };
 
 export default function OpinionPage() {
+  // يطابق <title> المحقون على الحافة (/api/edge/seo-meta) بعد تشغيل جافاسكربت.
+  useEffect(() => {
+    document.title = "الرأي — سبق";
+  }, []);
   useAdTracking('رأي');
   
   const [currentPage, setCurrentPage] = useState(1);

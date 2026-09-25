@@ -16,6 +16,7 @@ describe("robots.txt", () => {
     expect(lines).toContain("Allow: /");
     expect(lines).toContain("Disallow: /api/");
     expect(lines).toContain("Allow: /api/articles$");
+    expect(lines).toContain("Allow: /api/rss/");
     expect(lines).toContain("Sitemap: https://sabq.org/sitemap.xml");
     expect(lines).toContain("Sitemap: https://sabq.org/sitemap-news.xml");
     expect(txt).not.toMatch(/^Disallow: \/$/m);

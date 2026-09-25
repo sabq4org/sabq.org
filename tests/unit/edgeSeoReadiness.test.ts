@@ -65,4 +65,28 @@ describe('public SEO projections', () => {
     expect(r.status).toBe(404); expect(JSON.stringify(r.body)).not.toContain('SECRET');
     expect(r.headers['Cache-Control']).toBe('no-store');
   });
+  it('answers an unknown top-level path with a real 404 and no canonical', async () => {
+    const r = await request('/api/edge/seo-meta', {}, {path:'/this-page-does-not-exist-xyz123'});
+    expect(r.body.status).toBe(404); expect(r.body.robots).toBe('noindex, follow');
+    expect(r.body.canonical).toBe('');
+    const known = await request('/api/edge/seo-meta', {}, {path:'/lite'});
+    expect(known.body.status).toBeUndefined(); expect(known.body.image).toContain('/branding/sabq-og-image.png');
+  });
+  it('gives institutional pages their own title and crawlable text', async () => {
+    const about = await request('/api/edge/seo-meta', {}, {path:'/about'});
+    expect(about.body.title).toBe('من نحن — سبق'); expect(about.body.semanticHtml).toContain('<h1>');
+    const policy = await request('/api/edge/seo-meta', {}, {path:'/ai-policy'});
+    expect(policy.body.semanticHtml).toContain('تدريب نماذج الأساس');
+    f.rows = [[{slug:'o1',englishSlug:'op1',title:'مقال رأي'}]];
+    const opinion = await request('/api/edge/seo-meta', {}, {path:'/opinion'});
+    expect(opinion.body.title).toBe('الرأي — سبق'); expect(opinion.body.semanticHtml).toContain('/article/op1');
+    const contact = await request('/api/edge/seo-meta', {}, {path:'/contact'});
+    expect(contact.body.title).toBe('اتصل بنا — سبق');
+  });
+  it('renders reporter bio and recent articles for crawlers', async () => {
+    f.rows = [[{slug:'yasr',userId:'u1',nameAr:'ياسر',titleAr:'مراسل',bioAr:'نبذة المراسل'}], [{slug:'a1',englishSlug:'x1',title:'خبر المراسل'}]];
+    const r = await request('/api/edge/seo-meta', {}, {path:'/reporter/yasr'});
+    expect(r.body.title).toBe('ياسر — سبق');
+    expect(r.body.semanticHtml).toContain('نبذة المراسل'); expect(r.body.semanticHtml).toContain('/article/x1');
+  });
 });

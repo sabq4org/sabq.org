@@ -8,15 +8,41 @@ import { INLINE_NEWSLETTER_SIGNUP_ENABLED } from "@/lib/newsletter";
 
 export const revalidate = 60;
 
+const HOME_TITLE = "سبق الذكية - صحيفة سبق الإلكترونية";
+const HOME_DESCRIPTION =
+  "سبق الذكية - منصة الأخبار السعودية الأولى المدعومة بالذكاء الاصطناعي. أخبار عاجلة ومحلية ورياضية وعالمية على مدار الساعة.";
+// بطاقة المشاركة الأفقية المعتمدة (1200×630)، نفسها في client/index.html.
+const HOME_OG_IMAGE = "https://sabq.org/branding/sabq-og-image.png";
+
+// نسخة الزواحف من الرئيسية هي ما تقرؤه facebookexternalhit وTwitterbot
+// وواتساب؛ بدون og/twitter كانت معاينة مشاركة الرئيسية بلا صورة ولا عنوان.
 export const metadata: Metadata = {
-  title: { absolute: "سبق الذكية - صحيفة سبق الإلكترونية" },
-  description:
-    "سبق الذكية - منصة الأخبار السعودية الأولى المدعومة بالذكاء الاصطناعي. أخبار عاجلة ومحلية ورياضية وعالمية على مدار الساعة.",
-  alternates: { canonical: "https://sabq.org" },
+  title: { absolute: HOME_TITLE },
+  description: HOME_DESCRIPTION,
+  alternates: {
+    canonical: "https://sabq.org",
+    types: { "application/rss+xml": "https://sabq.org/api/rss/articles" },
+  },
   robots:
     process.env.STAGING_NO_INDEX === "true"
       ? { index: false, follow: false, nocache: true }
-      : { index: true, follow: true },
+      : { index: true, follow: true, "max-image-preview": "large" },
+  openGraph: {
+    type: "website",
+    url: "https://sabq.org",
+    title: HOME_TITLE,
+    description: HOME_DESCRIPTION,
+    siteName: "صحيفة سبق الإلكترونية",
+    locale: "ar_SA",
+    images: [{ url: HOME_OG_IMAGE, width: 1200, height: 630 }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    site: "@sabq",
+    title: HOME_TITLE,
+    description: HOME_DESCRIPTION,
+    images: [HOME_OG_IMAGE],
+  },
 };
 
 const EMPTY_HOME: HomeBundle = {
@@ -40,6 +66,29 @@ export default async function HomePage() {
 
   const siteUrl = process.env.PUBLIC_SITE_URL || "https://sabq.org";
   const jsonLd = [
+    // مطابق لمخطط المؤسسة في client/index.html (نسخة المتصفح)؛ كان غائبًا
+    // عن نسخة الزواحف فلا يرى Google كيان الصحيفة من الرئيسية.
+    {
+      "@context": "https://schema.org",
+      "@type": "NewsMediaOrganization",
+      name: "صحيفة سبق الإلكترونية",
+      alternateName: "Sabq",
+      url: siteUrl,
+      logo: { "@type": "ImageObject", url: HOME_OG_IMAGE, width: 1200, height: 630 },
+      sameAs: [
+        "https://x.com/sabqorg",
+        "https://www.facebook.com/sabq.org",
+        "https://www.instagram.com/sabqorg",
+        "https://youtube.com/@sabqorg",
+        "https://www.tiktok.com/@sabqorg",
+        "https://www.linkedin.com/in/sabqorg",
+        "https://whatsapp.com/channel/0029VaCUMDGEAKWA2soRAl02",
+      ],
+      description: "سبق الذكية - منصة الأخبار السعودية الأولى المدعومة بالذكاء الاصطناعي",
+      foundingDate: "2007",
+      areaServed: { "@type": "Country", name: "المملكة العربية السعودية" },
+      publishingPrinciples: `${siteUrl}/about`,
+    },
     {
       "@context": "https://schema.org",
       "@type": "WebSite",

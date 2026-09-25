@@ -939,14 +939,17 @@
         "vitest.web-next.config.ts",
         "client/src/pages/CategoryPage.tsx",
         "client/src/components/CategoryArchivePage.tsx",
-        "tests/unit/edgeApiSurge.test.ts"
+        "tests/unit/edgeApiSurge.test.ts",
+        "server/utils/spaTopLevelRoutes.ts",
+        "tests/unit/spaTopLevelRoutes.test.ts",
+        "tests/unit/edgeSoftNotFound.test.ts"
       ],
       "aiFeatureKeys": [],
       "dashboardPath": null,
       "owners": [
         "platform"
       ],
-      "lastReviewed": "2026-09-24"
+      "lastReviewed": "2026-09-25"
     },
     {
       "id": "comments",

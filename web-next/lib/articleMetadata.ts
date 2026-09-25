@@ -30,7 +30,11 @@ export function articleMetadata(m: SeoBundleMeta): Metadata {
       url: m.canonical,
       siteName: m.siteName,
       locale: m.locale,
-      images: m.image ? [{ url: m.image, width: 1200, height: 630 }] : undefined,
+      // Only the brand card is known to be 1200×630; article photos (e.g. the
+      // w1280 variant) are not, and wrong declared dimensions are worse than none.
+      images: m.image
+        ? [m.image.endsWith("/branding/sabq-og-image.png") ? { url: m.image, width: 1200, height: 630 } : { url: m.image }]
+        : undefined,
       publishedTime: m.publishedTime,
       modifiedTime: m.modifiedTime,
       section: m.section,
