@@ -23,6 +23,12 @@ describe("normalizeProviderError", () => {
     expect(isRetryableWithinModel(err)).toBe(false); // never retry an empty wallet
   });
 
+  it("classifies a depleted Gemini prepaid balance as QUOTA_EXCEEDED", () => {
+    // generateImage re-wraps SDK errors, so only the message text survives.
+    const err = normalize(new Error("Your prepayment credits are depleted. Please go to AI Studio to manage your project."));
+    expect(err.code).toBe("QUOTA_EXCEEDED");
+  });
+
   it("classifies 402 payment-required as QUOTA_EXCEEDED", () => {
     expect(normalize({ status: 402, message: "Payment Required" }).code).toBe("QUOTA_EXCEEDED");
   });

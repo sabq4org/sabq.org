@@ -145,7 +145,7 @@ export function AutoImageGenerator({
       }
     } catch (error: any) {
       toast({
-        title: language === "ar" ? "خطأ" : "Error",
+        title: language === "ar" ? "تعذّر توليد الصورة" : "Image generation failed",
         description: error.message || "Failed to generate image",
         variant: "destructive"
       });

@@ -152,7 +152,9 @@ export function RichTextEditor({
 
   const editor = useEditor({
     extensions: [
-      StarterKit,
+      // StarterKit v3 يضمّ link وunderline؛ نعطّلهما فيه لأننا نضيفهما صراحةً
+      // بإعداداتنا أدناه، وإلا حذّر tiptap من «Duplicate extension names».
+      StarterKit.configure({ link: false, underline: false }),
       Link.configure({
         openOnClick: false,
         HTMLAttributes: {
