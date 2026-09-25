@@ -59,7 +59,7 @@ sabq.org/
 ├── android/          ← (قديم — Capacitor، في طور الإيقاف؛ لا تطوّر فيه)
 ├── server/           ← Backend (Node.js + Express + Drizzle)
 ├── shared/           ← كود مشترك (Schema, Types, RBAC, Models)
-└── migrations/       ← Database migrations (تاريخي — استخدم `npm run db:push`)
+└── migrations/       ← ملفات SQL يدوية لإجراءات إنتاج خاصة (تغييرات المخطط عبر `npm run db:push`)
 ```
 
 ### Path aliases (في `client/`)
@@ -234,7 +234,7 @@ P4 (Low)       → تلميع وتجميل
 - لا تغيّر ملفات `.env` أو `secrets`
 - لا تدمج إلى `main` مباشرة — دائماً عبر PR
 - لا تحذف migrations موجودة
-- **لا تعدّل migration قديم** — أضف migration/تغيير جديد فقط
+- **لا تعدّل ملف SQL قديماً في `migrations/`** — تغييرات المخطط عبر `schema.ts` و`db:push`، وإجراءات الإنتاج الخاصة في ملف SQL جديد مؤرخ
 - **لا تستخدم `--no-verify` أو `--no-gpg-sign`** بدون إذن صريح
 - **لا تشغّل `npm run db:push` ضد Neon أو الإنتاج** — للتطوير: `npm run db:push:local` (localhost فقط). للإنتاج: `./push-to-production.sh` التفاعلي. دليل المحلي: [`docs/setup/LOCAL_POSTGRES_AR.md`](docs/setup/LOCAL_POSTGRES_AR.md)
 - لا تطوّر داخل `android/` (Capacitor قديم) — كل عمل أندرويد في `android-native/`
