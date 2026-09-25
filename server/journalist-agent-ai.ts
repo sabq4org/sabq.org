@@ -19,6 +19,12 @@ const genai = new GoogleGenerativeAI(
   process.env.AI_INTEGRATIONS_GEMINI_API_KEY!
 );
 
+// Model ids used by this agent. The stored aiModel label is derived from these so it
+// never drifts from the model actually called.
+const CLAUDE_MODEL = "claude-sonnet-4-6";
+const GPT_MODEL = "gpt-5.1";
+const GEMINI_MODEL = "gemini-2.5-flash";
+
 // Helper: Update task progress
 async function updateTaskProgress(
   taskId: string,
@@ -59,69 +65,16 @@ async function markTaskFailed(
 async function performResearch(taskId: string, prompt: string) {
   console.log(`📚 [Journalist Agent] Starting research for task ${taskId}`);
   
-  await updateTaskProgress(taskId, 1, "جاري البحث عن المعلومات...");
+  await updateTaskProgress(taskId, 1, "جاري تجهيز طلب المحرر...");
 
-  try {
-    // Use Claude to extract search query from prompt
-    const searchQueryResponse = await anthropic.messages.create({
-      model: "claude-sonnet-4-6",
-      max_tokens: 200,
-      messages: [
-        {
-          role: "user",
-          content: `من فضلك، استخرج أفضل كلمة بحث من الطلب التالي. اكتب فقط كلمة البحث دون أي شرح أو نص إضافي:\n\n${prompt}`,
-        },
-      ],
-    });
-
-    const searchQuery =
-      searchQueryResponse.content[0].type === "text"
-        ? searchQueryResponse.content[0].text.trim()
-        : prompt;
-
-    console.log(`🔍 [Journalist Agent] Search query: ${searchQuery}`);
-
-    // Simulate web search results (في المستقبل: استخدام web_search API)
-    const sources = [
-      {
-        title: `نتيجة بحث عن: ${searchQuery}`,
-        url: "https://example.com/article1",
-        snippet: `معلومات حول ${searchQuery}. هذه مسودة تجريبية للنظام.`,
-      },
-      {
-        title: `تقرير متعمق: ${searchQuery}`,
-        url: "https://example.com/article2",
-        snippet: `تحليل شامل حول ${searchQuery} وأهميته في السوق الحالي.`,
-      },
-    ];
-
-    // Create summary using AI
-    const summaryResponse = await anthropic.messages.create({
-      model: "claude-sonnet-4-6",
-      max_tokens: 500,
-      messages: [
-        {
-          role: "user",
-          content: `لخص المعلومات التالية حول "${searchQuery}" بشكل موجز:\n\n${sources
-            .map((s) => `- ${s.title}: ${s.snippet}`)
-            .join("\n")}`,
-        },
-      ],
-    });
-
-    const summary =
-      summaryResponse.content[0].type === "text"
-        ? summaryResponse.content[0].text
-        : "لم يتم العثور على ملخص";
-
-    return {
-      sources,
-      summary,
-    };
-  } catch (error) {
-    console.error(`❌ [Journalist Agent] Research failed:`, error);
-    throw error;
-  }
+  // No real search backend is wired in yet. The previous implementation asked Claude to
+  // "summarize" placeholder example.com snippets, and the draft step then treated that
+  // summary as facts. Until real search exists, pass nothing: the analysis and draft
+  // steps work from the editor's request only.
+  return {
+    sources: [] as Array<{ title: string; url: string; snippet: string }>,
+    summary: "",
+  };
 }
 
 // Step 2: Analyze and extract key points
@@ -136,17 +89,15 @@ async function analyzeAndExtractKeyPoints(
 
   try {
     const analysisResponse = await anthropic.messages.create({
-      model: "claude-sonnet-4-6",
+      model: CLAUDE_MODEL,
       max_tokens: 1000,
       messages: [
         {
           role: "user",
           content: `أنت محلل صحفي في "سبق". قم بتحليل المعلومات التالية واستخراج عناصر القصة الصحفية:
 
-📍 الطلب الأصلي: ${prompt}
-
-📊 المعلومات المجمعة: ${researchSummary}
-
+📍 طلب المحرر: ${prompt}
+${researchSummary ? `\n📊 ملخص البحث: ${researchSummary}\n` : `\nلا توجد مصادر بحث مرفقة. اعتمد على طلب المحرر وحده، ولا تضف وقائع أو أرقاماً أو أسماء غير موجودة فيه.\n`}
 📰 قدم تحليلاً صحفياً شاملاً يتضمن:
 
 1. **النقاط الرئيسية** (3-5 نقاط):
@@ -222,24 +173,23 @@ async function writeDraft(
 
   try {
     const draftResponse = await anthropic.messages.create({
-      model: "claude-sonnet-4-6",
+      model: CLAUDE_MODEL,
       max_tokens: 2500,
       messages: [
         {
           role: "user",
           content: `أنت محرر صحفي محترف في صحيفة "سبق" الإلكترونية السعودية. اكتب خبراً صحفياً احترافياً بأسلوب "سبق" عن:
 
-📍 الموضوع: ${prompt}
+📍 طلب المحرر: ${prompt}
 
-📊 المعلومات الأساسية:
+📊 عناصر مستخلصة من طلب المحرر:
 النقاط الرئيسية:
 ${analysis.keyPoints.map((p: string, i: number) => `${i + 1}. ${p}`).join("\n")}
 
 الموضوع الرئيسي: ${analysis.mainTheme}
 الزاوية الصحفية: ${analysis.suggestedAngle}
 
-ملخص البحث:
-${researchSummary}
+${researchSummary ? `ملخص البحث:\n${researchSummary}` : "لا توجد مصادر بحث مرفقة. لا تضف وقائع أو أرقاماً أو أسماء أو تصريحات غير موجودة في طلب المحرر."}
 
 📜 معايير الكتابة بأسلوب "سبق" الصحفية (التزم بها بدقة 100%):
 
@@ -561,7 +511,7 @@ async function generateHeadlines(
     // GPT-5.1 headline (formal/official style) - Migrated to gpt-5.1
     try {
       const gptResponse = await openai.chat.completions.create({
-        model: "gpt-5.1",
+        model: GPT_MODEL,
         messages: [
           {
             role: "system",
@@ -579,7 +529,7 @@ async function generateHeadlines(
       headlines.push({
         text: validateHeadline(rawHeadline),
         style: "formal",
-        aiModel: "GPT-4o",
+        aiModel: GPT_MODEL,
       });
     } catch (error) {
       console.error("GPT headline generation failed:", error);
@@ -588,7 +538,7 @@ async function generateHeadlines(
     // Claude headline (engaging/dynamic style)
     try {
       const claudeResponse = await anthropic.messages.create({
-        model: "claude-sonnet-4-6",
+        model: CLAUDE_MODEL,
         max_tokens: 100,
         messages: [
           {
@@ -604,7 +554,7 @@ async function generateHeadlines(
       headlines.push({
         text: validateHeadline(rawHeadline),
         style: "engaging",
-        aiModel: "Claude Sonnet 4-5",
+        aiModel: CLAUDE_MODEL,
       });
     } catch (error) {
       console.error("Claude headline generation failed:", error);
@@ -612,7 +562,7 @@ async function generateHeadlines(
 
     // Gemini headline (SEO-optimized but still follows Sabq rules)
     try {
-      const geminiModel = genai.getGenerativeModel({ model: "gemini-2.5-flash" });
+      const geminiModel = genai.getGenerativeModel({ model: GEMINI_MODEL });
       const geminiResponse = await geminiModel.generateContent(
         sabqHeadlineRules + `\n\nنمط هذا العنوان: محسّن لمحركات البحث (SEO) مع الالتزام بمعايير سبق`
       );
@@ -621,7 +571,7 @@ async function generateHeadlines(
       headlines.push({
         text: validateHeadline(rawHeadline),
         style: "seo",
-        aiModel: "Gemini 2.5 Flash",
+        aiModel: GEMINI_MODEL,
       });
     } catch (error) {
       console.error("Gemini headline generation failed:", error);
@@ -667,7 +617,6 @@ export async function executeJournalistTask(taskId: string, prompt: string) {
 
     // Step 1: Research
     const research = await performResearch(taskId, prompt);
-    aiProviders.push("Anthropic");
 
     // Step 2: Analysis
     const analysis = await analyzeAndExtractKeyPoints(taskId, prompt, research.summary);

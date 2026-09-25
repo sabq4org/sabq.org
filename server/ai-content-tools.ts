@@ -62,6 +62,12 @@ const genai = new GoogleGenerativeAI(
   process.env.AI_INTEGRATIONS_GEMINI_API_KEY!
 );
 
+// Model ids used in this module. Result labels are derived from these so they never
+// drift from the model actually called.
+const CLAUDE_MODEL = "claude-sonnet-4-6";
+const GPT_MODEL = "gpt-5.1";
+const GEMINI_MODEL = "gemini-2.5-flash";
+
 // Safe JSON extraction and parsing helper
 function safeParseAiJson<T>(
   rawText: string,
@@ -110,7 +116,7 @@ export async function summarizeText(
     };
 
     const response = await anthropic.messages.create({
-      model: "claude-sonnet-4-6",
+      model: CLAUDE_MODEL,
       max_tokens: 2000,
       messages: [
         {
@@ -188,7 +194,7 @@ export async function generateSocialPost(
 
     // Migrated to gpt-5.1
     const response = await openai.chat.completions.create({
-      model: "gpt-5.1",
+      model: GPT_MODEL,
       messages: [
         {
           role: "system",
@@ -263,7 +269,7 @@ export async function suggestImageQuery(contentText: string): Promise<{
   console.log(`🖼️ [AI Tools] Suggesting image queries`);
 
   try {
-    const model = genai.getGenerativeModel({ model: "gemini-2.5-flash" });
+    const model = genai.getGenerativeModel({ model: GEMINI_MODEL });
 
     const prompt = `أنت خبير في البحث عن الصور الصحفية. قم بتحليل المحتوى التالي واقترح كلمات بحث للعثور على صور مناسبة:
 
@@ -334,7 +340,7 @@ export async function translateContent(
     const toLangName = languageNames[toLang] || toLang;
 
     const response = await anthropic.messages.create({
-      model: "claude-sonnet-4-6",
+      model: CLAUDE_MODEL,
       max_tokens: 4000,
       messages: [
         {
@@ -429,12 +435,12 @@ ${context ? `السياق: ${context}` : ''}
 
   // استدعاء النماذج الثلاثة بالتوازي
   const analysisPromises = [
-    // Claude Sonnet 4-5
+    // Claude
     (async () => {
       try {
         console.log(`🤖 [Claude] Starting analysis...`);
         const response = await anthropic.messages.create({
-          model: "claude-sonnet-4-6",
+          model: CLAUDE_MODEL,
           max_tokens: 2000,
           messages: [{ role: "user", content: prompt }],
         });
@@ -449,7 +455,7 @@ ${context ? `السياق: ${context}` : ''}
         console.log(`✅ [Claude] Analysis complete - Verdict: ${analysis.verdict}`);
 
         return {
-          model: "Claude Sonnet 4-5",
+          model: CLAUDE_MODEL,
           verdict: analysis.verdict as Verdict,
           confidence: analysis.confidence,
           reasoning: analysis.reasoning,
@@ -461,13 +467,13 @@ ${context ? `السياق: ${context}` : ''}
       }
     })(),
 
-    // GPT-4o
+    // GPT
     (async () => {
       try {
         console.log(`🤖 [GPT-5.1] Starting analysis...`);
         // Migrated to gpt-5.1
         const response = await openai.chat.completions.create({
-          model: "gpt-5.1",
+          model: GPT_MODEL,
           messages: [
             {
               role: "system",
@@ -488,23 +494,23 @@ ${context ? `السياق: ${context}` : ''}
         console.log(`✅ [GPT-5.1] Analysis complete - Verdict: ${analysis.verdict}`);
 
         return {
-          model: "GPT-5.1",
+          model: GPT_MODEL,
           verdict: analysis.verdict as Verdict,
           confidence: analysis.confidence,
           reasoning: analysis.reasoning,
           redFlags: analysis.redFlags || [],
         } as ModelAnalysis;
       } catch (error) {
-        console.error(`❌ [GPT-4o] Analysis failed:`, error);
+        console.error(`❌ [GPT] Analysis failed:`, error);
         return null;
       }
     })(),
 
-    // Gemini 2.0 Flash
+    // Gemini
     (async () => {
       try {
         console.log(`🤖 [Gemini] Starting analysis...`);
-        const model = genai.getGenerativeModel({ model: "gemini-2.5-flash" });
+        const model = genai.getGenerativeModel({ model: GEMINI_MODEL });
         const result = await model.generateContent(prompt);
         const response = result.response;
         const text = response.text();
@@ -518,7 +524,7 @@ ${context ? `السياق: ${context}` : ''}
         console.log(`✅ [Gemini] Analysis complete - Verdict: ${analysis.verdict}`);
 
         return {
-          model: "Gemini 2.0 Flash",
+          model: GEMINI_MODEL,
           verdict: analysis.verdict as Verdict,
           confidence: analysis.confidence,
           reasoning: analysis.reasoning,
@@ -723,7 +729,7 @@ export async function analyzeTrends(
     console.log(`🤖 [Claude] Starting topics and sentiment analysis...`);
     
     const claudePromise = anthropic.messages.create({
-      model: "claude-sonnet-4-6",
+      model: CLAUDE_MODEL,
       max_tokens: 3000,
       messages: [
         {
@@ -762,7 +768,7 @@ export async function analyzeTrends(
     // 4. تحليل بـ Gemini 2.0 Flash - الكلمات المفتاحية والتوصيات
     console.log(`🤖 [Gemini] Starting keywords and recommendations analysis...`);
     
-    const model = genai.getGenerativeModel({ model: "gemini-2.5-flash" });
+    const model = genai.getGenerativeModel({ model: GEMINI_MODEL });
     const geminiPromise = model.generateContent(`أنت محلل محتوى متخصص في استخراج الكلمات المفتاحية.
 
 المهمة: استخراج أهم الكلمات المفتاحية من المحتوى التالي.

@@ -43,9 +43,14 @@ export const anthropicAdapter: ProviderAdapter = {
       { timeout: params.timeoutMs, signal: params.signal, maxRetries: 0 },
     );
 
-    const content = response.content[0];
+    // Collect every text block: on models where thinking is on by default the first
+    // block is a thinking block, and reading content[0] alone returns "" silently.
+    const text = response.content
+      .filter((block): block is Anthropic.TextBlock => block.type === "text")
+      .map((block) => block.text)
+      .join("");
     return {
-      content: content?.type === "text" ? content.text : "",
+      content: text,
       inputTokens: response.usage.input_tokens,
       outputTokens: response.usage.output_tokens,
       truncated: response.stop_reason === "max_tokens",
