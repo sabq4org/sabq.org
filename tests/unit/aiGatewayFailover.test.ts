@@ -43,6 +43,10 @@ function ok(content: string): AdapterCompleteResult {
   return { content, inputTokens: 10, outputTokens: 20, truncated: false };
 }
 
+function truncated(content: string): AdapterCompleteResult {
+  return { content, inputTokens: 11, outputTokens: 21, truncated: true };
+}
+
 function quotaError(provider: string, modelId: string): AIGatewayError {
   return new AIGatewayError(`${provider}/${modelId}: quota exceeded`, {
     code: "QUOTA_EXCEEDED",
@@ -89,6 +93,45 @@ function buildHarness(
 }
 
 describe("AIGateway failover", () => {
+  it("keeps a truncated completion successful and annotates its single usage row", async () => {
+    const { gateway, logs } = buildHarness([
+      makeAdapter("openai", async () => truncated("partial")),
+    ], makeConfig({ fallbackChain: [] }));
+
+    const result = await gateway.complete({ feature: "test-feature", prompt: "hi" });
+
+    expect(result).toMatchObject({
+      content: "partial",
+      provider: "openai",
+      truncated: true,
+      fallbackUsed: false,
+      usage: { inputTokens: 11, outputTokens: 21 },
+    });
+    expect(logs).toHaveLength(1);
+    expect(logs[0]).toMatchObject({
+      status: "success",
+      inputTokens: 11,
+      outputTokens: 21,
+      errorCode: "OUTPUT_TRUNCATED",
+      errorMessage: "Model output was truncated before completion.",
+    });
+    expect(logs[0].estimatedCostUsd).toBeCloseTo(0.000053, 10);
+  });
+
+  it("leaves an untruncated completion unannotated with one successful usage row", async () => {
+    const { gateway, logs } = buildHarness([
+      makeAdapter("openai", async () => ok("complete")),
+    ], makeConfig({ fallbackChain: [] }));
+
+    const result = await gateway.complete({ feature: "test-feature", prompt: "hi" });
+
+    expect(result).toMatchObject({ content: "complete", truncated: false, fallbackUsed: false });
+    expect(logs).toHaveLength(1);
+    expect(logs[0]).toMatchObject({ status: "success", inputTokens: 10, outputTokens: 20 });
+    expect(logs[0].errorCode).toBeUndefined();
+    expect(logs[0].errorMessage).toBeUndefined();
+  });
+
   it("falls back to the next model on QUOTA_EXCEEDED and logs status=fallback", async () => {
     const calls: string[] = [];
     const { gateway, logs, incidents } = buildHarness(

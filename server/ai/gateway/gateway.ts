@@ -61,6 +61,8 @@ export interface GatewayDeps {
 
 const DEFAULT_TIMEOUT_MS = 90_000;
 const DEFAULT_RETRIES = 2;
+const OUTPUT_TRUNCATED_ERROR_CODE = "OUTPUT_TRUNCATED";
+const OUTPUT_TRUNCATED_ERROR_MESSAGE = "Model output was truncated before completion.";
 
 function dedupeCandidates(candidates: ModelRef[]): ModelRef[] {
   const seen = new Set<string>();
@@ -383,6 +385,11 @@ export class AIGateway {
     const latencyMs = outcome.attempts.find((a) => a.ok)?.latencyMs ?? 0;
     const model = await this.deps.getModel(outcome.used);
     const estimatedCostUsd = computeCostUsd(model, usage);
+    const truncated =
+      op === "complete" &&
+      typeof outcome.result === "object" &&
+      outcome.result !== null &&
+      (outcome.result as { truncated?: boolean }).truncated === true;
 
     this.deps.logUsage({
       featureKey: req.feature,
@@ -395,6 +402,8 @@ export class AIGateway {
       estimatedCostUsd,
       latencyMs,
       status: outcome.fallbackUsed ? "fallback" : "success",
+      errorCode: truncated ? OUTPUT_TRUNCATED_ERROR_CODE : undefined,
+      errorMessage: truncated ? OUTPUT_TRUNCATED_ERROR_MESSAGE : undefined,
       userId: req.userId,
     });
 

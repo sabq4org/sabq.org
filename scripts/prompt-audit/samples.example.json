@@ -1,12 +1,14 @@
 [
   {
-    "id": "example-edit-quotes",
+    "id": "TEMPLATE-normal-1",
+    "cohort": "normal",
     "type": "edit",
-    "material": "أعلنت الهيئة العامة للإحصاء اليوم أن معدل التضخم بلغ 2.1% وقال المتحدث باسمها إن \"الأرقام مطمئنة\" وإن \"الاتجاه مستقر\" خلال الربع الحالي."
+    "material": "TEMPLATE ONLY — replace this with one real newsroom sample of the normal cohort. This file is intentionally incomplete and is rejected by the comparison script."
   },
   {
-    "id": "example-review",
-    "type": "review",
-    "material": "قالب فقط: ضع هنا مادة حقيقية من غرفة الأخبار."
+    "id": "TEMPLATE-quotes-1",
+    "cohort": "quotes",
+    "type": "edit",
+    "material": "TEMPLATE ONLY — replace this with real Arabic newsroom material containing an ASCII quote such as \"quoted text\". This file is intentionally incomplete and is rejected by the comparison script."
   }
 ]

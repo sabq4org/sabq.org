@@ -539,6 +539,10 @@ async function generateStoryWithGPT(
     max_completion_tokens: 4096,
   });
 
+  if (response.choices[0]?.finish_reason === "length") {
+    throw new Error("GPT story truncated (finish_reason=length)");
+  }
+
   const storyData = JSON.parse(response.choices[0].message.content || '{}');
   const generationTime = Date.now() - startTime;
 
