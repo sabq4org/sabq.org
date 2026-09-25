@@ -130,6 +130,13 @@ const containsArabic = (s: string) => ARABIC_RE.test(s);
 // DELIBERATELY EXCLUDES current features that share the shape: `gulf` (gulf
 // events), `omq` (deep analyses), `category`, `article`, `news`, `opinion`,
 // `en`, `ur`, `world-day(s)`.
+// Bare legacy roots that still collect search impressions (GSC 2026-09-25)
+// but render only the SPA NotFound page today.
+const LEGACY_ROOT_REDIRECTS: Record<string, string> = {
+  "/saudia": "/category/saudi",
+  "/collection/latest-news": "/",
+};
+
 // Fast structural test: can this path EVER produce a redirect or gone=true?
 // computeSlugRedirect only matches /article|news/…, /category/…, and the legacy
 // /<prefix>/…/slug shapes; computeArticleGone only matches (en|ur)?/article/….
@@ -141,6 +148,8 @@ const containsArabic = (s: string) => ARABIC_RE.test(s);
 // permissive here is safe — a false positive only means we cache as before.
 function isRedirectCandidate(path: string): boolean {
   if (/^\/home\/?$/i.test(path)) return true;
+  if (/^\/amp\//i.test(path)) return true;
+  if (LEGACY_ROOT_REDIRECTS[path.replace(/\/$/, "").toLowerCase()]) return true;
   if (/^\/(?:en\/|ur\/)?article\//.test(path)) return true;
   if (/^\/news\//.test(path)) return true;
   if (/^\/category\//.test(path)) return true;
@@ -175,6 +184,28 @@ function abs(url: string | null | undefined): string {
 // route below with an in-process cache. Returns the canonical redirect path.
 async function computeSlugRedirect(path: string): Promise<string | null> {
   if (/^\/home\/?$/i.test(path)) return "/";
+  const legacyRoot = LEGACY_ROOT_REDIRECTS[path.replace(/\/$/, "").toLowerCase()];
+  if (legacyRoot) {
+    // Land on the category's canonical URL (englishSlug), not the readable
+    // alias, so the redirect does not create another duplicate hop.
+    const cat = legacyRoot.match(/^\/category\/([^/]+)$/);
+    if (!cat) return legacyRoot;
+    const [row] = await db
+      .select({ englishSlug: categories.englishSlug })
+      .from(categories)
+      .where(eq(categories.slug, cat[1]))
+      .limit(1);
+    return row?.englishSlug ? `/category/${row.englishSlug}` : legacyRoot;
+  }
+  // Old AMP URLs (/amp/story/<legacy path> or /amp/<path>): resolve the inner
+  // path exactly like a non-AMP URL. GSC listed them as duplicates whose
+  // canonical Google picked itself, because nothing redirected them.
+  const amp = path.match(/^\/amp(?:\/story)?(\/.+)$/i);
+  if (amp) {
+    const inner = amp[1];
+    if (/^\/amp\//i.test(inner)) return null;
+    return (await computeSlugRedirect(inner)) || (/^\/article\/[^/]+$/.test(inner) ? inner : null);
+  }
   const legacyTarget = await resolveLegacyArticlePath(safeDecode(path));
   if (legacyTarget) {
     return await resolveArchiveCanonical(safeDecode(legacyTarget.slice("/article/".length))) || legacyTarget;

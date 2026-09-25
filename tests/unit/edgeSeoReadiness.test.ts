@@ -89,4 +89,13 @@ describe('public SEO projections', () => {
     expect(r.body.title).toBe('ياسر — سبق');
     expect(r.body.semanticHtml).toContain('نبذة المراسل'); expect(r.body.semanticHtml).toContain('/article/x1');
   });
+  it('redirects bare legacy roots and old AMP URLs to their canonical page', async () => {
+    f.rows = [[{englishSlug:'CWtMvGT'}]];
+    expect((await request('/api/edge/slug-redirect', {}, {path:'/saudia'})).body.redirect).toBe('/category/CWtMvGT');
+    expect((await request('/api/edge/slug-redirect', {}, {path:'/collection/latest-news'})).body.redirect).toBe('/');
+    expect((await request('/api/edge/slug-redirect', {}, {path:'/amp/article/x1'})).body.redirect).toBe('/article/x1');
+    f.rows = [[{englishSlug:'x2', slug:'s2'}]];
+    expect((await request('/api/edge/slug-redirect', {}, {path:'/amp/story/news/k27fxz'})).body.redirect).toBe('/article/x2');
+    expect((await request('/api/edge/slug-redirect', {}, {path:'/amp/amp/article/x1'})).body.redirect).toBeNull();
+  });
 });

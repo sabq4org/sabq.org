@@ -107,5 +107,6 @@
 - **صورة المشاركة الافتراضية:** الميتا العامة تستخدم `/branding/sabq-og-image.png` (1200×630) بدل `icon.png` المربعة. أبعاد og تُعلن لصورة العلامة فقط؛ صورة الخبر الفعلية لا تُعلن لها أبعاد مفترضة. شعار الناشر في NewsArticle يحمل 1200×630.
 - **الرئيسية في web-next:** og/twitter كاملة ومخطط NewsMediaOrganization (مطابق client/index.html) و`max-image-preview:large` ورابط اكتشاف RSS. ميتا الحافة للرئيسية تستخدم العنوان والوصف نفسيهما.
 - **RSS:** robots.txt يسمح بـ `/api/rss/` (خلاصات عامة فقط في `rssFeedRoutes.ts`)، و`client/index.html` يعلن `<link rel="alternate" type="application/rss+xml">`.
+- **روابط قديمة بلا تحويل (من Search Console):** `LEGACY_ROOT_REDIRECTS` في `edgeMeta.ts` يحوّل `/saudia` إلى رابط قسم «السعودية» الأساسي (englishSlug من الجدول) و`/collection/latest-news` إلى الرئيسية. روابط AMP القديمة (`/amp/<path>` و`/amp/story/<path>`) تُحل كالمسار الداخلي نفسه (قديم أو عربي أو news) أو تذهب إلى `/article/<slug>` مباشرة؛ ما لا يُحل يسقط إلى 404 الحقيقي أعلاه. الروابط القصيرة (`/sF6gde`) لا مقابل لها في `legacy_redirects` ولا `legacy_slug`، فتبقى 404.
 - خارج هذا التغيير عمدًا: رابط الأقسام الأساسي المقروء (ترحيل canonical)، lastmod لكل خريطة وعدد خرائط الأوردو، HSTS سنة، توحيد اسم العلامة، حظر زواحف التدريب، والأداء. قرارات أو قياس مطلوب أولًا.
 
