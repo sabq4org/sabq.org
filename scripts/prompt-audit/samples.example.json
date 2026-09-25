@@ -1,0 +1,14 @@
+[
+  {
+    "id": "TEMPLATE-normal-1",
+    "cohort": "normal",
+    "type": "edit",
+    "material": "TEMPLATE ONLY — replace this with one real newsroom sample of the normal cohort. This file is intentionally incomplete and is rejected by the comparison script."
+  },
+  {
+    "id": "TEMPLATE-quotes-1",
+    "cohort": "quotes",
+    "type": "edit",
+    "material": "TEMPLATE ONLY — replace this with real Arabic newsroom material containing an ASCII quote such as \"quoted text\". This file is intentionally incomplete and is rejected by the comparison script."
+  }
+]

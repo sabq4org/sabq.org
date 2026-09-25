@@ -12,37 +12,25 @@
 
 import { aiGateway } from "../ai/gateway";
 import {
-  SABQ_EDITORIAL_CORE_AR,
   SABQ_PRIMARY_EDITOR_MODEL,
   SABQ_FALLBACK_EDITOR_MODEL,
 } from "../ai/sabqEditorialPrompt";
-import { SABQ_CONSTITUTION_AR } from "../ai/prompts/constitution";
 import {
-  SABQ_TASK_PROMPTS_AR,
-  SABQ_TASK_OUTPUT_FORMAT_AR,
   TASKS_WANTING_VERIFICATION,
   type EditorialTaskType,
 } from "../ai/prompts/tasks";
+import {
+  EDITORIAL_JSON_SCHEMA,
+  buildSystemPrompt,
+  buildUserMessage,
+  type EditorialTaskInput,
+} from "../ai/prompts/editorialRequest";
+
 import { assertEditedContentComplete } from "../ai/editorialOutputGuards";
 import { sanitizeArticleHtml } from "../utils/sanitizeHtml";
 import { isHttpSourceUrl } from "@shared/editorialAiSources";
 
-export interface EditorialTaskInput {
-  type: EditorialTaskType;
-  /** المادة الخام (وفي «ادمج»: المادة الأولى) */
-  material: string;
-  /** المادة الثانية — مهمة «ادمج» فقط */
-  material2?: string;
-  /** توجيه حر من المحرر (زاوية مطلوبة، تركيز عنوان، جمهور...) */
-  instructions?: string;
-  /**
-   * سياق تحقق خارجي (نتائج بحث ويب منسوبة بروابطها) تجهزه طبقة أعلى.
-   * بدونه تعمل مهام «طور/تقرير/بروفايل» بوضع متحفظ: إثراء صياغة فقط
-   * مع قائمة ما يحتاج تحققاً في editorNotes.
-   */
-  verificationContext?: string;
-  userId?: string;
-}
+export { EDITORIAL_JSON_SCHEMA, type EditorialTaskInput };
 
 export interface EditorialTaskResult {
   headline: string;
@@ -75,30 +63,6 @@ const BODY_COMPLETENESS_TASKS: ReadonlySet<EditorialTaskType> = new Set([
   "edit",
   "merge",
 ]);
-
-function buildSystemPrompt(type: EditorialTaskType): string {
-  return [
-    SABQ_EDITORIAL_CORE_AR,
-    SABQ_CONSTITUTION_AR,
-    SABQ_TASK_PROMPTS_AR[type],
-    SABQ_TASK_OUTPUT_FORMAT_AR,
-  ].join("\n\n");
-}
-
-function buildUserMessage(input: EditorialTaskInput): string {
-  const parts: string[] = [];
-  if (input.instructions?.trim()) {
-    parts.push(`## توجيه المحرر\n${input.instructions.trim()}`);
-  }
-  if (input.verificationContext?.trim()) {
-    parts.push(`## سياق التحقق (نتائج بحث موثقة — اعتمدها واذكر مصادرها)\n${input.verificationContext.trim()}`);
-  }
-  parts.push(`## المادة\n${input.material.trim()}`);
-  if (input.type === "merge" && input.material2?.trim()) {
-    parts.push(`=====\n## المادة الثانية\n${input.material2.trim()}`);
-  }
-  return parts.join("\n\n");
-}
 
 /** يجرد أسوار ```json إن غلّف النموذج مخرجه بها رغم jsonMode */
 function stripCodeFences(raw: string): string {
@@ -184,7 +148,12 @@ async function completeOnce(
       { role: "system", content: buildSystemPrompt(input.type) },
       { role: "user", content: buildUserMessage(input) },
     ],
-    options: { maxTokens: MAX_OUTPUT_TOKENS, temperature: TEMPERATURE, jsonMode: true },
+    options: {
+      maxTokens: MAX_OUTPUT_TOKENS,
+      temperature: TEMPERATURE,
+      jsonMode: true,
+      jsonSchema: EDITORIAL_JSON_SCHEMA,
+    },
   });
   if (res.truncated) {
     throw new Error(`Editorial output truncated (max_tokens) on ${modelId}`);

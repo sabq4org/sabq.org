@@ -369,7 +369,12 @@
         "server/services/botDraftsService.ts",
         "server/services/botDraftPublishEffects.ts",
         "shared/botDrafts.ts",
-        "scripts/bot-drafts-client.ts"
+        "scripts/bot-drafts-client.ts",
+        "server/ai/prompts/editorialRequest.ts",
+        "scripts/prompt-audit/**",
+        "tests/unit/editorialJsonSchema.test.ts",
+        "tests/unit/dataStoryStructuredOutputs.test.ts",
+        "tests/unit/structuredOutputsComparison.test.ts"
       ],
       "aiFeatureKeys": [
         "content-tools",
@@ -469,7 +474,10 @@
         "client/src/pages/PromptStudioPublic.tsx",
         "server/services/aiPublicStatsService.ts",
         "server/routes/aiPublicStats.ts",
-        "e2e/ai-hub-overview.spec.ts"
+        "e2e/ai-hub-overview.spec.ts",
+        "server/ai/claudeStructuredOutputs.ts",
+        "tests/unit/claudeStructuredOutputs.test.ts",
+        "tests/unit/aiGatewayFailover.test.ts"
       ],
       "aiFeatureKeys": [
         "legacy-ai-manager",
@@ -481,7 +489,7 @@
       "owners": [
         "ai"
       ],
-      "lastReviewed": "2026-09-24"
+      "lastReviewed": "2026-09-25"
     },
     {
       "id": "muqtarab",

@@ -2,6 +2,7 @@
 
 import Anthropic from "@anthropic-ai/sdk";
 import type { AdapterCompleteParams, AdapterCompleteResult, ProviderAdapter } from "../types";
+import { claudeJsonOutput } from "../../claudeStructuredOutputs";
 
 let client: Anthropic | null = null;
 
@@ -39,7 +40,8 @@ export const anthropicAdapter: ProviderAdapter = {
         ...(params.temperature !== undefined ? { temperature: params.temperature } : {}),
         ...(systemParts.length ? { system: systemParts.join("\n\n") } : {}),
         messages: chat.length ? chat : [{ role: "user", content: "" }],
-      },
+        ...(params.jsonSchema ? claudeJsonOutput(params.jsonSchema) : {}),
+      } as Anthropic.MessageCreateParamsNonStreaming,
       { timeout: params.timeoutMs, signal: params.signal, maxRetries: 0 },
     );
 
