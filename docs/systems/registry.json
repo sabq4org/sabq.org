@@ -406,7 +406,7 @@
       "owners": [
         "editorial"
       ],
-      "lastReviewed": "2026-09-24"
+      "lastReviewed": "2026-09-25"
     },
     {
       "id": "ifox",
@@ -1162,7 +1162,8 @@
         "client/src/pages/dashboard/AiStaff/**",
         "scripts/seed-ai-staff.ts",
         "client/public/ai-team/**"
-      ]
+      ],
+      "lastReviewed": "2026-09-25"
     },
     {
       "id": "ops-room",
