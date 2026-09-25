@@ -251,8 +251,6 @@
         "tests/unit/writerWeeklySlot.test.ts",
         "client/src/pages/dashboard/ReportersPage.tsx",
         "client/src/pages/reporter/ReporterMyArticlesPage.tsx",
-        "server/journalist-agent-ai.ts",
-        "server/journalist-agent-routes.ts",
         "server/ai-content-tools.ts",
         "server/data-story-ai.ts",
         "server/data-story-routes.ts",
@@ -375,7 +373,6 @@
       ],
       "aiFeatureKeys": [
         "content-tools",
-        "journalist-agent",
         "data-story",
         "ai-article-generator",
         "article-classification",
