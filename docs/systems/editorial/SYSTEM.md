@@ -1,6 +1,6 @@
 # نظام التحرير وغرف الأخبار (`editorial`)
 
-> آخر مراجعة: 2026-09-24 (نشر وجدولة مسودات البوت من المحادثة) | المالك: editorial
+> آخر مراجعة: 2026-09-25 (تقاعد وكيل الصحفي القديم) | المالك: editorial
 
 ## الغرض
 غرفة الأخبار اليومية + أدوات التحرير بالذكاء الاصطناعي التي يستخدمها المحررون: عناوين، مقالات، تصنيف، SEO، روابط ذكية، صور، وكلاء بريد/واتساب، ومساعد كاتب الرأي، والإعلانات الداخلية الموجهة لفريق العمل.
@@ -10,20 +10,21 @@
 - **خارج النطاق (لها أنظمة):** iFox، المقترب، الرادار، عُمق، أخبار البطولات، النشرات الصوتية، إشراف التعليقات، المتجهات/البرومبت (ai-hub).
 
 ## مفاتيح AI (حصرية)
-`content-tools`, `journalist-agent`, `data-story`, `ai-article-generator`, `article-classification`, `content-analyzer`, `smart-categories`, `smart-category-classifier`, `story-matcher`, `smart-insights`, `geo-extraction`, `smart-links`, `story-cards`, `seo-generator`, `mobile-article-enrichment`, `image-generation`, `nano-banana-images`, `smart-thumbnail`, `visual-ai`, `infographic-ai`, `whatsapp-agent`, `email-agent`, `opinion-writer-*`, `coverage-gap-matcher`
+`content-tools`, `data-story`, `ai-article-generator`, `article-classification`, `content-analyzer`, `smart-categories`, `smart-category-classifier`, `story-matcher`, `smart-insights`, `geo-extraction`, `smart-links`, `story-cards`, `seo-generator`, `mobile-article-enrichment`, `image-generation`, `nano-banana-images`, `smart-thumbnail`, `visual-ai`, `infographic-ai`, `whatsapp-agent`, `email-agent`, `opinion-writer-*`, `coverage-gap-matcher`
 
 ## نقاط الدخول
 | الطبقة | أمثلة |
 |--------|--------|
 | غرفة الأخبار | `articleEditLocks`, `editorAlerts`, `dashboardPulse` |
 | الإعلانات الداخلية | `server/routes/announcements.ts`، `/api/announcements/*`، وصفحات `/dashboard/announcements` |
-| AI تحريري | `ai-content-tools`, `journalist-agent-ai`, `aiArticleGenerator`, `seo-generator` |
+| AI تحريري | `ai-content-tools`, `aiArticleGenerator`, `seo-generator` |
 | مسودات البوتات | `server/routes/botDrafts.ts` + `server/services/botDraftsService.ts` + `botDraftPublishEffects.ts` + `shared/botDrafts.ts` — إنشاء/تحديث/`PATCH /ready` و`POST /publish` و`POST /schedule` و`POST /images`. Bearer من `BOT_DRAFTS_API_TOKENS`. الدليل: [`BOT_DRAFTS_API.md`](./BOT_DRAFTS_API.md) |
 | رادار الفجوات | `server/services/coverageGapMatcher.ts` (محرك المطابقة الدلالية), `server/routes/coverageGaps.ts` (`/api/admin/dashboard/coverage-gaps` + تعيين/مسودة/استبعاد) |
 | Web | `/dashboard`, Communications, Prompt Studio, Voice Management |
 | صفحة الكاتب بالاسم | `GET /api/authors/by-name` → `authorProfileService`؛ واجهة `/author/:name`؛ من مقال الرأي يُفضَّل `/reporter/:slug` إن وُجد `staff.slug` وإلا `/author/:name` (مثل iOS) |
 
 ## عقود مهمة
+- **تقاعد وكيل الصحفي (2026-09-25):** أُزيلت مسارات `/api/journalist-tasks` ومحركها ومفتاح `journalist-agent` الافتراضي. يبقى جدول `journalist_tasks` وبياناته أرشيفًا بلا حذف أو ترحيل. البحث التحريري الموثق يستمر في `editorial-research` المستقل. فحص الإنتاج وجد 5 مهام (مكتملتان)، وآخرها 2025-11-12؛ لم تظهر مطابقة بعناوين المسودات/العناوين البديلة/أول 60 حرفًا خلال 30 يومًا من كل مهمة. هذه مطابقة محدودة وليست إثباتًا لعدم نشر نص معاد الصياغة.
 - **مواعيد الرأي في لوحة iOS (2026-09-23):** `GET /api/v1/admin/articles` و`GET /api/v1/admin/articles/:id` يضيفان `writerWeeklySlot` لمسودات الرأي ومقالاته المجدولة من حساب الويب نفسه (`getNextSlotsForWriters`)؛ القائمة تضيف `articleType` و`authorId` و`publishedAt`، والاسم الظاهر للرأي من الكاتب لا المراسل. الحقول إضافية؛ مصادقة Bearer وبوابة الإدارة بلا تغيير، والمستهلكون السابقون يتجاهلونها. تعرض iOS الموعد المحفوظ أولاً ثم الموعد القادم المقترح بتوقيت الرياض وتقويم ميلادي، مع تمييز المسودة عن النشر المجدول فعلياً. تنبيه «فات الموعد» يخص تاريخاً محفوظاً مضى فقط؛ `nextSlot` مستقبلي ولا يثبت أن المقال فوّت أسبوعاً سابقاً. عند اختيار الجدولة لمقال فات موعده، يُعبّأ الموعد القادم للكاتب تلقائياً مع إمكانية تعديله؛ الموعد المحفوظ المستقبلي يبقى أولوية. إن لم يتوفر موعد قادم، يلزم اختيار يدوي واضح. تبديل الكاتب يُبطل اقتراح الكاتب السابق، وحفظ المسودة دون اعتماد إعادة الجدولة لا يمحو موعدها المحفوظ. الجدولة تتطلب تاريخاً مستقبلياً في التطبيق والخادم؛ موعد مفقود/غير صالح/ماضٍ يُرفض برسالة واضحة. لا تغيير للجدول الأسبوعي أو عامل النشر أو قاعدة البيانات. يحتاج الظهور الكامل نشر إضافة API وتوزيع بناء iOS معاً.
 - **ظهور النشر المجدول في إدارة الأخبار (2026-09-09):** قائمة `status=published` تستخدم الأكبر بين `displayOrder` وثواني `publishedAt`، ثم تاريخ النشر/الإنشاء/المعرّف للفصل الثابت. بذلك تظهر المواد التي أُنشئت منذ أيام ونُشرت اليوم دون backfill. `adminArticleList` يجمع أعلى `offset+limit` من فهرس الترتيب اليدوي وفهرس النشر، بفلاتر الملكية/النوع/التصنيف/البحث داخل الفرعين، ويرتب مرشحي الصفحة فقط؛ لا مسح كامل للأرشيف بترتيب تعبير محسوب. جلب التفاصيل يعيد تطبيق الفلاتر نفسها. السحب اليدوي يكتب قيمًا أعلى من تواريخ نشر كل صفوف الصفحة ليبقى ترتيبها ثابتًا بعد التحديث.
 - **قائمة المجدولة:** `status=scheduled` يعرض كل المواد بالحالة نفسها، بما فيها المتأخرة أو التي بلا موعد، والأقرب موعدًا أولًا (`NULLS LAST`). العداد يحسب نفس مجموعة الحالة دون شرط تاريخ؛ مفتاح SWR `articles:admin:metrics:v4` (أُضيف `readyToPublish`، وسياسة إبطال الكتابات باقية). السحب اليدوي معطّل في هذا التبويب لأن الموعد هو ترتيب العمل. المواد المنشورة تنتقل إلى «منشورة» مهما بقي `scheduledAt` في سجلها.

@@ -80,7 +80,6 @@ export const DEFAULT_FEATURES: DefaultFeature[] = [
   // التدقيق اللغوي للمحرر (نص + عنوان): بدائل خفيفة وسريعة لأن المهمة قصيرة، والمهلة
   // تُضبط في proofreadService (25ث) بدل الافتراضي.
   { featureKey: "proofread", displayName: "التدقيق اللغوي", category: "editorial", primary: GPT_5_1, fallbackChain: [HAIKU, GEMINI_FLASH] },
-  { featureKey: "journalist-agent", displayName: "الوكيل الصحفي", category: "editorial", primary: GPT_5_1, fallbackChain: CHAIN_AFTER_GPT },
   { featureKey: "data-story", displayName: "قصص البيانات", category: "editorial", primary: GPT_5_1, fallbackChain: CHAIN_AFTER_GPT },
   { featureKey: "deep-analysis", displayName: "التحليل العميق (عمق)", category: "editorial", primary: GPT_5_1, fallbackChain: CHAIN_AFTER_GPT },
   { featureKey: "muqtarab-ai", displayName: "ذكاء مقترب", category: "editorial", primary: GPT_4O_MINI, fallbackChain: CHAIN_AFTER_MINI },

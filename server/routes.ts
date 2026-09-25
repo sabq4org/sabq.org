@@ -49,7 +49,6 @@ import { setupAuth, isAuthenticated, invalidateUserSessionCache, invalidateAllUs
 import { getCsrfToken, validateCsrfToken, ensureCsrfToken } from "./csrf";
 import adsRoutes from "./ads-routes";
 import { registerDataStoryRoutes } from './data-story-routes';
-import journalistAgentRoutes from './journalist-agent-routes';
 import emailAgentRoutes from './routes/emailAgent';
 import whatsappAgentRoutes from './routes/whatsappAgent';
 import commentModerationRoutes from './routes/commentModeration';
@@ -30541,11 +30540,6 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   registerSmartNewsletterRoutes(app);
   app.use(newsletterEditorialRoutes);
   registerTestEmailTemplatesRoutes(app, requireAuth, requireRole);
-  // ============================================================
-  // SMART JOURNALIST AGENT - وكيل الصحفي الذكي
-  // ============================================================
-  app.use(journalistAgentRoutes);
-
   // ============================================================
   // SHORT LINKS - SOCIAL SHARING
   // ============================================================
