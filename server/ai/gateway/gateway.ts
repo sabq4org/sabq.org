@@ -103,6 +103,7 @@ export class AIGateway {
         maxTokens: req.options?.maxTokens ?? cfg.maxTokens ?? undefined,
         temperature: req.options?.temperature ?? cfg.temperature ?? undefined,
         jsonMode: req.options?.jsonMode,
+        jsonSchema: req.options?.jsonSchema,
         timeoutMs,
         signal,
       }),

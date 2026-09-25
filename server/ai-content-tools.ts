@@ -2,6 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { z } from "zod";
+import { claudeJsonOutput } from "./ai/claudeStructuredOutputs";
 
 // Zod schemas for AI responses validation with coercion
 const ClaudeTopicSchema = z.object({
@@ -67,6 +68,43 @@ const genai = new GoogleGenerativeAI(
 const CLAUDE_MODEL = "claude-sonnet-4-6";
 const GPT_MODEL = "gpt-5.1";
 const GEMINI_MODEL = "gemini-2.5-flash";
+
+// Output schemas for the Claude branches (enforced when CLAUDE_STRUCTURED_OUTPUTS=on).
+// The prompt text still asks for JSON because the GPT/Gemini branches share it.
+const FACT_CHECK_JSON_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["verdict", "confidence", "reasoning", "redFlags"],
+  properties: {
+    verdict: { type: "string", enum: ["credible", "questionable", "false"] },
+    confidence: { type: "number", description: "0-100" },
+    reasoning: { type: "string" },
+    redFlags: { type: "array", items: { type: "string" } },
+  },
+};
+
+const TRENDS_JSON_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["topics", "overallSentiment", "summary"],
+  properties: {
+    topics: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["topic", "category", "mentionCount"],
+        properties: {
+          topic: { type: "string" },
+          category: { type: "string" },
+          mentionCount: { type: "integer" },
+        },
+      },
+    },
+    overallSentiment: { type: "string", enum: ["positive", "neutral", "negative"] },
+    summary: { type: "string", description: "ملخص الاتجاهات بالعربية. للاقتباس استخدم «...»" },
+  },
+};
 
 // Safe JSON extraction and parsing helper
 function safeParseAiJson<T>(
@@ -443,9 +481,17 @@ ${context ? `السياق: ${context}` : ''}
           model: CLAUDE_MODEL,
           max_tokens: 2000,
           messages: [{ role: "user", content: prompt }],
-        });
+          ...claudeJsonOutput(FACT_CHECK_JSON_SCHEMA),
+        } as Anthropic.MessageCreateParamsNonStreaming);
 
-        const content = response.content[0].type === "text" ? response.content[0].text : "";
+        if (response.stop_reason === "max_tokens") {
+          throw new Error("Claude fact-check truncated (max_tokens)");
+        }
+        const content = response.content
+          .filter((b): b is Anthropic.TextBlock => b.type === "text")
+          .map((b) => b.text)
+          .join("");
+        // With Structured Outputs the whole text is the JSON; the regex also covers the off path.
         const jsonMatch = content.match(/\{[\s\S]*\}/);
         if (!jsonMatch) {
           throw new Error("فشل استخراج JSON من استجابة Claude");
@@ -763,7 +809,8 @@ export async function analyzeTrends(
 ⚠️ مهم: أرجع JSON فقط بدون أي نص إضافي. تأكد من صحة التنسيق.`,
         },
       ],
-    });
+      ...claudeJsonOutput(TRENDS_JSON_SCHEMA),
+    } as Anthropic.MessageCreateParamsNonStreaming);
 
     // 4. تحليل بـ Gemini 2.0 Flash - الكلمات المفتاحية والتوصيات
     console.log(`🤖 [Gemini] Starting keywords and recommendations analysis...`);
@@ -803,11 +850,13 @@ ${combinedText.substring(0, 10000)}
     // استخراج نتائج Claude
     let claudeAnalysis = null;
     const claudeResult = results[0];
-    if (claudeResult.status === "fulfilled") {
-      const claudeContent =
-        claudeResult.value.content[0].type === "text"
-          ? claudeResult.value.content[0].text
-          : "";
+    if (claudeResult.status === "fulfilled" && claudeResult.value.stop_reason === "max_tokens") {
+      console.error("❌ [Claude] Trends response truncated (max_tokens)");
+    } else if (claudeResult.status === "fulfilled") {
+      const claudeContent = claudeResult.value.content
+        .filter((b): b is Anthropic.TextBlock => b.type === "text")
+        .map((b) => b.text)
+        .join("");
 
       claudeAnalysis = safeParseAiJson(
         claudeContent,

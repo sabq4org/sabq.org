@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { claudeJsonOutput } from "./ai/claudeStructuredOutputs";
 import OpenAI from "openai";
 import type { ParsedDataset } from './data-parser';
 import { calculateStatistics, getTopValues } from './data-parser';
@@ -101,6 +102,39 @@ export async function analyzeDataset(
   }
 }
 
+// Output schema for the Claude story draft (enforced when CLAUDE_STRUCTURED_OUTPUTS=on).
+const STORY_JSON_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["title", "subtitle", "excerpt", "content", "outline"],
+  properties: {
+    title: { type: "string", description: "عنوان صحفي بأسلوب سبق، 80 حرفاً أو أقل" },
+    subtitle: { type: "string", description: "عنوان فرعي يضيف معلومة أو رقماً بارزاً، 60-80 حرفاً" },
+    excerpt: { type: "string", description: "جملتان تلخصان القصة مع الرقم الأبرز" },
+    content: { type: "string", description: "HTML: <h2> للأقسام، <p> للفقرات، <strong> للأرقام، <ul><li> للنقاط. للاقتباس استخدم «...»" },
+    outline: {
+      type: "object",
+      additionalProperties: false,
+      required: ["sections"],
+      properties: {
+        sections: {
+          type: "array",
+          items: {
+            type: "object",
+            additionalProperties: false,
+            required: ["heading", "content", "dataReferences"],
+            properties: {
+              heading: { type: "string" },
+              content: { type: "string" },
+              dataReferences: { type: "array", items: { type: "string" } },
+            },
+          },
+        },
+      },
+    },
+  },
+};
+
 /**
  * Generate Arabic news story from analysis
  */
@@ -112,25 +146,32 @@ export async function generateStory(
   const startTime = Date.now();
 
   try {
-    // Use Claude Sonnet 3.5 for Arabic text generation
     const prompt = buildStoryPrompt(dataset, analysis, fileName);
 
     const response = await anthropic.messages.create({
       model: "claude-sonnet-4-6",
-      max_tokens: 4000,
+      // A full HTML story plus outline did not fit reliably in 4000 tokens.
+      max_tokens: 8000,
       messages: [{
         role: "user",
         content: prompt
-      }]
-    });
+      }],
+      ...claudeJsonOutput(STORY_JSON_SCHEMA),
+    } as Anthropic.MessageCreateParamsNonStreaming);
 
-    const content = response.content[0];
-    if (content.type !== 'text') {
-      throw new Error('Unexpected response type from Claude');
+    if (response.stop_reason === "max_tokens") {
+      throw new Error("Claude story truncated (max_tokens)");
     }
+    const text = response.content
+      .filter((b): b is Anthropic.TextBlock => b.type === "text")
+      .map((b) => b.text)
+      .join("")
+      .trim();
 
-    // Parse the JSON response
-    const storyData = JSON.parse(content.text);
+    // With Structured Outputs the text is the JSON itself. On the off path the model may
+    // still wrap it in a code fence, which used to fail the parse and drop to GPT silently.
+    const fenced = text.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/);
+    const storyData = JSON.parse(fenced ? fenced[1] : text);
 
     const generationTime = Date.now() - startTime;
 
@@ -470,7 +511,7 @@ ${analysis.insights.narrative}
   }
 }
 
-تذكّر: القصة يجب أن تكون جاهزة للنشر مباشرة في "سبق" دون تعديل. استخدم لغة صحفية احترافية، أرقاماً دقيقة، تفسيرات سياقية، ومقارنات درامية.`;
+استخدم لغة صحفية احترافية، أرقاماً دقيقة، تفسيرات سياقية، ومقارنات درامية.`;
 }
 
 /**

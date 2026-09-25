@@ -80,6 +80,12 @@ export interface CompleteRequest extends BaseRequest {
     maxTokens?: number;
     temperature?: number;
     jsonMode?: boolean;
+    /**
+     * JSON Schema for the output. Anthropic has no schema-less JSON mode, so jsonMode alone
+     * is prompt-only there; with a schema (and CLAUDE_STRUCTURED_OUTPUTS=on) Claude is held
+     * to it via Structured Outputs. Other providers ignore it and keep using jsonMode.
+     */
+    jsonSchema?: Record<string, unknown>;
   };
 }
 
@@ -151,6 +157,7 @@ export interface AdapterCompleteParams {
   maxTokens?: number;
   temperature?: number;
   jsonMode?: boolean;
+  jsonSchema?: Record<string, unknown>;
   timeoutMs: number;
   signal?: AbortSignal;
 }
