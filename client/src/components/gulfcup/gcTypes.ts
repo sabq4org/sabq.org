@@ -395,7 +395,24 @@ export interface GcDayGroup {
   items: GcFixture[];
 }
 
-/** تجميع المباريات حسب اليوم (بتوقيت الرياض)، مع تصدّر مباراة المضيف يومها. */
+/** موعد المباراة غير محدد بعد (API-Football يعيد TBD أو طابعًا زمنيًا فارغًا). */
+function isKickoffTimeTbd(f: GcFixture): boolean {
+  return f.status.code === "TBD" || !(f.timestamp > 0);
+}
+
+/**
+ * ترتيب زمني تصاعدي حسب موعد الانطلاق الفعلي، ثم رقم المباراة عند التساوي؛
+ * المباريات غير محددة الوقت في نهاية يومها. لا أولوية لمباراة المضيف هنا —
+ * تمييزها بصري فقط في البطاقة.
+ */
+export function compareFixturesByKickoff(a: GcFixture, b: GcFixture): number {
+  const aTbd = isKickoffTimeTbd(a);
+  const bTbd = isKickoffTimeTbd(b);
+  if (aTbd !== bTbd) return aTbd ? 1 : -1;
+  return (aTbd ? 0 : a.timestamp - b.timestamp) || a.matchNo - b.matchNo;
+}
+
+/** تجميع المباريات حسب اليوم (بتوقيت الرياض)، الأيام والمباريات داخلها تصاعديًا. */
 export function groupFixturesByDay(fixtures: GcFixture[]): GcDayGroup[] {
   const map = new Map<string, GcFixture[]>();
   for (const f of fixtures) {
@@ -403,17 +420,12 @@ export function groupFixturesByDay(fixtures: GcFixture[]): GcDayGroup[] {
     if (!map.has(key)) map.set(key, []);
     map.get(key)!.push(f);
   }
-  const involvesSaudi = (f: GcFixture) =>
-    f.home.id === SAUDI_TEAM_ID || f.away.id === SAUDI_TEAM_ID;
   return Array.from(map.entries())
     .sort((a, b) => a[0].localeCompare(b[0]))
     .map(([key, items]) => ({
       key,
       label: formatKickoffDay(items[0].date),
-      items: [...items].sort(
-        (a, b) =>
-          (involvesSaudi(a) ? 0 : 1) - (involvesSaudi(b) ? 0 : 1) || a.timestamp - b.timestamp,
-      ),
+      items: [...items].sort(compareFixturesByKickoff),
     }));
 }
 

@@ -23,13 +23,13 @@ export function GcSchedule({
   const [activeRound, setActiveRound] = useState<string | null>(null);
   const filtered = activeRound ? fixtures.filter((f) => f.round === activeRound) : fixtures;
   // المباريات الجارية والقادمة تتصدّر الجدول، والمنتهية تنتقل إلى قسم مطويّ بعدها
-  // (الأحدث أولًا) حتى لا تزاحم ما يهمّ الزائر الآن.
+  // حتى لا تزاحم ما يهمّ الزائر الآن. القسمان مرتّبان زمنيًا تصاعديًا.
   const upcomingDays = useMemo(
     () => groupFixturesByDay(filtered.filter((f) => !f.status.finished)),
     [filtered],
   );
   const finishedDays = useMemo(
-    () => groupFixturesByDay(filtered.filter((f) => f.status.finished)).reverse(),
+    () => groupFixturesByDay(filtered.filter((f) => f.status.finished)),
     [filtered],
   );
   const finishedCount = finishedDays.reduce((n, d) => n + d.items.length, 0);
