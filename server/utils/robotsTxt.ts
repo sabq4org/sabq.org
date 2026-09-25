@@ -18,6 +18,8 @@ Content-Signal: ${CONTENT_SIGNAL}
 Allow: /
 Disallow: /api/
 ${apiListingRobotsRules}
+# خلاصات RSS المعلنة في llms.txt ورأس الصفحات: قابلة للزحف رغم حظر /api/.
+Allow: /api/rss/
 
 # ملاحظة: صفحات الحساب والمصادقة (login, register, logout, *-password,
 # 2fa-verify, verify-email, profile, bookmarks, reading-history, my-*,

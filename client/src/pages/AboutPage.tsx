@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { motion } from "framer-motion";
 import { 
   Sparkles, 
@@ -22,6 +23,10 @@ import { Footer } from "@/components/Footer";
 import { useQuery } from "@tanstack/react-query";
 
 export default function AboutPage() {
+  // يطابق <title> المحقون على الحافة (/api/edge/seo-meta) بعد تشغيل جافاسكربت.
+  useEffect(() => {
+    document.title = "من نحن — سبق";
+  }, []);
   // Fetch current user
   const { data: user } = useQuery<{ name?: string | null; email?: string; role?: string; profileImageUrl?: string | null }>({
     queryKey: ["/api/auth/user"],

@@ -64,6 +64,8 @@ import { paginationOrReject } from "../utils/pagination";
 import { LEGACY_ARTICLE_PREFIXES, resolveLegacyArticlePath, resolveArchiveCanonical } from "../services/archiveSeo";
 
 import { getAuthorPageByName } from "../services/authorProfileService";
+import { isKnownSpaTopLevelPath } from "../utils/spaTopLevelRoutes";
+import { AI_POLICY_ALLOWED, AI_POLICY_FORBIDDEN, AI_POLICY_INTRO } from "@shared/aiPolicyContent";
 import { archivePage, archiveHref, normalizeSeoPath, SEO_ARCHIVE_PAGE_SIZE } from "../utils/seoArchive";
 
 import { getPublicEditorialModifiedAt } from "../utils/editorialDates";
@@ -128,6 +130,13 @@ const containsArabic = (s: string) => ARABIC_RE.test(s);
 // DELIBERATELY EXCLUDES current features that share the shape: `gulf` (gulf
 // events), `omq` (deep analyses), `category`, `article`, `news`, `opinion`,
 // `en`, `ur`, `world-day(s)`.
+// Bare legacy roots that still collect search impressions (GSC 2026-09-25)
+// but render only the SPA NotFound page today.
+const LEGACY_ROOT_REDIRECTS: Record<string, string> = {
+  "/saudia": "/category/saudi",
+  "/collection/latest-news": "/",
+};
+
 // Fast structural test: can this path EVER produce a redirect or gone=true?
 // computeSlugRedirect only matches /article|news/…, /category/…, and the legacy
 // /<prefix>/…/slug shapes; computeArticleGone only matches (en|ur)?/article/….
@@ -139,6 +148,8 @@ const containsArabic = (s: string) => ARABIC_RE.test(s);
 // permissive here is safe — a false positive only means we cache as before.
 function isRedirectCandidate(path: string): boolean {
   if (/^\/home\/?$/i.test(path)) return true;
+  if (/^\/amp\//i.test(path)) return true;
+  if (LEGACY_ROOT_REDIRECTS[path.replace(/\/$/, "").toLowerCase()]) return true;
   if (/^\/(?:en\/|ur\/)?article\//.test(path)) return true;
   if (/^\/news\//.test(path)) return true;
   if (/^\/category\//.test(path)) return true;
@@ -173,6 +184,28 @@ function abs(url: string | null | undefined): string {
 // route below with an in-process cache. Returns the canonical redirect path.
 async function computeSlugRedirect(path: string): Promise<string | null> {
   if (/^\/home\/?$/i.test(path)) return "/";
+  const legacyRoot = LEGACY_ROOT_REDIRECTS[path.replace(/\/$/, "").toLowerCase()];
+  if (legacyRoot) {
+    // Land on the category's canonical URL (englishSlug), not the readable
+    // alias, so the redirect does not create another duplicate hop.
+    const cat = legacyRoot.match(/^\/category\/([^/]+)$/);
+    if (!cat) return legacyRoot;
+    const [row] = await db
+      .select({ englishSlug: categories.englishSlug })
+      .from(categories)
+      .where(eq(categories.slug, cat[1]))
+      .limit(1);
+    return row?.englishSlug ? `/category/${row.englishSlug}` : legacyRoot;
+  }
+  // Old AMP URLs (/amp/story/<legacy path> or /amp/<path>): resolve the inner
+  // path exactly like a non-AMP URL. GSC listed them as duplicates whose
+  // canonical Google picked itself, because nothing redirected them.
+  const amp = path.match(/^\/amp(?:\/story)?(\/.+)$/i);
+  if (amp) {
+    const inner = amp[1];
+    if (/^\/amp\//i.test(inner)) return null;
+    return (await computeSlugRedirect(inner)) || (/^\/article\/[^/]+$/.test(inner) ? inner : null);
+  }
   const legacyTarget = await resolveLegacyArticlePath(safeDecode(path));
   if (legacyTarget) {
     return await resolveArchiveCanonical(safeDecode(legacyTarget.slice("/article/".length))) || legacyTarget;
@@ -578,7 +611,7 @@ function articleMetaPayload(opts: {
     publisher: {
       "@type": "NewsMediaOrganization",
       name: b.name,
-      logo: { "@type": "ImageObject", url: BRAND_OG_IMAGE },
+      logo: { "@type": "ImageObject", url: BRAND_OG_IMAGE, width: 1200, height: 630 },
     },
     speakable: schemaExtras.speakable,
   };
@@ -602,8 +635,9 @@ function articleMetaPayload(opts: {
     type: "article",
     locale: b.locale,
     siteName: b.name,
-    imageWidth: 1200,
-    imageHeight: 630,
+    // الأبعاد معروفة لصورة العلامة فقط؛ صورة الخبر الفعلية (مثل w1280) ليست
+    // 1200×630، وإعلان أبعاد خاطئة أسوأ من عدم إعلانها.
+    ...(opts.image === BRAND_OG_IMAGE ? { imageWidth: 1200, imageHeight: 630 } : {}),
     publishedTime,
     modifiedTime,
     section: opts.section || undefined,
@@ -963,12 +997,30 @@ function defaultMeta(path: string) {
   return {
     title: d.title,
     description: d.description,
-    image: DEFAULT_OG_IMAGE,
+    // صورة المشاركة الأفقية 1200×630 بدل icon.png المربعة (1024×1024) التي
+    // كانت تظهر معاينة ضعيفة في واتساب وX مع summary_large_image.
+    image: BRAND_OG_IMAGE,
+    imageWidth: 1200,
+    imageHeight: 630,
     canonical: `${SITE_URL}${path === "/" ? "" : path}`,
     robots: "index,follow",
     type: "website",
     locale: d.locale,
     siteName: d.siteName,
+  };
+}
+
+// مسار لا تعرفه SPA (مقطعه الأول خارج App.tsx) → 404 حقيقي بدل 200 مع
+// index,follow (Soft 404). وسيط Pages يقرأ `status` ويعيد القشرة بالحالة 404،
+// فيرى المتصفح صفحة NotFound نفسها. لا canonical لصفحة غير موجودة.
+function notFoundMeta(path: string) {
+  const locale = localeOfPath(path);
+  return {
+    ...defaultMeta(path),
+    title: locale === "en" ? "Page not found — Sabq" : locale === "ur" ? "صفحہ نہیں ملا — سبق" : "الصفحة غير موجودة | سبق",
+    canonical: "",
+    robots: "noindex, follow",
+    status: 404,
   };
 }
 
@@ -992,6 +1044,26 @@ const LOCALIZED_STATIC_PAGES: Record<
   "/en/accessibility-statement": { title: "Accessibility Statement — Sabq", desc: "Accessibility statement of Sabq News.", locale: "en_US", siteName: "Sabq News" },
   "/en/daily-brief": { title: "Daily Brief — Sabq", desc: "A daily roundup of the most important news from Sabq.", locale: "en_US", siteName: "Sabq News" },
   "/en/moment-by-moment": { title: "Moment by Moment — Sabq", desc: "Live coverage of breaking events from Sabq News.", locale: "en_US", siteName: "Sabq News" },
+  // Arabic — parity with seoInjector.ts STATIC_INDEXABLE_PAGES, limited to
+  // routes App.tsx actually renders. Before this, every Arabic institutional
+  // page reached crawlers with the generic «سبق الذكية» title. Pages that also
+  // need crawlable body text (/about, /ai-policy, /opinion, /moment-by-moment,
+  // /daily-brief) are ROUTE_HANDLERS below, NOT here (a static entry wins).
+  "/categories": { title: "التصنيفات — سبق", desc: "استكشف تصنيفات الأخبار في صحيفة سبق الإلكترونية", locale: "ar_SA", siteName: ARTICLE_BRAND.ar.name },
+  "/privacy": { title: "سياسة الخصوصية — سبق", desc: "سياسة خصوصية صحيفة سبق الإلكترونية", locale: "ar_SA", siteName: ARTICLE_BRAND.ar.name },
+  "/ar/privacy": { title: "سياسة الخصوصية — سبق", desc: "سياسة خصوصية صحيفة سبق الإلكترونية", locale: "ar_SA", siteName: ARTICLE_BRAND.ar.name },
+  "/terms": { title: "شروط الاستخدام — سبق", desc: "شروط استخدام صحيفة سبق الإلكترونية", locale: "ar_SA", siteName: ARTICLE_BRAND.ar.name },
+  "/ar/terms": { title: "شروط الاستخدام — سبق", desc: "شروط استخدام صحيفة سبق الإلكترونية", locale: "ar_SA", siteName: ARTICLE_BRAND.ar.name },
+  "/contact": { title: "اتصل بنا — سبق", desc: "تواصل مع فريق صحيفة سبق الإلكترونية", locale: "ar_SA", siteName: ARTICLE_BRAND.ar.name },
+  "/accessibility-statement": { title: "بيان إمكانية الوصول — سبق", desc: "بيان إمكانية الوصول في صحيفة سبق الإلكترونية", locale: "ar_SA", siteName: ARTICLE_BRAND.ar.name },
+  "/ar/accessibility-statement": { title: "بيان إمكانية الوصول — سبق", desc: "بيان إمكانية الوصول في صحيفة سبق الإلكترونية", locale: "ar_SA", siteName: ARTICLE_BRAND.ar.name },
+  "/shorts": { title: "أخبار قصيرة — سبق", desc: "أخبار سريعة ومختصرة من صحيفة سبق الإلكترونية", locale: "ar_SA", siteName: ARTICLE_BRAND.ar.name },
+  "/rss": { title: "خلاصات RSS — سبق", desc: "خلاصات RSS لأخبار صحيفة سبق الإلكترونية", locale: "ar_SA", siteName: ARTICLE_BRAND.ar.name },
+  "/developers": { title: "المطورون — سبق", desc: "موارد المطورين على صحيفة سبق الإلكترونية", locale: "ar_SA", siteName: ARTICLE_BRAND.ar.name },
+  "/advertise": { title: "أعلن معنا — سبق", desc: "فرص الإعلان على صحيفة سبق الإلكترونية", locale: "ar_SA", siteName: ARTICLE_BRAND.ar.name },
+  "/news": { title: "آخر الأخبار — سبق", desc: "تصفح أحدث الأخبار العاجلة والمستجدات على صحيفة سبق الإلكترونية.", locale: "ar_SA", siteName: ARTICLE_BRAND.ar.name },
+  "/newsletter": { title: "النشرة الإخبارية — سبق", desc: "اشترك في نشرة سبق الإخبارية لتصلك أهم الأخبار والمستجدات يوميًا.", locale: "ar_SA", siteName: ARTICLE_BRAND.ar.name },
+  "/ai": { title: "iFox — مساعد سبق الذكي", desc: "iFox هو مساعد سبق الذكي للأخبار والمعلومات والإجابات الفورية.", locale: "ar_SA", siteName: ARTICLE_BRAND.ar.name },
   // Urdu
   "/ur": { title: "سبق نیوز — اے آئی سے چلنے والا اسمارٹ نیوز پلیٹ فارم", desc: "سبق نیوز — ایک اسمارٹ، اے آئی سے چلنے والا نیوز پلیٹ فارم جو تازہ ترین خبریں فراہم کرتا ہے۔", locale: "ur_PK", siteName: "سبق نیوز" },
   "/ur/news": { title: "تازہ خبریں — سبق نیوز", desc: "سبق نیوز پر تازہ ترین خبریں اور بریکنگ نیوز پڑھیں۔", locale: "ur_PK", siteName: "سبق نیوز" },
@@ -1004,6 +1076,8 @@ function staticPageMeta(path: string) {
     title: entry.title,
     description: entry.desc,
     image: BRAND_OG_IMAGE,
+    imageWidth: 1200,
+    imageHeight: 630,
     canonical: `${SITE_URL}${path}`,
     robots: "index,follow",
     type: "website",
@@ -1155,12 +1229,33 @@ async function buildReporterMeta(idOrSlug: string, isEn: boolean) {
     worksFor: isEn ? SABQ_ORG_EN : SABQ_ORG_AR,
   });
 
+  // Crawlable body: the profile HTML reached crawlers with an empty #root
+  // (title + ProfilePage only). Same owner rule as storage.getReporterProfile.
+  let semanticHtml: string | undefined;
+  if (!isEn && row.userId) {
+    const recent = await db
+      .select({ slug: articles.slug, englishSlug: articles.englishSlug, title: articles.title })
+      .from(articles)
+      .where(and(
+        eq(articles.status, "published"),
+        or(eq(articles.reporterId, row.userId), eq(articles.authorId, row.userId)),
+      ))
+      .orderBy(desc(articles.publishedAt))
+      .limit(20);
+    semanticHtml = hiddenIntroHtml(fullName, [jobTitle, bioText])
+      + (buildLinkListHtml(`أحدث أخبار ${fullName}`, recent.map((r) => ({
+        href: `/article/${r.englishSlug || r.slug}`,
+        title: r.title || "",
+      }))) || "");
+  }
+
   return {
     title: isEn ? `${fullName} — Sabq` : `${fullName} — سبق`,
     description,
     image,
     canonical,
     robots: "index, follow, max-image-preview:large",
+    semanticHtml,
     type: "profile",
     locale: isEn ? "en_US" : "ar_SA",
     jsonLd: buildProfilePageJsonLd({
@@ -1195,7 +1290,105 @@ async function buildAuthorMeta(name: string, page: number) {
   };
 }
 
+// Crawler-visible body for Arabic hub/institutional pages that previously
+// reached every crawler with an empty #root (1 visible character). Same hidden
+// block pattern as the other hubs: React replaces #root on hydrate.
+function hiddenIntroHtml(heading: string, paragraphs: string[]): string {
+  const body = paragraphs.filter(Boolean).map((p) => `<p>${escapeHtml(p)}</p>`).join("");
+  return `<section style="position:absolute;left:-9999px;top:0;width:1px;height:1px;overflow:hidden;" aria-hidden="true"><h1>${escapeHtml(heading)}</h1>${body}</section>`;
+}
+
+const INSTITUTIONAL_LINKS = [
+  { href: "/about", title: "من نحن" },
+  { href: "/ai-policy", title: "سياسة استخدام الذكاء الاصطناعي" },
+  { href: "/sabq-ai", title: "عقل سبق — الذكاء الاصطناعي في خدمة الصحافة" },
+  { href: "/contact", title: "اتصل بنا" },
+  { href: "/privacy", title: "سياسة الخصوصية" },
+  { href: "/terms", title: "شروط الاستخدام" },
+];
+
+async function latestArticleLinks(limit: number, articleType?: string) {
+  const rows = await db
+    .select({ slug: articles.slug, englishSlug: articles.englishSlug, title: articles.title })
+    .from(articles)
+    .where(articleType
+      ? and(eq(articles.status, "published"), eq(articles.articleType, articleType))
+      : eq(articles.status, "published"))
+    .orderBy(desc(articles.publishedAt))
+    .limit(limit);
+  return rows.map((r) => ({ href: `/article/${r.englishSlug || r.slug}`, title: r.title || "" }));
+}
+
+function arabicHubMeta(path: string, title: string, description: string, semanticHtml: string | undefined) {
+  return {
+    title,
+    description,
+    image: BRAND_OG_IMAGE,
+    imageWidth: 1200,
+    imageHeight: 630,
+    canonical: `${SITE_URL}${path}`,
+    robots: "index,follow",
+    type: "website",
+    locale: "ar_SA",
+    siteName: ARTICLE_BRAND.ar.name,
+    semanticHtml,
+  };
+}
+
 const ROUTE_HANDLERS: RouteHandler[] = [
+  {
+    pattern: /^\/about$/,
+    handle: async () => arabicHubMeta(
+      "/about",
+      "من نحن — سبق",
+      "تعرف على صحيفة سبق الإلكترونية ورسالتها: صحيفة سعودية تأسست عام 2007، تغطي أخبار المملكة والخليج والعالم على مدار الساعة.",
+      hiddenIntroHtml("من نحن — صحيفة سبق الإلكترونية", [
+        "صحيفة سبق الإلكترونية صحيفة سعودية تأسست عام 2007، تغطي أخبار المملكة العربية السعودية والخليج والعالم على مدار الساعة باللغات العربية والإنجليزية والأردية.",
+      ]) + (buildLinkListHtml("عن سبق", INSTITUTIONAL_LINKS) || ""),
+    ),
+  },
+  {
+    pattern: /^\/ai-policy$/,
+    handle: async () => arabicHubMeta(
+      "/ai-policy",
+      "سياسة استخدام الذكاء الاصطناعي | سبق",
+      AI_POLICY_INTRO,
+      hiddenIntroHtml("سياسة استخدام الذكاء الاصطناعي", [
+        AI_POLICY_INTRO,
+        "المسموح:",
+        ...AI_POLICY_ALLOWED.map((i) => `${i.title}: ${i.body}`),
+        "الممنوع:",
+        ...AI_POLICY_FORBIDDEN.map((i) => `${i.title}: ${i.body}`),
+      ]) + (buildLinkListHtml("عن سبق", INSTITUTIONAL_LINKS) || ""),
+    ),
+  },
+  {
+    pattern: /^\/opinion$/,
+    handle: async () => arabicHubMeta(
+      "/opinion",
+      "الرأي — سبق",
+      "مقالات الرأي والتحليل في صحيفة سبق الإلكترونية",
+      buildLinkListHtml("أحدث مقالات الرأي على سبق", await latestArticleLinks(40, "opinion")),
+    ),
+  },
+  {
+    pattern: /^\/moment-by-moment$/,
+    handle: async () => arabicHubMeta(
+      "/moment-by-moment",
+      "لحظة بلحظة — سبق",
+      "متابعة لحظية للأحداث الجارية على صحيفة سبق الإلكترونية",
+      buildLinkListHtml("آخر الأخبار لحظة بلحظة", await latestArticleLinks(40)),
+    ),
+  },
+  {
+    pattern: /^\/daily-brief$/,
+    handle: async () => arabicHubMeta(
+      "/daily-brief",
+      "الموجز اليومي — سبق",
+      "ملخص يومي لأهم الأحداث والأخبار من صحيفة سبق الإلكترونية",
+      buildLinkListHtml("أهم أخبار اليوم على سبق", await latestArticleLinks(40)),
+    ),
+  },
   { pattern: /^\/author\/([^/?#]+)\/?(?:\?page=(\d+))?$/, handle: async (m) => buildAuthorMeta(safeDecode(m[1]), Number(m[2] || 1)) },
   // Homepage — inject a crawlable list of the most recent article links so
   // Googlebot can DISCOVER new articles by crawling "/" (the SPA shell shows
@@ -1300,6 +1493,10 @@ const ROUTE_HANDLERS: RouteHandler[] = [
       }
       return {
         ...defaultMeta("/"),
+        // نفس عنوان ووصف نسخة الزواحف (web-next/app/page.tsx) بدل «سبق الذكية» العامة.
+        title: "سبق الذكية - صحيفة سبق الإلكترونية",
+        description: "سبق الذكية - منصة الأخبار السعودية الأولى المدعومة بالذكاء الاصطناعي. أخبار عاجلة ومحلية ورياضية وعالمية على مدار الساعة.",
+        robots: "index, follow, max-image-preview:large",
         semanticHtml,
         heroPreload,
       };
@@ -3102,7 +3299,7 @@ router.get("/api/edge/seo-meta", async (req, res) => {
         return missing;
       }
 
-      const fallback = defaultMeta(path);
+      const fallback = isKnownSpaTopLevelPath(path) ? defaultMeta(path) : notFoundMeta(path);
       edgeMetaCache.set(cacheKey, fallback, EDGE_META_MISS_TTL);
       return fallback;
     })();

@@ -1,6 +1,6 @@
 # SEO و SSR (`seo-ssr`)
 
-> آخر مراجعة: 2026-09-24 (Content-Signal وllms.txt) | المالك: platform
+> آخر مراجعة: 2026-09-25 (مراجعة تقرير السيو الخارجي: 404 الناعم والصفحات المؤسسية) | المالك: platform
 
 ## الغرض
 ميتادات للدوالش، إعادة توجيه السلاق، وSSR للمحتوى العام عبر `web-next`.
@@ -99,3 +99,14 @@
 - `/newsletter` في SPA وweb-next يقدم «سبق في ٣ دقائق» بخياري يومي/أسبوعي؛ النماذج في الرئيسية وبعد المتن وروابط التنقل والتذييل لا تغيّر canonical أو عقود bundles.
 - الاشتراك يستدعي API القائم بعقد الموافقة وانتظار التأكيد؛ لا تفعيل عند عرض GET. رموز التأكيد في fragment، وتزال من شريط العنوان عند التقاطها للضغط الصريح.
 - لا تضف gtag إلى web-next. صفحة التأكيد/التفضيلات في SPA مستثناة من analytics/ad bootstrap، مع بقاء قياس دعوات الاشتراك في الرئيسية والمقال دون بريد أو token.
+
+## مراجعة تقرير السيو الخارجي — 2026-09-25
+
+- **404 الناعم:** `server/utils/spaTopLevelRoutes.ts` يحمل المقطع الأول لكل مسار في `client/src/App.tsx`. مسار بمقطع أول غير معروف (بعد فحص slug-redirect والمعالجات) يأخذ من `/api/edge/seo-meta` ميتا `status: 404` مع `noindex, follow` وبلا canonical، ووسيط Pages يعيد القشرة المحقونة بالحالة 404 و`X-Robots-Tag` دون كاش؛ المتصفح يرى صفحة NotFound نفسها. الملف الثابت غير HTML (مثل `manifest.webmanifest`) لا يتأثر. الاختبار `spaTopLevelRoutes.test.ts` يفشل إذا أضيف مسار في App.tsx دون مقطعه هنا. المسار المعروف بلا معالج يبقى `index,follow` كما كان (لا noindex جماعي).
+- **الصفحات المؤسسية العربية:** مداخل ثابتة بعنوان ووصف خاصين (مطابقة `STATIC_INDEXABLE_PAGES` في seoInjector، فقط لمسارات يعرضها App.tsx)، ومعالجات بنص للزواحف لـ `/about` و`/ai-policy` (نص السياسة من `shared/aiPolicyContent.ts` الذي تقرؤه صفحة SPA أيضًا) و`/opinion` (أحدث 40 رأيًا) و`/moment-by-moment` و`/daily-brief` (أحدث 40 خبرًا). صفحة الكاتب `/reporter/:slug` تضيف النبذة وأحدث 20 خبرًا بقاعدة المالك نفسها في `getReporterProfile`.
+- **صورة المشاركة الافتراضية:** الميتا العامة تستخدم `/branding/sabq-og-image.png` (1200×630) بدل `icon.png` المربعة. أبعاد og تُعلن لصورة العلامة فقط؛ صورة الخبر الفعلية لا تُعلن لها أبعاد مفترضة. شعار الناشر في NewsArticle يحمل 1200×630.
+- **الرئيسية في web-next:** og/twitter كاملة ومخطط NewsMediaOrganization (مطابق client/index.html) و`max-image-preview:large` ورابط اكتشاف RSS. ميتا الحافة للرئيسية تستخدم العنوان والوصف نفسيهما.
+- **RSS:** robots.txt يسمح بـ `/api/rss/` (خلاصات عامة فقط في `rssFeedRoutes.ts`)، و`client/index.html` يعلن `<link rel="alternate" type="application/rss+xml">`.
+- **روابط قديمة بلا تحويل (من Search Console):** `LEGACY_ROOT_REDIRECTS` في `edgeMeta.ts` يحوّل `/saudia` إلى رابط قسم «السعودية» الأساسي (englishSlug من الجدول) و`/collection/latest-news` إلى الرئيسية. روابط AMP القديمة (`/amp/<path>` و`/amp/story/<path>`) تُحل كالمسار الداخلي نفسه (قديم أو عربي أو news) أو تذهب إلى `/article/<slug>` مباشرة؛ ما لا يُحل يسقط إلى 404 الحقيقي أعلاه. الروابط القصيرة (`/sF6gde`) لا مقابل لها في `legacy_redirects` ولا `legacy_slug`، فتبقى 404.
+- خارج هذا التغيير عمدًا: رابط الأقسام الأساسي المقروء (ترحيل canonical)، lastmod لكل خريطة وعدد خرائط الأوردو، HSTS سنة، توحيد اسم العلامة، حظر زواحف التدريب، والأداء. قرارات أو قياس مطلوب أولًا.
+
