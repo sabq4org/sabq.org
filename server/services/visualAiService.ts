@@ -11,6 +11,11 @@ import { createGoogleGenAI } from "../utils/googleGenAi";
 import { ObjectStorageService } from "../objectStorage";
 import { assertSafeImageUrl } from "../utils/safeImageUrl";
 import { parseVisualAiJson } from "./visualAiJson";
+import { logUsage } from "../ai/gateway/usageLogger";
+import { normalizeProviderError } from "../ai/gateway/errors";
+
+/** مفتاح سجلّ ai_usage_logs لاستدعاء نموذج صور الأخبار (Gemini) */
+const NEWS_IMAGE_FEATURE = "news-image-generation";
 import pRetry from "p-retry";
 import https from "https";
 import http from "http";
@@ -342,6 +347,8 @@ export interface NewsImageGenerationResult {
   generationTime?: number;
   cost?: number;
   error?: string;
+  /** تصنيف الفشل (QUOTA_EXCEEDED، AUTH_ERROR، CONTENT_FILTER…) ليعرض المستدعي رسالة مفهومة */
+  errorCode?: string;
   /** البرومبت الفعلي المرسل للنموذج — يُخزَّن كأثر (provenance) لدى المستدعين */
   finalPrompt?: string;
   /** النمط والنموذج المستخدمان فعليًا بعد الحسم من السجلّ */
@@ -453,12 +460,34 @@ export async function generateNewsImage(request: NewsImageGenerationRequest): Pr
     });
     
     const generationTime = Date.now() - startTime;
-    
-    if (!result.success || !result.imageData) {
+    const imageModelUsed = result.metadata?.model || styleModel || "unknown";
+    const failed = !result.success || !result.imageData;
+    const errorText = failed ? result.error || "no image data returned" : undefined;
+    const errorCode = errorText
+      ? normalizeProviderError("gemini", imageModelUsed, new Error(errorText)).code
+      : undefined;
+
+    // سجلّ في ai_usage_logs: فشل توليد الصورة كان لا يظهر إلا في سجلات Railway،
+    // فيصل للمحرر ردّ 400 بلا أثر قابل للتشخيص من القاعدة.
+    logUsage({
+      featureKey: NEWS_IMAGE_FEATURE,
+      provider: "gemini",
+      modelId: imageModelUsed,
+      operation: "image",
+      unitCount: failed ? 0 : 1,
+      estimatedCostUsd: failed ? 0 : result.cost ?? 0,
+      latencyMs: generationTime,
+      status: failed ? "failed" : "success",
+      errorCode,
+      errorMessage: errorText,
+    });
+
+    if (failed || !result.imageData) {
       return {
         success: false,
         generationTime,
-        error: result.error || "Image generation failed"
+        error: result.error || "Image generation failed",
+        errorCode
       };
     }
     
@@ -485,6 +514,15 @@ export async function generateNewsImage(request: NewsImageGenerationRequest): Pr
   } catch (error: any) {
     const generationTime = Date.now() - startTime;
     console.error(`[Visual AI] News image generation failed:`, error);
+    logUsage({
+      featureKey: NEWS_IMAGE_FEATURE,
+      provider: "gemini",
+      modelId: "unknown",
+      operation: "image",
+      latencyMs: generationTime,
+      status: "failed",
+      errorMessage: error?.message || String(error),
+    });
     
     return {
       success: false,

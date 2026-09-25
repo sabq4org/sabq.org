@@ -40,6 +40,8 @@ export function normalizeProviderError(
     text.includes("insufficient credit") ||
     text.includes("billing") ||
     text.includes("exceeded your current quota") ||
+    // Gemini prepaid accounts: "Your prepayment credits are depleted…"
+    text.includes("credits are depleted") ||
     (status === 429 && text.includes("quota"))
   ) {
     return new AIGatewayError(`${provider}/${modelId}: quota exceeded — ${message}`, {

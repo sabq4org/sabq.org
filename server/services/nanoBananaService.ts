@@ -6,7 +6,8 @@
 import { Modality } from "@google/genai";
 import { createGoogleGenAI } from "../utils/googleGenAi";
 import { ObjectStorageService } from "../objectStorage";
-import pRetry from "p-retry";
+import pRetry, { AbortError } from "p-retry";
+import { normalizeProviderError } from "../ai/gateway/errors";
 import { newsImageStorageService } from "./newsImageStorageService";
 import { DEFAULT_IMAGE_MODEL, LEGACY_IMAGE_MODEL } from "@shared/imageStyles";
 
@@ -180,13 +181,15 @@ export async function generateImage(
             });
           } catch (error: any) {
             console.error(`[Nano Banana Pro] Generation error (${model}):`, error);
-            if (isRateLimitError(error)) {
+            // نفاد الرصيد/الفوترة أو مفتاح غير صالح لا تحلّه إعادة المحاولة — كانت
+            // رسالة «quota» تُعامل كتقييد معدّل فينتظر المحرر نحو دقيقة قبل الفشل.
+            const code = normalizeProviderError("gemini", model, error).code;
+            if (isRateLimitError(error) && code !== "QUOTA_EXCEEDED" && code !== "AUTH_ERROR") {
               throw error; // Retry
             }
-            // Don't retry non-rate-limit errors
-            const abortError: any = new Error(error.message);
-            abortError.name = 'AbortError';
-            throw abortError;
+            // Don't retry other errors. p-retry يوقف المحاولات فقط مع مثيل AbortError
+            // الخاص به (لا يكفي ضبط name)، ونُبقي الرسالة الأصلية لتصنيفها لاحقًا.
+            throw new AbortError(error instanceof Error ? error : String(error));
           }
         },
         {

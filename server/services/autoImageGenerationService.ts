@@ -99,6 +99,11 @@ export interface AutoImageGenerationResult {
   mediaFileId?: string;
   message?: string;
   error?: string;
+  /**
+   * سبب الفشل: قيود الإعدادات (DISABLED، ARTICLE_TYPE_NOT_ENABLED، CATEGORY_SKIPPED،
+   * MONTHLY_LIMIT_REACHED) أو تصنيف خطأ المزوّد (QUOTA_EXCEEDED، AUTH_ERROR…).
+   */
+  errorCode?: string;
 }
 
 /**
@@ -216,6 +221,7 @@ export async function autoGenerateImage(
     if (!settings.enabled && !request.forceGeneration) {
       return {
         success: false,
+        errorCode: "DISABLED",
         message: "Auto image generation is disabled"
       };
     }
@@ -225,6 +231,7 @@ export async function autoGenerateImage(
         !settings.articleTypes.includes(request.articleType)) {
       return {
         success: false,
+        errorCode: "ARTICLE_TYPE_NOT_ENABLED",
         message: `Auto generation not enabled for ${request.articleType} articles`
       };
     }
@@ -234,6 +241,7 @@ export async function autoGenerateImage(
         settings.skipCategories.includes(request.category)) {
       return {
         success: false,
+        errorCode: "CATEGORY_SKIPPED",
         message: `Auto generation skipped for category ${request.category}`
       };
     }
@@ -241,6 +249,7 @@ export async function autoGenerateImage(
     if (!request.forceGeneration && await isGenerationLimitReached()) {
       return {
         success: false,
+        errorCode: "MONTHLY_LIMIT_REACHED",
         message: "Monthly generation limit reached"
       };
     }
@@ -261,7 +270,8 @@ export async function autoGenerateImage(
     if (!generationResult.success || !generationResult.imageUrl) {
       return {
         success: false,
-        error: generationResult.error || "Image generation failed"
+        error: generationResult.error || "Image generation failed",
+        errorCode: generationResult.errorCode
       };
     }
     
@@ -294,6 +304,9 @@ export async function autoGenerateImage(
       uploadedBy: userId
     }).returning();
     
+    // بلا updatedAt: هو نسخة الحفظ لدى المحرر (expectedUpdatedAt)، والمحرر المفتوح
+    // يضع الصورة نفسها في نموذجه عبر onImageGenerated فيحفظها مع الحفظ التالي.
+    // رفعه هنا كان يجعل ذلك الحفظ يُرفض بـ«تغير المقال منذ فتحه» (قاعدة 2026-09-24).
     await db.update(articles)
       .set({ 
         imageUrl: generationResult.imageUrl,
@@ -301,7 +314,6 @@ export async function autoGenerateImage(
         isAiGeneratedImage: true,
         aiImageModel: generationResult.model || settings.provider,
         aiImagePrompt: generationResult.finalPrompt || smartPrompt,
-        updatedAt: new Date()
       })
       .where(eq(articles.id, request.articleId));
     
