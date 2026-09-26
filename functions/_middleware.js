@@ -763,7 +763,7 @@ class RootInjector {
   }
 }
 
-function getApiCacheTtl(path, request) {
+export function getApiCacheTtl(path, request) {
   if (request.method !== "GET" && request.method !== "HEAD") return 0;
 
   // Bypass cache if there's a session cookie or auth header
@@ -792,6 +792,9 @@ function getApiCacheTtl(path, request) {
   if (path === "/api/articles/search-simple") return 0;
 
   if (/^\/api\/categories\/[^/]+\/articles$/.test(path)) return 60;
+  // Category lookup by slug (CategoryPage header). Public catalog row from
+  // storage.getAllCategories — no per-user fields, same for every visitor.
+  if (/^\/api\/categories\/slug\/[^/]+$/.test(path)) return 60;
 
   if (/^\/api\/articles\/[^/]+$/.test(path)) return 60;
   if (/^\/api\/articles\/[^/]+\/sidebar$/.test(path)) return 60;

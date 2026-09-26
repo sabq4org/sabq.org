@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { NOINDEX_EXACT, NOINDEX_PREFIXES } from "../../server/utils/noindexPaths";
 // @ts-expect-error Pages JS is untyped
-import { apiCacheKey, isNoindexPrefix } from "../../functions/_middleware.js";
+import { apiCacheKey, getApiCacheTtl, isNoindexPrefix } from "../../functions/_middleware.js";
 import { articleMetadata } from "../../web-next/lib/articleMetadata";
 describe("edge audit boundaries", () => {
   it("keeps all backend private paths outside shared HTML caching", () => {
@@ -14,6 +14,16 @@ describe("edge audit boundaries", () => {
       .map(q => apiCacheKey("https://sabq.org/api/categories" + q).url);
     expect(new Set(keys).size).toBe(4);
     expect(apiCacheKey(keys[1] + "&utm_source=test").url).toBe(keys[1]);
+  });
+  it("edge-caches the public category-by-slug lookup for anonymous GETs only", () => {
+    const req = (headers: Record<string, string> = {}, method = "GET") =>
+      new Request("https://sabq.org/api/categories/slug/sports", { method, headers });
+    expect(getApiCacheTtl("/api/categories/slug/sports", req())).toBe(60);
+    expect(getApiCacheTtl("/api/categories/slug/%D8%B1%D9%8A%D8%A7%D8%B6%D8%A9", req())).toBe(60);
+    expect(getApiCacheTtl("/api/categories/slug/sports", req({ cookie: "connect.sid=s%3Aabc" }))).toBe(0);
+    expect(getApiCacheTtl("/api/categories/slug/sports", req({ authorization: "Bearer x" }))).toBe(0);
+    expect(getApiCacheTtl("/api/categories/slug/sports", req({}, "POST"))).toBe(0);
+    expect(getApiCacheTtl("/api/categories/slug/sports/extra", req())).toBe(0);
   });
   it("preserves Google News exclusion in Next metadata", () => {
     expect(articleMetadata({ title: "test", googlebotNews: "noindex" } as any).other)

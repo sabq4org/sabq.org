@@ -156,3 +156,7 @@ export function generateResponsiveSrcSet(src: string, quality: number = 85): str
 }
 
 export const HERO_SIZES_ATTR = '(max-width: 640px) 100vw, (max-width: 1024px) 80vw, 720px';
+
+// Default `sizes` of <OptimizedImage> (grid/list cards). Shared so the edge
+// category-card preload advertises the same candidates the card requests.
+export const DEFAULT_IMAGE_SIZES_ATTR = '(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw';

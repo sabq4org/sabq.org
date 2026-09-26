@@ -33,6 +33,7 @@ import {
   topics,
   staff,
   articleMediaAssets,
+  articleSmartCategories,
 } from "@shared/schema";
 import { eq, or, and, desc, ne, isNull, aliasedTable, sql, inArray, like, ilike, notIlike } from "drizzle-orm";
 import {
@@ -41,7 +42,7 @@ import {
   normalizeImageSrc,
   HERO_SIZES_ATTR,
 } from "@shared/cdnImage";
-import { buildArticleHeroPreload } from "@shared/articleHeroPreload";
+import { buildArticleHeroPreload, buildCardImagePreload, pickCategoryLandingLead } from "@shared/articleHeroPreload";
 import { buildNewsArticleSchemaExtras, getArticleSchemaType, htmlToPlainText } from "../utils/newsArticleSchema";
 import { sanitizeArticleHtml } from "../utils/sanitizeHtml";
 import {
@@ -1363,6 +1364,59 @@ function arabicHubMeta(path: string, title: string, description: string, semanti
   };
 }
 
+// Category landing LCP preload. CategoryLandingPage renders
+// GET /api/categories/:slug/articles (default limit 50) through its default
+// view (last 30 days, newest first) and gives index 0 `priority`. We re-run the
+// API's own query shape (same WHERE/ORDER/LIMIT, narrow columns) and pick with
+// the shared pickCategoryLandingLead, then build the URL with the same shared
+// helper <ArticleMedia>/<OptimizedImage> use — a different URL would download
+// the image twice. Any failure just omits the preload.
+const CATEGORY_ARTICLES_API_LIMIT = 50;
+const AI_CATEGORY_SLUGS = ["ai-news", "ai-insights", "ai-opinions", "ai-tools", "ai-voice"];
+const categoryLeadColumns = {
+  publishedAt: articles.publishedAt,
+  updatedAt: articles.updatedAt,
+  articleType: articles.articleType,
+  imageUrl: articles.imageUrl,
+  videoThumbnailUrl: articles.videoThumbnailUrl,
+  thumbnailUrl: articles.thumbnailUrl,
+  infographicBannerUrl: articles.infographicBannerUrl,
+  videoUrl: articles.videoUrl,
+};
+async function buildCategoryLandingPreload(category: { id: string; slug: string; type: string; isIfoxCategory: boolean }) {
+  try {
+    const isSmart = category.type === "dynamic" || category.type === "smart";
+    // storage.getArticles drops iFox categories unless the slug is an AI one;
+    // with categoryId pinned that empties the whole list.
+    if (!isSmart && category.isIfoxCategory && !AI_CATEGORY_SLUGS.includes(category.slug)) return undefined;
+    const rows = isSmart
+      ? await db
+          .select(categoryLeadColumns)
+          .from(articleSmartCategories)
+          .innerJoin(articles, eq(articles.id, articleSmartCategories.articleId))
+          .where(and(eq(articleSmartCategories.categoryId, category.id), eq(articles.status, "published")))
+          .orderBy(desc(articleSmartCategories.score), desc(sql`COALESCE(${articles.resurfacedAt}, ${articles.publishedAt})`))
+          .limit(CATEGORY_ARTICLES_API_LIMIT)
+      : await db
+          .select(categoryLeadColumns)
+          .from(articles)
+          .where(and(
+            eq(articles.categoryId, category.id),
+            eq(articles.status, "published"),
+            or(isNull(articles.articleType), ne(articles.articleType, "opinion")),
+          ))
+          .orderBy(desc(articles.displayOrder), desc(sql`COALESCE(${articles.resurfacedAt}, ${articles.publishedAt})`), desc(articles.createdAt))
+          .limit(CATEGORY_ARTICLES_API_LIMIT);
+    const lead = pickCategoryLandingLead(rows);
+    // Infographics render InfographicArticleCard (no priority image).
+    if (!lead || lead.articleType === "infographic") return undefined;
+    return buildCardImagePreload(lead);
+  } catch (err) {
+    console.warn("[edge-meta] category preload skipped:", (err as Error)?.message);
+    return undefined;
+  }
+}
+
 const ROUTE_HANDLERS: RouteHandler[] = [
   {
     pattern: /^\/about$/,
@@ -1832,12 +1886,17 @@ const ROUTE_HANDLERS: RouteHandler[] = [
           description: categories.description,
           heroImageUrl: categories.heroImageUrl,
           englishSlug: categories.englishSlug,
+          slug: categories.slug,
+          type: categories.type,
+          isIfoxCategory: categories.isIfoxCategory,
         })
         .from(categories)
         .where(where!)
         .limit(1);
       if (!row) return null;
       const displayName = row.nameAr || row.nameEn;
+      // LCP: the landing (not the ?page= archive) preloads its priority card image.
+      const heroPreload = m[2] === undefined ? await buildCategoryLandingPreload(row) : undefined;
       // Crawlable list of this section's recent articles → a discovery hub so
       // Googlebot reaches the section's new articles by following links.
       const sectionArticles = await db
@@ -1868,6 +1927,7 @@ const ROUTE_HANDLERS: RouteHandler[] = [
           `أحدث الأخبار في ${displayName}`,
           links,
         ),
+        heroPreload,
       };
     },
   },

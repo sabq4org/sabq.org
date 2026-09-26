@@ -942,7 +942,8 @@
         "tests/unit/edgeApiSurge.test.ts",
         "server/utils/spaTopLevelRoutes.ts",
         "tests/unit/spaTopLevelRoutes.test.ts",
-        "tests/unit/edgeSoftNotFound.test.ts"
+        "tests/unit/edgeSoftNotFound.test.ts",
+        "tests/unit/categoryCardPreload.test.ts"
       ],
       "aiFeatureKeys": [],
       "dashboardPath": null,
