@@ -2,6 +2,10 @@ import { z } from 'zod';
 import { storage } from '../storage';
 import { ARABIC_NEWS_VOICES } from './elevenlabs';
 
+export const GEMINI_NEWS_VOICES = [
+  { id: 'Orus', name: 'Orus', description: 'صوت Gemini ثابت — مذيع أخبار سعودي' },
+] as const;
+
 export const HUMAIN_NEWS_VOICES = [
   { id: 'cabd361b-cb91-4eb6-8d35-c8660bf82e7a', name: 'عبدالله', description: 'سعودي نجدي — رجل' },
   { id: '9bbc9620-a2ff-489b-b292-5007210f49ca', name: 'عبدالعزيز', description: 'سعودي نجدي — رجل' },
@@ -10,14 +14,14 @@ export const HUMAIN_NEWS_VOICES = [
 ] as const;
 
 export const summaryAudioSettingsSchema = z.object({
-  primaryProvider: z.enum(['humain', 'elevenlabs']),
+  primaryProvider: z.enum(['gemini', 'humain', 'elevenlabs']),
   humainVoiceId: z.string().refine(id => HUMAIN_NEWS_VOICES.some(v => v.id === id), 'صوت HUMAIN غير صالح'),
   elevenlabsVoiceId: z.string().refine(id => ARABIC_NEWS_VOICES.some(v => v.voice_id === id), 'صوت ElevenLabs غير صالح'),
 }).strict();
 export type SummaryAudioSettings = z.infer<typeof summaryAudioSettingsSchema>;
 export const SUMMARY_AUDIO_SETTINGS_KEY = 'summary_audio_settings';
 export const DEFAULT_SUMMARY_AUDIO_SETTINGS: SummaryAudioSettings = {
-  primaryProvider: 'humain',
+  primaryProvider: 'gemini',
   humainVoiceId: HUMAIN_NEWS_VOICES[0].id,
   elevenlabsVoiceId: 'MI88rOZjXbH22N8KHXUo',
 };
@@ -41,9 +45,11 @@ export async function saveSummaryAudioSettings(value: unknown): Promise<SummaryA
 
 export function summaryAudioCatalog() {
   return {
+    geminiVoices: GEMINI_NEWS_VOICES,
     humainVoices: HUMAIN_NEWS_VOICES,
     elevenlabsVoices: ARABIC_NEWS_VOICES.map(v => ({ id: v.voice_id, name: v.name })),
     configured: {
+      gemini: Boolean(process.env.GEMINI_API_KEY?.trim() || process.env.AI_INTEGRATIONS_GEMINI_API_KEY?.trim()),
       humain: Boolean(process.env.HUMAIN_VOICE_API_KEY?.trim()),
       elevenlabs: Boolean(process.env.ELEVENLABS_API_KEY?.trim()),
     },

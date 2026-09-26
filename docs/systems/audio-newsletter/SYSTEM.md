@@ -1,6 +1,6 @@
 # النشرات الصوتية (`audio-newsletter`)
 
-> آخر مراجعة: 2026-09-24 | المالك: content
+> آخر مراجعة: 2026-09-26 | المالك: content
 
 ## الغرض
 موجز المقالات والأخبار الصوتي وإعدادات أصواته، والنشرة البريدية المجدولة الباقية بعد إيقاف منتج النشرات الصوتية وتوليد ملفاته في 2026-07-25.
@@ -20,10 +20,10 @@
 ## عقود مهمة / Gotchas
 - الويب يعرض «الصوت عبر HUMAIN» بحجم 11px وأخضر غامق بجوار الاستماع، بناءً على `X-TTS-Provider` الفعلي بعد نجاح التشغيل. يستعمل نفس GET للصوت والنسبة مع Blob URL؛ لا طلب توليد إضافي ولا استنتاج من إعداد المزود الافتراضي. الترويسة مكشوفة لـCORS لتشغيل DIRECT mode.
 - منتج الصوت ومسارات الإنشاء والإدارة محذوفة عمداً منذ PR #1216. مسارا القائمة القديمان `/api/audio-newsletters` و`/api/audio-newsletters/public` يعيدان قائمة فارغة متوافقة لعملاء الويب المخزنين، وروابط الحلقات القديمة تعيد 410.
-- HUMAIN هو الأساسي الافتراضي (عبدالله)، ثم ElevenLabs (علي)، ثم Google عند تعطل الاثنين. يمكن اختيار HUMAIN/ElevenLabs وصوتيهما من إعدادات النظام. غياب المفتاح يتخطّى المزود؛ لا تُحفظ المفاتيح في الواجهة أو قاعدة البيانات.
+- Gemini بصوت Orus هو الافتراضي للإعدادات الجديدة؛ يليه HUMAIN (عبدالله)، ثم ElevenLabs (علي)، ثم Google. يمكن اختيار المزود الأساسي من إعدادات النظام، وتبقى الإعدادات السابقة حتى تغييرها صراحة. غياب المفتاح يتخطّى المزود؛ لا تُحفظ المفاتيح في الواجهة أو قاعدة البيانات.
 - الإعداد `summary_audio_settings` خاص في جدول الإعدادات الحالي، ومستقل عن `tts_settings` لمنتج النشرات المتوقف. إعداد الموجز الجديد يتقدم على متغير `TTS_PROVIDER` القديم في مسار المقال فقط.
 - GET/PUT إعدادات ومعاينة POST تحتاج Passport + `system.manage_settings`. المعاينة نص ثابت، 6 طلبات/دقيقة لكل IP، ولا تستخدم fallback أو تحفظ الاختيار.
-- HUMAIN يعيد WAV/PCM16/24kHz/mono؛ ElevenLabs/Google يعيدان MP3. مسار المقال يعيد بايتات ومحتوى MIME صحيحاً، وليس JSON. مستهلكو الويب وAVPlayer وExoPlayer يظلون على نفس URL.
+- Gemini وHUMAIN يعيدان WAV/PCM16/24kHz/mono؛ ElevenLabs/Google يعيدان MP3. مسار المقال يعيد بايتات ومحتوى MIME صحيحاً، وليس JSON. مستهلكو الويب وAVPlayer وExoPlayer يظلون على نفس URL.
 - كاش الذاكرة محدود 64 MiB ويشمل بصمة النص والمزود والصوتين. الاستجابة `private, no-store` لإظهار الإعداد الجديد عند الطلب التالي؛ الكاش الداخلي يوم للنجاح الأساسي ودقيقة للاحتياط. لا يُستبدل التسجيل الجاري تشغيله عند الحفظ.
 - **نفاد رصيد ElevenLabs:** يبقى cooldown القائم 15 دقيقة. HUMAIN يُتخطى دقيقة بعد الفشل التقني. لا fallback لرفض المحتوى. HUMAIN مهلة كلية 25 ثانية تشمل الاتصال وجميع الأجزاء، ويُنهى Worker عند انتهائها. تُدمج الأجزاء المكتملة فقط؛ أي فشل يعيد توليد النص الكامل عبر ElevenLabs.
 - تفاصيل التفعيل والتحقق وحدود التشغيل: [`HUMAIN.md`](HUMAIN.md).
@@ -58,3 +58,11 @@
 - المسودات تحفظ في `audio_newsletters.customContent` بغلاف JSON مرقّم؛ لا Schema جديد ولا توليد صوت. المراجعة والاعتماد يسبقان تصدير HTML؛ التعديل يبطل الاعتماد. لا إنشاء حملة بعيدة أو إرسال من زر التصدير.
 - واجهة الاشتراك العربية موجودة في SPA وSSR؛ الروابط في التنقل والتذييل، والفورم في الرئيسية وبعد المقال. صفحة التأكيد/التفضيلات `/newsletter` صامتة للتحليلات والإعلانات الخارجية؛ قياس مواضع الدعوة في المقال والرئيسية بلا بريد أو رموز ملكية.
 - عقود `/api/v1` للموبايل لم تتغير، وإدراج النموذج داخل iOS وAndroid مؤجل إلى مرحلة منتج مستقلة.
+
+## Gemini summary voice (2026-09-26)
+
+Gemini 3.8 Flash TTS with Orus and the approved Saudi radio style is the default for new settings. Previously saved selections are preserved until explicitly changed to `gemini`. Technical failures fall back to HUMAIN first, then the existing ElevenLabs and Google Cloud TTS providers.
+
+`geminiTts.ts` uses the Interactions API with server-only `GEMINI_API_KEY` (then `AI_INTEGRATIONS_GEMINI_API_KEY`). The verbatim transcript and `speech_metadata.style` are separate. Requests have bounded time and size; content refusals do not fall back.
+
+Settings add `primaryProvider: "gemini"`, `geminiVoices`, and `configured.gemini`. Preview accepts Orus only and never falls back. Gemini returns WAV and `X-TTS-Provider: gemini`; the HUMAIN credit remains tied to actual HUMAIN audio. The cache includes the Gemini profile version and expires fallback audio quickly to recover the primary provider. No schema change is needed.
