@@ -206,6 +206,34 @@ async function computeSlugRedirect(path: string): Promise<string | null> {
     if (/^\/amp\//i.test(inner)) return null;
     return (await computeSlugRedirect(inner)) || (/^\/article\/[^/]+$/.test(inner) ? inner : null);
   }
+  // /en|ur/article/<slug> where <slug> is an ARABIC article, not a translation.
+  // Until 2026-07-30 every Arabic article emitted hreflang="en" to
+  // /en/article/<its englishSlug> whether or not a translation existed, and
+  // Google still recrawls ~300k of those as 404 (GSC 2026-09-26). Send them to
+  // the published translation when one exists, else to the Arabic article.
+  const localized = path.match(/^\/(en|ur)\/article\/([^/?#]+)\/?$/);
+  if (localized) {
+    const [, lang, rawSlug] = localized;
+    const slug = safeDecode(rawSlug);
+    const table = lang === "en" ? enArticles : urArticles;
+    const [own] = await db
+      .select({ id: table.id })
+      .from(table)
+      .where(or(eq(table.englishSlug, slug), eq(table.slug, slug))!)
+      .limit(1);
+    if (own) return null;
+    const [ar] = await db
+      .select({ id: articles.id, englishSlug: articles.englishSlug, slug: articles.slug })
+      .from(articles)
+      .where(and(eq(articles.status, "published"), or(eq(articles.englishSlug, slug), eq(articles.slug, slug)))!)
+      .limit(1);
+    if (!ar) return null;
+    if (lang === "en") {
+      const sibling = await resolveEnSiblingSlug(ar.id);
+      if (sibling) return `/en/article/${encodeURIComponent(sibling)}`;
+    }
+    return `/article/${encodeURIComponent(ar.englishSlug || ar.slug)}`;
+  }
   const legacyTarget = await resolveLegacyArticlePath(safeDecode(path));
   if (legacyTarget) {
     return await resolveArchiveCanonical(safeDecode(legacyTarget.slice("/article/".length))) || legacyTarget;

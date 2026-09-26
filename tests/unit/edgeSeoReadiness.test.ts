@@ -98,4 +98,14 @@ describe('public SEO projections', () => {
     expect((await request('/api/edge/slug-redirect', {}, {path:'/amp/story/news/k27fxz'})).body.redirect).toBe('/article/x2');
     expect((await request('/api/edge/slug-redirect', {}, {path:'/amp/amp/article/x1'})).body.redirect).toBeNull();
   });
+  it('sends old /en/article links of Arabic articles to the translation or the Arabic article', async () => {
+    f.rows = [[], [{id:'a1', englishSlug:'1ehZR8x', slug:'s1'}], []];
+    expect((await request('/api/edge/slug-redirect', {}, {path:'/en/article/1ehZR8x'})).body.redirect).toBe('/article/1ehZR8x');
+    f.rows = [[], [{id:'a2', englishSlug:'tgZusyi', slug:'s2'}], [{slug:'en-s', englishSlug:'enX'}]];
+    expect((await request('/api/edge/slug-redirect', {}, {path:'/en/article/tgZusyi'})).body.redirect).toBe('/en/article/enX');
+    f.rows = [[{id:'e1'}]];
+    expect((await request('/api/edge/slug-redirect', {}, {path:'/en/article/realEn'})).body.redirect).toBeNull();
+    f.rows = [[], []];
+    expect((await request('/api/edge/slug-redirect', {}, {path:'/ur/article/missing'})).body.redirect).toBeNull();
+  });
 });
