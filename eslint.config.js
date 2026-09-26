@@ -166,8 +166,12 @@ export default tseslint.config(
     // user-neutral withCache wrapper (breaking-push stampede was running 6
     // uncached DB queries per click and exhausting the pool) — refactor
     // inside the existing handler, no new endpoints. File is now 10083 lines.
+    // RATCHETED DOWN 2026-09-26 (breaking-push wave, pool=50/0idle/23wait):
+    // fresh-window caching for /homepage, /news/paginated, /articles/:id and
+    // cached comments/likes; the comment-tree query moved to
+    // services/mobileCommentTreeService.ts (ADR-001). File is now 10058 lines.
     files: ["server/routes/mobileApiRoutes.ts"],
-    rules: { "max-lines": ["error", { max: 10083 }] },
+    rules: { "max-lines": ["error", { max: 10058 }] },
   },
   {
     // AI Hub (issue #589, Phase 3): every AI call goes through
