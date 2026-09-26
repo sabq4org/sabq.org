@@ -1,3 +1,4 @@
+import { PgDialect } from "drizzle-orm/pg-core";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import express from "express";
@@ -59,6 +60,8 @@ import {
   appendBotDraftBodyImages,
   normalizeDraftContent,
   botDraftContentBlockedMessage,
+  botDraftContentEditBlock,
+  buildPublishedBotContentPatch,
   botDraftPublicUrl,
   botDraftPublishBlockedMessage,
   botDraftPublishedBlock,
@@ -80,6 +83,7 @@ import {
   BOT_DRAFT_FORBIDDEN_FIELDS,
   BOT_DRAFT_READY_STATUS,
   BOT_DRAFT_SOURCE,
+  findDisallowedPublishedContentFields,
   BOT_DRAFTS_IMAGE_FIELD,
   parseBotDraftPublishAt,
   BOT_DRAFTS_IMAGE_MAX_BYTES,
@@ -878,7 +882,7 @@ describe("pure helpers", () => {
     expect(botDraftReadyBlockedMessage("published")).toContain("لم تعد مسودة");
     expect(botDraftContentBlockedMessage("archived")).toContain("لم تعد مسودة");
   });
-  it("marks non-draft rows as not updatable and exposes the dashboard edit url", () => {
+  it("marks a published bot article as updatable and other states as not", () => {
     vi.stubEnv("PUBLIC_SITE_URL", "https://sabq.org/");
     const now = new Date("2026-09-20T10:00:00Z");
     const row = {
@@ -887,7 +891,7 @@ describe("pure helpers", () => {
       createdAt: now, updatedAt: now,
     } as any;
     expect(toBotDraftResponse({ ...row, englishSlug: "abc12xy" }, "local")).toMatchObject({
-      status: "published", updatable: false, bot: "grok-bot", clientReference: "g-1", keywords: ["أ"], categorySlug: "local",
+      status: "published", updatable: true, bot: "grok-bot", clientReference: "g-1", keywords: ["أ"], categorySlug: "local",
       editUrl: "https://sabq.org/dashboard/articles/art-9/edit", createdAt: now.toISOString(),
       bodyImageUrls: [],
       publicUrl: "https://sabq.org/article/abc12xy",
@@ -899,6 +903,10 @@ describe("pure helpers", () => {
     });
     const ready = toBotDraftResponse({ ...row, status: BOT_DRAFT_READY_STATUS }, "local");
     expect(ready).toMatchObject({ status: BOT_DRAFT_READY_STATUS, updatable: false, editUrl: ready.editUrl, previewUrl: expect.stringContaining("/preview") });
+    expect(toBotDraftResponse({ ...row, status: "archived" }, "local").updatable).toBe(false);
+    expect(toBotDraftResponse({ ...row, status: "scheduled" }, "local").updatable).toBe(false);
+    expect(toBotDraftResponse({ ...row, source: "manual" }, "local").updatable).toBe(false);
+    expect(toBotDraftResponse({ ...row, status: "draft" }, "local").updatable).toBe(true);
   });
   it("returns body image URLs and keeps the article text out of the response", () => {
     const now = new Date("2026-09-22T10:00:00Z");
@@ -1003,5 +1011,70 @@ describe("pure helpers", () => {
     expect(botDraftPublicUrl("abc12xy", "عنوان")).toBe("https://sabq.org/article/abc12xy");
     expect(botDraftPublicUrl(null, "عنوان")).toBe(`https://sabq.org/article/${encodeURIComponent("عنوان")}`);
     expect(botDraftPublicUrl("", "")).toBeNull();
+  });
+});
+
+describe("published bot content edit rules", () => {
+  const dialect = new PgDialect();
+
+  it("allows a published bot row and rejects published non-bot, archived, and deleted rows", () => {
+    expect(botDraftContentEditBlock({ source: BOT_DRAFT_SOURCE, status: "published" })).toBeNull();
+    expect(botDraftContentEditBlock({ source: BOT_DRAFT_SOURCE, status: "draft" })).toBeNull();
+    expect(botDraftContentEditBlock({ source: "manual", status: "published" })).toMatchObject({
+      httpStatus: 409,
+      code: "not_a_draft",
+      details: { status: "published" },
+    });
+    expect(botDraftContentEditBlock({ source: BOT_DRAFT_SOURCE, status: "archived" })).toMatchObject({
+      httpStatus: 409,
+      code: "not_a_draft",
+      details: { status: "archived" },
+    });
+    expect(botDraftContentEditBlock({ source: BOT_DRAFT_SOURCE, status: "deleted" })).toMatchObject({
+      httpStatus: 409,
+      code: "not_a_draft",
+      details: { status: "deleted" },
+    });
+    expect(botDraftContentEditBlock({ source: "manual", status: "draft" })).toMatchObject({
+      httpStatus: 404,
+      code: "not_found",
+    });
+    expect(botDraftContentEditBlock(null)).toMatchObject({ httpStatus: 404, code: "not_found" });
+  });
+
+  it("rejects category and draft-only fields on a published article and keeps the public identity", () => {
+    expect(findDisallowedPublishedContentFields({ title: "عنوان جديد للخبر", categorySlug: "local", imageUrls: [] })).toEqual([
+      "categorySlug",
+      "imageUrls",
+    ]);
+    expect(findDisallowedPublishedContentFields({ title: "عنوان جديد للخبر", keywords: ["سبق"] })).toEqual([]);
+
+    const now = new Date("2026-09-26T08:00:00.000Z");
+    const patch = buildPublishedBotContentPatch(
+      { seo: { metaTitle: "قديم", keywords: ["قديم"] } },
+      {
+        title: "عنوان محدّث للخبر المنشور",
+        excerpt: "موجز جديد",
+        keywords: ["جديد"],
+        content: "<p>متن الخبر المنشور بعد التعديل يكفي للحد الأدنى.</p>",
+        contentFormat: "html",
+      },
+      now,
+    );
+    expect(patch.title).toBe("عنوان محدّث للخبر المنشور");
+    expect(patch.excerpt).toBe("موجز جديد");
+    expect(patch.aiSummary).toBe("موجز جديد");
+    expect(patch.aiBullets).toBeNull();
+    expect(patch.updatedAt).toEqual(now);
+    expect(patch.seo).toEqual({ metaTitle: "قديم", keywords: ["جديد"] });
+    expect(patch.content).toContain("متن الخبر المنشور");
+    for (const key of ["status", "publishedAt", "slug", "englishSlug", "authorId", "reporterId", "categoryId", "scheduledAt"]) {
+      expect(patch).not.toHaveProperty(key);
+    }
+    const seoSql = patch.seoMetadata as { queryChunks?: unknown } | undefined;
+    expect(seoSql).toBeTruthy();
+    const query = dialect.sqlToQuery(patch.seoMetadata as never);
+    expect(query.sql).toContain("editorialModifiedAt");
+    expect(query.sql).not.toContain("slug");
   });
 });

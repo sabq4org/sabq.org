@@ -1,12 +1,12 @@
 # Bot Drafts API — مسودات ونشر وجدولة وإدارة بعد النشر لبوت «نشر سبق»
 
-> آخر مراجعة: 2026-09-26 | المالك: editorial | الحالة: مسودة، جاهز للمناوب، نشر، جدولة، ثم أرشفة وتعديل الموعد والظهور.
+> آخر مراجعة: 2026-09-26 | المالك: editorial | الحالة: مسودة، جاهز للمناوب، نشر، جدولة، تعديل المحتوى بعد النشر، ثم أرشفة وتعديل الموعد والظهور.
 
 ## الملخص (للبوت)
 
 1. **إنشاء مسودة:** `POST https://api.sabq.org/api/internal/bot-drafts` مع ترويسة `Authorization: Bearer <SABQ_BOT_DRAFTS_TOKEN>` وجسم JSON فيه `title` و`content` (وتصنيف اختياري `categorySlug`). الرد يحمل `id` و`editUrl`.
-2. **تحديث مسودة:** `PATCH https://api.sabq.org/api/internal/bot-drafts/<id>` بنفس الترويسة والحقول التي تغيّرت فقط، ما دامت `draft`. ممنوع إرسال `status` أو أي حقل نشر/جدولة في الجسم — يُرفض 422.
-3. **نشر فوري:** `POST https://api.sabq.org/api/internal/bot-drafts/<id>/publish` بجسم فارغ `{}`. يعمل على `draft` أو `ready_to_publish` فقط. الرد: `status: "published"` و`updatable: false` و`publicUrl` (رابط القارئ).
+2. **تحديث المحتوى:** `PATCH https://api.sabq.org/api/internal/bot-drafts/<id>` بنفس الترويسة والحقول التي تغيّرت فقط. يعمل على `draft`، وعلى `published` إن كان `source=bot`. ممنوع إرسال `status` أو أي حقل نشر/جدولة في الجسم — يُرفض 422. على المنشور: العنوان والمتن والموجز والصورة والكلمات والمصدر فقط؛ `categorySlug` مرفوض 422. الحالة تبقى `published` والرابط و`publishedAt` لا يتغيران.
+3. **نشر فوري:** `POST https://api.sabq.org/api/internal/bot-drafts/<id>/publish` بجسم فارغ `{}`. يعمل على `draft` أو `ready_to_publish` فقط. الرد: `status: "published"` و`updatable: true` (البوت يستطيع بعدها تعديل المحتوى) و`publicUrl` (رابط القارئ).
 4. **جدولة:** `POST https://api.sabq.org/api/internal/bot-drafts/<id>/schedule` بجسم `{ "publishAt": "2026-09-24T18:30:00+03:00" }`. وقت الرياض يُرسل بإزاحة `+03:00` أو ما يعادله UTC (`Z`). الماضي يُرفض 400. الرد: `status: "scheduled"` و`scheduledAt` و`editUrl`.
 5. **تغيير الموعد:** `PATCH .../<id>/schedule` بنفس جسم `publishAt`، والمادة حالتها `scheduled` فقط.
 6. **إلغاء الجدولة:** `DELETE .../<id>/schedule` بجسم فارغ. تعود `draft` ولا تُحذف.
@@ -15,7 +15,7 @@
 9. **جاهز للمناوب (بدون نشر):** `PATCH .../<id>/ready` بجسم فارغ `{}`. الحالة `ready_to_publish`. محرر الوردية ينشر من اللوحة، أو البوت ينشر/يجدول لاحقاً.
 10. **رفع صورة:** `POST .../images` بنفس التوكن. `deliveryUrl` غلاف (`imageUrl`) أو متن (`imageUrls`).
 
-كل المسارات أعلاه تعمل فقط على مادة `source=bot`. مادة أنشأها محرر تُرجع `404 not_found`. قفل التحرير النشط يُرجع `409 locked_by_editor`.
+كل المسارات أعلاه تعمل فقط على مادة `source=bot`، باستثناء `PATCH /:id` على خبر منشور ليس للبوت: يرد `409 not_a_draft` لا `404`. بقية صفوف المحرر تبقى `404 not_found`. قفل التحرير النشط يُرجع `409 locked_by_editor`.
 
 ---
 
@@ -38,7 +38,7 @@
 | `POST` | `/api/internal/bot-drafts` | إنشاء مسودة عربية جديدة (الحالة `draft` دائماً) |
 | `POST` | `/api/internal/bot-drafts/images` | رفع صورة غلاف واحدة إلى R2 (`sabq-news-images` / `media.sabq.org`) عبر `newsImageStorageService` |
 | `GET` | `/api/internal/bot-drafts/:id` | قراءة حالة المسودة ومعرّفها ورابط التحرير |
-| `PATCH` | `/api/internal/bot-drafts/:id` | تحديث مسودة أنشأها بوت وما زالت `draft` |
+| `PATCH` | `/api/internal/bot-drafts/:id` | تحديث محتوى مسودة `draft` أو خبر `published` أنشأه البوت. نفس شكل الجسم |
 | `PATCH` | `/api/internal/bot-drafts/:id/ready` | انتقال واحد: `draft` → `ready_to_publish`. جسم فارغ. لا نشر |
 | `POST` | `/api/internal/bot-drafts/:id/publish` | نشر فوري. جسم فارغ `{}`. من `draft` أو `ready_to_publish` |
 | `POST` | `/api/internal/bot-drafts/:id/schedule` | جدولة أولى. الجسم `{ "publishAt": "<ISO-8601 مع منطقة>" }` من `draft` أو `ready_to_publish` |
@@ -93,7 +93,9 @@ User-Agent: Mozilla/5.0 (compatible; SabqBotDrafts/1.0)
 
 - الإدراج يكتب `status='draft'`, `reviewStatus=null`, `publishType='instant'`, `scheduledAt=null`, `publishedAt=null`, `articleType='news'`, `newsType='regular'`, `source='bot'` — قيم ثابتة في الخدمة لا تأتي من الطلب.
 - الإسناد من الخادم فقط: `authorId` و`reporterId` = حساب «صحيفة سبق» (`BOT_DRAFTS_AUTHOR_USER_ID` أو الافتراضي). البوت لا يرسلهما (`422 forbidden_fields`). عند `PATCH` المحتوى يُملأ `reporterId` فقط إن كان فارغاً — اختيار المحرر لا يُستبدل. حساب الإسناد غير موجود/غير نشط → `503 author_not_configured`.
-- تحديث المحتوى يضرب فقط `status='draft' AND source='bot'`. بعد `ready_to_publish` أو النشر أو الجدولة أو الأرشفة يُرجع `409 not_a_draft` و`updatable: false`.
+- تحديث المحتوى يضرب `source='bot'` في `draft` أو `published`. بعد `ready_to_publish` أو الجدولة أو الأرشفة أو الحذف يُرجع `409 not_a_draft`. خبر منشور ليس `source=bot` يُرجع `409 not_a_draft` أيضاً. صف محرر في حالة أخرى يبقى `404`.
+- على `published`: الحقول المسموحة `title`, `subtitle`, `excerpt`, `content`, `contentFormat`, `sourceUrl`, `imageUrl`, `keywords`. `categorySlug` و`categoryId` و`imageUrls` و`clientReference` و`notes` تُرفض `422 forbidden_fields` — نقل التصنيف يغيّر أرشيف القسم وخلاصة RSS و`articleSection` وليس تعديلاً نصياً آمناً على مسار إبطال كاش حفظ المحرر. `status` و`publishedAt` و`slug` لا تُكتب. `excerpt` يزامن `aiSummary` ويمسح `aiBullets` كما يفعل حفظ اللوحة. `updatedAt` يتقدم، و`seo_metadata.editorialModifiedAt` يُدمج ذرياً عند تغيّر حقل ظاهر (مصدر `dateModified` العربي) عبر `buildEditorialMetadataUpdate`. لا جدول مراجعات منفصل: السجل هو `article_events` و`activity_logs` مثل حفظ المحرر، عبر `recordEvent`.
+- إبطال الكاش بعد تعديل المنشور هو مسار `PATCH /api/admin/articles/:id`: `invalidateArticleWrite` (ذاكرة القوائم والمقال بما فيها نافذة العشر ثوانٍ، جيل seo-meta، Redis pub/sub، purge Cloudflare للرئيسية ولـ`slug`/`englishSlug`) ثم حذف `lite-feed`. لا مسح لخرائط الموقع في Redis ولا لذاكرة `sitemap-news` لأن حفظ المحتوى في اللوحة لا يمسحها. لا إشعار دفع ولا IndexNow ولا إعادة نشر.
 - `PATCH /:id/ready` ينقل `draft` → `ready_to_publish` فقط، بلا `publishedAt` وبلا مرور على ناشر الإنتاج. قفل تحرير نشط → `409 locked_by_editor`. جسم فيه حقول → `400`، وحقل ممنوع مثل `status` → `422`.
 - `POST /:id/publish` و`POST /:id/schedule` يعملان على `source=bot` في `draft` أو `ready_to_publish`. صف محرر → `404 not_found`. منشور أو مجدول أو مؤرشف → `409 not_a_draft`. قفل تحرير → `409 locked_by_editor`.
 - النشر الفوري يكتب نفس أعمدة زر «نشر» في اللوحة: `status=published` و`publishType=instant` و`publishedAt` الآن و`displayOrder` بثواني يونكس، ثم يُبطل كاش القرّاء وCDN (`invalidateArticleWrite`) ويُرسل IndexNow على `englishSlug`. الإسناد لا يتغير.
@@ -163,7 +165,7 @@ User-Agent: Mozilla/5.0 (compatible; SabqBotDrafts/1.0)
 { "title": "أمانة الرياض تطلق مبادرة لتشجير 500 حديقة خلال عام", "excerpt": "…" }
 ```
 
-الرد `200` بنفس شكل الإنشاء. `slug` لا يتغير عند تعديل العنوان (المحرر يغيّره من اللوحة إن لزم).
+الرد `200` بنفس شكل الإنشاء، ويضيف `status` و`publishedAt` و`updatable`. على المسودة `updatable: true`. على الخبر المنشور الذي أنشأه البوت `status` يبقى `"published"` و`updatable: true` و`publishedAt` والـ`slug` و`publicUrl` لا تتغير حتى لو تغيّر العنوان (المحرر يغيّر الرابط من اللوحة إن لزم). `categorySlug` على المنشور → `422 forbidden_fields`. مؤرشف أو محذوف → `409 not_a_draft`.
 
 ### رفع صورة غلاف — `POST /api/internal/bot-drafts/images`
 
@@ -315,7 +317,7 @@ User-Agent: Mozilla/5.0 (compatible; SabqBotDrafts/1.0)
 
 | الحالة | النتيجة |
 |--------|---------|
-| `draft` أو `ready_to_publish` وبلا قفل | `200` و`status: "published"` و`updatable: false` و`publicUrl` |
+| `draft` أو `ready_to_publish` وبلا قفل | `200` و`status: "published"` و`updatable: true` و`publicUrl` |
 | قفل محرر | `409 locked_by_editor` |
 | `published` / `scheduled` / `archived` | `409 not_a_draft` مع `details.status` |
 | ليست `source=bot` | `404 not_found` |
@@ -335,7 +337,7 @@ User-Agent: Mozilla/5.0 (compatible; SabqBotDrafts/1.0)
 
 نفس قيود القفل والمصدر والحالة كالنشر الفوري. `scheduledAt` داخل الجسم يبقى `422 forbidden_fields`؛ الحقل المقبول اسمه `publishAt` فقط.
 
-`GET /api/internal/bot-drafts/<id>` → `200` بنفس الشكل، ويضيف `isFeatured` و`newsType` و`hideFromHomepage`. بعد التعليم: `status: "ready_to_publish"`, `updatable: false`. بعد النشر: `status: "published"` و`publicUrl`. بعد الجدولة: `status: "scheduled"` و`scheduledAt`. بعد إلغاء الجدولة: `status: "draft"` و`updatable: true` و`scheduledAt: null`. بعد الأرشفة: `status: "archived"`.
+`GET /api/internal/bot-drafts/<id>` → `200` بنفس الشكل، ويضيف `isFeatured` و`newsType` و`hideFromHomepage`. بعد التعليم: `status: "ready_to_publish"`, `updatable: false`. بعد النشر: `status: "published"` و`updatable: true` و`publicUrl`. بعد الجدولة: `status: "scheduled"` و`scheduledAt` و`updatable: false`. بعد إلغاء الجدولة: `status: "draft"` و`updatable: true` و`scheduledAt: null`. بعد الأرشفة: `status: "archived"` و`updatable: false`.
 
 ### تغيير موعد الجدولة — `PATCH /api/internal/bot-drafts/:id/schedule`
 
@@ -654,7 +656,7 @@ const live = await client.publish(draft.id); // live.publicUrl و live.status ==
    - «لتغيير موعد مادة مجدولة: `PATCH /schedule` بنفس `publishAt`. لإلغاء الجدولة: `DELETE /schedule` بجسم فارغ فتعود مسودة. لا تحذف الصف.»
    - «لسحب خبر منشور من الموقع: `POST /archive` وليس `DELETE`. الأرشفة قابلة للاستعادة من اللوحة.»
    - «لمميز أو عاجل أو إخفاء الرئيسية على خبر منشور: `PATCH /visibility`. تعليم العاجل لا يرسل إشعاراً للقرّاء.»
-   - «لتحديث مسودة ما زالت `draft`: `PATCH` بالحقول المتغيرة فقط. لا ترسل `status`. إن رجع 409 فالمادة نُشرت أو يحررها محرر أو لم تعد مسودة.»
+   - «لتحديث المحتوى: `PATCH` بالحقول المتغيرة فقط على مسودة `draft` أو على خبرك المنشور (`source=bot`). على المنشور لا ترسل `categorySlug` ولا `status`. الحالة تبقى `published` والرابط و`publishedAt` لا يتغيران. إن رجع 409 فالمادة ليست مسودة ولا خبراً منشوراً للبوت، أو يحررها محرر.»
    - «`PATCH /ready` يعلّم المادة للمناوب دون نشر. استخدمه فقط إذا طُلب تركها لغرفة الأخبار.»
    - «لرفع صورة: `POST /images` وحقل `file`. الغلاف = `imageUrl`. المتن = `imageUrls`.»
 4. اجعل البوت يُرفق دائماً `notes` بما يجب على المحرر التحقق منه.
@@ -672,7 +674,7 @@ const live = await client.publish(draft.id); // live.publicUrl و live.status ==
 | 1 | `POST` بعنوان ومتن وتصنيف | `201` + `status: "draft"` + `editUrl`؛ تظهر المادة فوراً في `/dashboard/articles` تبويب المسودات ويفتحها `editUrl` في المحرر |
 | 2 | `PATCH` بعنوان جديد ثم فتح المسودة في اللوحة | `200` والعنوان الجديد ظاهر مباشرة (كاش قوائم اللوحة يُبطل مع كل كتابة) |
 | 3 | `PATCH` بـ `{"status":"published"}` أو `{"scheduledAt":…}` | `422 forbidden_fields` ولا تغيير في القاعدة |
-| 4 | `POST /:id/publish` بجسم `{}` على مسودة بوت بلا قفل | `200` و`status: "published"` و`updatable: false` و`publicUrl` يفتح الخبر |
+| 4 | `POST /:id/publish` بجسم `{}` على مسودة بوت بلا قفل | `200` و`status: "published"` و`updatable: true` و`publicUrl` يفتح الخبر |
 | 4a | `PATCH /:id/publish` أو `POST /:id/submit-review` | `403 forbidden_action` |
 | 4b | `PATCH /:id/ready` بجسم `{}` على مسودة بلا قفل | `200` و`status: "ready_to_publish"` و`updatable: false`؛ تظهر في لوحة «جاهز للنشر» |
 | 4e | `POST /:id/schedule` بـ `publishAt` مستقبلي `+03:00` | `200` و`status: "scheduled"` و`scheduledAt`؛ تظهر في المجدول وتنشر عند الموعد |
@@ -686,7 +688,7 @@ const live = await client.publish(draft.id); // live.publicUrl و live.status ==
 | 4d | من اللوحة: نشر المادة الجاهزة، أو «إرجاع لمسودة» | مسار المحرر ما زال يعمل؛ الإرجاع يعيد `draft` و`updatable: true` |
 | 5 | بنفس التوكن: `PATCH /api/admin/articles/<id>` أو `POST /api/admin/articles` | `401` (لا جلسة) — التوكن لا يعمل على المسارات الإدارية |
 | 6 | افتح المسودة في اللوحة (قفل تحرير نشط) ثم `PATCH` من البوت | `409 locked_by_editor` |
-| 7 | انشر المسودة من اللوحة ثم `PATCH` من البوت | `409 not_a_draft` و`GET` يرجع `status: "published"`, `updatable: false` |
+| 7 | `PATCH /:id` على خبر بوت `published` بحقل `title` (وبلا `categorySlug`) | `200` و`status: "published"` و`updatable: true` و`slug` و`publishedAt` كما كانا |
 | 8 | توكن خاطئ / بدون توكن | `401` مع `Cache-Control: private, no-store` ولا يظهر أي توكن في الرد أو اللوج |
 | 9 | `GET` بمعرّف مسودة أنشأها محرر (ليست من بوت) | `404` — لا كشف لمسودات المحررين |
 | 10 | لوج Railway بعد الخطوات أعلاه | أسطر `[BotDrafts] created/updated/published/scheduled` و`marked ready` بلا توكنات |

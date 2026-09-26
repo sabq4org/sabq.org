@@ -99,7 +99,7 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
     patch:
       operationId: updateSabqDraft
-      summary: تحديث مسودة أنشأها بوت وما زالت draft (الحقول المتغيرة فقط)
+      summary: تحديث محتوى مسودة draft أو خبر published أنشأه البوت (نفس شكل الجسم)
       requestBody:
         required: true
         content:
@@ -117,7 +117,7 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
         "409":
-          description: not_a_draft (نُشرت/جُدولت) أو locked_by_editor (محرر يعمل عليها الآن)
+          description: not_a_draft (ليست draft ولا published لصف source=bot، أو خبر منشور لم ينشئه البوت، أو مؤرشفة) أو locked_by_editor
           content:
             application/json:
               schema:
@@ -178,7 +178,7 @@ paths:
               description: جسم فارغ. أي حقل يُرفض. status أو authorId يُرفضان 422.
       responses:
         "200":
-          description: نُشرت. status=published وupdatable=false وpublicUrl
+          description: نُشرت. status=published وupdatable=true وpublicUrl
           content:
             application/json:
               schema:
@@ -435,6 +435,11 @@ components:
         - $ref: "#/components/schemas/DraftFields"
         - required: [title, content]
     BotDraftUpdate:
+      description: >
+        نفس حقول الإنشاء وكلها اختيارية وحقل واحد على الأقل. على خبر published
+        مصدره bot المسموح فقط title وsubtitle وexcerpt وcontent وcontentFormat
+        وsourceUrl وimageUrl وkeywords. categorySlug وcategoryId وimageUrls
+        وclientReference وnotes تُرفض 422. status وpublishedAt وslug لا تُكتب.
       allOf:
         - $ref: "#/components/schemas/DraftFields"
         - minProperties: 1
@@ -443,7 +448,7 @@ components:
       properties:
         id: { type: string }
         status: { type: string, description: الحالة الحالية في اللوحة (draft/ready_to_publish/published/scheduled/archived) }
-        updatable: { type: boolean, description: true فقط عندما تكون draft. false بعد الجاهزية أو النشر أو الجدولة أو الأرشفة. إلغاء الجدولة يعيدها true }
+        updatable: { type: boolean, description: true لمسودة draft ولخبر published مصدره bot. false بعد الجاهزية أو الجدولة أو الأرشفة، ولصف ليس source=bot. إلغاء الجدولة يعيدها true }
         title: { type: string }
         subtitle: { type: string, nullable: true }
         slug: { type: string }
