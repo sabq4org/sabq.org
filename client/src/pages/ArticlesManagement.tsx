@@ -1922,7 +1922,8 @@ export default function ArticlesManagement() {
             </div>
           )}
 
-          {activeStatus === "draft" && canSeeWeekBoard && (typeFilter === "all" || typeFilter === "opinion") && !listParams.search && (
+          {/* لوحة أسبوع كتّاب الرأي لسطح المكتب فقط؛ على الجوال لا تُعرض ولا تُجلب بياناتها. */}
+          {!isMobile && activeStatus === "draft" && canSeeWeekBoard && (typeFilter === "all" || typeFilter === "opinion") && !listParams.search && (
             <OpinionWeekBoard onOpenArticle={(id) => setLocation(`/dashboard/articles/${id}`)} />
           )}
 
