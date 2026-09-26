@@ -328,14 +328,10 @@ router.post("/articles/:id/view", async (req: Request, res: Response) => {
       });
     }
 
-    // Check if article exists
-    const [article] = await db
-      .select({ id: articles.id })
-      .from(articles)
-      .where(eq(articles.id, articleId))
-      .limit(1);
-
-    if (!article) {
+    // التحقق من الوجود عبر قراءة العداد المكيّشة (10ث، جلب واحد) بدل SELECT
+    // لكل مشاهدة — كل نقر على إشعار العاجل يرسل هذا الطلب (حادثة 2026-09-26).
+    const liveViews = await getLiveArticleViews(articleId);
+    if (liveViews == null) {
       return res.status(404).json({ 
         success: false,
         message: "المقال غير موجود" 
@@ -3058,6 +3054,8 @@ function formatArticleForMobile(row: any, baseUrl: string) {
 }
 
 import { memoryCache as sharedMemoryCache, withSWR, withCache, CACHE_TTL } from "../memoryCache";
+import { readWithFreshWindow } from "../utils/freshWindowCache";
+import { getApprovedCommentTree } from "../services/mobileCommentTreeService";
 import { getLiveArticleViews } from "../services/articleViewCounterService";
 
 function getCached(key: string) {
@@ -3232,30 +3230,40 @@ router.get("/news/paginated", publicListLimiter, async (req: Request, res: Respo
       },
     );
 
-    const results = await db
-      .select({
-        article: articleCardSelect,
-        category: { nameAr: categories.nameAr, id: categories.id },
-        author: {
-          firstName: users.firstName,
-          lastName: users.lastName,
-        },
-        reporter: {
-          firstName: reporterUsers.firstName,
-          lastName: reporterUsers.lastName,
-        },
-      })
-      .from(articles)
-      .leftJoin(categories, eq(articles.categoryId, categories.id))
-      .leftJoin(users, eq(articles.authorId, users.id))
-      .leftJoin(reporterUsers, eq(articles.reporterId, reporterUsers.id))
-      .where(and(...conditions))
-      .orderBy(desc(articles.publishedAt))
-      .limit(boundedLimit(limit))
-      .offset(offset);
+    // الصفحة نفسها محايدة للمستخدم: كاش قصير بجلب واحد، والطلب «الطازج»
+    // يأخذ نسخة عمرها ≤10ث. البادئة `news-` تُبطل مع كل نشر — حادثة 2026-09-26.
+    const items = await readWithFreshWindow(
+      `news-paginated:mobile:${limit}:${offset}`,
+      30_000,
+      wantsFreshData(req),
+      async () => {
+        const results = await db
+          .select({
+            article: articleCardSelect,
+            category: { nameAr: categories.nameAr, id: categories.id },
+            author: {
+              firstName: users.firstName,
+              lastName: users.lastName,
+            },
+            reporter: {
+              firstName: reporterUsers.firstName,
+              lastName: reporterUsers.lastName,
+            },
+          })
+          .from(articles)
+          .leftJoin(categories, eq(articles.categoryId, categories.id))
+          .leftJoin(users, eq(articles.authorId, users.id))
+          .leftJoin(reporterUsers, eq(articles.reporterId, reporterUsers.id))
+          .where(and(...conditions))
+          .orderBy(desc(articles.publishedAt))
+          .limit(boundedLimit(limit))
+          .offset(offset);
+        return results.map((r) => formatArticleForMobile(r, BASE_URL));
+      },
+    );
 
     res.json({
-      articles: results.map((r) => formatArticleForMobile(r, BASE_URL)),
+      articles: items,
       total,
       limit,
       offset,
@@ -3283,10 +3291,12 @@ router.get("/articles/:id", async (req: Request, res: Response, next: NextFuncti
     // إشعار العاجل (حادثة 2026-08-06: ‏38 ألف جهاز خلال دقائق) — بلا كاش كان
     // كل نقر ينفّذ ٦ استعلامات DB مستقلة فتمتلئ البركة (pool=50/0idle/98wait)
     // ويقف الموقع كله. المفتاح يحمل الـid/السلاق فيُبطل مع كتابة المقال فقط.
+    // الطلب «الطازج» لا يحذف المفتاح (كان كل نقر بـno-cache يعيد البناء):
+    // يأخذ نسخة عمرها ≤10ث بجلب واحد للمتزامنين — حادثة 2026-09-26.
     const cacheKey = `article:mobile:${articleId}`;
-    if (wantsFreshData(req)) sharedMemoryCache.delete(cacheKey);
-
-    let payload = await withCache(cacheKey, CACHE_TTL.MEDIUM, () => buildMobileArticlePayload(articleId));
+    let payload = await readWithFreshWindow(cacheKey, CACHE_TTL.MEDIUM, wantsFreshData(req), () =>
+      buildMobileArticlePayload(articleId),
+    );
 
     if (!payload) {
       return res.status(404).json({
@@ -4134,100 +4144,99 @@ router.get("/roles", async (_req: Request, res: Response) => {
 // GET /api/v1/homepage (combined feed)
 router.get("/homepage", async (req: Request, res: Response) => {
   try {
+    // جلب واحد للمتزامنين؛ الطلب «الطازج» (سحب التحديث/الفحص الصامت بعد
+    // العاجل) يأخذ نسخة عمرها ≤10ث بدل بناء الرئيسية لكل جهاز — حادثة 2026-09-26.
     const cacheKey = "mobile:homepage";
-    if (!wantsFreshData(req)) {
-      const cached = getCached(cacheKey);
-      if (cached) return res.json(cached);
-    }
+    const result = await readWithFreshWindow(cacheKey, 2 * 60 * 1000, wantsFreshData(req), async () => {
 
-    // Align hero selection/order with web (`getHeroArticles` / homepage-lite):
-    // editors reorder via displayOrder; sorting by publishedAt alone made
-    // pull-to-refresh look broken — fresh JSON, same carousel order.
-    const heroArticles = await db
-      .select({
-        article: articleCardSelect,
-        category: { nameAr: categories.nameAr, id: categories.id },
-        author: { firstName: users.firstName, lastName: users.lastName },
-        reporter: { firstName: reporterUsers.firstName, lastName: reporterUsers.lastName },
-      })
-      .from(articles)
-      .leftJoin(categories, eq(articles.categoryId, categories.id))
-      .leftJoin(users, eq(articles.authorId, users.id))
-      .leftJoin(reporterUsers, eq(articles.reporterId, reporterUsers.id))
-      .where(
-        and(
-          eq(articles.status, "published"),
-          eq(articles.hideFromHomepage, false),
-          or(
-            eq(articles.newsType, "breaking"),
-            eq(articles.isFeatured, true)
-          ),
-          or(
-            isNull(articles.articleType),
-            ne(articles.articleType, "opinion"),
-            eq(articles.isFeatured, true)
-          ),
-          or(
-            isNull(articles.aiGenerated),
-            eq(articles.aiGenerated, false),
-            eq(articles.isFeatured, true)
+      // Align hero selection/order with web (`getHeroArticles` / homepage-lite):
+      // editors reorder via displayOrder; sorting by publishedAt alone made
+      // pull-to-refresh look broken — fresh JSON, same carousel order.
+      const heroArticles = await db
+        .select({
+          article: articleCardSelect,
+          category: { nameAr: categories.nameAr, id: categories.id },
+          author: { firstName: users.firstName, lastName: users.lastName },
+          reporter: { firstName: reporterUsers.firstName, lastName: reporterUsers.lastName },
+        })
+        .from(articles)
+        .leftJoin(categories, eq(articles.categoryId, categories.id))
+        .leftJoin(users, eq(articles.authorId, users.id))
+        .leftJoin(reporterUsers, eq(articles.reporterId, reporterUsers.id))
+        .where(
+          and(
+            eq(articles.status, "published"),
+            eq(articles.hideFromHomepage, false),
+            or(
+              eq(articles.newsType, "breaking"),
+              eq(articles.isFeatured, true)
+            ),
+            or(
+              isNull(articles.articleType),
+              ne(articles.articleType, "opinion"),
+              eq(articles.isFeatured, true)
+            ),
+            or(
+              isNull(articles.aiGenerated),
+              eq(articles.aiGenerated, false),
+              eq(articles.isFeatured, true)
+            )
           )
         )
-      )
-      .orderBy(
-        desc(sql`GREATEST(COALESCE(${articles.displayOrder}, 0), EXTRACT(EPOCH FROM COALESCE(${articles.resurfacedAt}, ${articles.publishedAt})))`),
-        desc(sql`COALESCE(${articles.resurfacedAt}, ${articles.publishedAt})`)
-      )
-      .limit(5);
-
-    const latestArticles = await db
-      .select({
-        article: articleCardSelect,
-        category: { nameAr: categories.nameAr, id: categories.id },
-        author: { firstName: users.firstName, lastName: users.lastName },
-        reporter: { firstName: reporterUsers.firstName, lastName: reporterUsers.lastName },
-      })
-      .from(articles)
-      .leftJoin(categories, eq(articles.categoryId, categories.id))
-      .leftJoin(users, eq(articles.authorId, users.id))
-      .leftJoin(reporterUsers, eq(articles.reporterId, reporterUsers.id))
-      .where(
-        and(
-          eq(articles.status, "published"),
-          eq(articles.hideFromHomepage, false)
+        .orderBy(
+          desc(sql`GREATEST(COALESCE(${articles.displayOrder}, 0), EXTRACT(EPOCH FROM COALESCE(${articles.resurfacedAt}, ${articles.publishedAt})))`),
+          desc(sql`COALESCE(${articles.resurfacedAt}, ${articles.publishedAt})`)
         )
-      )
-      // «إنعاش»: صدارة الموجز بوقت الإنعاش دون تغيير تاريخ النشر الظاهر
-      .orderBy(desc(sql`COALESCE(${articles.resurfacedAt}, ${articles.publishedAt})`))
-      .limit(20);
+        .limit(5);
 
-    const breakingArticles = await db
-      .select({
-        article: articleCardSelect,
-        category: { nameAr: categories.nameAr, id: categories.id },
-        author: { firstName: users.firstName, lastName: users.lastName },
-        reporter: { firstName: reporterUsers.firstName, lastName: reporterUsers.lastName },
-      })
-      .from(articles)
-      .leftJoin(categories, eq(articles.categoryId, categories.id))
-      .leftJoin(users, eq(articles.authorId, users.id))
-      .leftJoin(reporterUsers, eq(articles.reporterId, reporterUsers.id))
-      .where(
-        and(
-          eq(articles.status, "published"),
-          eq(articles.newsType, "breaking"),
-          gte(articles.publishedAt, new Date(Date.now() - 24 * 60 * 60 * 1000))
+      const latestArticles = await db
+        .select({
+          article: articleCardSelect,
+          category: { nameAr: categories.nameAr, id: categories.id },
+          author: { firstName: users.firstName, lastName: users.lastName },
+          reporter: { firstName: reporterUsers.firstName, lastName: reporterUsers.lastName },
+        })
+        .from(articles)
+        .leftJoin(categories, eq(articles.categoryId, categories.id))
+        .leftJoin(users, eq(articles.authorId, users.id))
+        .leftJoin(reporterUsers, eq(articles.reporterId, reporterUsers.id))
+        .where(
+          and(
+            eq(articles.status, "published"),
+            eq(articles.hideFromHomepage, false)
+          )
         )
-      )
-      .orderBy(desc(sql`COALESCE(${articles.resurfacedAt}, ${articles.publishedAt})`))
-      .limit(10);
+        // «إنعاش»: صدارة الموجز بوقت الإنعاش دون تغيير تاريخ النشر الظاهر
+        .orderBy(desc(sql`COALESCE(${articles.resurfacedAt}, ${articles.publishedAt})`))
+        .limit(20);
 
-    const result = {
-      hero: heroArticles.map((r) => formatArticleForMobile(r, BASE_URL)),
-      latest: latestArticles.map((r) => formatArticleForMobile(r, BASE_URL)),
-      breaking: breakingArticles.map((r) => formatArticleForMobile(r, BASE_URL)),
-    };
-    setCache(cacheKey, result, 2 * 60 * 1000);
+      const breakingArticles = await db
+        .select({
+          article: articleCardSelect,
+          category: { nameAr: categories.nameAr, id: categories.id },
+          author: { firstName: users.firstName, lastName: users.lastName },
+          reporter: { firstName: reporterUsers.firstName, lastName: reporterUsers.lastName },
+        })
+        .from(articles)
+        .leftJoin(categories, eq(articles.categoryId, categories.id))
+        .leftJoin(users, eq(articles.authorId, users.id))
+        .leftJoin(reporterUsers, eq(articles.reporterId, reporterUsers.id))
+        .where(
+          and(
+            eq(articles.status, "published"),
+            eq(articles.newsType, "breaking"),
+            gte(articles.publishedAt, new Date(Date.now() - 24 * 60 * 60 * 1000))
+          )
+        )
+        .orderBy(desc(sql`COALESCE(${articles.resurfacedAt}, ${articles.publishedAt})`))
+        .limit(10);
+
+      return {
+        hero: heroArticles.map((r) => formatArticleForMobile(r, BASE_URL)),
+        latest: latestArticles.map((r) => formatArticleForMobile(r, BASE_URL)),
+        breaking: breakingArticles.map((r) => formatArticleForMobile(r, BASE_URL)),
+      };
+    });
     res.json(result);
   } catch (error) {
     console.error("[Mobile API] GET /homepage error:", error);
@@ -4251,53 +4260,13 @@ router.get("/homepage", async (req: Request, res: Response) => {
 router.get("/articles/:slug/comments", async (req: Request, res: Response) => {
   try {
     const slug = req.params.slug;
-    const [article] = await db
-      .select({ id: articles.id })
-      .from(articles)
-      .where(eq(articles.slug, slug))
-      .limit(1);
-
-    if (!article) {
+    // قائمة التعليقات المعتمدة محايدة للمستخدم: كاش 15ث بجلب واحد (نفس نافذة
+    // كاش الحافة للمجهولين). طلبات الجوال تحمل Bearer فتتجاوز الحافة، وكل نقر
+    // على إشعار العاجل كان ينفّذ استعلامين هنا (حادثة 2026-09-26). التعليق
+    // الجديد يدخل «قيد المراجعة» فلا يظهر هنا فورًا أصلًا.
+    const topLevel = await withCache(`comments:mobile:${slug}`, 15_000, () => getApprovedCommentTree(slug));
+    if (!topLevel) {
       return res.status(404).json({ success: false, message: "Article not found" });
-    }
-
-    // Public view: approved comments only. Threading is one level deep —
-    // top-level rows carry their replies inline, matching what the web's
-    // `storage.getCommentsByArticle` produces.
-    const rows = await db
-      .select({
-        comment: comments,
-        user: {
-          id: users.id,
-          firstName: users.firstName,
-          lastName: users.lastName,
-          profileImageUrl: users.profileImageUrl,
-        },
-      })
-      .from(comments)
-      .leftJoin(users, eq(comments.userId, users.id))
-      .where(and(eq(comments.articleId, article.id), eq(comments.status, "approved")))
-      .orderBy(comments.createdAt);
-
-    type CommentNode = (typeof rows)[number]["comment"] & {
-      user: (typeof rows)[number]["user"];
-      replies: CommentNode[];
-    };
-
-    const nodes = new Map<string, CommentNode>();
-    const topLevel: CommentNode[] = [];
-    for (const r of rows) {
-      nodes.set(r.comment.id, { ...r.comment, user: r.user, replies: [] });
-    }
-    for (const r of rows) {
-      const node = nodes.get(r.comment.id)!;
-      if (r.comment.parentId) {
-        const parent = nodes.get(r.comment.parentId);
-        if (parent) parent.replies.push(node);
-        else topLevel.push(node);
-      } else {
-        topLevel.push(node);
-      }
     }
 
     res.json(topLevel);
@@ -5834,13 +5803,17 @@ router.get("/articles/:id/react", async (req: Request, res: Response) => {
     const session = await verifyMemberSession(req);
     const articleId = req.params.id;
 
-    const [{ count }] = await db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(reactions)
-      .where(and(
-        eq(reactions.articleId, articleId),
-        eq(reactions.type, "like"),
-      ));
+    // العدد محايد للمستخدم: كاش 10ث بجلب واحد (يُمسح عند الإعجاب/إلغائه).
+    const count = await withCache(`article:likes:${articleId}`, 10_000, async () => {
+      const [row] = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(reactions)
+        .where(and(
+          eq(reactions.articleId, articleId),
+          eq(reactions.type, "like"),
+        ));
+      return Number(row?.count) || 0;
+    });
 
     let liked = false;
     if (session) {
@@ -5902,6 +5875,8 @@ router.post("/articles/:id/react", async (req: Request, res: Response) => {
       });
       liked = true;
     }
+
+    sharedMemoryCache.delete(`article:likes:${articleId}`);
 
     const [{ count }] = await db
       .select({ count: sql<number>`count(*)::int` })
