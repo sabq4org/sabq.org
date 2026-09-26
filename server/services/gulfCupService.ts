@@ -33,6 +33,8 @@ import {
   resolveGcFixtureIdentities,
   type GcProviderFixtureIdentity,
 } from "./gulfCupFixtureIdentity";
+import { applyGcKnockoutTeams } from "./gulfCupKnockout";
+import { localizeGcPlayerName } from "./gulfCupPlayerNames";
 import { GC_EDITIONS, getGcTeamLegacy, type GcTeamLegacy } from "./gulfCupHistory";
 import { resolveNames } from "./worldCupNameTranslator";
 import { tallyGcScorersFromFixtures } from "./gulfCupScorerTally";
@@ -326,6 +328,10 @@ export async function getGcTeams(): Promise<GcTeam[]> {
   });
 }
 
+const GC_KNOCKOUT_SLOTS = new Map(
+  GC_FIXTURES.map((seed) => [seed.matchNo, { homeSlot: seed.homeSlot, awaySlot: seed.awaySlot }]),
+);
+
 /**
  * جدول المباريات كاملًا مع دمج بيانات المزوّد. `forceFresh` مخصص لحدود كتابة
  * حساسة مثل قبول رهان؛ القراءات العادية تبقى على SWR لتفادي ضغط المزوّد.
@@ -339,7 +345,10 @@ export async function getGcFixtures(forceFresh = false): Promise<GcFixture[]> {
   }, forceFresh);
   // فوق الكاش: نتيجة TheSports اللحظية (MQTT/بولينغ 2ث) للمباريات الجارية فقط —
   // تصل الأهداف بثوانٍ بدل انتظار دورة كاش المزوّد الأساسي.
-  return overlayGcLiveScores(base);
+  const live = await overlayGcLiveScores(base);
+  // فتحات نصف النهائي/النهائي: منتخب المزوّد إن وُجد، وإلا مركز المجموعة
+  // المحسوم من النتائج المنتهية. placeholder يبقى إن لم يُحسم المركز.
+  return applyGcKnockoutTeams(live, GC_KNOCKOUT_SLOTS, GC_GROUPS, seedTeam);
 }
 
 /** يبني ترتيب المجموعات من النتائج المنتهية ثم يطبّق المباريات الجارية مبدئيًّا. */
@@ -801,7 +810,7 @@ function mapScorerRows(rows: any[], tr: (n: string | null | undefined) => string
     return {
       rank: index + 1,
       id: row.player?.id ?? 0,
-      name: tr(row.player?.name),
+      name: localizeGcPlayerName(row.player?.id ?? 0, tr(row.player?.name)),
       photo: row.player?.photo ?? "",
       team: {
         id: teamId,
@@ -847,7 +856,14 @@ async function tallyGcScorersFromEvents(): Promise<Pick<GcScorersBoard, "scorers
   );
   const tr = await resolveNames(names).catch(() => (n: string | null | undefined) => n ?? "");
   const tally = tallyGcScorersFromFixtures(rawFixtures, (n) => tr(n), seedTeam);
-  return { scorers: tally.scorers.slice(0, 15), assists: tally.assists.slice(0, 10) };
+  const nameById = <T extends { id: number; name: string }>(row: T): T => ({
+    ...row,
+    name: localizeGcPlayerName(row.id, row.name),
+  });
+  return {
+    scorers: tally.scorers.slice(0, 15).map(nameById),
+    assists: tally.assists.slice(0, 10).map(nameById),
+  };
 }
 
 /**
