@@ -14,7 +14,7 @@ function PlaybackFixture() {
   const { provider, isLoadingAudio, handlePlayAudio } = useArticleSummaryAudio(slug, '1', true);
   return <section className="space-y-4 rounded-lg border p-4" dir="rtl">
     <div className="flex items-center gap-2"><button disabled={isLoadingAudio} onClick={handlePlayAudio}>استماع للموجز</button><SummaryAudioAttribution provider={provider} /></div>
-    <div className="flex gap-3">{['humain', 'elevenlabs', 'google', 'unknown', 'failed'].map(value => <button key={value} onClick={() => setSlug(value)}>{value}</button>)}</div>
+    <div className="flex gap-3">{['humain', 'gemini', 'elevenlabs', 'google', 'unknown', 'failed'].map(value => <button key={value} onClick={() => setSlug(value)}>{value}</button>)}</div>
   </section>;
 }
 createRoot(document.getElementById('root')!).render(

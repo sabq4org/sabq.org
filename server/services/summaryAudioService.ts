@@ -1,16 +1,18 @@
 import { createHash } from 'node:crypto';
 import { synthesizeHumain, isContentRejection } from './humainTts';
+import { GEMINI_TTS_CONFIG_VERSION, GEMINI_TTS_VOICE, isGeminiContentRejection, synthesizeGemini } from './geminiTts';
 import { getElevenLabsService, isElevenLabsQuotaCoolingDown } from './elevenlabs';
 import { getGoogleTTSService } from './googleTts';
 import { loadSummaryAudioSettings, type SummaryAudioSettings } from './summaryAudioSettings';
 
-export type SummaryAudio = { buffer: Buffer; provider: 'humain' | 'elevenlabs' | 'google'; contentType: 'audio/wav' | 'audio/mpeg' };
+export type SummaryAudio = { buffer: Buffer; provider: 'gemini' | 'humain' | 'elevenlabs' | 'google'; contentType: 'audio/wav' | 'audio/mpeg' };
 export const SUMMARY_AUDIO_SAMPLE = 'أهلاً بكم في موجز الأخبار من سبق. من الرياض، نتابع أبرز المستجدات المحلية، ونستعرض أهم الأخبار الاقتصادية والرياضية. قراءة واضحة، ومعلومة موثوقة، ومتابعة مستمرة على مدار الساعة.';
 const cache = new Map<string, { audio: SummaryAudio; expires: number }>();
 const pending = new Map<string, Promise<SummaryAudio>>();
 const MAX_CACHE_BYTES = 64 * 1024 * 1024;
 let cacheBytes = 0;
 let humainUnavailableUntil = 0;
+let geminiUnavailableUntil = 0;
 
 async function withDeadline<T>(task: Promise<T>, ms: number): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -25,6 +27,18 @@ function checked(buffer: Buffer, provider: SummaryAudio['provider']): SummaryAud
   return { buffer, provider, contentType: provider === 'humain' ? 'audio/wav' : 'audio/mpeg' };
 }
 
+function checkedGemini(buffer: Buffer): SummaryAudio {
+  if (buffer.length < 44 || buffer.subarray(0, 4).toString('ascii') !== 'RIFF' || buffer.subarray(8, 12).toString('ascii') !== 'WAVE') {
+    throw new Error('TTS_INVALID_AUDIO');
+  }
+  if (buffer.length > 16 * 1024 * 1024) throw new Error('TTS_INVALID_AUDIO');
+  return { buffer, provider: 'gemini', contentType: 'audio/wav' };
+}
+
+function geminiConfigured(): boolean {
+  return Boolean(process.env.GEMINI_API_KEY?.trim() || process.env.AI_INTEGRATIONS_GEMINI_API_KEY?.trim());
+}
+
 async function elevenlabs(text: string, voiceId: string): Promise<SummaryAudio> {
   if (isElevenLabsQuotaCoolingDown()) throw new Error('ELEVENLABS_UNAVAILABLE');
   const service = getElevenLabsService();
@@ -36,13 +50,26 @@ async function elevenlabs(text: string, voiceId: string): Promise<SummaryAudio> 
 }
 
 /** Preview must play exactly the requested voice; never conceal failure with fallback. */
-export async function previewSummaryVoice(provider: 'humain' | 'elevenlabs', voiceId: string): Promise<SummaryAudio> {
+export async function previewSummaryVoice(provider: 'gemini' | 'humain' | 'elevenlabs', voiceId: string): Promise<SummaryAudio> {
+  if (provider === 'gemini') {
+    if (voiceId !== GEMINI_TTS_VOICE) throw new Error('GEMINI_INVALID_VOICE');
+    return checkedGemini(await synthesizeGemini(SUMMARY_AUDIO_SAMPLE));
+  }
   if (provider === 'humain') return checked(await synthesizeHumain(SUMMARY_AUDIO_SAMPLE, voiceId), 'humain');
   return elevenlabs(SUMMARY_AUDIO_SAMPLE, voiceId);
 }
 
 export async function generateSummaryAudio(text: string, settings: SummaryAudioSettings): Promise<SummaryAudio> {
-  if (settings.primaryProvider === 'humain' && Date.now() >= humainUnavailableUntil && process.env.HUMAIN_VOICE_API_KEY?.trim()) {
+  if (settings.primaryProvider === 'gemini' && Date.now() >= geminiUnavailableUntil && geminiConfigured()) {
+    try {
+      return checkedGemini(await synthesizeGemini(text));
+    } catch (error) {
+      if (isGeminiContentRejection(error)) throw error;
+      geminiUnavailableUntil = Date.now() + 60_000;
+      console.warn('[summary-audio] Gemini unavailable; trying HUMAIN');
+    }
+  }
+  if ((settings.primaryProvider === 'gemini' || settings.primaryProvider === 'humain') && Date.now() >= humainUnavailableUntil && process.env.HUMAIN_VOICE_API_KEY?.trim()) {
     try {
       return checked(await synthesizeHumain(text, settings.humainVoiceId), 'humain');
     } catch (error) {
@@ -62,7 +89,7 @@ export async function generateSummaryAudio(text: string, settings: SummaryAudioS
 }
 
 export function summaryAudioCacheKey(articleId: string, text: string, settings: SummaryAudioSettings): string {
-  return createHash('sha256').update(JSON.stringify(['summary-v4', articleId, text, settings])).digest('hex');
+  return createHash('sha256').update(JSON.stringify(['summary-v5', GEMINI_TTS_CONFIG_VERSION, articleId, text, settings])).digest('hex');
 }
 
 /** Shared by all existing web/iOS/Android article and opinion audio consumers. */

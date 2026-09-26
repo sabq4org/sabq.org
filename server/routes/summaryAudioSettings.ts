@@ -22,13 +22,13 @@ router.put(path, async (req, res) => {
 });
 const previewLimit = rateLimit({ windowMs: 60_000, limit: 6, standardHeaders: 'draft-7', legacyHeaders: false,
   message: { message: 'انتظر دقيقة قبل توليد عينات إضافية' } });
-const previewSchema = z.object({ provider: z.enum(['humain', 'elevenlabs']), voiceId: z.string() }).strict();
+const previewSchema = z.object({ provider: z.enum(['gemini', 'humain', 'elevenlabs']), voiceId: z.string() }).strict();
 router.post(`${path}/preview`, previewLimit, async (req, res) => {
   const parsed = previewSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ message: 'اختر صوتاً صالحاً' });
   const catalog = summaryAudioCatalog();
   const { provider, voiceId } = parsed.data;
-  const voices = provider === 'humain' ? catalog.humainVoices : catalog.elevenlabsVoices;
+  const voices = provider === 'gemini' ? catalog.geminiVoices : provider === 'humain' ? catalog.humainVoices : catalog.elevenlabsVoices;
   if (!voices.some(v => v.id === voiceId)) return res.status(400).json({ message: 'الصوت لا يتبع المزود المحدد' });
   if (!catalog.configured[provider]) return res.status(503).json({ message: 'مفتاح المزود غير مضاف في الخادم' });
   try {

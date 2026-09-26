@@ -10,14 +10,16 @@ test.beforeEach(async ({ page }) => {
   page.on('console', message => { if (message.type() === 'error') console.error('UI console:', message.text()); });
 });
 test.beforeAll(async () => {
-  vite = await createServer({ configFile: false, root: process.cwd(), plugins: [react()],
-    resolve: { alias: { '@': path.resolve('client/src'), '@shared': path.resolve('shared') } },
+  vite = await createServer({ configFile: false, root: process.cwd(), cacheDir: path.resolve('node_modules/.cache/summary-audio-' + process.pid), plugins: [react()],
+    resolve: { dedupe: ['react', 'react-dom'], alias: { '@': path.resolve('client/src'), '@shared': path.resolve('shared') } },
+    optimizeDeps: { entries: ['e2e/fixtures/summary-audio.html'], include: ['react', 'react-dom/client', 'react/jsx-runtime', '@tanstack/react-query'] },
     server: { host: '127.0.0.1', port: 0 }, logLevel: 'error' });
   await vite.listen(); base = vite.resolvedUrls!.local[0];
 });
 test.afterAll(async () => { await vite?.close(); });
 const defaults = { primaryProvider: 'humain', humainVoiceId: 'cabd361b-cb91-4eb6-8d35-c8660bf82e7a', elevenlabsVoiceId: 'MI88rOZjXbH22N8KHXUo' };
 const catalog = {
+  geminiVoices: [{ id: "Orus", name: "Orus" }],
   humainVoices: [
     { id: defaults.humainVoiceId, name: 'عبدالله', description: 'سعودي نجدي — رجل' },
     { id: '9bbc9620-a2ff-489b-b292-5007210f49ca', name: 'عبدالعزيز' },
@@ -25,7 +27,7 @@ const catalog = {
     { id: '19965876-8cd6-4b8c-9af4-35cbec69ff1d', name: 'سارة' },
   ],
   elevenlabsVoices: [{ id: defaults.elevenlabsVoiceId, name: 'علي — راوي سعودي عميق' }],
-  configured: { humain: true, elevenlabs: true },
+  configured: { gemini: true, humain: true, elevenlabs: true },
 };
 test('choose, preview, save and reload the Saudi voice; responsive RTL', async ({ page }, testInfo) => {
   let settings = { ...defaults }; let saves = 0; let previewVoice = '';
@@ -57,7 +59,7 @@ test('choose, preview, save and reload the Saudi voice; responsive RTL', async (
   await page.screenshot({ path: testInfo.outputPath('mobile.png'), fullPage: true });
 });
 test('missing key remains explicit and cannot generate a preview', async ({ page }) => {
-  await page.route('**/api/system/summary-audio-settings', r => r.fulfill({ json: { settings: defaults, ...catalog, configured: { humain: false, elevenlabs: true } } }));
+  await page.route('**/api/system/summary-audio-settings', r => r.fulfill({ json: { settings: defaults, ...catalog, configured: { gemini: true, humain: false, elevenlabs: true } } }));
   await page.goto(`${base}e2e/fixtures/summary-audio.html`);
   await expect(page.getByRole('button', { name: 'استمع إلى عينة HUMAIN' })).toBeDisabled();
   await expect(page.getByText('المفتاح غير مضاف', { exact: true })).toBeVisible();
@@ -96,12 +98,35 @@ test('HUMAIN credit follows the actual audio response and clears for fallback, n
   expect(await credit.evaluate(el => getComputedStyle(el).fontSize)).toBe('11px');
   expect(await credit.evaluate(el => getComputedStyle(el).color)).toBe('rgb(22, 101, 52)');
   await page.screenshot({ path: testInfo.outputPath('humain-attribution.png'), fullPage: true });
-  for (const provider of ['elevenlabs', 'google', 'unknown', 'failed']) {
+  for (const provider of ['gemini', 'elevenlabs', 'google', 'unknown', 'failed']) {
     await page.getByRole('button', { name: provider, exact: true }).click();
     await expect(credit).toHaveCount(0);
     await page.getByRole('button', { name: 'استماع للموجز', exact: true }).click();
     await expect(page.getByRole('button', { name: 'استماع للموجز', exact: true })).toBeEnabled();
     await expect(credit).toHaveCount(0);
   }
-  expect(requests).toBe(5);
+  expect(requests).toBe(6);
+});
+
+test('Gemini Orus preview is separate from saving the primary', async ({ page }) => {
+  let settings = { ...defaults }; let saves = 0; let request: unknown;
+  await page.route('**/api/csrf-token', r => r.fulfill({ json: { csrfToken: 'local-test-token' } }));
+  await page.route('**/api/system/summary-audio-settings', async r => {
+    if (r.request().method() === 'PUT') { settings = r.request().postDataJSON(); saves++; }
+    await r.fulfill({ json: { settings, ...catalog } });
+  });
+  await page.route('**/api/system/summary-audio-settings/preview', async r => {
+    request = r.request().postDataJSON();
+    await r.fulfill({ contentType: 'audio/wav', body: Buffer.from('preview') });
+  });
+  await page.goto(base + 'e2e/fixtures/summary-audio.html');
+  await page.locator('#summary-audio-provider').click();
+  await page.getByRole('option', { name: /Gemini/ }).click();
+  await page.getByRole('button', { name: /Gemini/ }).click();
+  await expect(page.locator('audio')).toHaveAttribute('src', /^blob:/);
+  expect(request).toEqual({ provider: 'gemini', voiceId: 'Orus' }); expect(saves).toBe(0);
+  await page.getByRole('button', { name: 'حفظ إعدادات الصوت' }).click();
+  await expect.poll(() => saves).toBe(1);
+  await page.reload();
+  await expect(page.locator('#summary-audio-provider')).toContainText('Gemini');
 });

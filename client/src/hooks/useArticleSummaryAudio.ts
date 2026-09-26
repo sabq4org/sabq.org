@@ -44,7 +44,7 @@ export function useArticleSummaryAudio(slug: string | undefined, revision: strin
       let actualProvider = provider;
       if (!audio) {
         setProvider(null);
-        const url = `/api/articles/${encodeURIComponent(slug)}/summary-audio?v=${encodeURIComponent(revision)}&tts=humain-v4`;
+        const url = `/api/articles/${encodeURIComponent(slug)}/summary-audio?v=${encodeURIComponent(revision)}&tts=summary-v5`;
         const response = await fetch(apiUrl(url), { credentials: 'include', signal: controller.signal, cache: 'no-store' });
         if (!response.ok) throw new Error('Audio request failed');
         const blob = await response.blob();

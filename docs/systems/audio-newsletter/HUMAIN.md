@@ -1,6 +1,8 @@
-# أصوات موجز الأخبار — HUMAIN
+# أصوات موجز الأخبار — Gemini وHUMAIN
 
 متابعة: [Issue #1517](https://github.com/sabq4org/sabq.org/issues/1517). التوثيق الرسمي: [HUMAIN TTS](https://docs.voice.humain.com/en/api-guides/asyncapi/tts).
+
+> تحديث 2026-09-26: Gemini 3.8 Flash TTS بصوت Orus وتوجيه سعودي إذاعي هو الاختيار المعتمد. تفعيله يجعل HUMAIN أول بديل، ثم ElevenLabs وGoogle. يتطلب تفعيل الإعدادات القديمة اختيار Gemini وحفظه بعد النشر.
 
 ## الاختيار من لوحة الإدارة
 
@@ -26,10 +28,10 @@
 
 ## العقد الفني
 
-- `GET /api/system/summary-audio-settings`: `{settings, humainVoices, elevenlabsVoices, configured}`.
-- `PUT` المسار نفسه: `{primaryProvider: "humain" | "elevenlabs", humainVoiceId, elevenlabsVoiceId}`. تحقق صارم، لا حقول إضافية ولا مفاتيح أسرار.
+- `GET /api/system/summary-audio-settings`: `{settings, geminiVoices, humainVoices, elevenlabsVoices, configured}`.
+- `PUT` المسار نفسه: `{primaryProvider: "gemini" | "humain" | "elevenlabs", humainVoiceId, elevenlabsVoiceId}`. تحقق صارم، لا حقول إضافية ولا مفاتيح أسرار.
 - `POST .../preview`: `{provider, voiceId}`؛ بايتات صوت عند النجاح أو 400/503/429. النص ثابت ولا يقبل نصاً من العميل. جميع هذه المسارات Passport + `system.manage_settings`، بلا تخزين خارجي.
-- `GET /api/articles/:slug/summary-audio` يحافظ على فحص صلاحية مشاهدة المقال الحالي ويستخدم `aiSummary || excerpt`. يعيد `audio/wav` من HUMAIN أو `audio/mpeg` من ElevenLabs/Google، و`X-TTS-Provider` و`X-TTS-Cache`.
+- `GET /api/articles/:slug/summary-audio` يحافظ على فحص صلاحية مشاهدة المقال الحالي ويستخدم `aiSummary || excerpt`. يعيد `audio/wav` من Gemini أو HUMAIN أو `audio/mpeg` من ElevenLabs/Google، و`X-TTS-Provider` و`X-TTS-Cache`.
 - قراءة إعدادات الإدارة لا تعود إلى الافتراضيات عند تعطل قاعدة البيانات؛ يعرض الخطأ بدلاً من ادعاء حفظ/قراءة ناجحة. عدم وجود الإعداد فقط يستخدم الافتراضيات.
 
 ## المهل والكاش

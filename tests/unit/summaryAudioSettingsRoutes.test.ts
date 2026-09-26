@@ -30,7 +30,7 @@ describe('private summary settings API', () => {
   it('returns catalog and configuration status without keys or public caching', async () => {
     const response = await fetch(base, { headers: admin });
     expect(response.headers.get('cache-control')).toContain('no-store');
-    const json = await response.json(); expect(json.humainVoices).toHaveLength(4); expect(json.configured.humain).toBe(true);
+    const json = await response.json(); expect(json.geminiVoices).toEqual([{ id: 'Orus', name: 'Orus', description: expect.any(String) }]); expect(json.humainVoices).toHaveLength(4); expect(json.configured.humain).toBe(true);
     expect(JSON.stringify(json)).not.toContain('test-key-not-public');
   });
   it('saves a valid choice privately and rejects unknown fields', async () => {
@@ -50,6 +50,16 @@ describe('private summary settings API', () => {
     const response = await fetch(base + '/preview', { method: 'POST', headers: admin, body: JSON.stringify({ provider: 'humain', voiceId: defaults.humainVoiceId }) });
     expect(response.status).toBe(200); expect(response.headers.get('content-type')).toContain('audio/wav');
     expect(mocks.preview).toHaveBeenCalledWith('humain', defaults.humainVoiceId); expect(mocks.upsertSystemSetting).not.toHaveBeenCalled();
+  });
+  it('previews fixed Gemini Orus without allowing client style/model fields', async () => {
+    vi.stubEnv('GEMINI_API_KEY', 'gemini-secret-not-public');
+    mocks.preview.mockResolvedValue({ buffer: Buffer.from('RIFFtest'), provider: 'gemini', contentType: 'audio/wav' });
+    const response = await fetch(base + '/preview', { method: 'POST', headers: admin, body: JSON.stringify({ provider: 'gemini', voiceId: 'Orus', model: 'client-model' }) });
+    expect(response.status).toBe(400);
+    expect(mocks.preview).not.toHaveBeenCalled();
+    const valid = await fetch(base + '/preview', { method: 'POST', headers: admin, body: JSON.stringify({ provider: 'gemini', voiceId: 'Orus' }) });
+    expect(valid.status).toBe(200);
+    expect(mocks.preview).toHaveBeenCalledWith('gemini', 'Orus');
   });
   it('reports a provider outage without returning fake preview audio', async () => {
     mocks.preview.mockRejectedValue(new Error('offline'));

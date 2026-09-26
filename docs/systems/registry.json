@@ -562,7 +562,7 @@
       "nameEn": "Audio Newsletters",
       "status": "active",
       "category": "content",
-      "summary": "موجز المقال الصوتي بأصوات HUMAIN السعودية وإعدادات إدارة واحتياط ElevenLabs ثم Google، إضافة إلى النشرة البريدية الباقية بعد إيقاف منتج النشرات الصوتية.",
+      "summary": "موجز المقال الصوتي بصوت Gemini السعودي الإذاعي واحتياط HUMAIN ثم ElevenLabs ثم Google، إضافة إلى النشرة البريدية الباقية بعد إيقاف منتج النشرات الصوتية.",
       "docPath": "docs/systems/audio-newsletter/SYSTEM.md",
       "relatedDocs": [
         "docs/AUDIO_NEWSLETTER_SYSTEM.md",
@@ -581,6 +581,8 @@
         "client/src/pages/dashboard/NewsletterAnalytics.tsx",
         "docs/AUDIO_NEWSLETTER_SYSTEM.md",
         "server/services/humainTts.ts",
+        "server/services/geminiTts.ts",
+        "tests/unit/geminiTts.test.ts",
         "server/services/summaryAudioSettings.ts",
         "server/services/summaryAudioService.ts",
         "server/services/elevenlabs.ts",
@@ -618,7 +620,7 @@
       "owners": [
         "content"
       ],
-      "lastReviewed": "2026-09-24"
+      "lastReviewed": "2026-09-26"
     },
     {
       "id": "media-library",
