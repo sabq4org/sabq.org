@@ -19,6 +19,15 @@ export const PLAYER_AR_AL_BISHI = "عبدالعزيز البيشي";
  */
 export const PLAYER_AR_AL_HAMAMI = "همام الهمامي";
 
+/** فراس البريكان (API-Football 44324) — لا «فهد البريكين». */
+export const PLAYER_AR_FIRAS_AL_BURAIKAN = "فراس البريكان";
+/** حسن كادش (API-Football 44335) — لا «هشام قادش». */
+export const PLAYER_AR_HASSAN_KADESH = "حسن كادش";
+/** سلطان مندش (API-Football 2639) — لا «سالم مندش». */
+export const PLAYER_AR_SULTAN_MANDASH = "سلطان مندش";
+/** بوعلام خوخي (API-Football 2532). */
+export const PLAYER_AR_BOUALEM_KHOUKHI = "بوعلام خوخي";
+
 /** صيغ المزوّد الشائعة — تُدمَج في WC_PLAYER_AR عبر resolveNames. */
 export const CURATED_PLAYER_AR: Record<string, string> = {
   "Abdulaziz Al-Dwehe": PLAYER_AR_AL_DWEHE,
@@ -73,6 +82,50 @@ export const CURATED_PLAYER_AR: Record<string, string> = {
   "هـ. الهمامي": PLAYER_AR_AL_HAMAMI,
   "ح. الهمامي": PLAYER_AR_AL_HAMAMI,
   [PLAYER_AR_AL_HAMAMI]: PLAYER_AR_AL_HAMAMI,
+
+  // خليجي 27 (2026-09-26): API-Football يختصر «F. Al Buraikan» (مسافة لا شرطة)
+  // فيسقط على صف wc_player_names القديم «فهد البريكين». اللاعب 44324 هو فراس.
+  // «فهد البريكين/البريكان» تعريب آلي خاطئ لتوسعة الحرف F، لا اسم لاعب آخر.
+  "F. Al Buraikan": PLAYER_AR_FIRAS_AL_BURAIKAN,
+  "F. Al-Buraikan": PLAYER_AR_FIRAS_AL_BURAIKAN,
+  "F. Al Buraykan": PLAYER_AR_FIRAS_AL_BURAIKAN,
+  "Firas Al Buraikan": PLAYER_AR_FIRAS_AL_BURAIKAN,
+  "Firas Al-Buraikan": PLAYER_AR_FIRAS_AL_BURAIKAN,
+  "Feras Al Brikan": PLAYER_AR_FIRAS_AL_BURAIKAN,
+  "Feras Al-Brikan": PLAYER_AR_FIRAS_AL_BURAIKAN,
+  "Feras Tariq Nasser Al Brikan": PLAYER_AR_FIRAS_AL_BURAIKAN,
+  "فهد البريكين": PLAYER_AR_FIRAS_AL_BURAIKAN,
+  "فهد البريكان": PLAYER_AR_FIRAS_AL_BURAIKAN,
+  [PLAYER_AR_FIRAS_AL_BURAIKAN]: PLAYER_AR_FIRAS_AL_BURAIKAN,
+
+  // «H. Kadesh» (حسن كادش، 44335) توسّع آليًا إلى «هشام».
+  "H. Kadesh": PLAYER_AR_HASSAN_KADESH,
+  "H. Kadish": PLAYER_AR_HASSAN_KADESH,
+  "H. Qadash": PLAYER_AR_HASSAN_KADESH,
+  "Hassan Kadesh": PLAYER_AR_HASSAN_KADESH,
+  "Hassan Kadish": PLAYER_AR_HASSAN_KADESH,
+  "Hasan Kadesh": PLAYER_AR_HASSAN_KADESH,
+  "Hasan Kadish": PLAYER_AR_HASSAN_KADESH,
+  "Hassan Kadesh Yahya Mahboob": PLAYER_AR_HASSAN_KADESH,
+  "هشام قادش": PLAYER_AR_HASSAN_KADESH,
+  "هشام كادش": PLAYER_AR_HASSAN_KADESH,
+  [PLAYER_AR_HASSAN_KADESH]: PLAYER_AR_HASSAN_KADESH,
+
+  // «S. Mandash» (سلطان مندش، 2639) توسّع آليًا إلى «سالم».
+  "S. Mandash": PLAYER_AR_SULTAN_MANDASH,
+  "Sultan Mandash": PLAYER_AR_SULTAN_MANDASH,
+  "Sultan Ahmed Mohammed Mandash": PLAYER_AR_SULTAN_MANDASH,
+  "سالم مندش": PLAYER_AR_SULTAN_MANDASH,
+  [PLAYER_AR_SULTAN_MANDASH]: PLAYER_AR_SULTAN_MANDASH,
+
+  // بوعلام خوخي: «بواليم» نقل حرفي، و«ب. خوخي» اختصار نفس اللاعب (2532).
+  "B. Khoukhi": PLAYER_AR_BOUALEM_KHOUKHI,
+  "Boualem Khoukhi": PLAYER_AR_BOUALEM_KHOUKHI,
+  "Boualem Al Khoukhi": PLAYER_AR_BOUALEM_KHOUKHI,
+  "Boualem Al-Khoukhi": PLAYER_AR_BOUALEM_KHOUKHI,
+  "بواليم خوخي": PLAYER_AR_BOUALEM_KHOUKHI,
+  "ب. خوخي": PLAYER_AR_BOUALEM_KHOUKHI,
+  [PLAYER_AR_BOUALEM_KHOUKHI]: PLAYER_AR_BOUALEM_KHOUKHI,
 };
 
 const DWEHE_SOURCE =

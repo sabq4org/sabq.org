@@ -50,7 +50,18 @@ export interface GcSeedFixture {
   /** مجموعات المرشحين لكل فتحة knockout؛ تثبّت الهوية عند التأجيل. */
   homeCandidateIds?: readonly number[];
   awayCandidateIds?: readonly number[];
+  /**
+   * كيف تُملأ الفتحة من نتائج المجموعات أو من فائز مباراة سابقة.
+   * لا يحمل اسم منتخب — الحساب في gulfCupKnockout يقرّر إن كان المركز محسومًا.
+   */
+  homeSlot?: GcBracketSlot;
+  awaySlot?: GcBracketSlot;
 }
+
+/** فتحة إقصائية: مركز داخل مجموعة، أو فائز مباراة سابقة برقمها الرسمي. */
+export type GcBracketSlot =
+  | { kind: "groupRank"; groupIndex: 0 | 1; rank: 1 | 2 }
+  | { kind: "winnerOf"; matchNo: number };
 
 // دور المجموعات (12 مباراة) ثم نصفا النهائي والنهائي (3 مباريات). التوقيتات +03:00.
 export const GC_FIXTURES: GcSeedFixture[] = [
@@ -70,8 +81,8 @@ export const GC_FIXTURES: GcSeedFixture[] = [
   { id: 27000011, matchNo: 11, kickoff: "2026-09-30T20:30:00+03:00", venue: "KASC", roundEn: "Group Stage - 3", homeId: 1569, awayId: 1563 },
   { id: 27000012, matchNo: 12, kickoff: "2026-09-30T20:30:00+03:00", venue: "PAF", roundEn: "Group Stage - 3", homeId: 1550, awayId: 1547 },
   // ── نصف النهائي ──
-  { id: 27000013, matchNo: 13, kickoff: "2026-10-03T18:00:00+03:00", venue: "KASC", roundEn: "Semi-finals", homeId: null, awayId: null, homePlaceholder: "أول المجموعة الأولى", awayPlaceholder: "ثاني المجموعة الثانية", homeCandidateIds: GC_GROUPS[0].teamIds, awayCandidateIds: GC_GROUPS[1].teamIds },
-  { id: 27000014, matchNo: 14, kickoff: "2026-10-03T20:30:00+03:00", venue: "PAF", roundEn: "Semi-finals", homeId: null, awayId: null, homePlaceholder: "أول المجموعة الثانية", awayPlaceholder: "ثاني المجموعة الأولى", homeCandidateIds: GC_GROUPS[1].teamIds, awayCandidateIds: GC_GROUPS[0].teamIds },
+  { id: 27000013, matchNo: 13, kickoff: "2026-10-03T18:00:00+03:00", venue: "KASC", roundEn: "Semi-finals", homeId: null, awayId: null, homePlaceholder: "أول المجموعة الأولى", awayPlaceholder: "ثاني المجموعة الثانية", homeCandidateIds: GC_GROUPS[0].teamIds, awayCandidateIds: GC_GROUPS[1].teamIds, homeSlot: { kind: "groupRank", groupIndex: 0, rank: 1 }, awaySlot: { kind: "groupRank", groupIndex: 1, rank: 2 } },
+  { id: 27000014, matchNo: 14, kickoff: "2026-10-03T20:30:00+03:00", venue: "PAF", roundEn: "Semi-finals", homeId: null, awayId: null, homePlaceholder: "أول المجموعة الثانية", awayPlaceholder: "ثاني المجموعة الأولى", homeCandidateIds: GC_GROUPS[1].teamIds, awayCandidateIds: GC_GROUPS[0].teamIds, homeSlot: { kind: "groupRank", groupIndex: 1, rank: 1 }, awaySlot: { kind: "groupRank", groupIndex: 0, rank: 2 } },
   // ── النهائي ──
-  { id: 27000015, matchNo: 15, kickoff: "2026-10-06T20:30:00+03:00", venue: "KASC", roundEn: "Final", homeId: null, awayId: null, homePlaceholder: "الفائز من نصف النهائي الأول", awayPlaceholder: "الفائز من نصف النهائي الثاني" },
+  { id: 27000015, matchNo: 15, kickoff: "2026-10-06T20:30:00+03:00", venue: "KASC", roundEn: "Final", homeId: null, awayId: null, homePlaceholder: "الفائز من نصف النهائي الأول", awayPlaceholder: "الفائز من نصف النهائي الثاني", homeSlot: { kind: "winnerOf", matchNo: 13 }, awaySlot: { kind: "winnerOf", matchNo: 14 } },
 ];

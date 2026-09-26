@@ -104,6 +104,34 @@ describe("correctSportsPlayerName — همام الهمامي (التباس H ه
   });
 });
 
+describe("correctSportsPlayerName — خليجي 27 (توسعة الحرف الأول الخاطئة)", () => {
+  it("F. Al Buraikan المخزّن «فهد البريكين» يصبح فراس البريكان", () => {
+    expect(correctSportsPlayerName("F. Al Buraikan", "فهد البريكين")).toBe("فراس البريكان");
+    expect(correctSportsPlayerName("F. Al-Buraikan", "فهد البريكان")).toBe("فراس البريكان");
+    expect(correctSportsPlayerName("فهد البريكين", "فهد البريكين")).toBe("فراس البريكان");
+  });
+
+  it("H. Kadesh المخزّن «هشام قادش» يصبح حسن كادش", () => {
+    expect(correctSportsPlayerName("H. Kadesh", "هشام قادش")).toBe("حسن كادش");
+    expect(correctSportsPlayerName("Hassan Kadish", "حسن قادش")).toBe("حسن كادش");
+  });
+
+  it("S. Mandash المخزّن «سالم مندش» يصبح سلطان مندش", () => {
+    expect(correctSportsPlayerName("S. Mandash", "سالم مندش")).toBe("سلطان مندش");
+  });
+
+  it("بوعلام خوخي يصحّح الاختصار والنقل الحرفي", () => {
+    expect(correctSportsPlayerName("B. Khoukhi", "ب. خوخي")).toBe("بوعلام خوخي");
+    expect(correctSportsPlayerName("Boualem Khoukhi", "بواليم خوخي")).toBe("بوعلام خوخي");
+  });
+
+  it("لا يعمّم اختصارات عامة مثل ي. ناصر أو ن. خيمينيز", () => {
+    expect(correctSportsPlayerName("Y. Nasser", "ي. ناصر")).toBe("ي. ناصر");
+    expect(correctSportsPlayerName("N. Jiménez", "ن. خيمينيز")).toBe("ن. خيمينيز");
+    expect(correctSportsPlayerName("K. A. Al", "ك. أ. آل")).toBe("ك. أ. آل");
+  });
+});
+
 describe("SPL_PLAYER_AR — تغطية هويتَي الهمامي المزدوجتين وأسماء افتتاح روشن", () => {
   it("معرّفا الهمامي (التشكيلة والأحداث) يعيدان الاسم المعتمد نفسه", () => {
     expect(SPL_PLAYER_AR[463864]).toBe(PLAYER_AR_AL_HAMAMI);
