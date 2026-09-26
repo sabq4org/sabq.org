@@ -3,11 +3,13 @@
  *
  * قاعدة المصداقية (من رأس SabqAI.tsx): لا أرقام لحظية وهمية — كل رقم هنا
  * استعلام قراءة حقيقي من جداول الإنتاج، مع كاش ذاكرة قصير حتى لا تلمس
- * الصفحة العامة القاعدة إلا مرة كل بضع دقائق.
+ * الصفحة العامة القاعدة إلا مرة كل بضع دقائق. عدّ المقالات المنشورة
+ * له كاش إضافي 60 ثانية (ذاكرة ثم Redis) لأن مسحه هو الأثقل.
  */
 import { sql } from "drizzle-orm";
 import { db } from "../db";
 import { withSWR } from "../memoryCache";
+import { readPublishedArticleCounts } from "./publishedArticleCountsCache";
 
 export interface AiPublicStats {
   /** وقت حساب الأرقام فعليًا — تعرضه الواجهة كـ«آخر تحديث» صادق */
@@ -51,7 +53,7 @@ async function computeStats(): Promise<AiPublicStats> {
     OR feature_key IN ('world-cup-news', 'sportmonks-news', 'kings-cup-news')
   )`;
 
-  const [aiAgg, aiDaily, commentsAgg, storiesAgg, articlesAgg, ttsAgg, radarAgg, sportsAgg, domainAgg] = await Promise.all([
+  const [aiAgg, aiDaily, commentsAgg, storiesAgg, articleCounts, ttsAgg, radarAgg, sportsAgg, domainAgg] = await Promise.all([
     db.execute(sql`
       SELECT
         count(*)::bigint AS total_ops,
@@ -76,12 +78,20 @@ async function computeStats(): Promise<AiPublicStats> {
       FROM comments
     `),
     db.execute(sql`SELECT count(*)::bigint AS total FROM stories`),
-    db.execute(sql`
-      SELECT
-        (SELECT count(*)::bigint FROM articles WHERE status = 'published') AS total_published,
-        (SELECT count(*)::bigint FROM articles
-         WHERE status = 'published' AND published_at >= ${riyadhDayStartUtc}) AS today_published
-    `),
+    readPublishedArticleCounts(async () => {
+      // نفس حدّ يوم الرياض ونفس شكل العدّ. الكاش 60 ثانية ولا يغيّر الشرط.
+      const articlesAgg = await db.execute(sql`
+        SELECT
+          (SELECT count(*)::bigint FROM articles WHERE status = 'published') AS total_published,
+          (SELECT count(*)::bigint FROM articles
+           WHERE status = 'published' AND published_at >= ${riyadhDayStartUtc}) AS today_published
+      `);
+      const articlesRow = articlesAgg.rows[0] ?? {};
+      return {
+        totalPublished: num(articlesRow.total_published),
+        todayPublished: num(articlesRow.today_published),
+      };
+    }),
     db.execute(sql`
       SELECT coalesce(sum(duration_ms), 0)::bigint AS total_duration_ms
       FROM tts_usage_logs
@@ -113,7 +123,6 @@ async function computeStats(): Promise<AiPublicStats> {
 
   const agg = aiAgg.rows[0] ?? {};
   const commentsRow = commentsAgg.rows[0] ?? {};
-  const articlesRow = articlesAgg.rows[0] ?? {};
 
   const todayByDomain = { editorial: 0, sports: 0, visual: 0, audio: 0 };
   for (const row of domainAgg.rows) {
@@ -138,8 +147,8 @@ async function computeStats(): Promise<AiPublicStats> {
     },
     stories: { total: num(storiesAgg.rows[0]?.total) },
     articles: {
-      totalPublished: num(articlesRow.total_published),
-      todayPublished: num(articlesRow.today_published),
+      totalPublished: articleCounts.totalPublished,
+      todayPublished: articleCounts.todayPublished,
     },
     audio: { totalMinutes: Math.round(num(ttsAgg.rows[0]?.total_duration_ms) / 60_000) },
     radar: { totalItems: num(radarAgg.rows[0]?.total) },
