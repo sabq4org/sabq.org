@@ -1,10 +1,7 @@
 import { publicArticleText, type PublicArticleLocale } from "./publicArticleText";
 import { BookOpen, Brain, Play } from "lucide-react";
-import {
-  getCacheBustedImageUrl,
-  getObjectPosition,
-  getArticleDisplayImageUrl,
-} from "@/lib/imageUtils";
+import { getObjectPosition } from "@/lib/imageUtils";
+import { getArticleCardImageSrc } from "@shared/articleHeroPreload";
 import type { ArticleWithDetails } from "@shared/schema";
 import { OptimizedImage } from "../OptimizedImage";
 
@@ -21,8 +18,8 @@ export function ArticleMedia({
   priority?: boolean;
   variant?: "grid" | "list" | "compact";
 }) {
-  const source = getArticleDisplayImageUrl(article) || (article as ArticleWithDetails & { featuredImage?: string }).featuredImage;
-  const url = getCacheBustedImageUrl(source, article.updatedAt);
+  // Shared with the edge category-card preload (edgeMeta.ts) — keep in lockstep.
+  const url = getArticleCardImageSrc(article as ArticleWithDetails & { featuredImage?: string });
   return (
     <div
       className={`public-card-media relative overflow-hidden bg-slate-100 dark:bg-slate-800 ${className}`}

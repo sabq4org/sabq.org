@@ -942,14 +942,15 @@
         "tests/unit/edgeApiSurge.test.ts",
         "server/utils/spaTopLevelRoutes.ts",
         "tests/unit/spaTopLevelRoutes.test.ts",
-        "tests/unit/edgeSoftNotFound.test.ts"
+        "tests/unit/edgeSoftNotFound.test.ts",
+        "tests/unit/categoryCardPreload.test.ts"
       ],
       "aiFeatureKeys": [],
       "dashboardPath": null,
       "owners": [
         "platform"
       ],
-      "lastReviewed": "2026-09-25"
+      "lastReviewed": "2026-09-26"
     },
     {
       "id": "comments",

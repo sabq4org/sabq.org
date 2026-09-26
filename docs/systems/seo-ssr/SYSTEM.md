@@ -1,6 +1,6 @@
 # SEO و SSR (`seo-ssr`)
 
-> آخر مراجعة: 2026-09-25 (مراجعة تقرير السيو الخارجي: 404 الناعم والصفحات المؤسسية) | المالك: platform
+> آخر مراجعة: 2026-09-26 (تحميل مبكر لصورة أول بطاقة في صفحة القسم + كاش حافة لبحث القسم) | المالك: platform
 
 ## الغرض
 ميتادات للدوالش، إعادة توجيه السلاق، وSSR للمحتوى العام عبر `web-next`.
@@ -14,6 +14,7 @@
 - **ميزانية خرائط الأرشيف:** بحث النسخ المرشحة محصور بفهرس `legacy_slug` مع حاجز `OFFSET 0`، وتسبق مقارنة الحالة والترتيب والعنوان والتاريخ قراءة المحتوى الكامل عبر `CASE`. هذه الحواجز تحفظ قرار التطابق وتمنع عودة استعلامات الفهرسين وقراءة المحتوى المبكرة؛ لا تُزل دون قياس خطة التنفيذ.
 - **تقسيم AR (2026-09-07):** 500 خريطة عربية بدل 50 لتقليل كلفة القراءة الباردة؛ شرط `% 50` يحافظ على استخدام فهرس الإنتاج القائم، ثم `% 500` يختار الجزء الأصغر. كل خبر يخص جزءًا واحدًا. فهرس الخرائط يعلن الأجزاء كلها، مع مفاتيح كاش `index_archive_v3` و`__sitemapArticlesCanonicalV3`؛ الإنجليزية والأردية دون تغيير. لا تغيير Schema أو فهارس قاعدة البيانات.
 - **قوائم JSON المفهرسة رغم robots (2026-09-07):** `apiListingRobots.ts` يضيف `X-Robots-Tag: noindex, nofollow` إلى GET/HEAD لقائمتي `/api/articles` و`/api/v2/articles` فقط. robots يسمح بمساريهما التامين ومعاملات الاستعلام لرؤية الترويسة؛ التفاصيل وبقية API تبقى محظورة. تبقى بيانات JSON العامة وكاشها وصلاحياتها كما هي؛ قاعدة no-store أدناه تخص قوالب HTML الخاصة، ولا تستلزم إلغاء كاش قوائم API العامة.
+- **LCP صفحة القسم العربية (2026-09-26):** معالج `/category/:slug` (الصفحة الأولى فقط، لا `?page=`) يعلن `heroPreload` لصورة البطاقة ذات الأولوية: يعيد استعلام `/api/categories/:slug/articles` نفسه (الترتيب والشروط وحد 50، بما فيها الأقسام الذكية/الديناميكية) بأعمدة ضيقة، ثم `pickCategoryLandingLead` (آخر 30 يومًا، الأحدث، ترتيب مستقر) و`buildCardImagePreload` المشتركان مع `ArticleMedia`/`OptimizedImage` (عرض 640، جودة 85، `DEFAULT_IMAGE_SIZES_ATTR`). الإنفوجرافيك وقسم iFox غير AI بلا preload. `/api/categories/slug/:slug` صار في `getApiCacheTtl` بـ60ث للمجهول (صف فهرس عام بلا بيانات مستخدم). الحارس: `categoryCardPreload.test.ts`.
 - مسارات noindex → `Cache-Control: private, no-store`.
 - **Railway staging:** يجب ضبط `STAGING_NO_INDEX=true` على `web-next`؛ يضيف
   `X-Robots-Tag: noindex, nofollow, noarchive` وrobots meta ويمنع كاش CDN.
@@ -108,5 +109,6 @@
 - **الرئيسية في web-next:** og/twitter كاملة ومخطط NewsMediaOrganization (مطابق client/index.html) و`max-image-preview:large` ورابط اكتشاف RSS. ميتا الحافة للرئيسية تستخدم العنوان والوصف نفسيهما.
 - **RSS:** robots.txt يسمح بـ `/api/rss/` (خلاصات عامة فقط في `rssFeedRoutes.ts`)، و`client/index.html` يعلن `<link rel="alternate" type="application/rss+xml">`.
 - **روابط قديمة بلا تحويل (من Search Console):** `LEGACY_ROOT_REDIRECTS` في `edgeMeta.ts` يحوّل `/saudia` إلى رابط قسم «السعودية» الأساسي (englishSlug من الجدول) و`/collection/latest-news` إلى الرئيسية. روابط AMP القديمة (`/amp/<path>` و`/amp/story/<path>`) تُحل كالمسار الداخلي نفسه (قديم أو عربي أو news) أو تذهب إلى `/article/<slug>` مباشرة؛ ما لا يُحل يسقط إلى 404 الحقيقي أعلاه. الروابط القصيرة (`/sF6gde`) لا مقابل لها في `legacy_redirects` ولا `legacy_slug`، فتبقى 404.
+- **روابط إنجليزية قديمة لأخبار عربية (2026-09-26):** قبل 2026-07-30 كان كل خبر عربي يعلن hreflang="en" إلى `/en/article/<englishSlug>` حتى بلا ترجمة، فتراكم نحو 300 ألف 404 في Search Console. `computeSlugRedirect` يحوّل الآن `/en|ur/article/<slug>` الذي لا يطابق صفًا في `en_articles`/`ur_articles` لكنه خبر عربي منشور: إلى الترجمة الإنجليزية المنشورة إن وُجدت (`resolveEnSiblingSlug`) وإلا إلى `/article/<slug>`. ما لا يطابق شيئًا يبقى 404.
 - خارج هذا التغيير عمدًا: رابط الأقسام الأساسي المقروء (ترحيل canonical)، lastmod لكل خريطة وعدد خرائط الأوردو، HSTS سنة، توحيد اسم العلامة، حظر زواحف التدريب، والأداء. قرارات أو قياس مطلوب أولًا.
 

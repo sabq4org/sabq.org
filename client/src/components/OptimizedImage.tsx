@@ -2,12 +2,12 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import type { CSSProperties } from "react";
 import { ImageOff } from "lucide-react";
 import {
-  buildCloudflareUrl as sharedBuildCloudflareUrl,
-  generateResponsiveSrcSet as sharedGenerateResponsiveSrcSet,
   normalizeImageSrc as sharedNormalizeImageSrc,
+  DEFAULT_IMAGE_SIZES_ATTR,
 } from "@/lib/cdnImage";
+import { getOptimizedImageSrc, getOptimizedImageSrcSet, type ImageSize } from "@/lib/optimizedImageSources";
 
-export type ImageSize = 'thumbnail' | 'small' | 'medium' | 'large' | 'original';
+export type { ImageSize };
 
 interface OptimizedImageProps {
   src: string;
@@ -73,7 +73,6 @@ function generateGradientPlaceholder(src: string): string {
 // CDN helpers are shared via @/lib/cdnImage so both <OptimizedImage> and the
 // legacy HTML transformer use the exact same allow-list and srcset widths.
 const normalizeImageSrc = sharedNormalizeImageSrc;
-const buildCloudflareUrl = sharedBuildCloudflareUrl;
 
 // Legacy: Build optimized image URL with query parameters for server-side optimization
 function buildOptimizedUrl(src: string, options?: { 
@@ -102,36 +101,6 @@ function buildOptimizedUrl(src: string, options?: {
   return `${src}${separator}${params.join('&')}`;
 }
 
-const generateResponsiveSrcSet = sharedGenerateResponsiveSrcSet;
-
-// Convert image URL using Cloudflare CDN with smart sizing
-function getOptimizedUrl(src: string, options?: {
-  width?: number;
-  height?: number;
-  quality?: number;
-  preferSize?: ImageSize;
-}): string {
-  if (!src) return '';
-  
-  // Default sizes based on preferSize
-  const sizeMap: Record<ImageSize, number> = {
-    thumbnail: 150,
-    small: 320,
-    medium: 640,
-    large: 960,
-    original: 0
-  };
-  
-  const width = options?.width || (options?.preferSize ? sizeMap[options.preferSize] : 640);
-  const quality = options?.quality || 85;
-  
-  // Use Cloudflare CDN for optimization
-  if (width > 0) {
-    return buildCloudflareUrl(src, { width, height: options?.height, quality });
-  }
-  
-  return src;
-}
 
 export function OptimizedImage({
   src,
@@ -146,7 +115,7 @@ export function OptimizedImage({
   blurDataUrl,
   threshold = 0.1,
   eager = false,
-  sizes = "(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw",
+  sizes = DEFAULT_IMAGE_SIZES_ATTR,
   srcSet,
   style,
   fetchPriority = "auto",
@@ -167,15 +136,7 @@ export function OptimizedImage({
   
   const optimizedSrc = useMemo(() => {
     if (webpSrc) return webpSrc;
-    let resolvedHeight = height;
-    if (!resolvedHeight && aspectRatio && typeof aspectRatio === 'string' && aspectRatio.includes('/')) {
-      const [w, h] = aspectRatio.split('/').map(Number);
-      const baseWidth = width || (preferSize ? ({ thumbnail: 150, small: 320, medium: 640, large: 960, original: 0 } as const)[preferSize] : 640);
-      if (w > 0 && h > 0 && baseWidth > 0) {
-        resolvedHeight = Math.round((baseWidth * h) / w);
-      }
-    }
-    return getOptimizedUrl(normalizedSrc, { width, height: resolvedHeight, quality, preferSize });
+    return getOptimizedImageSrc(normalizedSrc, { width, height, quality, preferSize, aspectRatio });
   }, [normalizedSrc, webpSrc, width, height, quality, preferSize, aspectRatio]);
   
   const isTransformed = optimizedSrc !== normalizedSrc;
@@ -187,7 +148,7 @@ export function OptimizedImage({
     // match the quality used by the hero preload (<link rel=preload>). A
     // mismatch makes the browser pick a different candidate for the preload vs
     // the rendered <img>, causing a double download of the LCP image.
-    return generateResponsiveSrcSet(normalizedSrc, quality);
+    return getOptimizedImageSrcSet(normalizedSrc, quality);
   }, [normalizedSrc, srcSet, useFallback, quality]);
   
   // Use provided blurDataUrl (base64) or generate lightweight CSS gradient
