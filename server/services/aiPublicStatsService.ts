@@ -4,7 +4,7 @@
  * قاعدة المصداقية (من رأس SabqAI.tsx): لا أرقام لحظية وهمية — كل رقم هنا
  * استعلام قراءة حقيقي من جداول الإنتاج، مع كاش ذاكرة قصير حتى لا تلمس
  * الصفحة العامة القاعدة إلا مرة كل بضع دقائق. عدّ المقالات المنشورة
- * له كاش إضافي 60 ثانية (ذاكرة ثم Redis) لأن مسحه هو الأثقل.
+ * له كاش إضافي 10 دقائق (ذاكرة ثم Redis) لأن مسحه هو الأثقل.
  */
 import { sql } from "drizzle-orm";
 import { db } from "../db";
@@ -79,7 +79,7 @@ async function computeStats(): Promise<AiPublicStats> {
     `),
     db.execute(sql`SELECT count(*)::bigint AS total FROM stories`),
     readPublishedArticleCounts(async () => {
-      // نفس حدّ يوم الرياض ونفس شكل العدّ. الكاش 60 ثانية ولا يغيّر الشرط.
+      // نفس حدّ يوم الرياض ونفس شكل العدّ. الكاش 10 دقائق ولا يغيّر الشرط.
       const articlesAgg = await db.execute(sql`
         SELECT
           (SELECT count(*)::bigint FROM articles WHERE status = 'published') AS total_published,

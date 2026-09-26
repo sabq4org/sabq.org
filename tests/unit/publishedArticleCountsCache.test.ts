@@ -29,7 +29,7 @@ afterEach(() => {
 });
 
 describe("published article counts cache", () => {
-  it("serves the in-process value until the 60s TTL expires", async () => {
+  it("serves the in-process value until the 10-minute TTL expires", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-09-26T12:00:00.000Z"));
     const load = vi.fn()
@@ -37,17 +37,17 @@ describe("published article counts cache", () => {
       .mockResolvedValueOnce({ totalPublished: 945214, todayPublished: 43 });
 
     await expect(readPublishedArticleCounts(load)).resolves.toEqual(counts);
-    vi.setSystemTime(new Date("2026-09-26T12:00:59.999Z"));
+    vi.setSystemTime(new Date("2026-09-26T12:09:59.999Z"));
     await expect(readPublishedArticleCounts(load)).resolves.toEqual(counts);
     expect(load).toHaveBeenCalledTimes(1);
 
-    vi.setSystemTime(new Date("2026-09-26T12:01:00.000Z"));
+    vi.setSystemTime(new Date("2026-09-26T12:10:00.000Z"));
     await expect(readPublishedArticleCounts(load)).resolves.toEqual({
       totalPublished: 945214,
       todayPublished: 43,
     });
     expect(load).toHaveBeenCalledTimes(2);
-    expect(PUBLISHED_ARTICLE_COUNTS_TTL_MS).toBe(60_000);
+    expect(PUBLISHED_ARTICLE_COUNTS_TTL_MS).toBe(600_000);
   });
 
   it("coalesces concurrent misses into one load", async () => {
@@ -73,6 +73,9 @@ describe("published article counts cache", () => {
     await expect(readPublishedArticleCounts(load)).resolves.toEqual(counts);
     expect(load).toHaveBeenCalledTimes(1);
     expect(get).toHaveBeenCalledTimes(1);
+    expect(set.mock.calls[0]?.[2]).toEqual({
+      expiration: { type: "PX", value: PUBLISHED_ARTICLE_COUNTS_TTL_MS },
+    });
 
     resetPublishedArticleCountsCacheForTests();
     get.mockImplementation(() => {

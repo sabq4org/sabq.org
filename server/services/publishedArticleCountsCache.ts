@@ -2,13 +2,13 @@
  * كاش عدّ المقالات المنشورة (الإجمالي + منشورات اليوم بتوقيت الرياض).
  *
  * الاستعلام يمشي على كل الصفوف المنشورة، لذلك نُبقيه خارج كل طلب:
- * ذاكرة العملية 60 ثانية، ثم Redis إن كان متصلًا ليشاركه أكثر من نسخة.
+ * ذاكرة العملية 10 دقائق، ثم Redis إن كان متصلًا ليشاركه أكثر من نسخة.
  * خطأ Redis لا يُرمى — نكمل من القاعدة. الفوات المتزامن يشترك في جلب واحد.
  * فشل القاعدة يبقى خطأً ولا يُخزَّن.
  */
 import { getRedisClient } from "../redis";
 
-export const PUBLISHED_ARTICLE_COUNTS_TTL_MS = 60_000;
+export const PUBLISHED_ARTICLE_COUNTS_TTL_MS = 600_000;
 
 const REDIS_KEY = "ai-public-stats:published-article-counts";
 
