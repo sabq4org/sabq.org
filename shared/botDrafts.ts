@@ -34,7 +34,7 @@ export const BOT_DRAFTS_IMAGE_MIME_TYPES = [
   "image/gif",
 ] as const;
 
-/** الحالة الوحيدة التي يُنشئها البوت ويُسمح له بتعديل محتواها. */
+/** الحالة التي يُنشئها البوت. تعديل المحتوى مسموح أيضاً على `published` لصف `source=bot` عبر نفس `PATCH`. */
 export const BOT_DRAFT_STATUS = "draft" as const;
 
 /**
@@ -103,6 +103,30 @@ export function findForbiddenBotDraftFields(body: unknown): BotDraftForbiddenFie
   if (!body || typeof body !== "object" || Array.isArray(body)) return [];
   const keys = new Set(Object.keys(body as Record<string, unknown>));
   return BOT_DRAFT_FORBIDDEN_FIELDS.filter((field) => keys.has(field));
+}
+
+/**
+ * حقول المحتوى المسموحة على خبر `published` و`source=bot` عبر `PATCH /:id`.
+ * `categorySlug` و`categoryId` و`imageUrls` و`clientReference` و`notes` تبقى للمسودة:
+ * نقل التصنيف يغيّر أرشيف القسم وخلاصات RSS و`articleSection` وليس تعديلاً نصياً آمناً.
+ */
+export const BOT_DRAFT_PUBLISHED_CONTENT_FIELDS = [
+  "title",
+  "subtitle",
+  "excerpt",
+  "content",
+  "contentFormat",
+  "sourceUrl",
+  "imageUrl",
+  "keywords",
+] as const;
+
+export type BotDraftPublishedContentField = (typeof BOT_DRAFT_PUBLISHED_CONTENT_FIELDS)[number];
+
+/** حقول جسم التحديث التي لا تُقبل على الخبر المنشور. الترتيب ثابت للاختبارات. */
+export function findDisallowedPublishedContentFields(body: object): string[] {
+  const allowed = new Set<string>(BOT_DRAFT_PUBLISHED_CONTENT_FIELDS);
+  return Object.keys(body).filter((key) => !allowed.has(key)).sort();
 }
 
 const httpsUrl = z
@@ -281,8 +305,8 @@ export interface BotDraftResponse {
    */
   status: string;
   /**
-   * `true` فقط عندما تكون المادة `draft`.
-   * بعد الجاهزية أو النشر أو الجدولة أو الأرشفة تصبح `false`.
+   * `true` لمسودة `draft`، ولخبر `published` أنشأه البوت (`source=bot`) لأن البوت يعدّل محتواه.
+   * `false` بعد الجاهزية أو الجدولة أو الأرشفة، ولأي صف ليس `source=bot`.
    * إلغاء الجدولة يعيدها `draft` فتعود `true`.
    */
   updatable: boolean;

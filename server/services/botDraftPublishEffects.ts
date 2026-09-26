@@ -253,6 +253,29 @@ export function queueBotDraftUnscheduleEffects(article: BotDraftReleaseRow, botN
 }
 
 /**
+ * تعديل محتوى خبر منشور. نفس إبطال `PATCH /api/admin/articles/:id`:
+ * `invalidateArticleWrite` يمسح كاش القوائم والمقال (بما فيه نافذة العشر ثوانٍ
+ * `*:fresh` من مفاتيح `^news-` و`^mobile` و`article:`)، يرفع جيل seo-meta
+ * وإسقاطات SEO، ينشر الإبطال لبقية النسخ عبر Redis، ويطهّر Cloudflare
+ * للرئيسية ولرابط المقال (`slug` و`englishSlug`). ثم يُحذف `lite-feed`.
+ * خرائط الموقع في Redis وذاكرة `sitemap-news` ليست ضمن حفظ المحتوى في اللوحة
+ * (تُحدَّث عند الأرشفة/الترجمة أو بانتهاء المهلة) فلا تُمسح هنا.
+ * لا تنبيهات ولا IndexNow ولا إعادة نشر اجتماعي.
+ */
+export function queueBotDraftPublishedContentEffects(article: BotDraftReleaseRow, botName: string): void {
+  try {
+    invalidateArticleWrite(article, {
+      reason: `bot-draft-published-edit:${botName}`,
+      oldSlug: article.slug,
+      oldEnglishSlug: article.englishSlug,
+    });
+    memoryCache.delete("lite-feed");
+  } catch (error) {
+    console.error("[BotDrafts] published-content cache invalidation failed:", error);
+  }
+}
+
+/**
  * ظهور المادة المنشورة. إبطال الكاش مثل زر المميز/العاجل/حفظ المحرر.
  * لا إشعار قرّاء: `POST /feature` و`POST /toggle-breaking` لا يرسلان دفعاً.
  * عند إلغاء العاجل نُطهّر شريط العاجل على الحافة لأن الصف بعد التحديث لم يعد `breaking`

@@ -9,7 +9,7 @@
 // ----------------------------------------------------------------------------
 
 import crypto from "node:crypto";
-import { and, eq, gt, inArray, sql } from "drizzle-orm";
+import { and, eq, gt, inArray, sql, type SQL } from "drizzle-orm";
 import { db } from "../db";
 import { articleEditLocks, articles, categories, enArticles, users } from "@shared/schema";
 import { SABQ_NEWSPAPER_ACCOUNT_ID } from "@shared/sabqNewspaper";
@@ -19,6 +19,7 @@ import {
   BOT_DRAFT_READY_STATUS,
   BOT_DRAFT_SOURCE,
   BOT_DRAFT_STATUS,
+  findDisallowedPublishedContentFields,
   isBotDraftPublishableStatus,
   type BotDraftArchiveInput,
   type BotDraftCreateInput,
@@ -31,6 +32,7 @@ import { resolveUniqueArticleSlug } from "./articleSlugService";
 import { logArticleEvent } from "./articleEventsService";
 import { generateEnglishSlug } from "../utils/slugTransliterator";
 import { sanitizeArticleHtml } from "../utils/sanitizeArticleHtml";
+import { buildEditorialMetadataUpdate } from "../utils/editorialDatesSql";
 import { logActivity } from "../rbac";
 import { memoryCache } from "../memoryCache";
 
@@ -384,7 +386,10 @@ function isoOrNull(value: Date | string | null | undefined): string | null {
 
 type ArticleRow = typeof articles.$inferSelect;
 
-/** بعد الاعتماد لا يُعدَّل المحتوى. الرسالة تُعاد مع 409 `not_a_draft`. */
+/**
+ * الحالات التي لا يُعدَّل محتواها من البوت.
+ * `published` لصف `source=bot` مسموح في `PATCH /:id` ولا يمر من هنا.
+ */
 export function botDraftContentBlockedMessage(status: string): string {
   if (status === BOT_DRAFT_READY_STATUS) {
     return "المادة جاهزة للنشر ولا يمكن للبوت تعديلها بعد اعتماد المحرر";
@@ -568,6 +573,114 @@ export function buildBotDraftUnscheduleUpdate(now: Date): {
   };
 }
 
+export type BotDraftContentEditBlock = {
+  httpStatus: 404 | 409;
+  code: "not_found" | "not_a_draft";
+  message: string;
+  details?: { status: string };
+};
+
+/**
+ * من يجوز له تعديل المحتوى عبر `PATCH /:id`.
+ * مسودة بوت أو خبر بوت منشور: مسموح.
+ * خبر منشور ليس `source=bot`: 409 `not_a_draft` (لا 404، حتى لا يُفهم كغياب الصف).
+ * أي صف آخر ليس للبوت: 404 كما في بقية العقد.
+ * مؤرشف/محذوف/مجدول/جاهز لصف البوت: 409 `not_a_draft`.
+ */
+export function botDraftContentEditBlock(
+  row: { source?: string | null; status: string } | null,
+): BotDraftContentEditBlock | null {
+  if (!row) {
+    return { httpStatus: 404, code: "not_found", message: "المسودة غير موجودة" };
+  }
+  if (row.source !== BOT_DRAFT_SOURCE) {
+    if (row.status === "published") {
+      return {
+        httpStatus: 409,
+        code: "not_a_draft",
+        message: "لا يمكن للبوت تعديل خبر لم ينشئه",
+        details: { status: row.status },
+      };
+    }
+    return { httpStatus: 404, code: "not_found", message: "المسودة غير موجودة" };
+  }
+  if (row.status === BOT_DRAFT_STATUS || row.status === "published") return null;
+  return {
+    httpStatus: 409,
+    code: "not_a_draft",
+    message: botDraftContentBlockedMessage(row.status),
+    details: { status: row.status },
+  };
+}
+
+/** `true` لمسودة البوت ولخبره المنشور. الجاهزية والجدولة والأرشفة وصفوف المحرر تبقى `false`. */
+export function isBotOwnedContentEditable(row: { status: string; source?: string | null }): boolean {
+  return row.source === BOT_DRAFT_SOURCE && (row.status === BOT_DRAFT_STATUS || row.status === "published");
+}
+
+/**
+ * أعمدة تعديل خبر منشور. لا يكتب `status` ولا `publishedAt` ولا `slug` ولا `englishSlug`
+ * ولا الإسناد. `editorialModifiedAt` يُدمج ذرياً في `seo_metadata` عندما يتغير حقل
+ * ظاهر للقارئ — نفس مساعد `storage.updateArticle` الذي يغذّي `dateModified`.
+ * `excerpt` يزامن `aiSummary` ويمسح نقاط الموجز كما يفعل حفظ المحرر.
+ */
+/** كتابة عمود أو تعبير SQL (دمج `editorialModifiedAt`) كما يقبلها `db.update().set()`. */
+type ArticleColumnWrite = {
+  [Key in keyof typeof articles.$inferInsert]?: (typeof articles.$inferInsert)[Key] | SQL;
+};
+
+export function buildPublishedBotContentPatch(
+  existing: Pick<ArticleRow, "seo">,
+  input: BotDraftUpdateInput,
+  now: Date,
+): ArticleColumnWrite {
+  const patch: ArticleColumnWrite = { updatedAt: now };
+
+  if (input.title !== undefined) patch.title = input.title;
+  if (input.subtitle !== undefined) patch.subtitle = input.subtitle;
+  if (input.content !== undefined) {
+    patch.content = normalizeDraftContent(input.content, input.contentFormat);
+  }
+  if (input.excerpt !== undefined) {
+    const nextSummary = typeof input.excerpt === "string" ? input.excerpt.trim() || null : null;
+    patch.excerpt = nextSummary;
+    patch.aiSummary = nextSummary;
+    patch.aiBullets = null;
+    patch.aiBulletsGeneratedAt = null;
+  }
+  if (input.imageUrl !== undefined) patch.imageUrl = input.imageUrl;
+  if (input.sourceUrl !== undefined) patch.sourceUrl = input.sourceUrl;
+  if (input.keywords !== undefined) {
+    patch.seo = { ...(existing.seo ?? {}), keywords: input.keywords };
+  }
+
+  const editorialMetadata = buildEditorialMetadataUpdate(patch as Record<string, unknown>, now);
+  if (editorialMetadata) patch.seoMetadata = editorialMetadata;
+
+  const guarded = patch as Record<string, unknown>;
+  delete guarded.status;
+  delete guarded.publishedAt;
+  delete guarded.slug;
+  delete guarded.englishSlug;
+  delete guarded.authorId;
+  delete guarded.reporterId;
+  delete guarded.scheduledAt;
+  delete guarded.categoryId;
+  return patch;
+}
+
+function publishedChangeLabels(input: BotDraftUpdateInput): string[] {
+  const labels: string[] = [];
+  if (input.title !== undefined) labels.push("العنوان");
+  if (input.subtitle !== undefined) labels.push("العنوان الفرعي");
+  if (input.content !== undefined || input.contentFormat !== undefined) labels.push("المحتوى");
+  if (input.excerpt !== undefined) labels.push("الملخص");
+  if (input.imageUrl !== undefined) labels.push("الصورة");
+  if (input.sourceUrl !== undefined) labels.push("المصدر");
+  if (input.keywords !== undefined) labels.push("الكلمات المفتاحية");
+  return labels;
+}
+
 /** يكتب حقول الظهور التي أرسلها البوت فقط، بلا لمس للحالة أو الإسناد. */
 export function buildBotDraftVisibilityUpdate(input: BotDraftVisibilityInput, now: Date): {
   updatedAt: Date;
@@ -588,7 +701,7 @@ export function toBotDraftResponse(row: ArticleRow, categorySlug: string | null 
   return {
     id: row.id,
     status: row.status,
-    updatable: row.status === BOT_DRAFT_STATUS,
+    updatable: isBotOwnedContentEditable(row),
     title: row.title,
     subtitle: row.subtitle ?? null,
     slug: row.slug,
@@ -690,6 +803,11 @@ export function reporterIdForBotDraftUpdate(
   return isMissingBotDraftReporter(existingReporterId) ? authorUserId : undefined;
 }
 
+async function findArticleById(articleId: string): Promise<ArticleRow | null> {
+  const [row] = await db.select().from(articles).where(eq(articles.id, articleId)).limit(1);
+  return row ?? null;
+}
+
 async function findBotArticle(articleId: string): Promise<ArticleRow | null> {
   const [row] = await db
     .select()
@@ -787,21 +905,30 @@ export async function updateBotDraft(
   input: BotDraftUpdateInput,
   ctx: BotRequestContext = {},
 ): Promise<BotDraftResponse> {
-  const existing = await findBotArticle(articleId);
-  if (!existing) {
-    throw new BotDraftError(404, "not_found", "المسودة غير موجودة");
+  const existing = await findArticleById(articleId);
+  const block = botDraftContentEditBlock(existing);
+  if (block || !existing) {
+    throw new BotDraftError(
+      block?.httpStatus ?? 404,
+      block?.code ?? "not_found",
+      block?.message ?? "المسودة غير موجودة",
+      block?.details,
+    );
   }
-  if (existing.status !== BOT_DRAFT_STATUS) {
-    throw new BotDraftError(409, "not_a_draft", botDraftContentBlockedMessage(existing.status), {
-      status: existing.status,
-    });
+  if (existing.status === "published") {
+    const disallowed = findDisallowedPublishedContentFields(input);
+    if (disallowed.length > 0) {
+      throw new BotDraftError(
+        422,
+        "forbidden_fields",
+        "تعديل الخبر المنشور يقبل العنوان والعنوان الفرعي والموجز والمتن والصورة والكلمات والمصدر فقط. التصنيف يبقى للمسودة",
+        { fields: disallowed },
+      );
+    }
   }
-  const lock = await findActiveEditLock(articleId);
-  if (lock) {
-    throw new BotDraftError(409, "locked_by_editor", "محرر يعمل على المسودة الآن — أعد المحاولة لاحقاً", {
-      editor: lock.userName,
-      lockExpiresAt: lock.expiresAt.toISOString(),
-    });
+  await throwIfEditLocked(articleId);
+  if (existing.status === "published") {
+    return updatePublishedBotArticle(bot, existing, input, ctx);
   }
 
   const category = await resolveCategory(input);
@@ -855,6 +982,46 @@ export async function updateBotDraft(
   await recordEvent(row.id, row.authorId, "updated", `حدّث البوت «${bot.name}» المسودة`, bot, reference, ctx, row, existing);
   console.log(`[BotDrafts] updated draft ${row.id} by bot=${bot.name} fields=${Object.keys(input).join(",")}`);
   return toBotDraftResponse(row, category?.slug ?? (await categorySlugFor(row.categoryId)));
+}
+
+/**
+ * تعديل محتوى خبر بوت منشور. الحالة وتاريخ النشر والرابط العام لا تتغير.
+ * لا إشعار دفع ولا IndexNow ولا إعادة نشر — الإبطال فقط مثل حفظ المحرر.
+ */
+async function updatePublishedBotArticle(
+  bot: BotIdentity,
+  existing: ArticleRow,
+  input: BotDraftUpdateInput,
+  ctx: BotRequestContext,
+): Promise<BotDraftResponse> {
+  const now = new Date();
+  const patch = buildPublishedBotContentPatch(existing, input, now);
+  const [row] = await db
+    .update(articles)
+    .set(patch)
+    .where(and(eq(articles.id, existing.id), eq(articles.status, "published"), eq(articles.source, BOT_DRAFT_SOURCE)))
+    .returning();
+  if (!row) {
+    throw new BotDraftError(409, "not_a_draft", "تغيّرت حالة المادة أثناء التحديث", { status: "unknown" });
+  }
+
+  const { queueBotDraftPublishedContentEffects } = await import("./botDraftPublishEffects");
+  queueBotDraftPublishedContentEffects(row, bot.name);
+  await recordEvent(
+    row.id,
+    row.authorId,
+    "updated",
+    `حدّث البوت «${bot.name}» الخبر المنشور`,
+    bot,
+    existing.sourceMetadata?.clientReference,
+    ctx,
+    row,
+    existing,
+    undefined,
+    { changedFields: publishedChangeLabels(input) },
+  );
+  console.log(`[BotDrafts] updated published ${row.id} by bot=${bot.name} fields=${Object.keys(input).join(",")}`);
+  return toBotDraftResponse(row, await categorySlugFor(row.categoryId));
 }
 
 /**
@@ -1262,8 +1429,14 @@ async function recordEvent(
   newValue: ArticleRow,
   oldValue?: ArticleRow,
   activityAction?: string,
+  extraMetadata?: Record<string, unknown>,
 ): Promise<void> {
-  const metadata = { bot: bot.name, clientReference: clientReference ?? null, channel: "bot-drafts-api" };
+  const metadata = {
+    bot: bot.name,
+    clientReference: clientReference ?? null,
+    channel: "bot-drafts-api",
+    ...extraMetadata,
+  };
   await Promise.all([
     logArticleEvent({ articleId, eventType: action, actorId, summary, metadata }).catch((error) =>
       console.error("[BotDrafts] article event log failed:", error),

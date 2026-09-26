@@ -122,7 +122,11 @@ export class BotDraftsClient {
     return this.request("POST", "/api/internal/bot-drafts", payload);
   }
 
-  /** تحديث مسودة أنشأها بوت وما زالت draft. 409 إن نُشرت/جُدولت أو يحررها محرر الآن. */
+  /**
+   * تحديث محتوى مادة أنشأها بوت: مسودة `draft`، أو خبر `published`.
+   * على المنشور الحقول: title, subtitle, excerpt, content, contentFormat, sourceUrl, imageUrl, keywords.
+   * `categorySlug` على المنشور → 422. مؤرشف/مجدول/جاهز أو خبر ليس للبوت → 409. قفل المحرر → 409.
+   */
   update(id: string, payload: BotDraftPayload): Promise<BotDraft> {
     return this.request("PATCH", `/api/internal/bot-drafts/${encodeURIComponent(id)}`, payload);
   }
@@ -137,7 +141,7 @@ export class BotDraftsClient {
 
   /**
    * نشر فوري لمسودة `draft` أو `ready_to_publish`. جسم فارغ.
-   * الرد: `status=published` و`updatable=false` و`publicUrl`.
+   * الرد: `status=published` و`updatable=true` (المحتوى قابل للتعديل بعدها) و`publicUrl`.
    */
   publish(id: string): Promise<BotDraft> {
     return this.request("POST", `/api/internal/bot-drafts/${encodeURIComponent(id)}/publish`, {});
