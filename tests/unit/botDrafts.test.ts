@@ -10,6 +10,10 @@ const state = vi.hoisted(() => ({
   ready: vi.fn(),
   publish: vi.fn(),
   schedule: vi.fn(),
+  reschedule: vi.fn(),
+  unschedule: vi.fn(),
+  archive: vi.fn(),
+  visibility: vi.fn(),
   invalidate: vi.fn(),
   uploadImage: vi.fn(),
   isUploadAvailable: vi.fn(() => true),
@@ -38,6 +42,10 @@ vi.mock("../../server/services/botDraftsService", async (original) => ({
   markBotDraftReady: state.ready,
   publishBotDraft: state.publish,
   scheduleBotDraft: state.schedule,
+  rescheduleBotDraft: state.reschedule,
+  unscheduleBotDraft: state.unschedule,
+  archiveBotDraft: state.archive,
+  updateBotDraftVisibility: state.visibility,
 }));
 
 import router from "../../server/routes/botDrafts";
@@ -53,10 +61,16 @@ import {
   botDraftContentBlockedMessage,
   botDraftPublicUrl,
   botDraftPublishBlockedMessage,
+  botDraftPublishedBlock,
   botDraftReadyBlockedMessage,
   botDraftReleaseBlock,
+  botDraftScheduledBlock,
+  buildBotDraftArchiveUpdate,
   buildBotDraftPublishUpdate,
+  buildBotDraftRescheduleUpdate,
   buildBotDraftScheduleUpdate,
+  buildBotDraftUnscheduleUpdate,
+  buildBotDraftVisibilityUpdate,
   parseBotDraftTokens,
   reporterIdForBotDraftUpdate,
   toBotDraftResponse,
@@ -432,7 +446,7 @@ describe("GET and PATCH /api/internal/bot-drafts/:id", () => {
     expect((await call("GET", "/api/internal/bot-drafts/art-1", undefined, GROK)).status).not.toBe(429);
   });
   it("refuses unknown sub-actions and non-POST verbs on publish", async () => {
-    for (const action of ["submit-review", "archive", "delete"]) {
+    for (const action of ["submit-review", "delete"]) {
       const response = await call("POST", `/api/internal/bot-drafts/art-1/${action}`, {});
       expect(response.status).toBe(403);
       expect((await response.json()).code).toBe("forbidden_action");
@@ -596,6 +610,153 @@ describe("POST /api/internal/bot-drafts/:id/schedule", () => {
   });
 });
 
+describe("post-publish bot draft controls", () => {
+  const future = "2026-12-01T18:30:00+03:00";
+  const published = () =>
+    draft({
+      status: "published",
+      updatable: false,
+      isFeatured: false,
+      newsType: "regular",
+      hideFromHomepage: false,
+      publicUrl: "https://sabq.org/article/abc12xy",
+    });
+
+  it("archives a published bot article without a hard delete", async () => {
+    state.archive.mockResolvedValueOnce(published());
+    const response = await call("POST", "/api/internal/bot-drafts/art-1/archive", { reason: "خبر مكرر" });
+    expect(response.status).toBe(200);
+    expect(state.archive).toHaveBeenCalledWith(
+      { name: "nashr-sabq" },
+      "art-1",
+      { reason: "خبر مكرر" },
+      expect.anything(),
+    );
+    const gone = await call("DELETE", "/api/internal/bot-drafts/art-1");
+    expect(gone.status).toBe(405);
+    expect(state.archive).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects archive of a locked, unpublished, or non-bot row", async () => {
+    state.archive.mockRejectedValueOnce(new BotDraftError(409, "locked_by_editor", "مقفل", { editor: "علي" }));
+    expect((await call("POST", "/api/internal/bot-drafts/art-1/archive", {})).status).toBe(409);
+
+    state.archive.mockRejectedValueOnce(new BotDraftError(409, "not_published", "ليست منشورة", { status: "scheduled" }));
+    const scheduled = await call("POST", "/api/internal/bot-drafts/art-1/archive", {});
+    expect(scheduled.status).toBe(409);
+    expect(await scheduled.json()).toMatchObject({ code: "not_published", details: { status: "scheduled" } });
+
+    state.archive.mockRejectedValueOnce(new BotDraftError(404, "not_found", "غير موجودة"));
+    expect((await call("POST", "/api/internal/bot-drafts/editor-1/archive", {})).status).toBe(404);
+
+    const forbidden = await call("POST", "/api/internal/bot-drafts/art-1/archive", { status: "archived" });
+    expect(forbidden.status).toBe(422);
+    expect((await forbidden.json()).code).toBe("forbidden_fields");
+    expect(state.archive).toHaveBeenCalledTimes(3);
+  });
+
+  it("reschedules with the same publishAt rules as the first schedule", async () => {
+    state.reschedule.mockResolvedValueOnce(
+      draft({ status: "scheduled", updatable: false, scheduledAt: "2026-12-01T15:30:00.000Z" }),
+    );
+    const response = await call("PATCH", "/api/internal/bot-drafts/art-1/schedule", { publishAt: future });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ status: "scheduled", scheduledAt: "2026-12-01T15:30:00.000Z" });
+    expect(state.reschedule).toHaveBeenCalledWith({ name: "nashr-sabq" }, "art-1", new Date(future), expect.anything());
+    expect(state.schedule).not.toHaveBeenCalled();
+
+    const past = await call("PATCH", "/api/internal/bot-drafts/art-1/schedule", { publishAt: "2020-01-01T00:00:00Z" });
+    expect(past.status).toBe(400);
+    const naive = await call("PATCH", "/api/internal/bot-drafts/art-1/schedule", { publishAt: "2026-12-01T18:30:00" });
+    expect(naive.status).toBe(400);
+    expect((await naive.json()).message).toContain("+03:00");
+    const smuggled = await call("PATCH", "/api/internal/bot-drafts/art-1/schedule", { publishAt: future, scheduledAt: future });
+    expect(smuggled.status).toBe(422);
+    expect(state.reschedule).toHaveBeenCalledTimes(1);
+  });
+
+  it("maps reschedule conflicts for a lock and a row that is not scheduled", async () => {
+    state.reschedule.mockRejectedValueOnce(new BotDraftError(409, "locked_by_editor", "مقفل", { editor: "علي" }));
+    expect((await (await call("PATCH", "/api/internal/bot-drafts/art-1/schedule", { publishAt: future })).json()).code).toBe(
+      "locked_by_editor",
+    );
+    state.reschedule.mockRejectedValueOnce(new BotDraftError(409, "not_scheduled", "ليست مجدولة", { status: "published" }));
+    const publishedRow = await call("PATCH", "/api/internal/bot-drafts/art-1/schedule", { publishAt: future });
+    expect(publishedRow.status).toBe(409);
+    expect(await publishedRow.json()).toMatchObject({ code: "not_scheduled", details: { status: "published" } });
+    state.reschedule.mockRejectedValueOnce(new BotDraftError(404, "not_found", "غير موجودة"));
+    expect((await call("PATCH", "/api/internal/bot-drafts/editor-1/schedule", { publishAt: future })).status).toBe(404);
+  });
+
+  it("cancels a schedule back to a draft and does not delete the row", async () => {
+    state.unschedule.mockResolvedValueOnce(draft({ status: "draft", updatable: true, scheduledAt: null }));
+    const response = await call("DELETE", "/api/internal/bot-drafts/art-1/schedule", {});
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ status: "draft", updatable: true, scheduledAt: null });
+    expect(state.unschedule).toHaveBeenCalledWith({ name: "nashr-sabq" }, "art-1", expect.anything());
+    expect(state.archive).not.toHaveBeenCalled();
+  });
+
+  it("rejects unscheduling a locked or published row and a smuggled status", async () => {
+    state.unschedule.mockRejectedValueOnce(new BotDraftError(409, "locked_by_editor", "مقفل", { editor: "علي" }));
+    expect((await call("DELETE", "/api/internal/bot-drafts/art-1/schedule", {})).status).toBe(409);
+    state.unschedule.mockRejectedValueOnce(new BotDraftError(409, "not_scheduled", "منشورة", { status: "published" }));
+    const publishedRow = await call("DELETE", "/api/internal/bot-drafts/art-1/schedule", {});
+    expect(publishedRow.status).toBe(409);
+    expect(await publishedRow.json()).toMatchObject({ code: "not_scheduled" });
+    const forbidden = await call("DELETE", "/api/internal/bot-drafts/art-1/schedule", { status: "draft" });
+    expect(forbidden.status).toBe(422);
+    expect(state.unschedule).toHaveBeenCalledTimes(2);
+  });
+
+  it("sets featured, breaking, and homepage visibility on a published article", async () => {
+    state.visibility.mockResolvedValueOnce(
+      published(),
+    );
+    const response = await call("PATCH", "/api/internal/bot-drafts/art-1/visibility", {
+      isFeatured: true,
+      newsType: "breaking",
+      hideFromHomepage: true,
+    });
+    expect(response.status).toBe(200);
+    expect(state.visibility).toHaveBeenCalledWith(
+      { name: "nashr-sabq" },
+      "art-1",
+      { isFeatured: true, newsType: "breaking", hideFromHomepage: true },
+      expect.anything(),
+    );
+    const unmark = await call("PATCH", "/api/internal/bot-drafts/art-1/visibility", {
+      isFeatured: false,
+      newsType: "regular",
+      hideFromHomepage: false,
+    });
+    expect(unmark.status).toBe(200);
+  });
+
+  it("rejects an empty visibility body, a featured newsType, and fields outside the CMS toggles", async () => {
+    const empty = await call("PATCH", "/api/internal/bot-drafts/art-1/visibility", {});
+    expect(empty.status).toBe(400);
+    expect((await empty.json()).code).toBe("validation_error");
+    const featuredType = await call("PATCH", "/api/internal/bot-drafts/art-1/visibility", { newsType: "featured" });
+    expect(featuredType.status).toBe(400);
+    const forbidden = await call("PATCH", "/api/internal/bot-drafts/art-1/visibility", { isFeatured: true, status: "published" });
+    expect(forbidden.status).toBe(422);
+    expect((await forbidden.json()).code).toBe("forbidden_fields");
+    expect(state.visibility).not.toHaveBeenCalled();
+  });
+
+  it("maps visibility conflicts for a lock, a draft, and an editor row", async () => {
+    state.visibility.mockRejectedValueOnce(new BotDraftError(409, "locked_by_editor", "مقفل", { editor: "علي" }));
+    expect((await call("PATCH", "/api/internal/bot-drafts/art-1/visibility", { isFeatured: true })).status).toBe(409);
+    state.visibility.mockRejectedValueOnce(new BotDraftError(409, "not_published", "مسودة", { status: "draft" }));
+    const draftRow = await call("PATCH", "/api/internal/bot-drafts/art-1/visibility", { hideFromHomepage: true });
+    expect(draftRow.status).toBe(409);
+    expect(await draftRow.json()).toMatchObject({ code: "not_published", details: { status: "draft" } });
+    state.visibility.mockRejectedValueOnce(new BotDraftError(404, "not_found", "غير موجودة"));
+    expect((await call("PATCH", "/api/internal/bot-drafts/editor-1/visibility", { newsType: "breaking" })).status).toBe(404);
+  });
+});
+
 describe("pure helpers", () => {
   it("lists forbidden fields present in a body", () => {
     expect(findForbiddenBotDraftFields({ title: "x", status: "draft", scheduledAt: "now" })).toEqual(["status", "scheduledAt"]);
@@ -732,6 +893,9 @@ describe("pure helpers", () => {
       publicUrl: "https://sabq.org/article/abc12xy",
       publishedAt: null,
       scheduledAt: null,
+      isFeatured: false,
+      newsType: "regular",
+      hideFromHomepage: false,
     });
     const ready = toBotDraftResponse({ ...row, status: BOT_DRAFT_READY_STATUS }, "local");
     expect(ready).toMatchObject({ status: BOT_DRAFT_READY_STATUS, updatable: false, editUrl: ready.editUrl, previewUrl: expect.stringContaining("/preview") });
@@ -798,6 +962,44 @@ describe("pure helpers", () => {
       updatedAt: now,
     });
     expect(schedule).not.toHaveProperty("authorId");
+    const archived = buildBotDraftArchiveUpdate(now, "  خبر مكرر  ");
+    expect(archived).toEqual({
+      status: "archived",
+      reviewStatus: null,
+      updatedAt: now,
+      reviewNotes: "خبر مكرر",
+    });
+    expect(buildBotDraftArchiveUpdate(now, "   ")).not.toHaveProperty("reviewNotes");
+    expect(archived).not.toHaveProperty("authorId");
+    const rescheduled = buildBotDraftRescheduleUpdate(when, now);
+    expect(rescheduled).toMatchObject({ status: "scheduled", publishType: "scheduled", scheduledAt: when });
+    expect(rescheduled).not.toHaveProperty("authorId");
+    const draftAgain = buildBotDraftUnscheduleUpdate(now);
+    expect(draftAgain).toEqual({
+      status: "draft",
+      publishType: "instant",
+      scheduledAt: null,
+      updatedAt: now,
+    });
+    expect(draftAgain).not.toHaveProperty("id");
+    expect(buildBotDraftVisibilityUpdate({ isFeatured: true, newsType: "breaking" }, now)).toEqual({
+      updatedAt: now,
+      isFeatured: true,
+      newsType: "breaking",
+    });
+    expect(buildBotDraftVisibilityUpdate({ hideFromHomepage: false }, now)).not.toHaveProperty("newsType");
+    expect(botDraftPublishedBlock(null)).toMatchObject({ code: "not_found" });
+    expect(botDraftPublishedBlock({ source: "dashboard", status: "published" })).toMatchObject({ code: "not_found" });
+    expect(botDraftPublishedBlock({ source: BOT_DRAFT_SOURCE, status: "published" })).toBeNull();
+    expect(botDraftPublishedBlock({ source: BOT_DRAFT_SOURCE, status: "scheduled" })).toMatchObject({
+      code: "not_published",
+      details: { status: "scheduled" },
+    });
+    expect(botDraftScheduledBlock({ source: BOT_DRAFT_SOURCE, status: "published" })).toMatchObject({
+      code: "not_scheduled",
+      details: { status: "published" },
+    });
+    expect(botDraftScheduledBlock({ source: BOT_DRAFT_SOURCE, status: "scheduled" })).toBeNull();
     expect(botDraftPublicUrl("abc12xy", "عنوان")).toBe("https://sabq.org/article/abc12xy");
     expect(botDraftPublicUrl(null, "عنوان")).toBe(`https://sabq.org/article/${encodeURIComponent("عنوان")}`);
     expect(botDraftPublicUrl("", "")).toBeNull();

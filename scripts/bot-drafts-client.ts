@@ -17,6 +17,10 @@
  *   tsx scripts/bot-drafts-client.ts ready <id>
  *   tsx scripts/bot-drafts-client.ts publish <id>
  *   tsx scripts/bot-drafts-client.ts schedule <id> --publish-at=2026-09-24T18:30:00+03:00
+ *   tsx scripts/bot-drafts-client.ts reschedule <id> --publish-at=2026-09-24T21:00:00+03:00
+ *   tsx scripts/bot-drafts-client.ts unschedule <id>
+ *   tsx scripts/bot-drafts-client.ts archive <id> [--reason="خبر مكرر"]
+ *   tsx scripts/bot-drafts-client.ts visibility <id> [--featured=true|false] [--breaking=true|false] [--hide-from-homepage=true|false]
  *   tsx scripts/bot-drafts-client.ts upload --file=./cover.jpg
  */
 
@@ -69,6 +73,9 @@ export interface BotDraft {
   publicUrl?: string | null;
   publishedAt?: string | null;
   scheduledAt?: string | null;
+  isFeatured?: boolean;
+  newsType?: string;
+  hideFromHomepage?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -142,6 +149,35 @@ export class BotDraftsClient {
    */
   schedule(id: string, publishAt: string): Promise<BotDraft> {
     return this.request("POST", `/api/internal/bot-drafts/${encodeURIComponent(id)}/schedule`, { publishAt });
+  }
+
+  /** تغيير موعد مادة حالتها `scheduled`. نفس صيغة `publishAt`. لا يحذف المادة. */
+  reschedule(id: string, publishAt: string): Promise<BotDraft> {
+    return this.request("PATCH", `/api/internal/bot-drafts/${encodeURIComponent(id)}/schedule`, { publishAt });
+  }
+
+  /** إلغاء الجدولة وإعادة المادة `draft`. لا حذف. */
+  unschedule(id: string): Promise<BotDraft> {
+    return this.request("DELETE", `/api/internal/bot-drafts/${encodeURIComponent(id)}/schedule`, {});
+  }
+
+  /**
+   * أرشفة ناعمة لمادة `published`. تختفي من الموقع وتبقى في اللوحة ويمكن استعادتها.
+   * DELETE على المعرّف نفسه يبقى 405 ولا يحذف الصف.
+   */
+  archive(id: string, reason?: string): Promise<BotDraft> {
+    return this.request("POST", `/api/internal/bot-drafts/${encodeURIComponent(id)}/archive`, reason ? { reason } : {});
+  }
+
+  /**
+   * مميز / عاجل / إخفاء الرئيسية لمادة منشورة.
+   * تعليم العاجل لا يرسل إشعار القرّاء، مثل زر اللوحة.
+   */
+  setVisibility(
+    id: string,
+    patch: { isFeatured?: boolean; newsType?: "breaking" | "regular"; hideFromHomepage?: boolean },
+  ): Promise<BotDraft> {
+    return this.request("PATCH", `/api/internal/bot-drafts/${encodeURIComponent(id)}/visibility`, patch);
   }
 
   /** حالة المسودة ومعرفها ورابط التحرير الداخلي. */
@@ -273,13 +309,42 @@ async function main() {
       result = await client.schedule(id, publishAt);
       break;
     }
+    case "reschedule": {
+      if (!id) throw new Error("reschedule needs <id>");
+      const publishAt = flags["publish-at"] || flags.publishAt;
+      if (!publishAt) throw new Error("reschedule needs --publish-at=2026-09-24T18:30:00+03:00");
+      result = await client.reschedule(id, publishAt);
+      break;
+    }
+    case "unschedule": {
+      if (!id) throw new Error("unschedule needs <id>");
+      result = await client.unschedule(id);
+      break;
+    }
+    case "archive": {
+      if (!id) throw new Error("archive needs <id>");
+      result = await client.archive(id, flags.reason);
+      break;
+    }
+    case "visibility": {
+      if (!id) throw new Error("visibility needs <id>");
+      const patch: { isFeatured?: boolean; newsType?: "breaking" | "regular"; hideFromHomepage?: boolean } = {};
+      if (flags.featured !== undefined) patch.isFeatured = flags.featured === "true";
+      if (flags.breaking !== undefined) patch.newsType = flags.breaking === "true" ? "breaking" : "regular";
+      if (flags["hide-from-homepage"] !== undefined) patch.hideFromHomepage = flags["hide-from-homepage"] === "true";
+      if (!Object.keys(patch).length) {
+        throw new Error("visibility needs --featured= and/or --breaking= and/or --hide-from-homepage= (true|false)");
+      }
+      result = await client.setVisibility(id, patch);
+      break;
+    }
     case "upload": {
       if (!flags.file) throw new Error("upload needs --file=path");
       result = await client.uploadImage({ data: readFileSync(flags.file), filename: basename(flags.file) });
       break;
     }
     default:
-      console.error("usage: bot-drafts-client.ts <create|update|get|ready|publish|schedule|upload> [id] [--flags]  (see file header)");
+      console.error("usage: bot-drafts-client.ts <create|update|get|ready|publish|schedule|reschedule|unschedule|archive|visibility|upload> [id] [--flags]  (see file header)");
       process.exit(2);
   }
   console.log(JSON.stringify(result, null, 2));

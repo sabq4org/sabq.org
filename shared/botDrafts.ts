@@ -61,9 +61,9 @@ export function isBotDraftPublishableStatus(status: string | null | undefined): 
 }
 
 /**
- * حقول يُرفض وجودها في جسم أي طلب من البوت (422 `forbidden_fields`)،
- * بما فيها `POST /publish` و`POST /schedule`. الحالة والموعد يضبطهما الخادم
- * في هذين المسارين، ولا يُكتبان من الجسم. الإسناد ممنوع دائماً.
+ * حقول يُرفض وجودها في جسم الإنشاء والتحديث والنشر والجدولة والأرشفة وإلغاء الجدولة
+ * (422 `forbidden_fields`). الحالة والموعد يضبطهما الخادم، والإسناد ممنوع دائماً.
+ * الاستثناء الوحيد: `PATCH /:id/visibility` يسمح بـ `isFeatured` و`newsType` و`hideFromHomepage`.
  */
 export const BOT_DRAFT_FORBIDDEN_FIELDS = [
   "status",
@@ -178,6 +178,46 @@ export const botDraftUpdateSchema = z
 export const botDraftPublishSchema = z.object({}).strict();
 
 /**
+ * POST /api/internal/bot-drafts/:id/archive — أرشفة ناعمة لمادة منشورة.
+ * `reason` اختياري ويُحفظ في `reviewNotes` مثل سبب أرشفة اللوحة. لا حذف من القاعدة.
+ */
+export const botDraftArchiveSchema = z
+  .object({
+    reason: z
+      .string()
+      .trim()
+      .max(1000, "سبب الأرشفة يتجاوز 1000 حرف")
+      .optional(),
+  })
+  .strict();
+
+/** DELETE /api/internal/bot-drafts/:id/schedule — جسم فارغ. يعيد المسودة ولا يحذف الصف. */
+export const botDraftUnscheduleSchema = z.object({}).strict();
+
+/**
+ * PATCH /api/internal/bot-drafts/:id/visibility.
+ * نفس أعمدة محرر اللوحة: `isFeatured` (مميز)، `newsType` (`breaking` عاجل أو `regular`)،
+ * `hideFromHomepage` (إخفاء من الرئيسية مع بقاء الرابط). حقل واحد على الأقل.
+ */
+export const botDraftVisibilitySchema = z
+  .object({
+    isFeatured: z.boolean().optional(),
+    newsType: z.enum(["breaking", "regular"], {
+      message: "newsType يجب أن يكون breaking أو regular — التمييز يُضبط عبر isFeatured",
+    }).optional(),
+    hideFromHomepage: z.boolean().optional(),
+  })
+  .strict()
+  .refine(
+    (value) =>
+      value.isFeatured !== undefined || value.newsType !== undefined || value.hideFromHomepage !== undefined,
+    { message: "أرسل حقلاً واحداً على الأقل: isFeatured أو newsType أو hideFromHomepage" },
+  );
+
+/** حقول الظهور المسموحة في مسار visibility رغم وجودها في قائمة المنع العامة. */
+export const BOT_DRAFT_VISIBILITY_FIELDS = ["isFeatured", "newsType", "hideFromHomepage"] as const;
+
+/**
  * POST /api/internal/bot-drafts/:id/schedule.
  * `publishAt` وقت ISO-8601 بمنطقة زمنية. وقت الرياض يُرسل `+03:00` أو ما يعادله UTC.
  * الماضي والفوري بلا إزاحة يُرفضان في `parseBotDraftPublishAt`.
@@ -191,6 +231,8 @@ export const botDraftScheduleSchema = z
 export type BotDraftCreateInput = z.infer<typeof botDraftCreateSchema>;
 export type BotDraftUpdateInput = z.infer<typeof botDraftUpdateSchema>;
 export type BotDraftScheduleInput = z.infer<typeof botDraftScheduleSchema>;
+export type BotDraftArchiveInput = z.infer<typeof botDraftArchiveSchema>;
+export type BotDraftVisibilityInput = z.infer<typeof botDraftVisibilitySchema>;
 
 /** مثال موثّق للبوت: جدار الرياض يُرسل بإزاحة +03:00 لا كوقت عارٍ. */
 export const BOT_DRAFT_PUBLISH_AT_HINT =
@@ -238,7 +280,11 @@ export interface BotDraftResponse {
    * النشر والجدولة من البوت يكتبان `published` أو `scheduled` عبر مساريهما لا عبر الجسم.
    */
   status: string;
-  /** `true` فقط عندما تكون المادة `draft`. بعد الجاهزية أو النشر أو الجدولة تصبح `false`. */
+  /**
+   * `true` فقط عندما تكون المادة `draft`.
+   * بعد الجاهزية أو النشر أو الجدولة أو الأرشفة تصبح `false`.
+   * إلغاء الجدولة يعيدها `draft` فتعود `true`.
+   */
   updatable: boolean;
   title: string;
   subtitle: string | null;
@@ -274,6 +320,12 @@ export interface BotDraftResponse {
   publishedAt: string | null;
   /** موعد الجدولة المخزّن، أو null إن لم تُجدول. */
   scheduledAt: string | null;
+  /** مميز في اللوحة والرئيسية. نفس عمود `articles.isFeatured`. */
+  isFeatured: boolean;
+  /** `breaking` خبر عاجل، وإلا `regular`. نفس عمود `articles.newsType`. */
+  newsType: string;
+  /** مخفي من الرئيسية ويبقى على رابطه المباشر. نفس عمود `articles.hideFromHomepage`. */
+  hideFromHomepage: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -300,6 +352,8 @@ export const BOT_DRAFT_ERROR_CODES = [
   "author_not_configured",
   "not_found",
   "not_a_draft",
+  "not_published",
+  "not_scheduled",
   "locked_by_editor",
   "license_required",
   "forbidden_action",

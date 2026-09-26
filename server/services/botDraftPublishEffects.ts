@@ -8,11 +8,13 @@
 // الفشل هنا لا يتراجع عن الكتابة: المادة أصبحت منشورة أو مجدولة.
 // ----------------------------------------------------------------------------
 
-import { eq } from "drizzle-orm";
-import { articles } from "@shared/schema";
+import { eq, sql } from "drizzle-orm";
+import { articles, categories } from "@shared/schema";
 import { db } from "../db";
 import { memoryCache } from "../memoryCache";
+import { AR_SITEMAP_BUCKETS } from "./archiveSeo";
 import { invalidateArticleWrite } from "./contentInvalidation";
+import { clearNewsSitemapMemoryCache } from "./newsSitemapMemoryCache";
 
 export interface BotDraftReleaseRow {
   id: string;
@@ -206,5 +208,115 @@ async function runScheduleFanout(article: BotDraftReleaseRow): Promise<void> {
     const { sendReporterScheduleEmail } = await import("./editorAlerts");
     await notifyReporterArticleScheduled(article.id, when);
     await sendReporterScheduleEmail(article.id, when);
+  });
+}
+
+/**
+ * أرشفة: نفس إبطال زر اللوحة (`invalidateArticleWrite` بسبب يحوي archive فلا تدفئة)،
+ * ثم إسقاط خرائط الموقع والخلاصات. تنبيه صاحب الاسم مطابق لأرشفة اللوحة،
+ * وليس إشعار قرّاء العاجل.
+ */
+export function queueBotDraftArchiveEffects(
+  article: BotDraftReleaseRow,
+  botName: string,
+  reason: string | null,
+): void {
+  try {
+    invalidateArticleWrite(article, { reason: `bot-draft-archive:${botName}` });
+    memoryCache.delete("lite-feed");
+    clearNewsSitemapMemoryCache();
+  } catch (error) {
+    console.error("[BotDrafts] archive cache invalidation failed:", error);
+  }
+
+  setImmediate(() => {
+    void runArchiveFanout(article, reason);
+  });
+}
+
+/** تغيير الموعد لا يعيد تنبيه الجدولة: الحالة كانت `scheduled` وبقيت كذلك. */
+export function queueBotDraftRescheduleEffects(article: BotDraftReleaseRow, botName: string): void {
+  try {
+    invalidateArticleWrite(article, { reason: `bot-draft-reschedule:${botName}`, warm: false });
+  } catch (error) {
+    console.error("[BotDrafts] reschedule cache invalidation failed:", error);
+  }
+}
+
+/** إلغاء الجدولة يخرج المادة من طابور الكرون. ليست على الموقع بعد، فلا تدفئة. */
+export function queueBotDraftUnscheduleEffects(article: BotDraftReleaseRow, botName: string): void {
+  try {
+    invalidateArticleWrite(article, { reason: `bot-draft-unschedule:${botName}`, warm: false });
+  } catch (error) {
+    console.error("[BotDrafts] unschedule cache invalidation failed:", error);
+  }
+}
+
+/**
+ * ظهور المادة المنشورة. إبطال الكاش مثل زر المميز/العاجل/حفظ المحرر.
+ * لا إشعار قرّاء: `POST /feature` و`POST /toggle-breaking` لا يرسلان دفعاً.
+ * عند إلغاء العاجل نُطهّر شريط العاجل على الحافة لأن الصف بعد التحديث لم يعد `breaking`
+ * و`invalidateArticleWrite` يطهّر ذلك الشريط فقط عندما تبقى القيمة عاجلاً.
+ */
+export function queueBotDraftVisibilityEffects(
+  article: BotDraftReleaseRow,
+  previousNewsType: string | null | undefined,
+  botName: string,
+): void {
+  try {
+    invalidateArticleWrite(article, { reason: `bot-draft-visibility:${botName}` });
+    memoryCache.delete("lite-feed");
+    if (previousNewsType === "breaking" && article.newsType !== "breaking") {
+      void import("./cloudflarePurge").then((mod) => mod.purgeBreakingNews({ immediate: true }));
+    }
+  } catch (error) {
+    console.error("[BotDrafts] visibility cache invalidation failed:", error);
+  }
+}
+
+async function arabicSitemapBucket(articleId: string): Promise<number | null> {
+  const result = await db.execute(sql`SELECT (abs(hashtext(${articleId}::text)) % ${AR_SITEMAP_BUCKETS}) + 1 AS bucket`);
+  const rows = (result as { rows?: Array<{ bucket?: unknown }> }).rows ?? (result as unknown as Array<{ bucket?: unknown }>);
+  const bucket = Number(rows?.[0]?.bucket);
+  if (!Number.isInteger(bucket) || bucket < 1 || bucket > AR_SITEMAP_BUCKETS) return null;
+  return bucket;
+}
+
+async function runArchiveFanout(article: BotDraftReleaseRow, reason: string | null): Promise<void> {
+  await safe("sitemap cache", async () => {
+    const { invalidateSitemapXmlCache } = await import("./sitemapCacheService");
+    await invalidateSitemapXmlCache(["__sitemapArticlesCanonicalV3", "index_archive_v3"]);
+  });
+
+  await safe("sitemap and feed purge", async () => {
+    const paths = ["/sitemap-news.xml", "/sitemap.xml", "/api/rss/articles", "/api/rss/articles.json"];
+    const bucket = await arabicSitemapBucket(article.id);
+    if (bucket) paths.push(`/sitemap-articles-${bucket}.xml`);
+    if (article.categoryId) {
+      const [category] = await db
+        .select({ slug: categories.slug })
+        .from(categories)
+        .where(eq(categories.id, article.categoryId))
+        .limit(1);
+      if (category?.slug) paths.push(`/api/rss/articles/category/${encodeURIComponent(category.slug)}`);
+    }
+    const { purgeContentSurfaces } = await import("./cloudflarePurge");
+    await purgeContentSurfaces(paths, { immediate: true });
+  });
+
+  await safe("archive stakeholder", async () => {
+    const { notifyArticleStakeholders } = await import("./editorialNotifications");
+    await notifyArticleStakeholders(stakeholderPayload(article), "archived", reason);
+  });
+
+  const emailReason = reason?.trim() || "تم أرشفة المقال من قبل فريق التحرير";
+  await safe("archive email", async () => {
+    if (article.articleType === "opinion") {
+      const { sendOpinionAuthorArchiveEmail } = await import("./editorAlerts");
+      await sendOpinionAuthorArchiveEmail(article.id, emailReason);
+      return;
+    }
+    const { sendReporterArchiveEmail } = await import("./editorAlerts");
+    await sendReporterArchiveEmail(article.id, emailReason);
   });
 }

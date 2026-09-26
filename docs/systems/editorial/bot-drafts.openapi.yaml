@@ -1,11 +1,14 @@
 openapi: 3.0.3
 info:
   title: Sabq Bot Drafts API
-  version: 1.1.0
+  version: 1.2.0
   description: |
     مسودات لبوت «نشر سبق» ومهندّس (Grok Bot). الإنشاء draft.
     POST /{id}/publish ينشر فوراً. POST /{id}/schedule يجدول بـ publishAt.
+    PATCH /{id}/schedule يغيّر موعد مادة مجدولة. DELETE /{id}/schedule يلغي الجدولة ويعيدها draft.
+    POST /{id}/archive أرشفة ناعمة لمادة منشورة. PATCH /{id}/visibility يضبط المميز والعاجل وإخفاء الرئيسية.
     PATCH /{id}/ready ينقل إلى ready_to_publish دون نشر.
+    المواد القابلة للإدارة source=bot فقط.
     الدليل الكامل: docs/systems/editorial/BOT_DRAFTS_API.md
 servers:
   - url: https://api.sabq.org
@@ -244,6 +247,158 @@ paths:
                 $ref: "#/components/schemas/Error"
         "422": { $ref: "#/components/responses/Unprocessable" }
         "429": { $ref: "#/components/responses/RateLimited" }
+    patch:
+      operationId: rescheduleSabqDraft
+      summary: تغيير موعد مادة بوت مجدولة
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [publishAt]
+              properties:
+                publishAt:
+                  type: string
+                  format: date-time
+                  example: "2026-09-24T21:00:00+03:00"
+      responses:
+        "200":
+          description: بقي status=scheduled وتبدّل scheduledAt. لا إعادة لتنبيه الجدولة
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BotDraft"
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: not_scheduled أو locked_by_editor
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "422": { $ref: "#/components/responses/Unprocessable" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+    delete:
+      operationId: unscheduleSabqDraft
+      summary: إلغاء الجدولة وإعادة المادة مسودة دون حذف
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+      responses:
+        "200":
+          description: status=draft وupdatable=true وscheduledAt=null
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BotDraft"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: not_scheduled أو locked_by_editor
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "422": { $ref: "#/components/responses/Unprocessable" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /api/internal/bot-drafts/{id}/archive:
+    post:
+      operationId: archiveSabqDraft
+      summary: أرشفة ناعمة لمادة بوت منشورة (لا حذف من القاعدة)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                reason:
+                  type: string
+                  maxLength: 1000
+                  description: سبب اختياري يُحفظ في reviewNotes
+      responses:
+        "200":
+          description: status=archived. تختفي من الموقع والرئيسية والخلاصات والخرائط
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BotDraft"
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: not_published أو locked_by_editor
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "422": { $ref: "#/components/responses/Unprocessable" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /api/internal/bot-drafts/{id}/visibility:
+    patch:
+      operationId: setSabqDraftVisibility
+      summary: مميز أو عاجل أو إخفاء من الرئيسية لمادة منشورة. لا إشعار قرّاء
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              minProperties: 1
+              properties:
+                isFeatured: { type: boolean, description: مميز }
+                newsType:
+                  type: string
+                  enum: [breaking, regular]
+                  description: breaking عاجل. featured ليست قيمة مقبولة
+                hideFromHomepage: { type: boolean, description: true يخفي من الرئيسية ويبقي الرابط }
+      responses:
+        "200":
+          description: الحقول المحدّثة. تعليم العاجل لا يرسل دفعاً للقرّاء
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BotDraft"
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: not_published أو locked_by_editor
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "422": { $ref: "#/components/responses/Unprocessable" }
+        "429": { $ref: "#/components/responses/RateLimited" }
 components:
   securitySchemes:
     botToken:
@@ -288,7 +443,7 @@ components:
       properties:
         id: { type: string }
         status: { type: string, description: الحالة الحالية في اللوحة (draft/ready_to_publish/published/scheduled/archived) }
-        updatable: { type: boolean, description: true فقط عندما تكون draft. false بعد الجاهزية أو النشر أو الجدولة }
+        updatable: { type: boolean, description: true فقط عندما تكون draft. false بعد الجاهزية أو النشر أو الجدولة أو الأرشفة. إلغاء الجدولة يعيدها true }
         title: { type: string }
         subtitle: { type: string, nullable: true }
         slug: { type: string }
@@ -315,6 +470,9 @@ components:
           description: رابط القارئ https://sabq.org/article/{englishSlug}. الصفحة العامة تعرضه عندما status=published. أثناء scheduled نفس الرابط يُفتح بعد الموعد.
         publishedAt: { type: string, format: date-time, nullable: true }
         scheduledAt: { type: string, format: date-time, nullable: true, description: موعد الجدولة المؤكد }
+        isFeatured: { type: boolean, description: مميز }
+        newsType: { type: string, description: breaking أو regular }
+        hideFromHomepage: { type: boolean, description: مخفي من الرئيسية }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
     BotDraftImageUpload:
@@ -335,7 +493,7 @@ components:
       properties:
         code:
           type: string
-          enum: [not_configured, unauthorized, forbidden_fields, validation_error, category_not_found, author_not_configured, not_found, not_a_draft, locked_by_editor, license_required, forbidden_action, rate_limited, invalid_image, file_too_large, storage_unavailable, upload_failed, server_error]
+          enum: [not_configured, unauthorized, forbidden_fields, validation_error, category_not_found, author_not_configured, not_found, not_a_draft, not_published, not_scheduled, locked_by_editor, license_required, forbidden_action, rate_limited, invalid_image, file_too_large, storage_unavailable, upload_failed, server_error]
         message: { type: string }
         details: {}
   responses:

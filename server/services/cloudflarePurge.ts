@@ -140,6 +140,22 @@ export async function purgeUrls(urls: string[], opts?: { immediate?: boolean }):
   return { success: true };
 }
 
+/**
+ * مسارات عامة تُطهَّر بعد أرشفة خبر: خرائط الموقع على موقع القرّاء،
+ * ومسارات `/api/` على الموقع وعلى أصل الـ API معاً.
+ */
+export async function purgeContentSurfaces(
+  paths: string[],
+  opts?: { immediate?: boolean },
+): Promise<PurgeResult> {
+  const urls = paths.flatMap((path) => {
+    if (!path.startsWith("/")) return [];
+    if (path.startsWith("/api/")) return bothHosts(path);
+    return [`${SITE_URL}${path}`];
+  });
+  return purgeUrls(urls, opts);
+}
+
 export async function purgeHomepage(opts?: { immediate?: boolean }): Promise<PurgeResult> {
   return purgeUrls([
     `${SITE_URL}/`,

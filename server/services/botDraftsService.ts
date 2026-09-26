@@ -9,9 +9,9 @@
 // ----------------------------------------------------------------------------
 
 import crypto from "node:crypto";
-import { and, eq, gt, inArray } from "drizzle-orm";
+import { and, eq, gt, inArray, sql } from "drizzle-orm";
 import { db } from "../db";
-import { articleEditLocks, articles, categories, users } from "@shared/schema";
+import { articleEditLocks, articles, categories, enArticles, users } from "@shared/schema";
 import { SABQ_NEWSPAPER_ACCOUNT_ID } from "@shared/sabqNewspaper";
 import {
   BOT_DRAFT_BODY_IMAGE_LIMIT,
@@ -20,10 +20,12 @@ import {
   BOT_DRAFT_SOURCE,
   BOT_DRAFT_STATUS,
   isBotDraftPublishableStatus,
+  type BotDraftArchiveInput,
   type BotDraftCreateInput,
   type BotDraftErrorCode,
   type BotDraftResponse,
   type BotDraftUpdateInput,
+  type BotDraftVisibilityInput,
 } from "@shared/botDrafts";
 import { resolveUniqueArticleSlug } from "./articleSlugService";
 import { logArticleEvent } from "./articleEventsService";
@@ -469,6 +471,118 @@ export function buildBotDraftScheduleUpdate(publishAt: Date, now: Date): BotDraf
   };
 }
 
+export type BotDraftLifecycleBlock = {
+  httpStatus: 404 | 409;
+  code: "not_found" | "not_published" | "not_scheduled";
+  message: string;
+  details?: { status: string };
+};
+
+/** أرشفة الظهور والتحكم بهما لمادة `source=bot` المنشورة فقط. غيرها 404 أو 409. */
+export function botDraftPublishedBlock(
+  row: { source?: string | null; status: string } | null,
+): BotDraftLifecycleBlock | null {
+  if (!row || row.source !== BOT_DRAFT_SOURCE) {
+    return { httpStatus: 404, code: "not_found", message: "المسودة غير موجودة" };
+  }
+  if (row.status !== "published") {
+    return {
+      httpStatus: 409,
+      code: "not_published",
+      message:
+        row.status === "scheduled"
+          ? "المادة مجدولة وليست منشورة. لتغيير الموعد PATCH /schedule ولإلغاء الجدولة DELETE /schedule"
+          : "هذا الإجراء يعمل على مادة منشورة فقط",
+      details: { status: row.status },
+    };
+  }
+  return null;
+}
+
+/** تغيير موعد الجدولة أو إلغاؤها لمادة `source=bot` المجدولة فقط. */
+export function botDraftScheduledBlock(
+  row: { source?: string | null; status: string } | null,
+): BotDraftLifecycleBlock | null {
+  if (!row || row.source !== BOT_DRAFT_SOURCE) {
+    return { httpStatus: 404, code: "not_found", message: "المسودة غير موجودة" };
+  }
+  if (row.status !== "scheduled") {
+    return {
+      httpStatus: 409,
+      code: "not_scheduled",
+      message:
+        row.status === "published"
+          ? "المادة منشورة وليست مجدولة. الأرشفة عبر POST /archive"
+          : "تعديل الموعد أو إلغاء الجدولة يعمل على مادة مجدولة فقط",
+      details: { status: row.status },
+    };
+  }
+  return null;
+}
+
+/**
+ * أرشفة ناعمة مثل `POST /api/admin/articles/:id/archive`:
+ * `status=archived` و`reviewStatus=null`. الصف يبقى ويمكن للمحرر استعادته لمسودة.
+ */
+export function buildBotDraftArchiveUpdate(
+  now: Date,
+  reason?: string | null,
+): { status: "archived"; reviewStatus: null; updatedAt: Date; reviewNotes?: string } {
+  const note = typeof reason === "string" ? reason.trim().slice(0, 1000) : "";
+  return {
+    status: "archived",
+    reviewStatus: null,
+    updatedAt: now,
+    ...(note ? { reviewNotes: note } : {}),
+  };
+}
+
+/** يبقي `status=scheduled` ويبدّل `scheduledAt` فقط حتى يلتقط الكرون الموعد الجديد. */
+export function buildBotDraftRescheduleUpdate(
+  publishAt: Date,
+  now: Date,
+): { status: "scheduled"; publishType: "scheduled"; scheduledAt: Date; updatedAt: Date } {
+  return {
+    status: "scheduled",
+    publishType: "scheduled",
+    scheduledAt: publishAt,
+    updatedAt: now,
+  };
+}
+
+/**
+ * إلغاء الجدولة: تعود `draft` قابلة للتعديل. لا حذف، و`scheduledAt` يُصفَّر
+ * حتى لا يلتقطها `publishScheduledArticles`.
+ */
+export function buildBotDraftUnscheduleUpdate(now: Date): {
+  status: "draft";
+  publishType: "instant";
+  scheduledAt: null;
+  updatedAt: Date;
+} {
+  return {
+    status: "draft",
+    publishType: "instant",
+    scheduledAt: null,
+    updatedAt: now,
+  };
+}
+
+/** يكتب حقول الظهور التي أرسلها البوت فقط، بلا لمس للحالة أو الإسناد. */
+export function buildBotDraftVisibilityUpdate(input: BotDraftVisibilityInput, now: Date): {
+  updatedAt: Date;
+  isFeatured?: boolean;
+  newsType?: "breaking" | "regular";
+  hideFromHomepage?: boolean;
+} {
+  return {
+    updatedAt: now,
+    ...(input.isFeatured !== undefined ? { isFeatured: input.isFeatured } : {}),
+    ...(input.newsType !== undefined ? { newsType: input.newsType } : {}),
+    ...(input.hideFromHomepage !== undefined ? { hideFromHomepage: input.hideFromHomepage } : {}),
+  };
+}
+
 export function toBotDraftResponse(row: ArticleRow, categorySlug: string | null = null): BotDraftResponse {
   const meta = (row.sourceMetadata ?? {}) as NonNullable<ArticleRow["sourceMetadata"]>;
   return {
@@ -486,6 +600,9 @@ export function toBotDraftResponse(row: ArticleRow, categorySlug: string | null 
     sourceUrl: row.sourceUrl ?? null,
     keywords: Array.isArray(row.seo?.keywords) ? row.seo!.keywords! : [],
     source: row.source,
+    isFeatured: row.isFeatured === true,
+    newsType: row.newsType || "regular",
+    hideFromHomepage: row.hideFromHomepage === true,
     bot: meta.bot ?? null,
     clientReference: meta.clientReference ?? null,
     notes: meta.notes ?? null,
@@ -932,16 +1049,219 @@ export async function scheduleBotDraft(
   return toBotDraftResponse(row, await categorySlugFor(row.categoryId));
 }
 
+function throwLifecycleBlock(block: BotDraftLifecycleBlock | null): void {
+  if (!block) return;
+  throw new BotDraftError(block.httpStatus, block.code, block.message, block.details);
+}
+
+/**
+ * أرشفة مادة بوت منشورة. نفس أعمدة أرشفة اللوحة: تختفي من الرئيسية والخلاصات
+ * وخرائط الموقع لأن كلها تشترط `status=published`، والصف يبقى قابلاً للاستعادة.
+ */
+export async function archiveBotDraft(
+  bot: BotIdentity,
+  articleId: string,
+  input: BotDraftArchiveInput = {},
+  ctx: BotRequestContext = {},
+): Promise<BotDraftResponse> {
+  const existing = await findBotArticle(articleId);
+  throwLifecycleBlock(botDraftPublishedBlock(existing));
+  await throwIfEditLocked(articleId);
+
+  const now = new Date();
+  const patch = buildBotDraftArchiveUpdate(now, input.reason);
+  const [row] = await db
+    .update(articles)
+    .set(patch)
+    .where(and(eq(articles.id, articleId), eq(articles.source, BOT_DRAFT_SOURCE), eq(articles.status, "published")))
+    .returning();
+  if (!row) {
+    throw new BotDraftError(409, "not_published", "تغيّرت حالة المادة أثناء الأرشفة", { status: "unknown" });
+  }
+
+  invalidateAdminListCaches();
+  const { queueBotDraftArchiveEffects } = await import("./botDraftPublishEffects");
+  queueBotDraftArchiveEffects(row, bot.name, row.reviewNotes ?? null);
+  await recordEvent(
+    row.id,
+    row.authorId,
+    "deleted",
+    `أرشف البوت «${bot.name}» الخبر`,
+    bot,
+    existing!.sourceMetadata?.clientReference,
+    ctx,
+    row,
+    existing!,
+    "archived",
+  );
+  console.log(`[BotDrafts] archived ${row.id} by bot=${bot.name}`);
+  return toBotDraftResponse(row, await categorySlugFor(row.categoryId));
+}
+
+/**
+ * تغيير `scheduledAt` لمادة مجدولة. نفس تحقق الوقت المستقبلي. لا يعيد إرسال
+ * تنبيه الجدولة لأن الحالة لم تنتقل إلى `scheduled` من جديد.
+ */
+export async function rescheduleBotDraft(
+  bot: BotIdentity,
+  articleId: string,
+  publishAt: Date,
+  ctx: BotRequestContext = {},
+): Promise<BotDraftResponse> {
+  if (!(publishAt instanceof Date) || Number.isNaN(publishAt.getTime()) || publishAt.getTime() <= Date.now()) {
+    throw new BotDraftError(
+      400,
+      "validation_error",
+      "موعد النشر في الماضي أو اللحظة الحالية. أرسل وقت الرياض بإزاحة +03:00 أو ما يعادله UTC.",
+      { publishAt: publishAt instanceof Date && !Number.isNaN(publishAt.getTime()) ? publishAt.toISOString() : null },
+    );
+  }
+
+  const existing = await findBotArticle(articleId);
+  throwLifecycleBlock(botDraftScheduledBlock(existing));
+  await throwIfEditLocked(articleId);
+
+  const now = new Date();
+  const patch = buildBotDraftRescheduleUpdate(publishAt, now);
+  const [row] = await db
+    .update(articles)
+    .set(patch)
+    .where(and(eq(articles.id, articleId), eq(articles.source, BOT_DRAFT_SOURCE), eq(articles.status, "scheduled")))
+    .returning();
+  if (!row) {
+    throw new BotDraftError(409, "not_scheduled", "تغيّرت حالة المادة أثناء تغيير الموعد", { status: "unknown" });
+  }
+
+  invalidateAdminListCaches();
+  const { queueBotDraftRescheduleEffects } = await import("./botDraftPublishEffects");
+  queueBotDraftRescheduleEffects(row, bot.name);
+  await recordEvent(
+    row.id,
+    row.authorId,
+    "updated",
+    `غيّر البوت «${bot.name}» موعد النشر`,
+    bot,
+    existing!.sourceMetadata?.clientReference,
+    ctx,
+    row,
+    existing!,
+  );
+  console.log(`[BotDrafts] rescheduled ${row.id} by bot=${bot.name} at=${row.scheduledAt?.toISOString?.() ?? ""}`);
+  return toBotDraftResponse(row, await categorySlugFor(row.categoryId));
+}
+
+/**
+ * إلغاء الجدولة: `draft` من جديد، بلا حذف. الكرون لا ينشرها لأن الحالة لم تعد `scheduled`.
+ */
+export async function unscheduleBotDraft(
+  bot: BotIdentity,
+  articleId: string,
+  ctx: BotRequestContext = {},
+): Promise<BotDraftResponse> {
+  const existing = await findBotArticle(articleId);
+  throwLifecycleBlock(botDraftScheduledBlock(existing));
+  await throwIfEditLocked(articleId);
+
+  const now = new Date();
+  const patch = buildBotDraftUnscheduleUpdate(now);
+  const [row] = await db
+    .update(articles)
+    .set(patch)
+    .where(and(eq(articles.id, articleId), eq(articles.source, BOT_DRAFT_SOURCE), eq(articles.status, "scheduled")))
+    .returning();
+  if (!row) {
+    throw new BotDraftError(409, "not_scheduled", "تغيّرت حالة المادة أثناء إلغاء الجدولة", { status: "unknown" });
+  }
+
+  invalidateAdminListCaches();
+  const { queueBotDraftUnscheduleEffects } = await import("./botDraftPublishEffects");
+  queueBotDraftUnscheduleEffects(row, bot.name);
+  await recordEvent(
+    row.id,
+    row.authorId,
+    "unpublished",
+    `ألغى البوت «${bot.name}» الجدولة وأعاد الخبر مسودة`,
+    bot,
+    existing!.sourceMetadata?.clientReference,
+    ctx,
+    row,
+    existing!,
+  );
+  console.log(`[BotDrafts] unscheduled ${row.id} by bot=${bot.name}`);
+  return toBotDraftResponse(row, await categorySlugFor(row.categoryId));
+}
+
+/**
+ * مميز / عاجل / إخفاء الرئيسية لمادة منشورة. الأعمدة نفسها التي يكتبها المحرر.
+ * تعليم العاجل هنا لا يرسل إشعار القرّاء: زر اللوحة `toggle-breaking` لا يرسله أيضاً.
+ */
+export async function updateBotDraftVisibility(
+  bot: BotIdentity,
+  articleId: string,
+  input: BotDraftVisibilityInput,
+  ctx: BotRequestContext = {},
+): Promise<BotDraftResponse> {
+  const existing = await findBotArticle(articleId);
+  throwLifecycleBlock(botDraftPublishedBlock(existing));
+  await throwIfEditLocked(articleId);
+
+  const now = new Date();
+  const patch = buildBotDraftVisibilityUpdate(input, now);
+  const [row] = await db
+    .update(articles)
+    .set(patch)
+    .where(and(eq(articles.id, articleId), eq(articles.source, BOT_DRAFT_SOURCE), eq(articles.status, "published")))
+    .returning();
+  if (!row) {
+    throw new BotDraftError(409, "not_published", "تغيّرت حالة المادة أثناء تحديث الظهور", { status: "unknown" });
+  }
+
+  if (input.newsType !== undefined && input.newsType !== existing!.newsType) {
+    await syncEnglishNewsType(row.id, input.newsType);
+  }
+
+  invalidateAdminListCaches();
+  const { queueBotDraftVisibilityEffects } = await import("./botDraftPublishEffects");
+  queueBotDraftVisibilityEffects(row, existing!.newsType, bot.name);
+  const changed = Object.keys(input).join(",");
+  await recordEvent(
+    row.id,
+    row.authorId,
+    "updated",
+    `حدّث البوت «${bot.name}» ظهور الخبر (${changed})`,
+    bot,
+    existing!.sourceMetadata?.clientReference,
+    ctx,
+    row,
+    existing!,
+  );
+  console.log(`[BotDrafts] visibility ${row.id} by bot=${bot.name} fields=${changed}`);
+  return toBotDraftResponse(row, await categorySlugFor(row.categoryId));
+}
+
+/** نفس مزامنة زر العاجل في اللوحة: ترجمة EN المرتبطة عبر seoMetadata.sourceArticleId. */
+async function syncEnglishNewsType(articleId: string, newsType: string): Promise<void> {
+  try {
+    await db
+      .update(enArticles)
+      .set({ newsType, updatedAt: new Date() })
+      .where(sql`${enArticles.seoMetadata}->>'sourceArticleId' = ${articleId}`);
+  } catch (error) {
+    console.warn(`[BotDrafts] EN newsType sync failed for ${articleId}:`, error);
+  }
+}
+
 async function recordEvent(
   articleId: string,
   actorId: string,
-  action: "created" | "updated" | "published",
+  action: "created" | "updated" | "published" | "deleted" | "unpublished",
   summary: string,
   bot: BotIdentity,
   clientReference: string | undefined,
   ctx: BotRequestContext,
   newValue: ArticleRow,
   oldValue?: ArticleRow,
+  activityAction?: string,
 ): Promise<void> {
   const metadata = { bot: bot.name, clientReference: clientReference ?? null, channel: "bot-drafts-api" };
   await Promise.all([
@@ -950,7 +1270,7 @@ async function recordEvent(
     ),
     logActivity({
       userId: actorId,
-      action,
+      action: activityAction ?? action,
       entityType: "article",
       entityId: articleId,
       oldValue: oldValue ? { title: oldValue.title, status: oldValue.status } : undefined,

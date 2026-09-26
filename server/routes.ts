@@ -149,6 +149,11 @@ import { getNewsPulseExtras } from "./services/newsPulseInsights";
 import { bestEffortWithin } from "./utils/bestEffortDeadline";
 import { getOrBuildSitemapXml, invalidateSitemapXmlCache } from "./services/sitemapCacheService";
 import {
+  clearNewsSitemapMemoryCache,
+  readNewsSitemapMemoryCache,
+  writeNewsSitemapMemoryCache,
+} from "./services/newsSitemapMemoryCache";
+import {
   pickEnArticleSlug,
   resolveEnCategoryId,
   syncBreakingToArabicSource,
@@ -9547,7 +9552,7 @@ Respond in valid JSON format only:
       invalidatePublishedContent({ reason: "en-translate" });
       invalidateSitemapXmlCache(["__sitemapEnArticles", "index"]).catch(() => {});
       try {
-        (app as any).__sitemapNewsCache = null;
+        clearNewsSitemapMemoryCache();
       } catch {
         /* best-effort */
       }
@@ -27077,7 +27082,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       const cutoff = new Date(Date.now() - 48 * 60 * 60 * 1000);
 
       const now = Date.now();
-      const cache = (app as any).__sitemapNewsCache;
+      const cache = readNewsSitemapMemoryCache();
       if (cache && now - cache.ts < 3 * 60 * 1000) {
         res.header('Content-Type', 'application/xml; charset=utf-8');
         res.setHeader('Cache-Control', 'public, max-age=180, s-maxage=180');
@@ -27179,7 +27184,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
 
       xml += '</urlset>';
 
-      (app as any).__sitemapNewsCache = { xml, ts: now };
+      writeNewsSitemapMemoryCache({ xml, ts: now });
 
       res.header('Content-Type', 'application/xml; charset=utf-8');
       res.setHeader('Cache-Control', 'public, max-age=180, s-maxage=180');
