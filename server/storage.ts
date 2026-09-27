@@ -4384,12 +4384,19 @@ export class DatabaseStorage implements IStorage {
     // "ذكاء اصطناعي" badge on the hero image.
     await this.applyAiImageFlagFromMedia(articleWithSlug);
 
+    // وقت إنشاء المسودة على الخادم، ولا يُقبل من جسم العميل.
+    delete (articleWithSlug as any).draftCreatedAt;
+    delete (articleWithSlug as any).correctedAt;
+    (articleWithSlug as any).draftCreatedAt = new Date();
+
     const [created] = await (executor ?? db).insert(articles).values([articleWithSlug as any]).returning();
     return created;
   }
 
   async updateArticle(id: string, articleData: Partial<InsertArticle>): Promise<Article> {
     const updateData: any = { ...articleData, updatedAt: new Date() };
+    delete updateData.draftCreatedAt;
+    delete updateData.correctedAt;
     if (updateData.imageFocalPoint === null || updateData.imageFocalPoint === undefined) {
       delete updateData.imageFocalPoint;
     }

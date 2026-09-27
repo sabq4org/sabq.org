@@ -20,14 +20,24 @@ vi.mock("../../server/db", () => ({
   db: {
     select: () => ({
       from: () => ({
-        where: () => ({
-          limit: async () => {
-            dbState.selects += 1;
-            if (dbState.selects === 1) return dbState.article ? [dbState.article] : [];
-            if (dbState.selects === 2) return dbState.lock ? [dbState.lock] : [];
-            return [];
-          },
-        }),
+        where: () => {
+          const query = {
+            limit: async () => {
+              dbState.selects += 1;
+              if (dbState.selects === 1) return dbState.article ? [dbState.article] : [];
+              if (dbState.selects === 2) return dbState.lock ? [dbState.lock] : [];
+              return [];
+            },
+            then: (resolve: (rows: unknown[]) => void, reject?: (error: unknown) => void) =>
+              Promise.resolve([]).then(resolve, reject),
+          };
+          return query;
+        },
+      }),
+    }),
+    insert: () => ({
+      values: () => ({
+        returning: async () => [{ id: "rev-1" }],
       }),
     }),
     update: () => ({

@@ -369,6 +369,13 @@
         "server/services/botDraftsService.ts",
         "server/services/botDraftPublishEffects.ts",
         "shared/botDrafts.ts",
+        "shared/publishFirst.ts",
+        "server/services/publishFirstService.ts",
+        "server/routes/publishFirst.ts",
+        "migrations/20260927_publish_first.sql",
+        "tests/unit/publishFirst.test.ts",
+        "client/src/components/article-editor/PublishFirstPanel.tsx",
+        "client/src/components/admin/PublishFirstFlagsCard.tsx",
         "scripts/bot-drafts-client.ts",
         "server/ai/prompts/editorialRequest.ts",
         "scripts/prompt-audit/**",
@@ -411,7 +418,7 @@
       "owners": [
         "editorial"
       ],
-      "lastReviewed": "2026-09-26"
+      "lastReviewed": "2026-09-27"
     },
     {
       "id": "ifox",
@@ -956,7 +963,7 @@
       "owners": [
         "platform"
       ],
-      "lastReviewed": "2026-09-26"
+      "lastReviewed": "2026-09-27"
     },
     {
       "id": "comments",

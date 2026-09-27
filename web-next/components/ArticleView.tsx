@@ -165,6 +165,14 @@ export function ArticleView({
             dangerouslySetInnerHTML={{ __html: bundle.contentHtml }}
           />
 
+          {bundle.updateLines && bundle.updateLines.length > 0 && (
+            <ul className="mt-6 space-y-2 border-t pt-4 text-sm text-muted-foreground" data-testid="article-update-lines">
+              {bundle.updateLines.map((line) => (
+                <li key={line.id}>{line.text}</li>
+              ))}
+            </ul>
+          )}
+
           {bundle.articleTags && bundle.articleTags.length > 0 && (
             <section aria-label="الكلمات المفتاحية" className="mt-8">
               <h2 className="text-sm font-semibold text-muted-foreground">

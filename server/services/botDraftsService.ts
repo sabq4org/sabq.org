@@ -35,6 +35,13 @@ import { sanitizeArticleHtml } from "../utils/sanitizeArticleHtml";
 import { buildEditorialMetadataUpdate } from "../utils/editorialDatesSql";
 import { logActivity } from "../rbac";
 import { memoryCache } from "../memoryCache";
+import {
+  maybePlanPublishedRevision,
+  recordArticleRevision,
+  sensitiveGateForArticle,
+  botDraftUploadIssue,
+  recordReviewerVerdict,
+} from "./publishFirstService";
 
 // ────────────────────────────────────────────────────────────────────
 // أخطاء العقد
@@ -653,6 +660,7 @@ export function buildPublishedBotContentPatch(
   if (input.keywords !== undefined) {
     patch.seo = { ...(existing.seo ?? {}), keywords: input.keywords };
   }
+  if (input.riskLabel !== undefined) patch.riskLabel = input.riskLabel;
 
   const editorialMetadata = buildEditorialMetadataUpdate(patch as Record<string, unknown>, now);
   if (editorialMetadata) patch.seoMetadata = editorialMetadata;
@@ -666,6 +674,9 @@ export function buildPublishedBotContentPatch(
   delete guarded.reporterId;
   delete guarded.scheduledAt;
   delete guarded.categoryId;
+  delete guarded.draftCreatedAt;
+  delete guarded.correctedAt;
+  delete guarded.verdictAt;
   return patch;
 }
 
@@ -713,6 +724,9 @@ export function toBotDraftResponse(row: ArticleRow, categorySlug: string | null 
     sourceUrl: row.sourceUrl ?? null,
     keywords: Array.isArray(row.seo?.keywords) ? row.seo!.keywords! : [],
     source: row.source,
+    riskLabel: row.riskLabel ?? null,
+    draftCreatedAt: isoOrNull(row.draftCreatedAt) ?? row.createdAt.toISOString(),
+    correctedAt: isoOrNull(row.correctedAt),
     isFeatured: row.isFeatured === true,
     newsType: row.newsType || "regular",
     hideFromHomepage: row.hideFromHomepage === true,
@@ -754,12 +768,45 @@ async function resolveCategory(input: { categoryId?: string; categorySlug?: stri
     .where(condition)
     .limit(1);
   if (!row || !isAssignableBotCategoryStatus(row.status)) {
-    throw new BotDraftError(422, "category_not_found", "التصنيف غير موجود أو غير نشط", {
-      categoryId: input.categoryId ?? null,
+    const issue = await botDraftUploadIssue({
       categorySlug: input.categorySlug ?? null,
+      categoryResolved: false,
+      categoryProvided: true,
     });
+    throw new BotDraftError(
+      422,
+      "category_not_found",
+      issue?.message ?? "التصنيف غير موجود أو غير نشط",
+      issue?.details ?? {
+        categoryId: input.categoryId ?? null,
+        categorySlug: input.categorySlug ?? null,
+      },
+    );
   }
   return { id: row.id, slug: row.slug };
+}
+
+async function assertBotSubtitle(subtitle: string | null | undefined): Promise<void> {
+  if (subtitle == null || subtitle === "") return;
+  const issue = await botDraftUploadIssue({
+    subtitle,
+    categoryResolved: true,
+    categoryProvided: false,
+  });
+  if (issue) throw new BotDraftError(issue.httpStatus, issue.code, issue.message, issue.details);
+}
+
+async function assertBotSensitiveRelease(
+  articleId: string,
+  riskLabel: string | null | undefined,
+): Promise<void> {
+  const decision = await sensitiveGateForArticle({
+    articleId,
+    riskLabel,
+    action: "publish",
+    adminOverride: false,
+  });
+  if (!decision.allow) throw new BotDraftError(422, decision.code, decision.message);
 }
 
 async function categorySlugFor(categoryId: string | null): Promise<string | null> {
@@ -848,6 +895,7 @@ export async function createBotDraft(
   input: BotDraftCreateInput,
   ctx: BotRequestContext = {},
 ): Promise<BotDraftResponse> {
+  await assertBotSubtitle(input.subtitle);
   const { authorId, reporterId } = attributionForBotDraftCreate(await resolveBotAuthorId());
   const category = await resolveCategory(input);
   const slug = await resolveUniqueArticleSlug(generateArabicSlug(input.title) || `bot-${Date.now()}`);
@@ -875,6 +923,8 @@ export async function createBotDraft(
       publishedAt: null,
       source: BOT_DRAFT_SOURCE,
       sourceUrl: input.sourceUrl ?? null,
+      riskLabel: input.riskLabel ?? null,
+      draftCreatedAt: now,
       sourceMetadata: {
         type: "bot",
         bot: bot.name,
@@ -915,6 +965,7 @@ export async function updateBotDraft(
       block?.details,
     );
   }
+  await assertBotSubtitle(input.subtitle);
   if (existing.status === "published") {
     const disallowed = findDisallowedPublishedContentFields(input);
     if (disallowed.length > 0) {
@@ -949,6 +1000,7 @@ export async function updateBotDraft(
   if (input.keywords !== undefined) {
     patch.seo = { ...(existing.seo ?? {}), keywords: input.keywords };
   }
+  if (input.riskLabel !== undefined) patch.riskLabel = input.riskLabel;
   if (input.clientReference !== undefined || input.notes !== undefined) {
     patch.sourceMetadata = {
       ...(existing.sourceMetadata ?? { type: "bot" }),
@@ -996,6 +1048,31 @@ async function updatePublishedBotArticle(
 ): Promise<BotDraftResponse> {
   const now = new Date();
   const patch = buildPublishedBotContentPatch(existing, input, now);
+  const contentPatch: Record<string, unknown> = {};
+  if (input.title !== undefined) contentPatch.title = input.title;
+  if (input.subtitle !== undefined) contentPatch.subtitle = input.subtitle;
+  if (input.excerpt !== undefined) contentPatch.excerpt = patch.excerpt ?? null;
+  if (input.content !== undefined) contentPatch.content = patch.content;
+  if (input.imageUrl !== undefined) contentPatch.imageUrl = input.imageUrl;
+  if (input.riskLabel !== undefined) contentPatch.riskLabel = input.riskLabel;
+  const plan = await maybePlanPublishedRevision({
+    existingStatus: existing.status,
+    existing,
+    patch: contentPatch,
+    updateReason: input.updateReason,
+    now,
+  });
+  const resultingRisk = input.riskLabel !== undefined ? input.riskLabel : existing.riskLabel;
+  if (plan?.contentChanged) {
+    const decision = await sensitiveGateForArticle({
+      articleId: existing.id,
+      riskLabel: resultingRisk,
+      action: "correct",
+      adminOverride: false,
+    });
+    if (!decision.allow) throw new BotDraftError(422, decision.code, decision.message);
+  }
+  if (plan) patch.correctedAt = plan.correctedAt;
   const [row] = await db
     .update(articles)
     .set(patch)
@@ -1007,6 +1084,14 @@ async function updatePublishedBotArticle(
 
   const { queueBotDraftPublishedContentEffects } = await import("./botDraftPublishEffects");
   queueBotDraftPublishedContentEffects(row, bot.name);
+  if (plan) {
+    await recordArticleRevision({
+      articleId: row.id,
+      editorUserId: row.authorId,
+      editorName: `بوت ${bot.name}`,
+      plan,
+    });
+  }
   await recordEvent(
     row.id,
     row.authorId,
@@ -1124,6 +1209,25 @@ function releasableWhere(articleId: string) {
  * نشر فوري بنفس أعمدة زر «نشر» في اللوحة، ثم إبطال الكاش وIndexNow والتنبيهات.
  * لا يكتب authorId ولا reporterId.
  */
+export async function recordBotReviewerVerdict(
+  articleId: string,
+  input: { verdict: string; reviewerName: string; note?: string | null },
+) {
+  const existing = await findBotArticle(articleId);
+  if (!existing) throw new BotDraftError(404, "not_found", "المسودة غير موجودة");
+  const saved = await recordReviewerVerdict({ articleId, ...input });
+  if (!saved.ok) {
+    throw new BotDraftError(saved.notFound ? 404 : 422, "validation_error", saved.message);
+  }
+  return {
+    articleId,
+    verdict: saved.verdict.verdict,
+    reviewerName: saved.verdict.reviewerName,
+    note: saved.verdict.note,
+    verdictAt: saved.verdict.verdictAt.toISOString(),
+  };
+}
+
 export async function publishBotDraft(
   bot: BotIdentity,
   articleId: string,
@@ -1133,6 +1237,7 @@ export async function publishBotDraft(
   throwIfNotReleasable(existing);
   await throwIfEditLocked(articleId);
   await assertBotDraftBylineMayPublish(existing);
+  await assertBotSensitiveRelease(existing.id, existing.riskLabel);
 
   const now = new Date();
   const patch: BotDraftPublishUpdate & { englishSlug?: string } = buildBotDraftPublishUpdate(now, existing.publishedAt);
@@ -1186,6 +1291,7 @@ export async function scheduleBotDraft(
   throwIfNotReleasable(existing);
   await throwIfEditLocked(articleId);
   await assertBotDraftBylineMayPublish(existing);
+  await assertBotSensitiveRelease(existing.id, existing.riskLabel);
 
   const now = new Date();
   const patch: BotDraftScheduleUpdate & { englishSlug?: string } = buildBotDraftScheduleUpdate(publishAt, now);

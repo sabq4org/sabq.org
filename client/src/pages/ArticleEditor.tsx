@@ -114,6 +114,8 @@ import { TitleProofreadDialog } from "@/components/article-editor/TitleProofread
 import { ProofreadDialog } from "@/components/article-editor/ProofreadDialog";
 import { EditAndGenerateStreamDialog } from "@/components/article-editor/EditAndGenerateStreamDialog";
 import { SabqEditorAssistant } from "@/components/article-editor/SabqEditorAssistant";
+import { PublishFirstPanel } from "@/components/article-editor/PublishFirstPanel";
+import { editorialCategoryChoices, type PublishFirstRiskLabel } from "@shared/publishFirst";
 import { useArticleEditLock } from "@/hooks/useArticleEditLock";
 import { useEditorPresence } from "@/hooks/useEditorPresence";
 import { PERMISSION_CODES, SUPERUSER_ROLE_NAMES } from "@shared/rbac-constants";
@@ -222,6 +224,10 @@ export default function ArticleEditor() {
   const [content, setContent] = useState("");
   const [excerpt, setExcerpt] = useState("");
   const [categoryId, setCategoryId] = useState("");
+  const [riskLabel, setRiskLabel] = useState<"" | PublishFirstRiskLabel>("");
+  const [updateReason, setUpdateReason] = useState("");
+  const [sensitiveOverride, setSensitiveOverride] = useState(false);
+  const [overrideReason, setOverrideReason] = useState("");
   // 📰 Default reporter: صحيفة سبق (newspaper account) for new articles
   const NEWSPAPER_ACCOUNT_ID = 'RnP7eDOAl5T5rGpib9_8d';
   const [reporterId, setReporterId] = useState<string | null>(isNewArticle ? NEWSPAPER_ACCOUNT_ID : null);
@@ -386,6 +392,10 @@ export default function ArticleEditor() {
     setContent("");
     setExcerpt("");
     setCategoryId("");
+    setRiskLabel("");
+    setUpdateReason("");
+    setSensitiveOverride(false);
+    setOverrideReason("");
     setReporterId(NEWSPAPER_ACCOUNT_ID);
     setOpinionAuthorId(null);
     setArticleType(typeParam || "news");
@@ -485,6 +495,13 @@ export default function ArticleEditor() {
   // Check if user can publish directly (otherwise saves as draft).
   // الناشر الموثوق (auto_publish) يُمنح articles.publish من /api/auth/user،
   // ونحتاط أيضاً بـ publisherAccount.autoPublish إن تأخّر كاش الصلاحيات.
+  const canOverrideSensitive = Boolean(
+    user && (
+      (user.role && (SUPERUSER_ROLE_NAMES as readonly string[]).includes(user.role)) ||
+      (user.roles ?? []).some((role) => (SUPERUSER_ROLE_NAMES as readonly string[]).includes(role)) ||
+      user.permissions?.includes("*")
+    ),
+  );
   const canPublish = Boolean(
     user &&
       (hasPermission(user, PERMISSION_CODES.ARTICLES_PUBLISH) ||
@@ -617,10 +634,10 @@ export default function ArticleEditor() {
 
   // Filter to show only core categories (exclude smart, dynamic, seasonal)
   // Opinion authors see all core categories just like other users
-  const categories = allCategories.filter(cat => {
-    const isCoreCategory = cat.type === "core" || !cat.type;
-    return isCoreCategory;
-  });
+  const categoryChoices = editorialCategoryChoices(allCategories, categoryId);
+  const categories = categoryId && !categoryChoices.some((cat) => cat.id === categoryId)
+    ? [{ id: categoryId, nameAr: "التصنيف الحالي" } as Category, ...categoryChoices]
+    : categoryChoices;
 
   // Load via /api/admin/articles/:id (same surface as save PATCH/POST) — the legacy
   // /api/dashboard/articles/:id path uses a heavier getArticleById join that can stall
@@ -763,6 +780,9 @@ export default function ArticleEditor() {
       setContent(article.content);
       setExcerpt(article.excerpt || "");
       setCategoryId(article.categoryId || "");
+      setRiskLabel((article.riskLabel as PublishFirstRiskLabel) || "");
+      setUpdateReason("");
+      setSensitiveOverride(false);
       // Use reporterId as is - system supports various ID formats (nanoid, UUID, etc.)
       const validReporterId = article.reporterId || null;
       console.log('[ArticleEditor] Setting reporterId:', {
@@ -1605,6 +1625,15 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
         articleData.whatsappCta = null;
       }
 
+      articleData.riskLabel = riskLabel || null;
+      if (!isNewArticle && status === "published") {
+        articleData.updateReason = updateReason.trim() || null;
+      }
+      if (sensitiveOverride) {
+        articleData.sensitiveOverride = true;
+        articleData.overrideReason = overrideReason.trim() || null;
+      }
+
       // Add fields specific to news articles (not for opinion)
       if (articleType !== "opinion") {
         articleData.subtitle = subtitle;
@@ -1739,6 +1768,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
       // If updating existing article, also invalidate its specific query
       if (!isNewArticle && id) {
         queryClient.invalidateQueries({ queryKey: ["/api/admin/articles", id] });
+        queryClient.invalidateQueries({ queryKey: ["/api/admin/articles", id, "publish-first"] });
       }
       
       // Determine the correct success message
@@ -4754,6 +4784,20 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                 )}
               </CardContent>
             </Card>
+
+            <PublishFirstPanel
+              articleId={id}
+              status={status}
+              riskLabel={riskLabel}
+              onRiskLabel={setRiskLabel}
+              updateReason={updateReason}
+              onUpdateReason={setUpdateReason}
+              sensitiveOverride={sensitiveOverride}
+              onSensitiveOverride={setSensitiveOverride}
+              overrideReason={overrideReason}
+              onOverrideReason={setOverrideReason}
+              canOverride={canOverrideSensitive}
+            />
 
             {/* Reporter - Hidden for opinion articles */}
             {articleType !== "opinion" && (

@@ -1,4 +1,5 @@
 import { SummaryAudioSettings } from "@/components/admin/SummaryAudioSettings";
+import { PublishFirstFlagsCard } from "@/components/admin/PublishFirstFlagsCard";
 import { useEffect, useState, useId } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
@@ -1007,6 +1008,8 @@ export default function SystemSettings() {
           </header>
 
           <SummaryAudioSettings />
+
+          <PublishFirstFlagsCard />
 
           {/* Section: Tournament Blocks */}
           <div className="space-y-4">

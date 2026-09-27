@@ -89,6 +89,9 @@ export const BOT_DRAFT_FORBIDDEN_FIELDS = [
   "slug",
   "englishSlug",
   "articleType",
+  "draftCreatedAt",
+  "correctedAt",
+  "verdictAt",
   "source",
   "sourceMetadata",
   "aiGenerated",
@@ -119,6 +122,8 @@ export const BOT_DRAFT_PUBLISHED_CONTENT_FIELDS = [
   "sourceUrl",
   "imageUrl",
   "keywords",
+  "riskLabel",
+  "updateReason",
 ] as const;
 
 export type BotDraftPublishedContentField = (typeof BOT_DRAFT_PUBLISHED_CONTENT_FIELDS)[number];
@@ -158,6 +163,8 @@ const keywords = z.array(z.string().trim().min(1).max(60)).max(20, "الحد ا�
 const sourceUrl = webUrl.nullable();
 const clientReference = z.string().trim().min(1).max(120);
 const notes = z.string().trim().max(2000, "الملاحظات تتجاوز 2000 حرف").nullable();
+const riskLabel = z.enum(["safe", "needs_look", "sensitive"]).nullable();
+const updateReason = z.string().trim().max(500, "سبب التحديث يتجاوز 500 حرف").nullable();
 
 /** POST /api/internal/bot-drafts */
 export const botDraftCreateSchema = z
@@ -175,6 +182,7 @@ export const botDraftCreateSchema = z
     sourceUrl: sourceUrl.optional(),
     clientReference: clientReference.optional(),
     notes: notes.optional(),
+    riskLabel: riskLabel.optional(),
   })
   .strict();
 
@@ -194,12 +202,26 @@ export const botDraftUpdateSchema = z
     sourceUrl: sourceUrl.optional(),
     clientReference: clientReference.optional(),
     notes: notes.optional(),
+    riskLabel: riskLabel.optional(),
+    updateReason: updateReason.optional(),
   })
   .strict()
   .refine((value) => Object.keys(value).length > 0, { message: "لا توجد حقول للتحديث" });
 
 /** POST /api/internal/bot-drafts/:id/publish — جسم فارغ. الحالة يكتبها الخادم. */
 export const botDraftPublishSchema = z.object({}).strict();
+
+/**
+ * POST /api/internal/bot-drafts/:id/verdict — حكم مراجع.
+ * `verdictAt` يكتبه الخادم ويُرفض إن أُرسل (strict).
+ */
+export const botDraftVerdictSchema = z
+  .object({
+    verdict: z.enum(["ok", "minor", "major"]),
+    reviewerName: z.string().trim().min(1, "اسم المراجع مطلوب").max(120),
+    note: z.string().trim().max(2000).optional(),
+  })
+  .strict();
 
 /**
  * POST /api/internal/bot-drafts/:id/archive — أرشفة ناعمة لمادة منشورة.
@@ -352,6 +374,12 @@ export interface BotDraftResponse {
   hideFromHomepage: boolean;
   createdAt: string;
   updatedAt: string;
+  /** safe | needs_look | sensitive. null إن لم تُحدَّد. */
+  riskLabel: string | null;
+  /** وقت إنشاء المسودة على الخادم. للصفوف القديمة يساوي createdAt. */
+  draftCreatedAt: string | null;
+  /** آخر تصحيح لمادة منشورة، أو null. */
+  correctedAt: string | null;
 }
 
 /** رد `POST /api/internal/bot-drafts/images` — `deliveryUrl` يصلح غلافاً (`imageUrl`) أو صورة متن (`imageUrls`). */
@@ -373,6 +401,8 @@ export const BOT_DRAFT_ERROR_CODES = [
   "forbidden_fields",
   "validation_error",
   "category_not_found",
+  "subtitle_too_long",
+  "sensitive_needs_verdict",
   "author_not_configured",
   "not_found",
   "not_a_draft",

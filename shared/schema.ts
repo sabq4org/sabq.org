@@ -1054,6 +1054,11 @@ export const articles = pgTable("articles", {
   priceHalalas: integer("price_halalas").default(0), // Price in halalas (1 SAR = 100 halalas)
   previewLength: integer("preview_length").default(300), // Characters shown before paywall
   
+  // ضمانات «النشر أولاً». الأعمدة اختيارية بلا افتراض متطاير حتى لا يُعاد
+  // كتابة جدول articles عند الإضافة. الطوابع يكتبها الخادم فقط.
+  riskLabel: text("risk_label"), // safe | needs_look | sensitive
+  draftCreatedAt: timestamp("draft_created_at"),
+  correctedAt: timestamp("corrected_at"),
   publishedAt: timestamp("published_at"),
   // «إنعاش»: يعيد الخبر لصدارة الموجز بترتيب COALESCE(resurfaced_at, published_at)
   // دون المساس بتاريخ النشر الظاهر أو المشاهدات أو الرابط.
@@ -1168,6 +1173,45 @@ export const insertArticleEventSchema = createInsertSchema(articleEvents).omit({
 
 export type InsertArticleEvent = z.infer<typeof insertArticleEventSchema>;
 export type ArticleEvent = typeof articleEvents.$inferSelect;
+
+// حكم مراجع «النشر أولاً» — أي قيمة (ok/minor/major) تفك بوابة الحساسية.
+export const articleReviewerVerdicts = pgTable("article_reviewer_verdicts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  articleId: varchar("article_id").references(() => articles.id, { onDelete: "cascade" }).notNull(),
+  verdict: text("verdict").notNull(), // ok | minor | major
+  reviewerName: text("reviewer_name").notNull(),
+  note: text("note"),
+  verdictAt: timestamp("verdict_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_article_reviewer_verdicts_article").on(table.articleId, table.verdictAt.desc()),
+]);
+
+// لقطة ما قبل تعديل خبر منشور، مع سبب التحديث الظاهر للقارئ إن وُجد.
+export const articleRevisions = pgTable("article_revisions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  articleId: varchar("article_id").references(() => articles.id, { onDelete: "cascade" }).notNull(),
+  editorUserId: varchar("editor_user_id").references(() => users.id, { onDelete: "set null" }),
+  editorName: text("editor_name"),
+  changedFields: jsonb("changed_fields").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+  previousValues: jsonb("previous_values").$type<Record<string, unknown>>().notNull().default(sql`'{}'::jsonb`),
+  updateReason: text("update_reason"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_article_revisions_article").on(table.articleId, table.createdAt.asc()),
+]);
+
+// تجاوز مسؤول لبوابة الحساسية. قابل للاستعلام ويُعرض في تاريخ المقال.
+export const articlePublishOverrides = pgTable("article_publish_overrides", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  articleId: varchar("article_id").references(() => articles.id, { onDelete: "cascade" }).notNull(),
+  actorUserId: varchar("actor_user_id").references(() => users.id, { onDelete: "set null" }),
+  actorName: text("actor_name"),
+  action: text("action").notNull(), // publish | correct
+  reason: text("reason"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_article_publish_overrides_article").on(table.articleId, table.createdAt.desc()),
+]);
 
 // RSS feeds for import
 export const rssFeeds = pgTable("rss_feeds", {
@@ -3779,6 +3823,9 @@ export const insertArticleSchema = createInsertSchema(articles).omit({
   publisherCreditDeducted: true,
   publisherApprovedAt: true,
   publisherApprovedBy: true,
+  // طوابع «النشر أولاً» يملكها الخادم. riskLabel يبقى مقبولاً من المحرر.
+  draftCreatedAt: true,
+  correctedAt: true,
 }).extend({
   slug: z.string().max(150, "الرابط (slug) يجب أن لا يتجاوز 150 حرف"),
   imageFocalPoint: imageFocalPointSchema.nullable().optional(),
@@ -3786,6 +3833,7 @@ export const insertArticleSchema = createInsertSchema(articles).omit({
   seoMetadata: seoMetadataSchema,
   sourceMetadata: sourceMetadataSchema,
   whatsappCta: whatsappCtaFieldSchema,
+  riskLabel: z.enum(["safe", "needs_look", "sensitive"]).nullable().optional(),
 });
 
 // iFox Article Schemas - Accept categorySlug instead of categoryId
@@ -4344,11 +4392,13 @@ export const updateArticleSchema = z.object({
     x: z.number().min(0).max(100),
     y: z.number().min(0).max(100),
   }).nullable().optional(),
+  // varchar في القاعدة، ومعرفات الاستيراد ليست كلها UUID. الوجود يُفحص في المسار.
   categoryId: z.union([
-    z.string().uuid("معرف التصنيف غير صحيح"),
+    z.string().trim().min(1).max(64, "معرف التصنيف غير صحيح"),
     z.literal(""),
     z.null()
   ]).optional(),
+  riskLabel: z.enum(["safe", "needs_look", "sensitive"]).nullable().optional(),
   reporterId: z.union([
     z.string().min(1, "معرف المراسل غير صحيح"),
     z.null()

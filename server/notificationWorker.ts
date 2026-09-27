@@ -6,6 +6,7 @@ import { eq, and, lte, isNull, sql } from "drizzle-orm";
 import { notificationQueue, notificationsInbox, notificationMetrics, articles } from "@shared/schema";
 import { storage } from "./storage";
 import { invalidatePublishedContent } from "./services/contentInvalidation";
+import { sensitiveGateForArticle } from "./services/publishFirstService";
 import { broadcastArticlePublished } from "./routes/editorPresence";
 import { 
   notificationMemoryService, 
@@ -336,6 +337,19 @@ async function publishScheduledArticles() {
       await new Promise(resolve => setImmediate(resolve));
       if (!isLeader()) break;
       try {
+        if (article.riskLabel === "sensitive") {
+          const gate = await sensitiveGateForArticle({
+            articleId: article.id,
+            riskLabel: article.riskLabel,
+            action: "publish",
+            adminOverride: false,
+          });
+          if (!gate.allow) {
+            console.warn(`[ScheduledPublisher] skipped sensitive article ${article.id}: ${gate.code}`);
+            continue;
+          }
+        }
+
         const publishTime = new Date();
         
         const [published] = await db
