@@ -1,6 +1,6 @@
 # SEO و SSR (`seo-ssr`)
 
-> آخر مراجعة: 2026-09-26 (تحميل مبكر لصورة أول بطاقة في صفحة القسم + كاش حافة لبحث القسم) | المالك: platform
+> آخر مراجعة: 2026-09-27 (صفحة مواعيدك HTML مبكر من الحافة) | المالك: platform
 
 ## الغرض
 ميتادات للدوالش، إعادة توجيه السلاق، وSSR للمحتوى العام عبر `web-next`.
@@ -111,4 +111,10 @@
 - **روابط قديمة بلا تحويل (من Search Console):** `LEGACY_ROOT_REDIRECTS` في `edgeMeta.ts` يحوّل `/saudia` إلى رابط قسم «السعودية» الأساسي (englishSlug من الجدول) و`/collection/latest-news` إلى الرئيسية. روابط AMP القديمة (`/amp/<path>` و`/amp/story/<path>`) تُحل كالمسار الداخلي نفسه (قديم أو عربي أو news) أو تذهب إلى `/article/<slug>` مباشرة؛ ما لا يُحل يسقط إلى 404 الحقيقي أعلاه. الروابط القصيرة (`/sF6gde`) لا مقابل لها في `legacy_redirects` ولا `legacy_slug`، فتبقى 404.
 - **روابط إنجليزية قديمة لأخبار عربية (2026-09-26):** قبل 2026-07-30 كان كل خبر عربي يعلن hreflang="en" إلى `/en/article/<englishSlug>` حتى بلا ترجمة، فتراكم نحو 300 ألف 404 في Search Console. `computeSlugRedirect` يحوّل الآن `/en|ur/article/<slug>` الذي لا يطابق صفًا في `en_articles`/`ur_articles` لكنه خبر عربي منشور: إلى الترجمة الإنجليزية المنشورة إن وُجدت (`resolveEnSiblingSlug`) وإلا إلى `/article/<slug>`. ما لا يطابق شيئًا يبقى 404.
 - خارج هذا التغيير عمدًا: رابط الأقسام الأساسي المقروء (ترحيل canonical)، lastmod لكل خريطة وعدد خرائط الأوردو، HSTS سنة، توحيد اسم العلامة، حظر زواحف التدريب، والأداء. قرارات أو قياس مطلوب أولًا.
+
+## مواعيدك — HTML مبكر — 2026-09-27
+
+- `GET/HEAD /mawaeed` و`/mawaeed/:slug` يخرجان من `functions/_middleware.js` قبل البروكسي وقبل قشرة SPA، عبر `functions/mawaeedPage.js`. البشر والزواحف يرون الوثيقة نفسها. المسار ليس في `spaTopLevelRoutes`.
+- المصدر `GET /api/mawaeed` على Railway. الفشل 503 مع `noindex` و`no-store` ولا سقوط إلى القشرة. `dateModified` يأتي من JSON (`content_updated_at`) لا من ساعة الطلب.
+- كاش المتصفح `private, no-cache`. `CDN-Cache-Control: public, max-age=60`. مفتاح Workers يضم المنطقة ووسم النشر حتى لا تختلط نسخة الرياض بمكة. المسح العادي لا يفرغ مفاتيح Workers المخصصة.
 

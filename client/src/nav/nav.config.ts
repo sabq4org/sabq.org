@@ -1,6 +1,7 @@
 import {
   LayoutDashboard,
   CalendarClock,
+  CalendarDays,
   FileText,
   FolderOpen,
   Users,
@@ -412,6 +413,15 @@ export const navConfig: NavItem[] = [
         path: "/dashboard/world-days",
         icon: Globe,
         roles: ["admin", "editor", "content_manager"],
+      },
+      {
+        id: "mawaeed",
+        labelKey: "nav.mawaeed",
+        labelAr: "مواعيدك",
+        path: "/dashboard/mawaeed",
+        icon: CalendarDays,
+        roles: ["admin"],
+        permissions: ["mawaeed.edit"],
       },
       {
         id: "media_library",

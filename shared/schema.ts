@@ -15448,3 +15448,61 @@ export const editorialResearchJobs = pgTable("editorial_research_jobs", {
   index("editorial_research_jobs_owner_created_idx").on(table.userId, table.createdAt),
   index("editorial_research_jobs_status_idx").on(table.status),
 ]);
+
+// مواعيدك — مواعيد الخدمات العامة. جداول جديدة إضافية؛ لا علاقة لها بتقويم التحرير.
+export const mawaeedSeries = pgTable("mawaeed_series", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  slug: varchar("slug", { length: 80 }).notNull(),
+  kind: varchar("kind", { length: 40 }).notNull(),
+  titleAr: text("title_ar").notNull(),
+  summaryAr: text("summary_ar").notNull().default(""),
+  sortOrder: integer("sort_order").notNull().default(0),
+  published: boolean("published").notNull().default(true),
+  /** لربط الأخبار لاحقًا. المرحلة 1 لا تقرأه. */
+  tagId: varchar("tag_id").references(() => tags.id, { onDelete: "set null" }),
+  contentUpdatedAt: timestamp("content_updated_at", { withTimezone: true }).notNull().defaultNow(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex("mawaeed_series_slug_uidx").on(table.slug),
+]);
+
+export const mawaeedOccurrences = pgTable("mawaeed_occurrences", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  seriesId: varchar("series_id").notNull().references(() => mawaeedSeries.id, { onDelete: "cascade" }),
+  seedKey: varchar("seed_key", { length: 400 }),
+  titleAr: text("title_ar").notNull(),
+  startsOn: date("starts_on").notNull(),
+  endsOn: date("ends_on"),
+  sourceUrl: text("source_url").notNull(),
+  sourceTitle: text("source_title").notNull(),
+  /** confirmed | expected | unverified */
+  certainty: varchar("certainty", { length: 20 }).notNull().default("confirmed"),
+  /** scheduled | cancelled | superseded */
+  status: varchar("status", { length: 20 }).notNull().default("scheduled"),
+  published: boolean("published").notNull().default(false),
+  /** all | riyadh_most | western */
+  regionGroup: varchar("region_group", { length: 20 }).notNull().default("all"),
+  hijriLabel: text("hijri_label"),
+  publicNote: text("public_note"),
+  ruleNote: text("rule_note"),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex("mawaeed_occurrences_seed_key_uidx").on(table.seedKey),
+  index("mawaeed_occurrences_series_date_idx").on(table.seriesId, table.startsOn),
+]);
+
+export const mawaeedChanges = pgTable("mawaeed_changes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  seriesId: varchar("series_id").notNull().references(() => mawaeedSeries.id, { onDelete: "cascade" }),
+  occurrenceId: varchar("occurrence_id").references(() => mawaeedOccurrences.id, { onDelete: "set null" }),
+  actorUserId: varchar("actor_user_id").references(() => users.id, { onDelete: "set null" }),
+  action: varchar("action", { length: 20 }).notNull(),
+  beforeJson: jsonb("before_json").$type<Record<string, unknown> | null>(),
+  afterJson: jsonb("after_json").$type<Record<string, unknown> | null>(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  index("mawaeed_changes_series_idx").on(table.seriesId, table.createdAt),
+]);

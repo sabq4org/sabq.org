@@ -338,6 +338,7 @@ const QuizManagement = lazy(() => retryImport(() => import("@/pages/dashboard/Qu
 // === LAZY IMPORTS (Dashboard Tools) ===
 const BreakingTickerManager = lazy(() => retryImport(() => import("@/pages/dashboard/BreakingTickerManager")));
 const WorldDaysManagement = lazy(() => retryImport(() => import("@/pages/dashboard/WorldDaysManagement")));
+const MawaeedManagement = lazy(() => retryImport(() => import("@/pages/dashboard/MawaeedManagement")));
 const SmartRadar = lazy(() => retryImport(() => import("@/pages/dashboard/SmartRadar")));
 const RssFeedsManager = lazy(() => retryImport(() => import("@/pages/dashboard/RssFeedsManager")));
 const SportmonksNewsImporter = lazy(() => retryImport(() => import("@/pages/dashboard/SportmonksNewsImporter")));
@@ -887,6 +888,16 @@ function Router() {
         
         {/* World Days Management */}
         <Route path="/dashboard/world-days">{() => <LazyRoute component={WorldDaysManagement} />}</Route>
+
+        <Route path="/dashboard/mawaeed">
+          {() => (
+            <ProtectedRoute requireAnyPermission={["mawaeed.edit"]}>
+              <Suspense fallback={<PageLoader />}>
+                <MawaeedManagement />
+              </Suspense>
+            </ProtectedRoute>
+          )}
+        </Route>
 
         {/* Smart Radar — رادار سبق الذكي (مسؤول النظام فقط) */}
         <Route path="/dashboard/radar">

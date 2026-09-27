@@ -208,6 +208,9 @@ export const PERMISSION_CODES = {
   SOCIAL_PUBLISH_MANAGE_SCHEDULED: "social_publish.manage_scheduled",
   SOCIAL_PUBLISH_VIEW_LOG: "social_publish.view_log",
   SOCIAL_PUBLISH_MANAGE_ACCOUNTS: "social_publish.manage_accounts",
+
+  // مواعيدك — تحرير الصفحة العامة /mawaeed. الأدمن يمر عبر "*".
+  MAWAEED_EDIT: "mawaeed.edit",
 } as const;
 
 // Role to permissions mapping (for UI display)

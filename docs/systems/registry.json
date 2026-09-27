@@ -1,7 +1,7 @@
 {
   "$schemaNote": "Machine-readable catalog of Sabq product systems. Consumed by scripts/systems-inventory.mjs and /api/admin/systems-catalog. aiFeatureKeys must be exclusive (one system owner) to avoid double-counting.",
   "version": 2,
-  "updatedAt": "2026-09-24",
+  "updatedAt": "2026-09-27",
   "systems": [
     {
       "id": "account-center",
@@ -956,7 +956,7 @@
       "owners": [
         "platform"
       ],
-      "lastReviewed": "2026-09-26"
+      "lastReviewed": "2026-09-27"
     },
     {
       "id": "comments",
@@ -1039,6 +1039,40 @@
       "lastReviewed": "2026-07-17"
     },
     {
+      "id": "mawaeed",
+      "nameAr": "مواعيدك",
+      "nameEn": "Mawaeed",
+      "status": "active",
+      "category": "content",
+      "summary": "صفحة عامة لمواعيد الرواتب وحساب المواطن والضمان والتقاعد والتقويم الدراسي، مع لوحة تحرير وسجل تغيير.",
+      "docPath": "docs/systems/mawaeed/SYSTEM.md",
+      "relatedDocs": [
+        "docs/systems/seo-ssr/SYSTEM.md",
+        "docs/systems/auth-rbac/SYSTEM.md"
+      ],
+      "pathGlobs": [
+        "shared/mawaeed/**",
+        "server/services/mawaeedService.ts",
+        "server/routes/mawaeed.ts",
+        "functions/mawaeedPage.js",
+        "client/src/pages/dashboard/MawaeedManagement.tsx",
+        "scripts/seed-mawaeed.ts",
+        "migrations/20260927_mawaeed.sql",
+        "data/mawaeed/**",
+        "tests/unit/mawaeedDates.test.ts",
+        "tests/unit/mawaeedPage.test.ts",
+        "tests/unit/mawaeedApi.test.ts",
+        "tests/unit/mawaeedEdge.test.ts",
+        "docs/systems/mawaeed/**"
+      ],
+      "aiFeatureKeys": [],
+      "dashboardPath": "/dashboard/mawaeed",
+      "owners": [
+        "editorial"
+      ],
+      "lastReviewed": "2026-09-27"
+    },
+    {
       "id": "systems-catalog",
       "nameAr": "كتالوج الأنظمة (هذا النظام)",
       "nameEn": "Systems Catalog",
@@ -1064,7 +1098,7 @@
       "owners": [
         "platform"
       ],
-      "lastReviewed": "2026-07-17"
+      "lastReviewed": "2026-09-27"
     },
     {
       "id": "smart-blocks",
