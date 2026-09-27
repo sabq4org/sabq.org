@@ -2,8 +2,8 @@
  * صفحة «مواعيدك» على حافة Pages: HTML من نموذج JSON الجاهز.
  * العدّاد الثابت يُحسب في الـ API. سكربت صغير يعيد الأيام والساعات بتوقيت الرياض.
  *
- * الهيكل: hero للموعد الأقرب (العنصر البصري الوحيد البارز)، ثم صفوف الأقسام
- * بخطوط شعرية، ثم أسئلة شائعة ومنهجية. لا شبكة بطاقات مكررة.
+ * الهيكل (مستلهم من تطبيقات العدّ التنازلي الأعلى دخلاً عبر Appllama): بطاقة «ويدجت» للموعد الأقرب
+ * بساعة أيام/ساعات/دقائق، ثم بطاقات أقسام بمربع «باقي N يوم» مرتبة من الأقرب، ثم منهجية وأسئلة.
  */
 
 const REGIONS = ["riyadh", "makkah", "madinah", "jeddah", "taif"];
@@ -16,7 +16,10 @@ function normalizeArabic(text) {
     .trim();
 }
 
-/** لون مميز واحد لكل سلسلة، يُطبَّق كمتغير CSS على القسم. */
+/**
+ * لون كل سلسلة. --kind للنصوص والنقاط (يتبدّل مع الوضع الداكن)،
+ * و--kind-deep خلفية مصمتة لبطاقة البطل بنص أبيض (ثابتة في الوضعين).
+ */
 const KIND_CLASS = {
   school_holiday: "k-school",
   salary: "k-salary",
@@ -60,6 +63,81 @@ function kindClass(kind) {
   return KIND_CLASS[kind] || "k-school";
 }
 
+/* ───────── الوقت المتبقي (نفس منطق السكربت في المتصفح) ───────── */
+
+/** منتصف ليل اليوم المستهدف بتوقيت الرياض (UTC+3) بالميلي ثانية. */
+function riyadhStartMs(iso) {
+  const bits = String(iso || "").split("-").map(Number);
+  if (bits.length !== 3 || bits.some((n) => !Number.isFinite(n))) return NaN;
+  return Date.UTC(bits[0], bits[1] - 1, bits[2], -3, 0, 0, 0);
+}
+
+function remainingParts(iso, nowMs) {
+  const ms = riyadhStartMs(iso) - nowMs;
+  if (!Number.isFinite(ms) || ms <= 0) return null;
+  const totalMinutes = Math.floor(ms / 60000);
+  return {
+    days: Math.floor(totalMinutes / 1440),
+    hours: Math.floor(totalMinutes / 60) % 24,
+    minutes: totalMinutes % 60,
+  };
+}
+
+function daysUnit(n) {
+  if (n <= 2) return "يوم";
+  if (n >= 3 && n <= 10) return "أيام";
+  return "يوماً";
+}
+
+function hoursUnit(n) {
+  if (n <= 2) return "ساعة";
+  if (n >= 3 && n <= 10) return "ساعات";
+  return "ساعة";
+}
+
+/** مربع العدّاد في بطاقة القائمة: رقم كبير + وحدة (نمط «Split Time Badge»). */
+function tileHtml(card, nowMs) {
+  if (card.isPast) {
+    return `<div class="tile tile-past"><span class="tile-word">${esc(card.pastLabel || "انتهى")}</span></div>`;
+  }
+  const left = remainingParts(card.startsOn, nowMs);
+  let num = "";
+  let unit = "";
+  if (!left) {
+    return `<div class="tile tile-today" data-tile data-date="${esc(card.startsOn)}" data-today="${esc(
+      card.todayLabel,
+    )}"><span class="tile-word">${esc(card.todayLabel || "اليوم")}</span></div>`;
+  }
+  if (left.days >= 1) {
+    num = String(left.days);
+    unit = daysUnit(left.days);
+  } else {
+    num = String(Math.max(1, left.hours));
+    unit = hoursUnit(Math.max(1, left.hours));
+  }
+  return `<div class="tile" data-tile data-date="${esc(card.startsOn)}" data-today="${esc(card.todayLabel)}">
+      <span class="tile-pre">باقي</span>
+      <b class="tile-num">${esc(num)}</b>
+      <span class="tile-unit">${esc(unit)}</span>
+    </div>`;
+}
+
+/** ساعة البطل: أيام | ساعات | دقائق (نمط «Expanded Format»). */
+function clockHtml(card, nowMs) {
+  if (card.isPast) return `<p class="clock-word">${esc(card.pastLabel || "انتهى")}</p>`;
+  const left = remainingParts(card.startsOn, nowMs);
+  if (!left) return `<p class="clock-word">${esc(card.todayLabel || "اليوم")}</p>`;
+  const cell = (part, value, label) =>
+    `<div class="clock-cell"><b data-part="${part}">${value}</b><span>${label}</span></div>`;
+  return `<div class="clock" data-clock data-date="${esc(card.startsOn)}" aria-hidden="true">
+      ${cell("d", left.days, "أيام")}
+      ${cell("h", left.hours, "ساعات")}
+      ${cell("m", left.minutes, "دقائق")}
+    </div>`;
+}
+
+/* ───────── أجزاء مشتركة ───────── */
+
 /** شارة الحالة: مؤكد / متوقع / انتهى. */
 function badgeFor(card) {
   if (card.isPast) return { cls: "badge badge-neutral", text: card.pastLabel || "انتهى" };
@@ -67,17 +145,19 @@ function badgeFor(card) {
   return { cls: "badge badge-ok", text: card.certaintyLabel };
 }
 
-/** العدّاد: عنصر واحد يحمّل data-countdown ليحدّثه السكربت في المتصفح. */
+/** العدّاد النصي: عنصر يحمّل data-countdown ليحدّثه السكربت في المتصفح. */
 function countdownHtml(card, className) {
   if (card.isPast) return `<span class="${className} ${className}-past">${esc(card.pastLabel || "")}</span>`;
   return `<strong class="${className}" data-countdown data-date="${esc(card.startsOn)}" data-today="${esc(card.todayLabel)}">${esc(card.countdownText)}</strong>`;
 }
 
-function calendarHtml(card, className) {
-  return `<span class="${className}">
-      <time datetime="${esc(card.startsOn)}">${esc(card.gregorianLabel)}</time>
-      <span class="hijri">${esc(card.hijriLabel)}</span>
-    </span>`;
+/** تاريخ مكدّس لبطاقات القوائم: الميلادي بخط عريض والهجري تحته. */
+function dateStackHtml(card) {
+  return `<p class="item-date"><time datetime="${esc(card.startsOn)}">${esc(card.gregorianLabel)}</time><span class="hijri">${esc(card.hijriLabel)}</span></p>`;
+}
+
+function dateLineHtml(card, className) {
+  return `<p class="${className}"><time datetime="${esc(card.startsOn)}">${esc(card.gregorianLabel)}</time><span class="sep" aria-hidden="true">·</span><span class="hijri">${esc(card.hijriLabel)}</span></p>`;
 }
 
 function noteLines(card) {
@@ -88,31 +168,15 @@ function noteLines(card) {
 }
 
 function sourceHtml(card) {
-  if (!card) return "";
-  return `<p class="src">المصدر: <a href="${esc(card.sourceUrl)}" rel="noopener noreferrer">${esc(card.sourceTitle)}</a></p>`;
+  if (!card || !card.sourceUrl) return "";
+  return `<p class="src"><span class="src-label">المصدر</span><a href="${esc(card.sourceUrl)}" rel="noopener noreferrer">${esc(card.sourceTitle)}</a></p>`;
 }
 
-/** بطاقة موعد مستوية تُستخدم في قوائم «المواعيد القادمة» داخل صفحات الأقسام. */
-function occurrenceRow(card) {
-  const badge = badgeFor(card);
-  const end =
-    card.endsOn && card.endsOn !== card.startsOn
-      ? `<span class="end">حتى ${esc(card.endsOn)}</span>`
-      : "";
-  return `<li class="occ">
-    <div class="occ-when">
-      ${countdownHtml(card, "count")}
-      ${calendarHtml(card, "cal")}
-      ${end}
-    </div>
-    <div class="occ-body">
-      <p class="occ-title">${esc(card.title)}</p>
-      <p class="occ-meta"><span class="${badge.cls}">${esc(badge.text)}</span></p>
-      ${card.expectedHint ? `<p class="note">${esc(card.expectedHint)}</p>` : ""}
-      ${noteLines(card)}
-      ${sourceHtml(card)}
-    </div>
-  </li>`;
+function prevHtml(block) {
+  if (!block.previous) return "";
+  return `<p class="prev">السابق: ${esc(block.previous.title)} — ${esc(block.previous.gregorianLabel)} · ${esc(
+    block.previous.pastLabel || "",
+  )}</p>`;
 }
 
 /**
@@ -126,7 +190,8 @@ function followHtml(block) {
   return `<p class="follow">${esc(line)}</p>`;
 }
 
-/** الموعد الأقرب عبر كل السلاسل — بطل الصفحة. */
+/* ───────── البطل: الموعد الأقرب ───────── */
+
 function nearestCard(view) {
   let best = null;
   for (const block of view.series || []) {
@@ -137,85 +202,150 @@ function nearestCard(view) {
   return best;
 }
 
-function heroHtml(card) {
+function heroHtml(card, { nowMs, href }) {
   if (!card) return "";
   const badge = badgeFor(card);
   // كثير من عناوين المواعيد تبدأ باسم السلسلة نفسها (وقد تختلف حركة واحدة)؛ لا نكرّره.
   const series = String(card.seriesTitle || "").trim();
   const showEyebrow = Boolean(series) && !normalizeArabic(card.title).startsWith(normalizeArabic(series));
+  const hint = card.expectedHint ? `<p class="hero-note">${esc(card.expectedHint)}</p>` : "";
+  const notes = [card.publicNote, card.visionNote]
+    .filter(Boolean)
+    .map((line) => `<p class="hero-note">${esc(line)}</p>`)
+    .join("");
   return `<section class="hero ${kindClass(card.kind)}" aria-labelledby="hero-title">
-    ${
-      showEyebrow
-        ? `<p class="hero-eyebrow"><span class="dot" aria-hidden="true"></span>${esc(series)}</p>`
-        : ""
-    }
-    <h2 class="hero-title" id="hero-title">${esc(card.title)}</h2>
-    <div class="hero-when">
-      ${countdownHtml(card, "hero-count")}
-      ${calendarHtml(card, "hero-cal")}
+    <div class="hero-top">
+      <p class="hero-kicker">الموعد الأقرب${showEyebrow ? ` · ${esc(series)}` : ""}</p>
+      <span class="${badge.cls} badge-on-hero">${esc(badge.text)}</span>
     </div>
-    <p class="hero-meta"><span class="${badge.cls}">${esc(badge.text)}</span></p>
-    ${card.expectedHint ? `<p class="note">${esc(card.expectedHint)}</p>` : ""}
-    ${noteLines(card)}
-    ${sourceHtml(card)}
+    <h2 class="hero-title" id="hero-title">${esc(card.title)}</h2>
+    ${clockHtml(card, nowMs)}
+    <p class="hero-phrase">${countdownHtml(card, "hero-count")}</p>
+    ${dateLineHtml(card, "hero-date")}
+    ${hint}${notes}
+    <div class="hero-foot">
+      ${
+        card.sourceUrl
+          ? `<a class="hero-src" href="${esc(card.sourceUrl)}" rel="noopener noreferrer">المصدر: ${esc(card.sourceTitle)}</a>`
+          : ""
+      }
+      ${href ? `<a class="hero-cta" href="${esc(href)}">كل مواعيد القسم</a>` : ""}
+    </div>
   </section>`;
 }
 
-/** صف قسم في الصفحة الرئيسية: العنوان، ثم الموعد القادم، ثم نص الجواب. */
-function seriesRow(block) {
+/* ───────── لوحة الأقسام (الرئيسية) ───────── */
+
+/** بطاقة قسم: شريط لوني، العنوان والموعد القادم، ومربع «باقي» على الطرف. */
+function seriesRow(block, nowMs) {
   const next = block.next;
   const badge = next ? badgeFor(next) : null;
-  return `<section class="series ${kindClass(block.kind)}" id="${esc(block.slug)}">
-    <h2><a href="${esc(block.href)}">${esc(block.title)}</a></h2>
-    ${
-      next
-        ? `<div class="row-when">
-            ${countdownHtml(next, "count")}
-            ${calendarHtml(next, "cal")}
-            <span class="${badge.cls}">${esc(badge.text)}</span>
-          </div>`
-        : ""
-    }
-    <p class="answer">${esc(block.answerLine)}</p>
-    ${followHtml(block)}
-    <p class="summary">${esc(block.summary)}</p>
-    ${next && next.expectedHint ? `<p class="note">${esc(next.expectedHint)}</p>` : ""}
-    ${next ? noteLines(next) : ""}
-    ${sourceHtml(next)}
-    ${
-      block.previous
-        ? `<p class="prev">السابق: ${esc(block.previous.title)} — ${esc(block.previous.gregorianLabel)} · ${esc(
-            block.previous.pastLabel || "",
-          )}</p>`
-        : ""
-    }
-  </section>`;
+  const details = [
+    `<p class="answer">${esc(block.answerLine)}</p>`,
+    followHtml(block),
+    `<p class="summary">${esc(block.summary)}</p>`,
+    next && next.expectedHint ? `<p class="note">${esc(next.expectedHint)}</p>` : "",
+    next ? noteLines(next) : "",
+    sourceHtml(next),
+    prevHtml(block),
+  ].join("");
+  return `<article class="item ${kindClass(block.kind)}" id="${esc(block.slug)}">
+    <a class="item-main" href="${esc(block.href)}">
+      <span class="item-bar" aria-hidden="true"></span>
+      <div class="item-text">
+        <h2 class="item-series">${esc(block.title)}</h2>
+        ${
+          next
+            ? `<p class="item-title">${esc(next.title)}</p>
+               ${dateStackHtml(next)}
+               <p class="item-meta"><span class="${badge.cls}">${esc(badge.text)}</span></p>`
+            : `<p class="item-title item-empty">لا موعد قادم معلن بعد</p>`
+        }
+      </div>
+      ${next ? tileHtml(next, nowMs) : ""}
+    </a>
+    <details class="more"><summary>التفاصيل والمصدر</summary><div class="more-body">${details}</div></details>
+  </article>`;
 }
 
+/** ترتيب اللوحة من الأقرب (نمط تطبيقات العدّ التنازلي)؛ الأقسام بلا موعد قادم في الآخر. */
+function sortedSeries(series) {
+  return (series || [])
+    .map((block, index) => ({ block, index }))
+    .sort((a, b) => {
+      const x = a.block.next ? a.block.next.startsOn : "9999";
+      const y = b.block.next ? b.block.next.startsOn : "9999";
+      return x < y ? -1 : x > y ? 1 : a.index - b.index;
+    })
+    .map((entry) => entry.block);
+}
+
+/* ───────── صفحة القسم ───────── */
+
 /**
- * صفحة قسم: نص الجواب والملخص والسجل فقط.
- * الموعد القادم وشارته ومصدره وملاحظاته يعرضها الـhero أعلاه — لا نكرّرها.
+ * نص الجواب والملخص والسجل فقط.
+ * الموعد القادم وشارته ومصدره وملاحظاته يعرضها البطل أعلاه — لا نكرّرها.
  */
 function seriesDetail(block) {
   if (!block) return "";
-  return `<section class="series ${kindClass(block.kind)}" id="${esc(block.slug)}">
-    <p class="answer">${esc(block.answerLine)}</p>
+  return `<section class="panel ${kindClass(block.kind)}" id="${esc(block.slug)}">
+    <p class="answer answer-lg">${esc(block.answerLine)}</p>
     ${followHtml(block)}
     <p class="summary">${esc(block.summary)}</p>
-    ${
-      block.previous
-        ? `<p class="prev">السابق: ${esc(block.previous.title)} — ${esc(block.previous.gregorianLabel)} · ${esc(
-            block.previous.pastLabel || "",
-          )}</p>`
-        : ""
-    }
+    ${prevHtml(block)}
   </section>`;
 }
 
+/** صف موعد في قوائم «المواعيد القادمة». */
+function occurrenceRow(card, nowMs) {
+  const badge = badgeFor(card);
+  const end =
+    card.endsOn && card.endsOn !== card.startsOn ? `<p class="item-end">حتى ${esc(card.endsOn)}</p>` : "";
+  const details = [
+    card.expectedHint ? `<p class="note">${esc(card.expectedHint)}</p>` : "",
+    noteLines(card),
+    sourceHtml(card),
+  ].join("");
+  return `<li class="item ${kindClass(card.kind)}">
+    <div class="item-main">
+      <span class="item-bar" aria-hidden="true"></span>
+      <div class="item-text">
+        <p class="item-title item-title-strong">${esc(card.title)}</p>
+        ${dateStackHtml(card)}
+        ${end}
+        <p class="item-meta"><span class="${badge.cls}">${esc(badge.text)}</span></p>
+      </div>
+      ${tileHtml(card, nowMs)}
+    </div>
+    ${details ? `<details class="more"><summary>المصدر والملاحظات</summary><div class="more-body">${details}</div></details>` : ""}
+  </li>`;
+}
+
+/** قوائم «المواعيد القادمة» — نستثني موعد البطل فقد عُرض أعلاه. */
+function sectionsHtml(sections, heroId, nowMs) {
+  return (sections || [])
+    .map((section) => ({ ...section, cards: section.cards.filter((card) => card.id !== heroId) }))
+    .filter((section) => section.cards.length > 0)
+    .map(
+      (section) => `<section class="group">
+      <h2 class="group-title">${esc(section.title)}<span class="group-count">${section.cards.length}</span></h2>
+      <ul class="list">${section.cards.map((card) => occurrenceRow(card, nowMs)).join("")}</ul>
+    </section>`,
+    )
+    .join("");
+}
+
+/* ───────── التنقل والمنطقة والأسئلة ───────── */
+
 function navHtml(view) {
-  return `<nav class="crumbs" aria-label="أقسام مواعيدك">${view.nav
-    .map((item) => `<a${item.current ? ' class="current"' : ""} href="${esc(item.href)}">${esc(item.label)}</a>`)
-    .join("")}</nav>`;
+  return `<nav class="chips" aria-label="أقسام مواعيدك"><div class="chips-track">${view.nav
+    .map(
+      (item) =>
+        `<a class="chip${item.current ? " is-current" : ""}"${item.current ? ' aria-current="page"' : ""} href="${esc(
+          item.href,
+        )}">${esc(item.label)}</a>`,
+    )
+    .join("")}</div></nav>`;
 }
 
 function regionHtml(view) {
@@ -225,12 +355,16 @@ function regionHtml(view) {
   const links = view.regions
     .map(
       (region) =>
-        `<a${region.id === view.region ? ' aria-current="true"' : ""} href="${esc(regionHref(path, region.id))}">${esc(
-          region.label,
-        )}</a>`,
+        `<a class="seg${region.id === view.region ? " is-on" : ""}"${
+          region.id === view.region ? ' aria-current="true"' : ""
+        } href="${esc(regionHref(path, region.id))}">${esc(region.label)}</a>`,
     )
     .join("");
-  return `<div class="region"><span class="region-label">المنطقة</span><div class="region-list">${links}</div><p class="region-note">الافتراضي الرياض. الإجازات الإضافية تختلف، والإجازات الرسمية من الوزارة تظهر لكل المناطق.</p></div>`;
+  return `<div class="region">
+    <p class="region-label">المنطقة التعليمية</p>
+    <div class="segmented" role="group" aria-label="اختر المنطقة">${links}</div>
+    <p class="region-note">الافتراضي الرياض. الإجازات الإضافية تختلف، والإجازات الرسمية من الوزارة تظهر لكل المناطق.</p>
+  </div>`;
 }
 
 function westernNote(view) {
@@ -240,46 +374,50 @@ function westernNote(view) {
   return `<p class="callout">إجازات مكة المكرمة والمدينة المنورة وجدة والطائف الإضافية لا تُعرض حتى يؤكدها محرر ويربطها بمصدر الإدارة. الظاهر الآن هو تقويم الوزارة المشترك.</p>`;
 }
 
-/** قوائم «المواعيد القادمة» — نستثني موعد الـhero فقد عُرض أعلاه. */
-function sectionsHtml(sections, heroId) {
-  return (sections || [])
-    .map((section) => ({ ...section, cards: section.cards.filter((card) => card.id !== heroId) }))
-    .filter((section) => section.cards.length > 0)
-    .map(
-      (section) => `<section class="upcoming">
-      <h2>${esc(section.title)}</h2>
-      <ul class="occ-list">${section.cards.map(occurrenceRow).join("")}</ul>
-    </section>`,
-    )
-    .join("");
-}
-
 function faqHtml(faq) {
   if (!faq || faq.length === 0) return "";
   const items = faq
-    .map((item) => `<details><summary>${esc(item.question)}</summary><p>${esc(item.answer)}</p></details>`)
+    .map((item) => `<details class="qa"><summary>${esc(item.question)}</summary><p>${esc(item.answer)}</p></details>`)
     .join("");
-  return `<section class="faq"><h2>أسئلة شائعة</h2>${items}</section>`;
+  return `<section class="faq"><h2 class="group-title">أسئلة شائعة</h2><div class="inset">${items}</div></section>`;
 }
 
-export function renderMawaeedHtml(view) {
+function methodHtml(text) {
+  if (!text) return "";
+  return `<section class="method">
+    <h2 class="group-title">كيف نحسب المواعيد ومن أين نأخذها؟</h2>
+    <div class="panel"><p>${esc(text)}</p>
+      <p class="legend"><span class="badge badge-ok">مؤكد</span> من إعلان رسمي منشور
+        <span class="badge badge-warn">متوقع</span> من الجدول المعتاد للجهة حتى يصدر الإعلان</p>
+    </div>
+  </section>`;
+}
+
+export function renderMawaeedHtml(view, options = {}) {
+  const nowMs = Number.isFinite(options.nowMs) ? options.nowMs : Date.now();
   const title = esc(view.page.title);
   const description = esc(view.page.description);
   const canonical = esc(view.page.canonical);
   const home = !view.page.slug;
   const hero = nearestCard(view);
+  const heroBlock = hero ? (view.series || []).find((block) => block.slug === hero.seriesSlug) : null;
+  const heroHref = home && heroBlock ? heroBlock.href : null;
+  const series = sortedSeries(view.series);
 
   const bodyMain = home
-    ? `${heroHtml(hero)}
-       <div class="board">${(view.series || []).map(seriesRow).join("")}</div>
+    ? `${heroHtml(hero, { nowMs, href: heroHref })}
        ${
-         view.methodology
-           ? `<section class="method"><h2>كيف نحسب المواعيد ومن أين نأخذها؟</h2><p>${esc(view.methodology)}</p></section>`
+         series.length
+           ? `<section class="board-wrap" aria-labelledby="board-title">
+                <div class="section-head"><h2 class="group-title" id="board-title">كل المواعيد</h2><span class="section-sub">من الأقرب إلى الأبعد</span></div>
+                <div class="board">${series.map((block) => seriesRow(block, nowMs)).join("")}</div>
+              </section>`
            : ""
-       }`
-    : `${heroHtml(hero)}
+       }
+       ${methodHtml(view.methodology)}`
+    : `${heroHtml(hero, { nowMs, href: null })}
        ${seriesDetail((view.series || [])[0])}
-       ${sectionsHtml(view.sections, hero ? hero.id : null)}
+       ${sectionsHtml(view.sections, hero ? hero.id : null, nowMs)}
        ${westernNote(view)}
        ${faqHtml(view.faq)}`;
 
@@ -289,7 +427,9 @@ export function renderMawaeedHtml(view) {
 <html lang="ar" dir="rtl">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f3f5f8" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0b1017" media="(prefers-color-scheme: dark)">
 <title>${title}</title>
 <meta name="description" content="${description}">
 <link rel="canonical" href="${canonical}">
@@ -324,190 +464,297 @@ ${jsonLd}
 <style>
   :root {
     color-scheme: light;
-    --paper:#fbfcfd; --surface:#fff; --ink:#111c2e; --muted:#5b6675; --line:#e4e9ef;
-    --accent:#0e7cb8; --accent-soft:#eaf6fd;
-    --ok:#0d6b4d; --ok-soft:#e7f6ef;
-    --warn:#8a5a00; --warn-soft:#fff4d6;
-    --neutral:#5b6675; --neutral-soft:#eef1f5;
-    --k-school:#1578b8; --k-salary:#0d6b4d; --k-citizen:#8a5a00;
-    --k-social:#6d28d9; --k-pension:#b45309;
+    --paper:#f3f5f8; --surface:#fff; --surface-2:#f7f9fb; --ink:#101a2b; --muted:#5d6877; --line:#e3e8ee;
+    --accent:#0e7cb8; --accent-soft:#e6f3fb;
+    --ok:#0d6b4d; --ok-soft:#e4f5ec;
+    --warn:#8a5a00; --warn-soft:#fff2cf;
+    --neutral:#5d6877; --neutral-soft:#edf0f4;
+    --k-school:#1571b0; --k-salary:#0d6b4d; --k-citizen:#8a5a00; --k-social:#6d28d9; --k-pension:#b45309;
+    --shadow:0 1px 2px rgba(16,26,43,.05), 0 4px 16px rgba(16,26,43,.05);
+    --radius:18px;
   }
   @media (prefers-color-scheme: dark) {
     :root {
       color-scheme: dark;
-      --paper:#0e141c; --surface:#151d27; --ink:#eaf0f6; --muted:#9aa8b6; --line:#27323e;
+      --paper:#0b1017; --surface:#141c26; --surface-2:#18212c; --ink:#eaf0f6; --muted:#9aa8b6; --line:#253140;
       --accent:#5cc0f0; --accent-soft:#12303f;
       --ok:#6fd3aa; --ok-soft:#10322a;
       --warn:#e8bd6a; --warn-soft:#3a2f14;
       --neutral:#9aa8b6; --neutral-soft:#1d2732;
-      --k-school:#5cc0f0; --k-salary:#6fd3aa; --k-citizen:#e8bd6a;
-      --k-social:#b79cf5; --k-pension:#f0a868;
+      --k-school:#5cc0f0; --k-salary:#6fd3aa; --k-citizen:#e8bd6a; --k-social:#b79cf5; --k-pension:#f0a868;
+      --shadow:0 1px 2px rgba(0,0,0,.3);
     }
   }
-  .k-school { --kind:var(--k-school); }
-  .k-salary { --kind:var(--k-salary); }
-  .k-citizen { --kind:var(--k-citizen); }
-  .k-social { --kind:var(--k-social); }
-  .k-pension { --kind:var(--k-pension); }
+  .k-school  { --kind:var(--k-school);  --kind-deep:#135f96; --kind-deep-2:#1b86c9; }
+  .k-salary  { --kind:var(--k-salary);  --kind-deep:#0b5c42; --kind-deep-2:#138a62; }
+  .k-citizen { --kind:var(--k-citizen); --kind-deep:#7a4f00; --kind-deep-2:#a86d06; }
+  .k-social  { --kind:var(--k-social);  --kind-deep:#5421b5; --kind-deep-2:#7c3aed; }
+  .k-pension { --kind:var(--k-pension); --kind-deep:#94400a; --kind-deep-2:#c2570c; }
 
   * { box-sizing:border-box; }
+  html { -webkit-text-size-adjust:100%; }
   body {
-    margin:0; background:var(--paper); color:var(--ink); line-height:1.75;
+    margin:0; background:var(--paper); color:var(--ink); line-height:1.7;
     font-family:"IBM Plex Sans Arabic","Noto Naskh Arabic","Segoe UI",Tahoma,sans-serif;
-    -webkit-text-size-adjust:100%;
   }
   a { color:var(--accent); text-decoration:none; }
   a:hover { text-decoration:underline; }
-  header, main, footer { width:min(880px, calc(100% - 32px)); margin-inline:auto; }
+  .wrap { width:min(920px, calc(100% - 32px)); margin-inline:auto; }
+  .num, .tile-num, .clock b, .hijri, time { font-variant-numeric:tabular-nums; }
 
-  header {
-    padding:16px 0 10px; display:flex; justify-content:space-between; align-items:baseline;
-    gap:12px; border-bottom:1px solid var(--line); margin-bottom:20px;
+  /* شريط علوي مضغوط يلتصق بالأعلى */
+  .topbar {
+    position:sticky; top:0; z-index:10;
+    background:color-mix(in srgb, var(--paper) 86%, transparent);
+    -webkit-backdrop-filter:saturate(1.6) blur(14px); backdrop-filter:saturate(1.6) blur(14px);
+    border-bottom:1px solid var(--line);
   }
+  .topbar .wrap { display:flex; align-items:center; justify-content:space-between; gap:12px; height:52px; }
   .brand { font-family:Tajawal,sans-serif; font-weight:700; font-size:1.3rem; color:var(--ink); }
-  header .site { font-size:.92rem; color:var(--muted); }
+  .brand:hover { text-decoration:none; }
+  .top-title { font-size:.9rem; color:var(--muted); font-weight:700; }
 
-  .crumbs { display:flex; flex-wrap:wrap; gap:6px; margin:0 0 18px; }
-  .crumbs a { border:1px solid var(--line); border-radius:999px; padding:4px 11px; font-size:.86rem; color:var(--muted); }
-  .crumbs a.current { background:var(--accent-soft); border-color:var(--accent); color:var(--accent); font-weight:700; }
+  /* رأس الصفحة: عنوان كبير بأسلوب iOS */
+  .intro { padding:18px 0 4px; }
+  h1 { font-family:Tajawal,sans-serif; font-weight:700; font-size:1.65rem; line-height:1.35; margin:0 0 8px; letter-spacing:-.01em; }
+  .lede { color:var(--muted); font-size:.95rem; margin:0 0 8px; max-width:62ch; }
+  .updated { display:inline-flex; align-items:center; gap:6px; color:var(--muted); font-size:.8rem; margin:0; }
+  .live { width:7px; height:7px; border-radius:50%; background:var(--ok); box-shadow:0 0 0 3px var(--ok-soft); flex:none; }
 
-  h1 { font-family:Tajawal,sans-serif; font-weight:700; font-size:1.4rem; line-height:1.5; margin:0 0 8px; letter-spacing:-.01em; }
-  .lede { color:var(--muted); font-size:.95rem; margin:0 0 6px; max-width:62ch; }
-  .updated { color:var(--muted); font-size:.82rem; margin:0 0 20px; }
+  /* شرائح الأقسام: تمرير أفقي بلا التفاف */
+  .chips { margin:14px -16px 0; overflow-x:auto; scrollbar-width:none; -webkit-overflow-scrolling:touch; }
+  .chips::-webkit-scrollbar { display:none; }
+  .chips-track { display:flex; gap:8px; padding:2px 16px 4px; width:max-content; }
+  .chip {
+    white-space:nowrap; border-radius:999px; padding:7px 14px; font-size:.88rem; font-weight:700;
+    background:var(--surface); color:var(--muted); border:1px solid var(--line);
+  }
+  .chip:hover { text-decoration:none; color:var(--ink); }
+  .chip.is-current { background:var(--ink); color:var(--paper); border-color:var(--ink); }
 
-  .region { margin:0 0 22px; }
-  .region-label { font-size:.82rem; color:var(--muted); }
-  .region-list { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
-  .region-list a { border:1px solid var(--line); border-radius:8px; padding:5px 11px; font-size:.88rem; color:var(--muted); }
-  .region-list a[aria-current="true"] { background:var(--accent-soft); border-color:var(--accent); color:var(--accent); font-weight:700; }
-  .region-note { color:var(--muted); font-size:.82rem; margin:8px 0 0; max-width:62ch; }
+  /* المنطقة: متحكم مقسّم */
+  .region { margin:18px 0 0; }
+  .region-label { font-size:.8rem; color:var(--muted); font-weight:700; margin:0 0 6px; }
+  .segmented {
+    display:flex; gap:2px; padding:3px; border-radius:12px; background:var(--neutral-soft);
+    overflow-x:auto; scrollbar-width:none;
+  }
+  .segmented::-webkit-scrollbar { display:none; }
+  .seg {
+    flex:1 0 auto; text-align:center; white-space:nowrap; padding:7px 12px; border-radius:9px;
+    font-size:.88rem; color:var(--muted);
+  }
+  .seg:hover { text-decoration:none; color:var(--ink); }
+  .seg.is-on { background:var(--surface); color:var(--ink); font-weight:700; box-shadow:0 1px 3px rgba(16,26,43,.12); }
+  .region-note { color:var(--muted); font-size:.8rem; margin:8px 0 0; max-width:62ch; }
 
-  /* البطل: الموعد الأقرب — العنصر البصري الوحيد البارز */
+  /* البطل: بطاقة «ويدجت» مصمتة بلون القسم */
   .hero {
-    background:var(--surface); border:1px solid var(--line); border-inline-start:4px solid var(--kind, var(--accent));
-    border-radius:12px; padding:16px 18px 14px; margin-bottom:26px;
+    position:relative; overflow:hidden; margin:20px 0 0; color:#fff;
+    background:linear-gradient(145deg, var(--kind-deep-2), var(--kind-deep));
+    border-radius:24px; padding:18px 18px 16px; box-shadow:0 10px 30px -12px var(--kind-deep);
   }
-  .hero-eyebrow {
-    display:flex; align-items:center; gap:7px; margin:0 0 6px;
-    font-size:.85rem; color:var(--muted);
+  .hero::after {
+    content:""; position:absolute; inset-inline-end:-60px; top:-70px; width:220px; height:220px; border-radius:50%;
+    background:radial-gradient(circle, rgba(255,255,255,.16), rgba(255,255,255,0) 70%); pointer-events:none;
   }
-  .dot { width:8px; height:8px; border-radius:50%; background:var(--kind, var(--accent)); flex:none; }
-  .hero-title { font-family:Tajawal,sans-serif; font-weight:700; font-size:1.3rem; line-height:1.45; margin:0 0 14px; }
-  .hero-when { display:flex; flex-wrap:wrap; align-items:baseline; gap:8px 20px; }
-  .hero-count {
-    font-weight:700; font-size:2rem; line-height:1.15; letter-spacing:-.02em;
-    font-variant-numeric:tabular-nums;
+  .hero a { color:#fff; }
+  .hero-top { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+  .hero-kicker { margin:0; font-size:.82rem; font-weight:700; opacity:.85; }
+  .badge-on-hero { background:rgba(255,255,255,.18) !important; color:#fff !important; }
+  .hero-title { font-family:Tajawal,sans-serif; font-weight:700; font-size:1.35rem; line-height:1.45; margin:8px 0 14px; }
+  .clock { display:grid; grid-template-columns:repeat(3, 1fr); gap:8px; }
+  .clock-cell {
+    background:rgba(255,255,255,.14); border:1px solid rgba(255,255,255,.14);
+    border-radius:14px; padding:10px 6px 8px; text-align:center;
   }
-  .hero-count-past { color:var(--muted); font-size:1.3rem; }
-  .hero-cal { display:flex; flex-direction:column; gap:1px; font-size:.95rem; }
-  .hero-cal time { font-weight:700; }
-  .hero-meta { margin:12px 0 0; }
-  .hijri { color:var(--muted); font-size:.88rem; font-variant-numeric:tabular-nums; }
+  .clock-cell b { display:block; font-family:Inter,"IBM Plex Sans Arabic",sans-serif; font-weight:600; font-size:2.1rem; line-height:1.1; letter-spacing:-.02em; }
+  .clock-cell span { display:block; font-size:.78rem; opacity:.85; margin-top:2px; }
+  .clock-word { margin:0; font-family:Tajawal,sans-serif; font-weight:700; font-size:2rem; }
+  .hero-phrase { margin:12px 0 0; font-size:.95rem; }
+  .hero-count { font-weight:700; }
+  .hero-count-past { opacity:.85; }
+  .hero-date { margin:2px 0 0; font-size:.92rem; }
+  .hero-date time { font-weight:700; }
+  .hero-date .hijri { opacity:.85; }
+  .hero .sep { margin-inline:6px; opacity:.6; }
+  .hero-note { margin:10px 0 0; font-size:.84rem; opacity:.88; max-width:60ch; }
+  .hero-foot { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:10px 16px; margin-top:14px; padding-top:12px; border-top:1px solid rgba(255,255,255,.18); }
+  .hero-src { font-size:.82rem; opacity:.9; text-decoration:underline; text-underline-offset:3px; }
+  .hero-cta { font-size:.85rem; font-weight:700; background:#fff; color:var(--kind-deep) !important; padding:7px 14px; border-radius:999px; }
+  .hero-cta:hover { text-decoration:none; }
 
-  .badge { display:inline-block; border-radius:999px; padding:1px 9px; font-size:.78rem; font-weight:700; }
+  .badge { display:inline-block; border-radius:999px; padding:1px 9px; font-size:.76rem; font-weight:700; white-space:nowrap; }
   .badge-ok { background:var(--ok-soft); color:var(--ok); }
   .badge-warn { background:var(--warn-soft); color:var(--warn); }
   .badge-neutral { background:var(--neutral-soft); color:var(--neutral); }
 
-  /* لوحة الأقسام: صفوف بخطوط شعرية، لا بطاقات متطابقة */
-  .board { border-top:1px solid var(--line); }
-  .series { border-bottom:1px solid var(--line); padding:20px 0; }
-  .series h2 { font-family:Tajawal,sans-serif; font-weight:700; font-size:1.05rem; margin:0 0 10px; }
-  .series h2 a { color:var(--ink); }
-  .series h2 a::before { content:""; display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--kind, var(--accent)); margin-inline-end:8px; vertical-align:middle; }
+  /* رؤوس المجموعات */
+  .section-head { display:flex; align-items:baseline; justify-content:space-between; gap:10px; margin:28px 0 10px; }
+  .group-title { font-family:Tajawal,sans-serif; font-weight:700; font-size:1.1rem; margin:0; display:flex; align-items:center; gap:8px; }
+  .section-sub { color:var(--muted); font-size:.82rem; }
+  .group { margin-top:26px; }
+  .group > .group-title { margin-bottom:10px; }
+  .group-count { font-family:Inter,sans-serif; font-size:.75rem; font-weight:600; color:var(--muted); background:var(--neutral-soft); border-radius:999px; padding:0 8px; }
 
-  .row-when { display:flex; flex-wrap:wrap; align-items:baseline; gap:6px 16px; margin-bottom:10px; }
-  .count { font-weight:700; font-size:1.2rem; font-variant-numeric:tabular-nums; }
-  .count-past { color:var(--muted); font-weight:400; font-size:1rem; }
-  .cal { display:flex; flex-wrap:wrap; align-items:baseline; gap:2px 8px; font-size:.9rem; }
-  .cal time { font-weight:700; }
+  /* بطاقات المواعيد: شريط لوني + نص + مربع «باقي» */
+  .board, .list { display:grid; gap:10px; }
+  .list { list-style:none; margin:0; padding:0; }
+  .item { background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow); overflow:hidden; }
+  .item-main { display:flex; align-items:stretch; gap:12px; padding:14px 14px 12px; color:inherit; }
+  a.item-main:hover { text-decoration:none; background:var(--surface-2); }
+  .item-bar { width:4px; border-radius:4px; background:var(--kind); flex:none; }
+  .item-text { flex:1; min-width:0; }
+  .item-series { font-family:Tajawal,sans-serif; font-weight:700; font-size:1.02rem; line-height:1.4; margin:0 0 2px; color:var(--ink); }
+  .item-title { margin:0; font-size:.9rem; color:var(--muted); }
+  .item-title-strong { color:var(--ink); font-weight:700; font-size:.96rem; }
+  .item-empty { font-style:normal; }
+  .item-date { margin:6px 0 0; font-size:.86rem; line-height:1.5; display:flex; flex-direction:column; }
+  .item-date time { font-weight:700; }
+  .item-date .hijri { color:var(--muted); font-size:.8rem; }
+  .sep { margin-inline:6px; color:var(--muted); }
+  .item-end { margin:2px 0 0; font-size:.82rem; color:var(--muted); }
+  .item-meta { margin:8px 0 0; }
 
-  .answer { font-size:1rem; margin:0 0 8px; padding-inline-start:12px; border-inline-start:3px solid var(--kind, var(--accent)); }
-  .follow, .summary { color:var(--muted); font-size:.92rem; margin:6px 0 0; max-width:62ch; }
-  .note { color:var(--muted); font-size:.86rem; margin:8px 0 0; max-width:62ch; }
-  .src { font-size:.86rem; margin:8px 0 0; }
-  .prev { color:var(--muted); font-size:.82rem; margin:10px 0 0; }
-  .end { color:var(--muted); font-size:.86rem; }
+  .tile {
+    flex:none; align-self:center; width:78px; min-height:78px; border-radius:16px;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center;
+    background:var(--neutral-soft); background:color-mix(in srgb, var(--kind) 12%, var(--surface));
+    color:var(--kind); padding:6px 4px;
+  }
+  .tile-pre { font-size:.68rem; font-weight:700; opacity:.8; line-height:1.2; }
+  .tile-num { font-family:Inter,"IBM Plex Sans Arabic",sans-serif; font-weight:600; font-size:1.75rem; line-height:1.1; letter-spacing:-.02em; }
+  .tile-unit { font-size:.74rem; font-weight:700; line-height:1.3; }
+  .tile-word { font-size:.85rem; font-weight:700; padding:0 4px; line-height:1.4; }
+  .tile-past { color:var(--neutral); background:var(--neutral-soft); }
 
-  /* قائمة المواعيد القادمة داخل صفحات الأقسام */
-  .upcoming { margin-top:26px; }
-  .upcoming > h2 { font-family:Tajawal,sans-serif; font-weight:700; font-size:1.05rem; margin:0 0 4px; }
-  .occ-list { list-style:none; margin:0; padding:0; border-top:1px solid var(--line); }
-  .occ { border-bottom:1px solid var(--line); padding:14px 0; }
-  .occ-when { display:flex; flex-wrap:wrap; align-items:baseline; gap:4px 14px; margin-bottom:6px; }
-  .occ-title { font-weight:700; font-size:.98rem; margin:0 0 4px; }
-  .occ-meta { margin:0; }
+  .answer { margin:0; font-size:.92rem; color:var(--ink); }
+  .answer-lg { padding:0; font-size:1rem; }
+  .more { border-top:1px solid var(--line); }
+  .more > summary {
+    list-style:none; cursor:pointer; padding:10px 14px; font-size:.84rem; font-weight:700; color:var(--accent);
+    display:flex; align-items:center; justify-content:space-between;
+  }
+  .more > summary::-webkit-details-marker { display:none; }
+  .more > summary::after { content:"+"; font-family:Inter,sans-serif; font-size:1.1rem; line-height:1; color:var(--muted); }
+  .more[open] > summary::after { content:"−"; }
+  .more-body { padding:0 14px 14px; }
+  .follow, .summary { color:var(--muted); font-size:.9rem; margin:6px 0 0; max-width:62ch; }
+  .more-body > :first-child { margin-top:0; }
+  .note { color:var(--muted); font-size:.85rem; margin:8px 0 0; max-width:62ch; }
+  .src { font-size:.85rem; margin:10px 0 0; display:flex; flex-wrap:wrap; gap:4px 8px; align-items:baseline; }
+  .src-label { font-size:.72rem; font-weight:700; color:var(--muted); background:var(--neutral-soft); border-radius:6px; padding:0 6px; }
+  .prev { color:var(--muted); font-size:.8rem; margin:10px 0 0; }
 
-  .callout { background:var(--warn-soft); border:1px solid var(--line); border-radius:10px; padding:11px 13px; font-size:.9rem; margin:22px 0 0; max-width:62ch; }
-  .method { margin-top:28px; }
-  .method h2, .faq h2 { font-family:Tajawal,sans-serif; font-weight:700; font-size:1.05rem; margin:0 0 8px; }
-  .method p { color:var(--muted); font-size:.92rem; margin:0; max-width:62ch; }
-  .faq { margin-top:28px; }
-  details { background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:10px 13px; margin:8px 0; }
-  summary { cursor:pointer; font-weight:700; font-size:.95rem; }
-  details p { color:var(--muted); font-size:.9rem; margin:8px 0 0; }
+  /* لوحات نصية (صفحة القسم والمنهجية) */
+  .panel { background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:14px 16px; margin-top:14px; box-shadow:var(--shadow); }
+  .panel.k-school, .panel.k-salary, .panel.k-citizen, .panel.k-social, .panel.k-pension { border-inline-start:4px solid var(--kind); }
+  .method { margin-top:30px; }
+  .method .panel { margin-top:10px; }
+  .method p { color:var(--muted); font-size:.9rem; margin:0; max-width:66ch; }
+  .method .legend { margin-top:12px; display:flex; flex-wrap:wrap; align-items:center; gap:6px 8px; font-size:.82rem; }
 
-  footer { padding:26px 0 40px; color:var(--muted); font-size:.85rem; border-top:1px solid var(--line); margin-top:30px; }
+  .callout { background:var(--warn-soft); border:1px solid var(--line); border-radius:14px; padding:11px 13px; font-size:.9rem; margin:22px 0 0; max-width:62ch; }
+
+  /* الأسئلة: قائمة مجمّعة */
+  .faq { margin-top:30px; }
+  .inset { margin-top:10px; background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); overflow:hidden; box-shadow:var(--shadow); }
+  .qa + .qa { border-top:1px solid var(--line); }
+  .qa > summary { list-style:none; cursor:pointer; padding:13px 16px; font-weight:700; font-size:.94rem; display:flex; justify-content:space-between; gap:12px; }
+  .qa > summary::-webkit-details-marker { display:none; }
+  .qa > summary::after { content:"‹"; color:var(--muted); transition:transform .15s; }
+  .qa[open] > summary::after { transform:rotate(-90deg); }
+  .qa p { color:var(--muted); font-size:.9rem; margin:0; padding:0 16px 14px; }
+
+  footer { padding:26px 0 calc(40px + env(safe-area-inset-bottom)); color:var(--muted); font-size:.82rem; margin-top:30px; }
   footer p { margin:0; }
 
+  :focus-visible { outline:2px solid var(--accent); outline-offset:2px; border-radius:6px; }
+  @media (prefers-reduced-motion: reduce) { * { transition:none !important; } }
+
   @media (min-width:760px) {
-    h1 { font-size:1.7rem; }
-    .hero { padding:20px 22px 18px; }
-    .hero-title { font-size:1.5rem; }
-    .hero-count { font-size:2.5rem; }
+    h1 { font-size:2rem; }
+    .chips { margin-inline:0; }
+    .chips-track { padding-inline:0; }
+    .segmented { display:inline-flex; }
+    .hero { padding:24px 26px 20px; }
+    .hero-title { font-size:1.6rem; }
+    .clock { max-width:440px; }
+    .clock-cell b { font-size:2.6rem; }
+    .board { grid-template-columns:1fr 1fr; align-items:start; }
   }
 </style>
 </head>
 <body>
-<header><a class="brand" href="/">سبق</a><a class="site" href="/mawaeed">مواعيدك</a></header>
-<main>
-${navHtml(view)}
+<header class="topbar"><div class="wrap"><a class="brand" href="/">سبق</a><a class="top-title" href="/mawaeed">مواعيدك</a></div></header>
+<main class="wrap">
+<div class="intro">
 <h1>${esc(view.page.h1)}</h1>
 <p class="lede">${description}</p>
-<p class="updated">آخر تحديث للبيانات: <time datetime="${esc(view.dateModified)}">${esc(view.dateModifiedLabel)}</time> — بتوقيت السعودية</p>
+<p class="updated"><span class="live" aria-hidden="true"></span>آخر تحديث للبيانات: <time datetime="${esc(view.dateModified)}">${esc(view.dateModifiedLabel)}</time> — بتوقيت السعودية</p>
+</div>
+${navHtml(view)}
 ${regionHtml(view)}
 ${bodyMain}
 </main>
-<footer><p>الأوقات بتوقيت السعودية. التاريخ الهجري بتقويم أم القرى.</p></footer>
+<footer class="wrap"><p>الأوقات بتوقيت السعودية. التاريخ الهجري بتقويم أم القرى.</p></footer>
 <script>
 (function () {
+  function daysText(n) {
+    if (n === 1) return "يوم واحد";
+    if (n === 2) return "يومين";
+    if (n <= 10) return n + " أيام";
+    return n + " يوماً";
+  }
+  function hoursText(n) {
+    if (n <= 0) return "";
+    if (n === 1) return "وساعة";
+    if (n === 2) return "وساعتان";
+    if (n <= 10) return "و" + n + " ساعات";
+    return "و" + n + " ساعة";
+  }
   function phrase(days, hours, todayLabel) {
     if (days <= 0 && hours <= 0) return todayLabel;
-    function daysText(n) {
-      if (n === 1) return "يوم واحد";
-      if (n === 2) return "يومين";
-      if (n <= 10) return n + " أيام";
-      return n + " يوماً";
-    }
-    function hoursText(n) {
-      if (n <= 0) return "";
-      if (n === 1) return "وساعة";
-      if (n === 2) return "وساعتان";
-      if (n <= 10) return "و" + n + " ساعات";
-      return "و" + n + " ساعة";
-    }
     if (days <= 0) return "بعد " + hoursText(hours).replace(/^و/, "");
     if (hours <= 0) return "بعد " + daysText(days);
     return "بعد " + daysText(days) + " " + hoursText(hours);
   }
+  function dayUnit(n) { return n <= 2 ? "يوم" : n <= 10 ? "أيام" : "يوماً"; }
+  function hourUnit(n) { return n <= 2 ? "ساعة" : n <= 10 ? "ساعات" : "ساعة"; }
+  function left(target) {
+    var bits = String(target || "").split("-");
+    if (bits.length !== 3) return null;
+    var start = Date.UTC(Number(bits[0]), Number(bits[1]) - 1, Number(bits[2]), -3, 0, 0, 0);
+    var ms = start - Date.now();
+    if (!(ms > 0)) return { done: true };
+    var mins = Math.floor(ms / 60000);
+    return { days: Math.floor(mins / 1440), hours: Math.floor(mins / 60) % 24, minutes: mins % 60 };
+  }
+  function each(sel, fn) { var n = document.querySelectorAll(sel); for (var i = 0; i < n.length; i++) fn(n[i]); }
   function tick() {
-    var now = new Date();
-    var nodes = document.querySelectorAll("[data-countdown]");
-    for (var i = 0; i < nodes.length; i++) {
-      var el = nodes[i];
-      var target = el.getAttribute("data-date");
-      var todayLabel = el.getAttribute("data-today") || "اليوم";
-      if (!target) continue;
-      var bits = target.split("-");
-      var start = Date.UTC(Number(bits[0]), Number(bits[1]) - 1, Number(bits[2]), -3, 0, 0, 0);
-      var ms = start - now.getTime();
-      if (ms <= 0) { el.textContent = todayLabel; continue; }
-      var totalHours = Math.floor(ms / 3600000);
-      el.textContent = phrase(Math.floor(totalHours / 24), totalHours % 24, todayLabel);
-    }
+    each("[data-countdown]", function (el) {
+      var r = left(el.getAttribute("data-date")); if (!r) return;
+      var today = el.getAttribute("data-today") || "اليوم";
+      el.textContent = r.done ? today : phrase(r.days, r.hours, today);
+    });
+    each("[data-clock]", function (el) {
+      var r = left(el.getAttribute("data-date")); if (!r) return;
+      if (r.done) { el.outerHTML = '<p class="clock-word">اليوم</p>'; return; }
+      var map = { d: r.days, h: r.hours, m: r.minutes };
+      var parts = el.querySelectorAll("[data-part]");
+      for (var i = 0; i < parts.length; i++) parts[i].textContent = map[parts[i].getAttribute("data-part")];
+    });
+    each("[data-tile]", function (el) {
+      var r = left(el.getAttribute("data-date")); if (!r) return;
+      var num = el.querySelector(".tile-num"), unit = el.querySelector(".tile-unit");
+      if (r.done) { el.innerHTML = '<span class="tile-word"></span>'; el.firstChild.textContent = el.getAttribute("data-today") || "اليوم"; return; }
+      if (!num || !unit) return;
+      if (r.days >= 1) { num.textContent = r.days; unit.textContent = dayUnit(r.days); }
+      else { var h = Math.max(1, r.hours); num.textContent = h; unit.textContent = hourUnit(h); }
+    });
   }
   tick();
-  setInterval(tick, 60000);
+  setInterval(tick, 30000);
 })();
 </script>
 </body>
