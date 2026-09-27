@@ -26865,7 +26865,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
 
         let xml = '<?xml version="1.0" encoding="UTF-8"?>\n';
         xml += '<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n';
-        xml += `  <sitemap><loc>${baseUrl}/sitemap-static.xml</loc></sitemap>\n`;
+        xml += `  <sitemap><loc>${baseUrl}/sitemap-static.xml</loc></sitemap>\n  <sitemap><loc>${baseUrl}/sitemap-mawaeed.xml</loc></sitemap>\n`;
         xml += `  <sitemap><loc>${baseUrl}/sitemap-categories.xml</loc>${lastmod}</sitemap>\n`;
         xml += `  <sitemap><loc>${baseUrl}/sitemap-news.xml</loc>${lastmod}</sitemap>\n`;
         for (let i = 1; i <= SITEMAP_AR_BUCKETS; i++) {
