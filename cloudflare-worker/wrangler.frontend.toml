@@ -27,3 +27,7 @@ routes = []
 [vars]
 API_ORIGIN = "https://api.sabq.org"
 FRONTEND_ORIGIN = "https://sabq.org"
+
+[observability]
+enabled = true
+head_sampling_rate = 1

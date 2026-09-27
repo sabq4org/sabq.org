@@ -16,3 +16,7 @@ region = "aws:us-east-1"
 
 [vars]
 API_ORIGIN = "https://sabqorg-production.up.railway.app"
+
+[observability]
+enabled = true
+head_sampling_rate = 1
