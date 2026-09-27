@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   confirmOccurrence: vi.fn(),
   listSitemapEntries: vi.fn(),
   purgeContentSurfaces: vi.fn(),
+  captureException: vi.fn(),
 }));
 
 vi.mock("../../server/services/mawaeedService", () => ({
@@ -31,6 +32,10 @@ vi.mock("../../server/services/mawaeedService", () => ({
 
 vi.mock("../../server/services/cloudflarePurge", () => ({
   purgeContentSurfaces: mocks.purgeContentSurfaces,
+}));
+
+vi.mock("@sentry/node", () => ({
+  captureException: mocks.captureException,
 }));
 
 vi.mock("../../server/rbac", () => ({
@@ -89,6 +94,23 @@ describe("mawaeed API", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("cache-control")).toBe("public, max-age=30, s-maxage=60");
     expect(mocks.getPublicPage).toHaveBeenCalledWith(null, "makkah");
+  });
+
+  it("logs a database failure and sends it to Sentry", async () => {
+    const cause = Object.assign(new Error("permission denied for table mawaeed_series"), { code: "42501" });
+    const error = new Error("Failed query: select from mawaeed_series");
+    error.cause = cause;
+    mocks.getPublicPage.mockRejectedValueOnce(error);
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const response = await fetch(`${base}/api/mawaeed`);
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({ message: "تعذر تنفيذ الطلب" });
+    expect(spy).toHaveBeenCalledWith("[mawaeed]", error);
+    expect(mocks.captureException).toHaveBeenCalledWith(error, {
+      tags: { subsystem: "mawaeed", pgCode: "42501" },
+      extra: { cause: "permission denied for table mawaeed_series" },
+    });
+    spy.mockRestore();
   });
 
   it("returns 404 for an unknown section", async () => {
