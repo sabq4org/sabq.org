@@ -15,12 +15,23 @@ describe("early error buffer (Sentry loads after first paint)", () => {
     const t = fakeTarget();
     installEarlyErrorBuffer(t as unknown as Window);
     const boom = new Error("chunk failed");
-    t.listeners.get("error")!({ error: boom } as unknown as Event);
+    t.listeners.get("error")!({
+      error: boom,
+      filename: "https://sabq.org/assets/index-boot.js",
+    } as unknown as Event);
     t.listeners.get("unhandledrejection")!({ reason: new TypeError("x") } as unknown as Event);
     t.listeners.get("unhandledrejection")!({ reason: { noStack: true } } as unknown as Event);
     const drained = drainEarlyErrors(t as unknown as Window);
     expect(drained).toHaveLength(2);
-    expect(drained[0]).toBe(boom);
+    expect(drained[0]).toEqual({
+      error: boom,
+      source: "error",
+      filename: "https://sabq.org/assets/index-boot.js",
+    });
+    expect(drained[1]).toMatchObject({
+      error: expect.any(TypeError),
+      source: "unhandledrejection",
+    });
     expect(t.listeners.size).toBe(0);
     expect(drainEarlyErrors(t as unknown as Window)).toEqual([]);
   });

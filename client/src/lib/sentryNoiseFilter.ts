@@ -39,7 +39,7 @@ import {
 
 /**
  * «من أصولنا»: حزمة الويب (sabq.org ونطاقاتها الفرعية بما فيها cdn، ومعاينات
- * Cloudflare Pages)، وعمّال blob: أنشأناها نحن، وأغلفة كاباسيتور
+ * Cloudflare Pages لمشروع `sabq-org` فقط)، وعمّال blob: أنشأناها نحن، وأغلفة كاباسيتور
  * (capacitor://localhost على iOS وhttps://localhost داخل تطبيق أندرويد).
  *
  * النمط **مثبّت على بداية السلسلة وعلى حدّ المضيف**. الصيغة السابقة كانت
@@ -48,7 +48,7 @@ import {
  * محدود (الفرز فقط) لكنه ثغرة تصنيف حقيقية كشفها اختبار الوحدة.
  */
 export const FIRST_PARTY_FRAME =
-  /^(?:blob:|capacitor:)|^https?:\/\/(?:[a-z0-9-]+\.)*(?:sabq\.org|pages\.dev|localhost)(?::\d+)?\/(?:assets|src)\//i;
+  /^(?:blob:|capacitor:)|^https?:\/\/(?:(?:[a-z0-9-]+\.)*sabq\.org|(?:[a-z0-9-]+\.)?sabq-org\.pages\.dev|localhost)(?::\d+)?\/(?:assets|src)\//i;
 
 /** إطارات تُنتجها المنصّة لا ملف لها — تُتخطّى نزولًا في المكدس. */
 const SYNTHETIC_FILENAMES = new Set(["[native code]", "[wasm code]"]);
@@ -69,6 +69,34 @@ export function isAutoCapturedMechanism(mechanismType: unknown): boolean {
 
 export function isFirstPartyFilename(filename: unknown): boolean {
   return typeof filename === "string" && FIRST_PARTY_FRAME.test(filename);
+}
+
+export interface BufferedEarlyErrorLike {
+  error: Error;
+  source: "error" | "unhandledrejection";
+  filename?: string;
+}
+
+/**
+ * Sentry is loaded after first paint. Replaying an early Error with
+ * `captureException` changes its mechanism to `generic` and discards the
+ * ErrorEvent filename. That made injected, stackless syntax errors look like
+ * explicit application captures (JAVASCRIPT-REACT-3K/3M).
+ *
+ * Replay only when the original event still has first-party provenance. This
+ * preserves genuine boot/chunk failures while applying the same fail-closed
+ * rule used by beforeSend for automatically captured stackless events.
+ */
+export function shouldReplayEarlyError(record: BufferedEarlyErrorLike): boolean {
+  if (isFirstPartyFilename(record.filename)) return true;
+
+  const stack = record.error.stack;
+  if (typeof stack !== "string" || !stack) return false;
+  for (const line of stack.split("\n")) {
+    const url = line.match(/(?:blob:|capacitor:|https?:\/\/)[^\s)]+/i)?.[0];
+    if (isFirstPartyFilename(url)) return true;
+  }
+  return false;
 }
 
 function hasBrowserExtensionFrame(event: MinimalSentryEvent): boolean {

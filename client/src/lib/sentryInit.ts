@@ -3,6 +3,7 @@ import {
   sentryBeforeSend,
   SENTRY_DENY_URLS,
   SENTRY_IGNORE_ERRORS,
+  shouldReplayEarlyError,
 } from "./sentryNoiseFilter";
 import { drainEarlyErrors } from "./earlyErrorBuffer";
 
@@ -65,5 +66,10 @@ export function initSentry() {
     // المنطق كامل ومشروح في lib/sentryNoiseFilter.ts.
     beforeSend: sentryBeforeSend,
   });
-  for (const err of drainEarlyErrors()) Sentry.captureException(err);
+  for (const record of drainEarlyErrors()) {
+    if (!shouldReplayEarlyError(record)) continue;
+    Sentry.captureException(record.error, {
+      tags: { sabq_early_error_source: record.source },
+    });
+  }
 }
