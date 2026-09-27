@@ -127,7 +127,9 @@ export default tseslint.config(
     // 409 conflict body moved to services/articleDerivedWrites.ts → 36353.
     // 2026-09-24: robots.txt body moved to utils/robotsTxt.ts (Content-Signal) → 36329.
     files: ["server/routes.ts"],
-    rules: { "max-lines": ["error", { max: 36304 }] },
+    // 2026-09-27: استدعاءات «النشر أولاً» داخل معالجات الحفظ والنشر القائمة.
+    // المنطق في publishFirstService؛ السقف = حجم الملف بعد تلك الاستدعاءات.
+    rules: { "max-lines": ["error", { max: 36336 }] },
   },
   {
     files: ["server/storage.ts"],

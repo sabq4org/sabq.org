@@ -34,6 +34,7 @@ import {
   botDraftArchiveSchema,
   botDraftCreateSchema,
   botDraftPublishSchema,
+  botDraftVerdictSchema,
   botDraftReadySchema,
   botDraftScheduleSchema,
   botDraftUnscheduleSchema,
@@ -55,6 +56,7 @@ import {
   isBotDraftsConfigured,
   markBotDraftReady,
   publishBotDraft,
+  recordBotReviewerVerdict,
   rescheduleBotDraft,
   scheduleBotDraft,
   unscheduleBotDraft,
@@ -337,6 +339,29 @@ router.post(
       res.json(draft);
     } catch (error) {
       handleError(res, error, "publish");
+    }
+  },
+);
+
+router.post(
+  `${BOT_DRAFTS_BASE_PATH}/:id/verdict`,
+  requireBotToken,
+  botWriteLimiter,
+  rejectForbiddenFields,
+  async (req: BotRequest, res: Response) => {
+    const parsed = botDraftVerdictSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      return sendError(res, 400, {
+        code: "validation_error",
+        message: "الحكم يحتاج verdict (ok أو minor أو major) وreviewerName",
+        details: parsed.error.flatten(),
+      });
+    }
+    try {
+      const verdict = await recordBotReviewerVerdict(req.params.id, parsed.data);
+      res.status(201).json(verdict);
+    } catch (error) {
+      handleError(res, error, "verdict");
     }
   },
 );

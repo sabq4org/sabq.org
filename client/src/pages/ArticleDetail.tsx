@@ -1312,6 +1312,17 @@ export default function ArticleDetail() {
                   data-testid="content-article-body"
                 />
               )}
+              {(() => {
+                const updateLines = (article as unknown as { updateLines?: Array<{ id: string; text: string }> }).updateLines;
+                if (!Array.isArray(updateLines) || updateLines.length === 0) return null;
+                return (
+                  <ul className="mt-6 space-y-2 border-t pt-4 text-sm text-muted-foreground" data-testid="article-update-lines">
+                    {updateLines.map((line) => (
+                      <li key={line.id}>{line.text}</li>
+                    ))}
+                  </ul>
+                );
+              })()}
             </div>
 
             {/* Weekly Photos Section */}

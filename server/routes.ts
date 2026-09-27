@@ -24,6 +24,15 @@ import { isSafeRedirectUrl } from "./utils/safeRedirect";
 import { getRealIp as getTrustedRealIp } from "./utils/trustedProxyIp";
 import { toPublicUser } from "./utils/publicUser";
 import { denyPublish } from "./services/publishGate";
+import {
+  attachPublishedUpdateLines,
+  editorDisplayName,
+  guardDirectArticlePublish,
+  prepareDashboardArticleSave,
+  prepareNewArticlePublishFirst,
+  recordArticleRevision,
+  recordPublishOverride,
+} from "./services/publishFirstService";
 import { AR_SITEMAP_BUCKETS, archiveSitemapBucketCondition, isCanonicalArchiveArticle } from "./services/archiveSeo";
 import { apiListingNoindex } from "./utils/apiListingRobots";
 import { buildRobotsTxt } from "./utils/robotsTxt";
@@ -552,6 +561,8 @@ function sanitizeArticleUpdatePayload(body: any) {
   if (sanitizedBody.categoryId === '') {
     delete sanitizedBody.categoryId;
   }
+
+  for (const key of ["draftCreatedAt", "correctedAt", "verdictAt"]) delete sanitizedBody[key];
 
   if (sanitizedBody.content && typeof sanitizedBody.content === "string") {
     sanitizedBody.content = sanitizeArticleHtml(sanitizedBody.content);
@@ -7738,10 +7749,17 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         }
       }
 
+      const publishFirstCreate = await prepareNewArticlePublishFirst(articleData, req.user, req.body, () => getEffectiveUserPermissions(req.user.id));
+      if ("status" in publishFirstCreate) return res.status(publishFirstCreate.status).json(publishFirstCreate.body);
+
       const [newArticle] = await db
         .insert(articles)
         .values(articleData)
         .returning();
+
+      if (publishFirstCreate.override) {
+        await recordPublishOverride({ articleId: newArticle.id, actorUserId: req.user.id, actorName: publishFirstCreate.actorName, action: "publish", reason: publishFirstCreate.reason });
+      }
 
       // Invalidate caches when articles are created
       memoryCache.invalidatePattern('^homepage');
@@ -8328,6 +8346,12 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         }
       }
 
+      const publishFirstSave = await prepareDashboardArticleSave({
+        articleId, existing: existingArticle, updateData, userId, user: req.user, permissions: userPermissions, body: req.body,
+      });
+      if ("status" in publishFirstSave) return res.status(publishFirstSave.status).json(publishFirstSave.body);
+      const revisionPlan = publishFirstSave.revisionPlan;
+
       // Ensure unique slug (appends -2, -3 if duplicate exists on another article)
       if (updateData.slug) {
         updateData.slug = await resolveUniqueArticleSlug(updateData.slug, articleId);
@@ -8345,6 +8369,10 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
 
       if (!updatedArticle) {
         return res.status(409).json(await articleWriteConflict(articleId, userId));
+      }
+
+      if (revisionPlan) {
+        recordArticleRevision({ articleId, editorUserId: userId, editorName: await editorDisplayName(userId), plan: revisionPlan }).catch((error) => console.error("[publish-first] revision failed", error));
       }
 
       // Invalidate caches immediately (in-memory + Redis + Cloudflare CDN).
@@ -8756,6 +8784,9 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
           return res.status(403).json({ message: "لا يمكنك نشر مقالات الآخرين" });
         }
       }
+
+      const directPublishGate = await guardDirectArticlePublish({ article, articleId, userId, user: req.user, permissions: userPermissions, body: req.body });
+      if (directPublishGate) return res.status(directPublishGate.status).json(directPublishGate.body);
 
       // مالك الوكالة أو موظف مرتبط (linkedPublisherId) — إحصاء/خصم الرصيد
       const agencyPublisher = await storage.getPublisherByUserId(userId);
@@ -13687,6 +13718,7 @@ Respond in valid JSON format only:
         storage.recordArticleRead(userId, finalArticle.id).catch(() => {});
       }
 
+      await attachPublishedUpdateLines(finalArticle);
       res.json(finalArticle);
     } catch (error) {
       console.error("Error fetching article:", error);

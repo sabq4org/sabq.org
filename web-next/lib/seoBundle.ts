@@ -40,6 +40,7 @@ export interface SeoBundle {
   keywords: string[];
   meta: SeoBundleMeta;
   jsonLd: Record<string, unknown>;
+  updateLines?: Array<{ id: string; at: string; text: string }>;
 }
 
 export type Lang = "ar" | "en" | "ur";
