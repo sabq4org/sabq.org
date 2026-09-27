@@ -560,7 +560,9 @@ export default function MawaeedManagement() {
           </div>
 
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold leading-6 text-foreground">{row.titleAr}</p>
+            <p className="text-sm font-semibold leading-6 text-foreground [overflow-wrap:anywhere]">
+              {row.titleAr}
+            </p>
             <div className="mt-1 flex flex-wrap items-center gap-1">
               <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
                 <span aria-hidden className={cn("h-1.5 w-1.5 rounded-full", kind.dot)} />
@@ -576,7 +578,9 @@ export default function MawaeedManagement() {
               <p className="mt-1 text-[11px] text-muted-foreground">حتى {formatGregorian(row.endsOn).label}</p>
             ) : null}
             {note ? (
-              <p className="mt-1 line-clamp-2 text-[11px] leading-relaxed text-muted-foreground">{note}</p>
+              <p className="mt-1 line-clamp-2 text-[11px] leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">
+                {note}
+              </p>
             ) : null}
           </div>
 
@@ -726,9 +730,10 @@ export default function MawaeedManagement() {
 
         <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
           {/* الشريط الزمني */}
-          <div className="space-y-3">
+          {/* min-w-0 على أعمدة الشبكة يمنع أي عنصر بالداخل من فرض عرضه الأدنى على الصفحة */}
+          <div className="min-w-0 space-y-3">
             {/* شريط الأدوات */}
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center">
               <div className="relative flex-1">
                 <Search className="pointer-events-none absolute end-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
@@ -869,7 +874,7 @@ export default function MawaeedManagement() {
           </div>
 
           {/* سجل التغييرات */}
-          <aside className="lg:sticky lg:top-4 lg:self-start">
+          <aside className="min-w-0 lg:sticky lg:top-4 lg:self-start">
             <Card className="overflow-hidden rounded-2xl border border-border bg-card shadow-none">
               <header className="flex items-center gap-2 border-b border-border/60 px-4 py-3">
                 <History className="h-4 w-4 text-muted-foreground" />
@@ -892,7 +897,7 @@ export default function MawaeedManagement() {
                     const diffs = changeDiffs(change);
                     const headline = (change.after?.titleAr as string | undefined) ?? "موعد";
                     return (
-                      <li key={change.id} className="px-4 py-3">
+                      <li key={change.id} className="min-w-0 px-4 py-3">
                         <div className="flex items-baseline justify-between gap-2">
                           <p className="text-[13px] font-medium text-foreground">
                             {ACTION_LABELS[change.action] ?? change.action}
@@ -904,9 +909,14 @@ export default function MawaeedManagement() {
                         <p className="mt-0.5 truncate text-[12px] text-muted-foreground">{headline}</p>
                         <p className="text-[11px] text-muted-foreground">{change.actorName || "النظام"}</p>
                         {diffs.length > 0 ? (
-                          <ul className="mt-1.5 space-y-0.5">
+                          <ul className="mt-1.5 min-w-0 space-y-0.5">
                             {diffs.slice(0, 4).map((diff) => (
-                              <li key={diff.field} className="text-[11px] leading-relaxed text-muted-foreground">
+                              // overflow-wrap:anywhere يكسر روابط المصدر الطويلة، ويخفض العرض الأدنى
+                              // للعنصر — بخلاف break-words الذي لا يؤثر على قياس min-content.
+                              <li
+                                key={diff.field}
+                                className="text-[11px] leading-relaxed text-muted-foreground [overflow-wrap:anywhere]"
+                              >
                                 <span className="font-medium text-foreground/80">{diff.label}:</span>{" "}
                                 {change.before ? (
                                   <>
