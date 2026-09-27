@@ -3,6 +3,7 @@
  * الأدمن يمر لأن userHasPermission يختصر حسابات المسؤول.
  */
 import { Router, type Request, type Response } from "express";
+import * as Sentry from "@sentry/node";
 import { ZodError } from "zod";
 import { requirePermission } from "../rbac";
 import { purgeContentSurfaces } from "../services/cloudflarePurge";
@@ -26,6 +27,16 @@ function actorId(req: Request): string | null {
   return id || null;
 }
 
+function reportUnexpected(error: unknown) {
+  console.error("[mawaeed]", error);
+  const cause = error instanceof Error ? error.cause : undefined;
+  const pgCode = cause && typeof cause === "object" && "code" in cause ? String((cause as { code?: unknown }).code) : undefined;
+  Sentry.captureException(error, {
+    tags: { subsystem: "mawaeed", ...(pgCode ? { pgCode } : {}) },
+    extra: { cause: cause instanceof Error ? cause.message : cause ?? null },
+  });
+}
+
 function sendError(res: Response, error: unknown) {
   if (error instanceof ZodError) {
     return res.status(400).json({ message: "بيانات غير صالحة", errors: error.issues.map((issue) => issue.message) });
@@ -33,7 +44,7 @@ function sendError(res: Response, error: unknown) {
   if (error instanceof MawaeedError) {
     return res.status(error.status).json({ message: error.message });
   }
-  console.error("[mawaeed]", error);
+  reportUnexpected(error);
   return res.status(500).json({ message: "تعذر تنفيذ الطلب" });
 }
 
@@ -131,7 +142,7 @@ router.get("/sitemap-mawaeed.xml", async (_req, res) => {
     res.setHeader("Cache-Control", "public, max-age=1800, s-maxage=1800");
     res.send(xml);
   } catch (error) {
-    console.error("[mawaeed] sitemap", error);
+    reportUnexpected(error);
     res.status(500).send("Error generating sitemap");
   }
 });
