@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-03T04:18:06.098Z",
+  "generatedAt": "2026-09-27T04:56:49.147Z",
   "systems": [
     {
       "id": "account-center",
@@ -31,7 +31,7 @@
     },
     {
       "id": "loyalty",
-      "fileCount": 828,
+      "fileCount": 31,
       "samplePaths": [
         "server/services/loyalty.ts",
         "server/routes/loyaltyAdmin.ts",
@@ -45,7 +45,7 @@
     },
     {
       "id": "predictions-core",
-      "fileCount": 36,
+      "fileCount": 43,
       "samplePaths": [
         "server/services/predictions/fixtureAdapter.ts",
         "server/services/predictions/fixtureSyncLogic.ts",
@@ -59,21 +59,21 @@
     },
     {
       "id": "editorial",
-      "fileCount": 137,
+      "fileCount": 232,
       "samplePaths": [
-        "client/src/components/staff/MyStaffProfileCard.tsx",
-        "client/src/components/staff/MyServicesHomeLink.tsx",
-        "client/src/components/staff/StaffProfileForm.tsx",
-        "client/src/pages/dashboard/StaffProfilesDirectory.tsx",
-        "client/src/pages/dashboard/StaffProfilePage.tsx",
-        "client/src/pages/dashboard/MyServicesPage.tsx",
-        "server/routes/staffProfiles.ts",
-        "server/services/staffProfileService.ts"
+        "server/services/mobileAdminSchedule.ts",
+        "tests/unit/mobileAdminSchedule.test.ts",
+        "sabq app ios/sabq/Models/AdminModels.swift",
+        "sabq app ios/sabq/Screens/AdminArticleEditorView.swift",
+        "sabq app ios/sabq/Screens/AdminDashboardView.swift",
+        "sabq app ios/sabq/Components/AdminDashboardComponents.swift",
+        "sabq app ios/sabqTests/AdminScheduleTests.swift",
+        "sabq app ios/sabqTests/AdminScheduleSnapshotTests.swift"
       ]
     },
     {
       "id": "ifox",
-      "fileCount": 48,
+      "fileCount": 50,
       "samplePaths": [
         "server/services/ifox/budgetService.ts",
         "server/services/ifox/calendarService.ts",
@@ -82,12 +82,12 @@
         "server/services/ifox/preferencesService.ts",
         "server/services/ifox/qualityService.ts",
         "server/services/ifox/strategyService.ts",
-        "server/services/ifox/templatesService.ts"
+        "server/services/ifox/taskPersistence.ts"
       ]
     },
     {
       "id": "ai-hub",
-      "fileCount": 32,
+      "fileCount": 40,
       "samplePaths": [
         "server/ai/gateway/adapters/anthropic.ts",
         "server/ai/gateway/adapters/elevenlabs.ts",
@@ -129,7 +129,7 @@
     },
     {
       "id": "audio-newsletter",
-      "fileCount": 10,
+      "fileCount": 53,
       "samplePaths": [
         "server/services/aiNewsletterService.ts",
         "server/services/aiNewsletterEnhancer.ts",
@@ -143,7 +143,7 @@
     },
     {
       "id": "media-library",
-      "fileCount": 17,
+      "fileCount": 23,
       "samplePaths": [
         "server/services/mediaAutoTagService.ts",
         "server/services/mediaCaptionService.ts",
@@ -157,35 +157,35 @@
     },
     {
       "id": "sports-tournaments",
-      "fileCount": 127,
+      "fileCount": 139,
       "samplePaths": [
+        "server/services/sportsComponentSnapshot.ts",
+        "client/src/hooks/useSportsHomeQuery.ts",
+        "client/src/components/kingscup/KingsCupHomeSection.tsx",
+        "client/src/components/sports/SportsPortalStrip.tsx",
+        "client/src/components/tournaments/CupHomeStrip.tsx",
         "server/services/gulfCupData.ts",
         "server/services/gulfCupFixtureIdentity.ts",
-        "server/services/gulfCupHistory.ts",
-        "server/services/gulfCupNames.ts",
-        "server/services/gulfCupPredictionScoring.ts",
-        "server/services/gulfCupService.ts",
-        "server/services/asianCupNames.ts",
-        "server/services/asianCupRatings.ts"
+        "server/services/gulfCupHistory.ts"
       ]
     },
     {
       "id": "push-notifications",
-      "fileCount": 12,
+      "fileCount": 29,
       "samplePaths": [
         "server/services/fcmPayload.ts",
+        "server/services/fcmRouting.ts",
         "server/services/fcmService.ts",
         "server/services/apnsService.ts",
         "server/services/expoService.ts",
         "server/services/liveActivityService.ts",
         "server/services/liveActivityStartService.ts",
-        "server/jobs/pushWorker.ts",
-        "server/notificationBus.ts"
+        "server/jobs/pushWorker.ts"
       ]
     },
     {
       "id": "ads",
-      "fileCount": 15,
+      "fileCount": 17,
       "samplePaths": [
         "server/services/adsAnalytics.ts",
         "server/ads-routes.ts",
@@ -199,30 +199,30 @@
     },
     {
       "id": "auth-rbac",
-      "fileCount": 27,
+      "fileCount": 68,
       "samplePaths": [
         "server/auth.ts",
         "server/rbac.ts",
         "server/csrf.ts",
         "server/twoFactor.ts",
         "server/sessionFailoverStore.ts",
+        "server/services/authAttemptGuard.ts",
         "server/services/memberSessionService.ts",
-        "server/services/phoneAuth.ts",
-        "shared/rbac-constants.ts"
+        "server/services/phoneAuth.ts"
       ]
     },
     {
       "id": "seo-ssr",
-      "fileCount": 131,
+      "fileCount": 65,
       "samplePaths": [
         "server/seoInjector.ts",
         "server/middleware/slugRedirect.ts",
         "server/routes/edgeMeta.ts",
         "server/utils/noindexPaths.ts",
-        "web-next/.DS_Store",
         "web-next/.dockerignore",
         "web-next/.env.example",
-        "web-next/.gitignore"
+        "web-next/.gitignore",
+        "web-next/Dockerfile"
       ]
     },
     {
@@ -262,16 +262,16 @@
     },
     {
       "id": "systems-catalog",
-      "fileCount": 37,
+      "fileCount": 44,
       "samplePaths": [
         "docs/systems/AUDIT-2026-07-17.md",
         "docs/systems/GOVERNANCE.md",
         "docs/systems/README.md",
         "docs/systems/account-center/SYSTEM.md",
         "docs/systems/ads/SYSTEM.md",
+        "docs/systems/ai-hub/RUNTIME_READ_ACCESS.md",
         "docs/systems/ai-hub/SYSTEM.md",
-        "docs/systems/ai-staff/SYSTEM.md",
-        "docs/systems/audio-newsletter/OPERATIONS.md"
+        "docs/systems/ai-staff/SYSTEM.md"
       ]
     },
     {
@@ -356,6 +356,34 @@
         "server/services/sama/samaClient.ts",
         "server/services/sama/samaFx.ts",
         "server/services/sama/samaIndicators.ts"
+      ]
+    },
+    {
+      "id": "platform-runtime",
+      "fileCount": 27,
+      "samplePaths": [
+        "server/index.ts",
+        "server/bootstrap.ts",
+        "server/leaderElection.ts",
+        "server/leaderCron.ts",
+        "server/shutdown.ts",
+        "server/routes.ts",
+        "server/storage.ts",
+        "server/routes/mobileApiRoutes.ts"
+      ]
+    },
+    {
+      "id": "mobile-analytics",
+      "fileCount": 9,
+      "samplePaths": [
+        "sabq app ios/sabq/Services/SabqAnalytics.swift",
+        "sabq app ios/sabq/Services/SabqAnalyticsPrivacy.swift",
+        "sabq app ios/sabq/Components/AnalyticsReadingProgress.swift",
+        "sabq app ios/sabqTests/SabqAnalyticsCoreTests.swift",
+        "android-native/app/src/main/kotlin/com/sabq/smart/data/analytics/AnalyticsPolicy.kt",
+        "android-native/app/src/main/kotlin/com/sabq/smart/data/analytics/SabqAnalytics.kt",
+        "android-native/app/src/test/kotlin/com/sabq/smart/data/analytics/AnalyticsPolicyTest.kt",
+        "scripts/verify-mobile-firebase-config.py"
       ]
     }
   ]

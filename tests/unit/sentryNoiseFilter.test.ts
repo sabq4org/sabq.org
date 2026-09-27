@@ -6,6 +6,7 @@ import {
   isClientNoiseException,
   shouldSendSentryEvent,
   sentryBeforeSend,
+  shouldReplayEarlyError,
   SENTRY_DENY_URLS,
   type MinimalSentryEvent,
 } from "../../client/src/lib/sentryNoiseFilter";
@@ -40,6 +41,29 @@ const OUR_BUNDLE = "https://sabq.org/assets/index-m-Y1GLu9.js";
 const OUR_VENDOR = "https://sabq.org/assets/vendor-react-DDGRY6NW.js";
 
 describe("shouldSendSentryEvent — أخطاء الطرف الثالث تسقط", () => {
+  it("JAVASCRIPT-REACT-3K/3M: لا يعيد أخطاء syntax المبكرة بلا أصل مملوك", () => {
+    const injected = new SyntaxError("Unexpected token 'else'");
+    injected.stack = "";
+    expect(
+      shouldReplayEarlyError({
+        error: injected,
+        source: "error",
+        filename: "https://sabq.org/",
+      }),
+    ).toBe(false);
+
+    const owned = new Error("boot failed");
+    owned.stack = "Error: boot failed\n    at boot (https://sabq.org/assets/index-boot.js:1:2)";
+    expect(shouldReplayEarlyError({ error: owned, source: "unhandledrejection" })).toBe(true);
+    expect(
+      shouldReplayEarlyError({
+        error: new Error("inline failure"),
+        source: "error",
+        filename: "https://sabq.org/assets/index-inline.js",
+      }),
+    ).toBe(true);
+  });
+
   it("JAVASCRIPT-REACT-32: بريدج iOS داخل تطبيق Google، إطار غلاف Sentry وحده", () => {
     // `TypeError: undefined is not an object (evaluating 'window.webkit.messageHandlers')`
     // المكدس كله إطار واحد: دالة الغلاف `r` داخل حزمتنا. قبل هذا الفلتر كان
@@ -208,6 +232,7 @@ describe("المساعدات", () => {
     expect(isFirstPartyFilename("https://sabq.org/assets/index-x.js")).toBe(true);
     expect(isFirstPartyFilename("https://cdn.sabq.org/assets/index-x.js")).toBe(true);
     expect(isFirstPartyFilename("https://abc.sabq-org.pages.dev/assets/index-x.js")).toBe(true);
+    expect(isFirstPartyFilename("https://foreign-project.pages.dev/assets/index-x.js")).toBe(false);
     expect(isFirstPartyFilename("http://localhost:5173/src/main.tsx")).toBe(true);
     expect(isFirstPartyFilename("capacitor://localhost/assets/index-x.js")).toBe(true);
     expect(isFirstPartyFilename("blob:https://sabq.org/9f0c-uuid")).toBe(true);

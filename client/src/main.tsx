@@ -15,7 +15,8 @@ ensureAnalyticsReady();
 
 // Sentry يُحمَّل بعد ظهور الصفحة (خطة LCP 2026-09-25، بقرار المالك
 // 2026-09-26): التهيئة كاملة في lib/sentryInit.ts، وأخطاء ما قبل التحميل
-// يحفظها earlyErrorBuffer ثم تُرسل عبر الفلاتر نفسها.
+// يحفظها earlyErrorBuffer مع مصدرها، ثم يعيد فقط ما يثبت أن له إطارًا أو
+// filename من حزمة سبق؛ لا تتحول أخطاء السكربتات المحقونة إلى generic زائف.
 if (import.meta.env.PROD) {
   installEarlyErrorBuffer();
   const loadSentry = () => {

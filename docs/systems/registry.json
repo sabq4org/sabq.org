@@ -845,6 +845,7 @@
         "server/csrf.ts",
         "server/twoFactor.ts",
         "server/sessionFailoverStore.ts",
+        "server/services/authAttemptGuard.ts",
         "server/services/memberSessionService.ts",
         "server/services/phoneAuth.ts",
         "server/services/otpService.ts",
@@ -879,6 +880,7 @@
         "tests/unit/authSessionRevocation.test.ts",
         "tests/unit/sessionFailoverStore.test.ts",
         "tests/unit/sessionDegradedSignal.test.ts",
+        "tests/unit/authAttemptGuard.test.ts",
         "server/utils/trustedProxyIp.ts",
         "server/utils/rateLimiting.ts",
         "sabq app ios/sabq/Stores/AuthStore.swift",
@@ -902,7 +904,7 @@
       "owners": [
         "platform"
       ],
-      "lastReviewed": "2026-09-24"
+      "lastReviewed": "2026-09-27"
     },
     {
       "id": "seo-ssr",
@@ -1259,6 +1261,11 @@
         "server/utils/freshWindowCache.ts",
         "server/services/mobileCommentTreeService.ts",
         "tests/unit/freshWindowCache.test.ts",
+        "client/src/lib/earlyErrorBuffer.ts",
+        "client/src/lib/sentryInit.ts",
+        "client/src/lib/sentryNoiseFilter.ts",
+        "tests/unit/earlyErrorBuffer.test.ts",
+        "tests/unit/sentryNoiseFilter.test.ts",
         "shared/schema.ts",
         "Dockerfile",
         ".github/workflows/**",
@@ -1269,7 +1276,7 @@
       "owners": [
         "platform"
       ],
-      "lastReviewed": "2026-09-26"
+      "lastReviewed": "2026-09-27"
     },
     {
       "id": "mobile-analytics",
