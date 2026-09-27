@@ -16,7 +16,7 @@
 | Web | `functions/mawaeedPage.js`, `functions/_middleware.js`, `client/src/pages/dashboard/MawaeedManagement.tsx` |
 | Shared | `shared/mawaeed/*` |
 | Schema | `mawaeed_series`, `mawaeed_occurrences`, `mawaeed_changes` في `shared/schema.ts` و`migrations/20260927_mawaeed.sql` |
-| Seed | `scripts/seed-mawaeed.ts`, `data/mawaeed/2026-09-27-mawaeed-dates.csv` |
+| Seed | `scripts/seed-mawaeed.ts`, `migrations/20260927_mawaeed_seed.sql`, `data/mawaeed/2026-09-27-mawaeed-dates.csv` |
 
 ## التوثيق المرتبط
 - [`docs/systems/seo-ssr/SYSTEM.md`](../seo-ssr/SYSTEM.md) — فرع HTML المبكر والكاش.
@@ -32,7 +32,7 @@
 - فشل الـ API يعيد 503 مع `noindex` و`no-store` ولا يسقط إلى قشرة SPA.
 - كاش الحافة 60 ثانية. مفاتيح Workers لا تُمسح بمسح Cloudflare العادي. العدّاد قد يتأخر حتى دقيقة ثم يصححه السكربت.
 - الهجري للعرض عبر `Intl` وتقويم أم القرى عند ظهر الرياض. المصدر المخزّن هو التاريخ الميلادي الذي يكتبه المحرر.
-- إعادة البذر تتخطى الصف الذي لمسه مستخدم (`actor_user_id` غير فارغ) ولا تستبدل عناوين السلاسل التي عدّلها المحرر.
+- إعادة البذر بالسكربت تتخطى الصف الذي لمسه مستخدم (`actor_user_id` غير فارغ) ولا تستبدل عناوين السلاسل التي عدّلها المحرر. ملف `migrations/20260927_mawaeed_seed.sql` يدرج الإدخال الأول فقط: `ON CONFLICT DO NOTHING`، و`hijri_label` و`public_note` فارغان كما يكتبهما السكربت، وختم السلاسل `2026-09-27T00:00:00.000+03:00`.
 - ملف الهجرة مؤرخ `20260927_mawaeed.sql` ويمكن إعادة تسميته إن تعارض مع هجرة أخرى. الجداول جديدة فقط.
 - لا تُضاف حقائق هوية عن سبق (سنة التأسيس وغيرها) إلى الصفحة أو المخطط. `FAQPage` للقراءة الآلية بعد توقف نتائج الأسئلة الغنية في 7 مايو 2026.
 
