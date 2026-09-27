@@ -473,7 +473,9 @@
         "client/src/pages/PromptStudio.tsx",
         "client/src/pages/PromptStudioPublic.tsx",
         "server/services/aiPublicStatsService.ts",
+        "server/services/publishedArticleCountsCache.ts",
         "server/routes/aiPublicStats.ts",
+        "tests/unit/publishedArticleCountsCache.test.ts",
         "e2e/ai-hub-overview.spec.ts",
         "server/ai/claudeStructuredOutputs.ts",
         "tests/unit/claudeStructuredOutputs.test.ts",
@@ -489,7 +491,7 @@
       "owners": [
         "ai"
       ],
-      "lastReviewed": "2026-09-25"
+      "lastReviewed": "2026-09-26"
     },
     {
       "id": "muqtarab",

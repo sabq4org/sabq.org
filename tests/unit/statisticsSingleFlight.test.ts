@@ -5,6 +5,7 @@ vi.mock('../../server/storage', () => ({ storage: { getNewsStatistics: mocks.new
 import { CACHE_TTL, swrCache } from '../../server/memoryCache';
 import { getDashboardPulseStats } from '../../server/services/dashboardPulseService';
 import { getAiPublicStats } from '../../server/services/aiPublicStatsService';
+import { resetPublishedArticleCountsCacheForTests } from '../../server/services/publishedArticleCountsCache';
 import { getCachedNewsStatistics } from '../../server/services/newsStatisticsService';
 
 function deferred<T>() {
@@ -15,6 +16,7 @@ function deferred<T>() {
 beforeEach(() => {
   vi.useFakeTimers();
   swrCache.invalidatePattern('^(public:ai-stats|news:stats|admin:dashboard:pulse)$');
+  resetPublishedArticleCountsCacheForTests();
   vi.clearAllMocks();
 });
 afterEach(() => { vi.useRealTimers(); });
@@ -37,7 +39,9 @@ describe('statistics refresh load', () => {
     const gate = deferred<{ rows: never[] }>();
     mocks.execute.mockReturnValue(gate.promise);
     const results = await Promise.all(Array.from({ length: 50 }, () => getAiPublicStats()));
-    expect(mocks.execute).toHaveBeenCalledTimes(18);
+    // Article counts stay cached for 10 minutes, so the 5-minute stats refresh
+    // reruns the other eight queries only.
+    expect(mocks.execute).toHaveBeenCalledTimes(17);
     expect(results.every((r) => r === previous)).toBe(true);
     expect(results[0].generatedAt).toBe(previous.generatedAt);
     gate.resolve({ rows: [] });
