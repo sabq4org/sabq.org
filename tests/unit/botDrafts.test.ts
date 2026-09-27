@@ -15,6 +15,7 @@ const state = vi.hoisted(() => ({
   unschedule: vi.fn(),
   archive: vi.fn(),
   visibility: vi.fn(),
+  verdict: vi.fn(),
   invalidate: vi.fn(),
   uploadImage: vi.fn(),
   isUploadAvailable: vi.fn(() => true),
@@ -47,6 +48,7 @@ vi.mock("../../server/services/botDraftsService", async (original) => ({
   unscheduleBotDraft: state.unschedule,
   archiveBotDraft: state.archive,
   updateBotDraftVisibility: state.visibility,
+  recordBotReviewerVerdict: state.verdict,
 }));
 
 import router from "../../server/routes/botDrafts";
@@ -551,6 +553,33 @@ describe("POST /api/internal/bot-drafts/:id/publish", () => {
   });
 });
 
+describe("POST /api/internal/bot-drafts/:id/verdict", () => {
+  it("stores a reviewer verdict with the same bot token", async () => {
+    state.verdict.mockResolvedValueOnce({ id: "v1", verdict: "ok", reviewerName: "نورة" });
+    const response = await call("POST", "/api/internal/bot-drafts/art-1/verdict", {
+      verdict: "ok",
+      reviewerName: "نورة",
+      note: "مناسبة",
+    });
+    expect(response.status).toBe(201);
+    expect(state.verdict).toHaveBeenCalledWith("art-1", expect.objectContaining({
+      verdict: "ok",
+      reviewerName: "نورة",
+      note: "مناسبة",
+    }));
+  });
+
+  it("rejects a client-supplied verdict timestamp", async () => {
+    const response = await call("POST", "/api/internal/bot-drafts/art-1/verdict", {
+      verdict: "minor",
+      reviewerName: "نورة",
+      verdictAt: "2020-01-01T00:00:00.000Z",
+    });
+    expect(response.status).toBe(422);
+    expect(state.verdict).not.toHaveBeenCalled();
+  });
+});
+
 describe("POST /api/internal/bot-drafts/:id/schedule", () => {
   const future = "2026-12-01T18:30:00+03:00";
 
@@ -1048,6 +1077,11 @@ describe("published bot content edit rules", () => {
       "imageUrls",
     ]);
     expect(findDisallowedPublishedContentFields({ title: "عنوان جديد للخبر", keywords: ["سبق"] })).toEqual([]);
+    expect(findDisallowedPublishedContentFields({
+      title: "عنوان جديد للخبر",
+      riskLabel: "needs_look",
+      updateReason: "تصحيح رقم",
+    })).toEqual([]);
 
     const now = new Date("2026-09-26T08:00:00.000Z");
     const patch = buildPublishedBotContentPatch(

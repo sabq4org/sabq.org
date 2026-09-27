@@ -412,7 +412,21 @@ components:
         title: { type: string, minLength: 3, maxLength: 300, description: عنوان الخبر }
         content: { type: string, minLength: 20, maxLength: 300000, description: HTML أو نص خام (يتحول لفقرات). وسوم img https تُعاد كتابتها لشكل محرر TipTap }
         contentFormat: { type: string, enum: [html, text] }
-        subtitle: { type: string, maxLength: 300, nullable: true }
+        subtitle:
+          type: string
+          maxLength: 300
+          nullable: true
+          description: مع publish_first_validation (الافتراضي مفعّل) السقف الفعلي 120 ويرد 422 subtitle_too_long. إطفاء العلم يعيد 300.
+        riskLabel:
+          type: string
+          nullable: true
+          enum: [safe, needs_look, sensitive]
+          description: شارة المخاطر. sensitive تمنع النشر والتصحيح بعد النشر حتى POST /verdict.
+        updateReason:
+          type: string
+          maxLength: 500
+          nullable: true
+          description: سبب التحديث على خبر منشور. يظهر للقارئ إن كان علم سطر التحديث مفعّلاً.
         excerpt: { type: string, maxLength: 1000, nullable: true, description: المقدمة/الموجز }
         categoryId: { type: string }
         categorySlug: { type: string, description: slug تصنيف منشور (status=visible في الإنتاج؛ يُقبل active تاريخياً) من GET /api/categories }
@@ -438,7 +452,7 @@ components:
       description: >
         نفس حقول الإنشاء وكلها اختيارية وحقل واحد على الأقل. على خبر published
         مصدره bot المسموح فقط title وsubtitle وexcerpt وcontent وcontentFormat
-        وsourceUrl وimageUrl وkeywords. categorySlug وcategoryId وimageUrls
+        وsourceUrl وimageUrl وkeywords وriskLabel وupdateReason. categorySlug وcategoryId وimageUrls
         وclientReference وnotes تُرفض 422. status وpublishedAt وslug لا تُكتب.
       allOf:
         - $ref: "#/components/schemas/DraftFields"

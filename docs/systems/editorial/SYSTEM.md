@@ -1,6 +1,6 @@
 # نظام التحرير وغرف الأخبار (`editorial`)
 
-> آخر مراجعة: 2026-09-25 (تقاعد وكيل الصحفي القديم) | المالك: editorial
+> آخر مراجعة: 2026-09-27 (ضمانات النشر أولاً) | المالك: editorial
 
 ## الغرض
 غرفة الأخبار اليومية + أدوات التحرير بالذكاء الاصطناعي التي يستخدمها المحررون: عناوين، مقالات، تصنيف، SEO، روابط ذكية، صور، وكلاء بريد/واتساب، ومساعد كاتب الرأي، والإعلانات الداخلية الموجهة لفريق العمل.
@@ -18,7 +18,8 @@
 | غرفة الأخبار | `articleEditLocks`, `editorAlerts`, `dashboardPulse` |
 | الإعلانات الداخلية | `server/routes/announcements.ts`، `/api/announcements/*`، وصفحات `/dashboard/announcements` |
 | AI تحريري | `ai-content-tools`, `aiArticleGenerator`, `seo-generator` |
-| مسودات البوتات | `server/routes/botDrafts.ts` + `server/services/botDraftsService.ts` + `botDraftPublishEffects.ts` + `shared/botDrafts.ts` — إنشاء/تحديث محتوى المسودة أو الخبر المنشور (`PATCH /:id`)/`PATCH /ready` و`POST /publish` و`POST /schedule` و`POST /images`. Bearer من `BOT_DRAFTS_API_TOKENS`. الدليل: [`BOT_DRAFTS_API.md`](./BOT_DRAFTS_API.md) |
+| مسودات البوتات | `server/routes/botDrafts.ts` + `server/services/botDraftsService.ts` + `botDraftPublishEffects.ts` + `shared/botDrafts.ts` — إنشاء/تحديث محتوى المسودة أو الخبر المنشور (`PATCH /:id`)/`PATCH /ready` و`POST /publish` و`POST /schedule` و`POST /:id/verdict` و`POST /images`. Bearer من `BOT_DRAFTS_API_TOKENS`. الدليل: [`BOT_DRAFTS_API.md`](./BOT_DRAFTS_API.md) |
+| النشر أولاً | `shared/publishFirst.ts` + `server/services/publishFirstService.ts` + `server/routes/publishFirst.ts` + `migrations/20260927_publish_first.sql` |
 | رادار الفجوات | `server/services/coverageGapMatcher.ts` (محرك المطابقة الدلالية), `server/routes/coverageGaps.ts` (`/api/admin/dashboard/coverage-gaps` + تعيين/مسودة/استبعاد) |
 | Web | `/dashboard`, Communications, Prompt Studio, Voice Management |
 | صفحة الكاتب بالاسم | `GET /api/authors/by-name` → `authorProfileService`؛ واجهة `/author/:name`؛ من مقال الرأي يُفضَّل `/reporter/:slug` إن وُجد `staff.slug` وإلا `/author/:name` (مثل iOS) |
@@ -244,6 +245,18 @@
 - **جاهز للنشر (2026-09-24):** `PATCH /api/internal/bot-drafts/:id/ready` (نفس Bearer، جسم فارغ) ينقل `draft` → `ready_to_publish` لصف `source=bot` دون نشر. قفل أو حالة غير `draft` → `409`. بعدها `updatable=false`. الشريحة «جاهز للنشر» في إدارة الأخبار تبقى لمحرر الوردية، ويستطيع البوت أيضاً أن ينشر أو يجدول المادة الجاهزة.
 - **نشر وجدولة من المحادثة (2026-09-24):** `POST /:id/publish` بجسم `{}` و`POST /:id/schedule` بجسم `{ publishAt }` على `source=bot` في `draft` أو `ready_to_publish`. النشر يكتب `published` + `publishedAt` + `publishType=instant` ويُبطل الكاش عبر `invalidateArticleWrite` ويُرسل IndexNow على `englishSlug`. الرد يضيف `publicUrl` = `{أصل الموقع}/article/{englishSlug}`. الجدولة تكتب `scheduled` + `publishType=scheduled` + `scheduledAt` فيدخل الصف `publishScheduledArticles`. وقت الرياض يُرسل `+03:00` أو UTC؛ الماضي `400`. قفل `409 locked_by_editor`، حالة خاطئة `409 not_a_draft`، صف غير بوت `404`. لا `authorId` من البوت ولا `denyPublish` (لا جلسة). بوابة الترخيص تُفحص وصاحب «صحيفة سبق» مُعفى. `PATCH /publish` يبقى `403`.
 - **بعد النشر والجدولة (2026-09-26):** البوت يدير صف `source=bot` فقط. `PATCH /:id` على `published` يعدّل المحتوى المسموح ويبقي الحالة والموعد والرابط، ويُبطل كاش القرّاء مثل حفظ المحرر بلا تنبيه. `POST /:id/archive` على `published` يكتب `archived` و`reviewStatus=null` مثل أرشفة اللوحة (لا حذف صف؛ الاستعادة من اللوحة). يُبطل كاش القرّاء وخرائط المقالات و`sitemap-news` وخلاصات RSS، ويرسل تنبيه الأرشفة لصاحب الاسم لا للقرّاء. `DELETE /:id` يبقى `405`. `PATCH /:id/schedule` يبدّل `scheduledAt` لمادة `scheduled` بنفس تحقق `publishAt` ومن دون إعادة تنبيه الجدولة. `DELETE /:id/schedule` يعيدها `draft` (`scheduledAt=null`) بلا حذف. `PATCH /:id/visibility` يكتب `isFeatured` و`newsType` (`breaking`|`regular`) و`hideFromHomepage` كما يفعل المحرر. تعليم العاجل **لا** يرسل دفع القرّاء، مثل `POST /toggle-breaking`؛ الدفع يبقى عند النشر فقط. إلغاء العاجل يطهّر شريط العاجل على الحافة. حالة خاطئة: `409 not_published` أو `409 not_scheduled`. قفل المحرر يبقى `409 locked_by_editor`.
+
+## النشر أولاً — 2026-09-27
+
+- أربعة أعلام في `system_settings`، والصف الغائب يعني **مفعّل**. القراءة تُخزَّن 5 ثوانٍ وتُمسح عند الكتابة، بلا إعادة نشر: `publish_first_validation` و`publish_first_sensitive_gate` و`publish_first_revision_history` و`publish_first_update_line`. الإطفاء من `PUT /api/admin/publish-first/flags` (صلاحية `system.manage_settings`) أو من بطاقة «النشر أولاً» في إعدادات النظام.
+- تحقق الرفع (علم التحقق): `subtitle` أكثر من 120 حرفاً → `422 subtitle_too_long`. `categorySlug` غير الموجود → `422 category_not_found` ومع العلم مفعّلاً تُرفق `validSlugs` (حتى 40). إطفاء العلم يعيد سقف 300 حرفاً ويحذف قائمة التصنيفات؛ التصنيف المجهول يبقى 422 لأنه لا معرّف يُكتب.
+- `articles.risk_label` اختياري: `safe` | `needs_look` | `sensitive` (آمنة / تحتاج نظرة / حساسة). حكم المراجع صف في `article_reviewer_verdicts` (`ok` | `minor` | `major`) عبر `POST /api/internal/bot-drafts/:id/verdict` بنفس توكن البوت، و`verdict_at` من الخادم. أي حكم يفتح بوابة «حساسة». النشر (لوحة، `POST /api/admin/articles/:id/publish`، إنشاء بحالة منشورة/مجدولة، نشر/جدولة البوت، وكرون `publishScheduledArticles`) والتصحيح بعد النشر يُرفضان `422 sensitive_needs_verdict` برسالة عربية حتى يوجد حكم. تغيير الشارة وحدها لا يُعد تصحيحاً.
+- تجاوز المسؤول (`admin` / `superadmin` / `system_admin` / `system.admin` أو صلاحية `*`) يرسل `sensitiveOverride: true` من اللوحة ويُسجَّل في `article_publish_overrides`. البوت لا يتجاوز. الاسترجاع من مسؤول يُسجّل تجاوزاً إن كانت المادة حساسة بلا حكم.
+- الطوابع: `draft_created_at` عند إنشاء المسودة (والإنشاء من اللوحة)، و`published_at` القائم، و`verdict_at` على صف الحكم، و`corrected_at` عند مراجعة خبر منشور. لا تُقبل من العميل. تأريخ `publishedAt` الإداري القديم في اللوحة باقٍ كما هو.
+- كل تعديل لمحتوى خبر منشور (مع علم السجل) يكتب `article_revisions`: من، متى، الحقول، القيم السابقة، وسبب التحديث. المسؤول يسترجع من `POST /api/admin/articles/:id/revisions/:revisionId/rollback`. سبب التحديث غير الفارغ يظهر للقارئ «تحديث: … — …» بتوقيت الرياض عبر `updateLines` على `GET /api/articles/:slug` و`seo-bundle`. إطفاء علم السطر يعيد مصفوفة فارغة.
+- **ترتيب النشر:** شغّل `migrations/20260927_publish_first.sql` على Neon قبل نشر الـ API. الأعمدة الجديدة على `articles` بلا افتراض متطاير؛ Drizzle يختارها صراحة، ونشر الكود قبل الـ SQL يفشل قراءات المقال.
+- تغيير التصنيف بعد النشر من اللوحة: مخطط التحديث كان يشترط UUID بينما معرّفات الاستيراد نصية، ومنتقي التصنيف كان يخفي غير `core`. الحفظ يقبل معرّفاً قصيراً موجوداً وحالته `visible` أو `active`، والمنتقي يُبقي التصنيف الحالي.
+- `409` على خبر منشور من مسار البوت: خبر ليس `source=bot` يرد `not_a_draft`، وحالة غير `draft`/`published` كذلك، وقفل المحرر `locked_by_editor`. حفظ اللوحة قد يرد `ARTICLE_LOCKED` أو `ARTICLE_VERSION_CONFLICT`. المسار الجديد لا يفتح تعديل البوت لأخبار المحررين؛ تعديل «منار العمران» إن كان خبراً منشوراً لغير البوت يبقى من اللوحة ويُسجَّل كمراجعة.
 
 ## موضع الاشتراك البريدي — 2026-09-24
 
