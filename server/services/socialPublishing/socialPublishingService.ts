@@ -289,11 +289,14 @@ export interface UpdatePostInput {
   scheduledAt?: Date | null;
 }
 
-/** تعديل مسودة أو منشور مجدول — يرفض ما بدأ نشره أو انتهى */
+/** مسودة أو مجدول أو فشل قابل لإعادة المحاولة — يُرفض processing والمنشور والملغى */
+const EDITABLE_POST_STATUSES = ["draft", "scheduled", "failed"] as const;
+
+/** تعديل مسودة أو منشور مجدول أو فاشل — يرفض ما بدأ نشره أو نُشر أو أُلغي */
 export async function updateEditablePost(postId: string, input: UpdatePostInput): Promise<SocialPost> {
   const post = await getPost(postId);
   if (!post) throw new SocialPublishValidationError("المنشور غير موجود", 404);
-  if (post.status !== "draft" && post.status !== "scheduled") {
+  if (!EDITABLE_POST_STATUSES.includes(post.status as (typeof EDITABLE_POST_STATUSES)[number])) {
     throw new SocialPublishValidationError(
       `لا يمكن تعديل منشور حالته «${post.status}»`,
       409,
@@ -333,7 +336,7 @@ export async function updateEditablePost(postId: string, input: UpdatePostInput)
       ...(input.scheduledAt !== undefined ? { scheduledAt: input.scheduledAt } : {}),
       updatedAt: new Date(),
     })
-    .where(and(eq(socialPosts.id, postId), inArray(socialPosts.status, ["draft", "scheduled"])))
+    .where(and(eq(socialPosts.id, postId), inArray(socialPosts.status, [...EDITABLE_POST_STATUSES])))
     .returning();
   if (!updated) {
     throw new SocialPublishValidationError("تعذر التعديل — المنشور دخل مرحلة النشر", 409);
@@ -354,11 +357,21 @@ export function assertValidScheduleTime(scheduledAt: Date): void {
   }
 }
 
-export async function schedulePost(postId: string, scheduledAt: Date): Promise<SocialPost> {
+export async function schedulePost(
+  postId: string,
+  scheduledAt: Date,
+  opts?: { resetAttempts?: boolean },
+): Promise<SocialPost> {
   assertValidScheduleTime(scheduledAt);
   const [updated] = await db
     .update(socialPosts)
-    .set({ status: "scheduled", scheduledAt, updatedAt: new Date() })
+    .set({
+      status: "scheduled",
+      scheduledAt,
+      updatedAt: new Date(),
+      // بعد فشل نهائي كان العداد قد بلغ السقف فيرفضه العامل — إعادة الجدولة من البوت تبدأ من صفر
+      ...(opts?.resetAttempts ? { attempts: 0, lastError: null } : {}),
+    })
     .where(and(eq(socialPosts.id, postId), inArray(socialPosts.status, ["draft", "scheduled", "failed"])))
     .returning();
   if (!updated) {

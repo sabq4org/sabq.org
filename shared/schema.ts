@@ -15450,9 +15450,23 @@ export const socialPostAttempts = pgTable("social_post_attempts", {
   index("social_post_attempts_post_idx").on(table.postId, table.createdAt),
 ]);
 
+// مفتاح عدم التكرار لبوت النشر على X. جدول جانبي حتى لا تتغير قراءات
+// social_posts (اللوحة والعامل) قبل دفع المخطط. المرجع الواحد = منشور واحد.
+export const socialPostBotKeys = pgTable("social_post_bot_keys", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  botName: text("bot_name").notNull(),
+  clientReference: text("client_reference").notNull(),
+  postId: varchar("post_id").notNull().references(() => socialPosts.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("social_post_bot_keys_bot_ref_unique").on(table.botName, table.clientReference),
+  uniqueIndex("social_post_bot_keys_post_unique").on(table.postId),
+]);
+
 export type SocialPlatformAccount = typeof socialPlatformAccounts.$inferSelect;
 export type SocialPost = typeof socialPosts.$inferSelect;
 export type SocialPostAttempt = typeof socialPostAttempts.$inferSelect;
+export type SocialPostBotKey = typeof socialPostBotKeys.$inferSelect;
 
 // ============================================================
 // اقتصاد سبق الحي — بيانات البنك المركزي السعودي (ساما)

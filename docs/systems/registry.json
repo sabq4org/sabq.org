@@ -1145,10 +1145,11 @@
       "nameEn": "Social Publishing (X)",
       "status": "active",
       "category": "content",
-      "summary": "نشر أخبار سبق على منصة X من لوحة التحكم: فوري أو مجدول، بنص يدوي/عنوان/اقتراح ذكاء، مع صورة اختيارية وسجل محاولات append-only. المعمارية provider-based لإضافة منصات لاحقاً.",
+      "summary": "نشر أخبار سبق على منصة X من لوحة التحكم أو عبر بوت /api/internal/bot-social: فوري أو مجدول، بنص يدوي/عنوان/اقتراح ذكاء، مع صورة اختيارية وسجل محاولات append-only. المعمارية provider-based لإضافة منصات لاحقاً.",
       "docPath": "docs/systems/social-publishing/SYSTEM.md",
       "relatedDocs": [
         "docs/setup/X_PUBLISHING_SETUP_AR.md",
+        "docs/systems/social-publishing/BOT_SOCIAL_API.md",
         "docs/systems/editorial/SYSTEM.md",
         "docs/systems/auth-rbac/SYSTEM.md"
       ],
@@ -1156,6 +1157,8 @@
         "shared/socialPostText.ts",
         "server/services/socialPublishing/**",
         "server/routes/socialPublishing.ts",
+        "server/routes/botSocial.ts",
+        "shared/botSocial.ts",
         "server/jobs/socialPublishWorker.ts",
         "client/src/components/social/SocialPublishDialog.tsx",
         "client/src/pages/dashboard/SocialPublishingPage.tsx",
@@ -1165,6 +1168,9 @@
         "tests/unit/socialPublishingLogic.test.ts",
         "tests/unit/opinionSocialProposal.test.ts",
         "tests/unit/xApiClient.test.ts",
+        "tests/unit/botSocialLogic.test.ts",
+        "tests/unit/botSocialService.test.ts",
+        "tests/unit/botSocialRoute.test.ts",
         "docs/systems/social-publishing/**"
       ],
       "aiFeatureKeys": [
@@ -1175,7 +1181,7 @@
         "editorial",
         "platform"
       ],
-      "lastReviewed": "2026-08-19"
+      "lastReviewed": "2026-09-28"
     },
     {
       "id": "sahraa-tv-block",
@@ -1321,7 +1327,7 @@
       "owners": [
         "platform"
       ],
-      "lastReviewed": "2026-09-27"
+      "lastReviewed": "2026-09-28"
     },
     {
       "id": "mobile-analytics",

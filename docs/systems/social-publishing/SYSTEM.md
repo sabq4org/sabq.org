@@ -1,6 +1,6 @@
 # النشر الاجتماعي (`social-publishing`)
 
-> آخر مراجعة: 2026-08-19 (ترقية واجهة سجل المنشورات بهوية بطاقات اجتماعية تفاعلية، إبراز الهاشتاقات، نسخ فوري وبحث سريع) | المالك: editorial + platform
+> آخر مراجعة: 2026-09-28 (واجهة بوت `/api/internal/bot-social` بتوكن منفصل ومفتاح عدم تكرار) | المالك: editorial + platform
 
 ## الغرض
 نشر أخبار سبق على منصة X من لوحة التحكم: فوري أو مجدول، بنص من العنوان أو
@@ -13,8 +13,9 @@
 - **داخل النطاق:** ربط حساب X (OAuth 2.0 PKCE)، تكوين المنشور، النشر الفوري
   والمجدول، سجل المحاولات، اقتراح النص (`social-post-suggest`).
 - **خارج النطاق:** بقية المنصات (إنستغرام/فيسبوك/لينكدإن)، الفيديو، الردود
-  والتحليلات، قراءة X (تلك في `radar` و`sahraa-tv-block`)، النشر الآلي بلا
-  مراجعة بشرية.
+  والتحليلات، قراءة X (تلك في `radar` و`sahraa-tv-block`). النشر الآلي لكل
+  خبر بلا استدعاء صريح خارج النطاق؛ بوت «نشر إكس» ينشر فقط ما يطلبه عبر
+  واجهة البوت أدناه.
 
 ## مفاتيح AI (حصرية)
 `social-post-suggest` — عبر `aiGateway.complete` (defaults: GPT-4o-mini).
@@ -24,6 +25,7 @@
 |--------|--------|
 | Backend | `server/services/socialPublishing/` (service + xApiClient + publerApiClient + imageResolver + tokenCrypto + suggest) |
 | Routes | `server/routes/socialPublishing.ts` — `/api/social-publishing/*` (Passport + RBAC + CSRF عام) |
+| Bot API | `server/routes/botSocial.ts` — `/api/internal/bot-social/*` (Bearer `SABQ_BOT_SOCIAL_TOKEN`، ليس توكن المسودات). العقد: [`BOT_SOCIAL_API.md`](./BOT_SOCIAL_API.md) |
 | Worker | `server/jobs/socialPublishWorker.ts` — cron كل دقيقة، مسجل في `server/index.ts` |
 | Shared | `shared/socialPostText.ts` (العد الموزون) + جداول في `shared/schema.ts` |
 | Web | زر «النشر على X» في `RowActions`/إدارة المقالات → `SocialPublishDialog`؛ صفحة `/dashboard/social-publishing` |
@@ -41,6 +43,11 @@
   عبر Publer `/media/from-url` — **الوسيلة المباشرة لا تدعم الفيديو v1**.
 - `social_post_attempts` — سجل append-only لكل محاولة (طور، نتيجة، HTTP،
   رسالة منظفة من الأسرار، مدة).
+- `social_post_bot_keys` — مفتاح عدم التكرار للبوت: `bot_name` +
+  `client_reference` فريدان ويشيران إلى `social_posts.id`. جدول جانبي حتى
+  لا تتغير قراءات اللوحة أو العامل. **يجب دفع المخطط قبل استخدام الواجهة**
+  (`./push-to-production.sh`). غيابه يعطّل البوت فقط ولا يغيّر أعمدة
+  `social_posts`.
 
 ## عقود مهمة / Gotchas
 - **exactly-once:** المطالبة الفورية تحديث شرطي
@@ -99,6 +106,23 @@
 `SOCIAL_PUBLISH_TOKEN_SECRET` (اختياري — يسقط على `SESSION_SECRET`)،
 `SOCIAL_PUBLISH_TRANSPORT` (`publer` لتفعيل وسيلة Publer)،
 `PUBLER_API_KEY`, `PUBLER_WORKSPACE_ID` (خطة Publer Business).
+
+بوت النشر (منفصل عن `BOT_DRAFTS_API_TOKENS`): `SABQ_BOT_SOCIAL_TOKEN`
+(توكن واحد، الاسم الافتراضي `nashr-x` ويُبدَّل بـ `SABQ_BOT_SOCIAL_NAME`)
+أو `BOT_SOCIAL_API_TOKENS` بصيغة `name:token`. الإسناد:
+`SABQ_BOT_SOCIAL_USER_ID` ثم `BOT_DRAFTS_AUTHOR_USER_ID` ثم حساب «صحيفة سبق».
+الحدود: `BOT_SOCIAL_WRITE_RATE_LIMIT` (30/دقيقة)، `BOT_SOCIAL_PUBLISH_RATE_LIMIT`
+(20/5 دقائق)، `BOT_SOCIAL_SUGGEST_RATE_LIMIT` (30/15 دقيقة).
+
+## واجهة البوت (2026-09-28)
+المسار `/api/internal/bot-social` يعيد استخدام `createDraftPost` /
+`claimPostForImmediatePublish` / `publishClaimedPost` / `schedulePost` /
+`cancelPost` / `suggestSocialPostForArticle`. لا منطق نشر ثانٍ.
+`clientReference` مع اسم البوت مفتاح فريد: إعادة نفس المرجع لا تنشئ منشوراً
+ثانياً. الخبر يجب أن يكون `published` و`publishedAt` ليس في المستقبل.
+التدقيق في `activity_logs` بقناة `bot-social-api`. تعديل المنشور الفاشل
+صار مسموحاً (`failed` ضمن الحالات القابلة للتعديل) حتى يصحّح البوت النص
+قبل إعادة المحاولة.
 
 ## عند التعديل
 - [ ] قرأت هذا الملف
