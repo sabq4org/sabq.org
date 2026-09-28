@@ -23,9 +23,29 @@ export const botSocialClientReferenceSchema = z
   .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]*$/);
 
 const articleIdSchema = z.string().trim().min(1).max(80);
+const articleUrlSchema = z.string().trim().min(1).max(2000);
 const textSchema = z.string().trim().min(1).max(2000);
 const textSourceSchema = z.enum(["title", "title_link", "custom", "ai"]);
 const imageSourceSchema = z.enum(["article", "upload", "library", "none"]);
+
+/** يلزم أحدهما. إن وُجدا معاً فالتحقق أنهما نفس الخبر يتم بعد حل الرابط. */
+const articleRefFields = {
+  articleId: articleIdSchema.optional(),
+  articleUrl: articleUrlSchema.optional(),
+};
+
+function requireArticleRef(
+  value: { articleId?: string; articleUrl?: string },
+  ctx: z.RefinementCtx,
+): void {
+  if (!value.articleId && !value.articleUrl) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "يلزم articleId أو articleUrl",
+      path: ["articleId"],
+    });
+  }
+}
 
 /** حقول التأليف المشتركة. الغياب عند إعادة المحاولة يُبقي المحتوى المخزّن. */
 const composeFields = {
@@ -37,23 +57,29 @@ const composeFields = {
 };
 
 export const botSocialSuggestSchema = z.object({
-  articleId: articleIdSchema,
-});
+  ...articleRefFields,
+}).superRefine(requireArticleRef);
 
 export const botSocialPreviewSchema = z.object({
-  articleId: articleIdSchema,
+  ...articleRefFields,
   ...composeFields,
-});
+}).superRefine(requireArticleRef);
 
-export const botSocialPublishSchema = z.object({
-  articleId: articleIdSchema,
+const botSocialPublishObject = z.object({
+  ...articleRefFields,
   clientReference: botSocialClientReferenceSchema,
   ...composeFields,
 });
 
-export const botSocialScheduleSchema = botSocialPublishSchema.extend({
-  scheduledAt: z.string().datetime({ offset: true }),
+export const botSocialPublishSchema = botSocialPublishObject.superRefine(requireArticleRef);
+
+export const botSocialResolveQuerySchema = z.object({
+  url: articleUrlSchema,
 });
+
+export const botSocialScheduleSchema = botSocialPublishObject.extend({
+  scheduledAt: z.string().datetime({ offset: true }),
+}).superRefine(requireArticleRef);
 
 export const botSocialCancelSchema = z
   .object({
@@ -86,3 +112,4 @@ export type BotSocialScheduleInput = z.infer<typeof botSocialScheduleSchema>;
 export type BotSocialPreviewInput = z.infer<typeof botSocialPreviewSchema>;
 export type BotSocialCancelInput = z.infer<typeof botSocialCancelSchema>;
 export type BotSocialListQuery = z.infer<typeof botSocialListQuerySchema>;
+export type BotSocialResolveQuery = z.infer<typeof botSocialResolveQuerySchema>;

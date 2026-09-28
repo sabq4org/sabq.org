@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { botSocialPublishSchema, botSocialSuggestSchema } from "../../shared/botSocial";
 import {
   BotSocialError,
   assertArticleTweetable,
@@ -10,6 +11,7 @@ import {
   isBotSocialConfigured,
   isUniqueViolation,
   loadBotSocialTokens,
+  parseBotSocialArticleUrl,
   resolveBotSocialCompose,
 } from "../../server/services/socialPublishing/botSocialLogic";
 
@@ -158,5 +160,72 @@ describe("article tweet gate and helpers", () => {
   it("detects a postgres unique violation through a wrapped cause", () => {
     expect(isUniqueViolation({ cause: { code: "23505" } })).toBe(true);
     expect(isUniqueViolation(new Error("other"))).toBe(false);
+  });
+});
+
+describe("article URL forms", () => {
+  const arabic = "خبر-عاجل";
+
+  it("accepts the short code, www, trailing slash, query, and fragment", () => {
+    expect(parseBotSocialArticleUrl("https://sabq.org/article/jrdic6y")).toEqual({ slug: "jrdic6y", lang: "ar" });
+    expect(parseBotSocialArticleUrl("https://www.sabq.org/article/jrdic6y/")).toEqual({ slug: "jrdic6y", lang: "ar" });
+    expect(parseBotSocialArticleUrl("https://SABQ.org/article/jrdic6y?utm_source=x#top")).toEqual({
+      slug: "jrdic6y",
+      lang: "ar",
+    });
+    expect(parseBotSocialArticleUrl("http://www.sabq.org/article/jrdic6y/?ref=desk#section")).toEqual({
+      slug: "jrdic6y",
+      lang: "ar",
+    });
+  });
+
+  it("decodes a percent-encoded Arabic slug", () => {
+    const url = `https://sabq.org/article/${encodeURIComponent(arabic)}/?x=1`;
+    expect(parseBotSocialArticleUrl(url)).toEqual({ slug: arabic, lang: "ar" });
+  });
+
+  it("rejects other hosts and non-article paths", () => {
+    for (const url of [
+      "https://example.com/article/jrdic6y",
+      "https://api.sabq.org/article/jrdic6y",
+      "https://sabq.org/news/jrdic6y",
+      "not a url",
+    ]) {
+      try {
+        parseBotSocialArticleUrl(url);
+        throw new Error(`expected rejection for ${url}`);
+      } catch (error) {
+        expect(error).toBeInstanceOf(BotSocialError);
+        expect(error).toMatchObject({ httpStatus: 400, code: "validation_error" });
+      }
+    }
+  });
+
+  it("rejects English and Urdu article links with unsupported_language", () => {
+    const cases = [
+      ["https://sabq.org/en/article/abc/", "en"],
+      ["https://www.sabq.org/ur/article/xyz?x=1", "ur"],
+    ] as const;
+    for (const [url, lang] of cases) {
+      try {
+        parseBotSocialArticleUrl(url);
+        throw new Error(`expected rejection for ${url}`);
+      } catch (error) {
+        expect(error).toBeInstanceOf(BotSocialError);
+        expect(error).toMatchObject({ httpStatus: 422, code: "unsupported_language", details: { lang } });
+      }
+    }
+  });
+
+  it("requires articleId or articleUrl, and allows both for a later equality check", () => {
+    expect(botSocialSuggestSchema.safeParse({}).success).toBe(false);
+    expect(botSocialSuggestSchema.safeParse({ articleUrl: "https://sabq.org/article/jrdic6y" }).success).toBe(true);
+    expect(botSocialPublishSchema.safeParse({
+      articleId: "art-1",
+      articleUrl: "https://sabq.org/article/jrdic6y",
+      clientReference: "ref-1",
+      text: "نص",
+    }).success).toBe(true);
+    expect(botSocialPublishSchema.safeParse({ clientReference: "ref-1", text: "نص" }).success).toBe(false);
   });
 });

@@ -11,6 +11,7 @@ const state = vi.hoisted(() => ({
   cancel: vi.fn(),
   get: vi.fn(),
   list: vi.fn(),
+  resolve: vi.fn(),
 }));
 
 vi.mock("../../server/db", () => ({ db: {} }));
@@ -22,6 +23,7 @@ vi.mock("../../server/services/socialPublishing/botSocialService", () => ({
   cancelBotSocialPost: (...args: unknown[]) => state.cancel(...args),
   getBotSocialPost: (...args: unknown[]) => state.get(...args),
   listBotSocialPosts: (...args: unknown[]) => state.list(...args),
+  resolveBotSocialArticleUrl: (...args: unknown[]) => state.resolve(...args),
 }));
 
 import router from "../../server/routes/botSocial";
@@ -107,6 +109,26 @@ describe("bot social auth", () => {
     expect(state.publish.mock.calls[0][0]).toEqual({ name: "nashr-x" });
   });
 
+  it("returns 400 when neither articleId nor articleUrl is sent", async () => {
+    const response = await call("POST", "/api/internal/bot-social/publish", { clientReference: "ref-1", text: "نص" });
+    expect(response.status).toBe(400);
+    expect((await response.json()).code).toBe("validation_error");
+    expect(state.publish).not.toHaveBeenCalled();
+  });
+
+  it("accepts articleUrl and resolves a public link before posting", async () => {
+    state.publish.mockResolvedValue({ post: { id: "post-1", status: "published" }, idempotentReplay: false });
+    const articleUrl = "https://www.sabq.org/article/jrdic6y/?utm=1#top";
+    const response = await call("POST", "/api/internal/bot-social/publish", {
+      articleUrl,
+      clientReference: "ref-1",
+      text: "نص التغريدة",
+    });
+    expect(response.status).toBe(200);
+    expect(state.publish.mock.calls[0][1]).toMatchObject({ articleUrl, clientReference: "ref-1" });
+    expect(state.publish.mock.calls[0][1].articleId).toBeUndefined();
+  });
+
   it("returns 400 when clientReference is missing", async () => {
     const response = await call("POST", "/api/internal/bot-social/publish", { articleId: "art-1", text: "نص" });
     expect(response.status).toBe(400);
@@ -165,5 +187,29 @@ describe("bot social routes", () => {
     expect(limited.status).toBe(429);
     expect((await limited.json()).code).toBe("rate_limited");
     expect((await call("GET", "/api/internal/bot-social/posts", undefined, RATE)).status).toBe(200);
+  });
+
+  it("resolves a URL with the same bearer and rejects a missing url", async () => {
+    state.resolve.mockResolvedValue({
+      articleId: "art-1",
+      title: "عنوان",
+      status: "published",
+      publishedAt: "2026-09-01T00:00:00.000Z",
+      linkUrl: "https://sabq.org/article/jrdic6y",
+      lang: "ar",
+    });
+    const url = "https://sabq.org/article/jrdic6y";
+    const response = await call("GET", `/api/internal/bot-social/resolve?url=${encodeURIComponent(url)}`);
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("private, no-store");
+    expect(await response.json()).toMatchObject({ articleId: "art-1", lang: "ar" });
+    expect(state.resolve).toHaveBeenCalledWith(url);
+
+    const missing = await call("GET", "/api/internal/bot-social/resolve");
+    expect(missing.status).toBe(400);
+    expect((await missing.json()).code).toBe("validation_error");
+
+    const denied = await call("GET", `/api/internal/bot-social/resolve?url=${encodeURIComponent(url)}`, undefined, DRAFTS);
+    expect(denied.status).toBe(401);
   });
 });

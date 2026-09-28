@@ -1145,7 +1145,7 @@
       "nameEn": "Social Publishing (X)",
       "status": "active",
       "category": "content",
-      "summary": "نشر أخبار سبق على منصة X من لوحة التحكم أو عبر بوت /api/internal/bot-social: فوري أو مجدول، بنص يدوي/عنوان/اقتراح ذكاء، مع صورة اختيارية وسجل محاولات append-only. المعمارية provider-based لإضافة منصات لاحقاً.",
+      "summary": "نشر أخبار سبق على منصة X من لوحة التحكم أو عبر بوت /api/internal/bot-social: فوري أو مجدول، بنص يدوي/عنوان/اقتراح ذكاء، مع صورة اختيارية وسجل محاولات append-only. البوت يقبل معرّف الخبر أو رابطه العام. المعمارية provider-based لإضافة منصات لاحقاً.",
       "docPath": "docs/systems/social-publishing/SYSTEM.md",
       "relatedDocs": [
         "docs/setup/X_PUBLISHING_SETUP_AR.md",

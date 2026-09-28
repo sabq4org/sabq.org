@@ -1,6 +1,6 @@
 # النشر الاجتماعي (`social-publishing`)
 
-> آخر مراجعة: 2026-09-28 (واجهة بوت `/api/internal/bot-social` بتوكن منفصل ومفتاح عدم تكرار) | المالك: editorial + platform
+> آخر مراجعة: 2026-09-28 (البوت يقبل رابط الخبر العام ويحلّه بمعرّف `articles.id`) | المالك: editorial + platform
 
 ## الغرض
 نشر أخبار سبق على منصة X من لوحة التحكم: فوري أو مجدول، بنص من العنوان أو
@@ -118,8 +118,15 @@
 المسار `/api/internal/bot-social` يعيد استخدام `createDraftPost` /
 `claimPostForImmediatePublish` / `publishClaimedPost` / `schedulePost` /
 `cancelPost` / `suggestSocialPostForArticle`. لا منطق نشر ثانٍ.
-`clientReference` مع اسم البوت مفتاح فريد: إعادة نفس المرجع لا تنشئ منشوراً
-ثانياً. الخبر يجب أن يكون `published` و`publishedAt` ليس في المستقبل.
+`suggest` / `preview` / `publish` / `schedule` تقبل `articleUrl`
+(`https://sabq.org/article/...` أو `www`) بدل `articleId` أو معهما إن حُلّا
+إلى نفس الصف. الحل يعيد شرط الصفحة العامة: `slug` أو `english_slug`، ثم
+`id` إن كان UUID، ثم `legacy_slug`. `GET /resolve?url=` يعيد
+`{ articleId, title, status, publishedAt, linkUrl, lang }` قبل الكتابة.
+الإنجليزية والأردية: `422 unsupported_language`.
+`clientReference` مع اسم البوت مفتاح فريد على المعرّف المحلول: إعادة نفس
+المرجع لخبر آخر ترجع `409 reference_article_mismatch`. الخبر يجب أن يكون
+`published` و`publishedAt` ليس في المستقبل.
 التدقيق في `activity_logs` بقناة `bot-social-api`. تعديل المنشور الفاشل
 صار مسموحاً (`failed` ضمن الحالات القابلة للتعديل) حتى يصحّح البوت النص
 قبل إعادة المحاولة.

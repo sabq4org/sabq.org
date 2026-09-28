@@ -72,6 +72,7 @@ import { BotSocialError } from "../../server/services/socialPublishing/botSocial
 import {
   previewBotSocialPost,
   publishBotSocialPost,
+  resolveBotSocialArticleUrl,
   scheduleBotSocialPost,
 } from "../../server/services/socialPublishing/botSocialService";
 
@@ -287,5 +288,109 @@ describe("schedule and preview", () => {
   it("preview of a draft article is article_not_published", async () => {
     state.selects = [[article("scheduled")]];
     await expect(previewBotSocialPost({ articleId: "art-1", text: "نص" })).rejects.toBeInstanceOf(BotSocialError);
+  });
+});
+
+function located(over: Record<string, unknown> = {}) {
+  return {
+    id: "art-1",
+    title: "عنوان الخبر",
+    slug: "عنوان",
+    englishSlug: "jrdic6y",
+    status: "published",
+    publishedAt: new Date("2026-09-01T00:00:00Z"),
+    ...over,
+  };
+}
+
+describe("article URL resolution", () => {
+  it("resolves a short code, a www URL, and a percent-encoded Arabic slug to articles.id", async () => {
+    state.selects = [
+      [located({ id: "art-ar", slug: "خبر-عاجل", englishSlug: "jrdic6y" })],
+      [{ ...article(), id: "art-ar", slug: "خبر-عاجل", englishSlug: "jrdic6y" }],
+    ];
+    const preview = await previewBotSocialPost({
+      articleUrl: `https://www.sabq.org/article/${encodeURIComponent("خبر-عاجل")}/?utm=1#x`,
+      text: "مرحبا",
+      includeLink: true,
+    });
+    expect(preview.articleId).toBe("art-ar");
+    expect(preview.linkUrl).toBe("https://sabq.org/article/jrdic6y");
+
+    state.selects = [[located()]];
+    await expect(resolveBotSocialArticleUrl("https://sabq.org/article/jrdic6y")).resolves.toEqual({
+      articleId: "art-1",
+      title: "عنوان الخبر",
+      status: "published",
+      publishedAt: "2026-09-01T00:00:00.000Z",
+      linkUrl: "https://sabq.org/article/jrdic6y",
+      lang: "ar",
+    });
+  });
+
+  it("falls back to the article id for a UUID and to legacy_slug after the public slug miss", async () => {
+    const id = "0d8c8a1e-6f2b-4b1e-9d2a-2f6f4f9d1a11";
+    state.selects = [
+      [],
+      [located({ id, englishSlug: "jrdic6y" })],
+      [{ ...article(), id, englishSlug: "jrdic6y" }],
+    ];
+    await expect(previewBotSocialPost({
+      articleUrl: `https://sabq.org/article/${id}`,
+      text: "نص",
+    })).resolves.toMatchObject({ articleId: id });
+
+    state.selects = [
+      [],
+      [located({ id: "art-legacy", englishSlug: "canon", slug: "arabic-slug" })],
+      [{ ...article(), id: "art-legacy", englishSlug: "canon", slug: "arabic-slug" }],
+    ];
+    await expect(previewBotSocialPost({
+      articleUrl: "https://sabq.org/article/old-legacy-id/",
+      text: "نص",
+    })).resolves.toMatchObject({ articleId: "art-legacy", linkUrl: "https://sabq.org/article/canon" });
+  });
+
+  it("returns 404 when the public token matches nothing, and 400 for another host", async () => {
+    state.selects = [[], []];
+    await expect(previewBotSocialPost({
+      articleUrl: "https://sabq.org/article/missing",
+      text: "نص",
+    })).rejects.toMatchObject({ httpStatus: 404, code: "not_found" });
+
+    await expect(resolveBotSocialArticleUrl("https://example.com/article/jrdic6y")).rejects.toMatchObject({
+      httpStatus: 400,
+      code: "validation_error",
+    });
+    await expect(resolveBotSocialArticleUrl("https://sabq.org/en/article/abc")).rejects.toMatchObject({
+      httpStatus: 422,
+      code: "unsupported_language",
+    });
+  });
+
+  it("rejects articleId and articleUrl when they resolve to different articles", async () => {
+    state.selects = [[located({ id: "art-2", englishSlug: "other-slug" })]];
+    await expect(publishBotSocialPost(bot, {
+      articleId: "art-1",
+      articleUrl: "https://sabq.org/article/other-slug",
+      clientReference: "ref-1",
+      text: "نص التغريدة",
+    })).rejects.toMatchObject({ httpStatus: 400, code: "validation_error" });
+    expect(state.create).not.toHaveBeenCalled();
+  });
+
+  it("keeps clientReference idempotency on the resolved article id", async () => {
+    state.selects = [
+      [located({ id: "art-2", englishSlug: "other-slug", slug: "آخر" })],
+      [{ ...article(), id: "art-2", englishSlug: "other-slug", slug: "آخر" }],
+      [binding(socialPost({ articleId: "art-1" }))],
+    ];
+    await expect(publishBotSocialPost(bot, {
+      articleUrl: "https://www.sabq.org/article/other-slug/?utm=1#top",
+      clientReference: "ref-1",
+      text: "نص التغريدة",
+    })).rejects.toMatchObject({ httpStatus: 409, code: "reference_article_mismatch" });
+    expect(state.create).not.toHaveBeenCalled();
+    expect(state.claim).not.toHaveBeenCalled();
   });
 });

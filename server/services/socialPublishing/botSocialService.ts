@@ -1,6 +1,6 @@
 // عمليات بوت النشر على X. التأليف والطول هنا، والنشر نفسه عبر
 // socialPublishingService (نفس المطالبة والعامل ومزوّد X/Publer).
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, or } from "drizzle-orm";
 import { composeXPostText, validateXPostText } from "@shared/socialPostText";
 import { articles, socialPostBotKeys, socialPosts, users, type SocialPost } from "@shared/schema";
 import { SABQ_NEWSPAPER_ACCOUNT_ID } from "@shared/sabqNewspaper";
@@ -23,6 +23,7 @@ import {
   decideScheduleAction,
   formatSuggestedText,
   isUniqueViolation,
+  parseBotSocialArticleUrl,
   previewLimits,
   resolveBotSocialCompose,
   type BotSocialCompose,
@@ -197,6 +198,94 @@ async function requireActor(): Promise<string> {
   return row.id;
 }
 
+interface ArticleLocator {
+  id: string;
+  title: string;
+  slug: string;
+  englishSlug: string | null;
+  status: string;
+  publishedAt: Date | null;
+}
+
+const articleLocatorColumns = {
+  id: articles.id,
+  title: articles.title,
+  slug: articles.slug,
+  englishSlug: articles.englishSlug,
+  status: articles.status,
+  publishedAt: articles.publishedAt,
+};
+
+/**
+ * نفس شرط GET /api/articles/:slug: slug أو english_slug (storage.getArticleBySlug)،
+ * ثم المعرّف إن كان UUID (المسار في routes.ts)، ثم legacy_slug كما يحلّه
+ * computeSlugRedirect لمسارات الأرشيف القديمة. لا نكتب مطابقة جديدة.
+ */
+const ARTICLE_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+async function findArabicArticleByPublicToken(token: string): Promise<ArticleLocator | null> {
+  const [bySlug] = await db
+    .select(articleLocatorColumns)
+    .from(articles)
+    .where(or(eq(articles.slug, token), eq(articles.englishSlug, token))!)
+    .limit(1);
+  if (bySlug) return bySlug;
+
+  if (ARTICLE_UUID_RE.test(token)) {
+    const [byId] = await db
+      .select(articleLocatorColumns)
+      .from(articles)
+      .where(eq(articles.id, token))
+      .limit(1);
+    if (byId) return byId;
+  }
+
+  const [byLegacy] = await db
+    .select(articleLocatorColumns)
+    .from(articles)
+    .where(eq(articles.legacySlug, token))
+    .limit(1);
+  return byLegacy ?? null;
+}
+
+async function locateArticleFromUrl(articleUrl: string): Promise<ArticleLocator> {
+  const parsed = parseBotSocialArticleUrl(articleUrl);
+  const row = await findArabicArticleByPublicToken(parsed.slug);
+  if (!row) throw new BotSocialError(404, "not_found", "الخبر غير موجود");
+  return row;
+}
+
+async function resolveInputArticleId(input: { articleId?: string; articleUrl?: string }): Promise<string> {
+  if (!input.articleUrl) {
+    if (!input.articleId) {
+      throw new BotSocialError(400, "validation_error", "يلزم articleId أو articleUrl");
+    }
+    return input.articleId;
+  }
+  const row = await locateArticleFromUrl(input.articleUrl);
+  if (input.articleId && input.articleId !== row.id) {
+    throw new BotSocialError(
+      400,
+      "validation_error",
+      "articleId وarticleUrl لا يشيران إلى الخبر نفسه",
+      { articleId: input.articleId, resolvedArticleId: row.id },
+    );
+  }
+  return row.id;
+}
+
+export async function resolveBotSocialArticleUrl(articleUrl: string) {
+  const row = await locateArticleFromUrl(articleUrl);
+  return {
+    articleId: row.id,
+    title: row.title,
+    status: row.status,
+    publishedAt: iso(row.publishedAt),
+    linkUrl: buildArticleUrl(row),
+    lang: "ar" as const,
+  };
+}
+
 async function loadArticle(articleId: string): Promise<ArticleTweetTarget> {
   const [article] = await db
     .select({
@@ -327,7 +416,7 @@ async function applyEdits(post: SocialPost, composed: BotSocialCompose): Promise
 }
 
 export async function previewBotSocialPost(input: BotSocialPreviewInput) {
-  const article = await loadArticle(input.articleId);
+  const article = await loadArticle(await resolveInputArticleId(input));
   const composed = composeFor(article, input, null);
   return {
     articleId: article.id,
@@ -341,9 +430,10 @@ export async function previewBotSocialPost(input: BotSocialPreviewInput) {
 
 export async function suggestBotSocialPost(
   bot: BotSocialIdentity,
-  articleId: string,
+  input: { articleId?: string; articleUrl?: string },
   ctx: BotSocialRequestContext = {},
 ) {
+  const articleId = await resolveInputArticleId(input);
   const article = await loadArticle(articleId);
   const actorId = await requireActor();
   let suggestion: { post: string; hashtags: string[] };
@@ -418,7 +508,7 @@ export async function publishBotSocialPost(
   input: BotSocialPublishInput,
   ctx: BotSocialRequestContext = {},
 ): Promise<{ post: BotSocialPostResponse; idempotentReplay: boolean }> {
-  const article = await loadArticle(input.articleId);
+  const article = await loadArticle(await resolveInputArticleId(input));
   const loaded = await loadOrCreate(bot, article, input, "publish");
   if (loaded.replay) {
     const post = toBotSocialPost(loaded.binding);
@@ -489,7 +579,7 @@ export async function scheduleBotSocialPost(
   input: BotSocialScheduleInput,
   ctx: BotSocialRequestContext = {},
 ): Promise<{ post: BotSocialPostResponse; idempotentReplay: boolean }> {
-  const article = await loadArticle(input.articleId);
+  const article = await loadArticle(await resolveInputArticleId(input));
   const when = new Date(input.scheduledAt);
   const loaded = await loadOrCreate(bot, article, input, "schedule");
   if (loaded.replay) {

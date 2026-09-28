@@ -22,6 +22,8 @@ Authorization: Bearer <SABQ_BOT_SOCIAL_TOKEN>
 ## القواعد
 
 - الخبر عربي من جدول `articles` وحالته `published` و`publishedAt` ليس في المستقبل. غير ذلك: `422 article_not_published`.
+- `suggest` و`preview` و`publish` و`schedule` تقبل `articleId` (قيمة `articles.id`) **أو** `articleUrl`. يلزم أحدهما. إن وُجدا معاً يجب أن يشيرا إلى الخبر نفسه، وإلا `400 validation_error`. الرابط يُحل بنفس شرط الصفحة العامة (`slug` أو `english_slug`، ثم `id` إن كان UUID، ثم `legacy_slug`) قبل أي كتابة، ومفتاح عدم التكرار يبقى على المعرّف المحلول: إعادة `clientReference` مع رابط لخبر آخر ترجع `409 reference_article_mismatch`.
+- أشكال الرابط المقبولة: `https://sabq.org/article/...` و`https://www.sabq.org/article/...` (و`http`)، مع شرطة مائلة أخيرة أو بدونها، ومع استعلام أو هاش. المقطع قد يكون الرمز القصير (`english_slug` مثل `jrdic6y`) أو `slug` العربي مرمّزاً بالمئة أو `legacy_slug`. أي مضيف آخر: `400 validation_error`. رابط لا يطابق خبراً: `404 not_found`. `/en/article/` و`/ur/article/`: `422 unsupported_language`.
 - `clientReference` (1–120، حروف وأرقام و`.` `_` `:` `-`) مع اسم البوت مفتاح فريد. إعادة نفس المرجع لا تنشئ تغريدة ثانية.
 - إذا كان المرجع منشوراً، `publish` و`schedule` يرجعان `200` مع `idempotentReplay: true` ونفس `externalPostUrl`.
 - إذا كان `processing`: `409 in_progress` — اقرأ الحالة ولا تعد الإرسال حتى تستقر.
@@ -44,6 +46,14 @@ Authorization: Bearer <SABQ_BOT_SOCIAL_TOKEN>
 { "articleId": "ART_ID" }
 ```
 
+أو برابط الخبر بدل المعرّف:
+
+```json
+{ "articleUrl": "https://sabq.org/article/jrdic6y" }
+```
+
+`https://www.sabq.org/article/jrdic6y/?utm=1#top` و`https://sabq.org/article/%D8%AE%D8%A8%D8%B1-%D8%B9%D8%A7%D8%AC%D9%84` يُحلّان بالطريقة نفسها.
+
 ```json
 {
   "articleId": "ART_ID",
@@ -64,13 +74,15 @@ Authorization: Bearer <SABQ_BOT_SOCIAL_TOKEN>
 
 ```json
 {
-  "articleId": "ART_ID",
+  "articleUrl": "https://www.sabq.org/article/jrdic6y/",
   "text": "نص التغريدة",
   "textSource": "ai",
   "includeLink": true,
   "imageSource": "article"
 }
 ```
+
+`articleId` يبقى مقبولاً مكان `articleUrl`.
 
 `textSource`: `title | title_link | custom | ai`. غيابه `custom`. `textSource: "title"` بلا `includeLink` يُسقط الرابط. `imageSource: "none"` بلا صورة.
 
@@ -103,7 +115,7 @@ Authorization: Bearer <SABQ_BOT_SOCIAL_TOKEN>
 
 ```json
 {
-  "articleId": "ART_ID",
+  "articleUrl": "https://sabq.org/article/jrdic6y?utm_source=desk",
   "clientReference": "nashr-2026-09-28-art-1",
   "text": "نص التغريدة",
   "textSource": "ai",
@@ -111,6 +123,8 @@ Authorization: Bearer <SABQ_BOT_SOCIAL_TOKEN>
   "imageSource": "article"
 }
 ```
+
+إن أُرسل `articleId` مع `articleUrl` فيجب أن يحل الرابط إلى ذلك المعرّف.
 
 ```json
 {
@@ -155,7 +169,7 @@ Authorization: Bearer <SABQ_BOT_SOCIAL_TOKEN>
 
 ```json
 {
-  "articleId": "ART_ID",
+  "articleUrl": "https://sabq.org/article/jrdic6y",
   "clientReference": "nashr-2026-09-28-art-1",
   "text": "نص التغريدة",
   "scheduledAt": "2026-09-28T21:00:00+03:00"
@@ -174,6 +188,30 @@ Authorization: Bearer <SABQ_BOT_SOCIAL_TOKEN>
 
 أو `{ "id": "POST_ID" }`. المجدول فقط. المنشور: `409 not_cancelable`. الملغى مسبقاً: `idempotentReplay: true`. السبب يُحفظ في `lastError`.
 
+### حل الرابط قبل النشر
+
+`GET /api/internal/bot-social/resolve?url=`
+
+نفس توكن Bearer. `url` مرمّز كمُعامل استعلام (`encodeURIComponent`). لا يشترط أن يكون الخبر منشوراً؛ الكتابة لاحقاً ما زالت ترفض غير المنشور بـ `422 article_not_published`.
+
+```http
+GET /api/internal/bot-social/resolve?url=https%3A%2F%2Fsabq.org%2Farticle%2Fjrdic6y%2F%3Futm%3D1 HTTP/1.1
+Authorization: Bearer <SABQ_BOT_SOCIAL_TOKEN>
+```
+
+```json
+{
+  "articleId": "ART_ID",
+  "title": "عنوان الخبر",
+  "status": "published",
+  "publishedAt": "2026-09-01T00:00:00.000Z",
+  "linkUrl": "https://sabq.org/article/jrdic6y",
+  "lang": "ar"
+}
+```
+
+`publishedAt` يكون `null` إن لم يُنشر بعد. `linkUrl` هو الرابط العام (`english_slug` وإلا `slug`). `lang` دائماً `"ar"` لأن الإنجليزية والأردية تُرفضان قبل البحث.
+
 ### قراءة الحالة والقائمة
 
 `GET /api/internal/bot-social/posts/:id` → `{ "post": { ... } }`
@@ -190,9 +228,9 @@ Authorization: Bearer <SABQ_BOT_SOCIAL_TOKEN>
 
 | HTTP | code | متى |
 |------|------|-----|
-| 400 | `validation_error` | جسم أو وقت أو صورة أو طول غير صالح |
+| 400 | `validation_error` | جسم أو وقت أو صورة أو طول غير صالح، أو مضيف الرابط ليس sabq.org، أو غاب `articleId` و`articleUrl`، أو اجتمعا على خبرين مختلفين |
 | 401 | `unauthorized` | توكن مفقود أو توكن المسودات |
-| 404 | `not_found` | خبر أو منشور هذا البوت غير موجود |
+| 404 | `not_found` | خبر أو منشور هذا البوت غير موجود، أو رابط `/article/` لا يطابق صفاً |
 | 409 | `account_not_connected` | لا حساب X مرتبط |
 | 409 | `in_progress` | الحالة `processing` |
 | 409 | `canceled` | المرجع أُلغي |
@@ -200,6 +238,7 @@ Authorization: Bearer <SABQ_BOT_SOCIAL_TOKEN>
 | 409 | `conflict` | حالة لا تسمح |
 | 409 | `reference_article_mismatch` | المرجع مستخدم لخبر آخر |
 | 422 | `article_not_published` | الخبر ليس منشوراً الآن |
+| 422 | `unsupported_language` | الرابط إنجليزي `/en/article/` أو أردي `/ur/article/` |
 | 429 | `rate_limited` | حد الكتابة أو النشر أو التوليد |
 | 502 | `suggest_failed` | فشل نموذج الاقتراح |
 | 502 | `publish_failed` | المزوّد رفض النشر؛ `post` مرفق |

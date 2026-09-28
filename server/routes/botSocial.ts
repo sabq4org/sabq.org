@@ -6,6 +6,7 @@
 // POST /api/internal/bot-social/publish     نشر فوري (idempotent عبر clientReference)
 // POST /api/internal/bot-social/schedule    جدولة
 // POST /api/internal/bot-social/cancel      إلغاء المجدول
+// GET  /api/internal/bot-social/resolve     حل رابط خبر عربي إلى articles.id
 // GET  /api/internal/bot-social/posts       أحدث منشورات هذا البوت
 // GET  /api/internal/bot-social/posts/:id   حالة منشور
 //
@@ -23,6 +24,7 @@ import {
   botSocialListQuerySchema,
   botSocialPreviewSchema,
   botSocialPublishSchema,
+  botSocialResolveQuerySchema,
   botSocialScheduleSchema,
   botSocialSuggestSchema,
   type BotSocialErrorBody,
@@ -39,6 +41,7 @@ import {
   listBotSocialPosts,
   previewBotSocialPost,
   publishBotSocialPost,
+  resolveBotSocialArticleUrl,
   scheduleBotSocialPost,
   suggestBotSocialPost,
 } from "../services/socialPublishing/botSocialService";
@@ -130,7 +133,7 @@ router.post(
       return sendError(res, 400, { code: "validation_error", message: "بيانات التوليد غير صالحة", details: parsed.error.flatten() });
     }
     try {
-      const suggestion = await suggestBotSocialPost(req.bot!, parsed.data.articleId, requestContext(req));
+      const suggestion = await suggestBotSocialPost(req.bot!, parsed.data, requestContext(req));
       res.json(suggestion);
     } catch (error) {
       handleError(res, error, "suggest");
@@ -187,6 +190,22 @@ router.post(
       res.json(await scheduleBotSocialPost(req.bot!, parsed.data, requestContext(req)));
     } catch (error) {
       handleError(res, error, "schedule");
+    }
+  },
+);
+
+router.get(
+  `${BOT_SOCIAL_BASE_PATH}/resolve`,
+  requireBotToken,
+  async (req: BotRequest, res: Response) => {
+    const parsed = botSocialResolveQuerySchema.safeParse(req.query);
+    if (!parsed.success) {
+      return sendError(res, 400, { code: "validation_error", message: "رابط الخبر مفقود أو غير صالح", details: parsed.error.flatten() });
+    }
+    try {
+      res.json(await resolveBotSocialArticleUrl(parsed.data.url));
+    } catch (error) {
+      handleError(res, error, "resolve");
     }
   },
 );
