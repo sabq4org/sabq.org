@@ -36,7 +36,7 @@ import {
   sourcesDueForFetch,
 } from "./repo";
 import { transformItem } from "./transformer";
-import { applyGates, regateStories } from "./gates";
+import { applyGates, consolidateStories, regateStories } from "./gates";
 
 // بعد توسعة المصادر تراكم طابور إنجليزي — دفعة أكبر + جولات متعددة لتصفية الترجمة
 const MAX_ANALYZE_PER_RUN = Number(process.env.RADAR_MAX_ANALYZE_PER_RUN || 20);
@@ -62,6 +62,8 @@ export interface RadarCycleSummary {
   errors: number;
   /** نسخ ضُمّت لقصصها بلا تحليل */
   merged: number;
+  /** قصص باقية ضُمّت إليها قصص متفرقة لنفس الحدث */
+  storiesMerged: number;
   /** بلغ سقف التحليل اليومي — الإشارات الرخيصة مستمرة والتحليل مؤجل */
   analysisCapped: boolean;
 }
@@ -112,6 +114,7 @@ export async function runRadarCycle(): Promise<RadarCycleSummary> {
     cleaned: 0,
     errors: 0,
     merged: 0,
+    storiesMerged: 0,
     analysisCapped: false,
   };
 
@@ -215,6 +218,12 @@ export async function runRadarCycle(): Promise<RadarCycleSummary> {
   try {
     const fresh = analyzed.length ? await itemsByIds(analyzed.map((i) => i.id)) : [];
     gated = await applyGates(fresh);
+    // توحيد القصص المتفرقة عبر اللغات (بالعناوين العربية) كل 5 دقائق
+    if (isClusteringEnabled() && new Date().getMinutes() % 5 === 0) {
+      const keepers = await consolidateStories();
+      summary.storiesMerged = keepers.length;
+      keepers.forEach((id) => touchedStories.add(id));
+    }
     const alreadyGated = new Set(fresh.map((i) => i.storyId).filter(Boolean));
     await regateStories([...touchedStories].filter((id) => !alreadyGated.has(id)));
   } catch (error) {

@@ -131,6 +131,7 @@ interface RadarItemRow {
   lane?: "opportunity" | "watch" | "background" | null;
   storySourceCount?: number | null;
   mergedCopies?: number;
+  storySiblings?: number;
   matchedKeywords: string[] | null;
   translatedTitle: string | null;
   translatedSummary: string | null;
@@ -656,9 +657,9 @@ function RadarItemCard({
               {item.storySourceCount} مصادر مستقلة
             </Badge>
           )}
-          {(item.mergedCopies ?? 0) > 0 && (
-            <Badge variant="outline" title="نسخ شبه مطابقة ضُمّت لهذه المادة دون تحليل مكرر">
-              +{item.mergedCopies} نسخة
+          {(item.mergedCopies ?? 0) + (item.storySiblings ?? 0) > 0 && (
+            <Badge variant="outline" title="تغطيات أخرى للقصة نفسها من ناشرين ولغات مختلفة — تظهر بطاقة واحدة للقصة">
+              +{(item.mergedCopies ?? 0) + (item.storySiblings ?? 0)} تغطية
             </Badge>
           )}
           {item.eventTiming && item.eventTiming !== "new" && (

@@ -131,7 +131,13 @@ export function registerRadarRoutes(app: Express) {
     }
     try {
       const { breaking, status, ...rest } = parsed.data;
-      const result = await listItems({ ...rest, statuses: status, breakingOnly: breaking });
+      // ترتيب الأولوية = عرض تحريري: بطاقة واحدة لكل قصة
+      const result = await listItems({
+        ...rest,
+        statuses: status,
+        breakingOnly: breaking,
+        collapseStories: rest.sort === "priority",
+      });
       res.json(result);
     } catch (error) {
       console.error("[Radar API] items failed:", error);
