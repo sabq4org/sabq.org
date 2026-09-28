@@ -7,22 +7,35 @@ html[data-sabq-top-ads-disabled] [data-testid="dms-ad-slot-Leaderboard"] {
   display: none !important;
 }
 
-/* Leaderboard is desktop-only (DmsLeaderboardAd: hidden md:block). DMS
- * skinning yanks #Leaderboard out of that wrapper and reinserts it as a
- * sibling under the site header. On mobile hide it always. On listing
- * pages (/news and /category), also collapse the empty hijacked slot on
- * desktop so it does not leave a hole between the chrome header and the
- * page header. MPU is unchanged. */
-@media (max-width: 767px) {
-  html #Leaderboard {
-    display: none !important;
-    min-height: 0 !important;
-    height: 0 !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    overflow: hidden !important;
+/* Leaderboard fixed heights (DMS ask, 2026-09-28): 100px on mobile, 250px
+ * on desktop. DMS centres approved creatives (320x50, 728x90, 970x90)
+ * vertically inside the box; a wrong-size creative (e.g. 300x600) is clipped
+ * instead of pushing the page down. Rich-media expandable/pushdown formats
+ * cannot serve with a fixed height. The rule targets the id so it still
+ * applies when DMS skinning moves #Leaderboard out of our wrapper and under
+ * the site header; the testid covers the id-less placeholder rendered while
+ * the setting loads, so the space is reserved from first paint (no CLS).
+ * No display here: the disabled rule above must still win. */
+html #Leaderboard,
+html [data-testid="dms-ad-slot-Leaderboard"] {
+  box-sizing: border-box !important;
+  height: 100px !important;
+  min-height: 100px !important;
+  max-height: 100px !important;
+  overflow: hidden !important;
+}
+@media (min-width: 768px) {
+  html #Leaderboard,
+  html [data-testid="dms-ad-slot-Leaderboard"] {
+    height: 250px !important;
+    min-height: 250px !important;
+    max-height: 250px !important;
   }
 }
+
+/* On listing pages (/news and /category), collapse the empty hijacked slot so
+ * it does not leave a hole between the chrome header and the page header.
+ * MPU is unchanged. */
 :is(.news-listing-page, .category-listing-page) > #Leaderboard:not(:has(iframe)) {
   display: none !important;
   min-height: 0 !important;
