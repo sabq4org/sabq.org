@@ -1292,6 +1292,7 @@ export const radarItems = pgTable("radar_items", {
   publishedAt: timestamp("published_at"),
   fetchedAt: timestamp("fetched_at").defaultNow().notNull(),
   // new → analyzed → ready (مسودة جاهزة) → exported | dismissed
+  // filtered = استبعاد آلي قبل التحليل · merged = نسخة شبه مطابقة ضُمّت لقصتها بلا تحليل
   status: text("status").notNull().default("new"),
   newsValue: integer("news_value"), // 0–100 قيمة إخبارية لجمهور سبق
   scoreBreakdown: jsonb("score_breakdown").$type<{
@@ -1300,6 +1301,10 @@ export const radarItems = pgTable("radar_items", {
     regionalRelevance?: number;
     novelty?: number;
     reason?: string;
+    /** طلب العاجل من التحليل أو قاعدة تنبيه — القرار النهائي لبوابة triage.decideBreaking */
+    breakingRequested?: boolean;
+    /** لماذا رُفض طلب العاجل */
+    breakingDeniedBy?: string | null;
   }>(),
   isBreaking: boolean("is_breaking").notNull().default(false),
   matchedKeywords: jsonb("matched_keywords").$type<string[]>(),
@@ -1339,8 +1344,25 @@ export const radarItems = pgTable("radar_items", {
   exportedAt: timestamp("exported_at"),
   exportedBy: varchar("exported_by").references(() => users.id, { onDelete: "set null" }),
   error: text("error"), // آخر خطأ تحليل/تحويل لهذه المادة
+  // ---- فرز الدقة (2026-09-28) — additive، راجع server/services/radar/triage.ts ----
+  publisherKey: text("publisher_key"), // هوية الناشر الفعلي (نطاق/سجل) — أساس عدّ المستقل
+  publisherType: text("publisher_type"), // official | wire | major | press_release | aggregator | social | unknown
+  wireOrigin: text("wire_origin"), // وكالة أصل النقل إن وُجد عزو (رويترز/واس…)
+  textBasis: text("text_basis"), // body | title_only — العنوان وحده لا يُلخَّص
+  qualityFlags: jsonb("quality_flags").$type<string[]>(), // missing_date, future_date, past_year:YYYY, title_only…
+  screenReason: text("screen_reason"), // سبب الاستبعاد الآلي قبل التحليل (status=filtered)
+  duplicateOfId: varchar("duplicate_of_id"), // نسخة شبه مطابقة ضُمّت شاهدًا (status=merged)
+  eventTiming: text("event_timing"), // new | ongoing | old | unknown — من التحليل مع دليل
+  timingEvidence: text("timing_evidence"),
+  contentType: text("content_type"), // news | claim | analysis | opinion | press_release | other
+  evidenceScore: integer("evidence_score"), // 0–100 قوة الدليل
+  freshnessScore: integer("freshness_score"), // 0–100 حداثة الزمن الموثوق
+  priorityScore: integer("priority_score"), // 0–100 أولوية مركبة بسقوف
+  lane: text("lane"), // opportunity | watch | background
+  breakingUntil: timestamp("breaking_until"), // العاجل صفة مؤقتة تنتهي هنا
 }, (table) => [
   uniqueIndex("uq_radar_items_source_guid").on(table.sourceId, table.guid),
+  index("idx_radar_items_priority").on(table.priorityScore.desc()),
   index("idx_radar_items_status").on(table.status, table.fetchedAt.desc()),
   index("idx_radar_items_news_value").on(table.newsValue),
   index("idx_radar_items_story").on(table.storyId),

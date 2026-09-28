@@ -84,11 +84,7 @@ async function joinStory(story: RadarStory, item: RadarItem, embedding: number[]
 
   await db.update(radarItems).set({ storyId: story.id }).where(eq(radarItems.id, item.id));
 
-  const distinctSources = await db
-    .select({ n: sql<number>`count(distinct ${radarItems.sourceId})::int` })
-    .from(radarItems)
-    .where(eq(radarItems.storyId, story.id));
-  const sourceCount = Math.max(Number(distinctSources[0]?.n ?? 1), 1);
+  const sourceCount = await independentSourceCount(story.id);
 
   await db
     .update(radarStories)
@@ -105,14 +101,101 @@ async function joinStory(story: RadarStory, item: RadarItem, embedding: number[]
 }
 
 /**
+ * عدد المصادر المستقلة في القصة: وكالة الأصل إن وُجد عزو، وإلا الناشر الفعلي،
+ * وإلا المصدر — نسخ ناشر واحد بثماني لغات = مصدر واحد، وعشرة مواقع تنقل
+ * رويترز = مصدر واحد. (كان يعدّ source_id = الممر، فتتضخم الأعداد.)
+ */
+export async function independentSourceCount(storyId: string): Promise<number> {
+  const rows = await db
+    .select({
+      n: sql<number>`count(distinct coalesce(${radarItems.wireOrigin}, ${radarItems.publisherKey}, 'source:' || ${radarItems.sourceId}))::int`,
+    })
+    .from(radarItems)
+    .where(and(eq(radarItems.storyId, storyId), sql`${radarItems.status} <> 'filtered'`));
+  return Math.max(Number(rows[0]?.n ?? 1), 1);
+}
+
+function nearCopyThreshold(): number {
+  const n = Number(process.env.RADAR_NEAR_COPY_THRESHOLD ?? 0.92);
+  return Number.isFinite(n) && n > 0 && n <= 1 ? n : 0.92;
+}
+
+/** ممثل القصة المحلَّل (أعلى قيمة) — أصل تُضمّ إليه النسخ شبه المطابقة */
+async function analyzedRepresentative(storyId: string): Promise<RadarItem | null> {
+  const rows = await db
+    .select()
+    .from(radarItems)
+    .where(
+      and(
+        eq(radarItems.storyId, storyId),
+        sql`${radarItems.status} in ('analyzed', 'ready', 'exported')`
+      )
+    )
+    .orderBy(desc(radarItems.newsValue))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+/**
+ * قبل التحليل: مادة جديدة انضمت لقصة لها ممثل محلَّل تُضمّ شاهدًا بلا نداء
+ * نموذج إذا كانت نسخة شبه مطابقة (تشابه ≥ عتبة النسخ) أو من الناشر/الوكالة
+ * نفسها. غير ذلك تبقى new فتُحلَّل كتطور محتمل — لا نبتلع تطورًا جديدًا.
+ */
+async function maybeMergeCopy(item: RadarItem, storyId: string, similarity: number): Promise<boolean> {
+  if (item.status !== "new") return false;
+  const rep = await analyzedRepresentative(storyId);
+  if (!rep) return false;
+  const itemKey = item.wireOrigin || item.publisherKey;
+  const sameOrigin = Boolean(itemKey) && itemKey === (rep.wireOrigin || rep.publisherKey);
+  if (!sameOrigin && similarity < nearCopyThreshold()) return false;
+  await db
+    .update(radarItems)
+    .set({ status: "merged", duplicateOfId: rep.duplicateOfId ?? rep.id })
+    .where(and(eq(radarItems.id, item.id), eq(radarItems.status, "new")));
+  return true;
+}
+
+/** نسخ مكررة (merged) تتبع قصة أصلها مباشرة بلا تضمين */
+async function attachMergedCopies(items: RadarItem[], touched: Set<string>): Promise<RadarItem[]> {
+  const rest: RadarItem[] = [];
+  const attached = new Set<string>();
+  for (const item of items) {
+    if (item.status !== "merged" || !item.duplicateOfId) {
+      rest.push(item);
+      continue;
+    }
+    const [origin] = await db
+      .select({ storyId: radarItems.storyId })
+      .from(radarItems)
+      .where(eq(radarItems.id, item.duplicateOfId))
+      .limit(1);
+    if (!origin?.storyId) continue; // الأصل لم يُجمَّع بعد — الجولة التالية
+    await db.update(radarItems).set({ storyId: origin.storyId }).where(eq(radarItems.id, item.id));
+    attached.add(origin.storyId);
+    touched.add(origin.storyId);
+  }
+  for (const storyId of attached) {
+    await db
+      .update(radarStories)
+      .set({ sourceCount: await independentSourceCount(storyId), lastSeenAt: new Date() })
+      .where(eq(radarStories.id, storyId));
+  }
+  return rest;
+}
+
+/**
  * يسند مواد بلا قصة إلى أقرب قصة نشطة أو ينشئ قصة جديدة.
  * يعيد عدد المواد التي رُبطت / أُنشئت لها قصة.
  */
-export async function clusterRadarItems(items: RadarItem[]): Promise<{ clustered: number; created: number }> {
-  if (!isClusteringEnabled() || !items.length) return { clustered: 0, created: 0 };
+export async function clusterRadarItems(
+  items: RadarItem[]
+): Promise<{ clustered: number; created: number; merged: number; storyIds: string[] }> {
+  const touched = new Set<string>();
+  if (!isClusteringEnabled() || !items.length) return { clustered: 0, created: 0, merged: 0, storyIds: [] };
 
-  const pending = items.filter((i) => !i.storyId);
-  if (!pending.length) return { clustered: 0, created: 0 };
+  const unassigned = items.filter((i) => !i.storyId && i.status !== "filtered");
+  const pending = await attachMergedCopies(unassigned, touched);
+  if (!pending.length) return { clustered: 0, created: 0, merged: 0, storyIds: [...touched] };
 
   let stories = await loadActiveStories();
   const itemVectors = await embedTexts(pending.map(itemText));
@@ -143,6 +226,7 @@ export async function clusterRadarItems(items: RadarItem[]): Promise<{ clustered
   const threshold = clusterThreshold();
   let clustered = 0;
   let created = 0;
+  let merged = 0;
 
   for (let i = 0; i < pending.length; i++) {
     const item = pending[i];
@@ -173,6 +257,8 @@ export async function clusterRadarItems(items: RadarItem[]): Promise<{ clustered
 
     if (matchOk && best) {
       await joinStory(best.story, item, vec);
+      touched.add(best.story.id);
+      if (await maybeMergeCopy(item, best.story.id, best.score)) merged++;
       stories[best.idx] = {
         ...stories[best.idx],
         lastSeenAt: new Date(),
@@ -182,6 +268,7 @@ export async function clusterRadarItems(items: RadarItem[]): Promise<{ clustered
       clustered++;
     } else {
       const story = await createStory(item, vec);
+      touched.add(story.id);
       stories = [story, ...stories];
       storyVectors = [vec, ...storyVectors];
       created++;
@@ -189,7 +276,7 @@ export async function clusterRadarItems(items: RadarItem[]): Promise<{ clustered
     }
   }
 
-  return { clustered, created };
+  return { clustered, created, merged, storyIds: [...touched] };
 }
 
 /** مواد بلا قصة (حد) — للجولة الدورية */
@@ -197,7 +284,7 @@ export async function itemsNeedingClustering(limit: number): Promise<RadarItem[]
   return db
     .select()
     .from(radarItems)
-    .where(and(isNull(radarItems.storyId), sql`${radarItems.status} <> 'dismissed'`))
+    .where(and(isNull(radarItems.storyId), sql`${radarItems.status} not in ('dismissed', 'filtered')`))
     .orderBy(desc(radarItems.fetchedAt))
     .limit(limit);
 }

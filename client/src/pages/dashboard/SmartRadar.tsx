@@ -83,6 +83,19 @@ interface RadarStatsResponse {
   newsapiLastFetchedAt: string | null;
   telegramConfigured: boolean;
   webSearchConfigured: boolean;
+  filteredToday?: number;
+  mergedToday?: number;
+}
+
+interface RadarStatusResponse {
+  forceDisabled: boolean;
+  cronEnabled: boolean;
+  clustering: boolean;
+  autoTransform: boolean;
+  dailyAnalyzeCap: number;
+  analyzedToday: number;
+  lastAnalyzedAt: string | null;
+  lastCycle: { finishedAt: string; summary: { analysisCapped?: boolean } } | null;
 }
 
 interface RadarItemRow {
@@ -98,10 +111,26 @@ interface RadarItemRow {
   originalLanguage: string | null;
   publishedAt: string | null;
   fetchedAt: string;
-  status: "new" | "analyzed" | "ready" | "exported" | "dismissed";
+  status: "new" | "analyzed" | "ready" | "exported" | "dismissed" | "filtered" | "merged";
   newsValue: number | null;
-  scoreBreakdown: { reason?: string; saudiRelevance?: number } | null;
+  scoreBreakdown: { reason?: string; saudiRelevance?: number; breakingDeniedBy?: string | null } | null;
   isBreaking: boolean;
+  breakingUntil?: string | null;
+  // فرز الدقة — محاور منفصلة بدل رقم واحد يوحي باحتمال صحة
+  publisherType?: string | null;
+  wireOrigin?: string | null;
+  textBasis?: "body" | "title_only" | null;
+  qualityFlags?: string[] | null;
+  screenReason?: string | null;
+  eventTiming?: "new" | "ongoing" | "old" | "unknown" | null;
+  timingEvidence?: string | null;
+  contentType?: string | null;
+  evidenceScore?: number | null;
+  freshnessScore?: number | null;
+  priorityScore?: number | null;
+  lane?: "opportunity" | "watch" | "background" | null;
+  storySourceCount?: number | null;
+  mergedCopies?: number;
   matchedKeywords: string[] | null;
   translatedTitle: string | null;
   translatedSummary: string | null;
@@ -162,16 +191,49 @@ interface CategoryRow {
 
 // ---------- ثوابت العرض ----------
 
+// المسارات الثلاثة: فرص (مرتبة بالأولوية المركبة) · يحتاج تحققًا (ادعاءات/دليل ضعيف)
+// · خلفية (قديم/ترويجي) — لا تزاحم الخلفية الوارد الحي
 const TABS: { id: string; label: string; params: Record<string, string> }[] = [
-  { id: "inbox", label: "الرصد", params: { status: "new,analyzed" } },
-  { id: "breaking", label: "عاجل", params: { status: "new,analyzed,ready", breaking: "true" } },
+  { id: "inbox", label: "فرص", params: { status: "new,analyzed", lane: "opportunity", sort: "priority" } },
+  { id: "watch", label: "يحتاج تحققًا", params: { status: "new,analyzed", lane: "watch", sort: "priority" } },
+  { id: "breaking", label: "عاجل", params: { status: "new,analyzed,ready", breaking: "true", sort: "priority" } },
   { id: "ready", label: "جاهز للنشر", params: { status: "ready" } },
+  { id: "background", label: "خلفية", params: { status: "analyzed", lane: "background" } },
   { id: "exported", label: "صُدِّر", params: { status: "exported" } },
   { id: "dismissed", label: "مستبعد", params: { status: "dismissed" } },
+  { id: "filtered", label: "مستبعد آليًا", params: { status: "filtered" } },
 ];
 
+const PUBLISHER_TYPE_LABELS: Record<string, string> = {
+  official: "جهة رسمية",
+  wire: "وكالة",
+  major: "مؤسسة كبرى",
+  press_release: "بيان صحفي",
+  aggregator: "مجمّع",
+  social: "تواصل",
+};
+
+const TIMING_LABELS: Record<string, string> = {
+  new: "حدث جديد",
+  ongoing: "تطور مستمر",
+  old: "حدث قديم",
+  unknown: "توقيت غير محسوم",
+};
+
+/** عاجل نشط = وسم لم تنتهِ صلاحيته (المواد القديمة بلا صلاحية: 3 ساعات من الرصد) */
+function isActiveBreaking(item: RadarItemRow): boolean {
+  if (!item.isBreaking) return false;
+  const until = item.breakingUntil
+    ? new Date(item.breakingUntil).getTime()
+    : new Date(item.fetchedAt).getTime() + 3 * 3_600_000;
+  return until > Date.now();
+}
+
 const EMPTY_MESSAGES: Record<string, string> = {
-  inbox: "لا مواد مرصودة بعد — أضف مصادر وسيبدأ الرادار بالتقاط الجديد تلقائيًا",
+  inbox: "لا فرص في هذه النافذة — جرّب نافذة أوسع أو تبويب «يحتاج تحققًا»",
+  watch: "لا ادعاءات أو مواد ضعيفة الدليل تحتاج تحققًا الآن",
+  background: "لا مواد خلفية",
+  filtered: "لا مواد مستبعدة آليًا — البيانات الصحفية والتواريخ المستحيلة تظهر هنا مع السبب",
   breaking: "لا رصد عاجلًا الآن — التنبيهات تظهر هنا فور مطابقة قواعدك",
   ready: "لا مسودات جاهزة — حوّل مادة من تبويب الرصد لتظهر هنا",
   exported: "لم يُصدَّر شيء بعد — المواد المصدَّرة تبقى هنا للتوثيق",
@@ -194,6 +256,17 @@ function timeAgo(iso: string | null): string {
   }
 }
 
+function describeRunStatus(status: RadarStatusResponse | undefined): string {
+  if (!status) return "رصد المصادر العالمية وفرزها بالدليل والحداثة والصلة";
+  if (status.forceDisabled) return "الرادار متوقف إجباريًا من الكود — لا جلب ولا تحليل.";
+  const parts: string[] = [status.cronEnabled ? "الرصد الآلي يعمل" : "الرصد الآلي متوقف (RADAR_ENABLED)"];
+  if (status.lastAnalyzedAt) parts.push(`آخر تحليل ${timeAgo(status.lastAnalyzedAt)}`);
+  parts.push(`تحليل اليوم ${status.analyzedToday}/${status.dailyAnalyzeCap}`);
+  if (status.analyzedToday >= status.dailyAnalyzeCap) parts.push("بلغ السقف اليومي — التحليل مؤجل");
+  parts.push(status.autoTransform ? "التحويل التلقائي مفعّل" : "التحويل التلقائي معطّل");
+  return parts.join(" · ");
+}
+
 // ---------- الصفحة ----------
 
 export default function SmartRadar() {
@@ -202,7 +275,8 @@ export default function SmartRadar() {
   const [activeTab, setActiveTab] = useState("inbox");
   const [sourceFilter, setSourceFilter] = useState<string>("all");
   const [channelFilter, setChannelFilter] = useState<"all" | "feed" | "x">("all");
-  const [timeFilter, setTimeFilter] = useState<"all" | "1" | "3" | "24">("all");
+  // الافتراضي آخر 24 ساعة: «كل الأوقات» مع الترتيب بالرصد كان يخلط القديم بالحي
+  const [timeFilter, setTimeFilter] = useState<"all" | "1" | "3" | "24">("24");
   const [limit, setLimit] = useState(30);
 
   const tabParams = TABS.find((t) => t.id === activeTab)?.params ?? {};
@@ -214,6 +288,11 @@ export default function SmartRadar() {
     refetchInterval: 60_000,
   });
   const stats = statsRaw ?? null;
+
+  const { data: runStatus } = useQuery<RadarStatusResponse>({
+    queryKey: ["/api/radar/status"],
+    refetchInterval: 60_000,
+  });
 
   const { data: itemsRaw, isLoading: itemsLoading } = useQuery<{
     items: RadarItemRow[];
@@ -326,7 +405,7 @@ export default function SmartRadar() {
         <DashboardPageHeader
           icon={Radar}
           title="رادار سبق الذكي"
-          description="الرصد الآلي والجلب اليدوي متوقفان إجبارياً. يمكن مراجعة المواد والمصادر الموجودة فقط."
+          description={describeRunStatus(runStatus)}
           actions={
             <>
             <SourcesSheet sources={sources} categories={categories} />
@@ -345,7 +424,16 @@ export default function SmartRadar() {
 
         {/* ---------- مؤشرات سريعة ---------- */}
         <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
-          <KpiCard icon={<Satellite className="h-4 w-4" />} label="وارد اليوم" value={stats?.newToday} />
+          <KpiCard
+            icon={<Satellite className="h-4 w-4" />}
+            label="وارد اليوم"
+            value={stats?.newToday}
+            hint={
+              stats?.mergedToday || stats?.filteredToday
+                ? `${stats?.mergedToday ?? 0} نسخة ضُمّت · ${stats?.filteredToday ?? 0} استُبعدت آليًا`
+                : undefined
+            }
+          />
           <KpiCard
             icon={<Zap className="h-4 w-4 text-red-500" />}
             label="عاجل نشط"
@@ -532,12 +620,16 @@ function RadarItemCard({
 }) {
   const score = item.newsValue;
   const keywords = Array.isArray(item.matchedKeywords) ? item.matchedKeywords : [];
+  const flags = Array.isArray(item.qualityFlags) ? item.qualityFlags : [];
+  const breaking = isActiveBreaking(item);
+  const timeUnreliable = flags.includes("future_date") || flags.includes("missing_date");
+  const pastYear = flags.find((f) => f.startsWith("past_year:"))?.split(":")[1];
 
   return (
-    <Card className={`flex flex-col ${item.isBreaking ? "border-red-300 dark:border-border" : ""}`}>
+    <Card className={`flex flex-col ${breaking ? "border-red-300 dark:border-border" : ""}`}>
       <CardHeader className="space-y-2 pb-2">
         <div className="flex flex-wrap items-center gap-2 text-xs">
-          {item.isBreaking && (
+          {breaking && (
             <Badge variant="destructive" className="animate-pulse">
               <Zap className="ml-0.5 h-3 w-3" /> عاجل
             </Badge>
@@ -555,7 +647,39 @@ function RadarItemCard({
           {/* لمواد ممرات الاصطياد (Google News/GDELT) الناشر الحقيقي أهم من اسم الممر */}
           <Badge variant="secondary" title={item.publisher ? item.sourceName ?? undefined : undefined}>
             {item.publisher ?? item.sourceName ?? "مصدر"}
+            {item.publisherType && PUBLISHER_TYPE_LABELS[item.publisherType]
+              ? ` · ${PUBLISHER_TYPE_LABELS[item.publisherType]}`
+              : ""}
           </Badge>
+          {(item.storySourceCount ?? 0) > 1 && (
+            <Badge variant="outline" title="ناشرون/وكالات مستقلة — نسخ الناشر نفسه بلغات مختلفة تُعد مصدرًا واحدًا">
+              {item.storySourceCount} مصادر مستقلة
+            </Badge>
+          )}
+          {(item.mergedCopies ?? 0) > 0 && (
+            <Badge variant="outline" title="نسخ شبه مطابقة ضُمّت لهذه المادة دون تحليل مكرر">
+              +{item.mergedCopies} نسخة
+            </Badge>
+          )}
+          {item.eventTiming && item.eventTiming !== "new" && (
+            <Badge
+              variant="outline"
+              className={item.eventTiming === "old" ? "border-red-400 text-red-700 dark:text-red-300" : ""}
+              title={item.timingEvidence ?? undefined}
+            >
+              {TIMING_LABELS[item.eventTiming]}
+            </Badge>
+          )}
+          {item.textBasis === "title_only" && (
+            <Badge variant="outline" className="border-amber-400 text-amber-700 dark:text-amber-300" title="وصل العنوان وحده — لا ملخص حتى لا يُنسب للمصدر ما لم يُقرأ">
+              المتن لم يُقرأ
+            </Badge>
+          )}
+          {item.contentType === "claim" && (
+            <Badge variant="outline" className="border-amber-400 text-amber-700 dark:text-amber-300">
+              ادعاء غير مؤكد
+            </Badge>
+          )}
           {item.sourceType === "x" ? (
             <Badge className="bg-sky-600 text-white hover:bg-sky-600">
               X{item.xValue ? ` · ${item.xValue}` : ""}
@@ -572,15 +696,24 @@ function RadarItemCard({
           {/* «نُشر» = تاريخ المصدر الحقيقي؛ غيابه يُعلن صراحةً بوقت الرصد —
               عرض وقت الجلب كأنه وقت النشر أوهم بأن خبرًا قديمًا «منذ دقائق» */}
           <span className="text-muted-foreground">
-            {item.publishedAt
+            {item.publishedAt && !timeUnreliable
               ? `نُشر ${timeAgo(item.publishedAt)}`
-              : `رُصد ${timeAgo(item.fetchedAt)} — تاريخ النشر غير معروف`}
+              : `رُصد ${timeAgo(item.fetchedAt)} — ${flags.includes("future_date") ? "تاريخ النشر مستقبلي غير موثوق" : "تاريخ النشر غير معروف"}`}
+            {pastYear ? ` · يذكر عام ${pastYear}` : ""}
           </span>
         </div>
         {score != null && (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2" title="الصلة لجمهور سبق — ليست احتمال صحة الخبر">
+            <span className="text-[11px] text-muted-foreground">صلة</span>
             <Progress value={score} className="h-1.5 flex-1" indicatorClassName={scoreColor(score)} />
-            <span className="text-xs font-bold tabular-nums">{score}%</span>
+            <span className="text-xs font-bold tabular-nums">{score}</span>
+          </div>
+        )}
+        {item.evidenceScore != null && item.freshnessScore != null && (
+          <div className="flex gap-3 text-[11px] text-muted-foreground tabular-nums">
+            <span title="نوع الناشر + التأييد المستقل">دليل {item.evidenceScore}</span>
+            <span title="عمر الزمن الموثوق للحدث">حداثة {item.freshnessScore}</span>
+            {item.priorityScore != null && <span className="font-medium text-foreground">أولوية {item.priorityScore}</span>}
           </div>
         )}
       </CardHeader>
@@ -595,6 +728,9 @@ function RadarItemCard({
         )}
         {item.translatedSummary && (
           <p className="text-sm text-muted-foreground line-clamp-3">{item.translatedSummary}</p>
+        )}
+        {item.status === "filtered" && item.screenReason && (
+          <p className="text-xs text-red-700 dark:text-red-300">استُبعد آليًا: {item.screenReason}</p>
         )}
         {item.scoreBreakdown?.reason && (
           <p className="text-xs italic text-muted-foreground line-clamp-2">
@@ -666,7 +802,7 @@ function RadarItemCard({
             فتح المقال
           </Button>
         )}
-        {item.status === "dismissed" && (
+        {(item.status === "dismissed" || item.status === "filtered") && (
           <Button size="sm" variant="outline" onClick={onRestore}>
             <RotateCcw className="ml-1 h-4 w-4" />
             استعادة
@@ -1040,7 +1176,7 @@ function WatchesSheet({
         <SheetHeader className="text-right">
           <SheetTitle>رصدات إكس</SheetTitle>
           <SheetDescription>
-            حساب أو كلمة أو هاشتاق أو ترند — الجلب الآلي واليدوي متوقفان إجبارياً حالياً
+            حساب أو كلمة أو هاشتاق أو ترند — الرصدات تُجلب ضمن دورة الرادار وفق فترتها
           </SheetDescription>
         </SheetHeader>
 

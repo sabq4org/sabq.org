@@ -12,6 +12,8 @@ import { requireAuth, requireRole } from "../rbac";
 import { insertRadarAlertRuleSchema, insertRadarSourceSchema } from "@shared/schema";
 import {
   countActiveXWatches,
+  countAnalyzedToday,
+  lastAnalyzedAt,
   createRule,
   createSource,
   deleteRule,
@@ -26,8 +28,13 @@ import {
   updateRule,
   updateSource,
 } from "../services/radar/repo";
-import { fetchSingleSource, runRadarCycle } from "../services/radar/cycle";
-import { isRadarForceDisabled } from "../services/radar/flags";
+import { DAILY_ANALYZE_CAP, fetchSingleSource, getLastCycle, runRadarCycle } from "../services/radar/cycle";
+import {
+  isClusteringEnabled,
+  isMomentumEnabled,
+  isRadarForceDisabled,
+  isRelevanceEnabled,
+} from "../services/radar/flags";
 import { transformItem } from "../services/radar/transformer";
 import { developItem } from "../services/radar/developer";
 import { exportItemToArticle } from "../services/radar/exporter";
@@ -47,7 +54,7 @@ const canView = SYSTEM_ADMIN_ONLY;
 const canWork = SYSTEM_ADMIN_ONLY;
 const canManage = SYSTEM_ADMIN_ONLY;
 
-const RADAR_STATUSES = ["new", "analyzed", "ready", "exported", "dismissed"] as const;
+const RADAR_STATUSES = ["new", "analyzed", "ready", "exported", "dismissed", "filtered", "merged"] as const;
 
 const itemsQuerySchema = z.object({
   // قائمة حالات مفصولة بفواصل — التبويبات تجمع أكثر من حالة (مثل new,analyzed)
@@ -61,6 +68,8 @@ const itemsQuerySchema = z.object({
   channel: z.enum(["x", "feed"]).optional(),
   breaking: z.coerce.boolean().optional(),
   sinceHours: z.coerce.number().int().min(1).max(168).optional(),
+  lane: z.enum(["opportunity", "watch", "background"]).optional(),
+  sort: z.enum(["priority", "recent"]).optional(),
   limit: z.coerce.number().int().min(1).max(100).optional(),
   offset: z.coerce.number().int().min(0).optional(),
 });
@@ -79,6 +88,28 @@ export function registerRadarRoutes(app: Express) {
     } catch (error) {
       console.error("[Radar API] stats failed:", error);
       res.status(500).json({ message: "تعذر جلب إحصاءات الرادار" });
+    }
+  });
+
+  // حالة تشغيل حقيقية من الخادم — بدل نص «متوقف» الثابت في الواجهة
+  app.get("/api/radar/status", requireAuth, canView, async (_req, res) => {
+    try {
+      const [analyzedToday, lastAnalysis] = await Promise.all([countAnalyzedToday(), lastAnalyzedAt()]);
+      res.json({
+        forceDisabled: isRadarForceDisabled(),
+        cronEnabled: process.env.RADAR_ENABLED === "true",
+        clustering: isClusteringEnabled(),
+        momentum: isMomentumEnabled(),
+        relevance: isRelevanceEnabled(),
+        autoTransform: process.env.RADAR_AUTO_TRANSFORM !== "false",
+        dailyAnalyzeCap: DAILY_ANALYZE_CAP,
+        analyzedToday,
+        lastAnalyzedAt: lastAnalysis ? lastAnalysis.toISOString() : null,
+        lastCycle: getLastCycle(),
+      });
+    } catch (error) {
+      console.error("[Radar API] status failed:", error);
+      res.status(500).json({ message: "تعذر جلب حالة الرادار" });
     }
   });
 
@@ -180,7 +211,8 @@ export function registerRadarRoutes(app: Express) {
     try {
       const item = await getItem(String(req.params.id));
       if (!item) return res.status(404).json({ message: "المادة غير موجودة" });
-      if (item.status !== "dismissed") {
+      // المستبعد آليًا (filtered) يُستعاد أيضًا: قرار المحرر يغلب الفرز
+      if (item.status !== "dismissed" && item.status !== "filtered") {
         return res.status(409).json({ message: "المادة ليست مستبعدة" });
       }
       const updated = await updateItem(item.id, {
