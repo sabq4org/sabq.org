@@ -7,6 +7,8 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "../../db";
 import { radarItems, radarStories, type RadarItem } from "@shared/schema";
 import { countIndependentSources, decideBreaking, scoreItem } from "./triage";
+import { independentSourceCount } from "./clusterer";
+import { planStoryMerges } from "./storyMerge";
 
 const ARABIC = /[؀-ۿ]/;
 
@@ -132,4 +134,56 @@ export async function regateStories(storyIds: string[], now: Date = new Date()):
       )
     );
   return (await applyGates(items, now)).length;
+}
+
+/**
+ * توحيد القصص المتفرقة بعد التحليل: الحدث الواحد الذي انقسم عبر اللغات إلى
+ * عدة قصص تُضم مواده للقصة الأكبر (بالعناوين العربية المترجمة)، وتُؤرشف البقية.
+ * يعيد القصص الباقية التي تغيّر تأييدها لإعادة بواباتها.
+ */
+export async function consolidateStories(now: Date = new Date()): Promise<string[]> {
+  const since = new Date(now.getTime() - 24 * 3_600_000);
+  const rows = await db
+    .select({ storyId: radarItems.storyId, title: radarItems.translatedTitle, newsValue: radarItems.newsValue })
+    .from(radarItems)
+    .innerJoin(radarStories, eq(radarItems.storyId, radarStories.id))
+    .where(
+      and(
+        eq(radarStories.status, "active"),
+        inArray(radarItems.status, ["analyzed", "ready", "exported"]),
+        sql`${radarItems.translatedTitle} IS NOT NULL`,
+        sql`${radarItems.fetchedAt} >= ${since}`
+      )
+    )
+    .limit(3000);
+
+  const byStory = new Map<string, { title: string; value: number; size: number }>();
+  for (const row of rows) {
+    if (!row.storyId || !row.title) continue;
+    const current = byStory.get(row.storyId);
+    const value = row.newsValue ?? 0;
+    if (!current) byStory.set(row.storyId, { title: row.title, value, size: 1 });
+    else {
+      current.size++;
+      if (value > current.value) Object.assign(current, { title: row.title, value });
+    }
+  }
+  const plan = planStoryMerges(
+    Array.from(byStory, ([id, s]) => ({ id, title: s.title, size: s.size }))
+  );
+  if (!plan.size) return [];
+
+  const keepers = new Set<string>();
+  for (const [absorbed, keeper] of plan) {
+    await db.update(radarItems).set({ storyId: keeper }).where(eq(radarItems.storyId, absorbed));
+    await db.update(radarStories).set({ status: "archived" }).where(eq(radarStories.id, absorbed));
+    keepers.add(keeper);
+  }
+  for (const keeper of keepers) {
+    await db
+      .update(radarStories)
+      .set({ sourceCount: await independentSourceCount(keeper), lastSeenAt: new Date() })
+      .where(eq(radarStories.id, keeper));
+  }
+  return [...keepers];
 }

@@ -273,6 +273,8 @@ export interface RadarItemFilters {
   lane?: "opportunity" | "watch" | "background";
   /** priority = الأولوية المركبة (الافتراضي في الواجهة) · recent = وقت الرصد */
   sort?: "priority" | "recent";
+  /** بطاقة واحدة لكل قصة: تُعرض أعلى مادة أولوية فقط وتُعدّ البقية «تغطيات» */
+  collapseStories?: boolean;
   /** آخر N ساعة — على تاريخ النشر، ويسقط لوقت الرصد إن غاب */
   sinceHours?: number;
   limit?: number;
@@ -287,6 +289,8 @@ export type RadarItemListRow = RadarItem & {
   storySourceCount: number | null;
   /** نسخ ضُمّت لهذه المادة شاهدًا بلا تحليل */
   mergedCopies: number;
+  /** مواد أخرى من القصة نفسها أُخفيت خلف هذه البطاقة (عند collapseStories) */
+  storySiblings: number;
 };
 
 /**
@@ -314,6 +318,18 @@ function itemConditions(filters: RadarItemFilters) {
     conditions.push(
       dsql`coalesce(${radarItems.publishedAt}, ${radarItems.fetchedAt}) >= now() - make_interval(hours => ${filters.sinceHours})`
     );
+  }
+  if (filters.collapseStories) {
+    // لا تُعرض مادة إن كان في قصتها مادة أعلى ترتيبًا بالحالات نفسها
+    const statuses = filters.statuses?.length ? filters.statuses : ["new", "analyzed", "ready"];
+    conditions.push(dsql`(${radarItems.storyId} IS NULL OR NOT EXISTS (
+      SELECT 1 FROM radar_items sib
+      WHERE sib.story_id = ${radarItems.storyId}
+        AND sib.id <> ${radarItems.id}
+        AND sib.status IN (${dsql.join(statuses.map((st) => dsql`${st}`), dsql`, `)})
+        AND (coalesce(sib.priority_score, -1), coalesce(sib.news_value, -1), sib.fetched_at, sib.id)
+          > (coalesce(${radarItems.priorityScore}, -1), coalesce(${radarItems.newsValue}, -1), ${radarItems.fetchedAt}, ${radarItems.id})
+    ))`);
   }
   if (filters.channel === "x") conditions.push(eq(radarSources.type, "x"));
   if (filters.channel === "feed") conditions.push(inArray(radarSources.type, ["rss", "json"]));
@@ -362,6 +378,23 @@ export async function listItems(
         .groupBy(radarItems.duplicateOfId)
     : [];
   const copyCount = new Map(copies.map((c) => [c.id, Number(c.n)]));
+  const storyIds = Array.from(
+    new Set(rows.map((r) => r.item.storyId).filter((id): id is string => Boolean(id)))
+  );
+  const siblings =
+    filters.collapseStories && storyIds.length
+      ? await db
+          .select({ storyId: radarItems.storyId, n: count() })
+          .from(radarItems)
+          .where(
+            and(
+              inArray(radarItems.storyId, storyIds),
+              inArray(radarItems.status, filters.statuses?.length ? filters.statuses : ["new", "analyzed", "ready"])
+            )
+          )
+          .groupBy(radarItems.storyId)
+      : [];
+  const siblingCount = new Map(siblings.map((r) => [r.storyId, Number(r.n) - 1]));
   return {
     items: rows.map((r) => ({
       ...r.item,
@@ -370,6 +403,7 @@ export async function listItems(
       xValue: r.xValue,
       storySourceCount: r.storySourceCount ?? null,
       mergedCopies: copyCount.get(r.item.id) ?? 0,
+      storySiblings: (r.item.storyId && siblingCount.get(r.item.storyId)) || 0,
     })),
     total: totals[0]?.value ?? 0,
   };
