@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const state = vi.hoisted(() => ({
   selects: [] as unknown[][],
+  wheres: [] as unknown[],
   create: vi.fn(),
   update: vi.fn(),
   schedule: vi.fn(),
@@ -27,7 +28,10 @@ function chain(rows: unknown) {
   } = {
     from: () => builder,
     innerJoin: () => builder,
-    where: () => builder,
+    where: (clause: unknown) => {
+      state.wheres.push(clause);
+      return builder;
+    },
     orderBy: () => builder,
     limit: () => pending,
     then: (onOk, onErr) => pending.then(onOk, onErr),
@@ -138,8 +142,25 @@ const publishBody = {
   imageSource: "article" as const,
 };
 
+function whereColumns(clause: unknown): string[] {
+  const names: string[] = [];
+  const walk = (node: unknown) => {
+    if (!node || typeof node !== "object") return;
+    if ("name" in node && "table" in node && typeof (node as { name: unknown }).name === "string") {
+      names.push((node as { name: string }).name);
+    }
+    const chunks = (node as { queryChunks?: unknown[] }).queryChunks;
+    if (Array.isArray(chunks)) {
+      for (const chunk of chunks) walk(chunk);
+    }
+  };
+  walk(clause);
+  return names;
+}
+
 beforeEach(() => {
   state.selects = [];
+  state.wheres = [];
   state.create.mockReset();
   state.update.mockReset();
   state.schedule.mockReset();
@@ -306,6 +327,7 @@ function located(over: Record<string, unknown> = {}) {
 describe("article URL resolution", () => {
   it("resolves a short code, a www URL, and a percent-encoded Arabic slug to articles.id", async () => {
     state.selects = [
+      [],
       [located({ id: "art-ar", slug: "خبر-عاجل", englishSlug: "jrdic6y" })],
       [{ ...article(), id: "art-ar", slug: "خبر-عاجل", englishSlug: "jrdic6y" }],
     ];
@@ -316,21 +338,26 @@ describe("article URL resolution", () => {
     });
     expect(preview.articleId).toBe("art-ar");
     expect(preview.linkUrl).toBe("https://sabq.org/article/jrdic6y");
+    expect(state.wheres.slice(0, 2).map(whereColumns)).toEqual([["english_slug"], ["slug"]]);
 
-    state.selects = [[located()]];
-    await expect(resolveBotSocialArticleUrl("https://sabq.org/article/jrdic6y")).resolves.toEqual({
+    state.wheres = [];
+    state.selects = [[located({ englishSlug: "y68a4q6" })]];
+    await expect(resolveBotSocialArticleUrl("https://sabq.org/article/y68a4q6")).resolves.toEqual({
       articleId: "art-1",
       title: "عنوان الخبر",
       status: "published",
       publishedAt: "2026-09-01T00:00:00.000Z",
-      linkUrl: "https://sabq.org/article/jrdic6y",
+      linkUrl: "https://sabq.org/article/y68a4q6",
       lang: "ar",
     });
+    expect(state.wheres.map(whereColumns)).toEqual([["english_slug"]]);
   });
 
-  it("falls back to the article id for a UUID and to legacy_slug after the public slug miss", async () => {
+  it("falls back to legacy_slug before a UUID, after english_slug and slug miss", async () => {
     const id = "0d8c8a1e-6f2b-4b1e-9d2a-2f6f4f9d1a11";
     state.selects = [
+      [],
+      [],
       [],
       [located({ id, englishSlug: "jrdic6y" })],
       [{ ...article(), id, englishSlug: "jrdic6y" }],
@@ -339,8 +366,16 @@ describe("article URL resolution", () => {
       articleUrl: `https://sabq.org/article/${id}`,
       text: "نص",
     })).resolves.toMatchObject({ articleId: id });
+    expect(state.wheres.slice(0, 4).map(whereColumns)).toEqual([
+      ["english_slug"],
+      ["slug"],
+      ["legacy_slug"],
+      ["id"],
+    ]);
 
+    state.wheres = [];
     state.selects = [
+      [],
       [],
       [located({ id: "art-legacy", englishSlug: "canon", slug: "arabic-slug" })],
       [{ ...article(), id: "art-legacy", englishSlug: "canon", slug: "arabic-slug" }],
@@ -349,10 +384,15 @@ describe("article URL resolution", () => {
       articleUrl: "https://sabq.org/article/old-legacy-id/",
       text: "نص",
     })).resolves.toMatchObject({ articleId: "art-legacy", linkUrl: "https://sabq.org/article/canon" });
+    expect(state.wheres.slice(0, 3).map(whereColumns)).toEqual([
+      ["english_slug"],
+      ["slug"],
+      ["legacy_slug"],
+    ]);
   });
 
   it("returns 404 when the public token matches nothing, and 400 for another host", async () => {
-    state.selects = [[], []];
+    state.selects = [[], [], []];
     await expect(previewBotSocialPost({
       articleUrl: "https://sabq.org/article/missing",
       text: "نص",

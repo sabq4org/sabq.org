@@ -1,6 +1,6 @@
 // عمليات بوت النشر على X. التأليف والطول هنا، والنشر نفسه عبر
 // socialPublishingService (نفس المطالبة والعامل ومزوّد X/Publer).
-import { and, desc, eq, or } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { composeXPostText, validateXPostText } from "@shared/socialPostText";
 import { articles, socialPostBotKeys, socialPosts, users, type SocialPost } from "@shared/schema";
 import { SABQ_NEWSPAPER_ACCOUNT_ID } from "@shared/sabqNewspaper";
@@ -217,35 +217,34 @@ const articleLocatorColumns = {
 };
 
 /**
- * نفس شرط GET /api/articles/:slug: slug أو english_slug (storage.getArticleBySlug)،
- * ثم المعرّف إن كان UUID (المسار في routes.ts)، ثم legacy_slug كما يحلّه
- * computeSlugRedirect لمسارات الأرشيف القديمة. لا نكتب مطابقة جديدة.
+ * ترتيب حل مقطع /article/:x بعد فك الترميز، بما يطابق ما تفتحه الصفحة:
+ * الرمز القصير هو english_slug، ثم slug العربي، ثم legacy_slug (غالباً فارغ)،
+ * ثم articles.id إن كان المقطع UUID (احتياط GET /api/articles/:slug).
+ * كل عمود استعلام مستقل حتى يفوز english_slug إن تطابق أكثر من صف.
  */
 const ARTICLE_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-async function findArabicArticleByPublicToken(token: string): Promise<ArticleLocator | null> {
-  const [bySlug] = await db
+async function selectArticleBy(column: typeof articles.englishSlug | typeof articles.slug | typeof articles.legacySlug | typeof articles.id, token: string): Promise<ArticleLocator | null> {
+  const [row] = await db
     .select(articleLocatorColumns)
     .from(articles)
-    .where(or(eq(articles.slug, token), eq(articles.englishSlug, token))!)
+    .where(eq(column, token))
     .limit(1);
+  return row ?? null;
+}
+
+async function findArabicArticleByPublicToken(token: string): Promise<ArticleLocator | null> {
+  const byEnglish = await selectArticleBy(articles.englishSlug, token);
+  if (byEnglish) return byEnglish;
+
+  const bySlug = await selectArticleBy(articles.slug, token);
   if (bySlug) return bySlug;
 
-  if (ARTICLE_UUID_RE.test(token)) {
-    const [byId] = await db
-      .select(articleLocatorColumns)
-      .from(articles)
-      .where(eq(articles.id, token))
-      .limit(1);
-    if (byId) return byId;
-  }
+  const byLegacy = await selectArticleBy(articles.legacySlug, token);
+  if (byLegacy) return byLegacy;
 
-  const [byLegacy] = await db
-    .select(articleLocatorColumns)
-    .from(articles)
-    .where(eq(articles.legacySlug, token))
-    .limit(1);
-  return byLegacy ?? null;
+  if (!ARTICLE_UUID_RE.test(token)) return null;
+  return selectArticleBy(articles.id, token);
 }
 
 async function locateArticleFromUrl(articleUrl: string): Promise<ArticleLocator> {

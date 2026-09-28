@@ -120,8 +120,8 @@
 `cancelPost` / `suggestSocialPostForArticle`. لا منطق نشر ثانٍ.
 `suggest` / `preview` / `publish` / `schedule` تقبل `articleUrl`
 (`https://sabq.org/article/...` أو `www`) بدل `articleId` أو معهما إن حُلّا
-إلى نفس الصف. الحل يعيد شرط الصفحة العامة: `slug` أو `english_slug`، ثم
-`id` إن كان UUID، ثم `legacy_slug`. `GET /resolve?url=` يعيد
+إلى نفس الصف. بعد فك ترميز المقطع يُبحث بالترتيب: `english_slug`، ثم
+`slug`، ثم `legacy_slug`، ثم `id` إن كان UUID. `GET /resolve?url=` يعيد
 `{ articleId, title, status, publishedAt, linkUrl, lang }` قبل الكتابة.
 الإنجليزية والأردية: `422 unsupported_language`.
 `clientReference` مع اسم البوت مفتاح فريد على المعرّف المحلول: إعادة نفس
