@@ -37,6 +37,7 @@ import staffProfilesRouter from "./staffProfiles";
 import meetingsRouter from "./meetingsRoutes";
 import meetingMinutesRouter from "./meetingMinutesRoutes";
 import botDraftsRouter from "./botDrafts";
+import botSocialRouter from "./botSocial";
 import publishFirstRouter from "./publishFirst";
 import reportersAdminRouter from "./reportersAdmin";
 import replyPolishRouter from "./replyPolish";
@@ -152,6 +153,8 @@ export function registerSplitRoutes(app: Express) {
   app.use(meetingMinutesRouter);
   // مسودات البوتات (نشر سبق / Grok) — /api/internal/bot-drafts، Bearer لكل بوت، draft فقط
   app.use(botDraftsRouter);
+  // نشر X للبوت الخارجي — /api/internal/bot-social، توكن منفصل عن مسودات البوت
+  app.use(botSocialRouter);
   app.use(publishFirstRouter);
   app.use(reportersAdminRouter);
   app.use(replyPolishRouter);
