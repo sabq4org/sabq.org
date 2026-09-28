@@ -7,6 +7,7 @@
 import type { RadarItem } from "@shared/schema";
 import { listRules, updateItem } from "./repo";
 import { matchAlertRules, type AlertMatch } from "./parsing";
+import { applyGates } from "./gates";
 
 function telegramConfig(): { token: string; chatId: string } | null {
   const token = process.env.TELEGRAM_BOT_TOKEN;
@@ -28,7 +29,7 @@ async function sendTelegramAlert(item: RadarItem, matches: AlertMatch[]): Promis
   const title = item.translatedTitle || item.originalTitle;
   const labels = matches.map((m) => m.rule.label).join("، ");
   const text = [
-    `🚨 <b>رادار سبق — رصد عاجل</b>`,
+    item.isBreaking ? `🚨 <b>رادار سبق — رصد عاجل</b>` : `📡 <b>رادار سبق — رصد يطابق قاعدة</b>`,
     ``,
     `<b>${escapeHtml(title)}</b>`,
     item.translatedSummary ? escapeHtml(item.translatedSummary) : null,
@@ -67,6 +68,7 @@ export async function processAlerts(items: RadarItem[]): Promise<number> {
   if (!rules.length) return 0;
 
   let sent = 0;
+  const regate: RadarItem[] = [];
   for (const item of items) {
     if (item.alertedAt) continue;
     const matches = matchAlertRules(item, rules);
@@ -84,12 +86,17 @@ export async function processAlerts(items: RadarItem[]): Promise<number> {
         console.error("[Radar Alerts] telegram send failed:", error);
       }
     }
-    await updateItem(item.id, {
+    const row = await updateItem(item.id, {
       matchedKeywords,
-      isBreaking: item.isBreaking || markBreaking,
       alertedAt: new Date(),
+      // القاعدة تطلب العاجل؛ القرار لبوابة الزمن/الدليل (applyGates) لا للكلمة المفتاحية
+      ...(markBreaking
+        ? { scoreBreakdown: { ...(item.scoreBreakdown ?? {}), breakingRequested: true } }
+        : {}),
     });
+    if (markBreaking && row) regate.push(row);
     if (delivered) sent++;
   }
+  if (regate.length) await applyGates(regate);
   return sent;
 }

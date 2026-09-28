@@ -1,32 +1,19 @@
 /**
- * حساب الصلة السعودية — نقي نسبياً (قراءة JSON فقط، بلا DB).
+ * حساب الصلة السعودية — نقي (قواميس مضمّنة، بلا DB).
  */
-import { readFileSync } from "fs";
-import { dirname, join } from "path";
-import { fileURLToPath } from "url";
 import { normalizeText } from "./textNormalize";
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
-
-function loadTerms(file: string): string[] {
-  try {
-    const raw = JSON.parse(readFileSync(join(__dirname, "data", file), "utf8")) as { terms?: string[] };
-    return (raw.terms ?? []).map((t) => normalizeText(t)).filter(Boolean);
-  } catch {
-    return [];
-  }
-}
+import { SAUDI_NEGATIVE_TERMS, SAUDI_POSITIVE_TERMS } from "./relevanceTerms";
 
 let positiveCache: string[] | null = null;
 let negativeCache: string[] | null = null;
 
 function positiveTerms(): string[] {
-  if (!positiveCache) positiveCache = loadTerms("saudi-positive.json");
+  if (!positiveCache) positiveCache = SAUDI_POSITIVE_TERMS.map((t) => normalizeText(t)).filter(Boolean);
   return positiveCache;
 }
 
 function negativeTerms(): string[] {
-  if (!negativeCache) negativeCache = loadTerms("saudi-negative.json");
+  if (!negativeCache) negativeCache = SAUDI_NEGATIVE_TERMS.map((t) => normalizeText(t)).filter(Boolean);
   return negativeCache;
 }
 

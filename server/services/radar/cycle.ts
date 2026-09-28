@@ -1,8 +1,11 @@
 /**
  * دورة الرادار — الأوركسترا التي يستدعيها الـ cron كل دقيقة:
- * 1) جلب المصادر التي حان موعدها (فترة لكل مصدر) وإدراج الجديد بلا تكرار.
- * 2) تحليل دفعة من المواد الجديدة (قيمة إخبارية + ترجمة) بنداء نموذج واحد.
- * 3) تقييم قواعد التنبيه على ما حُلّل (عاجل + تيليجرام).
+ * 1) جلب المصادر التي حان موعدها + فرز حتمي عند الإدراج (triage.ts):
+ *    البيانات الصحفية والتواريخ المستحيلة → filtered، والنسخ المكررة → merged.
+ * 2) تجميع القصص قبل التحليل — النسخ شبه المطابقة لا تُحلَّل.
+ * 3) تحليل ما تبقى (قيمة + ترجمة + توقيت الحدث) ضمن سقف يومي، ثم البوابات:
+ *    عاجل مؤقت بشروط مجتمعة، ومحاور دليل/حداثة/أولوية منفصلة (gates.ts).
+ * 4) تقييم قواعد التنبيه على ما حُلّل (تيليجرام؛ العاجل عبر البوابة).
  * 4) تحويل تحريري تلقائي للعاجل عالي القيمة — جاهز للنشر قبل أن يطلبه أحد.
  * 5) تنظيف ساعيّ للمواد القديمة غير المُصدَّرة.
  */
@@ -24,13 +27,16 @@ import { isRadarRateLimitError, RADAR_FETCH_CONCURRENCY } from "./fetchPolicy";
 import {
   breakingItemsNeedingDraft,
   cleanupOldItems,
+  countAnalyzedToday,
   getSource,
   insertItems,
+  itemsByIds,
   itemsNeedingAnalysis,
   markSourceFetched,
   sourcesDueForFetch,
 } from "./repo";
 import { transformItem } from "./transformer";
+import { applyGates, regateStories } from "./gates";
 
 // بعد توسعة المصادر تراكم طابور إنجليزي — دفعة أكبر + جولات متعددة لتصفية الترجمة
 const MAX_ANALYZE_PER_RUN = Number(process.env.RADAR_MAX_ANALYZE_PER_RUN || 20);
@@ -39,6 +45,8 @@ const MAX_CLUSTER_PER_RUN = Number(process.env.RADAR_MAX_CLUSTER_PER_RUN || 40);
 const AUTO_TRANSFORM_MIN_SCORE = Number(process.env.RADAR_AUTOTRANSFORM_MIN_SCORE || 80);
 const MAX_AUTO_TRANSFORM_PER_RUN = 2;
 const RETENTION_DAYS = Number(process.env.RADAR_RETENTION_DAYS || 14);
+/** سقف كلفة فعلي: عدد المواد المحلَّلة يوميًا (بتوقيت الرياض) */
+export const DAILY_ANALYZE_CAP = Math.max(0, Number(process.env.RADAR_DAILY_ANALYZE_CAP || 2000));
 const autoTransformEnabled = () => process.env.RADAR_AUTO_TRANSFORM !== "false";
 const sourceFetchLimit = pLimit(RADAR_FETCH_CONCURRENCY);
 
@@ -52,6 +60,23 @@ export interface RadarCycleSummary {
   autoDrafts: number;
   cleaned: number;
   errors: number;
+  /** نسخ ضُمّت لقصصها بلا تحليل */
+  merged: number;
+  /** بلغ سقف التحليل اليومي — الإشارات الرخيصة مستمرة والتحليل مؤجل */
+  analysisCapped: boolean;
+}
+
+export interface RadarCycleRecord {
+  startedAt: string;
+  finishedAt: string;
+  summary: RadarCycleSummary;
+}
+
+let lastCycle: RadarCycleRecord | null = null;
+
+/** آخر دورة على هذه النسخة من الخادم (قد تكون null على نسخة ليست القائدة) */
+export function getLastCycle(): RadarCycleRecord | null {
+  return lastCycle;
 }
 
 /** جلب مصدر واحد يدويًا (زر "جلب الآن" في الواجهة) — يعيد عدد الجديد */
@@ -86,11 +111,14 @@ export async function runRadarCycle(): Promise<RadarCycleSummary> {
     autoDrafts: 0,
     cleaned: 0,
     errors: 0,
+    merged: 0,
+    analysisCapped: false,
   };
 
   if (isRadarForceDisabled()) {
     return summary;
   }
+  const startedAt = new Date().toISOString();
 
   // 1) الجلب — فشل مصدر واحد لا يوقف البقية
   const due = await sourcesDueForFetch();
@@ -127,48 +155,74 @@ export async function runRadarCycle(): Promise<RadarCycleSummary> {
     }
   }
 
-  // 2) التحليل + الترجمة — جولات متتالية حتى يصفو الطابور أو يبلغ السقف
+  // 2) التجميع قبل التحليل (خلف flag): النسخ شبه المطابقة تُضمّ شاهدًا لقصتها
+  // بلا نداء نموذج، والمادة التي فيها جديد تبقى new لتُحلَّل كتطور.
+  const touchedStories = new Set<string>();
+  if (isClusteringEnabled()) {
+    try {
+      const backlog = await itemsNeedingClustering(MAX_CLUSTER_PER_RUN * 3);
+      if (backlog.length) {
+        const result = await clusterRadarItems(backlog);
+        summary.clustered += result.clustered;
+        summary.storiesCreated += result.created;
+        summary.merged += result.merged;
+        result.storyIds.forEach((id) => touchedStories.add(id));
+      }
+    } catch (error) {
+      summary.errors++;
+      console.error("[Radar] pre-analysis clustering failed:", error);
+    }
+  }
+
+  // 3) التحليل + الترجمة — جولات متتالية حتى يصفو الطابور أو يبلغ السقف اليومي
   const analyzed: RadarItem[] = [];
   try {
-    for (let round = 0; round < MAX_ANALYZE_ROUNDS; round++) {
-      const pending = await itemsNeedingAnalysis(MAX_ANALYZE_PER_RUN);
+    let remaining = Math.max(0, DAILY_ANALYZE_CAP - (await countAnalyzedToday()));
+    if (remaining === 0) summary.analysisCapped = true;
+    for (let round = 0; round < MAX_ANALYZE_ROUNDS && remaining > 0; round++) {
+      const batchSize = Math.min(MAX_ANALYZE_PER_RUN, remaining);
+      const pending = await itemsNeedingAnalysis(batchSize);
       if (!pending.length) break;
       const batch = await analyzeItems(pending);
       analyzed.push(...batch);
       summary.analyzed += batch.length;
+      remaining -= batch.length;
+      if (remaining <= 0) summary.analysisCapped = true;
       // دفعة ناقصة = لا مزيد في الطابور
-      if (pending.length < MAX_ANALYZE_PER_RUN) break;
+      if (pending.length < batchSize) break;
     }
   } catch (error) {
     summary.errors++;
     console.error("[Radar] analysis failed:", error);
   }
 
-  // 3) تجميع القصص (خلف flag) — بعد التحليل لتوفر العناوين المترجمة عند الإمكان
-  if (isClusteringEnabled()) {
+  // 3أ) مواد حُلّلت دون قصة (التجميع فشل سابقًا) — تجميع لاحق
+  if (isClusteringEnabled() && analyzed.some((i) => !i.storyId)) {
     try {
-      const pool = analyzed.length
-        ? analyzed
-        : await itemsNeedingClustering(MAX_CLUSTER_PER_RUN);
-      const result = await clusterRadarItems(pool);
-      summary.clustered = result.clustered;
-      summary.storiesCreated = result.created;
-      // أيضاً صفّ طابور المواد القديمة بلا قصة
-      if (analyzed.length) {
-        const backlog = await itemsNeedingClustering(MAX_CLUSTER_PER_RUN);
-        if (backlog.length) {
-          const more = await clusterRadarItems(backlog);
-          summary.clustered += more.clustered;
-          summary.storiesCreated += more.created;
-        }
-      }
+      const result = await clusterRadarItems(analyzed.filter((i) => !i.storyId));
+      summary.clustered += result.clustered;
+      summary.storiesCreated += result.created;
+      result.storyIds.forEach((id) => touchedStories.add(id));
     } catch (error) {
       summary.errors++;
       console.error("[Radar] clustering failed:", error);
     }
   }
 
-  // 3ب) زخم + صلة على القصص النشطة
+  // 3ب) البوابات: عاجل مؤقت + محاور + مسار، بعد معرفة المصادر المستقلة.
+  // وقصص زاد تأييدها تُعاد بواباتها (مصدر مستقل ثانٍ قد يرفع العاجل).
+  let gated: RadarItem[] = [];
+  try {
+    const fresh = analyzed.length ? await itemsByIds(analyzed.map((i) => i.id)) : [];
+    gated = await applyGates(fresh);
+    const alreadyGated = new Set(fresh.map((i) => i.storyId).filter(Boolean));
+    await regateStories([...touchedStories].filter((id) => !alreadyGated.has(id)));
+  } catch (error) {
+    summary.errors++;
+    console.error("[Radar] gates failed:", error);
+  }
+
+  // 3ج) زخم + صلة على القصص النشطة
   if (isMomentumEnabled()) {
     try {
       await refreshStoryMomentum(50);
@@ -188,7 +242,7 @@ export async function runRadarCycle(): Promise<RadarCycleSummary> {
 
   // 4) التنبيهات على ما حُلّل في هذه الدورة
   try {
-    summary.alertsSent = await processAlerts(analyzed);
+    summary.alertsSent = await processAlerts(gated.length ? gated : analyzed);
   } catch (error) {
     summary.errors++;
     console.error("[Radar] alerts failed:", error);
@@ -237,5 +291,6 @@ export async function runRadarCycle(): Promise<RadarCycleSummary> {
     console.warn("[Radar] coverage-gap matcher unavailable:", error instanceof Error ? error.message : error);
   }
 
+  lastCycle = { startedAt, finishedAt: new Date().toISOString(), summary };
   return summary;
 }
