@@ -88,6 +88,8 @@ test("category results follow the heading without a viewport-sized blank gap", a
     if (path === "/api/categories/slug/saudi") return route.fulfill({ json: category });
     if (path === "/api/categories/saudi/articles") return route.fulfill({ json: [article] });
     if (path === "/api/categories") return route.fulfill({ json: [category] });
+    // Layout without the top ad; the reserved leaderboard box has its own test below.
+    if (path === "/api/system/dms-top-ads") return route.fulfill({ json: { showTopAds: false } });
     return route.fulfill({ json: {} });
   });
   await page.setViewportSize({ width: 390, height: 844 });
@@ -108,6 +110,30 @@ test("category results follow the heading without a viewport-sized blank gap", a
   expect(desktopFilters.y - (desktopHeader.y + desktopHeader.height)).toBeLessThan(240);
   await expect(page.getByTestId("category-filter-bar")).toBeVisible();
   await expect(page.getByText("وصف موجز للخبر المحلي.")).toBeVisible();
+});
+
+test("top leaderboard reserves a fixed 100px box on mobile and 250px on desktop", async ({ page }) => {
+  const category = { id: "category-local", slug: "saudi", englishSlug: "saudi", nameAr: "محليات", description: "أخبار المناطق والمدن السعودية", icon: "🗺️", type: "manual" };
+  await page.route("**/api/**", route => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === "/api/auth/user") return route.fulfill({ status: 401, json: { message: "Unauthorized" } });
+    if (path === "/api/categories/slug/saudi") return route.fulfill({ json: category });
+    if (path === "/api/categories/saudi/articles") return route.fulfill({ json: [] });
+    if (path === "/api/system/dms-top-ads") return route.fulfill({ json: { showTopAds: true } });
+    return route.fulfill({ json: {} });
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/category/saudi");
+  const slot = page.locator("#Leaderboard");
+  await expect(slot).toBeVisible();
+  expect((await slot.boundingBox())!.height).toBe(100);
+
+  // A wrong-size creative (300x600) must not grow the box.
+  await slot.evaluate(element => { element.innerHTML = '<iframe width="300" height="600" style="display:block;width:300px;height:600px;border:0"></iframe>'; });
+  expect((await slot.boundingBox())!.height).toBe(100);
+
+  await page.setViewportSize({ width: 1280, height: 800 });
+  expect((await slot.boundingBox())!.height).toBe(250);
 });
 
 test("keyword results follow a compact heading without full-width mobile filters", async ({ page }) => {
