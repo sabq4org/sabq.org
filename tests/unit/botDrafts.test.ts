@@ -61,10 +61,12 @@ import {
   generateArabicSlug,
   isAssignableBotCategoryStatus,
   isMissingBotDraftReporter,
+  isPersonalBotNewspaperNews,
   appendBotDraftBodyImages,
   normalizeDraftContent,
   botDraftContentBlockedMessage,
   botDraftContentEditBlock,
+  buildBotDraftSeoPatch,
   buildPublishedBotContentPatch,
   botDraftPublicUrl,
   botDraftPublishBlockedMessage,
@@ -812,6 +814,15 @@ describe("pure helpers", () => {
     expect(reporterIdForBotDraftUpdate("", sabq)).toBe(sabq);
     expect(reporterIdForBotDraftUpdate("editor-choice", sabq)).toBeUndefined();
   });
+  it("exempts only personal bot news with the server-owned newspaper byline", () => {
+    const personal = { name: "publisher-u", personal: { userId: "u", capabilities: [] } } as any;
+    const legacy = { name: "nashr-sabq" };
+    const newspaper = "RnP7eDOAl5T5rGpib9_8d";
+    expect(isPersonalBotNewspaperNews(personal, { articleType: "news", authorId: newspaper, reporterId: newspaper })).toBe(true);
+    expect(isPersonalBotNewspaperNews(legacy, { articleType: "news", authorId: newspaper, reporterId: newspaper })).toBe(false);
+    expect(isPersonalBotNewspaperNews(personal, { articleType: "opinion", authorId: newspaper, reporterId: newspaper })).toBe(false);
+    expect(isPersonalBotNewspaperNews(personal, { articleType: "news", authorId: "custom", reporterId: "custom" })).toBe(false);
+  });
   it("wraps plain text into escaped paragraphs and passes HTML through the sanitizer", () => {
     expect(normalizeDraftContent("فقرة أولى a < b & c\n\nفقرة ثانية\nسطر")).toBe("<p>فقرة أولى a &lt; b &amp; c</p>\n<p>فقرة ثانية<br>سطر</p>");
     expect(normalizeDraftContent("<p>مرحبا</p>")).toBe("<p>مرحبا</p>");
@@ -918,11 +929,11 @@ describe("pure helpers", () => {
     const now = new Date("2026-09-20T10:00:00Z");
     const row = {
       id: "art-9", status: "published", title: "ت", subtitle: null, slug: "ت", excerpt: null, categoryId: null, imageUrl: null,
-      sourceUrl: null, seo: { keywords: ["أ"] }, source: "bot", sourceMetadata: { type: "bot", bot: "grok-bot", clientReference: "g-1" },
+      sourceUrl: null, seo: { metaTitle: "عنوان SEO", metaDescription: "وصف SEO", keywords: ["أ"] }, source: "bot", sourceMetadata: { type: "bot", bot: "grok-bot", clientReference: "g-1" },
       createdAt: now, updatedAt: now,
     } as any;
     expect(toBotDraftResponse({ ...row, englishSlug: "abc12xy" }, "local")).toMatchObject({
-      status: "published", updatable: true, bot: "grok-bot", clientReference: "g-1", keywords: ["أ"], categorySlug: "local",
+      status: "published", updatable: true, bot: "grok-bot", clientReference: "g-1", keywords: ["أ"], seoTitle: "عنوان SEO", seoDescription: "وصف SEO", categorySlug: "local",
       editUrl: "https://sabq.org/dashboard/articles/art-9/edit", createdAt: now.toISOString(),
       bodyImageUrls: [],
       publicUrl: "https://sabq.org/article/abc12xy",
@@ -1079,6 +1090,7 @@ describe("published bot content edit rules", () => {
       "imageUrls",
     ]);
     expect(findDisallowedPublishedContentFields({ title: "عنوان جديد للخبر", keywords: ["سبق"] })).toEqual([]);
+    expect(findDisallowedPublishedContentFields({ title: "عنوان جديد للخبر", seoTitle: "عنوان SEO" })).toEqual([]);
     expect(findDisallowedPublishedContentFields({
       title: "عنوان جديد للخبر",
       riskLabel: "needs_look",
@@ -1092,6 +1104,8 @@ describe("published bot content edit rules", () => {
         title: "عنوان محدّث للخبر المنشور",
         excerpt: "موجز جديد",
         keywords: ["جديد"],
+        seoTitle: "عنوان SEO جديد",
+        seoDescription: "وصف SEO جديد",
         content: "<p>متن الخبر المنشور بعد التعديل يكفي للحد الأدنى.</p>",
         contentFormat: "html",
       },
@@ -1102,7 +1116,11 @@ describe("published bot content edit rules", () => {
     expect(patch.aiSummary).toBe("موجز جديد");
     expect(patch.aiBullets).toBeNull();
     expect(patch.updatedAt).toEqual(now);
-    expect(patch.seo).toEqual({ metaTitle: "قديم", keywords: ["جديد"] });
+    expect(patch.seo).toEqual({ metaTitle: "عنوان SEO جديد", metaDescription: "وصف SEO جديد", keywords: ["جديد"] });
+    expect(buildBotDraftSeoPatch({ metaTitle: "قديم", metaDescription: "قديم", keywords: ["ك"] }, { seoTitle: null })).toEqual({
+      metaDescription: "قديم",
+      keywords: ["ك"],
+    });
     expect(patch.content).toContain("متن الخبر المنشور");
     for (const key of ["status", "publishedAt", "slug", "englishSlug", "authorId", "reporterId", "categoryId", "scheduledAt"]) {
       expect(patch).not.toHaveProperty(key);

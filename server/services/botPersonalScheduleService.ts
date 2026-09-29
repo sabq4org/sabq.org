@@ -1,13 +1,16 @@
 import { articles, botPublisherTokens } from "@shared/schema";
-import { and, eq, sql, type SQL } from "drizzle-orm";
+import { SABQ_NEWSPAPER_ACCOUNT_ID } from "@shared/sabqNewspaper";
+import { and, eq, isNull, or, sql, type SQL } from "drizzle-orm";
 import { db } from "../db";
 import { authenticatePublisherTokenId } from "./botPublisherTokenService";
-import { assertMediaLicenseAllowsSubmission } from "./mediaLicenseService";
 import { deductPublisherCreditSafely } from "./publisherCreditService";
 import { logArticleEvent } from "./articleEventsService";
 import { logActivity } from "../rbac";
 
-type ScheduledArticle = Pick<typeof articles.$inferSelect, "id" | "title" | "sourceMetadata" | "publisherId">;
+type ScheduledArticle = Pick<
+  typeof articles.$inferSelect,
+  "id" | "title" | "sourceMetadata" | "publisherId" | "articleType" | "authorId" | "reporterId"
+>;
 
 /** Revocation, account suspension and permission changes also stop pending schedules. */
 export async function personalBotScheduledReleaseAllowed(article: ScheduledArticle): Promise<boolean> {
@@ -17,7 +20,12 @@ export async function personalBotScheduledReleaseAllowed(article: ScheduledArtic
   const principal = await authenticatePublisherTokenId(tokenId);
   if (!principal || principal.userId !== owner || !principal.capabilities.includes("publish")) return false;
   if ((principal.publisherId ?? null) !== article.publisherId) return false;
-  return (await assertMediaLicenseAllowsSubmission(owner)).ok;
+  if (article.articleType !== "news") return false;
+  if ((article.reporterId || article.authorId) !== SABQ_NEWSPAPER_ACCOUNT_ID) return false;
+  // Personal bot news uses the server-owned newspaper byline. Its execution
+  // gate remains token/permission/ownership based; professional media-license
+  // enforcement stays on human/editorial channels.
+  return true;
 }
 
 /** Called only after the atomic scheduled -> published transition succeeds. */
@@ -38,14 +46,35 @@ export async function recordPersonalBotScheduledPublish(article: ScheduledArticl
 
 /** Check revocation/expiry again in the very SQL statement that publishes. */
 export function personalBotScheduledWriteCondition(article: ScheduledArticle): SQL | undefined {
-  if (!article.sourceMetadata?.publisherUserId) return undefined;
-  return sql`exists (
-    select 1 from ${botPublisherTokens}
-    where ${botPublisherTokens.id} = ${article.sourceMetadata.publisherTokenId ?? ""}
-      and ${botPublisherTokens.userId} = ${article.sourceMetadata.publisherUserId}
-      and ${botPublisherTokens.revokedAt} is null
-      and ${botPublisherTokens.expiresAt} > now()
-  )`;
+  const metadata = article.sourceMetadata;
+  const owner = metadata?.publisherUserId;
+  if (!owner) return undefined;
+
+  // Keep the final UPDATE scoped to the same personal-news contract checked
+  // above. This closes the race where ownership, byline, or article type
+  // changes after authorization but before the scheduled -> published write.
+  const publisherCondition = article.publisherId === null
+    ? isNull(articles.publisherId)
+    : eq(articles.publisherId, article.publisherId);
+  const newspaperBylineCondition = or(
+    eq(articles.reporterId, SABQ_NEWSPAPER_ACCOUNT_ID),
+    and(isNull(articles.reporterId), eq(articles.authorId, SABQ_NEWSPAPER_ACCOUNT_ID)),
+  );
+  return and(
+    eq(articles.source, "bot"),
+    sql`${articles.sourceMetadata}->>'publisherUserId' = ${owner}`,
+    sql`${articles.sourceMetadata}->>'publisherTokenId' = ${metadata.publisherTokenId ?? ""}`,
+    publisherCondition,
+    eq(articles.articleType, "news"),
+    newspaperBylineCondition,
+    sql`exists (
+      select 1 from ${botPublisherTokens}
+      where ${botPublisherTokens.id} = ${metadata.publisherTokenId ?? ""}
+        and ${botPublisherTokens.userId} = ${owner}
+        and ${botPublisherTokens.revokedAt} is null
+        and ${botPublisherTokens.expiresAt} > now()
+    )`,
+  );
 }
 
 /** A permanently rejected schedule returns to draft, preventing worker starvation. */
