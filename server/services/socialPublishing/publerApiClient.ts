@@ -341,26 +341,41 @@ export interface ResolvedXStatus {
   handle: string;
 }
 
-/** يقبل رابط حالة X/Twitter فقط. اسم العرض ومسار الملف وروابط الأخبار تُرفض. */
+/**
+ * أي رابط حالة على x.com أو twitter.com (مع www/mobile، استعلام، أو مسار زائد
+ * مثل /photo/1). يُستخرج معرف التغريدة الرقمي. اسم العرض ومسار الملف وروابط الأخبار تُرفض.
+ */
 export function parseXStatusUrl(raw: string | null | undefined): ResolvedXStatus | null {
   if (!raw || typeof raw !== "string") return null;
+  const trimmed = raw.trim();
   let url: URL;
   try {
-    url = new URL(raw.trim());
+    url = new URL(trimmed);
   } catch {
-    return null;
+    try {
+      url = new URL(`https://${trimmed}`);
+    } catch {
+      return null;
+    }
   }
   if (url.protocol !== "http:" && url.protocol !== "https:") return null;
-  const host = url.hostname.toLowerCase().replace(/^www\./, "");
+  const host = url.hostname.toLowerCase().replace(/^(www|mobile)\./, "");
   if (host !== "x.com" && host !== "twitter.com") return null;
-  const match = url.pathname.match(/^\/([A-Za-z0-9_]{1,15})\/status\/(\d+)\/?$/);
-  if (!match) return null;
-  const handle = match[1];
-  const tweetId = match[2];
+  const statusMatch = url.pathname.match(/\/status\/(\d+)/);
+  if (!statusMatch) return null;
+  const tweetId = statusMatch[1];
+  const handleMatch = url.pathname.match(/^\/([A-Za-z0-9_]{1,15})\/status\/(\d+)/);
+  if (handleMatch && handleMatch[2] === tweetId) {
+    return {
+      handle: handleMatch[1],
+      tweetId,
+      statusUrl: `https://x.com/${handleMatch[1]}/status/${tweetId}`,
+    };
+  }
   return {
-    handle,
+    handle: "",
     tweetId,
-    statusUrl: `https://x.com/${handle}/status/${tweetId}`,
+    statusUrl: `https://x.com/i/web/status/${tweetId}`,
   };
 }
 
@@ -402,19 +417,34 @@ export function buildPublerExternalRef(input: {
   };
 }
 
-function publishedPostNeedle(text: string): string {
-  return text.trim().slice(0, 80);
+const MIN_TEXT_SIGNAL = 12;
+
+function collapseWs(value: string): string {
+  return value.trim().replace(/\s+/g, " ");
 }
 
-function rowTextStartsWith(row: unknown, needle: string): boolean {
-  if (!needle || !row || typeof row !== "object") return false;
-  const value = (row as { text?: unknown }).text;
-  return typeof value === "string" && value.trim().startsWith(needle);
+/** السطر الأول من النص المنشور، بلا رابط الخبر إن كان ملحقاً في نهايته. */
+function tweetBody(text: string, linkUrl?: string | null): string {
+  const line = text.trim().split("\n")[0]?.trim() ?? "";
+  const link = (linkUrl ?? "").trim();
+  if (link && line.endsWith(link)) return line.slice(0, -link.length).trim();
+  return line;
+}
+
+export interface MatchPublishedOptions {
+  /** معرف حساب Publer (ليس job id). صف بحساب آخر يُستبعد. */
+  accountId?: string;
+  linkUrl?: string | null;
+}
+
+function rowAccountId(row: Record<string, unknown>): string | null {
+  const id = row.account_id ?? row.accountId;
+  return typeof id === "string" && id.length > 0 ? id : null;
 }
 
 /**
- * post_link هو رابط الشبكة. url في نفس الكائن رابط المحتوى (الخبر)
- * ولا يُعتمد إلا إذا كان هو نفسه رابط status.
+ * post_link هو رابط الشبكة وقد يكون أي شكل status على x.com/twitter.com.
+ * url في نفس الكائن رابط المحتوى (الخبر) ولا يُعتمد كتغريدة إلا إذا كان status.
  */
 function statusFromPostFields(row: unknown): ResolvedXStatus | null {
   if (!row || typeof row !== "object") return null;
@@ -427,15 +457,70 @@ function statusFromPostFields(row: unknown): ResolvedXStatus | null {
   return null;
 }
 
-export function matchPublishedXStatus(rows: readonly unknown[], text: string): ResolvedXStatus | null {
-  const needle = publishedPostNeedle(text);
-  if (!needle) return null;
+function contentMatches(row: Record<string, unknown>, body: string, linkUrl?: string | null): boolean {
+  const text = typeof row.text === "string" ? collapseWs(row.text) : "";
+  const attached = typeof row.url === "string" ? row.url.trim() : "";
+  const bodyNorm = collapseWs(body);
+  const signal = bodyNorm.slice(0, 40);
+  const textHit =
+    signal.length >= MIN_TEXT_SIGNAL &&
+    (text.startsWith(signal) ||
+      text.includes(signal) ||
+      (text.length >= MIN_TEXT_SIGNAL && bodyNorm.startsWith(collapseWs(text).slice(0, 40))));
+  const link = (linkUrl ?? "").trim();
+  const linkHit = link.length > 0 && (text.includes(link) || attached === link || attached.includes(link));
+  return textHit || linkHit;
+}
+
+/**
+ * لا نطابق بمعرف المهمة `publer:<jobId>` ولا بمعرف صف Publer.
+ * الشرط: نفس الحساب (إن وُجد account_id) + النص أو linkUrl + post_link بصيغة status.
+ */
+export function matchPublishedXStatus(
+  rows: readonly unknown[],
+  text: string,
+  opts: MatchPublishedOptions = {},
+): ResolvedXStatus | null {
+  const body = tweetBody(text, opts.linkUrl);
   for (const row of rows) {
-    if (!rowTextStartsWith(row, needle)) continue;
+    if (!row || typeof row !== "object") continue;
+    const record = row as Record<string, unknown>;
+    const accountId = rowAccountId(record);
+    if (opts.accountId && accountId && accountId !== opts.accountId) continue;
+    if (!contentMatches(record, body, opts.linkUrl)) continue;
     const status = statusFromPostFields(row);
     if (status) return status;
   }
   return null;
+}
+
+export interface PublishedRowStats {
+  rowCount: number;
+  withStatusLink: number;
+  contentMatches: number;
+  accountMismatches: number;
+}
+
+export function summarizePublishedRows(
+  rows: readonly unknown[],
+  text: string,
+  opts: MatchPublishedOptions = {},
+): PublishedRowStats {
+  const body = tweetBody(text, opts.linkUrl);
+  const stats: PublishedRowStats = { rowCount: 0, withStatusLink: 0, contentMatches: 0, accountMismatches: 0 };
+  for (const row of rows) {
+    if (!row || typeof row !== "object") continue;
+    stats.rowCount += 1;
+    const record = row as Record<string, unknown>;
+    if (statusFromPostFields(row)) stats.withStatusLink += 1;
+    const accountId = rowAccountId(record);
+    if (opts.accountId && accountId && accountId !== opts.accountId) {
+      stats.accountMismatches += 1;
+      continue;
+    }
+    if (contentMatches(record, body, opts.linkUrl)) stats.contentMatches += 1;
+  }
+  return stats;
 }
 
 /** يمشي حمولة job_status بحثاً عن post_link/url بصيغة status. النصوص الحرة لا تُمسح. */
@@ -469,41 +554,95 @@ function postRowsFromResponse(json: unknown): unknown[] {
   return [];
 }
 
-function publishedPostsPath(accountId: string, page: number, query?: string): string {
-  const base = `/posts?state[]=published_posted&account_ids[]=${encodeURIComponent(accountId)}&page=${page}`;
-  if (!query) return base;
-  return `${base}&query=${encodeURIComponent(query)}`;
+function isoDay(date: Date): string {
+  return date.toISOString().slice(0, 10);
 }
+
+/**
+ * نافذة from/to حول وقت النشر. الوثائق: from وto تاريخ ISO، وfrom مطلوب مع to.
+ * اليوم السابق وحتى اليوم التالي ليبقى المنشور داخل الحدين حتى لو كانا حصريين.
+ */
+export function publerPublishedWindow(
+  publishedAt?: Date | string | null,
+  now = new Date(),
+): { from: string; to: string } {
+  const parsed = publishedAt ? new Date(publishedAt) : now;
+  const base = Number.isNaN(parsed.getTime()) ? now : parsed;
+  return {
+    from: isoDay(new Date(base.getTime() - 24 * 60 * 60 * 1000)),
+    to: isoDay(new Date(base.getTime() + 2 * 24 * 60 * 60 * 1000)),
+  };
+}
+
+/**
+ * job_status لا يعيد معرف المنشور، ومعرف المهمة ليس معرف GET /posts/{id}.
+ * مرشّح الوثائق للقائمة هو account_ids[] (جسم الإنشاء يستخدم accounts[]).
+ * state قيمة واحدة في كل طلب: published ثم published_posted إن لزم.
+ */
+function publishedPostsPath(
+  accountId: string,
+  page: number,
+  window: { from: string; to: string },
+  state: string,
+): string {
+  return (
+    `/posts?state=${encodeURIComponent(state)}` +
+    `&account_ids[]=${encodeURIComponent(accountId)}` +
+    `&from=${window.from}&to=${window.to}&page=${page}`
+  );
+}
+
+type FetchRowsResult =
+  | { ok: true; rows: unknown[] }
+  | { ok: false; httpStatus?: number; message: string };
 
 async function fetchPublishedRows(
   accountId: string,
   page: number,
-  query: string | undefined,
+  window: { from: string; to: string },
+  state: string,
   timeoutMs: number,
-): Promise<unknown[] | null> {
+): Promise<FetchRowsResult> {
   try {
     const json = await publerFetch(
-      publishedPostsPath(accountId, page, query),
+      publishedPostsPath(accountId, page, window, state),
       { method: "GET" },
       "posts list",
       timeoutMs,
     );
-    return postRowsFromResponse(json);
-  } catch {
-    return null;
+    return { ok: true, rows: postRowsFromResponse(json) };
+  } catch (error) {
+    const httpStatus = error instanceof SocialProviderError ? error.opts.httpStatus : undefined;
+    const message = redactPublerMessage(error instanceof Error ? error.message : "lookup failed");
+    return { ok: false, httpStatus, message };
   }
 }
 
 export interface ResolvePublishedPostLinkOptions {
   timeoutMs?: number;
-  /** بحث نصي لمنشور قد لا يكون في الصفحة الأولى بعد مرور الوقت */
-  search?: boolean;
+  /** رابط الخبر كما خُزّن عندنا — Publer يضعه غالباً في url لا في text */
+  linkUrl?: string | null;
+  /** وقت نشر الصف عندنا؛ غيابه يعني نافذة حول الآن (النشر الفوري) */
+  publishedAt?: Date | string | null;
+}
+
+function redactPublerMessage(message: string): string {
+  let out = sanitizeSecretText(message);
+  for (const secret of [process.env.PUBLER_API_KEY, process.env.PUBLER_WORKSPACE_ID]) {
+    if (secret && secret.length >= 4) out = out.split(secret).join("[redacted]");
+  }
+  return out.replace(/Bearer-API\s+\S+/gi, "Bearer-API [redacted]");
+}
+
+function logPublerLookup(level: "info" | "warn", entry: Record<string, unknown>): void {
+  const line = JSON.stringify({ event: "publer_post_link_lookup", ...entry });
+  if (level === "info") console.info(line);
+  else console.warn(line);
 }
 
 /**
- * حل رابط الحالة من GET /posts. أي فشل يعيد null ولا يرمي.
- * إن وُجد الصف ومطابق النص بلا post_link نعود فوراً: الرابط لم يُملأ بعد
- * وصفحة تالية لن تخلقه.
+ * حل رابط الحالة من GET /posts داخل نافذة التاريخ. أي فشل يعيد null ولا يرمي.
+ * سجل واحد لكل محاولة: found / not_found (مع الأعداد) / error. بلا أسرار.
  */
 export async function resolvePublishedPostLink(
   publerAccountId: string,
@@ -511,20 +650,64 @@ export async function resolvePublishedPostLink(
   opts: ResolvePublishedPostLinkOptions = {},
 ): Promise<ResolvedXStatus | null> {
   const timeoutMs = opts.timeoutMs ?? POST_LINK_LOOKUP_TIMEOUT_MS;
-  const line = text.trim().split("\n")[0]?.trim() ?? "";
-  const query = opts.search && line ? line.slice(0, 60) : undefined;
-  const steps: Array<{ page: number; query?: string }> = query
-    ? [{ page: 0, query }, { page: 0 }, { page: 1 }]
-    : [{ page: 0 }, { page: 1 }];
-  for (const step of steps) {
-    const rows = await fetchPublishedRows(publerAccountId, step.page, step.query, timeoutMs);
-    if (!rows) return null;
-    const hit = matchPublishedXStatus(rows, text);
-    if (hit) return hit;
-    // نتيجة البحث قد تُسقط post_link. التوقف المبكر فقط للقائمة غير المفلترة:
-    // الصف موجود والرابط لم يُملأ بعد، وصفحة تالية لن تخلقه.
-    if (!step.query && rows.some((row) => rowTextStartsWith(row, publishedPostNeedle(text)))) return null;
+  const window = publerPublishedWindow(opts.publishedAt);
+  const matchOpts: MatchPublishedOptions = { accountId: publerAccountId, linkUrl: opts.linkUrl };
+  const totals: PublishedRowStats = { rowCount: 0, withStatusLink: 0, contentMatches: 0, accountMismatches: 0 };
+  let pages = 0;
+  let lastError: { httpStatus?: number; message: string } | null = null;
+
+  // published يشمل المنشور حسب الوثائق؛ published_posted احتياط إن رجعت الأولى فراغاً أو بلا مطابقة.
+  for (const state of ["published", "published_posted"]) {
+    for (const page of [0, 1]) {
+      const fetched = await fetchPublishedRows(publerAccountId, page, window, state, timeoutMs);
+      if (!fetched.ok) {
+        lastError = { httpStatus: fetched.httpStatus, message: fetched.message };
+        break;
+      }
+      pages += 1;
+      const stats = summarizePublishedRows(fetched.rows, text, matchOpts);
+      totals.rowCount += stats.rowCount;
+      totals.withStatusLink += stats.withStatusLink;
+      totals.contentMatches += stats.contentMatches;
+      totals.accountMismatches += stats.accountMismatches;
+      const hit = matchPublishedXStatus(fetched.rows, text, matchOpts);
+      if (hit) {
+        logPublerLookup("info", {
+          outcome: "found",
+          accountId: publerAccountId,
+          state,
+          from: window.from,
+          to: window.to,
+          page,
+          tweetId: hit.tweetId,
+          ...totals,
+        });
+        return hit;
+      }
+      if (fetched.rows.length === 0) break;
+    }
   }
+
+  if (pages === 0 && lastError) {
+    logPublerLookup("warn", {
+      outcome: "error",
+      accountId: publerAccountId,
+      from: window.from,
+      to: window.to,
+      httpStatus: lastError.httpStatus ?? null,
+      message: lastError.message,
+    });
+    return null;
+  }
+
+  logPublerLookup("warn", {
+    outcome: "not_found",
+    accountId: publerAccountId,
+    from: window.from,
+    to: window.to,
+    pages,
+    ...totals,
+  });
   return null;
 }
 

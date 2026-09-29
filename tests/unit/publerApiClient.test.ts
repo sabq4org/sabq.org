@@ -240,8 +240,13 @@ describe("publerApiClient — الوسائط والنشر", () => {
       handle: "sabqorg",
       statusUrl: "https://x.com/sabqorg/status/2104791827802911159",
     });
-    expect(String(fetchMock.mock.calls[0][0])).toContain("page=0");
-    expect(String(fetchMock.mock.calls[0][0])).not.toContain("query=");
+    const requested = String(fetchMock.mock.calls[0][0]);
+    expect(requested).toContain("page=0");
+    expect(requested).toContain("state=published");
+    expect(requested).toContain("account_ids");
+    expect(requested).toContain("from=");
+    expect(requested).toContain("to=");
+    expect(requested).not.toContain("query=");
     expect(fetchMock).toHaveBeenCalledTimes(1);
 
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("boom")));
@@ -270,27 +275,29 @@ describe("publerApiClient — الوسائط والنشر", () => {
     expect(xProfileUrlFromHandle("@sabqorg")).toBe("https://x.com/sabqorg");
   });
 
-  it("بحث بلا post_link يتبعه جلب الصفحة غير المفلترة التي تحمل رابط الحالة", async () => {
+  it("الصفحة التالية داخل النافذة تُستخدم عندما تتأخر post_link", async () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(
         jsonResponse(200, {
-          posts: [{ text: "خبر عاجل من سبق", url: "https://sabq.org/article/jrdic6y" }],
+          posts: [{ text: "خبر عاجل من سبق", url: "https://sabq.org/article/jrdic6y", account_id: "acc-1" }],
         }),
       )
       .mockResolvedValueOnce(
         jsonResponse(200, {
           posts: [{
+            account_id: "acc-1",
             text: "خبر عاجل من سبق",
             post_link: "https://x.com/sabqorg/status/2104791827802911159",
           }],
         }),
       );
     vi.stubGlobal("fetch", fetchMock);
-    const hit = await resolvePublishedPostLink("acc-1", "خبر عاجل من سبق", { search: true });
+    const hit = await resolvePublishedPostLink("acc-1", "خبر عاجل من سبق");
     expect(hit?.tweetId).toBe("2104791827802911159");
-    expect(String(fetchMock.mock.calls[0][0])).toContain("query=");
-    expect(String(fetchMock.mock.calls[1][0])).not.toContain("query=");
+    expect(String(fetchMock.mock.calls[0][0])).toContain("state=published");
+    expect(String(fetchMock.mock.calls[0][0])).not.toContain("query=");
+    expect(String(fetchMock.mock.calls[1][0])).toContain("page=1");
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });
@@ -419,5 +426,131 @@ describe("publerApiClient — رابط الحالة لا يُبنى من اسم 
       externalPostId: "2104791827802911159",
       externalPostUrl: "https://x.com/sabqorg/status/2104791827802911159",
     })).toBe(false);
+  });
+});
+
+describe("publerApiClient — مطابقة المنشور المنشور دون معرف المهمة", () => {
+  const body = "أمطار رعدية متوسطة إلى غزيرة مصحوبة بزخات من البرد";
+  const link = "https://sabq.org/article/mm9d7g2";
+  const composed = `${body}\n${link}`;
+  const jobId = "6abb3fc20d073712d4416efc";
+
+  beforeEach(() => {
+    vi.stubEnv("PUBLER_API_KEY", "test-key");
+    vi.stubEnv("PUBLER_WORKSPACE_ID", "ws-1");
+    vi.spyOn(console, "info").mockImplementation(() => {});
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+  });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it("يقبل أي رابط status على x.com أو twitter.com ويستخرج الرقم", () => {
+    expect(parseXStatusUrl("https://mobile.twitter.com/sabqorg/status/2104791827802911159/photo/1")).toEqual({
+      handle: "sabqorg",
+      tweetId: "2104791827802911159",
+      statusUrl: "https://x.com/sabqorg/status/2104791827802911159",
+    });
+    expect(parseXStatusUrl("https://x.com/i/web/status/2104791827802911159")).toEqual({
+      handle: "",
+      tweetId: "2104791827802911159",
+      statusUrl: "https://x.com/i/web/status/2104791827802911159",
+    });
+    expect(parseXStatusUrl("https://x.com/sabqorg")).toBeNull();
+    expect(parseXStatusUrl(link)).toBeNull();
+  });
+
+  it("يطابق نص Publer المنفصل عن رابط الخبر داخل نافذة publishedAt ولا يطلب معرف المهمة", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse(200, {
+        posts: [
+          {
+            id: jobId,
+            account_id: "acc-x",
+            text: "منشور آخر تماماً لا علاقة له",
+            url: "https://sabq.org/article/other",
+            post_link: "https://x.com/sabqorg/status/111",
+          },
+          {
+            id: "real-post",
+            account_id: "other-account",
+            text: body,
+            url: link,
+            post_link: "https://x.com/sabqorg/status/222",
+          },
+          {
+            id: "posted",
+            account_id: "acc-x",
+            text: body,
+            url: link,
+            post_link: "https://mobile.twitter.com/sabqorg/status/2104791827802911159/photo/1",
+          },
+        ],
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const hit = await resolvePublishedPostLink("acc-x", composed, {
+      linkUrl: link,
+      publishedAt: "2026-09-29T04:34:00.000Z",
+    });
+
+    expect(hit).toEqual({
+      tweetId: "2104791827802911159",
+      handle: "sabqorg",
+      statusUrl: "https://x.com/sabqorg/status/2104791827802911159",
+    });
+    const requested = String(fetchMock.mock.calls[0][0]);
+    expect(requested).toContain("state=published");
+    expect(requested).toContain("account_ids");
+    expect(requested).toContain("acc-x");
+    expect(requested).toContain("from=2026-09-28");
+    expect(requested).toContain("to=2026-10-01");
+    expect(requested).not.toContain(jobId);
+    expect(requested).not.toContain("/posts/" + jobId);
+
+    const logged = vi.mocked(console.info).mock.calls.map((call) => String(call[0])).join("\n");
+    const found = JSON.parse(logged) as { outcome: string; tweetId: string; rowCount: number };
+    expect(found.outcome).toBe("found");
+    expect(found.tweetId).toBe("2104791827802911159");
+    expect(found.rowCount).toBeGreaterThan(0);
+    expect(logged).not.toContain("test-key");
+  });
+
+  it("يسجل not_found مع الأعداد عندما لا يوجد post_link مطابق", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        jsonResponse(200, {
+          posts: [{ id: "p", account_id: "acc-x", text: body, url: link, post_link: null }],
+        }),
+      ),
+    );
+    const hit = await resolvePublishedPostLink("acc-x", composed, {
+      linkUrl: link,
+      publishedAt: "2026-09-29T04:34:00.000Z",
+    });
+    expect(hit).toBeNull();
+    const logged = vi.mocked(console.warn).mock.calls.map((call) => String(call[0])).find((line) => line.includes("not_found"));
+    expect(logged).toBeTruthy();
+    const parsed = JSON.parse(logged ?? "{}") as { outcome: string; rowCount: number; contentMatches: number; withStatusLink: number };
+    expect(parsed.outcome).toBe("not_found");
+    expect(parsed.rowCount).toBeGreaterThan(0);
+    expect(parsed.contentMatches).toBeGreaterThan(0);
+    expect(parsed.withStatusLink).toBe(0);
+    expect(logged).not.toContain("test-key");
+  });
+
+  it("يسجل error عند فشل القائمة ولا يرمي", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("boom Bearer-API test-key")));
+    const hit = await resolvePublishedPostLink("acc-x", composed, { linkUrl: link });
+    expect(hit).toBeNull();
+    const logged = vi.mocked(console.warn).mock.calls.map((call) => String(call[0])).find((line) => line.includes("error"));
+    expect(logged).toBeTruthy();
+    const parsed = JSON.parse(logged ?? "{}") as { outcome: string; message?: string };
+    expect(parsed.outcome).toBe("error");
+    expect(logged).not.toContain("test-key");
   });
 });

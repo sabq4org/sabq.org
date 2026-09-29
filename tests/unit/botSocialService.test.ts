@@ -490,7 +490,10 @@ describe("Publer status URL backfill on bot reads", () => {
     expect(state.resolveLink).toHaveBeenCalledWith(
       "publer-acc",
       "نص التغريدة\nhttps://sabq.org/article/english-slug",
-      expect.objectContaining({ search: true }),
+      expect.objectContaining({
+        linkUrl: "https://sabq.org/article/english-slug",
+        publishedAt: now,
+      }),
     );
     expect(state.lastUpdate).toEqual(expect.objectContaining({
       externalPostId: "2104791827802911159",
