@@ -130,7 +130,6 @@ export function Header({ user, onMenuClick, sticky = true }: HeaderProps) {
     { name: "مُقترب", href: "/muqtarab" },
     { name: "لحظة بلحظة", href: "/moment-by-moment" },
     { name: "عقل سبق", href: "/sabq-ai", icon: Brain },
-    { name: "النشرة", href: "/newsletter", icon: Mail },
   ];
 
   // الزر يبقى مع أدوات الهيدر. dir على الجذر فقط: Radix يكتبه على لوحة
