@@ -103,6 +103,11 @@ export default function OpinionPage() {
       <Header user={user} />
       <NavigationBar />
 
+      {/* DMS: الليدربورد مباشرة تحت القائمة الرئيسية (طلب DMS 2026-09-29) */}
+      <div className="container mx-auto px-4 sm:px-6 lg:px-8 pt-4 max-w-7xl empty:hidden">
+        <DmsLeaderboardAd />
+      </div>
+
       <main className="flex-1">
         {/* Hero Section — رأس القسم */}
         <section className="public-page-header relative pt-10 pb-8 px-4" data-testid="section-hero">
@@ -150,7 +155,6 @@ export default function OpinionPage() {
             </Button>
             </div>
 
-            <DmsLeaderboardAd />
             <DmsMpuAd topSlot />
 
             {isLoading ? (

@@ -68,6 +68,8 @@ test("opinion archive removes the empty category strip below the header", async 
     if (path === "/api/auth/user") return route.fulfill({ status: 401, json: { message: "Unauthorized" } });
     if (path === "/api/categories/smart") return route.fulfill({ json: [] });
     if (path === "/api/opinion") return route.fulfill({ json: { articles: [article], pagination: { page: 1, limit: 12, total: 1, totalPages: 1 } } });
+    // Layout without the top ad; the leaderboard placement has its own test below.
+    if (path === "/api/system/dms-top-ads") return route.fulfill({ json: { showTopAds: false } });
     return route.fulfill({ json: {} });
   });
   await page.goto("/opinion");
@@ -77,6 +79,24 @@ test("opinion archive removes the empty category strip below the header", async 
   const hero = (await page.getByTestId("section-hero").boundingBox())!;
   expect(Math.abs(hero.y - (header.y + header.height))).toBeLessThan(2);
   await expect(page.getByTestId("opinion-views-opinion-archive-sample")).toHaveText("1,240 مشاهدة");
+});
+
+test("opinion archive places the leaderboard directly under the main menu", async ({ page }) => {
+  await page.route("**/api/**", route => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === "/api/auth/user") return route.fulfill({ status: 401, json: { message: "Unauthorized" } });
+    if (path === "/api/opinion") return route.fulfill({ json: { articles: [], pagination: { page: 1, limit: 12, total: 0, totalPages: 0 } } });
+    if (path === "/api/system/dms-top-ads") return route.fulfill({ json: { showTopAds: true } });
+    return route.fulfill({ json: {} });
+  });
+  await page.goto("/opinion");
+  const slot = page.locator("#Leaderboard");
+  await expect(slot).toBeVisible();
+  const header = (await page.getByRole("banner", { name: "رأس الصفحة الرئيسي" }).boundingBox())!;
+  const ad = (await slot.boundingBox())!;
+  const hero = (await page.getByTestId("section-hero").boundingBox())!;
+  expect(ad.y - (header.y + header.height)).toBeLessThan(40);
+  expect(ad.y).toBeLessThan(hero.y);
 });
 
 test("category results follow the heading without a viewport-sized blank gap", async ({ page }) => {
