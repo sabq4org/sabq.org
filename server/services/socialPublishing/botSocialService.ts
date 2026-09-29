@@ -2,7 +2,14 @@
 // socialPublishingService (نفس المطالبة والعامل ومزوّد X/Publer).
 import { and, desc, eq } from "drizzle-orm";
 import { composeXPostText, validateXPostText } from "@shared/socialPostText";
-import { articles, socialPostBotKeys, socialPosts, users, type SocialPost } from "@shared/schema";
+import {
+  articles,
+  socialPlatformAccounts,
+  socialPostBotKeys,
+  socialPosts,
+  users,
+  type SocialPost,
+} from "@shared/schema";
 import { SABQ_NEWSPAPER_ACCOUNT_ID } from "@shared/sabqNewspaper";
 import type {
   BotSocialCancelInput,
@@ -40,6 +47,12 @@ import {
   schedulePost,
   updateEditablePost,
 } from "./socialPublishingService";
+import {
+  needsPublerStatusBackfill,
+  resolvePublishedPostLink,
+  xProfileUrlFromHandle,
+  type ResolvedXStatus,
+} from "./publerApiClient";
 import { suggestSocialPostForArticle } from "./suggestService";
 
 export interface BotSocialRequestContext {
@@ -123,6 +136,114 @@ export function toBotSocialPost(binding: Binding): BotSocialPostResponse {
     createdAt: iso(binding.post.createdAt) || new Date(0).toISOString(),
     updatedAt: iso(binding.post.updatedAt) || new Date(0).toISOString(),
   };
+}
+
+/** قراءة البوت لا تنتظر استطلاع النشر؛ طلب واحد قصير لكل منشور معلّق. */
+const PUBLER_BACKFILL_TIMEOUT_MS = 4_000;
+const PUBLER_BACKFILL_MAX = 8;
+
+async function loadPublerAccountRef(accountId: string): Promise<{ externalAccountId: string | null; handle: string | null }> {
+  const [row] = await db
+    .select({
+      externalAccountId: socialPlatformAccounts.externalAccountId,
+      handle: socialPlatformAccounts.handle,
+    })
+    .from(socialPlatformAccounts)
+    .where(eq(socialPlatformAccounts.id, accountId))
+    .limit(1);
+  return {
+    externalAccountId: row?.externalAccountId ?? null,
+    handle: row?.handle ?? null,
+  };
+}
+
+async function saveExternalLink(
+  post: SocialPost,
+  patch: { externalPostId: string; externalPostUrl: string | null },
+): Promise<SocialPost> {
+  const [updated] = await db
+    .update(socialPosts)
+    .set({
+      externalPostId: patch.externalPostId,
+      externalPostUrl: patch.externalPostUrl,
+      updatedAt: new Date(),
+    })
+    .where(and(
+      eq(socialPosts.id, post.id),
+      eq(socialPosts.status, "published"),
+      eq(socialPosts.externalPostId, post.externalPostId ?? ""),
+    ))
+    .returning();
+  return updated ?? post;
+}
+
+/**
+ * منشور Publer بلا رابط status: نسأل GET /posts مرة واحدة ونخزّن التغريدة.
+ * إن لم يظهر post_link نستبدل أي رابط مبني من اسم العرض برابط الملف أو null،
+ * ونُبقي `publer:<jobId>` حتى تنجح قراءة لاحقة.
+ */
+async function hydrateBotPosts(posts: SocialPost[]): Promise<SocialPost[]> {
+  const pendingIndexes: number[] = [];
+  posts.forEach((post, index) => {
+    if (needsPublerStatusBackfill(post)) pendingIndexes.push(index);
+  });
+  if (pendingIndexes.length === 0) return posts;
+  const next = posts.slice();
+  const accounts = new Map<string, Promise<{ externalAccountId: string | null; handle: string | null }>>();
+  const loadAccount = (accountId: string) => {
+    let pending = accounts.get(accountId);
+    if (!pending) {
+      pending = loadPublerAccountRef(accountId);
+      accounts.set(accountId, pending);
+    }
+    return pending;
+  };
+
+  await Promise.all(pendingIndexes.slice(0, PUBLER_BACKFILL_MAX).map(async (index) => {
+    const original = posts[index];
+    try {
+      const account = original.accountId ? await loadAccount(original.accountId) : null;
+      let resolved: ResolvedXStatus | null = null;
+      if (account?.externalAccountId) {
+        resolved = await resolvePublishedPostLink(
+          account.externalAccountId,
+          composeXPostText(original.text, original.linkUrl),
+          { timeoutMs: PUBLER_BACKFILL_TIMEOUT_MS, search: true },
+        );
+      }
+      if (resolved) {
+        next[index] = await saveExternalLink(original, {
+          externalPostId: resolved.tweetId,
+          externalPostUrl: resolved.statusUrl,
+        });
+        return;
+      }
+      const pendingUrl = xProfileUrlFromHandle(account?.handle);
+      if ((original.externalPostUrl ?? null) === pendingUrl) return;
+      next[index] = await saveExternalLink(original, {
+        externalPostId: original.externalPostId ?? "",
+        externalPostUrl: pendingUrl,
+      });
+    } catch (error) {
+      console.warn(
+        `[BotSocial] تعذر إكمال رابط Publer للمنشور ${original.id}:`,
+        error instanceof Error ? error.message : error,
+      );
+    }
+  }));
+  return next;
+}
+
+async function presentBindings(bindings: Binding[]): Promise<BotSocialPostResponse[]> {
+  const hydrated = await hydrateBotPosts(bindings.map((binding) => binding.post));
+  return bindings.map((binding, index) =>
+    toBotSocialPost({ ...binding, post: hydrated[index] ?? binding.post }),
+  );
+}
+
+async function presentBinding(binding: Binding): Promise<BotSocialPostResponse> {
+  const [post] = await presentBindings([binding]);
+  return post;
 }
 
 function rethrowKnown(error: unknown): never {
@@ -510,7 +631,7 @@ export async function publishBotSocialPost(
   const article = await loadArticle(await resolveInputArticleId(input));
   const loaded = await loadOrCreate(bot, article, input, "publish");
   if (loaded.replay) {
-    const post = toBotSocialPost(loaded.binding);
+    const post = await presentBinding(loaded.binding);
     await audit({
       userId: loaded.actorId,
       action: "bot_social_publish",
@@ -529,7 +650,7 @@ export async function publishBotSocialPost(
   if (!claimed) {
     const current = await getPost(loaded.binding.post.id);
     if (current?.status === "published") {
-      const post = toBotSocialPost({ ...loaded.binding, post: current });
+      const post = await presentBinding({ ...loaded.binding, post: current });
       await audit({
         userId: loaded.actorId,
         action: "bot_social_publish",
@@ -582,7 +703,7 @@ export async function scheduleBotSocialPost(
   const when = new Date(input.scheduledAt);
   const loaded = await loadOrCreate(bot, article, input, "schedule");
   if (loaded.replay) {
-    const post = toBotSocialPost(loaded.binding);
+    const post = await presentBinding(loaded.binding);
     await audit({
       userId: loaded.actorId,
       action: "bot_social_schedule",
@@ -675,7 +796,7 @@ export async function cancelBotSocialPost(
 export async function getBotSocialPost(bot: BotSocialIdentity, id: string): Promise<{ post: BotSocialPostResponse }> {
   const binding = await findBindingByPostId(bot.name, id);
   if (!binding) throw new BotSocialError(404, "not_found", "المنشور غير موجود");
-  return { post: toBotSocialPost(binding) };
+  return { post: await presentBinding(binding) };
 }
 
 export async function listBotSocialPosts(
@@ -685,7 +806,7 @@ export async function listBotSocialPosts(
   if (query.clientReference) {
     const binding = await findBinding(bot.name, query.clientReference);
     if (!binding) throw new BotSocialError(404, "not_found", "المنشور غير موجود");
-    return { post: toBotSocialPost(binding) };
+    return { post: await presentBinding(binding) };
   }
   const filters = [eq(socialPostBotKeys.botName, bot.name)];
   if (query.articleId) filters.push(eq(socialPosts.articleId, query.articleId));
@@ -698,8 +819,10 @@ export async function listBotSocialPosts(
     .orderBy(desc(socialPosts.createdAt))
     .limit(query.limit ?? 20);
   return {
-    posts: rows.map((row) =>
-      toBotSocialPost({ botName: row.key.botName, clientReference: row.key.clientReference, post: row.post }),
-    ),
+    posts: await presentBindings(rows.map((row) => ({
+      botName: row.key.botName,
+      clientReference: row.key.clientReference,
+      post: row.post,
+    }))),
   };
 }

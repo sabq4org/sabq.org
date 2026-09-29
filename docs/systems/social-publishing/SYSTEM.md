@@ -1,6 +1,6 @@
 # النشر الاجتماعي (`social-publishing`)
 
-> آخر مراجعة: 2026-09-28 (البوت يقبل رابط الخبر العام ويحلّه بمعرّف `articles.id`) | المالك: editorial + platform
+> آخر مراجعة: 2026-09-29 (رابط Publer: لا يُبنى من اسم العرض، ويُستكمل `post_link` لاحقاً) | المالك: editorial + platform
 
 ## الغرض
 نشر أخبار سبق على منصة X من لوحة التحكم: فوري أو مجدول، بنص من العنوان أو
@@ -84,8 +84,19 @@
   (`POST /posts/schedule/publish` بـ`bulk.state="scheduled"` **بلا**
   `scheduled_at` = فوري) مع استطلاع `job_status`. **مهلة الاستطلاع بعد
   إرسال النشر خطأ دائم عمداً** (الحالة مجهولة — إعادة آلية قد تكرر
-  المنشور). `job_status` لا يعيد رابط المنشور — يُحل best-effort من
-  `GET /posts` (`post_link`) بمطابقة النص ولا يُفشل منشوراً صدر فعلاً.
+  المنشور). وثائق Publer: `job_status` المكتمل `{ status, payload.failures }`
+  بلا رابط. الرابط في `GET /posts` → `post_link` (رابط الشبكة؛ `url` رابط
+  المحتوى المرفق لا التغريدة، و`id` معرف Publer). بعد اكتمال المهمة استطلاع
+  قصير (3 محاولات / ثانيتان) ثم مطابقة النص. عند الغياب: `externalPostId`
+  = `publer:<jobId>` و`externalPostUrl` = `https://x.com/{handle}` **فقط**
+  إذا كان handle معرف X صالحاً (`[A-Za-z0-9_]{1,15}`)، وإلا `null`.
+  **لا يُبنى رابط من اسم العرض** ولا من `https://app.publer.com/`. الحقل
+  معلّق حتى يظهر `post_link`؛ عندها يُخزَّن `https://x.com/{handle}/status/{id}`
+  ومعرف التغريدة. قراءة `GET /api/internal/bot-social/posts` (قائمة أو
+  تفاصيل أو مرجع) تعيد المحاولة لمنشور `published` بمعرف `publer:` بلا
+  رابط status وتكتب النتيجة على الصف. المنشور المجدول يمر بنفس
+  `createPost` عبر العامل، ثم بنفس الإكمال عند القراءة. لا يُفشل منشور
+  صدر لمجرد تعذر الرابط.
   الربط بلا OAuth: الحساب يُربط في لوحة Publer ثم يُزامَن عبر
   `POST /api/social-publishing/publer/sync` (صف الحساب بـ
   `credentialsEncrypted=null` — 401/403 من Publer خلل مفتاح/خطة ولا
