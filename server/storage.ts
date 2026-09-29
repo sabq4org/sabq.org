@@ -20495,6 +20495,12 @@ export class DatabaseStorage implements IStorage {
     const applicantEmail = application.email.toLowerCase().trim();
     const [existingUser] = await db.select().from(users).where(sql`lower(${users.email}) = ${applicantEmail}`);
 
+    // الترخيص المرفق في الطلب يُعتمد مع القبول وينتقل إلى الحساب — وإلا دخل
+    // الكاتب لوحته «بلا ترخيص» وطُلب منه رفع الملف نفسه ومراجعة ثانية.
+    // يُفحص قبل ربط الجوال حتى لا يغيّر طلبٌ مرفوض (ترخيص منتهٍ) أي حساب.
+    const { mediaLicenseFromApplication } = await import("./services/mediaLicenseService");
+    const licenseFromApplication = mediaLicenseFromApplication(application);
+
     const { claimPhoneForStaffAccount, normalizePhone } = await import("./services/phoneAuth");
     const phoneCheck = await claimPhoneForStaffAccount(application.phone, existingUser?.id ?? null);
     if (!phoneCheck.ok) {
@@ -20538,6 +20544,7 @@ export class DatabaseStorage implements IStorage {
           phoneNumber: normalizedPhone || existingUser.phoneNumber,
           phoneVerified: Boolean(normalizedPhone) || existingUser.phoneVerified,
           isProfileComplete: true,
+          ...(licenseFromApplication ?? {}),
         })
         .where(eq(users.id, existingUser.id))
         .returning();
@@ -20573,6 +20580,7 @@ export class DatabaseStorage implements IStorage {
         bio: application.bio,
         isProfileComplete: true,
         mustChangePassword: true,
+        ...(licenseFromApplication ?? {}),
       }).returning();
       finalUser = newUser;
       

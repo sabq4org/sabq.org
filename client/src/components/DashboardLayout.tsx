@@ -51,7 +51,6 @@ import type { UserRole } from "@/nav/types";
 import { resolveUserRole } from "@/lib/roleMapping";
 import type { NavItem } from "@/nav/types";
 import { cn } from "@/lib/utils";
-import { MEDIA_LICENSE_DASHBOARD_WARNING } from "@shared/mediaLicense";
 import { useMediaLicenseGate } from "@/hooks/useMediaLicenseGate";
 import { DashboardSessionLoading } from "./DashboardSessionLoading";
 
@@ -751,14 +750,15 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                     : []
               }
             />
-            {showMediaLicenseWarningBanner ? (
+            {/* مساحة الكاتب تعرض الترخيص في بطاقة «خطوتك التالية» — لا نكرره هنا */}
+            {showMediaLicenseWarningBanner && location.split("?")[0] !== "/dashboard/opinion-author" ? (
               <button
                 type="button"
                 onClick={openMediaLicenseForm}
                 className="mb-4 w-full rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-start text-sm font-medium leading-relaxed text-red-700 transition-colors hover:bg-red-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 dark:border-red-800 dark:bg-red-950/50 dark:text-red-200 dark:hover:bg-red-950/70"
                 data-testid="banner-media-license-warning"
               >
-                {MEDIA_LICENSE_DASHBOARD_WARNING}
+                {createBlockedReason}
               </button>
             ) : null}
             {children}

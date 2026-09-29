@@ -12,15 +12,35 @@ export const GMEDIA_REGISTER_URL =
 export const MEDIA_LICENSE_REQUIRED_MESSAGE =
   "يجب الحصول على ترخيص مهني ساري من هيئة تنظيم الإعلام أو تجديده قبل إرسال خبر أو مقال. سجّل أو جدّد ترخيصك عبر منصة الإعلاميين، ثم أرفقه من لوحة التحكم.";
 
-/** تنبيه لوحة التحكم لمن بلا ترخيص ساري أو ترخيص يحتاج تحديثاً. */
+/** تنبيه لوحة التحكم لمن لم يرفق ترخيصاً مهنياً بعد (المهلة التنظيمية انتهت في 31 يوليو 2026). */
 export const MEDIA_LICENSE_DASHBOARD_WARNING =
-  "مهلة استكمال الترخيص المهني تنتهي بنهاية 31 يوليو. ابتداءً من 1 أغسطس لن تتمكنوا من النشر إذا لم يكن لديكم ترخيص ساري أو كان بحاجة لتحديث.";
+  "أرفق ترخيصك المهني الساري من هيئة تنظيم الإعلام لتتمكن من إرسال المقالات والأخبار.";
+
+/** ترخيص مرفوع لكن تاريخه انتهى. */
+export const MEDIA_LICENSE_EXPIRED_WARNING =
+  "انتهى ترخيصك المهني. جدّده عبر منصة الإعلاميين ثم أرفق الترخيص الجديد لتتمكن من الإرسال.";
+
+/** الإدارة طلبت إعادة رفع الملف. */
+export const MEDIA_LICENSE_NEEDS_CORRECTION_WARNING =
+  "ملف ترخيصك المهني يحتاج تصحيحاً. أعد رفعه لتتمكن من الإرسال.";
 
 /** تنبيه عند رفع الترخيص وبانتظار موافقة مسؤول النظام. */
 export const MEDIA_LICENSE_PENDING_REVIEW_WARNING =
   "ترخيصك المهني بانتظار موافقة مسؤول النظام بعد الاطلاع على الملف. لن تتمكن من إنشاء خبر أو مقال حتى تتم الموافقة.";
 
 export const MEDIA_LICENSE_REQUIRED_CODE = "MEDIA_LICENSE_REQUIRED";
+
+/** رسالة واحدة تصف ما يلزم الكاتب/المراسل فعله بحسب حالة ترخيصه (أولوية: مراجعة ← تصحيح ← منتهٍ ← بلا ترخيص). */
+export function mediaLicenseActionMessage(state: {
+  pendingReview?: boolean;
+  needsCorrection?: boolean;
+  expired?: boolean;
+}): string {
+  if (state.pendingReview) return MEDIA_LICENSE_PENDING_REVIEW_WARNING;
+  if (state.needsCorrection) return MEDIA_LICENSE_NEEDS_CORRECTION_WARNING;
+  if (state.expired) return MEDIA_LICENSE_EXPIRED_WARNING;
+  return MEDIA_LICENSE_DASHBOARD_WARNING;
+}
 
 export function isMediaLicenseEnforcementActive(now: Date = new Date()): boolean {
   return now.getTime() >= new Date(MEDIA_LICENSE_ENFORCEMENT_AT).getTime();
