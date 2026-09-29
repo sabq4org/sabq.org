@@ -35,6 +35,7 @@ export interface BotDraftReleaseRow {
   submitterId: string | null;
   isFeatured: boolean;
   geoLocations: unknown;
+  sourceMetadata?: { publisherUserId?: string; publisherOwnerUserId?: string } | null;
 }
 
 function canonicalSlug(article: Pick<BotDraftReleaseRow, "englishSlug" | "slug">): string | null {
@@ -155,9 +156,9 @@ async function runPublishFanout(article: BotDraftReleaseRow): Promise<void> {
   await safe("publisher credit", async () => {
     const { deductPublisherCreditSafely } = await import("./publisherCreditService");
     await deductPublisherCreditSafely({
-      authorUserId: article.authorId,
+      authorUserId: article.sourceMetadata?.publisherOwnerUserId ?? article.authorId,
       articleId: article.id,
-      actorId: article.authorId,
+      actorId: article.sourceMetadata?.publisherUserId ?? article.authorId,
     });
   });
 

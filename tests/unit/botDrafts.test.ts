@@ -5,6 +5,7 @@ import express from "express";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 const state = vi.hoisted(() => ({
+  personalAuth: vi.fn(),
   create: vi.fn(),
   get: vi.fn(),
   update: vi.fn(),
@@ -21,6 +22,7 @@ const state = vi.hoisted(() => ({
   isUploadAvailable: vi.fn(() => true),
   isR2Configured: vi.fn(() => true),
 }));
+vi.mock("../../server/services/botPublisherTokenService", () => ({ authenticatePublisherToken: state.personalAuth }));
 vi.mock("../../server/db", () => ({ db: {} }));
 vi.mock("../../server/rbac", () => ({ logActivity: vi.fn().mockResolvedValue(undefined) }));
 vi.mock("../../server/memoryCache", () => ({ memoryCache: { invalidatePattern: state.invalidate }, CACHE_TTL: {} }));
@@ -1110,5 +1112,35 @@ describe("published bot content edit rules", () => {
     const query = dialect.sqlToQuery(patch.seoMetadata as never);
     expect(query.sql).toContain("editorialModifiedAt");
     expect(query.sql).not.toContain("slug");
+  });
+});
+
+
+describe("personal publisher token routing", () => {
+  const principal = { userId: "u-1", tokenId: "t-1", email: "one@example.test", name: "ناشر", expiresAt: new Date("2027-01-01"), capabilities: ["read"] };
+  it("accepts personal identity even when the legacy token service is unconfigured", async () => {
+    vi.stubEnv("BOT_DRAFTS_API_TOKENS", "");
+    state.personalAuth.mockResolvedValue(principal);
+    const res = await call("GET", "/api/internal/bot-drafts/me", undefined, "botpub_valid_personal_credential");
+    expect(res.status).toBe(200);
+    expect((await res.json()).user.id).toBe("u-1");
+    expect(state.personalAuth).toHaveBeenCalledWith("botpub_valid_personal_credential");
+  });
+  it("rejects revoked personal tokens without legacy fallback", async () => {
+    state.personalAuth.mockResolvedValue(null);
+    expect((await call("GET", "/api/internal/bot-drafts/me", undefined, "botpub_revoked_credential")).status).toBe(401);
+  });
+  it("passes personal ownership context to the read service", async () => {
+    state.personalAuth.mockResolvedValue(principal);
+    state.get.mockResolvedValue(null);
+    expect((await call("GET", "/api/internal/bot-drafts/other-id", undefined, "botpub_valid_personal_credential")).status).toBe(404);
+    expect(state.get).toHaveBeenCalledWith("other-id", { name: "publisher-u-1", personal: principal });
+  });
+  it("rejects reviewer verdicts and unauthorized uploads before performing work", async () => {
+    state.personalAuth.mockResolvedValue(principal);
+    expect((await call("POST", "/api/internal/bot-drafts/a/verdict", { verdict: "ok", reviewerName: "fake" }, "botpub_valid_personal_credential")).status).toBe(403);
+    expect(state.verdict).not.toHaveBeenCalled();
+    expect((await uploadCall(undefined, "a.jpg", "botpub_valid_personal_credential")).status).toBe(403);
+    expect(state.uploadImage).not.toHaveBeenCalled();
   });
 });

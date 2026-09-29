@@ -1005,6 +1005,11 @@ export const articles = pgTable("articles", {
     clientReference?: string;
     notes?: string;
     receivedAt?: string;
+    // Personal publisher bot attribution — type-only JSON additions; no DDL.
+    publisherUserId?: string;
+    publisherTokenId?: string;
+    publisherOwnerUserId?: string;
+    scheduleFailure?: { at: string; reason: string };
   }>(),
   sourceUrl: text("source_url"), // URL of the original source
   
@@ -14164,6 +14169,29 @@ export const appMemberSessions = pgTable("app_member_sessions", {
 
 // Type for mobile app sessions
 export type AppMemberSession = typeof appMemberSessions.$inferSelect;
+
+// Personal credentials used by the Sabq publisher bot/iOS client. This table
+// is deliberately separate from app_member_sessions and the legacy global bot
+// token so revocation and attribution remain per human user.
+export const botPublisherTokens = pgTable("bot_publisher_tokens", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  tokenHash: text("token_hash").notNull().unique(),
+  tokenPrefix: varchar("token_prefix", { length: 32 }).notNull(),
+  label: varchar("label", { length: 120 }),
+  expiresAt: timestamp("expires_at").notNull(),
+  revokedAt: timestamp("revoked_at"),
+  issuedBy: varchar("issued_by").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  lastUsedAt: timestamp("last_used_at"),
+}, (table) => [
+  index("bot_publisher_tokens_user_id_idx").on(table.userId),
+  index("bot_publisher_tokens_expires_at_idx").on(table.expiresAt),
+  index("bot_publisher_tokens_revoked_at_idx").on(table.revokedAt),
+]);
+
+export type BotPublisherToken = typeof botPublisherTokens.$inferSelect;
+export type InsertBotPublisherToken = typeof botPublisherTokens.$inferInsert;
 
 // ============================================================================
 // EMAIL AGENT PROCESSED (تكرار البريد الذكي)

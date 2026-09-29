@@ -715,3 +715,16 @@ const live = await client.publish(draft.id); // live.publicUrl و live.status ==
 3. **ضبط الأسرار على Railway** (`BOT_DRAFTS_API_TOKENS`) وإعادة النشر — بدونها المسار يرد `503` ولا أثر له على التحرير الحالي.
 
 لا تغييرات schema ولا `db:push`: النشر والجدولة يستخدمان `published` و`scheduled` و`scheduledAt` و`publishedAt` و`publishType` القائمة. `sourceMetadata` يبقى jsonb بلا DDL.
+
+
+## Personal publisher credentials (phase 1)
+
+`botpub_*` credentials are issued for an existing user from `/dashboard/publisher-tokens` (administrative Passport/CSRF flow). `GET /api/internal/bot-drafts/me` returns `{user:{id,email,name},tokenId,expiresAt,capabilities}` with `Cache-Control: private, no-store`. A legacy service token cannot use this identity endpoint. Personal credentials authorize news only, not Bot Social or reviewer verdicts.
+
+Every call rechecks account status, live permissions and agency eligibility. Article reads and writes are restricted to the server-stamped `sourceMetadata.publisherUserId` and current agency. Public author/reporter stay the newspaper account; submitter and audit actor identify the human. Published-field restrictions and sensitive-publication gates remain unchanged.
+
+Personal `POST /:id/archive` also archives draft, ready and scheduled material. It never permanently deletes. A scheduled personal publication revalidates its recorded credential, publishing right, agency and media license when the worker executes. Revoking/rotating that credential stops its outstanding schedules; explicitly reschedule with the replacement credential to authorize them again.
+
+Install `migrations/20260929_bot_publisher_tokens.sql` before enabling personal credentials. Existing environment-backed bot tokens retain their previous contract.
+
+- عند فقدان تفويض الجدولة يعيد العامل المادة مسودة مع سبب دائم يظهر في ملاحظات الرد وسجل العمليات؛ لا تظل جدولة معلقة تعيق الطابور. شرط SQL النهائي يفحص التوكن مرة أخرى قبل ترقية الحالة.
