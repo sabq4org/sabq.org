@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Sabq Bot Drafts API
-  version: 1.2.0
+  version: 1.3.0
   description: |
     مسودات لبوت «نشر سبق» ومهندّس (Grok Bot). الإنشاء draft.
     POST /{id}/publish ينشر فوراً. POST /{id}/schedule يجدول بـ publishAt.
@@ -9,6 +9,7 @@ info:
     POST /{id}/archive أرشفة ناعمة لمادة منشورة. PATCH /{id}/visibility يضبط المميز والعاجل وإخفاء الرئيسية.
     PATCH /{id}/ready ينقل إلى ready_to_publish دون نشر.
     المواد القابلة للإدارة source=bot فقط.
+    التوكن الشخصي لخبر news ذي byline صحيفة سبق لا يتطلب ترخيص مستخدم التوكن؛ تبقى صلاحيات RBAC والملكية والحصة وبوابة الحساسية سارية، وتبقى legacy/byline المخصصة والقنوات الأخرى خلف بوابة الترخيص القائمة.
     الدليل الكامل: docs/systems/editorial/BOT_DRAFTS_API.md
 servers:
   - url: https://api.sabq.org
@@ -186,7 +187,7 @@ paths:
         "400": { $ref: "#/components/responses/ValidationError" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403":
-          description: license_required إن كان صاحب الاسم بلا ترخيص. PATCH على هذا المسار forbidden_action
+          description: license_required إن كان byline غير مؤسسي بلا ترخيص. التوكن الشخصي لخبر news ذي byline صحيفة سبق لا يطلب ترخيص مستخدم التوكن. PATCH على هذا المسار forbidden_action
           content:
             application/json:
               schema:
@@ -233,7 +234,7 @@ paths:
         "400": { $ref: "#/components/responses/ValidationError" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403":
-          description: license_required
+          description: license_required إن كان byline غير مؤسسي بلا ترخيص. التوكن الشخصي لخبر news ذي byline صحيفة سبق لا يطلب ترخيص مستخدم التوكن
           content:
             application/json:
               schema:
@@ -338,7 +339,7 @@ paths:
                 reason:
                   type: string
                   maxLength: 1000
-                  description: سبب اختياري يُحفظ في reviewNotes
+                  description: سبب اختياري يدخله المستخدم فقط؛ يُحفظ بعد trim في reviewNotes ويظهر في article_events وسجل النشاط
       responses:
         "200":
           description: status=archived. تختفي من الموقع والرئيسية والخلاصات والخرائط
@@ -428,6 +429,8 @@ components:
           nullable: true
           description: سبب التحديث على خبر منشور. يظهر للقارئ إن كان علم سطر التحديث مفعّلاً.
         excerpt: { type: string, maxLength: 1000, nullable: true, description: المقدمة/الموجز }
+        seoTitle: { type: string, maxLength: 70, nullable: true, description: يُحفظ في seo.metaTitle؛ غيابه يحافظ على القيمة وnull/الفارغ يمسحها }
+        seoDescription: { type: string, maxLength: 160, nullable: true, description: يُحفظ في seo.metaDescription؛ غيابه يحافظ على القيمة وnull/الفارغ يمسحها }
         categoryId: { type: string }
         categorySlug: { type: string, description: slug تصنيف منشور (status=visible في الإنتاج؛ يُقبل active تاريخياً) من GET /api/categories }
         imageUrl: { type: string, format: uri, nullable: true, description: صورة الغلاف فقط — https. لا تُنسخ إلى المتن }
@@ -452,7 +455,7 @@ components:
       description: >
         نفس حقول الإنشاء وكلها اختيارية وحقل واحد على الأقل. على خبر published
         مصدره bot المسموح فقط title وsubtitle وexcerpt وcontent وcontentFormat
-        وsourceUrl وimageUrl وkeywords وriskLabel وupdateReason. categorySlug وcategoryId وimageUrls
+        وsourceUrl وimageUrl وkeywords وseoTitle وseoDescription وriskLabel وupdateReason. categorySlug وcategoryId وimageUrls
         وclientReference وnotes تُرفض 422. status وpublishedAt وslug لا تُكتب.
       allOf:
         - $ref: "#/components/schemas/DraftFields"
@@ -467,6 +470,8 @@ components:
         subtitle: { type: string, nullable: true }
         slug: { type: string }
         excerpt: { type: string, nullable: true }
+        seoTitle: { type: string, nullable: true, description: articles.seo.metaTitle }
+        seoDescription: { type: string, nullable: true, description: articles.seo.metaDescription }
         categoryId: { type: string, nullable: true }
         categorySlug: { type: string, nullable: true }
         imageUrl: { type: string, nullable: true }
@@ -512,7 +517,7 @@ components:
       properties:
         code:
           type: string
-          enum: [not_configured, unauthorized, forbidden_fields, validation_error, category_not_found, author_not_configured, not_found, not_a_draft, not_published, not_scheduled, locked_by_editor, license_required, forbidden_action, rate_limited, invalid_image, file_too_large, storage_unavailable, upload_failed, server_error]
+          enum: [not_configured, unauthorized, forbidden_fields, validation_error, category_not_found, subtitle_too_long, sensitive_needs_verdict, author_not_configured, not_found, not_a_draft, not_published, not_scheduled, locked_by_editor, license_required, forbidden_action, rate_limited, invalid_image, file_too_large, storage_unavailable, upload_failed, server_error]
         message: { type: string }
         details: {}
   responses:

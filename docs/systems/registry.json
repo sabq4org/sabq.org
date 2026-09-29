@@ -152,7 +152,7 @@
       "nameEn": "Editorial / Newsroom",
       "status": "active",
       "category": "content",
-      "summary": "غرفة الأخبار + أدوات التحرير بالذكاء الاصطناعي: عناوين، مقالات، تصنيف، SEO، روابط ذكية، صور، وكلاء بريد/واتساب، ورأي الكاتب. الموجز العام يتزامن من excerpt عند الحفظ.",
+      "summary": "غرفة الأخبار + أدوات التحرير بالذكاء الاصطناعي: عناوين، مقالات، تصنيف، SEO، روابط ذكية، صور، وكلاء بريد/واتساب، ورأي الكاتب. الموجز العام يتزامن من excerpt عند الحفظ؛ BotDrafts يعيد حقلي SEO canonical ويحافظ على ضوابط التوكن والملكية والحصة.",
       "docPath": "docs/systems/editorial/SYSTEM.md",
       "relatedDocs": [
         "docs/editorial/sabq-unified-editorial-prompt.md",

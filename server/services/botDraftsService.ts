@@ -661,6 +661,13 @@ export function buildPublishedBotContentPatch(
   if (input.keywords !== undefined) {
     patch.seo = { ...(existing.seo ?? {}), keywords: input.keywords };
   }
+  const seoPatch = buildBotDraftSeoPatch(existing.seo, input);
+  if (seoPatch) {
+    patch.seo = {
+      ...seoPatch,
+      ...(input.keywords !== undefined ? { keywords: input.keywords } : {}),
+    };
+  }
   if (input.riskLabel !== undefined) patch.riskLabel = input.riskLabel;
 
   const editorialMetadata = buildEditorialMetadataUpdate(patch as Record<string, unknown>, now);
@@ -690,7 +697,42 @@ function publishedChangeLabels(input: BotDraftUpdateInput): string[] {
   if (input.imageUrl !== undefined) labels.push("الصورة");
   if (input.sourceUrl !== undefined) labels.push("المصدر");
   if (input.keywords !== undefined) labels.push("الكلمات المفتاحية");
+  if (input.seoTitle !== undefined) labels.push("عنوان SEO");
+  if (input.seoDescription !== undefined) labels.push("وصف SEO");
   return labels;
+}
+
+/**
+ * يكتب مفاتيح SEO التي يقرأها الموقع فعلياً (`articles.seo`).
+ * غياب الحقل يبقي قيمته، وnull/النص الفارغ يمسحها، حتى لا يضيع keywords أو
+ * أي مفاتيح SEO أخرى يملكها المحرر.
+ */
+export function buildBotDraftSeoPatch(
+  existing: ArticleRow["seo"],
+  input: Pick<BotDraftUpdateInput, "seoTitle" | "seoDescription">,
+): NonNullable<ArticleRow["seo"]> | undefined {
+  const hasTitle = input.seoTitle !== undefined;
+  const hasDescription = input.seoDescription !== undefined;
+  if (!hasTitle && !hasDescription) return undefined;
+
+  const seo = { ...(existing ?? {}) } as NonNullable<ArticleRow["seo"]>;
+  if (hasTitle) {
+    if (input.seoTitle) seo.metaTitle = input.seoTitle;
+    else delete seo.metaTitle;
+  }
+  if (hasDescription) {
+    if (input.seoDescription) seo.metaDescription = input.seoDescription;
+    else delete seo.metaDescription;
+  }
+  return seo;
+}
+
+function buildBotDraftCreateSeo(input: BotDraftCreateInput): NonNullable<ArticleRow["seo"]> | undefined {
+  const seo: NonNullable<ArticleRow["seo"]> = {};
+  if (input.keywords !== undefined) seo.keywords = input.keywords;
+  if (input.seoTitle) seo.metaTitle = input.seoTitle;
+  if (input.seoDescription) seo.metaDescription = input.seoDescription;
+  return Object.keys(seo).length > 0 ? seo : undefined;
 }
 
 /** يكتب حقول الظهور التي أرسلها البوت فقط، بلا لمس للحالة أو الإسناد. */
@@ -718,6 +760,8 @@ export function toBotDraftResponse(row: ArticleRow, categorySlug: string | null 
     subtitle: row.subtitle ?? null,
     slug: row.slug,
     excerpt: row.excerpt ?? null,
+    seoTitle: row.seo?.metaTitle ?? null,
+    seoDescription: row.seo?.metaDescription ?? null,
     categoryId: row.categoryId ?? null,
     categorySlug,
     imageUrl: row.imageUrl ?? null,
@@ -866,11 +910,17 @@ export function assertPersonalCapability(bot: BotIdentity, capability: import("@
   }
 }
 
-async function assertPersonalPublishLicense(bot: BotIdentity): Promise<void> {
-  if (!bot.personal) return;
-  const { assertMediaLicenseAllowsSubmission } = await import("./mediaLicenseService");
-  const gate = await assertMediaLicenseAllowsSubmission(bot.personal.userId);
-  if (!gate.ok) throw new BotDraftError(403, "license_required", gate.message, { licenseCode: gate.code });
+/**
+ * توكن الناشر الشخصي ينشر الأخبار بإسناد علني إلى حساب صحيفة سبق، لذلك لا
+ * يطلب ترخيصاً مهنياً من مستخدم التوكن. يبقى الإعفاء محصوراً في خبر news
+ * وبـ byline المؤسسة؛ legacy bot أو أي byline مخصص يمر من بوابة الترخيص القائمة.
+ */
+export function isPersonalBotNewspaperNews(
+  bot: BotIdentity | null | undefined,
+  row: Pick<ArticleRow, "articleType" | "authorId" | "reporterId">,
+): boolean {
+  if (!bot?.personal || row.articleType !== "news") return false;
+  return (row.reporterId || row.authorId) === SABQ_NEWSPAPER_ACCOUNT_ID;
 }
 
 async function findArticleById(articleId: string, bot?: BotIdentity): Promise<ArticleRow | null> {
@@ -924,6 +974,7 @@ export async function createBotDraft(
   const category = await resolveCategory(input);
   const slug = await resolveUniqueArticleSlug(generateArabicSlug(input.title) || `bot-${Date.now()}`);
   const now = new Date();
+  const normalizedExcerpt = input.excerpt?.trim() || null;
 
   const [row] = await db
     .insert(articles)
@@ -933,7 +984,14 @@ export async function createBotDraft(
       slug,
       englishSlug: generateEnglishSlug(input.title),
       content: normalizeDraftContent(input.content, input.contentFormat, input.imageUrls),
-      excerpt: input.excerpt ?? null,
+      excerpt: normalizedExcerpt,
+      ...(input.excerpt !== undefined
+        ? {
+            aiSummary: normalizedExcerpt,
+            aiBullets: null,
+            aiBulletsGeneratedAt: null,
+          }
+        : {}),
       imageUrl: input.imageUrl ?? null,
       categoryId: category?.id ?? null,
       authorId,
@@ -967,7 +1025,7 @@ export async function createBotDraft(
         notes: input.notes ?? undefined,
         receivedAt: now.toISOString(),
       },
-      seo: input.keywords?.length ? { keywords: input.keywords } : undefined,
+      seo: buildBotDraftCreateSeo(input),
       displayOrder: Math.floor(now.getTime() / 1000),
     })
     .returning();
@@ -1030,12 +1088,25 @@ export async function updateBotDraft(
     // إلحاق فقط: لا نعيد كتابة صور ضبطها المحرر (العرض/المحاذاة) داخل المسودة.
     patch.content = appendBotDraftBodyImages(existing.content ?? "", input.imageUrls);
   }
-  if (input.excerpt !== undefined) patch.excerpt = input.excerpt;
+  if (input.excerpt !== undefined) {
+    const nextSummary = input.excerpt?.trim() || null;
+    patch.excerpt = nextSummary;
+    patch.aiSummary = nextSummary;
+    patch.aiBullets = null;
+    patch.aiBulletsGeneratedAt = null;
+  }
   if (input.imageUrl !== undefined) patch.imageUrl = input.imageUrl;
   if (input.sourceUrl !== undefined) patch.sourceUrl = input.sourceUrl;
   if (category) patch.categoryId = category.id;
   if (input.keywords !== undefined) {
     patch.seo = { ...(existing.seo ?? {}), keywords: input.keywords };
+  }
+  const seoPatch = buildBotDraftSeoPatch(existing.seo, input);
+  if (seoPatch) {
+    patch.seo = {
+      ...seoPatch,
+      ...(input.keywords !== undefined ? { keywords: input.keywords } : {}),
+    };
   }
   if (input.riskLabel !== undefined) patch.riskLabel = input.riskLabel;
   if (input.clientReference !== undefined || input.notes !== undefined) {
@@ -1219,7 +1290,8 @@ async function throwIfEditLocked(articleId: string): Promise<void> {
  * لا نستدعي `denyPublish`: ذلك الفحص لجلسة Passport وصلاحية `articles.publish`
  * ونافذة الوكالة. تفويض البوت هو توكن Bearer على صف `source=bot` فقط.
  */
-async function assertBotDraftBylineMayPublish(row: ArticleRow): Promise<void> {
+async function assertBotDraftBylineMayPublish(bot: BotIdentity, row: ArticleRow): Promise<void> {
+  if (isPersonalBotNewspaperNews(bot, row)) return;
   const [{ assertMediaLicenseAllowsSubmission }, { resolveContentBylineUserId }] = await Promise.all([
     import("./mediaLicenseService"),
     import("@shared/mediaLicense"),
@@ -1276,8 +1348,7 @@ export async function publishBotDraft(
   const existing = await findBotArticle(articleId, bot);
   throwIfNotReleasable(existing);
   await throwIfEditLocked(articleId);
-  await assertBotDraftBylineMayPublish(existing);
-  await assertPersonalPublishLicense(bot);
+  await assertBotDraftBylineMayPublish(bot, existing);
   await assertBotSensitiveRelease(existing.id, existing.riskLabel);
 
   const now = new Date();
@@ -1332,8 +1403,7 @@ export async function scheduleBotDraft(
   const existing = await findBotArticle(articleId, bot);
   throwIfNotReleasable(existing);
   await throwIfEditLocked(articleId);
-  await assertBotDraftBylineMayPublish(existing);
-  await assertPersonalPublishLicense(bot);
+  await assertBotDraftBylineMayPublish(bot, existing);
   await assertBotSensitiveRelease(existing.id, existing.riskLabel);
 
   const now = new Date();
@@ -1415,6 +1485,7 @@ export async function archiveBotDraft(
     row,
     existing!,
     "archived",
+    { archiveReason: row.reviewNotes ?? null },
   );
   console.log(`[BotDrafts] archived ${row.id} by bot=${bot.name}`);
   return toBotDraftResponse(row, await categorySlugFor(row.categoryId));
@@ -1443,8 +1514,8 @@ export async function rescheduleBotDraft(
   const existing = await findBotArticle(articleId, bot);
   throwLifecycleBlock(botDraftScheduledBlock(existing));
   await throwIfEditLocked(articleId);
+  await assertBotDraftBylineMayPublish(bot, existing!);
 
-  await assertPersonalPublishLicense(bot);
   await assertBotSensitiveRelease(existing!.id, existing!.riskLabel);
 
   const now = new Date();
@@ -1616,7 +1687,11 @@ async function recordEvent(
       entityType: "article",
       entityId: articleId,
       oldValue: oldValue ? { title: oldValue.title, status: oldValue.status } : undefined,
-      newValue: { title: newValue.title, status: newValue.status },
+      newValue: {
+        title: newValue.title,
+        status: newValue.status,
+        ...(newValue.reviewNotes ? { reviewNotes: newValue.reviewNotes } : {}),
+      },
       metadata: { ...metadata, ip: ctx.ip, userAgent: ctx.userAgent },
     }).catch((error) => console.error("[BotDrafts] activity log failed:", error)),
   ]);

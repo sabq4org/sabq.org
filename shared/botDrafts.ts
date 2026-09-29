@@ -122,6 +122,8 @@ export const BOT_DRAFT_PUBLISHED_CONTENT_FIELDS = [
   "sourceUrl",
   "imageUrl",
   "keywords",
+  "seoTitle",
+  "seoDescription",
   "riskLabel",
   "updateReason",
 ] as const;
@@ -165,6 +167,9 @@ const clientReference = z.string().trim().min(1).max(120);
 const notes = z.string().trim().max(2000, "الملاحظات تتجاوز 2000 حرف").nullable();
 const riskLabel = z.enum(["safe", "needs_look", "sensitive"]).nullable();
 const updateReason = z.string().trim().max(500, "سبب التحديث يتجاوز 500 حرف").nullable();
+/** مفاتيح SEO القانونية في articles.seo؛ null أو النص الفارغ يمسح القيمة القائمة. */
+const seoTitle = z.string().trim().max(70, "عنوان SEO يتجاوز 70 حرفاً").nullable();
+const seoDescription = z.string().trim().max(160, "وصف SEO يتجاوز 160 حرفاً").nullable();
 
 /** POST /api/internal/bot-drafts */
 export const botDraftCreateSchema = z
@@ -179,6 +184,8 @@ export const botDraftCreateSchema = z
     imageUrl: imageUrl.optional(),
     imageUrls: imageUrls.optional(),
     keywords: keywords.optional(),
+    seoTitle: seoTitle.optional(),
+    seoDescription: seoDescription.optional(),
     sourceUrl: sourceUrl.optional(),
     clientReference: clientReference.optional(),
     notes: notes.optional(),
@@ -199,6 +206,8 @@ export const botDraftUpdateSchema = z
     imageUrl: imageUrl.optional(),
     imageUrls: imageUrls.optional(),
     keywords: keywords.optional(),
+    seoTitle: seoTitle.optional(),
+    seoDescription: seoDescription.optional(),
     sourceUrl: sourceUrl.optional(),
     clientReference: clientReference.optional(),
     notes: notes.optional(),
@@ -336,6 +345,9 @@ export interface BotDraftResponse {
   subtitle: string | null;
   slug: string;
   excerpt: string | null;
+  /** العنوان والوصف المقروءان من articles.seo.metaTitle/metaDescription. */
+  seoTitle: string | null;
+  seoDescription: string | null;
   categoryId: string | null;
   categorySlug: string | null;
   imageUrl: string | null;

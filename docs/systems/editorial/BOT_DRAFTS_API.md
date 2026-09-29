@@ -1,16 +1,16 @@
 # Bot Drafts API — مسودات ونشر وجدولة وإدارة بعد النشر لبوت «نشر سبق»
 
-> آخر مراجعة: 2026-09-26 | المالك: editorial | الحالة: مسودة، جاهز للمناوب، نشر، جدولة، تعديل المحتوى بعد النشر، ثم أرشفة وتعديل الموعد والظهور.
+> آخر مراجعة: 2026-09-29 | المالك: editorial | الحالة: مسودة، جاهز للمناوب، نشر، جدولة، تعديل المحتوى بعد النشر، ثم أرشفة وتعديل الموعد والظهور.
 
 ## الملخص (للبوت)
 
 1. **إنشاء مسودة:** `POST https://api.sabq.org/api/internal/bot-drafts` مع ترويسة `Authorization: Bearer <SABQ_BOT_DRAFTS_TOKEN>` وجسم JSON فيه `title` و`content` (وتصنيف اختياري `categorySlug`). الرد يحمل `id` و`editUrl`.
-2. **تحديث المحتوى:** `PATCH https://api.sabq.org/api/internal/bot-drafts/<id>` بنفس الترويسة والحقول التي تغيّرت فقط. يعمل على `draft`، وعلى `published` إن كان `source=bot`. ممنوع إرسال `status` أو أي حقل نشر/جدولة في الجسم — يُرفض 422. على المنشور: العنوان والمتن والموجز والصورة والكلمات والمصدر فقط؛ `categorySlug` مرفوض 422. الحالة تبقى `published` والرابط و`publishedAt` لا يتغيران.
+2. **تحديث المحتوى:** `PATCH https://api.sabq.org/api/internal/bot-drafts/<id>` بنفس الترويسة والحقول التي تغيّرت فقط. يعمل على `draft`، وعلى `published` إن كان `source=bot`. ممنوع إرسال `status` أو أي حقل نشر/جدولة في الجسم — يُرفض 422. على المنشور: العنوان والمتن والموجز والصورة والكلمات وحقلا SEO والمصدر فقط؛ `categorySlug` مرفوض 422. الحالة تبقى `published` والرابط و`publishedAt` لا يتغيران.
 3. **نشر فوري:** `POST https://api.sabq.org/api/internal/bot-drafts/<id>/publish` بجسم فارغ `{}`. يعمل على `draft` أو `ready_to_publish` فقط. الرد: `status: "published"` و`updatable: true` (البوت يستطيع بعدها تعديل المحتوى) و`publicUrl` (رابط القارئ).
 4. **جدولة:** `POST https://api.sabq.org/api/internal/bot-drafts/<id>/schedule` بجسم `{ "publishAt": "2026-09-24T18:30:00+03:00" }`. وقت الرياض يُرسل بإزاحة `+03:00` أو ما يعادله UTC (`Z`). الماضي يُرفض 400. الرد: `status: "scheduled"` و`scheduledAt` و`editUrl`.
 5. **تغيير الموعد:** `PATCH .../<id>/schedule` بنفس جسم `publishAt`، والمادة حالتها `scheduled` فقط.
 6. **إلغاء الجدولة:** `DELETE .../<id>/schedule` بجسم فارغ. تعود `draft` ولا تُحذف.
-7. **أرشفة مادة منشورة:** `POST .../<id>/archive` بجسم `{}` أو `{ "reason": "…" }`. أرشفة ناعمة (`archived`) مثل اللوحة. `DELETE /<id>` يبقى 405 ولا يحذف الصف.
+7. **الأرشفة:** `POST .../<id>/archive` بجسم اختياري لا يحوي إلا `{ "reason": "…" }`. التطبيق يرسل سبب المستخدم فقط، والخادم يحفظه في ملاحظات الأرشفة وسجل التدقيق. أرشفة ناعمة (`archived`) مثل اللوحة. `DELETE /<id>` يبقى 405 ولا يحذف الصف.
 8. **الظهور بعد النشر:** `PATCH .../<id>/visibility` بحقول `isFeatured` و/أو `newsType` (`breaking`|`regular`) و/أو `hideFromHomepage`. تعليم العاجل لا يرسل إشعار القرّاء.
 9. **جاهز للمناوب (بدون نشر):** `PATCH .../<id>/ready` بجسم فارغ `{}`. الحالة `ready_to_publish`. محرر الوردية ينشر من اللوحة، أو البوت ينشر/يجدول لاحقاً.
 10. **رفع صورة:** `POST .../images` بنفس التوكن. `deliveryUrl` غلاف (`imageUrl`) أو متن (`imageUrls`).
@@ -71,15 +71,19 @@ User-Agent: Mozilla/5.0 (compatible; SabqBotDrafts/1.0)
 | `contentFormat` | `"html"` \| `"text"` | اختياري | يفرض التفسير بدل الاكتشاف التلقائي (وجود وسوم = HTML). `text` يهرّب الوسوم؛ صور المتن عندها عبر `imageUrls` لا عبر لصق HTML. |
 | `subtitle` | string ≤120 عند تفعيل `publish_first_validation`، وإلا ≤300 \| null | اختياري | عنوان فرعي. تجاوز السقف الفعّال: `422 subtitle_too_long` |
 | `excerpt` | string ≤1000 \| null | اختياري | المقدمة/الموجز |
+| `seoTitle` | string ≤70 \| null | اختياري | يُحفظ في `seo.metaTitle`؛ غيابه يحافظ على القيمة، و`null`/الفارغ يمسحها |
+| `seoDescription` | string ≤160 \| null | اختياري | يُحفظ في `seo.metaDescription`؛ غيابه يحافظ على القيمة، و`null`/الفارغ يمسحها |
 | `categoryId` أو `categorySlug` | string | اختياري | تصنيف منشور للقرّاء (`status=visible` في الإنتاج، ويُقبل `active` تاريخياً) من `GET https://api.sabq.org/api/categories` (عام بلا مصادقة). غير موجود أو `inactive` → `422 category_not_found`. |
 | `imageUrl` | https URL \| null | اختياري | صورة **الغلاف** فقط (أعلى الخبر). ارفع عبر `POST /images` ثم ضع `deliveryUrl`. لا يُنسخ تلقائياً إلى المتن. |
 | `imageUrls` | https URL[] ≤20 | اختياري | صور **المتن**. كل عنصر `deliveryUrl` من `POST /images`. الخادم يلحقها أسفل الجسم بترتيب المصفوفة كعقدة TipTap `img` (انظر «صور المتن»). الرابط الموجود أصلاً داخل المتن لا يُكرَّر. |
-| `keywords` | string[] ≤20 | اختياري | تُحفظ في `seo.keywords` |
+| `keywords` | string[] ≤20 | اختياري | تُحفظ في `seo.keywords` وتبقى عند تحديث حقول SEO الأخرى |
 | `sourceUrl` | http(s) URL \| null | اختياري | المصدر الأصلي |
 | `clientReference` | string ≤120 | اختياري | معرّف البوت الداخلي للمادة (يُعاد في الرد للمطابقة) |
 | `notes` | string ≤2000 \| null | اختياري | ملاحظة للمحررين (مثل: «تحقق من الأرقام») |
 
 في `PATCH` كل الحقول اختيارية ويلزم حقل واحد على الأقل. الحقول غير المعروفة تُرفض `400`.
+
+الردود تعيد `seoTitle` و`seoDescription` مقروءين من `seo.metaTitle` و`seo.metaDescription`، إضافة إلى `keywords` من `seo.keywords`؛ لذلك يمكن للبوت التحقق من الحفظ عبر `GET`.
 
 ### الحقول الممنوعة (ترفض 422 قبل أي معالجة)
 
@@ -94,14 +98,14 @@ User-Agent: Mozilla/5.0 (compatible; SabqBotDrafts/1.0)
 - الإدراج يكتب `status='draft'`, `reviewStatus=null`, `publishType='instant'`, `scheduledAt=null`, `publishedAt=null`, `articleType='news'`, `newsType='regular'`, `source='bot'` — قيم ثابتة في الخدمة لا تأتي من الطلب.
 - الإسناد من الخادم فقط: `authorId` و`reporterId` = حساب «صحيفة سبق» (`BOT_DRAFTS_AUTHOR_USER_ID` أو الافتراضي). البوت لا يرسلهما (`422 forbidden_fields`). عند `PATCH` المحتوى يُملأ `reporterId` فقط إن كان فارغاً — اختيار المحرر لا يُستبدل. حساب الإسناد غير موجود/غير نشط → `503 author_not_configured`.
 - تحديث المحتوى يضرب `source='bot'` في `draft` أو `published`. بعد `ready_to_publish` أو الجدولة أو الأرشفة أو الحذف يُرجع `409 not_a_draft`. خبر منشور ليس `source=bot` يُرجع `409 not_a_draft` أيضاً. صف محرر في حالة أخرى يبقى `404`.
-- على `published`: الحقول المسموحة `title`, `subtitle`, `excerpt`, `content`, `contentFormat`, `sourceUrl`, `imageUrl`, `keywords`, `riskLabel`, `updateReason`. `categorySlug` و`categoryId` و`imageUrls` و`clientReference` و`notes` تُرفض `422 forbidden_fields` — نقل التصنيف يغيّر أرشيف القسم وخلاصة RSS و`articleSection` وليس تعديلاً نصياً آمناً على مسار إبطال كاش حفظ المحرر. `status` و`publishedAt` و`slug` لا تُكتب، وكذلك `draftCreatedAt` و`correctedAt` و`verdictAt`. `excerpt` يزامن `aiSummary` ويمسح `aiBullets` كما يفعل حفظ اللوحة. `updatedAt` يتقدم، و`seo_metadata.editorialModifiedAt` يُدمج ذرياً عند تغيّر حقل ظاهر. مع علم `publish_first_revision_history` يُكتب صف في `article_revisions` إلى جانب `article_events`. مادة `riskLabel=sensitive` بلا حكم مراجع تُرفض `422 sensitive_needs_verdict` عند النشر أو الجدولة أو تصحيح المحتوى.
+- على `published`: الحقول المسموحة `title`, `subtitle`, `excerpt`, `content`, `contentFormat`, `sourceUrl`, `imageUrl`, `keywords`, `seoTitle`, `seoDescription`, `riskLabel`, `updateReason`. `categorySlug` و`categoryId` و`imageUrls` و`clientReference` و`notes` تُرفض `422 forbidden_fields` — نقل التصنيف يغيّر أرشيف القسم وخلاصة RSS و`articleSection` وليس تعديلاً نصياً آمناً على مسار إبطال كاش حفظ المحرر. `status` و`publishedAt` و`slug` لا تُكتب، وكذلك `draftCreatedAt` و`correctedAt` و`verdictAt`. `excerpt` يزامن `aiSummary` ويمسح `aiBullets` كما يفعل حفظ اللوحة، في الإنشاء والتحديث أيضاً. `seoTitle` و`seoDescription` يكتبان المفاتيح القانونية `seo.metaTitle` و`seo.metaDescription` مع دمج `keywords` وباقي مفاتيح SEO؛ `seoMetadata` يبقى للأثر الفني مثل `editorialModifiedAt`. `updatedAt` يتقدم، و`seo_metadata.editorialModifiedAt` يُدمج ذرياً عند تغيّر حقل ظاهر. مع علم `publish_first_revision_history` يُكتب صف في `article_revisions` إلى جانب `article_events`. مادة `riskLabel=sensitive` بلا حكم مراجع تُرفض `422 sensitive_needs_verdict` عند النشر أو الجدولة أو تصحيح المحتوى.
 - `POST /:id/verdict` بجسم `{ verdict: "ok"|"minor"|"major", reviewerName, note? }` وبنفس Bearer. `verdictAt` من الخادم ويُرفض إن أُرسل. الصف ليس `source=bot` → `404`. أي حكم يفتح بوابة الحساسية.
 - إبطال الكاش بعد تعديل المنشور هو مسار `PATCH /api/admin/articles/:id`: `invalidateArticleWrite` (ذاكرة القوائم والمقال بما فيها نافذة العشر ثوانٍ، جيل seo-meta، Redis pub/sub، purge Cloudflare للرئيسية ولـ`slug`/`englishSlug`) ثم حذف `lite-feed`. لا مسح لخرائط الموقع في Redis ولا لذاكرة `sitemap-news` لأن حفظ المحتوى في اللوحة لا يمسحها. لا إشعار دفع ولا IndexNow ولا إعادة نشر.
 - `PATCH /:id/ready` ينقل `draft` → `ready_to_publish` فقط، بلا `publishedAt` وبلا مرور على ناشر الإنتاج. قفل تحرير نشط → `409 locked_by_editor`. جسم فيه حقول → `400`، وحقل ممنوع مثل `status` → `422`.
 - `POST /:id/publish` و`POST /:id/schedule` يعملان على `source=bot` في `draft` أو `ready_to_publish`. صف محرر → `404 not_found`. منشور أو مجدول أو مؤرشف → `409 not_a_draft`. قفل تحرير → `409 locked_by_editor`.
 - النشر الفوري يكتب نفس أعمدة زر «نشر» في اللوحة: `status=published` و`publishType=instant` و`publishedAt` الآن و`displayOrder` بثواني يونكس، ثم يُبطل كاش القرّاء وCDN (`invalidateArticleWrite`) ويُرسل IndexNow على `englishSlug`. الإسناد لا يتغير.
 - الجدولة تكتب `status=scheduled` و`publishType=scheduled` و`scheduledAt`. ناشر المواد المجدولة (`publishScheduledArticles`) يرقّيها عند حلول الموعد كما لو جدولها محرر. لا نشر فوري من هذا المسار.
-- تفويض البوت هو توكن Bearer لا جلسة Passport ولا `denyPublish`. بوابة الترخيص المهني تُفحص على صاحب الاسم؛ حساب «صحيفة سبق» مؤسسي ومُعفى. مراسل بدّله المحرر بلا ترخيص ساري → `403 license_required`.
+- تفويض البوت هو توكن Bearer لا جلسة Passport ولا `denyPublish`. في التوكن الشخصي، أخبار `news` ذات byline حساب «صحيفة سبق» لا تطلب ترخيصاً مهنياً من مستخدم التوكن؛ تبقى صلاحيات RBAC والتوكن والملكية وبوابة الحساسية وحصة الناشر سارية. legacy bot أو byline مخصص يمر من بوابة الترخيص القائمة، والقنوات التحريرية الأخرى لا تتغير.
 - من `ready_to_publish` المحرر ما زال يستطيع النشر من اللوحة أو الإرجاع إلى `draft` (يعيد `updatable: true`). حفظ المحرر يُبقي الجاهزية.
 - القائمة: `GET /api/admin/articles?status=ready_to_publish` وشريحة «جاهز للنشر» في إدارة الأخبار. العداد `readyToPublish` في `/api/admin/articles/metrics` (مفتاح الكاش `articles:admin:metrics:v4`) ولا يُحسب ضمن المسودات. المادة لا تظهر للقرّاء لأن الواجهة العامة تشترط `published`.
 
@@ -449,7 +453,7 @@ User-Agent: Mozilla/5.0 (compatible; SabqBotDrafts/1.0)
 | 400 | `validation_error` | حقل ناقص/غير صالح/غير معروف. `details` = `zod.flatten()` |
 | 401 | `unauthorized` | توكن مفقود أو غير مطابق (مع `WWW-Authenticate: Bearer`) |
 | 403 | `forbidden_action` | فعل فرعي غير معروف، أو `PATCH/PUT/DELETE` على `/publish` أو `/schedule` |
-| 403 | `license_required` | صاحب الاسم الظاهر بلا ترخيص مهني ساري. حساب «صحيفة سبق» لا يُرفض لهذا السبب |
+| 403 | `license_required` | byline غير مؤسسي بلا ترخيص مهني ساري. التوكن الشخصي لخبر `news` ذي byline «صحيفة سبق» لا يطلب ترخيص مستخدم التوكن |
 | 404 | `not_found` | المعرّف غير موجود **أو** المادة ليست من إنشاء بوت (`source != 'bot'`) — لا نكشف مسودات المحررين |
 | 405 | `forbidden_action` | `PUT`/`DELETE` على `/:id` |
 | 409 | `not_a_draft` | تحديث محتوى والمادة ليست `draft`، أو جاهزية والمادة ليست `draft`، أو نشر/جدولة أولى والمادة ليست `draft` ولا `ready_to_publish`. `details.status` = الحالة الحالية |
@@ -458,6 +462,8 @@ User-Agent: Mozilla/5.0 (compatible; SabqBotDrafts/1.0)
 | 409 | `locked_by_editor` | محرر يفتح المادة الآن (قفل تحرير نشط، TTL 10 دقائق). `details.editor`, `details.lockExpiresAt` |
 | 422 | `forbidden_fields` | وجود حقل ممنوع. `details.fields` = القائمة |
 | 422 | `category_not_found` | تصنيف غير موجود أو غير قابل للإسناد (`inactive`؛ الإنتاج يستخدم `visible`) |
+| 422 | `subtitle_too_long` | العنوان الفرعي يتجاوز 120 حرفاً مع تفعيل `publish_first_validation` (أو 300 عند تعطيله) |
+| 422 | `sensitive_needs_verdict` | مادة حساسة بلا حكم مراجع صالح قبل النشر أو التصحيح |
 | 400 | `invalid_image` | نوع غير مسموح أو البايتات ليست JPEG/PNG/WEBP/GIF |
 | 400 | `file_too_large` | الملف أكبر من 10MB |
 | 429 | `rate_limited` | تجاوز سقف الكتابة للدقيقة لهذا البوت (افتراضي 30) |
@@ -723,7 +729,7 @@ const live = await client.publish(draft.id); // live.publicUrl و live.status ==
 
 Every call rechecks account status, live permissions and agency eligibility. Article reads and writes are restricted to the server-stamped `sourceMetadata.publisherUserId` and current agency. Public author/reporter stay the newspaper account; submitter and audit actor identify the human. Published-field restrictions and sensitive-publication gates remain unchanged.
 
-Personal `POST /:id/archive` also archives draft, ready and scheduled material. It never permanently deletes. A scheduled personal publication revalidates its recorded credential, publishing right, agency and media license when the worker executes. Revoking/rotating that credential stops its outstanding schedules; explicitly reschedule with the replacement credential to authorize them again.
+Personal `POST /:id/archive` also archives draft, ready and scheduled material. It never permanently deletes. The app sends only the user-entered `reason`; the server stores the trimmed value (up to 1000 characters) in `reviewNotes` and repeats it in `article_events` and activity audit metadata. A scheduled personal news publication revalidates its recorded credential, publishing right, agency, newspaper byline and SQL write gate when the worker executes; it does not require the personal user's media license. Revoking/rotating that credential stops its outstanding schedules; explicitly reschedule with the replacement credential to authorize them again.
 
 Install `migrations/20260929_bot_publisher_tokens.sql` before enabling personal credentials. Existing environment-backed bot tokens retain their previous contract.
 

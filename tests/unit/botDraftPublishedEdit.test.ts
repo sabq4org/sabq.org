@@ -63,7 +63,7 @@ vi.mock("../../server/rbac", () => ({ logActivity }));
 vi.mock("../../server/notificationService", () => ({ sendArticleNotification }));
 vi.mock("../../server/indexNow", () => ({ notifySearchEngines }));
 
-import { BotDraftError, updateBotDraft } from "../../server/services/botDraftsService";
+import { archiveBotDraft, BotDraftError, updateBotDraft } from "../../server/services/botDraftsService";
 
 const publishedAt = new Date("2026-09-26T06:00:00.000Z");
 
@@ -127,7 +127,13 @@ describe("updateBotDraft on a published article", () => {
     const result = await updateBotDraft(
       { name: "nashr-sabq" },
       "art-pub",
-      { title: "عنوان بعد النشر للخبر", excerpt: "موجز بعد التعديل", keywords: ["جديد"] },
+      {
+        title: "عنوان بعد النشر للخبر",
+        excerpt: "موجز بعد التعديل",
+        keywords: ["جديد"],
+        seoTitle: "عنوان SEO بعد التعديل",
+        seoDescription: "وصف SEO بعد التعديل",
+      },
     );
 
     expect(result).toMatchObject({
@@ -144,7 +150,11 @@ describe("updateBotDraft on a published article", () => {
       title: "عنوان بعد النشر للخبر",
       excerpt: "موجز بعد التعديل",
       aiSummary: "موجز بعد التعديل",
-      seo: { metaTitle: "قديم", keywords: ["جديد"] },
+      seo: {
+        metaTitle: "عنوان SEO بعد التعديل",
+        metaDescription: "وصف SEO بعد التعديل",
+        keywords: ["جديد"],
+      },
     });
     expect(dbState.setArg).not.toHaveProperty("status");
     expect(dbState.setArg).not.toHaveProperty("publishedAt");
@@ -172,6 +182,58 @@ describe("updateBotDraft on a published article", () => {
       }),
     );
     expect(logActivity).toHaveBeenCalledWith(expect.objectContaining({ action: "updated", entityId: "art-pub" }));
+  });
+
+  it("syncs excerpt to the smart summary and clears stale bullets on a draft", async () => {
+    const existing = publishedArticle({ status: "draft", sourceMetadata: { type: "bot", bot: "nashr-sabq" } });
+    dbState.article = existing;
+    dbState.updated = {
+      ...existing,
+      excerpt: "موجز مسودة جديد",
+      aiSummary: "موجز مسودة جديد",
+      aiBullets: null,
+      aiBulletsGeneratedAt: null,
+      updatedAt: new Date("2026-09-26T09:00:00.000Z"),
+    };
+
+    await updateBotDraft({ name: "nashr-sabq" }, "art-pub", { excerpt: "  موجز مسودة جديد  " });
+
+    expect(dbState.setArg).toMatchObject({
+      excerpt: "موجز مسودة جديد",
+      aiSummary: "موجز مسودة جديد",
+      aiBullets: null,
+      aiBulletsGeneratedAt: null,
+    });
+  });
+
+  it("persists the archive reason in notes and both audit surfaces", async () => {
+    const existing = publishedArticle({
+      sourceMetadata: { type: "bot", bot: "publisher-u", publisherUserId: "u", publisherTokenId: "t", clientReference: "ref-1" },
+    });
+    dbState.article = existing;
+    dbState.updated = {
+      ...existing,
+      status: "archived",
+      reviewNotes: "خبر مكرر",
+      updatedAt: new Date("2026-09-26T09:00:00.000Z"),
+    };
+
+    await archiveBotDraft(
+      { name: "publisher-u", personal: { userId: "u", tokenId: "t", capabilities: ["archive"] } as any },
+      "art-pub",
+      { reason: "  خبر مكرر  " },
+    );
+
+    expect(dbState.setArg).toMatchObject({ status: "archived", reviewStatus: null, reviewNotes: "خبر مكرر" });
+    expect(logArticleEvent).toHaveBeenCalledWith(expect.objectContaining({
+      eventType: "deleted",
+      metadata: expect.objectContaining({ archiveReason: "خبر مكرر" }),
+    }));
+    expect(logActivity).toHaveBeenCalledWith(expect.objectContaining({
+      action: "archived",
+      newValue: expect.objectContaining({ reviewNotes: "خبر مكرر" }),
+      metadata: expect.objectContaining({ archiveReason: "خبر مكرر" }),
+    }));
   });
 
   it("rejects a published non-bot article with 409 and does not write", async () => {
