@@ -501,9 +501,13 @@ export default function OpinionDetailPage() {
       <Header user={user} />
       <NavigationBar />
 
+      {/* DMS: الليدربورد مباشرة تحت القائمة الرئيسية كما في صفحة الخبر (طلب DMS 2026-09-29) */}
+      <div className="container mx-auto px-4 sm:px-6 lg:px-8 pt-4 max-w-7xl empty:hidden">
+        <DmsLeaderboardAd />
+      </div>
+
       <main className="flex-1">
         <div className="article-detail-main container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <DmsLeaderboardAd />
           <DmsMpuAd topSlot />
           
           <div className="article-detail-layout">
