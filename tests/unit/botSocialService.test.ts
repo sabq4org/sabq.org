@@ -14,6 +14,9 @@ const state = vi.hoisted(() => ({
   delete: vi.fn(),
   suggest: vi.fn(),
   audit: vi.fn(),
+  resolveLink: vi.fn(),
+  updateReturning: vi.fn(),
+  lastUpdate: null as Record<string, unknown> | null,
 }));
 
 function chain(rows: unknown) {
@@ -44,8 +47,21 @@ vi.mock("../../server/db", () => ({
     select: () => chain(state.selects.shift() ?? []),
     insert: () => ({ values: () => state.insert() }),
     delete: () => ({ where: () => state.delete() }),
+    update: () => ({
+      set: (values: Record<string, unknown>) => {
+        state.lastUpdate = values;
+        return { where: () => ({ returning: () => state.updateReturning() }) };
+      },
+    }),
   },
 }));
+vi.mock("../../server/services/socialPublishing/publerApiClient", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../server/services/socialPublishing/publerApiClient")>();
+  return {
+    ...actual,
+    resolvePublishedPostLink: (...args: unknown[]) => state.resolveLink(...args),
+  };
+});
 vi.mock("../../server/rbac", () => ({
   logActivity: (...args: unknown[]) => state.audit(...args),
 }));
@@ -74,6 +90,8 @@ vi.mock("../../server/services/socialPublishing/socialPublishingService", () => 
 
 import { BotSocialError } from "../../server/services/socialPublishing/botSocialLogic";
 import {
+  getBotSocialPost,
+  listBotSocialPosts,
   previewBotSocialPost,
   publishBotSocialPost,
   resolveBotSocialArticleUrl,
@@ -172,6 +190,11 @@ beforeEach(() => {
   state.delete.mockReset();
   state.suggest.mockReset();
   state.audit.mockReset();
+  state.resolveLink.mockReset();
+  state.updateReturning.mockReset();
+  state.lastUpdate = null;
+  state.resolveLink.mockResolvedValue(null);
+  state.updateReturning.mockResolvedValue([]);
   state.insert.mockResolvedValue(undefined);
   state.delete.mockResolvedValue(undefined);
   state.audit.mockResolvedValue(undefined);
@@ -432,5 +455,174 @@ describe("article URL resolution", () => {
     })).rejects.toMatchObject({ httpStatus: 409, code: "reference_article_mismatch" });
     expect(state.create).not.toHaveBeenCalled();
     expect(state.claim).not.toHaveBeenCalled();
+  });
+});
+
+describe("Publer status URL backfill on bot reads", () => {
+  const pending = () => socialPost({
+    status: "published",
+    publishedAt: now,
+    externalPostId: "publer:6abb3fc20d073712d4416efc",
+    externalPostUrl: "https://x.com/صحيفة سبق الإلكترونية",
+  });
+
+  it("GET detail stores the tweet id and status URL from post_link", async () => {
+    state.selects = [
+      [binding(pending())],
+      [{ externalAccountId: "publer-acc", handle: "صحيفة سبق الإلكترونية" }],
+    ];
+    state.resolveLink.mockResolvedValue({
+      tweetId: "2104791827802911159",
+      statusUrl: "https://x.com/sabqorg/status/2104791827802911159",
+      handle: "sabqorg",
+    });
+    state.updateReturning.mockResolvedValue([socialPost({
+      status: "published",
+      publishedAt: now,
+      externalPostId: "2104791827802911159",
+      externalPostUrl: "https://x.com/sabqorg/status/2104791827802911159",
+    })]);
+
+    const result = await getBotSocialPost(bot, "post-1");
+
+    expect(result.post.externalPostId).toBe("2104791827802911159");
+    expect(result.post.externalPostUrl).toBe("https://x.com/sabqorg/status/2104791827802911159");
+    expect(state.resolveLink).toHaveBeenCalledWith(
+      "publer-acc",
+      "نص التغريدة\nhttps://sabq.org/article/english-slug",
+      expect.objectContaining({ search: true }),
+    );
+    expect(state.lastUpdate).toEqual(expect.objectContaining({
+      externalPostId: "2104791827802911159",
+      externalPostUrl: "https://x.com/sabqorg/status/2104791827802911159",
+    }));
+  });
+
+  it("drops a display-name URL when post_link is still missing and keeps the publer id", async () => {
+    state.selects = [
+      [binding(pending())],
+      [{ externalAccountId: "publer-acc", handle: "صحيفة سبق الإلكترونية" }],
+    ];
+    state.updateReturning.mockResolvedValue([socialPost({
+      status: "published",
+      publishedAt: now,
+      externalPostId: "publer:6abb3fc20d073712d4416efc",
+      externalPostUrl: null,
+    })]);
+
+    const result = await getBotSocialPost(bot, "post-1");
+
+    expect(result.post.externalPostUrl).toBeNull();
+    expect(result.post.externalPostId).toBe("publer:6abb3fc20d073712d4416efc");
+    expect(state.lastUpdate).toEqual(expect.objectContaining({
+      externalPostId: "publer:6abb3fc20d073712d4416efc",
+      externalPostUrl: null,
+    }));
+    expect(JSON.stringify(result.post)).not.toContain("صحيفة");
+  });
+
+  it("uses the stored @handle as a profile URL while the status link is pending", async () => {
+    state.selects = [
+      [binding(pending())],
+      [{ externalAccountId: "publer-acc", handle: "sabqorg" }],
+    ];
+    state.updateReturning.mockResolvedValue([socialPost({
+      status: "published",
+      publishedAt: now,
+      externalPostId: "publer:6abb3fc20d073712d4416efc",
+      externalPostUrl: "https://x.com/sabqorg",
+    })]);
+
+    const result = await getBotSocialPost(bot, "c89bd0fd-2e80-4608-ab3a-302e6c72d5bd");
+
+    expect(result.post.externalPostUrl).toBe("https://x.com/sabqorg");
+    expect(state.lastUpdate).toEqual(expect.objectContaining({
+      externalPostUrl: "https://x.com/sabqorg",
+    }));
+  });
+
+  it("does not call Publer when the row already has a status URL", async () => {
+    state.selects = [[binding(socialPost({
+      status: "published",
+      publishedAt: now,
+      externalPostId: "99",
+      externalPostUrl: "https://x.com/sabqorg/status/99",
+    }))]];
+
+    const result = await getBotSocialPost(bot, "post-1");
+
+    expect(result.post.externalPostUrl).toBe("https://x.com/sabqorg/status/99");
+    expect(state.resolveLink).not.toHaveBeenCalled();
+    expect(state.lastUpdate).toBeNull();
+  });
+
+  it("list backfills a published Publer row and leaves scheduled and direct X rows alone", async () => {
+    const scheduled = socialPost({
+      id: "post-sched",
+      status: "scheduled",
+      externalPostId: null,
+      externalPostUrl: null,
+    });
+    const direct = socialPost({
+      id: "post-x",
+      status: "published",
+      publishedAt: now,
+      externalPostId: "99",
+      externalPostUrl: "https://x.com/sabqorg/status/99",
+    });
+    state.selects = [
+      [
+        binding(pending()),
+        { ...binding(scheduled), key: { ...binding().key, postId: "post-sched", clientReference: "ref-sched" } },
+        { ...binding(direct), key: { ...binding().key, postId: "post-x", clientReference: "ref-x" } },
+      ],
+      [{ externalAccountId: "publer-acc", handle: "sabqorg" }],
+    ];
+    state.resolveLink.mockResolvedValue({
+      tweetId: "2104791827802911159",
+      statusUrl: "https://x.com/sabqorg/status/2104791827802911159",
+      handle: "sabqorg",
+    });
+    state.updateReturning.mockResolvedValue([socialPost({
+      status: "published",
+      publishedAt: now,
+      externalPostId: "2104791827802911159",
+      externalPostUrl: "https://x.com/sabqorg/status/2104791827802911159",
+    })]);
+
+    const result = await listBotSocialPosts(bot, { limit: 20 });
+
+    expect("posts" in result).toBe(true);
+    if (!("posts" in result)) return;
+    expect(result.posts).toHaveLength(3);
+    expect(result.posts[0].externalPostUrl).toBe("https://x.com/sabqorg/status/2104791827802911159");
+    expect(result.posts[0].externalPostId).toBe("2104791827802911159");
+    expect(result.posts[1].status).toBe("scheduled");
+    expect(result.posts[1].externalPostUrl).toBeNull();
+    expect(result.posts[2].externalPostUrl).toBe("https://x.com/sabqorg/status/99");
+    expect(state.resolveLink).toHaveBeenCalledTimes(1);
+  });
+
+  it("clientReference lookup backfills the same way after a scheduled post is published", async () => {
+    state.selects = [
+      [binding(pending())],
+      [{ externalAccountId: "publer-acc", handle: null }],
+    ];
+    state.resolveLink.mockResolvedValue({
+      tweetId: "2104791827802911159",
+      statusUrl: "https://x.com/sabqorg/status/2104791827802911159",
+      handle: "sabqorg",
+    });
+    state.updateReturning.mockResolvedValue([socialPost({
+      status: "published",
+      publishedAt: now,
+      externalPostId: "2104791827802911159",
+      externalPostUrl: "https://x.com/sabqorg/status/2104791827802911159",
+    })]);
+
+    const result = await listBotSocialPosts(bot, { clientReference: "ref-1" });
+
+    expect("post" in result && result.post.externalPostId).toBe("2104791827802911159");
+    expect(state.resolveLink).toHaveBeenCalledTimes(1);
   });
 });

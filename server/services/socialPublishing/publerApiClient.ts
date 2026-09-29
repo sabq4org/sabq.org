@@ -3,14 +3,21 @@
 // العمليات غير متزامنة: النشر والرفع من URL يعيدان job_id يُستطلع عبر
 // GET /job_status/{id} حتى complete/failed.
 //
-// عقود مهمة (وثائق Publer كما في 2026-08):
+// عقود مهمة (وثائق Publer، https://publer.com/docs — 2026-09):
 // - النشر الفوري: POST /posts/schedule/publish بـ bulk.state="scheduled"
 //   وبدون scheduled_at (جدولتنا الداخلية تبقى الحاكمة — لا نفوضها لPubler).
-// - job_status المكتمل لا يتضمن معرف/رابط المنشور الخارجي — يُحل best-effort
-//   من GET /posts (حقل post_link) بمطابقة النص، ولا نُفشل منشوراً نُشر فعلاً
-//   لمجرد تعذر حل الرابط.
-// - مهلة الاستطلاع بعد إرسال النشر خطأ «دائم» عمداً: الحالة مجهولة وقد يكون
-//   المنشور صدر — إعادة المحاولة الآلية تخاطر بالتكرار، فالقرار للمستخدم.
+// - GET /job_status/{id} عند الاكتمال: { status, payload: { failures } }.
+//   الوثائق لا تضع فيه رابط المنشور ولا معرف التغريدة. إن ظهر post_link
+//   لاحقاً داخل الحمولة نقبله، وإلا فالمصدر هو GET /posts.
+// - GET /posts → PostSummary.post_link = رابط المنشور على الشبكة بعد النشر
+//   (يبقى null وهو مجدول). الحقل url رابط المحتوى المرفق (الخبر) لا التغريدة.
+//   معرف الصف id معرف Publer لا معرف التغريدة؛ نستخرج الأخير من /status/{id}.
+// - GET /accounts.name اسم عرض. لا حقل username لحساباتنا (username للمتنافسين فقط).
+//   social_id معرف المنصة الرقمي لا @handle. لا نبني رابطاً من اسم العرض.
+// - مهلة استطلاع job_status بعد إرسال النشر خطأ «دائم» عمداً: الحالة مجهولة
+//   وقد يكون المنشور صدر — إعادة المحاولة الآلية تخاطر بالتكرار.
+// - تعذر حل post_link لا يُفشل منشوراً صدر. الرابط يُستكمل باستطلاع قصير ثم
+//   عند قراءة واجهة البوت. المؤقت: https://x.com/{handle} أو null.
 import { eq } from "drizzle-orm";
 import { db } from "../../db";
 import { socialPlatformAccounts, type SocialPlatformAccount } from "@shared/schema";
@@ -281,7 +288,7 @@ export interface PublerCreatePostInput {
 export async function publishToPublerAccount(
   publerAccountId: string,
   input: PublerCreatePostInput,
-): Promise<{ jobId: string }> {
+): Promise<{ jobId: string; job: unknown }> {
   const hasImages = Boolean(input.mediaIds && input.mediaIds.length > 0);
   const hasVideo = Boolean(input.videoMediaId);
   const network: Record<string, unknown> = {
@@ -317,35 +324,254 @@ export async function publishToPublerAccount(
   if (!jobId) {
     throw new SocialProviderError("استجابة النشر لدى Publer بلا job_id", { retryable: false });
   }
-  await pollPublerJob(String(jobId), input.pollOptions);
-  return { jobId: String(jobId) };
+  const job = await pollPublerJob(String(jobId), input.pollOptions);
+  return { jobId: String(jobId), job };
+}
+
+const X_HANDLE_RE = /^[A-Za-z0-9_]{1,15}$/;
+/** استطلاع post_link بعد اكتمال المهمة: قصير ومحدود حتى لا نطوّل النشر */
+const POST_LINK_POLL_ATTEMPTS = 3;
+const POST_LINK_POLL_INTERVAL_MS = 2_000;
+const POST_LINK_LOOKUP_TIMEOUT_MS = 8_000;
+
+export interface ResolvedXStatus {
+  /** الرقم في /status/ — معرف التغريدة لا معرف Publer */
+  tweetId: string;
+  statusUrl: string;
+  handle: string;
+}
+
+/** يقبل رابط حالة X/Twitter فقط. اسم العرض ومسار الملف وروابط الأخبار تُرفض. */
+export function parseXStatusUrl(raw: string | null | undefined): ResolvedXStatus | null {
+  if (!raw || typeof raw !== "string") return null;
+  let url: URL;
+  try {
+    url = new URL(raw.trim());
+  } catch {
+    return null;
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") return null;
+  const host = url.hostname.toLowerCase().replace(/^www\./, "");
+  if (host !== "x.com" && host !== "twitter.com") return null;
+  const match = url.pathname.match(/^\/([A-Za-z0-9_]{1,15})\/status\/(\d+)\/?$/);
+  if (!match) return null;
+  const handle = match[1];
+  const tweetId = match[2];
+  return {
+    handle,
+    tweetId,
+    statusUrl: `https://x.com/${handle}/status/${tweetId}`,
+  };
 }
 
 /**
- * حل رابط المنشور الخارجي بعد اكتمال النشر — best-effort:
- * job_status لا يعيده، فنبحث في منشورات الحساب المنشورة عن أحدث
- * منشور نصه يطابق نصنا. أي فشل هنا يعيد null ولا يرمي.
+ * رابط ملف الحساب. المعرف يجب أن يطابق شكل @handle في X.
+ * اسم العرض (عربي، مسافات، أطول من 15) يعيد null — لا يُصنع منه رابط.
+ */
+export function xProfileUrlFromHandle(handle: string | null | undefined): string | null {
+  const cleaned = (handle ?? "").trim().replace(/^@/, "");
+  if (!X_HANDLE_RE.test(cleaned)) return null;
+  return `https://x.com/${cleaned}`;
+}
+
+/** منشور Publer نُشر ولم يُحفظ له رابط /status/ بعد. المعرف المؤقت `publer:<jobId>`. */
+export function needsPublerStatusBackfill(post: {
+  status: string;
+  externalPostId?: string | null;
+  externalPostUrl?: string | null;
+}): boolean {
+  if (post.status !== "published") return false;
+  if (parseXStatusUrl(post.externalPostUrl)) return false;
+  return typeof post.externalPostId === "string" && post.externalPostId.startsWith("publer:");
+}
+
+export function buildPublerExternalRef(input: {
+  jobId: string;
+  handle: string | null | undefined;
+  resolved: ResolvedXStatus | null;
+}): ProviderPostResult {
+  if (input.resolved) {
+    return {
+      externalPostId: input.resolved.tweetId,
+      externalPostUrl: input.resolved.statusUrl,
+    };
+  }
+  return {
+    externalPostId: `publer:${input.jobId}`,
+    externalPostUrl: xProfileUrlFromHandle(input.handle),
+  };
+}
+
+function publishedPostNeedle(text: string): string {
+  return text.trim().slice(0, 80);
+}
+
+function rowTextStartsWith(row: unknown, needle: string): boolean {
+  if (!needle || !row || typeof row !== "object") return false;
+  const value = (row as { text?: unknown }).text;
+  return typeof value === "string" && value.trim().startsWith(needle);
+}
+
+/**
+ * post_link هو رابط الشبكة. url في نفس الكائن رابط المحتوى (الخبر)
+ * ولا يُعتمد إلا إذا كان هو نفسه رابط status.
+ */
+function statusFromPostFields(row: unknown): ResolvedXStatus | null {
+  if (!row || typeof row !== "object") return null;
+  const record = row as { post_link?: unknown; url?: unknown };
+  if (typeof record.post_link === "string") {
+    const fromLink = parseXStatusUrl(record.post_link);
+    if (fromLink) return fromLink;
+  }
+  if (typeof record.url === "string") return parseXStatusUrl(record.url);
+  return null;
+}
+
+export function matchPublishedXStatus(rows: readonly unknown[], text: string): ResolvedXStatus | null {
+  const needle = publishedPostNeedle(text);
+  if (!needle) return null;
+  for (const row of rows) {
+    if (!rowTextStartsWith(row, needle)) continue;
+    const status = statusFromPostFields(row);
+    if (status) return status;
+  }
+  return null;
+}
+
+/** يمشي حمولة job_status بحثاً عن post_link/url بصيغة status. النصوص الحرة لا تُمسح. */
+export function findXStatusInJobPayload(data: unknown, depth = 0): ResolvedXStatus | null {
+  if (depth > 8 || data == null || typeof data !== "object") return null;
+  if (Array.isArray(data)) {
+    for (const item of data) {
+      const hit = findXStatusInJobPayload(item, depth + 1);
+      if (hit) return hit;
+    }
+    return null;
+  }
+  const fromFields = statusFromPostFields(data);
+  if (fromFields) return fromFields;
+  for (const value of Object.values(data as Record<string, unknown>)) {
+    if (value && typeof value === "object") {
+      const hit = findXStatusInJobPayload(value, depth + 1);
+      if (hit) return hit;
+    }
+  }
+  return null;
+}
+
+function postRowsFromResponse(json: unknown): unknown[] {
+  if (Array.isArray(json)) return json;
+  if (json && typeof json === "object") {
+    const record = json as { posts?: unknown; data?: unknown };
+    if (Array.isArray(record.posts)) return record.posts;
+    if (Array.isArray(record.data)) return record.data;
+  }
+  return [];
+}
+
+function publishedPostsPath(accountId: string, page: number, query?: string): string {
+  const base = `/posts?state[]=published_posted&account_ids[]=${encodeURIComponent(accountId)}&page=${page}`;
+  if (!query) return base;
+  return `${base}&query=${encodeURIComponent(query)}`;
+}
+
+async function fetchPublishedRows(
+  accountId: string,
+  page: number,
+  query: string | undefined,
+  timeoutMs: number,
+): Promise<unknown[] | null> {
+  try {
+    const json = await publerFetch(
+      publishedPostsPath(accountId, page, query),
+      { method: "GET" },
+      "posts list",
+      timeoutMs,
+    );
+    return postRowsFromResponse(json);
+  } catch {
+    return null;
+  }
+}
+
+export interface ResolvePublishedPostLinkOptions {
+  timeoutMs?: number;
+  /** بحث نصي لمنشور قد لا يكون في الصفحة الأولى بعد مرور الوقت */
+  search?: boolean;
+}
+
+/**
+ * حل رابط الحالة من GET /posts. أي فشل يعيد null ولا يرمي.
+ * إن وُجد الصف ومطابق النص بلا post_link نعود فوراً: الرابط لم يُملأ بعد
+ * وصفحة تالية لن تخلقه.
  */
 export async function resolvePublishedPostLink(
   publerAccountId: string,
   text: string,
-): Promise<{ postId: string; postLink: string } | null> {
-  try {
-    const json = await publerFetch(
-      `/posts?state[]=published_posted&account_ids[]=${encodeURIComponent(publerAccountId)}&page=1`,
-      { method: "GET" },
-      "posts list",
-    );
-    const rows: any[] = Array.isArray(json) ? json : json?.posts ?? json?.data ?? [];
-    const needle = text.trim().slice(0, 80);
-    const match = rows.find(
-      (p) => typeof p?.text === "string" && p.text.trim().startsWith(needle) && p?.post_link,
-    );
-    if (!match) return null;
-    return { postId: String(match.id ?? ""), postLink: String(match.post_link) };
-  } catch {
-    return null;
+  opts: ResolvePublishedPostLinkOptions = {},
+): Promise<ResolvedXStatus | null> {
+  const timeoutMs = opts.timeoutMs ?? POST_LINK_LOOKUP_TIMEOUT_MS;
+  const line = text.trim().split("\n")[0]?.trim() ?? "";
+  const query = opts.search && line ? line.slice(0, 60) : undefined;
+  const steps: Array<{ page: number; query?: string }> = query
+    ? [{ page: 0, query }, { page: 0 }, { page: 1 }]
+    : [{ page: 0 }, { page: 1 }];
+  for (const step of steps) {
+    const rows = await fetchPublishedRows(publerAccountId, step.page, step.query, timeoutMs);
+    if (!rows) return null;
+    const hit = matchPublishedXStatus(rows, text);
+    if (hit) return hit;
+    // نتيجة البحث قد تُسقط post_link. التوقف المبكر فقط للقائمة غير المفلترة:
+    // الصف موجود والرابط لم يُملأ بعد، وصفحة تالية لن تخلقه.
+    if (!step.query && rows.some((row) => rowTextStartsWith(row, publishedPostNeedle(text)))) return null;
   }
+  return null;
+}
+
+export async function pollPublishedPostLink(
+  publerAccountId: string,
+  text: string,
+  opts: { attempts?: number; intervalMs?: number; timeoutMs?: number } = {},
+): Promise<ResolvedXStatus | null> {
+  const attempts = Math.max(1, opts.attempts ?? POST_LINK_POLL_ATTEMPTS);
+  const intervalMs = opts.intervalMs ?? POST_LINK_POLL_INTERVAL_MS;
+  const timeoutMs = opts.timeoutMs ?? POST_LINK_LOOKUP_TIMEOUT_MS;
+  for (let i = 0; i < attempts; i++) {
+    if (i > 0 && intervalMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    }
+    const hit = await resolvePublishedPostLink(publerAccountId, text, { timeoutMs });
+    if (hit) return hit;
+  }
+  return null;
+}
+
+/**
+ * بعد اكتمال مهمة النشر: رابط الحالة من حمولة المهمة إن وُجد (الوثائق لا تضمنه)،
+ * وإلا استطلاع قصير لـ GET /posts. الغياب لا يُفشل النشر: معرف `publer:<jobId>`
+ * ورابط ملف الحساب أو null.
+ */
+export async function resolveExternalRefAfterPublerJob(input: {
+  jobId: string;
+  job: unknown;
+  publerAccountId: string;
+  text: string;
+  handle: string | null | undefined;
+  poll?: { attempts?: number; intervalMs?: number; timeoutMs?: number };
+}): Promise<ProviderPostResult> {
+  const fromJob = findXStatusInJobPayload(input.job);
+  const resolved =
+    fromJob ??
+    (await pollPublishedPostLink(input.publerAccountId, input.text, input.poll ?? {
+      attempts: POST_LINK_POLL_ATTEMPTS,
+      intervalMs: POST_LINK_POLL_INTERVAL_MS,
+      timeoutMs: POST_LINK_LOOKUP_TIMEOUT_MS,
+    }));
+  return buildPublerExternalRef({
+    jobId: input.jobId,
+    handle: input.handle,
+    resolved,
+  });
 }
 
 // ── تطبيق عقد المزود ───────────────────────────────────────────────
@@ -400,24 +626,24 @@ export const publerProvider: SocialPublishProvider = {
 
   async createPost(accountId, input): Promise<ProviderPostResult> {
     const account = await loadPublerLinkedAccount(accountId);
-    const { jobId } = await publishToPublerAccount(account.externalAccountId!, {
+    const { jobId, job } = await publishToPublerAccount(account.externalAccountId!, {
       text: input.text,
       mediaIds: input.mediaIds,
       videoMediaId: input.videoMediaId,
     });
-    // المنشور صدر — حل الرابط تحسين لا شرط، وفشله لا يُفشل النشر
-    const resolved = await resolvePublishedPostLink(account.externalAccountId!, input.text);
-    if (resolved) {
-      return { externalPostId: resolved.postId || `publer:${jobId}`, externalPostUrl: resolved.postLink };
+    // المنشور صدر — غياب post_link لا يُفشل النشر ولا يُصنع رابط من اسم العرض
+    const result = await resolveExternalRefAfterPublerJob({
+      jobId,
+      job,
+      publerAccountId: account.externalAccountId!,
+      text: input.text,
+      handle: account.handle,
+    });
+    if (!parseXStatusUrl(result.externalPostUrl)) {
+      console.warn(
+        `[SocialPublish] Publer job ${jobId} اكتمل دون رابط status — externalPostUrl معلّق حتى يظهر post_link`,
+      );
     }
-    console.warn(
-      `[SocialPublish] Publer job ${jobId} اكتمل لكن تعذر حل رابط المنشور — يُسجل رابط الحساب بدلاً منه`,
-    );
-    return {
-      externalPostId: `publer:${jobId}`,
-      externalPostUrl: account.handle
-        ? `https://x.com/${account.handle}`
-        : "https://app.publer.com/",
-    };
+    return result;
   },
 };

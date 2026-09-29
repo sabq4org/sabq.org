@@ -4,14 +4,20 @@ vi.mock("../../server/db", () => ({ db: {} }));
 
 import {
   activeSocialTransport,
+  buildPublerExternalRef,
   extractMediaIdFromJobPayload,
+  findXStatusInJobPayload,
   listPublerAccounts,
+  needsPublerStatusBackfill,
+  parseXStatusUrl,
   pollPublerJob,
   publerConfigured,
   publishToPublerAccount,
+  resolveExternalRefAfterPublerJob,
   resolvePublishedPostLink,
   uploadImageToPubler,
   uploadVideoToPublerFromUrl,
+  xProfileUrlFromHandle,
 } from "../../server/services/socialPublishing/publerApiClient";
 import { getProvider } from "../../server/services/socialPublishing/socialPublishingService";
 import { SocialProviderError } from "../../server/services/socialPublishing/types";
@@ -213,22 +219,205 @@ describe("publerApiClient — الوسائط والنشر", () => {
     expect(extractMediaIdFromJobPayload({ payload: { failures: {} } })).toBeNull();
   });
 
-  it("حل رابط المنشور: مطابقة النص تعيد post_link والفشل يعيد null بلا رمي", async () => {
+  it("حل رابط المنشور: post_link يُحوَّل لمعرف التغريدة والفشل يعيد null بلا رمي", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse(200, {
+        posts: [
+          { id: "p1", text: "خبر آخر", post_link: "https://x.com/sabqorg/status/1" },
+          {
+            id: "p2",
+            text: "خبر عاجل من سبق",
+            url: "https://sabq.org/article/jrdic6y",
+            post_link: "https://twitter.com/sabqorg/status/2104791827802911159?s=20",
+          },
+        ],
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const hit = await resolvePublishedPostLink("acc-1", "خبر عاجل من سبق");
+    expect(hit).toEqual({
+      tweetId: "2104791827802911159",
+      handle: "sabqorg",
+      statusUrl: "https://x.com/sabqorg/status/2104791827802911159",
+    });
+    expect(String(fetchMock.mock.calls[0][0])).toContain("page=0");
+    expect(String(fetchMock.mock.calls[0][0])).not.toContain("query=");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("boom")));
+    expect(await resolvePublishedPostLink("acc-1", "أي نص")).toBeNull();
+  });
+
+  it("رابط الخبر في url وpost_link الفارغ لا يُعاملان كتغريدة، واسم العرض لا يُقبل", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue(
         jsonResponse(200, {
           posts: [
-            { id: "p1", text: "خبر آخر", post_link: "https://x.com/sabqorg/status/1" },
-            { id: "p2", text: "خبر عاجل من سبق", post_link: "https://x.com/sabqorg/status/2" },
+            {
+              id: "publer-row",
+              text: "خبر عاجل من سبق",
+              url: "https://sabq.org/article/jrdic6y",
+              post_link: "https://x.com/صحيفة سبق الإلكترونية",
+            },
           ],
         }),
       ),
     );
-    const hit = await resolvePublishedPostLink("acc-1", "خبر عاجل من سبق");
-    expect(hit).toEqual({ postId: "p2", postLink: "https://x.com/sabqorg/status/2" });
+    expect(await resolvePublishedPostLink("acc-1", "خبر عاجل من سبق")).toBeNull();
+    expect(parseXStatusUrl("https://x.com/صحيفة سبق الإلكترونية")).toBeNull();
+    expect(xProfileUrlFromHandle("صحيفة سبق الإلكترونية")).toBeNull();
+    expect(xProfileUrlFromHandle("@sabqorg")).toBe("https://x.com/sabqorg");
+  });
 
-    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("boom")));
-    expect(await resolvePublishedPostLink("acc-1", "أي نص")).toBeNull();
+  it("بحث بلا post_link يتبعه جلب الصفحة غير المفلترة التي تحمل رابط الحالة", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse(200, {
+          posts: [{ text: "خبر عاجل من سبق", url: "https://sabq.org/article/jrdic6y" }],
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse(200, {
+          posts: [{
+            text: "خبر عاجل من سبق",
+            post_link: "https://x.com/sabqorg/status/2104791827802911159",
+          }],
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    const hit = await resolvePublishedPostLink("acc-1", "خبر عاجل من سبق", { search: true });
+    expect(hit?.tweetId).toBe("2104791827802911159");
+    expect(String(fetchMock.mock.calls[0][0])).toContain("query=");
+    expect(String(fetchMock.mock.calls[1][0])).not.toContain("query=");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("publerApiClient — رابط الحالة لا يُبنى من اسم العرض", () => {
+  beforeEach(() => {
+    vi.stubEnv("PUBLER_API_KEY", "test-key");
+    vi.stubEnv("PUBLER_WORKSPACE_ID", "ws-1");
+  });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  it("حمولة job_status بلا post_link لا تُنتج رابطاً، واسم العرض يبقى null", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse(200, {
+        posts: [{ id: "p1", text: "خبر عاجل من سبق", url: "https://sabq.org/article/jrdic6y", post_link: null }],
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    expect(findXStatusInJobPayload({ status: "complete", result: { payload: { failures: {} } } })).toBeNull();
+
+    const pending = await resolveExternalRefAfterPublerJob({
+      jobId: "6abb3fc20d073712d4416efc",
+      job: { status: "complete", result: { payload: { failures: {} } } },
+      publerAccountId: "acc-1",
+      text: "خبر عاجل من سبق",
+      handle: "صحيفة سبق الإلكترونية",
+      poll: { attempts: 1, intervalMs: 0 },
+    });
+    expect(pending.externalPostId).toBe("publer:6abb3fc20d073712d4416efc");
+    expect(pending.externalPostUrl).toBeNull();
+    expect(JSON.stringify(pending)).not.toContain("صحيفة");
+
+    const profile = buildPublerExternalRef({
+      jobId: "job-1",
+      handle: "sabqorg",
+      resolved: null,
+    });
+    expect(profile).toEqual({
+      externalPostId: "publer:job-1",
+      externalPostUrl: "https://x.com/sabqorg",
+    });
+  });
+
+  it("يستطلع GET /posts حتى يظهر post_link ثم يحفظ معرف التغريدة لا معرف Publer", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse(200, {
+          posts: [{
+            text: "خبر عاجل من سبق\nhttps://sabq.org/article/jrdic6y",
+            post_link: null,
+            url: "https://sabq.org/article/jrdic6y",
+          }],
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse(200, {
+          posts: [{
+            id: "publer-post",
+            text: "خبر عاجل من سبق\nhttps://sabq.org/article/jrdic6y",
+            post_link: "https://x.com/sabqorg/status/2104791827802911159",
+          }],
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    const result = await resolveExternalRefAfterPublerJob({
+      jobId: "6abb3fc20d073712d4416efc",
+      job: { status: "complete", result: { payload: { failures: {} } } },
+      publerAccountId: "acc-1",
+      text: "خبر عاجل من سبق\nhttps://sabq.org/article/jrdic6y",
+      handle: "صحيفة سبق الإلكترونية",
+      poll: { attempts: 2, intervalMs: 0 },
+    });
+    expect(result).toEqual({
+      externalPostId: "2104791827802911159",
+      externalPostUrl: "https://x.com/sabqorg/status/2104791827802911159",
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("إن أعادت الحمولة post_link نستخدمه بلا نداء لقائمة المنشورات", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const result = await resolveExternalRefAfterPublerJob({
+      jobId: "job-9",
+      job: {
+        status: "complete",
+        result: { payload: { post_link: "https://twitter.com/sabqorg/status/99" } },
+      },
+      publerAccountId: "acc-1",
+      text: "نص",
+      handle: "sabqorg",
+      poll: { attempts: 3, intervalMs: 0 },
+    });
+    expect(result.externalPostId).toBe("99");
+    expect(result.externalPostUrl).toBe("https://x.com/sabqorg/status/99");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("needsPublerStatusBackfill للمنشور المعلّق فقط، بما فيه بعد الجدولة حين يُنشر", () => {
+    expect(needsPublerStatusBackfill({
+      status: "published",
+      externalPostId: "publer:6abb3fc20d073712d4416efc",
+      externalPostUrl: "https://x.com/صحيفة سبق الإلكترونية",
+    })).toBe(true);
+    expect(needsPublerStatusBackfill({
+      status: "published",
+      externalPostId: "publer:job",
+      externalPostUrl: "https://x.com/sabqorg",
+    })).toBe(true);
+    expect(needsPublerStatusBackfill({
+      status: "published",
+      externalPostId: "publer:job",
+      externalPostUrl: "https://x.com/sabqorg/status/2104791827802911159",
+    })).toBe(false);
+    expect(needsPublerStatusBackfill({
+      status: "scheduled",
+      externalPostId: "publer:job",
+      externalPostUrl: null,
+    })).toBe(false);
+    expect(needsPublerStatusBackfill({
+      status: "published",
+      externalPostId: "2104791827802911159",
+      externalPostUrl: "https://x.com/sabqorg/status/2104791827802911159",
+    })).toBe(false);
   });
 });

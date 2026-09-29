@@ -10,7 +10,13 @@ export interface ProviderIdentity {
 
 export interface ProviderPostResult {
   externalPostId: string;
-  externalPostUrl: string;
+  /**
+   * رابط الحالة على X عند توفره (`https://x.com/{handle}/status/{id}`).
+   * مع Publer قد يتأخر ظهور `post_link`: عندها رابط الملف
+   * `https://x.com/{handle}` فقط إن كان handle معرفاً صالحاً مخزناً، وإلا null.
+   * لا يُبنى الرابط من اسم العرض. القراءة اللاحقة قد تملأ رابط الحالة.
+   */
+  externalPostUrl: string | null;
 }
 
 /** خطأ مزود مصنَّف — retryable يقود قرار إعادة المحاولة في العامل */

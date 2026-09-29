@@ -161,7 +161,7 @@ Authorization: Bearer <SABQ_BOT_SOCIAL_TOKEN>
 
 فشل المزوّد: `502 publish_failed` مع `post.status = "failed"` و`lastError`. أعد نفس `clientReference` بعد التصحيح؛ لا يُنشأ صف ثانٍ. النشر الفوري الفاشل لا يُعاد تلقائياً (نفس سلوك اللوحة). إذا كان `lastError` «انتهت مهلة تأكيد مهمة Publer» فالحالة مجهولة وقد تكون التغريدة صدرت — تحقق من الحساب قبل إعادة المحاولة، لأن الإعادة تستدعي المزوّد من جديد.
 
-مع Publer قد يتأخر `externalPostUrl` أو يكون رابط الحساب إذا تعذر حل `post_link`. المعرف عندها `publer:<jobId>`.
+مع Publer قد يتأخر `externalPostUrl` حتى يظهر `post_link` في `GET /posts` (حقل `job_status` لا يعيد رابط التغريدة). قبل ذلك يكون `externalPostId` = `publer:<jobId>` و`externalPostUrl` إما `https://x.com/{handle}` إن كان handle معرفاً صالحاً مخزناً (مثل `sabqorg`) أو `null`. اسم العرض لا يُستخدم في الرابط، والحقل معلّق. عند ظهور الرابط تُخزَّن القيمة `https://x.com/{handle}/status/{tweetId}` ويصبح `externalPostId` معرف التغريدة.
 
 ### جدولة
 
@@ -176,7 +176,7 @@ Authorization: Bearer <SABQ_BOT_SOCIAL_TOKEN>
 }
 ```
 
-الوقت ISO مع إزاحة (`Z` مقبول). بعد أكثر من دقيقة وأقل من سنة. الرد `post.status = "scheduled"` و`scheduledAt`. العامل (`socialPublishWorker`) ينشر كل دقيقة. إذا كان المرجع قد نُشر: `idempotentReplay: true` بلا تغريدة جديدة. إعادة الجدولة لنفس المرجع المجدول تحدّث الموعد. بعد فشل استُنفدت محاولاته تُصفَّر `attempts` حتى يلتقطه العامل.
+الوقت ISO مع إزاحة (`Z` مقبول). بعد أكثر من دقيقة وأقل من سنة. الرد `post.status = "scheduled"` و`scheduledAt`. العامل (`socialPublishWorker`) ينشر كل دقيقة عبر نفس `createPost`، فيُستطلع `post_link` بعد النشر مثل الفوري. إذا كان المرجع قد نُشر: `idempotentReplay: true` بلا تغريدة جديدة، وتُستكمل قراءة الرابط إن كان ما زال معلّقاً. إعادة الجدولة لنفس المرجع المجدول تحدّث الموعد. بعد فشل استُنفدت محاولاته تُصفَّر `attempts` حتى يلتقطه العامل.
 
 ### إلغاء الجدولة
 
@@ -221,6 +221,8 @@ Authorization: Bearer <SABQ_BOT_SOCIAL_TOKEN>
 `GET /api/internal/bot-social/posts?limit=20&articleId=ART_ID&status=scheduled` → `{ "posts": [ ... ] }`
 
 `limit` من 1 إلى 50، والافتراضي 20. القائمة لمنشورات هذا البوت فقط.
+
+منشور Publer بحالة `published` ومعرف `publer:…` بلا رابط `/status/` يُعاد فحصه عند هذه القراءة (التفاصيل، أو `clientReference`، أو القائمة حتى 8 صفوف معلّقة). إن وُجد `post_link` يُخزَّن رابط الحالة ومعرف التغريدة على الصف نفسه. إن لم يُوجد يُستبدل أي رابط مبني من اسم العرض برابط الملف أو `null`، ويبقى المعرف `publer:<jobId>` حتى قراءة لاحقة. المنشور المجدول لا يُفحص قبل أن يصبح `published`.
 
 حالات `status`: `draft | scheduled | processing | published | failed | canceled`.
 
