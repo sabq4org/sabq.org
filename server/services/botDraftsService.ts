@@ -9,7 +9,7 @@
 // ----------------------------------------------------------------------------
 
 import crypto from "node:crypto";
-import { and, eq, gt, inArray, sql, type SQL } from "drizzle-orm";
+import { and, eq, gt, inArray, isNull, sql, type SQL } from "drizzle-orm";
 import { db } from "../db";
 import { articleEditLocks, articles, categories, enArticles, users } from "@shared/schema";
 import { SABQ_NEWSPAPER_ACCOUNT_ID } from "@shared/sabqNewspaper";
@@ -66,6 +66,7 @@ export class BotDraftError extends Error {
 export interface BotIdentity {
   /** اسم البوت كما في متغير البيئة — يُسجَّل في sourceMetadata وسجل الأحداث. */
   name: string;
+  personal?: import("@shared/botPublisherTokens").BotPublisherPrincipal;
 }
 
 interface BotTokenEntry extends BotIdentity {
@@ -732,7 +733,7 @@ export function toBotDraftResponse(row: ArticleRow, categorySlug: string | null 
     hideFromHomepage: row.hideFromHomepage === true,
     bot: meta.bot ?? null,
     clientReference: meta.clientReference ?? null,
-    notes: meta.notes ?? null,
+    notes: [meta.notes, meta.scheduleFailure?.reason].filter(Boolean).join("\n") || null,
     editUrl: botDraftEditUrl(row.id),
     previewUrl: botDraftPreviewUrl(row.id),
     publicUrl: botDraftPublicUrl(row.englishSlug, row.slug),
@@ -850,16 +851,38 @@ export function reporterIdForBotDraftUpdate(
   return isMissingBotDraftReporter(existingReporterId) ? authorUserId : undefined;
 }
 
-async function findArticleById(articleId: string): Promise<ArticleRow | null> {
-  const [row] = await db.select().from(articles).where(eq(articles.id, articleId)).limit(1);
+/** Personal tokens never inherit the legacy service token's shared article scope. */
+export function personalOwnershipWhere(bot?: BotIdentity): SQL | undefined {
+  if (!bot?.personal) return undefined;
+  return and(
+    sql`${articles.sourceMetadata}->>'publisherUserId' = ${bot.personal.userId}`,
+    bot.personal.publisherId ? eq(articles.publisherId, bot.personal.publisherId) : isNull(articles.publisherId),
+  );
+}
+
+export function assertPersonalCapability(bot: BotIdentity, capability: import("@shared/botPublisherTokens").BotPublisherCapability): void {
+  if (bot.personal && !bot.personal.capabilities.includes(capability)) {
+    throw new BotDraftError(403, "forbidden_action", "حسابك لا يملك صلاحية هذه العملية");
+  }
+}
+
+async function assertPersonalPublishLicense(bot: BotIdentity): Promise<void> {
+  if (!bot.personal) return;
+  const { assertMediaLicenseAllowsSubmission } = await import("./mediaLicenseService");
+  const gate = await assertMediaLicenseAllowsSubmission(bot.personal.userId);
+  if (!gate.ok) throw new BotDraftError(403, "license_required", gate.message, { licenseCode: gate.code });
+}
+
+async function findArticleById(articleId: string, bot?: BotIdentity): Promise<ArticleRow | null> {
+  const [row] = await db.select().from(articles).where(and(eq(articles.id, articleId), personalOwnershipWhere(bot))).limit(1);
   return row ?? null;
 }
 
-async function findBotArticle(articleId: string): Promise<ArticleRow | null> {
+async function findBotArticle(articleId: string, bot?: BotIdentity): Promise<ArticleRow | null> {
   const [row] = await db
     .select()
     .from(articles)
-    .where(and(eq(articles.id, articleId), eq(articles.source, BOT_DRAFT_SOURCE)))
+    .where(and(eq(articles.id, articleId), eq(articles.source, BOT_DRAFT_SOURCE), personalOwnershipWhere(bot)))
     .limit(1);
   return row ?? null;
 }
@@ -895,6 +918,7 @@ export async function createBotDraft(
   input: BotDraftCreateInput,
   ctx: BotRequestContext = {},
 ): Promise<BotDraftResponse> {
+  assertPersonalCapability(bot, "create");
   await assertBotSubtitle(input.subtitle);
   const { authorId, reporterId } = attributionForBotDraftCreate(await resolveBotAuthorId());
   const category = await resolveCategory(input);
@@ -914,6 +938,12 @@ export async function createBotDraft(
       categoryId: category?.id ?? null,
       authorId,
       reporterId,
+      ...(bot.personal ? {
+        submitterId: bot.personal.userId,
+        publisherId: bot.personal.publisherId ?? null,
+        isPublisherNews: Boolean(bot.personal.publisherId),
+        publisherSubmittedAt: bot.personal.publisherId ? now : null,
+      } : {}),
       articleType: "news",
       newsType: "regular",
       publishType: "instant",
@@ -928,6 +958,11 @@ export async function createBotDraft(
       sourceMetadata: {
         type: "bot",
         bot: bot.name,
+        ...(bot.personal ? {
+          publisherUserId: bot.personal.userId,
+          publisherTokenId: bot.personal.tokenId,
+          publisherOwnerUserId: bot.personal.publisherOwnerUserId,
+        } : {}),
         clientReference: input.clientReference,
         notes: input.notes ?? undefined,
         receivedAt: now.toISOString(),
@@ -943,8 +978,9 @@ export async function createBotDraft(
   return toBotDraftResponse(row, category?.slug ?? null);
 }
 
-export async function getBotDraft(articleId: string): Promise<BotDraftResponse | null> {
-  const row = await findBotArticle(articleId);
+export async function getBotDraft(articleId: string, bot?: BotIdentity): Promise<BotDraftResponse | null> {
+  if (bot) assertPersonalCapability(bot, "read");
+  const row = await findBotArticle(articleId, bot);
   if (!row) return null;
   return toBotDraftResponse(row, await categorySlugFor(row.categoryId));
 }
@@ -955,7 +991,8 @@ export async function updateBotDraft(
   input: BotDraftUpdateInput,
   ctx: BotRequestContext = {},
 ): Promise<BotDraftResponse> {
-  const existing = await findArticleById(articleId);
+  assertPersonalCapability(bot, "edit");
+  const existing = await findArticleById(articleId, bot);
   const block = botDraftContentEditBlock(existing);
   if (block || !existing) {
     throw new BotDraftError(
@@ -1022,7 +1059,7 @@ export async function updateBotDraft(
   const [row] = await db
     .update(articles)
     .set(patch)
-    .where(and(eq(articles.id, articleId), eq(articles.status, BOT_DRAFT_STATUS), eq(articles.source, BOT_DRAFT_SOURCE)))
+    .where(and(eq(articles.id, articleId), eq(articles.status, BOT_DRAFT_STATUS), eq(articles.source, BOT_DRAFT_SOURCE), personalOwnershipWhere(bot)))
     .returning();
   if (!row) {
     // سباق: تغيّرت الحالة بين القراءة والكتابة
@@ -1076,7 +1113,7 @@ async function updatePublishedBotArticle(
   const [row] = await db
     .update(articles)
     .set(patch)
-    .where(and(eq(articles.id, existing.id), eq(articles.status, "published"), eq(articles.source, BOT_DRAFT_SOURCE)))
+    .where(and(eq(articles.id, existing.id), eq(articles.status, "published"), eq(articles.source, BOT_DRAFT_SOURCE), personalOwnershipWhere(bot)))
     .returning();
   if (!row) {
     throw new BotDraftError(409, "not_a_draft", "تغيّرت حالة المادة أثناء التحديث", { status: "unknown" });
@@ -1087,8 +1124,8 @@ async function updatePublishedBotArticle(
   if (plan) {
     await recordArticleRevision({
       articleId: row.id,
-      editorUserId: row.authorId,
-      editorName: `بوت ${bot.name}`,
+      editorUserId: bot.personal?.userId ?? row.authorId,
+      editorName: bot.personal?.name ?? `بوت ${bot.name}`,
       plan,
     });
   }
@@ -1118,7 +1155,8 @@ export async function markBotDraftReady(
   articleId: string,
   ctx: BotRequestContext = {},
 ): Promise<BotDraftResponse> {
-  const existing = await findBotArticle(articleId);
+  assertPersonalCapability(bot, "ready");
+  const existing = await findBotArticle(articleId, bot);
   if (!existing) {
     throw new BotDraftError(404, "not_found", "المسودة غير موجودة");
   }
@@ -1138,7 +1176,7 @@ export async function markBotDraftReady(
   const [row] = await db
     .update(articles)
     .set({ status: BOT_DRAFT_READY_STATUS, updatedAt: new Date() })
-    .where(and(eq(articles.id, articleId), eq(articles.status, BOT_DRAFT_STATUS), eq(articles.source, BOT_DRAFT_SOURCE)))
+    .where(and(eq(articles.id, articleId), eq(articles.status, BOT_DRAFT_STATUS), eq(articles.source, BOT_DRAFT_SOURCE), personalOwnershipWhere(bot)))
     .returning();
   if (!row) {
     throw new BotDraftError(409, "not_a_draft", "تغيّرت حالة المادة أثناء التعليم", { status: "unknown" });
@@ -1197,11 +1235,12 @@ async function assertBotDraftBylineMayPublish(row: ArticleRow): Promise<void> {
   }
 }
 
-function releasableWhere(articleId: string) {
+function releasableWhere(articleId: string, bot: BotIdentity) {
   return and(
     eq(articles.id, articleId),
     eq(articles.source, BOT_DRAFT_SOURCE),
     inArray(articles.status, [...BOT_DRAFT_PUBLISHABLE_STATUSES]),
+    personalOwnershipWhere(bot),
   );
 }
 
@@ -1233,10 +1272,12 @@ export async function publishBotDraft(
   articleId: string,
   ctx: BotRequestContext = {},
 ): Promise<BotDraftResponse> {
-  const existing = await findBotArticle(articleId);
+  assertPersonalCapability(bot, "publish");
+  const existing = await findBotArticle(articleId, bot);
   throwIfNotReleasable(existing);
   await throwIfEditLocked(articleId);
   await assertBotDraftBylineMayPublish(existing);
+  await assertPersonalPublishLicense(bot);
   await assertBotSensitiveRelease(existing.id, existing.riskLabel);
 
   const now = new Date();
@@ -1245,7 +1286,7 @@ export async function publishBotDraft(
     patch.englishSlug = generateEnglishSlug(existing.title);
   }
 
-  const [row] = await db.update(articles).set(patch).where(releasableWhere(articleId)).returning();
+  const [row] = await db.update(articles).set(patch).where(releasableWhere(articleId, bot)).returning();
   if (!row) {
     throw new BotDraftError(409, "not_a_draft", "تغيّرت حالة المادة أثناء النشر", { status: "unknown" });
   }
@@ -1278,6 +1319,7 @@ export async function scheduleBotDraft(
   publishAt: Date,
   ctx: BotRequestContext = {},
 ): Promise<BotDraftResponse> {
+  assertPersonalCapability(bot, "schedule");
   if (!(publishAt instanceof Date) || Number.isNaN(publishAt.getTime()) || publishAt.getTime() <= Date.now()) {
     throw new BotDraftError(
       400,
@@ -1287,10 +1329,11 @@ export async function scheduleBotDraft(
     );
   }
 
-  const existing = await findBotArticle(articleId);
+  const existing = await findBotArticle(articleId, bot);
   throwIfNotReleasable(existing);
   await throwIfEditLocked(articleId);
   await assertBotDraftBylineMayPublish(existing);
+  await assertPersonalPublishLicense(bot);
   await assertBotSensitiveRelease(existing.id, existing.riskLabel);
 
   const now = new Date();
@@ -1299,7 +1342,11 @@ export async function scheduleBotDraft(
     patch.englishSlug = generateEnglishSlug(existing.title);
   }
 
-  const [row] = await db.update(articles).set(patch).where(releasableWhere(articleId)).returning();
+  if (bot.personal) Object.assign(patch, {
+    sourceMetadata: { ...existing!.sourceMetadata, publisherTokenId: bot.personal.tokenId, scheduleFailure: undefined },
+  });
+
+  const [row] = await db.update(articles).set(patch).where(releasableWhere(articleId, bot)).returning();
   if (!row) {
     throw new BotDraftError(409, "not_a_draft", "تغيّرت حالة المادة أثناء الجدولة", { status: "unknown" });
   }
@@ -1337,8 +1384,10 @@ export async function archiveBotDraft(
   input: BotDraftArchiveInput = {},
   ctx: BotRequestContext = {},
 ): Promise<BotDraftResponse> {
-  const existing = await findBotArticle(articleId);
-  throwLifecycleBlock(botDraftPublishedBlock(existing));
+  assertPersonalCapability(bot, "archive");
+  const existing = await findBotArticle(articleId, bot);
+  const archivable = bot.personal && existing && ["draft", "ready_to_publish", "scheduled", "published"].includes(existing.status);
+  if (!archivable) throwLifecycleBlock(botDraftPublishedBlock(existing));
   await throwIfEditLocked(articleId);
 
   const now = new Date();
@@ -1346,7 +1395,7 @@ export async function archiveBotDraft(
   const [row] = await db
     .update(articles)
     .set(patch)
-    .where(and(eq(articles.id, articleId), eq(articles.source, BOT_DRAFT_SOURCE), eq(articles.status, "published")))
+    .where(and(eq(articles.id, articleId), eq(articles.source, BOT_DRAFT_SOURCE), eq(articles.status, existing!.status), personalOwnershipWhere(bot)))
     .returning();
   if (!row) {
     throw new BotDraftError(409, "not_published", "تغيّرت حالة المادة أثناء الأرشفة", { status: "unknown" });
@@ -1381,6 +1430,7 @@ export async function rescheduleBotDraft(
   publishAt: Date,
   ctx: BotRequestContext = {},
 ): Promise<BotDraftResponse> {
+  assertPersonalCapability(bot, "reschedule");
   if (!(publishAt instanceof Date) || Number.isNaN(publishAt.getTime()) || publishAt.getTime() <= Date.now()) {
     throw new BotDraftError(
       400,
@@ -1390,16 +1440,23 @@ export async function rescheduleBotDraft(
     );
   }
 
-  const existing = await findBotArticle(articleId);
+  const existing = await findBotArticle(articleId, bot);
   throwLifecycleBlock(botDraftScheduledBlock(existing));
   await throwIfEditLocked(articleId);
 
+  await assertPersonalPublishLicense(bot);
+  await assertBotSensitiveRelease(existing!.id, existing!.riskLabel);
+
   const now = new Date();
   const patch = buildBotDraftRescheduleUpdate(publishAt, now);
+  if (bot.personal) Object.assign(patch, {
+    sourceMetadata: { ...existing!.sourceMetadata, publisherTokenId: bot.personal.tokenId, scheduleFailure: undefined },
+  });
+
   const [row] = await db
     .update(articles)
     .set(patch)
-    .where(and(eq(articles.id, articleId), eq(articles.source, BOT_DRAFT_SOURCE), eq(articles.status, "scheduled")))
+    .where(and(eq(articles.id, articleId), eq(articles.source, BOT_DRAFT_SOURCE), eq(articles.status, "scheduled"), personalOwnershipWhere(bot)))
     .returning();
   if (!row) {
     throw new BotDraftError(409, "not_scheduled", "تغيّرت حالة المادة أثناء تغيير الموعد", { status: "unknown" });
@@ -1431,7 +1488,8 @@ export async function unscheduleBotDraft(
   articleId: string,
   ctx: BotRequestContext = {},
 ): Promise<BotDraftResponse> {
-  const existing = await findBotArticle(articleId);
+  assertPersonalCapability(bot, "cancelSchedule");
+  const existing = await findBotArticle(articleId, bot);
   throwLifecycleBlock(botDraftScheduledBlock(existing));
   await throwIfEditLocked(articleId);
 
@@ -1440,7 +1498,7 @@ export async function unscheduleBotDraft(
   const [row] = await db
     .update(articles)
     .set(patch)
-    .where(and(eq(articles.id, articleId), eq(articles.source, BOT_DRAFT_SOURCE), eq(articles.status, "scheduled")))
+    .where(and(eq(articles.id, articleId), eq(articles.source, BOT_DRAFT_SOURCE), eq(articles.status, "scheduled"), personalOwnershipWhere(bot)))
     .returning();
   if (!row) {
     throw new BotDraftError(409, "not_scheduled", "تغيّرت حالة المادة أثناء إلغاء الجدولة", { status: "unknown" });
@@ -1474,7 +1532,10 @@ export async function updateBotDraftVisibility(
   input: BotDraftVisibilityInput,
   ctx: BotRequestContext = {},
 ): Promise<BotDraftResponse> {
-  const existing = await findBotArticle(articleId);
+  if (input.isFeatured !== undefined) assertPersonalCapability(bot, input.isFeatured ? "featured" : "unfeatured");
+  if (input.newsType !== undefined) assertPersonalCapability(bot, input.newsType === "breaking" ? "breaking" : "regular");
+  if (input.hideFromHomepage !== undefined) assertPersonalCapability(bot, input.hideFromHomepage ? "hide" : "show");
+  const existing = await findBotArticle(articleId, bot);
   throwLifecycleBlock(botDraftPublishedBlock(existing));
   await throwIfEditLocked(articleId);
 
@@ -1483,7 +1544,7 @@ export async function updateBotDraftVisibility(
   const [row] = await db
     .update(articles)
     .set(patch)
-    .where(and(eq(articles.id, articleId), eq(articles.source, BOT_DRAFT_SOURCE), eq(articles.status, "published")))
+    .where(and(eq(articles.id, articleId), eq(articles.source, BOT_DRAFT_SOURCE), eq(articles.status, "published"), personalOwnershipWhere(bot)))
     .returning();
   if (!row) {
     throw new BotDraftError(409, "not_published", "تغيّرت حالة المادة أثناء تحديث الظهور", { status: "unknown" });
@@ -1537,7 +1598,9 @@ async function recordEvent(
   activityAction?: string,
   extraMetadata?: Record<string, unknown>,
 ): Promise<void> {
+  actorId = bot.personal?.userId ?? actorId;
   const metadata = {
+    ...(bot.personal ? { userId: bot.personal.userId, tokenId: bot.personal.tokenId } : {}),
     bot: bot.name,
     clientReference: clientReference ?? null,
     channel: "bot-drafts-api",

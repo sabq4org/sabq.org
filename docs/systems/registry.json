@@ -1,7 +1,7 @@
 {
   "$schemaNote": "Machine-readable catalog of Sabq product systems. Consumed by scripts/systems-inventory.mjs and /api/admin/systems-catalog. aiFeatureKeys must be exclusive (one system owner) to avoid double-counting.",
   "version": 2,
-  "updatedAt": "2026-09-27",
+  "updatedAt": "2026-09-29",
   "systems": [
     {
       "id": "account-center",
@@ -381,7 +381,8 @@
         "scripts/prompt-audit/**",
         "tests/unit/editorialJsonSchema.test.ts",
         "tests/unit/dataStoryStructuredOutputs.test.ts",
-        "tests/unit/structuredOutputsComparison.test.ts"
+        "tests/unit/structuredOutputsComparison.test.ts",
+        "server/services/botPersonalScheduleService.ts"
       ],
       "aiFeatureKeys": [
         "content-tools",
@@ -904,14 +905,18 @@
         "client/src/components/EditUserDialog.tsx",
         "e2e/edit-user-biography.spec.ts",
         "cloudflare-worker/public-api-burst-cache.js",
-        "tests/unit/apiOriginWorkerBurst.test.ts"
+        "tests/unit/apiOriginWorkerBurst.test.ts",
+        "shared/botPublisherTokens.ts",
+        "server/services/botPublisherTokenService.ts",
+        "server/routes/botPublisherTokens.ts",
+        "client/src/pages/dashboard/PublisherTokensPage.tsx"
       ],
       "aiFeatureKeys": [],
       "dashboardPath": "/dashboard/roles",
       "owners": [
         "platform"
       ],
-      "lastReviewed": "2026-09-27"
+      "lastReviewed": "2026-09-29"
     },
     {
       "id": "seo-ssr",

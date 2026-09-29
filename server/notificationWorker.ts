@@ -1,3 +1,4 @@
+import { personalBotScheduledWriteCondition, stopUnauthorizedPersonalSchedule } from "./services/botPersonalScheduleService";
 import { isLeader } from "./leaderElection";
 import type { ScheduledTask } from "node-cron";
 import cron from "./leaderCron";
@@ -350,6 +351,16 @@ async function publishScheduledArticles() {
           }
         }
 
+        // A scheduled personal-bot operation must still be authorized at execution time.
+        if (article.source === "bot" && article.sourceMetadata?.publisherUserId) {
+          const { personalBotScheduledReleaseAllowed } = await import("./services/botPersonalScheduleService");
+          if (!await personalBotScheduledReleaseAllowed(article)) {
+            console.warn(`[ScheduledPublisher] personal authorization no longer valid for ${article.id}`);
+            await stopUnauthorizedPersonalSchedule(article);
+            continue;
+          }
+        }
+
         const publishTime = new Date();
         
         const [published] = await db
@@ -360,9 +371,14 @@ async function publishScheduledArticles() {
             updatedAt: publishTime,
           })
           .where(and(eq(articles.id, article.id), eq(articles.status, "scheduled"),
-            lte(articles.scheduledAt, publishTime)))
+            lte(articles.scheduledAt, publishTime), personalBotScheduledWriteCondition(article)))
           .returning({ id: articles.id });
         if (!published) continue;
+
+        if (article.source === "bot" && article.sourceMetadata?.publisherUserId) {
+          const { recordPersonalBotScheduledPublish } = await import("./services/botPersonalScheduleService");
+          await recordPersonalBotScheduledPublish(article);
+        }
 
         console.log(`[ScheduledPublisher] Published article: ${article.id} - ${article.title}`);
 
@@ -485,7 +501,7 @@ async function publishScheduledArticles() {
         try {
           const { logActivity } = await import("./rbac");
           await logActivity({
-            userId: article.authorId,
+            userId: article.source === "bot" ? article.sourceMetadata?.publisherUserId ?? article.authorId : article.authorId,
             action: 'ArticlePublished',
             entityType: 'Article',
             entityId: article.id,

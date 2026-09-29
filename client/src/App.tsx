@@ -299,6 +299,7 @@ const SuspiciousWordsManagement = lazy(() => retryImport(() => import("@/pages/a
 // === LAZY IMPORTS (System Settings) ===
 const StoryAdmin = lazy(() => retryImport(() => import("@/pages/StoryAdmin")));
 const SystemSettings = lazy(() => retryImport(() => import("@/pages/SystemSettings")));
+const PublisherTokensPage = lazy(() => retryImport(() => import("@/pages/dashboard/PublisherTokensPage")));
 const SportsTournamentsAdmin = lazy(() => retryImport(() => import("@/pages/dashboard/SportsTournamentsAdmin")));
 const Wc2026NumbersReportPage = lazy(() => retryImport(() => import("@/pages/dashboard/Wc2026NumbersReportPage")));
 const AutoImageSettings = lazy(() => retryImport(() => import("@/pages/AutoImageSettings")));
@@ -985,6 +986,15 @@ function Router() {
         <Route path="/dashboard/meetings/room/:id">{() => <LazyRoute component={MeetingRoomPage} />}</Route>
         <Route path="/dashboard/meetings/:id">{() => <LazyRoute component={MeetingDetailPage} />}</Route>
         <Route path="/dashboard/roles">{() => <LazyRoute component={RolesManagement} />}</Route>
+        <Route path="/dashboard/publisher-tokens">
+          {() => (
+            <ProtectedRoute requireStaff={true} requireAnyPermission={["system.manage_settings"]}>
+              <Suspense fallback={<PageLoader />}>
+                <PublisherTokensPage />
+              </Suspense>
+            </ProtectedRoute>
+          )}
+        </Route>
         <Route path="/dashboard/push-notifications">{() => <LazyRoute component={PushNotifications} />}</Route>
         
         {/* Advertising Dashboard - Arabic only */}

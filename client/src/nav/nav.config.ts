@@ -1146,6 +1146,15 @@ export const navConfig: NavItem[] = [
         permissions: ["system.manage_settings"],
       },
       {
+        id: "publisher_tokens",
+        labelKey: "nav.publisher_tokens",
+        labelAr: "توكنات نشر سبق",
+        path: "/dashboard/publisher-tokens",
+        icon: KeyRound,
+        roles: ["admin", "system_admin"],
+        permissions: ["system.manage_settings"],
+      },
+      {
         id: "sports_tournaments",
         labelKey: "nav.sports_tournaments",
         labelAr: "البطولات الرياضية",

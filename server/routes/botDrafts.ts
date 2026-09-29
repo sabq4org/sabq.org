@@ -50,6 +50,7 @@ import { verifyImageMagicBytes } from "../utils/imageVerify";
 import {
   BotDraftError,
   authenticateBotToken,
+  assertPersonalCapability,
   createBotDraft,
   archiveBotDraft,
   getBotDraft,
@@ -65,7 +66,14 @@ import {
   type BotIdentity,
 } from "../services/botDraftsService";
 
+import { authenticatePublisherToken } from "../services/botPublisherTokenService";
+
 const router = Router();
+// Authentication failures are bounded too; internal routes bypass the global limiter.
+router.use(BOT_DRAFTS_BASE_PATH, rateLimit({
+  windowMs: 60_000, limit: 120, skipSuccessfulRequests: true, standardHeaders: true, legacyHeaders: false,
+  validate: { xForwardedForHeader: false },
+}));
 
 type BotRequest = Request & { bot?: BotIdentity };
 
@@ -73,18 +81,34 @@ function sendError(res: Response, status: number, body: BotDraftErrorBody): void
   res.status(status).json(body);
 }
 
-function requireBotToken(req: BotRequest, res: Response, next: NextFunction) {
+async function requireBotToken(req: BotRequest, res: Response, next: NextFunction) {
   res.setHeader("Cache-Control", "private, no-store");
-  if (!isBotDraftsConfigured()) {
-    return sendError(res, 503, { code: "not_configured", message: "واجهة مسودات البوتات غير مفعّلة على هذا الخادم" });
-  }
-  const bot = authenticateBotToken(req.headers.authorization);
-  if (!bot) {
+  try {
+    const raw = /^Bearer\s+(.+)$/i.exec(req.headers.authorization?.trim() ?? "")?.[1]?.trim();
+    if (raw?.startsWith("botpub_")) {
+      const personal = await authenticatePublisherToken(raw);
+      if (personal) {
+        req.bot = { name: `publisher-${personal.userId}`, personal };
+        return next();
+      }
+    } else {
+      if (!isBotDraftsConfigured()) {
+        return sendError(res, 503, { code: "not_configured", message: "واجهة مسودات البوتات غير مفعّلة على هذا الخادم" });
+      }
+      const legacy = authenticateBotToken(req.headers.authorization);
+      if (legacy) { req.bot = legacy; return next(); }
+    }
     res.setHeader("WWW-Authenticate", 'Bearer realm="sabq-bot-drafts"');
-    return sendError(res, 401, { code: "unauthorized", message: "توكن غير صالح أو مفقود" });
+    return sendError(res, 401, { code: "unauthorized", message: "توكن غير صالح أو منتهي أو ملغى" });
+  } catch (error) {
+    console.error("[BotDrafts] personal authentication unavailable");
+    sendError(res, 503, { code: "server_error", message: "خدمة التحقق من الربط غير متاحة مؤقتًا" });
   }
-  req.bot = bot;
-  next();
+}
+
+function requireUploadCapability(req: BotRequest, res: Response, next: NextFunction) {
+  try { assertPersonalCapability(req.bot!, "upload"); next(); }
+  catch (error) { handleError(res, error, "upload-authorize"); }
 }
 
 // محدد خاص بالبوتات: المسار معفى من محدد الكتابة العام (Railway egress واحد).
@@ -206,6 +230,7 @@ router.post(
   BOT_DRAFTS_IMAGES_PATH,
   requireBotToken,
   botWriteLimiter,
+  requireUploadCapability,
   parseBotImageUpload,
   async (req: BotRequest, res: Response) => {
     const file = req.file;
@@ -266,9 +291,18 @@ router.post(
   },
 );
 
+router.get(`${BOT_DRAFTS_BASE_PATH}/me`, requireBotToken, (req: BotRequest, res: Response) => {
+  const principal = req.bot?.personal;
+  if (!principal) return sendError(res, 403, { code: "forbidden_action", message: "يتطلب الربط توكن مستخدم شخصي" });
+  res.json({
+    user: { id: principal.userId, email: principal.email, name: principal.name },
+    tokenId: principal.tokenId, expiresAt: principal.expiresAt, capabilities: principal.capabilities,
+  });
+});
+
 router.get(`${BOT_DRAFTS_BASE_PATH}/:id`, requireBotToken, async (req: BotRequest, res: Response) => {
   try {
-    const draft = await getBotDraft(req.params.id);
+    const draft = await getBotDraft(req.params.id, req.bot!);
     if (!draft) {
       return sendError(res, 404, { code: "not_found", message: "المسودة غير موجودة" });
     }
@@ -349,6 +383,7 @@ router.post(
   botWriteLimiter,
   rejectForbiddenFields,
   async (req: BotRequest, res: Response) => {
+    if (req.bot?.personal) return sendError(res, 403, { code: "forbidden_action", message: "التوكن الشخصي مخصص لإدارة الأخبار، ولا يمنح صلاحية المدقق" });
     const parsed = botDraftVerdictSchema.safeParse(req.body ?? {});
     if (!parsed.success) {
       return sendError(res, 400, {
