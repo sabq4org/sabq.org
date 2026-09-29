@@ -208,7 +208,11 @@ async function hydrateBotPosts(posts: SocialPost[]): Promise<SocialPost[]> {
         resolved = await resolvePublishedPostLink(
           account.externalAccountId,
           composeXPostText(original.text, original.linkUrl),
-          { timeoutMs: PUBLER_BACKFILL_TIMEOUT_MS, search: true },
+          {
+            timeoutMs: PUBLER_BACKFILL_TIMEOUT_MS,
+            linkUrl: original.linkUrl,
+            publishedAt: original.publishedAt,
+          },
         );
       }
       if (resolved) {

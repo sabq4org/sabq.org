@@ -1,6 +1,6 @@
 # النشر الاجتماعي (`social-publishing`)
 
-> آخر مراجعة: 2026-09-29 (رابط Publer: لا يُبنى من اسم العرض، ويُستكمل `post_link` لاحقاً) | المالك: editorial + platform
+> آخر مراجعة: 2026-09-29 (استكمال post_link بنافذة تاريخ ونص/رابط، لا بمعرف المهمة) | المالك: editorial + platform
 
 ## الغرض
 نشر أخبار سبق على منصة X من لوحة التحكم: فوري أو مجدول، بنص من العنوان أو
@@ -85,9 +85,14 @@
   `scheduled_at` = فوري) مع استطلاع `job_status`. **مهلة الاستطلاع بعد
   إرسال النشر خطأ دائم عمداً** (الحالة مجهولة — إعادة آلية قد تكرر
   المنشور). وثائق Publer: `job_status` المكتمل `{ status, payload.failures }`
-  بلا رابط. الرابط في `GET /posts` → `post_link` (رابط الشبكة؛ `url` رابط
-  المحتوى المرفق لا التغريدة، و`id` معرف Publer). بعد اكتمال المهمة استطلاع
-  قصير (3 محاولات / ثانيتان) ثم مطابقة النص. عند الغياب: `externalPostId`
+  بلا رابط وبلا معرف منشور — `publer:<jobId>` ليس مسار `GET /posts/{id}`.
+  الرابط في `GET /posts` → `post_link` (أي رابط status على x.com/twitter.com؛
+  `url` رابط المحتوى، و`id` معرف Publer). البحث: `state=published` ثم
+  `published_posted` عند الحاجة، مع `account_ids[]` و`from`/`to` حول
+  `publishedAt` (±يوم، حتى يبقى اليوم داخل الحدين). المطابقة بالحساب ثم
+  بنص السطر الأول أو `linkUrl`، لا ببادئة النص المركّب مع الرابط. سجل
+  واحد لكل محاولة: `publer_post_link_lookup` = found / not_found / error.
+  بعد اكتمال المهمة استطلاع قصير (3 محاولات / ثانيتان). عند الغياب: `externalPostId`
   = `publer:<jobId>` و`externalPostUrl` = `https://x.com/{handle}` **فقط**
   إذا كان handle معرف X صالحاً (`[A-Za-z0-9_]{1,15}`)، وإلا `null`.
   **لا يُبنى رابط من اسم العرض** ولا من `https://app.publer.com/`. الحقل

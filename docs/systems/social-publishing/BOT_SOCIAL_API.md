@@ -161,7 +161,7 @@ Authorization: Bearer <SABQ_BOT_SOCIAL_TOKEN>
 
 فشل المزوّد: `502 publish_failed` مع `post.status = "failed"` و`lastError`. أعد نفس `clientReference` بعد التصحيح؛ لا يُنشأ صف ثانٍ. النشر الفوري الفاشل لا يُعاد تلقائياً (نفس سلوك اللوحة). إذا كان `lastError` «انتهت مهلة تأكيد مهمة Publer» فالحالة مجهولة وقد تكون التغريدة صدرت — تحقق من الحساب قبل إعادة المحاولة، لأن الإعادة تستدعي المزوّد من جديد.
 
-مع Publer قد يتأخر `externalPostUrl` حتى يظهر `post_link` في `GET /posts` (حقل `job_status` لا يعيد رابط التغريدة). قبل ذلك يكون `externalPostId` = `publer:<jobId>` و`externalPostUrl` إما `https://x.com/{handle}` إن كان handle معرفاً صالحاً مخزناً (مثل `sabqorg`) أو `null`. اسم العرض لا يُستخدم في الرابط، والحقل معلّق. عند ظهور الرابط تُخزَّن القيمة `https://x.com/{handle}/status/{tweetId}` ويصبح `externalPostId` معرف التغريدة.
+مع Publer قد يتأخر `externalPostUrl` حتى يظهر `post_link`. `job_status` لا يعيد رابط التغريدة ولا معرف المنشور، و`publer:<jobId>` لا يُستخدم لجلب `GET /posts/{id}`. الإكمال يبحث `GET /posts?state=published&account_ids[]=…&from=&to=` حول وقت النشر، ويطابق الحساب ثم نص التغريدة أو رابط الخبر، ويقبل أي `post_link` على x.com أو twitter.com فيه `/status/{id}`. قبل ذلك يكون `externalPostId` = `publer:<jobId>` و`externalPostUrl` إما `https://x.com/{handle}` إن كان handle معرفاً صالحاً مخزناً (مثل `sabqorg`) أو `null`. اسم العرض لا يُستخدم في الرابط، والحقل معلّق. عند ظهور الرابط تُخزَّن القيمة `https://x.com/{handle}/status/{tweetId}` ويصبح `externalPostId` معرف التغريدة.
 
 ### جدولة
 
