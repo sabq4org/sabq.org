@@ -301,8 +301,16 @@ router.get(`${BOT_DRAFTS_BASE_PATH}/me`, requireBotToken, (req: BotRequest, res:
 });
 
 router.get(`${BOT_DRAFTS_BASE_PATH}/:id`, requireBotToken, async (req: BotRequest, res: Response) => {
+  const includeContent = req.query.includeContent === undefined
+    ? false
+    : typeof req.query.includeContent === "string" && req.query.includeContent === "1";
+  if (req.query.includeContent !== undefined && (typeof req.query.includeContent !== "string" || req.query.includeContent !== "1")) {
+    return sendError(res, 400, { code: "validation_error", message: "includeContent يجب أن يكون 1" });
+  }
   try {
-    const draft = await getBotDraft(req.params.id, req.bot!);
+    const draft = includeContent
+      ? await getBotDraft(req.params.id, req.bot!, { includeContent: true })
+      : await getBotDraft(req.params.id, req.bot!);
     if (!draft) {
       return sendError(res, 404, { code: "not_found", message: "المسودة غير موجودة" });
     }

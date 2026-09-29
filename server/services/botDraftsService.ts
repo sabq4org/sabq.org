@@ -750,13 +750,18 @@ export function buildBotDraftVisibilityUpdate(input: BotDraftVisibilityInput, no
   };
 }
 
-export function toBotDraftResponse(row: ArticleRow, categorySlug: string | null = null): BotDraftResponse {
+export function toBotDraftResponse(
+  row: ArticleRow,
+  categorySlug: string | null = null,
+  options: { includeContent?: boolean } = {},
+): BotDraftResponse {
   const meta = (row.sourceMetadata ?? {}) as NonNullable<ArticleRow["sourceMetadata"]>;
   return {
     id: row.id,
     status: row.status,
     updatable: isBotOwnedContentEditable(row),
     title: row.title,
+    ...(options.includeContent ? { content: row.content, contentFormat: "html" as const } : {}),
     subtitle: row.subtitle ?? null,
     slug: row.slug,
     excerpt: row.excerpt ?? null,
@@ -1036,11 +1041,15 @@ export async function createBotDraft(
   return toBotDraftResponse(row, category?.slug ?? null);
 }
 
-export async function getBotDraft(articleId: string, bot?: BotIdentity): Promise<BotDraftResponse | null> {
+export async function getBotDraft(
+  articleId: string,
+  bot?: BotIdentity,
+  options: { includeContent?: boolean } = {},
+): Promise<BotDraftResponse | null> {
   if (bot) assertPersonalCapability(bot, "read");
   const row = await findBotArticle(articleId, bot);
   if (!row) return null;
-  return toBotDraftResponse(row, await categorySlugFor(row.categoryId));
+  return toBotDraftResponse(row, await categorySlugFor(row.categoryId), options);
 }
 
 export async function updateBotDraft(

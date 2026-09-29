@@ -417,6 +417,26 @@ describe("GET and PATCH /api/internal/bot-drafts/:id", () => {
     state.get.mockResolvedValueOnce(null);
     expect((await call("GET", "/api/internal/bot-drafts/missing")).status).toBe(404);
   });
+  it("keeps content out of the default response and returns canonical HTML only with includeContent=1", async () => {
+    state.get.mockResolvedValueOnce(draft()).mockResolvedValueOnce(draft({ content: '<p>النص كما خُزّن</p><img src="https://media.sabq.org/news/a.webp">', contentFormat: "html" }));
+    const withoutContent = await call("GET", "/api/internal/bot-drafts/art-1");
+    expect(withoutContent.status).toBe(200);
+    expect(await withoutContent.json()).not.toHaveProperty("content");
+
+    const withContent = await call("GET", "/api/internal/bot-drafts/art-1?includeContent=1");
+    expect(withContent.status).toBe(200);
+    expect(await withContent.json()).toMatchObject({
+      content: '<p>النص كما خُزّن</p><img src="https://media.sabq.org/news/a.webp">',
+      contentFormat: "html",
+    });
+    expect(state.get).toHaveBeenLastCalledWith("art-1", { name: "nashr-sabq" }, { includeContent: true });
+  });
+  it.each(["0", "true", "", "1&includeContent=1"]) ("rejects invalid includeContent query %s", async (value) => {
+    const response = await call("GET", `/api/internal/bot-drafts/art-1?includeContent=${value}`);
+    expect(response.status).toBe(400);
+    expect((await response.json()).code).toBe("validation_error");
+    expect(state.get).not.toHaveBeenCalled();
+  });
   it("updates only allowed fields and surfaces 409 when the article is no longer a draft", async () => {
     state.update.mockResolvedValueOnce(draft({ title: "عنوان محدث" }));
     const ok = await call("PATCH", "/api/internal/bot-drafts/art-1", { title: "عنوان محدث" });
@@ -963,6 +983,10 @@ describe("pure helpers", () => {
     expect(response.bodyImageUrls).toEqual(["https://media.sabq.org/news/body.webp"]);
     expect(response.imageUrl).toBe("https://media.sabq.org/news/cover.webp");
     expect(JSON.stringify(response)).not.toContain("متن تجريبي");
+    expect(toBotDraftResponse(row, null, { includeContent: true })).toMatchObject({
+      content: row.content,
+      contentFormat: "html",
+    });
   });
   it("parses future Riyadh offsets and rejects past or naive times", () => {
     const now = new Date("2026-09-24T12:00:00.000Z");

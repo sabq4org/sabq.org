@@ -89,6 +89,12 @@ paths:
     get:
       operationId: getSabqDraft
       summary: حالة المسودة ومعرّفها ورابط التحرير الداخلي
+      parameters:
+        - name: includeContent
+          in: query
+          required: false
+          description: أرسل 1 لإعادة المتن الكنسي المخزّن كـ HTML. القيمة الافتراضية لا تعيد المتن؛ القيم الأخرى والمصفوفات مرفوضة.
+          schema: { type: string, enum: ["1"] }
       responses:
         "200":
           description: المسودة
@@ -96,6 +102,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/BotDraft"
+        "400": { $ref: "#/components/responses/ValidationError" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
     patch:
@@ -467,6 +474,8 @@ components:
         status: { type: string, description: الحالة الحالية في اللوحة (draft/ready_to_publish/published/scheduled/archived) }
         updatable: { type: boolean, description: true لمسودة draft ولخبر published مصدره bot. false بعد الجاهزية أو الجدولة أو الأرشفة، ولصف ليس source=bot. إلغاء الجدولة يعيدها true }
         title: { type: string }
+        content: { type: string, description: يظهر فقط في GET مع includeContent=1، وهو HTML الكنسي المخزّن }
+        contentFormat: { type: string, enum: [html], description: يظهر مع content في GET مع includeContent=1 فقط }
         subtitle: { type: string, nullable: true }
         slug: { type: string }
         excerpt: { type: string, nullable: true }

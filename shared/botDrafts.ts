@@ -342,6 +342,10 @@ export interface BotDraftResponse {
    */
   updatable: boolean;
   title: string;
+  /** المتن الكنسي المخزّن كـ HTML؛ يظهر فقط عند GET مع includeContent=1. */
+  content?: string;
+  /** صيغة المتن عند طلبه صراحةً؛ BotDrafts يخزّنه ويعيده كـ HTML كنسي. */
+  contentFormat?: "html";
   subtitle: string | null;
   slug: string;
   excerpt: string | null;
