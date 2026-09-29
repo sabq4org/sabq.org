@@ -23,6 +23,7 @@ import {
   decideScheduleAction,
   formatSuggestedText,
   isUniqueViolation,
+  parseBotSocialArticleUrl,
   previewLimits,
   resolveBotSocialCompose,
   type BotSocialCompose,
@@ -197,6 +198,93 @@ async function requireActor(): Promise<string> {
   return row.id;
 }
 
+interface ArticleLocator {
+  id: string;
+  title: string;
+  slug: string;
+  englishSlug: string | null;
+  status: string;
+  publishedAt: Date | null;
+}
+
+const articleLocatorColumns = {
+  id: articles.id,
+  title: articles.title,
+  slug: articles.slug,
+  englishSlug: articles.englishSlug,
+  status: articles.status,
+  publishedAt: articles.publishedAt,
+};
+
+/**
+ * ترتيب حل مقطع /article/:x بعد فك الترميز، بما يطابق ما تفتحه الصفحة:
+ * الرمز القصير هو english_slug، ثم slug العربي، ثم legacy_slug (غالباً فارغ)،
+ * ثم articles.id إن كان المقطع UUID (احتياط GET /api/articles/:slug).
+ * كل عمود استعلام مستقل حتى يفوز english_slug إن تطابق أكثر من صف.
+ */
+const ARTICLE_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+async function selectArticleBy(column: typeof articles.englishSlug | typeof articles.slug | typeof articles.legacySlug | typeof articles.id, token: string): Promise<ArticleLocator | null> {
+  const [row] = await db
+    .select(articleLocatorColumns)
+    .from(articles)
+    .where(eq(column, token))
+    .limit(1);
+  return row ?? null;
+}
+
+async function findArabicArticleByPublicToken(token: string): Promise<ArticleLocator | null> {
+  const byEnglish = await selectArticleBy(articles.englishSlug, token);
+  if (byEnglish) return byEnglish;
+
+  const bySlug = await selectArticleBy(articles.slug, token);
+  if (bySlug) return bySlug;
+
+  const byLegacy = await selectArticleBy(articles.legacySlug, token);
+  if (byLegacy) return byLegacy;
+
+  if (!ARTICLE_UUID_RE.test(token)) return null;
+  return selectArticleBy(articles.id, token);
+}
+
+async function locateArticleFromUrl(articleUrl: string): Promise<ArticleLocator> {
+  const parsed = parseBotSocialArticleUrl(articleUrl);
+  const row = await findArabicArticleByPublicToken(parsed.slug);
+  if (!row) throw new BotSocialError(404, "not_found", "الخبر غير موجود");
+  return row;
+}
+
+async function resolveInputArticleId(input: { articleId?: string; articleUrl?: string }): Promise<string> {
+  if (!input.articleUrl) {
+    if (!input.articleId) {
+      throw new BotSocialError(400, "validation_error", "يلزم articleId أو articleUrl");
+    }
+    return input.articleId;
+  }
+  const row = await locateArticleFromUrl(input.articleUrl);
+  if (input.articleId && input.articleId !== row.id) {
+    throw new BotSocialError(
+      400,
+      "validation_error",
+      "articleId وarticleUrl لا يشيران إلى الخبر نفسه",
+      { articleId: input.articleId, resolvedArticleId: row.id },
+    );
+  }
+  return row.id;
+}
+
+export async function resolveBotSocialArticleUrl(articleUrl: string) {
+  const row = await locateArticleFromUrl(articleUrl);
+  return {
+    articleId: row.id,
+    title: row.title,
+    status: row.status,
+    publishedAt: iso(row.publishedAt),
+    linkUrl: buildArticleUrl(row),
+    lang: "ar" as const,
+  };
+}
+
 async function loadArticle(articleId: string): Promise<ArticleTweetTarget> {
   const [article] = await db
     .select({
@@ -327,7 +415,7 @@ async function applyEdits(post: SocialPost, composed: BotSocialCompose): Promise
 }
 
 export async function previewBotSocialPost(input: BotSocialPreviewInput) {
-  const article = await loadArticle(input.articleId);
+  const article = await loadArticle(await resolveInputArticleId(input));
   const composed = composeFor(article, input, null);
   return {
     articleId: article.id,
@@ -341,9 +429,10 @@ export async function previewBotSocialPost(input: BotSocialPreviewInput) {
 
 export async function suggestBotSocialPost(
   bot: BotSocialIdentity,
-  articleId: string,
+  input: { articleId?: string; articleUrl?: string },
   ctx: BotSocialRequestContext = {},
 ) {
+  const articleId = await resolveInputArticleId(input);
   const article = await loadArticle(articleId);
   const actorId = await requireActor();
   let suggestion: { post: string; hashtags: string[] };
@@ -418,7 +507,7 @@ export async function publishBotSocialPost(
   input: BotSocialPublishInput,
   ctx: BotSocialRequestContext = {},
 ): Promise<{ post: BotSocialPostResponse; idempotentReplay: boolean }> {
-  const article = await loadArticle(input.articleId);
+  const article = await loadArticle(await resolveInputArticleId(input));
   const loaded = await loadOrCreate(bot, article, input, "publish");
   if (loaded.replay) {
     const post = toBotSocialPost(loaded.binding);
@@ -489,7 +578,7 @@ export async function scheduleBotSocialPost(
   input: BotSocialScheduleInput,
   ctx: BotSocialRequestContext = {},
 ): Promise<{ post: BotSocialPostResponse; idempotentReplay: boolean }> {
-  const article = await loadArticle(input.articleId);
+  const article = await loadArticle(await resolveInputArticleId(input));
   const when = new Date(input.scheduledAt);
   const loaded = await loadOrCreate(bot, article, input, "schedule");
   if (loaded.replay) {

@@ -111,6 +111,63 @@ export function isBotSocialConfigured(): boolean {
   return loadBotSocialTokens().length > 0;
 }
 
+const ARTICLE_URL_HOSTS = new Set(["sabq.org", "www.sabq.org"]);
+
+export interface ParsedBotSocialArticleUrl {
+  /** مقطع المسار بعد فك الترميز، كما يبحث عنه GET /api/articles/:slug. */
+  slug: string;
+  lang: "ar";
+}
+
+/**
+ * يطبّع رابط خبر عربي عام. المضيف sabq.org أو www.sabq.org فقط.
+ * يُسقط الاستعلام والهاش والشرطة المائلة الأخيرة، ويفك ترميز المسار مرة واحدة
+ * (نفس safeDecode في slugRedirect / edge slug-redirect).
+ * /en/article و/ur/article ليسا جدولاً عربياً — 422 unsupported_language.
+ */
+export function parseBotSocialArticleUrl(raw: string): ParsedBotSocialArticleUrl {
+  let url: URL;
+  try {
+    url = new URL(raw.trim());
+  } catch {
+    throw new BotSocialError(400, "validation_error", "articleUrl ليس رابطاً صالحاً");
+  }
+  if (url.protocol !== "https:" && url.protocol !== "http:") {
+    throw new BotSocialError(400, "validation_error", "articleUrl يجب أن يكون رابط http أو https");
+  }
+  if (!ARTICLE_URL_HOSTS.has(url.hostname.toLowerCase())) {
+    throw new BotSocialError(400, "validation_error", "رابط الخبر يجب أن يكون على sabq.org أو www.sabq.org");
+  }
+
+  const path = url.pathname.replace(/\/+$/, "") || "/";
+  const localized = path.match(/^\/(en|ur)\/article\/([^/]+)$/i);
+  if (localized) {
+    throw new BotSocialError(
+      422,
+      "unsupported_language",
+      "واجهة البوت تقبل أخبار سبق العربية فقط (/article/)، لا الإنجليزية ولا الأردية",
+      { lang: localized[1].toLowerCase() },
+    );
+  }
+
+  const match = path.match(/^\/article\/([^/]+)$/);
+  if (!match) {
+    throw new BotSocialError(400, "validation_error", "articleUrl يجب أن يكون رابط خبر عربي /article/...");
+  }
+
+  let slug = match[1];
+  try {
+    slug = decodeURIComponent(slug);
+  } catch {
+    throw new BotSocialError(400, "validation_error", "ترميز رابط الخبر غير صالح");
+  }
+  slug = slug.trim();
+  if (!slug) {
+    throw new BotSocialError(400, "validation_error", "articleUrl يجب أن يكون رابط خبر عربي /article/...");
+  }
+  return { slug, lang: "ar" };
+}
+
 /**
  * Authorization: Bearer. المقارنة ثابتة الزمن على SHA-256.
  * توكن مسودات البوت لا يُقبل هنا حتى لو طابق شكلاً — المصدر متغير بيئة آخر.
