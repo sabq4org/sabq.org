@@ -19,6 +19,7 @@ import { ar } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
+import { useMediaLicenseGate } from "@/hooks/useMediaLicenseGate";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { OPINION_WRITERS_PER_DAY_CAP } from "@shared/opinionWriterConstants";
 import {
@@ -32,7 +33,9 @@ import {
   CircleX,
   ClipboardList,
   Edit3,
+  PenLine,
   Share2,
+  ShieldAlert,
 } from "lucide-react";
 
 export const WEEKDAYS_AR = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
@@ -112,7 +115,7 @@ export function WriterDayPicker({ dayLoads }: { dayLoads: number[] }) {
       queryClient.invalidateQueries({ queryKey: ["/api/opinion-author/schedule"] });
       toast({
         title: "تم تسجيل يومك",
-        description: `مقالتك ستُنشر أسبوعياً يوم ${WEEKDAYS_AR[weekday]}`,
+        description: `مقالتك ستُنشر أسبوعياً يوم ${WEEKDAYS_AR[weekday]} — يمكنك البدء بكتابتها الآن`,
       });
     },
     onError: (error: Error) => {
@@ -189,7 +192,7 @@ export function WriterDayPicker({ dayLoads }: { dayLoads: number[] }) {
   );
 }
 
-type RailItemKind = "late" | "reminder" | "pick_day" | "editorial" | "survey" | "notice" | "schedule_ok";
+type RailItemKind = "license" | "late" | "reminder" | "pick_day" | "editorial" | "survey" | "notice" | "schedule_ok";
 
 type RailItem = {
   key: string;
@@ -200,6 +203,7 @@ type RailItem = {
 };
 
 const KIND_PRIORITY: Record<RailItemKind, number> = {
+  license: -1,
   late: 0,
   reminder: 1,
   pick_day: 2,
@@ -218,6 +222,8 @@ function fmtDate(iso: string, withTime = true) {
 }
 
 function scheduleItemVisual(kind: RailItemKind) {
+  if (kind === "license")
+    return { card: "border-r-4 border-r-destructive", iconWrap: "bg-destructive/10 text-destructive", Icon: ShieldAlert };
   if (kind === "late")
     return { card: "border-r-4 border-r-destructive", iconWrap: "bg-destructive/10 text-destructive", Icon: CircleX };
   if (kind === "reminder")
@@ -225,18 +231,26 @@ function scheduleItemVisual(kind: RailItemKind) {
   return { card: "border-r-4 border-r-primary", iconWrap: "bg-primary/10 text-primary", Icon: CalendarClock };
 }
 
+/**
+ * «خطوتك التالية»: بطاقة واحدة بأهم ما يلزم الكاتب (الترخيص ← الموعد ← اختيار اليوم ← التنبيهات)
+ * وتحتها البقية مختصرة. تحل محل شريط الترخيص العام وبانر الموعد ولوحة التنبيهات في مساحة الكاتب.
+ */
 export function WriterPriorityRail({
   notifications,
   onOpenNotification,
   onMarkAllRead,
   markingAll,
+  onStartWriting,
 }: {
   notifications: EditorialNotification[];
   onOpenNotification: (notification: EditorialNotification) => void;
   onMarkAllRead: () => void;
   markingAll: boolean;
+  /** زر «اكتب مقالك» داخل بطاقة الموعد — يظهر فقط إن لم يكن هناك قفل ترخيص */
+  onStartWriting?: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const { createBlocked, createBlockedReason, pendingReview, openMediaLicenseForm } = useMediaLicenseGate();
   const { data } = useQuery<{
     banner: ScheduleBannerData | null;
     canChoose?: boolean;
@@ -251,6 +265,14 @@ export function WriterPriorityRail({
 
   const items = useMemo<RailItem[]>(() => {
     const list: RailItem[] = [];
+    if (createBlocked) {
+      list.push({
+        key: "license",
+        kind: "license",
+        title: pendingReview ? "ترخيصك المهني قيد المراجعة" : "الترخيص المهني مطلوب قبل الإرسال",
+        subtitle: createBlockedReason,
+      });
+    }
     if (banner?.state === "late") {
       const publishStillAhead = new Date(banner.nextPublishAt).getTime() > Date.now();
       list.push({
@@ -303,11 +325,14 @@ export function WriterPriorityRail({
       });
     }
     return list.sort((a, b) => KIND_PRIORITY[a.kind] - KIND_PRIORITY[b.kind]);
-  }, [banner, canChoose, notifications]);
+  }, [banner, canChoose, notifications, createBlocked, createBlockedReason, pendingReview]);
 
   if (items.length === 0) return null;
 
-  const [top, ...rest] = items;
+  const [top, ...others] = items;
+  // اختيار اليوم خطوة كاملة لا صف مختصر: تظهر بطاقته حتى لو تقدّمها بند آخر (مثل الترخيص)
+  const dayPickerBelowTop = top.kind !== "pick_day" && others.some((item) => item.kind === "pick_day");
+  const rest = others.filter((item) => item.kind !== "pick_day");
   const compactRows = expanded ? rest : rest.slice(0, 3);
   const hiddenCount = rest.length - compactRows.length;
   const unreadCount = notifications.length;
@@ -347,16 +372,32 @@ export function WriterPriorityRail({
       );
     }
     const visual = scheduleItemVisual(item.kind);
+    const isScheduleItem = item.kind === "late" || item.kind === "reminder" || item.kind === "schedule_ok";
+    // بعد اختيار اليوم: الكتابة متاحة مباشرة من بطاقة الموعد ما لم تكن مقالة الأسبوع في المسار
+    const showWrite = isScheduleItem && Boolean(onStartWriting) && !createBlocked && !banner?.hasUpcoming;
+    const showLicense = item.kind === "license" && !pendingReview;
     return (
-      <Card className={`${visual.card} shadow-none`} dir="rtl">
-        <CardContent className="flex items-start gap-3 p-3 sm:p-4">
-          <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-lg ${visual.iconWrap}`}>
-            <visual.Icon className="h-5 w-5" />
-          </span>
-          <div className="space-y-0.5">
-            <p className="text-sm font-bold sm:text-base">{item.title}</p>
-            {item.subtitle && <p className="text-xs text-muted-foreground sm:text-sm">{item.subtitle}</p>}
+      <Card className={`${visual.card} shadow-none`} dir="rtl" data-testid={`writer-next-step-${item.kind}`}>
+        <CardContent className="flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:p-4">
+          <div className="flex min-w-0 flex-1 items-start gap-3">
+            <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-lg ${visual.iconWrap}`}>
+              <visual.Icon className="h-5 w-5" />
+            </span>
+            <div className="space-y-0.5">
+              <p className="text-sm font-bold sm:text-base">{item.title}</p>
+              {item.subtitle && <p className="text-xs text-muted-foreground sm:text-sm">{item.subtitle}</p>}
+            </div>
           </div>
+          {showWrite && (
+            <Button size="sm" className="shrink-0 gap-1.5" onClick={onStartWriting} data-testid="button-writer-next-step-write">
+              <PenLine className="h-4 w-4" /> اكتب مقالك
+            </Button>
+          )}
+          {showLicense && (
+            <Button size="sm" variant="outline" className="shrink-0 gap-1.5" onClick={openMediaLicenseForm} data-testid="button-writer-next-step-license">
+              <ShieldAlert className="h-4 w-4" /> أرفق الترخيص
+            </Button>
+          )}
         </CardContent>
       </Card>
     );
@@ -365,6 +406,7 @@ export function WriterPriorityRail({
   return (
     <div className="space-y-2" dir="rtl" data-testid="writer-priority-rail">
       {renderTop(top)}
+      {dayPickerBelowTop && data?.dayLoads && <WriterDayPicker dayLoads={data.dayLoads} />}
       {compactRows.length > 0 && (
         <div className="overflow-hidden rounded-xl border border-border bg-card">
           {compactRows.map((item) => {

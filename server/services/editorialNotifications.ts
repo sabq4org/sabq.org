@@ -18,7 +18,7 @@
  */
 
 import { db } from "../db";
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import {
   editorialNotifications,
   editorialNotificationPrefs,
@@ -314,6 +314,21 @@ export async function notifyEditorialEvent(args: NotifyEditorialArgs): Promise<v
         deliveryStatus: "pending",
       })
       .returning({ id: editorialNotifications.id });
+
+    // «نُشر» يُغني عن «جُدول» للمقال نفسه: نعلّم إشعار الجدولة مقروءاً حتى لا
+    // يتراكم إشعاران لكل مقال في مركز الكاتب (السجل يبقى كاملاً).
+    if (args.event === "published") {
+      await db
+        .update(editorialNotifications)
+        .set({ readAt: new Date() })
+        .where(and(
+          eq(editorialNotifications.userId, args.userId),
+          eq(editorialNotifications.articleId, args.article.id),
+          eq(editorialNotifications.type, "scheduled"),
+          isNull(editorialNotifications.readAt),
+        ))
+        .catch((err) => console.warn("[editorialNotifications] supersede scheduled failed:", err));
+    }
 
     // Find iOS devices to deliver to.
     const devices = await db

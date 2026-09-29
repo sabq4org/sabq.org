@@ -4,10 +4,7 @@ import { useLocation } from "wouter";
 import { useAuth, getHighestRole } from "@/hooks/useAuth";
 import { resolveUserRole } from "@/lib/roleMapping";
 import { WRITER_MEDIA_LICENSE_ANCHOR } from "@/lib/mediaLicenseAnchor";
-import {
-  MEDIA_LICENSE_DASHBOARD_WARNING,
-  MEDIA_LICENSE_PENDING_REVIEW_WARNING,
-} from "@shared/mediaLicense";
+import { mediaLicenseActionMessage } from "@shared/mediaLicense";
 
 export type MediaLicenseGateStatus = {
   submitted?: boolean;
@@ -88,9 +85,7 @@ export function useMediaLicenseGate() {
     showWarningBanner: needsLicenseAction,
     /** تعطيل أزرار «إنشاء / ابدأ الكتابة» لنفس جمهور التحذير */
     createBlocked: needsLicenseAction,
-    createBlockedReason: pendingReview
-      ? MEDIA_LICENSE_PENDING_REVIEW_WARNING
-      : MEDIA_LICENSE_DASHBOARD_WARNING,
+    createBlockedReason: mediaLicenseActionMessage({ pendingReview, needsCorrection, expired }),
     openMediaLicenseForm,
     isMediaLicensed: Boolean(data?.valid) && !data?.expiringSoon,
     showExpiringSoonBadge: enabled && isFetched && Boolean(data?.expiringSoon),

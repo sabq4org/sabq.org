@@ -18,12 +18,9 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { SubmitRevisionButton } from "@/components/SubmitRevisionButton";
 import { WriterInquiriesButton } from "@/components/WriterInquiriesButton";
 import {
-  WEEKDAYS_AR,
-  WriterDayPicker,
   WriterPriorityRail,
   editorialNotificationStyle,
   useIsWriterRail,
-  type ScheduleBannerData,
 } from "./WriterPriorityRail";
 import { MyServicesHomeLink } from "@/components/staff/MyServicesHomeLink";
 import {
@@ -163,104 +160,6 @@ function greeting(): string {
   if (hour < 12) return "صباح الإبداع";
   if (hour < 18) return "مساء الفكرة الجميلة";
   return "مساء الإبداع";
-}
-
-/** بانر ثابت أعلى لوحة الكاتب: يومه المخصص وموعد مقالته القادمة، بثلاث حالات */
-function WriterScheduleBanner() {
-  const { data } = useQuery<{
-    banner: ScheduleBannerData | null;
-    canChoose?: boolean;
-    dayLoads?: number[];
-  }>({
-    queryKey: ["/api/opinion-author/schedule"],
-    staleTime: 5 * 60 * 1000,
-  });
-  const banner = data?.banner;
-  if (!banner) {
-    if (data?.canChoose && Array.isArray(data.dayLoads)) {
-      return <WriterDayPicker dayLoads={data.dayLoads} />;
-    }
-    return null;
-  }
-
-  const fmt = (iso: string, withTime = true) =>
-    format(new Date(iso), withTime ? "EEEE d MMMM — h:mm a" : "EEEE d MMMM", { locale: ar });
-
-  const styles = {
-    ok: {
-      card: "border-r-4 border-r-primary",
-      iconWrap: "bg-primary/10 text-primary",
-      Icon: CalendarClock,
-    },
-    reminder: {
-      card: "border-r-4 border-r-amber-500",
-      iconWrap: "bg-amber-100 text-amber-600 dark:bg-amber-900/40 dark:text-amber-400",
-      Icon: BellRing,
-    },
-    late: {
-      card: "border-r-4 border-r-red-500",
-      iconWrap: "bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-400",
-      Icon: CircleX,
-    },
-  }[banner.state];
-
-  return (
-    <Card className={`${styles.card} shadow-none`} dir="rtl">
-      <CardContent className="flex items-start gap-3 p-3 sm:p-4">
-        <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-lg ${styles.iconWrap}`}>
-          <styles.Icon className="h-5 w-5" />
-        </span>
-        <div className="space-y-0.5">
-          <p className="text-sm font-bold sm:text-base">
-            {banner.state === "late"
-              ? new Date(banner.nextPublishAt).getTime() > Date.now()
-                ? "فات آخر موعد لإرسال مقالتك"
-                : "فات موعد النشر لهذا الأسبوع"
-              : banner.state === "reminder"
-                ? "تذكير: اقترب موعد مقالتك"
-                : `يومك المخصص للنشر: ${WEEKDAYS_AR[banner.weekday]}`}
-          </p>
-          <p className="text-xs text-muted-foreground sm:text-sm">
-            {banner.state === "late" ? (
-              new Date(banner.nextPublishAt).getTime() > Date.now() ? (
-                <>
-                  أرسل مقالتك الآن لتُجدول ليوم{" "}
-                  <b className="text-foreground">{fmt(banner.nextPublishAt)}</b>، أو تواصل مع
-                  المحررين عبر الاستفسارات.
-                </>
-              ) : (
-                <>
-                  لم تُنشر مقالة في موعدك الماضي. عند إرسال مقالتك الآن ستُجدول ليوم{" "}
-                  <b className="text-foreground">{fmt(banner.nextPublishAt)}</b>، أو تواصل مع
-                  المحررين عبر الاستفسارات.
-                </>
-              )
-            ) : banner.hasUpcoming ? (
-              <>
-                مقالتك القادمة في مسار النشر — موعدها{" "}
-                <b className="text-foreground">{fmt(banner.nextPublishAt)}</b>. شكراً لالتزامك.
-              </>
-            ) : banner.state === "reminder" ? (
-              <>
-                أرسلها قبل <b className="text-foreground">{fmt(banner.submitDeadline, false)}</b> —
-                تُنشر <b className="text-foreground">{fmt(banner.nextPublishAt)}</b>.
-              </>
-            ) : new Date(banner.submitDeadline).getTime() > Date.now() ? (
-              <>
-                مقالتك القادمة تُنشر <b className="text-foreground">{fmt(banner.nextPublishAt)}</b>.
-                آخر موعد للإرسال: <b className="text-foreground">{fmt(banner.submitDeadline, false)}</b>.
-              </>
-            ) : (
-              <>
-                مقالتك القادمة تُنشر <b className="text-foreground">{fmt(banner.nextPublishAt)}</b>.
-                أرسلها في أقرب وقت.
-              </>
-            )}
-          </p>
-        </div>
-      </CardContent>
-    </Card>
-  );
 }
 
 export default function WriterWorkspacePage() {
@@ -422,16 +321,13 @@ export default function WriterWorkspacePage() {
       <div className="relative min-h-full w-full text-right" dir="rtl" style={{ direction: "rtl" }}>
         <div className="w-full space-y-3 p-1 sm:space-y-5 sm:p-0" dir="rtl">
           <MyServicesHomeLink />
-          {railMode ? (
-            <WriterPriorityRail
-              notifications={unreadNotifications}
-              onOpenNotification={openEditorialNotification}
-              onMarkAllRead={() => markAllNotificationsReadMutation.mutate()}
-              markingAll={markAllNotificationsReadMutation.isPending}
-            />
-          ) : (
-            <WriterScheduleBanner />
-          )}
+          <WriterPriorityRail
+            notifications={unreadNotifications}
+            onOpenNotification={openEditorialNotification}
+            onMarkAllRead={() => markAllNotificationsReadMutation.mutate()}
+            markingAll={markAllNotificationsReadMutation.isPending}
+            onStartWriting={startWriting}
+          />
           {railMode ? (
             <section className="rounded-xl border border-border bg-card p-3" dir="rtl">
               <div className="flex items-center justify-between gap-2">
@@ -537,7 +433,6 @@ export default function WriterWorkspacePage() {
             </TabsList>
 
             <TabsContent value="today" className="mt-3 space-y-3 sm:mt-5 sm:space-y-5">
-              {!railMode && unreadNotifications.length > 0 && <EditorialAlertsPanel notifications={unreadNotifications} onOpen={openEditorialNotification} onMarkAll={() => markAllNotificationsReadMutation.mutate()} markingAll={markAllNotificationsReadMutation.isPending} />}
               <div className="grid gap-3 sm:gap-5 lg:grid-cols-3">
                 <Card className="border-border shadow-none lg:col-span-2">
                   <CardHeader className="space-y-1 p-3 sm:p-6">

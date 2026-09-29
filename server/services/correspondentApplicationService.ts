@@ -15,7 +15,7 @@ import {
   type InsertCorrespondentApplication,
   type User,
 } from "@shared/schema";
-import { isMediaLicenseExpired } from "./mediaLicenseService";
+import { mediaLicenseFromApplication } from "./mediaLicenseService";
 import { invalidateAllUserSessions } from "../auth";
 import { invalidateUserPermissionCache } from "../rbac";
 import { claimPhoneForStaffAccount, normalizePhone } from "./phoneAuth";
@@ -209,24 +209,8 @@ export async function approveCorrespondentApplication(
   const temporaryPassword = nanoid(12);
   const hashedPassword = await bcrypt.hash(temporaryPassword, 12);
 
-  // نسخ الترخيص من الطلب إلى الحساب عند توفر البيانات (لا نمسح إن كان الطلب بلا ترخيص)
-  if (
-    application.licenseNumber &&
-    application.licenseFileKey &&
-    application.licenseExpiresAt &&
-    isMediaLicenseExpired(application.licenseExpiresAt)
-  ) {
-    throw new Error("لا يمكن قبول طلب بترخيص منتهٍ — اطلب من المتقدم تجديد الترخيص أولاً");
-  }
-  const licenseFromApplication =
-    application.licenseNumber && application.licenseFileKey
-      ? {
-          mediaLicenseNumber: application.licenseNumber,
-          mediaLicenseFileKey: application.licenseFileKey,
-          mediaLicenseExpiresAt: application.licenseExpiresAt ?? null,
-          mediaLicenseSubmittedAt: new Date(),
-        }
-      : null;
+  // الترخيص المرفق في الطلب يُعتمد مع القبول (لا نمسح إن كان الطلب بلا ترخيص)
+  const licenseFromApplication = mediaLicenseFromApplication(application);
 
   if (existingUser) {
     if (!UPGRADEABLE_ROLES.includes((existingUser.role || "reader").toLowerCase())) {
