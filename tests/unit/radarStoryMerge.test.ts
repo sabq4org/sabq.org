@@ -36,4 +36,35 @@ describe("توحيد القصص المتفرقة", () => {
     expect(plan.has("b")).toBe(false);
     expect(plan.has("d")).toBe(false);
   });
+
+  it("يطابق المقارنة الزوجية الكاملة ولا يحجب الخيط عند 3000 قصة", () => {
+    let seed = 7;
+    const rand = () => ((seed = (seed * 1103515245 + 12345) % 2 ** 31) / 2 ** 31);
+    const vocab = Array.from({ length: 400 }, (_, i) => `كلمة${i}`);
+    const stories = Array.from({ length: 3000 }, (_, i) => ({
+      id: String(i),
+      title: Array.from({ length: 4 + Math.floor(rand() * 8) }, () => vocab[Math.floor(rand() * vocab.length)]).join(" "),
+      size: 1 + Math.floor(rand() * 5),
+    }));
+    // تكرارات مقصودة كي توجد مجموعات فعلية
+    for (let i = 0; i < 300; i++) stories[i * 10 + 1].title = `${stories[i * 10].title} اليوم`;
+
+    const started = Date.now();
+    const plan = planStoryMerges(stories);
+    expect(Date.now() - started).toBeLessThan(3000);
+
+    const sample = stories.slice(0, 400);
+    const parent = sample.map((_, i) => i);
+    const find = (i: number): number => (parent[i] === i ? i : (parent[i] = find(parent[i])));
+    for (let i = 0; i < sample.length; i++)
+      for (let j = i + 1; j < sample.length; j++)
+        if (sameEventTitles(sample[i].title, sample[j].title)) parent[find(j)] = find(i);
+    const samplePlan = planStoryMerges(sample);
+    for (let i = 0; i < sample.length; i++)
+      for (let j = i + 1; j < sample.length; j++) {
+        const together = (samplePlan.get(sample[i].id) ?? sample[i].id) === (samplePlan.get(sample[j].id) ?? sample[j].id);
+        expect(together).toBe(find(i) === find(j));
+      }
+    expect(plan.size).toBeGreaterThanOrEqual(300);
+  });
 });
