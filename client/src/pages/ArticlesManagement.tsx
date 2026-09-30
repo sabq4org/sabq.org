@@ -401,7 +401,7 @@ function wireAttribution(article: Article) {
     return { prefix: "واتساب", name, channel: "واتساب", title: `واتساب${name ? `: ${name}` : ""}`, testId: "badge-source-whatsapp", incoming: true, Icon: MessageCircle, enteredBy: null as string | null };
   }
   if (article.source === "bot") {
-    const bot = meta?.bot || "نشر سبق";
+    const bot = meta?.publisherUserId ? "نشر سبق" : meta?.bot || "نشر سبق";
     // The personal publisher identity is authoritative in sourceMetadata. Do not
     // infer it from the institutional byline or fall back to the user's email.
     const personalPublisher = meta?.publisherUserId && article.enteredBy?.id === meta.publisherUserId

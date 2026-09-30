@@ -377,7 +377,7 @@ for (const mobile of [false, true]) {
     const botArticle = (id: string, enteredBy?: Record<string, string> | null, publisherUserId?: string) => ({
       ...article(id),
       source: "bot",
-      sourceMetadata: { type: "bot", bot: "نشر سبق", ...(publisherUserId ? { publisherUserId } : {}) },
+      sourceMetadata: { type: "bot", bot: publisherUserId ? `publisher-${publisherUserId}` : "نشر سبق", ...(publisherUserId ? { publisherUserId } : {}) },
       enteredBy,
     });
     const rows = [
