@@ -57,6 +57,7 @@ import {
   isBotDraftsConfigured,
   markBotDraftReady,
   publishBotDraft,
+  botPrincipalMayOverrideSensitive,
   recordBotReviewerVerdict,
   rescheduleBotDraft,
   scheduleBotDraft,
@@ -291,12 +292,15 @@ router.post(
   },
 );
 
-router.get(`${BOT_DRAFTS_BASE_PATH}/me`, requireBotToken, (req: BotRequest, res: Response) => {
+router.get(`${BOT_DRAFTS_BASE_PATH}/me`, requireBotToken, async (req: BotRequest, res: Response) => {
   const principal = req.bot?.personal;
   if (!principal) return sendError(res, 403, { code: "forbidden_action", message: "يتطلب الربط توكن مستخدم شخصي" });
+  // Additive: clients show «أنشر على مسؤوليتي» only when the publish endpoint would accept it.
+  const sensitiveOverride = await botPrincipalMayOverrideSensitive(req.bot).catch(() => false);
   res.json({
     user: { id: principal.userId, email: principal.email, name: principal.name },
     tokenId: principal.tokenId, expiresAt: principal.expiresAt, capabilities: principal.capabilities,
+    sensitiveOverride,
   });
 });
 
@@ -377,7 +381,7 @@ router.post(
       });
     }
     try {
-      const draft = await publishBotDraft(req.bot!, req.params.id, requestContext(req));
+      const draft = await publishBotDraft(req.bot!, req.params.id, requestContext(req), parsed.data);
       res.json(draft);
     } catch (error) {
       handleError(res, error, "publish");

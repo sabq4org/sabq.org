@@ -183,7 +183,13 @@ paths:
             schema:
               type: object
               additionalProperties: false
-              description: جسم فارغ. أي حقل يُرفض. status أو authorId يُرفضان 422.
+              description: >-
+                جسم فارغ، أو استثناء المادة الحساسة من مدير النشر: sensitiveOverride=true مع overrideReason (3–500 حرف).
+                غير المدير يُرفض 403 sensitive_override_forbidden، والاستثناء يُسجّل في article_publish_overrides.
+                أي حقل آخر يُرفض. status أو authorId يُرفضان 422.
+              properties:
+                sensitiveOverride: { type: boolean, enum: [true] }
+                overrideReason: { type: string, minLength: 3, maxLength: 500 }
       responses:
         "200":
           description: نُشرت. status=published وupdatable=true وpublicUrl

@@ -33,13 +33,16 @@ import { logArticleEvent } from "./articleEventsService";
 import { generateEnglishSlug } from "../utils/slugTransliterator";
 import { sanitizeArticleHtml } from "../utils/sanitizeArticleHtml";
 import { buildEditorialMetadataUpdate } from "../utils/editorialDatesSql";
-import { logActivity } from "../rbac";
+import { logActivity, getUserRoleNames } from "../rbac";
+import { isPublishFirstAdmin } from "@shared/publishFirst";
 import { memoryCache } from "../memoryCache";
 import {
   maybePlanPublishedRevision,
   recordArticleRevision,
   sensitiveGateForArticle,
   botDraftUploadIssue,
+  recordPublishOverride,
+  editorDisplayName,
   recordReviewerVerdict,
 } from "./publishFirstService";
 
@@ -849,14 +852,24 @@ async function assertBotSubtitle(subtitle: string | null | undefined): Promise<v
 async function assertBotSensitiveRelease(
   articleId: string,
   riskLabel: string | null | undefined,
-): Promise<void> {
+  adminOverride = false,
+): Promise<{ override: boolean }> {
   const decision = await sensitiveGateForArticle({
     articleId,
     riskLabel,
     action: "publish",
-    adminOverride: false,
+    adminOverride,
   });
   if (!decision.allow) throw new BotDraftError(422, decision.code, decision.message);
+  return { override: Boolean(decision.override) };
+}
+
+/** مدير النشر (نفس قاعدة لوحة التحرير) — الوحيد الذي يستثني مادة حساسة عبر البوت. */
+export async function botPrincipalMayOverrideSensitive(bot: BotIdentity | undefined): Promise<boolean> {
+  if (!bot?.personal) return false;
+  const [user] = await db.select({ role: users.role }).from(users).where(eq(users.id, bot.personal.userId)).limit(1);
+  const roles = await getUserRoleNames(bot.personal.userId);
+  return isPublishFirstAdmin({ role: user?.role, roles });
 }
 
 async function categorySlugFor(categoryId: string | null): Promise<string | null> {
@@ -1352,13 +1365,18 @@ export async function publishBotDraft(
   bot: BotIdentity,
   articleId: string,
   ctx: BotRequestContext = {},
+  options: { sensitiveOverride?: true; overrideReason?: string } = {},
 ): Promise<BotDraftResponse> {
   assertPersonalCapability(bot, "publish");
   const existing = await findBotArticle(articleId, bot);
   throwIfNotReleasable(existing);
   await throwIfEditLocked(articleId);
   await assertBotDraftBylineMayPublish(bot, existing);
-  await assertBotSensitiveRelease(existing.id, existing.riskLabel);
+  const overrideRequested = options.sensitiveOverride === true;
+  if (overrideRequested && !(await botPrincipalMayOverrideSensitive(bot))) {
+    throw new BotDraftError(403, "sensitive_override_forbidden", "النشر على المسؤولية للمادة الحساسة متاح لمدير النشر فقط");
+  }
+  const gate = await assertBotSensitiveRelease(existing.id, existing.riskLabel, overrideRequested);
 
   const now = new Date();
   const patch: BotDraftPublishUpdate & { englishSlug?: string } = buildBotDraftPublishUpdate(now, existing.publishedAt);
@@ -1372,6 +1390,15 @@ export async function publishBotDraft(
   }
 
   invalidateAdminListCaches();
+  if (gate.override && bot.personal) {
+    await recordPublishOverride({
+      articleId: row.id,
+      actorUserId: bot.personal.userId,
+      actorName: await editorDisplayName(bot.personal.userId),
+      action: "publish",
+      reason: options.overrideReason ?? null,
+    });
+  }
   const { queueBotDraftPublishEffects } = await import("./botDraftPublishEffects");
   queueBotDraftPublishEffects(row, bot.name);
   await recordEvent(
