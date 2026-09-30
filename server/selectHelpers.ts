@@ -7,6 +7,7 @@
 // ============================================================
 
 import { articles, categories, users } from "@shared/schema";
+import { sql } from "drizzle-orm";
 import { toCdnUrl } from "./objectStorage";
 
 // ============================================================
@@ -199,6 +200,13 @@ export const articleAdminSelect = {
   views: articles.views,
   displayOrder: articles.displayOrder,
   source: articles.source,
+  // Only expose bot attribution; metadata can also contain tokens and raw messages.
+  sourceMetadata: sql<{ bot: string | null; publisherUserId: string | null } | null>`
+    CASE WHEN ${articles.source} = 'bot' THEN jsonb_build_object(
+      'bot', ${articles.sourceMetadata}->>'bot',
+      'publisherUserId', ${articles.sourceMetadata}->>'publisherUserId'
+    ) ELSE NULL END
+  `.as("source_metadata"),
   sourceUrl: articles.sourceUrl,
   isAiGeneratedImage: articles.isAiGeneratedImage,
   isAiGeneratedThumbnail: articles.isAiGeneratedThumbnail,

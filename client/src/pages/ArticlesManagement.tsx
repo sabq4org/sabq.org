@@ -102,11 +102,12 @@ type Article = {
   signals?: { notifiedAt: string | null; socialPublishedAt: string | null } | null;
   source?: string;
   sourceMetadata?: {
-    type?: 'email' | 'whatsapp' | 'manual' | 'mobile';
+    type?: 'email' | 'whatsapp' | 'manual' | 'mobile' | 'bot';
     from?: string;
     senderName?: string;
     senderId?: string;
     bot?: string;
+    publisherUserId?: string;
     platform?: 'ios' | 'android' | string;
     firstName?: string;
     lastName?: string;
@@ -401,7 +402,22 @@ function wireAttribution(article: Article) {
   }
   if (article.source === "bot") {
     const bot = meta?.bot || "نشر سبق";
-    return { prefix: "بوت", name: `«${bot}»`, channel: "بوت", title: `أضافه البوت «${bot}»`, testId: "badge-source-bot", incoming: true, Icon: Bot, enteredBy: null as string | null };
+    // The personal publisher identity is authoritative in sourceMetadata. Do not
+    // infer it from the institutional byline or fall back to the user's email.
+    const personalPublisher = meta?.publisherUserId && article.enteredBy?.id === meta.publisherUserId
+      ? `${article.enteredBy.firstName ?? ""} ${article.enteredBy.lastName ?? ""}`.trim() || null
+      : null;
+    const botName = `«${bot}»`;
+    return {
+      prefix: "بوت",
+      name: `${botName}${personalPublisher ? ` · ${personalPublisher}` : ""}`,
+      channel: "بوت",
+      title: `أضافه البوت ${botName}${personalPublisher ? ` · ${personalPublisher}` : ""}`,
+      testId: "badge-source-bot",
+      incoming: true,
+      Icon: Bot,
+      enteredBy: null as string | null,
+    };
   }
   if (article.source === "ai") {
     return { prefix: "مولّد آليًا", name: staff, channel: "آلي", title: `مولّد بالذكاء الاصطناعي${staff ? ` · ${staff}` : ""}`, testId: "badge-source-ai", incoming: true, Icon: Sparkles, enteredBy: null as string | null };

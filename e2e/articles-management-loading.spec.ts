@@ -369,3 +369,40 @@ test("ready-to-publish filter lists approved bot drafts for manual publish or re
   await expect(page.getByText("جاهزة للنشر · بانتظار محرر الوردية")).toBeVisible();
   expect(requests.some((url) => url.searchParams.get("status") === "ready_to_publish" && url.searchParams.get("page") === "1")).toBe(true);
 });
+
+for (const mobile of [false, true]) {
+  test(`personal bot publisher attribution is identity-bound (${mobile ? "mobile" : "desktop"})`, async ({ page }, info) => {
+    if (mobile) await page.setViewportSize({ width: 390, height: 844 });
+    await setup(page);
+    const botArticle = (id: string, enteredBy?: Record<string, string> | null, publisherUserId?: string) => ({
+      ...article(id),
+      source: "bot",
+      sourceMetadata: { type: "bot", bot: "نشر سبق", ...(publisherUserId ? { publisherUserId } : {}) },
+      enteredBy,
+    });
+    const rows = [
+      botArticle("bot-personal", { id: "publisher-1", firstName: "علي", lastName: "الحازمي", email: "ali@example.test" }, "publisher-1"),
+      botArticle("bot-legacy", { id: "legacy-bot", firstName: "حساب", lastName: "قديم", email: "legacy@example.test" }),
+      botArticle("bot-mismatch", { id: "publisher-2", firstName: "مستخدم", lastName: "آخر", email: "other@example.test" }, "publisher-1"),
+      botArticle("bot-missing"),
+      botArticle("bot-unnamed", { id: "publisher-1", firstName: " ", lastName: "", email: "private@example.test" }, "publisher-1"),
+    ];
+    await page.route("**/api/admin/articles?**", route => route.fulfill({
+      json: { articles: rows, page: 1, total: rows.length, limit: 30, totalPages: 1 },
+    }));
+    await page.getByRole("button", { name: "تحديث قائمة الاختبار" }).click();
+    const rowSelector = (id: string) => page.getByTestId(`${mobile ? "card" : "row"}-article-${id}`);
+    await expect(rowSelector("bot-personal")).toBeVisible();
+    await expect(rowSelector("bot-personal").getByTestId("badge-source-bot")).toHaveText(/بوت\s*«نشر سبق»(?:\s*·\s*)?علي الحازمي/);
+    await expect(rowSelector("bot-personal").getByTestId("badge-source-bot")).not.toContainText("ali@example.test");
+    await expect(rowSelector("bot-personal").getByTestId("badge-source-bot")).toHaveAttribute("title", "أضافه البوت «نشر سبق» · علي الحازمي");
+    await rowSelector("bot-personal").screenshot({ path: info.outputPath("bot-publisher-attribution.png") });
+    for (const id of ["bot-legacy", "bot-mismatch", "bot-missing", "bot-unnamed"]) {
+      const badge = rowSelector(id).getByTestId("badge-source-bot");
+      await expect(badge).toHaveText("بوت«نشر سبق»");
+      await expect(badge).not.toContainText("حساب قديم");
+      await expect(badge).not.toContainText("مستخدم آخر");
+      await expect(badge).not.toContainText("@example.test");
+    }
+  });
+}
