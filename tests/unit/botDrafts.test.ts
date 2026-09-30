@@ -17,6 +17,7 @@ const state = vi.hoisted(() => ({
   archive: vi.fn(),
   visibility: vi.fn(),
   verdict: vi.fn(),
+  mayOverride: vi.fn(async () => false),
   invalidate: vi.fn(),
   uploadImage: vi.fn(),
   isUploadAvailable: vi.fn(() => true),
@@ -51,6 +52,7 @@ vi.mock("../../server/services/botDraftsService", async (original) => ({
   archiveBotDraft: state.archive,
   updateBotDraftVisibility: state.visibility,
   recordBotReviewerVerdict: state.verdict,
+  botPrincipalMayOverrideSensitive: state.mayOverride,
 }));
 
 import router from "../../server/routes/botDrafts";
@@ -546,9 +548,31 @@ describe("POST /api/internal/bot-drafts/:id/publish", () => {
       editUrl: "https://sabq.org/dashboard/articles/art-1/edit",
       publicUrl: "https://sabq.org/article/abc12xy",
     });
-    expect(state.publish).toHaveBeenCalledWith({ name: "nashr-sabq" }, "art-1", expect.anything());
+    expect(state.publish).toHaveBeenCalledWith({ name: "nashr-sabq" }, "art-1", expect.anything(), {});
     expect(state.update).not.toHaveBeenCalled();
     expect(state.ready).not.toHaveBeenCalled();
+  });
+  it("passes a sensitive override with its reason to the service, and requires the reason", async () => {
+    state.publish.mockResolvedValueOnce(draft({ status: "published", updatable: false, scheduledAt: null }));
+    const ok = await call("POST", "/api/internal/bot-drafts/art-1/publish", { sensitiveOverride: true, overrideReason: "خبر عاجل مؤكد من الجهة الرسمية" });
+    expect(ok.status).toBe(200);
+    expect(state.publish).toHaveBeenCalledWith({ name: "nashr-sabq" }, "art-1", expect.anything(), { sensitiveOverride: true, overrideReason: "خبر عاجل مؤكد من الجهة الرسمية" });
+    state.publish.mockClear();
+    const missing = await call("POST", "/api/internal/bot-drafts/art-1/publish", { sensitiveOverride: true });
+    expect(missing.status).toBe(400);
+    const falseFlag = await call("POST", "/api/internal/bot-drafts/art-1/publish", { sensitiveOverride: false, overrideReason: "سبب" });
+    expect(falseFlag.status).toBe(400);
+    expect(state.publish).not.toHaveBeenCalled();
+  });
+  it("surfaces the sensitive gate and a non-admin override as clear 4xx errors", async () => {
+    state.publish.mockRejectedValueOnce(new BotDraftError(422, "sensitive_needs_verdict", "لا يمكن نشر هذه المادة: تصنيف المخاطر «حساسة»"));
+    const gated = await call("POST", "/api/internal/bot-drafts/art-1/publish", {});
+    expect(gated.status).toBe(422);
+    expect(await gated.json()).toMatchObject({ code: "sensitive_needs_verdict" });
+    state.publish.mockRejectedValueOnce(new BotDraftError(403, "sensitive_override_forbidden", "النشر على المسؤولية للمادة الحساسة متاح لمدير النشر فقط"));
+    const forbidden = await call("POST", "/api/internal/bot-drafts/art-1/publish", { sensitiveOverride: true, overrideReason: "سبب واضح" });
+    expect(forbidden.status).toBe(403);
+    expect(await forbidden.json()).toMatchObject({ code: "sensitive_override_forbidden" });
   });
   it("rejects a non-empty body and a smuggled status before publishing", async () => {
     const extra = await call("POST", "/api/internal/bot-drafts/art-1/publish", { title: "عنوان جديد" });
@@ -1165,8 +1189,12 @@ describe("personal publisher token routing", () => {
     state.personalAuth.mockResolvedValue(principal);
     const res = await call("GET", "/api/internal/bot-drafts/me", undefined, "botpub_valid_personal_credential");
     expect(res.status).toBe(200);
-    expect((await res.json()).user.id).toBe("u-1");
+    const body = await res.json();
+    expect(body.user.id).toBe("u-1");
+    expect(body.sensitiveOverride).toBe(false);
     expect(state.personalAuth).toHaveBeenCalledWith("botpub_valid_personal_credential");
+    state.mayOverride.mockResolvedValueOnce(true);
+    expect((await (await call("GET", "/api/internal/bot-drafts/me", undefined, "botpub_valid_personal_credential")).json()).sensitiveOverride).toBe(true);
   });
   it("rejects revoked personal tokens without legacy fallback", async () => {
     state.personalAuth.mockResolvedValue(null);

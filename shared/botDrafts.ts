@@ -218,7 +218,21 @@ export const botDraftUpdateSchema = z
   .refine((value) => Object.keys(value).length > 0, { message: "لا توجد حقول للتحديث" });
 
 /** POST /api/internal/bot-drafts/:id/publish — جسم فارغ. الحالة يكتبها الخادم. */
-export const botDraftPublishSchema = z.object({}).strict();
+/**
+ * POST /:id/publish — جسم فارغ، أو استثناء المادة الحساسة من مدير (`sensitiveOverride` + سبب).
+ * الخادم يتحقق أن صاحب التوكن مدير قبل قبول الاستثناء، ويسجّله في سجل الاستثناءات.
+ */
+export const botDraftPublishSchema = z
+  .object({
+    sensitiveOverride: z.literal(true).optional(),
+    overrideReason: z.string().trim().min(3).max(500).optional(),
+  })
+  .strict()
+  .refine((body) => !body.sensitiveOverride || Boolean(body.overrideReason), {
+    message: "سبب الاستثناء مطلوب مع sensitiveOverride",
+    path: ["overrideReason"],
+  });
+export type BotDraftPublishInput = z.infer<typeof botDraftPublishSchema>;
 
 /**
  * POST /api/internal/bot-drafts/:id/verdict — حكم مراجع.
@@ -419,6 +433,7 @@ export const BOT_DRAFT_ERROR_CODES = [
   "category_not_found",
   "subtitle_too_long",
   "sensitive_needs_verdict",
+  "sensitive_override_forbidden",
   "author_not_configured",
   "not_found",
   "not_a_draft",
