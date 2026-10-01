@@ -54,6 +54,7 @@ import {
   createBotDraft,
   archiveBotDraft,
   getBotDraft,
+  getBotDraftHistory,
   isBotDraftsConfigured,
   markBotDraftReady,
   publishBotDraft,
@@ -302,6 +303,29 @@ router.get(`${BOT_DRAFTS_BASE_PATH}/me`, requireBotToken, async (req: BotRequest
     tokenId: principal.tokenId, expiresAt: principal.expiresAt, capabilities: principal.capabilities,
     sensitiveOverride,
   });
+});
+
+const HISTORY_ID_RE = /^[A-Za-z0-9_-]{1,128}$/;
+const HISTORY_MAX_IDS = 100;
+
+router.get(`${BOT_DRAFTS_BASE_PATH}/history`, requireBotToken, async (req: BotRequest, res: Response) => {
+  if (!req.bot?.personal) {
+    return sendError(res, 403, { code: "forbidden_action", message: "يتطلب السجل توكن مستخدم شخصي" });
+  }
+  const rawIds = req.query.ids;
+  if (typeof rawIds !== "string" || !rawIds.trim()) {
+    return sendError(res, 400, { code: "validation_error", message: "ids مطلوب" });
+  }
+  const ids = [...new Set(rawIds.split(",").map((id) => id.trim()).filter(Boolean))];
+  if (ids.length === 0 || ids.length > HISTORY_MAX_IDS || ids.some((id) => !HISTORY_ID_RE.test(id))) {
+    return sendError(res, 400, { code: "validation_error", message: "ids يجب أن تكون حتى 100 معرّف صالح" });
+  }
+  try {
+    const history = await getBotDraftHistory(ids, req.bot!);
+    res.json(history);
+  } catch (error) {
+    handleError(res, error, "history");
+  }
 });
 
 router.get(`${BOT_DRAFTS_BASE_PATH}/:id`, requireBotToken, async (req: BotRequest, res: Response) => {

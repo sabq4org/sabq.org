@@ -13,6 +13,7 @@ import { and, eq, gt, inArray, isNull, sql, type SQL } from "drizzle-orm";
 import { db } from "../db";
 import { articleEditLocks, articles, categories, enArticles, users } from "@shared/schema";
 import { SABQ_NEWSPAPER_ACCOUNT_ID } from "@shared/sabqNewspaper";
+import { SYSTEM_ADMIN_TIER_ROLES } from "@shared/rbac-constants";
 import {
   BOT_DRAFT_BODY_IMAGE_LIMIT,
   BOT_DRAFT_PUBLISHABLE_STATUSES,
@@ -1063,6 +1064,75 @@ export async function getBotDraft(
   const row = await findBotArticle(articleId, bot);
   if (!row) return null;
   return toBotDraftResponse(row, await categorySlugFor(row.categoryId), options);
+}
+
+export interface BotDraftHistoryItem {
+  id: string;
+  status: string;
+  publishedAt: string | null;
+  publisherName?: string | null;
+}
+
+export interface BotDraftHistoryResponse {
+  items: BotDraftHistoryItem[];
+  canViewPublisherNames: boolean;
+}
+
+/**
+ * Reads the bounded history projection used by the personal publisher app.
+ * Ownership is applied in SQL; a legacy service token cannot call this path.
+ * Publisher names come only from the latest published audit event and are
+ * selected after checking the current token user's system-admin roles.
+ */
+export async function getBotDraftHistory(
+  ids: string[],
+  bot: BotIdentity,
+): Promise<BotDraftHistoryResponse> {
+  if (!bot.personal) throw new BotDraftError(403, "forbidden_action", "يتطلب السجل توكن مستخدم شخصي");
+  assertPersonalCapability(bot, "read");
+  const rows = await db
+    .select({ id: articles.id, status: articles.status, publishedAt: articles.publishedAt })
+    .from(articles)
+    .where(and(inArray(articles.id, ids), eq(articles.source, BOT_DRAFT_SOURCE), personalOwnershipWhere(bot)));
+  const roles = await getUserRoleNames(bot.personal.userId);
+  const canViewPublisherNames = roles.some((role) => SYSTEM_ADMIN_TIER_ROLES.includes(role.trim().toLowerCase()));
+  const names = new Map<string, string>();
+  const publishedOwnedIds = rows.filter((row) => row.status === "published").map((row) => row.id);
+  if (canViewPublisherNames && publishedOwnedIds.length) {
+    const events = await db.execute<{
+      articleId: string;
+      firstName: string | null;
+      lastName: string | null;
+    }>(sql`
+      SELECT a.id AS "articleId",
+             u.first_name AS "firstName",
+             u.last_name AS "lastName"
+      FROM articles a
+      LEFT JOIN LATERAL (
+        SELECT e.actor_id
+        FROM article_events e
+        WHERE e.article_id = a.id
+          AND e.event_type = 'published'
+        ORDER BY e.created_at DESC, e.id DESC
+        LIMIT 1
+      ) latest_event ON TRUE
+      LEFT JOIN users u ON u.id = latest_event.actor_id
+      WHERE a.id IN (${sql.join(publishedOwnedIds.map((id) => sql`${id}`), sql`, `)})
+    `);
+    for (const event of events.rows) {
+      const name = [event.firstName, event.lastName].filter(Boolean).join(" ").trim();
+      if (name) names.set(event.articleId, name);
+    }
+  }
+  return {
+    canViewPublisherNames,
+    items: rows.map((row) => ({
+      id: row.id,
+      status: row.status,
+      publishedAt: row.status === "published" ? isoOrNull(row.publishedAt) : null,
+      ...(canViewPublisherNames ? { publisherName: names.get(row.id) ?? null } : {}),
+    })),
+  };
 }
 
 export async function updateBotDraft(
