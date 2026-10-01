@@ -56,6 +56,7 @@ export default function GulfCupHomeSection() {
       champion={data.champion ?? null}
       emblemSrc={gulfCupLogoHorizontal}
       emblemAlt="شعار خليجي 27 الرسمي"
+      hideEmblemOnMobile
     />
   );
 }
