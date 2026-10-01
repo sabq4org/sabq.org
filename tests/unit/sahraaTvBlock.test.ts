@@ -84,9 +84,9 @@ describe("isValidXPostUrl", () => {
 });
 
 describe("parseSahraaTvBlockConfig", () => {
-  it("applies launch defaults (Sahraa video visible after resolve)", () => {
+  it("fails closed when no setting has been saved", () => {
     expect(parseSahraaTvBlockConfig(null)).toEqual({
-      isActive: true,
+      isActive: false,
       title: DEFAULT_SAHRAA_TITLE,
       description: DEFAULT_SAHRAA_DESCRIPTION,
       xPostUrl: DEFAULT_SAHRAA_X_POST_URL,
@@ -115,6 +115,22 @@ describe("parseSahraaTvBlockConfig", () => {
     expect(parsed.posterUrl).toBe("https://pbs.twimg.com/x.jpg");
     expect(parsed.updatedAt).toBe("2026-07-30T10:00:00.000Z");
   });
+
+  it("fails closed for a malformed setting", () => {
+    expect(
+      parseSahraaTvBlockConfig({
+        isActive: "true",
+        videoUrl: "https://video.example/a.mp4",
+      }).isActive,
+    ).toBe(false);
+    expect(
+      parseSahraaTvBlockConfig({
+        isActive: true,
+        xPostUrl: "https://x.com/home",
+        videoUrl: "https://video.example/a.mp4",
+      }).isActive,
+    ).toBe(false);
+  });
 });
 
 describe("toPublicSahraaTvBlock", () => {
@@ -126,6 +142,7 @@ describe("toPublicSahraaTvBlock", () => {
         description: "x",
         xPostUrl: "https://x.com/a/status/1234567890",
         videoUrl: "https://video.twimg.com/x.mp4",
+        mirroredVideoUrl: "",
         posterUrl: "",
         updatedAt: null,
       }).isVisible,
@@ -150,6 +167,7 @@ describe("toPublicSahraaTvBlock", () => {
       description: "وصف اليوم",
       xPostUrl: "https://x.com/AlSahraa/status/1234567890123456789",
       videoUrl: "https://video.twimg.com/clip.mp4",
+      mirroredVideoUrl: "",
       posterUrl: "https://pbs.twimg.com/thumb.jpg",
       updatedAt: "2026-07-30T10:00:00.000Z",
     });

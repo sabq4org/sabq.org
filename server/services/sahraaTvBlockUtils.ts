@@ -113,7 +113,9 @@ export function pickBestMp4Url(variants: XVideoVariant[]): string | null {
 /** إعدادات الإطلاق قبل أول حفظ من اللوحة */
 export function defaultSahraaTvBlockConfig(): SahraaTvBlockConfig {
   return {
-    isActive: true,
+    // A missing setting has never been explicitly approved for publication.
+    // The public endpoint must fail closed until an admin saves the block.
+    isActive: false,
     title: DEFAULT_SAHRAA_TITLE,
     description: DEFAULT_SAHRAA_DESCRIPTION,
     xPostUrl: DEFAULT_SAHRAA_X_POST_URL,
@@ -136,6 +138,20 @@ export function parseSahraaTvBlockConfig(value: unknown): SahraaTvBlockConfig {
   }
   const v = value as Record<string, unknown>;
   const defaults = defaultSahraaTvBlockConfig();
+  const has = (key: string) => Object.prototype.hasOwnProperty.call(v, key);
+  const malformed =
+    (has("isActive") && typeof v.isActive !== "boolean") ||
+    (has("title") && typeof v.title !== "string") ||
+    (has("description") && typeof v.description !== "string") ||
+    (has("xPostUrl") && typeof v.xPostUrl !== "string") ||
+    (has("videoUrl") && typeof v.videoUrl !== "string") ||
+    (has("mirroredVideoUrl") && typeof v.mirroredVideoUrl !== "string") ||
+    (has("posterUrl") && typeof v.posterUrl !== "string") ||
+    (has("updatedAt") &&
+      v.updatedAt !== null &&
+      (typeof v.updatedAt !== "string" || !Number.isFinite(Date.parse(v.updatedAt)))) ||
+    (has("xPostUrl") &&
+      (typeof v.xPostUrl !== "string" || !normalizeXPostUrl(v.xPostUrl)));
   const title =
     typeof v.title === "string" && v.title.trim()
       ? v.title.trim().slice(0, 80)
@@ -156,8 +172,8 @@ export function parseSahraaTvBlockConfig(value: unknown): SahraaTvBlockConfig {
       : null;
 
   return {
-    // قبل أول حفظ: ظاهر. بعد الحفظ: يتبع القيمة المخزّنة (حتى false)
-    isActive: typeof v.isActive === "boolean" ? v.isActive : defaults.isActive,
+    // القيمة المفقودة/غير الصحيحة تعني إعداداً غير مكتمل، لذلك نغلقه.
+    isActive: !malformed && typeof v.isActive === "boolean" ? v.isActive : false,
     title,
     description,
     xPostUrl: xPostUrl || defaults.xPostUrl,

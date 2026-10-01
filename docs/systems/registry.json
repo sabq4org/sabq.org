@@ -1209,7 +1209,10 @@
         "client/src/pages/dashboard/SahraaTvBlockSettings.tsx",
         "attached_assets/al-sahraa-channel-logo.png",
         "docs/systems/sahraa-tv-block/**",
-        "tests/unit/sahraaTvBlock.test.ts"
+        "tests/unit/sahraaTvBlock.test.ts",
+        "server/services/sahraaTvMediaMirror.ts",
+        "server/services/sahraaTvBlockPersistence.ts",
+        "tests/unit/sahraaTvBlock*.test.ts"
       ],
       "aiFeatureKeys": [],
       "dashboardPath": "/dashboard/sahraa-tv-block",
@@ -1217,7 +1220,7 @@
         "editorial",
         "platform"
       ],
-      "lastReviewed": "2026-07-30"
+      "lastReviewed": "2026-10-01"
     },
     {
       "id": "ai-staff",

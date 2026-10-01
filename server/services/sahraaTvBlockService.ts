@@ -2,7 +2,6 @@
  * بلوك قناة الصحراء — إعداد يومي عبر system_settings.
  * يعرض على الرئيسية فيديو فقط (MP4) + وصف تحريري — بلا واجهة تغريدة.
  */
-import { storage } from "../storage";
 import {
   SAHRAA_MEDIA_PATH,
   SAHRAA_TV_BLOCK_KEY,
@@ -16,6 +15,10 @@ import {
 } from "./sahraaTvBlockUtils";
 import { resolveXVideoFromPostUrl } from "./sahraaTvVideoResolver";
 import { mirrorSahraaVideoToR2 } from "./sahraaTvMediaMirror";
+import {
+  compareAndSetSahraaTvBlockSetting,
+  readSahraaTvBlockSetting,
+} from "./sahraaTvBlockPersistence";
 
 export {
   SAHRAA_MEDIA_PATH,
@@ -34,89 +37,34 @@ export {
 } from "./sahraaTvBlockUtils";
 
 export async function getSahraaTvBlockConfig(): Promise<SahraaTvBlockConfig> {
-  try {
-    const stored = await storage.getSystemSetting(SAHRAA_TV_BLOCK_KEY);
-    return parseSahraaTvBlockConfig(stored);
-  } catch {
-    return parseSahraaTvBlockConfig(null);
-  }
-}
-
-/** يضمن وجود videoUrl مستخرج من رابط إكس، ويُخزّنه إن نجح. */
-async function ensureVideoResolved(
-  config: SahraaTvBlockConfig,
-  persist: boolean,
-): Promise<SahraaTvBlockConfig> {
-  if (!config.isActive) return config;
-  if (config.videoUrl) return config;
-  if (!extractTweetId(config.xPostUrl)) return config;
-
-  const resolved = await resolveXVideoFromPostUrl(config.xPostUrl);
-  const next: SahraaTvBlockConfig = {
-    ...config,
-    videoUrl: resolved.videoUrl,
-    posterUrl: resolved.posterUrl,
-    updatedAt: config.updatedAt ?? new Date().toISOString(),
-  };
-
-  if (persist) {
-    try {
-      await storage.upsertSystemSetting(SAHRAA_TV_BLOCK_KEY, next, "content", true);
-    } catch (e) {
-      console.warn("[SahraaTvBlock] failed to persist resolved video:", e);
-    }
-  }
-  return next;
-}
-
-/** ينسخ الفيديو إلى R2 ويثبّت الرابط في الإعدادات. single-flight داخل الناسخ. */
-async function mirrorAndPersist(config: SahraaTvBlockConfig): Promise<void> {
-  const tweetId = extractTweetId(config.xPostUrl);
-  if (!tweetId || !config.videoUrl || config.mirroredVideoUrl) return;
-  const mirrored = await mirrorSahraaVideoToR2(config.videoUrl, tweetId);
-  if (!mirrored) return;
-  try {
-    await storage.upsertSystemSetting(
-      SAHRAA_TV_BLOCK_KEY,
-      { ...config, mirroredVideoUrl: mirrored },
-      "content",
-      true,
-    );
-  } catch (e) {
-    console.warn("[SahraaTvBlock] failed to persist mirrored url:", e);
-  }
+  const snapshot = await readSahraaTvBlockSetting();
+  return parseSahraaTvBlockConfig(snapshot?.rawValue ?? null);
 }
 
 export async function getPublicSahraaTvBlock(): Promise<SahraaTvBlockPublic> {
-  let config = await getSahraaTvBlockConfig();
+  // Public reads are deliberately read-only. Activation and mirroring happen
+  // only in an explicit admin save, so a hidden block cannot be resurrected by
+  // a homepage request.
+  let config: SahraaTvBlockConfig;
   try {
-    config = await ensureVideoResolved(config, true);
-  } catch (e: any) {
-    console.warn(
-      "[SahraaTvBlock] video resolve failed:",
-      e?.code ?? e?.message ?? e,
-      e?.details ?? "",
-    );
+    config = await getSahraaTvBlockConfig();
+  } catch (err) {
+    console.error("[SahraaTvBlock] public config read failed:", err);
     return { isVisible: false };
   }
   const pub = toPublicSahraaTvBlock(config);
-  if (pub.isVisible && pub.videoUrl) {
-    // نسخة R2 تُقدَّم من الحافة مباشرة. قبل اكتمال النسخ: بروكسي نفس المنشأ
-    // (المتصفح يرسل Referer=sabq.org فيُرفض الفيديو من twimg) — ويُطلق النسخ
-    // بالخلفية دون تعطيل الاستجابة.
-    if (config.mirroredVideoUrl) {
-      return { ...pub, videoUrl: config.mirroredVideoUrl };
-    }
-    void mirrorAndPersist(config);
-    return { ...pub, videoUrl: SAHRAA_MEDIA_PATH };
-  }
-  return pub;
+  return pub.isVisible
+    ? { ...pub, videoUrl: config.mirroredVideoUrl || SAHRAA_MEDIA_PATH }
+    : pub;
 }
 
 export async function saveSahraaTvBlockConfig(
   input: SaveSahraaTvBlockInput,
 ): Promise<SahraaTvBlockConfig> {
-  const current = await getSahraaTvBlockConfig();
+  // Capture the raw row before resolver/mirror work. The final write is a
+  // conditional CAS, so a concurrent hide wins over this slow save.
+  const snapshot = await readSahraaTvBlockSetting();
+  const current = parseSahraaTvBlockConfig(snapshot?.rawValue ?? null);
   let next = mergeSahraaTvBlockConfig(current, input);
 
   // عند التفعيل (أو تغيير الرابط) نستخرج الفيديو فوراً ونرفض الحفظ بلا فيديو
@@ -136,6 +84,6 @@ export async function saveSahraaTvBlockConfig(
     }
   }
 
-  await storage.upsertSystemSetting(SAHRAA_TV_BLOCK_KEY, next, "content", true);
+  await compareAndSetSahraaTvBlockSetting(snapshot, next);
   return next;
 }
