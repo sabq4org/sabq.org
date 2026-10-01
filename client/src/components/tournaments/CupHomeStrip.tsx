@@ -107,6 +107,8 @@ interface CupHomeStripProps {
   /** شعار البطولة الرسمي — يُعرض على رقعة بيضاء بدل أيقونة الكأس العامة */
   emblemSrc?: string;
   emblemAlt?: string;
+  /** إخفاء رقعة الشعار على شاشات الجوال فقط */
+  hideEmblemOnMobile?: boolean;
 }
 
 function arabicDays(n: number): string {
@@ -361,6 +363,7 @@ export default function CupHomeStrip({
   preSeason,
   emblemSrc,
   emblemAlt,
+  hideEmblemOnMobile = false,
 }: CupHomeStripProps) {
   if (!fixture && !champion && !preSeason) return null;
   // 3 مباريات فأكثر في اليوم = إبراز مباراة واحدة اعتباطي — نعرض عدّاد الجولة
@@ -396,7 +399,7 @@ export default function CupHomeStrip({
               <span className="flex items-center gap-3 cursor-pointer group">
                 {emblemSrc ? (
                   // الشعار الرسمي على رقعة بيضاء — نص الهوية الداكن يحتاج خلفية فاتحة
-                  <span className="rounded-xl bg-white p-1.5 shadow-lg shrink-0">
+                  <span className={`${hideEmblemOnMobile ? "hidden sm:block " : ""}rounded-xl bg-white p-1.5 shadow-lg shrink-0`}>
                     <img
                       src={emblemSrc}
                       alt={emblemAlt ?? title}
