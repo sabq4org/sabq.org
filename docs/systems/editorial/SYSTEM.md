@@ -1,6 +1,6 @@
 # نظام التحرير وغرف الأخبار (`editorial`)
 
-> آخر مراجعة: 2026-09-30 (BotDrafts personal publisher polish، opt-in full content read، SEO canonical وسبب الأرشفة) | المالك: editorial
+> آخر مراجعة: 2026-10-01 (BotDrafts personal publisher history، وقت النشر واسم منفذ النشر لمسؤول النظام) | المالك: editorial
 
 ## الغرض
 غرفة الأخبار اليومية + أدوات التحرير بالذكاء الاصطناعي التي يستخدمها المحررون: عناوين، مقالات، تصنيف، SEO، روابط ذكية، صور، وكلاء بريد/واتساب، ومساعد كاتب الرأي، والإعلانات الداخلية الموجهة لفريق العمل.
@@ -18,7 +18,7 @@
 | غرفة الأخبار | `articleEditLocks`, `editorAlerts`, `dashboardPulse` |
 | الإعلانات الداخلية | `server/routes/announcements.ts`، `/api/announcements/*`، وصفحات `/dashboard/announcements` |
 | AI تحريري | `ai-content-tools`, `aiArticleGenerator`, `seo-generator` |
-| مسودات البوتات | `server/routes/botDrafts.ts` + `server/services/botDraftsService.ts` + `botDraftPublishEffects.ts` + `shared/botDrafts.ts` — إنشاء/تحديث محتوى المسودة أو الخبر المنشور (`PATCH /:id`)/`PATCH /ready` و`POST /publish` و`POST /schedule` و`POST /:id/verdict` و`POST /images`. Bearer من `BOT_DRAFTS_API_TOKENS`. الدليل: [`BOT_DRAFTS_API.md`](./BOT_DRAFTS_API.md) |
+| مسودات البوتات | `server/routes/botDrafts.ts` + `server/services/botDraftsService.ts` + `botDraftPublishEffects.ts` + `shared/botDrafts.ts` — إنشاء/تحديث محتوى المسودة أو الخبر المنشور (`PATCH /:id`)/`PATCH /ready` و`POST /publish` و`POST /schedule` و`POST /:id/verdict` و`POST /images` و`GET /history` للتوكن الشخصي المالك. Bearer من `BOT_DRAFTS_API_TOKENS`. الدليل: [`BOT_DRAFTS_API.md`](./BOT_DRAFTS_API.md) |
 | النشر أولاً | `shared/publishFirst.ts` + `server/services/publishFirstService.ts` + `server/routes/publishFirst.ts` + `migrations/20260927_publish_first.sql` |
 | رادار الفجوات | `server/services/coverageGapMatcher.ts` (محرك المطابقة الدلالية), `server/routes/coverageGaps.ts` (`/api/admin/dashboard/coverage-gaps` + تعيين/مسودة/استبعاد) |
 | Web | `/dashboard`, Communications, Prompt Studio, Voice Management |

@@ -38,6 +38,7 @@
 | `POST` | `/api/internal/bot-drafts` | إنشاء مسودة عربية جديدة (الحالة `draft` دائماً) |
 | `POST` | `/api/internal/bot-drafts/images` | رفع صورة غلاف واحدة إلى R2 (`sabq-news-images` / `media.sabq.org`) عبر `newsImageStorageService` |
 | `GET` | `/api/internal/bot-drafts/:id` | قراءة حالة المسودة ومعرّفها ورابط التحرير |
+| `GET` | `/api/internal/bot-drafts/history?ids=<id,id,…>` | إسقاط تاريخ محدود لتواريخ النشر؛ للتوكن الشخصي المالك فقط |
 | `PATCH` | `/api/internal/bot-drafts/:id` | تحديث محتوى مسودة `draft` أو خبر `published` أنشأه البوت. نفس شكل الجسم |
 | `PATCH` | `/api/internal/bot-drafts/:id/ready` | انتقال واحد: `draft` → `ready_to_publish`. جسم فارغ. لا نشر |
 | `POST` | `/api/internal/bot-drafts/:id/publish` | نشر فوري. جسم فارغ `{}`. من `draft` أو `ready_to_publish` |
@@ -734,3 +735,8 @@ Personal `POST /:id/archive` also archives draft, ready and scheduled material. 
 Install `migrations/20260929_bot_publisher_tokens.sql` before enabling personal credentials. Existing environment-backed bot tokens retain their previous contract.
 
 - عند فقدان تفويض الجدولة يعيد العامل المادة مسودة مع سبب دائم يظهر في ملاحظات الرد وسجل العمليات؛ لا تظل جدولة معلقة تعيق الطابور. شرط SQL النهائي يفحص التوكن مرة أخرى قبل ترقية الحالة.
+### تاريخ النشر للتطبيق الشخصي — `GET /api/internal/bot-drafts/history`
+
+يقبل المسار توكن الناشر الشخصي فقط، ومعلمة `ids` تحتوي حتى 100 معرّف فريد (أحرف ASCII والأرقام و`_` و`-`، بحد 128 حرفاً لكل معرّف). تُطبّق ملكية التوكن في استعلام SQL ولا يعيد المسار مواد بوت يملكها مستخدم آخر أو مواداً غير `source=bot`. يعيد لكل مادة `id` و`status` و`publishedAt` فقط عندما تكون الحالة `published`؛ الحالات الأخرى تعيد `publishedAt: null`. لا يستخدم `updatedAt` أو `createdAt` بديلاً عن وقت النشر.
+
+يرد الحقل `canViewPublisherNames` دائماً. لا يظهر `publisherName` إلا للتوكن الشخصي لحساب ضمن أدوار مسؤول النظام المعتمدة، ويُستخرج من أحدث حدث `published` في `article_events` مع اسم منفذ الحدث. لا يُستنتج الاسم من مالك المادة أو حساب الإسناد أو اسم البوت، وإذا غاب الحدث/اسم المستخدم تكون القيمة `null`. التوكن القديم المشترك مرفوض بـ`403`.

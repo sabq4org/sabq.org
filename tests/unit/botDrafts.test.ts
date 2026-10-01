@@ -8,6 +8,7 @@ const state = vi.hoisted(() => ({
   personalAuth: vi.fn(),
   create: vi.fn(),
   get: vi.fn(),
+  history: vi.fn(),
   update: vi.fn(),
   ready: vi.fn(),
   publish: vi.fn(),
@@ -43,6 +44,7 @@ vi.mock("../../server/services/botDraftsService", async (original) => ({
   ...(await original<typeof import("../../server/services/botDraftsService")>()),
   createBotDraft: state.create,
   getBotDraft: state.get,
+  getBotDraftHistory: state.history,
   updateBotDraft: state.update,
   markBotDraftReady: state.ready,
   publishBotDraft: state.publish,
@@ -1205,6 +1207,26 @@ describe("personal publisher token routing", () => {
     state.get.mockResolvedValue(null);
     expect((await call("GET", "/api/internal/bot-drafts/other-id", undefined, "botpub_valid_personal_credential")).status).toBe(404);
     expect(state.get).toHaveBeenCalledWith("other-id", { name: "publisher-u-1", personal: principal });
+  });
+  it("returns bounded history through the personal token only", async () => {
+    state.personalAuth.mockResolvedValue(principal);
+    state.history.mockResolvedValue({
+      items: [{ id: "art-1", status: "published", publishedAt: "2026-10-01T12:00:00.000Z", publisherName: "محرر" }],
+      canViewPublisherNames: true,
+    });
+    const response = await call("GET", "/api/internal/bot-drafts/history?ids=art-1,art-1,art_2", undefined, "botpub_valid_personal_credential");
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ canViewPublisherNames: true });
+    expect(state.history).toHaveBeenCalledWith(["art-1", "art_2"], { name: "publisher-u-1", personal: principal });
+    expect((await call("GET", "/api/internal/bot-drafts/history?ids=art-1", undefined, NASHR)).status).toBe(403);
+  });
+  it("rejects invalid or oversized history id lists before querying", async () => {
+    state.personalAuth.mockResolvedValue(principal);
+    expect((await call("GET", "/api/internal/bot-drafts/history?ids=bad.id", undefined, "botpub_valid_personal_credential")).status).toBe(400);
+    expect((await call("GET", "/api/internal/bot-drafts/history?ids=,%20,%20", undefined, "botpub_valid_personal_credential")).status).toBe(400);
+    const ids = Array.from({ length: 101 }, (_, index) => `id-${index}`).join(",");
+    expect((await call("GET", `/api/internal/bot-drafts/history?ids=${ids}`, undefined, "botpub_valid_personal_credential")).status).toBe(400);
+    expect(state.history).not.toHaveBeenCalled();
   });
   it("rejects reviewer verdicts and unauthorized uploads before performing work", async () => {
     state.personalAuth.mockResolvedValue(principal);
