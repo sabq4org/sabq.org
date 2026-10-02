@@ -375,6 +375,7 @@
         "server/services/publishFirstService.ts",
         "server/routes/publishFirst.ts",
         "migrations/20260927_publish_first.sql",
+        "migrations/20261002_bot_publish_operations.sql",
         "tests/unit/publishFirst.test.ts",
         "client/src/components/article-editor/PublishFirstPanel.tsx",
         "client/src/components/admin/PublishFirstFlagsCard.tsx",

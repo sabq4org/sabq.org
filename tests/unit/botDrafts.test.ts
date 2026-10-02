@@ -12,6 +12,7 @@ const state = vi.hoisted(() => ({
   update: vi.fn(),
   ready: vi.fn(),
   publish: vi.fn(),
+  getOperation: vi.fn(),
   schedule: vi.fn(),
   reschedule: vi.fn(),
   unschedule: vi.fn(),
@@ -48,6 +49,7 @@ vi.mock("../../server/services/botDraftsService", async (original) => ({
   updateBotDraft: state.update,
   markBotDraftReady: state.ready,
   publishBotDraft: state.publish,
+  getBotDraftPublishOperation: state.getOperation,
   scheduleBotDraft: state.schedule,
   rescheduleBotDraft: state.reschedule,
   unscheduleBotDraft: state.unschedule,
@@ -584,6 +586,25 @@ describe("POST /api/internal/bot-drafts/:id/publish", () => {
     expect(forbidden.status).toBe(422);
     expect((await forbidden.json()).code).toBe("forbidden_fields");
     expect(state.publish).not.toHaveBeenCalled();
+  });
+  it("returns a durable operation envelope and exposes the same receipt by GET", async () => {
+    const operationId = "11111111-1111-4111-8111-111111111111";
+    state.publish.mockResolvedValueOnce({ operationId, articleId: "art-1", action: "publish", status: "processing" });
+    const pending = await call("POST", "/api/internal/bot-drafts/art-1/publish", { operationId });
+    expect(pending.status).toBe(202);
+    expect(await pending.json()).toMatchObject({ operationId, articleId: "art-1", action: "publish", status: "processing" });
+    expect(state.publish).toHaveBeenCalledWith({ name: "nashr-sabq" }, "art-1", expect.anything(), { operationId });
+
+    state.getOperation.mockResolvedValueOnce({ operationId, articleId: "art-1", action: "publish", status: "failed", error: { code: "locked_by_editor", message: "محرر يعمل" }, executionOutcome: "not_applied" });
+    const receipt = await call("GET", `/api/internal/bot-drafts/art-1/operations/${operationId}`);
+    expect(receipt.status).toBe(200);
+    expect(await receipt.json()).toMatchObject({ status: "failed", executionOutcome: "not_applied", error: { code: "locked_by_editor" } });
+  });
+  it("preserves collision errors from the receipt service", async () => {
+    state.publish.mockRejectedValueOnce(new BotDraftError(409, "operation_id_collision", "operationId مستخدم لطلب مختلف"));
+    const response = await call("POST", "/api/internal/bot-drafts/art-1/publish", { operationId: "22222222-2222-4222-8222-222222222222" });
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ code: "operation_id_collision" });
   });
   it("maps lock, already published, and a non-bot row", async () => {
     state.publish.mockRejectedValueOnce(new BotDraftError(409, "locked_by_editor", "محرر يعمل على المسودة الآن", { editor: "علي" }));

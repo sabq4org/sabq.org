@@ -11,7 +11,7 @@
 import crypto from "node:crypto";
 import { and, eq, gt, inArray, isNull, sql, type SQL } from "drizzle-orm";
 import { db } from "../db";
-import { articleEditLocks, articles, categories, enArticles, users } from "@shared/schema";
+import { articleEditLocks, articlePublishOperations, articles, categories, enArticles, users } from "@shared/schema";
 import { SABQ_NEWSPAPER_ACCOUNT_ID } from "@shared/sabqNewspaper";
 import { SYSTEM_ADMIN_TIER_ROLES } from "@shared/rbac-constants";
 import {
@@ -25,6 +25,7 @@ import {
   type BotDraftArchiveInput,
   type BotDraftCreateInput,
   type BotDraftErrorCode,
+  type BotDraftPublishOperationResponse,
   type BotDraftResponse,
   type BotDraftUpdateInput,
   type BotDraftVisibilityInput,
@@ -43,6 +44,7 @@ import {
   sensitiveGateForArticle,
   botDraftUploadIssue,
   recordPublishOverride,
+  recordPublishOverrideInTransaction,
   editorDisplayName,
   recordReviewerVerdict,
 } from "./publishFirstService";
@@ -978,6 +980,105 @@ export interface BotRequestContext {
   userAgent?: string;
 }
 
+type PublishOperationRow = typeof articlePublishOperations.$inferSelect;
+
+function publishActorKey(bot: BotIdentity): string {
+  return bot.personal ? `personal:${bot.personal.userId}` : `legacy:${bot.name}`;
+}
+
+function publishBodyFingerprint(options: { sensitiveOverride?: true; overrideReason?: string }): string {
+  return crypto
+    .createHash("sha256")
+    .update(JSON.stringify({
+      sensitiveOverride: options.sensitiveOverride === true,
+      overrideReason: options.sensitiveOverride === true ? (options.overrideReason ?? "") : null,
+    }))
+    .digest("hex");
+}
+
+function operationResponse(row: PublishOperationRow): BotDraftPublishOperationResponse {
+  const result: BotDraftPublishOperationResponse = {
+    operationId: row.operationId,
+    articleId: row.articleId,
+    action: "publish",
+    status: row.status as BotDraftPublishOperationResponse["status"],
+  };
+  if (row.response && typeof row.response === "object") result.response = row.response as unknown as BotDraftResponse;
+  if (row.error && typeof row.error === "object") {
+    const { executionOutcome, ...safeError } = row.error as Record<string, unknown>;
+    result.error = safeError as BotDraftPublishOperationResponse["error"];
+    if (executionOutcome === "not_applied") result.executionOutcome = "not_applied";
+  }
+  return result;
+}
+
+async function claimPublishOperation(
+  bot: BotIdentity,
+  articleId: string,
+  operationId: string,
+  options: { sensitiveOverride?: true; overrideReason?: string },
+): Promise<{ claimed: boolean; row: PublishOperationRow }> {
+  const actorKey = publishActorKey(bot);
+  const bodyFingerprint = publishBodyFingerprint(options);
+  const [created] = await db
+    .insert(articlePublishOperations)
+    .values({
+      operationId,
+      actorKey,
+      articleId,
+      bodyFingerprint,
+      status: "processing",
+      claimedAt: new Date(),
+    })
+    .onConflictDoNothing({ target: [articlePublishOperations.actorKey, articlePublishOperations.articleId, articlePublishOperations.operationId] })
+    .returning();
+  if (created) return { claimed: true, row: created };
+
+  const [existing] = await db
+    .select()
+    .from(articlePublishOperations)
+    .where(and(
+      eq(articlePublishOperations.actorKey, actorKey),
+      eq(articlePublishOperations.articleId, articleId),
+      eq(articlePublishOperations.operationId, operationId),
+    ))
+    .limit(1);
+  if (!existing) throw new BotDraftError(503, "server_error", "تعذر قراءة نتيجة عملية النشر");
+  if (existing.bodyFingerprint !== bodyFingerprint) {
+    throw new BotDraftError(409, "operation_id_collision", "operationId مستخدم لطلب نشر مختلف");
+  }
+  return { claimed: false, row: existing };
+}
+
+async function markPublishOperationFailed(operationId: string, actorKey: string, articleId: string, error: BotDraftError): Promise<void> {
+  await db
+    .update(articlePublishOperations)
+    .set({
+      status: "failed",
+      error: { code: error.code, message: error.message, details: error.details, executionOutcome: "not_applied" },
+      completedAt: new Date(),
+    })
+    .where(and(
+      eq(articlePublishOperations.operationId, operationId),
+      eq(articlePublishOperations.actorKey, actorKey),
+      eq(articlePublishOperations.articleId, articleId),
+      eq(articlePublishOperations.status, "processing"),
+    ));
+}
+
+async function ensurePublishReceiptPrivileges(tx: any, needsOverrideAudit: boolean, needsReceipt: boolean): Promise<void> {
+  if (typeof tx.execute !== "function") return;
+  const result = await tx.execute(sql`
+    SELECT
+      ${needsReceipt} = false OR has_table_privilege(current_user, 'article_publish_operations', 'UPDATE') AS receipt_update,
+      ${needsOverrideAudit} = false OR has_table_privilege(current_user, 'article_publish_overrides', 'INSERT') AS override_insert
+  `);
+  const row = (result as any)?.[0] ?? (result as any)?.rows?.[0];
+  if (!row || row.receipt_update !== true || row.override_insert !== true) {
+    throw new BotDraftError(503, "server_error", "صلاحيات سجل النشر غير مكتملة — لم تُكتب المادة");
+  }
+}
+
 // ────────────────────────────────────────────────────────────────────
 // العمليات
 // ────────────────────────────────────────────────────────────────────
@@ -1435,10 +1536,23 @@ export async function publishBotDraft(
   bot: BotIdentity,
   articleId: string,
   ctx: BotRequestContext = {},
-  options: { sensitiveOverride?: true; overrideReason?: string } = {},
-): Promise<BotDraftResponse> {
+  options: { operationId?: string; sensitiveOverride?: true; overrideReason?: string } = {},
+): Promise<BotDraftResponse | BotDraftPublishOperationResponse> {
   assertPersonalCapability(bot, "publish");
   const existing = await findBotArticle(articleId, bot);
+  if (!existing) throwIfNotReleasable(existing);
+
+  let claimedOperation: PublishOperationRow | undefined;
+  if (options.operationId) {
+    const claimed = await claimPublishOperation(bot, articleId, options.operationId, options);
+    if (!claimed.claimed) return operationResponse(claimed.row);
+    claimedOperation = claimed.row;
+  }
+
+  const actorKey = publishActorKey(bot);
+  let transactionCallbackCompleted = false;
+  let articleWriteStarted = false;
+  try {
   throwIfNotReleasable(existing);
   await throwIfEditLocked(articleId);
   await assertBotDraftBylineMayPublish(bot, existing);
@@ -1449,41 +1563,135 @@ export async function publishBotDraft(
   const gate = await assertBotSensitiveRelease(existing.id, existing.riskLabel, overrideRequested);
 
   const now = new Date();
-  const patch: BotDraftPublishUpdate & { englishSlug?: string } = buildBotDraftPublishUpdate(now, existing.publishedAt);
-  if (!existing.englishSlug) {
-    patch.englishSlug = generateEnglishSlug(existing.title);
-  }
-
-  const [row] = await db.update(articles).set(patch).where(releasableWhere(articleId, bot)).returning();
-  if (!row) {
-    throw new BotDraftError(409, "not_a_draft", "تغيّرت حالة المادة أثناء النشر", { status: "unknown" });
-  }
-
+  let row: ArticleRow;
+  let response: BotDraftResponse;
+  let effectiveGate = gate;
+  let publishPatch: (BotDraftPublishUpdate & { englishSlug?: string }) | undefined;
+  let alreadyTerminal: BotDraftPublishOperationResponse | undefined;
+  await db.transaction(async (tx) => {
+    if (claimedOperation) {
+      const [lockedOperation] = await tx
+        .select()
+        .from(articlePublishOperations)
+        .where(eq(articlePublishOperations.id, claimedOperation.id))
+        .limit(1)
+        .for("update");
+      if (!lockedOperation) throw new BotDraftError(503, "server_error", "تعذر قفل نتيجة عملية النشر");
+      if (lockedOperation.status !== "processing") {
+        alreadyTerminal = operationResponse(lockedOperation);
+        return;
+      }
+    }
+    await ensurePublishReceiptPrivileges(tx, Boolean(gate.override && bot.personal), Boolean(claimedOperation));
+    const [lockedArticle] = await tx
+      .select()
+      .from(articles)
+      .where(releasableWhere(articleId, bot))
+      .limit(1)
+      .for("update");
+    if (!lockedArticle) {
+      throw new BotDraftError(409, "not_a_draft", "تغيّرت حالة المادة أثناء النشر", { status: "unknown" });
+    }
+    await throwIfEditLocked(articleId);
+    await assertBotDraftBylineMayPublish(bot, lockedArticle);
+    // Re-read the sensitive gate after locking the current article row so a
+    // concurrent risk-label change cannot bypass the gate checked above.
+    effectiveGate = await assertBotSensitiveRelease(lockedArticle.id, lockedArticle.riskLabel, overrideRequested);
+    publishPatch = buildBotDraftPublishUpdate(now, lockedArticle.publishedAt);
+    if (!lockedArticle.englishSlug) publishPatch.englishSlug = generateEnglishSlug(lockedArticle.title);
+    articleWriteStarted = true;
+    const [updated] = await tx.update(articles).set(publishPatch).where(eq(articles.id, articleId)).returning();
+    if (!updated) throw new BotDraftError(409, "not_a_draft", "تغيّرت حالة المادة أثناء النشر", { status: "unknown" });
+    row = updated;
+    const [category] = await tx.select({ slug: categories.slug }).from(categories).where(eq(categories.id, row.categoryId ?? "")).limit(1);
+    response = toBotDraftResponse(row, category?.slug ?? null);
+    if (effectiveGate.override && bot.personal) {
+      try {
+        await recordPublishOverrideInTransaction(tx, {
+          articleId: row.id,
+          actorUserId: bot.personal.userId,
+          actorName: await editorDisplayName(bot.personal.userId),
+          action: "publish",
+          reason: options.overrideReason ?? null,
+          now,
+        });
+      } catch (error) {
+        // The article update is inside this transaction; convert an audit
+        // insert failure into a definitive rollback outcome for the receipt.
+        throw new BotDraftError(503, "server_error", "تعذر تسجيل تجاوز الحساسية — لم تُنشر المادة");
+      }
+    }
+    if (claimedOperation) {
+      const [saved] = await tx
+        .update(articlePublishOperations)
+        .set({ status: "succeeded", response: response as unknown as Record<string, unknown>, error: null, completedAt: new Date() })
+        .where(and(eq(articlePublishOperations.id, claimedOperation.id), eq(articlePublishOperations.status, "processing")))
+        .returning();
+      if (!saved) throw new BotDraftError(503, "server_error", "تعذر حفظ نتيجة عملية النشر");
+    }
+    transactionCallbackCompleted = true;
+  });
+  if (alreadyTerminal) return alreadyTerminal;
   invalidateAdminListCaches();
-  if (gate.override && bot.personal) {
-    await recordPublishOverride({
-      articleId: row.id,
-      actorUserId: bot.personal.userId,
-      actorName: await editorDisplayName(bot.personal.userId),
-      action: "publish",
-      reason: options.overrideReason ?? null,
-    });
+  try {
+    const { queueBotDraftPublishEffects } = await import("./botDraftPublishEffects");
+    queueBotDraftPublishEffects(row!, bot.name);
+  } catch (error) {
+    console.error("[BotDrafts] publish effects failed after committed publish:", error);
   }
-  const { queueBotDraftPublishEffects } = await import("./botDraftPublishEffects");
-  queueBotDraftPublishEffects(row, bot.name);
   await recordEvent(
-    row.id,
-    row.authorId,
+    row!.id,
+    row!.authorId,
     "published",
     `نشر البوت «${bot.name}» الخبر`,
     bot,
     existing.sourceMetadata?.clientReference,
     ctx,
-    row,
+    row!,
     existing,
   );
-  console.log(`[BotDrafts] published ${row.id} by bot=${bot.name}`);
-  return toBotDraftResponse(row, await categorySlugFor(row.categoryId));
+  console.log(`[BotDrafts] published ${row!.id} by bot=${bot.name}`);
+  return claimedOperation
+    ? { operationId: claimedOperation.operationId, articleId, action: "publish", status: "succeeded", response: response! }
+    : response!;
+  } catch (error) {
+    const definitiveFailure = error instanceof BotDraftError
+      ? error
+      : (!transactionCallbackCompleted && claimedOperation && !articleWriteStarted
+        ? new BotDraftError(503, "server_error", "فشلت عملية النشر قبل تثبيت الكتابة — لم تُطبّق", { executionOutcome: "not_applied" })
+        : (claimedOperation && articleWriteStarted && typeof (error as { code?: unknown })?.code === "string" && /^(23|42501)$/.test((error as { code: string }).code)
+          ? new BotDraftError(503, "server_error", "فشلت معاملة النشر وتراجعت — لم تُطبّق", { executionOutcome: "not_applied" })
+          : null));
+    if (claimedOperation && definitiveFailure) {
+      try {
+        await markPublishOperationFailed(claimedOperation.operationId, actorKey, articleId, definitiveFailure);
+      } catch (markError) {
+        console.error("[BotDrafts] failed to persist publish failure receipt:", markError);
+      }
+    }
+    throw error;
+  }
+}
+
+export async function getBotDraftPublishOperation(
+  bot: BotIdentity,
+  articleId: string,
+  operationId: string,
+): Promise<BotDraftPublishOperationResponse> {
+  assertPersonalCapability(bot, "publish");
+  const article = await findBotArticle(articleId, bot);
+  if (!article) throw new BotDraftError(404, "not_found", "المسودة غير موجودة");
+  const [row] = await db
+    .select()
+    .from(articlePublishOperations)
+    .where(and(
+      eq(articlePublishOperations.actorKey, publishActorKey(bot)),
+      eq(articlePublishOperations.articleId, articleId),
+      eq(articlePublishOperations.operationId, operationId),
+    ))
+    .limit(1);
+  if (!row) throw new BotDraftError(404, "operation_not_found", "عملية النشر غير موجودة");
+  return operationResponse(row);
 }
 
 /**

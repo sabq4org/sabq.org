@@ -1218,6 +1218,29 @@ export const articlePublishOverrides = pgTable("article_publish_overrides", {
   index("idx_article_publish_overrides_article").on(table.articleId, table.createdAt.desc()),
 ]);
 
+// Durable receipt for bot publish idempotency. The operation key is scoped to
+// the authenticated actor and article; the body fingerprint rejects reuse of
+// the same key for a different publish intent.
+export const articlePublishOperations = pgTable("article_publish_operations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  operationId: varchar("operation_id").notNull(),
+  actorKey: varchar("actor_key").notNull(),
+  articleId: varchar("article_id").references(() => articles.id, { onDelete: "cascade" }).notNull(),
+  bodyFingerprint: varchar("body_fingerprint").notNull(),
+  status: text("status").notNull(), // processing | succeeded | failed
+  response: jsonb("response").$type<Record<string, unknown> | null>(),
+  error: jsonb("error").$type<Record<string, unknown> | null>(),
+  claimedAt: timestamp("claimed_at").defaultNow().notNull(),
+  completedAt: timestamp("completed_at"),
+}, (table) => [
+  uniqueIndex("uq_article_publish_operations_actor_article_operation").on(
+    table.actorKey,
+    table.articleId,
+    table.operationId,
+  ),
+  index("idx_article_publish_operations_article").on(table.articleId, table.claimedAt.desc()),
+]);
+
 // RSS feeds for import
 export const rssFeeds = pgTable("rss_feeds", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

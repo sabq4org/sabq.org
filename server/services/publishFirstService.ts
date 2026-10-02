@@ -220,6 +220,20 @@ export async function recordPublishOverride(input: {
   return saved;
 }
 
+/** Same audit row writer, for callers that must commit it with another write. */
+export async function recordPublishOverrideInTransaction(tx: any, input: {
+  articleId: string;
+  actorUserId?: string | null;
+  actorName?: string | null;
+  action: "publish" | "correct";
+  reason?: string | null;
+  now?: Date;
+}) {
+  const row = buildOverrideLogRow({ ...input, now: input.now ?? new Date() });
+  const [saved] = await tx.insert(articlePublishOverrides).values(row).returning();
+  return saved;
+}
+
 export async function recordArticleRevision(input: {
   articleId: string;
   editorUserId?: string | null;
