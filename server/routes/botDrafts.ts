@@ -55,6 +55,7 @@ import {
   archiveBotDraft,
   getBotDraft,
   getBotDraftHistory,
+  getBotDraftPublishOperation,
   isBotDraftsConfigured,
   markBotDraftReady,
   publishBotDraft,
@@ -406,9 +407,27 @@ router.post(
     }
     try {
       const draft = await publishBotDraft(req.bot!, req.params.id, requestContext(req), parsed.data);
+      if (parsed.data.operationId && "status" in draft && draft.status === "processing") return res.status(202).json(draft);
+      if (parsed.data.operationId && "status" in draft && draft.status === "failed") return res.status(422).json(draft);
       res.json(draft);
     } catch (error) {
       handleError(res, error, "publish");
+    }
+  },
+);
+
+router.get(
+  `${BOT_DRAFTS_BASE_PATH}/:id/operations/:operationId`,
+  requireBotToken,
+  async (req: BotRequest, res: Response) => {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(req.params.operationId)) {
+      return sendError(res, 400, { code: "validation_error", message: "operationId يجب أن يكون UUID صالحاً" });
+    }
+    try {
+      const operation = await getBotDraftPublishOperation(req.bot!, req.params.id, req.params.operationId);
+      res.json(operation);
+    } catch (error) {
+      handleError(res, error, "publish-operation");
     }
   },
 );

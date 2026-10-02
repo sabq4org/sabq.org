@@ -1,12 +1,12 @@
 # Bot Drafts API — مسودات ونشر وجدولة وإدارة بعد النشر لبوت «نشر سبق»
 
-> آخر مراجعة: 2026-09-29 | المالك: editorial | الحالة: مسودة، جاهز للمناوب، نشر، جدولة، تعديل المحتوى بعد النشر، ثم أرشفة وتعديل الموعد والظهور.
+> آخر مراجعة: 2026-10-02 | المالك: editorial | الحالة: مسودة، جاهز للمناوب، نشر موثوق قابل للاستعادة، جدولة، تعديل المحتوى بعد النشر، ثم أرشفة وتعديل الموعد والظهور.
 
 ## الملخص (للبوت)
 
 1. **إنشاء مسودة:** `POST https://api.sabq.org/api/internal/bot-drafts` مع ترويسة `Authorization: Bearer <SABQ_BOT_DRAFTS_TOKEN>` وجسم JSON فيه `title` و`content` (وتصنيف اختياري `categorySlug`). الرد يحمل `id` و`editUrl`.
 2. **تحديث المحتوى:** `PATCH https://api.sabq.org/api/internal/bot-drafts/<id>` بنفس الترويسة والحقول التي تغيّرت فقط. يعمل على `draft`، وعلى `published` إن كان `source=bot`. ممنوع إرسال `status` أو أي حقل نشر/جدولة في الجسم — يُرفض 422. على المنشور: العنوان والمتن والموجز والصورة والكلمات وحقلا SEO والمصدر فقط؛ `categorySlug` مرفوض 422. الحالة تبقى `published` والرابط و`publishedAt` لا يتغيران.
-3. **نشر فوري:** `POST https://api.sabq.org/api/internal/bot-drafts/<id>/publish` بجسم فارغ `{}`. يعمل على `draft` أو `ready_to_publish` فقط. الرد: `status: "published"` و`updatable: true` (البوت يستطيع بعدها تعديل المحتوى) و`publicUrl` (رابط القارئ).
+3. **نشر فوري:** `POST https://api.sabq.org/api/internal/bot-drafts/<id>/publish` بجسم فارغ `{}`. يعمل على `draft` أو `ready_to_publish` فقط. يمكن إرسال `operationId` كـ UUID لإعادة المحاولة الآمنة. عند استخدامه تحفظ الخدمة إيصالاً دائماً مرتبطاً بالتوكن والمادة وبصمة الجسم؛ الرد يكون `{ operationId, articleId, action: "publish", status: "succeeded", response: <BotDraftResponse> }` بعد نجاح المعاملة، أو `status: "processing"` مع HTTP 202 إذا بقيت النتيجة غير محسومة. الفشل المؤكد قبل الكتابة يعاد في إيصال `status: "failed"` مع `error: { code, message }` و`executionOutcome: "not_applied"`، ولا يُستنتج الفشل من حالة المسودة. `GET .../<id>/operations/<operationId>` يعيد الإيصال نفسه. إعادة استخدام المعرّف مع جسم مختلف ترفض `409 operation_id_collision`، وملكية المادة تبقى شرطاً قبل قراءة الإيصال.
 4. **جدولة:** `POST https://api.sabq.org/api/internal/bot-drafts/<id>/schedule` بجسم `{ "publishAt": "2026-09-24T18:30:00+03:00" }`. وقت الرياض يُرسل بإزاحة `+03:00` أو ما يعادله UTC (`Z`). الماضي يُرفض 400. الرد: `status: "scheduled"` و`scheduledAt` و`editUrl`.
 5. **تغيير الموعد:** `PATCH .../<id>/schedule` بنفس جسم `publishAt`، والمادة حالتها `scheduled` فقط.
 6. **إلغاء الجدولة:** `DELETE .../<id>/schedule` بجسم فارغ. تعود `draft` ولا تُحذف.
@@ -42,6 +42,7 @@
 | `PATCH` | `/api/internal/bot-drafts/:id` | تحديث محتوى مسودة `draft` أو خبر `published` أنشأه البوت. نفس شكل الجسم |
 | `PATCH` | `/api/internal/bot-drafts/:id/ready` | انتقال واحد: `draft` → `ready_to_publish`. جسم فارغ. لا نشر |
 | `POST` | `/api/internal/bot-drafts/:id/publish` | نشر فوري. جسم فارغ `{}`. من `draft` أو `ready_to_publish` |
+| `GET` | `/api/internal/bot-drafts/:id/operations/:operationId` | قراءة إيصال نشر UUID للمالك فقط؛ processing/succeeded/failed |
 | `POST` | `/api/internal/bot-drafts/:id/schedule` | جدولة أولى. الجسم `{ "publishAt": "<ISO-8601 مع منطقة>" }` من `draft` أو `ready_to_publish` |
 | `PATCH` | `/api/internal/bot-drafts/:id/schedule` | تغيير موعد مادة `scheduled`. نفس جسم `publishAt` |
 | `DELETE` | `/api/internal/bot-drafts/:id/schedule` | إلغاء الجدولة والعودة إلى `draft`. جسم فارغ. لا حذف للصف |

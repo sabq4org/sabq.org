@@ -224,6 +224,7 @@ export const botDraftUpdateSchema = z
  */
 export const botDraftPublishSchema = z
   .object({
+    operationId: z.string().uuid().optional(),
     sensitiveOverride: z.literal(true).optional(),
     overrideReason: z.string().trim().min(3).max(500).optional(),
   })
@@ -233,6 +234,22 @@ export const botDraftPublishSchema = z
     path: ["overrideReason"],
   });
 export type BotDraftPublishInput = z.infer<typeof botDraftPublishSchema>;
+
+export type BotDraftPublishOperationStatus = "processing" | "succeeded" | "failed";
+
+export interface BotDraftPublishOperationResponse {
+  operationId: string;
+  articleId: string;
+  action: "publish";
+  status: BotDraftPublishOperationStatus;
+  response?: BotDraftResponse;
+  error?: {
+    code: BotDraftErrorCode;
+    message: string;
+    details?: unknown;
+  };
+  executionOutcome?: "not_applied";
+}
 
 /**
  * POST /api/internal/bot-drafts/:id/verdict — حكم مراجع.
@@ -448,6 +465,8 @@ export const BOT_DRAFT_ERROR_CODES = [
   "storage_unavailable",
   "upload_failed",
   "server_error",
+  "operation_id_collision",
+  "operation_not_found",
 ] as const;
 
 export type BotDraftErrorCode = (typeof BOT_DRAFT_ERROR_CODES)[number];

@@ -1,6 +1,6 @@
 # نظام التحرير وغرف الأخبار (`editorial`)
 
-> آخر مراجعة: 2026-10-01 (BotDrafts personal publisher history، وقت النشر واسم منفذ النشر لمسؤول النظام) | المالك: editorial
+> آخر مراجعة: 2026-10-02 (BotDrafts publish idempotency receipts، outcome contract، وatomic sensitive override audit) | المالك: editorial
 
 ## الغرض
 غرفة الأخبار اليومية + أدوات التحرير بالذكاء الاصطناعي التي يستخدمها المحررون: عناوين، مقالات، تصنيف، SEO، روابط ذكية، صور، وكلاء بريد/واتساب، ومساعد كاتب الرأي، والإعلانات الداخلية الموجهة لفريق العمل.
@@ -252,6 +252,8 @@
 - **بعد النشر والجدولة (2026-09-26):** البوت يدير صف `source=bot` فقط. `PATCH /:id` على `published` يعدّل المحتوى المسموح ويبقي الحالة والموعد والرابط، ويُبطل كاش القرّاء مثل حفظ المحرر بلا تنبيه. `POST /:id/archive` على `published` يكتب `archived` و`reviewStatus=null` مثل أرشفة اللوحة (لا حذف صف؛ الاستعادة من اللوحة). يُبطل كاش القرّاء وخرائط المقالات و`sitemap-news` وخلاصات RSS، ويرسل تنبيه الأرشفة لصاحب الاسم لا للقرّاء. `DELETE /:id` يبقى `405`. `PATCH /:id/schedule` يبدّل `scheduledAt` لمادة `scheduled` بنفس تحقق `publishAt` ومن دون إعادة تنبيه الجدولة. `DELETE /:id/schedule` يعيدها `draft` (`scheduledAt=null`) بلا حذف. `PATCH /:id/visibility` يكتب `isFeatured` و`newsType` (`breaking`|`regular`) و`hideFromHomepage` كما يفعل المحرر. تعليم العاجل **لا** يرسل دفع القرّاء، مثل `POST /toggle-breaking`؛ الدفع يبقى عند النشر فقط. إلغاء العاجل يطهّر شريط العاجل على الحافة. حالة خاطئة: `409 not_published` أو `409 not_scheduled`. قفل المحرر يبقى `409 locked_by_editor`.
 
 ## النشر أولاً — 2026-09-27
+
+- **موثوقية نشر BotDrafts (Issue #1799، 2026-10-02):** `POST /:id/publish` يقبل `operationId` UUID اختيارياً، ويكتب إيصالاً دائماً في `article_publish_operations` مرتبطاً بالفاعل والمادة وبصمة الجسم. تحديث المقال وسجل تجاوز الحساسية وإيصال النجاح معاملة واحدة؛ أي فشل مؤكد قبل الـcommit أو بعد rollback يثبت `failed` مع `executionOutcome=not_applied`. غموض الشبكة/الـcommit يبقى `processing`، ولا يُفسَّر من حالة المقال. `GET /:id/operations/:operationId` يقرأ الإيصال للمالك فقط؛ إعادة المعرّف نفسه مع بصمة مختلفة `409 operation_id_collision`. التوكنات القديمة بلا `operationId` تظل متوافقة، لكن مسار النشر نفسه يستخدم المعاملة الذرية. الترحيل الإضافي: `migrations/20261002_bot_publish_operations.sql`، ويجب تشغيله قبل نشر نسخة API التي تستخدم هذا العقد.
 
 - أربعة أعلام في `system_settings`، والصف الغائب يعني **مفعّل**. القراءة تُخزَّن 5 ثوانٍ وتُمسح عند الكتابة، بلا إعادة نشر: `publish_first_validation` و`publish_first_sensitive_gate` و`publish_first_revision_history` و`publish_first_update_line`. الإطفاء من `PUT /api/admin/publish-first/flags` (صلاحية `system.manage_settings`) أو من بطاقة «النشر أولاً» في إعدادات النظام.
 - تحقق الرفع (علم التحقق): `subtitle` أكثر من 120 حرفاً → `422 subtitle_too_long`. `categorySlug` غير الموجود → `422 category_not_found` ومع العلم مفعّلاً تُرفق `validSlugs` (حتى 40). إطفاء العلم يعيد سقف 300 حرفاً ويحذف قائمة التصنيفات؛ التصنيف المجهول يبقى 422 لأنه لا معرّف يُكتب.

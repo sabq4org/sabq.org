@@ -188,15 +188,24 @@ paths:
                 غير المدير يُرفض 403 sensitive_override_forbidden، والاستثناء يُسجّل في article_publish_overrides.
                 أي حقل آخر يُرفض. status أو authorId يُرفضان 422.
               properties:
+                operationId: { type: string, format: uuid, description: معرّف عملية ثابت لإعادة المحاولة الآمنة وقراءة الإيصال }
                 sensitiveOverride: { type: boolean, enum: [true] }
                 overrideReason: { type: string, minLength: 3, maxLength: 500 }
       responses:
         "200":
-          description: نُشرت. status=published وupdatable=true وpublicUrl
+          description: نُشرت أو أعيدت نتيجة الإيصال. مع operationId يعاد {operationId, articleId, action, status=succeeded, response}; failed يعني not_applied فقط.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/BotDraft"
+                oneOf:
+                  - $ref: "#/components/schemas/BotDraft"
+                  - $ref: "#/components/schemas/BotDraftPublishOperation"
+        "202":
+          description: العملية قيد التنفيذ أو نتيجتها غير محسومة؛ لا تُعاد محاولة النشر تلقائياً
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BotDraftPublishOperation"
         "400": { $ref: "#/components/responses/ValidationError" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403":
@@ -214,6 +223,29 @@ paths:
                 $ref: "#/components/schemas/Error"
         "422": { $ref: "#/components/responses/Unprocessable" }
         "429": { $ref: "#/components/responses/RateLimited" }
+  /api/internal/bot-drafts/{id}/operations/{operationId}:
+    get:
+      operationId: getSabqDraftPublishOperation
+      summary: قراءة إيصال عملية نشر بوت
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: operationId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: processing أو succeeded أو failed؛ الفشل المؤكد يحمل executionOutcome=not_applied
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BotDraftPublishOperation"
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
   /api/internal/bot-drafts/{id}/schedule:
     post:
       operationId: scheduleSabqDraft
@@ -526,13 +558,30 @@ components:
         width: { type: integer, nullable: true }
         height: { type: integer, nullable: true }
         purpose: { type: string, example: bot-article-image }
+    BotDraftPublishOperation:
+      type: object
+      required: [operationId, articleId, action, status]
+      properties:
+        operationId: { type: string, format: uuid }
+        articleId: { type: string }
+        action: { type: string, enum: [publish] }
+        status: { type: string, enum: [processing, succeeded, failed] }
+        response: { $ref: "#/components/schemas/BotDraft" }
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string }
+            message: { type: string }
+            details: {}
+        executionOutcome: { type: string, enum: [not_applied], description: يظهر فقط عند فشل مؤكد قبل الكتابة }
     Error:
       type: object
       required: [code, message]
       properties:
         code:
           type: string
-          enum: [not_configured, unauthorized, forbidden_fields, validation_error, category_not_found, subtitle_too_long, sensitive_needs_verdict, author_not_configured, not_found, not_a_draft, not_published, not_scheduled, locked_by_editor, license_required, forbidden_action, rate_limited, invalid_image, file_too_large, storage_unavailable, upload_failed, server_error]
+          enum: [not_configured, unauthorized, forbidden_fields, validation_error, category_not_found, subtitle_too_long, sensitive_needs_verdict, sensitive_override_forbidden, author_not_configured, not_found, operation_not_found, operation_id_collision, not_a_draft, not_published, not_scheduled, locked_by_editor, license_required, forbidden_action, rate_limited, invalid_image, file_too_large, storage_unavailable, upload_failed, server_error]
         message: { type: string }
         details: {}
   responses:
