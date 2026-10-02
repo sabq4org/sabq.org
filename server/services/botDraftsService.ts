@@ -1550,8 +1550,9 @@ export async function publishBotDraft(
   }
 
   const actorKey = publishActorKey(bot);
-  let transactionCallbackCompleted = false;
+  let transactionCallbackError: unknown;
   let articleWriteStarted = false;
+  let transactionCommitted = false;
   try {
   throwIfNotReleasable(existing);
   await throwIfEditLocked(articleId);
@@ -1569,6 +1570,7 @@ export async function publishBotDraft(
   let publishPatch: (BotDraftPublishUpdate & { englishSlug?: string }) | undefined;
   let alreadyTerminal: BotDraftPublishOperationResponse | undefined;
   await db.transaction(async (tx) => {
+    try {
     if (claimedOperation) {
       const [lockedOperation] = await tx
         .select()
@@ -1629,8 +1631,12 @@ export async function publishBotDraft(
         .returning();
       if (!saved) throw new BotDraftError(503, "server_error", "تعذر حفظ نتيجة عملية النشر");
     }
-    transactionCallbackCompleted = true;
+    } catch (error) {
+      transactionCallbackError = error;
+      throw error;
+    }
   });
+  transactionCommitted = true;
   if (alreadyTerminal) return alreadyTerminal;
   invalidateAdminListCaches();
   try {
@@ -1655,13 +1661,19 @@ export async function publishBotDraft(
     ? { operationId: claimedOperation.operationId, articleId, action: "publish", status: "succeeded", response: response! }
     : response!;
   } catch (error) {
-    const definitiveFailure = error instanceof BotDraftError
+    const rollbackConfirmed = transactionCallbackError !== undefined && error === transactionCallbackError;
+    const definitelyPrewrite = !articleWriteStarted && transactionCallbackError === undefined;
+    // A BotDraftError from the callback is definitive only when the transaction
+    // wrapper returned that same error (and therefore completed ROLLBACK). If
+    // rollback/commit transport failed, node-postgres can surface a different
+    // error and the receipt must remain processing/unknown.
+    const knownBotDraftFailure = !transactionCommitted && error instanceof BotDraftError
+      && (transactionCallbackError === undefined || error === transactionCallbackError);
+    const definitiveFailure = knownBotDraftFailure
       ? error
-      : (!transactionCallbackCompleted && claimedOperation && !articleWriteStarted
+      : (claimedOperation && (rollbackConfirmed || definitelyPrewrite)
         ? new BotDraftError(503, "server_error", "فشلت عملية النشر قبل تثبيت الكتابة — لم تُطبّق", { executionOutcome: "not_applied" })
-        : (claimedOperation && articleWriteStarted && typeof (error as { code?: unknown })?.code === "string" && /^(23|42501)$/.test((error as { code: string }).code)
-          ? new BotDraftError(503, "server_error", "فشلت معاملة النشر وتراجعت — لم تُطبّق", { executionOutcome: "not_applied" })
-          : null));
+        : null);
     if (claimedOperation && definitiveFailure) {
       try {
         await markPublishOperationFailed(claimedOperation.operationId, actorKey, articleId, definitiveFailure);
