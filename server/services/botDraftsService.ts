@@ -1067,6 +1067,7 @@ async function markPublishOperationFailed(operationId: string, actorKey: string,
 }
 
 async function ensurePublishReceiptPrivileges(tx: any, needsOverrideAudit: boolean, needsReceipt: boolean): Promise<void> {
+  if (!needsOverrideAudit && !needsReceipt) return;
   if (typeof tx.execute !== "function") return;
   const result = await tx.execute(sql`
     SELECT
@@ -1584,7 +1585,6 @@ export async function publishBotDraft(
         return;
       }
     }
-    await ensurePublishReceiptPrivileges(tx, Boolean(gate.override && bot.personal), Boolean(claimedOperation));
     const [lockedArticle] = await tx
       .select()
       .from(articles)
@@ -1599,6 +1599,10 @@ export async function publishBotDraft(
     // Re-read the sensitive gate after locking the current article row so a
     // concurrent risk-label change cannot bypass the gate checked above.
     effectiveGate = await assertBotSensitiveRelease(lockedArticle.id, lockedArticle.riskLabel, overrideRequested);
+    // Check only the writes this operation will perform, after the row lock and
+    // final sensitive gate. This preserves legacy calls before the receipt
+    // migration and closes the safe-to-sensitive race before article UPDATE.
+    await ensurePublishReceiptPrivileges(tx, Boolean(effectiveGate.override && bot.personal), Boolean(claimedOperation));
     publishPatch = buildBotDraftPublishUpdate(now, lockedArticle.publishedAt);
     if (!lockedArticle.englishSlug) publishPatch.englishSlug = generateEnglishSlug(lockedArticle.title);
     articleWriteStarted = true;
