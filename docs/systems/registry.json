@@ -964,14 +964,15 @@
         "server/utils/spaTopLevelRoutes.ts",
         "tests/unit/spaTopLevelRoutes.test.ts",
         "tests/unit/edgeSoftNotFound.test.ts",
-        "tests/unit/categoryCardPreload.test.ts"
+        "tests/unit/categoryCardPreload.test.ts",
+        "tests/unit/slugRedirectQuery.test.ts"
       ],
       "aiFeatureKeys": [],
       "dashboardPath": null,
       "owners": [
         "platform"
       ],
-      "lastReviewed": "2026-09-27"
+      "lastReviewed": "2026-10-03"
     },
     {
       "id": "comments",
@@ -1153,7 +1154,7 @@
       "nameEn": "Social Publishing (X)",
       "status": "active",
       "category": "content",
-      "summary": "نشر أخبار سبق على منصة X من لوحة التحكم أو عبر بوت /api/internal/bot-social: فوري أو مجدول، بنص يدوي/عنوان/اقتراح ذكاء، مع صورة اختيارية وسجل محاولات append-only. البوت يقبل معرّف الخبر أو رابطه العام. المعمارية provider-based لإضافة منصات لاحقاً.",
+      "summary": "نشر أخبار سبق على منصة X من لوحة التحكم أو عبر بوت /api/internal/bot-social: فوري أو مجدول، بنص يدوي/عنوان/اقتراح ذكاء، مع صورة اختيارية وسجل محاولات append-only. البوت يقبل معرّف الخبر أو رابطه العام، ومنذ 2026-10-03 منشوراً بلا خبر (kind=original) بصور متعددة ووسوم قياس يضعها الخادم. المعمارية provider-based لإضافة منصات لاحقاً.",
       "docPath": "docs/systems/social-publishing/SYSTEM.md",
       "relatedDocs": [
         "docs/setup/X_PUBLISHING_SETUP_AR.md",
@@ -1189,7 +1190,7 @@
         "editorial",
         "platform"
       ],
-      "lastReviewed": "2026-09-29"
+      "lastReviewed": "2026-10-03"
     },
     {
       "id": "sahraa-tv-block",

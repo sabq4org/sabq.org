@@ -1,6 +1,6 @@
 # النشر الاجتماعي (`social-publishing`)
 
-> آخر مراجعة: 2026-09-29 (استكمال post_link بنافذة تاريخ ونص/رابط، لا بمعرف المهمة) | المالك: editorial + platform
+> آخر مراجعة: 2026-10-03 (منشور بوت بلا خبر: صور متعددة ووسوم قياس) | المالك: editorial + platform
 
 ## الغرض
 نشر أخبار سبق على منصة X من لوحة التحكم: فوري أو مجدول، بنص من العنوان أو
@@ -129,6 +129,10 @@
 `SABQ_BOT_SOCIAL_USER_ID` ثم `BOT_DRAFTS_AUTHOR_USER_ID` ثم حساب «صحيفة سبق».
 الحدود: `BOT_SOCIAL_WRITE_RATE_LIMIT` (30/دقيقة)، `BOT_SOCIAL_PUBLISH_RATE_LIMIT`
 (20/5 دقائق)، `BOT_SOCIAL_SUGGEST_RATE_LIMIT` (30/15 دقيقة).
+
+## منشور البوت بلا خبر (2026-10-03)
+
+`kind: "original"` على `preview` / `publish` / `schedule` ينشر نصاً وصوراً (حتى 4) بلا `article_id`. حد الرفض 2000 حرفاً موزوناً؛ 280 يبقى `overStandard` ولا يرفض. مسار الخبر (بلا `kind` أو مع خبر) يبقى على حد 25000 وبلا وسم قياس. الرابط الاختياري على `sabq.org` فقط، والخادم يكتب `utm_source=x` و`utm_medium=social` و`utm_campaign` (افتراضي `sabqorg`) و`utm_content=<social_posts.id>`. المعاينة تستخدم `utm_content=preview` ولا تنشئ صفاً. رفع الملف: `POST /api/internal/bot-social/images` بنفس توكن البوت وعبر `newsImageStorageService` (`forceR2`). لا عمود جديد ولا حذف لتغريدة منشورة. العقد: [`BOT_SOCIAL_API.md`](./BOT_SOCIAL_API.md).
 
 ## واجهة البوت (2026-09-28)
 المسار `/api/internal/bot-social` يعيد استخدام `createDraftPost` /

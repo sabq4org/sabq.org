@@ -25,16 +25,23 @@ import { absolutizeImageUrl } from "./imageResolver";
 import {
   BotSocialError,
   assertArticleTweetable,
+  ORIGINAL_PREVIEW_CONTENT_ID,
+  ORIGINAL_X_MAX_WEIGHTED_LENGTH,
+  applySabqXMeasurementTags,
   decideCancelAction,
   decidePublishAction,
   decideScheduleAction,
   formatSuggestedText,
+  isOriginalBotSocial,
   isUniqueViolation,
+  originalPreviewLimits,
   parseBotSocialArticleUrl,
   previewLimits,
   resolveBotSocialCompose,
+  resolveOriginalPost,
   type BotSocialCompose,
   type BotSocialIdentity,
+  type OriginalPostCompose,
 } from "./botSocialLogic";
 import {
   SocialPublishValidationError,
@@ -71,6 +78,8 @@ export interface BotSocialPostResponse {
   linkUrl: string | null;
   imageSource: string;
   imageUrl: string | null;
+  imageUrls: string[];
+  kind: "article" | "original";
   composedText: string;
   weightedLength: number;
   remaining: number;
@@ -107,8 +116,16 @@ function iso(value: Date | string | null | undefined): string | null {
   return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
 }
 
+function storedImageUrls(post: SocialPost): string[] {
+  const fromMedia = Array.isArray(post.mediaUrls) ? post.mediaUrls.filter((url) => typeof url === "string" && url.trim()) : [];
+  if (fromMedia.length > 0) return fromMedia;
+  return post.imageUrl ? [post.imageUrl] : [];
+}
+
 export function toBotSocialPost(binding: Binding): BotSocialPostResponse {
   const validation = validateXPostText(binding.post.text, binding.post.linkUrl);
+  const original = binding.post.articleId == null;
+  const withinOriginalCap = validation.weightedLength > 0 && validation.weightedLength <= ORIGINAL_X_MAX_WEIGHTED_LENGTH;
   return {
     id: binding.post.id,
     articleId: binding.post.articleId,
@@ -120,10 +137,12 @@ export function toBotSocialPost(binding: Binding): BotSocialPostResponse {
     linkUrl: binding.post.linkUrl,
     imageSource: binding.post.imageSource,
     imageUrl: binding.post.imageUrl,
+    imageUrls: storedImageUrls(binding.post),
+    kind: original ? "original" : "article",
     composedText: composeXPostText(binding.post.text, binding.post.linkUrl),
     weightedLength: validation.weightedLength,
     remaining: validation.remaining,
-    valid: validation.valid,
+    valid: original ? withinOriginalCap : validation.valid,
     overStandard: validation.overStandard,
     scheduledAt: iso(binding.post.scheduledAt),
     publishedAt: iso(binding.post.publishedAt),
@@ -539,7 +558,140 @@ async function applyEdits(post: SocialPost, composed: BotSocialCompose): Promise
   }
 }
 
+function assertOriginalImages(urls: string[]): void {
+  for (const url of urls) assertCustomImage(url);
+}
+
+function originalExisting(post: SocialPost | null) {
+  if (!post) return null;
+  return {
+    text: post.text,
+    textSource: post.textSource,
+    linkUrl: post.linkUrl,
+    imageUrls: storedImageUrls(post),
+  };
+}
+
+async function createOriginalBinding(
+  bot: BotSocialIdentity,
+  composed: OriginalPostCompose,
+  clientReference: string,
+  actorId: string,
+): Promise<{ binding: Binding; created: boolean }> {
+  let post: SocialPost;
+  try {
+    post = await createDraftPost({
+      articleId: null,
+      text: composed.text,
+      textSource: composed.textSource,
+      includeLink: false,
+      imageSource: composed.imageSource,
+      imageUrl: composed.imageUrl,
+      mediaKind: composed.imageUrls.length > 0 ? "image" : "none",
+      mediaUrls: composed.imageUrls,
+      createdByUserId: actorId,
+    });
+  } catch (error) {
+    rethrowKnown(error);
+  }
+  try {
+    await db.insert(socialPostBotKeys).values({
+      botName: bot.name,
+      clientReference,
+      postId: post.id,
+    });
+  } catch (error) {
+    if (!isUniqueViolation(error)) throw error;
+    await db
+      .delete(socialPosts)
+      .where(and(eq(socialPosts.id, post.id), eq(socialPosts.status, "draft"), eq(socialPosts.attempts, 0)));
+    const winner = await findBinding(bot.name, clientReference);
+    if (!winner) throw error;
+    if (winner.post.articleId) throw mismatch(winner);
+    return { binding: winner, created: false };
+  }
+  return { binding: { botName: bot.name, clientReference, post }, created: true };
+}
+
+async function stampOriginalLink(post: SocialPost, composed: OriginalPostCompose): Promise<SocialPost> {
+  const linkUrl = composed.rawLinkUrl
+    ? applySabqXMeasurementTags(composed.rawLinkUrl, post.id, composed.campaign)
+    : null;
+  try {
+    return await updateEditablePost(post.id, {
+      text: composed.text,
+      includeLink: Boolean(linkUrl),
+      linkUrl,
+      imageSource: composed.imageSource,
+      imageUrl: composed.imageUrl,
+      mediaKind: composed.imageUrls.length > 0 ? "image" : "none",
+      mediaUrls: composed.imageUrls,
+      maxWeightedLength: ORIGINAL_X_MAX_WEIGHTED_LENGTH,
+    });
+  } catch (error) {
+    rethrowKnown(error);
+  }
+}
+
+async function loadOrCreateOriginal(
+  bot: BotSocialIdentity,
+  input: { clientReference: string; text?: string; textSource?: "custom" | "ai"; linkUrl?: string | null; imageUrl?: string | null; imageUrls?: string[]; campaign?: string },
+  mode: "publish" | "schedule",
+): Promise<{ binding: Binding; actorId: string; replay: boolean }> {
+  let binding = await findBinding(bot.name, input.clientReference);
+  if (binding?.post.articleId) throw mismatch(binding);
+  if (binding) {
+    const decision = mode === "publish" ? decidePublishAction(binding.post.status) : decideScheduleAction(binding.post.status);
+    if (decision.action === "replay") {
+      return { binding, actorId: binding.post.createdByUserId, replay: true };
+    }
+    if (decision.action === "reject") {
+      throw new BotSocialError(decision.httpStatus, decision.code, decision.message, { post: toBotSocialPost(binding) });
+    }
+  }
+  const composed = resolveOriginalPost({
+    body: input,
+    existing: originalExisting(binding?.post ?? null),
+    contentId: binding?.post.id ?? ORIGINAL_PREVIEW_CONTENT_ID,
+  });
+  assertOriginalImages(composed.imageUrls);
+  const actorId = await requireActor();
+  let createdNow = false;
+  if (!binding) {
+    const created = await createOriginalBinding(bot, composed, input.clientReference, actorId);
+    binding = created.binding;
+    createdNow = created.created;
+    if (binding.post.articleId) throw mismatch(binding);
+    const decision = mode === "publish" ? decidePublishAction(binding.post.status) : decideScheduleAction(binding.post.status);
+    if (decision.action === "replay") return { binding, actorId, replay: true };
+    if (decision.action === "reject") {
+      throw new BotSocialError(decision.httpStatus, decision.code, decision.message, { post: toBotSocialPost(binding) });
+    }
+    if (!createdNow) return { binding, actorId, replay: false };
+  }
+  const stamped = await stampOriginalLink(binding.post, composed);
+  return {
+    binding: { ...binding, post: { ...stamped, status: binding.post.status } },
+    actorId,
+    replay: false,
+  };
+}
+
 export async function previewBotSocialPost(input: BotSocialPreviewInput) {
+  if (isOriginalBotSocial(input)) {
+    const composed = resolveOriginalPost({ body: input, contentId: ORIGINAL_PREVIEW_CONTENT_ID });
+    assertOriginalImages(composed.imageUrls);
+    const { rawLinkUrl: _rawLinkUrl, ...publicCompose } = composed;
+    return {
+      kind: "original" as const,
+      articleId: null,
+      title: null,
+      excerpt: null,
+      status: null,
+      ...publicCompose,
+      ...originalPreviewLimits(),
+    };
+  }
   const article = await loadArticle(await resolveInputArticleId(input));
   const composed = composeFor(article, input, null);
   return {
@@ -632,6 +784,7 @@ export async function publishBotSocialPost(
   input: BotSocialPublishInput,
   ctx: BotSocialRequestContext = {},
 ): Promise<{ post: BotSocialPostResponse; idempotentReplay: boolean }> {
+  if (isOriginalBotSocial(input)) return publishOriginalBotSocialPost(bot, input, ctx);
   const article = await loadArticle(await resolveInputArticleId(input));
   const loaded = await loadOrCreate(bot, article, input, "publish");
   if (loaded.replay) {
@@ -698,11 +851,125 @@ export async function publishBotSocialPost(
   return { post, idempotentReplay: false };
 }
 
+async function publishOriginalBotSocialPost(
+  bot: BotSocialIdentity,
+  input: Extract<BotSocialPublishInput, { kind: "original" }>,
+  ctx: BotSocialRequestContext,
+): Promise<{ post: BotSocialPostResponse; idempotentReplay: boolean }> {
+  const loaded = await loadOrCreateOriginal(bot, input, "publish");
+  if (loaded.replay) {
+    const post = await presentBinding(loaded.binding);
+    await audit({
+      userId: loaded.actorId,
+      action: "bot_social_publish",
+      entityType: "social_post",
+      entityId: post.id,
+      bot,
+      clientReference: input.clientReference,
+      ctx,
+      status: post.status,
+      idempotentReplay: true,
+    });
+    return { post, idempotentReplay: true };
+  }
+  const claimed = await claimPostForImmediatePublish(loaded.binding.post.id);
+  if (!claimed) {
+    const current = await getPost(loaded.binding.post.id);
+    if (current?.status === "published") {
+      const post = await presentBinding({ ...loaded.binding, post: current });
+      await audit({
+        userId: loaded.actorId,
+        action: "bot_social_publish",
+        entityType: "social_post",
+        entityId: post.id,
+        bot,
+        clientReference: input.clientReference,
+        ctx,
+        status: post.status,
+        idempotentReplay: true,
+      });
+      return { post, idempotentReplay: true };
+    }
+    const post = current ? toBotSocialPost({ ...loaded.binding, post: current }) : undefined;
+    throw new BotSocialError(
+      409,
+      current?.status === "processing" ? "in_progress" : "conflict",
+      current?.status === "processing"
+        ? "المنشور قيد النشر — اقرأ الحالة ولا تعد الإرسال حتى تستقر"
+        : "تعذر بدء النشر",
+      post ? { post } : undefined,
+    );
+  }
+  const result = await publishClaimedPost(claimed, loaded.actorId);
+  const post = toBotSocialPost({ ...loaded.binding, post: result });
+  await audit({
+    userId: loaded.actorId,
+    action: "bot_social_publish",
+    entityType: "social_post",
+    entityId: post.id,
+    bot,
+    clientReference: input.clientReference,
+    ctx,
+    status: post.status,
+  });
+  if (result.status !== "published") {
+    throw new BotSocialError(502, "publish_failed", result.lastError || "فشل النشر", { post });
+  }
+  console.log(`[BotSocial] published original ${post.id} bot=${bot.name}`);
+  return { post, idempotentReplay: false };
+}
+
+async function scheduleOriginalBotSocialPost(
+  bot: BotSocialIdentity,
+  input: Extract<BotSocialScheduleInput, { kind: "original" }>,
+  ctx: BotSocialRequestContext,
+): Promise<{ post: BotSocialPostResponse; idempotentReplay: boolean }> {
+  const when = new Date(input.scheduledAt);
+  const loaded = await loadOrCreateOriginal(bot, input, "schedule");
+  if (loaded.replay) {
+    const post = await presentBinding(loaded.binding);
+    await audit({
+      userId: loaded.actorId,
+      action: "bot_social_schedule",
+      entityType: "social_post",
+      entityId: post.id,
+      bot,
+      clientReference: input.clientReference,
+      ctx,
+      status: post.status,
+      idempotentReplay: true,
+    });
+    return { post, idempotentReplay: true };
+  }
+  let scheduled: SocialPost;
+  try {
+    scheduled = await schedulePost(loaded.binding.post.id, when, {
+      resetAttempts: loaded.binding.post.status === "failed",
+    });
+  } catch (error) {
+    rethrowKnown(error);
+  }
+  const post = toBotSocialPost({ ...loaded.binding, post: scheduled });
+  await audit({
+    userId: loaded.actorId,
+    action: "bot_social_schedule",
+    entityType: "social_post",
+    entityId: post.id,
+    bot,
+    clientReference: input.clientReference,
+    ctx,
+    status: post.status,
+  });
+  console.log(`[BotSocial] scheduled original ${post.id} bot=${bot.name}`);
+  return { post, idempotentReplay: false };
+}
+
 export async function scheduleBotSocialPost(
   bot: BotSocialIdentity,
   input: BotSocialScheduleInput,
   ctx: BotSocialRequestContext = {},
 ): Promise<{ post: BotSocialPostResponse; idempotentReplay: boolean }> {
+  if (isOriginalBotSocial(input)) return scheduleOriginalBotSocialPost(bot, input, ctx);
   const article = await loadArticle(await resolveInputArticleId(input));
   const when = new Date(input.scheduledAt);
   const loaded = await loadOrCreate(bot, article, input, "schedule");
