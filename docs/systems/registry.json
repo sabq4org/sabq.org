@@ -215,6 +215,8 @@
         "server/services/nanoBananaService.ts",
         "server/services/aiSmartThumbnailService.ts",
         "server/services/autoImageGenerationService.ts",
+        "server/services/autoImageFailures.ts",
+        "tests/unit/autoImageFailures.test.ts",
         "server/services/aiImageGenerator.ts",
         "server/services/imageStyleService.ts",
         "server/routes/imageStyles.ts",
@@ -502,7 +504,7 @@
       "owners": [
         "ai"
       ],
-      "lastReviewed": "2026-09-26"
+      "lastReviewed": "2026-09-29"
     },
     {
       "id": "muqtarab",

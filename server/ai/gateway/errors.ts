@@ -42,6 +42,8 @@ export function normalizeProviderError(
     text.includes("exceeded your current quota") ||
     // Gemini prepaid accounts: "Your prepayment credits are depleted…"
     text.includes("credits are depleted") ||
+    // Gemini project spend cap set in AI Studio: "…exceeded its monthly spending cap…"
+    text.includes("spending cap") ||
     (status === 429 && text.includes("quota"))
   ) {
     return new AIGatewayError(`${provider}/${modelId}: quota exceeded — ${message}`, {
