@@ -224,6 +224,10 @@ describe("publishBotSocialPost", () => {
     expect(result.post.clientReference).toBe("ref-1");
     expect(result.post.botName).toBe("nashr-x");
     expect(state.create).toHaveBeenCalledTimes(1);
+    expect(state.create.mock.calls[0][0]).toMatchObject({ articleId: "art-1", includeLink: true });
+    expect(state.create.mock.calls[0][0].linkUrl).toBeUndefined();
+    expect(JSON.stringify(state.create.mock.calls[0][0])).not.toContain("utm_");
+    expect(state.update).not.toHaveBeenCalled();
     expect(state.claim).toHaveBeenCalledWith("post-1");
     expect(state.publishClaimed).toHaveBeenCalledTimes(1);
     expect(state.audit).toHaveBeenCalledWith(expect.objectContaining({
@@ -627,5 +631,169 @@ describe("Publer status URL backfill on bot reads", () => {
 
     expect("post" in result && result.post.externalPostId).toBe("2104791827802911159");
     expect(state.resolveLink).toHaveBeenCalledTimes(1);
+  });
+});
+
+function originalRow(over: Record<string, unknown> = {}) {
+  return socialPost({
+    id: "post-orig",
+    articleId: null,
+    text: "شرح الخدمة",
+    textSource: "custom",
+    linkUrl: null,
+    imageSource: "upload",
+    imageUrl: "https://media.sabq.org/a.png",
+    mediaKind: "image",
+    mediaUrls: ["https://media.sabq.org/a.png"],
+    ...over,
+  });
+}
+
+describe("original bot posts", () => {
+  it("previews a post without an article and does not publish", async () => {
+    const preview = await previewBotSocialPost({
+      kind: "original",
+      text: "شرح الخدمة",
+      linkUrl: "https://sabq.org/services/water?utm_source=bot&email=user@example.com",
+      imageUrl: "https://media.sabq.org/a.png",
+    });
+    expect(state.create).not.toHaveBeenCalled();
+    expect(state.claim).not.toHaveBeenCalled();
+    expect(state.publishClaimed).not.toHaveBeenCalled();
+    expect(preview.articleId).toBeNull();
+    expect(preview.kind).toBe("original");
+    expect(preview.imageUrls).toEqual(["https://media.sabq.org/a.png"]);
+    const link = new URL(String(preview.linkUrl));
+    expect(link.searchParams.get("utm_source")).toBe("x");
+    expect(link.searchParams.get("utm_medium")).toBe("social");
+    expect(link.searchParams.get("utm_campaign")).toBe("sabqorg");
+    expect(link.searchParams.get("utm_content")).toBe("preview");
+    expect(link.searchParams.get("email")).toBeNull();
+    expect(preview.valid).toBe(true);
+    expect(preview.hardMaxWeightedLength).toBe(2000);
+  });
+
+  it("rejects empty text and text over 2000 before creating a post", async () => {
+    state.selects = [[]];
+    await expect(publishBotSocialPost(bot, {
+      kind: "original",
+      clientReference: "ref-empty",
+      text: " ",
+    })).rejects.toMatchObject({ code: "validation_error", httpStatus: 400 });
+    state.selects = [[]];
+    await expect(publishBotSocialPost(bot, {
+      kind: "original",
+      clientReference: "ref-long",
+      text: "ا".repeat(2001),
+    })).rejects.toMatchObject({ code: "validation_error", httpStatus: 400 });
+    expect(state.create).not.toHaveBeenCalled();
+    expect(state.publishClaimed).not.toHaveBeenCalled();
+  });
+
+  it("accepts one image and publishes through the existing claim path", async () => {
+    const created = originalRow();
+    state.selects = [[], [{ id: "user-1", status: "active" }]];
+    state.create.mockResolvedValue(created);
+    state.update.mockImplementation(async (_id: string, patch: Record<string, unknown>) => ({ ...created, ...patch }));
+    state.claim.mockImplementation(async () => {
+      const patch = (state.update.mock.calls.at(-1)?.[1] ?? {}) as Record<string, unknown>;
+      return { ...created, ...patch, status: "processing", attempts: 1 };
+    });
+    state.publishClaimed.mockImplementation(async (claimed: ReturnType<typeof originalRow>) => ({
+      ...claimed,
+      status: "published",
+      externalPostId: "555",
+      externalPostUrl: "https://x.com/sabqorg/status/555",
+      publishedAt: now,
+    }));
+
+    const result = await publishBotSocialPost(bot, {
+      kind: "original",
+      clientReference: "ref-one",
+      text: "شرح الخدمة",
+      imageUrl: "https://media.sabq.org/a.png",
+    });
+
+    expect(result.idempotentReplay).toBe(false);
+    expect(result.post.articleId).toBeNull();
+    expect(result.post.kind).toBe("original");
+    expect(result.post.imageUrls).toEqual(["https://media.sabq.org/a.png"]);
+    expect(result.post.externalPostUrl).toBe("https://x.com/sabqorg/status/555");
+    expect(state.create.mock.calls[0][0]).toMatchObject({
+      articleId: null,
+      mediaUrls: ["https://media.sabq.org/a.png"],
+      mediaKind: "image",
+    });
+    expect(state.publishClaimed).toHaveBeenCalledTimes(1);
+  });
+
+  it("accepts more than one image and leaves the link with four measurement params", async () => {
+    const images = ["https://media.sabq.org/a.png", "https://media.sabq.org/b.jpg"];
+    const created = originalRow({ mediaUrls: images, imageUrl: images[0] });
+    state.selects = [[], [{ id: "user-1", status: "active" }]];
+    state.create.mockResolvedValue(created);
+    state.update.mockImplementation(async (_id: string, patch: Record<string, unknown>) => ({ ...created, ...patch }));
+    state.claim.mockImplementation(async () => {
+      const patch = (state.update.mock.calls.at(-1)?.[1] ?? {}) as Record<string, unknown>;
+      return { ...created, ...patch, status: "processing", attempts: 1 };
+    });
+    state.publishClaimed.mockImplementation(async (claimed: ReturnType<typeof originalRow>) => ({
+      ...claimed,
+      status: "published",
+      externalPostId: "556",
+      externalPostUrl: "https://x.com/sabqorg/status/556",
+      publishedAt: now,
+    }));
+
+    const result = await publishBotSocialPost(bot, {
+      kind: "original",
+      clientReference: "ref-many",
+      text: "بطاقتان",
+      linkUrl: "https://sabq.org/explain/networks?utm_source=forget&utm_medium=email",
+      imageUrls: images,
+      campaign: "networks",
+    });
+
+    expect(result.post.imageUrls).toEqual(images);
+    expect(result.post.externalPostUrl).toBe("https://x.com/sabqorg/status/556");
+    const outbound = state.publishClaimed.mock.calls[0][0] as { linkUrl: string; articleId: string | null };
+    expect(outbound.articleId).toBeNull();
+    const link = new URL(outbound.linkUrl);
+    expect(link.searchParams.get("utm_source")).toBe("x");
+    expect(link.searchParams.get("utm_medium")).toBe("social");
+    expect(link.searchParams.get("utm_campaign")).toBe("networks");
+    expect(link.searchParams.get("utm_content")).toBe("post-orig");
+    expect(link.search).not.toContain("forget");
+    expect(link.search).not.toContain("email");
+    expect(state.update.mock.invocationCallOrder[0]).toBeLessThan(state.claim.mock.invocationCallOrder[0]);
+  });
+
+  it("schedules an original post without publishing it", async () => {
+    const created = originalRow();
+    state.selects = [[], [{ id: "user-1", status: "active" }]];
+    state.create.mockResolvedValue(created);
+    state.update.mockImplementation(async (_id: string, patch: Record<string, unknown>) => ({ ...created, ...patch }));
+    state.schedule.mockImplementation(async () => {
+      const patch = (state.update.mock.calls.at(-1)?.[1] ?? {}) as Record<string, unknown>;
+      return { ...created, ...patch, status: "scheduled", scheduledAt: new Date("2026-10-04T18:00:00Z") };
+    });
+
+    const result = await scheduleBotSocialPost(bot, {
+      kind: "original",
+      clientReference: "ref-sched",
+      text: "موعد لاحق",
+      linkUrl: "https://sabq.org/calendar",
+      scheduledAt: "2026-10-04T21:00:00+03:00",
+    });
+
+    expect(result.post.status).toBe("scheduled");
+    expect(state.publishClaimed).not.toHaveBeenCalled();
+    expect(state.claim).not.toHaveBeenCalled();
+    const stored = state.update.mock.calls[0][1] as { linkUrl: string };
+    const link = new URL(stored.linkUrl);
+    expect(link.searchParams.get("utm_source")).toBe("x");
+    expect(link.searchParams.get("utm_medium")).toBe("social");
+    expect(link.searchParams.get("utm_campaign")).toBe("sabqorg");
+    expect(link.searchParams.get("utm_content")).toBe("post-orig");
   });
 });

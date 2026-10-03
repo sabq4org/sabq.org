@@ -14,7 +14,19 @@ const state = vi.hoisted(() => ({
   resolve: vi.fn(),
 }));
 
+const storage = vi.hoisted(() => ({
+  upload: vi.fn(),
+  isR2Configured: vi.fn(() => true),
+}));
+
 vi.mock("../../server/db", () => ({ db: {} }));
+vi.mock("../../server/services/newsImageStorageService", () => ({
+  newsImageStorageService: {
+    upload: (...args: unknown[]) => storage.upload(...args),
+    isR2Configured: () => storage.isR2Configured(),
+  },
+  isNewsImageR2DeliveryUrl: (url: unknown) => typeof url === "string" && url.startsWith("https://media.sabq.org/"),
+}));
 vi.mock("../../server/services/socialPublishing/botSocialService", () => ({
   suggestBotSocialPost: (...args: unknown[]) => state.suggest(...args),
   previewBotSocialPost: (...args: unknown[]) => state.preview(...args),
@@ -26,8 +38,10 @@ vi.mock("../../server/services/socialPublishing/botSocialService", () => ({
   resolveBotSocialArticleUrl: (...args: unknown[]) => state.resolve(...args),
 }));
 
+import sharp from "sharp";
 import router from "../../server/routes/botSocial";
 import { isCsrfExemptRequest } from "../../server/csrf";
+import { BOT_SOCIAL_IMAGE_FIELD, BOT_SOCIAL_IMAGES_PATH, BOT_SOCIAL_IMAGE_PURPOSE } from "../../shared/botSocial";
 
 const SOCIAL = "social-secret-token-0123456789abcdef-XYZ";
 const DRAFTS = "drafts-secret-token-0123456789abcdef-ABCD";
@@ -68,6 +82,9 @@ beforeEach(() => {
   vi.stubEnv("BOT_SOCIAL_PUBLISH_RATE_LIMIT", "1000");
   vi.stubEnv("BOT_SOCIAL_SUGGEST_RATE_LIMIT", "1000");
   for (const fn of Object.values(state)) fn.mockReset();
+  storage.upload.mockReset();
+  storage.isR2Configured.mockReset();
+  storage.isR2Configured.mockReturnValue(true);
 });
 
 afterEach(() => {
@@ -77,6 +94,7 @@ afterEach(() => {
 describe("bot social auth", () => {
   it("is CSRF-exempt like the other internal bot routes", () => {
     expect(isCsrfExemptRequest("POST", "/internal/bot-social/publish", "/api/internal/bot-social/publish")).toBe(true);
+    expect(isCsrfExemptRequest("POST", "/internal/bot-social/images", "/api/internal/bot-social/images")).toBe(true);
     expect(isCsrfExemptRequest("GET", "/internal/bot-social/posts", "/api/internal/bot-social/posts")).toBe(true);
   });
 
@@ -210,6 +228,81 @@ describe("bot social routes", () => {
     expect((await missing.json()).code).toBe("validation_error");
 
     const denied = await call("GET", `/api/internal/bot-social/resolve?url=${encodeURIComponent(url)}`, undefined, DRAFTS);
+    expect(denied.status).toBe(401);
+  });
+});
+
+describe("original bot social route", () => {
+  it("accepts publish and preview without an article and still rejects a bare body", async () => {
+    state.publish.mockResolvedValue({
+      post: { id: "post-orig", status: "published", externalPostUrl: "https://x.com/sabqorg/status/1" },
+      idempotentReplay: false,
+    });
+    state.preview.mockResolvedValue({ kind: "original", valid: true, linkUrl: null });
+    const published = await call("POST", "/api/internal/bot-social/publish", {
+      kind: "original",
+      clientReference: "ref-orig",
+      text: "شرح بلا خبر",
+      imageUrls: ["https://media.sabq.org/a.png", "https://media.sabq.org/b.jpg"],
+    });
+    expect(published.status).toBe(200);
+    expect(state.publish.mock.calls[0][1]).toMatchObject({
+      kind: "original",
+      clientReference: "ref-orig",
+      imageUrls: ["https://media.sabq.org/a.png", "https://media.sabq.org/b.jpg"],
+    });
+    expect(state.publish.mock.calls[0][1].articleId).toBeUndefined();
+
+    const preview = await call("POST", "/api/internal/bot-social/preview", {
+      kind: "original",
+      text: "معاينة",
+      imageUrl: "https://media.sabq.org/a.png",
+    });
+    expect(preview.status).toBe(200);
+    expect(state.preview).toHaveBeenCalledTimes(1);
+
+    const bare = await call("POST", "/api/internal/bot-social/publish", { clientReference: "ref-1", text: "نص" });
+    expect(bare.status).toBe(400);
+    const mixed = await call("POST", "/api/internal/bot-social/publish", {
+      kind: "original",
+      articleId: "art-1",
+      clientReference: "ref-1",
+      text: "نص",
+    });
+    expect(mixed.status).toBe(400);
+  });
+
+  it("uploads a designed PNG with the social token and returns a media.sabq.org URL", async () => {
+    storage.upload.mockResolvedValue({
+      success: true,
+      deliveryUrl: "https://media.sabq.org/news/2026/10/card/w1600.png",
+      imageId: "img-1",
+      filename: "card.png",
+      provider: "r2",
+    });
+    const png = await sharp({
+      create: { width: 2, height: 2, channels: 3, background: { r: 10, g: 20, b: 30 } },
+    }).png().toBuffer();
+    const form = new FormData();
+    form.append(BOT_SOCIAL_IMAGE_FIELD, new Blob([png], { type: "image/png" }), "card.png");
+    const response = await fetch(`${base}${BOT_SOCIAL_IMAGES_PATH}`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${SOCIAL}` },
+      body: form,
+    });
+    expect(response.status).toBe(201);
+    expect(response.headers.get("cache-control")).toBe("private, no-store");
+    expect(await response.json()).toMatchObject({
+      deliveryUrl: "https://media.sabq.org/news/2026/10/card/w1600.png",
+      purpose: BOT_SOCIAL_IMAGE_PURPOSE,
+    });
+    expect(storage.upload).toHaveBeenCalledWith(expect.objectContaining({
+      mimeType: "image/png",
+      purpose: BOT_SOCIAL_IMAGE_PURPOSE,
+      forceR2: true,
+    }));
+
+    const denied = await fetch(`${base}${BOT_SOCIAL_IMAGES_PATH}`, { method: "POST" });
     expect(denied.status).toBe(401);
   });
 });

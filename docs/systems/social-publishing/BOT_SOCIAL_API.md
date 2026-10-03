@@ -21,7 +21,8 @@ Authorization: Bearer <SABQ_BOT_SOCIAL_TOKEN>
 
 ## القواعد
 
-- الخبر عربي من جدول `articles` وحالته `published` و`publishedAt` ليس في المستقبل. غير ذلك: `422 article_not_published`.
+- تغريدة الخبر: عربي من جدول `articles` وحالته `published` و`publishedAt` ليس في المستقبل. غير ذلك: `422 article_not_published`. هذا المسار لم يتغير.
+- منشور بلا خبر (`kind: "original"`): لا `articleId` ولا `articleUrl`. النص والصورة والرابط الاختياري يكفي. التفاصيل تحت «منشور بلا خبر».
 - `suggest` و`preview` و`publish` و`schedule` تقبل `articleId` (قيمة `articles.id`) **أو** `articleUrl`. يلزم أحدهما. إن وُجدا معاً يجب أن يشيرا إلى الخبر نفسه، وإلا `400 validation_error`. الرابط يُفك ترميزه ثم يُبحث بالترتيب: `english_slug` (الرمز القصير في `/article/{code}`)، ثم `slug` العربي، ثم `legacy_slug`، ثم `articles.id` إن كان المقطع UUID. هذا ترتيب الصفحة العامة: الرمز الظاهر هو `english_slug`، والرابط الطويل يطابق `slug`، ومفتاح عدم التكرار يبقى على المعرّف المحلول: إعادة `clientReference` مع رابط لخبر آخر ترجع `409 reference_article_mismatch`.
 - أشكال الرابط المقبولة: `https://sabq.org/article/...` و`https://www.sabq.org/article/...` (و`http`)، مع شرطة مائلة أخيرة أو بدونها، ومع استعلام أو هاش. المقطع قد يكون الرمز القصير (`english_slug` مثل `jrdic6y`) أو `slug` العربي مرمّزاً بالمئة أو `legacy_slug`. أي مضيف آخر: `400 validation_error`. رابط لا يطابق خبراً: `404 not_found`. `/en/article/` و`/ur/article/`: `422 unsupported_language`.
 - `clientReference` (1–120، حروف وأرقام و`.` `_` `:` `-`) مع اسم البوت مفتاح فريد. إعادة نفس المرجع لا تنشئ تغريدة ثانية.
@@ -29,10 +30,80 @@ Authorization: Bearer <SABQ_BOT_SOCIAL_TOKEN>
 - إذا كان `processing`: `409 in_progress` — اقرأ الحالة ولا تعد الإرسال حتى تستقر.
 - إذا كان `canceled`: يلزم `clientReference` جديد.
 - أول طلب يكتب المحتوى. إعادة المحاولة التي تحذف `text` تُبقي النص المخزّن. السباق المتوازي: أول مفتاح يفوز، والخاسر يحذف مسودته اليتيمة ولا ينشر مرة ثانية.
-- الرابط يُركَّب في سطر جديد ويُحسب 23 (اختصار t.co). العربي = 1. الإيموجي = 2. الحد القياسي 280 (`overStandard`) وحد الرفض 25000.
+- تغريدة الخبر: الرابط يُركَّب في سطر جديد ويُحسب 23 (اختصار t.co). العربي = 1. الإيموجي = 2. الحد القياسي 280 (`overStandard`) وحد الرفض 25000. لا تُضاف وسوم قياس إلى رابط الخبر.
+- منشور `original`: نفس أوزان الحروف، و`overStandard` بعد 280، لكن حد الرفض 2000 موزوناً للنص مع الرابط إن وُجد. من 281 إلى 2000 مقبول.
 - الصورة الافتراضية صورة الخبر. `imageSource: "upload"|"library"` يحتاج `imageUrl` على مضيف مسموح (SSRF). لا رفع ملف من هذه الواجهة؛ ارفع عبر مسار صور المسودات أو مرّر رابط `media.sabq.org`.
 - الحساب المنفِّذ: `SABQ_BOT_SOCIAL_USER_ID` ثم `BOT_DRAFTS_AUTHOR_USER_ID` ثم حساب «صحيفة سبق». يجب أن يكون `active`.
 - التدقيق: `activity_logs` بقناة `bot-social-api` (اسم البوت، المرجع، IP، دون التوكن).
+
+## منشور بلا خبر (`kind: "original"`)
+
+للصور المصممة والشرح والخدمات والأسئلة التي لا ترتبط بخبر في `articles`. نفس التوكن ونفس `clientReference` ونفس المطالبة والعامل ومزوّد X/Publer. المعاينة لا تنشر. لا حذف لتغريدة صدرت.
+
+لا يلزم ترحيل إنتاج: `social_posts.article_id` قابل للفراغ، و`media_urls` يخزّن حتى 4 صور. هذا المسار لا يضيف عموداً.
+
+### الطلب
+
+`preview` و`publish` و`schedule` تقبل:
+
+```json
+{
+  "kind": "original",
+  "clientReference": "nashr-2026-10-03-card-1",
+  "text": "شرح رسوم المياه لهذا الأسبوع",
+  "linkUrl": "https://sabq.org/services/water",
+  "imageUrls": [
+    "https://media.sabq.org/news/2026/10/card-a.png",
+    "https://media.sabq.org/news/2026/10/card-b.jpg"
+  ],
+  "campaign": "water-fees"
+}
+```
+
+| الحقل | القاعدة |
+|--------|---------|
+| `kind` | `"original"` إلزامي. غيابه يُبقي مسار الخبر الذي يلزم فيه `articleId` أو `articleUrl`. |
+| `text` | مطلوب في أول طلب. فارغ: `400 validation_error`. فوق 2000 موزوناً (مع الرابط): `400`. إعادة المحاولة التي تحذف `text` تُبقي المخزّن. |
+| `linkUrl` | اختياري. غيابه منشور نص/صورة فقط. إن وُجد يجب أن يكون `http` أو `https` على `sabq.org` أو `www.sabq.org`. المضيفات الأخرى: `400`. |
+| `imageUrl` | صورة واحدة. ما زال يعمل. |
+| `imageUrls` | من 1 إلى 4. لا يُرسل مع `imageUrl` في نفس الطلب. |
+| `campaign` | اختياري. حروف إنجليزية وأرقام و`_` و`-` حتى 41 خانة. يكتبه الخادم في `utm_campaign`. غيابه = `sabqorg`. |
+| `articleId` / `articleUrl` | مرفوضان مع `kind: "original"`. |
+
+`schedule` يضيف `scheduledAt` كما في تغريدة الخبر.
+
+### وسوم القياس
+
+الخادم يضعها على الرابط الصادر. البوت لا يُعتمد عليه لتذكّرها، وأي `utm_*` يرسله يُستبدل. الأسماء هي أعمدة الروابط القصيرة في سبق (`utm_source` / `utm_medium` / `utm_campaign` / `utm_content`) وهي ما تُبقيه تحليلات الموقع (`utm_*` في `sanitizeAnalyticsUrl`). لا توجد قيمة ثابتة سابقة لحساب X، فالقيم:
+
+| الوسم | القيمة |
+|--------|--------|
+| `utm_source` | `x` |
+| `utm_medium` | `social` |
+| `utm_campaign` | `campaign` إن أُرسل، وإلا `sabqorg` |
+| `utm_content` | `social_posts.id` بعد الإنشاء. في المعاينة فقط: `preview` |
+
+يُحفظ `page` الرقمي إن وُجد. بقية الاستعلام تُسقط حتى لا تدخل بيانات شخصية. تحويل السلاق 301 في الخادم يُبقي الاستعلام، وحافة Pages كانت تُبقي `url.search` أصلاً. الصفحة القانونية تبقى بلا هذه الوسوم؛ التحليلات تقرأ رابط الوصول.
+
+### الصور المحلية
+
+`POST /api/internal/bot-social/images` بنفس توكن Bearer، حقل multipart اسمه `file` (JPEG/PNG/WEBP/GIF، 10MB). ليس مساراً عاماً. التخزين هو رفع صور المسودات نفسه (`newsImageStorageService` مع `forceR2`) والغرض `bot-article-image` حتى يصل الملف إلى `https://media.sabq.org/...`. ضع `deliveryUrl` في `imageUrl` أو `imageUrls`. رابط `https` على مضيف مسموح (مثل `media.sabq.org`) ما زال مقبولاً بلا رفع.
+
+### الرد
+
+نفس شكل تغريدة الخبر، مع:
+
+- `post.articleId = null` و`post.kind = "original"`
+- `post.imageUrls` بكل الصور، و`post.imageUrl` أول صورة
+- `post.linkUrl` بعد الوسوم إن وُجد رابط
+- `post.externalPostUrl` عند معرفته، بما فيه `/status/{id}`. مع Publer قد يتأخر الرابط حتى قراءة لاحقة، كما في تغريدة الخبر
+- المعاينة تضيف `hardMaxWeightedLength: 2000` ولا تكتب صفاً
+
+مثال رابط صادر:
+
+```text
+https://sabq.org/services/water?utm_source=x&utm_medium=social&utm_campaign=water-fees&utm_content=POST_ID
+```
 
 ## نقاط النهاية
 
@@ -125,6 +196,8 @@ Authorization: Bearer <SABQ_BOT_SOCIAL_TOKEN>
 ```
 
 إن أُرسل `articleId` مع `articleUrl` فيجب أن يحل الرابط إلى ذلك المعرّف.
+
+رد تغريدة الخبر يضيف حقلين لا يغيران السلوك: `kind: "article"` و`imageUrls` (صورة واحدة إن وُجدت، وإلا مصفوفة فارغة). الرابط يبقى رابط الخبر بلا وسوم قياس.
 
 ```json
 {
@@ -230,7 +303,7 @@ Authorization: Bearer <SABQ_BOT_SOCIAL_TOKEN>
 
 | HTTP | code | متى |
 |------|------|-----|
-| 400 | `validation_error` | جسم أو وقت أو صورة أو طول غير صالح، أو مضيف الرابط ليس sabq.org، أو غاب `articleId` و`articleUrl`، أو اجتمعا على خبرين مختلفين |
+| 400 | `validation_error` | جسم أو وقت أو صورة أو طول غير صالح، أو مضيف الرابط ليس sabq.org، أو غاب `articleId` و`articleUrl` في مسار الخبر، أو اجتمعا على خبرين مختلفين، أو `original` بلا نص أو فوق 2000 موزوناً أو برابط خارج سبق أو بـ `articleId` |
 | 401 | `unauthorized` | توكن مفقود أو توكن المسودات |
 | 404 | `not_found` | خبر أو منشور هذا البوت غير موجود، أو رابط `/article/` لا يطابق صفاً |
 | 409 | `account_not_connected` | لا حساب X مرتبط |

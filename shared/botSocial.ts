@@ -24,9 +24,44 @@ export const botSocialClientReferenceSchema = z
 
 const articleIdSchema = z.string().trim().min(1).max(80);
 const articleUrlSchema = z.string().trim().min(1).max(2000);
+/** تغريدة الخبر: سقف النص كما هو (2000 حرفاً). الحد الموزون 25000 يبقى في الخدمة. */
 const textSchema = z.string().trim().min(1).max(2000);
+/**
+ * منشور بلا خبر: السقف الصلب 2000 موزوناً يُفرض في الخدمة.
+ * 4000 هنا حتى يصل نص أطول من 2000 إلى فحص الوزن بدل أن يُرفض كطول نص خام.
+ */
+const originalTextSchema = z.string().trim().min(1).max(4000);
 const textSourceSchema = z.enum(["title", "title_link", "custom", "ai"]);
 const imageSourceSchema = z.enum(["article", "upload", "library", "none"]);
+const originalImageUrlSchema = z.string().trim().min(1).max(2000);
+
+/** رفع صور مصممة قبل النشر. نفس توكن البوت، وليس مساراً عاماً. */
+export const BOT_SOCIAL_IMAGES_PATH = `${BOT_SOCIAL_BASE_PATH}/images`;
+export const BOT_SOCIAL_IMAGE_FIELD = "file";
+export const BOT_SOCIAL_IMAGE_MAX_BYTES = 10 * 1024 * 1024;
+/**
+ * يطابق `bot-article` في `isNewsImagePurpose` حتى يُخزَّن الملف على
+ * media.sabq.org عبر `forceR2`، ثم يُجلب عند النشر كصورة الخبر.
+ */
+export const BOT_SOCIAL_IMAGE_PURPOSE = "bot-article-image";
+export const BOT_SOCIAL_IMAGE_MIME_TYPES = [
+  "image/jpeg",
+  "image/jpg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+] as const;
+
+/** أسماء وسوم الموقع الأربعة. القيم الافتراضية يضعها الخادم، لا البوت. */
+export const BOT_SOCIAL_MEASUREMENT = {
+  sourceKey: "utm_source",
+  sourceValue: "x",
+  mediumKey: "utm_medium",
+  mediumValue: "social",
+  campaignKey: "utm_campaign",
+  campaignValue: "sabqorg",
+  contentKey: "utm_content",
+} as const;
 
 /** يلزم أحدهما. إن وُجدا معاً فالتحقق أنهما نفس الخبر يتم بعد حل الرابط. */
 const articleRefFields = {
@@ -47,7 +82,7 @@ function requireArticleRef(
   }
 }
 
-/** حقول التأليف المشتركة. الغياب عند إعادة المحاولة يُبقي المحتوى المخزّن. */
+/** حقول التأليف المشتركة لتغريدة الخبر. الغياب عند إعادة المحاولة يُبقي المحتوى المخزّن. */
 const composeFields = {
   text: textSchema.optional(),
   textSource: textSourceSchema.optional(),
@@ -56,30 +91,80 @@ const composeFields = {
   imageUrl: z.string().trim().max(2000).nullish(),
 };
 
+const originalFields = {
+  text: originalTextSchema.optional(),
+  textSource: z.enum(["custom", "ai"]).optional(),
+  linkUrl: z.string().trim().max(2000).nullish(),
+  imageUrl: originalImageUrlSchema.nullish(),
+  imageUrls: z.array(originalImageUrlSchema).max(4).optional(),
+  campaign: z.string().trim().min(1).max(41).optional(),
+};
+
+function rejectArticleBindingOnOriginal(
+  value: { articleId?: string; articleUrl?: string },
+  ctx: z.RefinementCtx,
+): void {
+  if (value.articleId || value.articleUrl) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "منشور original لا يرتبط بخبر — لا ترسل articleId أو articleUrl",
+      path: ["articleId"],
+    });
+  }
+}
+
 export const botSocialSuggestSchema = z.object({
   ...articleRefFields,
 }).superRefine(requireArticleRef);
 
-export const botSocialPreviewSchema = z.object({
+const botSocialArticlePreviewObject = z.object({
+  kind: z.literal("article").optional(),
   ...articleRefFields,
   ...composeFields,
-}).superRefine(requireArticleRef);
+});
 
-const botSocialPublishObject = z.object({
+const botSocialOriginalPreviewObject = z.object({
+  kind: z.literal("original"),
+  ...articleRefFields,
+  ...originalFields,
+});
+
+export const botSocialPreviewSchema = z.union([
+  botSocialOriginalPreviewObject.superRefine(rejectArticleBindingOnOriginal),
+  botSocialArticlePreviewObject.superRefine(requireArticleRef),
+]);
+
+const botSocialArticlePublishObject = z.object({
+  kind: z.literal("article").optional(),
   ...articleRefFields,
   clientReference: botSocialClientReferenceSchema,
   ...composeFields,
 });
 
-export const botSocialPublishSchema = botSocialPublishObject.superRefine(requireArticleRef);
+const botSocialOriginalPublishObject = z.object({
+  kind: z.literal("original"),
+  ...articleRefFields,
+  clientReference: botSocialClientReferenceSchema,
+  ...originalFields,
+});
+
+export const botSocialPublishSchema = z.union([
+  botSocialOriginalPublishObject.superRefine(rejectArticleBindingOnOriginal),
+  botSocialArticlePublishObject.superRefine(requireArticleRef),
+]);
 
 export const botSocialResolveQuerySchema = z.object({
   url: articleUrlSchema,
 });
 
-export const botSocialScheduleSchema = botSocialPublishObject.extend({
-  scheduledAt: z.string().datetime({ offset: true }),
-}).superRefine(requireArticleRef);
+export const botSocialScheduleSchema = z.union([
+  botSocialOriginalPublishObject.extend({
+    scheduledAt: z.string().datetime({ offset: true }),
+  }).superRefine(rejectArticleBindingOnOriginal),
+  botSocialArticlePublishObject.extend({
+    scheduledAt: z.string().datetime({ offset: true }),
+  }).superRefine(requireArticleRef),
+]);
 
 export const botSocialCancelSchema = z
   .object({

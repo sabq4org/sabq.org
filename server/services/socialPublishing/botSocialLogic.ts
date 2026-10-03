@@ -7,7 +7,7 @@ import {
   composeXPostText,
   validateXPostText,
 } from "@shared/socialPostText";
-import type { BotSocialImageSource, BotSocialTextSource } from "@shared/botSocial";
+import { BOT_SOCIAL_MEASUREMENT, type BotSocialImageSource, type BotSocialTextSource } from "@shared/botSocial";
 
 export const BOT_SOCIAL_DEFAULT_NAME = "nashr-x";
 const BOT_NAME_RE = /^[a-z0-9][a-z0-9_-]{1,39}$/;
@@ -410,4 +410,230 @@ export function previewLimits() {
     maxWeightedLength: X_MAX_WEIGHTED_LENGTH,
     maxPremiumWeightedLength: X_MAX_PREMIUM_WEIGHTED_LENGTH,
   };
+}
+
+/** السقف الصلب لمنشور بلا خبر. 280 يبقى إشارة الطي فقط. */
+export const ORIGINAL_X_MAX_WEIGHTED_LENGTH = 2000;
+/** معرّف المعاينة داخل utm_content. النشر يستبدله بـ social_posts.id. */
+export const ORIGINAL_PREVIEW_CONTENT_ID = "preview";
+
+const CAMPAIGN_RE = /^[A-Za-z0-9][A-Za-z0-9_-]{0,40}$/;
+const CONTENT_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$/;
+const SITE_HOSTS = new Set(["sabq.org", "www.sabq.org"]);
+
+export function isOriginalBotSocial<T extends { kind?: string }>(
+  input: T,
+): input is Extract<T, { kind: "original" }> {
+  return input.kind === "original";
+}
+
+export function originalPreviewLimits() {
+  return {
+    maxWeightedLength: X_MAX_WEIGHTED_LENGTH,
+    hardMaxWeightedLength: ORIGINAL_X_MAX_WEIGHTED_LENGTH,
+  };
+}
+
+export function normalizeOriginalCampaign(raw: string | undefined): string {
+  const value = (raw ?? "").trim();
+  if (!value) return BOT_SOCIAL_MEASUREMENT.campaignValue;
+  if (!CAMPAIGN_RE.test(value)) {
+    throw new BotSocialError(
+      400,
+      "validation_error",
+      "campaign يقبل حروفاً إنجليزية وأرقاماً و _ و - فقط، والخادم يضعه في utm_campaign",
+    );
+  }
+  return value;
+}
+
+/**
+ * يضع وسوم القياس الأربعة على رابط سبق. أي utm قادم من البوت يُستبدل.
+ * يُحفظ معامل page الرقمي فقط إلى جانب الوسوم، وتُسقط بقية الاستعلام
+ * حتى لا تدخل بيانات شخصية إلى الرابط.
+ */
+export function applySabqXMeasurementTags(rawUrl: string, internalId: string, campaign?: string): string {
+  if (!CONTENT_ID_RE.test(internalId)) {
+    throw new BotSocialError(400, "validation_error", "معرّف القياس الداخلي غير صالح");
+  }
+  let url: URL;
+  try {
+    url = new URL(rawUrl.trim());
+  } catch {
+    throw new BotSocialError(400, "validation_error", "linkUrl ليس رابطاً صالحاً");
+  }
+  if (url.protocol !== "https:" && url.protocol !== "http:") {
+    throw new BotSocialError(400, "validation_error", "linkUrl يجب أن يكون رابط http أو https");
+  }
+  if (url.username || url.password) {
+    throw new BotSocialError(400, "validation_error", "linkUrl لا يقبل بيانات دخول داخل الرابط");
+  }
+  if (!SITE_HOSTS.has(url.hostname.toLowerCase())) {
+    throw new BotSocialError(400, "validation_error", "رابط المنشور يجب أن يكون على sabq.org أو www.sabq.org");
+  }
+  const page = url.searchParams.get("page");
+  const hash = url.hash;
+  url.protocol = "https:";
+  url.hostname = url.hostname.toLowerCase();
+  url.username = "";
+  url.password = "";
+  url.search = "";
+  if (page && /^[1-9]\d{0,4}$/.test(page)) url.searchParams.set("page", page);
+  url.searchParams.set(BOT_SOCIAL_MEASUREMENT.sourceKey, BOT_SOCIAL_MEASUREMENT.sourceValue);
+  url.searchParams.set(BOT_SOCIAL_MEASUREMENT.mediumKey, BOT_SOCIAL_MEASUREMENT.mediumValue);
+  url.searchParams.set(BOT_SOCIAL_MEASUREMENT.campaignKey, normalizeOriginalCampaign(campaign));
+  url.searchParams.set(BOT_SOCIAL_MEASUREMENT.contentKey, internalId);
+  url.hash = hash;
+  return url.toString();
+}
+
+export interface OriginalPostBody {
+  text?: string;
+  textSource?: "custom" | "ai";
+  linkUrl?: string | null;
+  imageUrl?: string | null;
+  imageUrls?: string[];
+  campaign?: string;
+}
+
+export interface OriginalPostExisting {
+  text: string;
+  textSource: string;
+  linkUrl: string | null;
+  imageUrls: string[];
+}
+
+export interface OriginalPostCompose {
+  text: string;
+  textSource: "custom" | "ai";
+  includeLink: boolean;
+  /** الرابط بعد وسم القياس، أو null. */
+  linkUrl: string | null;
+  /** الرابط كما أُرسل قبل استبدال المعرّف الداخلي، للوزن فقط عند غياب الصف. */
+  rawLinkUrl: string | null;
+  campaign: string;
+  imageSource: "upload" | "none";
+  imageUrl: string | null;
+  imageUrls: string[];
+  composedText: string;
+  weightedLength: number;
+  remaining: number;
+  valid: boolean;
+  overStandard: boolean;
+  empty: boolean;
+}
+
+function originalTextSource(value: string | undefined, fallback: "custom" | "ai"): "custom" | "ai" {
+  if (value === "ai" || value === "custom") return value;
+  return fallback;
+}
+
+/** صورة واحدة عبر imageUrl، أو حتى 4 عبر imageUrls. لا يجتمع الحقلان. */
+export function resolveOriginalImageUrls(
+  body: Pick<OriginalPostBody, "imageUrl" | "imageUrls">,
+  existing: string[] | null,
+): string[] {
+  const hasList = body.imageUrls !== undefined;
+  const hasSingle = body.imageUrl !== undefined;
+  if (hasList && hasSingle) {
+    throw new BotSocialError(400, "validation_error", "أرسل imageUrl أو imageUrls، لا الاثنين معاً");
+  }
+  let urls: string[];
+  if (hasList) urls = body.imageUrls ?? [];
+  else if (body.imageUrl === null) urls = [];
+  else if (typeof body.imageUrl === "string" && body.imageUrl.trim()) urls = [body.imageUrl.trim()];
+  else if (existing) urls = existing;
+  else urls = [];
+
+  const cleaned = urls.map((url) => url.trim()).filter(Boolean);
+  if (cleaned.length > 4) {
+    throw new BotSocialError(400, "validation_error", "الحد الأقصى 4 صور للمنشور");
+  }
+  return cleaned;
+}
+
+function assertOriginalLength(text: string, linkUrl: string | null) {
+  const validation = validateXPostText(text, linkUrl);
+  if (validation.empty || !text.trim()) {
+    throw new BotSocialError(400, "validation_error", "نص المنشور فارغ");
+  }
+  if (validation.weightedLength > ORIGINAL_X_MAX_WEIGHTED_LENGTH) {
+    throw new BotSocialError(
+      400,
+      "validation_error",
+      `النص يتجاوز حد منشور original (${validation.weightedLength}/${ORIGINAL_X_MAX_WEIGHTED_LENGTH})`,
+    );
+  }
+  return {
+    ...validation,
+    valid: true,
+    overStandard: validation.weightedLength > X_MAX_WEIGHTED_LENGTH,
+    remaining: X_MAX_WEIGHTED_LENGTH - validation.weightedLength,
+  };
+}
+
+/**
+ * يركّب منشوراً بلا خبر. contentId يُكتب في utm_content.
+ * المعاينة تستخدم ORIGINAL_PREVIEW_CONTENT_ID، والنشر يستخدم social_posts.id.
+ */
+export function resolveOriginalPost(input: {
+  body: OriginalPostBody;
+  existing?: OriginalPostExisting | null;
+  contentId: string;
+}): OriginalPostCompose {
+  const existing = input.existing ?? null;
+  const textSource = originalTextSource(
+    input.body.textSource,
+    existing?.textSource === "ai" ? "ai" : "custom",
+  );
+  const provided = (input.body.text ?? "").trim();
+  let text = provided;
+  if (!text && existing && input.body.text == null) text = existing.text;
+  const imageUrls = resolveOriginalImageUrls(input.body, existing ? existing.imageUrls : null);
+  const campaign = input.body.campaign !== undefined
+    ? normalizeOriginalCampaign(input.body.campaign)
+    : existing?.linkUrl
+      ? campaignFromStoredLink(existing.linkUrl)
+      : normalizeOriginalCampaign(undefined);
+
+  let rawLink: string | null;
+  if (input.body.linkUrl === null || (typeof input.body.linkUrl === "string" && !input.body.linkUrl.trim())) {
+    rawLink = null;
+  } else if (typeof input.body.linkUrl === "string") {
+    rawLink = input.body.linkUrl.trim();
+  } else if (existing?.linkUrl) {
+    rawLink = existing.linkUrl;
+  } else {
+    rawLink = null;
+  }
+
+  const linkUrl = rawLink ? applySabqXMeasurementTags(rawLink, input.contentId, campaign) : null;
+  const length = assertOriginalLength(text, linkUrl);
+  return {
+    text: text.trim(),
+    textSource,
+    includeLink: Boolean(linkUrl),
+    linkUrl,
+    rawLinkUrl: rawLink,
+    campaign,
+    imageSource: imageUrls.length > 0 ? "upload" : "none",
+    imageUrl: imageUrls[0] ?? null,
+    imageUrls,
+    composedText: composeXPostText(text, linkUrl),
+    weightedLength: length.weightedLength,
+    remaining: length.remaining,
+    valid: true,
+    overStandard: length.overStandard,
+    empty: false,
+  };
+}
+
+function campaignFromStoredLink(linkUrl: string): string {
+  try {
+    const value = new URL(linkUrl).searchParams.get(BOT_SOCIAL_MEASUREMENT.campaignKey) ?? "";
+    if (CAMPAIGN_RE.test(value)) return value;
+  } catch {
+    // الرابط المخزّن التالف يُعاد بناؤه بالحملة الافتراضية عند إعادة الإرسال.
+  }
+  return BOT_SOCIAL_MEASUREMENT.campaignValue;
 }

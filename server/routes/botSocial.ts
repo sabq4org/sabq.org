@@ -18,8 +18,14 @@
 
 import { Router, type NextFunction, type Request, type Response } from "express";
 import rateLimit from "express-rate-limit";
+import multer from "multer";
 import {
   BOT_SOCIAL_BASE_PATH,
+  BOT_SOCIAL_IMAGE_FIELD,
+  BOT_SOCIAL_IMAGE_MAX_BYTES,
+  BOT_SOCIAL_IMAGE_MIME_TYPES,
+  BOT_SOCIAL_IMAGE_PURPOSE,
+  BOT_SOCIAL_IMAGES_PATH,
   botSocialCancelSchema,
   botSocialListQuerySchema,
   botSocialPreviewSchema,
@@ -45,6 +51,8 @@ import {
   scheduleBotSocialPost,
   suggestBotSocialPost,
 } from "../services/socialPublishing/botSocialService";
+import { isNewsImageR2DeliveryUrl, newsImageStorageService } from "../services/newsImageStorageService";
+import { verifyImageMagicBytes } from "../utils/imageVerify";
 
 const router = Router();
 
@@ -121,6 +129,98 @@ function handleError(res: Response, error: unknown, action: string): void {
 function requestContext(req: Request) {
   return { ip: req.ip, userAgent: req.get("user-agent") };
 }
+
+const botSocialImageUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: BOT_SOCIAL_IMAGE_MAX_BYTES, files: 1 },
+  fileFilter: (_req, file, cb) => {
+    if ((BOT_SOCIAL_IMAGE_MIME_TYPES as readonly string[]).includes(file.mimetype.toLowerCase())) {
+      cb(null, true);
+      return;
+    }
+    cb(new Error("نوع الملف غير مسموح. الأنواع المسموحة: JPEG, PNG, WEBP, GIF"));
+  },
+});
+
+function parseBotSocialImageUpload(req: Request, res: Response, next: NextFunction) {
+  botSocialImageUpload.single(BOT_SOCIAL_IMAGE_FIELD)(req, res, (error: unknown) => {
+    if (!error) return next();
+    if (error instanceof multer.MulterError && error.code === "LIMIT_FILE_SIZE") {
+      return sendError(res, 400, { code: "file_too_large", message: "الملف كبير جداً. الحد الأقصى 10MB" });
+    }
+    if (error instanceof multer.MulterError && error.code === "LIMIT_UNEXPECTED_FILE") {
+      return sendError(res, 400, {
+        code: "validation_error",
+        message: `اسم الحقل يجب أن يكون ${BOT_SOCIAL_IMAGE_FIELD}`,
+      });
+    }
+    const message = error instanceof Error ? error.message : "تعذّر قراءة الملف المرفوع";
+    return sendError(res, 400, { code: "invalid_image", message });
+  });
+}
+
+async function isAllowedBotSocialImage(buffer: Buffer, claimedMime: string): Promise<boolean> {
+  const mime = claimedMime.toLowerCase();
+  if (mime === "image/gif") {
+    const header = buffer.subarray(0, 6).toString("ascii");
+    return header === "GIF87a" || header === "GIF89a";
+  }
+  const verify = await verifyImageMagicBytes(buffer, mime);
+  return verify.ok;
+}
+
+router.post(
+  BOT_SOCIAL_IMAGES_PATH,
+  requireBotToken,
+  botWriteLimiter,
+  parseBotSocialImageUpload,
+  async (req: BotRequest, res: Response) => {
+    const file = req.file;
+    if (!file) {
+      return sendError(res, 400, {
+        code: "validation_error",
+        message: `لم يتم اختيار ملف. الحقل المطلوب: ${BOT_SOCIAL_IMAGE_FIELD}`,
+      });
+    }
+    const allowed = await isAllowedBotSocialImage(file.buffer, file.mimetype);
+    if (!allowed) {
+      return sendError(res, 400, {
+        code: "invalid_image",
+        message: "الملف ليس صورة صالحة (JPEG/PNG/WEBP/GIF)",
+      });
+    }
+    if (!newsImageStorageService.isR2Configured()) {
+      return sendError(res, 503, {
+        code: "storage_unavailable",
+        message: "تخزين R2 لصور الأخبار غير متاح حالياً",
+      });
+    }
+    const filename = (file.originalname || "image").replace(/[/\\]/g, "").slice(0, 180) || "image";
+    try {
+      const result = await newsImageStorageService.upload({
+        buffer: file.buffer,
+        filename,
+        mimeType: file.mimetype,
+        purpose: BOT_SOCIAL_IMAGE_PURPOSE,
+        metadata: { source: "bot-social", bot: req.bot!.name },
+        rolloutKey: `bot-social:${req.bot!.name}:${filename}:${file.size}`,
+        forceR2: true,
+      });
+      if (!result.success || result.provider !== "r2" || !isNewsImageR2DeliveryUrl(result.deliveryUrl)) {
+        return sendError(res, 502, { code: "upload_failed", message: "تعذّر رفع الصورة إلى R2" });
+      }
+      res.status(201).json({
+        deliveryUrl: result.deliveryUrl,
+        imageId: result.imageId ?? null,
+        filename: result.filename ?? filename,
+        provider: result.provider ?? null,
+        purpose: BOT_SOCIAL_IMAGE_PURPOSE,
+      });
+    } catch (error) {
+      handleError(res, error, "upload-image");
+    }
+  },
+);
 
 router.post(
   `${BOT_SOCIAL_BASE_PATH}/suggest`,

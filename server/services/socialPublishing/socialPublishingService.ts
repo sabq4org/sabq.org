@@ -178,6 +178,11 @@ export interface CreatePostInput {
   includeLink: boolean;
   imageSource: "article" | "upload" | "library" | "none";
   imageUrl?: string | null;
+  /**
+   * رابط صريح لتغريدة بلا خبر. عند وجود articleId يُتجاهل ويبقى رابط الخبر
+   * حتى لا يتغير مسار تغريدات الأخبار.
+   */
+  linkUrl?: string | null;
   /** وسائط التأليف المستقل: image = حتى 4 صور، video = رابط واحد */
   mediaKind?: "none" | "image" | "video";
   mediaUrls?: string[];
@@ -185,6 +190,21 @@ export interface CreatePostInput {
 }
 
 export const MAX_POST_IMAGES = 4;
+
+/**
+ * رابط المسودة. وجود articleId يُبقي رابط الخبر ويتجاهل أي رابط صريح،
+ * حتى تبقى تغريدات الأخبار بلا وسم قياس يضيفه مسار المنشور المستقل.
+ */
+export function linkUrlForDraft(input: {
+  articleId?: string | null;
+  includeLink: boolean;
+  articleUrl: string | null;
+  explicitLinkUrl?: string | null;
+}): string | null {
+  if (input.articleId) return input.includeLink ? input.articleUrl : null;
+  if (!input.includeLink) return null;
+  return input.explicitLinkUrl?.trim() || null;
+}
 
 /** تحقق خالص لوسائط التأليف — يُستخدم في الإنشاء والاختبارات */
 export function validateComposeMedia(
@@ -249,7 +269,12 @@ export async function createDraftPost(input: CreatePostInput): Promise<SocialPos
     }
   }
 
-  const linkUrl = input.includeLink && context ? context.url : null;
+  const linkUrl = linkUrlForDraft({
+    articleId: input.articleId,
+    includeLink: input.includeLink,
+    articleUrl: context?.url ?? null,
+    explicitLinkUrl: input.linkUrl,
+  });
   const validation = validateXPostText(input.text, linkUrl);
   if (validation.empty) throw new SocialPublishValidationError("نص المنشور فارغ");
   if (!validation.valid) {
@@ -286,6 +311,15 @@ export interface UpdatePostInput {
   includeLink?: boolean;
   imageSource?: "article" | "upload" | "library" | "none";
   imageUrl?: string | null;
+  /** لمنشور بلا خبر فقط. مسار الخبر يعيد بناء الرابط من المقال. */
+  linkUrl?: string | null;
+  mediaKind?: "none" | "image" | "video";
+  mediaUrls?: string[];
+  /**
+   * سقف الطول الموزون. غيابه يُبقي حد Premium ‏(25000) لتغريدات الأخبار.
+   * منشور البوت بلا خبر يمرر 2000.
+   */
+  maxWeightedLength?: number;
   scheduledAt?: Date | null;
 }
 
@@ -308,14 +342,43 @@ export async function updateEditablePost(postId: string, input: UpdatePostInput)
   }
 
   const text = input.text !== undefined ? input.text : post.text;
-  const includeLink = input.includeLink !== undefined ? input.includeLink : Boolean(post.linkUrl);
-  const linkUrl = includeLink && context ? context.url : null;
+  let linkUrl: string | null;
+  if (post.articleId) {
+    const includeLink = input.includeLink !== undefined ? input.includeLink : Boolean(post.linkUrl);
+    linkUrl = includeLink && context ? context.url : null;
+  } else if (input.includeLink === false) {
+    linkUrl = null;
+  } else if (input.linkUrl !== undefined) {
+    linkUrl = input.linkUrl?.trim() || null;
+  } else {
+    const includeLink = input.includeLink !== undefined ? input.includeLink : Boolean(post.linkUrl);
+    linkUrl = includeLink ? post.linkUrl : null;
+  }
+  const lengthCap = input.maxWeightedLength ?? 25_000;
   const validation = validateXPostText(text, linkUrl);
   if (validation.empty) throw new SocialPublishValidationError("نص المنشور فارغ");
-  if (!validation.valid) {
+  if (!validation.valid || validation.weightedLength > lengthCap) {
     throw new SocialPublishValidationError(
-      `النص يتجاوز الحد الأقصى لمنصة X (${validation.weightedLength}/25000)`,
+      `النص يتجاوز الحد الأقصى لمنصة X (${validation.weightedLength}/${lengthCap})`,
     );
+  }
+  let mediaPatch: { mediaKind?: "none" | "image" | "video"; mediaUrls?: string[] } = {};
+  if (input.mediaKind !== undefined || input.mediaUrls !== undefined) {
+    const mediaKind = input.mediaKind
+      ?? (post.mediaKind === "image" || post.mediaKind === "video" ? post.mediaKind : "none");
+    const mediaUrls = (input.mediaUrls ?? (Array.isArray(post.mediaUrls) ? post.mediaUrls : []))
+      .map((url) => url.trim())
+      .filter(Boolean);
+    validateComposeMedia(mediaKind, mediaUrls);
+    for (const url of mediaUrls) {
+      try {
+        assertSafeImageUrl(absolutizeImageUrl(url));
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : "غير مسموح";
+        throw new SocialPublishValidationError(`رابط الوسائط مرفوض: ${message}`);
+      }
+    }
+    mediaPatch = { mediaKind, mediaUrls };
   }
   if (input.scheduledAt !== undefined && input.scheduledAt !== null) {
     assertValidScheduleTime(input.scheduledAt);
@@ -333,6 +396,7 @@ export async function updateEditablePost(postId: string, input: UpdatePostInput)
       linkUrl,
       imageSource: imageUrl ? imageSource : "none",
       imageUrl: imageUrl ?? null,
+      ...mediaPatch,
       ...(input.scheduledAt !== undefined ? { scheduledAt: input.scheduledAt } : {}),
       updatedAt: new Date(),
     })

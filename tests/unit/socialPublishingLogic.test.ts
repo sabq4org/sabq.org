@@ -6,6 +6,7 @@ import {
   assertValidScheduleTime,
   buildArticleUrl,
   decideFailureTransition,
+  linkUrlForDraft,
   MAX_POST_IMAGES,
   MAX_PUBLISH_ATTEMPTS,
   SocialPublishValidationError,
@@ -107,6 +108,27 @@ describe("socialPublishingService — رابط الخبر", () => {
     expect(buildArticleUrl({ slug: "خبر-عربي", englishSlug: null })).toBe(
       "https://sabq.org/article/خبر-عربي",
     );
+  });
+
+  it("keeps the article URL and ignores an explicit link when the post is tied to news", () => {
+    expect(linkUrlForDraft({
+      articleId: "art-1",
+      includeLink: true,
+      articleUrl: "https://sabq.org/article/english-slug",
+      explicitLinkUrl: "https://sabq.org/article/english-slug?utm_source=x&utm_medium=social",
+    })).toBe("https://sabq.org/article/english-slug");
+    expect(linkUrlForDraft({
+      articleId: null,
+      includeLink: true,
+      articleUrl: null,
+      explicitLinkUrl: "https://sabq.org/guide?utm_source=x",
+    })).toBe("https://sabq.org/guide?utm_source=x");
+    expect(linkUrlForDraft({
+      articleId: null,
+      includeLink: false,
+      articleUrl: null,
+      explicitLinkUrl: "https://sabq.org/guide",
+    })).toBeNull();
   });
 
   it("يزيل الشرطة المائلة الأخيرة من الأصل", () => {

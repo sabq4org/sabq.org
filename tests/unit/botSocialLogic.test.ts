@@ -12,7 +12,10 @@ import {
   isUniqueViolation,
   loadBotSocialTokens,
   parseBotSocialArticleUrl,
+  applySabqXMeasurementTags,
   resolveBotSocialCompose,
+  resolveOriginalImageUrls,
+  resolveOriginalPost,
 } from "../../server/services/socialPublishing/botSocialLogic";
 
 const SOCIAL = "social-secret-token-0123456789abcdef-XYZ";
@@ -135,6 +138,19 @@ describe("bot social compose", () => {
     expect(composed.imageSource).toBe("none");
   });
 
+  it("still accepts an article tweet between 281 and the premium cap", () => {
+    const composed = resolveBotSocialCompose({
+      article,
+      body: { text: "ا".repeat(281), textSource: "custom", includeLink: false, imageSource: "none" },
+    });
+    expect(composed.valid).toBe(true);
+    expect(composed.overStandard).toBe(true);
+    expect(composed.linkUrl).toBeNull();
+    expect(() =>
+      resolveBotSocialCompose({ article, body: { text: "ا".repeat(25000), includeLink: false } }),
+    ).not.toThrow();
+  });
+
   it("rejects an empty custom text and a text past the premium cap", () => {
     expect(() =>
       resolveBotSocialCompose({ article, body: { textSource: "custom", includeLink: false } }),
@@ -227,5 +243,111 @@ describe("article URL forms", () => {
       text: "نص",
     }).success).toBe(true);
     expect(botSocialPublishSchema.safeParse({ clientReference: "ref-1", text: "نص" }).success).toBe(false);
+    expect(botSocialPublishSchema.safeParse({
+      kind: "original",
+      clientReference: "ref-1",
+      text: "شرح بلا خبر",
+      imageUrls: ["https://media.sabq.org/a.png", "https://media.sabq.org/b.jpg"],
+    }).success).toBe(true);
+    expect(botSocialPublishSchema.safeParse({
+      kind: "original",
+      articleId: "art-1",
+      clientReference: "ref-1",
+      text: "شرح",
+    }).success).toBe(false);
+  });
+});
+
+describe("original post without an article", () => {
+  it("rejects empty text and text over 2000 weighted characters", () => {
+    expect(() => resolveOriginalPost({ body: { text: "   " }, contentId: "preview" })).toThrow(BotSocialError);
+    expect(() => resolveOriginalPost({
+      body: { text: "ا".repeat(2001) },
+      contentId: "preview",
+    })).toThrow(/2000/);
+    try {
+      resolveOriginalPost({ body: {}, contentId: "preview" });
+      throw new Error("expected empty rejection");
+    } catch (error) {
+      expect(error).toMatchObject({ httpStatus: 400, code: "validation_error" });
+    }
+  });
+
+  it("accepts 281 through 2000 weighted characters and keeps 280 as the fold signal", () => {
+    const folded = resolveOriginalPost({ body: { text: "ا".repeat(281) }, contentId: "preview" });
+    expect(folded.valid).toBe(true);
+    expect(folded.overStandard).toBe(true);
+    expect(folded.weightedLength).toBe(281);
+    const full = resolveOriginalPost({ body: { text: "ا".repeat(2000) }, contentId: "preview" });
+    expect(full.valid).toBe(true);
+    expect(full.overStandard).toBe(true);
+    expect(full.weightedLength).toBe(2000);
+    expect(() => resolveOriginalPost({
+      body: { text: "ا".repeat(2000), linkUrl: "https://sabq.org/guide" },
+      contentId: "preview",
+    })).toThrow(/2000/);
+  });
+
+  it("accepts one image and more than one image", () => {
+    expect(resolveOriginalImageUrls({ imageUrl: "https://media.sabq.org/a.png" }, null)).toEqual([
+      "https://media.sabq.org/a.png",
+    ]);
+    expect(resolveOriginalImageUrls({
+      imageUrls: ["https://media.sabq.org/a.png", "https://media.sabq.org/b.jpg"],
+    }, null)).toEqual([
+      "https://media.sabq.org/a.png",
+      "https://media.sabq.org/b.jpg",
+    ]);
+    expect(() => resolveOriginalImageUrls({
+      imageUrl: "https://media.sabq.org/a.png",
+      imageUrls: ["https://media.sabq.org/b.jpg"],
+    }, null)).toThrow(BotSocialError);
+  });
+
+  it("stamps the four measurement params and drops other query values", () => {
+    const tagged = applySabqXMeasurementTags(
+      "http://www.sabq.org/guide?email=user@example.com&page=2&utm_source=bot#section",
+      "post-1",
+      "teachers",
+    );
+    const url = new URL(tagged);
+    expect(url.protocol).toBe("https:");
+    expect(url.hostname).toBe("www.sabq.org");
+    expect(url.pathname).toBe("/guide");
+    expect(url.hash).toBe("#section");
+    expect(url.searchParams.get("page")).toBe("2");
+    expect(url.searchParams.get("utm_source")).toBe("x");
+    expect(url.searchParams.get("utm_medium")).toBe("social");
+    expect(url.searchParams.get("utm_campaign")).toBe("teachers");
+    expect(url.searchParams.get("utm_content")).toBe("post-1");
+    expect(url.searchParams.get("email")).toBeNull();
+    expect([...url.searchParams.keys()].sort()).toEqual([
+      "page",
+      "utm_campaign",
+      "utm_content",
+      "utm_medium",
+      "utm_source",
+    ]);
+
+    const composed = resolveOriginalPost({
+      body: { text: "شرح", linkUrl: "https://sabq.org/services/water" },
+      contentId: "preview",
+    });
+    const link = new URL(composed.linkUrl!);
+    expect(link.searchParams.get("utm_source")).toBe("x");
+    expect(link.searchParams.get("utm_medium")).toBe("social");
+    expect(link.searchParams.get("utm_campaign")).toBe("sabqorg");
+    expect(link.searchParams.get("utm_content")).toBe("preview");
+    expect(composed.composedText).toContain(composed.linkUrl!);
+  });
+
+  it("allows a post with no link", () => {
+    const composed = resolveOriginalPost({
+      body: { text: "صورة ونص", imageUrl: "https://media.sabq.org/card.png" },
+      contentId: "preview",
+    });
+    expect(composed.linkUrl).toBeNull();
+    expect(composed.imageUrls).toEqual(["https://media.sabq.org/card.png"]);
+    expect(composed.includeLink).toBe(false);
   });
 });
