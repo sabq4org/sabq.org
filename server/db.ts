@@ -21,6 +21,7 @@ import {
   getSessionFallbackPoolConfig,
   shouldRunStartupMaintenance,
 } from "./dbPoolConfig";
+import { installPostgresPoolErrorHandling } from "./utils/postgresPoolErrors";
 
 neonConfig.webSocketConstructor = ws;
 neonConfig.pipelineConnect = "password";
@@ -48,6 +49,14 @@ let _sessionFallbackPool: any;
 
 function getDatabaseUrl(): string | undefined {
   return process.env.NEON_DATABASE_URL || process.env.DATABASE_URL;
+}
+
+function handleMainPoolError(error: unknown): void {
+  const message = error instanceof Error ? error.message : String(error);
+  console.error('[Pool] Unexpected client error:', message);
+  _dbConnected = false;
+  _dbLastError = message;
+  startReconnectLoop();
 }
 
 function initPool(databaseUrl: string): void {
@@ -92,23 +101,15 @@ function initPool(databaseUrl: string): void {
   if (DB_DRIVER === 'pg') {
     console.log('[DB] Initializing connection (Standard PG via node-postgres) — Railway / generic PostgreSQL...');
     pool = new PgPool(poolConfig);
-    pool.on('error', (err: any) => {
-      console.error('[Pool] Unexpected client error:', err.message);
-      _dbConnected = false;
-      _dbLastError = err.message;
-      startReconnectLoop();
-    });
+    installPostgresPoolErrorHandling(pool, handleMainPoolError);
     db = drizzlePg(pool, { schema });
   } else {
     const isExternalNeon = !!process.env.NEON_DATABASE_URL;
     console.log(`[DB] Initializing connection (${isExternalNeon ? 'External Neon' : 'Replit DB'} via @neondatabase/serverless)...`);
     pool = new NeonPool(poolConfig);
-    pool.on('error', (err: any) => {
-      console.error('[Pool] Unexpected client error:', err.message);
-      _dbConnected = false;
-      _dbLastError = err.message;
-      startReconnectLoop();
-    });
+    // Keep NeonPool compatible with its optional poolQueryViaFetch path, which
+    // requires that the pool have no non-error listeners.
+    pool.on('error', handleMainPoolError);
     db = drizzleNeon({ client: pool, schema });
   }
 }
@@ -132,9 +133,15 @@ export function getSessionFallbackPool(): any {
     ? new PgPool(poolConfig)
     : new NeonPool(poolConfig);
 
-  _sessionFallbackPool.on("error", (err: any) => {
-    console.error("[Session Pool] Unexpected client error:", err.message);
-  });
+  const handleSessionPoolError = (error: unknown) => {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("[Session Pool] Unexpected client error:", message);
+  };
+  if (DB_DRIVER === "pg") {
+    installPostgresPoolErrorHandling(_sessionFallbackPool, handleSessionPoolError);
+  } else {
+    _sessionFallbackPool.on("error", handleSessionPoolError);
+  }
 
   console.log(
     `[Session Pool] Isolated PostgreSQL pool initialized (max=${poolConfig.max}, connTimeout=${poolConfig.connectionTimeoutMillis}ms, queryTimeout=${poolConfig.query_timeout}ms)`,

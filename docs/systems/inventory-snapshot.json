@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-27T04:56:49.147Z",
+  "generatedAt": "2026-10-04T04:24:05.137Z",
   "systems": [
     {
       "id": "account-center",
@@ -59,7 +59,7 @@
     },
     {
       "id": "editorial",
-      "fileCount": 232,
+      "fileCount": 243,
       "samplePaths": [
         "server/services/mobileAdminSchedule.ts",
         "tests/unit/mobileAdminSchedule.test.ts",
@@ -115,16 +115,16 @@
     },
     {
       "id": "radar",
-      "fileCount": 37,
+      "fileCount": 40,
       "samplePaths": [
         "server/services/radar/aiChain.ts",
         "server/services/radar/alerts.ts",
         "server/services/radar/analyst.ts",
         "server/services/radar/clusterer.ts",
         "server/services/radar/cycle.ts",
-        "server/services/radar/data/saudi-negative.json",
-        "server/services/radar/data/saudi-positive.json",
-        "server/services/radar/developer.ts"
+        "server/services/radar/developer.ts",
+        "server/services/radar/exporter.ts",
+        "server/services/radar/fetchPolicy.ts"
       ]
     },
     {
@@ -199,7 +199,7 @@
     },
     {
       "id": "auth-rbac",
-      "fileCount": 68,
+      "fileCount": 72,
       "samplePaths": [
         "server/auth.ts",
         "server/rbac.ts",
@@ -213,7 +213,7 @@
     },
     {
       "id": "seo-ssr",
-      "fileCount": 65,
+      "fileCount": 66,
       "samplePaths": [
         "server/seoInjector.ts",
         "server/middleware/slugRedirect.ts",
@@ -261,8 +261,22 @@
       ]
     },
     {
+      "id": "mawaeed",
+      "fileCount": 22,
+      "samplePaths": [
+        "shared/mawaeed/content.ts",
+        "shared/mawaeed/dates.ts",
+        "shared/mawaeed/model.ts",
+        "shared/mawaeed/present.ts",
+        "shared/mawaeed/seed.ts",
+        "shared/mawaeed/validate.ts",
+        "server/services/mawaeedService.ts",
+        "server/routes/mawaeed.ts"
+      ]
+    },
+    {
       "id": "systems-catalog",
-      "fileCount": 44,
+      "fileCount": 46,
       "samplePaths": [
         "docs/systems/AUDIT-2026-07-17.md",
         "docs/systems/GOVERNANCE.md",
@@ -290,21 +304,21 @@
     },
     {
       "id": "social-publishing",
-      "fileCount": 19,
+      "fileCount": 27,
       "samplePaths": [
         "shared/socialPostText.ts",
+        "server/services/socialPublishing/botSocialLogic.ts",
+        "server/services/socialPublishing/botSocialService.ts",
         "server/services/socialPublishing/imageResolver.ts",
         "server/services/socialPublishing/publerApiClient.ts",
         "server/services/socialPublishing/socialPublishingService.ts",
         "server/services/socialPublishing/suggestService.ts",
-        "server/services/socialPublishing/tokenCrypto.ts",
-        "server/services/socialPublishing/types.ts",
-        "server/services/socialPublishing/xApiClient.ts"
+        "server/services/socialPublishing/tokenCrypto.ts"
       ]
     },
     {
       "id": "sahraa-tv-block",
-      "fileCount": 10,
+      "fileCount": 15,
       "samplePaths": [
         "server/services/sahraaTvBlockService.ts",
         "server/services/sahraaTvBlockUtils.ts",
@@ -360,7 +374,7 @@
     },
     {
       "id": "platform-runtime",
-      "fileCount": 27,
+      "fileCount": 28,
       "samplePaths": [
         "server/index.ts",
         "server/bootstrap.ts",

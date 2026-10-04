@@ -1,7 +1,7 @@
 {
   "$schemaNote": "Machine-readable catalog of Sabq product systems. Consumed by scripts/systems-inventory.mjs and /api/admin/systems-catalog. aiFeatureKeys must be exclusive (one system owner) to avoid double-counting.",
   "version": 2,
-  "updatedAt": "2026-09-29",
+  "updatedAt": "2026-10-04",
   "systems": [
     {
       "id": "account-center",
@@ -1322,6 +1322,7 @@
         "server/storage.ts",
         "server/routes/mobileApiRoutes.ts",
         "server/utils/freshWindowCache.ts",
+        "server/utils/postgresPoolErrors.ts",
         "server/services/mobileCommentTreeService.ts",
         "tests/unit/freshWindowCache.test.ts",
         "client/src/lib/earlyErrorBuffer.ts",
@@ -1339,7 +1340,7 @@
       "owners": [
         "platform"
       ],
-      "lastReviewed": "2026-09-28"
+      "lastReviewed": "2026-10-04"
     },
     {
       "id": "mobile-analytics",
