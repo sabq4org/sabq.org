@@ -1,6 +1,6 @@
 # النشر الاجتماعي (`social-publishing`)
 
-> آخر مراجعة: 2026-10-03 (منشور بوت بلا خبر: صور متعددة ووسوم قياس) | المالك: editorial + platform
+> آخر مراجعة: 2026-10-04 (long_post عبر Publer، وإزالة ** من نص البوت) | المالك: editorial + platform
 
 ## الغرض
 نشر أخبار سبق على منصة X من لوحة التحكم: فوري أو مجدول، بنص من العنوان أو
@@ -82,7 +82,9 @@
   `publerProvider` — جدولتنا وexactly-once والسجل تبقى حاكمة، وPubller
   ينفذ الرفع (`POST /media` حقل `file`) والنشر
   (`POST /posts/schedule/publish` بـ`bulk.state="scheduled"` **بلا**
-  `scheduled_at` = فوري) مع استطلاع `job_status`. **مهلة الاستطلاع بعد
+  `scheduled_at` = فوري) مع استطلاع `job_status`. **نص أطول من 280
+  موزوناً يُرسل مع `details.type="long_post"`**؛ بدونه تقصّ Publer النص عند
+  280 بصمت فيضيع آخره والرابط (حادثة 2026-10-04). **مهلة الاستطلاع بعد
   إرسال النشر خطأ دائم عمداً** (الحالة مجهولة — إعادة آلية قد تكرر
   المنشور). وثائق Publer: `job_status` المكتمل `{ status, payload.failures }`
   بلا رابط وبلا معرف منشور — `publer:<jobId>` ليس مسار `GET /posts/{id}`.
