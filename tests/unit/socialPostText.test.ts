@@ -89,4 +89,11 @@ describe("stripMarkdownEmphasis — X لا يعرض Markdown", () => {
     const text = "#وسم_سعودي 5 * 3 https://sabq.org/a__b?utm_source=x";
     expect(stripMarkdownEmphasis(text)).toBe(text);
   });
+
+  it("لا يمس __ داخل وسم أو رابط عربي", () => {
+    for (const text of ["#وسم__سعودي__جديد", "https://sabq.org/خبر__عاجل__الآن", "https://sabq.org/**x**"]) {
+      expect(stripMarkdownEmphasis(text)).toBe(text);
+    }
+    expect(stripMarkdownEmphasis("خبر __عاجل__ الآن")).toBe("خبر عاجل الآن");
+  });
 });
