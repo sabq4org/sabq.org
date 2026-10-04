@@ -50,7 +50,13 @@ for (const a of advisories.values()) {
   }
 }
 for (const entry of allowlist) {
-  if (!advisories.has(entry.id)) console.log(`ℹ الاستثناء ${entry.id} (${entry.package}) لم يعد لازمًا — احذفه.`);
+  if (advisories.has(entry.id)) continue;
+  if (entry.until < today) {
+    failed = true;
+    console.error(`✖ استثناء منتهي (${entry.until}) ولم يعد لازمًا — احذف ${entry.id} (${entry.package}) من القائمة.`);
+  } else {
+    console.log(`ℹ الاستثناء ${entry.id} (${entry.package}) لم يعد لازمًا — احذفه.`);
+  }
 }
 
 if (failed) {
