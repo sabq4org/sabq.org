@@ -351,3 +351,14 @@ describe("original post without an article", () => {
     expect(composed.includeLink).toBe(false);
   });
 });
+
+describe("bot social markdown emphasis", () => {
+  it("strips ** from an original post before it is stored or counted", () => {
+    const composed = resolveOriginalPost({
+      body: { text: "«إنفيديا» تطوّر **النجدية والحجازية**" },
+      contentId: "preview",
+    });
+    expect(composed.text).toBe("«إنفيديا» تطوّر النجدية والحجازية");
+    expect(composed.composedText).not.toContain("**");
+  });
+});

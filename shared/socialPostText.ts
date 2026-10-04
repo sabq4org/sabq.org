@@ -50,6 +50,28 @@ export function xWeightedLength(text: string): number {
 }
 
 /**
+ * يزيل علامات التغميق في Markdown (`**نص**` و`__نص__`). X لا يعرض Markdown،
+ * فتظهر النجوم حرفياً في التغريدة. الروابط لا تُمس، و`__` الملاصقة لحرف أو
+ * رقم (عربي أو لاتيني) جزء من وسم أو معرّف وليست تغميقاً.
+ */
+const EMPHASIS_STARS = /\*\*(?=\S)([^*\n]*?\S)\*\*/g;
+const EMPHASIS_UNDERSCORES = /(?<![\p{L}\p{N}_])__(?=\S)([^_\n]*?\S)__(?![\p{L}\p{N}_])/gu;
+
+function stripEmphasisPlain(text: string): string {
+  return text.replace(EMPHASIS_STARS, "$1").replace(EMPHASIS_UNDERSCORES, "$1");
+}
+
+export function stripMarkdownEmphasis(text: string): string {
+  let out = "";
+  let lastIndex = 0;
+  for (const match of text.matchAll(URL_REGEX)) {
+    out += stripEmphasisPlain(text.slice(lastIndex, match.index)) + match[0];
+    lastIndex = (match.index ?? 0) + match[0].length;
+  }
+  return out + stripEmphasisPlain(text.slice(lastIndex));
+}
+
+/**
  * يركّب النص النهائي للمنشور: النص + الرابط في سطر جديد (إن وُجد).
  * الرابط لا يُدمج داخل النص حتى يبقى قابلاً للإزالة والعدّ المستقل.
  */
