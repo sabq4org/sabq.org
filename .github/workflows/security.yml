@@ -44,8 +44,10 @@ jobs:
           node-version: "24.20.0"
       # Block new high/critical advisories in production dependencies. Moderate
       # findings remain tracked separately so they do not mask urgent regressions.
+      # Advisories with no upstream fix that don't affect our usage can be listed
+      # in .github/npm-audit-allowlist.json with a reason and an expiry date.
       - name: npm audit (production deps)
-        run: npm audit --omit=dev --audit-level=high
+        run: node scripts/ci/npm-audit-gate.mjs
 
   sast:
     name: SAST (Semgrep)

@@ -1,0 +1,11 @@
+{
+  "_comment": "استثناءات مؤقتة لفحص الحزم (Security scan / Dependency audit). كل استثناء: سبب يثبت أن الثغرة لا تمسّنا + تاريخ انتهاء يُعاد بعده الفحص. لا تضف استثناء لثغرة لها إصلاح متاح — حدّث الحزمة.",
+  "advisories": [
+    {
+      "id": "GHSA-86w9-cpqp-85rv",
+      "package": "node-forge",
+      "reason": "الثغرة في التحقق من توقيعات RSA PKCS#1 v1.5. نستخدم node-forge فقط عبر passkit-generator لتوقيع بطاقات Apple Wallet (pkcs7.createSignedData) ولا نتحقق من أي توقيع. لا يوجد إصدار مُصلح حتى 2026-10-04 (المدى <=1.4.0 وهو الأحدث).",
+      "until": "2026-11-15"
+    }
+  ]
+}
