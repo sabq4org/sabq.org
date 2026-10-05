@@ -12,6 +12,28 @@ export function newsImageUploadLabel(progress: NewsImageUploadProgress): string 
   return `جارٍ رفع الصورة… ${progress.percent}%`;
 }
 
+/**
+ * Browser-side resizing is an optimisation only. Some browsers never settle
+ * the decode/encode promises for certain large photos, which left the hero
+ * image stuck on «جارٍ تجهيز الصورة…» with no request ever sent. Past this
+ * deadline the original file is uploaded and the server resizes it.
+ */
+export const PREPARE_TIMEOUT_MS = 8_000;
+/** Generous for a 10MB file on a slow link; a stalled transfer ends with an error, not an endless spinner. */
+export const UPLOAD_TIMEOUT_MS = 120_000;
+
+async function prepareWithDeadline(file: File): Promise<File> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<File>(resolve => {
+    timer = setTimeout(() => resolve(file), PREPARE_TIMEOUT_MS);
+  });
+  try {
+    return await Promise.race([prepareNewsImage(file).catch(() => file), deadline]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /** Same authenticated upload contract; only explicit article images are resized. */
 export async function uploadNewsImage<T>(
   original: FormData,
@@ -23,12 +45,12 @@ export async function uploadNewsImage<T>(
   const purpose = String(body.get("purpose") || body.get("entityType") || "");
   if (file instanceof File && /^(?:article|en-article|ur-article)(?:-|$)/.test(purpose)) {
     onProgress({ phase: "preparing", percent: 0 });
-    body.set("file", await prepareNewsImage(file));
+    body.set("file", await prepareWithDeadline(file));
   }
   onProgress({ phase: "uploading", percent: 0 });
   try {
     const result = await apiRequest<T>("/api/media/upload", {
-      method: "POST", body, isFormData: true,
+      method: "POST", body, isFormData: true, timeoutMs: UPLOAD_TIMEOUT_MS,
       onUploadProgress: ({ loaded, total }) => {
         if (total <= 0) return;
         const percent = Math.max(0, Math.min(100, Math.floor(loaded / total * 100)));

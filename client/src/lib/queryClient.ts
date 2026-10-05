@@ -447,6 +447,8 @@ export async function apiRequest<T = any>(
     headers?: Record<string, string>;
     isFormData?: boolean;
     onUploadProgress?: (progress: { loaded: number; total: number }) => void;
+    /** FormData (XHR) uploads only: abort after this many ms instead of hanging forever. */
+    timeoutMs?: number;
     _csrfRetry?: boolean;
     silent?: boolean;
   }
@@ -552,9 +554,20 @@ export async function apiRequest<T = any>(
       xhr.addEventListener('error', () => {
         reject(new Error('Network error'));
       });
+      // Without these a stalled or cancelled upload never settles and the
+      // caller's spinner stays on forever.
+      xhr.addEventListener('timeout', () => {
+        reject(new Error('Network error: upload timed out'));
+      });
+      xhr.addEventListener('abort', () => {
+        reject(new Error('Network error: upload aborted'));
+      });
 
       xhr.open(options?.method || 'POST', apiUrl(withSportsLang(url)));
       xhr.withCredentials = true;
+      if (options.timeoutMs && options.timeoutMs > 0) {
+        xhr.timeout = options.timeoutMs;
+      }
       
       const token = getCsrfToken();
       if (token) {
