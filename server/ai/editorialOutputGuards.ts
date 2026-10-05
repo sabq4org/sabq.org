@@ -23,7 +23,7 @@ const MIN_OUTPUT_RATIO = 0.5;
 
 /**
  * يرمي خطأ إذا بدا المحتوى المحرر مبتورًا. يُستدعى بعد JSON.parse في مسار
- * النموذج الأساسي (فيسقط للبديل) وبعد مسار البديل (فيصعد لإعادة المحاولة).
+ * النموذج الأساسي (فيسقط للبديل) وبعد مسار البديل (فيصعد إلى المستدعي).
  *
  * فحصان:
  * 1. محتوى HTML لا ينتهي بوسم إغلاق = قُطع داخل فقرة (البصمة الحتمية للعلة).
@@ -152,6 +152,13 @@ export function restoreSourceNumbers(source: string, output: string): RestoredSo
   return { text, restored };
 }
 
+export class EditorialContentIncompleteError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "EditorialContentIncompleteError";
+  }
+}
+
 export function assertEditedContentComplete(content: string, inputText: string): void {
   // مواد الـ spam (درجة < 10) قد تعود بمحتوى فارغ عمدًا — الغياب ليس بترًا
   if (!content) return;
@@ -159,7 +166,7 @@ export function assertEditedContentComplete(content: string, inputText: string):
   const trimmed = content.trimEnd();
   const usesHtmlBlocks = /<p[\s>]/i.test(trimmed);
   if (usesHtmlBlocks && !/<\/[a-z][a-z0-9]*>$/i.test(trimmed)) {
-    throw new Error(
+    throw new EditorialContentIncompleteError(
       "Edited content truncated: HTML body does not end with a closing tag (unescaped quote closed the JSON string early?)"
     );
   }
@@ -169,7 +176,7 @@ export function assertEditedContentComplete(content: string, inputText: string):
 
   const contentPlain = htmlToPlainText(content);
   if (contentPlain.length < inputPlain.length * MIN_OUTPUT_RATIO) {
-    throw new Error(
+    throw new EditorialContentIncompleteError(
       `Edited content truncated: output ${contentPlain.length} chars < ${MIN_OUTPUT_RATIO * 100}% of input ${inputPlain.length} chars`
     );
   }
