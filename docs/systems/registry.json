@@ -258,6 +258,8 @@
         "server/ai-classifier.ts",
         "server/ai/contentAnalyzer.ts",
         "server/ai/editorialOutputGuards.ts",
+        "server/ai/editorialCompletenessRetry.ts",
+        "tests/unit/editorialCompletenessRetry.test.ts",
         "server/storyMatcher.ts",
         "server/smartCategoriesEngine.ts",
         "client/src/components/DashboardLayout.tsx",
