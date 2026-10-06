@@ -283,9 +283,6 @@ export async function getPortalCreditPackages(publisher: Publisher) {
 
   const openPeriodStart = resolveOpenPeriodStart(rows, rows[0]?.startDate ?? now);
 
-  // صحّح usedCredits للباقات المفتوحة إن تخلّف العداد عن الواقع
-  const healUpdates: Array<{ id: string; used: number }> = [];
-
   const packages = rows.map((pkg) => {
     const expired = !!(pkg.expiryDate && pkg.expiryDate.getTime() < now.getTime());
     let status: "active" | "inactive" | "expired" = "inactive";
@@ -304,13 +301,11 @@ export async function getPortalCreditPackages(publisher: Publisher) {
 
     // الباقة المفتوحة: مصدر الحقيقة = المنشور في نافذتها (أو سجلات الاستخدام)
     // الباقة المحدودة: نثق بعدّاد الخصم مع عدم النزول تحت سجلات الاستخدام
+    // قراءة فقط: كانت هذه الدالة تكتب الرقم المعروض في usedCredits عند كل
+    // فتح للصفحة، فيبتعد العدّاد عن دفتر الخصم. الكتابة الآن من الخصم وحده.
     const usedCredits = pkg.isUnlimited
       ? Math.max(pkg.usedCredits, publishedInWindow, loggedUses)
       : Math.max(pkg.usedCredits, loggedUses);
-
-    if (pkg.isUnlimited && usedCredits !== pkg.usedCredits) {
-      healUpdates.push({ id: pkg.id, used: usedCredits });
-    }
 
     return {
       id: pkg.id,
@@ -331,17 +326,6 @@ export async function getPortalCreditPackages(publisher: Publisher) {
       createdAt: pkg.createdAt,
     };
   });
-
-  if (healUpdates.length > 0) {
-    await Promise.all(
-      healUpdates.map((u) =>
-        db
-          .update(publisherCredits)
-          .set({ usedCredits: u.used, updatedAt: now })
-          .where(eq(publisherCredits.id, u.id)),
-      ),
-    );
-  }
 
   return { packages };
 }

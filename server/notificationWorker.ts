@@ -380,6 +380,18 @@ async function publishScheduledArticles() {
           await recordPersonalBotScheduledPublish(article);
         }
 
+        // Agency news: the scheduled publisher used to release it without
+        // charging the package. The shared rule never charges an article twice,
+        // so the personal-bot charge above can't double up. Never throws.
+        if (article.publisherId) {
+          const { deductPublisherCreditSafely } = await import("./services/publisherCreditService");
+          await deductPublisherCreditSafely({
+            authorUserId: article.authorId,
+            articleId: article.id,
+            actorId: article.submitterId ?? article.authorId,
+          });
+        }
+
         console.log(`[ScheduledPublisher] Published article: ${article.id} - ${article.title}`);
 
         // Make the freshly-published article visible immediately on every pod + edge.
