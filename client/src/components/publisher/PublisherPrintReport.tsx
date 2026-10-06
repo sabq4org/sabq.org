@@ -17,6 +17,7 @@ export interface PrintReportData {
   month: string;
   monthLabel: string;
   agencyName: string;
+  agencyLogoUrl?: string | null;
   contactPerson?: string | null;
   packageLine?: string | null;
   generatedAt: string;
@@ -51,15 +52,18 @@ const PRINT_CSS = `
   body > *:not(#publisher-print-root) { display: none !important; }
   #publisher-print-root { display: block !important; }
 }
-#publisher-print-root .pr { direction: rtl !important; color: #0e2233 !important; font-family: "IBM Plex Sans Arabic", "Noto Sans Arabic", "Segoe UI", Tahoma, sans-serif !important; font-size: 10pt !important; line-height: 1.55 !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+#publisher-print-root .pr { direction: rtl !important; color: #0e2233 !important; font-family: "IBM Plex Sans Arabic", "Tajawal", "Segoe UI", Tahoma, sans-serif !important; font-size: 10pt !important; line-height: 1.55 !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
 #publisher-print-root .pr * { box-sizing: border-box !important; }
 #publisher-print-root .pr a { color: inherit !important; text-decoration: none !important; }
 #publisher-print-root .pr .num { font-variant-numeric: tabular-nums !important; }
 #publisher-print-root .pr .muted { color: #64748b !important; }
 #publisher-print-root .pr-head { display: flex !important; align-items: center !important; justify-content: space-between !important; gap: 16px !important; padding-bottom: 12px !important; border-bottom: 3px solid #1f9bea !important; }
+#publisher-print-root .pr-logos { display: flex !important; align-items: center !important; gap: 14px !important; }
+#publisher-print-root .pr-logos .sep { width: 1px !important; height: 44px !important; background: #cfd9e2 !important; }
+#publisher-print-root .pr-logos .agency { height: 54px !important; width: auto !important; max-width: 150px !important; object-fit: contain !important; display: block !important; }
 #publisher-print-root .pr-head img { height: 54px !important; width: auto !important; max-width: none !important; display: block !important; }
-#publisher-print-root .pr-head .kind { font-size: 9pt !important; font-weight: 600 !important; color: #1f9bea !important; letter-spacing: .02em !important; }
-#publisher-print-root .pr-head .pr-title { margin: 2px 0 0 !important; font-size: 20pt !important; font-weight: 800 !important; line-height: 1.2 !important; }
+#publisher-print-root .pr-head .kind { font-size: 9pt !important; font-weight: 600 !important; color: #1f9bea !important; }
+#publisher-print-root .pr-head .pr-title { margin: 2px 0 0 !important; font-size: 20pt !important; font-weight: 700 !important; line-height: 1.2 !important; }
 #publisher-print-root .pr-meta { display: grid !important; grid-template-columns: 1.2fr 1fr 1.5fr .9fr !important; gap: 1px !important; margin-top: 12px !important; background: #dbe4ec !important; border: 1px solid #dbe4ec !important; border-radius: 8px !important; overflow: hidden !important; }
 #publisher-print-root .pr-meta > div { background: #f6f9fb !important; padding: 7px 10px !important; }
 #publisher-print-root .pr-meta dt { font-size: 8pt !important; color: #64748b !important; }
@@ -67,13 +71,13 @@ const PRINT_CSS = `
 #publisher-print-root .pr-stats { display: grid !important; grid-template-columns: repeat(4, 1fr) !important; gap: 8px !important; margin-top: 14px !important; }
 #publisher-print-root .pr-stat { border: 1px solid #dbe4ec !important; border-top: 3px solid #1f9bea !important; border-radius: 8px !important; padding: 9px 11px !important; break-inside: avoid !important; }
 #publisher-print-root .pr-stat .label { font-size: 8.5pt !important; color: #64748b !important; }
-#publisher-print-root .pr-stat .value { font-size: 19pt !important; font-weight: 800 !important; line-height: 1.25 !important; }
+#publisher-print-root .pr-stat .value { font-size: 19pt !important; font-weight: 700 !important; line-height: 1.25 !important; }
 #publisher-print-root .pr-stat .hint { font-size: 8pt !important; color: #64748b !important; }
 #publisher-print-root .pr-up { color: #047857 !important; font-weight: 700 !important; }
 #publisher-print-root .pr-down { color: #b91c1c !important; font-weight: 700 !important; }
 #publisher-print-root .pr-panels { display: grid !important; grid-template-columns: 1fr 1fr !important; gap: 10px !important; margin-top: 14px !important; }
 #publisher-print-root .pr-panel { border: 1px solid #dbe4ec !important; border-radius: 8px !important; padding: 10px 12px !important; break-inside: avoid !important; }
-#publisher-print-root .pr .pr-h { margin: 0 0 8px !important; font-size: 11pt !important; font-weight: 800 !important; break-after: avoid !important; }
+#publisher-print-root .pr .pr-h { margin: 0 0 8px !important; font-size: 11pt !important; font-weight: 700 !important; break-after: avoid !important; }
 #publisher-print-root .pr-trend { display: flex !important; align-items: flex-end !important; gap: 8px !important; height: 110px !important; }
 #publisher-print-root .pr-trend > div { flex: 1 !important; height: 100% !important; display: flex !important; flex-direction: column !important; align-items: center !important; justify-content: flex-end !important; gap: 3px !important; }
 #publisher-print-root .pr-trend .bar { width: 70% !important; max-width: 34px !important; border-radius: 3px 3px 0 0 !important; background: #b9def7 !important; }
@@ -157,6 +161,11 @@ export function PublisherPrintReport({ data }: { data: PrintReportData }) {
 
   return createPortal(
     <div id="publisher-print-root">
+      {/* الخط نفسه بأوزانه كاملة؛ الموقع يحمّل 400 و700 فقط */}
+      <link
+        rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap"
+      />
       <style>{PRINT_CSS}</style>
       <div className="pr" dir="rtl" data-testid="publisher-print-report">
         <div className="pr-head">
@@ -164,7 +173,15 @@ export function PublisherPrintReport({ data }: { data: PrintReportData }) {
             <div className="kind">التقرير الشهري للوكالة</div>
             <div className="pr-title">{data.monthLabel}</div>
           </div>
-          <img src={sabqLogo} alt="سبق" />
+          <div className="pr-logos">
+            {data.agencyLogoUrl ? (
+              <>
+                <img className="agency" src={data.agencyLogoUrl} alt={data.agencyName} />
+                <span className="sep" />
+              </>
+            ) : null}
+            <img src={sabqLogo} alt="سبق" />
+          </div>
         </div>
 
         <dl className="pr-meta">

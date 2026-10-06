@@ -126,7 +126,7 @@ export default function PublisherReports() {
   // آخر 6 أشهر حتى الشهر المختار، من سلسلة لوحة التحكم نفسها
   const { data: overview } = useQuery<{
     monthlyPublishing?: Array<{ month: string; published: number; views: number }>;
-    publisher?: { contactPerson?: string | null };
+    publisher?: { contactPerson?: string | null; logoUrl?: string | null };
     activeCredit?: { packageName?: string | null; isUnlimited?: boolean; remainingCredits?: number; expiryDate?: string | null } | null;
   }>({
     queryKey: ["/api/publisher/portal/overview"],
@@ -153,6 +153,7 @@ export default function PublisherReports() {
             month: data.month,
             monthLabel: monthLabel(data.month),
             agencyName: data.agencyName,
+            agencyLogoUrl: overview?.publisher?.logoUrl ?? null,
             contactPerson: overview?.publisher?.contactPerson ?? null,
             packageLine,
             generatedAt: String(data.generatedAt),
@@ -191,7 +192,7 @@ export default function PublisherReports() {
                     ))}
                   </SelectContent>
                 </Select>
-                <Button variant="outline" className="gap-2 rounded-xl shadow-sm" onClick={() => window.print()} data-testid="button-print-report">
+                <Button variant="outline" className="gap-2 rounded-xl shadow-sm" onClick={() => void document.fonts.ready.then(() => window.print())} data-testid="button-print-report">
                   <Printer className="h-4 w-4" />
                   طباعة / PDF
                 </Button>
