@@ -13,6 +13,7 @@ import { alias } from "drizzle-orm/pg-core";
 import { db } from "../../db";
 import {
   articles,
+  publishers,
   users,
   socialPlatformAccounts,
   socialPosts,
@@ -187,6 +188,10 @@ export interface CreatePostInput {
   mediaKind?: "none" | "image" | "video";
   mediaUrls?: string[];
   createdByUserId: string;
+  /** تغريدة تطلبها وكالة لخبرها (لوحة الوكالة) */
+  publisherId?: string | null;
+  /** الموعد الذي تقترحه الوكالة وهي تنتظر الموافقة */
+  requestedAt?: Date | null;
 }
 
 export const MAX_POST_IMAGES = 4;
@@ -301,6 +306,8 @@ export async function createDraftPost(input: CreatePostInput): Promise<SocialPos
       mediaUrls,
       status: "draft",
       createdByUserId: input.createdByUserId,
+      publisherId: input.publisherId ?? null,
+      requestedAt: input.requestedAt ?? null,
     })
     .returning();
   return post;
@@ -505,6 +512,7 @@ export async function listPostsForArticle(articleId: string): Promise<SocialPost
       articleTitle: articles.title,
       articleImageUrl: articles.imageUrl,
       articleAuthorId: articles.authorId,
+      agencyName: publishers.agencyName,
       creatorFirst: creator.firstName,
       creatorLast: creator.lastName,
       publisherFirst: publisher.firstName,
@@ -512,6 +520,7 @@ export async function listPostsForArticle(articleId: string): Promise<SocialPost
     })
     .from(socialPosts)
     .leftJoin(articles, eq(socialPosts.articleId, articles.id))
+    .leftJoin(publishers, eq(socialPosts.publisherId, publishers.id))
     .leftJoin(creator, eq(socialPosts.createdByUserId, creator.id))
     .leftJoin(publisher, eq(socialPosts.publishedByUserId, publisher.id))
     .where(eq(socialPosts.articleId, articleId))
@@ -526,8 +535,9 @@ export async function listPostsForArticle(articleId: string): Promise<SocialPost
     createdByName: fullName(r.creatorFirst, r.creatorLast),
     publishedByName: fullName(r.publisherFirst, r.publisherLast),
     isAuthorProposal: Boolean(
-      r.post.articleId && r.articleAuthorId && r.post.createdByUserId === r.articleAuthorId,
+      !r.post.publisherId && r.post.articleId && r.articleAuthorId && r.post.createdByUserId === r.articleAuthorId,
     ),
+    agencyName: r.post.publisherId ? r.agencyName : null,
   }));
 }
 
@@ -537,6 +547,8 @@ export type SocialPostListItem = SocialPost & {
   createdByName: string | null;
   publishedByName: string | null;
   isAuthorProposal?: boolean;
+  /** اسم الوكالة لتغريدة طلبتها وكالة (null لغير ذلك) */
+  agencyName?: string | null;
 };
 
 export async function listRecentPosts(limit = 50): Promise<SocialPostListItem[]> {
@@ -548,6 +560,7 @@ export async function listRecentPosts(limit = 50): Promise<SocialPostListItem[]>
       articleTitle: articles.title,
       articleImageUrl: articles.imageUrl,
       articleAuthorId: articles.authorId,
+      agencyName: publishers.agencyName,
       creatorFirst: creator.firstName,
       creatorLast: creator.lastName,
       publisherFirst: publisher.firstName,
@@ -555,6 +568,7 @@ export async function listRecentPosts(limit = 50): Promise<SocialPostListItem[]>
     })
     .from(socialPosts)
     .leftJoin(articles, eq(socialPosts.articleId, articles.id))
+    .leftJoin(publishers, eq(socialPosts.publisherId, publishers.id))
     .leftJoin(creator, eq(socialPosts.createdByUserId, creator.id))
     .leftJoin(publisher, eq(socialPosts.publishedByUserId, publisher.id))
     .orderBy(desc(socialPosts.createdAt))
@@ -568,8 +582,9 @@ export async function listRecentPosts(limit = 50): Promise<SocialPostListItem[]>
     createdByName: fullName(r.creatorFirst, r.creatorLast),
     publishedByName: fullName(r.publisherFirst, r.publisherLast),
     isAuthorProposal: Boolean(
-      r.post.articleId && r.articleAuthorId && r.post.createdByUserId === r.articleAuthorId,
+      !r.post.publisherId && r.post.articleId && r.articleAuthorId && r.post.createdByUserId === r.articleAuthorId,
     ),
+    agencyName: r.post.publisherId ? r.agencyName : null,
   }));
 }
 
@@ -580,6 +595,7 @@ export interface SocialPublishStats {
   failed: number;
   pendingDrafts: number;
   pendingAuthorProposals: number;
+  pendingAgencyProposals: number;
 }
 
 /** عدادات لوحة النشر الاجتماعي — استعلام تجميعي واحد */
@@ -597,8 +613,10 @@ export async function getPublishStats(): Promise<SocialPublishStats> {
       count(*) FILTER (
         WHERE p.status = 'draft'
           AND p.article_id IS NOT NULL
+          AND p.publisher_id IS NULL
           AND (p.created_by_user_id = a.author_id OR p.created_by_user_id = a.submitter_id)
-      )::int AS pending_author_proposals
+      )::int AS pending_author_proposals,
+      count(*) FILTER (WHERE p.status = 'draft' AND p.publisher_id IS NOT NULL)::int AS pending_agency_proposals
     FROM social_posts AS p
     LEFT JOIN articles AS a ON p.article_id = a.id
   `);
@@ -610,6 +628,7 @@ export async function getPublishStats(): Promise<SocialPublishStats> {
     failed: Number(row.failed ?? 0),
     pendingDrafts: Number(row.pending_drafts ?? 0),
     pendingAuthorProposals: Number(row.pending_author_proposals ?? 0),
+    pendingAgencyProposals: Number(row.pending_agency_proposals ?? 0),
   };
 }
 
