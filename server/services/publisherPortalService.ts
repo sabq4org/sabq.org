@@ -30,6 +30,7 @@ import {
   currentRenewalMilestone,
   emailAdminsNewRequest,
   getPortalRenewal,
+  renewalRemindersEnabled,
 } from "./publisherRenewalService";
 
 /**
@@ -1133,7 +1134,7 @@ export async function runPublisherDailyAlerts(): Promise<{ publishersChecked: nu
         .limit(1);
 
       const events = collectAlertEvents(publisher, activeCredit ?? null, now);
-      const reminder = await buildRenewalReminder(publisher, now);
+      const reminder = renewalRemindersEnabled() ? await buildRenewalReminder(publisher, now) : null;
       if (reminder) {
         events.push({
           alertKey: reminder.alertKey,

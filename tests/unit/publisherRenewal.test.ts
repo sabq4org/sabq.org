@@ -8,6 +8,7 @@ import {
   renewalMilestones,
   renewalPackageName,
   renewalReminderEmail,
+  renewalRemindersEnabled,
 } from "../../server/services/publisherRenewalService";
 import { compareToUsual } from "../../server/services/publisherInsightsService";
 
@@ -99,5 +100,17 @@ describe("comparison with the section's usual reads", () => {
     expect(compareToUsual({ status: "published", views: 9000, publishedAt: "2026-10-05T12:00:00Z", categoryId: "biz" }, medians, now)).toBeNull();
     expect(compareToUsual({ status: "draft", views: 0, publishedAt: null, categoryId: "biz" }, medians, now)).toBeNull();
     expect(compareToUsual({ status: "published", views: 10, publishedAt: old, categoryId: "other" }, medians, now)).toBeNull();
+  });
+});
+
+describe("renewal reminders switch", () => {
+  it("stays off until PUBLISHER_RENEWAL_REMINDERS=on", () => {
+    vi.stubEnv("PUBLISHER_RENEWAL_REMINDERS", "");
+    expect(renewalRemindersEnabled()).toBe(false);
+    vi.stubEnv("PUBLISHER_RENEWAL_REMINDERS", "off");
+    expect(renewalRemindersEnabled()).toBe(false);
+    vi.stubEnv("PUBLISHER_RENEWAL_REMINDERS", "ON");
+    expect(renewalRemindersEnabled()).toBe(true);
+    vi.unstubAllEnvs();
   });
 });

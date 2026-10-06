@@ -26,6 +26,15 @@ export function publisherAdminEmail(): string {
   return process.env.PUBLISHER_ADMIN_EMAIL?.trim() || "info@sabq.org";
 }
 
+/**
+ * مفتاح تشغيل تذكير التجديد (البريد + تنبيه الجرس) — مطفأ حتى يُضبط
+ * PUBLISHER_RENEWAL_REMINDERS=on، لأن أول تذكير يصل وكالة حقيقية ولا يُسترجع.
+ * لا يمس شارة «باقتك تنتهي» في اللوحة ولا مسار الطلب والعرض.
+ */
+export function renewalRemindersEnabled(): boolean {
+  return process.env.PUBLISHER_RENEWAL_REMINDERS?.trim().toLowerCase() === "on";
+}
+
 /** طلب تجديد «حي» = لم يُغلق ولم يُرفض بعد. */
 export const LIVE_REQUEST_STATUSES = ["open", "offered", "accepted"] as const;
 
