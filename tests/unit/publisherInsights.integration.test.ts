@@ -152,6 +152,8 @@ async function ledger(articleId: string, actionType: string) {
     expect(report.categories[0]).toMatchObject({ name: "أعمال", published: 2 });
     expect(report.authors).toEqual([{ name: "سارة علي", published: 2, views: 800 }]);
     expect(report.topArticles.map((t) => t.views)).toEqual([500, 300]);
+    expect(report.articles.map((t) => t.views).sort()).toEqual([300, 500]);
+    expect(report.articles[0]).toMatchObject({ categoryName: "أعمال" });
     expect(report.availableMonths).toContain(month);
   });
 });

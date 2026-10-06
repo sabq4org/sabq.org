@@ -263,6 +263,8 @@ export function isValidMonth(month: string | undefined): month is string {
   return monthBounds(month).start.getTime() <= Date.now();
 }
 
+const MONTH_ARTICLES_LIMIT = 500;
+
 /** التقرير الشهري القابل للطباعة: ما نُشر، قراءاته، أقسامه، أفضله، ومن كتبه. */
 export async function getPortalMonthlyReport(publisher: Publisher, month: string) {
   const { start, end } = monthBounds(month);
@@ -277,7 +279,7 @@ export async function getPortalMonthlyReport(publisher: Publisher, month: string
       lt(articles.publishedAt, to),
     );
 
-  const [[totals], [previous], byCategory, top, byAuthor, months] = await Promise.all([
+  const [[totals], [previous], byCategory, top, byAuthor, months, monthArticles] = await Promise.all([
     db
       .select({ published: sql<number>`count(*)::int`, views: sql<number>`coalesce(sum(${articles.views}), 0)::bigint` })
       .from(articles)
@@ -333,6 +335,21 @@ export async function getPortalMonthlyReport(publisher: Publisher, month: string
       .groupBy(sql`date_trunc('month', ${articles.publishedAt})`)
       .orderBy(desc(sql`date_trunc('month', ${articles.publishedAt})`))
       .limit(24),
+    // كل أخبار الشهر بترتيب النشر، لسرد التقرير المطبوع
+    db
+      .select({
+        id: articles.id,
+        title: articles.title,
+        views: articles.views,
+        publishedAt: articles.publishedAt,
+        categoryId: articles.categoryId,
+        categoryName: categories.nameAr,
+      })
+      .from(articles)
+      .leftJoin(categories, eq(articles.categoryId, categories.id))
+      .where(published(start, end))
+      .orderBy(articles.publishedAt)
+      .limit(MONTH_ARTICLES_LIMIT),
   ]);
 
   const medians = await getCategoryMedians(byCategory.map((c) => c.categoryId ?? ""));
@@ -350,6 +367,10 @@ export async function getPortalMonthlyReport(publisher: Publisher, month: string
       usualMedian: c.categoryId ? (medians.get(c.categoryId)?.median ?? null) : null,
     })),
     topArticles: topWithUsual,
+    articles: monthArticles.map(({ categoryId, ...row }) => ({
+      ...row,
+      vsUsual: compareToUsual({ ...row, categoryId, status: "published" }, medians),
+    })),
     authors: byAuthor.map((a) => ({
       name: authorName(a.firstName, a.lastName) ?? "غير معروف",
       published: Number(a.published) || 0,
