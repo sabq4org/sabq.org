@@ -5461,6 +5461,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
           }}
           articleTitle={title}
           articleContent={content?.substring(0, 500)}
+          articleBody={content}
           currentImageUrl={imageUrl}
           uploadPurpose="article-library"
         />
