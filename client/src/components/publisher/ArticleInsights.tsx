@@ -87,3 +87,55 @@ export function PlacementChips({ value, className }: { value: ArticlePlacements 
     </span>
   );
 }
+
+/**
+ * القراءات مع شريط صغير عليه خط «المعتاد» في القسم. يمتد الشريط حتى 2.5 ضعف
+ * المعتاد، فيقع خط المعتاد عند 40% من عرضه.
+ */
+export function UsualBar({ views, value }: { views: number | null | undefined; value: VsUsual | null | undefined }) {
+  const SCALE = 2.5;
+  const fill = value ? Math.max(3, Math.min(100, (value.ratio / SCALE) * 100)) : 0;
+  const above = !!value && value.ratio >= 1.1;
+  const below = !!value && value.ratio < 0.9;
+  return (
+    <div className="flex min-w-0 flex-col gap-1" data-testid="usual-bar">
+      <span className="text-base font-semibold tabular-nums">{formatNumber(views ?? 0)}</span>
+      <span
+        className="relative block h-1.5 overflow-hidden rounded-full bg-muted"
+        title={value ? `المعتاد في القسم: ${formatNumber(value.median)} قراءة` : undefined}
+        aria-hidden
+      >
+        {value ? (
+          <>
+            <span
+              className={cn("absolute inset-y-0 start-0 rounded-full", below ? "bg-primary/40" : "bg-primary")}
+              style={{ width: `${fill}%` }}
+            />
+            <span className="absolute -inset-y-0.5 w-0.5 bg-foreground/45" style={{ insetInlineStart: `${100 / SCALE}%` }} />
+          </>
+        ) : null}
+      </span>
+      <span
+        className={cn(
+          "text-[11.5px]",
+          above ? "font-medium text-emerald-700 dark:text-emerald-300" : "text-muted-foreground",
+        )}
+      >
+        {!value ? (
+          "مبكر للحكم"
+        ) : above ? (
+          <>
+            <bdi dir="ltr" className="tabular-nums">
+              {value.ratio.toLocaleString("en-US", { maximumFractionDigits: 1 })}
+            </bdi>{" "}
+            ضعف المعتاد
+          </>
+        ) : below ? (
+          "أقل من المعتاد"
+        ) : (
+          "في حدود المعتاد"
+        )}
+      </span>
+    </div>
+  );
+}

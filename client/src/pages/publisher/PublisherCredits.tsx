@@ -31,6 +31,7 @@ import {
   Send,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { PublisherPageHeader } from "@/components/publisher/PublisherPageHeader";
 import { PublisherRenewalCard } from "@/components/publisher/PublisherRenewalCard";
 import { formatDateShort, formatNumber, formatTime } from "@/lib/format";
 
@@ -196,94 +197,113 @@ export default function PublisherCredits() {
       : 0;
 
   const activeUsed = activePackage?.usedCredits ?? 0;
+  // الانتهاء مخزّن كبداية اليوم التالي بتوقيت الرياض، فآخر يوم = الانتهاء ناقص لحظة
+  const timeline = (() => {
+    if (!activePackage?.expiryDate) return null;
+    const start = new Date(activePackage.startDate).getTime();
+    const end = new Date(activePackage.expiryDate).getTime();
+    if (!(end > start)) return null;
+    const day = 86_400_000;
+    const now = Date.now();
+    const elapsed = Math.min(Math.max(now - start, 0), end - start);
+    return {
+      percent: Math.round((elapsed / (end - start)) * 100),
+      elapsedDays: Math.floor(elapsed / day),
+      remainingDays: Math.max(0, Math.ceil((end - now) / day)),
+      lastDay: new Date(end - 1).toISOString(),
+    };
+  })();
   const activeCountingFrom = activePackage?.countingFrom || activePackage?.startDate;
 
   return (
     <PublisherLayout>
       <div className="w-full space-y-6" dir="rtl">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <h1 className="text-3xl font-bold" data-testid="text-page-title">
-              الباقة وكشف الحساب
-            </h1>
-            <p className="mt-1 text-muted-foreground">
-              باقات وكالتكم كما تظهر لدى الإدارة، مع عدّاد المنشور الفعلي للباقة المفتوحة
-            </p>
-          </div>
-          <Button
-            className="shrink-0 gap-2"
-            onClick={() => setRequestOpen(true)}
-            disabled={hasOpenRequest}
-            data-testid="button-request-renewal"
-          >
-            <Send className="h-4 w-4" />
-            {hasOpenRequest ? "طلبكم قيد المعالجة" : "طلب تجديد الباقة"}
-          </Button>
-        </div>
+        <PublisherPageHeader
+          icon={CreditCard}
+          eyebrow="الباقة وكشف الحساب"
+          title="باقتكم الحالية وما خُصم منها"
+          description="كما تظهر لدى إدارة سبق، شهرًا بشهر."
+          actions={
+            <Button
+              className="gap-2 rounded-xl shadow-sm"
+              onClick={() => setRequestOpen(true)}
+              disabled={hasOpenRequest}
+              data-testid="button-request-renewal"
+            >
+              <Send className="h-4 w-4" />
+              {hasOpenRequest ? "طلبكم قيد المعالجة" : "طلب تجديد الباقة"}
+            </Button>
+          }
+        />
 
         <PublisherRenewalCard />
 
         {packagesLoading ? (
           <Skeleton className="h-36 w-full rounded-xl" />
         ) : activePackage ? (
-          <Card
-            className="overflow-hidden border-border/60 shadow-sm"
-            data-testid="card-active-package"
-          >
-            <CardContent className="pt-6">
-              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                <div className="space-y-2">
-                  <div className="inline-flex items-center gap-2 text-xs font-medium text-teal-700 dark:text-teal-300">
-                    <Package className="h-3.5 w-3.5" />
-                    الباقة النشطة حالياً
+          <Card className="overflow-hidden border-border/60 shadow-sm" data-testid="card-active-package">
+            <div className="grid lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+              <div className="space-y-2 p-5">
+                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-200">
+                  <CheckCircle2 className="h-3 w-3" />
+                  نشطة
+                </span>
+                <h2 className="text-xl font-bold tracking-tight sm:text-2xl">{activePackage.packageName}</h2>
+                <p className="text-sm text-muted-foreground">
+                  {activePackage.isUnlimited
+                    ? "نشر بلا حد طوال مدة الباقة"
+                    : `${periodLabel[activePackage.period] || activePackage.period} · ${formatNumber(activePackage.totalCredits)} خبر`}
+                </p>
+                {timeline ? (
+                  <div className="space-y-1.5 pt-2" data-testid="package-timeline">
+                    <div className="h-2.5 overflow-hidden rounded-full bg-muted">
+                      <div className="h-full rounded-full bg-primary" style={{ width: `${timeline.percent}%` }} />
+                    </div>
+                    <div className="flex flex-wrap justify-between gap-x-3 text-xs tabular-nums text-muted-foreground">
+                      <span>{formatDateShort(activePackage.startDate)}</span>
+                      <span className="font-medium text-foreground">
+                        مضى {formatNumber(timeline.elapsedDays)} يومًا · باقي {formatNumber(timeline.remainingDays)}
+                      </span>
+                      <span>{formatDateShort(timeline.lastDay)}</span>
+                    </div>
                   </div>
-                  <h2 className="text-2xl font-bold tracking-tight">{activePackage.packageName}</h2>
-                  <p className="text-sm text-muted-foreground">
-                    {periodLabel[activePackage.period] || activePackage.period}
-                    {" · "}
-                    من {formatDateShort(activePackage.startDate)}
-                    {activePackage.expiryDate ? ` حتى ${formatDateShort(activePackage.expiryDate)}` : ""}
-                  </p>
-                  {activePackage.isUnlimited && activeCountingFrom ? (
-                    <p className="text-xs text-muted-foreground">
-                      يُحتسب المنشور منذ {formatDateShort(activeCountingFrom)}
-                      {activeCountingFrom !== activePackage.startDate
-                        ? " (بداية فترة النشر المفتوح للوكالة)"
-                        : ""}
-                    </p>
-                  ) : null}
-                </div>
-                <div className="min-w-[240px] rounded-2xl border bg-muted/30 px-5 py-4 text-center">
-                  {activePackage.isUnlimited ? (
-                    <>
-                      <div className="text-3xl font-bold">
-                        مفتوحة <span className="text-muted-foreground">∞</span>
-                      </div>
-                      <p
-                        className="mt-2 text-base font-semibold text-foreground"
-                        data-testid="text-open-published-count"
-                      >
-                        نُشر منها {formatNumber(activeUsed)} مادة
-                      </p>
-                    </>
-                  ) : (
-                    <>
-                      <div className="text-3xl font-bold tabular-nums">
-                        {activePackage.remainingCredits}
-                        <span className="text-base font-normal text-muted-foreground">
-                          {" "}
-                          / {activePackage.totalCredits}
-                        </span>
-                      </div>
-                      <Progress value={creditPercent} className="mt-3 h-1.5" />
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        الرصيد المتبقي · مستخدم {activeUsed}
-                      </p>
-                    </>
-                  )}
-                </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">من {formatDateShort(activePackage.startDate)} · بلا تاريخ انتهاء</p>
+                )}
               </div>
-            </CardContent>
+              <div className="space-y-1 border-t border-border/60 p-5 lg:border-s lg:border-t-0">
+                {activePackage.isUnlimited ? (
+                  <>
+                    <span className="text-xs text-muted-foreground">نُشر خلال الباقة المفتوحة</span>
+                    <div className="text-3xl font-bold tracking-tight tabular-nums" data-testid="text-open-published-count">
+                      {formatNumber(activeUsed)} خبرًا
+                    </div>
+                    {activeCountingFrom ? (
+                      <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 pt-2 text-sm">
+                        <dt className="text-muted-foreground">يُحتسب منذ</dt>
+                        <dd className="font-medium">{formatDateShort(activeCountingFrom)}</dd>
+                        {activeCountingFrom !== activePackage.startDate ? (
+                          <>
+                            <dt className="text-muted-foreground">قبلها</dt>
+                            <dd className="font-medium">باقة سابقة محدودة</dd>
+                          </>
+                        ) : null}
+                      </dl>
+                    ) : null}
+                  </>
+                ) : (
+                  <>
+                    <span className="text-xs text-muted-foreground">الرصيد المتبقي</span>
+                    <div className="text-3xl font-bold tracking-tight tabular-nums">
+                      {formatNumber(activePackage.remainingCredits)}
+                      <span className="text-base font-normal text-muted-foreground"> / {formatNumber(activePackage.totalCredits)}</span>
+                    </div>
+                    <Progress value={creditPercent} className="mt-2 h-1.5" />
+                    <p className="text-xs text-muted-foreground">مستخدم {formatNumber(activeUsed)}</p>
+                  </>
+                )}
+              </div>
+            </div>
           </Card>
         ) : (
           <Card className="border-dashed" data-testid="card-no-active-package">
@@ -295,59 +315,78 @@ export default function PublisherCredits() {
         )}
 
         {statement.length > 0 && (
-          <Card data-testid="card-statement">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <CreditCard className="h-5 w-5" />
+          <Card className="overflow-hidden border-border/60 shadow-sm" data-testid="card-statement">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 px-5 py-3.5">
+              <h3 className="flex items-center gap-2 font-semibold">
+                <CreditCard className="h-4 w-4" />
                 كشف الحساب الشهري
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="overflow-x-auto rounded-md border">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="text-right">الشهر</TableHead>
-                      <TableHead className="text-right">أخبار منشورة</TableHead>
-                      <TableHead className="text-right">قيود خصم</TableHead>
-                      <TableHead className="text-right">تسويات</TableHead>
-                      <TableHead className="text-right">الحالة</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {statement.map((row) => (
-                      <TableRow key={row.month} data-testid={`statement-${row.month}`}>
-                        <TableCell>
+              </h3>
+              <div className="flex gap-3 text-xs text-muted-foreground">
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="h-2.5 w-2.5 rounded-sm bg-primary" />
+                  قيد خصم
+                </span>
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="h-2.5 w-2.5 rounded-sm bg-violet-500" />
+                  تسوية
+                </span>
+              </div>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm tabular-nums">
+                <thead>
+                  <tr className="bg-muted/50 text-xs text-muted-foreground">
+                    <th className="px-5 py-2.5 text-start font-medium">الشهر</th>
+                    <th className="px-3 py-2.5 text-start font-medium">منشور</th>
+                    <th className="px-3 py-2.5 text-start font-medium">قيد خصم</th>
+                    <th className="px-3 py-2.5 text-start font-medium">تسوية</th>
+                    <th className="px-3 py-2.5 text-start font-medium">التوزيع</th>
+                    <th className="px-5 py-2.5 text-start font-medium">الحالة</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/60">
+                  {statement.map((row) => {
+                    const base = Math.max(1, row.published);
+                    return (
+                      <tr key={row.month} data-testid={`statement-${row.month}`}>
+                        <td className="whitespace-nowrap px-5 py-2.5 font-medium">
                           {new Date(`${row.month}-01T00:00:00Z`).toLocaleDateString("ar-SA-u-ca-gregory", {
                             month: "long",
                             year: "numeric",
                             timeZone: "UTC",
                           })}
-                        </TableCell>
-                        <TableCell className="tabular-nums">{formatNumber(row.published)}</TableCell>
-                        <TableCell className="tabular-nums">{formatNumber(row.charged)}</TableCell>
-                        <TableCell className="tabular-nums">{formatNumber(row.settled)}</TableCell>
-                        <TableCell>
+                        </td>
+                        <td className="px-3 py-2.5">{formatNumber(row.published)}</td>
+                        <td className="px-3 py-2.5">{formatNumber(row.charged)}</td>
+                        <td className="px-3 py-2.5">{formatNumber(row.settled)}</td>
+                        <td className="px-3 py-2.5">
+                          <div className="flex h-2 min-w-[90px] overflow-hidden rounded-full bg-muted" aria-hidden>
+                            <span className="h-full bg-primary" style={{ width: `${(row.charged / base) * 100}%` }} />
+                            <span className="h-full bg-violet-500" style={{ width: `${(row.settled / base) * 100}%` }} />
+                          </div>
+                        </td>
+                        <td className="whitespace-nowrap px-5 py-2.5">
                           {row.missing === 0 ? (
-                            <Badge variant="outline" className="border-0 bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200">
+                            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-200">
+                              <CheckCircle2 className="h-3 w-3" />
                               مطابق
-                            </Badge>
+                            </span>
                           ) : (
-                            <Badge variant="outline" className="border-0 bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
+                            <span className="inline-flex rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-800 dark:bg-amber-950/50 dark:text-amber-200">
                               {formatNumber(row.missing)} بلا قيد
-                            </Badge>
+                            </span>
                           )}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                «تسويات» أخبار نُشرت قبل إصلاح الخصم في 6 أكتوبر 2026 وقُيّدت لاحقًا بلا خصم من الرصيد. «مطابق» يعني أن لكل خبر
-                منشور قيدًا واحدًا.
-              </p>
-            </CardContent>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <p className="border-t border-border/60 px-5 py-3 text-xs text-muted-foreground">
+              «تسوية» قيد دفتري بلا خصم سُجّل في 6 أكتوبر 2026 لأخبار نُشرت قبل توحيد الخصم. «مطابق» يعني أن لكل خبر منشور قيدًا
+              واحدًا.
+            </p>
           </Card>
         )}
 
