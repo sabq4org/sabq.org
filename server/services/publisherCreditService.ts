@@ -31,7 +31,7 @@
 //     Paths that must block on an empty package (direct publish, admin
 //     approval) call `chargePublishInTx` inside their own transaction.
 
-import { and, asc, desc, eq, gte, isNull, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, isNull, lte, or, sql } from "drizzle-orm";
 import { db } from "../db";
 import { articles, publishers, publisherCredits, publisherCreditLogs, users } from "@shared/schema";
 
@@ -91,6 +91,8 @@ export async function chargePublishInTx(
       and(
         eq(publisherCredits.publisherId, publisherId),
         eq(publisherCredits.isActive, true),
+        // باقة تجديد مفعلة مسبقًا لا تُستهلك قبل موعد بدايتها
+        lte(publisherCredits.startDate, now),
         or(
           eq(publisherCredits.isUnlimited, true),
           sql`${publisherCredits.remainingCredits} > 0`,

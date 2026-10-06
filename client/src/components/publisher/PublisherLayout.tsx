@@ -13,6 +13,7 @@ import {
   Zap,
   ShieldCheck,
   Package,
+  FileBarChart,
 } from "lucide-react";
 import {
   Sidebar,
@@ -84,14 +85,21 @@ const navItems: NavItem[] = [
   {
     id: "publisher-articles",
     href: "/dashboard/publisher/articles",
-    label: "المقالات",
+    label: "أخباري",
     icon: FileText,
     testId: "nav-publisher-articles",
   },
   {
+    id: "publisher-reports",
+    href: "/dashboard/publisher/reports",
+    label: "التقارير الشهرية",
+    icon: FileBarChart,
+    testId: "nav-publisher-reports",
+  },
+  {
     id: "publisher-credits",
     href: "/dashboard/publisher/credits",
-    label: "سجل الرصيد",
+    label: "الباقة وكشف الحساب",
     icon: CreditCard,
     testId: "nav-publisher-credits",
   },
