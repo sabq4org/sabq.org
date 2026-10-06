@@ -57,7 +57,7 @@ export function daysUntil(date: Date | string, now = new Date()): number {
   return Math.ceil((new Date(date).getTime() - now.getTime()) / DAY);
 }
 
-const escapeHtml = (value: string) =>
+export const escapeHtml = (value: string) =>
   value.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 
 const arDate = (d: Date | string) =>
@@ -65,14 +65,14 @@ const arDate = (d: Date | string) =>
 
 const arNumber = (n: number) => n.toLocaleString("ar-SA");
 
-function emailShell(inner: string): string {
+export function emailShell(inner: string): string {
   return `<!DOCTYPE html><html dir="rtl" lang="ar"><body style="font-family:Tahoma,Arial,sans-serif;background:#f5f7f8;padding:24px;margin:0">
   <div style="max-width:560px;margin:0 auto;background:#fff;border-radius:10px;padding:28px;border:1px solid #e2e8f0;color:#334155;line-height:1.9;font-size:15px">
   ${inner}
   </div></body></html>`;
 }
 
-const button = (href: string, label: string) =>
+export const button = (href: string, label: string) =>
   `<p style="margin:22px 0"><a href="${href}" style="display:inline-block;background:#0369a1;color:#fff;text-decoration:none;padding:10px 22px;border-radius:8px">${label}</a></p>`;
 
 /** نص بريد التنبيه كما اتُّفق عليه مع الإدارة (6 أكتوبر 2026). */

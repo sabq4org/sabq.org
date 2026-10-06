@@ -9818,6 +9818,9 @@ export const publishers = pgTable("publishers", {
   // directly (the old hardcoded contentManagerPublisherMap behavior,
   // now a per-publisher flag).
   autoPublish: boolean("auto_publish").default(false).notNull(),
+  // النشر الاجتماعي من لوحة الوكالة: off = مخفي، approval = كل تغريدة
+  // تنتظر موافقة فريق سبق (الافتراضي)، direct = تنشر الوكالة أو تجدول بنفسها.
+  socialPublishMode: text("social_publish_mode").default("approval").notNull(),
 
   // Metadata
   notes: text("notes"), // Internal admin notes
@@ -10020,6 +10023,7 @@ export const updatePublisherSchema = z.object({
   taxNumber: z.string().optional(),
   address: z.string().optional(),
   isActive: z.boolean().optional(),
+  socialPublishMode: z.enum(["off", "approval", "direct"]).optional(),
   suspendedUntil: z.string().nullable().optional(),
   suspensionReason: z.string().optional(),
   publishingEndsAt: z.string().nullable().optional(),
@@ -15488,6 +15492,10 @@ export const socialPosts = pgTable("social_posts", {
   // وسائط متعددة (التأليف المستقل): image = حتى 4 صور، video = رابط واحد
   mediaKind: text("media_kind").default("none").notNull(), // none | image | video
   mediaUrls: jsonb("media_urls").$type<string[]>().default([]),
+  // تغريدة طلبتها وكالة لخبرها (null = منشور من فريق سبق أو كاتب رأي)
+  publisherId: varchar("publisher_id").references(() => publishers.id, { onDelete: "set null" }),
+  // الموعد الذي اقترحته الوكالة وهي تنتظر الموافقة (null = بعد الموافقة مباشرة)
+  requestedAt: timestamp("requested_at"),
   // draft | scheduled | processing | published | failed | canceled
   status: text("status").default("draft").notNull(),
   scheduledAt: timestamp("scheduled_at"),
@@ -15506,6 +15514,7 @@ export const socialPosts = pgTable("social_posts", {
   index("social_posts_article_idx").on(table.articleId),
   index("social_posts_status_scheduled_idx").on(table.status, table.scheduledAt),
   index("social_posts_status_locked_idx").on(table.status, table.lockedAt),
+  index("social_posts_publisher_idx").on(table.publisherId).where(sql`publisher_id IS NOT NULL`),
 ]);
 
 // سجل محاولات append-only — كل محاولة نشر (فورية أو من العامل) بصفّها

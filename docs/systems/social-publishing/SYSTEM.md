@@ -132,6 +132,10 @@
 الحدود: `BOT_SOCIAL_WRITE_RATE_LIMIT` (30/دقيقة)، `BOT_SOCIAL_PUBLISH_RATE_LIMIT`
 (20/5 دقائق)، `BOT_SOCIAL_SUGGEST_RATE_LIMIT` (30/15 دقيقة).
 
+## تغريدات الوكالات (2026-10-06)
+
+الوكالة تطلب تغريدة لخبرها المنشور من `/dashboard/publisher/articles/:id/social` (الخدمة `server/services/publisherSocialService.ts`، المسارات تحت `/api/publisher/portal/.../social`). الوضع لكل وكالة في `publishers.social_publish_mode`: `off` يخفي الميزة، `approval` (الافتراضي) ينشئ مسودة `draft` تنتظر فريق سبق، `direct` يسمح للوكالة بالنشر الفوري أو الجدولة عبر نفس `claimPostForImmediatePublish` / `schedulePost`. الصف يحمل `social_posts.publisher_id`، والموعد الذي تقترحه الوكالة في `requested_at` (لا في `scheduled_at`، حتى لا يلتقطه العامل قبل الموافقة ولا يغيّر انتقال الفشل). القواعد: تغريدة حية واحدة لكل خبر، مهلة 48 ساعة من نشر الخبر، لا خصم من رصيد الباقة، توليد النص 5 مرات يوميًا لكل وكالة (عداد في الذاكرة). في صفحة النشر الاجتماعي تظهر تحت تبويب «طلبات الوكالات» (`?filter=agency`)، والرفض يطلب ملاحظة تصل للوكالة. `notifyAuthorOfSocialPostStatus` يحوّل إشعارات هذه الصفوف إلى أعضاء الوكالة (لوحة + بريد للمرسل عند النشر والرفض) ويتجاهل سحب الوكالة لتغريدتها. الأعمدة في `migrations/20261006_agency_social_publishing.sql` وتُطبَّق قبل نشر الكود.
+
 ## منشور البوت بلا خبر (2026-10-03)
 
 `kind: "original"` على `preview` / `publish` / `schedule` ينشر نصاً وصوراً (حتى 4) بلا `article_id`. حد الرفض 2000 حرفاً موزوناً؛ 280 يبقى `overStandard` ولا يرفض. مسار الخبر (بلا `kind` أو مع خبر) يبقى على حد 25000 وبلا وسم قياس. الرابط الاختياري على `sabq.org` فقط، والخادم يكتب `utm_source=x` و`utm_medium=social` و`utm_campaign` (افتراضي `sabqorg`) و`utm_content=<social_posts.id>`. المعاينة تستخدم `utm_content=preview` ولا تنشئ صفاً. رفع الملف: `POST /api/internal/bot-social/images` بنفس توكن البوت وعبر `newsImageStorageService` (`forceR2`). لا عمود جديد ولا حذف لتغريدة منشورة. العقد: [`BOT_SOCIAL_API.md`](./BOT_SOCIAL_API.md).

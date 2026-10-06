@@ -43,6 +43,7 @@ import {
   User,
   Trash2,
   Loader2,
+  Share2,
 } from "lucide-react";
 import { formatDateShort, formatNumber, formatTime } from "@/lib/format";
 import { apiRequest } from "@/lib/queryClient";
@@ -99,6 +100,14 @@ export default function PublisherArticles() {
     queryKey: ["/api/publisher/portal/overview"],
   });
   const autoPublish = overview?.publisher?.autoPublish === true;
+  const { data: socialSettings } = useQuery<{ mode: "off" | "approval" | "direct" }>({
+    queryKey: ["/api/publisher/portal/social/settings"],
+    staleTime: 5 * 60_000,
+  });
+  const socialEnabled = Boolean(socialSettings && socialSettings.mode !== "off");
+  // مهلة طلب التغريدة: 48 ساعة من نشر الخبر (نفس قاعدة الخادم)
+  const withinSocialWindow = (a: Article) =>
+    Boolean(a.publishedAt) && Date.now() - new Date(a.publishedAt!).getTime() < 48 * 3600_000;
 
   const articlesQueryKey = [
     "/api/publisher/portal/articles",
@@ -341,6 +350,19 @@ export default function PublisherArticles() {
                                     <a href={viewHref} target="_blank" rel="noreferrer">
                                       <Eye className="h-4 w-4" />
                                     </a>
+                                  </Button>
+                                ) : null}
+                                {state === "published" && socialEnabled && withinSocialWindow(article) ? (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="gap-1"
+                                    data-testid={`button-social-${article.id}`}
+                                    title="نشر اجتماعي على X"
+                                    onClick={() => navigate(`/dashboard/publisher/articles/${article.id}/social`)}
+                                  >
+                                    <Share2 className="h-4 w-4" />
+                                    <span className="hidden xl:inline">نشر اجتماعي</span>
                                   </Button>
                                 ) : null}
                                 {canEdit ? (

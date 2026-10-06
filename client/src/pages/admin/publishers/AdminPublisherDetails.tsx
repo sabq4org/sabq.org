@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { AddCreditPackageDialog } from "@/components/admin/publishers/AddCreditPackageDialog";
 import { EditCreditExpiryDialog } from "@/components/admin/publishers/EditCreditExpiryDialog";
+import { PublisherSocialModeCard } from "@/components/admin/publishers/PublisherSocialModeCard";
 import { CreatePublisherDialog } from "@/components/admin/publishers/CreatePublisherDialog";
 import { PublisherMembersCard } from "@/components/admin/publishers/PublisherMembersCard";
 import { useToast } from "@/hooks/use-toast";
@@ -510,6 +511,9 @@ export default function AdminPublisherDetails() {
 
           <div className="xl:col-span-3">
             <PublisherMembersCard publisherId={publisherId!} />
+          </div>
+          <div className="xl:col-span-3">
+            <PublisherSocialModeCard publisherId={publisherId!} mode={publisher.socialPublishMode} />
           </div>
         </div>
 

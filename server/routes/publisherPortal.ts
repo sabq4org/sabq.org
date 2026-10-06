@@ -1,4 +1,4 @@
-import { Router, type Request } from "express";
+import { Router, type Request, type Response } from "express";
 import { z } from "zod";
 import { getUserPermissions, requireAuth } from "../rbac";
 import {
@@ -41,6 +41,15 @@ import {
   getPortalStatement,
   isValidMonth,
 } from "../services/publisherInsightsService";
+import {
+  agencySocialMode,
+  getAgencySocialStatus,
+  listAgencySocialPosts,
+  saveAgencySocialPost,
+  suggestAgencySocialText,
+  withdrawAgencySocialPost,
+} from "../services/publisherSocialService";
+import { SocialPublishValidationError } from "../services/socialPublishing/socialPublishingService";
 import {
   activateRenewal,
   defaultRenewalStart,
@@ -505,6 +514,97 @@ router.get("/api/publisher/portal/renewal", async (req, res) => {
   } catch (error) {
     console.error("[Publisher Portal] renewal failed:", error);
     res.status(500).json({ message: "تعذر جلب حالة التجديد" });
+  }
+});
+
+// ============================================
+// النشر الاجتماعي للوكالة (X على حساب سبق)
+// ============================================
+
+function socialError(res: Response, error: unknown, fallback: string) {
+  if (error instanceof SocialPublishValidationError) {
+    return res.status(error.status).json({ message: error.message });
+  }
+  console.error(`[Publisher Portal] ${fallback}:`, error);
+  res.status(500).json({ message: fallback });
+}
+
+router.get("/api/publisher/portal/social/settings", async (req, res) => {
+  res.json({ mode: agencySocialMode((req as any).publisher) });
+});
+
+router.get("/api/publisher/portal/social/posts", async (req, res) => {
+  try {
+    res.json({ posts: await listAgencySocialPosts((req as any).publisher) });
+  } catch (error) {
+    socialError(res, error, "تعذر جلب المنشورات الاجتماعية");
+  }
+});
+
+router.get("/api/publisher/portal/articles/:id/social", async (req, res) => {
+  try {
+    const status = await getAgencySocialStatus((req as any).publisher, req.params.id);
+    if (!status) return res.status(404).json({ message: "الخبر غير موجود" });
+    res.json(status);
+  } catch (error) {
+    socialError(res, error, "تعذر جلب حالة النشر الاجتماعي");
+  }
+});
+
+const agencySocialSchema = z.object({
+  text: z.string().trim().min(1, "نص التغريدة مطلوب").max(2000, "النص طويل جدًا"),
+  textSource: z.enum(["title", "custom", "ai"]),
+  includeLink: z.boolean(),
+  media: z.enum(["article", "images", "video", "none"]),
+  mediaUrls: z.array(z.string().min(1).max(2000)).max(4).default([]),
+  requestedAt: z.string().datetime({ offset: true }).nullish(),
+  action: z.enum(["submit", "publish_now", "schedule"]),
+});
+
+router.post("/api/publisher/portal/articles/:id/social", async (req, res) => {
+  try {
+    const parsed = agencySocialSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      return res.status(400).json({ message: parsed.error.errors[0]?.message ?? "بيانات غير صحيحة" });
+    }
+    const { requestedAt, ...input } = parsed.data;
+    const result = await saveAgencySocialPost((req as any).publisher, requestUserId(req), req.params.id, {
+      ...input,
+      requestedAt: requestedAt ? new Date(requestedAt) : null,
+    });
+    res.status(result.outcome === "submitted" ? 201 : 200).json(result);
+  } catch (error) {
+    socialError(res, error, "تعذر حفظ التغريدة");
+  }
+});
+
+router.post("/api/publisher/portal/articles/:id/social/suggest", async (req, res) => {
+  try {
+    res.json(await suggestAgencySocialText((req as any).publisher, requestUserId(req), req.params.id));
+  } catch (error) {
+    socialError(res, error, "تعذر توليد النص، يمكنكم كتابته يدويًا");
+  }
+});
+
+router.post("/api/publisher/portal/social/posts/:id/withdraw", async (req, res) => {
+  try {
+    await withdrawAgencySocialPost((req as any).publisher, requestUserId(req), req.params.id);
+    res.json({ message: "سُحبت التغريدة" });
+  } catch (error) {
+    socialError(res, error, "تعذر سحب التغريدة");
+  }
+});
+
+// رابط رفع موقّع لفيديو التغريدة، نفس مسار صفحة النشر الاجتماعي
+router.post("/api/publisher/portal/social/media/upload-url", async (req, res) => {
+  try {
+    if (agencySocialMode((req as any).publisher) === "off") {
+      return res.status(403).json({ message: "النشر الاجتماعي غير مفعّل لوكالتكم" });
+    }
+    const { ObjectStorageService } = await import("../objectStorage");
+    res.json({ uploadURL: await new ObjectStorageService().getObjectEntityUploadURL() });
+  } catch (error) {
+    socialError(res, error, "تعذر إنشاء رابط الرفع");
   }
 });
 
