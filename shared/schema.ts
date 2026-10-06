@@ -9930,11 +9930,34 @@ export const publisherRequests = pgTable("publisher_requests", {
   // ملاحظة الإدارة عند المعالجة — سبب الرفض تحديداً. كان يُرسل في الإشعار
   // فقط، فيضيع بمجرد أن تمر الوكالة على إشعاراتها.
   adminNote: text("admin_note"),
+  // عرض التجديد من الإدارة ورد الوكالة عليه (طلبات renewal فقط).
+  // الحالة تتقدم: open → offered → accepted → closed (بعد تأكيد الدفع والتفعيل).
+  offer: jsonb("offer").$type<PublisherRenewalOffer>(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => [
   index("publisher_requests_publisher_idx").on(table.publisherId),
   index("publisher_requests_status_idx").on(table.status),
 ]);
+
+export type PublisherRenewalOffer = {
+  packageType: "unlimited" | "limited";
+  /** عدد الأخبار للباقة المحدودة فقط */
+  totalCredits: number | null;
+  durationMonths: number;
+  /** ISO — تبدأ عادة لحظة انتهاء الباقة الحالية فلا ينقطع النشر */
+  startDate: string;
+  price: number | null;
+  currency: string;
+  /** ISO — آخر يوم يمكن فيه قبول العرض */
+  validUntil: string;
+  note: string | null;
+  sentAt: string;
+  sentBy: string;
+  response?: "accepted" | "contact";
+  respondedAt?: string;
+  respondedBy?: string;
+  activatedCreditId?: string;
+};
 
 export type PublisherRequest = typeof publisherRequests.$inferSelect;
 

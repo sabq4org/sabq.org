@@ -31,6 +31,7 @@ import {
   Send,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { PublisherRenewalCard } from "@/components/publisher/PublisherRenewalCard";
 import { formatDateShort, formatNumber, formatTime } from "@/lib/format";
 
 interface CreditLog {
@@ -65,6 +66,14 @@ const REQUEST_STATUS_META: Record<string, { label: string; className: string }> 
   open: {
     label: "قيد المعالجة",
     className: "bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-200",
+  },
+  offered: {
+    label: "وصل العرض",
+    className: "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200",
+  },
+  accepted: {
+    label: "بانتظار الدفع",
+    className: "bg-violet-100 text-violet-800 dark:bg-violet-900/40 dark:text-violet-200",
   },
   closed: {
     label: "مقبول",
@@ -137,7 +146,12 @@ export default function PublisherCredits() {
     queryKey: ["/api/publisher/portal/requests"],
   });
   const requests = Array.isArray(requestsData?.requests) ? requestsData!.requests : [];
-  const hasOpenRequest = requests.some((request) => request.status === "open");
+  const hasOpenRequest = requests.some((request) => ["open", "offered", "accepted"].includes(request.status));
+
+  const { data: statementData } = useQuery<{
+    months: Array<{ month: string; published: number; charged: number; settled: number; missing: number }>;
+  }>({ queryKey: ["/api/publisher/portal/statement"] });
+  const statement = Array.isArray(statementData?.months) ? statementData!.months : [];
 
   const { data: dataRaw, isLoading: logsLoading } = useQuery<{ logs: CreditLog[]; total: number }>({
     queryKey: ["/api/publisher/portal/credit-logs", { page, limit }],
@@ -190,7 +204,7 @@ export default function PublisherCredits() {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <h1 className="text-3xl font-bold" data-testid="text-page-title">
-              الرصيد والباقات
+              الباقة وكشف الحساب
             </h1>
             <p className="mt-1 text-muted-foreground">
               باقات وكالتكم كما تظهر لدى الإدارة، مع عدّاد المنشور الفعلي للباقة المفتوحة
@@ -206,6 +220,8 @@ export default function PublisherCredits() {
             {hasOpenRequest ? "طلبكم قيد المعالجة" : "طلب تجديد الباقة"}
           </Button>
         </div>
+
+        <PublisherRenewalCard />
 
         {packagesLoading ? (
           <Skeleton className="h-36 w-full rounded-xl" />
@@ -274,6 +290,63 @@ export default function PublisherCredits() {
             <CardContent className="flex items-center gap-3 py-6 text-sm text-muted-foreground">
               <Ban className="h-5 w-5" />
               لا توجد باقة نشطة حالياً — ستظهر هنا فور تفعيلها من الإدارة.
+            </CardContent>
+          </Card>
+        )}
+
+        {statement.length > 0 && (
+          <Card data-testid="card-statement">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <CreditCard className="h-5 w-5" />
+                كشف الحساب الشهري
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="overflow-x-auto rounded-md border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="text-right">الشهر</TableHead>
+                      <TableHead className="text-right">أخبار منشورة</TableHead>
+                      <TableHead className="text-right">قيود خصم</TableHead>
+                      <TableHead className="text-right">تسويات</TableHead>
+                      <TableHead className="text-right">الحالة</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {statement.map((row) => (
+                      <TableRow key={row.month} data-testid={`statement-${row.month}`}>
+                        <TableCell>
+                          {new Date(`${row.month}-01T00:00:00Z`).toLocaleDateString("ar-SA-u-ca-gregory", {
+                            month: "long",
+                            year: "numeric",
+                            timeZone: "UTC",
+                          })}
+                        </TableCell>
+                        <TableCell className="tabular-nums">{formatNumber(row.published)}</TableCell>
+                        <TableCell className="tabular-nums">{formatNumber(row.charged)}</TableCell>
+                        <TableCell className="tabular-nums">{formatNumber(row.settled)}</TableCell>
+                        <TableCell>
+                          {row.missing === 0 ? (
+                            <Badge variant="outline" className="border-0 bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200">
+                              مطابق
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="border-0 bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
+                              {formatNumber(row.missing)} بلا قيد
+                            </Badge>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                «تسويات» أخبار نُشرت قبل إصلاح الخصم في 6 أكتوبر 2026 وقُيّدت لاحقًا بلا خصم من الرصيد. «مطابق» يعني أن لكل خبر
+                منشور قيدًا واحدًا.
+              </p>
             </CardContent>
           </Card>
         )}

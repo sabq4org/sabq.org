@@ -21,6 +21,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { AddCreditPackageDialog } from "@/components/admin/publishers/AddCreditPackageDialog";
+import { EditCreditExpiryDialog } from "@/components/admin/publishers/EditCreditExpiryDialog";
 import { CreatePublisherDialog } from "@/components/admin/publishers/CreatePublisherDialog";
 import { PublisherMembersCard } from "@/components/admin/publishers/PublisherMembersCard";
 import { useToast } from "@/hooks/use-toast";
@@ -97,6 +98,7 @@ export default function AdminPublisherDetails() {
   const queryClient = useQueryClient();
 
   const [showEditDialog, setShowEditDialog] = useState(false);
+  const [editingExpiry, setEditingExpiry] = useState<PublisherCredit | null>(null);
   const [showAddPackageDialog, setShowAddPackageDialog] = useState(false);
   const [articlesPage, setArticlesPage] = useState(1);
   const [showSuspendConfirm, setShowSuspendConfirm] = useState(false);
@@ -593,9 +595,21 @@ export default function AdminPublisherDetails() {
                               <Badge variant="default">نشط</Badge>
                             )}
                           </TableCell>
-                          <TableCell>
+                          <TableCell className="whitespace-nowrap">
+                            {credit.isActive && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                title="تعديل تاريخ الانتهاء"
+                                onClick={() => setEditingExpiry(credit)}
+                                data-testid={`button-edit-expiry-${credit.id}`}
+                              >
+                                <Calendar className="h-4 w-4" />
+                              </Button>
+                            )}
                             {credit.isActive && !isExpired && (
                               <Button
+                                title="تعطيل الباقة"
                                 variant="ghost"
                                 size="sm"
                                 onClick={() => deactivateCreditMutation.mutate(credit.id)}
@@ -616,6 +630,7 @@ export default function AdminPublisherDetails() {
             )}
           </CardContent>
         </Card>
+        <EditCreditExpiryDialog publisherId={publisherId!} credit={editingExpiry} onClose={() => setEditingExpiry(null)} />
 
         {/* أخبار الوكالة */}
         <Card className="border-border/60">

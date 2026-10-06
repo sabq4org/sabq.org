@@ -17234,6 +17234,8 @@ export class DatabaseStorage implements IStorage {
         and(
           eq(publisherCredits.publisherId, publisherId),
           eq(publisherCredits.isActive, true),
+          // باقة التجديد المفعلة مسبقاً لا تُعد نشطة قبل بدايتها
+          lte(publisherCredits.startDate, now),
           // الباقة المفتوحة صالحة دائماً بغض النظر عن الرصيد المتبقي
           or(
             eq(publisherCredits.isUnlimited, true),

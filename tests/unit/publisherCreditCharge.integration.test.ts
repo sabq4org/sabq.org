@@ -22,13 +22,21 @@ async function charge(articleId: string, publisherId = "agency") {
   );
 }
 
-async function addPackage(p: { id: string; unlimited?: boolean; remaining?: number; expiresInDays?: number | null; active?: boolean }) {
+async function addPackage(p: {
+  id: string;
+  unlimited?: boolean;
+  remaining?: number;
+  expiresInDays?: number | null;
+  active?: boolean;
+  startsInDays?: number;
+}) {
   const expiry = p.expiresInDays === null ? null : new Date(Date.now() + (p.expiresInDays ?? 30) * DAY);
+  const start = new Date(Date.now() + (p.startsInDays ?? -1) * DAY);
   await pool.query(
     `INSERT INTO publisher_credits (id, publisher_id, package_name, total_credits, used_credits, remaining_credits,
        is_unlimited, period, start_date, expiry_date, is_active)
-     VALUES ($1, 'agency', $1, $2, 0, $2, $3, 'monthly', now() - interval '1 day', $4, $5)`,
-    [p.id, p.remaining ?? 0, p.unlimited ?? false, expiry, p.active ?? true],
+     VALUES ($1, 'agency', $1, $2, 0, $2, $3, 'monthly', $6, $4, $5)`,
+    [p.id, p.remaining ?? 0, p.unlimited ?? false, expiry, p.active ?? true, start],
   );
 }
 
@@ -113,6 +121,14 @@ async function logs(articleId: string) {
     expect(await charge("a1")).toBe("no_credits");
     expect(await logs("a1")).toHaveLength(0);
     expect(await pkg("expired")).toEqual({ used: 0, remaining: 5 });
+  });
+
+  it("does not use a renewal package before its start date", async () => {
+    await addPackage({ id: "current", remaining: 2, expiresInDays: 10 });
+    await addPackage({ id: "renewal", unlimited: true, startsInDays: 10, expiresInDays: 375 });
+    expect(await charge("a1")).toBe("deducted");
+    expect(await pkg("current")).toEqual({ used: 1, remaining: 1 });
+    expect(await pkg("renewal")).toEqual({ used: 0, remaining: 0 });
   });
 
   it("treats a ledger settlement entry as already charged and leaves the balance alone", async () => {

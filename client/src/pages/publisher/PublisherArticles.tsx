@@ -46,6 +46,12 @@ import {
 } from "lucide-react";
 import { formatDateShort, formatNumber, formatTime } from "@/lib/format";
 import { apiRequest } from "@/lib/queryClient";
+import {
+  PlacementChips,
+  UsualComparison,
+  type ArticlePlacements,
+  type VsUsual,
+} from "@/components/publisher/ArticleInsights";
 
 interface Article {
   id: string;
@@ -61,6 +67,8 @@ interface Article {
   publishedAt: string | null;
   categoryName: string | null;
   authorName: string | null;
+  vsUsual?: VsUsual | null;
+  placements?: ArticlePlacements | null;
 }
 
 function deriveState(article: Article): "published" | "pending" | "needs_changes" | "rejected" | "draft" {
@@ -251,6 +259,7 @@ export default function PublisherArticles() {
                       <TableRow>
                         <TableHead className="min-w-[320px] text-right">العنوان</TableHead>
                         <TableHead className="w-[120px] text-right">المشاهدات</TableHead>
+                        <TableHead className="w-[150px] text-right">مقارنة بالمعتاد</TableHead>
                         <TableHead className="w-[140px] text-right">الحالة</TableHead>
                         <TableHead className="w-[180px] text-right">الإجراءات</TableHead>
                       </TableRow>
@@ -278,7 +287,18 @@ export default function PublisherArticles() {
                         return (
                           <TableRow key={article.id} data-testid={`row-article-${article.id}`}>
                             <TableCell>
-                              <p className="text-base font-semibold leading-snug">{article.title}</p>
+                              {state === "published" ? (
+                                <button
+                                  type="button"
+                                  className="text-start text-base font-semibold leading-snug hover:text-primary hover:underline"
+                                  onClick={() => navigate(`/dashboard/publisher/articles/${article.id}/report`)}
+                                  data-testid={`link-report-${article.id}`}
+                                >
+                                  {article.title}
+                                </button>
+                              ) : (
+                                <p className="text-base font-semibold leading-snug">{article.title}</p>
+                              )}
                               <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
                                 {article.categoryName ? (
                                   <Badge variant="secondary" className="rounded-md font-normal">
@@ -293,6 +313,7 @@ export default function PublisherArticles() {
                                   </span>
                                 ) : null}
                               </div>
+                              {state === "published" ? <PlacementChips value={article.placements} className="mt-1.5" /> : null}
                               {(state === "needs_changes" || state === "rejected") &&
                                 article.publisherReviewNotes && (
                                   <p className="mt-1.5 line-clamp-2 text-xs text-orange-700 dark:text-orange-300">
@@ -302,6 +323,9 @@ export default function PublisherArticles() {
                             </TableCell>
                             <TableCell className="text-base font-medium tabular-nums">
                               {state === "published" ? formatNumber(article.views) : "—"}
+                            </TableCell>
+                            <TableCell>
+                              <UsualComparison value={article.vsUsual} status={article.status} />
                             </TableCell>
                             <TableCell>{getStatusBadge(state)}</TableCell>
                             <TableCell>

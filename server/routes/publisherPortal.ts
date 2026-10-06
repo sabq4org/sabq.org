@@ -16,6 +16,8 @@ import {
   getPortalOverview,
   getPublishedGuideSections,
   getPublishersSummary,
+  notifyAdmins,
+  notifyPublisherMembers,
   listAgencyReviewQueue,
   listGuideSectionsAdmin,
   listOwnPublisherRequests,
@@ -33,6 +35,19 @@ import {
   submitPortalArticle,
   updateGuideSection,
 } from "../services/publisherPortalService";
+import {
+  getPortalArticleReport,
+  getPortalMonthlyReport,
+  getPortalStatement,
+  isValidMonth,
+} from "../services/publisherInsightsService";
+import {
+  activateRenewal,
+  defaultRenewalStart,
+  getPortalRenewal,
+  respondToRenewalOffer,
+  sendRenewalOffer,
+} from "../services/publisherRenewalService";
 
 /**
  * بوابة الناشر — الأسطح الجديدة للوحة الوكالة.
@@ -428,13 +443,94 @@ router.post("/api/publisher/portal/requests", async (req, res) => {
   }
 });
 
-const REQUEST_STATUSES: readonly (PublisherRequestStatus | "all")[] = ["open", "closed", "rejected", "all"];
+router.post("/api/publisher/portal/requests/:id/respond", async (req, res) => {
+  try {
+    const parsed = z.object({ response: z.enum(["accepted", "contact"]) }).safeParse(req.body ?? {});
+    if (!parsed.success) return res.status(400).json({ message: "بيانات غير صحيحة" });
+    const result = await respondToRenewalOffer(
+      (req as any).publisher,
+      req.params.id,
+      requestUserId(req),
+      parsed.data.response,
+      { notifyAdmins },
+    );
+    if (!result.ok) return res.status(result.status).json({ message: result.message });
+    res.json({ message: result.message });
+  } catch (error) {
+    console.error("[Publisher Portal] renewal respond failed:", error);
+    res.status(500).json({ message: "تعذر إرسال ردكم" });
+  }
+});
+
+// ============================================
+// تقارير الوكالة: تقرير الخبر، التقرير الشهري، كشف الحساب، التجديد
+// ============================================
+
+router.get("/api/publisher/portal/articles/:id/report", async (req, res) => {
+  try {
+    const report = await getPortalArticleReport((req as any).publisher, req.params.id);
+    if (!report) return res.status(404).json({ message: "الخبر غير موجود" });
+    res.json(report);
+  } catch (error) {
+    console.error("[Publisher Portal] article report failed:", error);
+    res.status(500).json({ message: "تعذر تجهيز تقرير الخبر" });
+  }
+});
+
+router.get("/api/publisher/portal/reports/monthly", async (req, res) => {
+  try {
+    const now = new Date();
+    const fallback = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
+    const requested = typeof req.query.month === "string" ? req.query.month : undefined;
+    const month = isValidMonth(requested) ? requested : fallback;
+    res.json(await getPortalMonthlyReport((req as any).publisher, month));
+  } catch (error) {
+    console.error("[Publisher Portal] monthly report failed:", error);
+    res.status(500).json({ message: "تعذر تجهيز التقرير الشهري" });
+  }
+});
+
+router.get("/api/publisher/portal/statement", async (req, res) => {
+  try {
+    res.json({ months: await getPortalStatement((req as any).publisher) });
+  } catch (error) {
+    console.error("[Publisher Portal] statement failed:", error);
+    res.status(500).json({ message: "تعذر تجهيز كشف الحساب" });
+  }
+});
+
+router.get("/api/publisher/portal/renewal", async (req, res) => {
+  try {
+    res.json(await getPortalRenewal((req as any).publisher));
+  } catch (error) {
+    console.error("[Publisher Portal] renewal failed:", error);
+    res.status(500).json({ message: "تعذر جلب حالة التجديد" });
+  }
+});
+
+const REQUEST_STATUSES: readonly (PublisherRequestStatus | "all")[] = [
+  "open",
+  "offered",
+  "accepted",
+  "closed",
+  "rejected",
+  "all",
+];
 
 router.get("/api/admin/publishers/requests", requireAuth, requirePublisherManagement, async (req, res) => {
   try {
     const requested = req.query.status as PublisherRequestStatus | "all" | undefined;
     const status = requested && REQUEST_STATUSES.includes(requested) ? requested : "open";
-    res.json({ requests: await listPublisherRequests(status), status });
+    const requests = await listPublisherRequests(status);
+    // بداية الباقة الجديدة المقترحة في نموذج العرض: لحظة انتهاء الحالية
+    const withDefaults = await Promise.all(
+      requests.map(async (r) =>
+        r.type === "renewal" && (r.status === "open" || r.status === "offered")
+          ? { ...r, defaultStartDate: await defaultRenewalStart(r.publisherId) }
+          : r,
+      ),
+    );
+    res.json({ requests: withDefaults, status });
   } catch (error) {
     console.error("[Publisher Portal] requests list failed:", error);
     res.status(500).json({ message: "تعذر جلب الطلبات" });
@@ -470,6 +566,47 @@ router.post("/api/admin/publishers/requests/:id/reject", requireAuth, requirePub
   } catch (error) {
     console.error("[Publisher Portal] request reject failed:", error);
     res.status(500).json({ message: "تعذر رفض الطلب" });
+  }
+});
+
+const offerSchema = z.object({
+  packageType: z.enum(["unlimited", "limited"]),
+  totalCredits: z.number().int().positive().max(100_000).nullable().optional(),
+  durationMonths: z.number().int().min(1).max(36),
+  startDate: z.string().datetime().nullable().optional(),
+  price: z.number().nonnegative().max(100_000_000).nullable().optional(),
+  currency: z.string().trim().max(8).optional(),
+  validUntil: z.string().datetime(),
+  note: z.string().trim().max(1000).nullable().optional(),
+});
+
+router.post("/api/admin/publishers/requests/:id/offer", requireAuth, requirePublisherManagement, async (req, res) => {
+  try {
+    const parsed = offerSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      return res.status(400).json({ message: parsed.error.errors[0]?.message ?? "بيانات العرض غير صحيحة" });
+    }
+    const result = await sendRenewalOffer(req.params.id, (req.user as { id: string }).id, parsed.data, {
+      notifyMembers: notifyPublisherMembers,
+    });
+    if (!result.ok) return res.status(result.status).json({ message: result.message });
+    res.json({ message: result.message });
+  } catch (error) {
+    console.error("[Publisher Portal] renewal offer failed:", error);
+    res.status(500).json({ message: "تعذر إرسال العرض" });
+  }
+});
+
+router.post("/api/admin/publishers/requests/:id/activate", requireAuth, requirePublisherManagement, async (req, res) => {
+  try {
+    const result = await activateRenewal(req.params.id, (req.user as { id: string }).id, {
+      notifyMembers: notifyPublisherMembers,
+    });
+    if (!result.ok) return res.status(result.status).json({ message: result.message });
+    res.json({ message: result.message, creditId: result.creditId });
+  } catch (error) {
+    console.error("[Publisher Portal] renewal activate failed:", error);
+    res.status(500).json({ message: "تعذر تفعيل الباقة" });
   }
 });
 
