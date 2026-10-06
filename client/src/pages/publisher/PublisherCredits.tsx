@@ -156,6 +156,7 @@ export default function PublisherCredits() {
       credit_added: { variant: "default", label: "إضافة رصيد", icon: TrendingUp },
       credit_used: { variant: "secondary", label: "استخدام رصيد", icon: TrendingDown },
       credit_refunded: { variant: "outline", label: "استرجاع رصيد", icon: TrendingUp },
+      credit_settled: { variant: "outline", label: "تسوية دفترية", icon: CreditCard },
       package_expired: { variant: "destructive", label: "انتهت صلاحية الباقة", icon: Package },
     };
 

@@ -115,6 +115,16 @@ async function logs(articleId: string) {
     expect(await pkg("expired")).toEqual({ used: 0, remaining: 5 });
   });
 
+  it("treats a ledger settlement entry as already charged and leaves the balance alone", async () => {
+    await addPackage({ id: "limited", remaining: 5 });
+    await pool.query(
+      `INSERT INTO publisher_credit_logs (publisher_id, credit_package_id, article_id, action_type, credits_before, credits_changed, credits_after)
+       VALUES ('agency', 'limited', 'old', 'credit_settled', 5, 0, 5)`,
+    );
+    expect(await charge("old")).toBe("already_charged");
+    expect(await pkg("limited")).toEqual({ used: 0, remaining: 5 });
+  });
+
   it("charges again after a refund entry cancels the earlier charge", async () => {
     await addPackage({ id: "limited", remaining: 5 });
     await charge("a1");

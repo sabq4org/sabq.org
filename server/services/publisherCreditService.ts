@@ -11,8 +11,12 @@
 //
 // Guarantees here:
 //   - One article is charged at most once: a per-article advisory lock plus a
-//     check of the ledger (credit_used minus credit_refunded) inside the same
-//     transaction. Re-publishing an archived article does not charge again.
+//     check of the ledger (credit_used + credit_settled − credit_refunded)
+//     inside the same transaction. Re-publishing an archived article does not
+//     charge again. `credit_settled` is a zero-amount entry written once by
+//     scripts/sql/settle-publisher-credit-ledger-2026-10-06.sql for articles
+//     published before this service caught every path; it marks them charged
+//     without touching any balance or the usage counters.
 //   - UPDATE + log INSERT are atomic (one transaction).
 //   - Package selection: active, not expired, (unlimited OR has balance) —
 //     unlimited first, then the soonest-expiring.
@@ -73,7 +77,8 @@ export async function chargePublishInTx(
   const [ledger] = await tx
     .select({
       net: sql<number>`COALESCE(SUM(CASE ${publisherCreditLogs.actionType}
-        WHEN 'credit_used' THEN 1 WHEN 'credit_refunded' THEN -1 ELSE 0 END), 0)::int`,
+        WHEN 'credit_used' THEN 1 WHEN 'credit_settled' THEN 1
+        WHEN 'credit_refunded' THEN -1 ELSE 0 END), 0)::int`,
     })
     .from(publisherCreditLogs)
     .where(eq(publisherCreditLogs.articleId, articleId));
