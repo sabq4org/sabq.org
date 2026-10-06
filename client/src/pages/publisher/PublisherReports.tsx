@@ -10,6 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent } from "@/components/ui/card";
 import { PublisherPageHeader } from "@/components/publisher/PublisherPageHeader";
+import { PublisherPrintReport, type PrintReportArticle } from "@/components/publisher/PublisherPrintReport";
 import { cn } from "@/lib/utils";
 import { formatDateShort, formatNumber } from "@/lib/format";
 
@@ -27,6 +28,7 @@ interface MonthlyReport {
     categoryName: string | null;
     vsUsual: VsUsual | null;
   }>;
+  articles?: PrintReportArticle[];
   authors: Array<{ name: string; published: number; views: number }>;
   availableMonths: string[];
   generatedAt: string;
@@ -76,17 +78,6 @@ function ReportTile({
   );
 }
 
-/** الأرقام داخل ورقة التقرير نفسها، حتى تظهر في نسخة الطباعة. */
-function PrintFigure({ label, value, delta }: { label: string; value: ReactNode; delta?: ReactNode }) {
-  return (
-    <div className="rounded-xl bg-muted/40 p-3">
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="text-2xl font-bold tabular-nums">{value}</p>
-      {delta}
-    </div>
-  );
-}
-
 function Delta({ now, before }: { now: number; before: number }) {
   if (before <= 0) return null;
   const change = Math.round(((now - before) / before) * 100);
@@ -133,21 +124,52 @@ export default function PublisherReports() {
   const countedDays = inProgress ? new Date().getUTCDate() : daysInMonth;
 
   // آخر 6 أشهر حتى الشهر المختار، من سلسلة لوحة التحكم نفسها
-  const { data: overview } = useQuery<{ monthlyPublishing?: Array<{ month: string; published: number; views: number }> }>({
+  const { data: overview } = useQuery<{
+    monthlyPublishing?: Array<{ month: string; published: number; views: number }>;
+    publisher?: { contactPerson?: string | null; logoUrl?: string | null };
+    activeCredit?: { packageName?: string | null; isUnlimited?: boolean; remainingCredits?: number; expiryDate?: string | null } | null;
+  }>({
     queryKey: ["/api/publisher/portal/overview"],
   });
   const series = Array.isArray(overview?.monthlyPublishing) ? overview!.monthlyPublishing : [];
   const trend = series.filter((m) => m.month <= reportMonth).slice(-6);
   const trendMax = Math.max(1, ...trend.map((m) => m.published));
+  const credit = overview?.activeCredit;
+  const packageLine = credit
+    ? [
+        credit.packageName,
+        credit.isUnlimited ? null : `المتبقي ${formatNumber(credit.remainingCredits ?? 0)}`,
+        credit.expiryDate ? `حتى ${formatDateShort(new Date(new Date(credit.expiryDate).getTime() - 1))}` : null,
+      ]
+        .filter(Boolean)
+        .join(" · ")
+    : null;
 
   return (
     <PublisherLayout>
-      <style>{`@media print {
-        body * { visibility: hidden !important; }
-        #publisher-report, #publisher-report * { visibility: visible !important; }
-        #publisher-report { position: absolute; inset: 0; margin: 0; border: 0; box-shadow: none; }
-        .no-print { display: none !important; }
-      }`}</style>
+      {data ? (
+        <PublisherPrintReport
+          data={{
+            month: data.month,
+            monthLabel: monthLabel(data.month),
+            agencyName: data.agencyName,
+            agencyLogoUrl: overview?.publisher?.logoUrl ?? null,
+            contactPerson: overview?.publisher?.contactPerson ?? null,
+            packageLine,
+            generatedAt: String(data.generatedAt),
+            inProgress,
+            countedDays,
+            daysInMonth,
+            totals: data.totals,
+            previous: data.previous,
+            trend: trend.map((m) => ({ month: m.month, label: shortMonth(m.month), published: m.published })),
+            categories,
+            authors,
+            topArticles,
+            articles: Array.isArray(data.articles) ? data.articles : topArticles,
+          }}
+        />
+      ) : null}
       <div className="w-full space-y-6" dir="rtl">
         <div className="no-print">
           <PublisherPageHeader
@@ -170,7 +192,7 @@ export default function PublisherReports() {
                     ))}
                   </SelectContent>
                 </Select>
-                <Button variant="outline" className="gap-2 rounded-xl shadow-sm" onClick={() => window.print()} data-testid="button-print-report">
+                <Button variant="outline" className="gap-2 rounded-xl shadow-sm" onClick={() => void document.fonts.ready.then(() => window.print())} data-testid="button-print-report">
                   <Printer className="h-4 w-4" />
                   طباعة / PDF
                 </Button>
@@ -241,15 +263,6 @@ export default function PublisherReports() {
                   {inProgress ? " · الشهر جارٍ" : ""}
                 </span>
               </header>
-
-              <div className="hidden grid-cols-3 gap-3 print:grid">
-                <PrintFigure label="أخبار منشورة" value={formatNumber(data.totals.published)} delta={<Delta now={data.totals.published} before={data.previous.published} />} />
-                <PrintFigure label="قراءات أخبار الشهر" value={formatNumber(data.totals.views)} delta={<Delta now={data.totals.views} before={data.previous.views} />} />
-                <PrintFigure
-                  label="متوسط قراءات الخبر"
-                  value={data.totals.published ? formatNumber(Math.round(data.totals.views / data.totals.published)) : "—"}
-                />
-              </div>
 
               {trend.length > 1 ? (
                 <div className="space-y-2" data-testid="report-trend">

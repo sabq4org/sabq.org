@@ -17,7 +17,10 @@ const portal = vi.hoisted(() => ({
   listPublisherMembers: vi.fn(async () => [{ id: "member-1" }]),
 }));
 vi.mock("../../server/services/publisherPortalService", () => portal);
-vi.mock("../../server/services/email", () => ({ sendEmailNotification: vi.fn(async () => ({ success: true })) }));
+const email = vi.hoisted(() => ({ sendEmailNotification: vi.fn(async () => ({ success: true })) }));
+vi.mock("../../server/services/email", () => email);
+const editorAlerts = vi.hoisted(() => ({ sendEditorWhatsAppNotice: vi.fn(async () => 1) }));
+vi.mock("../../server/services/editorAlerts", () => editorAlerts);
 vi.mock("../../server/services/editorialNotifications", () => ({ notifyAuthorOfSocialPostStatus: vi.fn(async () => {}) }));
 vi.mock("../../server/services/socialPublishing/suggestService", () => ({ suggestSocialPostForArticle: vi.fn() }));
 
@@ -115,11 +118,15 @@ const submit = (over: Partial<AgencySocialInput> = {}): AgencySocialInput => ({
     expect(first.post).toMatchObject({ status: "draft", publisherId: "agency", imageSource: "article", scheduledAt: null });
     expect(first.post.requestedAt?.getTime()).toBe(at.getTime());
     expect(portal.notifyAdmins).toHaveBeenCalledOnce();
+    expect(editorAlerts.sendEditorWhatsAppNotice).toHaveBeenCalledOnce();
+    expect(editorAlerts.sendEditorWhatsAppNotice.mock.calls[0][0]).toContain("بانتظار موافقتك");
+    expect(email.sendEmailNotification).toHaveBeenCalledWith(expect.objectContaining({ to: "aalhazmi@sabq.org" }));
 
     const second = await saveAgencySocialPost(pub, "member-1", "story", submit({ text: "نص معدل", media: "none", requestedAt: null }));
     expect(second.outcome).toBe("updated");
     expect(second.post).toMatchObject({ id: first.post.id, text: "نص معدل", imageSource: "none", requestedAt: null });
     expect(portal.notifyAdmins).toHaveBeenCalledOnce();
+    expect(editorAlerts.sendEditorWhatsAppNotice).toHaveBeenCalledOnce();
     expect((await pool.query("SELECT count(*)::int AS n FROM social_posts")).rows[0].n).toBe(1);
   });
 
@@ -144,6 +151,7 @@ const submit = (over: Partial<AgencySocialInput> = {}): AgencySocialInput => ({
     expect(res.post).toMatchObject({ status: "scheduled", publisherId: "agency" });
     expect(res.post.scheduledAt?.getTime()).toBe(at.getTime());
     expect(portal.notifyAdmins).not.toHaveBeenCalled();
+    expect(editorAlerts.sendEditorWhatsAppNotice.mock.calls[0][0]).toContain("جدولت تغريدة");
   });
 
   it("keeps one live tweet per story and closes the window after 48 hours", async () => {

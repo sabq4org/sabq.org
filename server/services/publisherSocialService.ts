@@ -23,6 +23,7 @@ import {
 import { activeSocialTransport } from "./socialPublishing/publerApiClient";
 import { suggestSocialPostForArticle } from "./socialPublishing/suggestService";
 import { listPublisherMembers, notifyAdmins, notifyPublisherMembers } from "./publisherPortalService";
+import { sendEditorWhatsAppNotice } from "./editorAlerts";
 import { button, emailShell, escapeHtml } from "./publisherRenewalService";
 
 export type AgencySocialMode = "off" | "approval" | "direct";
@@ -178,6 +179,10 @@ export interface AgencySocialInput {
 
 export type AgencySocialOutcome = "submitted" | "updated" | "published" | "scheduled";
 
+const AGENCY_REQUESTS_URL = "https://sabq.org/dashboard/social-publishing?filter=agency";
+/** نسخة بريدية من تنبيه تغريدات الوكالات (طلب الإدارة، 6 أكتوبر 2026). */
+const AGENCY_SOCIAL_ALERT_EMAIL = "aalhazmi@sabq.org";
+
 /**
  * إنشاء أو تعديل تغريدة الوكالة لخبرها، ثم إرسالها للموافقة أو نشرها
  * حسب إعداد الوكالة. تغريدة واحدة حية لكل خبر.
@@ -245,6 +250,24 @@ export async function saveAgencySocialPost(
     });
   }
 
+  const riyadh = (d: Date) =>
+    d.toLocaleString("ar-SA-u-ca-gregory-nu-latn", { timeZone: "Asia/Riyadh", dateStyle: "medium", timeStyle: "short" });
+  // واتساب رئيس التحرير ونسخة بالبريد: لا ينتظرهما الطلب، وفشلهما لا يُفشل التغريدة
+  const whatsapp = (headline: string) => {
+    void sendEditorWhatsAppNotice(
+      `${headline}\nالوكالة: ${publisher.agencyName}\nالخبر: ${status.article.title}\nالتغريدة: ${text.slice(0, 200)}\n${AGENCY_REQUESTS_URL}`,
+    ).catch((err) => console.error("[Agency Social] WhatsApp notice failed:", err));
+    void sendEmailNotification({
+      to: AGENCY_SOCIAL_ALERT_EMAIL,
+      subject: `سبق | ${headline.replace(/^\S+\s/, "")} · ${publisher.agencyName}`,
+      html: emailShell(`
+        <h3 style="margin:0 0 8px;color:#0f172a">${escapeHtml(headline)}</h3>
+        <p><strong>الوكالة:</strong> ${escapeHtml(publisher.agencyName)}<br><strong>الخبر:</strong> ${escapeHtml(status.article.title)}</p>
+        <p style="white-space:pre-wrap;background:#f1f5f9;border-radius:8px;padding:12px">${escapeHtml(text)}</p>
+        ${button(AGENCY_REQUESTS_URL, "طلبات الوكالات")}`),
+    }).catch((err) => console.error("[Agency Social] email notice failed:", err));
+  };
+
   if (input.action === "publish_now") {
     const claimed = await claimPostForImmediatePublish(post.id);
     if (!claimed) throw new SocialPublishValidationError("التغريدة قيد النشر بالفعل", 409);
@@ -252,10 +275,13 @@ export async function saveAgencySocialPost(
     if (result.status !== "published") {
       throw new SocialPublishValidationError(result.lastError || "تعذر النشر، حاولوا مرة أخرى", 502);
     }
+    whatsapp("🐦 وكالة نشرت تغريدة على حساب سبق");
     return { outcome: "published", post: result };
   }
   if (input.action === "schedule") {
-    return { outcome: "scheduled", post: await schedulePost(post.id, requestedAt!) };
+    const scheduled = await schedulePost(post.id, requestedAt!);
+    whatsapp(`🗓️ وكالة جدولت تغريدة على حساب سبق (${riyadh(requestedAt!)})`);
+    return { outcome: "scheduled", post: scheduled };
   }
 
   if (!pendingId) {
@@ -267,6 +293,7 @@ export async function saveAgencySocialPost(
       body: `«${status.article.title}» · ${when}`,
       deeplink: "/dashboard/social-publishing?filter=agency",
     });
+    whatsapp(`🐦 طلب تغريدة من وكالة بانتظار موافقتك${askedAt ? ` (موعد مطلوب: ${riyadh(askedAt)})` : ""}`);
   }
   return { outcome: pendingId ? "updated" : "submitted", post };
 }
