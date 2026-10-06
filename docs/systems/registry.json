@@ -295,6 +295,9 @@
         "tests/unit/editorialStakeholders.test.ts",
         "server/routes/publisherPortal.ts",
         "server/services/publisherPortalService.ts",
+        "server/services/publisherCreditService.ts",
+        "scripts/publisher-credit-reconcile.ts",
+        "tests/unit/publisherCreditCharge.integration.test.ts",
         "server/services/articleViewCounterService.ts",
         "server/services/articleViewStatsService.ts",
         "client/src/pages/admin/publishers/**",
@@ -424,7 +427,7 @@
       "owners": [
         "editorial"
       ],
-      "lastReviewed": "2026-10-01"
+      "lastReviewed": "2026-10-06"
     },
     {
       "id": "ifox",
