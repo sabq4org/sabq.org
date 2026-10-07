@@ -32,6 +32,13 @@ describe("valueAppearsInSource", () => {
     expect(valueAppearsInSource("2.5 مليون", src)).toBe(false);
     expect(valueAppearsInSource("مليون", src)).toBe(false);
   });
+
+  it("يطابق الرقم كاملًا لا جزءًا منه", () => {
+    const src = "ارتفعت النسبة إلى 25% في عام 2026";
+    expect(valueAppearsInSource("25%", src)).toBe(true);
+    expect(valueAppearsInSource("5%", src)).toBe(false);
+    expect(valueAppearsInSource("20", src)).toBe(false);
+  });
 });
 
 describe("extractInfographicFacts", () => {
@@ -54,6 +61,22 @@ describe("extractInfographicFacts", () => {
     expect(req.options.jsonMode).toBe(true);
     expect(req.messages[1].content).toContain("2.4 مليون");
     expect(req.messages[1].content).not.toContain("<strong>");
+  });
+
+  it("لا يحسب الرقم المكرر مرتين، ويستبدل عنوانًا فيه رقم مخترع بعنوان الخبر", async () => {
+    completeMock.mockResolvedValue({
+      content: JSON.stringify({
+        heading: "ارتفاع 50% في التوظيف",
+        facts: [
+          { value: "7.1%", label: "البطالة" },
+          { value: "7.1%", label: "البطالة مرة أخرى" },
+          { value: "36%", label: "مشاركة المرأة" },
+        ],
+      }),
+    });
+    const r = await extractInfographicFacts(article);
+    expect(r?.facts.map((f) => f.value)).toEqual(["7.1%", "36%"]);
+    expect(r?.heading).toBe(article.title);
   });
 
   it("يعيد null (فيرجع المسار لوصف المشهد) إذا قلّت الأرقام الموثّقة عن اثنين", async () => {

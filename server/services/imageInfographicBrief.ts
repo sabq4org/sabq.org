@@ -63,12 +63,24 @@ export function stripHtml(html: string): string {
     .trim();
 }
 
-/** الرقم مقبول فقط إن ظهرت كل مجموعات أرقامه في نص الخبر نفسه. */
+const NUMBER_TOKEN = /\d+(?:[.,٫٬]\d+)*/g;
+
+/** الأرقام الكاملة في نص (رمزًا رمزًا) — «5» لا تطابق «25» ولا «20» تطابق «2026». */
+function numberTokens(text: string): string[] {
+  return normalizeDigits(text).match(NUMBER_TOKEN) ?? [];
+}
+
+/** الرقم مقبول فقط إن ظهر كل رقم كامل فيه رقمًا كاملًا في نص الخبر نفسه. */
 export function valueAppearsInSource(value: string, source: string): boolean {
-  const groups = normalizeDigits(value).match(/\d+(?:[.,٫٬]\d+)*/g);
-  if (!groups || groups.length === 0) return false;
-  const src = normalizeDigits(source);
-  return groups.every((g) => src.includes(g));
+  const groups = numberTokens(value);
+  if (groups.length === 0) return false;
+  const src = new Set(numberTokens(source));
+  return groups.every((g) => src.has(g));
+}
+
+/** نص بلا أرقام، أو كل أرقامه من الخبر — يُطبَّق على عنوان الإنفوجرافيك. */
+function numbersAllFromSource(text: string, source: string): boolean {
+  return numberTokens(text).length === 0 || valueAppearsInSource(text, source);
 }
 
 const clean = (s: unknown, max: number): string =>
@@ -105,12 +117,16 @@ export async function extractInfographicFacts(
         return { value: clean(item.value, 30), label: clean(item.label, 60) };
       })
       .filter((f) => f.value && f.label && valueAppearsInSource(f.value, source))
+      // الرقم المكرر لا يُحسب مرتين نحو الحد الأدنى
+      .filter((f, i, all) => all.findIndex((o) => normalizeDigits(o.value) === normalizeDigits(f.value)) === i)
       .slice(0, MAX_FACTS);
     if (facts.length < MIN_FACTS) {
       console.log(`[Image Infographic] Only ${facts.length} verified figures — falling back to scene brief`);
       return null;
     }
-    return { heading: clean(parsed.heading, 80) || clean(input.title, 80), facts };
+    // عنوان فيه رقم ليس في الخبر يُستبدل بعنوان الخبر نفسه
+    const heading = clean(parsed.heading, 80);
+    return { heading: heading && numbersAllFromSource(heading, source) ? heading : clean(input.title, 80), facts };
   } catch (error) {
     console.warn("[Image Infographic] Figure extraction failed — falling back to scene brief:", (error as Error)?.message);
     return null;
