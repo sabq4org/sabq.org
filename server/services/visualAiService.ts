@@ -332,6 +332,8 @@ ${promptParts.join('\n\n')}
 export interface NewsImageGenerationRequest {
   articleTitle: string;
   articleSummary?: string;
+  /** نص الخبر كاملًا (HTML مقبول) — يستخدمه نمط «إنفوجرافيك وبيانات» لاستخراج الأرقام */
+  articleContent?: string;
   category: string;
   language: "ar" | "en" | "ur";
   /** slug نمط من السجلّ المركزي، أو قيمة قديمة (photorealistic/…) تُترجم تلقائيًا */
@@ -420,27 +422,55 @@ export async function generateNewsImage(request: NewsImageGenerationRequest): Pr
     // وأيقونات وبوصلات ونصوص مشوّهة (خبر الأمطار 2026-08-28).
     const { generateSceneBrief, buildSceneContent, NEWS_IMAGE_AVOID_LIST } = await import("./imageSceneBrief");
     const { composeImagePrompt } = await import("@shared/imageStyles");
-    const brief = await generateSceneBrief({
-      title: request.articleTitle,
-      summary: request.articleSummary,
-      category: request.category,
-      language: request.language,
-    });
-    console.log(`[Visual AI] Scene brief (${brief.source}): ${brief.scene.substring(0, 120)}…`);
+
+    // نمط «إنفوجرافيك وبيانات»: أرقام الخبر نفسها بدل وصف المشهد، وبلا حراس
+    // منع النص/الأرقام (كانت تُلغي النمط فتخرج صورة عادية — 2026-10-07).
+    // بلا رقمين موثّقين في النص يعود المسار لوصف المشهد المعتاد.
+    let infographicPrompt: { prompt: string; negativePrompt?: string } | null = null;
+    if (resolvedStyleForPrompt && styleSlugUsed === "infographic") {
+      const { extractInfographicFacts, buildInfographicContent } = await import("./imageInfographicBrief");
+      const facts = await extractInfographicFacts({
+        title: request.articleTitle,
+        content: request.articleContent,
+        summary: request.articleSummary,
+        language: request.language,
+      });
+      if (facts) {
+        console.log(`[Visual AI] Infographic figures: ${facts.facts.map((f) => f.value).join(" | ")}`);
+        infographicPrompt = composeImagePrompt({
+          style: resolvedStyleForPrompt.style,
+          variant: resolvedStyleForPrompt.variant,
+          content: buildInfographicContent(facts, request.language),
+          includeGuards: false,
+        });
+      }
+    }
 
     let prompt: string;
-    if (resolvedStyleForPrompt) {
-      const composed = composeImagePrompt({
-        style: resolvedStyleForPrompt.style,
-        variant: resolvedStyleForPrompt.variant,
-        content: buildSceneContent(brief.scene),
-        userInstructions: `Mood: ${moodGuide[mood]}`,
-      });
-      prompt = composed.prompt;
-      styleNegativePrompt = [composed.negativePrompt, NEWS_IMAGE_AVOID_LIST].filter(Boolean).join(", ");
+    if (infographicPrompt) {
+      prompt = infographicPrompt.prompt;
+      styleNegativePrompt = infographicPrompt.negativePrompt;
     } else {
-      prompt = `${buildSceneContent(brief.scene)}\n\nVisual style:\n${styleText}\nMood: ${moodGuide[mood]}\n\nCRITICAL: absolutely no text, letters, words, numbers, or typography of any kind in the image.`;
-      styleNegativePrompt = [styleNegativePrompt, NEWS_IMAGE_AVOID_LIST].filter(Boolean).join(", ");
+      const brief = await generateSceneBrief({
+        title: request.articleTitle,
+        summary: request.articleSummary,
+        category: request.category,
+        language: request.language,
+      });
+      console.log(`[Visual AI] Scene brief (${brief.source}): ${brief.scene.substring(0, 120)}…`);
+      if (resolvedStyleForPrompt) {
+        const composed = composeImagePrompt({
+          style: resolvedStyleForPrompt.style,
+          variant: resolvedStyleForPrompt.variant,
+          content: buildSceneContent(brief.scene),
+          userInstructions: `Mood: ${moodGuide[mood]}`,
+        });
+        prompt = composed.prompt;
+        styleNegativePrompt = [composed.negativePrompt, NEWS_IMAGE_AVOID_LIST].filter(Boolean).join(", ");
+      } else {
+        prompt = `${buildSceneContent(brief.scene)}\n\nVisual style:\n${styleText}\nMood: ${moodGuide[mood]}\n\nCRITICAL: absolutely no text, letters, words, numbers, or typography of any kind in the image.`;
+        styleNegativePrompt = [styleNegativePrompt, NEWS_IMAGE_AVOID_LIST].filter(Boolean).join(", ");
+      }
     }
     
     // Use Nano Banana service (reuse existing service)
