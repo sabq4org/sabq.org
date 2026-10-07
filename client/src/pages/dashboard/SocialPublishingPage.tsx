@@ -81,6 +81,10 @@ interface SocialPostRow {
   createdByName?: string | null;
   publishedByName?: string | null;
   isAuthorProposal?: boolean;
+  /** اسم الوكالة لتغريدة طلبتها وكالة لخبرها */
+  agencyName?: string | null;
+  /** الموعد الذي تقترحه الوكالة وهي تنتظر الموافقة */
+  requestedAt?: string | null;
   status: string;
   text: string;
   imageUrl: string | null;
@@ -99,6 +103,7 @@ interface PublishStats {
   failed: number;
   pendingDrafts: number;
   pendingAuthorProposals: number;
+  pendingAgencyProposals?: number;
 }
 
 interface AttemptRow {
@@ -111,7 +116,14 @@ interface AttemptRow {
   createdAt: string;
 }
 
-type StatusFilter = "all" | "draft" | "scheduled" | "published" | "failed";
+type StatusFilter = "all" | "agency" | "draft" | "scheduled" | "published" | "failed";
+
+/** datetime-local بالتوقيت المحلي للمتصفح */
+function localInputValue(iso: string) {
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
 
 const STATUS_META: Record<
   string,
@@ -243,7 +255,7 @@ export default function SocialPublishingPage() {
   const initialFilter = useMemo<StatusFilter>(() => {
     try {
       const p = new URLSearchParams(window.location.search).get("filter");
-      if (p === "draft" || p === "published" || p === "scheduled" || p === "failed") {
+      if (p === "agency" || p === "draft" || p === "published" || p === "scheduled" || p === "failed") {
         return p;
       }
     } catch {}
@@ -257,6 +269,8 @@ export default function SocialPublishingPage() {
   const [editText, setEditText] = useState("");
   const [schedulingPost, setSchedulingPost] = useState<SocialPostRow | null>(null);
   const [scheduledAtLocal, setScheduledAtLocal] = useState("");
+  const [rejectingPost, setRejectingPost] = useState<SocialPostRow | null>(null);
+  const [rejectReason, setRejectReason] = useState("");
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   // نتيجة ربط OAuth تصل عبر ?x=connected|denied|…
@@ -318,7 +332,9 @@ export default function SocialPublishingPage() {
 
   const filteredPosts = useMemo(() => {
     let list = posts;
-    if (statusFilter !== "all") {
+    if (statusFilter === "agency") {
+      list = list.filter((p) => p.status === "draft" && p.agencyName);
+    } else if (statusFilter !== "all") {
       list = list.filter((p) => p.status === statusFilter);
     }
     if (searchQuery.trim()) {
@@ -328,6 +344,7 @@ export default function SocialPublishingPage() {
           p.text.toLowerCase().includes(q) ||
           p.articleTitle?.toLowerCase().includes(q) ||
           p.createdByName?.toLowerCase().includes(q) ||
+          p.agencyName?.toLowerCase().includes(q) ||
           p.publishedByName?.toLowerCase().includes(q)
       );
     }
@@ -337,6 +354,7 @@ export default function SocialPublishingPage() {
   const filterCounts = useMemo(
     () => ({
       all: posts.length,
+      agency: posts.filter((p) => p.status === "draft" && p.agencyName).length,
       draft: posts.filter((p) => p.status === "draft").length,
       published: posts.filter((p) => p.status === "published").length,
       scheduled: posts.filter((p) => p.status === "scheduled").length,
@@ -514,14 +532,16 @@ export default function SocialPublishingPage() {
     }
   };
 
+  // مقترحات كتّاب الرأي وطلبات الوكالات معًا
+  const pendingProposals = (stats?.pendingAuthorProposals ?? 0) + (stats?.pendingAgencyProposals ?? 0);
   const statTiles = [
     {
       key: "proposals",
       label: "مقترحات معلقة",
-      value: stats?.pendingAuthorProposals ?? 0,
+      value: pendingProposals,
       icon: Sparkles,
       valueClass:
-        (stats?.pendingAuthorProposals ?? 0) > 0
+        pendingProposals > 0
           ? "text-purple-600 dark:text-purple-400 font-bold"
           : "text-foreground",
       chip: "bg-purple-500/15 text-purple-600 dark:text-purple-400 border border-purple-500/20",
@@ -567,6 +587,7 @@ export default function SocialPublishingPage() {
 
   const filterButtons: Array<{ key: StatusFilter; label: string }> = [
     { key: "all", label: "الكل" },
+    { key: "agency", label: "طلبات الوكالات" },
     { key: "draft", label: "مسودات ومقترحات" },
     { key: "scheduled", label: "مجدول" },
     { key: "published", label: "منشور" },
@@ -755,7 +776,7 @@ export default function SocialPublishingPage() {
 
         {/* سجل المنشورات — التصميم العصري الشبيه بـ X */}
         <section className="space-y-4">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between border-b pb-4">
+          <div className="flex flex-col gap-3 2xl:flex-row 2xl:items-center 2xl:justify-between border-b pb-4">
             <div className="min-w-0">
               <h2 className="text-xl font-bold tracking-tight text-foreground flex items-center gap-2">
                 <span>سجل التغريدات والمنشورات</span>
@@ -899,7 +920,7 @@ export default function SocialPublishingPage() {
                             {p.createdByName && (
                               <span className="inline-flex items-center gap-1">
                                 <User className="h-3 w-3 opacity-60" />
-                                {p.isAuthorProposal ? "مقترح من: " : "بواسطة: "}
+                                {p.isAuthorProposal || p.agencyName ? "مقترح من: " : "بواسطة: "}
                                 <strong className="font-semibold text-foreground/80">
                                   {p.createdByName}
                                 </strong>
@@ -916,6 +937,17 @@ export default function SocialPublishingPage() {
 
                       {/* شارات الحالة ونوع المنشور */}
                       <div className="flex flex-wrap items-center gap-2">
+                        {p.agencyName && p.status === "draft" && (
+                          <Badge
+                            className="border border-sky-500/30 bg-sky-500/15 text-sky-700 dark:text-sky-300 px-2.5 py-0.5 text-xs font-semibold gap-1 shadow-xs"
+                            data-testid={`badge-agency-${p.id}`}
+                          >
+                            طلب وكالة: {p.agencyName}
+                            <span className="font-normal opacity-90">
+                              · {p.requestedAt ? `تطلب ${fmtSocialDateTime(p.requestedAt)}` : "تطلب بعد الموافقة"}
+                            </span>
+                          </Badge>
+                        )}
                         {p.isAuthorProposal && p.status === "draft" && (
                           <Badge className="border border-purple-500/30 bg-purple-500/15 text-purple-700 dark:text-purple-300 px-2.5 py-0.5 text-xs font-semibold gap-1 shadow-xs">
                             <Sparkles className="h-3 w-3 text-purple-600 dark:text-purple-400" />
@@ -1131,7 +1163,12 @@ export default function SocialPublishingPage() {
                                 className="h-8 gap-1 text-xs rounded-xl"
                                 onClick={() => {
                                   setSchedulingPost(p);
-                                  setScheduledAtLocal("");
+                                  // طلب الوكالة: الموعد المقترح جاهز في الحقل إن لم يمض
+                                  setScheduledAtLocal(
+                                    p.requestedAt && new Date(p.requestedAt).getTime() > Date.now() + 60_000
+                                      ? localInputValue(p.requestedAt)
+                                      : "",
+                                  );
                                 }}
                                 data-testid={`button-log-schedule-${p.id}`}
                               >
@@ -1145,7 +1182,13 @@ export default function SocialPublishingPage() {
                                 variant="ghost"
                                 className="h-8 text-xs text-red-600 hover:bg-red-500/10 rounded-xl"
                                 disabled={cancelMutation.isPending}
-                                onClick={() => cancelMutation.mutate(p.id)}
+                                onClick={() => {
+                                  if (p.agencyName) {
+                                    // الوكالة ترى الملاحظة في لوحتها وبريدها
+                                    setRejectingPost(p);
+                                    setRejectReason("");
+                                  } else cancelMutation.mutate(p.id);
+                                }}
                                 data-testid={`button-log-cancel-${p.id}`}
                               >
                                 رفض المقترح
@@ -1348,6 +1391,39 @@ export default function SocialPublishingPage() {
       </Dialog>
 
       {/* جدولة منشور مسودة */}
+      <Dialog open={Boolean(rejectingPost)} onOpenChange={(open) => !open && setRejectingPost(null)}>
+        <DialogContent className="w-[calc(100vw-1.25rem)] max-w-md rounded-2xl p-4 sm:p-6" dir="rtl">
+          <DialogHeader className="text-right">
+            <DialogTitle>رفض طلب {rejectingPost?.agencyName}</DialogTitle>
+            <DialogDescription>تصل الملاحظة للوكالة في لوحتها وبريدها، ويمكنها التعديل وإعادة الإرسال.</DialogDescription>
+          </DialogHeader>
+          <Textarea
+            value={rejectReason}
+            onChange={(e) => setRejectReason(e.target.value)}
+            rows={3}
+            placeholder="مثال: نقترح صياغة خبرية بدل العبارة التسويقية."
+            data-testid="input-reject-reason"
+          />
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setRejectingPost(null)}>
+              إلغاء
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={cancelMutation.isPending}
+              onClick={() => {
+                if (!rejectingPost) return;
+                cancelMutation.mutate({ postId: rejectingPost.id, reason: rejectReason.trim() || undefined });
+                setRejectingPost(null);
+              }}
+              data-testid="button-confirm-reject"
+            >
+              رفض الطلب
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog
         open={Boolean(schedulingPost)}
         onOpenChange={(open) => !open && setSchedulingPost(null)}

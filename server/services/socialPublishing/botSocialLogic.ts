@@ -5,6 +5,7 @@ import {
   X_MAX_PREMIUM_WEIGHTED_LENGTH,
   X_MAX_WEIGHTED_LENGTH,
   composeXPostText,
+  stripMarkdownEmphasis,
   validateXPostText,
 } from "@shared/socialPostText";
 import { BOT_SOCIAL_MEASUREMENT, type BotSocialImageSource, type BotSocialTextSource } from "@shared/botSocial";
@@ -345,7 +346,7 @@ function asImageSource(value: string | undefined, fallback: BotSocialImageSource
 export function resolveBotSocialCompose(input: BotSocialComposeInput): BotSocialCompose {
   const existing = input.existing ?? null;
   const textSource = asTextSource(input.body.textSource, existing ? asTextSource(existing.textSource, "custom") : "custom");
-  const provided = (input.body.text ?? "").trim();
+  const provided = stripMarkdownEmphasis(input.body.text ?? "").trim();
   let text = provided;
   if (!text && existing && input.body.text == null) text = existing.text;
   if (!text && (textSource === "title" || textSource === "title_link")) text = input.article.title.trim();
@@ -586,7 +587,7 @@ export function resolveOriginalPost(input: {
     input.body.textSource,
     existing?.textSource === "ai" ? "ai" : "custom",
   );
-  const provided = (input.body.text ?? "").trim();
+  const provided = stripMarkdownEmphasis(input.body.text ?? "").trim();
   let text = provided;
   if (!text && existing && input.body.text == null) text = existing.text;
   const imageUrls = resolveOriginalImageUrls(input.body, existing ? existing.imageUrls : null);

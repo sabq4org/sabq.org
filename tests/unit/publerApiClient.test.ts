@@ -121,6 +121,31 @@ describe("publerApiClient — الوسائط والنشر", () => {
     expect(body.bulk.posts[0].networks.twitter.media).toBeUndefined();
   });
 
+  it("نص أطول من 280 يُرسل long_post حتى لا تقصّه Publer ويضيع الرابط", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(200, { data: { job_id: "job-3" } }))
+      .mockResolvedValueOnce(jsonResponse(200, { data: { status: "complete" } }));
+    vi.stubGlobal("fetch", fetchMock);
+    const text = `${"ن".repeat(300)}\nhttps://sabq.org/article/x?utm_source=x`;
+    await publishToPublerAccount("acc-1", { text, mediaIds: ["m1"], pollOptions: { intervalMs: 1 } });
+    const twitter = JSON.parse(fetchMock.mock.calls[0][1].body as string).bulk.posts[0].networks.twitter;
+    expect(twitter.details).toEqual({ type: "long_post" });
+    expect(twitter.type).toBe("photo");
+    expect(twitter.text).toBe(text);
+  });
+
+  it("نص 280 موزوناً أو أقل يبقى بلا details", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(200, { data: { job_id: "job-4" } }))
+      .mockResolvedValueOnce(jsonResponse(200, { data: { status: "complete" } }));
+    vi.stubGlobal("fetch", fetchMock);
+    await publishToPublerAccount("acc-1", { text: "ن".repeat(280), pollOptions: { intervalMs: 1 } });
+    const twitter = JSON.parse(fetchMock.mock.calls[0][1].body as string).bulk.posts[0].networks.twitter;
+    expect(twitter.details).toBeUndefined();
+  });
+
   it("failures غير الفارغة في المهمة المكتملة = فشل دائم", async () => {
     const fetchMock = vi
       .fn()

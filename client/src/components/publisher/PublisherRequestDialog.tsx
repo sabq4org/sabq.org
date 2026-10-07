@@ -52,6 +52,7 @@ export function PublisherRequestDialog({ open, onOpenChange, defaultType }: Publ
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ["/api/publisher/portal/requests"] });
       queryClient.invalidateQueries({ queryKey: ["/api/publisher/portal/overview"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/publisher/portal/renewal"] });
       onOpenChange(false);
       toast({ title: "أُرسل الطلب", description: result?.message ?? "ستتواصل معكم الإدارة قريباً" });
     },

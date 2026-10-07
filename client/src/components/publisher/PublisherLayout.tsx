@@ -13,6 +13,8 @@ import {
   Zap,
   ShieldCheck,
   Package,
+  FileBarChart,
+  Share2,
 } from "lucide-react";
 import {
   Sidebar,
@@ -84,14 +86,28 @@ const navItems: NavItem[] = [
   {
     id: "publisher-articles",
     href: "/dashboard/publisher/articles",
-    label: "المقالات",
+    label: "أخباري",
     icon: FileText,
     testId: "nav-publisher-articles",
   },
   {
+    id: "publisher-social",
+    href: "/dashboard/publisher/social",
+    label: "النشر الاجتماعي",
+    icon: Share2,
+    testId: "nav-publisher-social",
+  },
+  {
+    id: "publisher-reports",
+    href: "/dashboard/publisher/reports",
+    label: "التقارير الشهرية",
+    icon: FileBarChart,
+    testId: "nav-publisher-reports",
+  },
+  {
     id: "publisher-credits",
     href: "/dashboard/publisher/credits",
-    label: "سجل الرصيد",
+    label: "الباقة وكشف الحساب",
     icon: CreditCard,
     testId: "nav-publisher-credits",
   },
@@ -162,6 +178,12 @@ export function PublisherLayout({ children }: PublisherLayoutProps) {
     enabled: Boolean(user),
     staleTime: 30_000,
   });
+  const { data: socialSettings } = useQuery<{ mode: "off" | "approval" | "direct" }>({
+    queryKey: ["/api/publisher/portal/social/settings"],
+    enabled: Boolean(user),
+    staleTime: 5 * 60_000,
+  });
+  const socialEnabled = Boolean(socialSettings && socialSettings.mode !== "off");
 
   if (isLoading || !user) {
     return (
@@ -304,7 +326,7 @@ export function PublisherLayout({ children }: PublisherLayoutProps) {
                 </SidebarGroupLabel>
                 <SidebarGroupContent className="px-2">
                   <SidebarMenu>
-                    {navItems.map((item) => {
+                    {navItems.filter((item) => item.id !== "publisher-social" || socialEnabled).map((item) => {
                       const Icon = item.icon;
                       const active = isActive(item.href);
 

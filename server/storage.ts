@@ -16,6 +16,7 @@ import { generateEnglishSlug } from './utils/slugTransliterator';
 import { notificationBus } from "./notificationBus";
 import { bufferArticleViewIncrement } from "./services/articleViewCounterService";
 import { matchesInternalAnnouncementAudience } from "./utils/internalAnnouncementTargeting";
+import { chargePublishInTx } from "./services/publisherCreditService";
 import {
   users,
   categories,
@@ -17233,6 +17234,8 @@ export class DatabaseStorage implements IStorage {
         and(
           eq(publisherCredits.publisherId, publisherId),
           eq(publisherCredits.isActive, true),
+          // باقة التجديد المفعلة مسبقاً لا تُعد نشطة قبل بدايتها
+          lte(publisherCredits.startDate, now),
           // الباقة المفتوحة صالحة دائماً بغض النظر عن الرصيد المتبقي
           or(
             eq(publisherCredits.isUnlimited, true),
@@ -17590,36 +17593,7 @@ export class DatabaseStorage implements IStorage {
         throw new Error('المقال غير موجود أو تمت الموافقة عليه مسبقاً');
       }
 
-      // Step 2: Lock and get active credit package (within transaction)
-      // Using SELECT FOR UPDATE to prevent concurrent credit deductions
-      const [activeCredit] = await tx
-        .select()
-        .from(publisherCredits)
-        .where(
-          and(
-            eq(publisherCredits.publisherId, publisherId),
-            eq(publisherCredits.isActive, true),
-            or(
-              isNull(publisherCredits.expiryDate),
-              gte(publisherCredits.expiryDate, new Date())
-            )
-          )
-        )
-        .orderBy(desc(publisherCredits.createdAt))
-        .for('update')  // Row-level lock - prevents concurrent credit updates
-        .limit(1);
-
-      if (!activeCredit) {
-        throw new Error('لا يوجد رصيد نشط متاح للناشر');
-      }
-
-      // Re-validate credit balance inside the locked transaction
-      // (الباقة المفتوحة لا تُقيَّد برصيد)
-      if (!activeCredit.isUnlimited && activeCredit.remainingCredits < 1) {
-        throw new Error('رصيد الناشر غير كافٍ');
-      }
-
-      // Step 3: Update article to published (within transaction)
+      // Step 2: Update article to published (within transaction)
       const [publishedArticle] = await tx
         .update(articles)
         .set({
@@ -17630,36 +17604,19 @@ export class DatabaseStorage implements IStorage {
         .where(eq(articles.id, articleId))
         .returning();
 
-      // Step 4: Deduct credit (within transaction)
-      // الباقة المفتوحة: نُحصي الاستخدام للتقارير دون إنقاص الرصيد
-      const creditsBefore = activeCredit.remainingCredits;
-      const creditsAfter = activeCredit.isUnlimited ? creditsBefore : creditsBefore - 1;
-
-      await tx
-        .update(publisherCredits)
-        .set({
-          usedCredits: activeCredit.usedCredits + 1,
-          remainingCredits: creditsAfter,
-          updatedAt: new Date(),
-        })
-        .where(eq(publisherCredits.id, activeCredit.id));
-
-      // Step 5: Create credit log (within transaction)
-      await tx
-        .insert(publisherCreditLogs)
-        .values({
-          publisherId,
-          creditPackageId: activeCredit.id,
-          articleId,
-          actionType: 'credit_used',
-          creditsBefore,
-          creditsChanged: activeCredit.isUnlimited ? 0 : -1,
-          creditsAfter,
-          performedBy,
-          notes: activeCredit.isUnlimited
-            ? `نشر خبر ضمن باقة مفتوحة: ${article.title}`
-            : `تم خصم رصيد مقابل نشر خبر: ${article.title}`,
-        });
+      // Step 3: Charge the package through the single shared rule
+      // (publisherCreditService) — same package selection as every other
+      // publish path, at most once per article. No usable package rolls
+      // the whole approval back.
+      const charge = await chargePublishInTx(tx, {
+        publisherId,
+        articleId,
+        performedBy,
+        note: article.title,
+      });
+      if (charge === 'no_credits') {
+        throw new Error('لا يوجد رصيد نشط متاح للناشر');
+      }
 
       // If we reach here, all operations succeeded
       // Transaction will commit automatically

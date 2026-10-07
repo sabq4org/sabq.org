@@ -23,6 +23,15 @@ import { deductPublisherCreditSafely } from "./publisherCreditService";
 import { invalidatePublishedContent } from "./contentInvalidation";
 import { PUBLISHER_GUIDE_DEFAULT_SECTIONS } from "@shared/publisherGuideDefaults";
 import { getUserPermissionData } from "../rbac";
+import { getArticlePlacements, getPublisherBenchmark, withUsualComparison } from "./publisherInsightsService";
+import {
+  LIVE_REQUEST_STATUSES,
+  buildRenewalReminder,
+  currentRenewalMilestone,
+  emailAdminsNewRequest,
+  getPortalRenewal,
+  renewalRemindersEnabled,
+} from "./publisherRenewalService";
 
 /**
  * بوابة الناشر (وكالات المحتوى الخارجية).
@@ -117,6 +126,8 @@ const articleListSelection = {
   publisherReviewNotes: articles.publisherReviewNotes,
   authorId: articles.authorId,
   categoryId: articles.categoryId,
+  isFeatured: articles.isFeatured,
+  newsType: articles.newsType,
 };
 
 function formatAuthorName(firstName: string | null, lastName: string | null) {
@@ -174,8 +185,13 @@ export async function getPortalArticles(
     db.select({ count: sql<number>`count(*)` }).from(articles).where(where),
   ]);
 
+  const [compared, placements] = await Promise.all([
+    withUsualComparison(rows),
+    getArticlePlacements(rows),
+  ]);
+
   return {
-    articles: rows.map((row) => ({
+    articles: compared.map((row) => ({
       id: row.id,
       title: row.title,
       slug: row.slug,
@@ -193,6 +209,8 @@ export async function getPortalArticles(
       categoryId: row.categoryId,
       categoryName: row.categoryName ?? null,
       authorName: formatAuthorName(row.authorFirstName, row.authorLastName),
+      vsUsual: row.vsUsual,
+      placements: placements.get(row.id) ?? null,
     })),
     total: Number(count) || 0,
     page,
@@ -283,9 +301,6 @@ export async function getPortalCreditPackages(publisher: Publisher) {
 
   const openPeriodStart = resolveOpenPeriodStart(rows, rows[0]?.startDate ?? now);
 
-  // صحّح usedCredits للباقات المفتوحة إن تخلّف العداد عن الواقع
-  const healUpdates: Array<{ id: string; used: number }> = [];
-
   const packages = rows.map((pkg) => {
     const expired = !!(pkg.expiryDate && pkg.expiryDate.getTime() < now.getTime());
     let status: "active" | "inactive" | "expired" = "inactive";
@@ -304,13 +319,11 @@ export async function getPortalCreditPackages(publisher: Publisher) {
 
     // الباقة المفتوحة: مصدر الحقيقة = المنشور في نافذتها (أو سجلات الاستخدام)
     // الباقة المحدودة: نثق بعدّاد الخصم مع عدم النزول تحت سجلات الاستخدام
+    // قراءة فقط: كانت هذه الدالة تكتب الرقم المعروض في usedCredits عند كل
+    // فتح للصفحة، فيبتعد العدّاد عن دفتر الخصم. الكتابة الآن من الخصم وحده.
     const usedCredits = pkg.isUnlimited
       ? Math.max(pkg.usedCredits, publishedInWindow, loggedUses)
       : Math.max(pkg.usedCredits, loggedUses);
-
-    if (pkg.isUnlimited && usedCredits !== pkg.usedCredits) {
-      healUpdates.push({ id: pkg.id, used: usedCredits });
-    }
 
     return {
       id: pkg.id,
@@ -331,17 +344,6 @@ export async function getPortalCreditPackages(publisher: Publisher) {
       createdAt: pkg.createdAt,
     };
   });
-
-  if (healUpdates.length > 0) {
-    await Promise.all(
-      healUpdates.map((u) =>
-        db
-          .update(publisherCredits)
-          .set({ usedCredits: u.used, updatedAt: now })
-          .where(eq(publisherCredits.id, u.id)),
-      ),
-    );
-  }
 
   return { packages };
 }
@@ -764,6 +766,7 @@ async function buildPortalOverview(publisher: Publisher) {
         and(
           eq(publisherCredits.publisherId, publisher.id),
           eq(publisherCredits.isActive, true),
+          lte(publisherCredits.startDate, now),
           or(
             sql`${publisherCredits.expiryDate} IS NULL`,
             gte(publisherCredits.expiryDate, now),
@@ -773,8 +776,9 @@ async function buildPortalOverview(publisher: Publisher) {
       .orderBy(desc(publisherCredits.isUnlimited), desc(publisherCredits.createdAt))
       .limit(1),
     db
-      .select(articleListSelection)
+      .select({ ...articleListSelection, authorFirstName: users.firstName, authorLastName: users.lastName })
       .from(articles)
+      .leftJoin(users, eq(articles.authorId, users.id))
       .where(condition)
       .orderBy(desc(articles.createdAt))
       .limit(8),
@@ -805,6 +809,15 @@ async function buildPortalOverview(publisher: Publisher) {
     message: string;
     action?: { kind: "request"; requestType: string; label: string } | { kind: "link"; href: string; label: string };
   }> = [];
+
+  const [renewal, benchmark, recentCompared] = await Promise.all([
+    getPortalRenewal(publisher, now),
+    getPublisherBenchmark(publisher).catch((err) => {
+      console.error("[Publisher Portal] benchmark failed:", err);
+      return null;
+    }),
+    withUsualComparison(recentArticles).catch(() => recentArticles.map((a) => ({ ...a, vsUsual: null }))),
+  ]);
 
   const needsChangesCount = Number(stats?.needsChanges) || 0;
   if (needsChangesCount > 0) {
@@ -862,13 +875,15 @@ async function buildPortalOverview(publisher: Publisher) {
         action: renewAction,
       });
     }
-    if (activeCredit.expiryDate) {
+    // التجديد: الباقة المفتوحة قبل 90 يومًا، والمحدودة قبل 30 — ما لم يكن
+    // للوكالة طلب تجديد حي أو باقة لاحقة مفعلة (تظهر حينها في بطاقة التجديد).
+    if (activeCredit.expiryDate && renewal.due && !renewal.request) {
       const expiryDays = Math.ceil((activeCredit.expiryDate.getTime() - now.getTime()) / 86_400_000);
-      if (expiryDays >= 0 && expiryDays <= 14) {
+      if (currentRenewalMilestone(expiryDays, activeCredit.isUnlimited) !== null) {
         attention.push({
           type: "package_expiring",
-          severity: "warning",
-          message: `تنتهي صلاحية باقة «${activeCredit.packageName}» خلال ${expiryDays} ${expiryDays <= 10 ? "أيام" : "يوماً"}.`,
+          severity: expiryDays <= 7 ? "critical" : "warning",
+          message: `باقتك تنتهي خلال ${expiryDays} ${expiryDays <= 10 && expiryDays >= 3 ? "أيام" : "يومًا"}. اطلب التجديد الآن ليستمر النشر دون انقطاع.`,
           action: renewAction,
         });
       }
@@ -932,10 +947,16 @@ async function buildPortalOverview(publisher: Publisher) {
     .select({
       id: publisherRequests.id,
       type: publisherRequests.type,
+      status: publisherRequests.status,
       createdAt: publisherRequests.createdAt,
     })
     .from(publisherRequests)
-    .where(and(eq(publisherRequests.publisherId, publisher.id), eq(publisherRequests.status, "open")))
+    .where(
+      and(
+        eq(publisherRequests.publisherId, publisher.id),
+        inArray(publisherRequests.status, [...LIVE_REQUEST_STATUSES]),
+      ),
+    )
     .orderBy(desc(publisherRequests.createdAt))
     .limit(1);
 
@@ -964,7 +985,12 @@ async function buildPortalOverview(publisher: Publisher) {
       needsChanges: needsChangesCount,
     },
     activeCredit: enrichedActiveCredit,
-    recentArticles,
+    renewal,
+    benchmark,
+    recentArticles: recentCompared.map(({ authorFirstName, authorLastName, ...a }) => ({
+      ...a,
+      authorName: formatAuthorName(authorFirstName, authorLastName),
+    })),
     topArticles,
     monthlyPublishing: monthlyPublishing.map((m) => ({
       month: m.month,
@@ -1023,6 +1049,8 @@ type PublisherAlertEvent = {
   body: string;
   /** أيام منع التكرار */
   cooldownDays: number;
+  /** بريد مخصص بدل القالب العام */
+  email?: { subject: string; html: string };
 };
 
 function collectAlertEvents(
@@ -1051,17 +1079,7 @@ function collectAlertEvents(
         cooldownDays: 7,
       });
     }
-    if (activeCredit.expiryDate) {
-      const days = Math.ceil((new Date(activeCredit.expiryDate).getTime() - now.getTime()) / 86_400_000);
-      if (days >= 0 && days <= 7) {
-        events.push({
-          alertKey: `package_expiring:${activeCredit.id}`,
-          title: "باقتكم تنتهي قريباً",
-          body: `تنتهي صلاحية باقة «${activeCredit.packageName}» بتاريخ ${arDate(activeCredit.expiryDate)} (خلال ${days} ${days <= 10 ? "أيام" : "يوماً"}).`,
-          cooldownDays: 7,
-        });
-      }
-    }
+    // قرب انتهاء الباقة: buildRenewalReminder (90/30/7 للمفتوحة، 30/7 للمحدودة)
   } else {
     events.push({
       alertKey: `no_active_package:${publisher.id}`,
@@ -1108,6 +1126,7 @@ export async function runPublisherDailyAlerts(): Promise<{ publishersChecked: nu
           and(
             eq(publisherCredits.publisherId, publisher.id),
             eq(publisherCredits.isActive, true),
+            lte(publisherCredits.startDate, now),
             or(sql`${publisherCredits.expiryDate} IS NULL`, gte(publisherCredits.expiryDate, now)),
           ),
         )
@@ -1115,6 +1134,17 @@ export async function runPublisherDailyAlerts(): Promise<{ publishersChecked: nu
         .limit(1);
 
       const events = collectAlertEvents(publisher, activeCredit ?? null, now);
+      const reminder = renewalRemindersEnabled() ? await buildRenewalReminder(publisher, now) : null;
+      if (reminder) {
+        events.push({
+          alertKey: reminder.alertKey,
+          title: reminder.title,
+          body: reminder.body,
+          // المفتاح يحمل الباقة والموعد، فالمنع الطويل لا يحجب الموعد التالي
+          cooldownDays: 120,
+          email: reminder.email,
+        });
+      }
       if (events.length === 0) continue;
 
       const members = (await listPublisherMembers(publisher.id)) ?? [];
@@ -1132,7 +1162,7 @@ export async function runPublisherDailyAlerts(): Promise<{ publishersChecked: nu
               type: ALERT_TYPE,
               title: event.title,
               body: event.body,
-              deeplink: "/dashboard/publisher",
+              deeplink: event.email ? "/dashboard/publisher/credits" : "/dashboard/publisher",
               metadata: { alertKey: event.alertKey, publisherId: publisher.id },
             });
           } catch (err) {
@@ -1142,11 +1172,15 @@ export async function runPublisherDailyAlerts(): Promise<{ publishersChecked: nu
 
         // بريد إلى صندوق الوكالة الرسمي
         if (publisher.email) {
-          await sendEmailNotification({
-            to: publisher.email,
-            subject: `سبق | ${event.title}`,
-            html: alertEmailHtml(publisher.agencyName, event.title, event.body),
-          });
+          await sendEmailNotification(
+            event.email
+              ? { to: publisher.email, ...event.email }
+              : {
+                  to: publisher.email,
+                  subject: `سبق | ${event.title}`,
+                  html: alertEmailHtml(publisher.agencyName, event.title, event.body),
+                },
+          );
         }
         alertsSent++;
       }
@@ -1409,7 +1443,7 @@ export async function seedDefaultGuideSections(adminId: string) {
 }
 
 /** إشعار جرس لكل مديري النظام — للأحداث التي تتطلب إجراء إدارياً. */
-async function notifyAdmins(payload: { title: string; body: string; deeplink?: string }) {
+export async function notifyAdmins(payload: { title: string; body: string; deeplink?: string }) {
   try {
     const admins = await db
       .select({ id: users.id })
@@ -1427,6 +1461,15 @@ async function notifyAdmins(payload: { title: string; body: string; deeplink?: s
   } catch (err) {
     console.error("[Publisher Portal] notifyAdmins failed:", err);
   }
+}
+
+/** تنبيه داخل اللوحة لكل أعضاء الوكالة (المالك والموظفين). */
+export async function notifyPublisherMembers(
+  publisherId: string,
+  payload: { title: string; body: string; deeplink?: string },
+) {
+  const members = (await listPublisherMembers(publisherId)) ?? [];
+  for (const member of members) await notifyPublisherUser(member.id, payload);
 }
 
 const REQUEST_TYPE_LABELS: Record<string, string> = {
@@ -1450,7 +1493,7 @@ export async function createPublisherRequest(
       and(
         eq(publisherRequests.publisherId, publisher.id),
         eq(publisherRequests.type, type),
-        eq(publisherRequests.status, "open"),
+        inArray(publisherRequests.status, [...LIVE_REQUEST_STATUSES]),
       ),
     )
     .limit(1);
@@ -1470,11 +1513,16 @@ export async function createPublisherRequest(
     body: `«${publisher.agencyName}» أرسلت طلب ${REQUEST_TYPE_LABELS[type]}${data.message ? `: ${data.message.slice(0, 140)}` : ""}`,
     deeplink: `/dashboard/admin/publishers/${publisher.id}`,
   });
+  try {
+    await emailAdminsNewRequest(publisher, REQUEST_TYPE_LABELS[type], data.message?.trim() || null);
+  } catch (err) {
+    console.error("[Publisher Portal] admin request email failed:", err);
+  }
 
   return { ok: true, message: "أُرسل طلبكم للإدارة وسيتم التواصل معكم قريباً" };
 }
 
-export type PublisherRequestStatus = "open" | "closed" | "rejected";
+export type PublisherRequestStatus = "open" | "offered" | "accepted" | "closed" | "rejected";
 
 /** طلبات الوكالة نفسها — لتعرف أن طلبها وصل وما مصيره. */
 export async function listOwnPublisherRequests(publisherId: string) {
@@ -1487,6 +1535,7 @@ export async function listOwnPublisherRequests(publisherId: string) {
       createdAt: publisherRequests.createdAt,
       handledAt: publisherRequests.handledAt,
       adminNote: publisherRequests.adminNote,
+      offer: publisherRequests.offer,
     })
     .from(publisherRequests)
     .where(eq(publisherRequests.publisherId, publisherId))
@@ -1508,9 +1557,13 @@ export async function listPublisherRequests(status: PublisherRequestStatus | "al
       createdAt: publisherRequests.createdAt,
       handledAt: publisherRequests.handledAt,
       adminNote: publisherRequests.adminNote,
+      offer: publisherRequests.offer,
       publisherId: publishers.id,
       agencyName: publishers.agencyName,
       logoUrl: publishers.logoUrl,
+      contactPerson: publishers.contactPerson,
+      email: publishers.email,
+      phoneNumber: publishers.phoneNumber,
     })
     .from(publisherRequests)
     .innerJoin(publishers, eq(publisherRequests.publisherId, publishers.id))
@@ -1540,7 +1593,7 @@ export async function resolvePublisherRequest(
       handledAt: new Date(),
       adminNote: trimmedNote,
     })
-    .where(and(eq(publisherRequests.id, requestId), eq(publisherRequests.status, "open")))
+    .where(and(eq(publisherRequests.id, requestId), inArray(publisherRequests.status, [...LIVE_REQUEST_STATUSES])))
     .returning({ id: publisherRequests.id, requestedBy: publisherRequests.requestedBy, type: publisherRequests.type });
 
   if (!updated) return false;
@@ -1663,7 +1716,7 @@ export async function listPublishersRich(opts: { page?: number; limit?: number; 
         openRequests: sql<number>`count(*)`,
       })
       .from(publisherRequests)
-      .where(and(inArray(publisherRequests.publisherId, ids), eq(publisherRequests.status, "open")))
+      .where(and(inArray(publisherRequests.publisherId, ids), inArray(publisherRequests.status, ["open", "accepted"])))
       .groupBy(publisherRequests.publisherId),
   ]);
 
@@ -1790,7 +1843,8 @@ export async function getPublishersSummary() {
     db
       .select({ openRequests: sql<number>`count(*)` })
       .from(publisherRequests)
-      .where(eq(publisherRequests.status, "open")),
+      // بانتظار قرار الإدارة: طلب جديد، أو عرض قبلته الوكالة وينتظر تأكيد الدفع
+      .where(inArray(publisherRequests.status, ["open", "accepted"])),
   ]);
 
   return {

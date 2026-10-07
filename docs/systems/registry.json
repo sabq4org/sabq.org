@@ -258,6 +258,8 @@
         "server/ai-classifier.ts",
         "server/ai/contentAnalyzer.ts",
         "server/ai/editorialOutputGuards.ts",
+        "server/ai/editorialCompletenessRetry.ts",
+        "tests/unit/editorialCompletenessRetry.test.ts",
         "server/storyMatcher.ts",
         "server/smartCategoriesEngine.ts",
         "client/src/components/DashboardLayout.tsx",
@@ -293,6 +295,14 @@
         "tests/unit/editorialStakeholders.test.ts",
         "server/routes/publisherPortal.ts",
         "server/services/publisherPortalService.ts",
+        "server/services/publisherCreditService.ts",
+        "scripts/publisher-credit-reconcile.ts",
+        "tests/unit/publisherCreditCharge.integration.test.ts",
+        "server/services/publisherInsightsService.ts",
+        "server/services/publisherRenewalService.ts",
+        "tests/unit/publisherRenewal.test.ts",
+        "tests/unit/publisherRenewal.integration.test.ts",
+        "tests/unit/publisherInsights.integration.test.ts",
         "server/services/articleViewCounterService.ts",
         "server/services/articleViewStatsService.ts",
         "client/src/pages/admin/publishers/**",
@@ -422,7 +432,7 @@
       "owners": [
         "editorial"
       ],
-      "lastReviewed": "2026-10-01"
+      "lastReviewed": "2026-10-07"
     },
     {
       "id": "ifox",
@@ -1172,6 +1182,13 @@
         "client/src/components/social/SocialPublishDialog.tsx",
         "client/src/pages/dashboard/SocialPublishingPage.tsx",
         "client/src/pages/opinion-author/OpinionAuthorSocialProposalDialog.tsx",
+        "server/services/publisherSocialService.ts",
+        "client/src/pages/publisher/PublisherSocialCompose.tsx",
+        "client/src/pages/publisher/PublisherSocialPosts.tsx",
+        "client/src/components/publisher/TweetPreview.tsx",
+        "client/src/components/admin/publishers/PublisherSocialModeCard.tsx",
+        "tests/unit/publisherSocial.test.ts",
+        "tests/unit/publisherSocial.integration.test.ts",
         "tests/unit/socialPostText.test.ts",
         "tests/unit/socialTokenCrypto.test.ts",
         "tests/unit/socialPublishingLogic.test.ts",
@@ -1190,7 +1207,7 @@
         "editorial",
         "platform"
       ],
-      "lastReviewed": "2026-10-03"
+      "lastReviewed": "2026-10-04"
     },
     {
       "id": "sahraa-tv-block",

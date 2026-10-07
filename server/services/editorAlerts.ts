@@ -467,6 +467,30 @@ export async function sendEditorPublishAlert(article: ArticlePublishData): Promi
 }
 
 /**
+ * تنبيه واتساب قصير لأرقام رئيس التحرير المسجلة في إعدادات التنبيهات، لأحداث
+ * تحتاج انتباهه (مثل طلب وكالة نشر تغريدة). يتبع مفتاح الواتساب فقط لا مفتاح
+ * تنبيهات النشر. نص حر: يصل داخل نافذة الـ 24 ساعة كتنبيهات النشر نفسها.
+ */
+export async function sendEditorWhatsAppNotice(body: string): Promise<number> {
+  const settings = await getEditorAlertSettings();
+  if (!settings.whatsappEnabled) return 0;
+  const numbers = settings.whatsappNumbers?.length
+    ? settings.whatsappNumbers
+    : settings.whatsappNumber
+      ? [settings.whatsappNumber]
+      : [];
+  let sent = 0;
+  for (const to of numbers) {
+    try {
+      if (await sendWhatsAppMessage({ to, body })) sent++;
+    } catch (error) {
+      console.error(`[EditorAlerts] ❌ WhatsApp notice failed for ${to.substring(0, 8)}...:`, error);
+    }
+  }
+  return sent;
+}
+
+/**
  * Update editor alert settings
  */
 export async function updateEditorAlertSettings(settings: Partial<EditorAlertSettings>): Promise<EditorAlertSettings> {
