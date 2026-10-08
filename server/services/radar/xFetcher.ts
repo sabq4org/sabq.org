@@ -20,6 +20,7 @@ import {
   sabqInterestXQueryClause,
   shouldApplyTopicFilter,
 } from "./topicFilter";
+import { assertRadarEnabled } from "./runtime";
 
 // السعودية في تصنيف مواقع الترندات (WOEID)
 const DEFAULT_TRENDS_WOEID = Number(process.env.RADAR_X_TRENDS_WOEID || 23424938);
@@ -68,6 +69,7 @@ function normalizeTrend(trend: XTrendEntry, now: Date): NormalizedRadarItem {
 
 /** يجلب رصدة إكس ويحدّث مؤشرها — يستدعيه fetchSource عند type = "x" */
 export async function fetchXSource(source: RadarSource): Promise<NormalizedRadarItem[]> {
+  await assertRadarEnabled();
   const xType = (source.xType ?? "keyword") as XWatchType;
   const value = source.xValue?.trim();
   if (!value) throw new Error("رصدة إكس بلا قيمة (x_value)");
@@ -77,7 +79,9 @@ export async function fetchXSource(source: RadarSource): Promise<NormalizedRadar
   if (xType === "trend") {
     const woeid = /^\d+$/.test(value) ? Number(value) : DEFAULT_TRENDS_WOEID;
     const now = new Date();
-    return (await provider.trends(woeid)).map((trend) => normalizeTrend(trend, now));
+    const trends = await provider.trends(woeid);
+    await assertRadarEnabled();
+    return trends.map((trend) => normalizeTrend(trend, now));
   }
 
   let query = buildWatchQuery(xType, value);
@@ -87,6 +91,7 @@ export async function fetchXSource(source: RadarSource): Promise<NormalizedRadar
   }
 
   const tweets = await provider.searchRecent(query, source.xSinceId ?? undefined);
+  await assertRadarEnabled();
   const cursor = newestTweetId(tweets);
   if (cursor && cursor !== source.xSinceId) {
     await updateSourceCursor(source.id, cursor);

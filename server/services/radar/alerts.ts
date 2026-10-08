@@ -8,6 +8,7 @@ import type { RadarItem } from "@shared/schema";
 import { listRules, updateItem } from "./repo";
 import { matchAlertRules, type AlertMatch } from "./parsing";
 import { applyGates } from "./gates";
+import { assertRadarEnabled } from "./runtime";
 
 function telegramConfig(): { token: string; chatId: string } | null {
   const token = process.env.TELEGRAM_BOT_TOKEN;
@@ -23,6 +24,7 @@ const escapeHtml = (text: string) =>
   text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
 async function sendTelegramAlert(item: RadarItem, matches: AlertMatch[]): Promise<boolean> {
+  await assertRadarEnabled();
   const config = telegramConfig();
   if (!config) return false;
 
@@ -64,12 +66,14 @@ async function sendTelegramAlert(item: RadarItem, matches: AlertMatch[]): Promis
  */
 export async function processAlerts(items: RadarItem[]): Promise<number> {
   if (!items.length) return 0;
+  await assertRadarEnabled();
   const rules = await listRules(true);
   if (!rules.length) return 0;
 
   let sent = 0;
   const regate: RadarItem[] = [];
   for (const item of items) {
+    await assertRadarEnabled();
     if (item.alertedAt) continue;
     const matches = matchAlertRules(item, rules);
     if (!matches.length) continue;
@@ -86,6 +90,7 @@ export async function processAlerts(items: RadarItem[]): Promise<number> {
         console.error("[Radar Alerts] telegram send failed:", error);
       }
     }
+    await assertRadarEnabled();
     const row = await updateItem(item.id, {
       matchedKeywords,
       alertedAt: new Date(),

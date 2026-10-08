@@ -8,6 +8,7 @@ import type { RadarItem } from "@shared/schema";
 import { generateWithFallback } from "./aiChain";
 import { approvedCategories, updateItem } from "./repo";
 import { parseAnalysisPayload } from "./parsing";
+import { assertRadarEnabled } from "./runtime";
 
 const ANALYST_MODEL_CHAIN: AIModelConfig[] = [
   { provider: "anthropic", model: "claude-haiku-4-5", maxTokens: 6000, temperature: 0.2, feature: "radar" },
@@ -96,15 +97,18 @@ ${categoriesBrief}
 /** يحلل دفعة مواد بنداء نموذج واحد ويكتب النتائج على الصفوف. يعيد المواد المحدّثة. */
 export async function analyzeItems(items: RadarItem[]): Promise<RadarItem[]> {
   if (!items.length) return [];
+  await assertRadarEnabled();
   const categoryList = await approvedCategories();
   const validSlugs = new Set(categoryList.map((c) => c.slug));
   const prompt = buildAnalysisPrompt(items, categoryList);
 
   const response = await generateWithFallback(prompt, ANALYST_MODEL_CHAIN);
+  await assertRadarEnabled();
   const analyses = parseAnalysisPayload(response.content);
   const byId = new Map(analyses.map((a) => [a.id, a]));
   const updated: RadarItem[] = [];
   for (const item of items) {
+    await assertRadarEnabled();
     const analysis = byId.get(item.id);
     if (!analysis || !analysis.translatedTitle) {
       // النموذج أسقط المادة — تبقى new وتُعاد المحاولة بالدورة التالية

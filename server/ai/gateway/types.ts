@@ -71,6 +71,8 @@ interface BaseRequest {
   /** Explicit model override (dashboard "test" button, migration escape hatch). */
   model?: ModelRef;
   timeoutMs?: number;
+  /** Optional caller gate checked immediately before every provider transport. */
+  beforeAttempt?: () => Promise<void>;
 }
 
 export interface CompleteRequest extends BaseRequest {

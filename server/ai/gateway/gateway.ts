@@ -276,12 +276,13 @@ export class AIGateway {
 
   private async runChain<TRes>(
     op: AIOperation,
-    req: { feature: string; userId?: string; timeoutMs?: number },
+    req: { feature: string; userId?: string; timeoutMs?: number; beforeAttempt?: () => Promise<void> },
     cfg: ResolvedFeatureConfig,
     candidates: ModelRef[],
     call: (model: ModelRef, adapter: ProviderAdapter, signal: AbortSignal, timeoutMs: number) => Promise<TRes>,
   ): Promise<FailoverOutcome<TRes>> {
     const controller = new AbortController();
+    let guardRejected = false;
     const timeoutMs = req.timeoutMs ?? this.timeoutMs;
     const deadline = Date.now() + timeoutMs;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -300,10 +301,31 @@ export class AIGateway {
       isAvailable: (m) => !controller.signal.aborted && this.deps.breaker.isAvailable(m),
       run: (m) => this.limiter(() => {
         controller.signal.throwIfAborted();
-        return this.attempt(op, m, call, controller.signal, deadline);
+        return this.attempt(op, m, call, controller.signal, deadline, async () => {
+          if (!req.beforeAttempt) return;
+          try {
+            await req.beforeAttempt();
+          } catch (error) {
+            // A gate rejection is terminal: abort queued/retrying work and
+            // expose a non-retryable gateway error so failover cannot spend
+            // against another provider. The original error remains as cause
+            // for the caller's own state re-check.
+            guardRejected = true;
+            const terminal = new AIGatewayError("AI attempt guard rejected", {
+              code: "FEATURE_DISABLED",
+              retryable: false,
+              cause: error,
+            });
+            controller.abort(terminal);
+            throw terminal;
+          }
+        });
       }),
       onSuccess: (m) => this.deps.breaker.recordSuccess(m),
       onFailure: (m, err) => {
+        // A caller gate is not a provider failure:
+        // do not poison breaker state or emit a provider incident.
+        if (guardRejected && err.code === "FEATURE_DISABLED") return;
         this.deps.breaker.recordFailure(m, err);
         this.deps.logUsage({
           featureKey: req.feature,
@@ -325,7 +347,12 @@ export class AIGateway {
         });
       },
     }).catch((err) => {
-      if (err instanceof AIGatewayError && err.attempts && err.attempts.length > 0) {
+      if (
+        err instanceof AIGatewayError &&
+        err.attempts &&
+        err.attempts.length > 0 &&
+        !guardRejected
+      ) {
         this.deps.notifyIncident({
           kind: "chain_exhausted",
           featureKey: req.feature,
@@ -349,6 +376,7 @@ export class AIGateway {
     call: (model: ModelRef, adapter: ProviderAdapter, signal: AbortSignal, timeoutMs: number) => Promise<TRes>,
     signal: AbortSignal,
     deadline: number,
+    beforeAttempt?: () => Promise<void>,
   ): Promise<TRes> {
     const adapter = this.deps.getAdapter(model.provider)!;
 
@@ -357,6 +385,8 @@ export class AIGateway {
       return await pRetry(
         async () => {
           try {
+            signal.throwIfAborted();
+            await beforeAttempt?.();
             signal.throwIfAborted();
             return await call(model, adapter, signal, Math.max(1, deadline - Date.now()));
           } catch (err) {
