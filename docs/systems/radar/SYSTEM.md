@@ -1,18 +1,19 @@
 # المِرقَب / الرادار (`radar`)
 
-> آخر مراجعة: 2026-09-28 | المالك: editorial
+> آخر مراجعة: 2026-10-08 | المالك: editorial
 
 ## الغرض
 رصد إخباري كثيف (RSS + حسابات X) + إشارات كمية (قصص/زخم/صلة) وتنبيهات للمحررين.
 
 ## الحدود
-- **داخل النطاق:** `server/services/radar/**`, `server/routes/radar.ts`, `SmartRadar`, حزم البذر، تقارير القبول.
+- **داخل النطاق:** `server/services/radar/**`, `server/routes/radar.ts`, `server/jobs/radarJob.ts`, `SmartRadar`, حزم البذر، تقارير القبول.
 - **خارج النطاق:** SEO/SSR. فجوات التغطية — نظام `editorial` (`coverageGapMatcher`) يستهلك قصص/مواد الرادار.
 
 ## نقاط الدخول
 | الطبقة | المسار |
 |--------|--------|
 | Backend | `server/services/radar/` (cycle, triage, gates, clusterer, momentum, relevance, topicFilter) |
+| تشغيل | `GET /api/radar/status` و`PATCH /api/radar/status` (`{ enabled: boolean }`) — مسؤول النظام فقط |
 | Web | `client/src/pages/dashboard/SmartRadar.tsx` |
 | بذر | `npx tsx scripts/seed-radar-pack.ts --all` |
 | قبول المرحلة أ | `npx tsx scripts/radar-phase1-acceptance.ts` |
@@ -22,14 +23,18 @@
 `radar-clustering` · `radar-relevance` (عبر ai-hub؛ الفجوات تبقى `coverage-gap-matcher` تحت editorial)
 
 ## عقود مهمة / Gotchas
-- **قفل الإيقاف الإجباري:** `RADAR_FORCE_DISABLED=false` حالياً منذ إعادة التفعيل بقرار المالك في 2026-07-31. عند قلبه إلى `true` يتوقف الكرون والجلب اليدوي ودورة الرصد حتى لو `RADAR_ENABLED=true`، وتعيد مسارات `/api/radar/run` و`/api/radar/sources/:id/fetch` حالة 503.
+- **مفتاح التشغيل الشامل (2026-10-08):** زر في رأس لوحة الرادار يغيّر `system_settings.radar_runtime_enabled` (قيمة JSON boolean، غير عامة). القيمة المحفوظة تتغلب على `RADAR_ENABLED` دون إعادة نشر؛ عند غيابها فقط يؤخذ متغير البيئة. الحالة تُقرأ من قاعدة البيانات دون cache بين نسخ الخادم، وفشل القراءة أو قيمة غير صالحة يوقف التنفيذ احترازيًا.
+- **عقد الحالة:** `GET /api/radar/status` و`PATCH /api/radar/status` يعيدان `enabled` الفعلية و`reason` و`runtimeSettingSource` مع معلومات التحليل والأعلام القائمة. PATCH يقبل boolean فقط وبصلاحية مسؤول النظام نفسها. نبض الجدولة يبقى مسجلاً لإتاحة إعادة التشغيل، لكنه لا يبدأ دورة حين `enabled=false`.
+- **حدود الإيقاف:** يمنع الجلب الآلي واليدوي (RSS/JSON/X)، التحليل والتجميع بالذكاء الاصطناعي، التحويل والتطوير والتصدير والتنبيهات. المسارات اليدوية التنفيذية تعيد 503 عند الإيقاف؛ العرض والإعدادات والبيانات السابقة محفوظة. تُفحص الحالة بين المراحل وقبل نداءات المزوّدين والبدائل. قد يكتمل طلب خارجي بدأ قبل الإيقاف؛ المفتاح لا يضمن إلغاءه لدى المزوّد.
+- **قفل طارئ مستقل:** الثابت البرمجي `RADAR_FORCE_DISABLED` في `flags.ts` يتغلب على مفتاح التشغيل ولا يستطيع الزر رفعه. قيمته الحالية `false`.
+- **الحالة التشغيلية المطلوبة:** أوقف المالك الرادار مؤقتًا في 2026-10-08؛ ضُبط `RADAR_ENABLED=false` في الإنتاج كإيقاف فوري للجدولة وحُفظ `radar_runtime_enabled=false` في قاعدة البيانات. لا تعِد تفعيله تلقائيًا عند النشر أو الاختبار.
 - **الوصول (منذ 2026-07-19):** واجهة `/dashboard/radar` وواجهات `/api/radar/*` لمسؤول النظام فقط (`system_admin` / `system.admin` / `superadmin`). لا تُفتح لـ `admin` العادي ولا للمحررين — القائمة تستخدم `requireRoles` لتفادي تحويل الدور وwildcard الصلاحيات.
 - **قصص:** `radar_stories` + `radar_items.story_id` خلف `RADAR_CLUSTERING_ENABLED` (افتراضي false). عتبة cosine `RADAR_CLUSTER_THRESHOLD` (0.85) مع سقوط كلمات ≥ 0.7.
 - **زخم:** `radar_story_snapshots` + `radar_items.metrics` خلف `RADAR_MOMENTUM_ENABLED`.
 - **صلة:** `saudi_relevance` خلف `RADAR_RELEVANCE_ENABLED` — قواميس `server/services/radar/relevanceTerms.ts` (مضمّنة في الحزمة؛ ملفات `data/*.json` السابقة لم تكن تُنسخ لصورة Railway فكانت تُحمَّل فارغة).
 - **فجوات v2:** `RADAR_GAP_V2_ENABLED` في editorial matcher — وحدة القصة لا المادة؛ لا تُفعَّل قبل ثبات المرحلة أ.
 - فلتر اهتمام سبق على المصادر الأجنبية: `RADAR_TOPIC_FILTER_ENABLED` (افتراضي مفعّل).
-- التفعيل التشغيلي (عند رفع القفل): `RADAR_ENABLED=true` + مفاتيح X.
+- إعادة التفعيل التشغيلي: زر «تشغيل الرادار» يحفظ `true`؛ تبقى مفاتيح المزوّدين والأعلام الفرعية مطلوبة لخدماتها.
 - **حماية المزوّدين:** الجلب محدود افتراضياً إلى 4 مصادر متزامنة (`RADAR_FETCH_CONCURRENCY`، من 1 إلى 12). المصدر الذي يعيد HTTP 429 يدخل تبريداً افتراضياً 15 دقيقة (`RADAR_RATE_LIMIT_BACKOFF_MINUTES`، من 5 إلى 1440) بدل إعادة طلبه كل دقيقة.
 
 ## فرز الدقة (2026-09-28)

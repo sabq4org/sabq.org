@@ -9,6 +9,7 @@ import { aiGateway } from "../../ai/gateway";
 import { cosineSimilarity } from "../../embeddingsService";
 import { clusterThreshold, isClusteringEnabled } from "./flags";
 import { keywordContainment, topicFingerprintFor } from "./textNormalize";
+import { assertRadarEnabled, isRadarDisabledError } from "./runtime";
 
 export { isClusteringEnabled, clusterThreshold };
 
@@ -31,12 +32,27 @@ async function embedTexts(texts: string[]): Promise<number[][] | null> {
   try {
     const vectors: number[][] = [];
     for (let i = 0; i < texts.length; i += EMBED_BATCH) {
+      await assertRadarEnabled();
       const slice = texts.slice(i, i + EMBED_BATCH);
-      const res = await aiGateway.embed({ feature: FEATURE_KEY, input: slice, timeoutMs: 60_000 });
+      const res = await aiGateway.embed({
+        feature: FEATURE_KEY,
+        input: slice,
+        timeoutMs: 60_000,
+        beforeAttempt: assertRadarEnabled,
+      });
+      await assertRadarEnabled();
       vectors.push(...res.embeddings);
     }
     return vectors;
   } catch (error) {
+    // The gateway wraps a caller gate as terminal FEATURE_DISABLED; confirm
+    // the live Radar state before allowing keyword fallback.
+    try {
+      await assertRadarEnabled();
+    } catch (disabled) {
+      throw disabled;
+    }
+    if (isRadarDisabledError(error)) throw error;
     console.warn(
       "[RadarCluster] embeddings unavailable — keyword fallback:",
       error instanceof Error ? error.message : error
@@ -192,6 +208,7 @@ export async function clusterRadarItems(
 ): Promise<{ clustered: number; created: number; merged: number; storyIds: string[] }> {
   const touched = new Set<string>();
   if (!isClusteringEnabled() || !items.length) return { clustered: 0, created: 0, merged: 0, storyIds: [] };
+  await assertRadarEnabled();
 
   const unassigned = items.filter((i) => !i.storyId && i.status !== "filtered");
   const pending = await attachMergedCopies(unassigned, touched);
@@ -229,6 +246,7 @@ export async function clusterRadarItems(
   let merged = 0;
 
   for (let i = 0; i < pending.length; i++) {
+    await assertRadarEnabled();
     const item = pending[i];
     const vec = itemVectors?.[i] ?? null;
     let best: { story: RadarStory; score: number; idx: number } | null = null;

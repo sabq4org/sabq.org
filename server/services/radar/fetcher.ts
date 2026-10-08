@@ -13,6 +13,7 @@ import {
 } from "./parsing";
 import { filterItemsBySabqInterest, shouldApplyTopicFilter } from "./topicFilter";
 import { fetchXSource } from "./xFetcher";
+import { assertRadarEnabled } from "./runtime";
 
 const FETCH_TIMEOUT_MS = 15_000;
 const MAX_ITEMS_PER_FETCH = 30;
@@ -39,10 +40,13 @@ function cleanText(value: unknown, maxLength: number): string {
 }
 
 async function fetchRss(source: RadarSource): Promise<NormalizedRadarItem[]> {
+  await assertRadarEnabled();
   const feed = await rssParser.parseURL(resolveEnvPlaceholders(source.url, process.env));
+  await assertRadarEnabled();
   const gnewsLane = isGoogleNewsLane(source);
   const items: NormalizedRadarItem[] = [];
   for (const item of feed.items ?? []) {
+    await assertRadarEnabled();
     // feedSource إما نص مباشر أو {_: "الاسم", $: {url}} حسب المُفكِّك
     const rawSource = (item as any).feedSource;
     const publisher = cleanText(
@@ -102,6 +106,7 @@ function firstString(obj: Record<string, unknown>, keys: string[]): string {
 }
 
 async function fetchJson(source: RadarSource): Promise<NormalizedRadarItem[]> {
+  await assertRadarEnabled();
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   try {
@@ -114,10 +119,12 @@ async function fetchJson(source: RadarSource): Promise<NormalizedRadarItem[]> {
     });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const payload = await response.json();
+    await assertRadarEnabled();
     const rawItems = extractJsonArray(payload);
 
     const items: NormalizedRadarItem[] = [];
     for (const raw of rawItems) {
+      await assertRadarEnabled();
       // Event Registry يعلّم النسخ المكررة من نفس المادة عبر المصادر — لا نهدر تحليلًا عليها
       if (raw.isDuplicate === true) continue;
       const title = cleanText(firstString(raw, ["title", "headline", "name"]), 300);
@@ -168,12 +175,14 @@ async function fetchJson(source: RadarSource): Promise<NormalizedRadarItem[]> {
 }
 
 export async function fetchSource(source: RadarSource): Promise<NormalizedRadarItem[]> {
+  await assertRadarEnabled();
   let items =
     source.type === "x"
       ? await fetchXSource(source)
       : source.type === "json"
         ? await fetchJson(source)
         : await fetchRss(source);
+  await assertRadarEnabled();
   // مصادر أجنبية: اهتمام سبق فقط (سعودية / إيران-أمريكا / مونديال / نجوم / حدث كبير)
   if (shouldApplyTopicFilter(source) && source.type !== "x") {
     items = filterItemsBySabqInterest(items);
