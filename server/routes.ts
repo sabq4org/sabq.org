@@ -93,6 +93,7 @@ import { summarizeText, generateSocialPost, suggestImageQuery, translateContent,
 import { importFromRssFeed } from "./rssImporter";
 import { generateCalendarEventIdeas, generateArticleDraft } from "./services/calendarAi";
 import { generateNewsletterSubtitle } from "./services/smartCategoryClassifier";
+import { createOAuthWebCompletion } from "./oauthWebCompletion";
 import { requireAuth, requirePermission, requireAnyPermission, requireRole, logActivity, redactActivityValue, getUserPermissionData, getUserPermissions, getEffectiveUserPermissions, userHasAnyRole, userHasPermission, invalidateUserPermissionCache, getRoleAssignmentAuthority, roleAssignmentError, roleIdsAssignmentError } from "./rbac";
 import { PERMISSION_CODES, ROLE_LABELS_AR, ROLE_NAMES } from "@shared/rbac-constants";
 import { isReaderLikeRole, mergeRoleSignals, primaryRoleKey } from "@shared/effectiveRoles";
@@ -778,6 +779,9 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
     return res.redirect(`${destination}?${marker.toString()}`);
   };
 
+  // OAuth لا يتخطى 2FA: الاستراتيجية تعمل بلا جلسة، ثم إما «بانتظار 2FA» أو جلسة كاملة.
+  const oauthComplete = (provider: "google" | "apple") => createOAuthWebCompletion(provider, oauthLanding);
+
   // Google OAuth Routes
   app.get("/api/auth/google",
     requireOAuthStrategy("google"),
@@ -787,13 +791,11 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
   app.get("/api/auth/google/callback",
     requireOAuthStrategy("google"),
     passport.authenticate("google", {
+      session: false,
       failureRedirect: "/ar/login?error=google_auth_failed",
       failureMessage: true
     }),
-    (req, res) => {
-      console.log("✅ Google OAuth callback successful");
-      oauthLanding(req, res);
-    }
+    oauthComplete("google")
   );
 
   // Apple OAuth Routes
@@ -805,13 +807,11 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
   app.post("/api/auth/apple/callback",
     requireOAuthStrategy("apple"),
     passport.authenticate("apple", {
+      session: false,
       failureRedirect: "/ar/login?error=apple_auth_failed",
       failureMessage: true
     }),
-    (req, res) => {
-      console.log("✅ Apple OAuth callback successful");
-      oauthLanding(req, res);
-    }
+    oauthComplete("apple")
   );
 
   // Apple Sign-In — Mobile callback.
