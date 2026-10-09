@@ -696,11 +696,11 @@ struct HomeFeedView: View {
                 .padding(.horizontal, 14)
                 .padding(.vertical, 12)
                 .background(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    RoundedRectangle(cornerRadius: SabqTheme.blockRadius, style: .continuous)
                         .fill(SabqTheme.coral.opacity(0.07))
                 )
                 .overlay(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    RoundedRectangle(cornerRadius: SabqTheme.blockRadius, style: .continuous)
                         .stroke(SabqTheme.coral.opacity(0.18), lineWidth: 1)
                 )
             }
@@ -889,7 +889,7 @@ struct HomeFeedView: View {
     private var opinionsPreviewSection: some View {
         let opinions = Array(articlesStore.opinions.prefix(5))
         if !opinions.isEmpty {
-            HomeSectionCard(title: "آراء تستحق القراءة", fill: SabqTheme.identityCard, showsShadow: false) {
+            HomeSectionCard(title: "آراء تستحق القراءة", fill: SabqTheme.identityCard) {
                 NavigationLink(value: OpinionsRoute()) {
                     HomeSectionLinkLabel()
                 }
@@ -1091,11 +1091,8 @@ struct HomeFeedView: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                .fill(SabqTheme.identityCard)
-        )
-        .contentShape(RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous))
+        .sabqBlockSurface(SabqTheme.identityCard)
+        .contentShape(RoundedRectangle(cornerRadius: SabqTheme.blockRadius, style: .continuous))
     }
 
     // MARK: - Personal Journey Block (auth-gated)
@@ -1116,16 +1113,7 @@ struct HomeFeedView: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
-                .fill(SabqTheme.surface)
-                .shadow(color: SabqTheme.shadow, radius: 12, x: 0, y: 4)
-                .shadow(color: SabqTheme.deepShadow, radius: 1, x: 0, y: 1)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
-                .stroke(SabqTheme.outline.opacity(0.5), lineWidth: 0.5)
-        )
+        .sabqBlockSurface()
     }
 
     // MARK: Journey sub-views
@@ -1325,14 +1313,7 @@ struct HomeFeedView: View {
                 }
             }
             .padding(14)
-            .background(
-                RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                    .fill(SabqTheme.surface)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                    .stroke(gold.opacity(0.18), lineWidth: 0.5)
-            )
+            .sabqBlockSurface()
         }
     }
 
@@ -1386,14 +1367,7 @@ struct HomeFeedView: View {
                             .foregroundStyle(SabqTheme.coral)
                     }
                     .padding(14)
-                    .background(
-                        RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                            .fill(SabqTheme.surface)
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                            .stroke(SabqTheme.coral.opacity(0.18), lineWidth: 0.5)
-                    )
+                    .sabqBlockSurface()
                 }
                 .buttonStyle(.plain)
             }
