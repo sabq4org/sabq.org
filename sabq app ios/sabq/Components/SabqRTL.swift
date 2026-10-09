@@ -149,6 +149,19 @@ private struct SabqRTLLabel: UIViewRepresentable {
     }
 }
 
+/// مفتاح قياس القصّ: النص والعرض (بنصف نقطة) والخط وعدد الأسطر والتباعد.
+/// القياس يتكرر لكل عنوان أثناء التمرير؛ النتيجة تُحفظ حتى لا يُعاد بحث
+/// الكلمات و`sizeThatFits` على الخيط الرئيسي عند ثبات المدخلات.
+private struct SabqTruncationKey: Hashable {
+    let text: String
+    let widthHalfPoints: Int
+    let fontName: String
+    let fontMilli: Int
+    let traits: UInt32
+    let maxLines: Int
+    let spacingMilli: Int
+}
+
 /// ملصق يقصّ عنوانه بنفسه عند آخر كلمة تتسع في الأسطر المسموحة مع «…»،
 /// محسوبًا على عرضه الفعلي عند كل تخطيط. نمط الفقرة `.byWordWrapping` يلغي
 /// قصّ UILabel فكان العنوان يُبتر بلا «…»، وتفعيل قصّ الذيل على النص المنسّق
@@ -158,6 +171,17 @@ final class SabqTruncatingLabel: UILabel {
     private var textAttributes: [NSAttributedString.Key: Any] = [:]
     private var maxLines = 0
     private var renderedWidth: CGFloat = -1
+    private var renderSignature: RenderSignature?
+
+    private struct RenderSignature: Equatable {
+        var text: String
+        var maxLines: Int
+        var fontName: String
+        var fontMilli: Int
+        var traits: UInt32
+        var spacingMilli: Int
+        var color: UInt32
+    }
 
     func configure(text: String, attributes: [NSAttributedString.Key: Any], maxLines: Int) {
         fullText = text
@@ -165,14 +189,19 @@ final class SabqTruncatingLabel: UILabel {
         self.maxLines = maxLines
         numberOfLines = maxLines == 1 ? 1 : 0
         lineBreakMode = maxLines == 1 ? .byTruncatingTail : .byWordWrapping
-        renderedWidth = -1
+        let signature = Self.renderSignature(text: text, attributes: attributes, maxLines: maxLines, traits: traitCollection)
+        if signature == renderSignature, abs(bounds.width - renderedWidth) < 0.5, attributedText != nil {
+            return
+        }
+        renderSignature = signature
         render(for: bounds.width)
-        setNeedsLayout()
+        if bounds.width <= 0 { setNeedsLayout() }
     }
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        if bounds.width != renderedWidth { render(for: bounds.width) }
+        guard bounds.width > 0, abs(bounds.width - renderedWidth) >= 0.5 else { return }
+        render(for: bounds.width)
     }
 
     private func render(for width: CGFloat) {
@@ -181,6 +210,38 @@ final class SabqTruncatingLabel: UILabel {
             : fullText
         renderedWidth = width
         attributedText = NSAttributedString(string: shown, attributes: textAttributes)
+    }
+
+    private static func renderSignature(
+        text: String,
+        attributes: [NSAttributedString.Key: Any],
+        maxLines: Int,
+        traits: UITraitCollection
+    ) -> RenderSignature {
+        let font = attributes[.font] as? UIFont
+        let spacing = (attributes[.paragraphStyle] as? NSParagraphStyle)?.lineSpacing ?? 0
+        return RenderSignature(
+            text: text,
+            maxLines: maxLines,
+            fontName: font?.fontName ?? "",
+            fontMilli: Int(((font?.pointSize ?? 0) * 100).rounded()),
+            traits: font?.fontDescriptor.symbolicTraits.rawValue ?? 0,
+            spacingMilli: Int((spacing * 100).rounded()),
+            color: colorKey(attributes[.foregroundColor] as? UIColor, traits: traits)
+        )
+    }
+
+    /// لون محلوم حسب السمات حتى يُعاد الرسم عند تبديل الفاتح/الداكن، لا عند
+    /// كل `updateUIView` واللون نفسه.
+    private static func colorKey(_ color: UIColor?, traits: UITraitCollection) -> UInt32 {
+        guard let color else { return 0 }
+        let resolved = color.resolvedColor(with: traits)
+        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        guard resolved.getRed(&r, green: &g, blue: &b, alpha: &a) else { return 0 }
+        func channel(_ value: CGFloat) -> UInt32 {
+            UInt32(Int((min(max(value, 0), 1) * 255).rounded()))
+        }
+        return (channel(r) << 24) | (channel(g) << 16) | (channel(b) << 8) | channel(a)
     }
 
     /// ملصق قياس بإعدادات ملصق العرض نفسها: `boundingRect` لا يحسب التباعد
@@ -193,7 +254,40 @@ final class SabqTruncatingLabel: UILabel {
         return label
     }()
 
+    private static var textCache: [SabqTruncationKey: String] = [:]
+    private static var heightCache: [SabqTruncationKey: CGFloat] = [:]
+    private static let cacheLimit = 320
+
+    private static func cacheKey(text: String, font: UIFont, spacing: CGFloat, maxLines: Int, width: CGFloat) -> SabqTruncationKey {
+        SabqTruncationKey(
+            text: text,
+            widthHalfPoints: Int((width * 2).rounded()),
+            fontName: font.fontName,
+            fontMilli: Int((font.pointSize * 100).rounded()),
+            traits: font.fontDescriptor.symbolicTraits.rawValue,
+            maxLines: maxLines,
+            spacingMilli: Int((spacing * 100).rounded())
+        )
+    }
+
+    private static func remember<T>(_ cache: inout [SabqTruncationKey: T], _ key: SabqTruncationKey, _ value: T) {
+        if cache.count >= cacheLimit { cache.removeAll(keepingCapacity: true) }
+        cache[key] = value
+    }
+
     static func labelHeight(_ text: String, attributes: [NSAttributedString.Key: Any], maxLines: Int, width: CGFloat) -> CGFloat {
+        let spacing = (attributes[.paragraphStyle] as? NSParagraphStyle)?.lineSpacing ?? 0
+        if width > 0, let font = attributes[.font] as? UIFont {
+            let key = cacheKey(text: text, font: font, spacing: spacing, maxLines: maxLines, width: width)
+            if let cached = heightCache[key] { return cached }
+            let height = measureHeight(text, attributes: attributes, maxLines: maxLines, width: width)
+            remember(&heightCache, key, height)
+            return height
+        }
+        return measureHeight(text, attributes: attributes, maxLines: maxLines, width: width)
+    }
+
+    private static func measureHeight(_ text: String, attributes: [NSAttributedString.Key: Any], maxLines: Int, width: CGFloat) -> CGFloat {
         let label = sizingLabel
         label.numberOfLines = maxLines == 1 ? 1 : 0
         label.attributedText = NSAttributedString(string: text, attributes: attributes)
@@ -204,6 +298,31 @@ final class SabqTruncatingLabel: UILabel {
     static func displayedText(_ text: String, attributes: [NSAttributedString.Key: Any], maxLines: Int, width: CGFloat) -> String {
         guard maxLines > 1, width > 0, let font = attributes[.font] as? UIFont else { return text }
         let spacing = (attributes[.paragraphStyle] as? NSParagraphStyle)?.lineSpacing ?? 0
+        let key = cacheKey(text: text, font: font, spacing: spacing, maxLines: maxLines, width: width)
+        if let cached = textCache[key] { return cached }
+        let shown = computeDisplayedText(
+            text,
+            attributes: attributes,
+            maxLines: maxLines,
+            width: CGFloat(key.widthHalfPoints) / 2,
+            font: font,
+            spacing: spacing
+        )
+        remember(&textCache, key, shown)
+        return shown
+    }
+
+    /// قصّ عند حدّ كلمة. إن لم تتسع ولا كلمة (عنوان بلا مسافات، أو كلمة أطول
+    /// من العرض) نرجع إلى قصّ الذيل حرفًا حرفًا مع «…» بدل إرجاع النص كاملًا
+    /// فيفيض عن البطاقة.
+    private static func computeDisplayedText(
+        _ text: String,
+        attributes: [NSAttributedString.Key: Any],
+        maxLines: Int,
+        width: CGFloat,
+        font: UIFont,
+        spacing: CGFloat
+    ) -> String {
         // ارتفاع n أسطر، مع تسامح لإضافة تباعد بعد السطر الأخير أو عدمها.
         let maxHeight = CGFloat(maxLines) * (font.lineHeight + spacing) + 1
         func fits(_ candidate: String) -> Bool {
@@ -211,17 +330,38 @@ final class SabqTruncatingLabel: UILabel {
         }
         if fits(text) { return text }
 
-        let words = text.split(separator: " ")
+        let words = text.split(separator: " ", omittingEmptySubsequences: true)
+        if words.count > 1 {
+            var low = 0
+            var high = words.count - 1
+            while low < high {
+                let mid = (low + high + 1) / 2
+                if fits(words[..<mid].joined(separator: " ") + "…") {
+                    low = mid
+                } else {
+                    high = mid - 1
+                }
+            }
+            if low > 0 {
+                return words[..<low].joined(separator: " ") + "…"
+            }
+        }
+        return truncatedByCharacter(text, fits: fits)
+    }
+
+    private static func truncatedByCharacter(_ text: String, fits: (String) -> Bool) -> String {
+        let chars = Array(text)
         var low = 0
-        var high = words.count - 1
+        var high = chars.count
         while low < high {
             let mid = (low + high + 1) / 2
-            if fits(words[..<mid].joined(separator: " ") + "…") {
+            if fits(String(chars.prefix(mid)) + "…") {
                 low = mid
             } else {
                 high = mid - 1
             }
         }
-        return low > 0 ? words[..<low].joined(separator: " ") + "…" : text
+        guard low > 0 else { return "…" }
+        return String(chars.prefix(low)) + "…"
     }
 }

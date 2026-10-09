@@ -539,9 +539,13 @@ struct FocalCachedAsyncImage<Placeholder: View>: View {
     /// صورة بعيدة الشكل عن الإطار (إنفوغرافيك طولي 9:16 أو مربعة في إطار 16:9)
     /// تُعرض كاملة في الوسط فوق نسخة مموّهة منها بدل قصّ معظمها.
     var fitsMismatchedAspect: Bool = false
+    /// شعار أو لوحة على خلفية بيضاء تقريبًا: تُعرض كاملة فوق أرضية ملوّنة
+    /// خفيفة بدل أن تذوب في بطاقة بيضاء عند القصّ حتى الحافة.
+    var plateLightBackdrop: Bool = false
     @ViewBuilder let placeholder: () -> Placeholder
 
     @State private var image: UIImage?
+    @State private var plateOnLight = false
     // التلاشي يُدار بـ opacity مستقلة بدل .transition — حتى لا يلتقط أنيميشن
     // الإدراج إعادةَ حساب إزاحة التركيز أثناء استقرار التخطيط عند التحميل
     // (كان ذلك يُحدث «انزلاق الصورة + فراغ جانبي» لحظيًا، أوضحه عرض Pro Max).
@@ -552,12 +556,14 @@ struct FocalCachedAsyncImage<Placeholder: View>: View {
         focalPoint: ImageFocalPoint?,
         maxPixelSize: CGFloat = 1400,
         fitsMismatchedAspect: Bool = false,
+        plateLightBackdrop: Bool = false,
         @ViewBuilder placeholder: @escaping () -> Placeholder
     ) {
         self.url = url
         self.focalPoint = focalPoint
         self.maxPixelSize = maxPixelSize
         self.fitsMismatchedAspect = fitsMismatchedAspect
+        self.plateLightBackdrop = plateLightBackdrop
         self.placeholder = placeholder
     }
 
@@ -566,7 +572,9 @@ struct FocalCachedAsyncImage<Placeholder: View>: View {
             ZStack(alignment: .topLeading) {
                 if let image {
                     Group {
-                        if fitsMismatchedAspect && Self.isAspectMismatched(image.size, proxy.size) {
+                        if plateOnLight {
+                            platedImage(image, in: proxy.size)
+                        } else if fitsMismatchedAspect && Self.isAspectMismatched(image.size, proxy.size) {
                             letterboxedImage(image, in: proxy.size)
                         } else {
                             focalImage(image, in: proxy.size)
@@ -598,6 +606,49 @@ struct FocalCachedAsyncImage<Placeholder: View>: View {
         guard image.width > 0, image.height > 0, container.width > 0, container.height > 0 else { return false }
         let ratio = (image.width / image.height) / (container.width / container.height)
         return ratio < 0.8 || ratio > 1.25
+    }
+
+    /// أكثر من نصف العيّنة قريب من الأبيض: شعار أو مستند على خلفية فاتحة.
+    private static func isMostlyLight(_ image: UIImage) -> Bool {
+        let side = 16
+        guard let cgImage = image.cgImage else { return false }
+        var pixels = [UInt8](repeating: 0, count: side * side * 4)
+        guard let ctx = CGContext(
+            data: &pixels,
+            width: side,
+            height: side,
+            bitsPerComponent: 8,
+            bytesPerRow: side * 4,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else { return false }
+        ctx.interpolationQuality = .low
+        ctx.draw(cgImage, in: CGRect(x: 0, y: 0, width: side, height: side))
+        var light = 0
+        let total = side * side
+        for index in 0..<total {
+            let offset = index * 4
+            if pixels[offset + 3] < 16 { continue }
+            let luma = (54 * Int(pixels[offset]) + 183 * Int(pixels[offset + 1]) + 18 * Int(pixels[offset + 2])) / 255
+            if luma >= 230 { light += 1 }
+        }
+        return light * 2 >= total
+    }
+
+    private func platedImage(_ image: UIImage, in container: CGSize) -> some View {
+        let size = CGSize(width: max(1, container.width), height: max(1, container.height))
+        return ZStack {
+            SabqTheme.softFill
+            SabqTheme.primaryEnd.opacity(0.07)
+            Image(uiImage: image)
+                .resizable()
+                .interpolation(.high)
+                .scaledToFit()
+                .padding(.horizontal, 22)
+                .padding(.vertical, 12)
+        }
+        .frame(width: size.width, height: size.height)
+        .animation(nil, value: container)
     }
 
     private func letterboxedImage(_ image: UIImage, in container: CGSize) -> some View {
@@ -652,13 +703,14 @@ struct FocalCachedAsyncImage<Placeholder: View>: View {
     private func loadImage(for requestedURL: URL?) async {
         guard let requestedURL else {
             image = nil
+            plateOnLight = false
             shown = false
             return
         }
         if let cached = ImageCache.cached(requestedURL, minPixelSize: maxPixelSize) {
             // صورة مخبّأة: ضعها بموضعها النهائي فورًا بلا أنيميشن هندسة، ثم
             // لاشِ الشفافية فقط — فلا تنزلق ولا يظهر فراغ على الشاشات العريضة.
-            image = cached
+            adopt(cached)
             shown = false
             withAnimation(.easeOut(duration: 0.2)) { shown = true }
             return
@@ -693,13 +745,19 @@ struct FocalCachedAsyncImage<Placeholder: View>: View {
         if let loaded {
             // ضبط الصورة بلا أنيميشن (موضع نهائي فورًا) ثم تلاشي الشفافية فقط —
             // يمنع التقاطَ أنيميشنِ الإدراج لإعادة حساب إزاحة التركيز.
-            image = loaded
+            adopt(loaded)
             shown = false
             withAnimation(.easeOut(duration: 0.25)) { shown = true }
         } else {
             image = nil
+            plateOnLight = false
             shown = false
         }
+    }
+
+    private func adopt(_ loaded: UIImage) {
+        image = loaded
+        plateOnLight = plateLightBackdrop && Self.isMostlyLight(loaded)
     }
 }
 
@@ -1568,6 +1626,15 @@ struct DetailLabelPill: View {
 
 // MARK: - Featured Article Card
 
+/// مقاس هيرو الرئيسية. 2.2:1 أقصر من 16:9 حتى تظهر بداية القسم التالي
+/// على iPhone 16 Pro دون تمرير. ميزانية النص عند حجم Dynamic Type الافتراضي
+/// (شريط بيانات بهدف لمس 44 + عنوان 3 أسطر بخط 18 + موجز سطر + حشوة 12×2)
+/// وتتدرّج في الشاشة عبر `@ScaledMetric`.
+enum FeaturedHeroMetrics {
+    static let imageAspect: CGFloat = 2.2
+    static let textBudget: CGFloat = 212
+}
+
 struct FeaturedArticleCard: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let article: Article
@@ -1584,12 +1651,17 @@ struct FeaturedArticleCard: View {
             // that squeeze; carousel height tracks the same math.
             Color.clear
                 .frame(maxWidth: .infinity)
-                .aspectRatio(16.0 / 9.0, contentMode: .fit)
+                .aspectRatio(FeaturedHeroMetrics.imageAspect, contentMode: .fit)
                 .fixedSize(horizontal: false, vertical: true)
                 .overlay {
                     Group {
                         if let urlString = article.imageURL, let url = URL(string: urlString) {
-                            FocalCachedAsyncImage(url: url, focalPoint: article.imageFocalPoint, fitsMismatchedAspect: true) {
+                            FocalCachedAsyncImage(
+                                url: url,
+                                focalPoint: article.imageFocalPoint,
+                                fitsMismatchedAspect: true,
+                                plateLightBackdrop: true
+                            ) {
                                 articleImagePlaceholder
                                     .overlay {
                                         ProgressView()
@@ -1603,15 +1675,10 @@ struct FeaturedArticleCard: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
                 .clipped()
-                .clipShape(
-                    UnevenRoundedRectangle(
-                        topLeadingRadius: SabqTheme.cardRadius,
-                        bottomLeadingRadius: 0,
-                        bottomTrailingRadius: 0,
-                        topTrailingRadius: SabqTheme.cardRadius,
-                        style: .continuous
-                    )
-                )
+                .clipShape(heroImageShape)
+                .overlay {
+                    heroImageShape.stroke(SabqTheme.outline.opacity(0.7), lineWidth: 1)
+                }
                 .aiImageBadgeOverlay(
                     isVisible: article.isAiGeneratedImage,
                     model: article.aiImageModel,
@@ -1622,13 +1689,14 @@ struct FeaturedArticleCard: View {
             // image overlay per user direction 2026-05-15 — carousel
             // card leads with hero photo + title alone.)
 
-            VStack(alignment: .leading, spacing: 12) {
-                // التصنيف بلونه ووقت النشر فوق العنوان، بدل التاريخ الكامل في
-                // الأسفل البعيد عن قارئ يتصفح اليوم نفسه (نموذج 2026-10-09).
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
+            VStack(alignment: .leading, spacing: 8) {
+                // التصنيف والوقت ومدة القراءة في سطر واحد مع الحفظ، حتى لا
+                // يحجز زر المحفوظات صفًا كاملًا تحت الموجز.
+                HStack(alignment: .center, spacing: 6) {
                     Text(article.categoryTitle)
                         .font(SabqFonts.app(size: 12, weight: .semibold))
                         .foregroundStyle(article.category.tint)
+                        .lineLimit(1)
                     Text("·")
                         .font(SabqFonts.app(size: 12, weight: .regular))
                         .foregroundStyle(SabqTheme.tertiaryInk)
@@ -1636,42 +1704,16 @@ struct FeaturedArticleCard: View {
                         .font(SabqFonts.app(size: 12, weight: .regular))
                         .foregroundStyle(SabqTheme.tertiaryInk)
                         .monospacedDigit()
-                }
-                .lineLimit(1)
-
-                // `fixedSize(horizontal: false, vertical: true)` is what
-                // forces the Text to respect the parent's width instead
-                // of taking its intrinsic single-line width. Without it
-                // the long Arabic title bled past the card edge, clipping
-                // the start of every line (looked like "أبو" was missing
-                // from "أبوظبي").
-                SabqRTLText(
-                    article.title,
-                    uiFont: SabqFonts.uiApp(size: 19, weight: .semibold),
-                    color: SabqTheme.ink,
-                    lineLimit: dynamicTypeSize.isAccessibilitySize ? 0 : 3,
-                    lineSpacing: 4
-                )
-
-                SabqRTLText(
-                    article.excerpt,
-                    uiFont: SabqFonts.uiApp(size: 14, weight: .regular),
-                    color: SabqTheme.secondaryInk,
-                    lineLimit: dynamicTypeSize.isAccessibilitySize ? 0 : 2,
-                    lineSpacing: 3
-                )
-
-                let metadataLayout = dynamicTypeSize.isAccessibilitySize
-                    ? AnyLayout(VStackLayout(alignment: .leading, spacing: 12))
-                    : AnyLayout(HStackLayout(spacing: 12))
-                metadataLayout {
+                        .lineLimit(1)
+                    Text("·")
+                        .font(SabqFonts.app(size: 12, weight: .regular))
+                        .foregroundStyle(SabqTheme.tertiaryInk)
                     Text(article.readingTime)
                         .font(SabqFonts.app(size: 12, weight: .regular))
                         .monospacedDigit()
                         .foregroundStyle(SabqTheme.tertiaryInk)
-
-                    Spacer(minLength: 0)
-
+                        .lineLimit(1)
+                    Spacer(minLength: 4)
                     Button {
                         SabqHaptics.light()
                         onBookmark()
@@ -1681,13 +1723,33 @@ struct FeaturedArticleCard: View {
                             .foregroundStyle(isBookmarked ? SabqTheme.primaryEnd : SabqTheme.tertiaryInk)
                             .scaleEffect(isBookmarked ? 1.15 : 1)
                             .animation(.spring(response: 0.3, dampingFraction: 0.5), value: isBookmarked)
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .frame(minWidth: 44, minHeight: 44)
                     .accessibilityLabel(isBookmarked ? "إزالة من المحفوظات" : "حفظ المقال")
                 }
+
+                SabqRTLText(
+                    article.title,
+                    uiFont: SabqFonts.uiApp(size: 18, weight: .semibold),
+                    color: SabqTheme.ink,
+                    lineLimit: dynamicTypeSize.isAccessibilitySize ? 0 : 3,
+                    lineSpacing: 3
+                )
+
+                if !article.excerpt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    SabqRTLText(
+                        article.excerpt,
+                        uiFont: SabqFonts.uiApp(size: 14, weight: .regular),
+                        color: SabqTheme.secondaryInk,
+                        lineLimit: dynamicTypeSize.isAccessibilitySize ? 0 : 1,
+                        lineSpacing: 2
+                    )
+                }
             }
-            .padding(20)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .frame(maxWidth: .infinity)
@@ -1700,6 +1762,16 @@ struct FeaturedArticleCard: View {
         .overlay(
             RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
                 .stroke(SabqTheme.outline.opacity(0.5), lineWidth: 0.5)
+        )
+    }
+
+    private var heroImageShape: UnevenRoundedRectangle {
+        UnevenRoundedRectangle(
+            topLeadingRadius: SabqTheme.cardRadius,
+            bottomLeadingRadius: 0,
+            bottomTrailingRadius: 0,
+            topTrailingRadius: SabqTheme.cardRadius,
+            style: .continuous
         )
     }
 

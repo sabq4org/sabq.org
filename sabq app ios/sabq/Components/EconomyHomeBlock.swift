@@ -201,6 +201,24 @@ struct EconomyHomeBlock: View {
     }
 }
 
+/// حصص شريط القطاعات بحيث يبقى المجموع داخل عرض الشريط حتى لو تجاوزت
+/// الحصص القادمة من الخادم 100 (الباقي يُكمَّل إلى 100 ثم تُطبَّع النسبة).
+nonisolated enum EconomyShareLayout {
+    static func fractions(shares: [Double]) -> [Double] {
+        let safe = shares.map { value -> Double in
+            guard value.isFinite, value > 0 else { return 0 }
+            return value
+        }
+        let sum = safe.reduce(0, +)
+        let rest = max(0, 100 - sum)
+        let total = sum + rest
+        guard total > 0.0001 else {
+            return Array(repeating: 0, count: safe.count) + [0]
+        }
+        return safe.map { $0 / total } + [rest / total]
+    }
+}
+
 // MARK: - بطاقة «أين أنفق السعوديون؟» في الرئيسية
 //
 // الجزء العلوي ظاهر دائمًا: العنوان، والرقم، والتغيّر عن الأسبوع السابق، وأعمدة
@@ -230,8 +248,18 @@ struct EconomyWeeklyHomeCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            header
-            figureRow
+            Button(action: toggle) {
+                VStack(alignment: .leading, spacing: 14) {
+                    header
+                    figureRow
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint(isExpanded ? "إخفاء توزيع الإنفاق" : "عرض أين صُرف الإنفاق")
+            .accessibilityValue(isExpanded ? "موسع" : "مطوي")
+
             if isExpanded {
                 whereSection
                     .transition(.opacity.combined(with: .move(edge: .top)))
@@ -242,11 +270,10 @@ struct EconomyWeeklyHomeCard: View {
         .background(
             RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
                 .fill(SabqTheme.surface)
-                .shadow(color: SabqTheme.shadow, radius: 12, x: 0, y: 4)
         )
         .clipShape(RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous))
-        .contentShape(RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous))
-        .onTapGesture { toggle() }
+        // الظل بعد القصّ حتى لا يبتلعه `.clipShape` (كان يُرسم داخل الخلفية ثم يُقص).
+        .shadow(color: SabqTheme.shadow, radius: 12, x: 0, y: 4)
         .accessibilityIdentifier("economy.home.teaser")
     }
 
@@ -268,16 +295,13 @@ struct EconomyWeeklyHomeCard: View {
                 .font(SabqFonts.app(size: 11, weight: .regular))
                 .foregroundStyle(SabqTheme.tertiaryInk)
                 .lineLimit(1)
-            Button(action: toggle) {
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(SabqTheme.primaryEnd)
-                    .rotationEffect(.degrees(isExpanded ? 180 : 0))
-                    .frame(width: 28, height: 28)
-                    .background(Circle().fill(SabqTheme.primaryEnd.opacity(0.12)))
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(isExpanded ? "إخفاء توزيع الإنفاق" : "عرض أين صُرف الإنفاق")
+            Image(systemName: "chevron.down")
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(SabqTheme.primaryEnd)
+                .rotationEffect(.degrees(isExpanded ? 180 : 0))
+                .frame(width: 28, height: 28)
+                .background(Circle().fill(SabqTheme.primaryEnd.opacity(0.12)))
+                .accessibilityHidden(true)
         }
     }
 
@@ -347,7 +371,9 @@ struct EconomyWeeklyHomeCard: View {
 
     private var whereSection: some View {
         let shown = topSectors
-        let rest = max(0, 100 - shown.reduce(0) { $0 + $1.share })
+        let fractions = EconomyShareLayout.fractions(shares: shown.map(\.share))
+        let pieces = Array(fractions.dropLast())
+        let rest = fractions.last ?? 0
         return VStack(alignment: .leading, spacing: 10) {
             Rectangle().fill(SabqTheme.outline).frame(height: 1)
 
@@ -356,15 +382,22 @@ struct EconomyWeeklyHomeCard: View {
                 .foregroundStyle(SabqTheme.secondaryInk)
 
             GeometryReader { geo in
-                let gaps = CGFloat(shown.count) * 2
+                let visiblePieces = pieces.filter { $0 > 0.001 }.count
+                let segmentCount = visiblePieces + (rest > 0.001 ? 1 : 0)
+                let gaps = CGFloat(max(0, segmentCount - 1)) * 2
                 let usable = max(0, geo.size.width - gaps)
                 HStack(spacing: 2) {
-                    ForEach(Array(shown.enumerated()), id: \.element.id) { index, sector in
-                        Self.sectorColors[index % Self.sectorColors.count]
-                            .frame(width: usable * CGFloat(sector.share / 100))
+                    ForEach(Array(shown.enumerated()), id: \.element.id) { index, _ in
+                        let fraction = index < pieces.count ? pieces[index] : 0
+                        if fraction > 0.001 {
+                            Self.sectorColors[index % Self.sectorColors.count]
+                                .frame(width: usable * CGFloat(fraction))
+                        }
                     }
-                    SabqTheme.outline
-                        .frame(width: usable * CGFloat(rest / 100))
+                    if rest > 0.001 {
+                        SabqTheme.outline
+                            .frame(width: usable * CGFloat(rest))
+                    }
                 }
             }
             .frame(height: 10)

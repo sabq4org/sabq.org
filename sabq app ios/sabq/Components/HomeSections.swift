@@ -183,6 +183,8 @@ struct LatestTimelineRow: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let article: Article
     var isNew: Bool = false
+    var isBookmarked: Bool = false
+    var onBookmark: () -> Void = {}
 
     var body: some View {
         HStack(alignment: .top, spacing: LatestTimelineStyle.gap) {
@@ -218,7 +220,7 @@ struct LatestTimelineRow: View {
     }
 
     private var kicker: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
+        HStack(alignment: .center, spacing: 8) {
             HStack(alignment: .firstTextBaseline, spacing: 2) {
                 Text(SabqFormatters.riyadhHourMinute.string(from: article.publishDate))
                     .font(SabqFonts.app(size: 12, weight: .bold))
@@ -237,6 +239,19 @@ struct LatestTimelineRow: View {
                 .font(SabqFonts.app(size: 12, weight: .semibold))
                 .foregroundStyle(article.category.tint)
                 .lineLimit(1)
+            Spacer(minLength: 4)
+            Button {
+                SabqHaptics.light()
+                onBookmark()
+            } label: {
+                Image(systemName: isBookmarked ? "bookmark.fill" : "bookmark")
+                    .font(SabqFonts.app(size: 14, weight: .medium))
+                    .foregroundStyle(isBookmarked ? SabqTheme.primaryEnd : SabqTheme.tertiaryInk)
+                    .frame(width: 44, height: 32)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(isBookmarked ? "إزالة من المحفوظات" : "حفظ المقال")
         }
         .fixedSize(horizontal: false, vertical: true)
     }

@@ -8,6 +8,35 @@ private final class ScrollOffsetRef {
     var value: CGFloat = 0
 }
 
+/// «آخر الأخبار» كانت تُصفّى من جديد في كل إعادة رسم (تمرير الرأس، حفظ،
+/// مؤشر الهيرو). نُبقي آخر نتيجة ما دامت بصمة المعرفات والعناوين كما هي.
+private final class LatestTimelineMemo {
+    private var fingerprint: Int?
+    private var value: [Article] = []
+
+    func resolve(filtered: [Article], opinions: [OpinionArticle], skipID: String?) -> [Article] {
+        var hasher = Hasher()
+        hasher.combine(skipID)
+        hasher.combine(filtered.count)
+        for article in filtered {
+            hasher.combine(article.id)
+            hasher.combine(article.title)
+            hasher.combine(article.imageURL)
+            hasher.combine(article.publishDate.timeIntervalSinceReferenceDate)
+        }
+        hasher.combine(opinions.count)
+        for opinion in opinions {
+            hasher.combine(opinion.id)
+        }
+        let stamp = hasher.finalize()
+        if stamp == fingerprint { return value }
+        fingerprint = stamp
+        let blocked = Set(opinions.map(\.id))
+        value = filtered.filter { $0.id != skipID && !blocked.contains($0.id) }
+        return value
+    }
+}
+
 /// Drives the LoyaltyCelebrationBanner — pairs the active tier with
 /// the reason it's showing so the banner can pick the right copy.
 struct LoyaltyBannerState: Equatable {
@@ -80,9 +109,10 @@ struct HomeFeedView: View {
     /// عرض عمود المحتوى مقيسًا من الحاوية لا من `UIScreen` — عرض الشاشة ليس
     /// مساحة النافذة على iPad المقسّم أو Stage Manager (تدقيق iOS 27، F11).
     @State private var feedContentWidth: CGFloat = 0
-    /// ميزانية كتلة النص تحت الهيرو (سطر التصنيف + عنوان 3 أسطر + موجز سطرين + بيانات +
-    /// حشو 20×2) — تتدرّج مع Dynamic Type كما تتدرّج خطوط البطاقة نفسها.
-    @ScaledMetric(relativeTo: .body) private var featuredTextBudget: CGFloat = 282
+    @State private var latestTimelineMemo = LatestTimelineMemo()
+    /// ميزانية كتلة النص تحت الهيرو — انظر `FeaturedHeroMetrics`. تتدرّج مع
+    /// Dynamic Type كما تتدرّج خطوط البطاقة نفسها.
+    @ScaledMetric(relativeTo: .body) private var featuredTextBudget: CGFloat = FeaturedHeroMetrics.textBudget
     /// Drives the modal push to "حسابي / نقاطي" when the user taps the
     /// LoyaltyStripView inside the personal-journey block.
     @State private var showLoyaltyAccount = false
@@ -134,10 +164,9 @@ struct HomeFeedView: View {
         ScrollViewReader { scrollProxy in
             ScrollView(showsIndicators: false) {
                 if isContentReady {
-                    // Newspaper-first home: عاجل → هيرو → رياضة → رحلة → آخر الأخبار.
-                    // Secondary blocks (ستوريز، تقويم، نشرة، ترند…) live in
-                    // a collapsed «المزيد اليوم» disclosure.
-                    CollapsingVStack(spacing: 20) {
+                    // الطيّة الأولى: الرأس ثم العاجل ثم الهيرو، والموجز سطرًا
+                    // تحته حتى تظهر بداية القسم التالي دون تمرير على iPhone 16 Pro.
+                    CollapsingVStack(spacing: 16) {
                         Color.clear
                             .frame(height: 0)
                             .id(Self.scrollTopID)
@@ -162,12 +191,6 @@ struct HomeFeedView: View {
                         )
                     }
 
-                    NavigationLink(value: DailyBriefRoute()) {
-                        greetingBlock
-                    }
-                    .buttonStyle(.plain)
-                    .animatedAppear(index: 0)
-
                     // عاجل — الشريط الوحيد المسموح فوق الهيرو.
                     if let ticker = breakingTicker, !ticker.headlines.isEmpty {
                         BreakingTickerBar(headlines: ticker.headlines)
@@ -179,6 +202,12 @@ struct HomeFeedView: View {
 
                     featuredSection
                         .animatedAppear(index: 2)
+
+                    NavigationLink(value: DailyBriefRoute()) {
+                        greetingBlock
+                    }
+                    .buttonStyle(.plain)
+                    .animatedAppear(index: 0)
 
                     // الاقتصاد الحي: «أين أنفق السعوديون…» أو «السعوديون في شهر بالأرقام»
                     // عند نشرة جديدة — يختفي ذاتيًا بلا بيانات (نقل الويب #1493–#1506).
@@ -239,9 +268,9 @@ struct HomeFeedView: View {
                 }
                 .frame(width: max(0, container.size.width - 32), alignment: .leading)
                 .padding(.horizontal, 16)
-                // 18 + مسافة العمود (20) التي كان VStack يحجزها بعد مرساة التمرير
-                // الصفرية؛ CollapsingVStack لا يحجزها فنعوّضها هنا لبقاء الرأس مكانه.
-                .padding(.top, 38)
+                // فراغ قصير تحت المنطقة الآمنة؛ المرساة الصفرية لا تحجز مسافة
+                // في CollapsingVStack فالرأس يبدأ هنا مباشرة.
+                .padding(.top, 20)
                 .padding(.bottom, 40)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 } else {
@@ -289,12 +318,16 @@ struct HomeFeedView: View {
                 // للبطاقة الأولى حتى يراه المحرر فور السحب للتحديث.
                 featuredIndex = 0
             }
-            // شريط "⬆️ X أخبار جديدة" عائم أسفل الشاشة فوق شريط التبويبات —
-            // في الأعلى كان يغطي زر البحث في رأس الرئيسية. يسمح باللمس فقط
-            // عندما يظهر الشريط.
-            .overlay(alignment: .bottom) {
-                newArticlesBanner(proxy: scrollProxy)
-                    .allowsHitTesting(articlesStore.newArticlesCount > 0)
+            // شريط "⬆️ X أخبار جديدة" داخل المنطقة الآمنة فوق شريط التبويبات
+            // ومؤشر الرئيسية — الإلصاق على حافة العرض كان يغطيهما على iOS 26+.
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                Group {
+                    if articlesStore.newArticlesCount > 0 {
+                        newArticlesBanner(proxy: scrollProxy)
+                            .padding(.bottom, 8)
+                    }
+                }
+                .animation(.easeInOut(duration: 0.25), value: articlesStore.newArticlesCount > 0)
             }
             // استطلاع خفيف لإشارة إبطال الكاش (نفس نمط الويب):
             // GET /api/cache-invalidation/check كل 30ث — وجلب الرئيسية فقط
@@ -454,7 +487,6 @@ struct HomeFeedView: View {
                 .shadow(color: SabqTheme.primaryEnd.opacity(0.35), radius: 10, x: 0, y: 4)
             }
             .buttonStyle(.plain)
-            .padding(.bottom, 14)
             .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             .transition(.move(edge: .bottom).combined(with: .opacity))
         }
@@ -767,10 +799,8 @@ struct HomeFeedView: View {
             // the bottom of the TabView frame with a Spacer-sized gap above.
             .tabViewStyle(.page(indexDisplayMode: .never))
             .id(articlesStore.featuredCarouselRevision)
-            // Height must track screen width: hero is 16:9 full-bleed, so a
-            // fixed 470pt was too short on Pro/Pro Max — SwiftUI then
-            // compressed the aspectRatio(.fit) hero horizontally while the
-            // text block kept the card full-width → white side gutters.
+            // الارتفاع يتبع عرض الحاوية ونسبة الهيرو نفسها في البطاقة، وإلا
+            // يضغط TabView الصورة أفقيًا وتظهر هوامش بيضاء على الجوانب.
             .frame(height: featuredCarouselHeight)
             // استبعاد خبر العاجل قد يقصّر القائمة — لا نترك المؤشر على صفحة اختفت.
             .onChange(of: featured.map(\.id)) { _, ids in
@@ -799,14 +829,12 @@ struct HomeFeedView: View {
         }
     }
 
-    /// TabView page height = full-width 16:9 hero + text block budget.
-    /// 16:9 مقاس صور الأخبار الغالب — 16:10 كان يقصّ ~5% من كل جانب فيبتر
-    /// الشعارات والنصوص القريبة من الحافة.
-    /// Outer feed padding is 16pt each side (see `fullBody`).
+    /// ارتفاع صفحة الـ TabView = صورة بعرض المحتوى بنسبة `FeaturedHeroMetrics`
+    /// + ميزانية النص. الحشو الأفقي للقائمة 16 نقطة من كل جانب.
     private var featuredCarouselHeight: CGFloat {
         // أول تخطيط يقتصر على النص؛ القياس التالي يأتي من الحاوية نفسها.
         let contentWidth = max(0, feedContentWidth)
-        let heroHeight = contentWidth * (9.0 / 16.0)
+        let heroHeight = contentWidth / FeaturedHeroMetrics.imageAspect
         return ceil(heroHeight + featuredTextBudget)
     }
 
@@ -913,9 +941,11 @@ struct HomeFeedView: View {
     /// «آخر الأخبار» بلا خبر العاجل المعروض فوقها، وبلا مقالات الرأي: بعض
     /// مصادر القائمة لا ترسل نوع المقال فيتسرّب الرأي إليها، فنستبعده بمعرّفه.
     private var latestTimelineArticles: [Article] {
-        let skip = displayedBreakingArticle?.id
-        let opinionIDs = Set(articlesStore.opinions.map(\.id))
-        return articlesStore.filteredArticles.filter { $0.id != skip && !opinionIDs.contains($0.id) }
+        latestTimelineMemo.resolve(
+            filtered: articlesStore.filteredArticles,
+            opinions: articlesStore.opinions,
+            skipID: displayedBreakingArticle?.id
+        )
     }
 
     /// فاصل اليوم: قبل أول خبر من يوم يختلف عن الخبر السابق (أو عن اليوم للخبر الأول).
@@ -947,7 +977,9 @@ struct HomeFeedView: View {
                     NavigationLink(value: article) {
                         LatestTimelineRow(
                             article: article,
-                            isNew: articlesStore.isRecentlyAdded(article.id)
+                            isNew: articlesStore.isRecentlyAdded(article.id),
+                            isBookmarked: bookmarksStore.isBookmarked(article.id),
+                            onBookmark: { bookmarksStore.toggle(article.id, article: article) }
                         )
                     }
                     .buttonStyle(.plain)
@@ -1005,9 +1037,9 @@ struct HomeFeedView: View {
 
     // MARK: - Greeting Block (Phase 2)
 
-    /// تحية بحسب الوقت تقود إلى «موجزك في سبق». بطاقة سماوية بهوية سبق
-    /// (لا بيج ولا شارة متدرجة)، وعنوان يقول ما خلف النقرة. السطر الثاني
-    /// عبارة الخادم المولّدة إن وصلت، وإلا جملة ثابتة بحسب حالة الدخول.
+    /// تحية بحسب الوقت تقود إلى «موجزك في سبق». سطر واحد بهوية سبق حتى لا
+    /// يزاحم الهيرو؛ العبارة المولّدة تبقى في تسمية إمكانية الوصول، وتظهر
+    /// مكتوبة عند أحجام النص الكبيرة.
     private var greetingBlock: some View {
         let hour = Calendar.current.component(.hour, from: Date())
         let greeting: String
@@ -1043,59 +1075,78 @@ struct HomeFeedView: View {
                 : "اختر اهتماماتك ونرتّب لك أهم الأخبار."
         }()
 
-        let layout = dynamicTypeSize.isAccessibilitySize
-            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 12))
-            : AnyLayout(HStackLayout(alignment: .center, spacing: 14))
-        return layout {
-            ZStack {
-                Circle()
-                    .fill(tint.opacity(0.18))
-                    .frame(width: 46, height: 46)
-                Image(systemName: icon)
-                    .font(.system(size: 21, weight: .semibold))
-                    .foregroundStyle(tint)
-                    .symbolRenderingMode(.hierarchical)
-            }
+        let iconMark = ZStack {
+            Circle()
+                .fill(tint.opacity(0.18))
+                .frame(width: 28, height: 28)
+            Image(systemName: icon)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(tint)
+                .symbolRenderingMode(.hierarchical)
+        }
+        .accessibilityHidden(true)
+
+        let chevron = Image(systemName: "chevron.left")
+            .font(SabqFonts.app(size: 12, weight: .semibold))
+            .foregroundStyle(SabqTheme.tertiaryInk)
             .accessibilityHidden(true)
 
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 8) {
-                    Text(greeting)
-                        .font(SabqFonts.app(size: 12, weight: .medium))
-                        .foregroundStyle(SabqTheme.secondaryInk)
-                    // «SABQ AI» نصًا بلون الهوية — يكفي ليُقرأ السطر الثاني كاقتراح آلي.
-                    Text("SABQ AI")
-                        .font(SabqFonts.app(size: 11, weight: .bold))
-                        .foregroundStyle(SabqTheme.brandBlue)
-                }
-
-                Text("موجزك اليومي في سبق")
-                    .font(SabqFonts.app(size: 17, weight: .bold))
-                    .foregroundStyle(SabqTheme.ink)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                Text(subline)
-                    .font(SabqFonts.app(size: 13, weight: .regular))
-                    .foregroundStyle(SabqTheme.secondaryInk)
-                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
-                    .multilineTextAlignment(.leading)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-            Image(systemName: "chevron.left")
-                .font(SabqFonts.app(size: 13, weight: .semibold))
-                .foregroundStyle(SabqTheme.tertiaryInk)
-                .accessibilityHidden(true)
+        let row = HStack(spacing: 8) {
+            iconMark
+            Text(greeting)
+                .font(SabqFonts.app(size: 12, weight: .medium))
+                .foregroundStyle(SabqTheme.secondaryInk)
+                .lineLimit(1)
+            Text("موجزك اليومي")
+                .font(SabqFonts.app(size: 14, weight: .bold))
+                .foregroundStyle(SabqTheme.ink)
+                .lineLimit(1)
+            Text("SABQ AI")
+                .font(SabqFonts.app(size: 11, weight: .bold))
+                .foregroundStyle(SabqTheme.brandBlue)
+                .lineLimit(1)
+            Spacer(minLength: 4)
+            chevron
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 14)
+
+        return Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 8) {
+                        iconMark
+                        Text(greeting)
+                            .font(SabqFonts.app(size: 13, weight: .medium))
+                            .foregroundStyle(SabqTheme.secondaryInk)
+                        Text("SABQ AI")
+                            .font(SabqFonts.app(size: 12, weight: .bold))
+                            .foregroundStyle(SabqTheme.brandBlue)
+                        Spacer(minLength: 4)
+                        chevron
+                    }
+                    Text("موجزك اليومي في سبق")
+                        .font(SabqFonts.app(size: 17, weight: .bold))
+                        .foregroundStyle(SabqTheme.ink)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(subline)
+                        .font(SabqFonts.app(size: 14, weight: .regular))
+                        .foregroundStyle(SabqTheme.secondaryInk)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            } else {
+                row
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, dynamicTypeSize.isAccessibilitySize ? 12 : 8)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .fill(SabqTheme.identityCard)
         )
-        .contentShape(RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous))
+        .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(greeting). موجزك اليومي في سبق. \(subline)")
+        .accessibilityHint("يفتح الموجز اليومي")
     }
 
     // MARK: - Personal Journey Block (auth-gated)
