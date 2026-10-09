@@ -244,7 +244,7 @@ struct LatestTimelineRow: View {
     private var thumbnail: some View {
         Group {
             if let urlString = article.imageURL, let url = URL(string: urlString) {
-                FocalCachedAsyncImage(url: url, focalPoint: article.imageFocalPoint, maxPixelSize: LatestTimelineStyle.thumbnailPixels) {
+                FocalCachedAsyncImage(url: url, focalPoint: article.imageFocalPoint, maxPixelSize: LatestTimelineStyle.thumbnailPixels, fitsMismatchedAspect: true) {
                     placeholder
                 }
             } else {

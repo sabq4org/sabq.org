@@ -536,6 +536,9 @@ struct FocalCachedAsyncImage<Placeholder: View>: View {
     /// ~30 ضعف حاجتها (تدقيق الأداء 2026-08-02). الافتراضي 1400 يغطي
     /// هيرو بعرض الشاشة على أكبر الأجهزة؛ مرّر 260 للمصغرات.
     var maxPixelSize: CGFloat = 1400
+    /// صورة بعيدة الشكل عن الإطار (إنفوغرافيك طولي 9:16 أو مربعة في إطار 16:9)
+    /// تُعرض كاملة في الوسط فوق نسخة مموّهة منها بدل قصّ معظمها.
+    var fitsMismatchedAspect: Bool = false
     @ViewBuilder let placeholder: () -> Placeholder
 
     @State private var image: UIImage?
@@ -548,11 +551,13 @@ struct FocalCachedAsyncImage<Placeholder: View>: View {
         url: URL?,
         focalPoint: ImageFocalPoint?,
         maxPixelSize: CGFloat = 1400,
+        fitsMismatchedAspect: Bool = false,
         @ViewBuilder placeholder: @escaping () -> Placeholder
     ) {
         self.url = url
         self.focalPoint = focalPoint
         self.maxPixelSize = maxPixelSize
+        self.fitsMismatchedAspect = fitsMismatchedAspect
         self.placeholder = placeholder
     }
 
@@ -560,8 +565,14 @@ struct FocalCachedAsyncImage<Placeholder: View>: View {
         GeometryReader { proxy in
             ZStack(alignment: .topLeading) {
                 if let image {
-                    focalImage(image, in: proxy.size)
-                        .opacity(shown ? 1 : 0)
+                    Group {
+                        if fitsMismatchedAspect && Self.isAspectMismatched(image.size, proxy.size) {
+                            letterboxedImage(image, in: proxy.size)
+                        } else {
+                            focalImage(image, in: proxy.size)
+                        }
+                    }
+                    .opacity(shown ? 1 : 0)
                 } else {
                     placeholder()
                         .frame(width: proxy.size.width, height: proxy.size.height)
@@ -580,6 +591,33 @@ struct FocalCachedAsyncImage<Placeholder: View>: View {
         .task(id: url) {
             await loadImage(for: url)
         }
+    }
+
+    /// أبعد من ربع عن نسبة الإطار في أي اتجاه: 4:3 أو مربعة أو طولية في إطار 16:9.
+    private static func isAspectMismatched(_ image: CGSize, _ container: CGSize) -> Bool {
+        guard image.width > 0, image.height > 0, container.width > 0, container.height > 0 else { return false }
+        let ratio = (image.width / image.height) / (container.width / container.height)
+        return ratio < 0.8 || ratio > 1.25
+    }
+
+    private func letterboxedImage(_ image: UIImage, in container: CGSize) -> some View {
+        let size = CGSize(width: max(1, container.width), height: max(1, container.height))
+        return ZStack {
+            Image(uiImage: image)
+                .resizable()
+                .scaledToFill()
+                .frame(width: size.width, height: size.height)
+                .blur(radius: 14)
+                .clipped()
+            Color.black.opacity(0.06)
+            Image(uiImage: image)
+                .resizable()
+                .interpolation(.high)
+                .scaledToFit()
+                .frame(width: size.width, height: size.height)
+        }
+        .frame(width: size.width, height: size.height)
+        .animation(nil, value: container)
     }
 
     private func focalImage(_ image: UIImage, in container: CGSize) -> some View {
@@ -1551,7 +1589,7 @@ struct FeaturedArticleCard: View {
                 .overlay {
                     Group {
                         if let urlString = article.imageURL, let url = URL(string: urlString) {
-                            FocalCachedAsyncImage(url: url, focalPoint: article.imageFocalPoint) {
+                            FocalCachedAsyncImage(url: url, focalPoint: article.imageFocalPoint, fitsMismatchedAspect: true) {
                                 articleImagePlaceholder
                                     .overlay {
                                         ProgressView()
@@ -1797,7 +1835,7 @@ struct CompactArticleRow: View {
     private var compactThumbnail: some View {
         Group {
             if let urlString = article.imageURL, let url = URL(string: urlString) {
-                FocalCachedAsyncImage(url: url, focalPoint: article.imageFocalPoint, maxPixelSize: 260) {
+                FocalCachedAsyncImage(url: url, focalPoint: article.imageFocalPoint, maxPixelSize: 260, fitsMismatchedAspect: true) {
                     thumbnailPlaceholder(size: NewsRowStyle.thumbnailWidth)
                 }
             } else {

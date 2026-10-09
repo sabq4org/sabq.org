@@ -78,10 +78,8 @@ private struct SabqRTLLabel: UIViewRepresentable {
     let lineSpacing: CGFloat
     let textStyle: UIFont.TextStyle
 
-    func makeUIView(context: Context) -> UILabel {
-        let label = UILabel()
-        label.numberOfLines = numberOfLines
-        label.lineBreakMode = .byTruncatingTail
+    func makeUIView(context: Context) -> SabqTruncatingLabel {
+        let label = SabqTruncatingLabel()
         // UIViewRepresentable لا يرث layoutDirection من SwiftUI — نفرض RTL صراحة.
         label.semanticContentAttribute = .forceRightToLeft
         label.textAlignment = .right
@@ -91,11 +89,14 @@ private struct SabqRTLLabel: UIViewRepresentable {
         return label
     }
 
-    func updateUIView(_ label: UILabel, context: Context) {
-        label.numberOfLines = numberOfLines
+    func updateUIView(_ label: SabqTruncatingLabel, context: Context) {
         label.semanticContentAttribute = .forceRightToLeft
         label.textAlignment = .right
-        applyAttributedText(to: label, font: scaledFont(context), width: label.preferredMaxLayoutWidth)
+        label.configure(
+            text: text,
+            attributes: Self.attributes(font: scaledFont(context), color: textColor, lineSpacing: lineSpacing, numberOfLines: numberOfLines),
+            maxLines: numberOfLines
+        )
     }
 
     /// الخط بعد مقياس Dynamic Type للنظام (نسبةً إلى body، كما تتدرّج خطوط
@@ -112,20 +113,21 @@ private struct SabqRTLLabel: UIViewRepresentable {
         return UIFontMetrics(forTextStyle: textStyle).scaledFont(for: base, compatibleWith: traits)
     }
 
-    func sizeThatFits(_ proposal: ProposedViewSize, uiView: UILabel, context: Context) -> CGSize? {
+    /// القياس لا يلمس الملصق: SwiftUI يقيس بعروض متعددة، وكان تعديل النص أثناء
+    /// القياس يترك في الملصق نصًا مقصوصًا لعرض غير العرض النهائي.
+    func sizeThatFits(_ proposal: ProposedViewSize, uiView: SabqTruncatingLabel, context: Context) -> CGSize? {
         let width = proposal.width ?? UIView.layoutFittingExpandedSize.width
         guard width.isFinite, width > 0 else { return nil }
-        // بدون preferredMaxLayoutWidth يبقى intrinsic ضيقاً فيبدو العنوان «في الوسط».
-        uiView.preferredMaxLayoutWidth = width
         let font = scaledFont(context)
-        applyAttributedText(to: uiView, font: font, width: width)
-        let fitted = uiView.sizeThatFits(
-            CGSize(width: width, height: CGFloat.greatestFiniteMagnitude)
-        )
-        return CGSize(width: width, height: max(ceil(fitted.height), ceil(font.lineHeight + lineSpacing)))
+        let attrs = Self.attributes(font: font, color: textColor, lineSpacing: lineSpacing, numberOfLines: numberOfLines)
+        let shown = SabqTruncatingLabel.displayedText(text, attributes: attrs, maxLines: numberOfLines, width: width)
+        let height = SabqTruncatingLabel.labelHeight(shown, attributes: attrs, maxLines: numberOfLines, width: width)
+        // +1: SwiftUI يقرّب الإطار إلى شبكة البكسل (80 → 79.67) فيرى UILabel أن
+        // السطر الأخير لا يتسع فيرسم سطرًا أقل في منتصف الصندوق.
+        return CGSize(width: width, height: max(ceil(height) + 1, ceil(font.lineHeight + lineSpacing)))
     }
 
-    private func attributes(font: UIFont) -> [NSAttributedString.Key: Any] {
+    static func attributes(font: UIFont, color: UIColor, lineSpacing: CGFloat, numberOfLines: Int) -> [NSAttributedString.Key: Any] {
         let paragraph = NSMutableParagraphStyle()
         paragraph.baseWritingDirection = .rightToLeft
         // .right صريح — .natural داخل UILabel المضمّن يُحلّ كـ LTR فيُحاذى لليسار.
@@ -140,36 +142,72 @@ private struct SabqRTLLabel: UIViewRepresentable {
         )
         return [
             .font: font,
-            .foregroundColor: textColor,
+            .foregroundColor: color,
             .paragraphStyle: paragraph,
             .writingDirection: [writingDir],
         ]
     }
+}
 
-    private func applyAttributedText(to label: UILabel, font: UIFont, width: CGFloat) {
-        let attrs = attributes(font: font)
-        label.attributedText = NSAttributedString(
-            string: displayedText(attributes: attrs, font: font, width: width),
-            attributes: attrs
-        )
+/// ملصق يقصّ عنوانه بنفسه عند آخر كلمة تتسع في الأسطر المسموحة مع «…»،
+/// محسوبًا على عرضه الفعلي عند كل تخطيط. نمط الفقرة `.byWordWrapping` يلغي
+/// قصّ UILabel فكان العنوان يُبتر بلا «…»، وتفعيل قصّ الذيل على النص المنسّق
+/// جعل UILabel يرسم بعض العناوين سطرًا واحدًا.
+final class SabqTruncatingLabel: UILabel {
+    private var fullText = ""
+    private var textAttributes: [NSAttributedString.Key: Any] = [:]
+    private var maxLines = 0
+    private var renderedWidth: CGFloat = -1
+
+    func configure(text: String, attributes: [NSAttributedString.Key: Any], maxLines: Int) {
+        fullText = text
+        textAttributes = attributes
+        self.maxLines = maxLines
+        numberOfLines = maxLines == 1 ? 1 : 0
+        lineBreakMode = maxLines == 1 ? .byTruncatingTail : .byWordWrapping
+        renderedWidth = -1
+        render(for: bounds.width)
+        setNeedsLayout()
     }
 
-    /// العنوان المعروض مقصوصًا عند آخر كلمة تتسع في `numberOfLines` مع «…».
-    /// نمط الفقرة `.byWordWrapping` يلغي قصّ UILabel فكان العنوان يُبتر بلا
-    /// «…»، وتفعيل قصّ الذيل على النص المنسّق جعل UILabel يرسم بعض العناوين
-    /// سطرًا واحدًا — فنقصّ يدويًا ونبقي الالتفاف العادي.
-    private func displayedText(attributes: [NSAttributedString.Key: Any], font: UIFont, width: CGFloat) -> String {
-        guard numberOfLines > 1, width > 0 else { return text }
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        if bounds.width != renderedWidth { render(for: bounds.width) }
+    }
+
+    private func render(for width: CGFloat) {
+        let shown = width > 0
+            ? Self.displayedText(fullText, attributes: textAttributes, maxLines: maxLines, width: width)
+            : fullText
+        renderedWidth = width
+        attributedText = NSAttributedString(string: shown, attributes: textAttributes)
+    }
+
+    /// ملصق قياس بإعدادات ملصق العرض نفسها: `boundingRect` لا يحسب التباعد
+    /// بعد السطر الأخير كما يحسبه UILabel، فكان الصندوق يقصر بنقاط عن ثلاثة
+    /// أسطر فيرسم UILabel سطرين في المنتصف.
+    private static let sizingLabel: UILabel = {
+        let label = UILabel()
+        label.semanticContentAttribute = .forceRightToLeft
+        label.textAlignment = .right
+        return label
+    }()
+
+    static func labelHeight(_ text: String, attributes: [NSAttributedString.Key: Any], maxLines: Int, width: CGFloat) -> CGFloat {
+        let label = sizingLabel
+        label.numberOfLines = maxLines == 1 ? 1 : 0
+        label.attributedText = NSAttributedString(string: text, attributes: attributes)
+        label.lineBreakMode = maxLines == 1 ? .byTruncatingTail : .byWordWrapping
+        return label.sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude)).height
+    }
+
+    static func displayedText(_ text: String, attributes: [NSAttributedString.Key: Any], maxLines: Int, width: CGFloat) -> String {
+        guard maxLines > 1, width > 0, let font = attributes[.font] as? UIFont else { return text }
+        let spacing = (attributes[.paragraphStyle] as? NSParagraphStyle)?.lineSpacing ?? 0
         // ارتفاع n أسطر، مع تسامح لإضافة تباعد بعد السطر الأخير أو عدمها.
-        let maxHeight = CGFloat(numberOfLines) * (font.lineHeight + lineSpacing) + 1
+        let maxHeight = CGFloat(maxLines) * (font.lineHeight + spacing) + 1
         func fits(_ candidate: String) -> Bool {
-            NSAttributedString(string: candidate, attributes: attributes)
-                .boundingRect(
-                    with: CGSize(width: width, height: .greatestFiniteMagnitude),
-                    options: [.usesLineFragmentOrigin, .usesFontLeading],
-                    context: nil
-                )
-                .height <= maxHeight
+            labelHeight(candidate, attributes: attributes, maxLines: 0, width: width) <= maxHeight
         }
         if fits(text) { return text }
 
