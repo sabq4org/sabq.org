@@ -10,7 +10,7 @@ import { articleCardSelect, articleListSelect, categoryBasicSelect, userPublicSe
 import { eq, desc, asc, sql, and, or, not, inArray, ne, gte, lt, lte, isNull, isNotNull, ilike, count, getTableColumns, type SQL } from "drizzle-orm";
 import { alias as aliasedTable } from "drizzle-orm/pg-core";
 import { nanoid } from 'nanoid';
-import { assignRbacRoleByName, resolvePrimaryRoleName, syncLegacyRoleFromRoleIds } from "./services/userRoleSync";
+import { resolvePrimaryRoleName, setUserSingleRole, syncLegacyRoleFromRoleIds } from "./services/userRoleSync";
 import bcrypt from 'bcrypt';
 import { generateEnglishSlug } from './utils/slugTransliterator';
 import { notificationBus } from "./notificationBus";
@@ -2984,8 +2984,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateUserRole(userId: string, role: string): Promise<User> {
-    const [user] = await db.update(users).set({ role }).where(eq(users.id, userId)).returning();
-    await assignRbacRoleByName(userId, role);
+    const user = await setUserSingleRole(userId, role);
     if (role === "reporter") {
       try { await this.ensureReporterStaffRecord(userId); } catch (err) {
         console.error("[updateUserRole] ensureReporterStaffRecord failed:", err);

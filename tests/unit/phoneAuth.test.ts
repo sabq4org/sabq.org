@@ -8,6 +8,7 @@ import {
   normalizePhone,
   normalizeSaudiPhone,
   phoneCandidates,
+  phoneMatchDigits,
   pickPreferredPhoneUser,
 } from "../../server/services/phoneAuth";
 
@@ -35,6 +36,25 @@ describe("phoneCandidates", () => {
       "0564255999",
       "564255999",
     ]));
+  });
+});
+
+describe("phoneMatchDigits", () => {
+  it("accepts Saudi local storage forms only for +966 numbers", () => {
+    expect(phoneMatchDigits("+966564255999")).toEqual(expect.arrayContaining([
+      "966564255999",
+      "00966564255999",
+      "0564255999",
+      "564255999",
+    ]));
+  });
+
+  it("never matches a foreign number to a Saudi account by its last 9 digits", () => {
+    const foreign = phoneMatchDigits("+1202564255999");
+    expect(foreign).toEqual(["1202564255999", "001202564255999"]);
+    expect(foreign).not.toContain("564255999");
+    expect(foreign).not.toContain("966564255999");
+    expect(phoneMatchDigits("+966564255999")).not.toContain("1202564255999");
   });
 });
 

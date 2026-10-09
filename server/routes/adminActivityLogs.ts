@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { storage } from "../storage";
-import { requireAuth, requirePermission } from "../rbac";
+import { redactActivityValue, requireAuth, requirePermission } from "../rbac";
 import { parsePage, parseLimit } from "../utils/pagination";
 
 const router: Router = Router();
@@ -47,7 +47,8 @@ router.get("/api/admin/activity-logs", requireAuth, requirePermission("system.vi
 
     const result = await storage.getActivityLogs(filters);
 
-    res.json(result);
+    // السجلات القديمة قد تحمل أسرارًا حُفظت قبل الحجب عند الكتابة.
+    res.json(redactActivityValue(result));
   } catch (error) {
     console.error("Error fetching activity logs:", error);
     res.status(500).json({ message: "Failed to fetch activity logs" });
@@ -78,7 +79,7 @@ router.get("/api/admin/activity-logs/:id", requireAuth, requirePermission("syste
       return res.status(404).json({ message: "Activity log not found" });
     }
 
-    res.json(log);
+    res.json(redactActivityValue(log));
   } catch (error) {
     console.error("Error fetching activity log:", error);
     res.status(500).json({ message: "Failed to fetch activity log" });

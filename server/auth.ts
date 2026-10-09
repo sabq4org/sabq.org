@@ -310,7 +310,8 @@ export async function setupAuth(app: Express) {
                 email: existingUser.email,
                 isNewUser: false,
                 isProfileComplete: existingUser.isProfileComplete ?? true, // ✅ Pass profile status
-                twoFactorEnabled: false, // OAuth users don't need 2FA
+                // الحساب القائم يحتفظ ببوابة 2FA؛ الـcallback يحوّله لشاشة الرمز قبل أي جلسة.
+                twoFactorEnabled: !!existingUser.twoFactorEnabled,
                 twoFactorMethod: 'authenticator'
               });
             }
@@ -466,7 +467,8 @@ export async function setupAuth(app: Express) {
                 email: existingUser.email,
                 isNewUser: false,
                 isProfileComplete: existingUser.isProfileComplete ?? true, // ✅ Pass profile status
-                twoFactorEnabled: false, // OAuth users don't need 2FA
+                // الحساب القائم يحتفظ ببوابة 2FA؛ الـcallback يحوّله لشاشة الرمز قبل أي جلسة.
+                twoFactorEnabled: !!existingUser.twoFactorEnabled,
                 twoFactorMethod: 'authenticator'
               });
             }
