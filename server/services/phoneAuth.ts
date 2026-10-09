@@ -101,14 +101,26 @@ export type PhoneUserResult =
 
 type UserRow = typeof users.$inferSelect;
 
-function phoneMatchSql(column: typeof users.phoneNumber, e164: string) {
+/// صيغ الأرقام المقبولة لنفس الجوال بعد إزالة غير الأرقام. التسامح مع الصيغ
+/// السعودية المحلية (5XXXXXXXX و05XXXXXXXX) خاص بأرقام +966 فقط؛ مطابقة آخر 9
+/// أرقام لأي رقم كانت تسمح لرقم أجنبي بنفس النهاية بدخول حساب سعودي.
+export function phoneMatchDigits(e164: string): string[] {
   const digits = e164.replace(/\D/g, "");
-  const last9 = digits.slice(-9);
-  // يطابق الرقم بعد إزالة غير الأرقام، أو آخر 9 أرقام (مسار سعودي شائع).
-  return sql`(
-    regexp_replace(coalesce(${column}, ''), '[^0-9]', '', 'g') = ${digits}
-    OR right(regexp_replace(coalesce(${column}, ''), '[^0-9]', '', 'g'), 9) = ${last9}
-  )`;
+  const out = new Set<string>([digits, `00${digits}`]);
+  if (e164.startsWith("+966")) {
+    const local = e164.slice(4);
+    out.add(`0${local}`);
+    out.add(local);
+  }
+  return [...out];
+}
+
+function phoneMatchSql(column: typeof users.phoneNumber, e164: string) {
+  const accepted = phoneMatchDigits(e164);
+  return sql`regexp_replace(coalesce(${column}, ''), '[^0-9]', '', 'g') IN (${sql.join(
+    accepted.map((d) => sql`${d}`),
+    sql`, `,
+  )})`;
 }
 
 /** كل الحسابات النشطة/غير المحذوفة التي تحمل هذا الجوال بأي صيغة. */
