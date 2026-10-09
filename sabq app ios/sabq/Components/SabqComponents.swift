@@ -1152,6 +1152,13 @@ nonisolated enum SabqTheme {
     /// بطاقات بنود الرئيسية (الرأي، الرحلة…) — درجة الويب نفسها #f4f8fb / #172330
     /// (كانت سماوية أقوى #dbf2ff). اعتمدها المالك 2026-09-12.
     static let sectionCard = publicSurface
+    /// بطاقة سماوية بهوية سبق (#E6F3FD / #172330) لبلوكَي التحية والرأي في
+    /// الرئيسية — أوضح من `publicSurface` الذي يذوب في خلفية التطبيق.
+    static let identityCard = Color(UIColor { t in
+        t.userInterfaceStyle == .dark
+            ? UIColor(red: 0x17 / 255.0, green: 0x23 / 255.0, blue: 0x30 / 255.0, alpha: 1)
+            : UIColor(red: 0xE6 / 255.0, green: 0xF3 / 255.0, blue: 0xFD / 255.0, alpha: 1)
+    })
     static let sectionSeparator = Color(UIColor { t in
         t.userInterfaceStyle == .dark
             ? UIColor(red: 0.20, green: 0.26, blue: 0.33, alpha: 1)
@@ -1539,7 +1546,7 @@ struct FeaturedArticleCard: View {
             // that squeeze; carousel height tracks the same math.
             Color.clear
                 .frame(maxWidth: .infinity)
-                .aspectRatio(16.0 / 10.0, contentMode: .fit)
+                .aspectRatio(16.0 / 9.0, contentMode: .fit)
                 .fixedSize(horizontal: false, vertical: true)
                 .overlay {
                     Group {
@@ -1578,6 +1585,22 @@ struct FeaturedArticleCard: View {
             // card leads with hero photo + title alone.)
 
             VStack(alignment: .leading, spacing: 12) {
+                // التصنيف بلونه ووقت النشر فوق العنوان، بدل التاريخ الكامل في
+                // الأسفل البعيد عن قارئ يتصفح اليوم نفسه (نموذج 2026-10-09).
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(article.categoryTitle)
+                        .font(SabqFonts.app(size: 12, weight: .semibold))
+                        .foregroundStyle(article.category.tint)
+                    Text("·")
+                        .font(SabqFonts.app(size: 12, weight: .regular))
+                        .foregroundStyle(SabqTheme.tertiaryInk)
+                    Text(heroWhen)
+                        .font(SabqFonts.app(size: 12, weight: .regular))
+                        .foregroundStyle(SabqTheme.tertiaryInk)
+                        .monospacedDigit()
+                }
+                .lineLimit(1)
+
                 // `fixedSize(horizontal: false, vertical: true)` is what
                 // forces the Text to respect the parent's width instead
                 // of taking its intrinsic single-line width. Without it
@@ -1604,22 +1627,10 @@ struct FeaturedArticleCard: View {
                     ? AnyLayout(VStackLayout(alignment: .leading, spacing: 12))
                     : AnyLayout(HStackLayout(spacing: 12))
                 metadataLayout {
-                    HStack(spacing: 5) {
-                        Image(systemName: "clock")
-                            .font(SabqFonts.app(size: 11, weight: .regular))
-                        Text(article.readingTime)
-                            .font(SabqFonts.app(size: 11, weight: .regular))
-                            .monospacedDigit()
-                    }
-                    .foregroundStyle(SabqTheme.tertiaryInk)
-
-                    HStack(spacing: 5) {
-                        Image(systemName: "calendar")
-                            .font(SabqFonts.app(size: 11, weight: .regular))
-                        Text(article.dateFormatted)
-                            .font(SabqFonts.app(size: 11, weight: .regular))
-                    }
-                    .foregroundStyle(SabqTheme.tertiaryInk)
+                    Text(article.readingTime)
+                        .font(SabqFonts.app(size: 12, weight: .regular))
+                        .monospacedDigit()
+                        .foregroundStyle(SabqTheme.tertiaryInk)
 
                     Spacer(minLength: 0)
 
@@ -1652,6 +1663,16 @@ struct FeaturedArticleCard: View {
             RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
                 .stroke(SabqTheme.outline.opacity(0.5), lineWidth: 0.5)
         )
+    }
+
+    /// «قبل 40 دقيقة» لخبر اليوم، و«أمس 4:35 م» لخبر الأمس، والتاريخ لما قبله.
+    private var heroWhen: String {
+        let cal = SabqFormatters.riyadhCalendar
+        let date = article.publishDate
+        if cal.isDateInToday(date) { return article.relativeDate }
+        let clock = "\(SabqFormatters.riyadhHourMinute.string(from: date)) \(SabqFormatters.riyadhPeriod.string(from: date))"
+        if cal.isDateInYesterday(date) { return "أمس \(clock)" }
+        return article.dateFormatted
     }
 
     private var articleImagePlaceholder: some View {
@@ -1691,6 +1712,9 @@ enum NewsRowStyle {
     static let thumbnailGap: CGFloat = 12
     static let textStackSpacing: CGFloat = 8
     static let titleSize: CGFloat = 15
+    /// عنوان الصف المضغوط في القوائم: أكبر بنقطة وبثلاثة أسطر بدل سطرين.
+    static let compactTitleSize: CGFloat = 16
+    static let compactTitleLines = 3
     static let titleLineSpacing: CGFloat = 4
     static let metadataSize: CGFloat = 12
     static let metadataLineSpacing: CGFloat = 3
@@ -1734,9 +1758,9 @@ struct CompactArticleRow: View {
             VStack(alignment: .leading, spacing: NewsRowStyle.textStackSpacing) {
                 SabqRTLText(
                     article.title,
-                    uiFont: SabqFonts.uiSubhead(size: NewsRowStyle.titleSize),
+                    uiFont: SabqFonts.uiSubhead(size: NewsRowStyle.compactTitleSize),
                     color: SabqTheme.ink,
-                    lineLimit: dynamicTypeSize.isAccessibilitySize ? 0 : 2,
+                    lineLimit: dynamicTypeSize.isAccessibilitySize ? 0 : NewsRowStyle.compactTitleLines,
                     lineSpacing: NewsRowStyle.titleLineSpacing
                 )
 
@@ -1899,13 +1923,9 @@ struct CompactArticleRow: View {
     }
 
     private var relativeDateLabel: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 4) {
-            Image(systemName: "clock")
-                .font(SabqFonts.app(size: NewsRowStyle.metadataSize - 2, weight: .regular))
-            Text(article.relativeDate)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .foregroundStyle(SabqTheme.tertiaryInk)
+        Text(article.relativeDate)
+            .fixedSize(horizontal: false, vertical: true)
+            .foregroundStyle(SabqTheme.tertiaryInk)
     }
 
     private func thumbnailPlaceholder(size: CGFloat) -> some View {

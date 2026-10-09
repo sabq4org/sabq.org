@@ -148,5 +148,9 @@ private struct SabqRTLLabel: UIViewRepresentable {
                 .writingDirection: [writingDir],
             ]
         )
+        // نمط الفقرة `.byWordWrapping` يلغي قصّ UILabel، فكان العنوان المحدود
+        // بسطرين يُبتر عند آخر كلمة بلا «…». ضبط الخاصية بعد النص المنسّق
+        // يطبّق القصّ على السطر الأخير فقط ويُبقي الالتفاف بين الأسطر.
+        label.lineBreakMode = numberOfLines == 0 ? .byWordWrapping : .byTruncatingTail
     }
 }
