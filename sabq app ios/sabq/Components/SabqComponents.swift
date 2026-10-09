@@ -536,6 +536,9 @@ struct FocalCachedAsyncImage<Placeholder: View>: View {
     /// ~30 ضعف حاجتها (تدقيق الأداء 2026-08-02). الافتراضي 1400 يغطي
     /// هيرو بعرض الشاشة على أكبر الأجهزة؛ مرّر 260 للمصغرات.
     var maxPixelSize: CGFloat = 1400
+    /// صورة بعيدة الشكل عن الإطار (إنفوغرافيك طولي 9:16 أو مربعة في إطار 16:9)
+    /// تُعرض كاملة في الوسط فوق نسخة مموّهة منها بدل قصّ معظمها.
+    var fitsMismatchedAspect: Bool = false
     @ViewBuilder let placeholder: () -> Placeholder
 
     @State private var image: UIImage?
@@ -548,11 +551,13 @@ struct FocalCachedAsyncImage<Placeholder: View>: View {
         url: URL?,
         focalPoint: ImageFocalPoint?,
         maxPixelSize: CGFloat = 1400,
+        fitsMismatchedAspect: Bool = false,
         @ViewBuilder placeholder: @escaping () -> Placeholder
     ) {
         self.url = url
         self.focalPoint = focalPoint
         self.maxPixelSize = maxPixelSize
+        self.fitsMismatchedAspect = fitsMismatchedAspect
         self.placeholder = placeholder
     }
 
@@ -560,8 +565,14 @@ struct FocalCachedAsyncImage<Placeholder: View>: View {
         GeometryReader { proxy in
             ZStack(alignment: .topLeading) {
                 if let image {
-                    focalImage(image, in: proxy.size)
-                        .opacity(shown ? 1 : 0)
+                    Group {
+                        if fitsMismatchedAspect && Self.isAspectMismatched(image.size, proxy.size) {
+                            letterboxedImage(image, in: proxy.size)
+                        } else {
+                            focalImage(image, in: proxy.size)
+                        }
+                    }
+                    .opacity(shown ? 1 : 0)
                 } else {
                     placeholder()
                         .frame(width: proxy.size.width, height: proxy.size.height)
@@ -580,6 +591,33 @@ struct FocalCachedAsyncImage<Placeholder: View>: View {
         .task(id: url) {
             await loadImage(for: url)
         }
+    }
+
+    /// أبعد من ربع عن نسبة الإطار في أي اتجاه: 4:3 أو مربعة أو طولية في إطار 16:9.
+    private static func isAspectMismatched(_ image: CGSize, _ container: CGSize) -> Bool {
+        guard image.width > 0, image.height > 0, container.width > 0, container.height > 0 else { return false }
+        let ratio = (image.width / image.height) / (container.width / container.height)
+        return ratio < 0.8 || ratio > 1.25
+    }
+
+    private func letterboxedImage(_ image: UIImage, in container: CGSize) -> some View {
+        let size = CGSize(width: max(1, container.width), height: max(1, container.height))
+        return ZStack {
+            Image(uiImage: image)
+                .resizable()
+                .scaledToFill()
+                .frame(width: size.width, height: size.height)
+                .blur(radius: 14)
+                .clipped()
+            Color.black.opacity(0.06)
+            Image(uiImage: image)
+                .resizable()
+                .interpolation(.high)
+                .scaledToFit()
+                .frame(width: size.width, height: size.height)
+        }
+        .frame(width: size.width, height: size.height)
+        .animation(nil, value: container)
     }
 
     private func focalImage(_ image: UIImage, in container: CGSize) -> some View {
@@ -1152,6 +1190,13 @@ nonisolated enum SabqTheme {
     /// بطاقات بنود الرئيسية (الرأي، الرحلة…) — درجة الويب نفسها #f4f8fb / #172330
     /// (كانت سماوية أقوى #dbf2ff). اعتمدها المالك 2026-09-12.
     static let sectionCard = publicSurface
+    /// بطاقة سماوية بهوية سبق (#E6F3FD / #172330) لبلوكَي التحية والرأي في
+    /// الرئيسية — أوضح من `publicSurface` الذي يذوب في خلفية التطبيق.
+    static let identityCard = Color(UIColor { t in
+        t.userInterfaceStyle == .dark
+            ? UIColor(red: 0x17 / 255.0, green: 0x23 / 255.0, blue: 0x30 / 255.0, alpha: 1)
+            : UIColor(red: 0xE6 / 255.0, green: 0xF3 / 255.0, blue: 0xFD / 255.0, alpha: 1)
+    })
     static let sectionSeparator = Color(UIColor { t in
         t.userInterfaceStyle == .dark
             ? UIColor(red: 0.20, green: 0.26, blue: 0.33, alpha: 1)
@@ -1539,12 +1584,12 @@ struct FeaturedArticleCard: View {
             // that squeeze; carousel height tracks the same math.
             Color.clear
                 .frame(maxWidth: .infinity)
-                .aspectRatio(16.0 / 10.0, contentMode: .fit)
+                .aspectRatio(16.0 / 9.0, contentMode: .fit)
                 .fixedSize(horizontal: false, vertical: true)
                 .overlay {
                     Group {
                         if let urlString = article.imageURL, let url = URL(string: urlString) {
-                            FocalCachedAsyncImage(url: url, focalPoint: article.imageFocalPoint) {
+                            FocalCachedAsyncImage(url: url, focalPoint: article.imageFocalPoint, fitsMismatchedAspect: true) {
                                 articleImagePlaceholder
                                     .overlay {
                                         ProgressView()
@@ -1578,6 +1623,22 @@ struct FeaturedArticleCard: View {
             // card leads with hero photo + title alone.)
 
             VStack(alignment: .leading, spacing: 12) {
+                // التصنيف بلونه ووقت النشر فوق العنوان، بدل التاريخ الكامل في
+                // الأسفل البعيد عن قارئ يتصفح اليوم نفسه (نموذج 2026-10-09).
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(article.categoryTitle)
+                        .font(SabqFonts.app(size: 12, weight: .semibold))
+                        .foregroundStyle(article.category.tint)
+                    Text("·")
+                        .font(SabqFonts.app(size: 12, weight: .regular))
+                        .foregroundStyle(SabqTheme.tertiaryInk)
+                    Text(heroWhen)
+                        .font(SabqFonts.app(size: 12, weight: .regular))
+                        .foregroundStyle(SabqTheme.tertiaryInk)
+                        .monospacedDigit()
+                }
+                .lineLimit(1)
+
                 // `fixedSize(horizontal: false, vertical: true)` is what
                 // forces the Text to respect the parent's width instead
                 // of taking its intrinsic single-line width. Without it
@@ -1604,22 +1665,10 @@ struct FeaturedArticleCard: View {
                     ? AnyLayout(VStackLayout(alignment: .leading, spacing: 12))
                     : AnyLayout(HStackLayout(spacing: 12))
                 metadataLayout {
-                    HStack(spacing: 5) {
-                        Image(systemName: "clock")
-                            .font(SabqFonts.app(size: 11, weight: .regular))
-                        Text(article.readingTime)
-                            .font(SabqFonts.app(size: 11, weight: .regular))
-                            .monospacedDigit()
-                    }
-                    .foregroundStyle(SabqTheme.tertiaryInk)
-
-                    HStack(spacing: 5) {
-                        Image(systemName: "calendar")
-                            .font(SabqFonts.app(size: 11, weight: .regular))
-                        Text(article.dateFormatted)
-                            .font(SabqFonts.app(size: 11, weight: .regular))
-                    }
-                    .foregroundStyle(SabqTheme.tertiaryInk)
+                    Text(article.readingTime)
+                        .font(SabqFonts.app(size: 12, weight: .regular))
+                        .monospacedDigit()
+                        .foregroundStyle(SabqTheme.tertiaryInk)
 
                     Spacer(minLength: 0)
 
@@ -1654,6 +1703,16 @@ struct FeaturedArticleCard: View {
         )
     }
 
+    /// «قبل 40 دقيقة» لخبر اليوم، و«أمس 4:35 م» لخبر الأمس، والتاريخ لما قبله.
+    private var heroWhen: String {
+        let cal = SabqFormatters.riyadhCalendar
+        let date = article.publishDate
+        if cal.isDateInToday(date) { return article.relativeDate }
+        let clock = "\(SabqFormatters.riyadhHourMinute.string(from: date)) \(SabqFormatters.riyadhPeriod.string(from: date))"
+        if cal.isDateInYesterday(date) { return "أمس \(clock)" }
+        return article.dateFormatted
+    }
+
     private var articleImagePlaceholder: some View {
         UnevenRoundedRectangle(
             topLeadingRadius: SabqTheme.cardRadius,
@@ -1684,13 +1743,18 @@ struct FeaturedArticleCard: View {
 /// these values here lets custom row consumers adopt the same visual rhythm
 /// without changing the global surface-card treatment.
 enum NewsRowStyle {
-    static let thumbnailWidth: CGFloat = 104
-    static let thumbnailHeight: CGFloat = 84
+    /// 16:9 مقاس صور الأخبار الغالب — 104×84 (قرابة 5:4) كان يقص ربع العرض
+    /// فيبتر الشعارات والنصوص القريبة من الحافة (ملاحظة المالك 2026-10-09).
+    static let thumbnailWidth: CGFloat = 112
+    static let thumbnailHeight: CGFloat = 63
     static let thumbnailRadius: CGFloat = 10
     static let thumbnailStrokeWidth: CGFloat = 0.5
     static let thumbnailGap: CGFloat = 12
     static let textStackSpacing: CGFloat = 8
     static let titleSize: CGFloat = 15
+    /// عنوان الصف المضغوط في القوائم: أكبر بنقطة وبثلاثة أسطر بدل سطرين.
+    static let compactTitleSize: CGFloat = 16
+    static let compactTitleLines = 3
     static let titleLineSpacing: CGFloat = 4
     static let metadataSize: CGFloat = 12
     static let metadataLineSpacing: CGFloat = 3
@@ -1734,9 +1798,9 @@ struct CompactArticleRow: View {
             VStack(alignment: .leading, spacing: NewsRowStyle.textStackSpacing) {
                 SabqRTLText(
                     article.title,
-                    uiFont: SabqFonts.uiSubhead(size: NewsRowStyle.titleSize),
+                    uiFont: SabqFonts.uiSubhead(size: NewsRowStyle.compactTitleSize),
                     color: SabqTheme.ink,
-                    lineLimit: dynamicTypeSize.isAccessibilitySize ? 0 : 2,
+                    lineLimit: dynamicTypeSize.isAccessibilitySize ? 0 : NewsRowStyle.compactTitleLines,
                     lineSpacing: NewsRowStyle.titleLineSpacing
                 )
 
@@ -1766,16 +1830,16 @@ struct CompactArticleRow: View {
         .padding(.vertical, 8)
     }
 
-    /// The compact row follows the sidebar row's fixed 104×84 thumbnail while
+    /// The compact row follows the sidebar row's fixed 112×63 (16:9) thumbnail while
     /// retaining focal-point cropping and the AI provenance badge.
     private var compactThumbnail: some View {
         Group {
             if let urlString = article.imageURL, let url = URL(string: urlString) {
-                FocalCachedAsyncImage(url: url, focalPoint: article.imageFocalPoint, maxPixelSize: 260) {
+                FocalCachedAsyncImage(url: url, focalPoint: article.imageFocalPoint, maxPixelSize: 260, fitsMismatchedAspect: true) {
                     thumbnailPlaceholder(size: NewsRowStyle.thumbnailWidth)
                 }
             } else {
-                thumbnailPlaceholder(size: 104)
+                thumbnailPlaceholder(size: NewsRowStyle.thumbnailWidth)
             }
         }
         .frame(width: NewsRowStyle.thumbnailWidth, height: NewsRowStyle.thumbnailHeight)
@@ -1899,13 +1963,9 @@ struct CompactArticleRow: View {
     }
 
     private var relativeDateLabel: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 4) {
-            Image(systemName: "clock")
-                .font(SabqFonts.app(size: NewsRowStyle.metadataSize - 2, weight: .regular))
-            Text(article.relativeDate)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .foregroundStyle(SabqTheme.tertiaryInk)
+        Text(article.relativeDate)
+            .fixedSize(horizontal: false, vertical: true)
+            .foregroundStyle(SabqTheme.tertiaryInk)
     }
 
     private func thumbnailPlaceholder(size: CGFloat) -> some View {
