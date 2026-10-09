@@ -269,6 +269,7 @@ const ComingSoon = lazy(() => retryImport(() => import("@/pages/ComingSoon")));
 const UserBehavior = lazy(() => retryImport(() => import("@/pages/UserBehavior")));
 const AdvancedAnalytics = lazy(() => retryImport(() => import("@/pages/AdvancedAnalytics")));
 const NewsletterAnalytics = lazy(() => retryImport(() => import("@/pages/dashboard/NewsletterAnalytics")));
+const AudioBulletinPage = lazy(() => retryImport(() => import("@/pages/dashboard/AudioBulletin")));
 const ArticleAnalyticsDashboard = lazy(() => retryImport(() => import("@/pages/dashboard/ArticleAnalyticsDashboard")));
 const SocialPublishingPage = lazy(() => retryImport(() => import("@/pages/dashboard/SocialPublishingPage")));
 
@@ -1215,6 +1216,7 @@ function Router() {
         <Route path="/dashboard/analytics/behavior">{() => <LazyRoute component={UserBehavior} />}</Route>
         <Route path="/dashboard/analytics/advanced">{() => <LazyRoute component={AdvancedAnalytics} />}</Route>
         <Route path="/dashboard/newsletter-analytics">{() => <LazyRoute component={NewsletterAnalytics} />}</Route>
+        <Route path="/dashboard/audio-bulletin">{() => <LazyRoute component={AudioBulletinPage} />}</Route>
         <Route path="/dashboard/rss-feeds">{() => <LazyRoute component={RssFeedsManager} />}</Route>
         <Route path="/dashboard/sportmonks-news">{() => <LazyRoute component={SportmonksNewsImporter} />}</Route>
         <Route path="/dashboard/sports-names">{() => <LazyRoute component={SportsNamesManager} />}</Route>

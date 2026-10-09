@@ -1895,6 +1895,18 @@ if (!(globalThis as any).__sabqServer) {
         }, BACKGROUND_JOB_DELAY);
       }
 
+      // «نشرة سَبْق» الصوتية: مسودة لكل موعد مجدول عند تفعيل الجدولة (القائد فقط).
+      if (enableBackgroundWorkers) {
+        setTimeout(async () => {
+          try {
+            const { startAudioBulletinJob } = await import("./jobs/audioBulletinJob");
+            startAudioBulletinJob();
+          } catch (error) {
+            console.error("[Server] Error starting audio bulletin job:", error);
+          }
+        }, BACKGROUND_JOB_DELAY);
+      }
+
       // تسوية توقّعات المونديال: نفس نمط أخبار المونديال — تسجيل دائم وفحص
       // القيادة داخل الدورة، يمنح الفائزين نقاطهم فور انتهاء المباراة.
       if (enableBackgroundWorkers) {

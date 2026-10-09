@@ -290,6 +290,15 @@ export const navConfig: NavItem[] = [
         permissions: ["articles.create"], // Users with articles.create permission can access
       },
       {
+        id: "audio_bulletin",
+        labelKey: "nav.audio_bulletin",
+        labelAr: "نشرة سبق الصوتية",
+        path: "/dashboard/audio-bulletin",
+        icon: Radio,
+        roles: ["admin", "editor"],
+        permissions: ["articles.publish"],
+      },
+      {
         id: "social_publishing",
         labelKey: "nav.social_publishing",
         labelAr: "النشر الاجتماعي",
