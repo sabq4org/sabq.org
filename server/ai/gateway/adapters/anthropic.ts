@@ -60,12 +60,14 @@ export const anthropicAdapter: ProviderAdapter = {
       .join("");
     return {
       content: text,
-      // input_tokens excludes cached prefix tokens; count them so usage stays the full
-      // prompt size and cost estimates stay at the uncached (upper-bound) price.
+      // input_tokens excludes cached prefix tokens; add them back so usage is the full
+      // prompt size, and report them separately so cost prices each at its own rate.
       inputTokens:
         response.usage.input_tokens +
         (response.usage.cache_read_input_tokens ?? 0) +
         (response.usage.cache_creation_input_tokens ?? 0),
+      cacheReadTokens: response.usage.cache_read_input_tokens ?? 0,
+      cacheWriteTokens: response.usage.cache_creation_input_tokens ?? 0,
       outputTokens: response.usage.output_tokens,
       truncated: response.stop_reason === "max_tokens",
     };

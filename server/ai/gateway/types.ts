@@ -173,8 +173,11 @@ export interface AdapterCompleteParams {
 
 export interface AdapterCompleteResult {
   content: string;
+  /** All prompt tokens, including prompt-cache reads and writes. */
   inputTokens: number;
   outputTokens: number;
+  cacheReadTokens?: number;
+  cacheWriteTokens?: number;
   truncated: boolean;
 }
 
