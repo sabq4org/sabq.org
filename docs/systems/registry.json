@@ -923,14 +923,19 @@
         "shared/botPublisherTokens.ts",
         "server/services/botPublisherTokenService.ts",
         "server/routes/botPublisherTokens.ts",
-        "client/src/pages/dashboard/PublisherTokensPage.tsx"
+        "client/src/pages/dashboard/PublisherTokensPage.tsx",
+        "server/oauthWebCompletion.ts",
+        "tests/unit/oauthWebCompletion.test.ts",
+        "tests/unit/activityLogRedaction.test.ts",
+        "tests/unit/userRoleSync.test.ts",
+        "tests/unit/csrfExemptions.test.ts"
       ],
       "aiFeatureKeys": [],
       "dashboardPath": "/dashboard/roles",
       "owners": [
         "platform"
       ],
-      "lastReviewed": "2026-09-29"
+      "lastReviewed": "2026-10-09"
     },
     {
       "id": "seo-ssr",
