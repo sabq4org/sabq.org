@@ -3,18 +3,22 @@
  * موعدها (فترة لكل مصدر، فالدقيقة مجرد نبض فحص رخيص)، تحليل الجديد، تنبيهات
  * العاجل، وتحويل تحريري تلقائي لعالي القيمة.
  *
- * التفعيل صريح عبر RADAR_ENABLED=true — لا تعمل تلقائيًا على أي بيئة لم تطلبها.
- * قفل إجباري: RADAR_FORCE_DISABLED في flags.ts يوقف الجدولة حتى لو RADAR_ENABLED=true.
+ * التفعيل الافتراضي عبر RADAR_ENABLED=true، ويمكن تجاوز الإعداد تشغيلياً من
+ * system_settings بالمفتاح radar_runtime_enabled. القفل الإجباري في flags.ts
+ * يوقف الجدولة حتى لو كان الإعداد التشغيلي مفعّلاً.
  */
 import cron from "node-cron";
 import { isLeader } from "../leaderElection";
 import { runRadarCycle } from "../services/radar/cycle";
 import { isRadarForceDisabled } from "../services/radar/flags";
+import { getRadarRuntimeState } from "../services/radar/runtime";
 
 let isRunning = false;
 
 async function tick(trigger: string): Promise<void> {
   if (isRadarForceDisabled()) return;
+  const runtime = await getRadarRuntimeState();
+  if (!runtime.enabled) return;
   // فحص القيادة عند كل دورة لا عند التسجيل: أثناء النشر يقلع الـ pod الجديد
   // بينما القديم ما زال ممسكًا بقفل القيادة — نفس نمط worldCupNewsJob (PR #207).
   if (!isLeader()) return;
@@ -42,11 +46,6 @@ export function startRadarJob(): void {
     console.log("[Radar Job] force-disabled (RADAR_FORCE_DISABLED) — no cron scheduled");
     return;
   }
-  if (process.env.RADAR_ENABLED !== "true") {
-    console.log("[Radar Job] disabled (RADAR_ENABLED != true)");
-    return;
-  }
-
   cron.schedule("* * * * *", () => void tick("cron"), { timezone: "Asia/Riyadh" });
   console.log("[Radar Job] 📡 scheduled — every minute (per-source intervals inside)");
 

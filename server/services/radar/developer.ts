@@ -24,10 +24,11 @@ import type { RadarItem, RadarSource } from "@shared/schema";
 import { approvedCategories, getSource, updateItem } from "./repo";
 import { parseDraftPayload } from "./parsing";
 import {
-  buildVerificationContext,
   isWebSearchConfigured,
+  searchWeb,
   type WebSearchResult,
 } from "../webSearchService";
+import { assertRadarEnabled, isRadarDisabledError } from "./runtime";
 
 const DEVELOPER_MODEL_CHAIN: AIModelConfig[] = [
   { provider: "anthropic", model: SABQ_PRIMARY_EDITOR_MODEL, maxTokens: 10_000, temperature: 0.35, feature: "radar-develop" },
@@ -41,6 +42,58 @@ function buildSearchQueries(item: RadarItem): string[] {
   const arabic = (item.translatedTitle || item.translatedSummary || "").trim();
   if (arabic) queries.push(arabic.slice(0, 120));
   return queries;
+}
+
+/** بحث الرادار مع بوابة قبل/بعد كل استعلام، دون تغيير المستهلكين الآخرين. */
+async function buildRadarVerificationContext(
+  queries: string[],
+  maxResultsPerQuery = 5,
+): Promise<{ context: string; results: WebSearchResult[] } | null> {
+  if (!isWebSearchConfigured()) return null;
+
+  const seen = new Set<string>();
+  const collected: WebSearchResult[] = [];
+  for (const query of queries.filter((q) => q.trim()).slice(0, 3)) {
+    await assertRadarEnabled();
+    try {
+      const results = await searchWeb(query.trim(), maxResultsPerQuery);
+      await assertRadarEnabled();
+      for (const result of results) {
+        if (seen.has(result.url)) continue;
+        seen.add(result.url);
+        collected.push(result);
+      }
+    } catch (error) {
+      // A pause must stop the query loop; ordinary provider failures retain
+      // the existing conservative behavior and allow the next query.
+      try {
+        await assertRadarEnabled();
+      } catch (disabled) {
+        throw disabled;
+      }
+      console.warn(
+        `[web-search] query failed (${query.slice(0, 60)}...):`,
+        error instanceof Error ? error.message : error,
+      );
+    }
+  }
+
+  if (collected.length === 0) return null;
+  const lines = collected
+    .slice(0, 12)
+    .map(
+      (result, index) =>
+        `${index + 1}. ${result.title}\n   الرابط: ${result.url}\n   المقتطف: ${result.snippet || "(بلا مقتطف)"}`,
+    );
+  return {
+    context: [
+      "نتائج بحث ويب حديثة (استخدمها للتحقق والإثراء مع العزو الصريح لمصدرها،",
+      "ولا تعتمد أي معلومة من خارجها ومن خارج المادة الأصلية):",
+      "",
+      ...lines,
+    ].join("\n"),
+    results: collected.slice(0, 12),
+  };
 }
 
 function buildDevelopPrompt(
@@ -140,6 +193,7 @@ function extractDevelopExtras(raw: string): {
 
 /** يطوّر المادة (بحث + توليد) ويكتب المسودة عليها (status → ready). */
 export async function developItem(item: RadarItem): Promise<RadarItem> {
+  await assertRadarEnabled();
   const [source, categoryList] = await Promise.all([
     getSource(item.sourceId),
     approvedCategories(),
@@ -149,13 +203,17 @@ export async function developItem(item: RadarItem): Promise<RadarItem> {
   // البحث أولاً — فشله لا يوقف التطوير، يحوّله لوضع متحفظ
   let verification: { context: string; results: WebSearchResult[] } | null = null;
   if (isWebSearchConfigured()) {
-    verification = await buildVerificationContext(buildSearchQueries(item));
+    await assertRadarEnabled();
+    verification = await buildRadarVerificationContext(buildSearchQueries(item));
+    await assertRadarEnabled();
   }
 
   const prompt = buildDevelopPrompt(item, source, categoryList, verification?.context ?? null);
 
   try {
+    await assertRadarEnabled();
     const response = await generateWithFallback(prompt, DEVELOPER_MODEL_CHAIN);
+    await assertRadarEnabled();
     const draft = parseDraftPayload(response.content);
     const extras = extractDevelopExtras(response.content);
     if (draft.categorySlug && !validSlugs.has(draft.categorySlug)) {
@@ -183,6 +241,7 @@ export async function developItem(item: RadarItem): Promise<RadarItem> {
     if (!updated) throw new Error("[Radar Developer] item vanished while updating");
     return updated;
   } catch (error) {
+    if (isRadarDisabledError(error)) throw error;
     const message = error instanceof Error ? error.message : String(error);
     await updateItem(item.id, { error: `develop: ${message}`.substring(0, 500) });
     throw error;

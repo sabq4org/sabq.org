@@ -432,7 +432,7 @@
       "owners": [
         "editorial"
       ],
-      "lastReviewed": "2026-10-07"
+      "lastReviewed": "2026-10-09"
     },
     {
       "id": "ifox",
@@ -512,7 +512,7 @@
       "owners": [
         "ai"
       ],
-      "lastReviewed": "2026-09-26"
+      "lastReviewed": "2026-10-09"
     },
     {
       "id": "muqtarab",
@@ -549,7 +549,7 @@
       "nameEn": "Smart Radar",
       "status": "active",
       "category": "intelligence",
-      "summary": "رصد إخباري كثيف + قصص مجمّعة وزخم وصلة سعودية؛ يغذّي فجوات التغطية. أُعيد تفعيل الجلب بقرار المالك في 2026-07-31.",
+      "summary": "رصد إخباري كثيف + قصص مجمّعة وزخم وصلة سعودية؛ مفتاح تشغيل شامل يحفظ الحالة. أوقفه المالك مؤقتًا في 2026-10-08.",
       "docPath": "docs/systems/radar/SYSTEM.md",
       "relatedDocs": [
         "docs/RADAR_X_WATCHES.md",
@@ -560,6 +560,7 @@
       "pathGlobs": [
         "server/services/radar/**",
         "server/routes/radar.ts",
+        "server/jobs/radarJob.ts",
         "client/src/pages/dashboard/SmartRadar.tsx",
         "scripts/seed-packs/**",
         "scripts/seed-radar-pack.ts",
@@ -577,7 +578,7 @@
       "owners": [
         "editorial"
       ],
-      "lastReviewed": "2026-09-28"
+      "lastReviewed": "2026-10-08"
     },
     {
       "id": "audio-newsletter",

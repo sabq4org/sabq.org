@@ -5,7 +5,6 @@
  * سقوط أي مزوّد لا يعمي الرادار: التوجيه auto يستخدم المتوفر من المفاتيح،
  * والتبديل النهائي قلبُ متغير بيئة أو عمود x_provider للرصدة — لا تغيير كود.
  */
-
 const FETCH_TIMEOUT_MS = 15_000;
 const MAX_TWEETS_PER_FETCH = 30;
 
@@ -37,6 +36,10 @@ export interface XProviderClient {
 }
 
 async function fetchJsonWithTimeout(url: string, headers: Record<string, string>): Promise<any> {
+  // تحميل حارس التشغيل كسول حتى تبقى دوال بناء الاستعلام قابلة للاختبار
+  // دون تهيئة اتصال قاعدة البيانات.
+  const { assertRadarEnabled } = await import("./runtime");
+  await assertRadarEnabled();
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   try {
@@ -45,7 +48,9 @@ async function fetchJsonWithTimeout(url: string, headers: Record<string, string>
       const body = await response.text().catch(() => "");
       throw new Error(`HTTP ${response.status} ${body.substring(0, 200)}`);
     }
-    return await response.json();
+    const payload = await response.json();
+    await assertRadarEnabled();
+    return payload;
   } finally {
     clearTimeout(timer);
   }

@@ -71,6 +71,8 @@ interface BaseRequest {
   /** Explicit model override (dashboard "test" button, migration escape hatch). */
   model?: ModelRef;
   timeoutMs?: number;
+  /** Optional caller gate checked immediately before every provider transport. */
+  beforeAttempt?: () => Promise<void>;
 }
 
 export interface CompleteRequest extends BaseRequest {
@@ -86,6 +88,12 @@ export interface CompleteRequest extends BaseRequest {
      * to it via Structured Outputs. Other providers ignore it and keep using jsonMode.
      */
     jsonSchema?: Record<string, unknown>;
+    /**
+     * Mark the system prompt for Anthropic prompt caching (5-minute TTL). Only for callers
+     * whose system prompt is fixed across requests; a varying one would pay the cache-write
+     * premium every call. Other providers ignore it.
+     */
+    cacheSystemPrompt?: boolean;
   };
 }
 
@@ -158,14 +166,18 @@ export interface AdapterCompleteParams {
   temperature?: number;
   jsonMode?: boolean;
   jsonSchema?: Record<string, unknown>;
+  cacheSystemPrompt?: boolean;
   timeoutMs: number;
   signal?: AbortSignal;
 }
 
 export interface AdapterCompleteResult {
   content: string;
+  /** All prompt tokens, including prompt-cache reads and writes. */
   inputTokens: number;
   outputTokens: number;
+  cacheReadTokens?: number;
+  cacheWriteTokens?: number;
   truncated: boolean;
 }
 

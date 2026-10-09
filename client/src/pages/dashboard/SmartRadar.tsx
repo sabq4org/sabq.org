@@ -88,6 +88,7 @@ interface RadarStatsResponse {
 }
 
 interface RadarStatusResponse {
+  enabled: boolean;
   forceDisabled: boolean;
   cronEnabled: boolean;
   clustering: boolean;
@@ -258,9 +259,14 @@ function timeAgo(iso: string | null): string {
 }
 
 function describeRunStatus(status: RadarStatusResponse | undefined): string {
-  if (!status) return "رصد المصادر العالمية وفرزها بالدليل والحداثة والصلة";
-  if (status.forceDisabled) return "الرادار متوقف إجباريًا من الكود — لا جلب ولا تحليل.";
-  const parts: string[] = [status.cronEnabled ? "الرصد الآلي يعمل" : "الرصد الآلي متوقف (RADAR_ENABLED)"];
+  if (!status) return "تعذر التحقق من حالة الرادار — أزرار التنفيذ معطلة مؤقتًا.";
+  if (status.forceDisabled) {
+    return "الرادار متوقف بقفل طارئ — لا يمكن تشغيله من هذا الزر. البيانات السابقة محفوظة.";
+  }
+  if (!status.enabled) {
+    return "الرادار متوقف بالكامل — البيانات السابقة محفوظة، ولن تُجرى عمليات جلب أو تحليل أو تحويل جديدة.";
+  }
+  const parts: string[] = [status.cronEnabled ? "الرصد الآلي يعمل" : "الرصد الآلي متوقف"];
   if (status.lastAnalyzedAt) parts.push(`آخر تحليل ${timeAgo(status.lastAnalyzedAt)}`);
   parts.push(`تحليل اليوم ${status.analyzedToday}/${status.dailyAnalyzeCap}`);
   if (status.analyzedToday >= status.dailyAnalyzeCap) parts.push("بلغ السقف اليومي — التحليل مؤجل");
@@ -290,10 +296,42 @@ export default function SmartRadar() {
   });
   const stats = statsRaw ?? null;
 
-  const { data: runStatus } = useQuery<RadarStatusResponse>({
+  const {
+    data: runStatus,
+    isLoading: statusLoading,
+    isError: statusError,
+  } = useQuery<RadarStatusResponse>({
     queryKey: ["/api/radar/status"],
     refetchInterval: 60_000,
   });
+  const statusAvailable = Boolean(runStatus) && !statusError;
+
+  const invalidateRadar = () => {
+    queryClient.invalidateQueries({ queryKey: ["/api/radar/items"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/radar/stats"] });
+  };
+
+  const statusMutation = useMutation({
+    mutationFn: (enabled: boolean) =>
+      apiRequest<RadarStatusResponse>("/api/radar/status", {
+        method: "PATCH",
+        body: JSON.stringify({ enabled }),
+      }),
+    onSuccess: (nextStatus) => {
+      queryClient.setQueryData(["/api/radar/status"], nextStatus);
+      queryClient.invalidateQueries({ queryKey: ["/api/radar/status"] });
+      invalidateRadar();
+      toast({
+        title: "تم تحديث حالة الرادار",
+        description: "البيانات السابقة محفوظة، وستتبع العمليات الجديدة الحالة المحدّثة.",
+      });
+    },
+    onError: (error: Error) =>
+      toast({ title: "تعذر تحديث حالة الرادار", description: error.message, variant: "destructive" }),
+  });
+  // لا نسمح بأي عملية قد تجلب أو تحلل أو تولّد تكلفة قبل تأكيد الحالة من الخادم.
+  const radarActionsEnabled =
+    statusAvailable && runStatus?.enabled === true && !runStatus.forceDisabled && !statusMutation.isPending;
 
   const { data: itemsRaw, isLoading: itemsLoading } = useQuery<{
     items: RadarItemRow[];
@@ -334,9 +372,16 @@ export default function SmartRadar() {
   const { data: categoriesRaw } = useQuery<CategoryRow[]>({ queryKey: ["/api/categories"] });
   const categories = Array.isArray(categoriesRaw) ? categoriesRaw : [];
 
-  const invalidateRadar = () => {
-    queryClient.invalidateQueries({ queryKey: ["/api/radar/items"] });
-    queryClient.invalidateQueries({ queryKey: ["/api/radar/stats"] });
+  const guardedRadarAction = (action: () => void) => {
+    if (!radarActionsEnabled) {
+      toast({
+        title: "الرادار متوقف",
+        description: "البيانات السابقة محفوظة، ويمكن إعادة التشغيل من زر حالة الرادار.",
+        variant: "destructive",
+      });
+      return;
+    }
+    action();
   };
 
   // ---------- إجراءات المواد ----------
@@ -406,15 +451,52 @@ export default function SmartRadar() {
         <DashboardPageHeader
           icon={Radar}
           title="رادار سبق الذكي"
-          description={describeRunStatus(runStatus)}
+          description={statusLoading ? "جارٍ التحقق من حالة الرادار..." : describeRunStatus(statusError ? undefined : runStatus)}
           actions={
             <>
-            <SourcesSheet sources={sources} categories={categories} />
-            <WatchesSheet watches={xWatches} categories={categories} />
+            <Button
+              variant={radarActionsEnabled ? "destructive" : "default"}
+              size="sm"
+              className="font-semibold"
+              disabled={
+                !statusAvailable ||
+                statusLoading ||
+                statusMutation.isPending ||
+                Boolean(runStatus?.forceDisabled)
+              }
+              onClick={() => statusMutation.mutate(!radarActionsEnabled)}
+              aria-pressed={radarActionsEnabled}
+              data-testid="button-radar-master-switch"
+              title={
+                !statusAvailable
+                  ? "جارٍ التحقق من حالة الرادار"
+                  : runStatus?.forceDisabled
+                    ? "لا يمكن تشغيل الرادار أثناء القفل الطارئ"
+                  : radarActionsEnabled
+                    ? "إيقاف الجلب والتحليل والتحويلات الجديدة"
+                    : "إعادة تشغيل عمليات الرادار"
+              }
+            >
+              {statusLoading || statusMutation.isPending
+                ? "جارٍ تحديث الحالة..."
+                : runStatus?.forceDisabled
+                  ? "التشغيل غير متاح"
+                  : radarActionsEnabled
+                  ? "إيقاف الرادار بالكامل"
+                  : "تشغيل الرادار"}
+            </Button>
+            <SourcesSheet sources={sources} categories={categories} allowFetching={radarActionsEnabled} />
+            <WatchesSheet watches={xWatches} categories={categories} allowFetching={radarActionsEnabled} />
             <RulesDialog rules={rules} telegramConfigured={stats?.telegramConfigured ?? false} />
             </>
           }
         />
+
+        {statusError && !statusLoading && (
+          <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+            تعذر التحقق من حالة الرادار؛ أزرار التنفيذ معطلة مؤقتًا. ستتجدد المحاولة تلقائيًا.
+          </div>
+        )}
 
         {health && health.withError > 0 && (
           <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
@@ -546,9 +628,10 @@ export default function SmartRadar() {
                   item={item}
                   busy={pendingItemId === item.id}
                   searchConfigured={stats?.webSearchConfigured ?? false}
-                  onTransform={() => transformMutation.mutate(item.id)}
-                  onDevelop={() => developMutation.mutate(item.id)}
-                  onExport={() => exportMutation.mutate(item.id)}
+                  onTransform={() => guardedRadarAction(() => transformMutation.mutate(item.id))}
+                  onDevelop={() => guardedRadarAction(() => developMutation.mutate(item.id))}
+                  onExport={() => guardedRadarAction(() => exportMutation.mutate(item.id))}
+                  radarActionsEnabled={radarActionsEnabled}
                   onDismiss={() => dismissMutation.mutate(item.id)}
                   onRestore={() => restoreMutation.mutate(item.id)}
                   onOpenArticle={(articleId) => setLocation(`/dashboard/articles/${articleId}/edit`)}
@@ -601,6 +684,7 @@ function KpiCard({
 function RadarItemCard({
   item,
   busy,
+  radarActionsEnabled,
   onTransform,
   onExport,
   onDismiss,
@@ -611,6 +695,7 @@ function RadarItemCard({
 }: {
   item: RadarItemRow;
   busy: boolean;
+  radarActionsEnabled: boolean;
   onTransform: () => void;
   onExport: () => void;
   onDismiss: () => void;
@@ -770,7 +855,7 @@ function RadarItemCard({
       <CardFooter className="flex flex-wrap items-center gap-2 pt-0">
         {(item.status === "new" || item.status === "analyzed") && (
           <>
-            <Button size="sm" onClick={onTransform} disabled={busy}>
+            <Button size="sm" onClick={onTransform} disabled={busy || !radarActionsEnabled}>
               <Wand2 className={`ml-1 h-4 w-4 ${busy ? "animate-pulse" : ""}`} />
               {busy ? "جارٍ التحويل..." : "تحويل تحريري"}
             </Button>
@@ -778,7 +863,7 @@ function RadarItemCard({
               size="sm"
               variant="secondary"
               onClick={onDevelop}
-              disabled={busy}
+              disabled={busy || !radarActionsEnabled}
               title={
                 searchConfigured
                   ? "تطوير معزز ببحث تحقق من الويب — مسودة مثراة بعزو + ملاحظات مراجع"
@@ -792,7 +877,7 @@ function RadarItemCard({
           </>
         )}
         {item.status === "ready" && (
-          <Button size="sm" onClick={onExport} disabled={busy}>
+          <Button size="sm" onClick={onExport} disabled={busy || !radarActionsEnabled}>
             <Send className="ml-1 h-4 w-4" />
             {busy ? "جارٍ التصدير..." : "تصدير وفتح المحرر"}
           </Button>
@@ -842,9 +927,11 @@ const EMPTY_SOURCE_FORM = {
 function SourcesSheet({
   sources,
   categories,
+  allowFetching,
 }: {
   sources: RadarSourceRow[];
   categories: CategoryRow[];
+  allowFetching: boolean;
 }) {
   const { toast } = useToast();
   const [form, setForm] = useState(EMPTY_SOURCE_FORM);
@@ -997,8 +1084,9 @@ function SourcesSheet({
           <Button
             size="sm"
             className="w-full"
-            disabled={!form.name.trim() || !form.url.trim() || createMutation.isPending}
+            disabled={!allowFetching || !form.name.trim() || !form.url.trim() || createMutation.isPending}
             onClick={() => createMutation.mutate(form)}
+            title={!allowFetching ? "الرادار متوقف: ستتمكن من إضافة المصدر بعد إعادة التشغيل" : undefined}
           >
             {createMutation.isPending ? "جارٍ الإضافة..." : "إضافة المصدر"}
           </Button>
@@ -1097,9 +1185,11 @@ const EMPTY_WATCH_FORM = {
 function WatchesSheet({
   watches,
   categories,
+  allowFetching,
 }: {
   watches: RadarSourceRow[];
   categories: CategoryRow[];
+  allowFetching: boolean;
 }) {
   const { toast } = useToast();
   const [form, setForm] = useState(EMPTY_WATCH_FORM);
@@ -1287,8 +1377,9 @@ function WatchesSheet({
           <Button
             size="sm"
             className="w-full"
-            disabled={!form.value.trim() || createMutation.isPending}
+            disabled={!allowFetching || !form.value.trim() || createMutation.isPending}
             onClick={() => createMutation.mutate(form)}
+            title={!allowFetching ? "الرادار متوقف: ستتمكن من إضافة الرصدة بعد إعادة التشغيل" : undefined}
           >
             {createMutation.isPending ? "جارٍ الإضافة..." : "إضافة الرصدة"}
           </Button>
