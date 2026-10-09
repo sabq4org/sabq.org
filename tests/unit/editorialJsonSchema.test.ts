@@ -29,6 +29,7 @@ describe("editorial output schema", () => {
     expect(complete.mock.calls[0][0].options).toMatchObject({
       jsonMode: true,
       jsonSchema: EDITORIAL_JSON_SCHEMA,
+      cacheSystemPrompt: true,
     });
   });
 

@@ -8,7 +8,7 @@ import pRetry from "p-retry";
 import { CircuitBreaker } from "./circuitBreaker";
 import { isRetryableWithinModel, normalizeProviderError } from "./errors";
 import { executeWithFailover, type FailoverOutcome } from "./failover";
-import { computeCostUsd } from "./costs";
+import { computeCostUsd, type UsageForCost } from "./costs";
 import type { AIIncident } from "./notifier";
 import {
   AIGatewayError,
@@ -106,6 +106,7 @@ export class AIGateway {
         temperature: req.options?.temperature ?? cfg.temperature ?? undefined,
         jsonMode: req.options?.jsonMode,
         jsonSchema: req.options?.jsonSchema,
+        cacheSystemPrompt: req.options?.cacheSystemPrompt,
         timeoutMs,
         signal,
       }),
@@ -115,7 +116,11 @@ export class AIGateway {
       inputTokens: outcome.result.inputTokens,
       outputTokens: outcome.result.outputTokens,
     };
-    const { latencyMs, estimatedCostUsd } = await this.logSuccess("complete", req, outcome, usage);
+    const { latencyMs, estimatedCostUsd } = await this.logSuccess("complete", req, outcome, {
+      ...usage,
+      cacheReadTokens: outcome.result.cacheReadTokens,
+      cacheWriteTokens: outcome.result.cacheWriteTokens,
+    });
 
     return {
       content: outcome.result.content,
@@ -410,7 +415,7 @@ export class AIGateway {
     op: AIOperation,
     req: { feature: string; userId?: string },
     outcome: FailoverOutcome<unknown>,
-    usage: { inputTokens?: number; outputTokens?: number; unitCount?: number },
+    usage: UsageForCost,
   ): Promise<{ latencyMs: number; estimatedCostUsd: number }> {
     const latencyMs = outcome.attempts.find((a) => a.ok)?.latencyMs ?? 0;
     const model = await this.deps.getModel(outcome.used);
