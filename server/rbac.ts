@@ -449,6 +449,33 @@ export function requireRole(...roleNames: string[]) {
   };
 }
 
+// مفاتيح لا تُحفظ في سجل النشاط أبدًا. مسارات إدارة المستخدمين تمرر صف users
+// كاملاً كـoldValue، فكان هاش كلمة المرور وسر 2FA ورموز الاحتياط تُحفظ
+// وتُعرض لكل من يملك system.view_audit.
+const ACTIVITY_LOG_REDACTED_KEYS = new Set([
+  "password",
+  "passwordHash",
+  "password_hash",
+  "twoFactorSecret",
+  "two_factor_secret",
+  "twoFactorBackupCodes",
+  "two_factor_backup_codes",
+]);
+
+export function redactActivityValue<T>(value: T, depth = 0): T {
+  if (value === null || value === undefined || depth > 5) return value;
+  if (Array.isArray(value)) {
+    return value.map((item) => redactActivityValue(item, depth + 1)) as T;
+  }
+  if (typeof value !== "object" || value instanceof Date) return value;
+  const out: Record<string, unknown> = {};
+  for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
+    if (ACTIVITY_LOG_REDACTED_KEYS.has(key)) continue;
+    out[key] = redactActivityValue(item, depth + 1);
+  }
+  return out as T;
+}
+
 // Helper: Log activity to activity_logs table
 export async function logActivity(params: {
   userId: string;
@@ -481,9 +508,9 @@ export async function logActivity(params: {
       action: params.action,
       entityType: params.entityType,
       entityId: params.entityId,
-      oldValue: params.oldValue || null,
-      newValue: params.newValue || null,
-      metadata: params.metadata || null,
+      oldValue: redactActivityValue(params.oldValue) || null,
+      newValue: redactActivityValue(params.newValue) || null,
+      metadata: redactActivityValue(params.metadata) || null,
     });
   } catch (error) {
     console.error("Error logging activity:", error);

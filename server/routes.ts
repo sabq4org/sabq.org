@@ -93,7 +93,7 @@ import { summarizeText, generateSocialPost, suggestImageQuery, translateContent,
 import { importFromRssFeed } from "./rssImporter";
 import { generateCalendarEventIdeas, generateArticleDraft } from "./services/calendarAi";
 import { generateNewsletterSubtitle } from "./services/smartCategoryClassifier";
-import { requireAuth, requirePermission, requireAnyPermission, requireRole, logActivity, getUserPermissionData, getUserPermissions, getEffectiveUserPermissions, userHasAnyRole, userHasPermission, invalidateUserPermissionCache, getRoleAssignmentAuthority, roleAssignmentError, roleIdsAssignmentError } from "./rbac";
+import { requireAuth, requirePermission, requireAnyPermission, requireRole, logActivity, redactActivityValue, getUserPermissionData, getUserPermissions, getEffectiveUserPermissions, userHasAnyRole, userHasPermission, invalidateUserPermissionCache, getRoleAssignmentAuthority, roleAssignmentError, roleIdsAssignmentError } from "./rbac";
 import { PERMISSION_CODES, ROLE_LABELS_AR, ROLE_NAMES } from "@shared/rbac-constants";
 import { isReaderLikeRole, mergeRoleSignals, primaryRoleKey } from "@shared/effectiveRoles";
 import { inferStaffRolesFromWork } from "./services/staffRoleInference";
@@ -18909,7 +18909,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       });
       
       res.json({
-        logs: enhancedLogs,
+        logs: redactActivityValue(enhancedLogs),
         total: count,
         page: pageNum,
         limit: limitNum,
