@@ -146,8 +146,14 @@ final class NotificationsStore {
     /// أحرف/أرقام لاتينية وشرطة/underscore فقط، بحد 128.
     private static let tokenPattern = "^[A-Za-z0-9_-]{1,128}$"
 
+    /// ICU عبر `NSRegularExpression` لا `range(of:options: .regularExpression)`:
+    /// الأخيرة على iOS 27 تمرّ بمحرك Swift Regex الذي يجمع `_` مع علامة التشكيل
+    /// التالية حرفًا واحدًا («_ً») فيرفض حد المدى ويُسقط التطبيق (`try!` داخلي).
+    private static let slugRegex = try? NSRegularExpression(pattern: slugPattern)
+
     private func isValidSlug(_ value: String) -> Bool {
-        value.range(of: Self.slugPattern, options: .regularExpression) != nil
+        guard let regex = Self.slugRegex else { return false }
+        return regex.firstMatch(in: value, range: NSRange(value.startIndex..., in: value)) != nil
     }
 
     private func isValidToken(_ value: String) -> Bool {
