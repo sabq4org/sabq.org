@@ -955,7 +955,7 @@ struct HomeFeedView: View {
                         // Prefetch images for the next 5 articles
                         let upcoming = articles.dropFirst(index + 1).prefix(5)
                         let urls = upcoming.compactMap { $0.imageURL.flatMap(URL.init(string:)) }
-                        if !urls.isEmpty { ImageCache.prefetch(urls: urls, maxPixelSize: 260) }
+                        if !urls.isEmpty { ImageCache.prefetch(urls: urls, maxPixelSize: LatestTimelineStyle.thumbnailPixels) }
                     }
                 }
             }

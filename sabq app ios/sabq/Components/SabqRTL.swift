@@ -95,7 +95,7 @@ private struct SabqRTLLabel: UIViewRepresentable {
         label.numberOfLines = numberOfLines
         label.semanticContentAttribute = .forceRightToLeft
         label.textAlignment = .right
-        applyAttributedText(to: label, font: scaledFont(context))
+        applyAttributedText(to: label, font: scaledFont(context), width: label.preferredMaxLayoutWidth)
     }
 
     /// الخط بعد مقياس Dynamic Type للنظام (نسبةً إلى body، كما تتدرّج خطوط
@@ -118,14 +118,14 @@ private struct SabqRTLLabel: UIViewRepresentable {
         // بدون preferredMaxLayoutWidth يبقى intrinsic ضيقاً فيبدو العنوان «في الوسط».
         uiView.preferredMaxLayoutWidth = width
         let font = scaledFont(context)
-        applyAttributedText(to: uiView, font: font)
+        applyAttributedText(to: uiView, font: font, width: width)
         let fitted = uiView.sizeThatFits(
             CGSize(width: width, height: CGFloat.greatestFiniteMagnitude)
         )
         return CGSize(width: width, height: max(ceil(fitted.height), ceil(font.lineHeight + lineSpacing)))
     }
 
-    private func applyAttributedText(to label: UILabel, font: UIFont) {
+    private func attributes(font: UIFont) -> [NSAttributedString.Key: Any] {
         let paragraph = NSMutableParagraphStyle()
         paragraph.baseWritingDirection = .rightToLeft
         // .right صريح — .natural داخل UILabel المضمّن يُحلّ كـ LTR فيُحاذى لليسار.
@@ -138,19 +138,52 @@ private struct SabqRTLLabel: UIViewRepresentable {
             value: NSWritingDirection.rightToLeft.rawValue
                 | NSWritingDirectionFormatType.embedding.rawValue
         )
+        return [
+            .font: font,
+            .foregroundColor: textColor,
+            .paragraphStyle: paragraph,
+            .writingDirection: [writingDir],
+        ]
+    }
 
+    private func applyAttributedText(to label: UILabel, font: UIFont, width: CGFloat) {
+        let attrs = attributes(font: font)
         label.attributedText = NSAttributedString(
-            string: text,
-            attributes: [
-                .font: font,
-                .foregroundColor: textColor,
-                .paragraphStyle: paragraph,
-                .writingDirection: [writingDir],
-            ]
+            string: displayedText(attributes: attrs, font: font, width: width),
+            attributes: attrs
         )
-        // نمط الفقرة `.byWordWrapping` يلغي قصّ UILabel، فكان العنوان المحدود
-        // بسطرين يُبتر عند آخر كلمة بلا «…». ضبط الخاصية بعد النص المنسّق
-        // يطبّق القصّ على السطر الأخير فقط ويُبقي الالتفاف بين الأسطر.
-        label.lineBreakMode = numberOfLines == 0 ? .byWordWrapping : .byTruncatingTail
+    }
+
+    /// العنوان المعروض مقصوصًا عند آخر كلمة تتسع في `numberOfLines` مع «…».
+    /// نمط الفقرة `.byWordWrapping` يلغي قصّ UILabel فكان العنوان يُبتر بلا
+    /// «…»، وتفعيل قصّ الذيل على النص المنسّق جعل UILabel يرسم بعض العناوين
+    /// سطرًا واحدًا — فنقصّ يدويًا ونبقي الالتفاف العادي.
+    private func displayedText(attributes: [NSAttributedString.Key: Any], font: UIFont, width: CGFloat) -> String {
+        guard numberOfLines > 1, width > 0 else { return text }
+        // ارتفاع n أسطر، مع تسامح لإضافة تباعد بعد السطر الأخير أو عدمها.
+        let maxHeight = CGFloat(numberOfLines) * (font.lineHeight + lineSpacing) + 1
+        func fits(_ candidate: String) -> Bool {
+            NSAttributedString(string: candidate, attributes: attributes)
+                .boundingRect(
+                    with: CGSize(width: width, height: .greatestFiniteMagnitude),
+                    options: [.usesLineFragmentOrigin, .usesFontLeading],
+                    context: nil
+                )
+                .height <= maxHeight
+        }
+        if fits(text) { return text }
+
+        let words = text.split(separator: " ")
+        var low = 0
+        var high = words.count - 1
+        while low < high {
+            let mid = (low + high + 1) / 2
+            if fits(words[..<mid].joined(separator: " ") + "…") {
+                low = mid
+            } else {
+                high = mid - 1
+            }
+        }
+        return low > 0 ? words[..<low].joined(separator: " ") + "…" : text
     }
 }

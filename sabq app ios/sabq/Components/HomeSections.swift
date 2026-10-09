@@ -105,8 +105,10 @@ enum LatestTimelineStyle {
     static let railLine: CGFloat = 2
     static let dotSize: CGFloat = 9
     static let gap: CGFloat = 12
-    static let thumbnailWidth: CGFloat = 96
-    static let thumbnailHeight: CGFloat = 72
+    static let thumbnailWidth = NewsRowStyle.thumbnailWidth
+    static let thumbnailHeight = NewsRowStyle.thumbnailHeight
+    /// 112pt × 3 — التحميل المسبق في الرئيسية يستخدم السقف نفسه حتى لا تُجلب الصورة مرتين.
+    static let thumbnailPixels: CGFloat = 340
     /// بداية الفاصل بين الصفوف: بعد عمود الخط مباشرة.
     static var dividerInset: CGFloat { railWidth + gap }
 }
@@ -192,19 +194,24 @@ struct LatestTimelineRow: View {
                 .padding(.top, 5)
                 .accessibilityHidden(true)
 
+            // الوقت والتصنيف فوق، ثم العنوان والصورة في صف واحد كي تبدأ الصورة
+            // مع أول سطر من العنوان (ملاحظة المالك 2026-10-09).
             VStack(alignment: .leading, spacing: 5) {
                 kicker
-                SabqRTLText(
-                    article.title,
-                    uiFont: SabqFonts.uiSubhead(size: NewsRowStyle.compactTitleSize),
-                    color: SabqTheme.ink,
-                    lineLimit: dynamicTypeSize.isAccessibilitySize ? 0 : NewsRowStyle.compactTitleLines,
-                    lineSpacing: NewsRowStyle.titleLineSpacing
-                )
+                HStack(alignment: .top, spacing: LatestTimelineStyle.gap) {
+                    SabqRTLText(
+                        article.title,
+                        uiFont: SabqFonts.uiSubhead(size: NewsRowStyle.compactTitleSize),
+                        color: SabqTheme.ink,
+                        lineLimit: dynamicTypeSize.isAccessibilitySize ? 0 : NewsRowStyle.compactTitleLines,
+                        lineSpacing: NewsRowStyle.titleLineSpacing
+                    )
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                    thumbnail
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-
-            thumbnail
         }
         .padding(.vertical, 12)
         .contentShape(Rectangle())
@@ -237,7 +244,7 @@ struct LatestTimelineRow: View {
     private var thumbnail: some View {
         Group {
             if let urlString = article.imageURL, let url = URL(string: urlString) {
-                FocalCachedAsyncImage(url: url, focalPoint: article.imageFocalPoint, maxPixelSize: 260) {
+                FocalCachedAsyncImage(url: url, focalPoint: article.imageFocalPoint, maxPixelSize: LatestTimelineStyle.thumbnailPixels) {
                     placeholder
                 }
             } else {
@@ -252,7 +259,7 @@ struct LatestTimelineRow: View {
             inset: 4,
             sizeScale: 0.65
         )
-        .padding(.top, 2)
+        .padding(.top, 4)
     }
 
     private var placeholder: some View {

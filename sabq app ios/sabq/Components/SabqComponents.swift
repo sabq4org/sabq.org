@@ -1705,8 +1705,10 @@ struct FeaturedArticleCard: View {
 /// these values here lets custom row consumers adopt the same visual rhythm
 /// without changing the global surface-card treatment.
 enum NewsRowStyle {
-    static let thumbnailWidth: CGFloat = 104
-    static let thumbnailHeight: CGFloat = 84
+    /// 16:9 مقاس صور الأخبار الغالب — 104×84 (قرابة 5:4) كان يقص ربع العرض
+    /// فيبتر الشعارات والنصوص القريبة من الحافة (ملاحظة المالك 2026-10-09).
+    static let thumbnailWidth: CGFloat = 112
+    static let thumbnailHeight: CGFloat = 63
     static let thumbnailRadius: CGFloat = 10
     static let thumbnailStrokeWidth: CGFloat = 0.5
     static let thumbnailGap: CGFloat = 12
@@ -1790,7 +1792,7 @@ struct CompactArticleRow: View {
         .padding(.vertical, 8)
     }
 
-    /// The compact row follows the sidebar row's fixed 104×84 thumbnail while
+    /// The compact row follows the sidebar row's fixed 112×63 (16:9) thumbnail while
     /// retaining focal-point cropping and the AI provenance badge.
     private var compactThumbnail: some View {
         Group {
@@ -1799,7 +1801,7 @@ struct CompactArticleRow: View {
                     thumbnailPlaceholder(size: NewsRowStyle.thumbnailWidth)
                 }
             } else {
-                thumbnailPlaceholder(size: 104)
+                thumbnailPlaceholder(size: NewsRowStyle.thumbnailWidth)
             }
         }
         .frame(width: NewsRowStyle.thumbnailWidth, height: NewsRowStyle.thumbnailHeight)
