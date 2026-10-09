@@ -586,7 +586,7 @@
       "nameEn": "Audio Newsletters",
       "status": "active",
       "category": "content",
-      "summary": "موجز المقال الصوتي بصوت Gemini السعودي الإذاعي واحتياط HUMAIN ثم ElevenLabs ثم Google، إضافة إلى النشرة البريدية الباقية بعد إيقاف منتج النشرات الصوتية.",
+      "summary": "موجز المقال الصوتي بصوت Gemini السعودي الإذاعي واحتياط HUMAIN ثم ElevenLabs ثم Google، إضافة إلى النشرة البريدية الباقية بعد إيقاف منتج النشرات الصوتية، و«نشرة سَبْق» الصوتية لأهم الأخبار تحت الهيدر بعد اعتماد محرر.",
       "docPath": "docs/systems/audio-newsletter/SYSTEM.md",
       "relatedDocs": [
         "docs/AUDIO_NEWSLETTER_SYSTEM.md",
@@ -634,17 +634,25 @@
         "client/src/pages/NewsletterPage.tsx",
         "tests/unit/newsletter*.test.ts",
         "e2e/newsletter-*.spec.ts",
-        "e2e/fixtures/newsletter.*"
+        "e2e/fixtures/newsletter.*",
+        "server/services/audioBulletin*.ts",
+        "server/routes/audioBulletin.ts",
+        "server/jobs/audioBulletinJob.ts",
+        "client/src/components/AudioBulletinBar.tsx",
+        "client/src/lib/audioBulletinPlayer.ts",
+        "client/src/pages/dashboard/AudioBulletin.tsx",
+        "tests/unit/audioBulletin*.test.ts"
       ],
       "aiFeatureKeys": [
         "audio-newsletter",
-        "newsletter-editorial"
+        "newsletter-editorial",
+        "audio-bulletin-script"
       ],
       "dashboardPath": "/dashboard/system-settings",
       "owners": [
         "content"
       ],
-      "lastReviewed": "2026-09-26"
+      "lastReviewed": "2026-10-09"
     },
     {
       "id": "media-library",
