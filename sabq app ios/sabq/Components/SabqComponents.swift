@@ -1551,20 +1551,13 @@ struct DetailLabelPill: View {
                     .frame(width: 11, height: 11)
             }
             Text(title)
-                .font(SabqFonts.app(size: 11, weight: .medium))
+                .font(SabqFonts.app(size: 13, weight: .semibold))
                 .lineLimit(1)
         }
+        // نص ملوّن بلا كبسولة (نموذج صفحة الخبر المعتمد 2026-10-09).
         .foregroundStyle(tint)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 5)
-        .background(
-            Capsule(style: .continuous)
-                .fill(tint.opacity(0.10))
-        )
-        .overlay(
-            Capsule(style: .continuous)
-                .stroke(tint.opacity(0.40), lineWidth: 1)
-        )
+        .padding(.vertical, 2)
+        .contentShape(Rectangle())
     }
 }
 
