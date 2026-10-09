@@ -88,6 +88,12 @@ export interface CompleteRequest extends BaseRequest {
      * to it via Structured Outputs. Other providers ignore it and keep using jsonMode.
      */
     jsonSchema?: Record<string, unknown>;
+    /**
+     * Mark the system prompt for Anthropic prompt caching (5-minute TTL). Only for callers
+     * whose system prompt is fixed across requests; a varying one would pay the cache-write
+     * premium every call. Other providers ignore it.
+     */
+    cacheSystemPrompt?: boolean;
   };
 }
 
@@ -160,6 +166,7 @@ export interface AdapterCompleteParams {
   temperature?: number;
   jsonMode?: boolean;
   jsonSchema?: Record<string, unknown>;
+  cacheSystemPrompt?: boolean;
   timeoutMs: number;
   signal?: AbortSignal;
 }

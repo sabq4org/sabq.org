@@ -29,6 +29,7 @@ export const anthropicAdapter: ProviderAdapter = {
   async complete(modelId: string, params: AdapterCompleteParams): Promise<AdapterCompleteResult> {
     // Anthropic takes system prompts as a top-level param, not a message role.
     const systemParts = params.messages.filter((m) => m.role === "system").map((m) => m.content);
+    const systemText = systemParts.join("\n\n");
     const chat = params.messages
       .filter((m) => m.role !== "system")
       .map((m) => ({ role: m.role as "user" | "assistant", content: m.content }));
@@ -38,7 +39,13 @@ export const anthropicAdapter: ProviderAdapter = {
         model: modelId,
         max_tokens: params.maxTokens ?? DEFAULT_MAX_TOKENS,
         ...(params.temperature !== undefined ? { temperature: params.temperature } : {}),
-        ...(systemParts.length ? { system: systemParts.join("\n\n") } : {}),
+        ...(systemParts.length
+          ? {
+              system: params.cacheSystemPrompt
+                ? [{ type: "text", text: systemText, cache_control: { type: "ephemeral" } }]
+                : systemText,
+            }
+          : {}),
         messages: chat.length ? chat : [{ role: "user", content: "" }],
         ...(params.jsonSchema ? claudeJsonOutput(params.jsonSchema) : {}),
       } as Anthropic.MessageCreateParamsNonStreaming,
@@ -53,7 +60,12 @@ export const anthropicAdapter: ProviderAdapter = {
       .join("");
     return {
       content: text,
-      inputTokens: response.usage.input_tokens,
+      // input_tokens excludes cached prefix tokens; count them so usage stays the full
+      // prompt size and cost estimates stay at the uncached (upper-bound) price.
+      inputTokens:
+        response.usage.input_tokens +
+        (response.usage.cache_read_input_tokens ?? 0) +
+        (response.usage.cache_creation_input_tokens ?? 0),
       outputTokens: response.usage.output_tokens,
       truncated: response.stop_reason === "max_tokens",
     };

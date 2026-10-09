@@ -720,7 +720,8 @@ Professional English news story, ready for immediate publication, presenting Sau
         model: SABQ_PRIMARY_EDITOR_MODEL,
         max_tokens: 8000,
         temperature: 0.3,
-        system: systemPrompt,
+        // تعليمات النظام ثابتة بين الأخبار (~5 آلاف توكن) فتُخزَّن مؤقتًا وتُقرأ بجزء صغير من سعر الإدخال
+        system: [{ type: "text" as const, text: systemPrompt, cache_control: { type: "ephemeral" as const } }],
         messages: [{ role: "user" as const, content: userPrompt }],
         // Structured Outputs: تضمن JSON صالحاً مطابقاً للمخطط (output_config غير موجود في أنواع SDK 0.68 لكنه GA في الـ API)
         output_config: {

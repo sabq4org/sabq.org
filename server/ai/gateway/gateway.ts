@@ -106,6 +106,7 @@ export class AIGateway {
         temperature: req.options?.temperature ?? cfg.temperature ?? undefined,
         jsonMode: req.options?.jsonMode,
         jsonSchema: req.options?.jsonSchema,
+        cacheSystemPrompt: req.options?.cacheSystemPrompt,
         timeoutMs,
         signal,
       }),
