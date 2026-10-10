@@ -395,7 +395,10 @@
         "tests/unit/editorialJsonSchema.test.ts",
         "tests/unit/dataStoryStructuredOutputs.test.ts",
         "tests/unit/structuredOutputsComparison.test.ts",
-        "server/services/botPersonalScheduleService.ts"
+        "server/services/botPersonalScheduleService.ts",
+        "client/src/lib/editAndGenerateStream.ts",
+        "tests/unit/editAndGenerateStream.test.ts",
+        "tests/unit/openaiUsageAttribution.test.ts"
       ],
       "aiFeatureKeys": [
         "content-tools",
@@ -426,13 +429,28 @@
         "coverage-gap-matcher",
         "editor-openai-images",
         "proofread",
-        "editorial-research"
+        "editorial-research",
+        "editor-summarize",
+        "editor-headlines",
+        "editor-credibility",
+        "editor-seo-analysis",
+        "editor-smart-content",
+        "editor-rewrite",
+        "editor-media-keywords",
+        "editor-auto-format",
+        "image-focal-point",
+        "editor-social-post",
+        "editor-fact-check",
+        "editorial-edit-fallback",
+        "editorial-email-analysis",
+        "editorial-content-improvement",
+        "editorial-image-alt-text"
       ],
       "dashboardPath": "/dashboard",
       "owners": [
         "editorial"
       ],
-      "lastReviewed": "2026-10-09"
+      "lastReviewed": "2026-10-10"
     },
     {
       "id": "ifox",
@@ -461,13 +479,16 @@
         "ifox-content",
         "ifox-quality",
         "ifox-strategy",
-        "ai-task-executor"
+        "ai-task-executor",
+        "ifox-title",
+        "ifox-content-suggestions",
+        "ifox-content-analysis"
       ],
       "dashboardPath": "/dashboard/admin/ifox",
       "owners": [
         "ai"
       ],
-      "lastReviewed": "2026-09-05"
+      "lastReviewed": "2026-10-10"
     },
     {
       "id": "ai-hub",
@@ -500,19 +521,25 @@
         "e2e/ai-hub-overview.spec.ts",
         "server/ai/claudeStructuredOutputs.ts",
         "tests/unit/claudeStructuredOutputs.test.ts",
-        "tests/unit/aiGatewayFailover.test.ts"
+        "tests/unit/aiGatewayFailover.test.ts",
+        "server/openai.ts",
+        "tests/unit/trackedOpenAI.test.ts"
       ],
       "aiFeatureKeys": [
         "legacy-ai-manager",
         "prompt-studio",
         "embeddings",
-        "entity-extraction"
+        "entity-extraction",
+        "legacy-openai-completion",
+        "reader-recommendations",
+        "reader-assistant",
+        "moment-insights"
       ],
       "dashboardPath": "/dashboard/ai-hub",
       "owners": [
         "ai"
       ],
-      "lastReviewed": "2026-10-09"
+      "lastReviewed": "2026-10-10"
     },
     {
       "id": "muqtarab",

@@ -2,6 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { SABQ_LANGUAGE_STANDARDS_AR, SABQ_PRIMARY_EDITOR_MODEL } from "./ai/sabqEditorialPrompt";
+import { trackedOpenAICompletion } from "./ai/gateway/trackedOpenAI";
 
 // SEO Generator for multilingual articles
 // Supports Arabic (Claude), English (GPT-4o), and Urdu (Gemini)
@@ -29,6 +30,14 @@ interface ArticleInput {
   subtitle?: string;
   content: string;
   excerpt?: string;
+}
+
+let openaiClient: OpenAI | null = null;
+function getOpenAIClient(): OpenAI {
+  if (!openaiClient) {
+    openaiClient = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  }
+  return openaiClient;
 }
 
 // Configuration: Primary and fallback models per language (Migrated to gpt-5.1)
@@ -258,11 +267,9 @@ async function generateWithOpenAI(
   language: "ar" | "en" | "ur",
   model: string
 ): Promise<SeoGenerationResult> {
-  const client = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-  });
+  const client = getOpenAIClient();
 
-  const response = await client.chat.completions.create({
+  const response = await trackedOpenAICompletion(client, "seo-generator", {
     model: model,
     max_completion_tokens: 1024,
     response_format: { type: "json_object" },
@@ -276,7 +283,7 @@ async function generateWithOpenAI(
         content: createUserPrompt(article, language),
       },
     ],
-  });
+  }, { deduplicate: true });
 
   const content = response.choices[0]?.message?.content;
   if (!content) {
