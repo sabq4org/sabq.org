@@ -13,6 +13,7 @@ import {
 import { assertEditedContentComplete, extractLockedSourceNumbers, restoreSourceNumbers } from "./editorialOutputGuards";
 import { PartialStringFieldTracker } from "./partialJsonString";
 import { EDITORIAL_PRESERVATION_INSTRUCTION, withEditorialCompletenessRepair } from "./editorialCompletenessRetry";
+import { trackedOpenAICompletion } from "./gateway/trackedOpenAI";
 
 /** تقدم إعادة الصياغة أثناء البث: نص جديد من optimized.content، أو إعادة بدء بعد فشل. */
 export type SabqEditorProgress = { type: "delta"; text: string } | { type: "reset" };
@@ -768,7 +769,7 @@ Professional English news story, ready for immediate publication, presenting Sau
       onProgress?.({ type: "reset" });
       result = await withEditorialCompletenessRepair(async (feedback) => {
         const response = await withOpenAIRetry(
-          () => openai.chat.completions.create({
+          () => trackedOpenAICompletion(openai, "editorial-edit-fallback", {
             model: SABQ_FALLBACK_EDITOR_MODEL,
             messages: [
               {
@@ -905,7 +906,7 @@ export async function analyzeEmailContent(text: string): Promise<EmailContentAna
 أعد النتيجة بصيغة JSON فقط.`;
 
     // Migrated from gpt-5 to gpt-5.1
-    const response = await openai.chat.completions.create({
+    const response = await trackedOpenAICompletion(openai, "editorial-email-analysis", {
       model: "gpt-4o-mini",
       messages: [
         {
@@ -1004,7 +1005,7 @@ Return the result in JSON format only.`,
     };
 
     // Migrated from gpt-5 to gpt-5.1
-    const response = await openai.chat.completions.create({
+    const response = await trackedOpenAICompletion(openai, "editorial-content-improvement", {
       model: "gpt-4o-mini",
       messages: [
         {
@@ -1221,7 +1222,7 @@ ${articleLead}
 
     const prompt = PROMPTS[language];
     
-    const response = await openai.chat.completions.create({
+    const response = await trackedOpenAICompletion(openai, "editorial-image-alt-text", {
       model: "gpt-4o-mini",
       messages: [
         { role: "system", content: "You are an expert in generating SEO-optimized, accessible alt text for news images." },
