@@ -13,12 +13,6 @@ const ROWS: Array<{ key: keyof PublishFirstFlags; title: string; settingKey: str
     hint: "العنوان الفرعي 120 حرفاً، وقائمة التصنيفات الصالحة في خطأ 422",
   },
   {
-    key: "sensitiveGate",
-    title: "بوابة المادة الحساسة",
-    settingKey: "publish_first_sensitive_gate",
-    hint: "منع نشر أو تصحيح «حساسة» قبل حكم المراجع",
-  },
-  {
     key: "revisionHistory",
     title: "سجل مراجعات ما بعد النشر",
     settingKey: "publish_first_revision_history",

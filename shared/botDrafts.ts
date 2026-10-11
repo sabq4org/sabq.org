@@ -217,22 +217,18 @@ export const botDraftUpdateSchema = z
   .strict()
   .refine((value) => Object.keys(value).length > 0, { message: "لا توجد حقول للتحديث" });
 
-/** POST /api/internal/bot-drafts/:id/publish — جسم فارغ. الحالة يكتبها الخادم. */
 /**
- * POST /:id/publish — جسم فارغ، أو استثناء المادة الحساسة من مدير (`sensitiveOverride` + سبب).
- * الخادم يتحقق أن صاحب التوكن مدير قبل قبول الاستثناء، ويسجّله في سجل الاستثناءات.
+ * POST /api/internal/bot-drafts/:id/publish — جسم فارغ. الحالة يكتبها الخادم.
+ * `sensitiveOverride` و`overrideReason` مقبولان للتوافق مع عملاء قدامى ويُتجاهلان:
+ * تصنيف الحساسية لا يمنع النشر.
  */
 export const botDraftPublishSchema = z
   .object({
     operationId: z.string().uuid().optional(),
-    sensitiveOverride: z.literal(true).optional(),
-    overrideReason: z.string().trim().min(3).max(500).optional(),
+    sensitiveOverride: z.boolean().optional(),
+    overrideReason: z.string().max(500).optional(),
   })
-  .strict()
-  .refine((body) => !body.sensitiveOverride || Boolean(body.overrideReason), {
-    message: "سبب الاستثناء مطلوب مع sensitiveOverride",
-    path: ["overrideReason"],
-  });
+  .strict();
 export type BotDraftPublishInput = z.infer<typeof botDraftPublishSchema>;
 
 export type BotDraftPublishOperationStatus = "processing" | "succeeded" | "failed";
@@ -449,8 +445,6 @@ export const BOT_DRAFT_ERROR_CODES = [
   "validation_error",
   "category_not_found",
   "subtitle_too_long",
-  "sensitive_needs_verdict",
-  "sensitive_override_forbidden",
   "author_not_configured",
   "not_found",
   "not_a_draft",

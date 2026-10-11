@@ -25,13 +25,11 @@ router.get(
       flags,
       defaults: {
         validation: true,
-        sensitiveGate: true,
         revisionHistory: true,
         updateLine: true,
       },
       keys: {
         validation: "publish_first_validation",
-        sensitiveGate: "publish_first_sensitive_gate",
         revisionHistory: "publish_first_revision_history",
         updateLine: "publish_first_update_line",
       },
@@ -47,7 +45,7 @@ router.put(
     res.setHeader("Cache-Control", "private, no-store");
     const body = req.body ?? {};
     const patch: Partial<Awaited<ReturnType<typeof getPublishFirstFlags>>> = {};
-    for (const name of ["validation", "sensitiveGate", "revisionHistory", "updateLine"] as const) {
+    for (const name of ["validation", "revisionHistory", "updateLine"] as const) {
       if (typeof body[name] === "boolean") patch[name] = body[name];
     }
     if (Object.keys(patch).length === 0) {

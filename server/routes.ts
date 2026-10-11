@@ -27,11 +27,9 @@ import { denyPublish } from "./services/publishGate";
 import {
   attachPublishedUpdateLines,
   editorDisplayName,
-  guardDirectArticlePublish,
   prepareDashboardArticleSave,
   prepareNewArticlePublishFirst,
   recordArticleRevision,
-  recordPublishOverride,
 } from "./services/publishFirstService";
 import { AR_SITEMAP_BUCKETS, archiveSitemapBucketCondition, isCanonicalArchiveArticle } from "./services/archiveSeo";
 import { apiListingNoindex } from "./utils/apiListingRobots";
@@ -7749,17 +7747,12 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         }
       }
 
-      const publishFirstCreate = await prepareNewArticlePublishFirst(articleData, req.user, req.body, () => getEffectiveUserPermissions(req.user.id));
-      if ("status" in publishFirstCreate) return res.status(publishFirstCreate.status).json(publishFirstCreate.body);
+      prepareNewArticlePublishFirst(articleData);
 
       const [newArticle] = await db
         .insert(articles)
         .values(articleData)
         .returning();
-
-      if (publishFirstCreate.override) {
-        await recordPublishOverride({ articleId: newArticle.id, actorUserId: req.user.id, actorName: publishFirstCreate.actorName, action: "publish", reason: publishFirstCreate.reason });
-      }
 
       // Invalidate caches when articles are created
       memoryCache.invalidatePattern('^homepage');
@@ -8347,7 +8340,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       }
 
       const publishFirstSave = await prepareDashboardArticleSave({
-        articleId, existing: existingArticle, updateData, userId, user: req.user, permissions: userPermissions, body: req.body,
+        existing: existingArticle, updateData, body: req.body,
       });
       if ("status" in publishFirstSave) return res.status(publishFirstSave.status).json(publishFirstSave.body);
       const revisionPlan = publishFirstSave.revisionPlan;
@@ -8784,9 +8777,6 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
           return res.status(403).json({ message: "لا يمكنك نشر مقالات الآخرين" });
         }
       }
-
-      const directPublishGate = await guardDirectArticlePublish({ article, articleId, userId, user: req.user, permissions: userPermissions, body: req.body });
-      if (directPublishGate) return res.status(directPublishGate.status).json(directPublishGate.body);
 
       // مالك الوكالة أو موظف مرتبط (linkedPublisherId) — إحصاء/خصم الرصيد
       const agencyPublisher = await storage.getPublisherByUserId(userId);

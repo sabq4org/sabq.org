@@ -1,5 +1,5 @@
-// خدمة «النشر أولاً»: أعلام من system_settings، بوابة الحساسية،
-// حكم المراجع، سجل المراجعة، وسبب التحديث. الاستعلامات هنا (ADR-001).
+// خدمة «النشر أولاً»: أعلام من system_settings،
+// حكم المراجع (معلوماتي)، سجل المراجعة، وسبب التحديث. الاستعلامات هنا (ADR-001).
 
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "../db";
@@ -15,13 +15,10 @@ import {
 import {
   PUBLISH_FIRST_FLAG_KEYS,
   PUBLISH_FIRST_FLAGS_DEFAULT,
-  buildOverrideLogRow,
   buildRevisionLogRow,
-  decideSensitiveGate,
   flagEnabledFromSetting,
   formatPublishFirstUpdateLines,
   isAcceptableCategoryId,
-  isPublishFirstAdmin,
   isPublishFirstVerdict,
   planContentRevision,
   validateBotDraftUpload,
@@ -29,7 +26,6 @@ import {
   type PublishFirstFlagName,
   type PublicUpdateLine,
   type RevisionPlan,
-  type SensitiveGateDecision,
 } from "@shared/publishFirst";
 const FLAG_TTL_MS = 5_000;
 
@@ -50,7 +46,6 @@ function flagsFromRows(rows: Array<{ key: string; value: unknown }>): PublishFir
     flagEnabledFromSetting(byKey.get(PUBLISH_FIRST_FLAG_KEYS[name]), PUBLISH_FIRST_FLAGS_DEFAULT[name]);
   return {
     validation: read("validation"),
-    sensitiveGate: read("sensitiveGate"),
     revisionHistory: read("revisionHistory"),
     updateLine: read("updateLine"),
   };
@@ -143,29 +138,6 @@ export async function botDraftUploadIssue(input: {
   return validateBotDraftUpload({ ...input, validationEnabled: flags.validation, validSlugs, slugsTruncated });
 }
 
-export async function articleHasReviewerVerdict(articleId: string): Promise<boolean> {
-  const [row] = await db
-    .select({ id: articleReviewerVerdicts.id })
-    .from(articleReviewerVerdicts)
-    .where(eq(articleReviewerVerdicts.articleId, articleId))
-    .limit(1);
-  return Boolean(row);
-}
-
-export async function sensitiveGateForArticle(input: {
-  articleId: string;
-  riskLabel: string | null | undefined;
-  action: "publish" | "correct";
-  adminOverride: boolean;
-}): Promise<SensitiveGateDecision> {
-  const flags = await getPublishFirstFlags();
-  if (!flags.sensitiveGate || input.riskLabel !== "sensitive") {
-    return decideSensitiveGate({ ...input, hasVerdict: false, gateEnabled: flags.sensitiveGate });
-  }
-  const hasVerdict = await articleHasReviewerVerdict(input.articleId);
-  return decideSensitiveGate({ ...input, hasVerdict, gateEnabled: true });
-}
-
 export async function editorDisplayName(userId: string): Promise<string> {
   const [user] = await db
     .select({ firstName: users.firstName, lastName: users.lastName, email: users.email })
@@ -205,33 +177,6 @@ export async function recordReviewerVerdict(input: {
     })
     .returning();
   return { ok: true as const, verdict: row };
-}
-
-export async function recordPublishOverride(input: {
-  articleId: string;
-  actorUserId?: string | null;
-  actorName?: string | null;
-  action: "publish" | "correct";
-  reason?: string | null;
-  now?: Date;
-}) {
-  const row = buildOverrideLogRow({ ...input, now: input.now ?? new Date() });
-  const [saved] = await db.insert(articlePublishOverrides).values(row).returning();
-  return saved;
-}
-
-/** Same audit row writer, for callers that must commit it with another write. */
-export async function recordPublishOverrideInTransaction(tx: any, input: {
-  articleId: string;
-  actorUserId?: string | null;
-  actorName?: string | null;
-  action: "publish" | "correct";
-  reason?: string | null;
-  now?: Date;
-}) {
-  const row = buildOverrideLogRow({ ...input, now: input.now ?? new Date() });
-  const [saved] = await tx.insert(articlePublishOverrides).values(row).returning();
-  return saved;
 }
 
 export async function recordArticleRevision(input: {
@@ -334,22 +279,6 @@ export async function rollbackArticleRevision(input: {
   for (const field of ROLLBACK_COLUMNS) {
     if (Object.prototype.hasOwnProperty.call(previous, field)) patch[field] = previous[field];
   }
-  const gate = await sensitiveGateForArticle({
-    articleId: input.articleId,
-    riskLabel: existing.riskLabel,
-    action: "correct",
-    adminOverride: true,
-  });
-  if (gate.allow && gate.override) {
-    await recordPublishOverride({
-      articleId: input.articleId,
-      actorUserId: input.editorUserId,
-      actorName: input.editorName,
-      action: "correct",
-      reason: "استرجاع نسخة سابقة",
-      now,
-    });
-  }
   const plan = planContentRevision({
     existingStatus: existing.status,
     existing,
@@ -379,61 +308,22 @@ export type PublishFirstDenial = {
   body: { message: string; code: string; field?: string };
 };
 
-function publishFirstDenial(decision: { code: string; message: string }): PublishFirstDenial {
-  return { status: 422, body: { message: decision.message, code: decision.code } };
-}
-
-function adminOverrideRequested(
-  body: { sensitiveOverride?: unknown } | null | undefined,
-  user: { role?: string | null; roles?: Array<string | { name?: string | null } | null> | null; permissions?: string[] | null },
-  permissions?: string[] | null,
-): boolean {
-  return body?.sensitiveOverride === true && isPublishFirstAdmin({
-    role: user.role,
-    roles: user.roles,
-    permissions: permissions ?? user.permissions,
-  });
-}
-
-/** يضبط طابع إنشاء المسودة ويمنع نشر مادة حساسة بلا حكم. */
-export async function prepareNewArticlePublishFirst(
-  articleData: Record<string, unknown>,
-  user: { id: string; role?: string | null; roles?: string[] | null },
-  body: { sensitiveOverride?: unknown; overrideReason?: unknown } | null | undefined,
-  loadPermissions: () => Promise<string[]>,
-): Promise<PublishFirstDenial | { override: boolean; reason: string | null; actorName: string | null }> {
+/**
+ * يضبط طابع إنشاء المسودة. تصنيف المخاطر (riskLabel) معلوماتي فقط ولا يمنع
+ * النشر ولا يؤخره: تقدير حساسية الخبر لرئيس التحرير، لا للنظام الآلي.
+ */
+export function prepareNewArticlePublishFirst(articleData: Record<string, unknown>): void {
   delete articleData.draftCreatedAt;
   delete articleData.correctedAt;
   delete articleData.verdictAt;
   articleData.draftCreatedAt = new Date();
-  const releasing = articleData.status === "published" || articleData.status === "scheduled";
-  if (!releasing || articleData.riskLabel !== "sensitive") {
-    return { override: false, reason: null, actorName: null };
-  }
-  const adminOverride = adminOverrideRequested(body, user, await loadPermissions());
-  const gate = await sensitiveGateForArticle({
-    articleId: "pending-create",
-    riskLabel: typeof articleData.riskLabel === "string" ? articleData.riskLabel : null,
-    action: "publish",
-    adminOverride,
-  });
-  if (!gate.allow) return publishFirstDenial(gate);
-  return {
-    override: gate.override,
-    reason: typeof body?.overrideReason === "string" ? body.overrideReason : null,
-    actorName: gate.override ? await editorDisplayName(user.id) : null,
-  };
 }
 
-/** تصنيف، بوابة الحساسية، وخطة المراجعة قبل حفظ اللوحة. */
+/** تحقق التصنيف وخطة المراجعة قبل حفظ اللوحة. */
 export async function prepareDashboardArticleSave(input: {
-  articleId: string;
   existing: { status?: string | null; riskLabel?: string | null };
   updateData: Record<string, unknown>;
-  userId: string;
-  user: { role?: string | null; roles?: string[] | null };
-  permissions: string[];
-  body: { updateReason?: unknown; sensitiveOverride?: unknown; overrideReason?: unknown } | null | undefined;
+  body: { updateReason?: unknown } | null | undefined;
 }): Promise<PublishFirstDenial | { revisionPlan: RevisionPlan | null }> {
   if (typeof input.updateData.categoryId === "string" && input.updateData.categoryId) {
     const category = await findAssignableCategory(input.updateData.categoryId);
@@ -445,78 +335,14 @@ export async function prepareDashboardArticleSave(input: {
     }
   }
   const updateReason = typeof input.body?.updateReason === "string" ? input.body.updateReason : null;
-  const adminOverride = adminOverrideRequested(input.body, input.user, input.permissions);
-  const resultingRisk = input.updateData.riskLabel !== undefined ? input.updateData.riskLabel : input.existing.riskLabel;
-  const nextStatus = (input.updateData.status as string | undefined) ?? input.existing.status;
-  const publishing = nextStatus === "published" && input.existing.status !== "published";
-  const scheduling = nextStatus === "scheduled" && input.existing.status !== "scheduled";
   const revisionPlan = await maybePlanPublishedRevision({
     existingStatus: input.existing.status,
     existing: input.existing,
     patch: input.updateData,
     updateReason,
   });
-  const overrideReason = typeof input.body?.overrideReason === "string" ? input.body.overrideReason : null;
-  const logOverride = async (action: "publish" | "correct") => {
-    await recordPublishOverride({
-      articleId: input.articleId,
-      actorUserId: input.userId,
-      actorName: await editorDisplayName(input.userId),
-      action,
-      reason: overrideReason,
-    });
-  };
-  if (publishing || scheduling) {
-    const gate = await sensitiveGateForArticle({
-      articleId: input.articleId,
-      riskLabel: typeof resultingRisk === "string" ? resultingRisk : null,
-      action: "publish",
-      adminOverride,
-    });
-    if (!gate.allow) return publishFirstDenial(gate);
-    if (gate.override) await logOverride("publish");
-  } else if (revisionPlan?.contentChanged) {
-    const gate = await sensitiveGateForArticle({
-      articleId: input.articleId,
-      riskLabel: typeof resultingRisk === "string" ? resultingRisk : null,
-      action: "correct",
-      adminOverride,
-    });
-    if (!gate.allow) return publishFirstDenial(gate);
-    if (gate.override) await logOverride("correct");
-  }
   if (revisionPlan) input.updateData.correctedAt = revisionPlan.correctedAt;
   return { revisionPlan };
-}
-
-/** نشر مباشر من POST /publish. المادة المنشورة مسبقاً لا تُعاد بوابة. */
-export async function guardDirectArticlePublish(input: {
-  article: { status?: string | null; riskLabel?: string | null };
-  articleId: string;
-  userId: string;
-  user: { role?: string | null; roles?: string[] | null };
-  permissions: string[];
-  body: { sensitiveOverride?: unknown; overrideReason?: unknown } | null | undefined;
-}): Promise<PublishFirstDenial | null> {
-  if (input.article.status === "published") return null;
-  const adminOverride = adminOverrideRequested(input.body, input.user, input.permissions);
-  const gate = await sensitiveGateForArticle({
-    articleId: input.articleId,
-    riskLabel: input.article.riskLabel,
-    action: "publish",
-    adminOverride,
-  });
-  if (!gate.allow) return publishFirstDenial(gate);
-  if (gate.override) {
-    await recordPublishOverride({
-      articleId: input.articleId,
-      actorUserId: input.userId,
-      actorName: await editorDisplayName(input.userId),
-      action: "publish",
-      reason: typeof input.body?.overrideReason === "string" ? input.body.overrideReason : null,
-    });
-  }
-  return null;
 }
 
 export async function attachPublishedUpdateLines<T extends { id?: string; status?: string | null }>(article: T): Promise<T> {

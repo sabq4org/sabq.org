@@ -3,7 +3,6 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
@@ -68,11 +67,7 @@ export function PublishFirstPanel({
   onRiskLabel,
   updateReason,
   onUpdateReason,
-  sensitiveOverride,
-  onSensitiveOverride,
-  overrideReason,
-  onOverrideReason,
-  canOverride,
+  canRollback,
 }: {
   articleId?: string;
   status: string;
@@ -80,11 +75,8 @@ export function PublishFirstPanel({
   onRiskLabel: (value: RiskValue) => void;
   updateReason: string;
   onUpdateReason: (value: string) => void;
-  sensitiveOverride: boolean;
-  onSensitiveOverride: (value: boolean) => void;
-  overrideReason: string;
-  onOverrideReason: (value: string) => void;
-  canOverride: boolean;
+  /** الاسترجاع للمسؤول فقط. */
+  canRollback: boolean;
 }) {
   const { toast } = useToast();
   const history = useQuery<HistoryResponse>({
@@ -133,11 +125,9 @@ export function PublishFirstPanel({
               ))}
             </SelectContent>
           </Select>
-          {riskLabel === "sensitive" && (
-            <p className="text-xs text-amber-700 dark:text-amber-300">
-              النشر والتصحيح بعد النشر يتوقفان حتى يسجّل مراجع حكماً، ما لم يتجاوزهما مسؤول.
-            </p>
-          )}
+          <p className="text-xs text-muted-foreground">
+            الشارة معلوماتية ولا تمنع النشر؛ القرار لرئيس التحرير.
+          </p>
         </div>
 
         {published && (
@@ -151,28 +141,6 @@ export function PublishFirstPanel({
               maxLength={500}
               data-testid="input-update-reason"
             />
-          </div>
-        )}
-
-        {canOverride && riskLabel === "sensitive" && (
-          <div className="space-y-2 rounded-md border border-amber-200 p-3 dark:border-amber-900">
-            <label className="flex items-center gap-2 text-sm">
-              <Checkbox
-                checked={sensitiveOverride}
-                onCheckedChange={(checked) => onSensitiveOverride(checked === true)}
-                data-testid="checkbox-sensitive-override"
-              />
-              تجاوز بوابة الحساسية (للمسؤول)
-            </label>
-            {sensitiveOverride && (
-              <Textarea
-                value={overrideReason}
-                onChange={(event) => onOverrideReason(event.target.value)}
-                placeholder="سبب التجاوز (اختياري) — يُسجَّل في تاريخ المقال"
-                maxLength={500}
-                data-testid="input-override-reason"
-              />
-            )}
           </div>
         )}
 
@@ -225,7 +193,7 @@ export function PublishFirstPanel({
                         {(revision.changedFields || []).map((field) => FIELD_LABELS[field] || field).join("، ") || "سبب تحديث فقط"}
                         {revision.updateReason ? ` — ${revision.updateReason}` : ""}
                       </p>
-                      {canOverride && (
+                      {canRollback && (
                         <Button
                           type="button"
                           variant="outline"

@@ -226,8 +226,6 @@ export default function ArticleEditor() {
   const [categoryId, setCategoryId] = useState("");
   const [riskLabel, setRiskLabel] = useState<"" | PublishFirstRiskLabel>("");
   const [updateReason, setUpdateReason] = useState("");
-  const [sensitiveOverride, setSensitiveOverride] = useState(false);
-  const [overrideReason, setOverrideReason] = useState("");
   // 📰 Default reporter: صحيفة سبق (newspaper account) for new articles
   const NEWSPAPER_ACCOUNT_ID = 'RnP7eDOAl5T5rGpib9_8d';
   const [reporterId, setReporterId] = useState<string | null>(isNewArticle ? NEWSPAPER_ACCOUNT_ID : null);
@@ -394,8 +392,6 @@ export default function ArticleEditor() {
     setCategoryId("");
     setRiskLabel("");
     setUpdateReason("");
-    setSensitiveOverride(false);
-    setOverrideReason("");
     setReporterId(NEWSPAPER_ACCOUNT_ID);
     setOpinionAuthorId(null);
     setArticleType(typeParam || "news");
@@ -495,7 +491,7 @@ export default function ArticleEditor() {
   // Check if user can publish directly (otherwise saves as draft).
   // الناشر الموثوق (auto_publish) يُمنح articles.publish من /api/auth/user،
   // ونحتاط أيضاً بـ publisherAccount.autoPublish إن تأخّر كاش الصلاحيات.
-  const canOverrideSensitive = Boolean(
+  const canRollbackRevisions = Boolean(
     user && (
       (user.role && (SUPERUSER_ROLE_NAMES as readonly string[]).includes(user.role)) ||
       (user.roles ?? []).some((role) => (SUPERUSER_ROLE_NAMES as readonly string[]).includes(role)) ||
@@ -782,7 +778,6 @@ export default function ArticleEditor() {
       setCategoryId(article.categoryId || "");
       setRiskLabel((article.riskLabel as PublishFirstRiskLabel) || "");
       setUpdateReason("");
-      setSensitiveOverride(false);
       // Use reporterId as is - system supports various ID formats (nanoid, UUID, etc.)
       const validReporterId = article.reporterId || null;
       console.log('[ArticleEditor] Setting reporterId:', {
@@ -1628,10 +1623,6 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
       articleData.riskLabel = riskLabel || null;
       if (!isNewArticle && status === "published") {
         articleData.updateReason = updateReason.trim() || null;
-      }
-      if (sensitiveOverride) {
-        articleData.sensitiveOverride = true;
-        articleData.overrideReason = overrideReason.trim() || null;
       }
 
       // Add fields specific to news articles (not for opinion)
@@ -4792,11 +4783,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
               onRiskLabel={setRiskLabel}
               updateReason={updateReason}
               onUpdateReason={setUpdateReason}
-              sensitiveOverride={sensitiveOverride}
-              onSensitiveOverride={setSensitiveOverride}
-              overrideReason={overrideReason}
-              onOverrideReason={setOverrideReason}
-              canOverride={canOverrideSensitive}
+              canRollback={canRollbackRevisions}
             />
 
             {/* Reporter - Hidden for opinion articles */}
