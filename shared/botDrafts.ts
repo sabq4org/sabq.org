@@ -226,7 +226,7 @@ export const botDraftPublishSchema = z
   .object({
     operationId: z.string().uuid().optional(),
     sensitiveOverride: z.boolean().optional(),
-    overrideReason: z.string().max(500).optional(),
+    overrideReason: z.string().trim().max(500).optional(),
   })
   .strict();
 export type BotDraftPublishInput = z.infer<typeof botDraftPublishSchema>;

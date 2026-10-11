@@ -245,10 +245,18 @@ describe("BotDraft publish operation receipts", () => {
 
   it("replays the same receipt when an older client resends legacy override fields", async () => {
     await publishBotDraft(legacyBot, "art-1", {}, { operationId });
-    const legacyOptions = { operationId, sensitiveOverride: true, overrideReason: "سبب" } as { operationId: string };
-    await expect(publishBotDraft(legacyBot, "art-1", {}, legacyOptions)).resolves.toMatchObject({ status: "succeeded", operationId });
+    await expect(publishBotDraft(legacyBot, "art-1", {}, { operationId, sensitiveOverride: true, overrideReason: "سبب" })).resolves.toMatchObject({ status: "succeeded", operationId });
     expect(state.s.articleUpdates).toBe(1);
     expect(state.s.queueCount).toBe(1);
+  });
+
+  it("replays a receipt stored before the gate was removed with the old override fingerprint", async () => {
+    await publishBotDraft(legacyBot, "art-1", {}, { operationId });
+    const { createHash } = await import("node:crypto");
+    state.s.operations[0].bodyFingerprint = createHash("sha256").update(JSON.stringify({ sensitiveOverride: true, overrideReason: "سبب واضح" })).digest("hex");
+    await expect(publishBotDraft(legacyBot, "art-1", {}, { operationId, sensitiveOverride: true, overrideReason: "سبب واضح" })).resolves.toMatchObject({ status: "succeeded", operationId });
+    await expect(publishBotDraft(legacyBot, "art-1", {}, { operationId, sensitiveOverride: true, overrideReason: "سبب آخر" })).rejects.toMatchObject({ httpStatus: 409, code: "operation_id_collision" });
+    expect(state.s.articleUpdates).toBe(1);
   });
 
   it("keeps a different actor's operation receipt isolated after the article is published", async () => {

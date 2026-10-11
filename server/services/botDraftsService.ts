@@ -959,13 +959,22 @@ function publishActorKey(bot: BotIdentity): string {
   return bot.personal ? `personal:${bot.personal.userId}` : `legacy:${bot.name}`;
 }
 
-// جسم النشر لم يعد يحمل حقولاً مؤثرة؛ البصمة ثابتة وتطابق بصمة الجسم الفارغ القديمة
-// حتى تبقى إعادة المحاولة بالمعرّف نفسه متوافقة مع الإيصالات المحفوظة قبل التغيير.
-function publishBodyFingerprint(): string {
+// جسم النشر لم يعد يحمل حقولاً مؤثرة؛ البصمة الجديدة تطابق بصمة الجسم الفارغ القديمة.
+// إيصال حُفظ قبل إلغاء بوابة الحساسية بجسم «تجاوز» يُقبل عند إعادة المحاولة بالمعرّف
+// والحقول نفسها، حتى لا تتحول إعادة المحاولة عبر النشر إلى 409.
+function fingerprintOf(sensitiveOverride: boolean, overrideReason: string | null): string {
   return crypto
     .createHash("sha256")
-    .update(JSON.stringify({ sensitiveOverride: false, overrideReason: null }))
+    .update(JSON.stringify({ sensitiveOverride, overrideReason }))
     .digest("hex");
+}
+
+function publishBodyFingerprint(): string {
+  return fingerprintOf(false, null);
+}
+
+function legacyOverrideFingerprint(options: { sensitiveOverride?: boolean; overrideReason?: string }): string | null {
+  return options.sensitiveOverride === true ? fingerprintOf(true, options.overrideReason ?? "") : null;
 }
 
 function operationResponse(row: PublishOperationRow): BotDraftPublishOperationResponse {
@@ -988,6 +997,7 @@ async function claimPublishOperation(
   bot: BotIdentity,
   articleId: string,
   operationId: string,
+  legacy: { sensitiveOverride?: boolean; overrideReason?: string } = {},
 ): Promise<{ claimed: boolean; row: PublishOperationRow }> {
   const actorKey = publishActorKey(bot);
   const bodyFingerprint = publishBodyFingerprint();
@@ -1015,7 +1025,7 @@ async function claimPublishOperation(
     ))
     .limit(1);
   if (!existing) throw new BotDraftError(503, "server_error", "تعذر قراءة نتيجة عملية النشر");
-  if (existing.bodyFingerprint !== bodyFingerprint) {
+  if (existing.bodyFingerprint !== bodyFingerprint && existing.bodyFingerprint !== legacyOverrideFingerprint(legacy)) {
     throw new BotDraftError(409, "operation_id_collision", "operationId مستخدم لطلب نشر مختلف");
   }
   return { claimed: false, row: existing };
@@ -1496,7 +1506,7 @@ export async function publishBotDraft(
   bot: BotIdentity,
   articleId: string,
   ctx: BotRequestContext = {},
-  options: { operationId?: string } = {},
+  options: { operationId?: string; sensitiveOverride?: boolean; overrideReason?: string } = {},
 ): Promise<BotDraftResponse | BotDraftPublishOperationResponse> {
   assertPersonalCapability(bot, "publish");
   const existing = await findBotArticle(articleId, bot);
@@ -1504,7 +1514,7 @@ export async function publishBotDraft(
 
   let claimedOperation: PublishOperationRow | undefined;
   if (options.operationId) {
-    const claimed = await claimPublishOperation(bot, articleId, options.operationId);
+    const claimed = await claimPublishOperation(bot, articleId, options.operationId, options);
     if (!claimed.claimed) return operationResponse(claimed.row);
     claimedOperation = claimed.row;
   }
