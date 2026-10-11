@@ -504,6 +504,13 @@ export default function ArticleEditor() {
         (user as { publisherAccount?: { autoPublish?: boolean } }).publisherAccount
           ?.autoPublish === true),
   );
+  // يطابق canTakeOverLock في server/routes/articleEditLocks.ts
+  const canTakeOverLock = Boolean(
+    user &&
+      hasPermission(user, PERMISSION_CODES.ARTICLES_PUBLISH) &&
+      hasPermission(user, PERMISSION_CODES.ARTICLES_EDIT_ANY),
+  );
+  const [showTakeOverDialog, setShowTakeOverDialog] = useState(false);
   const isContributorRole =
     !canPublish &&
     (user?.role === "reporter" ||
@@ -748,7 +755,7 @@ export default function ArticleEditor() {
 
   // ===== Article Edit Lock Management =====
   // Extracted to hooks/useArticleEditLock.ts (refactor: article-editor-split)
-  const { lockStatus, isLockedByOther } = useArticleEditLock({
+  const { lockStatus, isLockedByOther, takeOverLock, isTakingOverLock } = useArticleEditLock({
     articleId: id,
     isNewArticle,
     user,
@@ -2690,11 +2697,49 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
             data-testid="lock-alert"
           >
             <Lock className="h-5 w-5 text-red-700 dark:text-red-400 shrink-0" />
-            <span className="text-red-700 dark:text-red-400 font-medium">
+            <span className="flex-1 text-red-700 dark:text-red-400 font-medium">
               المقال تحت إجراء التعديل من قبل {lockStatus.lockedBy.name}
             </span>
+            {canTakeOverLock && (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="shrink-0 border-red-500 text-red-700 hover:bg-red-100 dark:text-red-400 dark:hover:bg-red-950"
+                onClick={() => setShowTakeOverDialog(true)}
+                disabled={isTakingOverLock}
+                data-testid="button-take-over-lock"
+              >
+                {isTakingOverLock && <Loader2 className="h-4 w-4 animate-spin" />}
+                تجاوز القفل
+              </Button>
+            )}
           </div>
         )}
+
+        <AlertDialog open={showTakeOverDialog} onOpenChange={setShowTakeOverDialog}>
+          <AlertDialogContent className="max-w-md" data-testid="dialog-take-over-lock">
+            <AlertDialogHeader>
+              <AlertDialogTitle className="text-right">تجاوز قفل التحرير؟</AlertDialogTitle>
+              <AlertDialogDescription className="text-right">
+                سيتوقف {lockStatus?.lockedBy?.name || "الزميل"} عن التحرير فورًا، ويظهر له أن القفل انتقل إليك. ما لم يحفظه من تعديلات يبقى في مسودة جهازه.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter className="flex-row-reverse gap-2">
+              <AlertDialogAction
+                onClick={() => {
+                  setShowTakeOverDialog(false);
+                  takeOverLock();
+                }}
+                className="bg-red-600 hover:bg-red-700 text-white"
+                data-testid="button-confirm-take-over-lock"
+              >
+                تجاوز وحرّر الآن
+              </AlertDialogAction>
+              <AlertDialogCancel data-testid="button-cancel-take-over-lock">إلغاء</AlertDialogCancel>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
         {/* Lock Status Indicator - When current user owns the lock.
             لا تظهر مع وجود محررين آخرين — رسالة «حصري» بجوار «فلان يحرّر الآن

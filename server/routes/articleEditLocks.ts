@@ -5,7 +5,10 @@
  * mount to coordinate concurrent editors:
  *
  *   GET    /api/admin/articles/:id/lock            check current lock
- *   POST   /api/admin/articles/:id/lock            acquire (or refresh own)
+ *   POST   /api/admin/articles/:id/lock            acquire (or refresh own);
+ *                                                   body { force: true } takes
+ *                                                   over a colleague's lock
+ *                                                   (admin / editor-in-chief)
  *   DELETE /api/admin/articles/:id/lock            release
  *   POST   /api/admin/articles/:id/lock/heartbeat  keep-alive
  *
@@ -27,6 +30,13 @@ import { getEffectiveUserPermissions } from "../rbac";
 
 const router = Router();
 const LOCK_TTL_MS = 10 * 60 * 1000;
+
+// تجاوز قفل زميل: للمدير ومن يملك النشر وتعديل أي مقال معًا (رئيس التحرير).
+// الخبر العاجل لا ينتظر انتهاء مهلة قفل محرر غائب.
+export function canTakeOverLock(permissions: string[]): boolean {
+  return permissions.includes("*")
+    || (permissions.includes("articles.publish") && permissions.includes("articles.edit_any"));
+}
 
 function requireAuth(req: any, res: any, next: any) {
   if (!req.isAuthenticated || !req.isAuthenticated() || !req.user?.id) {
@@ -84,13 +94,14 @@ router.post("/api/admin/articles/:id/lock", requireAuth, async (req: any, res) =
     // (edit_any، أو opinion.edit_any لمواد الرأي، أو مالكها). كان requireAuth
     // وحده يكفي فيستولي أي حساب مسجّل على قفل أي مقال ويرى «حق التحرير
     // الحصري» على مواد غيره (حادثة 2026-08-08).
-    const access = await authorizeArticleWrite(
-      userId,
-      articleId,
-      await getEffectiveUserPermissions(userId),
-    );
+    const permissions = await getEffectiveUserPermissions(userId);
+    const access = await authorizeArticleWrite(userId, articleId, permissions);
     if (!access.ok) {
       return res.status(access.httpStatus).json({ message: access.message });
+    }
+    const force = req.body?.force === true;
+    if (force && !canTakeOverLock(permissions)) {
+      return res.status(403).json({ message: "تجاوز القفل متاح للمدير ورئيس التحرير فقط" });
     }
 
     const now = new Date();
@@ -111,7 +122,10 @@ router.post("/api/admin/articles/:id/lock", requireAuth, async (req: any, res) =
       .onConflictDoUpdate({
         target: articleEditLocks.articleId,
         set: { userId, userName, acquiredAt: now, expiresAt, lastHeartbeat: now },
-        setWhere: or(eq(articleEditLocks.userId, userId), lte(articleEditLocks.expiresAt, sql`(clock_timestamp() at time zone 'UTC')`)),
+        // التجاوز ينقل القفل دون شرط؛ نبضة المالك السابق تفشل بعدها فيُبلَّغ
+        setWhere: force
+          ? undefined
+          : or(eq(articleEditLocks.userId, userId), lte(articleEditLocks.expiresAt, sql`(clock_timestamp() at time zone 'UTC')`)),
       })
       .returning();
 
@@ -120,6 +134,7 @@ router.post("/api/admin/articles/:id/lock", requireAuth, async (req: any, res) =
         .where(eq(articleEditLocks.articleId, articleId)).limit(1);
       return res.status(409).json({ message: "المقالة مقفلة من مستخدم آخر", ...shape(owner, userId) });
     }
+    if (force) console.info(`[edit-lock] takeover article=${articleId} by=${userId}`);
     res.json(shape(upserted as LockRow, userId));
   } catch (err) {
     console.error("[edit-lock] POST error:", err);

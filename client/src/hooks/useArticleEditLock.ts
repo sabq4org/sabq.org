@@ -12,7 +12,7 @@
 //    builds anyway); console.error lines are kept.
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { apiRequest, apiUrl, getCsrfToken } from "@/lib/queryClient";
+import { apiRequest, apiUrl, getCsrfToken, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
 export interface LockStatus {
@@ -32,6 +32,9 @@ interface UseArticleEditLockArgs {
   isUserLoading: boolean;
 }
 
+// إعادة فحص القفل كل 20 ثانية ما دامت المقالة مقفلة من زميل
+const LOCKED_RECHECK_MS = 20_000;
+
 export function useArticleEditLock({
   articleId: id,
   isNewArticle,
@@ -42,6 +45,8 @@ export function useArticleEditLock({
   const [lockStatus, setLockStatus] = useState<LockStatus | null>(null);
   const [isLockedByOther, setIsLockedByOther] = useState(false);
   const lockHeartbeatRef = useRef<NodeJS.Timeout | null>(null);
+  // هل أُبلغ المستخدم بأن المقالة مقفلة؟ يمنع تكرار التنبيه مع كل إعادة فحص
+  const lockedNoticeShownRef = useRef(false);
 
   // Check lock status query (only for existing articles)
   // Note: Don't gate on user - let the query run as soon as we have an article ID
@@ -60,10 +65,28 @@ export function useArticleEditLock({
       return await res.json();
     },
     enabled: !isNewArticle && !!id && id !== 'new',
-    refetchInterval: false,
+    // المقالة المقفلة تُعاد مراجعتها دوريًا: كانت الصفحة تفحص مرة واحدة عند
+    // الفتح فتبقى مجمّدة بعد زوال القفل (خروج المحرر أو انتهاء مهلته) حتى
+    // يعيد المستخدم تحميلها يدويًا.
+    refetchInterval: isLockedByOther ? LOCKED_RECHECK_MS : false,
+    refetchIntervalInBackground: false,
     staleTime: 0,
   });
   const initialLockStatus = lockStatusQuery.data;
+
+  const handleLockGranted = (data: LockStatus) => {
+    setLockStatus(data);
+    setIsLockedByOther(false);
+    if (lockedNoticeShownRef.current) {
+      // كانت مقفلة من زميل ثم تحرّرت أو تجاوزها المدير: حمّل آخر نسخة محفوظة قبل المتابعة
+      lockedNoticeShownRef.current = false;
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/articles", id] });
+      toast({
+        title: "أصبحت المقالة متاحة لك",
+        description: "القفل لك الآن، ويمكنك التعديل.",
+      });
+    }
+  };
 
   // Acquire lock mutation
   const acquireLockMutation = useMutation({
@@ -72,10 +95,7 @@ export function useArticleEditLock({
         method: "POST",
       });
     },
-    onSuccess: (data: LockStatus) => {
-      setLockStatus(data);
-      setIsLockedByOther(false);
-    },
+    onSuccess: (data: LockStatus) => handleLockGranted(data),
     onError: async (error: Error) => {
       console.error('[Lock] Failed to acquire lock:', error);
       // Refetch lock status to check if another user has the lock
@@ -83,6 +103,8 @@ export function useArticleEditLock({
       if (result.data?.locked && !result.data?.isOwner) {
         setLockStatus(result.data);
         setIsLockedByOther(true);
+        if (lockedNoticeShownRef.current) return;
+        lockedNoticeShownRef.current = true;
         toast({
           title: "المقالة مقفلة للتحرير",
           description: `يقوم ${result.data.lockedBy?.name || 'مستخدم آخر'} بتحرير هذه المقالة حالياً`,
@@ -95,6 +117,25 @@ export function useArticleEditLock({
           variant: "destructive",
         });
       }
+    },
+  });
+
+  // تجاوز قفل زميل (المدير ورئيس التحرير؛ الخادم يتحقق من الصلاحية)
+  const takeOverLockMutation = useMutation({
+    mutationFn: async () => {
+      return await apiRequest(`/api/admin/articles/${id}/lock`, {
+        method: "POST",
+        body: JSON.stringify({ force: true }),
+      });
+    },
+    onSuccess: (data: LockStatus) => handleLockGranted(data),
+    onError: (error: Error) => {
+      console.error('[Lock] Takeover failed:', error);
+      toast({
+        title: "تعذر تجاوز القفل",
+        description: error.message || "حاول مرة أخرى.",
+        variant: "destructive",
+      });
     },
   });
 
@@ -135,6 +176,7 @@ export function useArticleEditLock({
       if (result.data?.locked && !result.data?.isOwner) {
         setLockStatus(result.data);
         setIsLockedByOther(true);
+        lockedNoticeShownRef.current = true;
         toast({
           title: "فقدت قفل التحرير",
           description: `المقالة مقفلة الآن بواسطة ${result.data.lockedBy?.name || 'مستخدم آخر'}`,
@@ -161,13 +203,17 @@ export function useArticleEditLock({
         // Locked by another user
         setLockStatus(initialLockStatus);
         setIsLockedByOther(true);
+        if (lockedNoticeShownRef.current) return;
+        lockedNoticeShownRef.current = true;
         toast({
           title: "المقالة مقفلة للتحرير",
           description: `يقوم ${initialLockStatus.lockedBy?.name || 'مستخدم آخر'} بتحرير هذه المقالة حالياً`,
           variant: "destructive",
         });
       } else if (!initialLockStatus.locked || initialLockStatus.isOwner) {
-        // Not locked or locked by current user - try to acquire
+        // Not locked or locked by current user - try to acquire.
+        // لا تُرسل طلب حجز ثانيًا بينما الأول جارٍ
+        if (acquireLockMutation.isPending) return;
         acquireLockMutation.mutate();
       }
     }
@@ -225,5 +271,10 @@ export function useArticleEditLock({
     // deps preserved verbatim from the original inline effect
   }, [isNewArticle, id, lockStatus?.isOwner]);
 
-  return { lockStatus, isLockedByOther };
+  return {
+    lockStatus,
+    isLockedByOther,
+    takeOverLock: () => takeOverLockMutation.mutate(),
+    isTakingOverLock: takeOverLockMutation.isPending,
+  };
 }

@@ -5,9 +5,12 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vites
 import type { Server } from "node:http";
 const state = vi.hoisted(() => ({ db: null as any }));
 vi.mock("../../server/db", () => ({ get db() { return state.db; } }));
-vi.mock("../../server/rbac", () => ({ getEffectiveUserPermissions: async () => ["articles.edit_any"] }));
+vi.mock("../../server/rbac", () => ({
+  getEffectiveUserPermissions: async (id: string) => id === "chief" ? ["articles.edit_any", "articles.publish"] : ["articles.edit_any"],
+}));
 vi.mock("../../server/services/articleAccessService", () => ({ authorizeArticleWrite: async () => ({ ok: true }) }));
 import router from "../../server/routes/articleEditLocks";
+import { releaseEditLocksForUser } from "../../server/services/articleEditLockService";
 const url = process.env.SESSION_REVOCATION_TEST_URL;
 if (url && !["localhost", "127.0.0.1"].includes(new URL(url).hostname)) throw new Error("Local database only");
 describe.skipIf(!url)("article lock HTTP concurrency with PostgreSQL", () => {
@@ -19,6 +22,7 @@ describe.skipIf(!url)("article lock HTTP concurrency with PostgreSQL", () => {
       user_name text NOT NULL, acquired_at timestamp NOT NULL, expires_at timestamp NOT NULL, last_heartbeat timestamp NOT NULL)`);
     state.db = drizzle(pool);
     const app = express();
+    app.use(express.json());
     app.use((req: any, _res, next) => { req.user = { id: req.headers["x-user"], firstName: "Test" }; req.isAuthenticated = () => true; next(); });
     app.use(router);
     server = await new Promise<Server>(resolve => { const s = app.listen(0, "127.0.0.1", () => resolve(s)); });
@@ -27,6 +31,7 @@ describe.skipIf(!url)("article lock HTTP concurrency with PostgreSQL", () => {
   beforeEach(async () => { await pool.query("DELETE FROM article_edit_locks"); });
   afterAll(async () => { if (server) await new Promise<void>(r => server.close(() => r())); if (pool) { await pool.query("DROP SCHEMA lock_audit CASCADE"); await pool.end(); } });
   const request = (user: string, method = "POST", suffix = "") => fetch(base + suffix, { method, headers: { "x-user": user } });
+  const takeOver = (user: string) => fetch(base, { method: "POST", headers: { "x-user": user, "content-type": "application/json" }, body: JSON.stringify({ force: true }) });
   it("allows exactly one of ten simultaneous editors", async () => {
     const responses = await Promise.all(Array.from({ length: 10 }, (_, i) => request(`u${i}`)));
     expect(responses.filter(r => r.status === 200)).toHaveLength(1);
@@ -39,6 +44,21 @@ describe.skipIf(!url)("article lock HTTP concurrency with PostgreSQL", () => {
     expect((await request("old", "POST", "/heartbeat")).status).toBe(409);
     await request("old", "DELETE");
     expect((await pool.query("SELECT user_id FROM article_edit_locks")).rows[0].user_id).toBe("new");
+  });
+  it("logout release frees only the leaving editor's locks so a colleague can take over", async () => {
+    await request("leaving");
+    await pool.query(`INSERT INTO article_edit_locks VALUES ('b', 'other', 'Other', now() at time zone 'UTC', (now() at time zone 'UTC') + interval '10 minutes', now() at time zone 'UTC')`);
+    expect((await request("colleague")).status).toBe(409);
+    expect(await releaseEditLocksForUser("leaving")).toBe(1);
+    expect((await request("colleague")).status).toBe(200);
+    expect((await pool.query("SELECT user_id FROM article_edit_locks WHERE article_id = 'b'")).rows[0].user_id).toBe("other");
+  });
+  it("lets only the editor-in-chief take over a live lock, and the old owner's heartbeat then fails", async () => {
+    await request("writer");
+    expect((await takeOver("colleague")).status).toBe(403);
+    expect((await takeOver("chief")).status).toBe(200);
+    expect((await pool.query("SELECT user_id FROM article_edit_locks")).rows[0].user_id).toBe("chief");
+    expect((await request("writer", "POST", "/heartbeat")).status).toBe(409);
   });
   it("does not revive an expired heartbeat", async () => {
     await request("old");
