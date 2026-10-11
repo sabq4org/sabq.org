@@ -168,6 +168,7 @@ import {
 } from "./services/enArticleTranslationService";
 import pLimit from 'p-limit';
 import { db, executeWithStatementTimeout } from "./db";
+import { releaseEditLocksForUser } from "./services/articleEditLockService";
 import { articleCardSelect, articleAdminSelect, userBylineSelect } from "./selectHelpers";
 import { eq, and, or, desc, asc, ilike, sql, inArray, gte, lt, lte, aliasedTable, isNull, ne, not, isNotNull, gt, type SQL } from "drizzle-orm";
 import bcrypt from "bcrypt";
@@ -1411,6 +1412,9 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
     };
     
     try {
+      // الخروج يحرّر أقفال التحرير قبل إتلاف الجلسة؛ بعده يُرفض طلب التحرير من الصفحة
+      if (userId) await releaseEditLocksForUser(userId);
+
       // First, perform the logout
       await promisifiedLogout();
       
@@ -1459,6 +1463,9 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
     };
     
     try {
+      // الخروج يحرّر أقفال التحرير قبل إتلاف الجلسة؛ بعده يُرفض طلب التحرير من الصفحة
+      if (userId) await releaseEditLocksForUser(userId);
+
       // First, perform the logout
       await promisifiedLogout();
       

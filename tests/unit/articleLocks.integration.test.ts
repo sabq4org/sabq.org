@@ -8,6 +8,7 @@ vi.mock("../../server/db", () => ({ get db() { return state.db; } }));
 vi.mock("../../server/rbac", () => ({ getEffectiveUserPermissions: async () => ["articles.edit_any"] }));
 vi.mock("../../server/services/articleAccessService", () => ({ authorizeArticleWrite: async () => ({ ok: true }) }));
 import router from "../../server/routes/articleEditLocks";
+import { releaseEditLocksForUser } from "../../server/services/articleEditLockService";
 const url = process.env.SESSION_REVOCATION_TEST_URL;
 if (url && !["localhost", "127.0.0.1"].includes(new URL(url).hostname)) throw new Error("Local database only");
 describe.skipIf(!url)("article lock HTTP concurrency with PostgreSQL", () => {
@@ -39,6 +40,14 @@ describe.skipIf(!url)("article lock HTTP concurrency with PostgreSQL", () => {
     expect((await request("old", "POST", "/heartbeat")).status).toBe(409);
     await request("old", "DELETE");
     expect((await pool.query("SELECT user_id FROM article_edit_locks")).rows[0].user_id).toBe("new");
+  });
+  it("logout release frees only the leaving editor's locks so a colleague can take over", async () => {
+    await request("leaving");
+    await pool.query(`INSERT INTO article_edit_locks VALUES ('b', 'other', 'Other', now() at time zone 'UTC', (now() at time zone 'UTC') + interval '10 minutes', now() at time zone 'UTC')`);
+    expect((await request("colleague")).status).toBe(409);
+    expect(await releaseEditLocksForUser("leaving")).toBe(1);
+    expect((await request("colleague")).status).toBe(200);
+    expect((await pool.query("SELECT user_id FROM article_edit_locks WHERE article_id = 'b'")).rows[0].user_id).toBe("other");
   });
   it("does not revive an expired heartbeat", async () => {
     await request("old");
