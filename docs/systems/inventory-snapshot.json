@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-04T04:24:05.137Z",
+  "generatedAt": "2026-10-11T04:19:40.407Z",
   "systems": [
     {
       "id": "account-center",
@@ -59,7 +59,7 @@
     },
     {
       "id": "editorial",
-      "fileCount": 243,
+      "fileCount": 267,
       "samplePaths": [
         "server/services/mobileAdminSchedule.ts",
         "tests/unit/mobileAdminSchedule.test.ts",
@@ -87,7 +87,7 @@
     },
     {
       "id": "ai-hub",
-      "fileCount": 40,
+      "fileCount": 43,
       "samplePaths": [
         "server/ai/gateway/adapters/anthropic.ts",
         "server/ai/gateway/adapters/elevenlabs.ts",
@@ -115,7 +115,7 @@
     },
     {
       "id": "radar",
-      "fileCount": 40,
+      "fileCount": 42,
       "samplePaths": [
         "server/services/radar/aiChain.ts",
         "server/services/radar/alerts.ts",
@@ -129,7 +129,7 @@
     },
     {
       "id": "audio-newsletter",
-      "fileCount": 53,
+      "fileCount": 61,
       "samplePaths": [
         "server/services/aiNewsletterService.ts",
         "server/services/aiNewsletterEnhancer.ts",
@@ -199,7 +199,7 @@
     },
     {
       "id": "auth-rbac",
-      "fileCount": 72,
+      "fileCount": 77,
       "samplePaths": [
         "server/auth.ts",
         "server/rbac.ts",
@@ -304,7 +304,7 @@
     },
     {
       "id": "social-publishing",
-      "fileCount": 27,
+      "fileCount": 34,
       "samplePaths": [
         "shared/socialPostText.ts",
         "server/services/socialPublishing/botSocialLogic.ts",
