@@ -138,12 +138,9 @@ struct EconomyHomeBlock: View {
                 }
             case .weekly:
                 if let weekly = store.snapshot?.weekly {
-                    teaser(
-                        title: "أين أنفق السعوديون؟",
-                        figure: "\(EconomyFormat.fmtSar(weekly.totalValue)) ريال",
-                        caption: "إنفاق نقاط البيع · \(weekly.weekLabelAr)",
-                        badge: EconomyFormat.isFresh(weekly.ingestedAt, now: context.date) ? "أرقام جديدة" : nil,
-                        cta: "أين صُرفت؟"
+                    EconomyWeeklyHomeCard(
+                        weekly: weekly,
+                        isFresh: EconomyFormat.isFresh(weekly.ingestedAt, now: context.date)
                     )
                 }
             case .hidden:
@@ -201,6 +198,212 @@ struct EconomyHomeBlock: View {
         .accessibilityElement(children: .combine)
         .accessibilityHint("عرض تفاصيل الاقتصاد بالقطاعات والمدن")
         .accessibilityIdentifier("economy.home.teaser")
+    }
+}
+
+// MARK: - بطاقة «أين أنفق السعوديون؟» في الرئيسية
+//
+// الجزء العلوي ظاهر دائمًا: العنوان، والرقم، والتغيّر عن الأسبوع السابق، وأعمدة
+// آخر أربعة أسابيع. سهم صغير يوسّع البطاقة لتظهر «أين؟»: حصص أكبر ثلاثة
+// قطاعات ثم رابط التفاصيل (قرار المالك 2026-10-09). كل الأرقام من ملخص الأسبوع
+// في `/api/economy/snapshot` بلا طلب إضافي.
+
+struct EconomyWeeklyHomeCard: View {
+    let weekly: EconomyWeeklySummary
+    let isFresh: Bool
+    @State private var isExpanded = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private var series: [Double] {
+        weekly.kpis.first(where: { $0.key == "total" })?.series ?? []
+    }
+
+    private var topSectors: [EconomySectorSummary] {
+        Array(weekly.topSectors.prefix(3))
+    }
+
+    private static let sectorColors: [Color] = [
+        SabqTheme.brandBlue,
+        SabqTheme.brandSky,
+        SabqTheme.brandSky.opacity(0.45),
+    ]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            header
+            figureRow
+            if isExpanded {
+                whereSection
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
+                .fill(SabqTheme.surface)
+                .shadow(color: SabqTheme.shadow, radius: 12, x: 0, y: 4)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous))
+        .contentShape(RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous))
+        .onTapGesture { toggle() }
+        .accessibilityIdentifier("economy.home.teaser")
+    }
+
+    private func toggle() {
+        SabqHaptics.light()
+        withAnimation(reduceMotion ? nil : .snappy(duration: 0.28)) { isExpanded.toggle() }
+    }
+
+    private var header: some View {
+        HStack(alignment: .center, spacing: 8) {
+            Text("أين أنفق السعوديون؟")
+                .font(SabqFonts.app(size: 17, weight: .bold))
+                .foregroundStyle(SabqTheme.ink)
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
+            if isFresh { EconomyNewBadge(label: "جديد") }
+            Spacer(minLength: 6)
+            Text(weekly.weekLabelAr)
+                .font(SabqFonts.app(size: 11, weight: .regular))
+                .foregroundStyle(SabqTheme.tertiaryInk)
+                .lineLimit(1)
+            Button(action: toggle) {
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(SabqTheme.primaryEnd)
+                    .rotationEffect(.degrees(isExpanded ? 180 : 0))
+                    .frame(width: 28, height: 28)
+                    .background(Circle().fill(SabqTheme.primaryEnd.opacity(0.12)))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(isExpanded ? "إخفاء توزيع الإنفاق" : "عرض أين صُرف الإنفاق")
+        }
+    }
+
+    private var figureRow: some View {
+        let parts = EconomyFormat.fmtSar(weekly.totalValue).split(separator: " ", maxSplits: 1).map(String.init)
+        let number = parts.first ?? ""
+        let unit = (parts.count > 1 ? parts[1] + " " : "") + "ريال"
+        return HStack(alignment: .bottom, spacing: 12) {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(alignment: .firstTextBaseline, spacing: 5) {
+                    Text(number)
+                        .font(SabqFonts.app(size: 34, weight: .bold))
+                        .monospacedDigit()
+                        .foregroundStyle(SabqTheme.ink)
+                        .accessibilityIdentifier("economy.home.figure")
+                    Text(unit)
+                        .font(SabqFonts.app(size: 15, weight: .semibold))
+                        .foregroundStyle(SabqTheme.secondaryInk)
+                }
+                changeBadge
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            if series.count > 1 {
+                VStack(spacing: 4) {
+                    weeksBars
+                        .frame(width: 92, height: 54)
+                    Text("آخر \(series.count) أسابيع")
+                        .font(SabqFonts.app(size: 10, weight: .regular))
+                        .foregroundStyle(SabqTheme.tertiaryInk)
+                }
+                .accessibilityHidden(true)
+            }
+        }
+    }
+
+    private var changeBadge: some View {
+        let pct = weekly.totalChangePct
+        let up = pct >= 0
+        let tint = up ? EconomyTone.up : EconomyTone.down
+        return HStack(spacing: 4) {
+            Text("\(up ? "▲" : "▼") \(EconomyFormat.fmtPct(pct))")
+                .font(SabqFonts.app(size: 12.5, weight: .semibold))
+                .foregroundStyle(tint)
+                .monospacedDigit()
+            Text("عن الأسبوع السابق")
+                .font(SabqFonts.app(size: 12, weight: .regular))
+                .foregroundStyle(SabqTheme.tertiaryInk)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 3)
+        .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(tint.opacity(0.10)))
+    }
+
+    /// الأقدم يمينًا تحت RTL (أول عنصر في HStack)، والأسبوع الحالي مُبرز.
+    private var weeksBars: some View {
+        let maxV = max(series.max() ?? 1, 1)
+        return HStack(alignment: .bottom, spacing: 6) {
+            ForEach(Array(series.enumerated()), id: \.offset) { index, value in
+                RoundedRectangle(cornerRadius: 3, style: .continuous)
+                    .fill(index == series.count - 1 ? SabqTheme.brandBlue : SabqTheme.brandSky.opacity(0.22))
+                    .frame(maxWidth: .infinity)
+                    .frame(height: max(10, 54 * CGFloat(value / maxV)))
+            }
+        }
+    }
+
+    private var whereSection: some View {
+        let shown = topSectors
+        let rest = max(0, 100 - shown.reduce(0) { $0 + $1.share })
+        return VStack(alignment: .leading, spacing: 10) {
+            Rectangle().fill(SabqTheme.outline).frame(height: 1)
+
+            Text("أين؟")
+                .font(SabqFonts.app(size: 13, weight: .semibold))
+                .foregroundStyle(SabqTheme.secondaryInk)
+
+            GeometryReader { geo in
+                let gaps = CGFloat(shown.count) * 2
+                let usable = max(0, geo.size.width - gaps)
+                HStack(spacing: 2) {
+                    ForEach(Array(shown.enumerated()), id: \.element.id) { index, sector in
+                        Self.sectorColors[index % Self.sectorColors.count]
+                            .frame(width: usable * CGFloat(sector.share / 100))
+                    }
+                    SabqTheme.outline
+                        .frame(width: usable * CGFloat(rest / 100))
+                }
+            }
+            .frame(height: 10)
+            .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+            .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(Array(shown.enumerated()), id: \.element.id) { index, sector in
+                    HStack(spacing: 8) {
+                        RoundedRectangle(cornerRadius: 3, style: .continuous)
+                            .fill(Self.sectorColors[index % Self.sectorColors.count])
+                            .frame(width: 9, height: 9)
+                        Text(sector.ar)
+                            .font(SabqFonts.app(size: 14, weight: .regular))
+                            .foregroundStyle(SabqTheme.ink)
+                            .lineLimit(1)
+                        Spacer(minLength: 8)
+                        Text(EconomyFormat.fmtPct(sector.share))
+                            .font(SabqFonts.app(size: 13, weight: .semibold))
+                            .monospacedDigit()
+                            .foregroundStyle(SabqTheme.secondaryInk)
+                    }
+                    .accessibilityElement(children: .combine)
+                }
+            }
+
+            HStack(alignment: .firstTextBaseline) {
+                Text("المصدر: البنك المركزي السعودي")
+                    .font(SabqFonts.app(size: 11, weight: .regular))
+                    .foregroundStyle(SabqTheme.tertiaryInk)
+                Spacer(minLength: 8)
+                NavigationLink(value: EconomyRoute()) {
+                    HomeSectionLinkLabel(title: "التفاصيل")
+                }
+                .buttonStyle(.plain)
+                .accessibilityHint("عرض تفاصيل الاقتصاد بالقطاعات والمدن")
+            }
+            .padding(.top, 2)
+        }
     }
 }
 

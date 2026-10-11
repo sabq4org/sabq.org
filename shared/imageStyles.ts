@@ -33,6 +33,15 @@ export const KNOWN_IMAGE_MODELS = [
     recommendedFor: "الأخبار العامة والتوليد التلقائي السريع",
   },
   {
+    id: "gemini-nano-banana-2.1",
+    label: "Nano Banana 2.1 — أحدث نماذج Gemini (تصميم أدق وتعديل وثبات الشخصيات)",
+    provider: "google",
+    specialty: "general_latest",
+    recommendedFor:
+      "الأحدث من قوقل (أكتوبر 2026): يتفوق على الإصدارات السابقة في التصميم البصري، " +
+      "والتعديل على جزء محدد من الصورة، وثبات ملامح الشخص أو العنصر بين الصور، ونتائج أكثر طبيعية",
+  },
+  {
     id: "gemini-3-pro-image-preview",
     label: "Nano Banana Pro — Gemini 3 Pro Image (واقعية وبحث متقدم)",
     provider: "google",

@@ -153,6 +153,8 @@ async function completeOnce(
       temperature: TEMPERATURE,
       jsonMode: true,
       jsonSchema: EDITORIAL_JSON_SCHEMA,
+      // buildSystemPrompt depends only on the task type, so it caches across stories.
+      cacheSystemPrompt: true,
     },
   });
   if (res.truncated) {

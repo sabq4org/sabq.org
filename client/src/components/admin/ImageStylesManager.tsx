@@ -288,6 +288,11 @@ export function ImageStylesManager() {
               )}
             </SelectContent>
           </Select>
+          {KNOWN_IMAGE_MODELS.find((m) => m.id === settings.defaultModel)?.recommendedFor && (
+            <p className="text-xs text-muted-foreground" data-testid="text-default-model-strengths">
+              مميزاته: {KNOWN_IMAGE_MODELS.find((m) => m.id === settings.defaultModel)?.recommendedFor}
+            </p>
+          )}
           <p className="text-xs text-muted-foreground">
             يُستخدم لكل التوليد ما لم يحدد النمط نموذجًا خاصًا. عند تعذّر النموذج
             يتراجع النظام تلقائيًا إلى Nano Banana Pro.

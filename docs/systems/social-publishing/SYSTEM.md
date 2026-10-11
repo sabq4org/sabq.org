@@ -1,6 +1,6 @@
 # النشر الاجتماعي (`social-publishing`)
 
-> آخر مراجعة: 2026-10-03 (منشور بوت بلا خبر: صور متعددة ووسوم قياس) | المالك: editorial + platform
+> آخر مراجعة: 2026-10-04 (long_post عبر Publer، وإزالة ** من نص البوت) | المالك: editorial + platform
 
 ## الغرض
 نشر أخبار سبق على منصة X من لوحة التحكم: فوري أو مجدول، بنص من العنوان أو
@@ -82,7 +82,9 @@
   `publerProvider` — جدولتنا وexactly-once والسجل تبقى حاكمة، وPubller
   ينفذ الرفع (`POST /media` حقل `file`) والنشر
   (`POST /posts/schedule/publish` بـ`bulk.state="scheduled"` **بلا**
-  `scheduled_at` = فوري) مع استطلاع `job_status`. **مهلة الاستطلاع بعد
+  `scheduled_at` = فوري) مع استطلاع `job_status`. **نص أطول من 280
+  موزوناً يُرسل مع `details.type="long_post"`**؛ بدونه تقصّ Publer النص عند
+  280 بصمت فيضيع آخره والرابط (حادثة 2026-10-04). **مهلة الاستطلاع بعد
   إرسال النشر خطأ دائم عمداً** (الحالة مجهولة — إعادة آلية قد تكرر
   المنشور). وثائق Publer: `job_status` المكتمل `{ status, payload.failures }`
   بلا رابط وبلا معرف منشور — `publer:<jobId>` ليس مسار `GET /posts/{id}`.
@@ -129,6 +131,10 @@
 `SABQ_BOT_SOCIAL_USER_ID` ثم `BOT_DRAFTS_AUTHOR_USER_ID` ثم حساب «صحيفة سبق».
 الحدود: `BOT_SOCIAL_WRITE_RATE_LIMIT` (30/دقيقة)، `BOT_SOCIAL_PUBLISH_RATE_LIMIT`
 (20/5 دقائق)، `BOT_SOCIAL_SUGGEST_RATE_LIMIT` (30/15 دقيقة).
+
+## تغريدات الوكالات (2026-10-06)
+
+الوكالة تطلب تغريدة لخبرها المنشور من `/dashboard/publisher/articles/:id/social` (الخدمة `server/services/publisherSocialService.ts`، المسارات تحت `/api/publisher/portal/.../social`). الوضع لكل وكالة في `publishers.social_publish_mode`: `off` يخفي الميزة، `approval` (الافتراضي) ينشئ مسودة `draft` تنتظر فريق سبق، `direct` يسمح للوكالة بالنشر الفوري أو الجدولة عبر نفس `claimPostForImmediatePublish` / `schedulePost`. الصف يحمل `social_posts.publisher_id`، والموعد الذي تقترحه الوكالة في `requested_at` (لا في `scheduled_at`، حتى لا يلتقطه العامل قبل الموافقة ولا يغيّر انتقال الفشل). القواعد: تغريدة حية واحدة لكل خبر، مهلة 48 ساعة من نشر الخبر، لا خصم من رصيد الباقة، توليد النص 5 مرات يوميًا لكل وكالة (عداد في الذاكرة). في صفحة النشر الاجتماعي تظهر تحت تبويب «طلبات الوكالات» (`?filter=agency`)، والرفض يطلب ملاحظة تصل للوكالة. `notifyAuthorOfSocialPostStatus` يحوّل إشعارات هذه الصفوف إلى أعضاء الوكالة (لوحة + بريد للمرسل عند النشر والرفض) ويتجاهل سحب الوكالة لتغريدتها. الأعمدة في `migrations/20261006_agency_social_publishing.sql` وتُطبَّق قبل نشر الكود.
 
 ## منشور البوت بلا خبر (2026-10-03)
 

@@ -1,12 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { apiRequest } from "../../client/src/lib/queryClient";
 import { prepareNewsImage } from "../../client/src/lib/browserImageTranscode";
-import { uploadNewsImage, newsImageUploadLabel } from "../../client/src/lib/newsImageUpload";
+import { uploadNewsImage, newsImageUploadLabel, PREPARE_TIMEOUT_MS, UPLOAD_TIMEOUT_MS } from "../../client/src/lib/newsImageUpload";
 
 vi.mock("../../client/src/lib/queryClient", () => ({ apiRequest: vi.fn() }));
 vi.mock("../../client/src/lib/browserImageTranscode", () => ({ prepareNewsImage: vi.fn() }));
 
-afterEach(() => vi.resetAllMocks());
+afterEach(() => { vi.useRealTimers(); vi.resetAllMocks(); });
 
 function payload(purpose = "article-hero") {
   const body = new FormData();
@@ -75,5 +75,31 @@ describe("news image upload", () => {
     vi.mocked(apiRequest).mockRejectedValue(new Error("الملف كبير جداً"));
     await expect(uploadNewsImage(payload("avatar"))).rejects.toThrow("الملف كبير جداً");
     expect(newsImageUploadLabel({ phase: "processing", percent: 100 })).toBe("اكتمل الإرسال، جارٍ حفظ الصورة…");
+  });
+
+  it("uploads the original file when browser preparation never settles", async () => {
+    vi.useFakeTimers();
+    const original = payload();
+    const originalFile = original.get("file") as File;
+    vi.mocked(prepareNewsImage).mockReturnValue(new Promise<File>(() => {}));
+    vi.mocked(apiRequest).mockResolvedValue({ id: "media-1", url: "https://media.sabq.org/news/x.webp" });
+    const pending = uploadNewsImage(original);
+    await vi.advanceTimersByTimeAsync(PREPARE_TIMEOUT_MS);
+    await expect(pending).resolves.toMatchObject({ url: "https://media.sabq.org/news/x.webp" });
+    expect((vi.mocked(apiRequest).mock.calls[0][1]!.body as FormData).get("file")).toBe(originalFile);
+  });
+
+  it("uploads the original file when browser preparation throws", async () => {
+    const original = payload();
+    vi.mocked(prepareNewsImage).mockRejectedValue(new Error("decode failed"));
+    vi.mocked(apiRequest).mockResolvedValue({ url: "https://media.sabq.org/news/x.webp" });
+    await uploadNewsImage(original);
+    expect((vi.mocked(apiRequest).mock.calls[0][1]!.body as FormData).get("file")).toBe(original.get("file"));
+  });
+
+  it("gives the transfer a deadline and turns a timeout into a readable error", async () => {
+    vi.mocked(apiRequest).mockRejectedValue(new Error("Network error: upload timed out"));
+    await expect(uploadNewsImage(payload("avatar"))).rejects.toThrow("تحقق من الاتصال");
+    expect(vi.mocked(apiRequest).mock.calls[0][1]?.timeoutMs).toBe(UPLOAD_TIMEOUT_MS);
   });
 });

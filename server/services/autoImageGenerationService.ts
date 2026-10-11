@@ -261,6 +261,7 @@ export async function autoGenerateImage(
     const generationResult = await generateNewsImage({
       articleTitle: request.title,
       articleSummary: request.excerpt || extractSummary(request.content || ""),
+      articleContent: request.content,
       category: request.category || "عام",
       language: request.language,
       style: request.styleSlug || resolveStyleForArticleType(request.articleType, settings),

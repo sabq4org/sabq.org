@@ -59,6 +59,37 @@ export async function previewSummaryVoice(provider: 'gemini' | 'humain' | 'eleve
   return elevenlabs(SUMMARY_AUDIO_SAMPLE, voiceId);
 }
 
+export type SummaryVoiceProvider = SummaryAudio['provider'];
+
+function providerConfigured(provider: SummaryVoiceProvider): boolean {
+  if (provider === 'gemini') return geminiConfigured();
+  if (provider === 'humain') return Boolean(process.env.HUMAIN_VOICE_API_KEY?.trim());
+  if (provider === 'elevenlabs') return Boolean(process.env.ELEVENLABS_API_KEY?.trim());
+  return Boolean(getGoogleTTSService());
+}
+
+/** The same provider order as article summaries, keeping only providers with a key. */
+export function summaryVoiceOrder(settings: SummaryAudioSettings): SummaryVoiceProvider[] {
+  const order: SummaryVoiceProvider[] = settings.primaryProvider === 'gemini'
+    ? ['gemini', 'humain', 'elevenlabs', 'google']
+    : settings.primaryProvider === 'humain' ? ['humain', 'elevenlabs', 'google'] : ['elevenlabs', 'google'];
+  return order.filter(providerConfigured);
+}
+
+/**
+ * One provider, no fallback: multi-part audio (the news bulletin) must keep a single
+ * voice, so the caller restarts the whole job on the next provider instead.
+ */
+export async function synthesizeWithSummaryVoice(provider: SummaryVoiceProvider, text: string, settings: SummaryAudioSettings): Promise<SummaryAudio> {
+  if (provider === 'gemini') return checkedGemini(await synthesizeGemini(text, 60_000));
+  if (provider === 'humain') return checked(await synthesizeHumain(text, settings.humainVoiceId), 'humain');
+  if (provider === 'elevenlabs') return elevenlabs(text, settings.elevenlabsVoiceId);
+  const google = getGoogleTTSService();
+  if (!google) throw new Error('GOOGLE_NOT_CONFIGURED');
+  return checked(await withDeadline(google.textToSpeech({ text, voiceId: 'ar-XA-Wavenet-C', language: 'ar',
+    voiceSettings: { stability: 0.6, speed: 1.0 } }, 15_000, false), 16_000), 'google');
+}
+
 export async function generateSummaryAudio(text: string, settings: SummaryAudioSettings): Promise<SummaryAudio> {
   if (settings.primaryProvider === 'gemini' && Date.now() >= geminiUnavailableUntil && geminiConfigured()) {
     try {

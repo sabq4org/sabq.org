@@ -27,11 +27,9 @@ import { denyPublish } from "./services/publishGate";
 import {
   attachPublishedUpdateLines,
   editorDisplayName,
-  guardDirectArticlePublish,
   prepareDashboardArticleSave,
   prepareNewArticlePublishFirst,
   recordArticleRevision,
-  recordPublishOverride,
 } from "./services/publishFirstService";
 import { AR_SITEMAP_BUCKETS, archiveSitemapBucketCondition, isCanonicalArchiveArticle } from "./services/archiveSeo";
 import { apiListingNoindex } from "./utils/apiListingRobots";
@@ -93,7 +91,8 @@ import { summarizeText, generateSocialPost, suggestImageQuery, translateContent,
 import { importFromRssFeed } from "./rssImporter";
 import { generateCalendarEventIdeas, generateArticleDraft } from "./services/calendarAi";
 import { generateNewsletterSubtitle } from "./services/smartCategoryClassifier";
-import { requireAuth, requirePermission, requireAnyPermission, requireRole, logActivity, getUserPermissionData, getUserPermissions, getEffectiveUserPermissions, userHasAnyRole, userHasPermission, invalidateUserPermissionCache, getRoleAssignmentAuthority, roleAssignmentError, roleIdsAssignmentError } from "./rbac";
+import { createOAuthWebCompletion } from "./oauthWebCompletion";
+import { requireAuth, requirePermission, requireAnyPermission, requireRole, logActivity, redactActivityValue, getUserPermissionData, getUserPermissions, getEffectiveUserPermissions, userHasAnyRole, userHasPermission, invalidateUserPermissionCache, getRoleAssignmentAuthority, roleAssignmentError, roleIdsAssignmentError } from "./rbac";
 import { PERMISSION_CODES, ROLE_LABELS_AR, ROLE_NAMES } from "@shared/rbac-constants";
 import { isReaderLikeRole, mergeRoleSignals, primaryRoleKey } from "@shared/effectiveRoles";
 import { inferStaffRolesFromWork } from "./services/staffRoleInference";
@@ -105,7 +104,7 @@ import { sendArticleNotification, sendDraftSubmittedNotification } from "./notif
 import { sendEditorPublishAlert, getPublisherName, sendReporterPublishEmail, sendReporterArchiveEmail, sendReporterDeletionEmail, sendReporterRevisionEmail, sendOpinionAuthorPublishEmail, sendOpinionAuthorRejectionEmail, sendOpinionAuthorArchiveEmail, sendOpinionAuthorDeletionEmail, sendOpinionAuthorRevisionEmail } from "./services/editorAlerts";
 import { awardPoints } from "./services/loyalty";
 import { safeErrorPayload } from "./utils/safeError";
-import { deductPublisherCreditSafely } from "./services/publisherCreditService";
+import { chargePublishInTx, deductPublisherCreditSafely } from "./services/publisherCreditService";
 import { getPublishingGate, submitPortalArticle, notifyPublisherUser, getPortalArticles, trustedPublisherCanPublish, resolvePublisherForUser } from "./services/publisherPortalService";
 import { SABQ_NEWSPAPER_ACCOUNT_ID } from "@shared/sabqNewspaper";
 import { LOYALTY_ACTIONS } from "@shared/loyalty";
@@ -778,6 +777,9 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
     return res.redirect(`${destination}?${marker.toString()}`);
   };
 
+  // OAuth لا يتخطى 2FA: الاستراتيجية تعمل بلا جلسة، ثم إما «بانتظار 2FA» أو جلسة كاملة.
+  const oauthComplete = (provider: "google" | "apple") => createOAuthWebCompletion(provider, oauthLanding);
+
   // Google OAuth Routes
   app.get("/api/auth/google",
     requireOAuthStrategy("google"),
@@ -787,13 +789,11 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
   app.get("/api/auth/google/callback",
     requireOAuthStrategy("google"),
     passport.authenticate("google", {
+      session: false,
       failureRedirect: "/ar/login?error=google_auth_failed",
       failureMessage: true
     }),
-    (req, res) => {
-      console.log("✅ Google OAuth callback successful");
-      oauthLanding(req, res);
-    }
+    oauthComplete("google")
   );
 
   // Apple OAuth Routes
@@ -805,13 +805,11 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
   app.post("/api/auth/apple/callback",
     requireOAuthStrategy("apple"),
     passport.authenticate("apple", {
+      session: false,
       failureRedirect: "/ar/login?error=apple_auth_failed",
       failureMessage: true
     }),
-    (req, res) => {
-      console.log("✅ Apple OAuth callback successful");
-      oauthLanding(req, res);
-    }
+    oauthComplete("apple")
   );
 
   // Apple Sign-In — Mobile callback.
@@ -7749,17 +7747,12 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         }
       }
 
-      const publishFirstCreate = await prepareNewArticlePublishFirst(articleData, req.user, req.body, () => getEffectiveUserPermissions(req.user.id));
-      if ("status" in publishFirstCreate) return res.status(publishFirstCreate.status).json(publishFirstCreate.body);
+      prepareNewArticlePublishFirst(articleData);
 
       const [newArticle] = await db
         .insert(articles)
         .values(articleData)
         .returning();
-
-      if (publishFirstCreate.override) {
-        await recordPublishOverride({ articleId: newArticle.id, actorUserId: req.user.id, actorName: publishFirstCreate.actorName, action: "publish", reason: publishFirstCreate.reason });
-      }
 
       // Invalidate caches when articles are created
       memoryCache.invalidatePattern('^homepage');
@@ -8347,7 +8340,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       }
 
       const publishFirstSave = await prepareDashboardArticleSave({
-        articleId, existing: existingArticle, updateData, userId, user: req.user, permissions: userPermissions, body: req.body,
+        existing: existingArticle, updateData, body: req.body,
       });
       if ("status" in publishFirstSave) return res.status(publishFirstSave.status).json(publishFirstSave.body);
       const revisionPlan = publishFirstSave.revisionPlan;
@@ -8785,9 +8778,6 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         }
       }
 
-      const directPublishGate = await guardDirectArticlePublish({ article, articleId, userId, user: req.user, permissions: userPermissions, body: req.body });
-      if (directPublishGate) return res.status(directPublishGate.status).json(directPublishGate.body);
-
       // مالك الوكالة أو موظف مرتبط (linkedPublisherId) — إحصاء/خصم الرصيد
       const agencyPublisher = await storage.getPublisherByUserId(userId);
 
@@ -8806,53 +8796,6 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         try {
           const result = await db.transaction(async (tx) => {
             const now = new Date();
-            // باقة واحدة فقط: مفتوحة أولاً ثم الأقرب لانتهاء
-            const [selectedPackage] = await tx
-              .select()
-              .from(publisherCredits)
-              .where(
-                and(
-                  eq(publisherCredits.publisherId, agencyPublisher.id),
-                  eq(publisherCredits.isActive, true),
-                  or(
-                    eq(publisherCredits.isUnlimited, true),
-                    gt(publisherCredits.remainingCredits, 0),
-                  ),
-                  or(
-                    isNull(publisherCredits.expiryDate),
-                    gte(publisherCredits.expiryDate, now),
-                  ),
-                ),
-              )
-              .orderBy(desc(publisherCredits.isUnlimited), asc(publisherCredits.expiryDate))
-              .limit(1);
-
-            if (!selectedPackage) {
-              throw new Error("NO_CREDITS");
-            }
-
-            const wasUnlimited = selectedPackage.isUnlimited;
-            const [decrementedPackage] = await tx
-              .update(publisherCredits)
-              .set({
-                usedCredits: sql`${publisherCredits.usedCredits} + 1`,
-                ...(wasUnlimited
-                  ? {}
-                  : { remainingCredits: sql`${publisherCredits.remainingCredits} - 1` }),
-                updatedAt: now,
-              })
-              .where(
-                and(
-                  eq(publisherCredits.id, selectedPackage.id),
-                  wasUnlimited ? sql`true` : gt(publisherCredits.remainingCredits, 0),
-                ),
-              )
-              .returning();
-
-            if (!decrementedPackage) {
-              throw new Error("NO_CREDITS");
-            }
-
             const [published] = await tx
               .update(articles)
               .set({
@@ -8865,24 +8808,20 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
               .where(eq(articles.id, articleId))
               .returning();
 
-            await tx.insert(publisherCreditLogs).values({
+            // الخصم الموحّد (publisherCreditService): مرة واحدة لكل خبر،
+            // ورفض النشر هنا إن لم توجد باقة صالحة
+            const charge = await chargePublishInTx(tx, {
               publisherId: agencyPublisher.id,
-              creditPackageId: decrementedPackage.id,
               articleId,
-              actionType: "credit_used",
-              creditsBefore: wasUnlimited
-                ? decrementedPackage.remainingCredits
-                : decrementedPackage.remainingCredits + 1,
-              creditsChanged: wasUnlimited ? 0 : -1,
-              creditsAfter: decrementedPackage.remainingCredits,
               performedBy: userId,
-              notes: wasUnlimited
-                ? `نشر مقال ضمن باقة مفتوحة: ${article.title}`
-                : `نشر مقال: ${article.title}`,
+              note: article.title,
             });
+            if (charge === "no_credits") {
+              throw new Error("NO_CREDITS");
+            }
 
             console.log(
-              `📰 [PUBLISHER] Credit tracked for publisher ${agencyPublisher.id}. Remaining: ${decrementedPackage.remainingCredits}`,
+              `📰 [PUBLISHER] Credit ${charge} for publisher ${agencyPublisher.id} - article ${articleId}`,
             );
 
             return published;
@@ -18960,7 +18899,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       });
       
       res.json({
-        logs: enhancedLogs,
+        logs: redactActivityValue(enhancedLogs),
         total: count,
         page: pageNum,
         limit: limitNum,

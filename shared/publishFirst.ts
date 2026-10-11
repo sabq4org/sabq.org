@@ -28,7 +28,6 @@ export const PUBLISH_FIRST_VERDICTS_AR: Record<PublishFirstVerdict, string> = {
 /** مفاتيح system_settings. غياب الصف = مفعّل (الافتراضي). */
 export const PUBLISH_FIRST_FLAG_KEYS = {
   validation: "publish_first_validation",
-  sensitiveGate: "publish_first_sensitive_gate",
   revisionHistory: "publish_first_revision_history",
   updateLine: "publish_first_update_line",
 } as const;
@@ -37,23 +36,15 @@ export type PublishFirstFlagName = keyof typeof PUBLISH_FIRST_FLAG_KEYS;
 
 export interface PublishFirstFlags {
   validation: boolean;
-  sensitiveGate: boolean;
   revisionHistory: boolean;
   updateLine: boolean;
 }
 
 export const PUBLISH_FIRST_FLAGS_DEFAULT: PublishFirstFlags = {
   validation: true,
-  sensitiveGate: true,
   revisionHistory: true,
   updateLine: true,
 };
-
-export const SENSITIVE_PUBLISH_MESSAGE =
-  "لا يمكن نشر هذه المادة: تصنيف المخاطر «حساسة» ويتطلب حكم مراجع (مناسب أو ملاحظات طفيفة أو ملاحظات جوهرية) قبل النشر.";
-
-export const SENSITIVE_CORRECT_MESSAGE =
-  "لا يمكن تصحيح هذه المادة: تصنيف المخاطر «حساسة» ويتطلب حكم مراجع قبل التعديل بعد النشر.";
 
 /** حقول المحتوى التي تُلتقط في سجل المراجعة. riskLabel يُسجَّل ولا يُعدّ وحده «تصحيحاً». */
 export const PUBLISH_FIRST_REVISION_FIELDS = [
@@ -145,29 +136,6 @@ export function validateBotDraftUpload(input: {
   return null;
 }
 
-export type SensitiveGateDecision =
-  | { allow: true; override: boolean }
-  | { allow: false; code: "sensitive_needs_verdict"; message: string };
-
-export function decideSensitiveGate(input: {
-  riskLabel: string | null | undefined;
-  hasVerdict: boolean;
-  gateEnabled: boolean;
-  action: "publish" | "correct";
-  /** يُحتسب فقط بعد تأكيد أن الطالب مسؤول (admin). البوت يمرّر false دائماً. */
-  adminOverride: boolean;
-}): SensitiveGateDecision {
-  if (!input.gateEnabled) return { allow: true, override: false };
-  if (input.riskLabel !== "sensitive") return { allow: true, override: false };
-  if (input.hasVerdict) return { allow: true, override: false };
-  if (input.adminOverride) return { allow: true, override: true };
-  return {
-    allow: false,
-    code: "sensitive_needs_verdict",
-    message: input.action === "correct" ? SENSITIVE_CORRECT_MESSAGE : SENSITIVE_PUBLISH_MESSAGE,
-  };
-}
-
 export interface RoleLike {
   role?: string | null;
   roles?: Array<string | { name?: string | null } | null> | null;
@@ -235,34 +203,6 @@ export function planContentRevision(input: {
     updateReason,
     correctedAt: input.now,
     contentChanged: changedFields.some((field) => CONTENT_CORRECTION_FIELDS.has(field)),
-  };
-}
-
-export interface OverrideLogRow {
-  articleId: string;
-  actorUserId: string | null;
-  actorName: string | null;
-  action: "publish" | "correct";
-  reason: string | null;
-  createdAt: Date;
-}
-
-export function buildOverrideLogRow(input: {
-  articleId: string;
-  actorUserId?: string | null;
-  actorName?: string | null;
-  action: "publish" | "correct";
-  reason?: string | null;
-  now: Date;
-}): OverrideLogRow {
-  const reason = input.reason?.trim() || null;
-  return {
-    articleId: input.articleId,
-    actorUserId: input.actorUserId ?? null,
-    actorName: input.actorName?.trim() || null,
-    action: input.action,
-    reason,
-    createdAt: input.now,
   };
 }
 

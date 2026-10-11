@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   composeXPostText,
+  stripMarkdownEmphasis,
   validateXPostText,
   xWeightedLength,
   X_MAX_PREMIUM_WEIGHTED_LENGTH,
@@ -73,5 +74,26 @@ describe("socialPostText — العد الموزون لمنصة X", () => {
     const v = validateXPostText("خبر hello");
     expect(v.weightedLength).toBe(9);
     expect(v.remaining).toBe(X_MAX_WEIGHTED_LENGTH - 9);
+  });
+});
+
+describe("stripMarkdownEmphasis — X لا يعرض Markdown", () => {
+  it("يزيل ** و__ حول العبارة ويترك النص", () => {
+    expect(stripMarkdownEmphasis("على اللهجتين **النجدية والحجازية**، بعد")).toBe(
+      "على اللهجتين النجدية والحجازية، بعد",
+    );
+    expect(stripMarkdownEmphasis("__عاجل__ خبر")).toBe("عاجل خبر");
+  });
+
+  it("لا يمس الروابط والوسوم والنجمة المفردة", () => {
+    const text = "#وسم_سعودي 5 * 3 https://sabq.org/a__b?utm_source=x";
+    expect(stripMarkdownEmphasis(text)).toBe(text);
+  });
+
+  it("لا يمس __ داخل وسم أو رابط عربي", () => {
+    for (const text of ["#وسم__سعودي__جديد", "https://sabq.org/خبر__عاجل__الآن", "https://sabq.org/**x**"]) {
+      expect(stripMarkdownEmphasis(text)).toBe(text);
+    }
+    expect(stripMarkdownEmphasis("خبر __عاجل__ الآن")).toBe("خبر عاجل الآن");
   });
 });

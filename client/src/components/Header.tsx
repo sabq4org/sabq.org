@@ -7,6 +7,7 @@ import { AccessibilitySettings } from "./AccessibilitySettings";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
 import { AdSlot } from "./AdSlot";
 import { BreakingNewsTicker } from "./BreakingNewsTicker";
+import { AudioBulletinBar } from "./AudioBulletinBar";
 import { NotificationBell } from "./NotificationBell";
 import {
   DropdownMenu,
@@ -594,6 +595,7 @@ export function Header({ user, onMenuClick, sticky = true }: HeaderProps) {
           )}
         </SheetContent>
       </Sheet>
+      <AudioBulletinBar />
       <BreakingNewsTicker />
       {nd96.active && (
         <>

@@ -3,6 +3,7 @@ import OpenAI from "openai";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { z } from "zod";
 import { claudeJsonOutput } from "./ai/claudeStructuredOutputs";
+import { trackedOpenAICompletion } from "./ai/gateway/trackedOpenAI";
 
 // Zod schemas for AI responses validation with coercion
 const ClaudeTopicSchema = z.object({
@@ -231,7 +232,7 @@ export async function generateSocialPost(
     const spec = platformSpecs[platform];
 
     // Migrated to gpt-5.1
-    const response = await openai.chat.completions.create({
+    const response = await trackedOpenAICompletion(openai, "editor-social-post", {
       model: GPT_MODEL,
       messages: [
         {
@@ -518,7 +519,7 @@ ${context ? `السياق: ${context}` : ''}
       try {
         console.log(`🤖 [GPT-5.1] Starting analysis...`);
         // Migrated to gpt-5.1
-        const response = await openai.chat.completions.create({
+        const response = await trackedOpenAICompletion(openai, "editor-fact-check", {
           model: GPT_MODEL,
           messages: [
             {

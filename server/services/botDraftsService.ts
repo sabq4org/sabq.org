@@ -36,15 +36,11 @@ import { generateEnglishSlug } from "../utils/slugTransliterator";
 import { sanitizeArticleHtml } from "../utils/sanitizeArticleHtml";
 import { buildEditorialMetadataUpdate } from "../utils/editorialDatesSql";
 import { logActivity, getUserRoleNames } from "../rbac";
-import { isPublishFirstAdmin } from "@shared/publishFirst";
 import { memoryCache } from "../memoryCache";
 import {
   maybePlanPublishedRevision,
   recordArticleRevision,
-  sensitiveGateForArticle,
   botDraftUploadIssue,
-  recordPublishOverride,
-  recordPublishOverrideInTransaction,
   editorDisplayName,
   recordReviewerVerdict,
 } from "./publishFirstService";
@@ -852,29 +848,6 @@ async function assertBotSubtitle(subtitle: string | null | undefined): Promise<v
   if (issue) throw new BotDraftError(issue.httpStatus, issue.code, issue.message, issue.details);
 }
 
-async function assertBotSensitiveRelease(
-  articleId: string,
-  riskLabel: string | null | undefined,
-  adminOverride = false,
-): Promise<{ override: boolean }> {
-  const decision = await sensitiveGateForArticle({
-    articleId,
-    riskLabel,
-    action: "publish",
-    adminOverride,
-  });
-  if (!decision.allow) throw new BotDraftError(422, decision.code, decision.message);
-  return { override: Boolean(decision.override) };
-}
-
-/** مدير النشر (نفس قاعدة لوحة التحرير) — الوحيد الذي يستثني مادة حساسة عبر البوت. */
-export async function botPrincipalMayOverrideSensitive(bot: BotIdentity | undefined): Promise<boolean> {
-  if (!bot?.personal) return false;
-  const [user] = await db.select({ role: users.role }).from(users).where(eq(users.id, bot.personal.userId)).limit(1);
-  const roles = await getUserRoleNames(bot.personal.userId);
-  return isPublishFirstAdmin({ role: user?.role, roles });
-}
-
 async function categorySlugFor(categoryId: string | null): Promise<string | null> {
   if (!categoryId) return null;
   const [row] = await db.select({ slug: categories.slug }).from(categories).where(eq(categories.id, categoryId)).limit(1);
@@ -986,14 +959,22 @@ function publishActorKey(bot: BotIdentity): string {
   return bot.personal ? `personal:${bot.personal.userId}` : `legacy:${bot.name}`;
 }
 
-function publishBodyFingerprint(options: { sensitiveOverride?: true; overrideReason?: string }): string {
+// جسم النشر لم يعد يحمل حقولاً مؤثرة؛ البصمة الجديدة تطابق بصمة الجسم الفارغ القديمة.
+// إيصال حُفظ قبل إلغاء بوابة الحساسية بجسم «تجاوز» يُقبل عند إعادة المحاولة بالمعرّف
+// والحقول نفسها، حتى لا تتحول إعادة المحاولة عبر النشر إلى 409.
+function fingerprintOf(sensitiveOverride: boolean, overrideReason: string | null): string {
   return crypto
     .createHash("sha256")
-    .update(JSON.stringify({
-      sensitiveOverride: options.sensitiveOverride === true,
-      overrideReason: options.sensitiveOverride === true ? (options.overrideReason ?? "") : null,
-    }))
+    .update(JSON.stringify({ sensitiveOverride, overrideReason }))
     .digest("hex");
+}
+
+function publishBodyFingerprint(): string {
+  return fingerprintOf(false, null);
+}
+
+function legacyOverrideFingerprint(options: { sensitiveOverride?: boolean; overrideReason?: string }): string | null {
+  return options.sensitiveOverride === true ? fingerprintOf(true, options.overrideReason ?? "") : null;
 }
 
 function operationResponse(row: PublishOperationRow): BotDraftPublishOperationResponse {
@@ -1016,10 +997,10 @@ async function claimPublishOperation(
   bot: BotIdentity,
   articleId: string,
   operationId: string,
-  options: { sensitiveOverride?: true; overrideReason?: string },
+  legacy: { sensitiveOverride?: boolean; overrideReason?: string } = {},
 ): Promise<{ claimed: boolean; row: PublishOperationRow }> {
   const actorKey = publishActorKey(bot);
-  const bodyFingerprint = publishBodyFingerprint(options);
+  const bodyFingerprint = publishBodyFingerprint();
   const [created] = await db
     .insert(articlePublishOperations)
     .values({
@@ -1044,7 +1025,7 @@ async function claimPublishOperation(
     ))
     .limit(1);
   if (!existing) throw new BotDraftError(503, "server_error", "تعذر قراءة نتيجة عملية النشر");
-  if (existing.bodyFingerprint !== bodyFingerprint) {
+  if (existing.bodyFingerprint !== bodyFingerprint && existing.bodyFingerprint !== legacyOverrideFingerprint(legacy)) {
     throw new BotDraftError(409, "operation_id_collision", "operationId مستخدم لطلب نشر مختلف");
   }
   return { claimed: false, row: existing };
@@ -1066,16 +1047,14 @@ async function markPublishOperationFailed(operationId: string, actorKey: string,
     ));
 }
 
-async function ensurePublishReceiptPrivileges(tx: any, needsOverrideAudit: boolean, needsReceipt: boolean): Promise<void> {
-  if (!needsOverrideAudit && !needsReceipt) return;
+async function ensurePublishReceiptPrivileges(tx: any, needsReceipt: boolean): Promise<void> {
+  if (!needsReceipt) return;
   if (typeof tx.execute !== "function") return;
   const result = await tx.execute(sql`
-    SELECT
-      ${needsReceipt} = false OR has_table_privilege(current_user, 'article_publish_operations', 'UPDATE') AS receipt_update,
-      ${needsOverrideAudit} = false OR has_table_privilege(current_user, 'article_publish_overrides', 'INSERT') AS override_insert
+    SELECT has_table_privilege(current_user, 'article_publish_operations', 'UPDATE') AS receipt_update
   `);
   const row = (result as any)?.[0] ?? (result as any)?.rows?.[0];
-  if (!row || row.receipt_update !== true || row.override_insert !== true) {
+  if (!row || row.receipt_update !== true) {
     throw new BotDraftError(503, "server_error", "صلاحيات سجل النشر غير مكتملة — لم تُكتب المادة");
   }
 }
@@ -1364,16 +1343,6 @@ async function updatePublishedBotArticle(
     updateReason: input.updateReason,
     now,
   });
-  const resultingRisk = input.riskLabel !== undefined ? input.riskLabel : existing.riskLabel;
-  if (plan?.contentChanged) {
-    const decision = await sensitiveGateForArticle({
-      articleId: existing.id,
-      riskLabel: resultingRisk,
-      action: "correct",
-      adminOverride: false,
-    });
-    if (!decision.allow) throw new BotDraftError(422, decision.code, decision.message);
-  }
   if (plan) patch.correctedAt = plan.correctedAt;
   const [row] = await db
     .update(articles)
@@ -1537,7 +1506,7 @@ export async function publishBotDraft(
   bot: BotIdentity,
   articleId: string,
   ctx: BotRequestContext = {},
-  options: { operationId?: string; sensitiveOverride?: true; overrideReason?: string } = {},
+  options: { operationId?: string; sensitiveOverride?: boolean; overrideReason?: string } = {},
 ): Promise<BotDraftResponse | BotDraftPublishOperationResponse> {
   assertPersonalCapability(bot, "publish");
   const existing = await findBotArticle(articleId, bot);
@@ -1558,16 +1527,9 @@ export async function publishBotDraft(
   throwIfNotReleasable(existing);
   await throwIfEditLocked(articleId);
   await assertBotDraftBylineMayPublish(bot, existing);
-  const overrideRequested = options.sensitiveOverride === true;
-  if (overrideRequested && !(await botPrincipalMayOverrideSensitive(bot))) {
-    throw new BotDraftError(403, "sensitive_override_forbidden", "النشر على المسؤولية للمادة الحساسة متاح لمدير النشر فقط");
-  }
-  const gate = await assertBotSensitiveRelease(existing.id, existing.riskLabel, overrideRequested);
-
   const now = new Date();
   let row: ArticleRow;
   let response: BotDraftResponse;
-  let effectiveGate = gate;
   let publishPatch: (BotDraftPublishUpdate & { englishSlug?: string }) | undefined;
   let alreadyTerminal: BotDraftPublishOperationResponse | undefined;
   await db.transaction(async (tx) => {
@@ -1596,13 +1558,9 @@ export async function publishBotDraft(
     }
     await throwIfEditLocked(articleId);
     await assertBotDraftBylineMayPublish(bot, lockedArticle);
-    // Re-read the sensitive gate after locking the current article row so a
-    // concurrent risk-label change cannot bypass the gate checked above.
-    effectiveGate = await assertBotSensitiveRelease(lockedArticle.id, lockedArticle.riskLabel, overrideRequested);
-    // Check only the writes this operation will perform, after the row lock and
-    // final sensitive gate. This preserves legacy calls before the receipt
-    // migration and closes the safe-to-sensitive race before article UPDATE.
-    await ensurePublishReceiptPrivileges(tx, Boolean(effectiveGate.override && bot.personal), Boolean(claimedOperation));
+    // Check only the writes this operation will perform, after the row lock.
+    // This preserves legacy calls before the receipt migration.
+    await ensurePublishReceiptPrivileges(tx, Boolean(claimedOperation));
     publishPatch = buildBotDraftPublishUpdate(now, lockedArticle.publishedAt);
     if (!lockedArticle.englishSlug) publishPatch.englishSlug = generateEnglishSlug(lockedArticle.title);
     articleWriteStarted = true;
@@ -1611,22 +1569,6 @@ export async function publishBotDraft(
     row = updated;
     const [category] = await tx.select({ slug: categories.slug }).from(categories).where(eq(categories.id, row.categoryId ?? "")).limit(1);
     response = toBotDraftResponse(row, category?.slug ?? null);
-    if (effectiveGate.override && bot.personal) {
-      try {
-        await recordPublishOverrideInTransaction(tx, {
-          articleId: row.id,
-          actorUserId: bot.personal.userId,
-          actorName: await editorDisplayName(bot.personal.userId),
-          action: "publish",
-          reason: options.overrideReason ?? null,
-          now,
-        });
-      } catch (error) {
-        // The article update is inside this transaction; convert an audit
-        // insert failure into a definitive rollback outcome for the receipt.
-        throw new BotDraftError(503, "server_error", "تعذر تسجيل تجاوز الحساسية — لم تُنشر المادة");
-      }
-    }
     if (claimedOperation) {
       const [saved] = await tx
         .update(articlePublishOperations)
@@ -1734,7 +1676,6 @@ export async function scheduleBotDraft(
   throwIfNotReleasable(existing);
   await throwIfEditLocked(articleId);
   await assertBotDraftBylineMayPublish(bot, existing);
-  await assertBotSensitiveRelease(existing.id, existing.riskLabel);
 
   const now = new Date();
   const patch: BotDraftScheduleUpdate & { englishSlug?: string } = buildBotDraftScheduleUpdate(publishAt, now);
@@ -1845,8 +1786,6 @@ export async function rescheduleBotDraft(
   throwLifecycleBlock(botDraftScheduledBlock(existing));
   await throwIfEditLocked(articleId);
   await assertBotDraftBylineMayPublish(bot, existing!);
-
-  await assertBotSensitiveRelease(existing!.id, existing!.riskLabel);
 
   const now = new Date();
   const patch = buildBotDraftRescheduleUpdate(publishAt, now);

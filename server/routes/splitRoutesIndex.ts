@@ -3,6 +3,7 @@ import { aiHubRouter } from "./aiHub";
 import { editAndGenerateStreamRouter } from "./editAndGenerateStream";
 import { integrationsStatusRouter } from "./integrationsStatus";
 import systemSettingsRouter from "./systemSettings";
+import audioBulletinRouter from "./audioBulletin";
 import userDashboardThemeRouter from "./userDashboardTheme";
 import adminActivityLogsRouter from "./adminActivityLogs";
 import keywordFollowingRouter from "./keywordFollowing";
@@ -79,6 +80,7 @@ import gcMajlisRouter from "./gcMajlis";
 import gcFantasyRouter from "./gcFantasy";
 import rslPredictionsRouter from "./rslPredictions";
 import mediaLibraryRouter from "./mediaLibrary";
+import logoLibraryRouter from "./logoLibrary";
 import socialPublishingRouter from "./socialPublishing";
 import promptStudioRouter from "./promptStudio";
 import articleViewStatsRouter from "./articleViewStats";
@@ -116,6 +118,7 @@ import mawaeedRouter from "./mawaeed";
 export function registerSplitRoutes(app: Express) {
   // Must run after setupAuth (caller guarantees that).
   app.use(systemSettingsRouter);
+  app.use(audioBulletinRouter);
   app.use(userDashboardThemeRouter);
   app.use(aiHubRouter);
   app.use(editAndGenerateStreamRouter);
@@ -201,6 +204,7 @@ export function registerSplitRoutes(app: Express) {
   app.use(gcFantasyRouter);
   app.use(rslPredictionsRouter);
   app.use(mediaLibraryRouter);
+  app.use(logoLibraryRouter);
   app.use(socialPublishingRouter);
   app.use(promptStudioRouter);
   app.use(articleViewStatsRouter);

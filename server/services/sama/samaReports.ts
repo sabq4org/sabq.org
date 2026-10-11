@@ -2,6 +2,11 @@
  * فهارس ملفات ساما الدورية (PDF/Excel). صفحات الفهرس تُصيّر قائمة SharePoint داخل
  * `var WPQ1ListData = {"Row":[...]}` مع `FileRef` و`SAMAFilePublishDate` — نقرأها بدل
  * تخمين اسم الملف (اللاحقة الترتيبية غير منتظمة: 22nd / 15 / 25th-Jul).
+ *
+ * تغيير ساما في سبتمبر 2026: النشرة الشهرية صارت ملفًا واحدًا ثابت الاسم
+ * («Monthly Bulletin.xlsx» بمسافة) يُستبدل كل شهر، والأصول الاحتياطية صارت
+ * «International_Reserves_Aug2026.xlsx». لذلك الأنماط تقبل الاسمين، والملف بلا سنة في
+ * اسمه يُميَّز بتاريخ نشره (انظر `reportKey`).
  */
 import { parseSamaDate, samaGetText, SAMA_ORIGIN } from "./samaClient";
 
@@ -21,18 +26,19 @@ export const REPORT_INDEX: Record<ReportKind, { indexPath: string; filePattern: 
   },
   reserve_assets_monthly: {
     indexPath: "/en-US/Statistics/Indices/Pages/reserve_assets.aspx",
-    filePattern: /Reserve_Assets.*\.xlsx$/i,
+    filePattern: /(Reserve_Assets|International_Reserves).*\.xlsx$/i,
     titleAr: "الأصول الاحتياطية",
   },
   monthly_bulletin: {
     indexPath: "/ar-sa/Statistics/Pages/MonthlyStatistics.aspx",
-    filePattern: /Monthly_Bulletin.*\.xlsx$/i,
+    filePattern: /Monthly[_ ]Bulletin.*\.xlsx$/i,
     titleAr: "النشرة الإحصائية الشهرية",
   },
 };
 
 export interface ReportFile {
   kind: ReportKind;
+  /** مفتاح التخزين الفريد (economy_reports.file_name) — اسم الملف، ومعه تاريخ النشر إن خلا الاسم من سنة */
   fileName: string;
   url: string;
   /** ISO — تاريخ نشر ساما للملف */
@@ -41,6 +47,24 @@ export interface ReportFile {
 
 function decodeSp(s: string): string {
   return s.replace(/\\u([0-9a-fA-F]{4})/g, (_, h) => String.fromCharCode(parseInt(h, 16)));
+}
+
+/**
+ * اسم ملف ثابت يُستبدل كل شهر («Monthly Bulletin.xlsx») لا يصلح وحده مفتاحًا لمنع
+ * التكرار؛ نضيف إليه تاريخ النشر. الأسماء التي تحمل سنة تبقى كما هي حتى لا تتغيّر
+ * مفاتيح الصفوف المخزّنة سابقًا.
+ */
+export function reportKey(fileName: string, publishedAt: string | null): string {
+  if (/\d{4}/.test(fileName) || !publishedAt) return fileName;
+  return `${fileName}#${publishedAt}`;
+}
+
+function encodePath(fileRef: string): string {
+  try {
+    return encodeURI(decodeURI(fileRef));
+  } catch {
+    return encodeURI(fileRef);
+  }
 }
 
 /** يستخرج صفوف القائمة من HTML الفهرس — مُصدَّر للاختبار. */
@@ -56,11 +80,12 @@ export function parseReportIndexHtml(html: string, kind: ReportKind): ReportFile
     const fileRef = decodeSp(m[1]);
     const fileName = fileRef.split("/").pop() ?? fileRef;
     if (!def.filePattern.test(fileName)) continue;
+    const publishedAt = parseSamaDate(decodeSp(m[2]));
     files.push({
       kind,
-      fileName,
-      url: SAMA_ORIGIN + fileRef,
-      publishedAt: parseSamaDate(decodeSp(m[2])),
+      fileName: reportKey(fileName, publishedAt),
+      url: SAMA_ORIGIN + encodePath(fileRef),
+      publishedAt,
     });
   }
   return files;

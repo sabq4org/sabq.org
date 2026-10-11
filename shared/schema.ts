@@ -9818,6 +9818,9 @@ export const publishers = pgTable("publishers", {
   // directly (the old hardcoded contentManagerPublisherMap behavior,
   // now a per-publisher flag).
   autoPublish: boolean("auto_publish").default(false).notNull(),
+  // النشر الاجتماعي من لوحة الوكالة: off = مخفي، approval = كل تغريدة
+  // تنتظر موافقة فريق سبق (الافتراضي)، direct = تنشر الوكالة أو تجدول بنفسها.
+  socialPublishMode: text("social_publish_mode").default("approval").notNull(),
 
   // Metadata
   notes: text("notes"), // Internal admin notes
@@ -9930,11 +9933,34 @@ export const publisherRequests = pgTable("publisher_requests", {
   // ملاحظة الإدارة عند المعالجة — سبب الرفض تحديداً. كان يُرسل في الإشعار
   // فقط، فيضيع بمجرد أن تمر الوكالة على إشعاراتها.
   adminNote: text("admin_note"),
+  // عرض التجديد من الإدارة ورد الوكالة عليه (طلبات renewal فقط).
+  // الحالة تتقدم: open → offered → accepted → closed (بعد تأكيد الدفع والتفعيل).
+  offer: jsonb("offer").$type<PublisherRenewalOffer>(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => [
   index("publisher_requests_publisher_idx").on(table.publisherId),
   index("publisher_requests_status_idx").on(table.status),
 ]);
+
+export type PublisherRenewalOffer = {
+  packageType: "unlimited" | "limited";
+  /** عدد الأخبار للباقة المحدودة فقط */
+  totalCredits: number | null;
+  durationMonths: number;
+  /** ISO — تبدأ عادة لحظة انتهاء الباقة الحالية فلا ينقطع النشر */
+  startDate: string;
+  price: number | null;
+  currency: string;
+  /** ISO — آخر يوم يمكن فيه قبول العرض */
+  validUntil: string;
+  note: string | null;
+  sentAt: string;
+  sentBy: string;
+  response?: "accepted" | "contact";
+  respondedAt?: string;
+  respondedBy?: string;
+  activatedCreditId?: string;
+};
 
 export type PublisherRequest = typeof publisherRequests.$inferSelect;
 
@@ -9997,6 +10023,7 @@ export const updatePublisherSchema = z.object({
   taxNumber: z.string().optional(),
   address: z.string().optional(),
   isActive: z.boolean().optional(),
+  socialPublishMode: z.enum(["off", "approval", "direct"]).optional(),
   suspendedUntil: z.string().nullable().optional(),
   suspensionReason: z.string().optional(),
   publishingEndsAt: z.string().nullable().optional(),
@@ -15465,6 +15492,10 @@ export const socialPosts = pgTable("social_posts", {
   // وسائط متعددة (التأليف المستقل): image = حتى 4 صور، video = رابط واحد
   mediaKind: text("media_kind").default("none").notNull(), // none | image | video
   mediaUrls: jsonb("media_urls").$type<string[]>().default([]),
+  // تغريدة طلبتها وكالة لخبرها (null = منشور من فريق سبق أو كاتب رأي)
+  publisherId: varchar("publisher_id").references(() => publishers.id, { onDelete: "set null" }),
+  // الموعد الذي اقترحته الوكالة وهي تنتظر الموافقة (null = بعد الموافقة مباشرة)
+  requestedAt: timestamp("requested_at"),
   // draft | scheduled | processing | published | failed | canceled
   status: text("status").default("draft").notNull(),
   scheduledAt: timestamp("scheduled_at"),
@@ -15483,6 +15514,7 @@ export const socialPosts = pgTable("social_posts", {
   index("social_posts_article_idx").on(table.articleId),
   index("social_posts_status_scheduled_idx").on(table.status, table.scheduledAt),
   index("social_posts_status_locked_idx").on(table.status, table.lockedAt),
+  index("social_posts_publisher_idx").on(table.publisherId).where(sql`publisher_id IS NOT NULL`),
 ]);
 
 // سجل محاولات append-only — كل محاولة نشر (فورية أو من العامل) بصفّها
@@ -15643,3 +15675,67 @@ export const mawaeedChanges = pgTable("mawaeed_changes", {
 }, (table) => [
   index("mawaeed_changes_series_idx").on(table.seriesId, table.createdAt),
 ]);
+
+// ============================================
+// مكتبة الشعارات — منقولة من salogos إلى R2 (sabq-news-images/logos/)
+// المستورد: scripts/import-logos/import.ts — يحفظ الحقول الأصلية كما هي.
+// ============================================
+
+export const logos = pgTable("logos", {
+  /** id الأصلي من المصدر — لا يتغير */
+  id: varchar("id").primaryKey(),
+  displayId: integer("display_id").notNull(),
+  title: text("title").notNull(),
+  categoryId: varchar("category_id"),
+  status: varchar("status", { length: 32 }),
+  sourceCreatedAt: timestamp("source_created_at", { withTimezone: true }),
+  sourceUpdatedAt: timestamp("source_updated_at", { withTimezone: true }),
+  websiteUrl: text("website_url"),
+  downloadCount: integer("download_count").notNull().default(0),
+  tags: text("tags").array().notNull().default(sql`'{}'::text[]`),
+  slug: text("slug"),
+  ownerId: varchar("owner_id"),
+  /** الروابط الأصلية للمرجعية فقط — لا تُستخدم في الأخبار */
+  sourceImageUrl: text("source_image_url"),
+  sourceSvgUrl: text("source_svg_url"),
+  sourcePngUrl: text("source_png_url"),
+  /** روابط النسخ المخزنة في R2 (media.sabq.org) */
+  svgUrl: text("svg_url"),
+  pngUrl: text("png_url"),
+  /** الرابط المعتمد للأخبار: SVG إن وُجد وإلا PNG */
+  primaryUrl: text("primary_url"),
+  /** العنوان + الوسوم بعد توحيد الحروف (normalizeArabicForSearch في shared/logoSearch.ts) */
+  searchText: text("search_text").notNull().default(""),
+  importedAt: timestamp("imported_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex("logos_display_id_uidx").on(table.displayId),
+  index("logos_search_text_trgm_idx").using("gin", table.searchText.op("gin_trgm_ops")),
+  index("logos_tags_gin_idx").using("gin", table.tags),
+]);
+
+export const logoAssets = pgTable("logo_assets", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  logoId: varchar("logo_id").notNull().references(() => logos.id, { onDelete: "cascade" }),
+  /** svg | png | original */
+  variant: varchar("variant", { length: 16 }).notNull(),
+  sourceUrl: text("source_url").notNull(),
+  r2Key: text("r2_key"),
+  publicUrl: text("public_url"),
+  contentType: varchar("content_type", { length: 64 }),
+  bytes: integer("bytes"),
+  sha256: varchar("sha256", { length: 64 }),
+  /** uploaded | failed */
+  status: varchar("status", { length: 16 }).notNull(),
+  error: text("error"),
+  attempts: integer("attempts").notNull().default(0),
+  uploadedAt: timestamp("uploaded_at", { withTimezone: true }),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex("logo_assets_source_url_uidx").on(table.sourceUrl),
+  index("logo_assets_logo_idx").on(table.logoId),
+  index("logo_assets_status_idx").on(table.status),
+]);
+
+export type Logo = typeof logos.$inferSelect;
+export type LogoAsset = typeof logoAssets.$inferSelect;

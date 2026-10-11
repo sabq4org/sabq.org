@@ -460,6 +460,12 @@ export async function notifyAuthorOfSocialPostStatus(
     if (!row || !row.article || !row.post) return;
 
     const { post, article } = row;
+    // تغريدة طلبتها وكالة: يصل الإشعار لأعضاء الوكالة بنصها، لا بنص كاتب الرأي
+    if (post.publisherId) {
+      const { notifyAgencyOfSocialPost } = await import("./publisherSocialService");
+      await notifyAgencyOfSocialPost(post, article.title, event, options?.reviewerNote ?? null);
+      return;
+    }
     const authorUserId = post.createdByUserId;
 
     // نتأكد أن المنشور تم اقتراحه بواسطة كاتب أو مدخل المقال

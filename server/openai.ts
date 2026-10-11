@@ -1,6 +1,7 @@
 // Reference: javascript_openai blueprint
 import OpenAI from "openai";
 import { retryWithBackoff } from "./utils/retryWithBackoff";
+import { trackedOpenAICompletion } from "./ai/gateway/trackedOpenAI";
 import {
   SABQ_LANGUAGE_STANDARDS_AR,
   SABQ_HEADLINE_STANDARDS_AR,
@@ -43,15 +44,16 @@ export interface CreateAIResponseParams {
   cacheTTL?: number;
   maxTokens?: number;
   responseFormat?: { type: "json_object" };
+  feature?: string;
+  deduplicate?: boolean;
 }
 
 /**
  * Standardized helper function for creating AI responses using GPT-5.1
  * Supports reasoning effort levels and caching for optimal performance
  * 
- * Note: Using chat.completions.create() as the base API. The task specifies
- * responses.create() but this API doesn't exist in current OpenAI SDK.
- * This implementation provides the same functionality with proper API.
+ * Uses the tracked Chat Completions helper while preserving the complete SDK
+ * response expected by existing callers.
  * 
  * @param params Configuration for the AI response
  * @returns OpenAI response object
@@ -64,6 +66,8 @@ export async function createAIResponse(params: CreateAIResponseParams) {
     cacheTTL = 86400,
     maxTokens = 2048,
     responseFormat,
+    feature = "legacy-openai-completion",
+    deduplicate = false,
   } = params;
 
   // Build the request configuration for gpt-5.1
@@ -81,10 +85,10 @@ export async function createAIResponse(params: CreateAIResponseParams) {
 
   // Note: Reasoning and caching parameters are part of the new gpt-5.1 API
   // Add them here when they become available in the SDK
-  // For now, we use the standard chat.completions.create() API
+  // The tracked helper preserves the standard Chat Completions request.
   
   return withRetry(
-    () => openai.chat.completions.create(requestConfig),
+    () => trackedOpenAICompletion(openai, feature, requestConfig, { deduplicate }),
     3,
     "createAIResponse"
   );
@@ -126,7 +130,7 @@ export async function summarizeArticle(text: string): Promise<string> {
     console.log("[Summarize] Clean text length:", cleanText.length);
     console.log("[Summarize] Clean text preview:", cleanText.substring(0, 100) + "...");
     
-    const response = await openai.chat.completions.create({
+    const response = await trackedOpenAICompletion(openai, "editor-summarize", {
       model: "gpt-5.1",
       messages: [
         {
@@ -143,7 +147,7 @@ ${SABQ_SUMMARY_STANDARDS_AR}`,
         },
       ],
       max_completion_tokens: 1024,  // Increased for better results
-    });
+    }, { deduplicate: true });
 
     console.log("[Summarize] ✅ OpenAI response received");
     console.log("[Summarize] Response structure:", JSON.stringify({
@@ -288,7 +292,7 @@ ${cleanContent}`
     console.log("[GenerateTitles] Calling OpenAI API with full content...");
     console.log("[GenerateTitles] Full content length being sent:", cleanContent.length);
     
-    const response = await openai.chat.completions.create({
+    const response = await trackedOpenAICompletion(openai, "editor-headlines", {
       model: "gpt-5.1",
       messages: [
         {
@@ -354,7 +358,7 @@ export async function getArticleRecommendations(
       .map(a => `ID: ${a.id}, العنوان: ${a.title}, التصنيف: ${a.categoryId}`)
       .join("\n");
 
-    const response = await openai.chat.completions.create({
+    const response = await trackedOpenAICompletion(openai, "reader-recommendations", {
       model: "gpt-5.1",
       messages: [
         {
@@ -399,7 +403,7 @@ ${articlesContext}
 استخدم هذه الأخبار للإجابة على أسئلة القارئ عندما يكون ذلك مناسباً.`;
 
     console.log("[ChatAssistant] Calling OpenAI API...");
-    const response = await openai.chat.completions.create({
+    const response = await trackedOpenAICompletion(openai, "reader-assistant", {
       model: "gpt-5.1",
       messages: [
         {
@@ -482,7 +486,7 @@ export async function analyzeCredibility(
   - note: ملاحظة قصيرة (جملة واحدة)
 - summary: ملخص شامل للتحليل (2-3 جمل)`;
 
-    const response = await openai.chat.completions.create({
+    const response = await trackedOpenAICompletion(openai, "editor-credibility", {
       model: "gpt-5.1",
       messages: [
         {
@@ -579,7 +583,7 @@ ${activitiesText}
 
 قم بتحليل هذه البيانات وإنشاء رؤى ذكية بصيغة JSON.`;
 
-    const response = await openai.chat.completions.create({
+    const response = await trackedOpenAICompletion(openai, "moment-insights", {
       model: "gpt-5.1",
       messages: [
         {
@@ -655,7 +659,7 @@ export async function analyzeSEO(
 ${excerpt ? `المقدمة: ${excerpt}\n\n` : ''}المحتوى (أول 2000 حرف):
 ${content.substring(0, 2000)}`;
 
-    const response = await openai.chat.completions.create({
+    const response = await trackedOpenAICompletion(openai, "editor-seo-analysis", {
       model: "gpt-5.1",
       messages: [
         {
@@ -669,7 +673,7 @@ ${content.substring(0, 2000)}`;
       ],
       response_format: { type: "json_object" },
       max_completion_tokens: 1536,
-    });
+    }, { deduplicate: true });
 
     const result = JSON.parse(response.choices[0].message.content || "{}");
     
@@ -944,7 +948,7 @@ Translate this Arabic news to professional English and generate all required edi
     console.log("[Smart Content] Using prompt key:", promptKey);
     console.log("[Smart Content] Input content length:", newsContent.length);
     
-    const response = await openai.chat.completions.create({
+    const response = await trackedOpenAICompletion(openai, "editor-smart-content", {
       model: "gpt-5.1",
       messages: [
         {
@@ -1186,7 +1190,7 @@ Rewrite and improve this content in JSON format.`
     console.log("[Rewrite Content] Starting content enhancement with GPT-5.1...");
     console.log("[Rewrite Content] Original content length:", originalContent.length);
     
-    const response = await openai.chat.completions.create({
+    const response = await trackedOpenAICompletion(openai, "editor-rewrite", {
       model: "gpt-5.1",
       messages: [
         {
@@ -1267,7 +1271,7 @@ export async function extractMediaKeywords(
 
     console.log("[Extract Keywords] Analyzing content for media keywords...");
     
-    const response = await openai.chat.completions.create({
+    const response = await trackedOpenAICompletion(openai, "editor-media-keywords", {
       model: "gpt-5.1",
       messages: [
         {
@@ -1330,6 +1334,7 @@ export async function generateIFoxTitle(
 }`;
 
     const response = await createAIResponse({
+      feature: "ifox-title",
       messages: [
         {
           role: "system",
@@ -1403,6 +1408,7 @@ export async function generateIFoxContentSuggestions(
 }`;
 
     const response = await createAIResponse({
+      feature: "ifox-content-suggestions",
       messages: [
         {
           role: "system",
@@ -1500,6 +1506,7 @@ export async function analyzeIFoxContent(
 أعد النتيجة بصيغة JSON فقط.`;
 
     const response = await createAIResponse({
+      feature: "ifox-content-analysis",
       messages: [
         {
           role: "system",
@@ -1679,7 +1686,7 @@ export async function autoFormatContent(
 
     console.log("[AutoFormat] Calling OpenAI API...");
     
-    const response = await openai.chat.completions.create({
+    const response = await trackedOpenAICompletion(openai, "editor-auto-format", {
       model: "gpt-5.1",
       messages: [
         {
@@ -1759,7 +1766,7 @@ export interface FocalPointResult {
 
 export async function detectImageFocalPoint(imageUrl: string): Promise<FocalPointResult> {
   const response = await withRetry(async () => {
-    return await openai.chat.completions.create({
+    return await trackedOpenAICompletion(openai, "image-focal-point", {
       model: "gpt-4o-mini",
       max_tokens: 200,
       response_format: { type: "json_object" },

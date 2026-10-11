@@ -74,7 +74,9 @@ const EXEMPT_PATHS = [
   "/api/2fa/send-sms",
   "/api/oauth/token",  // RFC 6749 §5.2 token endpoint — uses client auth, not CSRF
   "/api/webhooks/",
-  "/api/whatsapp/",
+  // Twilio webhooks only — the dashboard admin routes under /api/whatsapp/* stay protected.
+  "/api/whatsapp/webhook",
+  "/api/whatsapp/status-callback",
   "/api/twilio/",
   "/api/email-agent/webhook",  // SendGrid inbound parse webhook
   "/api/correspondent-applications",  // Public reporter registration form
@@ -87,7 +89,6 @@ const EXEMPT_PATHS = [
   // Only the anonymous, header-less telemetry routes (view / reading-time,
   // sent via raw fetch or navigator.sendBeacon which cannot attach the
   // x-csrf-token header) are exempted, via EXEMPT_REGEX below.
-  "/api/native-ads/",  // Native ads tracking (impressions/clicks) for anonymous users
   "/api/store/auth/",  // Store customer authentication (login, register, etc.)
   "/api/store/cart",  // Store cart operations
   "/api/analytics/visitors/ping",  // Visitor heartbeat for anonymous users
@@ -98,10 +99,6 @@ const EXEMPT_PATHS = [
   // (UI: «تعذر توليد المحضر» / 0 مقاطع). Prefix covers future /api/internal/*.
   "/api/internal/",
   "/api/angle-submissions",  // Public angle submission form (Muqtarab)
-  // Muqtarab public topic view counter (anonymous, idempotent-ish increment).
-  // Only public /topics/:id/view lives here; authenticated writer routes are
-  // under /api/muqtarab/my-angle/* and remain CSRF-protected.
-  "/api/muqtarab/topics/",
   "/api/admin/moderator/disconnect",  // sendBeacon on tab close can't send headers
   "/api/editor-presence/",  // Live editor presence heartbeat/leave (session-auth gated, sendBeacon on unload)
   // Behavior telemetry — fire-and-forget analytics sent via sendBeacon
@@ -148,6 +145,16 @@ const EXEMPT_REGEX = [
   /^\/api\/articles\/[^/]+\/reading-time$/,  // Reading-time telemetry (sendBeacon)
   /^\/api\/en\/articles\/[^/]+\/view$/,      // English article view counter (raw fetch)
   /^\/api\/ur\/articles\/[^/]+\/view$/,      // Urdu article view counter (raw fetch)
+  // Native ads: anonymous tracking beacons and the public self-serve advertiser
+  // flow only. A "/api/native-ads/" prefix also exempted the editor CRUD
+  // (POST /api/native-ads/ with a trailing slash), letting a cross-site form
+  // create an active ad as a signed-in editor.
+  /^\/api\/native-ads\/[^/]+\/(impression|click)$/,
+  /^\/api\/native-ads\/(submit|upload)$/,
+  /^\/api\/native-ads\/my-ads\/[^/]+\/budget$/,
+  // Muqtarab public topic view counter only; the signed-in topic comment POST
+  // under the same /topics/:id/ prefix stays protected.
+  /^\/api\/muqtarab\/topics\/[^/]+\/view$/,
 ];
 
 export function isCsrfExemptRequest(

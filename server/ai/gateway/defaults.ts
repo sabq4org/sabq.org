@@ -75,6 +75,8 @@ export const DEFAULT_FEATURES: DefaultFeature[] = [
   // Direct Agents API session runner; no gateway fallback. Usage retained per research job.
   { featureKey: "editorial-research", displayName: "البحث التحريري الموثق", category: "editorial", primary: { provider: "openai", modelId: "gpt-6-astra" }, fallbackChain: [], allowFailover: false },
   // ── Editorial generation ──
+  // نص «نشرة سَبْق» الصوتية؛ بلا temperature لأن نماذج Claude الأحدث ترفضه.
+  { featureKey: "audio-bulletin-script", displayName: "نص النشرة الصوتية", category: "editorial", primary: SONNET, fallbackChain: [GPT_5_1], maxTokens: 6000 },
   { featureKey: "newsletter-editorial", displayName: "تحرير سبق في ٣ دقائق", category: "editorial", primary: SONNET, fallbackChain: [GPT_5_1], maxTokens: 3000, temperature: 0.2 },
   { featureKey: "content-tools", displayName: "أدوات المحتوى الذكية", category: "editorial", primary: GPT_5_1, fallbackChain: CHAIN_AFTER_GPT },
   // التدقيق اللغوي للمحرر (نص + عنوان): بدائل خفيفة وسريعة لأن المهمة قصيرة، والمهلة
@@ -155,6 +157,30 @@ export const DEFAULT_FEATURES: DefaultFeature[] = [
 
   // ── Audio (voice/provider selection stays in ttsProviderRegistry) ──
   { featureKey: "audio-newsletter", displayName: "النشرات الصوتية", category: "audio", primary: OPENAI_TTS, fallbackChain: [] },
+
+  // Legacy OpenAI transports: fixed caller model/payload; Hub disable switch + usage only.
+  { featureKey: "editor-summarize", displayName: "موجز المحرر", category: "editorial", primary: GPT_5_1, fallbackChain: [], allowFailover: false },
+  { featureKey: "editor-headlines", displayName: "عناوين المحرر", category: "editorial", primary: GPT_5_1, fallbackChain: [], allowFailover: false },
+  { featureKey: "editor-credibility", displayName: "تقييم المصداقية", category: "editorial", primary: GPT_5_1, fallbackChain: [], allowFailover: false },
+  { featureKey: "editor-seo-analysis", displayName: "تحليل SEO للمحرر", category: "editorial", primary: GPT_5_1, fallbackChain: [], allowFailover: false },
+  { featureKey: "editor-smart-content", displayName: "توليد العناصر التحريرية", category: "editorial", primary: GPT_5_1, fallbackChain: [], allowFailover: false },
+  { featureKey: "editor-rewrite", displayName: "إعادة صياغة المحرر", category: "editorial", primary: GPT_5_1, fallbackChain: [], allowFailover: false },
+  { featureKey: "editor-media-keywords", displayName: "كلمات البحث عن الوسائط", category: "editorial", primary: GPT_5_1, fallbackChain: [], allowFailover: false },
+  { featureKey: "editor-auto-format", displayName: "التنسيق الذكي", category: "editorial", primary: GPT_5_1, fallbackChain: [], allowFailover: false },
+  { featureKey: "image-focal-point", displayName: "تحديد بؤرة الصورة", category: "editorial", primary: GPT_4O_MINI, fallbackChain: [], allowFailover: false },
+  { featureKey: "editor-social-post", displayName: "منشور المحرر الاجتماعي", category: "editorial", primary: GPT_5_1, fallbackChain: [], allowFailover: false },
+  { featureKey: "editor-fact-check", displayName: "فحص الحقائق — OpenAI", category: "editorial", primary: GPT_5_1, fallbackChain: [], allowFailover: false },
+  { featureKey: "editorial-edit-fallback", displayName: "بديل OpenAI للتحرير", category: "editorial", primary: GPT_5_1, fallbackChain: [], allowFailover: false },
+  { featureKey: "editorial-email-analysis", displayName: "تحليل مادة البريد", category: "editorial", primary: GPT_4O_MINI, fallbackChain: [], allowFailover: false },
+  { featureKey: "editorial-content-improvement", displayName: "تحسين المحتوى", category: "editorial", primary: GPT_4O_MINI, fallbackChain: [], allowFailover: false },
+  { featureKey: "editorial-image-alt-text", displayName: "النص البديل للصورة", category: "editorial", primary: GPT_4O_MINI, fallbackChain: [], allowFailover: false },
+  { featureKey: "ifox-title", displayName: "iFox — العناوين", category: "editorial", primary: GPT_5_1, fallbackChain: [], allowFailover: false },
+  { featureKey: "ifox-content-suggestions", displayName: "iFox — اقتراح المحتوى", category: "editorial", primary: GPT_5_1, fallbackChain: [], allowFailover: false },
+  { featureKey: "ifox-content-analysis", displayName: "iFox — تحليل المحتوى", category: "editorial", primary: GPT_5_1, fallbackChain: [], allowFailover: false },
+  { featureKey: "legacy-openai-completion", displayName: "استدعاء OpenAI قديم", category: "general", primary: GPT_5_1, fallbackChain: [], allowFailover: false },
+  { featureKey: "reader-recommendations", displayName: "توصيات القراءة القديمة", category: "general", primary: GPT_5_1, fallbackChain: [], allowFailover: false },
+  { featureKey: "reader-assistant", displayName: "مساعد القارئ القديم", category: "general", primary: GPT_5_1, fallbackChain: [], allowFailover: false },
+  { featureKey: "moment-insights", displayName: "رؤى نشاط اللحظة", category: "general", primary: GPT_5_1, fallbackChain: [], allowFailover: false },
 
   // ── Phase-3 wave 0: traffic still flowing through the ai-manager façade.
   //    Callers pick their model explicitly, so the chain here is unused —

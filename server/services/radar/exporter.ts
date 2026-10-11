@@ -7,6 +7,7 @@ import { nanoid } from "nanoid";
 import { storage } from "../../storage";
 import type { RadarItem } from "@shared/schema";
 import { approvedCategories, categoryIdBySlug, getItem, getSource, updateItem } from "./repo";
+import { assertRadarEnabled } from "./runtime";
 
 // حساب «صحيفة سبق» (admin@sabq.org) — المراسل المعتمد للمواد المرصودة من
 // مصادر خارجية؛ نفس الحساب الافتراضي في ArticleEditor (NEWSPAPER_ACCOUNT_ID)
@@ -49,6 +50,7 @@ export async function exportItemToArticle(
   userId: string,
   overrideCategoryId?: string
 ): Promise<RadarExportResult> {
+  await assertRadarEnabled();
   const item = await getItem(itemId);
   if (!item) throw new Error("RADAR_ITEM_NOT_FOUND");
   if (!item.draft) throw new Error("RADAR_DRAFT_MISSING");
@@ -60,6 +62,9 @@ export async function exportItemToArticle(
   const source = await getSource(item.sourceId);
   const draft = item.draft;
   const categoryId = await resolveCategoryId(item, source?.categorySlug, overrideCategoryId);
+  // resolveCategoryId قد ينتظر عدة قراءات؛ أعد الفحص قبل الكتابة غير القابلة
+  // للتراجع إلى articles.
+  await assertRadarEnabled();
   const now = new Date();
 
   const created = await storage.createArticle({

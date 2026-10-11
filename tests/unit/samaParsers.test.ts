@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { annotateGroups, parsePosReport, parseWeekHeader } from "../../server/services/sama/parsers/posReport";
 import { parseMoneySupplyReport } from "../../server/services/sama/parsers/moneySupplyReport";
-import { parseReportIndexHtml } from "../../server/services/sama/samaReports";
+import { parseReportIndexHtml, reportKey } from "../../server/services/sama/samaReports";
 import { parseSamaDate, parseSamaNumber } from "../../server/services/sama/samaClient";
 
 const fixture = (name: string) => fs.readFileSync(path.join(__dirname, "..", "fixtures", "sama", name));
@@ -64,6 +64,29 @@ describe("محلّلات ملفات ساما", () => {
     expect(files).toHaveLength(1);
     expect(files[0].url).toBe("https://www.sama.gov.sa/ar-sa/Statistics/Indices/POS/Weekly_Points_of_Sale_Transactions_Report_22nd_Aug_2026.pdf");
     expect(files[0].publishedAt).toBe("2026-08-25");
+  });
+
+  it("يقرأ فهرس النشرة الشهرية بعد تغيير ساما (اسم ثابت بمسافة + PDF بجانبه)", () => {
+    // مقتطف من صفحة MonthlyStatistics.aspx كما هي في 2026-10-04
+    const html = `var WPQ1ListData = { "Row" : [
+      {"ID": "24", "FileRef": "\\u002far-sa\\u002fStatistics\\u002fMonthlyStatistics\\u002fMonthly_Statistical_Bulletin_for_Aug_2026.pdf", "SAMAFilePublishDate": "30\\u002f09\\u002f2026"},
+      {"ID": "25", "FileRef": "\\u002far-sa\\u002fStatistics\\u002fMonthlyStatistics\\u002fMonthly Bulletin.xlsx", "SAMAFilePublishDate": "30\\u002f09\\u002f2026"}
+    ]};`;
+    const files = parseReportIndexHtml(html, "monthly_bulletin");
+    expect(files).toHaveLength(1);
+    expect(files[0].url).toBe("https://www.sama.gov.sa/ar-sa/Statistics/MonthlyStatistics/Monthly%20Bulletin.xlsx");
+    expect(files[0].publishedAt).toBe("2026-09-30");
+    // الاسم ثابت كل شهر → المفتاح يحمل تاريخ النشر حتى لا يُعدّ نشرة سبتمبر مكررة
+    expect(files[0].fileName).toBe("Monthly Bulletin.xlsx#2026-09-30");
+  });
+
+  it("يبقي مفاتيح الأسماء المؤرخة كما هي ويقبل الاسم الجديد للأصول الاحتياطية", () => {
+    expect(reportKey("Monthly_Bulletin_July_2026.xlsx", "2026-08-30")).toBe("Monthly_Bulletin_July_2026.xlsx");
+    const html = `var WPQ1ListData = { "Row" : [
+      {"ID": "9", "FileRef": "\\u002fen-US\\u002fStatistics\\u002fIndices\\u002fD3\\u002fInternational_Reserves_Aug2026.xlsx", "SAMAFilePublishDate": "07\\u002f09\\u002f2026"}
+    ]};`;
+    const files = parseReportIndexHtml(html, "reserve_assets_monthly");
+    expect(files.map((f) => f.fileName)).toEqual(["International_Reserves_Aug2026.xlsx"]);
   });
 
   it("يوحّد تواريخ وأرقام ساما", () => {

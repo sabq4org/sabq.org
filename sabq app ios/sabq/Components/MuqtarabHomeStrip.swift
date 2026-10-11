@@ -31,10 +31,10 @@ final class MuqtarabHomeStore {
 
 // MARK: - شريط الزوايا في الواجهة الرئيسية
 //
-// الحاوية الموحدة نفسها (بلوك تفاصيل الخبر) بصفوف بطاقة الخبر الجانبية:
-// صورة الموضوع 104×84 (أو صورة الكاتب)، العنوان في سطرين، ثم اسم كاتب الزاوية
-// والوقت النسبي — قرار المالك 2026-09-12 حتى لا يشبه بلوك الرأي. يختفي كليًا
-// عند غياب البيانات.
+// الرأس الموحّد للرئيسية مع وصف قصير «زوايا كتّاب سبق» لأن «مُقترب» اسم علامة،
+// ثم أربعة صفوف: صورة الموضوع (أو صورة الكاتب)، العنوان، واسم كاتب الزاوية
+// بالأزرق العميق للهوية والوقت النسبي (نموذج 2026-10-09). يختفي كليًا عند
+// غياب البيانات.
 
 struct MuqtarabHomeStrip: View {
     private let store = MuqtarabHomeStore.shared
@@ -56,22 +56,12 @@ struct MuqtarabHomeStrip: View {
     }
 
     private var content: some View {
-        ArticleSidebarModule(
-            title: "مُقترب",
-            description: "زوايا كتّاب سبق — رأي يقترب من الحدث",
-            icon: "square.stack.3d.up",
-            fill: SabqTheme.surface,
-            action: {
-                NavigationLink(value: MuqtarabRoute()) {
-                    HStack(spacing: 4) {
-                        Text("كل الزوايا")
-                        Image(systemName: "chevron.left")
-                            .font(SabqFonts.app(size: 11, weight: .medium))
-                    }
-                }
-                .buttonStyle(.plain)
+        HomeSectionCard(title: "مُقترب", context: "زوايا كتّاب سبق") {
+            NavigationLink(value: MuqtarabRoute()) {
+                HomeSectionLinkLabel(title: "كل الزوايا")
             }
-        ) {
+            .buttonStyle(.plain)
+        } content: {
             ForEach(Array(visibleTopics.enumerated()), id: \.element.id) { index, topic in
                 if index > 0 { SidebarRowDivider() }
                 NavigationLink(value: MuqtarabTopicRoute(
@@ -79,19 +69,78 @@ struct MuqtarabHomeStrip: View {
                     topicSlug: topic.slug,
                     title: topic.title
                 )) {
-                    SidebarArticleRow(
-                        title: topic.title,
-                        // روابط مُقترب نسبية (`/uploads/...`) — تُكمَّل بأصل الموقع كما في شاشة مُقترب
-                        imageURL: (topic.heroImageUrl.flatMap { $0.isEmpty ? nil : $0 } ?? topic.writer?.avatar).map(URLConstants.absolutize),
-                        byline: topic.writer?.name ?? topic.angle?.name ?? "مُقترب",
-                        bylineAvatarURL: topic.writer?.avatar.map(URLConstants.absolutize),
-                        date: muqRelativeDate(topic.publishedAt),
-                        placeholderIcon: "square.stack.3d.up"
-                    )
+                    MuqtarabHomeRow(topic: topic)
                 }
                 .buttonStyle(.plain)
             }
         }
+    }
+}
+
+private struct MuqtarabHomeRow: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    let topic: MuqTopic
+
+    /// روابط مُقترب نسبية (`/uploads/...`) — تُكمَّل بأصل الموقع كما في شاشة مُقترب.
+    private var imageURL: URL? {
+        (topic.heroImageUrl.flatMap { $0.isEmpty ? nil : $0 } ?? topic.writer?.avatar)
+            .map(URLConstants.absolutize)
+            .flatMap(URL.init(string:))
+    }
+
+    private var byline: String { topic.writer?.name ?? topic.angle?.name ?? "مُقترب" }
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Group {
+                if let imageURL {
+                    CachedAsyncImage(url: imageURL, contentMode: .fill) { placeholder }
+                } else {
+                    placeholder
+                }
+            }
+            .frame(width: LatestTimelineStyle.thumbnailWidth, height: LatestTimelineStyle.thumbnailHeight)
+            .clipShape(RoundedRectangle(cornerRadius: NewsRowStyle.thumbnailRadius, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 4) {
+                SabqRTLText(
+                    topic.title,
+                    uiFont: SabqFonts.uiSubhead(size: NewsRowStyle.compactTitleSize),
+                    color: SabqTheme.ink,
+                    lineLimit: dynamicTypeSize.isAccessibilitySize ? 0 : 2,
+                    lineSpacing: NewsRowStyle.titleLineSpacing
+                )
+                HStack(spacing: 4) {
+                    Text(byline)
+                        .font(SabqFonts.app(size: 12, weight: .semibold))
+                        .foregroundStyle(SabqTheme.brandBlue)
+                        .lineLimit(1)
+                    // النقطة نص مستقل: في بداية نص عربي تنقلب لآخر السطر.
+                    if let date = muqRelativeDate(topic.publishedAt) {
+                        Text("·")
+                            .font(SabqFonts.app(size: 12, weight: .regular))
+                            .foregroundStyle(SabqTheme.tertiaryInk)
+                        Text(date)
+                            .font(SabqFonts.app(size: 12, weight: .regular))
+                            .foregroundStyle(SabqTheme.tertiaryInk)
+                            .lineLimit(1)
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.vertical, 12)
+        .contentShape(Rectangle())
+    }
+
+    private var placeholder: some View {
+        RoundedRectangle(cornerRadius: NewsRowStyle.thumbnailRadius, style: .continuous)
+            .fill(SabqTheme.primaryEnd.opacity(0.10))
+            .overlay {
+                Image(systemName: "square.stack.3d.up")
+                    .font(SabqFonts.app(size: 20, weight: .light))
+                    .foregroundStyle(SabqTheme.primaryEnd.opacity(0.45))
+            }
     }
 }
 

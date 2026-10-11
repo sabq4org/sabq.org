@@ -21,6 +21,7 @@
 import { eq } from "drizzle-orm";
 import { db } from "../../db";
 import { socialPlatformAccounts, type SocialPlatformAccount } from "@shared/schema";
+import { X_MAX_WEIGHTED_LENGTH, xWeightedLength } from "@shared/socialPostText";
 import { sanitizeSecretText } from "./tokenCrypto";
 import {
   SocialProviderError,
@@ -295,6 +296,11 @@ export async function publishToPublerAccount(
     type: hasVideo ? "video" : hasImages ? "photo" : "status",
     text: input.text,
   };
+  // بلا details.type=long_post تقصّ Publer النص عند 280 بصمت، فيضيع آخر
+  // النص والرابط الذي يأتي في سطره الأخير. @sabqorg حساب Premium.
+  if (xWeightedLength(input.text) > X_MAX_WEIGHTED_LENGTH) {
+    network.details = { type: "long_post" };
+  }
   if (hasVideo) {
     network.media = [{ id: input.videoMediaId, type: "video" }];
   } else if (hasImages) {

@@ -26,6 +26,14 @@ describe("computeCostUsd", () => {
     expect(computeCostUsd(m, { inputTokens: 100_000, outputTokens: 10_000 })).toBeCloseTo(0.225, 6);
   });
 
+  it("prices prompt-cache writes at 1.25× and reads at 0.1× of input", () => {
+    const m = model({ costPer1MInput: 2, costPer1MOutput: 10 });
+    // 1M prompt = 200k uncached + 600k written + 200k read → (200k + 750k + 20k) × $2 = $1.94
+    expect(
+      computeCostUsd(m, { inputTokens: 1_000_000, cacheWriteTokens: 600_000, cacheReadTokens: 200_000 }),
+    ).toBeCloseTo(1.94, 6);
+  });
+
   it("char pricing (TTS): unitCount chars × price / 1M", () => {
     const m = model({ pricingUnit: "chars", costPer1MInput: 15 });
     // 4,000-char newsletter at $15/1M chars → $0.06

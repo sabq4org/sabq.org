@@ -18,7 +18,6 @@ import { fetchSource } from "./fetcher";
 import {
   isClusteringEnabled,
   isMomentumEnabled,
-  isRadarForceDisabled,
   isRelevanceEnabled,
 } from "./flags";
 import { refreshStoryMomentum } from "./momentum";
@@ -37,6 +36,7 @@ import {
 } from "./repo";
 import { transformItem } from "./transformer";
 import { applyGates, consolidateStories, regateStories } from "./gates";
+import { assertRadarEnabled, isRadarDisabledError } from "./runtime";
 
 // بعد توسعة المصادر تراكم طابور إنجليزي — دفعة أكبر + جولات متعددة لتصفية الترجمة
 const MAX_ANALYZE_PER_RUN = Number(process.env.RADAR_MAX_ANALYZE_PER_RUN || 20);
@@ -83,19 +83,20 @@ export function getLastCycle(): RadarCycleRecord | null {
 
 /** جلب مصدر واحد يدويًا (زر "جلب الآن" في الواجهة) — يعيد عدد الجديد */
 export async function fetchSingleSource(sourceId: string): Promise<number> {
-  if (isRadarForceDisabled()) {
-    throw new Error("RADAR_FORCE_DISABLED");
-  }
+  await assertRadarEnabled();
   const source = await getSource(sourceId);
   if (!source) throw new Error("RADAR_SOURCE_NOT_FOUND");
   try {
     return await sourceFetchLimit(async () => {
+      await assertRadarEnabled();
       const normalized = await fetchSource(source);
+      await assertRadarEnabled();
       const inserted = await insertItems(source, normalized);
       await markSourceFetched(source.id, null);
       return inserted.length;
     });
   } catch (error) {
+    if (isRadarDisabledError(error)) throw error;
     const message = error instanceof Error ? error.message : String(error);
     await markSourceFetched(source.id, message.substring(0, 500));
     throw error;
@@ -118,33 +119,36 @@ export async function runRadarCycle(): Promise<RadarCycleSummary> {
     analysisCapped: false,
   };
 
-  if (isRadarForceDisabled()) {
-    return summary;
-  }
+  await assertRadarEnabled();
   const startedAt = new Date().toISOString();
 
   // 1) الجلب — فشل مصدر واحد لا يوقف البقية
   const due = await sourcesDueForFetch();
   const fetchResults = await Promise.allSettled(
     due.map((source) => sourceFetchLimit(async () => {
+      await assertRadarEnabled();
       try {
         const normalized = await fetchSource(source);
+        await assertRadarEnabled();
         const inserted = await insertItems(source, normalized);
         await markSourceFetched(source.id, null);
         return inserted.length;
       } catch (error) {
+        if (isRadarDisabledError(error)) throw error;
         const message = error instanceof Error ? error.message : String(error);
         await markSourceFetched(source.id, message.substring(0, 500));
         throw error;
       }
     }))
   );
+  await assertRadarEnabled();
   for (let index = 0; index < fetchResults.length; index++) {
     const result = fetchResults[index];
     if (result.status === "fulfilled") {
       summary.sourcesFetched++;
       summary.newItems += result.value;
     } else {
+      if (isRadarDisabledError(result.reason)) throw result.reason;
       summary.errors++;
       // فشل جلب/تحليل مصدر RSS (مثل "Unable to parse XML") حالة متوقَّعة لمصادر
       // متقلّبة؛ نكتفي بالرسالة المختصرة بدل إغراق السجلّات بالـ stack كل دقيقة.
@@ -163,15 +167,19 @@ export async function runRadarCycle(): Promise<RadarCycleSummary> {
   const touchedStories = new Set<string>();
   if (isClusteringEnabled()) {
     try {
+      await assertRadarEnabled();
       const backlog = await itemsNeedingClustering(MAX_CLUSTER_PER_RUN * 3);
+      await assertRadarEnabled();
       if (backlog.length) {
         const result = await clusterRadarItems(backlog);
+        await assertRadarEnabled();
         summary.clustered += result.clustered;
         summary.storiesCreated += result.created;
         summary.merged += result.merged;
         result.storyIds.forEach((id) => touchedStories.add(id));
       }
     } catch (error) {
+      if (isRadarDisabledError(error)) throw error;
       summary.errors++;
       console.error("[Radar] pre-analysis clustering failed:", error);
     }
@@ -180,13 +188,17 @@ export async function runRadarCycle(): Promise<RadarCycleSummary> {
   // 3) التحليل + الترجمة — جولات متتالية حتى يصفو الطابور أو يبلغ السقف اليومي
   const analyzed: RadarItem[] = [];
   try {
+    await assertRadarEnabled();
     let remaining = Math.max(0, DAILY_ANALYZE_CAP - (await countAnalyzedToday()));
+    await assertRadarEnabled();
     if (remaining === 0) summary.analysisCapped = true;
     for (let round = 0; round < MAX_ANALYZE_ROUNDS && remaining > 0; round++) {
       const batchSize = Math.min(MAX_ANALYZE_PER_RUN, remaining);
       const pending = await itemsNeedingAnalysis(batchSize);
+      await assertRadarEnabled();
       if (!pending.length) break;
       const batch = await analyzeItems(pending);
+      await assertRadarEnabled();
       analyzed.push(...batch);
       summary.analyzed += batch.length;
       remaining -= batch.length;
@@ -195,6 +207,7 @@ export async function runRadarCycle(): Promise<RadarCycleSummary> {
       if (pending.length < batchSize) break;
     }
   } catch (error) {
+    if (isRadarDisabledError(error)) throw error;
     summary.errors++;
     console.error("[Radar] analysis failed:", error);
   }
@@ -202,11 +215,14 @@ export async function runRadarCycle(): Promise<RadarCycleSummary> {
   // 3أ) مواد حُلّلت دون قصة (التجميع فشل سابقًا) — تجميع لاحق
   if (isClusteringEnabled() && analyzed.some((i) => !i.storyId)) {
     try {
+      await assertRadarEnabled();
       const result = await clusterRadarItems(analyzed.filter((i) => !i.storyId));
+      await assertRadarEnabled();
       summary.clustered += result.clustered;
       summary.storiesCreated += result.created;
       result.storyIds.forEach((id) => touchedStories.add(id));
     } catch (error) {
+      if (isRadarDisabledError(error)) throw error;
       summary.errors++;
       console.error("[Radar] clustering failed:", error);
     }
@@ -216,8 +232,11 @@ export async function runRadarCycle(): Promise<RadarCycleSummary> {
   // وقصص زاد تأييدها تُعاد بواباتها (مصدر مستقل ثانٍ قد يرفع العاجل).
   let gated: RadarItem[] = [];
   try {
+    await assertRadarEnabled();
     const fresh = analyzed.length ? await itemsByIds(analyzed.map((i) => i.id)) : [];
+    await assertRadarEnabled();
     gated = await applyGates(fresh);
+    await assertRadarEnabled();
     // توحيد القصص المتفرقة عبر اللغات (بالعناوين العربية) كل 5 دقائق
     if (isClusteringEnabled() && new Date().getMinutes() % 5 === 0) {
       const keepers = await consolidateStories();
@@ -227,6 +246,7 @@ export async function runRadarCycle(): Promise<RadarCycleSummary> {
     const alreadyGated = new Set(fresh.map((i) => i.storyId).filter(Boolean));
     await regateStories([...touchedStories].filter((id) => !alreadyGated.has(id)));
   } catch (error) {
+    if (isRadarDisabledError(error)) throw error;
     summary.errors++;
     console.error("[Radar] gates failed:", error);
   }
@@ -234,16 +254,22 @@ export async function runRadarCycle(): Promise<RadarCycleSummary> {
   // 3ج) زخم + صلة على القصص النشطة
   if (isMomentumEnabled()) {
     try {
+      await assertRadarEnabled();
       await refreshStoryMomentum(50);
+      await assertRadarEnabled();
     } catch (error) {
+      if (isRadarDisabledError(error)) throw error;
       summary.errors++;
       console.error("[Radar] momentum failed:", error);
     }
   }
   if (isRelevanceEnabled()) {
     try {
+      await assertRadarEnabled();
       await refreshStoryRelevance(40);
+      await assertRadarEnabled();
     } catch (error) {
+      if (isRadarDisabledError(error)) throw error;
       summary.errors++;
       console.error("[Radar] relevance failed:", error);
     }
@@ -251,8 +277,11 @@ export async function runRadarCycle(): Promise<RadarCycleSummary> {
 
   // 4) التنبيهات على ما حُلّل في هذه الدورة
   try {
+    await assertRadarEnabled();
     summary.alertsSent = await processAlerts(gated.length ? gated : analyzed);
+    await assertRadarEnabled();
   } catch (error) {
+    if (isRadarDisabledError(error)) throw error;
     summary.errors++;
     console.error("[Radar] alerts failed:", error);
   }
@@ -260,20 +289,25 @@ export async function runRadarCycle(): Promise<RadarCycleSummary> {
   // 5) التحويل التلقائي للعاجل عالي القيمة — أولوية Breaking News
   if (autoTransformEnabled()) {
     try {
+      await assertRadarEnabled();
       const candidates = await breakingItemsNeedingDraft(
         AUTO_TRANSFORM_MIN_SCORE,
         MAX_AUTO_TRANSFORM_PER_RUN
       );
       for (const candidate of candidates) {
+        await assertRadarEnabled();
         try {
           await transformItem(candidate);
+          await assertRadarEnabled();
           summary.autoDrafts++;
         } catch (error) {
+          if (isRadarDisabledError(error)) throw error;
           summary.errors++;
           console.error(`[Radar] auto-transform failed for ${candidate.id}:`, error);
         }
       }
     } catch (error) {
+      if (isRadarDisabledError(error)) throw error;
       summary.errors++;
       console.error("[Radar] auto-transform query failed:", error);
     }
@@ -282,8 +316,11 @@ export async function runRadarCycle(): Promise<RadarCycleSummary> {
   // 6) تنظيف ساعيّ (الدقيقة 0 فقط) — لا حاجة لحذف كل دقيقة
   if (new Date().getMinutes() === 0) {
     try {
+      await assertRadarEnabled();
       summary.cleaned = await cleanupOldItems(RETENTION_DAYS);
+      await assertRadarEnabled();
     } catch (error) {
+      if (isRadarDisabledError(error)) throw error;
       summary.errors++;
       console.error("[Radar] cleanup failed:", error);
     }
@@ -292,7 +329,9 @@ export async function runRadarCycle(): Promise<RadarCycleSummary> {
   // 7) رادار الفجوات التحريرية — fire-and-forget بعد اكتمال الدورة؛
   // استيراد ديناميكي + catch مزدوج حتى لا يؤثر فشل المطابقة على دورة الرادار
   try {
+    await assertRadarEnabled();
     const { refreshCoverageGaps } = await import("../coverageGapMatcher");
+    await assertRadarEnabled();
     void refreshCoverageGaps("radar-cycle").catch((error) => {
       console.warn("[Radar] coverage-gap matching failed:", error instanceof Error ? error.message : error);
     });

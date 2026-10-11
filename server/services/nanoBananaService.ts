@@ -54,6 +54,8 @@ function isModelUnavailableError(error: any): boolean {
 const MODEL_IMAGE_COSTS: Record<string, { standard: number; fourK: number }> = {
   "gemini-3-pro-image-preview": { standard: 0.134, fourK: 0.24 },
   "gemini-3.1-flash-image-preview": { standard: 0.067, fourK: 0.067 },
+  // تقدير مؤقت بسعر Nano Banana 2 حتى تنشر قوقل سعر 2.1
+  "gemini-nano-banana-2.1": { standard: 0.067, fourK: 0.067 },
   "recraft-v3": { standard: 0.08, fourK: 0.08 },
   "flux-1.1-pro": { standard: 0.05, fourK: 0.05 },
   "ideogram-2": { standard: 0.08, fourK: 0.08 },

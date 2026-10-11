@@ -12,6 +12,8 @@ import {
 } from "./sabqEditorialPrompt";
 import { assertEditedContentComplete, extractLockedSourceNumbers, restoreSourceNumbers } from "./editorialOutputGuards";
 import { PartialStringFieldTracker } from "./partialJsonString";
+import { EDITORIAL_PRESERVATION_INSTRUCTION, withEditorialCompletenessRepair } from "./editorialCompletenessRetry";
+import { trackedOpenAICompletion } from "./gateway/trackedOpenAI";
 
 /** تقدم إعادة الصياغة أثناء البث: نص جديد من optimized.content، أو إعادة بدء بعد فشل. */
 export type SabqEditorProgress = { type: "delta"; text: string } | { type: "reset" };
@@ -709,7 +711,7 @@ Professional English news story, ready for immediate publication, presenting Sau
       lockedNumbers.length > 0
         ? `\n\n## أرقام المصدر — انسخها حرفياً دون تغيير أي خانة:\n${lockedNumbers.map((n) => `- ${n}`).join("\n")}`
         : "";
-    const userPrompt = `قم بتحليل وتحرير المحتوى التالي:${lockBlock}\n\n${editorInput}`;
+    const userPrompt = `${EDITORIAL_PRESERVATION_INSTRUCTION}\n\nقم بتحليل وتحرير المحتوى التالي:${lockBlock}\n\n${editorInput}`;
     let result: any;
     try {
       const anthropic = getAnthropicClient();
@@ -719,7 +721,8 @@ Professional English news story, ready for immediate publication, presenting Sau
         model: SABQ_PRIMARY_EDITOR_MODEL,
         max_tokens: 8000,
         temperature: 0.3,
-        system: systemPrompt,
+        // تعليمات النظام ثابتة بين الأخبار (~5 آلاف توكن) فتُخزَّن مؤقتًا وتُقرأ بجزء صغير من سعر الإدخال
+        system: [{ type: "text" as const, text: systemPrompt, cache_control: { type: "ephemeral" as const } }],
         messages: [{ role: "user" as const, content: userPrompt }],
         // Structured Outputs: تضمن JSON صالحاً مطابقاً للمخطط (output_config غير موجود في أنواع SDK 0.68 لكنه GA في الـ API)
         output_config: {
@@ -764,34 +767,37 @@ Professional English news story, ready for immediate publication, presenting Sau
       );
       // البديل بلا بث — نمسح معاينة كلود الناقصة حتى لا تبقى معلّقة على الشاشة
       onProgress?.({ type: "reset" });
-      const response = await withOpenAIRetry(
-        () => openai.chat.completions.create({
-          model: SABQ_FALLBACK_EDITOR_MODEL,
-          messages: [
-            {
-              role: "system",
-              content: systemPrompt,
-            },
-            {
-              role: "user",
-              content: userPrompt,
-            },
-          ],
-          response_format: { type: "json_object" },
-          max_completion_tokens: 8000,
-        }),
-        3,
-        "SabqEditor"
-      );
+      result = await withEditorialCompletenessRepair(async (feedback) => {
+        const response = await withOpenAIRetry(
+          () => trackedOpenAICompletion(openai, "editorial-edit-fallback", {
+            model: SABQ_FALLBACK_EDITOR_MODEL,
+            messages: [
+              {
+                role: "system",
+                content: systemPrompt,
+              },
+              {
+                role: "user",
+                content: feedback ? `${feedback}\n\n${userPrompt}` : userPrompt,
+              },
+            ],
+            response_format: { type: "json_object" },
+            max_completion_tokens: 8000,
+          }),
+          3,
+          "SabqEditor"
+        );
 
-      // احرس من المخرجات المبتورة حتى لا يُنشر خبر ناقص بصمت
-      if (response.choices[0].finish_reason === "length") {
-        throw new Error("OpenAI fallback response truncated (finish_reason=length)");
-      }
+        // احرس من المخرجات المبتورة حتى لا يُنشر خبر ناقص بصمت
+        if (response.choices[0].finish_reason === "length") {
+          throw new Error("OpenAI fallback response truncated (finish_reason=length)");
+        }
 
-      result = JSON.parse(response.choices[0].message.content || "{}");
-      // نفس فحص الاكتمال على البديل — الرمي هنا يصعد لـ withRetry فيعيد المحاولة
-      assertEditedContentComplete(result?.optimized?.content || "", editorInput);
+        const fallbackResult = JSON.parse(response.choices[0].message.content || "{}");
+        // فحص البديل أيضًا؛ المساعد يضيف توجيهًا تصحيحيًا مرة واحدة ثم يصعّد الفشل.
+        assertEditedContentComplete(fallbackResult?.optimized?.content || "", editorInput);
+        return fallbackResult;
+      }, claudeError);
     }
 
     console.log("[Sabq Editor] Analysis and editing completed successfully");
@@ -900,7 +906,7 @@ export async function analyzeEmailContent(text: string): Promise<EmailContentAna
 أعد النتيجة بصيغة JSON فقط.`;
 
     // Migrated from gpt-5 to gpt-5.1
-    const response = await openai.chat.completions.create({
+    const response = await trackedOpenAICompletion(openai, "editorial-email-analysis", {
       model: "gpt-4o-mini",
       messages: [
         {
@@ -999,7 +1005,7 @@ Return the result in JSON format only.`,
     };
 
     // Migrated from gpt-5 to gpt-5.1
-    const response = await openai.chat.completions.create({
+    const response = await trackedOpenAICompletion(openai, "editorial-content-improvement", {
       model: "gpt-4o-mini",
       messages: [
         {
@@ -1216,7 +1222,7 @@ ${articleLead}
 
     const prompt = PROMPTS[language];
     
-    const response = await openai.chat.completions.create({
+    const response = await trackedOpenAICompletion(openai, "editorial-image-alt-text", {
       model: "gpt-4o-mini",
       messages: [
         { role: "system", content: "You are an expert in generating SEO-optimized, accessible alt text for news images." },

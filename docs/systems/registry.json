@@ -258,6 +258,8 @@
         "server/ai-classifier.ts",
         "server/ai/contentAnalyzer.ts",
         "server/ai/editorialOutputGuards.ts",
+        "server/ai/editorialCompletenessRetry.ts",
+        "tests/unit/editorialCompletenessRetry.test.ts",
         "server/storyMatcher.ts",
         "server/smartCategoriesEngine.ts",
         "client/src/components/DashboardLayout.tsx",
@@ -293,6 +295,14 @@
         "tests/unit/editorialStakeholders.test.ts",
         "server/routes/publisherPortal.ts",
         "server/services/publisherPortalService.ts",
+        "server/services/publisherCreditService.ts",
+        "scripts/publisher-credit-reconcile.ts",
+        "tests/unit/publisherCreditCharge.integration.test.ts",
+        "server/services/publisherInsightsService.ts",
+        "server/services/publisherRenewalService.ts",
+        "tests/unit/publisherRenewal.test.ts",
+        "tests/unit/publisherRenewal.integration.test.ts",
+        "tests/unit/publisherInsights.integration.test.ts",
         "server/services/articleViewCounterService.ts",
         "server/services/articleViewStatsService.ts",
         "client/src/pages/admin/publishers/**",
@@ -385,7 +395,10 @@
         "tests/unit/editorialJsonSchema.test.ts",
         "tests/unit/dataStoryStructuredOutputs.test.ts",
         "tests/unit/structuredOutputsComparison.test.ts",
-        "server/services/botPersonalScheduleService.ts"
+        "server/services/botPersonalScheduleService.ts",
+        "client/src/lib/editAndGenerateStream.ts",
+        "tests/unit/editAndGenerateStream.test.ts",
+        "tests/unit/openaiUsageAttribution.test.ts"
       ],
       "aiFeatureKeys": [
         "content-tools",
@@ -416,13 +429,28 @@
         "coverage-gap-matcher",
         "editor-openai-images",
         "proofread",
-        "editorial-research"
+        "editorial-research",
+        "editor-summarize",
+        "editor-headlines",
+        "editor-credibility",
+        "editor-seo-analysis",
+        "editor-smart-content",
+        "editor-rewrite",
+        "editor-media-keywords",
+        "editor-auto-format",
+        "image-focal-point",
+        "editor-social-post",
+        "editor-fact-check",
+        "editorial-edit-fallback",
+        "editorial-email-analysis",
+        "editorial-content-improvement",
+        "editorial-image-alt-text"
       ],
       "dashboardPath": "/dashboard",
       "owners": [
         "editorial"
       ],
-      "lastReviewed": "2026-10-01"
+      "lastReviewed": "2026-10-11"
     },
     {
       "id": "ifox",
@@ -451,13 +479,16 @@
         "ifox-content",
         "ifox-quality",
         "ifox-strategy",
-        "ai-task-executor"
+        "ai-task-executor",
+        "ifox-title",
+        "ifox-content-suggestions",
+        "ifox-content-analysis"
       ],
       "dashboardPath": "/dashboard/admin/ifox",
       "owners": [
         "ai"
       ],
-      "lastReviewed": "2026-09-05"
+      "lastReviewed": "2026-10-10"
     },
     {
       "id": "ai-hub",
@@ -490,19 +521,25 @@
         "e2e/ai-hub-overview.spec.ts",
         "server/ai/claudeStructuredOutputs.ts",
         "tests/unit/claudeStructuredOutputs.test.ts",
-        "tests/unit/aiGatewayFailover.test.ts"
+        "tests/unit/aiGatewayFailover.test.ts",
+        "server/openai.ts",
+        "tests/unit/trackedOpenAI.test.ts"
       ],
       "aiFeatureKeys": [
         "legacy-ai-manager",
         "prompt-studio",
         "embeddings",
-        "entity-extraction"
+        "entity-extraction",
+        "legacy-openai-completion",
+        "reader-recommendations",
+        "reader-assistant",
+        "moment-insights"
       ],
       "dashboardPath": "/dashboard/ai-hub",
       "owners": [
         "ai"
       ],
-      "lastReviewed": "2026-09-26"
+      "lastReviewed": "2026-10-10"
     },
     {
       "id": "muqtarab",
@@ -539,7 +576,7 @@
       "nameEn": "Smart Radar",
       "status": "active",
       "category": "intelligence",
-      "summary": "رصد إخباري كثيف + قصص مجمّعة وزخم وصلة سعودية؛ يغذّي فجوات التغطية. أُعيد تفعيل الجلب بقرار المالك في 2026-07-31.",
+      "summary": "رصد إخباري كثيف + قصص مجمّعة وزخم وصلة سعودية؛ مفتاح تشغيل شامل يحفظ الحالة. أوقفه المالك مؤقتًا في 2026-10-08.",
       "docPath": "docs/systems/radar/SYSTEM.md",
       "relatedDocs": [
         "docs/RADAR_X_WATCHES.md",
@@ -550,6 +587,7 @@
       "pathGlobs": [
         "server/services/radar/**",
         "server/routes/radar.ts",
+        "server/jobs/radarJob.ts",
         "client/src/pages/dashboard/SmartRadar.tsx",
         "scripts/seed-packs/**",
         "scripts/seed-radar-pack.ts",
@@ -567,7 +605,7 @@
       "owners": [
         "editorial"
       ],
-      "lastReviewed": "2026-09-28"
+      "lastReviewed": "2026-10-08"
     },
     {
       "id": "audio-newsletter",
@@ -575,7 +613,7 @@
       "nameEn": "Audio Newsletters",
       "status": "active",
       "category": "content",
-      "summary": "موجز المقال الصوتي بصوت Gemini السعودي الإذاعي واحتياط HUMAIN ثم ElevenLabs ثم Google، إضافة إلى النشرة البريدية الباقية بعد إيقاف منتج النشرات الصوتية.",
+      "summary": "موجز المقال الصوتي بصوت Gemini السعودي الإذاعي واحتياط HUMAIN ثم ElevenLabs ثم Google، إضافة إلى النشرة البريدية الباقية بعد إيقاف منتج النشرات الصوتية، و«نشرة سَبْق» الصوتية لأهم الأخبار تحت الهيدر بعد اعتماد محرر.",
       "docPath": "docs/systems/audio-newsletter/SYSTEM.md",
       "relatedDocs": [
         "docs/AUDIO_NEWSLETTER_SYSTEM.md",
@@ -623,17 +661,25 @@
         "client/src/pages/NewsletterPage.tsx",
         "tests/unit/newsletter*.test.ts",
         "e2e/newsletter-*.spec.ts",
-        "e2e/fixtures/newsletter.*"
+        "e2e/fixtures/newsletter.*",
+        "server/services/audioBulletin*.ts",
+        "server/routes/audioBulletin.ts",
+        "server/jobs/audioBulletinJob.ts",
+        "client/src/components/AudioBulletinBar.tsx",
+        "client/src/lib/audioBulletinPlayer.ts",
+        "client/src/pages/dashboard/AudioBulletin.tsx",
+        "tests/unit/audioBulletin*.test.ts"
       ],
       "aiFeatureKeys": [
         "audio-newsletter",
-        "newsletter-editorial"
+        "newsletter-editorial",
+        "audio-bulletin-script"
       ],
       "dashboardPath": "/dashboard/system-settings",
       "owners": [
         "content"
       ],
-      "lastReviewed": "2026-09-26"
+      "lastReviewed": "2026-10-09"
     },
     {
       "id": "media-library",
@@ -912,14 +958,19 @@
         "shared/botPublisherTokens.ts",
         "server/services/botPublisherTokenService.ts",
         "server/routes/botPublisherTokens.ts",
-        "client/src/pages/dashboard/PublisherTokensPage.tsx"
+        "client/src/pages/dashboard/PublisherTokensPage.tsx",
+        "server/oauthWebCompletion.ts",
+        "tests/unit/oauthWebCompletion.test.ts",
+        "tests/unit/activityLogRedaction.test.ts",
+        "tests/unit/userRoleSync.test.ts",
+        "tests/unit/csrfExemptions.test.ts"
       ],
       "aiFeatureKeys": [],
       "dashboardPath": "/dashboard/roles",
       "owners": [
         "platform"
       ],
-      "lastReviewed": "2026-09-29"
+      "lastReviewed": "2026-10-09"
     },
     {
       "id": "seo-ssr",
@@ -1172,6 +1223,13 @@
         "client/src/components/social/SocialPublishDialog.tsx",
         "client/src/pages/dashboard/SocialPublishingPage.tsx",
         "client/src/pages/opinion-author/OpinionAuthorSocialProposalDialog.tsx",
+        "server/services/publisherSocialService.ts",
+        "client/src/pages/publisher/PublisherSocialCompose.tsx",
+        "client/src/pages/publisher/PublisherSocialPosts.tsx",
+        "client/src/components/publisher/TweetPreview.tsx",
+        "client/src/components/admin/publishers/PublisherSocialModeCard.tsx",
+        "tests/unit/publisherSocial.test.ts",
+        "tests/unit/publisherSocial.integration.test.ts",
         "tests/unit/socialPostText.test.ts",
         "tests/unit/socialTokenCrypto.test.ts",
         "tests/unit/socialPublishingLogic.test.ts",
@@ -1190,7 +1248,7 @@
         "editorial",
         "platform"
       ],
-      "lastReviewed": "2026-10-03"
+      "lastReviewed": "2026-10-04"
     },
     {
       "id": "sahraa-tv-block",

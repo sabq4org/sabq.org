@@ -16,6 +16,30 @@ export async function assignRbacRoleByName(userId: string, role: string): Promis
   await db.insert(userRoles).values({ id: nanoid(), userId, roleId: rbacRole.id }).onConflictDoNothing();
 }
 
+type RoleWriteDb = Pick<typeof db, "transaction">;
+
+/**
+ * يجعل `role` دور المستخدم الوحيد: يحدّث `users.role` ويستبدل صفوف `user_roles`
+ * بصف هذا الدور داخل معاملة واحدة. الإضافة وحدها (`assignRbacRoleByName`) كانت
+ * تُبقي صف `admin` أو `editor` القديم، فيبقى المخفَّض مشرفًا فعليًا لأن RBAC
+ * يقرأ `user_roles` أولًا.
+ */
+export async function setUserSingleRole(
+  userId: string,
+  role: string,
+  database: RoleWriteDb = db,
+): Promise<typeof users.$inferSelect> {
+  return database.transaction(async (tx) => {
+    const [user] = await tx.update(users).set({ role }).where(eq(users.id, userId)).returning();
+    const [rbacRole] = await tx.select().from(roles).where(eq(roles.name, role)).limit(1);
+    await tx.delete(userRoles).where(eq(userRoles.userId, userId));
+    if (rbacRole) {
+      await tx.insert(userRoles).values({ id: nanoid(), userId, roleId: rbacRole.id });
+    }
+    return user;
+  });
+}
+
 export async function resolvePrimaryRoleName(
   tx: RoleTx,
   roleIds: string[] | undefined,

@@ -717,6 +717,7 @@ describe("opinionAuthorSocialProposal — إحصائيات لوحة التحكم
           failed: 1,
           pending_drafts: 7,
           pending_author_proposals: 5,
+          pending_agency_proposals: 2,
         },
       ],
     });
@@ -729,6 +730,7 @@ describe("opinionAuthorSocialProposal — إحصائيات لوحة التحكم
       failed: 1,
       pendingDrafts: 7,
       pendingAuthorProposals: 5,
+      pendingAgencyProposals: 2,
     });
   });
 
@@ -743,6 +745,7 @@ describe("opinionAuthorSocialProposal — إحصائيات لوحة التحكم
       failed: 0,
       pendingDrafts: 0,
       pendingAuthorProposals: 0,
+      pendingAgencyProposals: 0,
     });
   });
 });

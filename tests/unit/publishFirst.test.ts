@@ -1,10 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import * as publishFirst from "@shared/publishFirst";
 import {
   PUBLISH_FIRST_FLAGS_DEFAULT,
   PUBLISH_FIRST_SUBTITLE_MAX,
-  buildOverrideLogRow,
   buildRevisionLogRow,
-  decideSensitiveGate,
   editorialCategoryChoices,
   flagEnabledFromSetting,
   formatPublishFirstUpdateLine,
@@ -31,7 +30,7 @@ vi.mock("../../server/db", () => ({
   },
 }));
 
-import { recordArticleRevision, recordPublishOverride } from "../../server/services/publishFirstService";
+import { recordArticleRevision } from "../../server/services/publishFirstService";
 
 afterEach(() => {
   inserted.length = 0;
@@ -87,55 +86,12 @@ describe("upload-time validation", () => {
   });
 });
 
-describe("sensitive publish gate", () => {
-  it("blocks sensitive publish and correction until a verdict exists", () => {
-    expect(decideSensitiveGate({
-      riskLabel: "sensitive",
-      hasVerdict: false,
-      gateEnabled: true,
-      action: "publish",
-      adminOverride: false,
-    })).toMatchObject({ allow: false, code: "sensitive_needs_verdict" });
-    const correct = decideSensitiveGate({
-      riskLabel: "sensitive",
-      hasVerdict: false,
-      gateEnabled: true,
-      action: "correct",
-      adminOverride: false,
-    });
-    expect(correct.allow).toBe(false);
-    if (!correct.allow) expect(correct.message).toContain("تصحيح");
-  });
-
-  it("allows a verdict, a non-sensitive label, a disabled flag, and an admin override", () => {
-    expect(decideSensitiveGate({
-      riskLabel: "sensitive",
-      hasVerdict: true,
-      gateEnabled: true,
-      action: "publish",
-      adminOverride: false,
-    })).toEqual({ allow: true, override: false });
-    expect(decideSensitiveGate({
-      riskLabel: "needs_look",
-      hasVerdict: false,
-      gateEnabled: true,
-      action: "publish",
-      adminOverride: false,
-    }).allow).toBe(true);
-    expect(decideSensitiveGate({
-      riskLabel: "sensitive",
-      hasVerdict: false,
-      gateEnabled: false,
-      action: "publish",
-      adminOverride: false,
-    })).toEqual({ allow: true, override: false });
-    expect(decideSensitiveGate({
-      riskLabel: "sensitive",
-      hasVerdict: false,
-      gateEnabled: true,
-      action: "publish",
-      adminOverride: true,
-    })).toEqual({ allow: true, override: true });
+describe("risk label is informational only", () => {
+  it("exposes no sensitive publish gate, flag, or refusal message", () => {
+    expect("decideSensitiveGate" in publishFirst).toBe(false);
+    expect("SENSITIVE_PUBLISH_MESSAGE" in publishFirst).toBe(false);
+    expect("sensitiveGate" in PUBLISH_FIRST_FLAGS_DEFAULT).toBe(false);
+    expect(publishFirst.PUBLISH_FIRST_FLAG_KEYS).not.toHaveProperty("sensitiveGate");
   });
 
   it("recognizes admin by superuser role or wildcard permissions", () => {
@@ -146,30 +102,8 @@ describe("sensitive publish gate", () => {
   });
 });
 
-describe("override logging and revision rows", () => {
+describe("revision rows", () => {
   const now = new Date("2026-09-27T08:00:00.000Z");
-
-  it("builds a queryable override row and persists it", async () => {
-    const row = buildOverrideLogRow({
-      articleId: "art-1",
-      actorUserId: "ali",
-      actorName: "علي",
-      action: "publish",
-      reason: "  عاجل  ",
-      now,
-    });
-    expect(row).toEqual({
-      articleId: "art-1",
-      actorUserId: "ali",
-      actorName: "علي",
-      action: "publish",
-      reason: "عاجل",
-      createdAt: now,
-    });
-    const saved = await recordPublishOverride(row);
-    expect(saved).toMatchObject({ articleId: "art-1", action: "publish", reason: "عاجل" });
-    expect(inserted).toHaveLength(1);
-  });
 
   it("plans a published-article revision and persists previous values", async () => {
     const plan = planContentRevision({
@@ -257,7 +191,6 @@ describe("server timestamps, flags, and category choices", () => {
     expect(flagEnabledFromSetting({ enabled: false })).toBe(false);
     expect(PUBLISH_FIRST_FLAGS_DEFAULT).toEqual({
       validation: true,
-      sensitiveGate: true,
       revisionHistory: true,
       updateLine: true,
     });

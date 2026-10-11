@@ -7,7 +7,6 @@ import { eq, and, lte, isNull, sql } from "drizzle-orm";
 import { notificationQueue, notificationsInbox, notificationMetrics, articles } from "@shared/schema";
 import { storage } from "./storage";
 import { invalidatePublishedContent } from "./services/contentInvalidation";
-import { sensitiveGateForArticle } from "./services/publishFirstService";
 import { broadcastArticlePublished } from "./routes/editorPresence";
 import { 
   notificationMemoryService, 
@@ -338,19 +337,6 @@ async function publishScheduledArticles() {
       await new Promise(resolve => setImmediate(resolve));
       if (!isLeader()) break;
       try {
-        if (article.riskLabel === "sensitive") {
-          const gate = await sensitiveGateForArticle({
-            articleId: article.id,
-            riskLabel: article.riskLabel,
-            action: "publish",
-            adminOverride: false,
-          });
-          if (!gate.allow) {
-            console.warn(`[ScheduledPublisher] skipped sensitive article ${article.id}: ${gate.code}`);
-            continue;
-          }
-        }
-
         // A scheduled personal-bot operation must still be authorized at execution time.
         if (article.source === "bot" && article.sourceMetadata?.publisherUserId) {
           const { personalBotScheduledReleaseAllowed } = await import("./services/botPersonalScheduleService");
@@ -378,6 +364,18 @@ async function publishScheduledArticles() {
         if (article.source === "bot" && article.sourceMetadata?.publisherUserId) {
           const { recordPersonalBotScheduledPublish } = await import("./services/botPersonalScheduleService");
           await recordPersonalBotScheduledPublish(article);
+        }
+
+        // Agency news: the scheduled publisher used to release it without
+        // charging the package. The shared rule never charges an article twice,
+        // so the personal-bot charge above can't double up. Never throws.
+        if (article.publisherId) {
+          const { deductPublisherCreditSafely } = await import("./services/publisherCreditService");
+          await deductPublisherCreditSafely({
+            authorUserId: article.authorId,
+            articleId: article.id,
+            actorId: article.submitterId ?? article.authorId,
+          });
         }
 
         console.log(`[ScheduledPublisher] Published article: ${article.id} - ${article.title}`);

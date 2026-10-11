@@ -50,6 +50,41 @@ nonisolated enum SabqFormatters {
         return f
     }()
 
+    /// ساعة النشر بنظام 12 ساعة بلا «ص/م» — «10:24» (الشريط الزمني في الرئيسية).
+    static let riyadhHourMinute: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = saudiArabicLatinDigits
+        f.timeZone = TimeZone(identifier: "Asia/Riyadh")
+        f.dateFormat = "h:mm"
+        return f
+    }()
+
+    /// «ص» أو «م» بجوار `riyadhHourMinute` بخط أصغر.
+    static let riyadhPeriod: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = saudiArabicLatinDigits
+        f.timeZone = TimeZone(identifier: "Asia/Riyadh")
+        f.dateFormat = "a"
+        return f
+    }()
+
+    /// «الخميس 8 أكتوبر» — فاصل اليوم في الشريط الزمني.
+    static let riyadhWeekdayDay: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = saudiArabicLatinDigits
+        f.calendar = Calendar(identifier: .gregorian)
+        f.timeZone = TimeZone(identifier: "Asia/Riyadh")
+        f.dateFormat = "EEEE d MMMM"
+        return f
+    }()
+
+    /// تقويم ميلادي بتوقيت الرياض لمقارنة الأيام في الشريط الزمني.
+    static let riyadhCalendar: Calendar = {
+        var c = Calendar(identifier: .gregorian)
+        c.timeZone = TimeZone(identifier: "Asia/Riyadh") ?? .current
+        return c
+    }()
+
     /// تاريخ النشر بتوقيت الرياض بأرقام لاتينية — «12 سبتمبر 2026» (سطر الكاتب في الويب).
     static let riyadhDate: DateFormatter = {
         let f = DateFormatter()

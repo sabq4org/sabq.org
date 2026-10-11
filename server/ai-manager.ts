@@ -23,6 +23,8 @@ export interface AIModelConfig {
   jsonMode?: boolean; // Only use JSON response format when explicitly enabled
   /** AI Hub tracking key — set it when the caller knows its feature. */
   feature?: string;
+  /** Optional caller gate checked before every gateway transport/retry. */
+  beforeAttempt?: () => Promise<void>;
 }
 
 export interface AIResponse {
@@ -97,6 +99,7 @@ class AIManager {
           ...(temperature !== undefined ? { temperature } : {}),
           ...(config.jsonMode === true ? { jsonMode: true } : {}),
         },
+        beforeAttempt: config.beforeAttempt,
       });
 
       return {
