@@ -9,7 +9,7 @@ info:
     POST /{id}/archive أرشفة ناعمة لمادة منشورة. PATCH /{id}/visibility يضبط المميز والعاجل وإخفاء الرئيسية.
     PATCH /{id}/ready ينقل إلى ready_to_publish دون نشر.
     المواد القابلة للإدارة source=bot فقط.
-    التوكن الشخصي لخبر news ذي byline صحيفة سبق لا يتطلب ترخيص مستخدم التوكن؛ تبقى صلاحيات RBAC والملكية والحصة وبوابة الحساسية سارية، وتبقى legacy/byline المخصصة والقنوات الأخرى خلف بوابة الترخيص القائمة.
+    التوكن الشخصي لخبر news ذي byline صحيفة سبق لا يتطلب ترخيص مستخدم التوكن؛ تبقى صلاحيات RBAC والملكية والحصة سارية، وتبقى legacy/byline المخصصة والقنوات الأخرى خلف بوابة الترخيص القائمة.
     الدليل الكامل: docs/systems/editorial/BOT_DRAFTS_API.md
 servers:
   - url: https://api.sabq.org
@@ -184,13 +184,13 @@ paths:
               type: object
               additionalProperties: false
               description: >-
-                جسم فارغ، أو استثناء المادة الحساسة من مدير النشر: sensitiveOverride=true مع overrideReason (3–500 حرف).
-                غير المدير يُرفض 403 sensitive_override_forbidden، والاستثناء يُسجّل في article_publish_overrides.
+                جسم فارغ أو operationId فقط. sensitiveOverride وoverrideReason مقبولان من عملاء قدامى ويُتجاهلان؛
+                شارة الحساسية لا تمنع النشر.
                 أي حقل آخر يُرفض. status أو authorId يُرفضان 422.
               properties:
                 operationId: { type: string, format: uuid, description: معرّف عملية ثابت لإعادة المحاولة الآمنة وقراءة الإيصال }
-                sensitiveOverride: { type: boolean, enum: [true] }
-                overrideReason: { type: string, minLength: 3, maxLength: 500 }
+                sensitiveOverride: { type: boolean, deprecated: true, description: يُتجاهل }
+                overrideReason: { type: string, maxLength: 500, deprecated: true, description: يُتجاهل }
       responses:
         "200":
           description: نُشرت أو أعيدت نتيجة الإيصال. مع operationId يعاد {operationId, articleId, action, status=succeeded, response}; failed يعني not_applied فقط.
@@ -467,7 +467,7 @@ components:
           type: string
           nullable: true
           enum: [safe, needs_look, sensitive]
-          description: شارة المخاطر. sensitive تمنع النشر والتصحيح بعد النشر حتى POST /verdict.
+          description: شارة المخاطر معلوماتية فقط؛ لا تمنع النشر ولا الجدولة ولا التصحيح.
         updateReason:
           type: string
           maxLength: 500
@@ -581,7 +581,7 @@ components:
       properties:
         code:
           type: string
-          enum: [not_configured, unauthorized, forbidden_fields, validation_error, category_not_found, subtitle_too_long, sensitive_needs_verdict, sensitive_override_forbidden, author_not_configured, not_found, operation_not_found, operation_id_collision, not_a_draft, not_published, not_scheduled, locked_by_editor, license_required, forbidden_action, rate_limited, invalid_image, file_too_large, storage_unavailable, upload_failed, server_error]
+          enum: [not_configured, unauthorized, forbidden_fields, validation_error, category_not_found, subtitle_too_long, author_not_configured, not_found, operation_not_found, operation_id_collision, not_a_draft, not_published, not_scheduled, locked_by_editor, license_required, forbidden_action, rate_limited, invalid_image, file_too_large, storage_unavailable, upload_failed, server_error]
         message: { type: string }
         details: {}
   responses:

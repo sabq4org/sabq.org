@@ -7,7 +7,6 @@ import { eq, and, lte, isNull, sql } from "drizzle-orm";
 import { notificationQueue, notificationsInbox, notificationMetrics, articles } from "@shared/schema";
 import { storage } from "./storage";
 import { invalidatePublishedContent } from "./services/contentInvalidation";
-import { sensitiveGateForArticle } from "./services/publishFirstService";
 import { broadcastArticlePublished } from "./routes/editorPresence";
 import { 
   notificationMemoryService, 
@@ -338,19 +337,6 @@ async function publishScheduledArticles() {
       await new Promise(resolve => setImmediate(resolve));
       if (!isLeader()) break;
       try {
-        if (article.riskLabel === "sensitive") {
-          const gate = await sensitiveGateForArticle({
-            articleId: article.id,
-            riskLabel: article.riskLabel,
-            action: "publish",
-            adminOverride: false,
-          });
-          if (!gate.allow) {
-            console.warn(`[ScheduledPublisher] skipped sensitive article ${article.id}: ${gate.code}`);
-            continue;
-          }
-        }
-
         // A scheduled personal-bot operation must still be authorized at execution time.
         if (article.source === "bot" && article.sourceMetadata?.publisherUserId) {
           const { personalBotScheduledReleaseAllowed } = await import("./services/botPersonalScheduleService");

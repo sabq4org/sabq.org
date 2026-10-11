@@ -9,7 +9,6 @@ const state = vi.hoisted(() => {
     operations: [] as any[],
     operationCounter: 0,
     auditFailure: null as unknown,
-    gateFailure: null as unknown,
     categoryFailure: null as unknown,
     rollbackReject: null as unknown,
     commitReject: null as unknown,
@@ -161,17 +160,6 @@ vi.mock("../../server/services/publishFirstService", async (importOriginal) => {
   const original = await importOriginal<typeof import("../../server/services/publishFirstService")>();
   return {
     ...original,
-    sensitiveGateForArticle: vi.fn(async (input: any) => {
-      if (state.s.gateFailure) throw state.s.gateFailure;
-      if (input.riskLabel === "sensitive" && !input.adminOverride) {
-        return { allow: false, code: "sensitive_needs_verdict", message: "needs verdict" };
-      }
-      return { allow: true, override: Boolean(input.adminOverride && input.riskLabel === "sensitive") };
-    }),
-    recordPublishOverrideInTransaction: vi.fn(async (tx: any, input: any) => {
-      if (state.s.auditFailure) throw state.s.auditFailure;
-      return { id: "override-1", ...input };
-    }),
     editorDisplayName: vi.fn(async () => "مدير النشر"),
   };
 });
@@ -224,7 +212,6 @@ function reset(over: Record<string, unknown> = {}) {
     operations: [],
     operationCounter: 0,
     auditFailure: null,
-    gateFailure: null,
     categoryFailure: null,
     rollbackReject: null,
     commitReject: null,
@@ -238,20 +225,11 @@ function reset(over: Record<string, unknown> = {}) {
 describe("BotDraft publish operation receipts", () => {
   beforeEach(() => reset());
 
-  it("marks a reviewer permission failure before article write as failed/not_applied", async () => {
+  it("publishes a story labelled sensitive with no reviewer verdict", async () => {
     state.s.article = makeArticle({ riskLabel: "sensitive" });
-    state.s.gateFailure = Object.assign(new Error("permission denied"), { code: "42501" });
-    await expect(publishBotDraft(legacyBot, "art-1", {}, { operationId })).rejects.toThrow("permission denied");
-    expect(state.s.article.status).toBe("draft");
-    expect(state.s.operations[0]).toMatchObject({ status: "failed", error: { executionOutcome: "not_applied" } });
-  });
-
-  it("rolls back article when override audit fails and stores failed receipt", async () => {
-    state.s.article = makeArticle({ riskLabel: "sensitive" });
-    state.s.auditFailure = Object.assign(new Error("check violation"), { code: "23514" });
-    await expect(publishBotDraft(personalAdmin, "art-1", {}, { operationId, sensitiveOverride: true, overrideReason: "سبب واضح" })).rejects.toMatchObject({ httpStatus: 503 });
-    expect(state.s.article.status).toBe("draft");
-    expect(state.s.operations[0]).toMatchObject({ status: "failed", error: { executionOutcome: "not_applied" } });
+    await expect(publishBotDraft(legacyBot, "art-1", {}, { operationId })).resolves.toMatchObject({ status: "succeeded", operationId });
+    expect(state.s.article.status).toBe("published");
+    expect(state.s.article.riskLabel).toBe("sensitive");
   });
 
   it("replays a successful receipt after a lost response without queueing effects twice", async () => {
@@ -265,13 +243,20 @@ describe("BotDraft publish operation receipts", () => {
     expect(state.s.queueCount).toBe(1);
   });
 
-  it("rejects a reused operation id when the request body fingerprint changes", async () => {
+  it("replays the same receipt when an older client resends legacy override fields", async () => {
     await publishBotDraft(legacyBot, "art-1", {}, { operationId });
-    await expect(
-      publishBotDraft(legacyBot, "art-1", {}, { operationId, sensitiveOverride: true, overrideReason: "تغيير الطلب" }),
-    ).rejects.toMatchObject({ httpStatus: 409, code: "operation_id_collision" });
+    await expect(publishBotDraft(legacyBot, "art-1", {}, { operationId, sensitiveOverride: true, overrideReason: "سبب" })).resolves.toMatchObject({ status: "succeeded", operationId });
     expect(state.s.articleUpdates).toBe(1);
     expect(state.s.queueCount).toBe(1);
+  });
+
+  it("replays a receipt stored before the gate was removed with the old override fingerprint", async () => {
+    await publishBotDraft(legacyBot, "art-1", {}, { operationId });
+    const { createHash } = await import("node:crypto");
+    state.s.operations[0].bodyFingerprint = createHash("sha256").update(JSON.stringify({ sensitiveOverride: true, overrideReason: "سبب واضح" })).digest("hex");
+    await expect(publishBotDraft(legacyBot, "art-1", {}, { operationId, sensitiveOverride: true, overrideReason: "سبب واضح" })).resolves.toMatchObject({ status: "succeeded", operationId });
+    await expect(publishBotDraft(legacyBot, "art-1", {}, { operationId, sensitiveOverride: true, overrideReason: "سبب آخر" })).rejects.toMatchObject({ httpStatus: 409, code: "operation_id_collision" });
+    expect(state.s.articleUpdates).toBe(1);
   });
 
   it("keeps a different actor's operation receipt isolated after the article is published", async () => {
@@ -319,13 +304,12 @@ describe("BotDraft publish operation receipts", () => {
     expect(state.s.operations.map((row) => row.status).sort()).toEqual(["failed", "succeeded"]);
   });
 
-  it("rechecks a risk label changed before the row lock and blocks publishing", async () => {
+  it("publishes even when the risk label turns sensitive before the row lock", async () => {
     state.s.initialArticle = makeArticle({ riskLabel: "safe" });
     state.s.article = makeArticle({ riskLabel: "safe" });
     state.s.mutateBeforeTransaction = true;
-    await expect(publishBotDraft(legacyBot, "art-1", {}, { operationId })).rejects.toMatchObject({ httpStatus: 422 });
-    expect(state.s.article.status).toBe("draft");
+    await expect(publishBotDraft(legacyBot, "art-1", {}, { operationId })).resolves.toMatchObject({ status: "succeeded" });
+    expect(state.s.article.status).toBe("published");
     expect(state.s.article.riskLabel).toBe("sensitive");
-    expect(state.s.operations[0]).toMatchObject({ status: "failed", error: { executionOutcome: "not_applied" } });
   });
 });
