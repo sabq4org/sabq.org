@@ -74,6 +74,20 @@ export function useArticleEditLock({
   });
   const initialLockStatus = lockStatusQuery.data;
 
+  const handleLockGranted = (data: LockStatus) => {
+    setLockStatus(data);
+    setIsLockedByOther(false);
+    if (lockedNoticeShownRef.current) {
+      // كانت مقفلة من زميل ثم تحرّرت أو تجاوزها المدير: حمّل آخر نسخة محفوظة قبل المتابعة
+      lockedNoticeShownRef.current = false;
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/articles", id] });
+      toast({
+        title: "أصبحت المقالة متاحة لك",
+        description: "القفل لك الآن، ويمكنك التعديل.",
+      });
+    }
+  };
+
   // Acquire lock mutation
   const acquireLockMutation = useMutation({
     mutationFn: async () => {
@@ -81,19 +95,7 @@ export function useArticleEditLock({
         method: "POST",
       });
     },
-    onSuccess: (data: LockStatus) => {
-      setLockStatus(data);
-      setIsLockedByOther(false);
-      if (lockedNoticeShownRef.current) {
-        // كانت مقفلة من زميل ثم تحرّرت: حمّل آخر نسخة حفظها قبل المتابعة
-        lockedNoticeShownRef.current = false;
-        queryClient.invalidateQueries({ queryKey: ["/api/admin/articles", id] });
-        toast({
-          title: "أصبحت المقالة متاحة لك",
-          description: "تحرّر القفل، ويمكنك التعديل الآن.",
-        });
-      }
-    },
+    onSuccess: (data: LockStatus) => handleLockGranted(data),
     onError: async (error: Error) => {
       console.error('[Lock] Failed to acquire lock:', error);
       // Refetch lock status to check if another user has the lock
@@ -115,6 +117,25 @@ export function useArticleEditLock({
           variant: "destructive",
         });
       }
+    },
+  });
+
+  // تجاوز قفل زميل (المدير ورئيس التحرير؛ الخادم يتحقق من الصلاحية)
+  const takeOverLockMutation = useMutation({
+    mutationFn: async () => {
+      return await apiRequest(`/api/admin/articles/${id}/lock`, {
+        method: "POST",
+        body: JSON.stringify({ force: true }),
+      });
+    },
+    onSuccess: (data: LockStatus) => handleLockGranted(data),
+    onError: (error: Error) => {
+      console.error('[Lock] Takeover failed:', error);
+      toast({
+        title: "تعذر تجاوز القفل",
+        description: error.message || "حاول مرة أخرى.",
+        variant: "destructive",
+      });
     },
   });
 
@@ -250,5 +271,10 @@ export function useArticleEditLock({
     // deps preserved verbatim from the original inline effect
   }, [isNewArticle, id, lockStatus?.isOwner]);
 
-  return { lockStatus, isLockedByOther };
+  return {
+    lockStatus,
+    isLockedByOther,
+    takeOverLock: () => takeOverLockMutation.mutate(),
+    isTakingOverLock: takeOverLockMutation.isPending,
+  };
 }
