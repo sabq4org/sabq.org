@@ -570,9 +570,19 @@ export async function resolveTsMatchId(
   const cached = matchIdBridge.get(fixtureId);
   if (cached) return cached;
   if (!kickoffTs || !competitionId) return null;
+  // withSWR لا يخزّن الفشل: بلا هذا الفحص كان كل طلب overview يعيد نداء diary
+  // الفاشل (حتى 4 أيام × كل مباراة) أثناء التهدئة نفسها (سجلات 2026-10-13).
+  if (Date.now() < tsCooldownUntil) return null;
 
   for (const dateKey of candidateDateKeys(kickoffTs)) {
-    const day = await getDiaryRaw(dateKey);
+    let day: any[];
+    try {
+      day = await getDiaryRaw(dateKey);
+    } catch (e) {
+      // بعض المستدعين يبتلعون الخطأ بـ.catch(() => null)، فنفعّل التهدئة هنا.
+      armCooldown(e);
+      throw e;
+    }
     const id = pickTsDiaryMatch(day, competitionId, kickoffTs, teams);
     if (id) {
       matchIdBridge.set(fixtureId, id);
