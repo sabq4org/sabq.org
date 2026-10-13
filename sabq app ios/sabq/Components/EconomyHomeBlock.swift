@@ -192,7 +192,7 @@ struct EconomyHomeBlock: View {
             }
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .economyAccentCard(tone: SabqTheme.primaryEnd, radius: 16)
+            .sabqBlockSurface()
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
@@ -239,13 +239,8 @@ struct EconomyWeeklyHomeCard: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                .fill(SabqTheme.surface)
-                .shadow(color: SabqTheme.shadow, radius: 12, x: 0, y: 4)
-        )
-        .clipShape(RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous))
-        .contentShape(RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous))
+        .sabqBlockSurface()
+        .contentShape(RoundedRectangle(cornerRadius: SabqTheme.blockRadius, style: .continuous))
         .onTapGesture { toggle() }
         .accessibilityIdentifier("economy.home.teaser")
     }

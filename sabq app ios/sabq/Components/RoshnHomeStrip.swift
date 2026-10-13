@@ -229,8 +229,9 @@ struct RoshnHomeStrip: View {
         }
         .padding(.horizontal, 14).padding(.vertical, 13)
         .background(RoshnTheme.sky)
-        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .shadow(color: RoshnTheme.cardShadow, radius: 8, x: 0, y: 3)
+        // زوايا بطاقات الرئيسية الحادة وبلا ظل (طلب المالك 2026-10-09)؛ الأخضر
+        // الصلب بلا حد رمادي يبقى هوية «أخضر الملعب».
+        .clipShape(RoundedRectangle(cornerRadius: SabqTheme.blockRadius, style: .continuous))
     }
 
     private func chip(background: Color, @ViewBuilder content: () -> some View) -> some View {

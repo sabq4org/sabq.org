@@ -69,7 +69,6 @@ struct HomeSectionCard<Link: View, Content: View>: View {
     let title: String
     var context: String? = nil
     var fill: Color = SabqTheme.surface
-    var showsShadow: Bool = true
     @ViewBuilder var link: () -> Link
     @ViewBuilder var content: () -> Content
 
@@ -85,11 +84,7 @@ struct HomeSectionCard<Link: View, Content: View>: View {
         .padding(.top, 16)
         .padding(.bottom, 4)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                .fill(fill)
-                .shadow(color: showsShadow ? SabqTheme.shadow : .clear, radius: 12, x: 0, y: 4)
-        )
+        .sabqBlockSurface(fill)
         .accessibilityElement(children: .contain)
     }
 }

@@ -21,6 +21,9 @@ nonisolated struct JustifiedTextStyle: Equatable {
     /// فئة حجم النص في النظام (Dynamic Type) — تغييرها من الإعدادات يجب أن
     /// يعيد بناء الفقرة بحجم مقيس.
     var sizeCategory: UIContentSizeCategory
+    /// ضبط الفقرة من الطرفين؛ `false` = محاذاة لليمين (صفحة الخبر — الضبط
+    /// يمدّ الحروف بالكشيدة على عرض الجوال الضيق، قرار المالك 2026-10-09).
+    var justified: Bool = true
 
     /// النص العريض في إعدادات إمكانية الوصول يجب أن يغيّر مفتاح الكاش والرسم معًا.
     nonisolated static func legibleWeight(_ weight: UIFont.Weight, boldText: Bool) -> UIFont.Weight {
@@ -69,6 +72,12 @@ private extension EnvironmentValues {
     }
 }
 
+extension EnvironmentValues {
+    /// فقرات القارئ مضبوطة من الطرفين افتراضيًا (صفحة الرأي كالويب)؛ صفحة
+    /// الخبر تطفئه لتصير المحاذاة لليمين.
+    @Entry var sabqJustifiesBody: Bool = true
+}
+
 private func makeReaderTextView() -> UITextView {
     let tv = UITextView()
     tv.isEditable = false
@@ -92,9 +101,9 @@ private func makeReaderTextView() -> UITextView {
     return tv
 }
 
-private func justifiedParagraphStyle(lineSpacing: CGFloat) -> NSParagraphStyle {
+private func justifiedParagraphStyle(lineSpacing: CGFloat, justified: Bool = true) -> NSParagraphStyle {
     let ps = NSMutableParagraphStyle()
-    ps.alignment = .justified
+    ps.alignment = justified ? .justified : .right
     ps.lineSpacing = lineSpacing
     ps.baseWritingDirection = .rightToLeft
     return ps
@@ -152,7 +161,8 @@ struct JustifiedText: UIViewRepresentable {
                 useSerifReader: useSerifReader,
                 lineSpacing: lineSpacing,
                 colorKey: JustifiedTextStyle.colorKey(textColor, darkMode: context.environment.colorScheme == .dark),
-                sizeCategory: context.environment.justifiedSizeCategory
+                sizeCategory: context.environment.justifiedSizeCategory,
+                justified: context.environment.sabqJustifiesBody
             )
         )
     }
@@ -167,7 +177,7 @@ struct JustifiedText: UIViewRepresentable {
         uiView.attributedText = NSAttributedString(string: text, attributes: [
             .font: readerFont(size: size, weight: key.style.weight, serif: useSerifReader),
             .foregroundColor: textColor,
-            .paragraphStyle: justifiedParagraphStyle(lineSpacing: lineSpacing),
+            .paragraphStyle: justifiedParagraphStyle(lineSpacing: lineSpacing, justified: key.style.justified),
         ])
     }
 
@@ -218,7 +228,8 @@ struct JustifiedAttributedText: UIViewRepresentable {
                 useSerifReader: useSerifReader,
                 lineSpacing: lineSpacing,
                 colorKey: JustifiedTextStyle.colorKey(textColor, darkMode: context.environment.colorScheme == .dark),
-                sizeCategory: context.environment.justifiedSizeCategory
+                sizeCategory: context.environment.justifiedSizeCategory,
+                justified: context.environment.sabqJustifiesBody
             )
         )
     }
@@ -243,7 +254,7 @@ struct JustifiedAttributedText: UIViewRepresentable {
         // Apply justified paragraph style across the whole string
         // without clobbering the inline font/colour runs.
         let fullRange = NSRange(location: 0, length: m.length)
-        m.addAttribute(.paragraphStyle, value: justifiedParagraphStyle(lineSpacing: lineSpacing), range: fullRange)
+        m.addAttribute(.paragraphStyle, value: justifiedParagraphStyle(lineSpacing: lineSpacing, justified: key.style.justified), range: fullRange)
         uiView.attributedText = m
     }
 

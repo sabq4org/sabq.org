@@ -1212,6 +1212,8 @@ nonisolated enum SabqTheme {
     })
 
     nonisolated static let cardRadius: CGFloat   = 28
+    /// زوايا بطاقات الرئيسية: أحدّ من cardRadius/tileRadius (طلب المالك 2026-10-09).
+    nonisolated static let blockRadius: CGFloat  = 12
     nonisolated static let tileRadius: CGFloat   = 22
     nonisolated static let chipRadius: CGFloat   = 14
     nonisolated static let buttonRadius: CGFloat = 20
@@ -1549,20 +1551,13 @@ struct DetailLabelPill: View {
                     .frame(width: 11, height: 11)
             }
             Text(title)
-                .font(SabqFonts.app(size: 11, weight: .medium))
+                .font(SabqFonts.app(size: 13, weight: .semibold))
                 .lineLimit(1)
         }
+        // نص ملوّن بلا كبسولة (نموذج صفحة الخبر المعتمد 2026-10-09).
         .foregroundStyle(tint)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 5)
-        .background(
-            Capsule(style: .continuous)
-                .fill(tint.opacity(0.10))
-        )
-        .overlay(
-            Capsule(style: .continuous)
-                .stroke(tint.opacity(0.40), lineWidth: 1)
-        )
+        .padding(.vertical, 2)
+        .contentShape(Rectangle())
     }
 }
 
@@ -1605,10 +1600,10 @@ struct FeaturedArticleCard: View {
                 .clipped()
                 .clipShape(
                     UnevenRoundedRectangle(
-                        topLeadingRadius: SabqTheme.cardRadius,
+                        topLeadingRadius: SabqTheme.blockRadius,
                         bottomLeadingRadius: 0,
                         bottomTrailingRadius: 0,
-                        topTrailingRadius: SabqTheme.cardRadius,
+                        topTrailingRadius: SabqTheme.blockRadius,
                         style: .continuous
                     )
                 )
@@ -1691,16 +1686,7 @@ struct FeaturedArticleCard: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .frame(maxWidth: .infinity)
-        .background(
-            RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
-                .fill(SabqTheme.surface)
-                .shadow(color: SabqTheme.shadow, radius: 16, x: 0, y: 6)
-                .shadow(color: SabqTheme.deepShadow, radius: 1, x: 0, y: 1)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
-                .stroke(SabqTheme.outline.opacity(0.5), lineWidth: 0.5)
-        )
+        .sabqBlockSurface()
     }
 
     /// «قبل 40 دقيقة» لخبر اليوم، و«أمس 4:35 م» لخبر الأمس، والتاريخ لما قبله.
@@ -1715,10 +1701,10 @@ struct FeaturedArticleCard: View {
 
     private var articleImagePlaceholder: some View {
         UnevenRoundedRectangle(
-            topLeadingRadius: SabqTheme.cardRadius,
+            topLeadingRadius: SabqTheme.blockRadius,
             bottomLeadingRadius: 0,
             bottomTrailingRadius: 0,
-            topTrailingRadius: SabqTheme.cardRadius,
+            topTrailingRadius: SabqTheme.blockRadius,
             style: .continuous
         )
         .fill(
@@ -2316,5 +2302,18 @@ struct SabqAdaptivePickerStyle: ViewModifier {
         } else {
             content.pickerStyle(.segmented)
         }
+    }
+}
+
+// MARK: - سطح بطاقات الرئيسية
+
+extension View {
+    /// سطح بطاقات الرئيسية: بلا ظل، زوايا 12، وحد رمادي فاتح بنقطة واحدة
+    /// (طلب المالك 2026-10-09).
+    func sabqBlockSurface(_ fill: Color = SabqTheme.surface) -> some View {
+        let shape = RoundedRectangle(cornerRadius: SabqTheme.blockRadius, style: .continuous)
+        return background(shape.fill(fill))
+            .clipShape(shape)
+            .overlay(shape.strokeBorder(SabqTheme.outline, lineWidth: 1))
     }
 }
