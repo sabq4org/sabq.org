@@ -234,7 +234,7 @@ export class SessionFailoverStore extends session.Store {
     const accept: StoreCallback = (err, sess) => {
       if (err && this.degradeRead(sid, err, callback)) return;
       if (err || !sess) return callback(err, sess);
-      void this.revocations.isRevoked(sid, sess).then(
+      void this.revocations.isRevoked(sid, sess, { allowCached: true }).then(
         revoked => callback(null, revoked ? null : sess),
         error => { if (!this.degradeRead(sid, error, callback)) callback(error); },
       );
@@ -317,7 +317,7 @@ export class SessionFailoverStore extends session.Store {
    * قنوات تحول نفاد مسبح PG إلى صفحات 500 أثناء نوبة 2026-07-25.
    */
   touch(sid: string, sess: session.SessionData, callback?: SimpleCallback): void {
-    void this.revocations.isRevoked(sid, sess).then(revoked => {
+    void this.revocations.isRevoked(sid, sess, { allowCached: true }).then(revoked => {
       if (revoked) return callback?.();
       this.touchActiveSession(sid, sess, callback);
     }, () => callback?.()); // Failed revocation read must never renew the session.
