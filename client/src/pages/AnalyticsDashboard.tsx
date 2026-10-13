@@ -1,82 +1,124 @@
-import { useLocation } from "wouter";
+import { useLocation, Link } from "wouter";
 import { useEffect, lazy, Suspense } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
+import { DashboardLayout } from "@/components/DashboardLayout";
 import AnalyticsMetrics from "@/components/dashboard/AnalyticsMetrics";
 const AnalyticsChart = lazy(() => import("@/components/dashboard/AnalyticsChart"));
 import TopContentTable from "@/components/dashboard/TopContentTable";
 import RecentActivityFeed from "@/components/dashboard/RecentActivityFeed";
 import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
-import { BarChart3 } from "lucide-react";
-
-interface User {
-  id: string;
-  name?: string;
-  email?: string;
-  role?: string;
-}
+import { Button } from "@/components/ui/button";
+import { useAuth, hasRole, hasAnyPermission } from "@/hooks/useAuth";
+import { BarChart3, MousePointerClick, FileBarChart, RefreshCw } from "lucide-react";
 
 export default function AnalyticsDashboard() {
   const [, setLocation] = useLocation();
-  
-  const { data: user, isLoading } = useQuery<User>({
-    queryKey: ["/api/auth/user"],
-    retry: false,
-  });
+  const queryClient = useQueryClient();
+  const { user, isLoading } = useAuth();
 
-  // Check authorization - only admin, super_admin, chief_editor, editor
-  const authorizedRoles = ['admin', 'super_admin', 'chief_editor', 'editor'];
+  const isAuthorized =
+    hasRole(
+      user,
+      "admin",
+      "super_admin",
+      "superadmin",
+      "system_admin",
+      "chief_editor",
+      "editor",
+      "analyst"
+    ) || hasAnyPermission(user, "analytics.view", "articles.view");
 
   useEffect(() => {
-    if (!isLoading && (!user || !authorizedRoles.includes(user.role || ''))) {
-      setLocation('/');
+    if (!isLoading && (!user || !isAuthorized)) {
+      setLocation("/");
     }
-  }, [user, isLoading, setLocation]);
+  }, [user, isLoading, isAuthorized, setLocation]);
 
   useEffect(() => {
     document.title = "لوحة التحليلات - سبق الذكية";
   }, []);
 
+  const handleRefreshAll = () => {
+    void queryClient.invalidateQueries({ queryKey: ["/api/analytics/overview"] });
+    void queryClient.invalidateQueries({ queryKey: ["/api/analytics/chart"] });
+    void queryClient.invalidateQueries({ queryKey: ["/api/analytics/top-content"] });
+    void queryClient.invalidateQueries({ queryKey: ["/api/analytics/recent-activity"] });
+  };
+
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center space-y-4">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
-          <p className="text-muted-foreground">جاري التحميل...</p>
+      <DashboardLayout>
+        <div className="flex min-h-[60vh] items-center justify-center">
+          <div className="space-y-4 text-center">
+            <div className="mx-auto h-10 w-10 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+            <p className="text-sm text-muted-foreground">جاري تحميل لوحة التحليلات...</p>
+          </div>
         </div>
-      </div>
+      </DashboardLayout>
     );
   }
 
-  if (!user || !authorizedRoles.includes(user.role || '')) {
+  if (!user || !isAuthorized) {
     return null;
   }
 
   return (
-    <div className="min-h-screen bg-background" dir="rtl">
-      <div className="mx-auto w-full max-w-[1600px] space-y-6 px-4 pb-10 sm:px-6" data-testid="analytics-dashboard">
+    <DashboardLayout>
+      <div
+        className="mx-auto w-full max-w-[1600px] space-y-6 px-4 pb-12 sm:px-6"
+        dir="rtl"
+        data-testid="analytics-dashboard"
+      >
         <DashboardPageHeader
           icon={BarChart3}
-          title="لوحة التحليلات"
-          description="نظرة شاملة على أداء المنصة والإحصائيات التفصيلية"
+          title="لوحات التحليلات الشاملة"
+          description="نظرة تنفيذية موحّدة على مؤشرات أداء المنصة، نمو القراءات، المحتوى الأعلى تفاعلاً، وسجل النشاط الفوري"
+          actions={
+            <div className="flex flex-wrap items-center gap-2">
+              <Link href="/dashboard/analytics/behavior">
+                <Button variant="outline" size="sm" className="gap-1.5 rounded-xl">
+                  <MousePointerClick className="h-4 w-4 text-primary" />
+                  سلوك المستخدمين
+                </Button>
+              </Link>
+              <Link href="/dashboard/article-analytics">
+                <Button variant="outline" size="sm" className="gap-1.5 rounded-xl">
+                  <FileBarChart className="h-4 w-4 text-primary" />
+                  تحليلات المقالات
+                </Button>
+              </Link>
+              <Button
+                variant="default"
+                size="sm"
+                onClick={handleRefreshAll}
+                className="gap-1.5 rounded-xl"
+                data-testid="button-refresh-analytics-dashboard"
+              >
+                <RefreshCw className="h-4 w-4" />
+                تحديث المؤشرات
+              </Button>
+            </div>
+          }
         />
 
         {/* Metrics Cards Row */}
         <AnalyticsMetrics />
 
         {/* Main Chart */}
-        <Suspense fallback={<div className="animate-pulse bg-muted/30 rounded-lg h-80" />}>
+        <Suspense fallback={<div className="h-96 animate-pulse rounded-2xl bg-muted/30" />}>
           <AnalyticsChart />
         </Suspense>
 
         {/* Two Column Layout for Tables */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Top Content */}
-          <TopContentTable />
-
-          {/* Recent Activity */}
-          <RecentActivityFeed />
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+          <div className="lg:col-span-7">
+            <TopContentTable />
+          </div>
+          <div className="lg:col-span-5">
+            <RecentActivityFeed />
+          </div>
         </div>
       </div>
-    </div>
+    </DashboardLayout>
   );
 }

@@ -11111,83 +11111,105 @@ export class DatabaseStorage implements IStorage {
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - days);
 
-    // Active users count (users who had any activity during the period)
-    const activeUsersResult = await db
-      .select({ userId: readingHistory.userId })
-      .from(readingHistory)
-      .where(gte(readingHistory.readAt, startDate))
-      .union(
-        db.select({ userId: comments.userId })
-          .from(comments)
-          .where(gte(comments.createdAt, startDate))
-      )
-      .union(
-        db.select({ userId: reactions.userId })
-          .from(reactions)
-          .where(gte(reactions.createdAt, startDate))
-      )
-      .union(
-        db.select({ userId: bookmarks.userId })
-          .from(bookmarks)
-          .where(gte(bookmarks.createdAt, startDate))
-      )
-      .union(
-        db.select({ userId: behaviorLogs.userId })
-          .from(behaviorLogs)
-          .where(gte(behaviorLogs.createdAt, startDate))
-      );
+    const [
+      activeUsersResult,
+      readingStats,
+      [likesCount],
+      [commentsCount],
+      [bookmarksCount],
+      topCategories,
+      activeHours,
+      returningUsers,
+    ] = await Promise.all([
+      // Active users count (users who had any activity during the period)
+      db
+        .select({ userId: readingHistory.userId })
+        .from(readingHistory)
+        .where(gte(readingHistory.readAt, startDate))
+        .union(
+          db.select({ userId: comments.userId })
+            .from(comments)
+            .where(gte(comments.createdAt, startDate))
+        )
+        .union(
+          db.select({ userId: reactions.userId })
+            .from(reactions)
+            .where(gte(reactions.createdAt, startDate))
+        )
+        .union(
+          db.select({ userId: bookmarks.userId })
+            .from(bookmarks)
+            .where(gte(bookmarks.createdAt, startDate))
+        )
+        .union(
+          db.select({ userId: behaviorLogs.userId })
+            .from(behaviorLogs)
+            .where(gte(behaviorLogs.createdAt, startDate))
+        ),
+
+      // Reading time average from readingHistory
+      db
+        .select({
+          avgDuration: sql<number>`avg(${readingHistory.readDuration})`,
+          totalReads: sql<number>`count(*)`,
+        })
+        .from(readingHistory)
+        .where(gte(readingHistory.readAt, startDate)),
+
+      // Interaction counts
+      db
+        .select({ count: sql<number>`count(*)` })
+        .from(reactions)
+        .where(gte(reactions.createdAt, startDate)),
+
+      db
+        .select({ count: sql<number>`count(*)` })
+        .from(comments)
+        .where(gte(comments.createdAt, startDate)),
+
+      db
+        .select({ count: sql<number>`count(*)` })
+        .from(bookmarks)
+        .where(gte(bookmarks.createdAt, startDate)),
+
+      // Top categories from user interactions
+      db
+        .select({
+          categoryId: articles.categoryId,
+          categoryName: sql<string>`COALESCE(${categories.nameAr}, 'غير مصنف')`,
+          count: sql<number>`count(*)`,
+        })
+        .from(readingHistory)
+        .innerJoin(articles, eq(readingHistory.articleId, articles.id))
+        .leftJoin(categories, eq(articles.categoryId, categories.id))
+        .where(gte(readingHistory.readAt, startDate))
+        .groupBy(articles.categoryId, sql`COALESCE(${categories.nameAr}, 'غير مصنف')`)
+        .orderBy(desc(sql`count(*)`))
+        .limit(5),
+
+      // Active hours analysis from behaviorLogs
+      db
+        .select({
+          hour: sql<number>`extract(hour from ${behaviorLogs.createdAt})`,
+          count: sql<number>`count(*)`,
+        })
+        .from(behaviorLogs)
+        .where(gte(behaviorLogs.createdAt, startDate))
+        .groupBy(sql`extract(hour from ${behaviorLogs.createdAt})`),
+
+      // Return time analysis (users who came back on >1 distinct day)
+      db
+        .select({
+          userId: readingHistory.userId,
+          visitDays: sql<number>`count(distinct date(${readingHistory.readAt}))`,
+        })
+        .from(readingHistory)
+        .where(gte(readingHistory.readAt, startDate))
+        .groupBy(readingHistory.userId)
+        .having(sql`count(distinct date(${readingHistory.readAt})) > 1`),
+    ]);
 
     const totalUsers = new Set(activeUsersResult.map(r => r.userId)).size;
-
-    // Reading time average from readingHistory
-    const readingStats = await db
-      .select({
-        avgDuration: sql<number>`avg(${readingHistory.readDuration})`,
-        totalReads: sql<number>`count(*)`,
-      })
-      .from(readingHistory)
-      .where(gte(readingHistory.readAt, startDate));
-
-    // Interaction counts
-    const [likesCount] = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(reactions)
-      .where(gte(reactions.createdAt, startDate));
-
-    const [commentsCount] = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(comments)
-      .where(gte(comments.createdAt, startDate));
-
-    const [bookmarksCount] = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(bookmarks)
-      .where(gte(bookmarks.createdAt, startDate));
-
-    // Top categories from user interactions
-    const topCategories = await db
-      .select({
-        categoryId: articles.categoryId,
-        categoryName: sql<string>`COALESCE(${categories.nameAr}, 'غير مصنف')`,
-        count: sql<number>`count(*)`,
-      })
-      .from(readingHistory)
-      .innerJoin(articles, eq(readingHistory.articleId, articles.id))
-      .leftJoin(categories, eq(articles.categoryId, categories.id))
-      .where(gte(readingHistory.readAt, startDate))
-      .groupBy(articles.categoryId, sql`COALESCE(${categories.nameAr}, 'غير مصنف')`)
-      .orderBy(desc(sql`count(*)`))
-      .limit(5);
-
-    // Active hours analysis from behaviorLogs
-    const activeHours = await db
-      .select({
-        hour: sql<number>`extract(hour from ${behaviorLogs.createdAt})`,
-        count: sql<number>`count(*)`,
-      })
-      .from(behaviorLogs)
-      .where(gte(behaviorLogs.createdAt, startDate))
-      .groupBy(sql`extract(hour from ${behaviorLogs.createdAt})`);
 
     // Group by time periods
     const hourDistribution = { morning: 0, noon: 0, evening: 0, night: 0 };
@@ -11206,17 +11228,6 @@ export class DatabaseStorage implements IStorage {
       desktop: 30,
       tablet: 5,
     };
-
-    // Return time analysis (users who came back within 7 days)
-    const returningUsers = await db
-      .select({
-        userId: readingHistory.userId,
-        visitDays: sql<number>`count(distinct date(${readingHistory.readAt}))`,
-      })
-      .from(readingHistory)
-      .where(gte(readingHistory.readAt, startDate))
-      .groupBy(readingHistory.userId)
-      .having(sql`count(distinct date(${readingHistory.readAt})) > 1`);
 
     const returnRate = totalUsers > 0 
       ? Math.round((returningUsers.length / Number(totalUsers)) * 100) 
