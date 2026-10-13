@@ -5,6 +5,21 @@ import { apiListingRobotsRules } from "./apiListingRobots";
 // دون تعديل صفحة السياسة في نفس الـ PR. راجع docs/systems/seo-ssr/SYSTEM.md.
 export const CONTENT_SIGNAL = "search=yes, ai-input=yes, ai-train=no";
 
+// زواحف تدريب النماذج فقط (تطبيق ai-train=no). لا تضف هنا زواحف البحث أو
+// الاستشهاد (Googlebot، OAI-SearchBot، ChatGPT-User، Claude-SearchBot،
+// Claude-User، PerplexityBot): تبقى على مجموعة "*". ولا تضف لها مجموعة
+// Allow خاصة: البوت الذي له مجموعة باسمه يتجاهل "*" كلها فيفقد Disallow: /api/.
+// Google-Extended مستثنى عمدًا: يتحكم أيضًا في الاستشهاد داخل تطبيق Gemini،
+// وحجبه يخالف ai-input=yes.
+export const AI_TRAINING_CRAWLERS = [
+  "GPTBot",
+  "ClaudeBot",
+  "anthropic-ai",
+  "CCBot",
+  "Bytespider",
+  "Applebot-Extended",
+] as const;
+
 export function buildRobotsTxt(): string {
   return `# صحيفة سبق الإلكترونية — robots.txt
 # سياسة استخدام المحتوى في الذكاء الاصطناعي: https://sabq.org/ai-policy (Sabq-AI-Use-1.0)
@@ -31,6 +46,11 @@ Allow: /api/rss/
 # لكل مسارات noindex — راجع functions/_middleware.js) فيُسقطها من الفهرس.
 # بقية /api/ تبقى محظورة. قائمتا الأخبار المحددتان أعلاه قابلتان للزحف
 # لرؤية X-Robots-Tag: noindex, nofollow؛ الترويسة صالحة لموارد JSON أيضاً.
+
+# زواحف تدريب النماذج: ai-train=no (راجع /ai-policy). زواحف البحث والاستشهاد
+# باقية على المجموعة أعلاه.
+${AI_TRAINING_CRAWLERS.map((ua) => `User-agent: ${ua}`).join("\n")}
+Disallow: /
 
 # Googlebot-News intentionally has NO separate group — a previous
 # "Disallow: /" (with a few Allow exceptions) blocked it from the homepage
