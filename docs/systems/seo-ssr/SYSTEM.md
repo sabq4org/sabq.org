@@ -1,6 +1,6 @@
 # SEO و SSR (`seo-ssr`)
 
-> آخر مراجعة: 2026-10-03 (تحويل السلاق يبقي استعلام القياس) | المالك: platform
+> آخر مراجعة: 2026-10-13 (حجب زواحف التدريب في robots.txt) | المالك: platform
 
 ## الغرض
 ميتادات للدوالش، إعادة توجيه السلاق، وSSR للمحتوى العام عبر `web-next`.
@@ -94,6 +94,7 @@
 ## إشارات المحتوى للذكاء الاصطناعي وllms.txt — 2026-09-24
 
 - robots.txt (`server/utils/robotsTxt.ts`، يستدعيه `server/routes.ts`) يعلن داخل مجموعة `User-agent: *` السطر `Content-Signal: search=yes, ai-input=yes, ai-train=no` وفق contentsignals.org. القيم تطابق سياسة `/ai-policy` (Sabq-AI-Use-1.0): الاستدلال والاستشهاد مع الإسناد مسموحان، والتدريب والضبط الدقيق دون اتفاق مكتوب ممنوعان. لا تغيّر `ai-train` دون تعديل صفحة السياسة في نفس الـ PR.
+- **حجب زواحف التدريب (2026-10-13):** `AI_TRAINING_CRAWLERS` في `robotsTxt.ts` (GPTBot، ClaudeBot، anthropic-ai، CCBot، Bytespider، Applebot-Extended) لها مجموعة واحدة `Disallow: /`. زواحف البحث والاستشهاد (Googlebot، Bingbot، OAI-SearchBot، ChatGPT-User، Claude-SearchBot، Claude-User، PerplexityBot) تبقى على `*` بلا مجموعة خاصة، لأن البوت ذا المجموعة باسمه يتجاهل `*` فيفقد `Disallow: /api/`. Google-Extended مستثنى عمدًا: يتحكم في الاستشهاد داخل تطبيق Gemini، وحجبه يخالف `ai-input=yes`. robots إعلان لا إلزام؛ Bytespider معروف بتجاهله، وحجبه الفعلي في WAF على Cloudflare.
 - `client/public/llms.txt` ملف ثابت (امتداد `.txt` ضمن `STATIC_EXTENSIONS` فيُخدم من طبقة Pages الثابتة). يلخّص السياسة ويربط الأقسام العربية النشطة وخرائط الموقع وRSS. عند إضافة قسم رئيسي أو إيقافه حدّث الملف.
 - لا تغيير على قواعد Allow/Disallow أو على مسارات noindex؛ إعدادات Cloudflare للبوتات تسمح للزواحف الموثقة (Verified Bots) ولا تحظر فئات الذكاء الاصطناعي.
 
