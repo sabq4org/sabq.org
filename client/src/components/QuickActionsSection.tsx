@@ -7,7 +7,7 @@ import {
   Zap,
 } from "lucide-react";
 import { useAuth, hasAnyPermission } from "@/hooks/useAuth";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 
 interface QuickAction {
   id: string;
@@ -27,22 +27,22 @@ export function QuickActionsSection() {
   const allActions: QuickAction[] = [
     {
       id: "add-article",
-      title: "إضافة خبر",
-      description: "إنشاء خبر جديد",
+      title: "إضافة خبر جديد",
+      description: "تحرير ونشر مادة صحفية",
       icon: Newspaper,
       iconColor: "text-primary",
-      iconBgColor: "bg-primary/10",
+      iconBgColor: "bg-primary/10 border-primary/20",
       href: "/dashboard/article/new",
       testId: "quick-action-add-article",
       permissions: ["articles.create"],
     },
     {
       id: "add-task",
-      title: "إضافة مهمة",
-      description: "مهمة جديدة للفريق",
+      title: "إسناد مهمة",
+      description: "مهمة جديدة لفريق التحرير",
       icon: CheckSquare,
-      iconColor: "text-primary",
-      iconBgColor: "bg-primary/10",
+      iconColor: "text-emerald-600 dark:text-emerald-400",
+      iconBgColor: "bg-emerald-500/10 border-emerald-500/20",
       href: "/dashboard/tasks",
       testId: "quick-action-add-task",
       permissions: ["tasks.manage"],
@@ -50,10 +50,10 @@ export function QuickActionsSection() {
     {
       id: "add-analysis",
       title: "تحليل عميق",
-      description: "تحليل بالذكاء الاصطناعي",
+      description: "توليد تحليل معمق بالذكاء الاصطناعي",
       icon: TrendingUp,
-      iconColor: "text-primary",
-      iconBgColor: "bg-primary/10",
+      iconColor: "text-violet-600 dark:text-violet-400",
+      iconBgColor: "bg-violet-500/10 border-violet-500/20",
       href: "/dashboard/ai/deep",
       testId: "quick-action-add-analysis",
       permissions: ["analysis.create", "omq.create"],
@@ -61,10 +61,10 @@ export function QuickActionsSection() {
     {
       id: "add-block",
       title: "بلوك ذكي",
-      description: "محتوى قابل للاستخدام",
+      description: "إدارة قوالب العرض الذكية",
       icon: Blocks,
-      iconColor: "text-primary",
-      iconBgColor: "bg-primary/10",
+      iconColor: "text-amber-600 dark:text-amber-400",
+      iconBgColor: "bg-amber-500/10 border-amber-500/20",
       href: "/dashboard/smart-blocks",
       testId: "quick-action-add-block",
       permissions: ["blocks.manage"],
@@ -80,21 +80,21 @@ export function QuickActionsSection() {
   }
 
   return (
-    <Card className="h-full overflow-visible border-border/70 bg-card shadow-none" data-testid="section-quick-actions">
-      <CardHeader className="pb-3">
-        <CardTitle className="flex items-center gap-2 text-lg">
-          <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center">
-            <Zap className="h-4 w-4 text-primary" />
+    <Card className="h-full overflow-hidden rounded-xl border border-border/70 bg-card shadow-sm" data-testid="section-quick-actions">
+      <CardHeader className="pb-3 border-b border-border/50">
+        <div className="flex items-center gap-2.5">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-primary/20 bg-primary/10 text-primary">
+            <Zap className="h-4 w-4" />
           </div>
           <div>
-            <span>إجراءات سريعة</span>
-            <p className="text-xs font-normal text-muted-foreground mt-0.5">
-              إضافة محتوى جديد بنقرة واحدة
-            </p>
+            <CardTitle className="text-base font-bold">إجراءات غرفة الأخبار السريعة</CardTitle>
+            <CardDescription className="text-xs mt-0.5">
+              إطلاق المهام التحريرية والذكية بنقرة واحدة
+            </CardDescription>
           </div>
-        </CardTitle>
+        </div>
       </CardHeader>
-      <CardContent className="pt-0">
+      <CardContent className="pt-4">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {visibleActions.map((action) => (
             <QuickActionCard

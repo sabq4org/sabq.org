@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -43,12 +43,12 @@ const getRoleLabel = (mod: OnlineModerator): string => {
 export function OnlineModeratorsWidget() {
   const { data: moderators, isLoading } = useQuery<OnlineModerator[]>({
     queryKey: ["/api/admin/online-moderators"],
-    refetchInterval: 120000, // 2 min (was 30s)
+    refetchInterval: 120000,
     staleTime: 15000,
   });
 
-  const onlineModerators = moderators?.filter(m => m.isOnline) || [];
-  const offlineModerators = moderators?.filter(m => !m.isOnline).slice(0, 6) || [];
+  const onlineModerators = moderators?.filter((m) => m.isOnline) || [];
+  const offlineModerators = moderators?.filter((m) => !m.isOnline).slice(0, 6) || [];
 
   const getInitials = (firstName: string | null, lastName: string | null, email: string) => {
     if (firstName && lastName) {
@@ -81,19 +81,19 @@ export function OnlineModeratorsWidget() {
 
   if (isLoading) {
     return (
-      <Card className="h-full" data-testid="card-online-moderators-loading">
-        <CardHeader className="pb-3">
-          <Skeleton className="h-6 w-32" />
+      <Card className="h-full rounded-xl border border-border/70 bg-card shadow-sm" data-testid="card-online-moderators-loading">
+        <CardHeader className="pb-3 border-b border-border/50">
+          <Skeleton className="h-6 w-36" />
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-4 pt-4">
           <div className="flex gap-2">
             {[1, 2, 3].map((i) => (
-              <Skeleton key={i} className="h-12 w-12 rounded-full" />
+              <Skeleton key={i} className="h-11 w-11 rounded-full" />
             ))}
           </div>
           <div className="flex flex-wrap gap-2">
             {[1, 2, 3, 4].map((i) => (
-              <Skeleton key={i} className="h-8 w-20 rounded-md" />
+              <Skeleton key={i} className="h-7 w-20 rounded-md" />
             ))}
           </div>
         </CardContent>
@@ -102,30 +102,36 @@ export function OnlineModeratorsWidget() {
   }
 
   return (
-    <Card 
-      className="h-full border-border/70 bg-card shadow-none"
+    <Card
+      className="h-full rounded-xl border border-border/70 bg-card shadow-sm"
       data-testid="card-online-moderators"
     >
-      <CardHeader className="pb-3">
-        <CardTitle className="flex items-center justify-between text-base">
-          <div className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
-              <Users className="h-4 w-4 text-primary" />
+      <CardHeader className="pb-3 border-b border-border/50">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+              <Users className="h-4 w-4" />
             </div>
-            <span>المتصلون</span>
+            <div>
+              <CardTitle className="text-base font-bold">فريق التحرير المتصل</CardTitle>
+              <CardDescription className="text-xs mt-0.5">
+                المتواجدون في غرفة الأخبار الآن
+              </CardDescription>
+            </div>
           </div>
           {onlineModerators.length > 0 && (
-            <Badge 
-              className="border border-primary/20 bg-primary/10 px-2 text-xs text-primary hover:bg-primary/10"
+            <Badge
+              variant="outline"
+              className="border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 dark:text-emerald-300 tabular-nums"
               data-testid="badge-online-count"
             >
-              <Circle className="ml-1 h-2 w-2 animate-pulse fill-current" />
-              {onlineModerators.length} نشط
+              <span className="ml-1.5 h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+              {onlineModerators.length} نشط الآن
             </Badge>
           )}
-        </CardTitle>
+        </div>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-4 pt-4">
         {onlineModerators.length === 0 && offlineModerators.length === 0 ? (
           <div className="text-center py-6 text-muted-foreground" data-testid="text-no-moderators">
             <Users className="h-10 w-10 mx-auto mb-2 opacity-30" />
@@ -134,26 +140,35 @@ export function OnlineModeratorsWidget() {
         ) : (
           <>
             {onlineModerators.length > 0 && (
-              <div className="space-y-2">
-                <p className="text-xs font-medium text-muted-foreground">متصلون الآن</p>
+              <div className="space-y-2.5">
                 <div className="flex flex-wrap gap-2">
-                  {onlineModerators.map((mod) => (
+                  {onlineModerators.slice(0, 6).map((mod) => (
                     <Tooltip key={mod.id}>
                       <TooltipTrigger asChild>
                         <div
-                          className="relative group cursor-default"
+                          className="group flex items-center gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-2.5 py-1.5 cursor-default transition-colors hover:bg-emerald-500/10"
                           data-testid={`moderator-online-${mod.id}`}
                         >
-                          <Avatar className="h-11 w-11 ring-2 ring-chart-2 ring-offset-2 ring-offset-background transition-transform group-hover:scale-105">
-                            <AvatarImage src={mod.profileImageUrl || undefined} alt={getDisplayName(mod)} />
-                            <AvatarFallback className="bg-primary text-sm font-medium text-primary-foreground">
-                              {getInitials(mod.firstName, mod.lastName, mod.email)}
-                            </AvatarFallback>
-                          </Avatar>
-                          <Circle 
-                            className="absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full bg-background fill-chart-2 text-chart-2 ring-2 ring-background"
-                            data-testid="indicator-online"
-                          />
+                          <div className="relative shrink-0">
+                            <Avatar className="h-8 w-8 ring-1 ring-emerald-500/40">
+                              <AvatarImage src={mod.profileImageUrl || undefined} alt={getDisplayName(mod)} />
+                              <AvatarFallback className="bg-primary text-xs font-semibold text-primary-foreground">
+                                {getInitials(mod.firstName, mod.lastName, mod.email)}
+                              </AvatarFallback>
+                            </Avatar>
+                            <Circle
+                              className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-background fill-emerald-500 text-emerald-500 ring-1 ring-background"
+                              data-testid="indicator-online"
+                            />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-xs font-semibold text-foreground truncate max-w-[110px]">
+                              {getDisplayName(mod)}
+                            </p>
+                            <p className="text-[10px] text-muted-foreground truncate max-w-[110px]">
+                              {getRoleLabel(mod)}
+                            </p>
+                          </div>
                         </div>
                       </TooltipTrigger>
                       <TooltipContent side="bottom" className="text-xs" dir="rtl">
@@ -167,14 +182,14 @@ export function OnlineModeratorsWidget() {
             )}
 
             {offlineModerators.length > 0 && (
-              <div className="space-y-2">
-                <p className="text-xs font-medium text-muted-foreground">آخر نشاط</p>
+              <div className="space-y-2 pt-1 border-t border-border/40">
+                <p className="text-[11px] font-medium text-muted-foreground">آخر تواجد قريب</p>
                 <div className="flex flex-wrap gap-1.5">
                   {offlineModerators.map((mod) => (
                     <Tooltip key={mod.id}>
                       <TooltipTrigger asChild>
                         <div
-                          className="px-2.5 py-1.5 rounded-md bg-muted/60 text-muted-foreground text-xs cursor-default hover:bg-muted transition-colors"
+                          className="px-2.5 py-1 rounded-lg border border-border/50 bg-muted/40 text-muted-foreground text-xs cursor-default hover:bg-muted transition-colors"
                           data-testid={`moderator-offline-${mod.id}`}
                         >
                           {getDisplayName(mod)}
