@@ -1,30 +1,107 @@
-import { useEffect, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowDown, ArrowUp, Loader2, Radio, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import { Separator } from "@/components/ui/separator";
-import { apiRequest } from "@/lib/queryClient";
-import { hasPermission, useAuth } from "@/hooks/useAuth";
+import { Switch } from "@/components/ui/switch";
+import { Skeleton } from "@/components/ui/skeleton";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useAuth, hasPermission } from "@/hooks/useAuth";
+import {
+  AlertTriangle,
+  ArrowDown,
+  ArrowUp,
+  Check,
+  CheckCircle2,
+  Clock,
+  Copy,
+  Download,
+  ExternalLink,
+  EyeOff,
+  FileAudio,
+  Flame,
+  History,
+  ListMusic,
+  Loader2,
+  Mic,
+  Newspaper,
+  Pause,
+  Play,
+  Plus,
+  Radio,
+  RefreshCw,
+  RotateCcw,
+  Save,
+  Search,
+  Sparkles,
+  Star,
+  Trash2,
+  Volume2,
+  VolumeX,
+  Wand2,
+} from "lucide-react";
 
-type Item = { id: string; articleIds: string[]; href: string | null; label: string; text: string };
-type Bulletin = {
+interface BulletinItem {
+  id: string;
+  articleIds: string[];
+  href: string | null;
+  label: string;
+  text: string;
+}
+
+interface BulletinChapter {
+  start: number;
+  label: string;
+  href: string | null;
+}
+
+interface Bulletin {
   id: string;
   title: string;
   status: "draft" | "generating" | "failed" | "published";
   revision: number;
-  items: Item[];
+  items: BulletinItem[];
   createdAt: string;
-  createdBy: string | null;
   updatedAt: string;
   publishedAt: string | null;
   error: string | null;
-  audio: { url: string; durationSec: number; provider: string; chapters: Array<{ start: number; label: string }> } | null;
-};
-type AdminView = {
+  audio: {
+    url: string;
+    contentType?: string;
+    durationSec: number;
+    bytes?: number;
+    provider: string;
+    chapters: BulletinChapter[];
+  } | null;
+}
+
+interface BulletinHistoryEntry {
+  id: string;
+  title: string;
+  publishedAt: string | null;
+  approvedBy?: string | null;
+  durationSec: number;
+  provider: string;
+  hiddenAt?: string;
+  audioUrl?: string;
+  itemCount?: number;
+}
+
+interface CandidateStory {
+  id: string;
+  title: string;
+  href: string;
+  category?: string | null;
+  newsType?: string;
+  views?: number;
+  isFeatured?: boolean;
+  publishedAt?: string;
+}
+
+interface AdminBulletinResponse {
   scheduleEnabled: boolean;
   slots: number[];
   intro: string;
@@ -32,192 +109,1878 @@ type AdminView = {
   draft: Bulletin | null;
   current: Bulletin | null;
   live: boolean;
-  history: Array<{ id: string; title: string; publishedAt: string | null; durationSec: number; provider: string; hiddenAt?: string }>;
+  history: BulletinHistoryEntry[];
   storageConfigured: boolean;
   sourceTitles: Record<string, string>;
-};
+  candidates?: CandidateStory[];
+}
 
-const KEY = ["/api/audio-bulletin/admin"];
-const PROVIDER: Record<string, string> = { gemini: "Gemini", humain: "HUMAIN", elevenlabs: "ElevenLabs", google: "Google" };
-const dateTime = new Intl.DateTimeFormat("ar-SA-u-nu-latn", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Riyadh" });
-const fmtDate = (iso: string | null) => (iso ? dateTime.format(new Date(iso)) : "—");
-const fmtDuration = (s: number) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}`;
-const words = (text: string) => text.trim().split(/\s+/).filter(Boolean).length;
+const SABQ_VOCALIZED = "سَبْق";
+const LIVE_WINDOW_MS = 6 * 60 * 60 * 1000;
+const WORDS_PER_SECOND = 2.35;
+
+const EDITION_PRESETS = [
+  { label: "تلقائي حسب الوقت", value: "" },
+  { label: "نشرة الصباح", value: "نشرة الصباح" },
+  { label: "نشرة الظهيرة", value: "نشرة الظهيرة" },
+  { label: "نشرة المساء", value: "نشرة المساء" },
+  { label: "موجز سَبْق الصوتي", value: "موجز سَبْق الصوتي" },
+];
+
+const SCHEDULE_SLOTS = [
+  { hour: 7, label: "نشرة الصباح", timeLabel: "07:00 صباحاً", period: "الفترة الصباحية" },
+  { hour: 13, label: "نشرة الظهيرة", timeLabel: "01:00 ظهراً", period: "فترة الظهيرة" },
+  { hour: 21, label: "نشرة المساء", timeLabel: "09:00 مساءً", period: "الفترة المسائية" },
+];
+
+function vocalizeSabq(value: string): string {
+  return value
+    .replace(/(نشرة|صحيفة|موقع|تطبيق)\s+سبق(?=[\s،.,:؛!؟]|$)/g, `$1 ${SABQ_VOCALIZED}`)
+    .replace(/(^|[\s«"(])سبق(?=\s+دوت)/g, `$1${SABQ_VOCALIZED}`);
+}
+
+function vocalizeAllSabqOccurrences(value: string): string {
+  return value.replace(/سبق/g, SABQ_VOCALIZED);
+}
+
+function countWords(text: string): number {
+  const cleaned = text.trim();
+  if (!cleaned) return 0;
+  return cleaned.split(/\s+/).length;
+}
+
+function estimateSecondsFromWords(words: number): number {
+  if (words <= 0) return 0;
+  return Math.max(2, Math.round(words / WORDS_PER_SECOND));
+}
+
+function formatDateTime(iso?: string | null): string {
+  if (!iso) return "—";
+  try {
+    return new Intl.DateTimeFormat("ar-SA", {
+      dateStyle: "medium",
+      timeStyle: "short",
+      timeZone: "Asia/Riyadh",
+    }).format(new Date(iso));
+  } catch {
+    return iso;
+  }
+}
+
+function formatShortTime(iso?: string | null): string {
+  if (!iso) return "—";
+  try {
+    return new Intl.DateTimeFormat("ar-SA", {
+      hour: "numeric",
+      minute: "2-digit",
+      timeZone: "Asia/Riyadh",
+    }).format(new Date(iso));
+  } catch {
+    return iso;
+  }
+}
+
+function formatDuration(seconds?: number | null): string {
+  const total = Math.max(0, Math.round(seconds || 0));
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
+
+function getRemainingBroadcastWindow(publishedAt?: string | null): {
+  active: boolean;
+  label: string;
+  percentRemaining: number;
+} {
+  if (!publishedAt) {
+    return { active: false, label: "غير منشورة", percentRemaining: 0 };
+  }
+  const pubMs = new Date(publishedAt).getTime();
+  if (!Number.isFinite(pubMs)) {
+    return { active: false, label: "غير معروف", percentRemaining: 0 };
+  }
+  const expiresAt = pubMs + LIVE_WINDOW_MS;
+  const diff = expiresAt - Date.now();
+  if (diff <= 0) {
+    return { active: false, label: "انتهت نافذة الـ 6 ساعات", percentRemaining: 0 };
+  }
+  const hours = Math.floor(diff / (60 * 60 * 1000));
+  const mins = Math.floor((diff % (60 * 60 * 1000)) / (60 * 1000));
+  const pct = Math.min(100, Math.max(5, Math.round((diff / LIVE_WINDOW_MS) * 100)));
+  return {
+    active: true,
+    label: hours > 0 ? `متبقي ${hours} س و ${mins} د على الهواء` : `متبقي ${mins} دقيقة على الهواء`,
+    percentRemaining: pct,
+  };
+}
+
+function getNextRiyadhSlot(): { label: string; timeLabel: string; hour: number } {
+  try {
+    const riyadhHour = Number(
+      new Intl.DateTimeFormat("en-US", {
+        hour: "numeric",
+        hour12: false,
+        timeZone: "Asia/Riyadh",
+      }).format(new Date())
+    );
+    for (const slot of SCHEDULE_SLOTS) {
+      if (riyadhHour < slot.hour) return slot;
+    }
+    return SCHEDULE_SLOTS[0];
+  } catch {
+    return SCHEDULE_SLOTS[0];
+  }
+}
+
+function providerBadgeLabel(provider?: string): string {
+  if (provider === "gemini") return "Gemini Orus TTS";
+  if (provider === "humain") return "HUMAIN TTS";
+  if (provider === "elevenlabs") return "ElevenLabs";
+  if (provider === "google") return "Google TTS";
+  return provider || "TTS";
+}
 
 export default function AudioBulletinPage() {
-  const queryClient = useQueryClient();
   const { user } = useAuth();
-  const canSchedule = hasPermission(user, "system.manage_settings");
-  const [message, setMessage] = useState<string | null>(null);
-  const { data, isLoading, isError } = useQuery<AdminView | null>({
-    queryKey: KEY,
-    // While audio is being produced, check every few seconds until it is published or fails.
-    refetchInterval: (query) => ((query.state.data as AdminView | null)?.draft?.status === "generating" ? 4000 : false),
+  const canManageSchedule = hasPermission(user, "system.manage_settings");
+
+  const [draft, setDraft] = useState<Bulletin | null>(null);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // Studio Draft Generation Options
+  const [selectedEditionTitle, setSelectedEditionTitle] = useState<string>("");
+  const [selectedCandidateIds, setSelectedCandidateIds] = useState<string[]>([]);
+  const [candidateSearch, setCandidateSearch] = useState<string>("");
+  const [historySearch, setHistorySearch] = useState<string>("");
+
+  // Live Studio Audio Player State
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [audioDuration, setAudioDuration] = useState(0);
+  const [playbackRate, setPlaybackRate] = useState<1 | 1.25 | 1.5>(1);
+  const [isMuted, setIsMuted] = useState(false);
+  const [liveViewTab, setLiveViewTab] = useState<"chapters" | "script">("chapters");
+  const [copiedUrl, setCopiedUrl] = useState(false);
+
+  const { data, isLoading, isFetching, refetch } = useQuery<AdminBulletinResponse>({
+    queryKey: ["/api/audio-bulletin/admin"],
+    refetchInterval: (query) =>
+      query.state.data?.draft?.status === "generating" ? 2500 : false,
   });
-  const draft = data?.draft ?? null;
-  const [title, setTitle] = useState("");
-  const [items, setItems] = useState<Item[]>([]);
+
   useEffect(() => {
-    setTitle(draft?.title ?? "");
-    setItems(draft?.items ?? []);
-  }, [draft?.id, draft?.revision]);
+    if (!data?.draft) {
+      setDraft(null);
+      return;
+    }
+    setDraft((prev) =>
+      prev && prev.id === data.draft?.id && prev.revision === data.draft?.revision
+        ? prev
+        : structuredClone(data.draft)
+    );
+  }, [data?.draft]);
 
-  const dirty = Boolean(draft && (title !== draft.title || JSON.stringify(items.map((i) => [i.id, i.label, i.text])) !== JSON.stringify(draft.items.map((i) => [i.id, i.label, i.text]))));
-  const totalWords = words(data?.intro ?? "") + items.reduce((n, i) => n + words(i.text), 0) + words(data?.outro ?? "");
-  const estimatedMinutes = totalWords / 135;
+  const current = data?.current ?? null;
+  const isLive = Boolean(data?.live && current?.audio);
+  const sourceTitles = data?.sourceTitles ?? {};
+  const candidates = data?.candidates ?? [];
+  const history = data?.history ?? [];
+  const fixedIntro = data?.intro ?? "مرحباً بكم في نشرة سَبْق، نأخذكم في جولة سريعة لأهم الأخبار.";
+  const fixedOutro = data?.outro ?? "كانت هذه أبرز الأخبار، والتفاصيل كاملة على سَبْق دوت أورغ. شكراً لاستماعكم.";
 
-  const call = (url: string, method: string, body?: unknown) =>
-    apiRequest<AdminView>(url, { method, headers: { "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
-  const onDone = (text: string) => (next: AdminView) => { queryClient.setQueryData(KEY, next); setMessage(text); };
-  const onFail = (error: Error) => setMessage(error.message);
+  // Reset player state when current audio URL changes
+  useEffect(() => {
+    setIsPlaying(false);
+    setCurrentTime(0);
+    setAudioDuration(current?.audio?.durationSec ?? 0);
+  }, [current?.audio?.url, current?.audio?.durationSec]);
 
-  const create = useMutation({ mutationFn: () => call("/api/audio-bulletin/admin/draft", "POST"), onSuccess: onDone("كُتبت مسودة من أهم الأخبار المنشورة. راجعها قبل الاعتماد."), onError: onFail });
-  const save = useMutation({ mutationFn: () => call("/api/audio-bulletin/admin/draft", "PUT", { revision: draft!.revision, title, items: items.map(({ id, label, text }) => ({ id, label, text })) }), onSuccess: onDone("حُفظ التعديل."), onError: onFail });
-  const approve = useMutation({ mutationFn: () => call("/api/audio-bulletin/admin/draft/approve", "POST", { revision: draft!.revision }), onSuccess: onDone("اعتُمدت النشرة. يجري الآن تسجيلها بالصوت، وتظهر على الموقع فور انتهائه."), onError: onFail });
-  const discard = useMutation({ mutationFn: () => call("/api/audio-bulletin/admin/draft", "DELETE"), onSuccess: onDone("حُذفت المسودة."), onError: onFail });
-  const hide = useMutation({ mutationFn: () => call("/api/audio-bulletin/admin/hide", "POST"), onSuccess: onDone("أُخفيت النشرة من الموقع."), onError: onFail });
-  const schedule = useMutation({ mutationFn: (enabled: boolean) => call("/api/audio-bulletin/admin/schedule", "PUT", { enabled }), onSuccess: onDone("حُفظت الجدولة."), onError: onFail });
-  const busy = create.isPending || save.isPending || approve.isPending || discard.isPending;
+  // Check if local draft has unsaved changes compared to server draft
+  const hasUnsavedChanges = useMemo(() => {
+    if (!draft || !data?.draft) return false;
+    return (
+      JSON.stringify({
+        title: draft.title,
+        items: draft.items.map((i) => ({
+          id: i.id,
+          label: i.label,
+          text: i.text,
+          articleIds: i.articleIds,
+        })),
+      }) !==
+      JSON.stringify({
+        title: data.draft.title,
+        items: data.draft.items.map((i) => ({
+          id: i.id,
+          label: i.label,
+          text: i.text,
+          articleIds: i.articleIds,
+        })),
+      })
+    );
+  }, [draft, data?.draft]);
 
-  const move = (index: number, delta: number) => setItems((list) => {
-    const next = [...list];
-    const [moved] = next.splice(index, 1);
-    next.splice(index + delta, 0, moved);
-    return next;
+  // Word count & estimated duration for the open draft
+  const draftStats = useMemo(() => {
+    if (!draft) return { totalWords: 0, estimatedSeconds: 0, itemCount: 0 };
+    const introWords = countWords(fixedIntro);
+    const outroWords = countWords(fixedOutro);
+    const itemsWords = draft.items.reduce((acc, item) => acc + countWords(item.text), 0);
+    const totalWords = introWords + outroWords + itemsWords;
+    const estimatedSeconds =
+      estimateSecondsFromWords(totalWords) + Math.max(0, draft.items.length + 1) * 0.45;
+    return {
+      totalWords,
+      estimatedSeconds: Math.round(estimatedSeconds),
+      itemCount: draft.items.length,
+    };
+  }, [draft, fixedIntro, fixedOutro]);
+
+  // Active chapter index in the live player
+  const activeChapterIndex = useMemo(() => {
+    const chapters = current?.audio?.chapters;
+    if (!chapters?.length) return 0;
+    let activeIdx = 0;
+    for (let i = 0; i < chapters.length; i++) {
+      if (currentTime + 0.15 >= chapters[i].start) {
+        activeIdx = i;
+      } else {
+        break;
+      }
+    }
+    return activeIdx;
+  }, [current?.audio?.chapters, currentTime]);
+
+  // Set of articleIds already in the active draft
+  const draftArticleIds = useMemo(() => {
+    if (!draft) return new Set<string>();
+    return new Set(draft.items.flatMap((i) => i.articleIds));
+  }, [draft]);
+
+  // Filtered candidate stories
+  const filteredCandidates = useMemo(() => {
+    const q = candidateSearch.trim().toLowerCase();
+    if (!q) return candidates;
+    return candidates.filter(
+      (c) =>
+        c.title.toLowerCase().includes(q) ||
+        (c.category && c.category.toLowerCase().includes(q))
+    );
+  }, [candidates, candidateSearch]);
+
+  // Filtered history entries
+  const filteredHistory = useMemo(() => {
+    const q = historySearch.trim().toLowerCase();
+    if (!q) return history;
+    return history.filter((h) => h.title.toLowerCase().includes(q));
+  }, [history, historySearch]);
+
+  function applyResponse(next: AdminBulletinResponse, message: string) {
+    queryClient.setQueryData(["/api/audio-bulletin/admin"], next);
+    setDraft(next.draft ? structuredClone(next.draft) : null);
+    setStatusMessage(message);
+    setErrorMessage(null);
+  }
+
+  function handleError(error: unknown) {
+    setStatusMessage(null);
+    setErrorMessage(error instanceof Error ? error.message : "حدث خطأ غير متوقع");
+  }
+
+  function serializeDraftPayload(value: Bulletin) {
+    return {
+      revision: value.revision,
+      title: value.title.trim(),
+      items: value.items.map(({ id, label, text, articleIds, href }) => ({
+        id,
+        label: label.trim().slice(0, 60),
+        text: text.trim(),
+        ...(articleIds?.length ? { articleIds } : {}),
+        ...(href !== undefined ? { href } : {}),
+      })),
+    };
+  }
+
+  const createDraftMutation = useMutation({
+    mutationFn: (options?: { articleIds?: string[]; title?: string }) =>
+      apiRequest("/api/audio-bulletin/admin/draft", {
+        method: "POST",
+        body:
+          options && (options.articleIds?.length || options.title)
+            ? JSON.stringify(options)
+            : undefined,
+      }) as Promise<AdminBulletinResponse>,
+    onSuccess: (next) => {
+      setSelectedCandidateIds([]);
+      applyResponse(
+        next,
+        "تم توليد مسودة النشرة الصوتية بالذكاء الاصطناعي — راجع الفقرات وعدّلها قبل الاعتماد."
+      );
+    },
+    onError: handleError,
   });
-  const patch = (id: string, change: Partial<Item>) => setItems((list) => list.map((i) => (i.id === id ? { ...i, ...change } : i)));
+
+  const cloneCurrentMutation = useMutation({
+    mutationFn: () =>
+      apiRequest("/api/audio-bulletin/admin/draft/from-current", {
+        method: "POST",
+      }) as Promise<AdminBulletinResponse>,
+    onSuccess: (next) =>
+      applyResponse(
+        next,
+        "تم نسخ النشرة المنشورة حالياً إلى مسودة قابلة للتعديل وإعادة التسجيل."
+      ),
+    onError: handleError,
+  });
+
+  const saveDraftMutation = useMutation({
+    mutationFn: (value: Bulletin) =>
+      apiRequest("/api/audio-bulletin/admin/draft", {
+        method: "PUT",
+        body: JSON.stringify(serializeDraftPayload(value)),
+      }) as Promise<AdminBulletinResponse>,
+    onSuccess: (next) => applyResponse(next, "تم حفظ تعديلات المسودة بنجاح."),
+    onError: handleError,
+  });
+
+  const approveMutation = useMutation({
+    mutationFn: async (value: Bulletin) => {
+      const saved = (await apiRequest("/api/audio-bulletin/admin/draft", {
+        method: "PUT",
+        body: JSON.stringify(serializeDraftPayload(value)),
+      })) as AdminBulletinResponse;
+      const revision = saved.draft?.revision ?? value.revision;
+      return apiRequest("/api/audio-bulletin/admin/draft/approve", {
+        method: "POST",
+        body: JSON.stringify({ revision }),
+      }) as Promise<AdminBulletinResponse>;
+    },
+    onSuccess: (next) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/audio-bulletin/current"] });
+      applyResponse(
+        next,
+        "بدأ تسجيل الصوت بالذكاء الاصطناعي؛ ستُنشر النشرة تلقائياً فور اكتمال التسجيل."
+      );
+    },
+    onError: handleError,
+  });
+
+  const discardMutation = useMutation({
+    mutationFn: () =>
+      apiRequest("/api/audio-bulletin/admin/draft", {
+        method: "DELETE",
+      }) as Promise<AdminBulletinResponse>,
+    onSuccess: (next) => applyResponse(next, "تم حذف المسودة الحالية."),
+    onError: handleError,
+  });
+
+  const hideMutation = useMutation({
+    mutationFn: () =>
+      apiRequest("/api/audio-bulletin/admin/hide", {
+        method: "POST",
+      }) as Promise<AdminBulletinResponse>,
+    onSuccess: (next) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/audio-bulletin/current"] });
+      applyResponse(next, "تم إيقاف بث النشرة وإخفاؤها من واجهة الموقع.");
+    },
+    onError: handleError,
+  });
+
+  const scheduleMutation = useMutation({
+    mutationFn: (enabled: boolean) =>
+      apiRequest("/api/audio-bulletin/admin/schedule", {
+        method: "PUT",
+        body: JSON.stringify({ enabled }),
+      }) as Promise<AdminBulletinResponse>,
+    onSuccess: (next) =>
+      applyResponse(
+        next,
+        next.scheduleEnabled
+          ? "تم تفعيل الجدولة الآلية (7 صباحاً، 1 ظهراً، 9 مساءً بتوقيت الرياض)."
+          : "تم إيقاف الجدولة الآلية — النشر الآن يدوي فقط."
+      ),
+    onError: handleError,
+  });
+
+  const isGenerating = draft?.status === "generating";
+  const busy =
+    isGenerating ||
+    createDraftMutation.isPending ||
+    cloneCurrentMutation.isPending ||
+    saveDraftMutation.isPending ||
+    approveMutation.isPending ||
+    discardMutation.isPending ||
+    hideMutation.isPending;
+
+  // Draft item manipulation helpers
+  function updateItem(index: number, patch: Partial<BulletinItem>) {
+    if (!draft) return;
+    const items = draft.items.map((item, idx) =>
+      idx === index ? { ...item, ...patch } : item
+    );
+    setDraft({ ...draft, items });
+  }
+
+  function moveItem(index: number, direction: -1 | 1) {
+    if (!draft) return;
+    const target = index + direction;
+    if (target < 0 || target >= draft.items.length) return;
+    const items = [...draft.items];
+    [items[index], items[target]] = [items[target], items[index]];
+    setDraft({ ...draft, items });
+  }
+
+  function removeItem(index: number) {
+    if (!draft || draft.items.length <= 1) return;
+    setDraft({ ...draft, items: draft.items.filter((_, idx) => idx !== index) });
+  }
+
+  function addCandidateToDraft(story: CandidateStory) {
+    if (!draft) return;
+    if (draft.items.length >= 10) {
+      setErrorMessage("الحد الأقصى لفقرات النشرة هو 10 فقرات.");
+      return;
+    }
+    const cleanLabel = vocalizeSabq(story.title).slice(0, 58);
+    const newItem: BulletinItem = {
+      id: `item-${story.id.slice(0, 8)}-${Date.now().toString(36).slice(-3)}`,
+      label: cleanLabel.length >= 2 ? cleanLabel : "خبر جديد",
+      text: `وفي تفاصيل هذا الخبر، ${vocalizeSabq(story.title)}، حيث نتابع معكم أبرز المستجدات والتفاصيل عبر صحيفة ${SABQ_VOCALIZED}.`,
+      articleIds: [story.id],
+      href: story.href,
+    };
+    setDraft({ ...draft, items: [...draft.items, newItem] });
+    setStatusMessage(
+      `تم إدراج الخبر «${story.title.slice(0, 45)}...» كفقرة جديدة في المسودة.`
+    );
+  }
+
+  function vocalizeEntireDraft() {
+    if (!draft) return;
+    setDraft({
+      ...draft,
+      title: vocalizeAllSabqOccurrences(draft.title),
+      items: draft.items.map((item) => ({
+        ...item,
+        label: vocalizeAllSabqOccurrences(item.label),
+        text: vocalizeSabq(item.text),
+      })),
+    });
+    setStatusMessage(`تم تشكيل لفظ «${SABQ_VOCALIZED}» في فقرات المسودة.`);
+  }
+
+  function toggleCandidateSelection(id: string) {
+    setSelectedCandidateIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  }
+
+  // Audio player controls
+  function togglePlay() {
+    const el = audioRef.current;
+    if (!el) return;
+    if (el.paused) {
+      el.play().catch(() => {});
+    } else {
+      el.pause();
+    }
+  }
+
+  function seekTo(seconds: number) {
+    const el = audioRef.current;
+    if (!el) return;
+    el.currentTime = Math.max(0, seconds);
+    setCurrentTime(el.currentTime);
+    if (el.paused) {
+      el.play().catch(() => {});
+    }
+  }
+
+  function cyclePlaybackRate() {
+    const nextRate: 1 | 1.25 | 1.5 =
+      playbackRate === 1 ? 1.25 : playbackRate === 1.25 ? 1.5 : 1;
+    setPlaybackRate(nextRate);
+    if (audioRef.current) {
+      audioRef.current.playbackRate = nextRate;
+    }
+  }
+
+  function toggleMute() {
+    const nextMuted = !isMuted;
+    setIsMuted(nextMuted);
+    if (audioRef.current) {
+      audioRef.current.muted = nextMuted;
+    }
+  }
+
+  function copyAudioUrl() {
+    if (!current?.audio?.url) return;
+    navigator.clipboard?.writeText(current.audio.url).then(() => {
+      setCopiedUrl(true);
+      setTimeout(() => setCopiedUrl(false), 2000);
+    });
+  }
+
+  const broadcastWindow = getRemainingBroadcastWindow(current?.publishedAt);
+  const nextSlot = getNextRiyadhSlot();
+  const avgHistoryDuration =
+    history.length > 0
+      ? Math.round(
+          history.reduce((acc, h) => acc + (h.durationSec || 0), 0) / history.length
+        )
+      : 0;
+  const chapters = current?.audio?.chapters ?? [];
+  const totalCurrentDuration = current?.audio?.durationSec ?? 0;
 
   return (
     <DashboardLayout>
-      <div className="mx-auto flex max-w-3xl flex-col gap-8 p-4 sm:p-6" dir="rtl">
-        <header className="flex flex-col gap-2">
-          <div className="flex items-center gap-2">
-            <Radio className="h-5 w-5 text-primary" aria-hidden="true" />
-            <h1 className="text-2xl font-bold">نشرة سبق الصوتية</h1>
-          </div>
-          <p className="max-w-prose text-sm text-muted-foreground">
-            جولة مسموعة لأهم الأخبار تظهر تحت الهيدر. يكتب النظام مسودة من الأخبار المنشورة، وتراجعها هنا وتعتمدها، ثم تُسجَّل بصوت الموجز وتُنشر. لا يُسمع شيء قبل الاعتماد، وتختفي النشرة من الموقع بعد 6 ساعات.
-          </p>
-          {message && <p className="text-sm text-primary" role="status">{message}</p>}
-          {data && !data.storageConfigured && <p className="text-sm text-destructive">تخزين الملفات الصوتية غير مضبوط على الخادم، فلن يكتمل الاعتماد.</p>}
-        </header>
-
-        {isLoading && <p className="text-sm text-muted-foreground">جارٍ التحميل…</p>}
-        {isError && <p className="text-sm text-destructive">تعذّر تحميل النشرة.</p>}
-
-        {data && (
-          <>
-            <section className="flex flex-col gap-3" aria-labelledby="live">
-              <h2 id="live" className="text-lg font-semibold">على الموقع الآن</h2>
-              {data.current?.audio ? (
-                <div className="flex flex-col gap-3">
-                  <p className="text-sm">
-                    <span className="font-medium">{data.current.title}</span>
-                    <span className="text-muted-foreground"> · نُشرت {fmtDate(data.current.publishedAt)} · {fmtDuration(data.current.audio.durationSec)} · {PROVIDER[data.current.audio.provider] ?? data.current.audio.provider}</span>
-                    {!data.live && <span className="text-muted-foreground"> · انتهت مدتها ولم تعد ظاهرة</span>}
-                  </p>
-                  <audio controls preload="none" src={data.current.audio.url} className="w-full" />
-                  <div>
-                    <Button variant="outline" size="sm" onClick={() => hide.mutate()} disabled={hide.isPending}>أخفِ النشرة من الموقع</Button>
-                  </div>
+      <div className="mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6" dir="rtl">
+        {/* Executive Broadcast Studio Header */}
+        <Card className="relative overflow-hidden border-border/60 shadow-sm bg-gradient-to-l from-primary/[0.06] via-sky-500/[0.03] to-background">
+          <div className="h-1.5 w-full bg-gradient-to-l from-primary via-sky-500 to-indigo-500" />
+          <CardContent className="p-5 sm:p-6">
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-5">
+              <div className="flex items-start gap-4">
+                <div className="p-3.5 rounded-2xl bg-primary/10 text-primary ring-1 ring-primary/20 shadow-xs shrink-0">
+                  <Radio className="h-7 w-7" />
                 </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">لا توجد نشرة منشورة.</p>
-              )}
-            </section>
-
-            <Separator />
-
-            <section className="flex flex-col gap-4" aria-labelledby="draft">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <h2 id="draft" className="text-lg font-semibold">المسودة</h2>
-                <Button onClick={() => create.mutate()} disabled={busy || draft?.status === "generating"}>
-                  {create.isPending && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
-                  {draft ? "اكتب مسودة جديدة" : "اكتب مسودة الآن"}
-                </Button>
+                <div className="space-y-1.5">
+                  <div className="flex flex-wrap items-center gap-2.5">
+                    <h1 className="text-xl sm:text-2xl font-bold tracking-tight">
+                      استوديو النشرة الصوتية الإخبارية
+                    </h1>
+                    {isLive ? (
+                      <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30 gap-1.5 px-2.5 py-0.5">
+                        <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                        يبث الآن على الموقع · {broadcastWindow.label}
+                      </Badge>
+                    ) : current ? (
+                      <Badge variant="secondary" className="gap-1.5 px-2.5 py-0.5">
+                        <Clock className="h-3.5 w-3.5" />
+                        منشورة سابقاً · انتهت نافذة البث (6 ساعات)
+                      </Badge>
+                    ) : (
+                      <Badge
+                        variant="outline"
+                        className="gap-1.5 px-2.5 py-0.5 text-muted-foreground"
+                      >
+                        خارج الهواء حالياً
+                      </Badge>
+                    )}
+                    {data?.storageConfigured ? (
+                      <Badge
+                        variant="outline"
+                        className="text-xs border-sky-500/30 text-sky-700 dark:text-sky-300 bg-sky-500/5"
+                      >
+                        التخزين السحابي متصل
+                      </Badge>
+                    ) : null}
+                  </div>
+                  <p className="text-sm text-muted-foreground max-w-3xl leading-relaxed">
+                    إعداد وتحرير النصوص الإذاعية بالذكاء الاصطناعي، اختيار الأخبار المرشحة، التحكم في الفصول الصوتية، واعتماد التسجيل الصوتي الفوري في الشريط العلوي لـ {SABQ_VOCALIZED}.
+                  </p>
+                </div>
               </div>
 
-              {!draft && !create.isPending && <p className="text-sm text-muted-foreground">لا توجد مسودة. اكتب واحدة الآن، أو فعّل الجدولة لتُكتب تلقائياً في مواعيدها.</p>}
-              {create.isPending && <p className="text-sm text-muted-foreground">يختار النظام أهم الأخبار ويكتب النص، وقد يستغرق ذلك دقيقة.</p>}
+              {/* Studio Action Toolbar */}
+              <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => refetch()}
+                  disabled={isFetching || busy}
+                  className="gap-1.5"
+                >
+                  <RefreshCw className={`h-4 w-4 ${isFetching ? "animate-spin" : ""}`} />
+                  تحديث
+                </Button>
 
-              {draft && (
-                <div className="flex flex-col gap-5">
-                  <p className="text-sm text-muted-foreground">
-                    {draft.createdBy ? "كُتبت يدوياً" : "كُتبت تلقائياً"} {fmtDate(draft.createdAt)} · {items.length} أخبار · نحو {totalWords} كلمة (قرابة {Math.max(1, Math.round(estimatedMinutes))} دقائق)
-                  </p>
-                  {draft.status === "generating" && (
-                    <p className="flex items-center gap-2 text-sm text-primary"><Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />يجري تسجيل النشرة بالصوت…</p>
+                {current && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => cloneCurrentMutation.mutate()}
+                    disabled={busy}
+                    className="gap-1.5 border-primary/30 hover:bg-primary/5"
+                    data-testid="button-clone-current-bulletin"
+                  >
+                    {cloneCurrentMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Copy className="h-4 w-4 text-primary" />
+                    )}
+                    نسخ النشرة الحالية كمسودة
+                  </Button>
+                )}
+
+                <Button
+                  size="sm"
+                  onClick={() =>
+                    createDraftMutation.mutate({
+                      articleIds:
+                        selectedCandidateIds.length > 0 ? selectedCandidateIds : undefined,
+                      title: selectedEditionTitle || undefined,
+                    })
+                  }
+                  disabled={busy}
+                  className="gap-2 shadow-xs"
+                  data-testid="button-create-bulletin-draft"
+                >
+                  {createDraftMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Sparkles className="h-4 w-4" />
                   )}
-                  {draft.status === "failed" && draft.error && <p className="text-sm text-destructive">{draft.error}</p>}
+                  {selectedCandidateIds.length > 0
+                    ? `توليد مسودة من (${selectedCandidateIds.length}) أخبار محددة`
+                    : draft
+                    ? "إعادة توليد مسودة ذكية"
+                    : "توليد مسودة ذكية الآن"}
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
 
-                  <label className="flex flex-col gap-1.5 text-sm font-medium">
-                    اسم النشرة
-                    <Input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={80} disabled={draft.status === "generating"} />
-                  </label>
+        {/* Alerts & Storage Check */}
+        {data && !data.storageConfigured && (
+          <Card className="border-amber-500/40 bg-amber-500/10">
+            <CardContent className="p-4 flex items-center gap-3 text-sm">
+              <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0" />
+              <div>
+                <p className="font-semibold text-amber-900 dark:text-amber-200">
+                  التخزين السحابي (Cloudflare R2) غير مهيأ في هذه البيئة
+                </p>
+                <p className="text-amber-800/80 dark:text-amber-300/80 text-xs mt-0.5">
+                  يمكنك إنشاء المسودة وتحرير النص الإذاعي بالكامل، لكن تسجيل الصوت ونشر ملف MP3 يتطلب متغيرات R2.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
-                  <p className="border-s-2 border-border ps-3 text-sm text-muted-foreground">{data.intro}</p>
+        {(statusMessage || errorMessage || draft?.error) && (
+          <Card
+            className={
+              errorMessage || draft?.error
+                ? "border-destructive/40 bg-destructive/10"
+                : "border-emerald-500/40 bg-emerald-500/10"
+            }
+          >
+            <CardContent className="p-3.5 px-4 flex items-center justify-between gap-3 text-sm">
+              <div className="flex items-center gap-2.5">
+                {errorMessage || draft?.error ? (
+                  <AlertTriangle className="h-4 w-4 text-destructive shrink-0" />
+                ) : (
+                  <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                )}
+                <span className="font-medium">
+                  {errorMessage || draft?.error || statusMessage}
+                </span>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-xs"
+                onClick={() => {
+                  setStatusMessage(null);
+                  setErrorMessage(null);
+                }}
+              >
+                إغلاق
+              </Button>
+            </CardContent>
+          </Card>
+        )}
 
-                  <ol className="flex flex-col gap-5">
-                    {items.map((item, index) => (
-                      <li key={item.id} className="flex flex-col gap-2">
-                        <div className="flex items-center gap-2">
-                          <span className="w-6 shrink-0 text-sm tabular-nums text-muted-foreground">{index + 1}</span>
-                          <Input aria-label="عنوان الفقرة في المشغّل" value={item.label} maxLength={60} onChange={(e) => patch(item.id, { label: e.target.value })} disabled={draft.status === "generating"} />
-                          <Button variant="ghost" size="icon" aria-label="انقل للأعلى" disabled={index === 0 || draft.status === "generating"} onClick={() => move(index, -1)}><ArrowUp className="h-4 w-4" /></Button>
-                          <Button variant="ghost" size="icon" aria-label="انقل للأسفل" disabled={index === items.length - 1 || draft.status === "generating"} onClick={() => move(index, 1)}><ArrowDown className="h-4 w-4" /></Button>
-                          <Button variant="ghost" size="icon" aria-label="احذف الفقرة" disabled={items.length <= 1 || draft.status === "generating"} onClick={() => setItems((list) => list.filter((i) => i.id !== item.id))}><Trash2 className="h-4 w-4" /></Button>
-                        </div>
-                        <Textarea value={item.text} rows={4} onChange={(e) => patch(item.id, { text: e.target.value })} disabled={draft.status === "generating"} className="leading-7" />
-                        <p className="text-xs text-muted-foreground">
-                          المصدر: {item.articleIds.map((id) => data.sourceTitles[id] ?? "خبر محذوف").join(" · ")}
-                          {item.href && <> · <a href={item.href} target="_blank" rel="noreferrer" className="text-primary hover:underline">افتح الخبر</a></>}
-                        </p>
-                      </li>
-                    ))}
-                  </ol>
-
-                  <p className="border-s-2 border-border ps-3 text-sm text-muted-foreground">{data.outro}</p>
-
-                  <div className="flex flex-wrap gap-2">
-                    <Button variant="outline" onClick={() => save.mutate()} disabled={!dirty || busy || draft.status === "generating"}>احفظ التعديل</Button>
-                    <Button onClick={() => approve.mutate()} disabled={dirty || busy || draft.status === "generating" || !data.storageConfigured}>
-                      {approve.isPending && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
-                      اعتمد وسجّل وانشر
-                    </Button>
-                    <Button variant="ghost" onClick={() => discard.mutate()} disabled={busy || draft.status === "generating"}>احذف المسودة</Button>
+        {isLoading ? (
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+              {[1, 2, 3, 4].map((n) => (
+                <Skeleton key={n} className="h-28 w-full rounded-xl" />
+              ))}
+            </div>
+            <Skeleton className="h-64 w-full rounded-xl" />
+            <Skeleton className="h-96 w-full rounded-xl" />
+          </div>
+        ) : (
+          <>
+            {/* 4-Card Executive KPI Strip */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+              {/* KPI 1: Live Broadcast Status */}
+              <Card className="border-border/60 shadow-xs">
+                <CardContent className="p-4 flex items-start justify-between gap-3">
+                  <div className="space-y-1">
+                    <p className="text-xs font-medium text-muted-foreground">
+                      حالة البث الحي على الموقع
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg font-bold">
+                        {isLive
+                          ? current?.title
+                          : current
+                          ? "منتهية الصلاحية"
+                          : "متوقف حالياً"}
+                      </span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {current
+                        ? `نُشرت ${formatShortTime(current.publishedAt)} · ${broadcastWindow.label}`
+                        : "لا توجد نشرة معروضة للزوار الآن"}
+                    </p>
                   </div>
-                  {dirty && <p className="text-xs text-muted-foreground">احفظ التعديل أولاً، ثم اعتمد.</p>}
-                </div>
-              )}
-            </section>
+                  <div
+                    className={`p-2.5 rounded-xl shrink-0 ${
+                      isLive
+                        ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                        : "bg-muted text-muted-foreground"
+                    }`}
+                  >
+                    <Radio className="h-5 w-5" />
+                  </div>
+                </CardContent>
+              </Card>
 
-            <Separator />
+              {/* KPI 2: Audio Duration & Chapters */}
+              <Card className="border-border/60 shadow-xs">
+                <CardContent className="p-4 flex items-start justify-between gap-3">
+                  <div className="space-y-1">
+                    <p className="text-xs font-medium text-muted-foreground">
+                      مدة البث والفصول الصوتية
+                    </p>
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-xl font-bold tabular-nums">
+                        {current?.audio ? formatDuration(totalCurrentDuration) : "0:00"}
+                      </span>
+                      <span className="text-xs text-muted-foreground">دقيقة</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {current
+                        ? `${current.items.length} فقرات خبرية · ${chapters.length} فصول صوتية`
+                        : "بانتظار اعتماد النشرة القادمة"}
+                    </p>
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-sky-500/10 text-sky-600 dark:text-sky-400 shrink-0">
+                    <ListMusic className="h-5 w-5" />
+                  </div>
+                </CardContent>
+              </Card>
 
-            <section className="flex flex-col gap-3" aria-labelledby="schedule">
-              <h2 id="schedule" className="text-lg font-semibold">الجدولة</h2>
-              <label className="flex items-center gap-3 text-sm">
-                <Switch checked={data.scheduleEnabled} onCheckedChange={(v) => schedule.mutate(v)} disabled={!canSchedule || schedule.isPending} />
-                اكتب مسودة تلقائياً في {data.slots.map((h) => `${h}:00`).join(" و")} بتوقيت الرياض
-              </label>
-              <p className="text-xs text-muted-foreground">المسودة المجدولة تنتظر الاعتماد ولا تُنشر وحدها. {canSchedule ? "" : "تغيير الجدولة لمن يملك صلاحية إعدادات النظام."}</p>
-            </section>
+              {/* KPI 3: Editorial Draft & Candidate Pool */}
+              <Card className="border-border/60 shadow-xs">
+                <CardContent className="p-4 flex items-start justify-between gap-3">
+                  <div className="space-y-1">
+                    <p className="text-xs font-medium text-muted-foreground">
+                      المسودة وبنك الأخبار
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg font-bold">
+                        {isGenerating
+                          ? "جارٍ تسجيل الصوت..."
+                          : draft
+                          ? `مسودة نشطة (#${draft.revision})`
+                          : "لا توجد مسودة"}
+                      </span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {draft
+                        ? `${draftStats.itemCount} فقرات · ~${formatDuration(draftStats.estimatedSeconds)} دقيقة متوقعة`
+                        : `${candidates.length} خبر مرشح من الساعات الأخيرة`}
+                    </p>
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 shrink-0">
+                    <Mic className="h-5 w-5" />
+                  </div>
+                </CardContent>
+              </Card>
 
-            {data.history.length > 0 && (
-              <>
-                <Separator />
-                <section className="flex flex-col gap-3" aria-labelledby="history">
-                  <h2 id="history" className="text-lg font-semibold">النشرات السابقة</h2>
-                  <ul className="flex flex-col divide-y divide-border text-sm">
-                    {data.history.map((h) => (
-                      <li key={h.id} className="flex flex-wrap justify-between gap-2 py-2">
-                        <span>{h.title} · {fmtDate(h.publishedAt)}</span>
-                        <span className="tabular-nums text-muted-foreground">{fmtDuration(h.durationSec)} · {PROVIDER[h.provider] ?? h.provider}{h.hiddenAt ? " · أُخفيت" : ""}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </section>
-              </>
+              {/* KPI 4: Schedule & History */}
+              <Card className="border-border/60 shadow-xs">
+                <CardContent className="p-4 flex items-start justify-between gap-3">
+                  <div className="space-y-1">
+                    <p className="text-xs font-medium text-muted-foreground">
+                      الجدولة الآلية والأرشيف
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg font-bold">
+                        {data?.scheduleEnabled ? "مفعّلة (3 يومياً)" : "يدوي فقط"}
+                      </span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      القادمة: {nextSlot.timeLabel} · {history.length} نشرة بالسجل (متوسط{" "}
+                      {formatDuration(avgHistoryDuration)})
+                    </p>
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 shrink-0">
+                    <Clock className="h-5 w-5" />
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Live On-Air Broadcast Studio Player & Chapter Timeline */}
+            {current?.audio && (
+              <Card className="border-border/60 shadow-xs overflow-hidden">
+                <CardHeader className="pb-3 border-b bg-muted/20">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                    <div className="space-y-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <CardTitle className="text-base sm:text-lg flex items-center gap-2">
+                          <Volume2 className="h-5 w-5 text-primary" />
+                          البث الحي والملف الصوتي المعتمد: {current.title}
+                        </CardTitle>
+                        <Badge variant={isLive ? "default" : "secondary"}>
+                          {isLive ? "معروضة للزوار الآن" : "مخفية / انتهت المدة"}
+                        </Badge>
+                        <Badge variant="outline" className="text-xs">
+                          محرك الصوت: {providerBadgeLabel(current.audio.provider)}
+                        </Badge>
+                      </div>
+                      <CardDescription>
+                        نُشرت في {formatDateTime(current.publishedAt)} · المدة الإجمالية{" "}
+                        {formatDuration(totalCurrentDuration)} دقيقة · اضغط على أي فصل للانتقال الفوري في التسجيل
+                      </CardDescription>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={copyAudioUrl}
+                        className="gap-1.5 text-xs"
+                      >
+                        {copiedUrl ? (
+                          <Check className="h-3.5 w-3.5 text-emerald-600" />
+                        ) : (
+                          <Copy className="h-3.5 w-3.5" />
+                        )}
+                        {copiedUrl ? "تم نسخ الرابط" : "نسخ رابط MP3"}
+                      </Button>
+
+                      <Button variant="outline" size="sm" asChild className="gap-1.5 text-xs">
+                        <a
+                          href={current.audio.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          download
+                        >
+                          <Download className="h-3.5 w-3.5" />
+                          تحميل MP3
+                        </a>
+                      </Button>
+
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => hideMutation.mutate()}
+                        disabled={busy}
+                        className="gap-1.5 text-xs text-destructive hover:text-destructive border-destructive/30 hover:bg-destructive/10"
+                        data-testid="button-hide-bulletin"
+                      >
+                        <EyeOff className="h-3.5 w-3.5" />
+                        إخفاء من الموقع
+                      </Button>
+                    </div>
+                  </div>
+                </CardHeader>
+
+                <CardContent className="p-4 sm:p-5 space-y-5">
+                  {/* Hidden synced HTML5 Audio Element */}
+                  <audio
+                    ref={audioRef}
+                    src={current.audio.url}
+                    preload="metadata"
+                    onPlay={() => setIsPlaying(true)}
+                    onPause={() => setIsPlaying(false)}
+                    onEnded={() => setIsPlaying(false)}
+                    onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
+                    onLoadedMetadata={(e) => {
+                      const d = e.currentTarget.duration;
+                      if (Number.isFinite(d) && d > 0) setAudioDuration(d);
+                    }}
+                  />
+
+                  {/* Custom Studio Transport Bar */}
+                  <div className="rounded-2xl border bg-gradient-to-l from-primary/[0.04] via-background to-muted/30 p-3.5 sm:p-4 flex flex-col md:flex-row md:items-center gap-4">
+                    <div className="flex items-center gap-3">
+                      <Button
+                        type="button"
+                        size="icon"
+                        onClick={togglePlay}
+                        className="h-11 w-11 rounded-xl shadow-xs shrink-0"
+                        aria-label={isPlaying ? "إيقاف مؤقت" : "تشغيل النشرة"}
+                      >
+                        {isPlaying ? (
+                          <Pause className="h-5 w-5" />
+                        ) : (
+                          <Play className="h-5 w-5 fill-current" />
+                        )}
+                      </Button>
+
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold truncate">
+                          {chapters[activeChapterIndex]?.label || current.title}
+                        </p>
+                        <p className="text-xs text-muted-foreground tabular-nums">
+                          {formatDuration(currentTime)} /{" "}
+                          {formatDuration(audioDuration || totalCurrentDuration)}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Interactive Scrubber */}
+                    <div className="flex-1 flex items-center gap-3">
+                      <input
+                        type="range"
+                        min={0}
+                        max={Math.max(1, Math.round(audioDuration || totalCurrentDuration))}
+                        step={0.5}
+                        value={Math.min(currentTime, audioDuration || totalCurrentDuration)}
+                        onChange={(e) => seekTo(Number(e.target.value))}
+                        className="w-full accent-primary cursor-pointer h-2 rounded-lg bg-muted"
+                        aria-label="شريط تقدم النشرة الصوتية"
+                      />
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={cyclePlaybackRate}
+                        className="h-8 px-2.5 text-xs font-mono tabular-nums"
+                        title="سرعة التشغيل"
+                      >
+                        {playbackRate}x
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={toggleMute}
+                        className="h-8 w-8"
+                        aria-label={isMuted ? "إلغاء كتم الصوت" : "كتم الصوت"}
+                      >
+                        {isMuted ? (
+                          <VolumeX className="h-4 w-4 text-muted-foreground" />
+                        ) : (
+                          <Volume2 className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* View Switcher: Interactive Chapters vs Full Published Script */}
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-2.5">
+                    <div className="flex items-center gap-2">
+                      <Button
+                        type="button"
+                        variant={liveViewTab === "chapters" ? "default" : "ghost"}
+                        size="sm"
+                        onClick={() => setLiveViewTab("chapters")}
+                        className="h-8 text-xs gap-1.5"
+                      >
+                        <ListMusic className="h-3.5 w-3.5" />
+                        الفصول الصوتية ({chapters.length})
+                      </Button>
+                      <Button
+                        type="button"
+                        variant={liveViewTab === "script" ? "default" : "ghost"}
+                        size="sm"
+                        onClick={() => setLiveViewTab("script")}
+                        className="h-8 text-xs gap-1.5"
+                      >
+                        <Newspaper className="h-3.5 w-3.5" />
+                        النص الإذاعي الكامل والمصادر ({current.items.length} أخبار)
+                      </Button>
+                    </div>
+
+                    {!draft && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => cloneCurrentMutation.mutate()}
+                        disabled={busy}
+                        className="h-8 text-xs gap-1.5 text-primary"
+                      >
+                        <Wand2 className="h-3.5 w-3.5" />
+                        فتح في محرر المسودة للتعديل
+                      </Button>
+                    )}
+                  </div>
+
+                  {liveViewTab === "chapters" ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+                      {chapters.map((chapter, idx) => {
+                        const isCurrentChapter = activeChapterIndex === idx;
+                        const nextChapter = chapters[idx + 1];
+                        const chapterDuration = nextChapter
+                          ? Math.max(1, Math.round(nextChapter.start - chapter.start))
+                          : Math.max(
+                              1,
+                              Math.round(
+                                (totalCurrentDuration || audioDuration) - chapter.start
+                              )
+                            );
+
+                        return (
+                          <div
+                            key={`${chapter.start}-${idx}`}
+                            onClick={() => seekTo(chapter.start)}
+                            role="button"
+                            tabIndex={0}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" || e.key === " ") {
+                                e.preventDefault();
+                                seekTo(chapter.start);
+                              }
+                            }}
+                            className={`group cursor-pointer rounded-xl border p-3 transition-all flex flex-col justify-between gap-2 ${
+                              isCurrentChapter
+                                ? "border-primary bg-primary/[0.06] shadow-xs ring-1 ring-primary/20"
+                                : "border-border/60 hover:border-primary/40 hover:bg-muted/30"
+                            }`}
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex items-center gap-1.5">
+                                <span
+                                  className={`inline-flex items-center justify-center h-5 w-5 rounded-full text-[11px] font-bold ${
+                                    isCurrentChapter
+                                      ? "bg-primary text-primary-foreground"
+                                      : "bg-muted text-muted-foreground"
+                                  }`}
+                                >
+                                  {idx + 1}
+                                </span>
+                                <span className="text-[11px] font-mono tabular-nums text-muted-foreground">
+                                  {formatDuration(chapter.start)}
+                                </span>
+                              </div>
+                              <Badge
+                                variant="outline"
+                                className="text-[10px] px-1.5 py-0 h-4 tabular-nums"
+                              >
+                                {chapterDuration} ث
+                              </Badge>
+                            </div>
+
+                            <p className="text-xs font-medium leading-snug line-clamp-2 group-hover:text-primary transition-colors">
+                              {chapter.label}
+                            </p>
+
+                            {chapter.href && (
+                              <div className="flex items-center justify-end pt-1">
+                                <a
+                                  href={chapter.href}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="inline-flex items-center gap-1 text-[11px] text-primary hover:underline"
+                                >
+                                  المصدر
+                                  <ExternalLink className="h-3 w-3" />
+                                </a>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="space-y-3 bg-muted/20 rounded-xl p-4 border border-border/60">
+                      <div className="p-3 rounded-lg bg-background border border-border/50">
+                        <span className="text-xs font-semibold text-primary block mb-1">
+                          المقدمة الإذاعية الثابتة:
+                        </span>
+                        <p className="text-sm leading-relaxed">{fixedIntro}</p>
+                      </div>
+
+                      <div className="space-y-2.5">
+                        {current.items.map((item, idx) => (
+                          <div
+                            key={item.id}
+                            className="p-3.5 rounded-lg bg-background border border-border/50 space-y-2"
+                          >
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <div className="flex items-center gap-2">
+                                <Badge variant="secondary" className="text-xs">
+                                  الفقرة {idx + 1}
+                                </Badge>
+                                <span className="text-sm font-semibold">{item.label}</span>
+                              </div>
+                              <span className="text-xs text-muted-foreground">
+                                {countWords(item.text)} كلمة · ~
+                                {estimateSecondsFromWords(countWords(item.text))} ثانية
+                              </span>
+                            </div>
+                            <p className="text-sm leading-relaxed text-foreground/90">
+                              {item.text}
+                            </p>
+                            {item.articleIds.length > 0 && (
+                              <div className="flex flex-wrap items-center gap-2 pt-1 text-xs text-muted-foreground">
+                                <span>المصادر المرتبطة:</span>
+                                {item.articleIds.map((id) => {
+                                  const sourceTitle = sourceTitles[id];
+                                  return (
+                                    <a
+                                      key={id}
+                                      href={item.href || "#"}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="inline-flex items-center gap-1 text-primary hover:underline font-medium"
+                                    >
+                                      {sourceTitle || `خبر #${id.slice(0, 8)}`}
+                                      <ExternalLink className="h-3 w-3" />
+                                    </a>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className="p-3 rounded-lg bg-background border border-border/50">
+                        <span className="text-xs font-semibold text-primary block mb-1">
+                          الخاتمة الإذاعية الثابتة:
+                        </span>
+                        <p className="text-sm leading-relaxed">{fixedOutro}</p>
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
             )}
+
+            {/* Main Studio Workspace: 8 Columns Draft Editor + 4 Columns Candidate Pool & Schedule */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+              {/* Left/Main Column (8 cols): Draft Studio Editor */}
+              <div className="lg:col-span-8 space-y-6">
+                {draft ? (
+                  <Card className="border-border/60 shadow-xs">
+                    <CardHeader className="border-b bg-muted/20 pb-4">
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                        <div className="space-y-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <CardTitle className="text-lg flex items-center gap-2">
+                              <Mic className="h-5 w-5 text-primary" />
+                              استوديو تحرير المسودة الإذاعية
+                            </CardTitle>
+                            <Badge variant="outline">مراجعة #{draft.revision}</Badge>
+                            {isGenerating ? (
+                              <Badge className="bg-sky-500/15 text-sky-700 dark:text-sky-300 border-sky-500/30 gap-1.5">
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                                جارٍ تسجيل الصوت...
+                              </Badge>
+                            ) : hasUnsavedChanges ? (
+                              <Badge className="bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30">
+                                تعديلات غير محفوظة
+                              </Badge>
+                            ) : (
+                              <Badge variant="secondary" className="text-xs">
+                                محفوظة
+                              </Badge>
+                            )}
+                          </div>
+                          <CardDescription>
+                            إجمالي الكلمات: {draftStats.totalWords} كلمة · المدة التقديرية للتسجيل:{" "}
+                            <span className="font-semibold text-foreground">
+                              ~{formatDuration(draftStats.estimatedSeconds)} دقيقة
+                            </span>{" "}
+                            · آخر تحديث: {formatDateTime(draft.updatedAt)}
+                          </CardDescription>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={vocalizeEntireDraft}
+                            disabled={busy}
+                            className="gap-1.5 text-xs"
+                          >
+                            <Wand2 className="h-3.5 w-3.5 text-primary" />
+                            تشكيل «{SABQ_VOCALIZED}» في الكل
+                          </Button>
+
+                          {hasUnsavedChanges && data?.draft && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setDraft(structuredClone(data.draft))}
+                              disabled={busy}
+                              className="gap-1.5 text-xs"
+                            >
+                              <RotateCcw className="h-3.5 w-3.5" />
+                              تراجع
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    </CardHeader>
+
+                    <CardContent className="p-4 sm:p-6 space-y-5">
+                      {/* Edition Title & Preset Pills */}
+                      <div className="space-y-2">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <label className="text-sm font-semibold">عنوان النشرة الصوتية</label>
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            {EDITION_PRESETS.filter((p) => p.value).map((preset) => (
+                              <button
+                                key={preset.value}
+                                type="button"
+                                disabled={busy}
+                                onClick={() => setDraft({ ...draft, title: preset.value })}
+                                className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                                  draft.title === preset.value
+                                    ? "bg-primary text-primary-foreground border-primary"
+                                    : "bg-muted/40 hover:bg-muted border-border/60 text-muted-foreground"
+                                }`}
+                              >
+                                {preset.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                        <Input
+                          value={draft.title}
+                          disabled={busy}
+                          onChange={(e) => setDraft({ ...draft, title: e.target.value })}
+                          placeholder="مثال: نشرة المساء"
+                          className="font-semibold"
+                        />
+                      </div>
+
+                      {/* Fixed Broadcast Intro Reference */}
+                      <div className="rounded-xl border border-border/60 bg-muted/15 p-3.5 space-y-1.5">
+                        <div className="flex items-center justify-between gap-2">
+                          <Badge variant="outline" className="bg-background text-xs">
+                            الافتتاحية الإذاعية (تُقرأ تلقائياً في بداية التسجيل)
+                          </Badge>
+                          <span className="text-xs text-muted-foreground">
+                            {countWords(fixedIntro)} كلمة
+                          </span>
+                        </div>
+                        <p className="text-sm text-muted-foreground leading-relaxed">
+                          {fixedIntro}
+                        </p>
+                      </div>
+
+                      {/* Story Paragraphs List */}
+                      <div className="space-y-3.5">
+                        <div className="flex items-center justify-between">
+                          <h3 className="text-sm font-bold flex items-center gap-2">
+                            <Newspaper className="h-4 w-4 text-primary" />
+                            فقرات الأخبار ({draft.items.length} من 10)
+                          </h3>
+                          <span className="text-xs text-muted-foreground">
+                            يمكنك إضافة أخبار إضافية مباشرة من «بنك الأخبار المرشحة»
+                          </span>
+                        </div>
+
+                        {draft.items.map((item, index) => {
+                          const words = countWords(item.text);
+                          const estSec = estimateSecondsFromWords(words);
+                          return (
+                            <div
+                              key={item.id}
+                              className="rounded-xl border border-border/70 bg-card p-4 space-y-3 shadow-2xs hover:border-primary/30 transition-colors"
+                            >
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <div className="flex items-center gap-2">
+                                  <span className="inline-flex items-center justify-center h-6 w-6 rounded-full bg-primary/10 text-primary text-xs font-bold">
+                                    {index + 1}
+                                  </span>
+                                  <span className="text-sm font-semibold">
+                                    الفقرة الخبرية {index + 1}
+                                  </span>
+                                  <Badge variant="secondary" className="text-[11px] font-normal">
+                                    {words} كلمة · ~{estSec} ثانية
+                                  </Badge>
+                                </div>
+
+                                <div className="flex items-center gap-1">
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    disabled={busy}
+                                    className="h-7 text-xs"
+                                    onClick={() =>
+                                      updateItem(index, {
+                                        label: vocalizeAllSabqOccurrences(item.label),
+                                        text: vocalizeSabq(item.text),
+                                      })
+                                    }
+                                  >
+                                    تشكيل {SABQ_VOCALIZED}
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-7 w-7"
+                                    disabled={busy || index === 0}
+                                    onClick={() => moveItem(index, -1)}
+                                    aria-label="تحريك لأعلى"
+                                  >
+                                    <ArrowUp className="h-3.5 w-3.5" />
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-7 w-7"
+                                    disabled={busy || index === draft.items.length - 1}
+                                    onClick={() => moveItem(index, 1)}
+                                    aria-label="تحريك لأسفل"
+                                  >
+                                    <ArrowDown className="h-3.5 w-3.5" />
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-7 w-7 text-destructive hover:text-destructive"
+                                    disabled={busy || draft.items.length <= 1}
+                                    onClick={() => removeItem(index)}
+                                    aria-label="حذف الفقرة"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </Button>
+                                </div>
+                              </div>
+
+                              <div className="space-y-1.5">
+                                <label className="text-xs text-muted-foreground">
+                                  عنوان الفصل الصوتي (يظهر للمستمع في شريط الفصول — حتى 60 حرفاً)
+                                </label>
+                                <Input
+                                  value={item.label}
+                                  disabled={busy}
+                                  maxLength={60}
+                                  onChange={(e) => updateItem(index, { label: e.target.value })}
+                                  placeholder="عنوان موجز للخبر"
+                                  className="h-9 text-sm"
+                                />
+                              </div>
+
+                              <div className="space-y-1.5">
+                                <label className="text-xs text-muted-foreground">
+                                  النص الإذاعي للفقرة (يُقرأ صوتياً)
+                                </label>
+                                <Textarea
+                                  rows={3}
+                                  value={item.text}
+                                  disabled={busy}
+                                  onChange={(e) => updateItem(index, { text: e.target.value })}
+                                  className="text-sm leading-relaxed"
+                                />
+                              </div>
+
+                              {item.articleIds.length > 0 && (
+                                <div className="flex flex-wrap items-center gap-2 pt-1 text-xs text-muted-foreground border-t border-border/40">
+                                  <span>المصدر الخبري:</span>
+                                  {item.articleIds.map((id) => {
+                                    const sourceTitle = sourceTitles[id];
+                                    return (
+                                      <a
+                                        key={id}
+                                        href={item.href || "#"}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="inline-flex items-center gap-1 text-primary hover:underline font-medium"
+                                      >
+                                        {sourceTitle || `#${id.slice(0, 8)}`}
+                                        <ExternalLink className="h-3 w-3" />
+                                      </a>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* Fixed Broadcast Outro Reference */}
+                      <div className="rounded-xl border border-border/60 bg-muted/15 p-3.5 space-y-1.5">
+                        <div className="flex items-center justify-between gap-2">
+                          <Badge variant="outline" className="bg-background text-xs">
+                            الخاتمة الإذاعية (تُقرأ تلقائياً في نهاية التسجيل)
+                          </Badge>
+                          <span className="text-xs text-muted-foreground">
+                            {countWords(fixedOutro)} كلمة
+                          </span>
+                        </div>
+                        <p className="text-sm text-muted-foreground leading-relaxed">
+                          {fixedOutro}
+                        </p>
+                      </div>
+
+                      {/* Draft Studio Footer Actions */}
+                      <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t">
+                        <div className="flex flex-wrap items-center gap-2.5">
+                          <Button
+                            onClick={() => approveMutation.mutate(draft)}
+                            disabled={busy || !data?.storageConfigured}
+                            className="gap-2 shadow-xs"
+                            data-testid="button-approve-bulletin"
+                          >
+                            {approveMutation.isPending || isGenerating ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <CheckCircle2 className="h-4 w-4" />
+                            )}
+                            {isGenerating
+                              ? "جارٍ تسجيل الصوت والنشر..."
+                              : "اعتماد وتسجيل ونشر فوري"}
+                          </Button>
+
+                          <Button
+                            variant="outline"
+                            onClick={() => saveDraftMutation.mutate(draft)}
+                            disabled={busy}
+                            className="gap-2"
+                            data-testid="button-save-bulletin-draft"
+                          >
+                            {saveDraftMutation.isPending ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Save className="h-4 w-4" />
+                            )}
+                            حفظ التعديلات
+                          </Button>
+                        </div>
+
+                        <Button
+                          variant="ghost"
+                          onClick={() => discardMutation.mutate()}
+                          disabled={busy}
+                          className="text-destructive hover:text-destructive hover:bg-destructive/10 gap-1.5"
+                          data-testid="button-discard-bulletin-draft"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                          حذف المسودة
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ) : (
+                  /* Empty Draft State: Interactive Studio Launchpad */
+                  <Card className="border-border/60 shadow-xs">
+                    <CardHeader className="border-b bg-muted/15">
+                      <CardTitle className="text-lg flex items-center gap-2">
+                        <Sparkles className="h-5 w-5 text-primary" />
+                        إعداد مسودة نشرة صوتية جديدة
+                      </CardTitle>
+                      <CardDescription>
+                        اختر عنوان النشرة وحدّد أخباراً بعينها من بنك الأخبار المرشحة أو دع الذكاء الاصطناعي يختار أهم 5 إلى 8 أخبار من الساعات الأخيرة.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="p-5 sm:p-6 space-y-5">
+                      <div className="space-y-2.5">
+                        <label className="text-sm font-semibold block">
+                          1. اختر فترة / عنوان النشرة القادمة
+                        </label>
+                        <div className="flex flex-wrap gap-2">
+                          {EDITION_PRESETS.map((preset) => (
+                            <button
+                              key={preset.label}
+                              type="button"
+                              onClick={() => setSelectedEditionTitle(preset.value)}
+                              className={`text-xs sm:text-sm px-3.5 py-2 rounded-xl border font-medium transition-all ${
+                                selectedEditionTitle === preset.value
+                                  ? "bg-primary text-primary-foreground border-primary shadow-2xs"
+                                  : "bg-muted/30 hover:bg-muted border-border/60 text-foreground"
+                              }`}
+                            >
+                              {preset.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="rounded-xl border border-border/60 bg-muted/20 p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                        <div className="space-y-1">
+                          <p className="text-sm font-semibold">
+                            2. منهجية اختيار الأخبار:{" "}
+                            {selectedCandidateIds.length > 0 ? (
+                              <span className="text-primary">
+                                اختيار يدوي ({selectedCandidateIds.length} أخبار محددة من البنك)
+                              </span>
+                            ) : (
+                              <span className="text-emerald-600 dark:text-emerald-400">
+                                اختيار ذكي تلقائي (الأخبار العاجلة والمميزة والأعلى قراءة)
+                              </span>
+                            )}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            يمكنك تحديد أخبار معينة من قائمة «بنك الأخبار المرشحة» في العمود المجاور قبل التوليد.
+                          </p>
+                        </div>
+                        {selectedCandidateIds.length > 0 && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setSelectedCandidateIds([])}
+                            className="text-xs shrink-0"
+                          >
+                            إلغاء التحديد ({selectedCandidateIds.length})
+                          </Button>
+                        )}
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-3 pt-2">
+                        <Button
+                          onClick={() =>
+                            createDraftMutation.mutate({
+                              articleIds:
+                                selectedCandidateIds.length > 0
+                                  ? selectedCandidateIds
+                                  : undefined,
+                              title: selectedEditionTitle || undefined,
+                            })
+                          }
+                          disabled={busy}
+                          className="gap-2"
+                        >
+                          {createDraftMutation.isPending ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Sparkles className="h-4 w-4" />
+                          )}
+                          {selectedCandidateIds.length > 0
+                            ? `توليد المسودة من (${selectedCandidateIds.length}) أخبار محددة`
+                            : "توليد مسودة ذكية الآن"}
+                        </Button>
+
+                        {current && (
+                          <Button
+                            variant="outline"
+                            onClick={() => cloneCurrentMutation.mutate()}
+                            disabled={busy}
+                            className="gap-2"
+                          >
+                            {cloneCurrentMutation.isPending ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Copy className="h-4 w-4 text-primary" />
+                            )}
+                            نسخ النشرة الحالية للتعديل عليها
+                          </Button>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
+
+              {/* Right/Side Column (4 cols): Candidate News Pool + Schedule + History */}
+              <div className="lg:col-span-4 space-y-6">
+                {/* 1. Candidate News Pool Card */}
+                <Card className="border-border/60 shadow-xs">
+                  <CardHeader className="pb-3 border-b bg-muted/15">
+                    <div className="flex items-center justify-between gap-2">
+                      <CardTitle className="text-base flex items-center gap-2">
+                        <Newspaper className="h-4 w-4 text-primary" />
+                        بنك الأخبار المرشحة للنشرة
+                      </CardTitle>
+                      <Badge variant="secondary" className="text-xs">
+                        {candidates.length} خبر
+                      </Badge>
+                    </div>
+                    <CardDescription className="text-xs">
+                      {draft
+                        ? "اضغط «+ أضف للمسودة» لإدراج أي خبر مباشرة كفقرة جديدة في المسودة المفتوحة."
+                        : "حدد الأخبار التي ترغب في تضمينها قبل الضغط على «توليد مسودة ذكية»."}
+                    </CardDescription>
+                  </CardHeader>
+
+                  <CardContent className="p-3.5 space-y-3">
+                    <div className="relative">
+                      <Search className="h-3.5 w-3.5 text-muted-foreground absolute right-3 top-1/2 -translate-y-1/2" />
+                      <Input
+                        value={candidateSearch}
+                        onChange={(e) => setCandidateSearch(e.target.value)}
+                        placeholder="ابحث في الأخبار المرشحة..."
+                        className="h-8 pr-8 text-xs"
+                      />
+                    </div>
+
+                    {filteredCandidates.length === 0 ? (
+                      <p className="text-xs text-muted-foreground text-center py-6">
+                        لا توجد أخبار مرشحة مطابقة للبحث حالياً.
+                      </p>
+                    ) : (
+                      <div className="space-y-2 max-h-[380px] overflow-y-auto pl-1">
+                        {filteredCandidates.map((story) => {
+                          const isAlreadyInDraft = draftArticleIds.has(story.id);
+                          const isSelectedForNewDraft = selectedCandidateIds.includes(
+                            story.id
+                          );
+
+                          return (
+                            <div
+                              key={story.id}
+                              className={`rounded-xl border p-2.5 text-xs space-y-2 transition-all ${
+                                isAlreadyInDraft
+                                  ? "border-emerald-500/30 bg-emerald-500/[0.04]"
+                                  : isSelectedForNewDraft
+                                  ? "border-primary bg-primary/[0.05]"
+                                  : "border-border/60 hover:border-border"
+                              }`}
+                            >
+                              <div className="flex items-start justify-between gap-2">
+                                <p className="font-medium leading-snug text-foreground line-clamp-2">
+                                  {story.title}
+                                </p>
+                                <a
+                                  href={story.href}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="text-muted-foreground hover:text-primary shrink-0 mt-0.5"
+                                  title="فتح الخبر"
+                                >
+                                  <ExternalLink className="h-3.5 w-3.5" />
+                                </a>
+                              </div>
+
+                              <div className="flex flex-wrap items-center justify-between gap-1.5">
+                                <div className="flex flex-wrap items-center gap-1">
+                                  {story.newsType === "breaking" && (
+                                    <Badge
+                                      variant="destructive"
+                                      className="text-[10px] px-1.5 py-0 h-4 gap-0.5"
+                                    >
+                                      <Flame className="h-2.5 w-2.5" />
+                                      عاجل
+                                    </Badge>
+                                  )}
+                                  {story.isFeatured && (
+                                    <Badge
+                                      variant="outline"
+                                      className="text-[10px] px-1.5 py-0 h-4 gap-0.5 border-amber-500/40 text-amber-600"
+                                    >
+                                      <Star className="h-2.5 w-2.5" />
+                                      مميز
+                                    </Badge>
+                                  )}
+                                  {story.category && (
+                                    <Badge
+                                      variant="secondary"
+                                      className="text-[10px] px-1.5 py-0 h-4"
+                                    >
+                                      {story.category}
+                                    </Badge>
+                                  )}
+                                  <span className="text-[10px] text-muted-foreground">
+                                    {formatShortTime(story.publishedAt)}
+                                  </span>
+                                </div>
+
+                                {draft ? (
+                                  isAlreadyInDraft ? (
+                                    <Badge
+                                      variant="outline"
+                                      className="text-[10px] border-emerald-500/40 text-emerald-600 h-5"
+                                    >
+                                      مُدرج بالمسودة
+                                    </Badge>
+                                  ) : (
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      size="sm"
+                                      disabled={busy}
+                                      onClick={() => addCandidateToDraft(story)}
+                                      className="h-6 px-2 text-[11px] gap-1 border-primary/30 text-primary hover:bg-primary/10"
+                                    >
+                                      <Plus className="h-3 w-3" />
+                                      أضف للمسودة
+                                    </Button>
+                                  )
+                                ) : (
+                                  <Button
+                                    type="button"
+                                    variant={isSelectedForNewDraft ? "default" : "outline"}
+                                    size="sm"
+                                    onClick={() => toggleCandidateSelection(story.id)}
+                                    className="h-6 px-2 text-[11px] gap-1"
+                                  >
+                                    {isSelectedForNewDraft ? (
+                                      <>
+                                        <Check className="h-3 w-3" />
+                                        محدد
+                                      </>
+                                    ) : (
+                                      "تحديد للنشرة"
+                                    )}
+                                  </Button>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* 2. Automated Broadcast Schedule Card */}
+                <Card className="border-border/60 shadow-xs">
+                  <CardHeader className="pb-3 border-b bg-muted/15">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="space-y-0.5">
+                        <CardTitle className="text-base flex items-center gap-2">
+                          <Clock className="h-4 w-4 text-primary" />
+                          الجدولة الآلية للنشرة
+                        </CardTitle>
+                        <CardDescription className="text-xs">
+                          توليد مسودة تلقائي بتوقيت الرياض
+                        </CardDescription>
+                      </div>
+                      <Switch
+                        checked={Boolean(data?.scheduleEnabled)}
+                        disabled={!canManageSchedule || scheduleMutation.isPending}
+                        onCheckedChange={(checked) => scheduleMutation.mutate(checked)}
+                        data-testid="switch-bulletin-schedule"
+                      />
+                    </div>
+                  </CardHeader>
+                  <CardContent className="p-3.5 space-y-2.5">
+                    {SCHEDULE_SLOTS.map((slot) => {
+                      const isNext = nextSlot.hour === slot.hour;
+                      return (
+                        <div
+                          key={slot.hour}
+                          className={`rounded-xl border p-2.5 flex items-center justify-between text-xs ${
+                            isNext && data?.scheduleEnabled
+                              ? "border-primary/40 bg-primary/[0.05]"
+                              : "border-border/50 bg-muted/10"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <span
+                              className={`h-2 w-2 rounded-full ${
+                                isNext && data?.scheduleEnabled
+                                  ? "bg-primary animate-pulse"
+                                  : "bg-muted-foreground/40"
+                              }`}
+                            />
+                            <div>
+                              <p className="font-semibold">{slot.label}</p>
+                              <p className="text-[11px] text-muted-foreground">{slot.period}</p>
+                            </div>
+                          </div>
+                          <div className="text-left">
+                            <Badge
+                              variant={
+                                isNext && data?.scheduleEnabled ? "default" : "outline"
+                              }
+                              className="text-[11px] tabular-nums"
+                            >
+                              {slot.timeLabel}
+                            </Badge>
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {!canManageSchedule && (
+                      <p className="text-[11px] text-muted-foreground pt-1">
+                        تعديل حالة الجدولة يتطلب صلاحية إدارة إعدادات النظام.
+                      </p>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* 3. Broadcast History Card */}
+                <Card className="border-border/60 shadow-xs">
+                  <CardHeader className="pb-3 border-b bg-muted/15">
+                    <div className="flex items-center justify-between gap-2">
+                      <CardTitle className="text-base flex items-center gap-2">
+                        <History className="h-4 w-4 text-primary" />
+                        سجل النشرات المسجلة
+                      </CardTitle>
+                      <Badge variant="outline" className="text-xs">
+                        {history.length} نشرة
+                      </Badge>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="p-3.5 space-y-3">
+                    {history.length > 4 && (
+                      <div className="relative">
+                        <Search className="h-3.5 w-3.5 text-muted-foreground absolute right-3 top-1/2 -translate-y-1/2" />
+                        <Input
+                          value={historySearch}
+                          onChange={(e) => setHistorySearch(e.target.value)}
+                          placeholder="تصفية السجل..."
+                          className="h-8 pr-8 text-xs"
+                        />
+                      </div>
+                    )}
+
+                    {filteredHistory.length === 0 ? (
+                      <p className="text-xs text-muted-foreground text-center py-4">
+                        لا توجد نشرات مسجلة في السجل بعد.
+                      </p>
+                    ) : (
+                      <div className="space-y-2 max-h-[320px] overflow-y-auto pl-1">
+                        {filteredHistory.map((entry) => (
+                          <div
+                            key={entry.id}
+                            className="rounded-xl border border-border/60 p-2.5 text-xs space-y-1.5 hover:bg-muted/20 transition-colors"
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="font-semibold text-foreground flex items-center gap-1.5">
+                                <FileAudio className="h-3.5 w-3.5 text-primary shrink-0" />
+                                {entry.title}
+                              </span>
+                              <div className="flex items-center gap-1">
+                                <Badge
+                                  variant="secondary"
+                                  className="text-[10px] px-1.5 py-0 h-4 tabular-nums"
+                                >
+                                  {formatDuration(entry.durationSec)} د
+                                </Badge>
+                                <Badge
+                                  variant="outline"
+                                  className="text-[10px] px-1.5 py-0 h-4"
+                                >
+                                  {providerBadgeLabel(entry.provider)}
+                                </Badge>
+                              </div>
+                            </div>
+                            <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                              <span>{formatDateTime(entry.publishedAt)}</span>
+                              {entry.hiddenAt ? (
+                                <span className="text-amber-600">أُخفيت يدوياً</span>
+                              ) : entry.itemCount ? (
+                                <span>{entry.itemCount} فقرات</span>
+                              ) : null}
+                            </div>
+                            {entry.audioUrl && (
+                              <audio
+                                controls
+                                preload="none"
+                                src={entry.audioUrl}
+                                className="w-full h-7 mt-1"
+                              />
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
           </>
         )}
       </div>

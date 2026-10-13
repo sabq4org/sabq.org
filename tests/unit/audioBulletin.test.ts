@@ -4,17 +4,20 @@ vi.mock("../../server/db", () => ({ db: {} }));
 vi.mock("../../server/storage", () => ({ storage: { getSystemSetting: vi.fn(), upsertSystemSetting: vi.fn() } }));
 vi.mock("../../server/ai/gateway", () => ({ aiGateway: { complete: vi.fn() } }));
 
+import { storage } from "../../server/storage";
 import { joinPcm, parseWav, pcmDurationSec, wavFromPcm, type PcmAudio } from "../../server/services/audioBulletinAudio";
 import {
   BULLETIN_INTRO,
   BULLETIN_OUTRO,
   bulletinChapters,
   bulletinParagraphs,
+  cloneCurrentToDraft,
   dueSlot,
   editionTitle,
   parseScript,
   publicBulletin,
   rankCandidates,
+  updateBulletinDraft,
   vowelSabq,
   type Bulletin,
   type BulletinState,
@@ -139,5 +142,60 @@ describe("bulletin schedule and visibility", () => {
     const state: BulletinState = { version: 1, scheduleEnabled: false, lastScheduledSlot: null, draft: null, current, history: [] };
     expect(publicBulletin(state, Date.parse(publishedAt) + 5 * 3600_000)?.audioUrl).toContain("b1.mp3");
     expect(publicBulletin(state, Date.parse(publishedAt) + 7 * 3600_000)).toBeNull();
+  });
+
+  it("clones current published bulletin into an editable draft and allows adding candidate stories", async () => {
+    let savedState: BulletinState = {
+      version: 1,
+      scheduleEnabled: false,
+      lastScheduledSlot: null,
+      draft: null,
+      current: {
+        id: "pub-1",
+        title: "نشرة المساء",
+        status: "published",
+        revision: 3,
+        items: [{ id: "item-1", articleIds: ["art-1"], href: "/article/1", label: "خبر أول", text: "تفاصيل الخبر الأول في نشرة المساء." }],
+        createdAt: "2026-10-14T18:00:00.000Z",
+        createdBy: "u1",
+        updatedAt: "2026-10-14T18:00:00.000Z",
+        updatedBy: "u1",
+        approvedAt: "2026-10-14T18:01:00.000Z",
+        approvedBy: "u1",
+        publishedAt: "2026-10-14T18:02:00.000Z",
+        error: null,
+        audio: { url: "https://media.sabq.org/audio-bulletin/pub-1.mp3", contentType: "audio/mpeg", durationSec: 95, bytes: 1000, provider: "gemini", chapters: [] },
+      },
+      history: [],
+    };
+    vi.mocked(storage.getSystemSetting).mockImplementation(async () => structuredClone(savedState) as never);
+    vi.mocked(storage.upsertSystemSetting).mockImplementation(async (_k, val) => {
+      savedState = structuredClone(val as unknown as BulletinState);
+      return undefined as never;
+    });
+
+    const cloned = await cloneCurrentToDraft("editor-2");
+    expect(cloned.status).toBe("draft");
+    expect(cloned.revision).toBe(1);
+    expect(cloned.audio).toBeNull();
+    expect(cloned.items).toHaveLength(1);
+
+    const updated = await updateBulletinDraft({
+      revision: 1,
+      title: "نشرة المساء المحدثة",
+      items: [
+        ...cloned.items,
+        {
+          id: "item-new",
+          label: "خبر ثانٍ مضاف",
+          text: "نص الخبر الثاني المضاف مباشرة من بنك الأخبار المرشحة.",
+          articleIds: ["art-2"],
+          href: "/article/2",
+        },
+      ],
+    }, "editor-2");
+    expect(updated.revision).toBe(2);
+    expect(updated.items).toHaveLength(2);
+    expect(updated.items[1].articleIds).toEqual(["art-2"]);
   });
 });
