@@ -47,9 +47,9 @@ describe("Image Model Router & Intent Engine", () => {
       expect(result.provider).toBe("recraft");
     });
 
-    it("suggests Gemini 3.1 Flash for breaking banners", () => {
+    it("suggests the default fast model (Nano Banana 2.1) for breaking banners", () => {
       const result = suggestOptimalModel("breaking_banner");
-      expect(result.model).toBe("gemini-3.1-flash-image-preview");
+      expect(result.model).toBe("gemini-nano-banana-2.1");
       expect(result.provider).toBe("google");
     });
 

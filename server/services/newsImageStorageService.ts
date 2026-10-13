@@ -6,6 +6,7 @@ import {
   S3Client,
 } from "@aws-sdk/client-s3";
 import sharp from "sharp";
+import { isAiGeneratedImagePurpose, withAiProvenance } from "../utils/aiImageProvenance";
 import {
   cloudflareImagesService,
   type CloudflareUploadResult,
@@ -182,7 +183,7 @@ function safeMetadataValue(value: string): string {
   return value.replace(/[^\x20-\x7E]/g, "_").slice(0, 256);
 }
 
-async function prepareR2Objects(
+export async function prepareR2Objects(
   input: NewsImageUploadInput,
   prefix: string,
 ): Promise<{
@@ -193,6 +194,9 @@ async function prepareR2Objects(
   height?: number;
 }> {
   const originalExtension = extensionForMimeType(input.mimeType);
+  // Re-encoding drops all metadata, so AI-generated renditions get the IPTC
+  // trainedAlgorithmicMedia tag written back (Google Search guidance).
+  const aiGenerated = isAiGeneratedImagePurpose(input.purpose);
   const originalKey = `${prefix}/original.${originalExtension}`;
   const original: PreparedObject = {
     key: originalKey,
@@ -217,15 +221,18 @@ async function prepareR2Objects(
   ).sort((a, b) => a - b);
 
   const variants = await Promise.all(
-    widths.map(async (width): Promise<PreparedObject> => ({
-      key: `${prefix}/w${width}.webp`,
-      body: await sharp(input.buffer, { failOn: "truncated" })
-        .rotate()
-        .resize({ width, fit: "inside", withoutEnlargement: true })
-        .webp({ quality: 82, effort: 4, smartSubsample: true })
-        .toBuffer(),
-      contentType: "image/webp",
-    })),
+    widths.map(async (width): Promise<PreparedObject> => {
+      const pipeline = sharp(input.buffer, { failOn: "truncated" });
+      return {
+        key: `${prefix}/w${width}.webp`,
+        body: await (aiGenerated ? withAiProvenance(pipeline) : pipeline)
+          .rotate()
+          .resize({ width, fit: "inside", withoutEnlargement: true })
+          .webp({ quality: 82, effort: 4, smartSubsample: true })
+          .toBuffer(),
+        contentType: "image/webp",
+      };
+    }),
   );
 
   return {
