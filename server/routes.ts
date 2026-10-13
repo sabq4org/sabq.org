@@ -11658,7 +11658,13 @@ Respond in valid JSON format only:
   app.get("/api/analytics/user-behavior", async (req, res) => {
     try {
       const range = (req.query.range as string) || "7d";
+      const cacheKey = `analytics:user-behavior:${range}`;
+      const cached = memoryCache.get(cacheKey);
+      if (cached) {
+        return res.json(cached);
+      }
       const analytics = await storage.getUserBehaviorAnalytics(range);
+      memoryCache.set(cacheKey, analytics, CACHE_TTL.SHORT);
       res.json(analytics);
     } catch (error) {
       console.error("Error fetching user behavior analytics:", error);
@@ -25044,8 +25050,8 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
           eq(articles.hideFromHomepage, false),
             gte(articles.publishedAt, thirtyDaysAgo)
           ))
-          .orderBy(desc(articles.views))
-          .orderBy(desc(articles.publishedAt)).limit(10);
+          .orderBy(desc(articles.views), desc(articles.publishedAt))
+          .limit(10);
 
         // Calculate view changes for each article (compare with previous 30 days)
         const enrichedArticles = await Promise.all(
