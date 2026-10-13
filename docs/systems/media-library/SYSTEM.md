@@ -19,6 +19,8 @@
 - اختبارات `mediaStoreWebhook.test.ts` تمر عبر ترتيب Express الفعلي (JSON ثم CSRF ثم الراوتر)، بمفاتيح وبيانات صناعية وRetrieve Charge وهمي؛ لم تُنفذ دفعة مالية أو مكالمة Tap حية.
 - المساران القديمان `/api/payments/webhook` و`/api/advertiser-payments/webhook` خارج هذه الدفعة، ويحتاجان مراجعة مستقلة لعقد التوقيع وترتيب middleware؛ لم يتغير `tapPaymentService.verifyWebhookSignature` المشترك.
 
+- **وسم الصور المولدة في نسخ R2 (2026-10-13):** `prepareR2Objects` يكتب وسم IPTC `trainedAlgorithmicMedia` (XMP) في كل نسخة WebP إن كان الغرض ينتهي بـ`-ai-generated` أو `-openai-generated` (`isAiGeneratedImagePurpose`). الصور الحقيقية لا تُوسم، والأصل يُحفظ كما رُفع دون تغيير.
+
 ## عند التعديل
 - [ ] قرأت هذا الملف + runbook R2 عند لمس التخزين
 

@@ -9,6 +9,7 @@ import { ObjectStorageService } from "../objectStorage";
 import pRetry, { AbortError } from "p-retry";
 import { normalizeProviderError } from "../ai/gateway/errors";
 import { newsImageStorageService } from "./newsImageStorageService";
+import { withAiProvenance } from "../utils/aiImageProvenance";
 import { DEFAULT_IMAGE_MODEL, LEGACY_IMAGE_MODEL } from "@shared/imageStyles";
 
 // Validate required environment variables - Try both possible key names
@@ -54,8 +55,9 @@ function isModelUnavailableError(error: any): boolean {
 const MODEL_IMAGE_COSTS: Record<string, { standard: number; fourK: number }> = {
   "gemini-3-pro-image-preview": { standard: 0.134, fourK: 0.24 },
   "gemini-3.1-flash-image-preview": { standard: 0.067, fourK: 0.067 },
-  // تقدير مؤقت بسعر Nano Banana 2 حتى تنشر قوقل سعر 2.1
-  "gemini-nano-banana-2.1": { standard: 0.067, fourK: 0.067 },
+  // سعر قوقل المعلن 2026-10-06: 0.0336 (1K) و0.0504 (2K)؛ مصادر 4K متضاربة
+  // (0.0756 أو 0.113) فنأخذ الأعلى. standard يغطي 1K و2K فنحسبه بسعر 2K.
+  "gemini-nano-banana-2.1": { standard: 0.0504, fourK: 0.113 },
   "recraft-v3": { standard: 0.08, fourK: 0.08 },
   "flux-1.1-pro": { standard: 0.05, fourK: 0.05 },
   "ideogram-2": { standard: 0.08, fourK: 0.08 },
@@ -209,9 +211,9 @@ export async function generateImage(
     // المطلوب غير متاح لدى المزود (حماية الإنتاج من معرّف نموذج خاطئ في الإعدادات)
     let modelUsed = request.model?.trim() || LEGACY_IMAGE_MODEL;
     const GOOGLE_MODEL_MAP: Record<string, string> = {
-      "recraft-v3": "gemini-3.1-flash-image-preview",
+      "recraft-v3": DEFAULT_IMAGE_MODEL,
       "flux-1.1-pro": "gemini-3-pro-image-preview",
-      "ideogram-2": "gemini-3.1-flash-image-preview",
+      "ideogram-2": DEFAULT_IMAGE_MODEL,
     };
     const executionModel = GOOGLE_MODEL_MAP[modelUsed] || modelUsed;
     // وسم السجل «Nano Banana Pro» عام — هذا السطر هو الدليل على النموذج الفعلي
@@ -426,7 +428,7 @@ export async function uploadImageToStorage(
     const uniqueBase = `${baseName}_${timestamp}`;
     
     // Convert to WebP with smart compression (maintains quality, reduces size by ~30-50%)
-    const webpBuffer = await sharp(originalBuffer)
+    const webpBuffer = await withAiProvenance(sharp(originalBuffer))
       .webp({ 
         quality: 85,
         effort: 6,
@@ -435,7 +437,7 @@ export async function uploadImageToStorage(
       .toBuffer();
     
     // Generate thumbnail (640x360 for 16:9 ratio)
-    const thumbnailBuffer = await sharp(originalBuffer)
+    const thumbnailBuffer = await withAiProvenance(sharp(originalBuffer))
       .resize(640, 360, { fit: 'cover', position: 'center' })
       .webp({ quality: 80 })
       .toBuffer();

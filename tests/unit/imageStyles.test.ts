@@ -248,6 +248,28 @@ describe("resolveImageModel — النمط التوضيحي المعتمد", () 
   });
 });
 
+describe("النموذج الافتراضي بعد إيقاف Nano Banana 2 (2026-10-13)", () => {
+  const deprecated = "gemini-3.1-flash-image-preview";
+
+  it("الافتراضي المزروع هو Nano Banana 2.1", () => {
+    expect(DEFAULT_IMAGE_MODEL).toBe("gemini-nano-banana-2.1");
+  });
+
+  it("إعداد محفوظ بالنموذج الموقوف يتحول إلى 2.1 عند التطبيع وعند الحسم", () => {
+    const raw = { ...DEFAULT_IMAGE_STYLE_SETTINGS, defaultModel: deprecated };
+    expect(normalizeImageStyleSettings(raw).defaultModel).toBe("gemini-nano-banana-2.1");
+    expect(resolveImageModel(makeSettings([makeStyle()], deprecated), makeStyle())).toBe(
+      "gemini-nano-banana-2.1"
+    );
+  });
+
+  it("اختيار المحرر الصريح أو نموذج النمط لا يُغيَّر", () => {
+    const settings = makeSettings([makeStyle()], deprecated);
+    expect(resolveImageModel(settings, makeStyle(), deprecated)).toBe(deprecated);
+    expect(resolveImageModel(settings, makeStyle({ params: { model: deprecated } }))).toBe(deprecated);
+  });
+});
+
 describe("toEditorImageStyle — الشكل المكشوف للمحرر", () => {
   it("لا يسرّب نصوص البرومبت ويكشف شارات السياق المفعّلة فقط", () => {
     const style = normalizeImageStyleSettings(DEFAULT_IMAGE_STYLE_SETTINGS).styles[0];

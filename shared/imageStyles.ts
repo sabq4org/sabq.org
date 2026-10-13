@@ -27,7 +27,7 @@ export const IMAGE_STYLE_SETTINGS_KEY = "image_generation_styles";
 export const KNOWN_IMAGE_MODELS = [
   {
     id: "gemini-3.1-flash-image-preview",
-    label: "Nano Banana 2 — Gemini 3.1 Flash Image (سريع ومتوازن)",
+    label: "Nano Banana 2 — Gemini 3.1 Flash Image (أوقفت قوقل دعمه، استخدم 2.1)",
     provider: "google",
     specialty: "general_fast",
     recommendedFor: "الأخبار العامة والتوليد التلقائي السريع",
@@ -74,8 +74,19 @@ export const KNOWN_IMAGE_MODELS = [
 /** نوع المهمة البصرية لتوجيه النموذج الأمثل */
 export type ImageTaskIntent = "infographic" | "photo" | "opinion_art" | "breaking_banner" | "custom";
 
-/** النموذج الافتراضي للتوليد (قرار المالك 2026-08-08: Nano Banana 2) */
-export const DEFAULT_IMAGE_MODEL = "gemini-3.1-flash-image-preview";
+/**
+ * النموذج الافتراضي للتوليد (قرار المالك 2026-10-13: Nano Banana 2.1، بعد أن
+ * أوقفت قوقل دعم Nano Banana 2 في 2026-10-06 وطرحت 2.1 بنصف السعر).
+ */
+export const DEFAULT_IMAGE_MODEL = "gemini-nano-banana-2.1";
+
+/**
+ * نماذج أوقفت قوقل دعمها → بديلها. يُطبَّق على النموذج الافتراضي المحفوظ في
+ * الإعدادات فقط؛ اختيار المحرر الصريح أو نموذج النمط يبقى كما هو.
+ */
+export const DEPRECATED_IMAGE_MODEL_REPLACEMENTS: Readonly<Record<string, string>> = {
+  "gemini-3.1-flash-image-preview": DEFAULT_IMAGE_MODEL,
+};
 
 /** النموذج القديم المجرَّب — يُستخدم fallback عند فشل نموذج أحدث */
 export const LEGACY_IMAGE_MODEL = "gemini-3-pro-image-preview";
@@ -316,7 +327,7 @@ export function suggestOptimalModel(
 
   if (intent === "breaking_banner") {
     return {
-      model: "gemini-3.1-flash-image-preview",
+      model: DEFAULT_IMAGE_MODEL,
       reasonAr: "موصى به لسرعة الاستجابة وتوليد خلفيات الأخبار العاجلة الفورية",
       provider: "google",
     };
@@ -355,6 +366,7 @@ export function normalizeImageStyleSettings(raw: unknown): ImageStyleSettings {
   }
 
   const settings = parsed.data;
+  settings.defaultModel = replaceDeprecatedImageModel(settings.defaultModel) ?? DEFAULT_IMAGE_MODEL;
 
   const seen = new Set<string>();
   settings.styles = settings.styles.filter((style) => {
@@ -494,9 +506,13 @@ export function resolveImageModel(
   return (
     explicitModel?.trim() ||
     style?.params?.model?.trim() ||
-    settings.defaultModel?.trim() ||
+    replaceDeprecatedImageModel(settings.defaultModel?.trim()) ||
     DEFAULT_IMAGE_MODEL
   );
+}
+
+function replaceDeprecatedImageModel(model: string | undefined): string | undefined {
+  return model ? DEPRECATED_IMAGE_MODEL_REPLACEMENTS[model] ?? model : model;
 }
 
 /** تحويل نمط كامل إلى الشكل المكشوف للمحرر (بدون برومبتات) */
