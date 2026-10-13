@@ -1,6 +1,6 @@
 import { memo, KeyboardEvent } from "react";
 import { cn } from "@/lib/utils";
-import { LucideIcon } from "lucide-react";
+import { ArrowLeft, LucideIcon } from "lucide-react";
 import { useLocation } from "wouter";
 
 interface QuickActionCardProps {
@@ -37,7 +37,7 @@ const QuickActionCardComponent = ({
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
-    if (e.key === 'Enter' || e.key === ' ') {
+    if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
       handleClick();
     }
@@ -46,9 +46,9 @@ const QuickActionCardComponent = ({
   return (
     <div
       className={cn(
-        "group relative overflow-visible rounded-xl p-3 cursor-pointer transition-all duration-200 sm:p-4",
-        "bg-card/80 backdrop-blur-sm border border-border/50",
-        "hover:bg-card hover:border-border hover:shadow-md hover:-translate-y-0.5",
+        "group relative overflow-hidden rounded-xl p-3.5 cursor-pointer transition-all duration-200 sm:p-4",
+        "bg-card border border-border/70 shadow-sm",
+        "hover:border-primary/40 hover:bg-muted/20 hover:shadow-md hover:-translate-y-0.5",
         "active:translate-y-0 active:shadow-sm",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
         className
@@ -59,22 +59,23 @@ const QuickActionCardComponent = ({
       tabIndex={0}
       data-testid={testId}
     >
-      <div className="flex flex-col items-center gap-2 text-center sm:gap-3">
+      <div className="flex items-start justify-between gap-3">
         <div
           className={cn(
-            "flex h-9 w-9 items-center justify-center rounded-lg transition-transform duration-200 sm:h-12 sm:w-12 sm:rounded-xl",
+            "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border transition-transform duration-200 sm:h-11 sm:w-11",
             "group-hover:scale-105",
             iconBgColor
           )}
         >
-          <Icon className={cn("h-4 w-4 sm:h-6 sm:w-6", iconColor)} />
+          <Icon className={cn("h-5 w-5", iconColor)} />
         </div>
-        <div className="space-y-0.5 sm:space-y-1">
-          <h3 className="text-xs font-semibold leading-tight sm:text-sm">{title}</h3>
-          <p className="hidden text-xs leading-tight text-muted-foreground line-clamp-2 sm:block">
-            {description}
-          </p>
-        </div>
+        <ArrowLeft className="h-4 w-4 text-muted-foreground/50 transition-transform duration-200 group-hover:-translate-x-1 group-hover:text-primary" />
+      </div>
+      <div className="mt-3 space-y-1 text-right">
+        <h3 className="text-sm font-bold leading-tight text-foreground">{title}</h3>
+        <p className="text-xs leading-relaxed text-muted-foreground line-clamp-1">
+          {description}
+        </p>
       </div>
     </div>
   );
