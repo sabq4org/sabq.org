@@ -660,7 +660,7 @@ struct HomeFeedView: View {
     // MARK: - Breaking News
 
     /// خبر العاجل المعروض في بطاقته (حين لا يعمل شريط اللوحة). يُستبعد من
-    /// الهيرو و«آخر الأخبار» كي لا يظهر الخبر نفسه ثلاث مرات في الصفحة.
+    /// «آخر الأخبار» فقط؛ الهيرو يعرضه أيضًا.
     private var displayedBreakingArticle: Article? {
         if let ticker = breakingTicker, !ticker.headlines.isEmpty { return nil }
         return articlesStore.breakingNews.first
@@ -723,10 +723,10 @@ struct HomeFeedView: View {
 
     // MARK: - Featured
 
-    /// الهيرو يبدأ بالخبر الذي يلي خبر العاجل بدل تكراره.
+    /// خبر العاجل يبقى في الهيرو أيضًا مع شريطه (قرار المالك 2026-10-13)؛
+    /// يُستبعد من «آخر الأخبار» فقط.
     private var heroArticles: [Article] {
-        let skip = displayedBreakingArticle?.id
-        return Array(articlesStore.featuredArticles.filter { $0.id != skip }.prefix(3))
+        Array(articlesStore.featuredArticles.prefix(3))
     }
 
     private var featuredSection: some View {
