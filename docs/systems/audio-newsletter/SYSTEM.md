@@ -1,6 +1,6 @@
 # النشرات الصوتية (`audio-newsletter`)
 
-> آخر مراجعة: 2026-10-09 | المالك: content
+> آخر مراجعة: 2026-10-14 | المالك: content
 
 ## الغرض
 موجز المقالات والأخبار الصوتي وإعدادات أصواته، والنشرة البريدية المجدولة الباقية بعد إيقاف منتج النشرات الصوتية وتوليد ملفاته في 2026-07-25.
@@ -69,11 +69,12 @@ Gemini 3.8 Flash TTS with Orus and the approved Saudi radio style is the default
 
 Settings add `primaryProvider: "gemini"`, `geminiVoices`, and `configured.gemini`. Preview accepts Orus only and never falls back. Gemini returns WAV and `X-TTS-Provider: gemini`; the HUMAIN credit remains tied to actual HUMAIN audio. The cache includes the Gemini profile version and expires fallback audio quickly to recover the primary provider. No schema change is needed.
 
-## «نشرة سَبْق» الصوتية — 2026-10-09
+## «نشرة سَبْق» الصوتية — 2026-10-09 (تحديث استوديو التحرير: 2026-10-14)
 
 جولة مسموعة لأهم الأخبار (نحو 3 دقائق) في شريط رفيع تحت الهيدر. ليست عودة لمنتج النشرات الصوتية المحذوف: لا أرشيف حلقات ولا جدول جديد.
 
-- **المسار:** اختيار حتى 10 أخبار منشورة (`articleType = news`، غير مخفية من الرئيسية، آخر 6 ساعات أو 12 إن قلّت) مرتبة: عاجل ← مميز ← الأكثر قراءة. النموذج (`SABQ_EDITOR_MODEL` ثم `gpt-5.1`، الميزة `audio-bulletin-script`، بلا temperature) يكتب 5 إلى 8 فقرات JSON؛ أي معرّف خبر غير موجود في المواد يُحذف، وأقل من 3 فقرات صالحة يُرفض.
+- **المسار:** اختيار حتى 10 أخبار منشورة (`articleType = news`، غير مخفية من الرئيسية، آخر 6 ساعات أو 12/24 إن قلّت) مرتبة: عاجل ← مميز ← الأكثر قراءة. يدعم `POST /api/audio-bulletin/admin/draft` أيضاً تمرير `articleIds` مختارة يدوياً من المحرر وعنوان نشرة مخصص `title`. النموذج (`SABQ_EDITOR_MODEL` ثم `gpt-5.1`، الميزة `audio-bulletin-script`، بلا temperature) يكتب 5 إلى 8 فقرات JSON؛ أي معرّف خبر غير موجود في المواد يُحذف، وأقل من 3 فقرات صالحة (أو فقرة واحدة عند التحديد اليدوي لعدد أقل) يُرفض.
+- **استوديو التحرير (`/dashboard/audio-bulletin`):** يعرض مشغل بث حي تفاعلي مرتبط بالفصول الصوتية (`chapters`) والنص الكامل المنشور ومصادره (`sourceTitles` تُحلّ لكل من `current` و`draft`)، وبنك الأخبار المرشحة (`candidates`) لاختيار أخبار محددة أو إضافتها مباشرة كفقرة للمسودة المفتوحة، بالإضافة إلى `POST /api/audio-bulletin/admin/draft/from-current` لنسخ النشرة الحالية كمسودة قابلة للتعديل وإعادة التسجيل دون استدعاء LLM جديد.
 - **الترحيب والختام ثابتان في الكود** ومكتوب فيهما «سَبْق» مشكولة. `vowelSabq` يشكّل اسم الصحيفة في فقرات النموذج فقط عند «نشرة/صحيفة/موقع/تطبيق سبق» و«سبق دوت»، ولا يمس الفعل «سبق أن».
 - **لا يُسمع شيء قبل اعتماد محرر** يملك `articles.publish`. الاعتماد يرفض المسودة إن تغيّرت `revision` منذ فتحها.
 - **الصوت:** نفس ترتيب موجز المقال (`summaryVoiceOrder`)، لكن بمزود واحد للنشرة كلها: فشل أي فقرة يعيد النشرة كاملة على المزود التالي حتى لا يتبدل الصوت في منتصفها. رفض المحتوى يوقف ولا ينتقل. كل فقرة تُولَّد منفصلة، وبدايات الفقرات تُحسب من عدد العينات (فصول دقيقة). `lame` (مثبت في `Dockerfile`) يفك MP3 ويرمّز الناتج MP3 أحادي 64kbps؛ بدونه تُحفظ WAV.

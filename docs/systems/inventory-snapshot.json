@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-11T04:19:40.407Z",
+  "generatedAt": "2026-10-13T22:21:40.163Z",
   "systems": [
     {
       "id": "account-center",
@@ -31,7 +31,7 @@
     },
     {
       "id": "loyalty",
-      "fileCount": 31,
+      "fileCount": 848,
       "samplePaths": [
         "server/services/loyalty.ts",
         "server/routes/loyaltyAdmin.ts",
@@ -213,16 +213,16 @@
     },
     {
       "id": "seo-ssr",
-      "fileCount": 66,
+      "fileCount": 470,
       "samplePaths": [
         "server/seoInjector.ts",
         "server/middleware/slugRedirect.ts",
         "server/routes/edgeMeta.ts",
         "server/utils/noindexPaths.ts",
+        "web-next/.DS_Store",
         "web-next/.dockerignore",
         "web-next/.env.example",
-        "web-next/.gitignore",
-        "web-next/Dockerfile"
+        "web-next/.gitignore"
       ]
     },
     {
@@ -276,7 +276,7 @@
     },
     {
       "id": "systems-catalog",
-      "fileCount": 46,
+      "fileCount": 47,
       "samplePaths": [
         "docs/systems/AUDIT-2026-07-17.md",
         "docs/systems/GOVERNANCE.md",
@@ -285,7 +285,7 @@
         "docs/systems/ads/SYSTEM.md",
         "docs/systems/ai-hub/RUNTIME_READ_ACCESS.md",
         "docs/systems/ai-hub/SYSTEM.md",
-        "docs/systems/ai-staff/SYSTEM.md"
+        "docs/systems/ai-hub/runtime-read-access.sql"
       ]
     },
     {

@@ -68,6 +68,18 @@ export interface Bulletin {
   } | null;
 }
 
+export interface BulletinHistoryEntry {
+  id: string;
+  title: string;
+  publishedAt: string | null;
+  approvedBy: string | null;
+  durationSec: number;
+  provider: string;
+  hiddenAt?: string;
+  audioUrl?: string;
+  itemCount?: number;
+}
+
 export interface BulletinState {
   version: 1;
   scheduleEnabled: boolean;
@@ -75,7 +87,7 @@ export interface BulletinState {
   lastScheduledSlot: string | null;
   draft: Bulletin | null;
   current: Bulletin | null;
-  history: Array<Pick<Bulletin, 'id' | 'title' | 'publishedAt' | 'approvedBy'> & { durationSec: number; provider: string; hiddenAt?: string }>;
+  history: BulletinHistoryEntry[];
 }
 
 const EMPTY_STATE: BulletinState = { version: 1, scheduleEnabled: false, lastScheduledSlot: null, draft: null, current: null, history: [] };
@@ -187,7 +199,7 @@ export function rankCandidates(rows: CandidateStory[]): CandidateStory[] {
     || (b.publishedAt?.getTime() || 0) - (a.publishedAt?.getTime() || 0));
 }
 
-async function loadCandidates(now: Date): Promise<CandidateStory[]> {
+export async function loadCandidates(now = new Date(), maxItems = 10): Promise<CandidateStory[]> {
   const query = (hours: number) => db.select({
     id: articles.id,
     title: articles.title,
@@ -213,6 +225,7 @@ async function loadCandidates(now: Date): Promise<CandidateStory[]> {
     .limit(60);
   let rows = await query(6);
   if (rows.length < 6) rows = await query(12);
+  if (rows.length < 6) rows = await query(24);
   return rankCandidates(rows.map(r => ({
     id: r.id,
     title: stripMarkup(r.title),
@@ -223,7 +236,7 @@ async function loadCandidates(now: Date): Promise<CandidateStory[]> {
     isFeatured: r.isFeatured,
     publishedAt: r.publishedAt,
     body: stripMarkup(r.content).slice(0, 1800) || stripMarkup(r.excerpt),
-  }))).slice(0, 10);
+  }))).slice(0, maxItems);
 }
 
 // ── script ──────────────────────────────────────────────────────────────
@@ -294,22 +307,84 @@ async function writeScript(candidates: CandidateStory[], userId: string | null):
 
 export class BulletinConflictError extends Error {}
 
-export async function createBulletinDraft(userId: string | null, now = new Date()): Promise<Bulletin> {
+export interface CreateDraftOptions {
+  articleIds?: string[];
+  title?: string;
+}
+
+export async function createBulletinDraft(
+  userId: string | null,
+  now = new Date(),
+  options?: CreateDraftOptions,
+): Promise<Bulletin> {
   const existing = (await loadBulletinState()).draft;
   if (existing?.status === 'generating') throw new BulletinConflictError('النشرة الحالية قيد التوليد الصوتي؛ انتظر حتى تنتهي');
-  const candidates = await loadCandidates(now);
-  if (candidates.length < 3) throw new Error('لا توجد أخبار منشورة كافية في الساعات الأخيرة');
+  const allCandidates = await loadCandidates(now, 16);
+  const selectedIds = options?.articleIds?.filter(Boolean) ?? [];
+  const candidates = selectedIds.length >= 3
+    ? allCandidates.filter(c => selectedIds.includes(c.id))
+    : allCandidates.slice(0, 10);
+  if (candidates.length < 3) throw new Error('لا توجد أخبار منشورة كافية (يلزم 3 أخبار على الأقل)');
   const items = await writeScript(candidates, userId);
   const iso = now.toISOString();
+  const customTitle = options?.title?.trim();
   const draft: Bulletin = {
-    id: randomUUID(), title: editionTitle(now), status: 'draft', revision: 1, items,
-    createdAt: iso, createdBy: userId, updatedAt: iso, updatedBy: userId,
-    approvedAt: null, approvedBy: null, publishedAt: null, error: null, audio: null,
+    id: randomUUID(),
+    title: customTitle && customTitle.length >= 2 ? customTitle.slice(0, 80) : editionTitle(now),
+    status: 'draft',
+    revision: 1,
+    items,
+    createdAt: iso,
+    createdBy: userId,
+    updatedAt: iso,
+    updatedBy: userId,
+    approvedAt: null,
+    approvedBy: null,
+    publishedAt: null,
+    error: null,
+    audio: null,
   };
   return mutate(state => {
     if (state.draft?.status === 'generating') throw new BulletinConflictError('النشرة الحالية قيد التوليد الصوتي؛ انتظر حتى تنتهي');
     state.draft = draft;
     return draft;
+  });
+}
+
+/** Clones the currently published bulletin into a fresh editable draft without calling the LLM. */
+export async function cloneCurrentToDraft(userId: string, now = new Date()): Promise<Bulletin> {
+  return mutate(state => {
+    if (state.draft?.status === 'generating') {
+      throw new BulletinConflictError('النشرة الحالية قيد التوليد الصوتي؛ انتظر حتى تنتهي');
+    }
+    if (!state.current || state.current.items.length === 0) {
+      throw new BulletinConflictError('لا توجد نشرة منشورة حالياً لنسخها كمسودة');
+    }
+    const iso = now.toISOString();
+    const cloned: Bulletin = {
+      id: randomUUID(),
+      title: state.current.title,
+      status: 'draft',
+      revision: 1,
+      items: state.current.items.map(item => ({
+        id: randomUUID(),
+        articleIds: [...item.articleIds],
+        href: item.href,
+        label: item.label,
+        text: item.text,
+      })),
+      createdAt: iso,
+      createdBy: userId,
+      updatedAt: iso,
+      updatedBy: userId,
+      approvedAt: null,
+      approvedBy: null,
+      publishedAt: null,
+      error: null,
+      audio: null,
+    };
+    state.draft = cloned;
+    return cloned;
   });
 }
 
@@ -320,6 +395,8 @@ export const draftEditSchema = z.object({
     id: z.string(),
     label: z.string().trim().min(2).max(60),
     text: z.string().trim().min(20).max(1600),
+    articleIds: z.array(z.string()).min(1).max(6).optional(),
+    href: z.string().nullable().optional(),
   })).min(1).max(10),
 }).strict();
 
@@ -329,9 +406,24 @@ export async function updateBulletinDraft(input: z.infer<typeof draftEditSchema>
     if (!draft || draft.status === 'generating') throw new BulletinConflictError('لا توجد مسودة قابلة للتعديل');
     if (draft.revision !== input.revision) throw new BulletinConflictError('عدّل محرر آخر المسودة؛ حدّث الصفحة');
     const byId = new Map(draft.items.map(item => [item.id, item]));
-    if (input.items.some(item => !byId.has(item.id))) throw new BulletinConflictError('فقرة غير معروفة في المسودة');
-    // Editors may rewrite, reorder or drop paragraphs, but not invent new sources.
-    draft.items = input.items.map(item => ({ ...byId.get(item.id)!, label: item.label, text: stripMarkup(item.text) }));
+    for (const item of input.items) {
+      if (!byId.has(item.id) && (!item.articleIds || item.articleIds.length === 0)) {
+        throw new BulletinConflictError('فقرة غير معروفة في المسودة');
+      }
+    }
+    draft.items = input.items.map(item => {
+      const existing = byId.get(item.id);
+      if (existing) {
+        return { ...existing, label: item.label, text: stripMarkup(item.text) };
+      }
+      return {
+        id: item.id || randomUUID(),
+        articleIds: item.articleIds!,
+        href: item.href ?? null,
+        label: item.label,
+        text: stripMarkup(item.text),
+      };
+    });
     draft.title = input.title;
     draft.revision += 1;
     draft.status = 'draft';
@@ -383,7 +475,16 @@ async function produceAudio(bulletin: Bulletin): Promise<void> {
       state.current = published;
       state.draft = null;
       state.history = [
-        { id: published.id, title: published.title, publishedAt, approvedBy: published.approvedBy, durationSec: published.audio!.durationSec, provider: audio.provider },
+        {
+          id: published.id,
+          title: published.title,
+          publishedAt,
+          approvedBy: published.approvedBy,
+          durationSec: published.audio!.durationSec,
+          provider: audio.provider,
+          audioUrl: url,
+          itemCount: published.items.length,
+        },
         ...state.history,
       ].slice(0, 30);
     });
@@ -451,4 +552,3 @@ export async function articleTitles(ids: string[]): Promise<Map<string, string>>
   const rows = await db.select({ id: articles.id, title: articles.title }).from(articles).where(inArray(articles.id, ids));
   return new Map(rows.map(r => [r.id, stripMarkup(r.title)]));
 }
-

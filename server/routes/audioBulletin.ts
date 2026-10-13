@@ -8,11 +8,13 @@ import {
   articleTitles,
   BulletinConflictError,
   bulletinAdminView,
+  cloneCurrentToDraft,
   createBulletinDraft,
   discardBulletinDraft,
   draftEditSchema,
   hideCurrentBulletin,
   loadBulletinState,
+  loadCandidates,
   publicBulletin,
   setBulletinSchedule,
   updateBulletinDraft,
@@ -48,9 +50,27 @@ function fail(res: import('express').Response, error: unknown, fallback: string)
 
 async function adminPayload() {
   const view = bulletinAdminView(await loadBulletinState());
-  const ids = [...new Set((view.draft?.items ?? []).flatMap(item => item.articleIds))];
-  const titles = await articleTitles(ids);
-  return { ...view, sourceTitles: Object.fromEntries(titles) };
+  const ids = [
+    ...new Set([
+      ...(view.draft?.items ?? []).flatMap(item => item.articleIds),
+      ...(view.current?.items ?? []).flatMap(item => item.articleIds),
+    ]),
+  ];
+  const [titles, rawCandidates] = await Promise.all([
+    articleTitles(ids),
+    loadCandidates(new Date(), 15).catch(() => []),
+  ]);
+  const candidates = rawCandidates.map(({ id, title, href, category, newsType, views, isFeatured, publishedAt }) => ({
+    id,
+    title,
+    href,
+    category,
+    newsType,
+    views,
+    isFeatured,
+    publishedAt,
+  }));
+  return { ...view, sourceTitles: Object.fromEntries(titles), candidates };
 }
 
 router.get(admin, async (_req, res) => {
@@ -68,9 +88,21 @@ const draftLimiter = rateLimit({
   validate: cfValidate,
 });
 
+const createDraftOptionsSchema = z.object({
+  articleIds: z.array(z.string().min(1).max(64)).max(15).optional(),
+  title: z.string().trim().min(3).max(80).optional(),
+}).strict().optional();
+
 router.post(`${admin}/draft`, draftLimiter, async (req, res) => {
-  try { await createBulletinDraft(actorId(req)); res.json(await adminPayload()); }
+  const parsed = createDraftOptionsSchema.safeParse(req.body && Object.keys(req.body).length > 0 ? req.body : undefined);
+  if (!parsed.success) return res.status(400).json({ message: 'خيارات إنشاء المسودة غير صالحة' });
+  try { await createBulletinDraft(actorId(req), new Date(), parsed.data); res.json(await adminPayload()); }
   catch (error) { fail(res, error, 'تعذّر كتابة مسودة النشرة'); }
+});
+
+router.post(`${admin}/draft/from-current`, async (req, res) => {
+  try { await cloneCurrentToDraft(actorId(req)); res.json(await adminPayload()); }
+  catch (error) { fail(res, error, 'تعذّر نسخ النشرة الحالية كمسودة'); }
 });
 
 router.put(`${admin}/draft`, async (req, res) => {
