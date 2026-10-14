@@ -556,6 +556,12 @@
       "pathGlobs": [
         "server/services/muqtarab*.ts",
         "server/routes/muqtarab*.ts",
+        "client/src/pages/Muqtarab.tsx",
+        "client/src/pages/MuqtarabDetail.tsx",
+        "client/src/pages/TopicDetail.tsx",
+        "client/src/pages/WriterProfilePage.tsx",
+        "client/src/lib/muqtarab.ts",
+        "client/src/lib/angleTheme.ts",
         "client/src/pages/dashboard/DashboardMuqtarab.tsx",
         "client/src/pages/dashboard/MuqtarabReview.tsx",
         "docs/MUQTARAB.md",
@@ -568,7 +574,7 @@
       "owners": [
         "editorial"
       ],
-      "lastReviewed": "2026-07-17"
+      "lastReviewed": "2026-10-14"
     },
     {
       "id": "radar",

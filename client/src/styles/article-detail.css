@@ -214,3 +214,37 @@
   .article-detail .article-action { font-size: 15px; padding-inline: 6px; }
   .article-detail-byline { align-items: flex-start; }
 }
+
+/* Muqtarab Topic Detail — Scoped Editorial Reading Enhancements */
+.muqtarab-topic-detail .muqtarab-prose :is(p, li) {
+  font-size: inherit;
+  line-height: inherit;
+}
+.muqtarab-topic-detail .muqtarab-prose :is(h2, h3, h4) {
+  scroll-margin-top: 96px;
+  padding-inline-start: 12px;
+  border-inline-start: 3px solid var(--angle, var(--article-brand));
+}
+.muqtarab-topic-detail .muqtarab-prose blockquote {
+  border-inline-start: 4px solid var(--angle, var(--article-brand));
+  background: var(--angle-soft, var(--article-surface));
+  border-radius: 0 12px 12px 0;
+}
+.muqtarab-topic-detail .muqtarab-prose p[data-quote-paragraph="true"] {
+  margin-block: 1.5em;
+  padding: 16px 20px;
+  border-inline-start: 3px solid var(--angle, var(--article-brand));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--angle, var(--article-brand)) 6%, transparent);
+  font-weight: 500;
+}
+.muqtarab-topic-detail .muqtarab-prose p[data-verse-paragraph="true"] {
+  margin-block: 1.5em;
+  padding: 18px 22px;
+  border-radius: 14px;
+  border: 1px dashed var(--angle-border, var(--article-rule));
+  background: color-mix(in srgb, var(--angle, var(--article-brand)) 5%, transparent);
+  text-align: center;
+  font-weight: 600;
+  line-height: 2.15;
+}
