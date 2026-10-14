@@ -392,13 +392,45 @@ const DEFAULT_BYLINE = "صحيفة سبق";
 function wireAttribution(article: Article) {
   const meta = article.sourceMetadata as (Article["sourceMetadata"] & { bot?: string }) | null | undefined;
   const staff = userName(article.enteredBy);
+  const agencyName = article.publisher?.companyName || null;
+
   if (article.source === "email" || article.source === "url") {
     const name = meta?.senderName || meta?.from || null;
-    return { prefix: "البريد الذكي", name, channel: "بريد", title: `البريد الذكي${name ? `: ${name}` : ""}`, testId: "badge-source-email", incoming: true, Icon: Mail, enteredBy: null as string | null };
+    return {
+      prefix: "البريد الذكي",
+      name,
+      channel: "بريد",
+      title: `البريد الذكي${name ? `: ${name}` : ""}`,
+      testId: "badge-source-email",
+      incoming: true,
+      Icon: Mail,
+      enteredBy: null as string | null,
+      badgeTone: "border-sky-500/30 bg-sky-500/10 text-sky-800 dark:border-sky-500/35 dark:bg-sky-500/15 dark:text-sky-200",
+      iconTone: "text-sky-600 dark:text-sky-400",
+      botName: null as string | null,
+      personalPublisher: null as string | null,
+      agencyName,
+      sourceGroup: "email" as const,
+    };
   }
   if (article.source === "whatsapp") {
     const name = meta?.senderName || meta?.from || null;
-    return { prefix: "واتساب", name, channel: "واتساب", title: `واتساب${name ? `: ${name}` : ""}`, testId: "badge-source-whatsapp", incoming: true, Icon: MessageCircle, enteredBy: null as string | null };
+    return {
+      prefix: "واتساب",
+      name,
+      channel: "واتساب",
+      title: `واتساب${name ? `: ${name}` : ""}`,
+      testId: "badge-source-whatsapp",
+      incoming: true,
+      Icon: MessageCircle,
+      enteredBy: null as string | null,
+      badgeTone: "border-emerald-500/30 bg-emerald-500/10 text-emerald-800 dark:border-emerald-500/35 dark:bg-emerald-500/15 dark:text-emerald-200",
+      iconTone: "text-emerald-600 dark:text-emerald-400",
+      botName: null as string | null,
+      personalPublisher: null as string | null,
+      agencyName,
+      sourceGroup: "whatsapp" as const,
+    };
   }
   if (article.source === "bot") {
     const bot = meta?.publisherUserId ? "نشر سبق" : meta?.bot || "نشر سبق";
@@ -417,10 +449,31 @@ function wireAttribution(article: Article) {
       incoming: true,
       Icon: Bot,
       enteredBy: null as string | null,
+      badgeTone: "border-indigo-500/30 bg-indigo-500/10 text-indigo-900 dark:border-indigo-500/35 dark:bg-indigo-500/15 dark:text-indigo-200",
+      iconTone: "text-indigo-600 dark:text-indigo-400",
+      botName,
+      personalPublisher,
+      agencyName,
+      sourceGroup: "bot" as const,
     };
   }
   if (article.source === "ai") {
-    return { prefix: "مولّد آليًا", name: staff, channel: "آلي", title: `مولّد بالذكاء الاصطناعي${staff ? ` · ${staff}` : ""}`, testId: "badge-source-ai", incoming: true, Icon: Sparkles, enteredBy: null as string | null };
+    return {
+      prefix: "مولّد آليًا",
+      name: staff,
+      channel: "آلي",
+      title: `مولّد بالذكاء الاصطناعي${staff ? ` · ${staff}` : ""}`,
+      testId: "badge-source-ai",
+      incoming: true,
+      Icon: Sparkles,
+      enteredBy: null as string | null,
+      badgeTone: "border-purple-500/30 bg-purple-500/10 text-purple-800 dark:border-purple-500/35 dark:bg-purple-500/15 dark:text-purple-200",
+      iconTone: "text-purple-600 dark:text-purple-400",
+      botName: null as string | null,
+      personalPublisher: null as string | null,
+      agencyName,
+      sourceGroup: "ai" as const,
+    };
   }
   if (article.source === "ios-app" || article.source === "android-app") {
     const name = personName(article);
@@ -434,11 +487,32 @@ function wireAttribution(article: Article) {
       incoming: true,
       Icon: Smartphone,
       enteredBy: null as string | null,
+      badgeTone: "border-blue-500/30 bg-blue-500/10 text-blue-800 dark:border-blue-500/35 dark:bg-blue-500/15 dark:text-blue-200",
+      iconTone: "text-blue-600 dark:text-blue-400",
+      botName: null as string | null,
+      personalPublisher: null as string | null,
+      agencyName,
+      sourceGroup: "mobile" as const,
     };
   }
   if (article.publisher?.companyName) {
     const name = article.publisher.companyName;
-    return { prefix: "الوكالة", name, channel: "وكالة", title: `وكالة: ${name}`, testId: "badge-source-publisher", incoming: true, Icon: Building2, enteredBy: null as string | null };
+    return {
+      prefix: "الوكالة",
+      name,
+      channel: "وكالة",
+      title: `وكالة: ${name}`,
+      testId: "badge-source-publisher",
+      incoming: true,
+      Icon: Building2,
+      enteredBy: null as string | null,
+      badgeTone: "border-teal-500/30 bg-teal-500/10 text-teal-800 dark:border-teal-500/35 dark:bg-teal-500/15 dark:text-teal-200",
+      iconTone: "text-teal-600 dark:text-teal-400",
+      botName: null as string | null,
+      personalPublisher: null as string | null,
+      agencyName: null as string | null,
+      sourceGroup: "publisher" as const,
+    };
   }
   const byline = personName(article);
   if (article.articleType === "opinion") {
@@ -449,8 +523,14 @@ function wireAttribution(article: Article) {
       title: `الكاتب: ${byline}${staff && staff !== byline ? ` · أدخله ${staff}` : ""}`,
       testId: "badge-source-manual",
       incoming: false,
-      Icon: null,
+      Icon: FilePenLine,
       enteredBy: staff && staff !== byline ? staff : null,
+      badgeTone: "border-violet-500/25 bg-violet-500/10 text-violet-800 dark:border-violet-500/30 dark:bg-violet-500/15 dark:text-violet-200",
+      iconTone: "text-violet-600 dark:text-violet-400",
+      botName: null as string | null,
+      personalPublisher: null as string | null,
+      agencyName: null as string | null,
+      sourceGroup: "manual" as const,
     };
   }
   const name = staff || byline;
@@ -461,11 +541,71 @@ function wireAttribution(article: Article) {
     title: `أضافه: ${name}${byline && byline !== name ? ` · باسم ${byline}` : ""}`,
     testId: "badge-source-manual",
     incoming: false,
-    Icon: null,
+    Icon: UserRound,
     // الإسناد الظاهر إن اختلف عن الموظف ولم يكن الحساب الافتراضي
     enteredBy: null as string | null,
     byline: byline && byline !== name && byline !== DEFAULT_BYLINE ? byline : null,
+    badgeTone: "border-border/80 bg-muted/50 text-foreground/85",
+    iconTone: "text-muted-foreground",
+    botName: null as string | null,
+    personalPublisher: null as string | null,
+    agencyName: null as string | null,
+    sourceGroup: "manual" as const,
   };
+}
+
+function SourceAttributionBadge({
+  who,
+  compact = false,
+}: {
+  who: ReturnType<typeof wireAttribution>;
+  compact?: boolean;
+}) {
+  const WhoIcon = who.Icon ?? UserRound;
+  return (
+    <>
+      <span
+        data-testid={who.testId}
+        title={who.title}
+        className={cn(
+          "inline-flex min-w-0 max-w-full items-center gap-1 rounded-[5px] border px-1.5 font-medium transition-colors",
+          compact ? "text-[11px] leading-5" : "min-h-6 px-2 py-0.5 text-xs leading-5",
+          who.badgeTone,
+        )}
+      >
+        <WhoIcon className={cn("h-3 w-3 shrink-0", who.iconTone)} aria-hidden="true" />
+        <span className="shrink-0 opacity-85">{who.prefix}</span>
+        {who.botName ? (
+          <>
+            <span className="shrink-0 font-bold">{who.botName}</span>
+            {who.personalPublisher ? (
+              <span className="inline-flex min-w-0 items-center gap-1 rounded-[4px] border border-teal-500/35 bg-teal-500/15 px-1.5 text-[10.5px] font-bold leading-4 text-teal-900 dark:text-teal-200">
+                <Building2 className="h-2.5 w-2.5 shrink-0 text-teal-600 dark:text-teal-400" aria-hidden="true" />
+                <span className="truncate">{" · "}{who.personalPublisher}</span>
+              </span>
+            ) : null}
+          </>
+        ) : who.name ? (
+          <span className="truncate font-semibold">{who.name}</span>
+        ) : null}
+        {who.channel === "iOS" || who.channel === "أندرويد" ? (
+          <span className="shrink-0 font-semibold opacity-90">· {who.channel}</span>
+        ) : null}
+      </span>
+      {who.agencyName ? (
+        <span
+          className={cn(
+            "inline-flex shrink-0 items-center gap-1 rounded-[5px] border border-teal-500/30 bg-teal-500/10 px-1.5 font-semibold text-teal-800 dark:border-teal-500/35 dark:bg-teal-500/15 dark:text-teal-200",
+            compact ? "text-[11px] leading-5" : "min-h-6 px-2 py-0.5 text-xs leading-5",
+          )}
+          title={`الناشر: ${who.agencyName}`}
+        >
+          <Building2 className="h-3 w-3 shrink-0 text-teal-600 dark:text-teal-400" aria-hidden="true" />
+          <span className="truncate">الناشر: {who.agencyName}</span>
+        </span>
+      ) : null}
+    </>
+  );
 }
 
 /** ملصقات حالة المادة في سطر البيانات */
@@ -527,8 +667,6 @@ function ArticleWireRow({
     ? article.category.color
     : null;
   const aiImage = Boolean(article.isAiGeneratedThumbnail || (article as { isAiGeneratedImage?: boolean }).isAiGeneratedImage);
-  const WhoIcon = who.Icon;
-  const whoLabel = who.prefix;
   const momentTone = article.status === "scheduled"
     ? "border-sky-200 bg-sky-50 text-sky-800 dark:border-sky-800 dark:bg-sky-950/45 dark:text-sky-200"
     : article.status === BOT_DRAFT_READY_STATUS
@@ -537,17 +675,17 @@ function ArticleWireRow({
       ? "border-violet-200 bg-violet-50 text-violet-800 dark:border-violet-800 dark:bg-violet-950/45 dark:text-violet-200"
       : article.status === "draft"
         ? "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950/45 dark:text-amber-200"
-        : "border-border bg-muted/45 text-foreground/80";
+        : "border-border/80 bg-muted/45 text-foreground/85";
   const momentClass = cn("inline-flex min-h-6 max-w-full items-center gap-1.5 rounded-md border px-2 py-0.5 text-xs leading-5", momentTone);
   const momentContent = moment && (
     <>
       <Clock className="h-3.5 w-3.5 shrink-0 opacity-75" aria-hidden="true" />
       <span className="shrink-0 font-semibold">{moment.prefix}</span>
-      <span className="tabular-nums">{moment.label}</span>
+      <span className="tabular-nums font-medium">{moment.label}</span>
     </>
   );
   const categoryChip = categoryName ? (
-    <span className="inline-flex min-h-6 shrink-0 items-center gap-1.5 rounded-md border border-border bg-muted/35 px-2 py-0.5 text-xs leading-5 text-foreground/80">
+    <span className="inline-flex min-h-6 shrink-0 items-center gap-1.5 rounded-md border border-border/80 bg-muted/40 px-2 py-0.5 text-xs font-medium leading-5 text-foreground/85">
       <span
         className="h-2 w-2 rounded-full"
         style={{ backgroundColor: categoryColor ?? "currentColor" }}
@@ -559,7 +697,7 @@ function ArticleWireRow({
 
   return (
     <div className="min-w-0">
-      <div className="flex items-start gap-2">
+      <div className="flex items-start gap-1.5 sm:gap-2">
         <span className={cn("mt-0.5 inline-flex shrink-0 items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] font-bold leading-5", type.tone)}>
           {type.icon ? <type.icon className="h-3 w-3" aria-hidden="true" /> : null}
           {type.label}
@@ -573,9 +711,9 @@ function ArticleWireRow({
           title={article.title}
           onClick={onTitleClick}
           className={cn(
-            "min-w-0 flex-1 text-[15px] font-semibold leading-snug text-foreground",
+            "min-w-0 flex-1 text-[14px] sm:text-[15px] font-bold leading-snug text-foreground",
             desktop ? "truncate" : "line-clamp-2",
-            onTitleClick && "cursor-pointer hover:text-primary",
+            onTitleClick && "cursor-pointer hover:text-primary transition-colors",
           )}
         >
           {article.title}
@@ -606,15 +744,7 @@ function ArticleWireRow({
             {momentContent}
           </span>
         ) : null}
-        <span
-          data-testid={who.testId}
-          title={who.title}
-          className={cn("inline-flex min-h-6 min-w-0 max-w-full items-center gap-1 rounded-md border border-border bg-card px-2 py-0.5 text-xs leading-5 text-foreground/85", desktop && "flex-1")}
-        >
-          {WhoIcon ? <WhoIcon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" /> : <UserRound className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />}
-          <span className="shrink-0 text-muted-foreground">{whoLabel}</span>
-          <span className="truncate font-semibold">{who.name}</span>
-        </span>
+        <SourceAttributionBadge who={who} />
         {categoryChip}
         {!desktop ? <ArticleFlags article={article} omit={["featured", "reading"]} /> : null}
       </div>
@@ -760,8 +890,11 @@ function DeskTimeCell({ moment }: { moment: DeskMoment | null }) {
   const tone = DESK_TONE[moment.tone];
   const body = (
     <>
-      <span className={cn("block text-[11px] leading-4", moment.tone === "neutral" ? "text-muted-foreground" : tone)}>{moment.kicker}</span>
-      <span className={cn("block text-[14.5px] font-semibold leading-5 tabular-nums", tone)}>{moment.clock}</span>
+      <span className={cn("flex items-center gap-1 text-[11px] font-medium leading-4", moment.tone === "neutral" ? "text-muted-foreground" : tone)}>
+        <Clock className="h-3 w-3 shrink-0 opacity-70" aria-hidden="true" />
+        {moment.kicker}
+      </span>
+      <span className={cn("block text-[13.5px] font-bold leading-5 tabular-nums", tone)}>{moment.clock}</span>
       {moment.sub ? (
         <span className={cn("block text-[11px] leading-4 tabular-nums", moment.subTone ? DESK_TONE[moment.subTone] : "text-muted-foreground")}>{moment.sub}</span>
       ) : null}
@@ -778,7 +911,7 @@ function DeskThumb({ article }: { article: Article }) {
   const src = article.thumbnailUrl || article.imageUrl;
   if (!src) {
     return (
-      <div className="grid h-[42px] w-16 place-items-center rounded-md border border-dashed border-border text-muted-foreground" title="بلا صورة">
+      <div className="grid h-[44px] w-16 place-items-center rounded-lg border border-dashed border-border bg-muted/30 text-muted-foreground" title="بلا صورة">
         <ImageOff className="h-4 w-4" aria-hidden="true" />
       </div>
     );
@@ -789,7 +922,7 @@ function DeskThumb({ article }: { article: Article }) {
       alt=""
       loading="lazy"
       decoding="async"
-      className="h-[42px] w-16 rounded-md bg-muted object-cover"
+      className="h-[44px] w-16 rounded-lg border border-border/50 bg-muted object-cover shadow-2xs"
       data-testid={`thumb-article-${article.id}`}
     />
   );
@@ -809,8 +942,6 @@ function ArticleDeskMain({
   const categoryColor = article.category?.color && /^#([0-9a-fA-F]{6})$/.test(article.category.color)
     ? article.category.color
     : null;
-  const WhoIcon = who.Icon ?? UserRound;
-  const Sep = () => <span aria-hidden="true" className="text-border">|</span>;
 
   return (
     <div className="min-w-0">
@@ -834,37 +965,31 @@ function ArticleDeskMain({
           onClick={onTitleClick}
           className={cn(
             "min-w-0 flex-1 truncate text-[14.5px] font-semibold leading-6 text-foreground",
-            onTitleClick && "cursor-pointer hover:text-primary",
+            onTitleClick && "cursor-pointer hover:text-primary transition-colors",
           )}
         >
           {article.title}
         </h3>
         <EditorialDraftReviewCue article={article} layout="inline" testId={`badge-review-desktop-${article.id}`} />
       </div>
-      <div className="mt-1 flex min-w-0 items-center gap-2 overflow-hidden whitespace-nowrap text-xs text-muted-foreground">
+      <div className="mt-1 flex min-w-0 items-center gap-1.5 overflow-hidden whitespace-nowrap text-xs text-muted-foreground">
         {categoryName ? (
-          <span className="inline-flex shrink-0 items-center gap-1.5">
+          <span className="inline-flex shrink-0 items-center gap-1.5 rounded-[5px] border border-border/80 bg-muted/45 px-1.5 text-[11px] font-medium leading-5 text-foreground/85">
             <span className="h-[7px] w-[7px] rounded-full" style={{ backgroundColor: categoryColor ?? "currentColor" }} aria-hidden="true" />
             {categoryName}
           </span>
         ) : null}
-        {categoryName ? <Sep /> : null}
-        <span data-testid={who.testId} title={who.title} className="inline-flex min-w-0 items-center gap-1">
-          <WhoIcon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-          <span className="shrink-0">{who.prefix}</span>
-          {who.name ? <span className="truncate font-medium text-foreground/85">{who.name}</span> : null}
-          {who.channel === "iOS" || who.channel === "أندرويد" ? <span className="shrink-0">· {who.channel}</span> : null}
-        </span>
+        <SourceAttributionBadge who={who} compact />
         {who.enteredBy ? (
-          <span className="inline-flex min-w-0 shrink items-center gap-1" data-testid={`entered-by-${article.id}`}>
+          <span className="inline-flex min-w-0 shrink items-center gap-1 rounded-[5px] bg-muted/40 px-1.5 text-[11px] leading-5" data-testid={`entered-by-${article.id}`}>
             <span className="shrink-0">· أدخله</span>
-            <span className="truncate text-foreground/80">{who.enteredBy}</span>
+            <span className="truncate font-medium text-foreground/80">{who.enteredBy}</span>
           </span>
         ) : null}
         {"byline" in who && who.byline ? (
-          <span className="inline-flex min-w-0 shrink items-center gap-1" data-testid={`byline-${article.id}`}>
+          <span className="inline-flex min-w-0 shrink items-center gap-1 rounded-[5px] bg-muted/40 px-1.5 text-[11px] leading-5" data-testid={`byline-${article.id}`}>
             <span className="shrink-0">· باسم</span>
-            <span className="truncate text-foreground/80">{who.byline}</span>
+            <span className="truncate font-medium text-foreground/80">{who.byline}</span>
           </span>
         ) : null}
         <ArticleFlags article={article} />
@@ -1138,7 +1263,56 @@ export default function ArticlesManagement() {
       user?.id && previousQuery?.queryKey[1] === user.id ? previousData : undefined,
   });
 
-  const articles = useMemo(() => canViewArticles && Array.isArray(articlesData?.articles) ? articlesData.articles : [], [canViewArticles, articlesData?.articles]);
+  const [sourceFilter, setSourceFilter] = useState<
+    "all" | "bot" | "publisher" | "email" | "whatsapp" | "mobile" | "ai" | "manual"
+  >("all");
+
+  const rawArticles = useMemo(
+    () => (canViewArticles && Array.isArray(articlesData?.articles) ? articlesData.articles : []),
+    [canViewArticles, articlesData?.articles],
+  );
+
+  const sourceCounts = useMemo(() => {
+    const counts = {
+      all: rawArticles.length,
+      bot: 0,
+      publisher: 0,
+      email: 0,
+      whatsapp: 0,
+      mobile: 0,
+      ai: 0,
+      manual: 0,
+    };
+    for (const a of rawArticles) {
+      const who = wireAttribution(a);
+      if (who.sourceGroup === "bot") counts.bot++;
+      if (who.sourceGroup === "publisher" || Boolean(a.publisher?.companyName) || Boolean(who.personalPublisher)) {
+        counts.publisher++;
+      }
+      if (who.sourceGroup === "email") counts.email++;
+      if (who.sourceGroup === "whatsapp") counts.whatsapp++;
+      if (who.sourceGroup === "mobile") counts.mobile++;
+      if (who.sourceGroup === "ai") counts.ai++;
+      if (who.sourceGroup === "manual") counts.manual++;
+    }
+    return counts;
+  }, [rawArticles]);
+
+  const articles = useMemo(() => {
+    if (sourceFilter === "all") return rawArticles;
+    return rawArticles.filter((a) => {
+      const who = wireAttribution(a);
+      if (sourceFilter === "publisher") {
+        return (
+          who.sourceGroup === "publisher" ||
+          Boolean(a.publisher?.companyName) ||
+          Boolean(who.personalPublisher)
+        );
+      }
+      return who.sourceGroup === sourceFilter;
+    });
+  }, [rawArticles, sourceFilter]);
+
   const articlesBusy = articlesFetching || isPlaceholderData || searchTerm !== listParams.search;
   const now = useMinuteClock();
   const deskList = useMemo(() => buildDeskList(articles, activeStatus, now), [articles, activeStatus, now]);
@@ -1810,11 +1984,11 @@ export default function ArticlesManagement() {
           </div>
         )}
 
-        {/* Search + filters — single compact toolbar */}
-        <div className="rounded-xl border border-border/80 bg-card p-3 shadow-none sm:p-3.5">
+        {/* Search + filters + Quick Source Filter Pills */}
+        <div className="rounded-xl border border-border/80 bg-card p-3 shadow-xs sm:p-3.5 space-y-3">
           <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
             <Input
-              placeholder="البحث عن مقال..."
+              placeholder="البحث عن مقال بالاسم أو المقتطف..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               data-testid="input-search-articles"
@@ -1853,6 +2027,7 @@ export default function ArticlesManagement() {
                 className="h-10"
                 onClick={() => {
                   setSearchTerm("");
+                  setSourceFilter("all");
                   changeFilters({ search: "", type: "all", category: "all" });
                 }}
                 data-testid="button-clear-filters"
@@ -1860,6 +2035,99 @@ export default function ArticlesManagement() {
                 مسح
               </Button>
             </div>
+          </div>
+
+          {/* Quick Source Filter Bar */}
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 pt-2 border-t border-border/50 no-scrollbar" data-testid="source-filter-bar">
+            <span className="shrink-0 text-[11px] font-semibold text-muted-foreground ml-1">
+              المصدر:
+            </span>
+            {([
+              {
+                key: "all" as const,
+                label: "الكل",
+                count: sourceCounts.all,
+                Icon: Newspaper,
+                activeClass: "border-primary/40 bg-primary/10 text-primary font-bold",
+                idleClass: "border-border/70 bg-muted/30 text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+              },
+              {
+                key: "bot" as const,
+                label: "بوت «نشر سبق»",
+                count: sourceCounts.bot,
+                Icon: Bot,
+                activeClass: "border-indigo-500/45 bg-indigo-500/15 text-indigo-800 dark:text-indigo-200 font-bold",
+                idleClass: "border-indigo-500/20 bg-indigo-500/5 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-500/10",
+              },
+              {
+                key: "publisher" as const,
+                label: "الناشرون والوكالات",
+                count: sourceCounts.publisher,
+                Icon: Building2,
+                activeClass: "border-teal-500/45 bg-teal-500/15 text-teal-800 dark:text-teal-200 font-bold",
+                idleClass: "border-teal-500/20 bg-teal-500/5 text-teal-700 dark:text-teal-300 hover:bg-teal-500/10",
+              },
+              {
+                key: "email" as const,
+                label: "البريد الذكي",
+                count: sourceCounts.email,
+                Icon: Mail,
+                activeClass: "border-sky-500/45 bg-sky-500/15 text-sky-800 dark:text-sky-200 font-bold",
+                idleClass: "border-sky-500/20 bg-sky-500/5 text-sky-700 dark:text-sky-300 hover:bg-sky-500/10",
+              },
+              {
+                key: "whatsapp" as const,
+                label: "واتساب",
+                count: sourceCounts.whatsapp,
+                Icon: MessageCircle,
+                activeClass: "border-emerald-500/45 bg-emerald-500/15 text-emerald-800 dark:text-emerald-200 font-bold",
+                idleClass: "border-emerald-500/20 bg-emerald-500/5 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/10",
+              },
+              {
+                key: "mobile" as const,
+                label: "تطبيق المراسل",
+                count: sourceCounts.mobile,
+                Icon: Smartphone,
+                activeClass: "border-blue-500/45 bg-blue-500/15 text-blue-800 dark:text-blue-200 font-bold",
+                idleClass: "border-blue-500/20 bg-blue-500/5 text-blue-700 dark:text-blue-300 hover:bg-blue-500/10",
+              },
+              {
+                key: "ai" as const,
+                label: "الذكاء الاصطناعي",
+                count: sourceCounts.ai,
+                Icon: Sparkles,
+                activeClass: "border-purple-500/45 bg-purple-500/15 text-purple-800 dark:text-purple-200 font-bold",
+                idleClass: "border-purple-500/20 bg-purple-500/5 text-purple-700 dark:text-purple-300 hover:bg-purple-500/10",
+              },
+              {
+                key: "manual" as const,
+                label: "التحرير والكتّاب",
+                count: sourceCounts.manual,
+                Icon: UserRound,
+                activeClass: "border-violet-500/40 bg-violet-500/15 text-violet-800 dark:text-violet-200 font-bold",
+                idleClass: "border-border/70 bg-muted/30 text-foreground/80 hover:bg-muted/60",
+              },
+            ]).map((src) => {
+              const isSelected = sourceFilter === src.key;
+              return (
+                <button
+                  key={src.key}
+                  type="button"
+                  onClick={() => setSourceFilter(src.key)}
+                  data-testid={`filter-source-${src.key}`}
+                  className={cn(
+                    "inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs transition-all cursor-pointer select-none",
+                    isSelected ? src.activeClass : src.idleClass,
+                  )}
+                >
+                  <src.Icon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                  <span>{src.label}</span>
+                  <span className="rounded-full bg-background/80 px-1.5 py-0 text-[10px] font-bold tabular-nums">
+                    {src.count}
+                  </span>
+                </button>
+              );
+            })}
           </div>
         </div>
 
@@ -2124,7 +2392,7 @@ export default function ArticlesManagement() {
                   }`}
                   data-testid={`card-article-${article.id}`}
                 >
-                  {/* Header: Checkbox + Title + Status */}
+                  {/* Header: Checkbox + Title/Source/Date + Thumbnail */}
                   <div className="flex items-start gap-2.5">
                     {/* هدف اللمس 44px يوفره الغلاف؛ بدونه قاعدة الـWCAG العامة
                         تضخّم المربع نفسه إلى 44px فيبدو كصورة مكسورة */}
@@ -2168,31 +2436,40 @@ export default function ArticlesManagement() {
                         </div>
                       )}
                     </div>
+                    {(article.thumbnailUrl || article.imageUrl) ? (
+                      <img
+                        src={article.thumbnailUrl || article.imageUrl || ""}
+                        alt=""
+                        loading="lazy"
+                        decoding="async"
+                        className="h-14 w-16 shrink-0 rounded-lg border border-border/60 bg-muted object-cover shadow-2xs"
+                      />
+                    ) : null}
                   </div>
                   
                   {/* Stats Row */}
-                  <div className="flex items-center justify-between text-sm">
-                    <div className="flex items-center gap-2">
+                  <div className="flex items-center justify-between gap-2 text-xs pt-0.5">
+                    <div className="flex flex-wrap items-center gap-1.5">
                       {article.newsType === "breaking" && (
-                        <Badge variant="destructive" className="text-xs">
+                        <Badge variant="destructive" className="text-[11px] px-2 py-0.5">
                           <Bell className="h-3 w-3 ml-1" />
                           عاجل
                         </Badge>
                       )}
                       {article.isFeatured && (
-                        <Badge variant="secondary" className="text-xs">
+                        <Badge variant="secondary" className="text-[11px] px-2 py-0.5">
                           <Star className="h-3 w-3 ml-1 fill-current" />
                           مميز
                         </Badge>
                       )}
                       {article.isReading && (
-                        <Badge variant="outline" className="text-xs text-emerald-600 dark:text-emerald-400 border-emerald-500/30 bg-emerald-500/10">
+                        <Badge variant="outline" className="text-[11px] px-2 py-0.5 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 bg-emerald-500/10">
                           <BookOpen className="h-3 w-3 ml-1" />
                           قراءة
                         </Badge>
                       )}
                       {(article.isAiGeneratedThumbnail || (article as any).isAiGeneratedImage) && (
-                        <Badge className="text-xs bg-violet-500/90 hover:bg-violet-600 text-white border-0">
+                        <Badge className="text-[11px] px-2 py-0.5 bg-violet-500/90 hover:bg-violet-600 text-white border-0">
                           <Brain className="h-3 w-3 ml-1" />
                           صورة AI
                         </Badge>
@@ -2200,15 +2477,15 @@ export default function ArticlesManagement() {
                     </div>
                     <ViewsCount 
                       views={article.views}
-                      iconClassName="h-4 w-4"
-                      className="text-sm text-muted-foreground"
+                      iconClassName="h-3.5 w-3.5"
+                      className="text-xs font-medium tabular-nums text-muted-foreground"
                     />
                   </div>
                   
                   {/* Action Buttons - Permission-based visibility */}
-                  <div className="space-y-2 pt-2 border-t">
+                  <div className="space-y-1.5 pt-2 border-t border-border/60">
                     {/* Primary Action Buttons Grid */}
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-2 gap-1.5">
                       {canEditArticle(article) && (
                         <Button
                           size="sm"
