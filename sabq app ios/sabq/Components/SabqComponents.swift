@@ -1083,12 +1083,12 @@ nonisolated enum SabqTheme {
                            blue: CGFloat(hex & 255) / 255, alpha: 1)
         })
     }
-    static let background = adaptive(0xF4F8FB, 0x081420)
-    static let surface = adaptive(0xFFFFFF, 0x10202E)
+    static let background = adaptive(0xF4F7FA, 0x0E1822)
+    static let surface = adaptive(0xFFFFFF, 0x172330)
     static let ink = adaptive(0x10202E, 0xF3F6F9)
     static let secondaryInk = adaptive(0x516170, 0xB7C5D2, highContrastLight: 0x10202E, highContrastDark: 0xF3F6F9)
     static let tertiaryInk = adaptive(0x5A6B79, 0xA9B9C8, highContrastLight: 0x10202E, highContrastDark: 0xF3F6F9)
-    static let outline = adaptive(0xD8E1E8, 0x2A4258)
+    static let outline = adaptive(0xD8E1E8, 0x3B4B5B)
     static let shadow = Color.black.opacity(0.03)
     static let deepShadow = Color.black.opacity(0.05)
     static let success = adaptive(0x13734E, 0x73D9A9)
@@ -1141,7 +1141,7 @@ nonisolated enum SabqTheme {
     /// لحاويات البلوكات الجانبية وبنود الرئيسية — اعتمدها المالك لتطبيق iOS 2026-09-12.
     static let publicSurface = Color(UIColor { t in
         t.userInterfaceStyle == .dark
-            ? UIColor(red: 0x10 / 255.0, green: 0x20 / 255.0, blue: 0x2E / 255.0, alpha: 1)
+            ? UIColor(red: 0x17 / 255.0, green: 0x23 / 255.0, blue: 0x30 / 255.0, alpha: 1)
             : UIColor(red: 0xF4 / 255.0, green: 0xF8 / 255.0, blue: 0xFB / 255.0, alpha: 1)
     })
     /// الفاتح يطابق درجة الويب #f4f8fb (كان #f0f7fc)؛ الداكن يبقى محايدًا.
@@ -1165,7 +1165,7 @@ nonisolated enum SabqTheme {
     /// الرئيسية — أوضح من `publicSurface` الذي يذوب في خلفية التطبيق.
     static let identityCard = Color(UIColor { t in
         t.userInterfaceStyle == .dark
-            ? UIColor(red: 0x10 / 255.0, green: 0x20 / 255.0, blue: 0x2E / 255.0, alpha: 1)
+            ? UIColor(red: 0x17 / 255.0, green: 0x23 / 255.0, blue: 0x30 / 255.0, alpha: 1)
             : UIColor(red: 0xE6 / 255.0, green: 0xF3 / 255.0, blue: 0xFD / 255.0, alpha: 1)
     })
     static let sectionSeparator = Color(UIColor { t in

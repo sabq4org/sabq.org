@@ -108,10 +108,6 @@ struct ArticleDetailView: View {
     /// images use the URL-based binding below so any image in the
     /// article can drive the same viewer without bloating the state.
     @State private var isHeroLightboxPresented = false
-    /// تجاوز القارئ الصورة على الحبر — يعيد شريط الحالة لونه الطبيعي.
-    @State private var isPastHero = false
-    @State private var heroBlockHeight: CGFloat = 0
-    @Environment(\.colorScheme) private var colorScheme
     /// URL of an inline body image the user tapped. Setting this opens
     /// the lightbox; clearing it (or the user's tap-to-dismiss) closes
     /// it. Hero taps flip `isHeroLightboxPresented` instead so the
@@ -154,27 +150,19 @@ struct ArticleDetailView: View {
                     // the reader expects to see the WHOLE image the
                     // editor uploaded, otherwise faces in tall portraits
                     // get chopped off the top.
-                    // «حبر وسماء»: الصورة كاملة بمقاسها الأصلي على أرضية الحبر تحت
-                    // شريط التنقل، ثم ورقة النص تتراكب على هامش الحبر لا على الصورة.
-                    VStack(spacing: 0) {
-                        heroImage
-                            .contentShape(Rectangle())
-                            .onTapGesture {
-                                guard displayArticle.imageURL?.isEmpty == false else { return }
-                                SabqHaptics.light()
-                                isHeroLightboxPresented = true
-                            }
-                            .aiImageBadgeOverlay(
-                                isVisible: displayArticle.isAiGeneratedImage,
-                                model: displayArticle.aiImageModel,
-                                inset: 12,
-                                corner: .topLeading
-                            )
-                        Color.clear.frame(height: InkSky.sheetRadius + 6)
-                    }
-                    .padding(.top, proxy.safeAreaInsets.top)
-                    .background(InkSky.ink)
-                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { heroBlockHeight = $0 }
+                    heroImage
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            guard displayArticle.imageURL?.isEmpty == false else { return }
+                            SabqHaptics.light()
+                            isHeroLightboxPresented = true
+                        }
+                        .aiImageBadgeOverlay(
+                            isVisible: displayArticle.isAiGeneratedImage,
+                            model: displayArticle.aiImageModel,
+                            inset: 12,
+                            corner: .topLeading
+                        )
 
                     VStack(alignment: .leading, spacing: SabqLayout.space16) {
                         // Editorial column order (per user 2026-05-14):
@@ -247,21 +235,8 @@ struct ArticleDetailView: View {
                     .padding(.top, SabqLayout.space24)
                     .padding(.bottom, 40)
                     .frame(maxWidth: .infinity)
-                    .background(
-                        focusBackground,
-                        in: UnevenRoundedRectangle(topLeadingRadius: InkSky.sheetRadius,
-                                                   topTrailingRadius: InkSky.sheetRadius,
-                                                   style: .continuous)
-                    )
-                    .padding(.top, -InkSky.sheetRadius)
                 }
                 .frame(width: proxy.size.width, alignment: .leading)
-            }
-            .ignoresSafeArea(edges: .top)
-            .inkTopEdgeEffectHidden(!isPastHero)
-            .sabqScrollOffsetTracker { y in
-                let past = heroBlockHeight > 0 && y > heroBlockHeight - proxy.safeAreaInsets.top - 20
-                if past != isPastHero { isPastHero = past }
             }
             .sabqNavigationEdge()
             .sabqScrollProgressTracker { progress in
@@ -285,8 +260,6 @@ struct ArticleDetailView: View {
         .sabqRTL()
         .sabqScreen("ArticleDetail")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbarColorScheme(isPastHero ? colorScheme : .dark, for: .navigationBar)
-        .toolbarBackground(isPastHero ? .visible : .hidden, for: .navigationBar)
         .fullScreenCover(isPresented: $isHeroLightboxPresented) {
             ImageLightbox(
                 url: displayArticle.imageURL.flatMap(URL.init(string:)),
@@ -602,16 +575,7 @@ struct ArticleDetailView: View {
         FlowLayout(spacing: 14) {
             // Category is context, not severity. Keep red reserved for the
             // explicit breaking state below so ordinary sections stay calm.
-            HStack(spacing: 6) {
-                RoundedRectangle(cornerRadius: 1)
-                    .fill(InkSky.accent)
-                    .frame(width: 4, height: 14)
-                    .accessibilityHidden(true)
-                Text(article.categoryTitle)
-                    .font(SabqFonts.app(size: 14, weight: .semibold))
-                    .foregroundStyle(InkSky.accent)
-            }
-            .padding(.vertical, 2)
+            DetailLabelPill(title: article.categoryTitle, tint: SabqTheme.secondaryInk)
 
             // شارة «قراءة» التحريرية — تطابق شارة صفحة الخبر في الويب (#1420).
             // من `displayArticle` كي تظهر بعد وصول حمولة التفاصيل حتى لو دخل
@@ -704,113 +668,72 @@ struct ArticleDetailView: View {
     @ViewBuilder
     private var smartSummaryCard: some View {
         let body = smartSummaryText
-        // The listen button drives the summary-audio endpoint at request
-        // time, so it shows whenever there's text to speak and a slug to
-        // address the backend with.
+        // The listen button drives ElevenLabs TTS at request time, so
+        // we surface it whenever there's actual text to speak (and a
+        // slug to address the backend endpoint with). The previous
+        // `hasAudio = audioSummary?.url != nil` gate was permanently
+        // false because /api/articles/:slug/summary-audio responds
+        // with raw MP3 bytes, not a JSON URL envelope, so the
+        // decode-on-fetch always failed.
         let canListen = !body.isEmpty
             && (displayArticle.slug?.isEmpty == false)
 
-        if canListen {
-            listenCard
-        }
-
-        if !body.isEmpty {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(spacing: SabqLayout.space8) {
+        if body.isEmpty && !canListen {
+            EmptyView()
+        } else {
+            VStack(alignment: .leading, spacing: 10) {
+                let summaryLayout = dynamicTypeSize.isAccessibilitySize
+                    ? AnyLayout(VStackLayout(alignment: .leading, spacing: SabqLayout.space12))
+                    : AnyLayout(HStackLayout(spacing: SabqLayout.space8))
+                summaryLayout {
                     Image(systemName: "sparkles")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(InkSky.accent)
-                        .accessibilityHidden(true)
+                        .font(SabqFonts.app(size: 11, weight: .regular))
+                        .foregroundStyle(SabqTheme.primaryEnd)
                     Text("الموجز الذكي")
-                        .font(SabqFonts.display(size: 17, weight: .bold))
-                        .foregroundStyle(SabqTheme.ink)
-                        .accessibilityAddTraits(.isHeader)
+                        .font(SabqType.sectionTitle)
+                        .foregroundStyle(SabqTheme.brandBlue)
                     Spacer(minLength: 0)
-                    if !displayArticle.aiSummary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        Text("بمساعدة الذكاء الاصطناعي")
-                            .font(SabqFonts.app(size: 11, weight: .regular))
-                            .foregroundStyle(SabqTheme.tertiaryInk)
-                            .lineLimit(1)
+                    if canListen {
+                        if SabqAudioPlayer.shared.provider(for: audioKey) == "humain" {
+                            summaryAudioAttribution
+                        }
+                        listenButton
                     }
                 }
 
-                Text(body)
-                    .font(SabqType.body)
-                    .foregroundStyle(SabqTheme.ink)
-                    .multilineTextAlignment(.leading)
-                    .lineSpacing(6)
-                    .lineLimit(isSummaryExpanded ? nil : 4)
-                    .fixedSize(horizontal: false, vertical: true)
+                if !body.isEmpty {
+                    Text(body)
+                        .font(SabqType.body)
+                        .foregroundStyle(SabqTheme.secondaryInk)
+                        .multilineTextAlignment(.leading)
+                        .lineSpacing(4)
+                        .lineLimit(isSummaryExpanded ? nil : 3)
+                        .fixedSize(horizontal: false, vertical: true)
 
-                if Self.summaryNeedsToggle(body) {
-                    Button {
-                        withAnimation(.spring(response: 0.42, dampingFraction: 0.86)) {
-                            isSummaryExpanded.toggle()
+                    if Self.summaryNeedsToggle(body) {
+                        Button {
+                            withAnimation(.spring(response: 0.42, dampingFraction: 0.86)) {
+                                isSummaryExpanded.toggle()
+                            }
+                            SabqHaptics.light()
+                        } label: {
+                            HStack(spacing: 4) {
+                                Text(isSummaryExpanded ? "إخفاء التفاصيل" : "قراءة الموجز كاملًا")
+                                    .font(SabqType.label)
+                                Image(systemName: isSummaryExpanded ? "chevron.up" : "chevron.down")
+                                    .font(SabqFonts.app(size: 10, weight: .regular))
+                            }
+                            .foregroundStyle(SabqTheme.brandBlue)
+                            .frame(minHeight: SabqLayout.touchTarget)
                         }
-                        SabqHaptics.light()
-                    } label: {
-                        HStack(spacing: 4) {
-                            Text(isSummaryExpanded ? "إخفاء التفاصيل" : "قراءة الموجز كاملًا")
-                                .font(SabqType.label)
-                            Image(systemName: isSummaryExpanded ? "chevron.up" : "chevron.down")
-                                .font(SabqFonts.app(size: 10, weight: .regular))
-                        }
-                        .foregroundStyle(InkSky.accent)
-                        .frame(minHeight: SabqLayout.touchTarget)
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
                 }
             }
-            .padding(18)
+            .padding(16)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(InkSky.wash, in: RoundedRectangle(cornerRadius: InkSky.cardRadius, style: .continuous))
+            .sabqBlockSurface(SabqTheme.publicSurface)
         }
-    }
-
-    /// مشغّل الملخص الصوتي على الحبر — نفس مفتاح الرئيسية فيتزامن الزرّان.
-    private var listenCard: some View {
-        Button {
-            toggleAudio()
-        } label: {
-            HStack(spacing: 14) {
-                Image(systemName: isPlayingAudio ? "pause.fill" : "play.fill")
-                    .font(.system(size: 18, weight: .bold))
-                    .foregroundStyle(InkSky.ink)
-                    .frame(width: 50, height: 50)
-                    .background(Circle().fill(InkSky.sky))
-
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(isPlayingAudio ? "جارٍ تشغيل الملخص" : "استمع للملخص")
-                        .font(SabqFonts.app(size: 15, weight: .bold))
-                        .foregroundStyle(.white)
-                    if SabqAudioPlayer.shared.provider(for: audioKey) == "humain" {
-                        summaryAudioAttribution
-                    } else {
-                        Text("الملخص الصوتي · سبق")
-                            .font(SabqFonts.app(size: 12, weight: .regular))
-                            .foregroundStyle(.white.opacity(0.62))
-                    }
-                }
-
-                Spacer(minLength: 0)
-
-                InkSkyWave(
-                    activeCount: isPlayingAudio ? 14 : 4,
-                    active: InkSky.sky,
-                    idle: .white.opacity(0.28),
-                    heights: [8, 16, 24, 12, 28, 20, 10, 22, 30, 14, 18, 26, 12, 20]
-                )
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 14)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(InkSky.ink, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-            // يميّز المشغّل عن ورقة الليل الكحلية.
-            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(InkSky.sky.opacity(0.16), lineWidth: 1))
-            .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(isPlayingAudio ? "إيقاف الملخص الصوتي" : "استمع للملخص الصوتي")
     }
 
     /// Heuristic: at 14pt on standard mobile widths, ~50 chars/line fits, so
@@ -826,11 +749,35 @@ struct ArticleDetailView: View {
     /// فقط عندما يكون مقطع هذا الخبر عبر HUMAIN (رأس `X-TTS-Provider`).
     private var summaryAudioAttribution: some View {
         Text("الصوت عبر HUMAIN")
-            .font(SabqFonts.app(size: 12, weight: .regular))
-            // يُعرض على أرضية الحبر في مشغّل الملخص.
-            .foregroundStyle(Color(red: 0x73 / 255.0, green: 0xD9 / 255.0, blue: 0xA9 / 255.0))
+            .font(SabqFonts.app(size: 11, weight: .regular))
+            .foregroundStyle(SabqTheme.emerald)
             .lineLimit(1)
             .accessibilityLabel("الصوت عبر هيومن")
+    }
+
+    /// Compact play/pause pill for the audio summary. Sits in the smart-
+    /// summary card header. Hooks into the existing `toggleAudio` logic
+    /// so audio state stays synchronised with the rest of the screen.
+    private var listenButton: some View {
+        Button {
+            SabqHaptics.light()
+            toggleAudio()
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: isPlayingAudio ? "pause.fill" : "play.fill")
+                    .font(SabqFonts.app(size: 10, weight: .regular))
+                Text(isPlayingAudio ? "إيقاف" : "استماع")
+                    .font(SabqFonts.app(size: 13, weight: .semibold))
+            }
+            .foregroundStyle(SabqTheme.onAction)
+            .padding(.horizontal, SabqLayout.space12)
+            .frame(minHeight: SabqLayout.touchTarget)
+            .background(
+                RoundedRectangle(cornerRadius: SabqTheme.buttonRadius, style: .continuous)
+                    .fill(SabqTheme.actionFill)
+            )
+        }
+        .buttonStyle(.plain)
     }
 
     // Two compact lines beside the avatar: author and role, then publication details.
@@ -993,11 +940,10 @@ struct ArticleDetailView: View {
             // The UIKit bridge remains the source of truth for mixed-script
             // Arabic/Latin wrapping; its UIFontMetrics scaling preserves AX
             // sizes while the token keeps the title hierarchy consistent.
-            uiFont: SabqFonts.uiDisplay(size: CGFloat(fontSize + 8), weight: .heavy),
+            uiFont: SabqFonts.uiHeadline(size: CGFloat(fontSize + 4)),
             color: SabqTheme.ink,
             lineLimit: 0,
-            lineSpacing: 6,
-            textStyle: .title2
+            lineSpacing: 3
         )
         .padding(.horizontal, 4)
     }

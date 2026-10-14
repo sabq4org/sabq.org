@@ -50,16 +50,10 @@ struct ExploreView: View {
         ScrollViewReader { proxy in
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: SabqLayout.space24) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("اكتشف ما يحدث")
-                            .font(SabqFonts.display(size: 28, weight: .heavy))
-                            .foregroundStyle(SabqTheme.ink)
-                            .accessibilityAddTraits(.isHeader)
-                        Text("الأقسام بآخر صورها، والنشرات الصوتية، وبحث في كل سبق")
-                            .font(SabqType.body)
-                            .foregroundStyle(SabqTheme.secondaryInk)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
+                    Text("تصفّح الأقسام والمواضيع الأكثر تأثيراً")
+                        .font(SabqType.body)
+                        .foregroundStyle(SabqTheme.secondaryInk)
+                        .fixedSize(horizontal: false, vertical: true)
 
                     if trimmedSearchText.isEmpty {
                         idleContent
@@ -108,97 +102,26 @@ struct ExploreView: View {
     private var idleContent: some View {
         sectionsGridSection
 
-        audioCard
 
         if !recentSearches.isEmpty {
             recentSearchesSection
-        }
-    }
 
-    /// أحدث خبر بصورة في كل قسم من الأخبار المحمّلة — يغذّي صورة البطاقة ووقتها.
-    private var latestByCategory: [ArticleCategory: Article] {
-        var map: [ArticleCategory: Article] = [:]
-        for article in articlesStore.allArticles where article.imageURL?.isEmpty == false {
-            if let current = map[article.category], current.publishDate >= article.publishDate { continue }
-            map[article.category] = article
         }
-        return map
     }
 
     private var sectionsGridSection: some View {
-        let latest = latestByCategory
-        let pictured = ArticleCategory.allCases.filter { latest[$0] != nil }
-        let plain = ArticleCategory.allCases.filter { latest[$0] == nil }
-        let compactColumns = [GridItem(.adaptive(minimum: dynamicTypeSize.isAccessibilitySize ? 200 : 100), spacing: 8)]
-        return VStack(alignment: .leading, spacing: SabqLayout.space12) {
-            Text("الأقسام")
-                .font(SabqFonts.display(size: 21, weight: .heavy))
-                .foregroundStyle(SabqTheme.ink)
-                .accessibilityAddTraits(.isHeader)
+        VStack(alignment: .leading, spacing: SabqLayout.space12) {
+            sectionTitle(icon: "square.grid.2x2.fill", title: "التصنيفات", tint: SabqTheme.primaryEnd)
 
             LazyVGrid(columns: columns, spacing: SabqLayout.space12) {
-                ForEach(pictured) { category in
+                ForEach(Array(ArticleCategory.allCases.enumerated()), id: \.element.id) { _, category in
                     NavigationLink(value: category) {
-                        InkCategoryTile(category: category, latest: latest[category])
+                        CategoryTile(category: category)
                     }
                     .buttonStyle(.plain)
                 }
             }
-
-            if !plain.isEmpty {
-                LazyVGrid(columns: compactColumns, spacing: 8) {
-                    ForEach(plain) { category in
-                        NavigationLink(value: category) {
-                            Text(category.title)
-                                .font(SabqFonts.app(size: 15, weight: .semibold))
-                                .foregroundStyle(SabqTheme.ink)
-                                .frame(maxWidth: .infinity, minHeight: 50)
-                                .background(InkSky.card, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(InkSky.line, lineWidth: 1))
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-            }
         }
-    }
-
-    /// «سبق بصوت» على الحبر — مدخل النشرات الصوتية.
-    private var audioCard: some View {
-        NavigationLink(value: AudioNewslettersRoute()) {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(spacing: 10) {
-                    Image(systemName: "headphones")
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(InkSky.sky)
-                        .accessibilityHidden(true)
-                    Text("سبق بصوت")
-                        .font(SabqFonts.display(size: 18, weight: .bold))
-                        .foregroundStyle(.white)
-                    Spacer(minLength: 0)
-                    InkSkyWave(activeCount: 4, active: InkSky.sky, idle: .white.opacity(0.25),
-                               heights: [8, 14, 20, 12, 22, 16, 10, 18])
-                }
-                Text("النشرات الصوتية وموجز اليوم — في الطريق أو قبل النوم.")
-                    .font(SabqFonts.app(size: 14, weight: .regular))
-                    .foregroundStyle(.white.opacity(0.75))
-                    .fixedSize(horizontal: false, vertical: true)
-                HStack(spacing: 8) {
-                    Image(systemName: "play.fill")
-                        .font(.system(size: 13, weight: .bold))
-                    Text("استمع للنشرات")
-                        .font(SabqFonts.app(size: 14, weight: .bold))
-                }
-                .foregroundStyle(InkSky.ink)
-                .padding(.horizontal, 16)
-                .frame(height: 44)
-                .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(InkSky.sky))
-            }
-            .padding(18)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(InkSky.ink, in: RoundedRectangle(cornerRadius: InkSky.cardRadius, style: .continuous))
-        }
-        .buttonStyle(.plain)
     }
 
     private var recentSearchesSection: some View {
@@ -230,8 +153,10 @@ struct ExploreView: View {
                         .padding(.horizontal, SabqLayout.space12)
                         .padding(.vertical, SabqLayout.space8)
                         .frame(minHeight: SabqLayout.touchTarget)
-                        .background(InkSky.card, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(InkSky.line, lineWidth: 1))
+                        .background(
+                            Capsule(style: .continuous)
+                                .fill(SabqTheme.softFill)
+                        )
                     }
                     .buttonStyle(.plain)
                 }
@@ -360,52 +285,5 @@ struct ExploreView: View {
             searchFailed = true
             isSearching = false
         }
-    }
-}
-
-/// بطاقة قسم بصورة آخر خبر فيه، واسمه بخط العرض فوق حبر متدرّج.
-struct InkCategoryTile: View {
-    let category: ArticleCategory
-    let latest: Article?
-
-    var body: some View {
-        ZStack(alignment: .bottomLeading) {
-            Color.clear
-                .overlay {
-                    if let s = latest?.imageURL, let url = URL(string: s) {
-                        FocalCachedAsyncImage(url: url, focalPoint: latest?.imageFocalPoint, maxPixelSize: 600) {
-                            InkSky.inkRaised
-                        }
-                    } else {
-                        InkSky.inkRaised
-                    }
-                }
-                .clipped()
-
-            LinearGradient(
-                stops: [
-                    .init(color: InkSky.ink.opacity(0.05), location: 0),
-                    .init(color: InkSky.ink.opacity(0.88), location: 1),
-                ],
-                startPoint: .top, endPoint: .bottom
-            )
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(category.title)
-                    .font(SabqFonts.display(size: 21, weight: .heavy))
-                    .foregroundStyle(.white)
-                if let latest {
-                    Text("آخر خبر \(InkFormat.ago(latest.publishDate))")
-                        .font(SabqFonts.app(size: 12, weight: .regular))
-                        .foregroundStyle(.white.opacity(0.78))
-                }
-            }
-            .padding(14)
-        }
-        .frame(height: 136)
-        .frame(maxWidth: .infinity)
-        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .accessibilityElement(children: .combine)
     }
 }
