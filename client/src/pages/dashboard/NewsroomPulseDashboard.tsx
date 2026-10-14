@@ -267,38 +267,38 @@ function MetricCard({
 
   return (
     <Card className="relative overflow-hidden rounded-xl border border-border/70 bg-card shadow-sm transition-all hover:border-primary/30 hover:shadow-md">
-      <CardContent className="p-5">
-        <div className="flex items-start justify-between gap-2">
-          <div className="space-y-1">
-            <p className="text-xs font-medium text-muted-foreground">{title}</p>
+      <CardContent className="p-3 sm:p-5">
+        <div className="flex items-start justify-between gap-1.5 sm:gap-2">
+          <div className="min-w-0 space-y-0.5 sm:space-y-1">
+            <p className="truncate text-[11px] sm:text-xs font-medium text-muted-foreground">{title}</p>
             {loading ? (
-              <Skeleton className="mt-1.5 h-8 w-20" />
+              <Skeleton className="mt-1 h-6 sm:h-8 w-16 sm:w-20" />
             ) : (
-              <p className="text-2xl font-bold tracking-tight tabular-nums text-foreground">
+              <p className="text-lg sm:text-2xl font-bold tracking-tight tabular-nums text-foreground">
                 {typeof value === "number" ? number(value) : value}
               </p>
             )}
           </div>
-          <div className={cn("rounded-xl border p-2.5 shrink-0", iconBoxClass)}>
-            <Icon className="h-5 w-5" />
+          <div className={cn("rounded-lg sm:rounded-xl border p-1.5 sm:p-2.5 shrink-0", iconBoxClass)}>
+            <Icon className="h-4 w-4 sm:h-5 sm:w-5" />
           </div>
         </div>
 
-        <div className="mt-3.5 flex items-center justify-between gap-2 text-xs text-muted-foreground pt-2.5 border-t border-border/40">
+        <div className="mt-2 sm:mt-3.5 flex items-center justify-between gap-1.5 text-[10px] sm:text-xs text-muted-foreground pt-2 sm:pt-2.5 border-t border-border/40">
           <span className="truncate">{helper || "مقارنةً بأمس"}</span>
           {change !== undefined && !loading ? (
             <span
               className={cn(
-                "inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[11px] font-semibold tabular-nums shrink-0",
+                "inline-flex items-center gap-0.5 rounded-full px-1.5 sm:px-2 py-0.5 text-[10px] sm:text-[11px] font-semibold tabular-nums shrink-0",
                 change > 0 && "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
                 change < 0 && "bg-rose-500/10 text-rose-700 dark:text-rose-300",
                 change === 0 && "bg-muted text-muted-foreground",
               )}
             >
               {change > 0 ? (
-                <TrendingUp className="h-3 w-3" />
+                <TrendingUp className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
               ) : change < 0 ? (
-                <TrendingDown className="h-3 w-3" />
+                <TrendingDown className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
               ) : null}
               {change > 0 ? "+" : ""}
               {change}%
@@ -360,30 +360,30 @@ function ActionCard({
   return (
     <Link href={href}>
       <a className="group block rounded-xl border border-border/70 bg-card text-foreground shadow-sm transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:bg-muted/20 hover:shadow-md">
-        <div className="p-4">
-          <div className="flex items-start justify-between gap-2">
+        <div className="p-3 sm:p-4">
+          <div className="flex items-start justify-between gap-1.5 sm:gap-2">
             <span
               className={cn(
-                "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border",
+                "flex h-8 w-8 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-lg sm:rounded-xl border",
                 style.icon,
               )}
             >
-              <Icon className="h-5 w-5" />
+              <Icon className="h-4 w-4 sm:h-5 sm:w-5" />
             </span>
-            <Badge variant="outline" className={cn("text-[10px] font-semibold px-2 py-0.5", style.badge)}>
+            <Badge variant="outline" className={cn("text-[9px] sm:text-[10px] font-semibold px-1.5 sm:px-2 py-0.5", style.badge)}>
               {style.badgeLabel}
             </Badge>
           </div>
-          <div className="mt-3.5 flex items-baseline justify-between gap-2">
-            <div>
-              <div className="text-sm font-bold text-foreground">{title}</div>
-              <p className="mt-0.5 text-xs text-muted-foreground line-clamp-1">{description}</p>
+          <div className="mt-2.5 sm:mt-3.5 flex items-baseline justify-between gap-1.5 sm:gap-2">
+            <div className="min-w-0">
+              <div className="truncate text-xs sm:text-sm font-bold text-foreground">{title}</div>
+              <p className="mt-0.5 text-[10px] sm:text-xs text-muted-foreground line-clamp-1">{description}</p>
             </div>
-            <div className="flex items-center gap-1.5 shrink-0">
-              <span className={cn("text-2xl font-bold tabular-nums", style.accent)}>
+            <div className="flex items-center gap-1 shrink-0">
+              <span className={cn("text-lg sm:text-2xl font-bold tabular-nums", style.accent)}>
                 {number(count)}
               </span>
-              <ChevronLeft className="h-4 w-4 text-muted-foreground/50 transition-transform group-hover:-translate-x-1 group-hover:text-primary" />
+              <ChevronLeft className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-muted-foreground/50 transition-transform group-hover:-translate-x-1 group-hover:text-primary" />
             </div>
           </div>
         </div>
@@ -1408,11 +1408,11 @@ export default function NewsroomPulseDashboard() {
 
   return (
     <DashboardLayout>
-      <main dir="rtl" className="mx-auto max-w-[1600px] space-y-6 pb-24 sm:pb-10">
+      <main dir="rtl" className="mx-auto max-w-[1600px] space-y-5 sm:space-y-6 pb-24 sm:pb-10">
         <DashboardAnnouncementBanner deferLoading={statsQuery.isLoading} />
 
-        {/* Executive Command Header Card */}
-        <Card className="relative overflow-hidden rounded-2xl border border-border/70 bg-card shadow-sm">
+        {/* Executive Command Header Card — hidden on mobile browsers per user preference */}
+        <Card className="hidden sm:block relative overflow-hidden rounded-2xl border border-border/70 bg-card shadow-sm">
           <div className="h-1 w-full bg-gradient-to-l from-primary via-emerald-500 to-indigo-500" />
           <CardContent className="p-5 sm:p-6 space-y-4">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -1483,15 +1483,77 @@ export default function NewsroomPulseDashboard() {
           </CardContent>
         </Card>
 
+        {/* Favorites / Quick Access Section — Placed right at the top on both Mobile & Desktop */}
+        <section className="space-y-2.5 sm:space-y-3" data-testid="dashboard-favorites">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <span className="flex h-7 w-7 sm:h-8 sm:w-8 shrink-0 items-center justify-center rounded-lg border border-amber-500/25 bg-amber-500/10 text-amber-500">
+                <Star className="h-3.5 w-3.5 sm:h-4 sm:w-4 fill-current" />
+              </span>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-sm sm:text-base font-bold text-foreground">المفضلة</h2>
+                  {favoriteItems.length > 0 && (
+                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0 tabular-nums">
+                      {favoriteItems.length}
+                    </Badge>
+                  )}
+                </div>
+                <p className="text-[11px] sm:text-xs text-muted-foreground line-clamp-1">
+                  وصول سريع لصفحاتك المختارة عبر ★ من القائمة الجانبية
+                </p>
+              </div>
+            </div>
+          </div>
+          {favoriteItems.length > 0 ? (
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-2.5 lg:grid-cols-5">
+              {favoriteItems.map((item) => {
+                const FavoriteIcon = item.icon;
+                return (
+                  <div
+                    key={item.id}
+                    className="group flex items-center gap-1 rounded-xl border border-border/70 bg-card shadow-sm transition-all hover:border-primary/30 hover:shadow-md"
+                  >
+                    <Link
+                      href={item.path || "#"}
+                      onClick={() => trackNavClick(item.id, item.path || "")}
+                      className="flex min-w-0 flex-1 items-center gap-2 px-2.5 py-2 text-xs font-semibold sm:gap-2.5 sm:px-3 sm:py-2.5 sm:text-sm"
+                    >
+                      {FavoriteIcon && (
+                        <span className="flex h-7 w-7 sm:h-8 sm:w-8 shrink-0 items-center justify-center rounded-lg border border-primary/20 bg-primary/10 text-primary">
+                          <FavoriteIcon className="h-3.5 w-3.5 sm:h-4 sm:w-4" aria-hidden="true" />
+                        </span>
+                      )}
+                      <span className="truncate">{item.labelAr || item.labelKey}</span>
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => toggleFavorite(item)}
+                      className="shrink-0 rounded-lg p-1.5 sm:p-2 text-amber-500 opacity-80 hover:bg-muted hover:opacity-100"
+                      aria-label={`إزالة ${item.labelAr || item.labelKey} من المفضلة`}
+                    >
+                      <Star className="h-3.5 w-3.5 sm:h-4 sm:w-4 fill-current" />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="rounded-xl border border-dashed border-border/80 bg-muted/20 px-3.5 py-2.5 sm:px-4 sm:py-3 text-xs text-muted-foreground">
+              لا توجد صفحات مفضّلة بعد — اضغط ★ بجانب اسم أي قسم في القائمة الجانبية ليظهر هنا للوصول السريع.
+            </div>
+          )}
+        </section>
+
         {/* 6 Executive KPI Cards */}
         {!isContentManager && (
-          <section className="space-y-3">
+          <section className="space-y-2.5 sm:space-y-3">
             <SectionTitle
               icon={Gauge}
               title="مؤشرات الأداء اليومي اللحظية"
               description="أرقام اليوم منذ منتصف الليل مقارنةً بنفس الساعة من يوم أمس"
             />
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+            <div className="grid grid-cols-2 gap-2.5 sm:gap-4 lg:grid-cols-3 xl:grid-cols-6">
               <MetricCard
                 title="نُشر اليوم"
                 value={stats?.articles.publishedToday ?? 0}
@@ -1551,7 +1613,7 @@ export default function NewsroomPulseDashboard() {
         )}
 
         {/* Priority Intervention Section */}
-        <section className="space-y-3">
+        <section className="space-y-2.5 sm:space-y-3">
           <SectionTitle
             icon={BellRing}
             title="يتطلب تدخلك الآن"
@@ -1559,7 +1621,7 @@ export default function NewsroomPulseDashboard() {
           />
           <div
             className={cn(
-              "grid gap-3 sm:grid-cols-2",
+              "grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-2",
               !isContentManager && "lg:grid-cols-3 xl:grid-cols-5",
             )}
           >
@@ -1884,53 +1946,6 @@ export default function NewsroomPulseDashboard() {
               <UpcomingScheduleList schedule={schedule} />
             </CardContent>
           </Card>
-        </section>
-
-        {/* Favorites Section */}
-        <section className="space-y-3" data-testid="dashboard-favorites">
-          <SectionTitle
-            icon={Star}
-            title="اختصاراتك المفضلة"
-            description="تُضاف بالضغط على نجمة ★ بجانب اسم أي صفحة في القائمة الجانبية"
-          />
-          {favoriteItems.length > 0 ? (
-            <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-5">
-              {favoriteItems.map((item) => {
-                const FavoriteIcon = item.icon;
-                return (
-                  <div
-                    key={item.id}
-                    className="group flex items-center gap-1 rounded-xl border border-border/70 bg-card shadow-sm transition-colors hover:border-primary/30"
-                  >
-                    <Link
-                      href={item.path || "#"}
-                      onClick={() => trackNavClick(item.id, item.path || "")}
-                      className="flex min-w-0 flex-1 items-center gap-2.5 px-3 py-2.5 text-sm font-semibold"
-                    >
-                      {FavoriteIcon && (
-                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-primary/20 bg-primary/10 text-primary">
-                          <FavoriteIcon className="h-4 w-4" aria-hidden="true" />
-                        </span>
-                      )}
-                      <span className="truncate">{item.labelAr || item.labelKey}</span>
-                    </Link>
-                    <button
-                      type="button"
-                      onClick={() => toggleFavorite(item)}
-                      className="shrink-0 rounded-lg p-2 text-amber-500 opacity-80 hover:bg-muted hover:opacity-100"
-                      aria-label={`إزالة ${item.labelAr || item.labelKey} من المفضلة`}
-                    >
-                      <Star className="h-4 w-4 fill-current" />
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <div className="rounded-xl border border-dashed border-border/80 bg-muted/20 px-4 py-3.5 text-xs text-muted-foreground">
-              لا توجد صفحات مفضّلة بعد — اضغط ★ بجانب اسم أي قسم في القائمة الجانبية ليظهر هنا للوصول السريع.
-            </div>
-          )}
         </section>
 
         {/* Operations & Reminders */}
