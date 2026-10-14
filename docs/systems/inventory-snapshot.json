@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-14T17:55:11.795Z",
+  "generatedAt": "2026-10-14T18:34:56.841Z",
   "systems": [
     {
       "id": "account-center",
@@ -59,7 +59,7 @@
     },
     {
       "id": "editorial",
-      "fileCount": 267,
+      "fileCount": 269,
       "samplePaths": [
         "server/services/mobileAdminSchedule.ts",
         "tests/unit/mobileAdminSchedule.test.ts",
