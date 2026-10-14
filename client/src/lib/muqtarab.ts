@@ -18,6 +18,7 @@ export type AngleWriter = {
   name: string;
   avatar: string | null;
   slug: string | null;
+  bio?: string | null;
 };
 
 // Extended types for API responses
