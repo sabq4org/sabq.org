@@ -224,10 +224,10 @@ struct MomentByMomentView: View {
             } label: {
                 Text("إعادة المحاولة")
                     .font(SabqFonts.app(size: 12, weight: .medium))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(SabqTheme.onAction)
                     .padding(.horizontal, 18)
                     .padding(.vertical, 8)
-                    .background(Capsule().fill(SabqTheme.primaryEnd))
+                    .background(Capsule().fill(SabqTheme.actionFill))
             }
             .buttonStyle(.plain)
         }

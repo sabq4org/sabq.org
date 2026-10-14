@@ -47,7 +47,9 @@ struct SocialAuthButtons: View {
                     .foregroundStyle(.white)
             }
             .frame(maxWidth: .infinity)
-            .frame(height: 50)
+            .padding(.horizontal, SabqLayout.space16)
+            .padding(.vertical, SabqLayout.space12)
+            .frame(minHeight: SabqLayout.controlHeight)
             .background(
                 RoundedRectangle(cornerRadius: SabqTheme.buttonRadius, style: .continuous)
                     .fill(Color.black)
@@ -125,12 +127,15 @@ struct SocialAuthButtons: View {
             HStack(spacing: 10) {
                 Text("المتابعة باستخدام Google")
                     .font(SabqFonts.app(size: 16, weight: .semibold))
-                    .foregroundStyle(SabqTheme.ink)
+                    // Google's branded surface stays white in both appearances.
+                    .foregroundStyle(Color(white: 0.12))
                 GoogleGLogo()
                     .frame(width: 20, height: 20)
             }
             .frame(maxWidth: .infinity)
-            .frame(height: 50)
+            .padding(.horizontal, SabqLayout.space16)
+            .padding(.vertical, SabqLayout.space12)
+            .frame(minHeight: SabqLayout.controlHeight)
             .background(
                 RoundedRectangle(cornerRadius: SabqTheme.buttonRadius, style: .continuous)
                     .fill(Color.white)

@@ -1070,50 +1070,37 @@ struct ImageLightbox: View {
 // MARK: - Theme
 
 nonisolated enum SabqTheme {
-    static let background  = Color(UIColor { t in
-        t.userInterfaceStyle == .dark
-            ? UIColor(red: 0.07, green: 0.07, blue: 0.09, alpha: 1)
-            : UIColor(red: 0.95, green: 0.97, blue: 0.99, alpha: 1)
-    })
-    static let surface = Color(UIColor { t in
-        t.userInterfaceStyle == .dark
-            ? UIColor(red: 0.12, green: 0.12, blue: 0.14, alpha: 1)
-            : UIColor.white
-    })
-    static let ink = Color(UIColor { t in
-        t.userInterfaceStyle == .dark
-            ? UIColor(red: 0.95, green: 0.95, blue: 0.97, alpha: 1)
-            : UIColor(red: 0.10, green: 0.10, blue: 0.14, alpha: 1)
-    })
-    static let secondaryInk = Color(UIColor { t in
-        t.userInterfaceStyle == .dark
-            ? UIColor(red: 0.68, green: 0.68, blue: 0.72, alpha: 1)
-            : UIColor(red: 0.38, green: 0.40, blue: 0.46, alpha: 1)
-    })
-    static let tertiaryInk = Color(UIColor { t in
-        if t.accessibilityContrast == .high {
-            return t.userInterfaceStyle == .dark
-                ? UIColor(white: 0.88, alpha: 1) : UIColor(white: 0.25, alpha: 1)
-        }
-        return t.userInterfaceStyle == .dark
-            ? UIColor(red: 0.68, green: 0.68, blue: 0.72, alpha: 1)
-            : UIColor(red: 0.42, green: 0.44, blue: 0.49, alpha: 1)
-    })
-    static let outline = Color(UIColor { t in
-        t.userInterfaceStyle == .dark
-            ? UIColor(red: 0.20, green: 0.20, blue: 0.23, alpha: 1)
-            : UIColor(red: 0.88, green: 0.90, blue: 0.93, alpha: 1)
-    })
-    static let shadow = Color(UIColor { t in
-        t.userInterfaceStyle == .dark
-            ? UIColor.black.withAlphaComponent(0.30)
-            : UIColor.black.withAlphaComponent(0.05)
-    })
-    static let deepShadow = Color(UIColor { t in
-        t.userInterfaceStyle == .dark
-            ? UIColor.black.withAlphaComponent(0.40)
-            : UIColor.black.withAlphaComponent(0.08)
-    })
+    /// Brand ink, quiet paper surfaces and independently resolved dark surfaces.
+    static func adaptive(_ light: UInt32, _ dark: UInt32,
+                         highContrastLight: UInt32? = nil, highContrastDark: UInt32? = nil) -> Color {
+        Color(UIColor { traits in
+            let isDark = traits.userInterfaceStyle == .dark
+            let high = traits.accessibilityContrast == .high
+            let hex = isDark ? (high ? highContrastDark ?? dark : dark)
+                : (high ? highContrastLight ?? light : light)
+            return UIColor(red: CGFloat((hex >> 16) & 255) / 255,
+                           green: CGFloat((hex >> 8) & 255) / 255,
+                           blue: CGFloat(hex & 255) / 255, alpha: 1)
+        })
+    }
+    static let background = adaptive(0xF4F7FA, 0x0E1822)
+    static let surface = adaptive(0xFFFFFF, 0x172330)
+    static let ink = adaptive(0x10202E, 0xF3F6F9)
+    static let secondaryInk = adaptive(0x516170, 0xB7C5D2, highContrastLight: 0x10202E, highContrastDark: 0xF3F6F9)
+    static let tertiaryInk = adaptive(0x5A6B79, 0xA9B9C8, highContrastLight: 0x10202E, highContrastDark: 0xF3F6F9)
+    static let outline = adaptive(0xD8E1E8, 0x3B4B5B)
+    static let shadow = Color.black.opacity(0.03)
+    static let deepShadow = Color.black.opacity(0.05)
+    static let success = adaptive(0x13734E, 0x73D9A9)
+    static let warning = adaptive(0x946000, 0xF2C76D)
+    static let danger = adaptive(0xBF3038, 0xFF9297)
+    /// Filled actions stay dark enough for white labels, including dark/seasonal mode.
+    static var actionFill: Color {
+        NationalDayTheme.isActive ? NationalDayTheme.canvas : resolvedAccent.color
+    }
+    static let onAction = Color.white
+    static let disabledFill = adaptive(0xE0E7ED, 0x2B3B4A)
+    static let disabledInk = adaptive(0x576674, 0xA9B9C8)
     private static var _cachedAccentRaw: String?
     private static var _cachedAccent: AppAccent?
 
@@ -1133,15 +1120,7 @@ nonisolated enum SabqTheme {
     //
     // الألوان الدلالية (coral للأخطاء، gold للتنبيهات…) خارج هذا المسار
     // عمدًا، فتبقى دلالتها مقروءة أثناء الموسم.
-    static var primaryStart: Color {
-        if NationalDayTheme.isActive { return NationalDayTheme.accentSoft }
-        let accent = resolvedAccent
-        return Color(UIColor { t in
-            t.userInterfaceStyle == .dark
-                ? UIColor(accent.darkColor)
-                : UIColor(accent.color)
-        })
-    }
+    static var primaryStart: Color { primaryEnd }
     static var primaryEnd: Color {
         if NationalDayTheme.isActive { return NationalDayTheme.accent }
         let accent = resolvedAccent
@@ -1151,13 +1130,13 @@ nonisolated enum SabqTheme {
                 : UIColor(accent.color)
         })
     }
-    nonisolated static let teal        = Color(red: 0.16, green: 0.65, blue: 0.55)
-    nonisolated static let sky         = Color(red: 0.22, green: 0.52, blue: 0.95)
-    nonisolated static let gold        = Color(red: 0.92, green: 0.68, blue: 0.20)
-    nonisolated static let coral       = Color(red: 0.90, green: 0.35, blue: 0.32)
-    nonisolated static let leaf        = Color(red: 0.40, green: 0.73, blue: 0.22)
+    static let teal = adaptive(0x08785F, 0x70DCC0)
+    static let sky = brandBlue
+    static let gold = warning
+    static let coral = danger
+    static let leaf = success
     /// زمردي شارات «قراءة» في الويب (#047857).
-    nonisolated static let emerald     = Color(red: 0.016, green: 0.47, blue: 0.34)
+    static let emerald = success
     /// درجة الأزرق الفاتح المعتمدة في الويب (`--public-surface` ‏#f4f8fb، داكن #172330)
     /// لحاويات البلوكات الجانبية وبنود الرئيسية — اعتمدها المالك لتطبيق iOS 2026-09-12.
     static let publicSurface = Color(UIColor { t in
@@ -1166,16 +1145,8 @@ nonisolated enum SabqTheme {
             : UIColor(red: 0xF4 / 255.0, green: 0xF8 / 255.0, blue: 0xFB / 255.0, alpha: 1)
     })
     /// الفاتح يطابق درجة الويب #f4f8fb (كان #f0f7fc)؛ الداكن يبقى محايدًا.
-    static let paleFill = Color(UIColor { t in
-        t.userInterfaceStyle == .dark
-            ? UIColor(red: 0.14, green: 0.14, blue: 0.16, alpha: 1)
-            : UIColor(red: 0xF4 / 255.0, green: 0xF8 / 255.0, blue: 0xFB / 255.0, alpha: 1)
-    })
-    static let softFill = Color(UIColor { t in
-        t.userInterfaceStyle == .dark
-            ? UIColor(red: 0.16, green: 0.16, blue: 0.18, alpha: 1)
-            : UIColor(red: 0.92, green: 0.95, blue: 0.98, alpha: 1)
-    })
+    static let paleFill = adaptive(0xF4F7FA, 0x1D2E3D)
+    static let softFill = adaptive(0xE9F0F5, 0x243544)
     static let warmGlow = Color(UIColor { t in
         t.userInterfaceStyle == .dark
             ? UIColor(red: 0.12, green: 0.12, blue: 0.14, alpha: 1)
@@ -1203,7 +1174,7 @@ nonisolated enum SabqTheme {
             : UIColor(red: 0.72, green: 0.84, blue: 0.92, alpha: 1)
     })
     /// سماوي سبق #4CBCFD — ثابت في الوضعين، لون العلامة نفسه.
-    nonisolated static let brandSky = Color(red: 0.30, green: 0.74, blue: 0.99)
+    nonisolated static let brandSky = Color(red: 76 / 255.0, green: 188 / 255.0, blue: 253 / 255.0)
     /// أزرق سبق العميق #0E76B8 للنصوص التفاعلية؛ سماوي في الداكن.
     static let brandBlue = Color(UIColor { t in
         t.userInterfaceStyle == .dark
@@ -1211,16 +1182,16 @@ nonisolated enum SabqTheme {
             : UIColor(red: 0.05, green: 0.46, blue: 0.72, alpha: 1)
     })
 
-    nonisolated static let cardRadius: CGFloat   = 28
+    nonisolated static let cardRadius: CGFloat   = 16
     /// زوايا بطاقات الرئيسية: أحدّ من cardRadius/tileRadius (طلب المالك 2026-10-09).
     nonisolated static let blockRadius: CGFloat  = 12
-    nonisolated static let tileRadius: CGFloat   = 22
-    nonisolated static let chipRadius: CGFloat   = 14
-    nonisolated static let buttonRadius: CGFloat = 20
+    nonisolated static let tileRadius: CGFloat   = 12
+    nonisolated static let chipRadius: CGFloat   = 10
+    nonisolated static let buttonRadius: CGFloat = 12
 
     static var brandGradient: LinearGradient {
         LinearGradient(
-            colors: [primaryStart, primaryEnd],
+            colors: [actionFill, actionFill],
             startPoint: .topLeading,
             endPoint: .bottomTrailing
         )
@@ -1256,7 +1227,6 @@ struct SurfaceCard<Content: View>: View {
     var body: some View {
         let strokeColor = SabqTheme.outline.opacity(0.5)
         let strokeWidth: CGFloat = 0.5
-        let topShadow = SabqTheme.shadow
 
         // `lazy: true` للقوائم الطويلة داخل ScrollView — النسخة العادية كانت
         // تُركّب 50 صفًا وصورها دفعة واحدة أثناء حركة الدفع (تدقيق 2026-08-02).
@@ -1267,28 +1237,17 @@ struct SurfaceCard<Content: View>: View {
                 VStack(alignment: .leading, spacing: spacing) { content }
             }
         }
-        .padding(20)
+        .padding(SabqLayout.cardInset)
         .frame(maxWidth: .infinity, alignment: .leading)
         .multilineTextAlignment(.leading)
         .background(
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                 .fill(SabqTheme.surface)
-                .shadow(color: topShadow, radius: 16, x: 0, y: 6)
-                .shadow(color: SabqTheme.deepShadow, radius: 1, x: 0, y: 1)
         )
         .overlay(
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                 .stroke(strokeColor, lineWidth: strokeWidth)
         )
-        .overlay(alignment: .topTrailing) {
-            if let accent {
-                Circle()
-                    .fill(accent.opacity(0.08))
-                    .frame(width: 120, height: 120)
-                    .offset(x: 40, y: -40)
-                    .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
-            }
-        }
         .sabqRTL()
     }
 }
@@ -1392,7 +1351,7 @@ struct SmallSquareBadge: View {
             .frame(width: 44, height: 44)
             .overlay {
                 Image(systemName: systemImage)
-                    .font(SabqFonts.app(size: 18, weight: .semibold))
+                    .font(.system(size: 20, weight: .semibold))
                     .foregroundStyle(tint)
             }
     }
@@ -1432,14 +1391,15 @@ struct SmallActionButton: View {
         Button(action: action) {
             HStack(spacing: 7) {
                 Text(title)
-                    .font(SabqFonts.app(size: 12, weight: .medium))
+                    .font(SabqType.caption)
 
                 Image(systemName: systemImage)
-                    .font(SabqFonts.app(size: 12, weight: .medium))
+                    .font(SabqType.caption)
             }
             .foregroundStyle(tint)
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
+            .frame(minHeight: SabqLayout.touchTarget)
             .background(
                 RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous)
                     .fill(tint.opacity(0.10))
@@ -1457,27 +1417,17 @@ struct PrimaryCTAButton: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 10) {
-                Text(title)
-                    .font(SabqFonts.app(size: 17, weight: .bold))
-
-                Image(systemName: systemImage)
-                    .font(SabqFonts.app(size: 17, weight: .bold))
-            }
-            .foregroundStyle(Color.white.opacity(isDisabled ? 0.7 : 1))
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 17)
-            .background(
-                LinearGradient(
-                    colors: isDisabled
-                        ? [SabqTheme.secondaryInk.opacity(0.4), SabqTheme.secondaryInk.opacity(0.3)]
-                        : [SabqTheme.primaryStart, SabqTheme.primaryEnd],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                ),
-                in: RoundedRectangle(cornerRadius: SabqTheme.buttonRadius, style: .continuous)
-            )
-            .shadow(color: isDisabled ? .clear : SabqTheme.primaryEnd.opacity(0.25), radius: 12, x: 0, y: 6)
+            Label(title, systemImage: systemImage)
+                .font(SabqType.label)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .foregroundStyle(isDisabled ? SabqTheme.disabledInk : SabqTheme.onAction)
+                .padding(.horizontal, SabqLayout.space16)
+                .padding(.vertical, SabqLayout.space12)
+                .frame(maxWidth: .infinity, minHeight: SabqLayout.controlHeight)
+                .background(isDisabled ? SabqTheme.disabledFill : SabqTheme.actionFill,
+                            in: RoundedRectangle(cornerRadius: SabqTheme.buttonRadius))
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .disabled(isDisabled)
@@ -1498,11 +1448,12 @@ struct CategoryChip: View {
                 .foregroundStyle(isSelected ? .white : SabqTheme.secondaryInk)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 9)
+                .frame(minHeight: SabqLayout.touchTarget)
                 .background(
                     Capsule(style: .continuous)
                         .fill(
                             isSelected
-                                ? AnyShapeStyle(SabqTheme.brandGradient)
+                                ? AnyShapeStyle(SabqTheme.actionFill)
                                 : AnyShapeStyle(SabqTheme.paleFill)
                         )
                 )
@@ -1515,6 +1466,7 @@ struct CategoryChip: View {
                 )
         }
         .buttonStyle(.plain)
+        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
     }
 }
 
@@ -1545,10 +1497,11 @@ struct DetailLabelPill: View {
         HStack(spacing: 5) {
             if let icon {
                 Image(systemName: icon)
-                    .font(SabqFonts.app(size: 10, weight: .medium))
+                    .font(.system(size: 12, weight: .medium))
                     // SF Symbols vary in bounding box — lock size so every pill
                     // matches the passport "موثَّق" chip height.
-                    .frame(width: 11, height: 11)
+                    .frame(width: 14, height: 14)
+                    .accessibilityHidden(true)
             }
             Text(title)
                 .font(SabqFonts.app(size: 13, weight: .semibold))
@@ -1557,6 +1510,7 @@ struct DetailLabelPill: View {
         // نص ملوّن بلا كبسولة (نموذج صفحة الخبر المعتمد 2026-10-09).
         .foregroundStyle(tint)
         .padding(.vertical, 2)
+        .frame(minHeight: SabqLayout.touchTarget)
         .contentShape(Rectangle())
     }
 }
@@ -1623,7 +1577,7 @@ struct FeaturedArticleCard: View {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Text(article.categoryTitle)
                         .font(SabqFonts.app(size: 12, weight: .semibold))
-                        .foregroundStyle(article.category.tint)
+                        .foregroundStyle(SabqTheme.primaryEnd)
                     Text("·")
                         .font(SabqFonts.app(size: 12, weight: .regular))
                         .foregroundStyle(SabqTheme.tertiaryInk)
@@ -1632,7 +1586,7 @@ struct FeaturedArticleCard: View {
                         .foregroundStyle(SabqTheme.tertiaryInk)
                         .monospacedDigit()
                 }
-                .lineLimit(1)
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
 
                 // `fixedSize(horizontal: false, vertical: true)` is what
                 // forces the Text to respect the parent's width instead
@@ -1679,10 +1633,10 @@ struct FeaturedArticleCard: View {
                     }
                     .buttonStyle(.plain)
                     .frame(minWidth: 44, minHeight: 44)
-                    .accessibilityLabel(isBookmarked ? "إزالة من المحفوظات" : "حفظ المقال")
+                    .accessibilityLabel(isBookmarked ? "إزالة من المحفوظات" : "حفظ الخبر")
                 }
             }
-            .padding(20)
+            .padding(SabqLayout.cardInset)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .frame(maxWidth: .infinity)
@@ -1994,30 +1948,33 @@ struct CategoryTile: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .top) {
-                Spacer(minLength: 0)
-                SmallSquareBadge(systemImage: category.icon, tint: category.tint)
-            }
+            SmallSquareBadge(systemImage: category.icon, tint: SabqTheme.primaryEnd)
+                .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(category.title)
                     .font(SabqFonts.editorial(.headline, size: 16, weight: .semibold, boldText: legibilityWeight == .bold))
                     .foregroundStyle(SabqTheme.ink)
 
-                Text(category.subtitle)
-                    .font(SabqFonts.app(size: 11, weight: .regular))
-                    .foregroundStyle(SabqTheme.tertiaryInk)
-                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .multilineTextAlignment(.leading)
+                Group {
+                    if dynamicTypeSize.isAccessibilitySize {
+                        Text(category.subtitle)
+                    } else {
+                        Text(category.subtitle).lineLimit(2, reservesSpace: true)
+                    }
+                }
+                .font(SabqType.caption)
+                .foregroundStyle(SabqTheme.tertiaryInk)
+                .fixedSize(horizontal: false, vertical: true)
+                .multilineTextAlignment(.leading)
             }
         }
-        .padding(16)
+        .padding(SabqLayout.cardInset)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
                 .fill(SabqTheme.surface)
-                .shadow(color: SabqTheme.shadow, radius: 8, x: 0, y: 3)
+
         )
     }
 }
@@ -2078,7 +2035,7 @@ struct ErrorStateView: View {
         EmptyStateView(
             icon: "wifi.exclamationmark",
             tint: SabqTheme.coral,
-            title: "حدث خطأ",
+            title: "تعذّر تحميل المحتوى",
             subtitle: message,
             action: retryAction,
             actionTitle: "إعادة المحاولة"

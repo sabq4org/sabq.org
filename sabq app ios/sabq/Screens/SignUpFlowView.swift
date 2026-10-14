@@ -169,13 +169,13 @@ struct SignUpFlowView: View {
                         ZStack {
                             Circle()
                                 .fill(idx < buildProgress
-                                      ? SabqTheme.primaryEnd
+                                      ? SabqTheme.actionFill
                                       : SabqTheme.paleFill)
                                 .frame(width: 28, height: 28)
                             if idx < buildProgress {
                                 Image(systemName: "checkmark")
                                     .font(SabqFonts.app(size: 12, weight: .heavy))
-                                    .foregroundStyle(.white)
+                                    .foregroundStyle(SabqTheme.onAction)
                             } else if idx == buildProgress {
                                 ProgressView()
                                     .tint(SabqTheme.primaryEnd)
@@ -219,10 +219,10 @@ struct SignUpFlowView: View {
                 } label: {
                     Text("ابدأ التصفّح")
                         .font(SabqFonts.app(size: 16, weight: .heavy))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(SabqTheme.onAction)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 15)
-                        .background(SabqTheme.brandGradient, in: RoundedRectangle(cornerRadius: SabqTheme.buttonRadius, style: .continuous))
+                        .background(SabqTheme.actionFill, in: RoundedRectangle(cornerRadius: SabqTheme.buttonRadius, style: .continuous))
                 }
                 .buttonStyle(.plain)
                 .padding(.horizontal, 18)
@@ -352,13 +352,13 @@ struct SignUpFlowView: View {
     private func userBubble(_ text: String) -> some View {
         Text(text)
             .font(SabqFonts.app(size: 14, weight: .semibold))
-            .foregroundStyle(.white)
+            .foregroundStyle(SabqTheme.onAction)
             .multilineTextAlignment(.leading)
             .padding(.horizontal, 14)
             .padding(.vertical, 11)
             .background(
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(SabqTheme.primaryEnd)
+                    .fill(SabqTheme.actionFill)
             )
     }
 
@@ -406,10 +406,10 @@ struct SignUpFlowView: View {
             } label: {
                 Image(systemName: "paperplane.fill")
                     .font(SabqFonts.app(size: 15, weight: .heavy))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(canSubmit ? SabqTheme.onAction : SabqTheme.disabledInk)
                     .frame(width: 40, height: 40)
                     .background(
-                        Circle().fill(canSubmit ? SabqTheme.primaryEnd : SabqTheme.tertiaryInk)
+                        Circle().fill(canSubmit ? SabqTheme.actionFill : SabqTheme.disabledFill)
                     )
                     .rotationEffect(.degrees(180))
             }
@@ -451,10 +451,10 @@ struct SignUpFlowView: View {
                     Image(systemName: "checkmark.circle.fill")
                         .font(SabqFonts.app(size: 14, weight: .bold))
                 }
-                .foregroundStyle(.white)
+                .foregroundStyle(SabqTheme.onAction)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 13)
-                .background(SabqTheme.brandGradient, in: RoundedRectangle(cornerRadius: SabqTheme.buttonRadius, style: .continuous))
+                .background(SabqTheme.actionFill, in: RoundedRectangle(cornerRadius: SabqTheme.buttonRadius, style: .continuous))
             }
             .buttonStyle(.plain)
             .padding(.horizontal, 16)
@@ -478,12 +478,12 @@ struct SignUpFlowView: View {
         } label: {
             Text(category.name.isEmpty ? (category.slug ?? "—") : category.name)
                 .font(SabqFonts.app(size: 12, weight: .semibold))
-                .foregroundStyle(isOn ? .white : SabqTheme.ink)
+                .foregroundStyle(isOn ? SabqTheme.onAction : SabqTheme.ink)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 7)
                 .frame(maxWidth: .infinity)
                 .background(
-                    Capsule().fill(isOn ? SabqTheme.primaryEnd : SabqTheme.paleFill)
+                    Capsule().fill(isOn ? SabqTheme.actionFill : SabqTheme.paleFill)
                 )
         }
         .buttonStyle(.plain)
@@ -504,10 +504,10 @@ struct SignUpFlowView: View {
             } label: {
                 Text("إعادة المحاولة")
                     .font(SabqFonts.app(size: 13, weight: .bold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(SabqTheme.onAction)
                     .padding(.horizontal, 18)
                     .padding(.vertical, 10)
-                    .background(Capsule().fill(SabqTheme.primaryEnd))
+                    .background(Capsule().fill(SabqTheme.actionFill))
             }
             .buttonStyle(.plain)
 

@@ -1,0 +1,76 @@
+{
+  "devicesAndConfigurations" : [
+    {
+      "device" : {
+        "architecture" : "arm64",
+        "deviceId" : "7E79B415-3E9E-46DE-BA3D-3B297D003909",
+        "deviceName" : "Sabq Editorial Large QA",
+        "modelName" : "iPhone 18 Pro Max",
+        "osBuildNumber" : "24A434",
+        "osVersion" : "27.0",
+        "platform" : "iOS Simulator"
+      },
+      "expectedFailures" : 0,
+      "failedTests" : 0,
+      "passedTests" : 161,
+      "skippedTests" : 0,
+      "testPlanConfiguration" : {
+        "configurationId" : "1",
+        "configurationName" : "Test Scheme Action"
+      }
+    },
+    {
+      "device" : {
+        "architecture" : "arm64",
+        "deviceId" : "6A036B59-10A7-4C68-9246-DB792B6DE95B",
+        "deviceName" : "Sabq Editorial Small QA",
+        "modelName" : "iPhone SE (3rd generation)",
+        "osBuildNumber" : "24A434",
+        "osVersion" : "27.0",
+        "platform" : "iOS Simulator"
+      },
+      "expectedFailures" : 0,
+      "failedTests" : 0,
+      "passedTests" : 161,
+      "skippedTests" : 0,
+      "testPlanConfiguration" : {
+        "configurationId" : "1",
+        "configurationName" : "Test Scheme Action"
+      }
+    }
+  ],
+  "environmentDescription" : "sabq · Built with macOS 27.0.1",
+  "expectedFailures" : 0,
+  "failedTests" : 0,
+  "finishTime" : 1791964613.376,
+  "passedTests" : 161,
+  "result" : "Passed",
+  "runtimeWarnings" : [
+
+  ],
+  "skippedTests" : 0,
+  "startTime" : 1791964567.302,
+  "statistics" : [
+    {
+      "subtitle" : "322 test runs",
+      "title" : "161 tests ran on 2 devices"
+    }
+  ],
+  "testFailures" : [
+
+  ],
+  "title" : "Test - sabq",
+  "topInsights" : [
+    {
+      "category" : "Longest Test Runs",
+      "impact" : "91% of duration",
+      "text" : "2 longest test runs with outlier durations exceeding 0.49s (three standard deviations)"
+    },
+    {
+      "category" : "Longest Test Runs",
+      "impact" : "92% of duration",
+      "text" : "2 longest test runs with outlier durations exceeding 0.44s (three standard deviations)"
+    }
+  ],
+  "totalTestCount" : 161
+}

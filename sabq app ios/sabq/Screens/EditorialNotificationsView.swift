@@ -10,6 +10,9 @@ import UserNotifications
 /// dispatched gets a row here regardless of whether the push reached the
 /// device.
 struct EditorialNotificationsView: View {
+    @Environment(AuthStore.self) private var authStore
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @State private var showLogin = false
     @Environment(\.dismiss) private var dismiss
 
     @State private var items: [APIEditorialNotification] = []
@@ -35,7 +38,19 @@ struct EditorialNotificationsView: View {
         // in another NavigationStack here caused dismiss() to fail on the
         // back button, which left `navigationPath` non-empty in ContentView
         // and hid the tab bar — locking the user inside the screen.
-        content
+        Group {
+            if authStore.isLoggedIn {
+                content
+            } else {
+                ScrollView {
+                    EmptyStateView(icon: "bell", tint: SabqTheme.primaryEnd,
+                        title: "إشعارات حسابك",
+                        subtitle: "سجّل دخولك للاطلاع على إشعارات المحتوى الذي تشارك به في سبق.",
+                        action: { showLogin = true }, actionTitle: "تسجيل الدخول")
+                        .padding(SabqLayout.pageInset)
+                }
+            }
+        }
             .background(SabqTheme.background)
             .sabqRTL()
             .navigationBarTitleDisplayMode(.inline)
@@ -46,15 +61,20 @@ struct EditorialNotificationsView: View {
                         .foregroundStyle(SabqTheme.ink)
                 }
                 ToolbarItem(placement: .primaryAction) {
+                    if authStore.isLoggedIn {
                     NavigationLink(destination: NotificationPreferencesView()) {
                         Image(systemName: "slider.horizontal.3")
                             .font(SabqFonts.app(size: 16, weight: .semibold))
                             .foregroundStyle(SabqTheme.secondaryInk)
+                            .frame(minWidth: SabqLayout.touchTarget, minHeight: SabqLayout.touchTarget)
+                    }
+                    .accessibilityLabel("إعدادات الإشعارات")
                     }
                 }
             }
-            .task { await load() }
-            .refreshable { await load() }
+            .task(id: authStore.isLoggedIn) { if authStore.isLoggedIn { await load() } }
+            .refreshable { if authStore.isLoggedIn { await load() } }
+            .sheet(isPresented: $showLogin) { LoginSheet() }
             .sheet(item: $selectedNotification) { notification in
                 EditorialNotificationDetailView(item: notification)
             }
@@ -64,24 +84,19 @@ struct EditorialNotificationsView: View {
     private var content: some View {
         switch loadState {
         case .loading:
-            VStack { ProgressView().padding(.top, 120); Spacer() }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-        case .failed(let message):
-            VStack(spacing: 12) {
-                Spacer()
-                Image(systemName: "exclamationmark.circle")
-                    .font(SabqFonts.app(size: 40, weight: .light))
-                    .foregroundStyle(SabqTheme.coral)
-                Text(message)
-                    .font(SabqFonts.app(size: 14, weight: .medium))
-                    .foregroundStyle(SabqTheme.secondaryInk)
-                    .multilineTextAlignment(.center)
-                Button("إعادة المحاولة") { Task { await load() } }
-                    .font(SabqFonts.app(size: 14, weight: .bold))
-                    .foregroundStyle(SabqTheme.primaryEnd)
+            VStack(spacing: SabqLayout.space12) {
+                ProgressView("جارٍ تحميل الإشعارات…")
+                    .font(SabqType.caption)
+                    .tint(SabqTheme.primaryEnd)
                 Spacer()
             }
-            .padding()
+            .padding(.top, SabqLayout.space32)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        case .failed(let message):
+            ScrollView {
+                ErrorStateView(message: message, retryAction: { Task { await load() } })
+                    .padding(SabqLayout.pageInset)
+            }
         case .loaded:
             if items.isEmpty {
                 emptyState
@@ -147,6 +162,7 @@ struct EditorialNotificationsView: View {
             .foregroundStyle(SabqTheme.coral)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 12)
+            .frame(minHeight: SabqLayout.touchTarget)
             .background(
                 Capsule(style: .continuous)
                     .fill(SabqTheme.coral.opacity(0.08))
@@ -202,38 +218,12 @@ struct EditorialNotificationsView: View {
     }
 
     private var emptyState: some View {
-        VStack(spacing: 14) {
-            Spacer()
-            ZStack {
-                Circle()
-                    .fill(SabqTheme.primaryEnd.opacity(0.10))
-                    .frame(width: 96, height: 96)
-                Image(systemName: "bell.fill")
-                    .font(SabqFonts.app(size: 38, weight: .light))
-                    .foregroundStyle(SabqTheme.primaryEnd)
-            }
-            HStack(spacing: 6) {
-                Image(systemName: "checkmark.seal.fill")
-                    .font(SabqFonts.app(size: 10, weight: .regular))
-                Text("أنت محدّث")
-                    .font(SabqFonts.app(size: 11, weight: .black))
-            }
-            .foregroundStyle(.white)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 5)
-            .background(SabqTheme.primaryEnd, in: Capsule())
-            Text("لا توجد إشعارات بعد")
-                .font(SabqFonts.app(size: 17, weight: .bold))
-                .foregroundStyle(SabqTheme.ink)
-            Text("سيصلك هنا كل ما يخص مقالاتك وأخبارك من جدولة ونشر ومراجعة.")
-                .font(SabqFonts.app(size: 13))
-                .foregroundStyle(SabqTheme.secondaryInk)
-                .multilineTextAlignment(.center)
-                .lineSpacing(4)
-                .padding(.horizontal, 28)
-            Spacer()
+        ScrollView {
+            EmptyStateView(icon: "bell", tint: SabqTheme.primaryEnd,
+                title: "لا توجد إشعارات بعد",
+                subtitle: "تظهر هنا تحديثات جدولة محتواك ونشره ومراجعته.")
+                .padding(SabqLayout.pageInset)
         }
-        .frame(maxWidth: .infinity)
     }
 
     private var markAllReadButton: some View {
@@ -245,12 +235,13 @@ struct EditorialNotificationsView: View {
         } label: {
             HStack(spacing: 6) {
                 Image(systemName: "checkmark.circle.fill")
-                Text("تحديد الكل كمقروء")
+                Text("تعيين الكل كمقروء")
             }
             .font(SabqFonts.app(size: 12, weight: .medium))
             .foregroundStyle(SabqTheme.primaryEnd)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 10)
+            .frame(minHeight: SabqLayout.touchTarget)
             .background(Capsule().fill(SabqTheme.primaryEnd.opacity(0.10)))
         }
         .buttonStyle(.plain)
@@ -278,13 +269,13 @@ struct EditorialNotificationsView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 6) {
                         Text(item.title)
-                            .font(SabqFonts.app(size: 14, weight: .bold))
+                            .font(SabqType.label)
                             .foregroundStyle(SabqTheme.ink)
-                            .lineLimit(2)
+                            .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
                             .multilineTextAlignment(.leading)
                         if isUnread {
                             Circle()
-                                .fill(SabqTheme.coral)
+                                .fill(SabqTheme.primaryEnd)
                                 .frame(width: 7, height: 7)
                         }
                     }
@@ -293,10 +284,10 @@ struct EditorialNotificationsView: View {
                     // — otherwise the reason renders twice (body suffix +
                     // dedicated callout below).
                     Text(Self.cleanBody(item))
-                        .font(SabqFonts.app(size: 12, weight: .medium))
+                        .font(SabqType.caption)
                         .foregroundStyle(SabqTheme.secondaryInk)
                         .lineSpacing(3)
-                        .lineLimit(3)
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 3)
                         .multilineTextAlignment(.leading)
                         .fixedSize(horizontal: false, vertical: true)
                     if let reviewerNote = item.reviewerNote, !reviewerNote.isEmpty {
@@ -308,14 +299,14 @@ struct EditorialNotificationsView: View {
                             Text(reviewerNote)
                                 .font(SabqFonts.app(size: 11, weight: .regular))
                                 .foregroundStyle(style.tint)
-                                .lineLimit(2)
+                                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
                                 .multilineTextAlignment(.leading)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                         .padding(.top, 2)
                     }
                     Text(relativeDate(from: item.createdAt))
-                        .font(SabqFonts.app(size: 10, weight: .regular))
+                        .font(SabqType.caption)
                         .foregroundStyle(SabqTheme.tertiaryInk)
                 }
                 Spacer(minLength: 0)
@@ -324,7 +315,7 @@ struct EditorialNotificationsView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous)
-                    .fill(isUnread ? style.tint.opacity(0.05) : SabqTheme.paleFill.opacity(0.3))
+                    .fill(SabqTheme.surface)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous)
@@ -332,6 +323,8 @@ struct EditorialNotificationsView: View {
             )
         }
         .buttonStyle(.plain)
+        .accessibilityElement(children: .combine)
+        .accessibilityValue(isUnread ? "غير مقروء" : "مقروء")
     }
 
     private func rowStyle(for type: String) -> (icon: String, tint: Color) {
@@ -378,7 +371,7 @@ struct EditorialNotificationsView: View {
             notificationsStore.unreadCount = page.unread
             loadState = .loaded
         } catch {
-            loadState = .failed("تعذر جلب الإشعارات")
+            loadState = .failed("تعذّر تحميل الإشعارات. تحقق من اتصالك ثم أعد المحاولة.")
         }
         // The user is actively viewing the in-app list now, so any
         // editorial notifications still sitting in the system
@@ -789,7 +782,7 @@ struct EditorialNotificationDetailView: View {
             .foregroundStyle(.white)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 15)
-            .background(SabqTheme.brandGradient, in: RoundedRectangle(cornerRadius: SabqTheme.buttonRadius, style: .continuous))
+            .background(SabqTheme.actionFill, in: RoundedRectangle(cornerRadius: SabqTheme.buttonRadius, style: .continuous))
         }
         .buttonStyle(.plain)
     }
@@ -811,8 +804,10 @@ struct EditorialNotificationDetailView: View {
 struct NotificationPreferencesView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var prefs: EditorialNotificationPreferences = .allOn
+    @State private var savedPrefs: EditorialNotificationPreferences = .allOn
     @State private var loaded = false
     @State private var saving = false
+    @State private var preferenceError: String?
 
     var body: some View {
         ScrollView {
@@ -826,7 +821,7 @@ struct NotificationPreferencesView: View {
                             tint: SabqTheme.sky,
                             title: "جدولة المحتوى",
                             subtitle: "عند جدولة مقالتك/خبرك لوقت لاحق",
-                            isOn: $prefs.scheduledEnabled
+                            isOn: preferenceBinding(\.scheduledEnabled)
                         )
                         Divider()
                         toggleRow(
@@ -834,7 +829,7 @@ struct NotificationPreferencesView: View {
                             tint: SabqTheme.leaf,
                             title: "النشر",
                             subtitle: "عند نشر المحتوى وإتاحته للقراء",
-                            isOn: $prefs.publishedEnabled
+                            isOn: preferenceBinding(\.publishedEnabled)
                         )
                         Divider()
                         toggleRow(
@@ -842,7 +837,7 @@ struct NotificationPreferencesView: View {
                             tint: SabqTheme.primaryEnd,
                             title: "طلب تعديل",
                             subtitle: "حين يطلب المحرّر تعديلاً قبل النشر",
-                            isOn: $prefs.revisionEnabled
+                            isOn: preferenceBinding(\.revisionEnabled)
                         )
                         Divider()
                         toggleRow(
@@ -850,15 +845,28 @@ struct NotificationPreferencesView: View {
                             tint: SabqTheme.coral,
                             title: "الاعتذار / الرفض",
                             subtitle: "عند الاعتذار عن النشر مع توضيح السبب",
-                            isOn: $prefs.rejectedEnabled
+                            isOn: preferenceBinding(\.rejectedEnabled)
                         )
                     }
                 }
 
+                if let preferenceError {
+                    VStack(alignment: .leading, spacing: SabqLayout.space8) {
+                        Text(preferenceError).font(SabqType.label).foregroundStyle(SabqTheme.danger)
+                        if !loaded {
+                            Button("إعادة المحاولة") { Task { await loadPreferences() } }
+                                .frame(minHeight: SabqLayout.touchTarget)
+                        }
+                    }
+                    .accessibilityElement(children: .contain)
+                }
+                if !loaded && preferenceError == nil {
+                    ProgressView("جارٍ تحميل الإعدادات…")
+                }
                 if saving {
                     HStack(spacing: 6) {
                         ProgressView().controlSize(.small)
-                        Text("جاري الحفظ...")
+                        Text("جارٍ حفظ الإعدادات…")
                             .font(SabqFonts.app(size: 10, weight: .regular))
                             .foregroundStyle(SabqTheme.tertiaryInk)
                     }
@@ -871,16 +879,7 @@ struct NotificationPreferencesView: View {
         .sabqRTL()
         .navigationTitle("إعدادات الإشعارات")
         .navigationBarTitleDisplayMode(.inline)
-        .task {
-            if let p = try? await APIClient.shared.fetchNotificationPreferences() {
-                prefs = p
-                loaded = true
-            }
-        }
-        .onChange(of: prefs) { _, newPrefs in
-            guard loaded else { return }
-            Task { await save(newPrefs) }
-        }
+        .task { await loadPreferences() }
     }
 
     private var introCard: some View {
@@ -894,7 +893,7 @@ struct NotificationPreferencesView: View {
                         .font(SabqFonts.app(size: 16, weight: .bold))
                         .foregroundStyle(SabqTheme.ink)
                 }
-                Text("تحكم في الأنواع التي تصلك على هذا الجهاز. تطفئة نوع لا يلغي إرسالها — يمكن الاطلاع عليها لاحقاً من شاشة الإشعارات.")
+                Text("اختر التنبيهات التي تصلك على هذا الجهاز. يبقى سجل الإشعارات متاحًا داخل التطبيق عند إيقاف التنبيه.")
                     .font(SabqFonts.app(size: 12, weight: .medium))
                     .foregroundStyle(SabqTheme.secondaryInk)
                     .lineSpacing(3)
@@ -903,35 +902,59 @@ struct NotificationPreferencesView: View {
     }
 
     private func toggleRow(icon: String, tint: Color, title: String, subtitle: String, isOn: Binding<Bool>) -> some View {
-        HStack(spacing: 12) {
-            ZStack {
-                Circle()
-                    .fill(tint.opacity(0.14))
-                    .frame(width: 36, height: 36)
+        Toggle(isOn: isOn) {
+            HStack(alignment: .top, spacing: SabqLayout.space12) {
                 Image(systemName: icon)
-                    .font(SabqFonts.app(size: 15, weight: .semibold))
+                    .font(.system(size: 18, weight: .semibold))
                     .foregroundStyle(tint)
+                    .frame(width: 36, height: 36)
+                    .background(tint.opacity(0.12), in: Circle())
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: SabqLayout.space4) {
+                    Text(title).font(SabqType.label).foregroundStyle(SabqTheme.ink)
+                    Text(subtitle).font(SabqType.caption).foregroundStyle(SabqTheme.secondaryInk)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(SabqFonts.app(size: 14, weight: .bold))
-                    .foregroundStyle(SabqTheme.ink)
-                Text(subtitle)
-                    .font(SabqFonts.app(size: 10, weight: .regular))
-                    .foregroundStyle(SabqTheme.secondaryInk)
-                    .lineLimit(2)
-            }
-            Spacer(minLength: 0)
-            Toggle("", isOn: isOn)
-                .labelsHidden()
-                .tint(tint)
         }
-        .padding(.vertical, 8)
+        .tint(SabqTheme.actionFill)
+        .disabled(!loaded || saving)
+        .padding(.vertical, SabqLayout.space8)
+        .frame(minHeight: SabqLayout.touchTarget)
+    }
+
+    /// Persist only explicit changes; loading preferences must remain read-only.
+    private func preferenceBinding(_ keyPath: WritableKeyPath<EditorialNotificationPreferences, Bool>) -> Binding<Bool> {
+        Binding(get: { prefs[keyPath: keyPath] }, set: { value in
+            guard loaded, !saving else { return }
+            prefs[keyPath: keyPath] = value
+            let updated = prefs
+            saving = true
+            Task { await save(updated) }
+        })
+    }
+
+    private func loadPreferences() async {
+        preferenceError = nil
+        do {
+            prefs = try await APIClient.shared.fetchNotificationPreferences()
+            savedPrefs = prefs
+            loaded = true
+        } catch {
+            preferenceError = "تعذّر تحميل إعدادات الإشعارات. أعد المحاولة."
+        }
     }
 
     private func save(_ newPrefs: EditorialNotificationPreferences) async {
         saving = true
+        preferenceError = nil
         defer { saving = false }
-        try? await APIClient.shared.updateNotificationPreferences(newPrefs)
+        do {
+            try await APIClient.shared.updateNotificationPreferences(newPrefs)
+            savedPrefs = newPrefs
+        } catch {
+            prefs = savedPrefs
+            preferenceError = "تعذّر حفظ التغيير. أعد اختيار الإعداد للمحاولة مجددًا."
+        }
     }
 }

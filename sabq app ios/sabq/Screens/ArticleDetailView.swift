@@ -35,6 +35,7 @@ struct ReadingProgressOverlay: View {
 }
 
 struct ArticleDetailView: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let article: Article
     @Environment(BookmarksStore.self) private var bookmarksStore
     @Environment(AuthStore.self) private var authStore
@@ -163,7 +164,7 @@ struct ArticleDetailView: View {
                             corner: .topLeading
                         )
 
-                    VStack(alignment: .leading, spacing: 18) {
+                    VStack(alignment: .leading, spacing: SabqLayout.space16) {
                         // Editorial column order (per user 2026-05-14):
                         //   labels → title → metadata → smart summary →
                         //   audio (if any) → divider → body.
@@ -229,9 +230,9 @@ struct ArticleDetailView: View {
                                 .padding(.top, 24)
                         }
                     }
-                    .frame(width: max(0, min(proxy.size.width - 40, 720)), alignment: .leading)
-                    .padding(.horizontal, 20)
-                    .padding(.top, 24)
+                    .frame(width: max(0, min(proxy.size.width - (SabqLayout.pageInset * 2), SabqLayout.readingWidth)), alignment: .leading)
+                    .padding(.horizontal, SabqLayout.pageInset)
+                    .padding(.top, SabqLayout.space24)
                     .padding(.bottom, 40)
                     .frame(maxWidth: .infinity)
                 }
@@ -572,10 +573,9 @@ struct ArticleDetailView: View {
     /// FlowLayout wraps onto a second line on narrow screens.
     private var labelsRow: some View {
         FlowLayout(spacing: 14) {
-            DetailLabelPill(
-                title: article.categoryTitle,
-                tint: article.category.tint
-            )
+            // Category is context, not severity. Keep red reserved for the
+            // explicit breaking state below so ordinary sections stay calm.
+            DetailLabelPill(title: article.categoryTitle, tint: SabqTheme.secondaryInk)
 
             // شارة «قراءة» التحريرية — تطابق شارة صفحة الخبر في الويب (#1420).
             // من `displayArticle` كي تظهر بعد وصول حمولة التفاصيل حتى لو دخل
@@ -592,7 +592,7 @@ struct ArticleDetailView: View {
                         .frame(width: 12, height: 12)
                     Text("عاجل")
                         .font(SabqFonts.app(size: 13, weight: .semibold))
-                        .foregroundStyle(SabqTheme.coral)
+                        .foregroundStyle(SabqTheme.danger)
                 }
                 .padding(.vertical, 2)
             }
@@ -630,7 +630,7 @@ struct ArticleDetailView: View {
         case "neutral", "محايد":
             return ("محايد", "minus.circle", SabqTheme.secondaryInk)
         case "negative", "سلبي":
-            return ("سلبي", "exclamationmark.triangle.fill", SabqTheme.coral)
+            return ("سلبي", "exclamationmark.triangle.fill", SabqTheme.danger)
         case "mixed", "مختلط":
             return ("مختلط", "circle.lefthalf.fill", Color(red: 0.62, green: 0.36, blue: 0.92))
         default:
@@ -682,12 +682,15 @@ struct ArticleDetailView: View {
             EmptyView()
         } else {
             VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 8) {
+                let summaryLayout = dynamicTypeSize.isAccessibilitySize
+                    ? AnyLayout(VStackLayout(alignment: .leading, spacing: SabqLayout.space12))
+                    : AnyLayout(HStackLayout(spacing: SabqLayout.space8))
+                summaryLayout {
                     Image(systemName: "sparkles")
                         .font(SabqFonts.app(size: 11, weight: .regular))
                         .foregroundStyle(SabqTheme.primaryEnd)
                     Text("الموجز الذكي")
-                        .font(SabqFonts.app(size: 14, weight: .semibold))
+                        .font(SabqType.sectionTitle)
                         .foregroundStyle(SabqTheme.brandBlue)
                     Spacer(minLength: 0)
                     if canListen {
@@ -700,7 +703,7 @@ struct ArticleDetailView: View {
 
                 if !body.isEmpty {
                     Text(body)
-                        .font(SabqFonts.app(size: 15, weight: .regular))
+                        .font(SabqType.body)
                         .foregroundStyle(SabqTheme.secondaryInk)
                         .multilineTextAlignment(.leading)
                         .lineSpacing(4)
@@ -715,12 +718,13 @@ struct ArticleDetailView: View {
                             SabqHaptics.light()
                         } label: {
                             HStack(spacing: 4) {
-                                Text(isSummaryExpanded ? "طيّ" : "عرض المزيد")
-                                    .font(SabqFonts.app(size: 13, weight: .semibold))
+                                Text(isSummaryExpanded ? "إخفاء التفاصيل" : "قراءة الموجز كاملًا")
+                                    .font(SabqType.label)
                                 Image(systemName: isSummaryExpanded ? "chevron.up" : "chevron.down")
                                     .font(SabqFonts.app(size: 10, weight: .regular))
                             }
-                            .foregroundStyle(SabqTheme.primaryEnd)
+                            .foregroundStyle(SabqTheme.brandBlue)
+                            .frame(minHeight: SabqLayout.touchTarget)
                         }
                         .buttonStyle(.plain)
                     }
@@ -765,15 +769,12 @@ struct ArticleDetailView: View {
                 Text(isPlayingAudio ? "إيقاف" : "استماع")
                     .font(SabqFonts.app(size: 13, weight: .semibold))
             }
-            .foregroundStyle(SabqTheme.primaryEnd)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
+            .foregroundStyle(SabqTheme.onAction)
+            .padding(.horizontal, SabqLayout.space12)
+            .frame(minHeight: SabqLayout.touchTarget)
             .background(
-                RoundedRectangle(cornerRadius: 8, style: .continuous).fill(SabqTheme.surface)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .stroke(SabqTheme.primaryEnd.opacity(0.4), lineWidth: 1)
+                RoundedRectangle(cornerRadius: SabqTheme.buttonRadius, style: .continuous)
+                    .fill(SabqTheme.actionFill)
             )
         }
         .buttonStyle(.plain)
@@ -782,7 +783,10 @@ struct ArticleDetailView: View {
     // Two compact lines beside the avatar: author and role, then publication details.
     // Keep the full update timestamp available without adding another visual line.
     private var articleMeta: some View {
-        HStack(spacing: 8) {
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: SabqLayout.space8))
+            : AnyLayout(HStackLayout(spacing: SabqLayout.space8))
+        return layout {
             OpinionAuthorAvatar(
                 name: displayArticle.author,
                 imageURL: displayArticle.authorImageURL,
@@ -791,13 +795,16 @@ struct ArticleDetailView: View {
             .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 5) {
+                let authorLayout = dynamicTypeSize.isAccessibilitySize
+                    ? AnyLayout(VStackLayout(alignment: .leading, spacing: SabqLayout.space4))
+                    : AnyLayout(HStackLayout(spacing: SabqLayout.space4))
+                authorLayout {
                     NavigationLink(value: AuthorRoute(name: displayArticle.author)) {
                         HStack(spacing: 3) {
                             Text(displayArticle.author)
-                                .font(SabqFonts.app(size: 13, weight: .bold))
+                                .font(SabqType.label)
                                 .foregroundStyle(SabqTheme.ink)
-                                .lineLimit(1)
+                                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
                             if displayArticle.isAuthorVerified {
                                 Image(systemName: "checkmark.seal.fill")
                                     .font(.system(size: 10, weight: .semibold))
@@ -806,15 +813,17 @@ struct ArticleDetailView: View {
                         }
                     }
                     .buttonStyle(.plain)
+                    .frame(minHeight: SabqLayout.touchTarget, alignment: .leading)
                     .layoutPriority(1)
 
-                    Text("·")
-                        .accessibilityHidden(true)
+                    if !dynamicTypeSize.isAccessibilitySize {
+                        Text("·").accessibilityHidden(true)
+                    }
                     Text(reporterTitle ?? displayArticle.authorRole ?? "كاتب الخبر")
-                        .lineLimit(1)
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
                         .truncationMode(.tail)
                 }
-                .font(SabqFonts.app(size: 10.5, weight: .regular))
+                .font(SabqType.caption)
                 .foregroundStyle(SabqTheme.secondaryInk)
 
                 publicationSummary
@@ -829,9 +838,9 @@ struct ArticleDetailView: View {
                             .accessibilityHidden(true)
                         Text("آخر تحديث: \(updated)")
                             .monospacedDigit()
-                            .lineLimit(1)
+                            .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
                     }
-                    .font(SabqFonts.app(size: 11, weight: .regular))
+                .font(SabqType.caption)
                     .foregroundStyle(SabqTheme.secondaryInk)
                     .accessibilityLabel("آخر تحديث \(updated)")
                 }
@@ -845,11 +854,11 @@ struct ArticleDetailView: View {
         // U+200F في أول السطر: التاريخ يبدأ برقم («9 أكتوبر») فيُقرأ السطر LTR
         // وينقلب ترتيب العناصر الثلاثة بلا علامة اتجاه عربية.
         Text("\u{200F}\(displayArticle.publicationDate) · \(displayArticle.publicationClock) · \(displayArticle.readingLabel)")
-        .font(SabqFonts.app(size: 11, weight: .regular))
+                .font(SabqType.caption)
         .foregroundStyle(SabqTheme.secondaryInk)
         .monospacedDigit()
-        .lineLimit(1)
-        .minimumScaleFactor(0.85)
+        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+        .fixedSize(horizontal: false, vertical: true)
         .accessibilityElement(children: .ignore)
     }
 
@@ -916,11 +925,11 @@ struct ArticleDetailView: View {
                     .font(SabqFonts.app(size: 16, weight: .semibold))
             }
             Text(label)
-                .font(SabqFonts.app(size: 13, weight: .medium))
+                .font(SabqType.label)
         }
         .foregroundStyle(isActive ? SabqTheme.primaryEnd : SabqTheme.secondaryInk)
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity, minHeight: SabqLayout.touchTarget)
+        .padding(.vertical, SabqLayout.space8)
     }
 
     // MARK: - Title
@@ -928,7 +937,10 @@ struct ArticleDetailView: View {
     private var articleTitle: some View {
         SabqRTLText(
             displayArticle.title,
-            uiFont: SabqFonts.uiHeadline(size: CGFloat(fontSize + 6)),
+            // The UIKit bridge remains the source of truth for mixed-script
+            // Arabic/Latin wrapping; its UIFontMetrics scaling preserves AX
+            // sizes while the token keeps the title hierarchy consistent.
+            uiFont: SabqFonts.uiHeadline(size: CGFloat(fontSize + 4)),
             color: SabqTheme.ink,
             lineLimit: 0,
             lineSpacing: 3
@@ -1110,9 +1122,8 @@ struct ArticleDetailView: View {
                     .padding(.vertical, 5)
                     .background(
                         Capsule(style: .continuous)
-                            .fill(SabqTheme.primaryEnd)
+                            .fill(SabqTheme.actionFill)
                     )
-                    .shadow(color: SabqTheme.primaryEnd.opacity(0.4), radius: 5, y: 2)
                     .padding(12)
             }
         }
@@ -1481,7 +1492,10 @@ struct ArticleDetailView: View {
 
     /// دعوة الدخول سطر واحد بزر مستطيل (نموذج صفحة الخبر المعتمد 2026-10-09).
     private var signInPromptCard: some View {
-        HStack(spacing: 10) {
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: SabqLayout.space12))
+            : AnyLayout(HStackLayout(spacing: SabqLayout.space12))
+        return layout {
             Text("سجّل دخولك لإضافة تعليق")
                 .font(SabqFonts.app(size: 14, weight: .medium))
                 .foregroundStyle(SabqTheme.secondaryInk)
@@ -1496,8 +1510,9 @@ struct ArticleDetailView: View {
                     .foregroundStyle(.white)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 7)
+                    .frame(minHeight: SabqLayout.touchTarget)
                     .background(
-                        RoundedRectangle(cornerRadius: 8, style: .continuous).fill(SabqTheme.primaryEnd)
+                        RoundedRectangle(cornerRadius: 8, style: .continuous).fill(SabqTheme.actionFill)
                     )
             }
             .buttonStyle(.plain)
@@ -1872,7 +1887,7 @@ struct WeeklyPhotosLightbox: View {
                                 .padding(.vertical, 6)
                                 .background(
                                     Capsule(style: .continuous)
-                                        .fill(SabqTheme.primaryEnd)
+                                        .fill(SabqTheme.actionFill)
                                 )
                                 .shadow(color: .black.opacity(0.4), radius: 6, y: 2)
                             Spacer()

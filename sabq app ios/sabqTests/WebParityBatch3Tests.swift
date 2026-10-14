@@ -79,8 +79,8 @@ struct WebParityBatch3Tests {
         // لا أرقام عربية-هندية (U+0660…U+0669) في أي موضع — مقارنة بالرموز لا بالنص.
         #expect(a.publicationClock.unicodeScalars.allSatisfy { !(0x660...0x669).contains($0.value) })
         #expect(a.publicationDate.unicodeScalars.allSatisfy { !(0x660...0x669).contains($0.value) })
-        #expect(a.readingLabel.hasPrefix("قراءة "))
-        #expect(a.readingLabel.hasSuffix(" دقيقة"))
+        // The reader and cards now share the same concise Arabic duration.
+        #expect(a.readingLabel == "دقيقة قراءة")
     }
 
     @Test func reporterProfileDecodesTitle() throws {
