@@ -48,7 +48,7 @@ struct SettingsView: View {
 
     var body: some View {
         ScrollView(showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 20) {
+            VStack(alignment: .leading, spacing: SabqLayout.space16) {
                 SabqPageIntro("إعدادات التطبيق وعن سبق")
 
                 profileSection
@@ -68,10 +68,10 @@ struct SettingsView: View {
                 }
                 appInfoSection
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 18)
+            .padding(.horizontal, SabqLayout.pageInset)
+            .padding(.top, SabqLayout.space16)
             .padding(.bottom, 40)
-            .frame(maxWidth: 760, alignment: .leading)
+            .frame(maxWidth: SabqLayout.readingWidth, alignment: .leading)
             .frame(maxWidth: .infinity)
         }
         .sabqNavigationEdge()
@@ -166,50 +166,17 @@ struct SettingsView: View {
     // MARK: - Profile / Auth
 
     private var profileSection: some View {
-        SurfaceCard(accent: SabqTheme.primaryEnd) {
+        SurfaceCard {
             if authStore.isLoggedIn, let user = authStore.currentUser {
-                VStack(spacing: 16) {
-                    HStack(spacing: 14) {
-                        profileAvatar(user: user, size: 64)
-
-                        VStack(alignment: .leading, spacing: 5) {
-                            HStack(spacing: 6) {
-                                Text(user.displayName)
-                                    .font(SabqFonts.app(size: 17, weight: .bold))
-                                    .foregroundStyle(SabqTheme.ink)
-
-                                if user.isVerified {
-                                    Image(systemName: "checkmark.seal.fill")
-                                        .font(SabqFonts.app(size: 14))
-                                        .foregroundStyle(SabqTheme.primaryEnd)
-                                }
+                VStack(spacing: SabqLayout.space16) {
+                    Group {
+                        if dynamicTypeSize.isAccessibilitySize {
+                            VStack(alignment: .leading, spacing: SabqLayout.space12) {
+                                profileIdentity(user: user)
                             }
-
-                            HStack(spacing: 6) {
-                                Image(systemName: roleIcon(for: user.primaryRoleKey))
-                                    .font(SabqFonts.app(size: 11))
-                                    .foregroundStyle(SabqTheme.primaryEnd)
-                                Text(user.localizedRole)
-                                    .font(SabqFonts.app(size: 12, weight: .medium))
-                                    .foregroundStyle(SabqTheme.primaryEnd)
-                            }
-                            // Long-press the role label to surface the raw
-                            // role-payload the backend sent. Temporary
-                            // diagnostic for the "قارئ" mismatch report.
-                            .contentShape(Rectangle())
-                            .onLongPressGesture(minimumDuration: 0.6) {
-                                roleDebugMessage = user.roleDebugSummary
-                                showRoleDebug = true
-                            }
-
-                            if let email = user.email, !email.isEmpty {
-                                Text(email)
-                                    .font(SabqFonts.app(size: 12, weight: .regular))
-                                    .foregroundStyle(SabqTheme.secondaryInk)
-                                    .lineLimit(1)
-                            }
+                        } else {
+                            profileIdentity(user: user)
                         }
-                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
 
                     if let jobTitle = user.jobTitle, !jobTitle.isEmpty, jobTitle != user.localizedRole {
@@ -247,7 +214,7 @@ struct SettingsView: View {
                             Text("لم يتم تأكيد البريد الإلكتروني بعد")
                                 .font(SabqFonts.app(size: 13, weight: .medium))
                         }
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(SabqTheme.warning)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 8)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -299,12 +266,12 @@ struct SettingsView: View {
                                             Text("البيانات الشخصية")
                                                 .font(SabqFonts.app(size: 12, weight: .medium))
                                         }
-                                        .foregroundStyle(.white)
+                                        .foregroundStyle(SabqTheme.onAction)
                                         .frame(maxWidth: .infinity)
                                         .padding(.vertical, 9)
                                         .background(
                                             RoundedRectangle(cornerRadius: 9, style: .continuous)
-                                                .fill(SabqTheme.primaryEnd)
+                                                .fill(SabqTheme.actionFill)
                                         )
                                     }
                                     .buttonStyle(.plain)
@@ -331,7 +298,7 @@ struct SettingsView: View {
                                         .padding(.vertical, 9)
                                         .background(
                                             RoundedRectangle(cornerRadius: 9, style: .continuous)
-                                                .fill(needsBasics ? SabqTheme.primaryEnd.opacity(0.10) : SabqTheme.primaryEnd)
+                                                .fill(needsBasics ? SabqTheme.primaryEnd.opacity(0.10) : SabqTheme.actionFill)
                                         )
                                         .overlay(
                                             RoundedRectangle(cornerRadius: 9, style: .continuous)
@@ -382,43 +349,123 @@ struct SettingsView: View {
                     accountActionsSection
                 }
             } else {
-                HStack(spacing: 14) {
-                    Circle()
-                        .fill(SabqTheme.primaryEnd.opacity(0.1))
-                        .frame(width: 56, height: 56)
-                        .overlay {
-                            Image(systemName: "person.fill")
-                                .font(SabqFonts.app(size: 22, weight: .semibold))
-                                .foregroundStyle(SabqTheme.primaryEnd)
-                        }
-
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("تسجيل الدخول")
-                            .font(SabqFonts.app(size: 17, weight: .bold))
-                            .foregroundStyle(SabqTheme.ink)
-                        Text("سجّل دخولك لتجربة شخصية أفضل")
-                            .font(SabqFonts.app(size: 13, weight: .regular))
-                            .foregroundStyle(SabqTheme.secondaryInk)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
+                guestIdentity
                 .onTapGesture { showLogin = true }
 
                 Button { showLogin = true } label: {
-                    HStack(spacing: 8) {
+                    HStack(spacing: SabqLayout.space8) {
                         Image(systemName: "arrow.forward.circle.fill")
                             .font(SabqFonts.app(size: 16))
                         Text("تسجيل الدخول")
-                            .font(SabqFonts.app(size: 15, weight: .bold))
+                            .font(SabqType.headline)
                     }
-                    .foregroundStyle(.white)
+                    .foregroundStyle(SabqTheme.onAction)
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 14)
-                    .background(SabqTheme.brandGradient, in: RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous))
+                    .frame(minHeight: SabqLayout.controlHeight)
+                    .background(SabqTheme.actionFill, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                 }
                 .buttonStyle(.plain)
+                .accessibilityHint("يفتح شاشة تسجيل الدخول")
             }
         }
+    }
+
+    @ViewBuilder
+    private var guestIdentity: some View {
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: SabqLayout.space12) {
+                    guestAvatar
+                    guestCopy
+                }
+            } else {
+                HStack(alignment: .center, spacing: SabqLayout.space12) {
+                    guestAvatar
+                    guestCopy
+                }
+            }
+        }
+    }
+
+    private var guestAvatar: some View {
+        Circle()
+            .fill(SabqTheme.primaryEnd.opacity(0.1))
+            .frame(width: 56, height: 56)
+            .overlay {
+                Image(systemName: "person.fill")
+                    .font(SabqFonts.app(size: 22, weight: .semibold))
+                    .foregroundStyle(SabqTheme.secondaryInk)
+            }
+    }
+
+    private var guestCopy: some View {
+        VStack(alignment: .leading, spacing: SabqLayout.space4) {
+            Text("حسابك في سبق")
+                .font(SabqType.headline)
+                .foregroundStyle(SabqTheme.ink)
+            Text("احفظ أخبارك وتابع اهتماماتك عبر أجهزتك.")
+                .font(SabqType.body)
+                .foregroundStyle(SabqTheme.secondaryInk)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private func profileIdentity(user: APIUser) -> some View {
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: SabqLayout.space12) {
+                    profileAvatar(user: user, size: 56)
+                    profileDetails(user: user)
+                }
+            } else {
+                HStack(alignment: .top, spacing: SabqLayout.space12) {
+                    profileAvatar(user: user, size: 56)
+                    profileDetails(user: user)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func profileDetails(user: APIUser) -> some View {
+        VStack(alignment: .leading, spacing: SabqLayout.space4) {
+            HStack(spacing: SabqLayout.space4) {
+                Text(user.displayName)
+                    .font(SabqType.headline)
+                    .foregroundStyle(SabqTheme.ink)
+
+                if user.isVerified {
+                    Image(systemName: "checkmark.seal.fill")
+                        .font(SabqFonts.app(size: 14))
+                        .foregroundStyle(SabqTheme.success)
+                        .accessibilityLabel("حساب موثّق")
+                }
+            }
+
+            HStack(spacing: SabqLayout.space4) {
+                Image(systemName: "person.fill")
+                    .font(SabqFonts.app(size: 11))
+                    .foregroundStyle(SabqTheme.secondaryInk)
+                Text(user.localizedRole)
+                    .font(SabqType.label)
+                    .foregroundStyle(SabqTheme.secondaryInk)
+            }
+            .contentShape(Rectangle())
+            .onLongPressGesture(minimumDuration: 0.6) {
+                roleDebugMessage = user.roleDebugSummary
+                showRoleDebug = true
+            }
+
+            if let email = user.email, !email.isEmpty {
+                Text(email)
+                    .font(SabqType.caption)
+                    .foregroundStyle(SabqTheme.secondaryInk)
+                    .lineLimit(1)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     @ViewBuilder
@@ -476,7 +523,7 @@ struct SettingsView: View {
                         title: "إرسال خبر",
                         subtitle: "أرسل خبرك مع الصور — يصل لغرفة الأخبار",
                         icon: "newspaper.fill",
-                        tint: SabqTheme.coral
+                        tint: SabqTheme.primaryEnd
                     ) {
                         submissionKind = .news
                     }
@@ -492,7 +539,7 @@ struct SettingsView: View {
                             title: "مقالات تنتظر التعديل",
                             subtitle: "\(revisionsStore.count) مقال بحاجة لإعادة الإرسال",
                             icon: "pencil.and.list.clipboard",
-                            tint: RevisionPalette.accent,
+                            tint: SabqTheme.warning,
                             badgeCount: revisionsStore.count
                         )
                     }
@@ -511,7 +558,7 @@ struct SettingsView: View {
                         title: "إشعاراتي التحريرية",
                         subtitle: "متابعة جدولة ونشر ومراجعة محتواك",
                         icon: "bell.badge.fill",
-                        tint: SabqTheme.teal
+                        tint: SabqTheme.primaryEnd
                     )
                 }
                 .buttonStyle(.plain)
@@ -537,29 +584,31 @@ struct SettingsView: View {
                     .fill(tint.opacity(0.14))
                     .frame(width: 44, height: 44)
                 Image(systemName: icon)
-                    .font(SabqFonts.app(size: 18, weight: .semibold))
+                    .font(.system(size: 20, weight: .semibold))
                     .foregroundStyle(tint)
+                    .accessibilityHidden(true)
             }
 
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
                     Text(title)
-                        .font(SabqFonts.app(size: 15, weight: .bold))
+                        .font(SabqType.label)
                         .foregroundStyle(SabqTheme.ink)
+                        .fixedSize(horizontal: false, vertical: true)
                     if let badgeCount, badgeCount > 0 {
                         Text("\(badgeCount)")
                             .font(SabqFonts.app(size: 10, weight: .regular))
                             .monospacedDigit()
-                            .foregroundStyle(.white)
+                            .foregroundStyle(SabqTheme.onAction)
                             .padding(.horizontal, 7)
                             .padding(.vertical, 2)
-                            .background(Capsule().fill(tint))
+                            .background(Capsule().fill(SabqTheme.actionFill))
                     }
                 }
                 Text(subtitle)
-                    .font(SabqFonts.app(size: 12, weight: .medium))
+                    .font(SabqType.caption)
                     .foregroundStyle(SabqTheme.secondaryInk)
-                    .lineLimit(2)
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
                     .multilineTextAlignment(.leading)
             }
 
@@ -573,11 +622,11 @@ struct SettingsView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                .fill(tint.opacity(0.05))
+                .fill(SabqTheme.paleFill)
         )
         .overlay(
             RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                .stroke(tint.opacity(0.20), lineWidth: 0.5)
+                .stroke(SabqTheme.outline, lineWidth: 0.5)
         )
     }
 
@@ -696,21 +745,6 @@ struct SettingsView: View {
             return "اختر اهتماماتك لنرشّح لك ما يهمّك"
         case (false, false):
             return ""
-        }
-    }
-
-    private func roleIcon(for role: String?) -> String {
-        switch role {
-        case "admin": return "shield.fill"
-        case "system_admin": return "shield.lefthalf.filled"
-        case "editor", "editor-in-chief", "editor_in_chief", "senior-editor", "senior_editor", "managing_editor", "managing-editor", "editorial_manager", "editorial-manager": return "pencil.circle.fill"
-        case "journalist", "reporter", "correspondent", "writer", "author", "article_writer", "article-writer", "article_author", "article-author", "opinion_author", "opinion-author": return "newspaper.fill"
-        case "columnist": return "text.quote"
-        case "photographer": return "camera.fill"
-        case "moderator", "comments_moderator", "comments-moderator": return "flag.fill"
-        case "publisher": return "megaphone.fill"
-        case "contributor": return "person.text.rectangle"
-        default: return "person.fill"
         }
     }
 
@@ -945,7 +979,7 @@ struct SettingsView: View {
                                         if isSelected {
                                             Image(systemName: "checkmark")
                                                 .font(.system(size: 16, weight: .bold))
-                                                .foregroundStyle(.white)
+                                                .foregroundStyle(SabqTheme.onAction)
                                         }
                                     }
                                     .overlay(
@@ -957,11 +991,10 @@ struct SettingsView: View {
                                             .stroke(isSelected ? accent.color : Color.clear, lineWidth: isSelected ? 2 : 0)
                                             .padding(-3)
                                     )
-                                    .shadow(color: accent.color.opacity(isSelected ? 0.4 : 0.15), radius: isSelected ? 6 : 3, y: 2)
 
                                 Text(accent.title)
                                     .font(SabqFonts.app(size: 11, weight: isSelected ? .bold : .medium))
-                                    .foregroundStyle(isSelected ? accent.color : SabqTheme.tertiaryInk)
+                                    .foregroundStyle(isSelected ? SabqTheme.primaryEnd : SabqTheme.tertiaryInk)
                             }
                         }
                         .buttonStyle(.plain)
@@ -1016,7 +1049,7 @@ struct SettingsView: View {
     // MARK: - Subscription
 
     private var subscriptionSection: some View {
-        SurfaceCard(accent: SabqTheme.teal) {
+        SurfaceCard {
             SectionHeader(
                 title: "اشتراكات",
                 subtitle: "ابقَ على اطلاع دائم",
@@ -1039,7 +1072,7 @@ struct SettingsView: View {
     // MARK: - About
 
     private var aboutSection: some View {
-        SurfaceCard(accent: SabqTheme.primaryEnd) {
+        SurfaceCard {
             SectionHeader(
                 title: "عن سبق",
                 subtitle: "صحيفة إلكترونية سعودية",
@@ -1144,43 +1177,61 @@ struct SettingsView: View {
     // MARK: - Helpers
 
     private func settingsToggle(title: String, subtitle: String, icon: String, tint: Color, isOn: Binding<Bool>) -> some View {
-        HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 3) {
+        HStack(alignment: .top, spacing: SabqLayout.space12) {
+            VStack(alignment: .leading, spacing: SabqLayout.space4) {
                 Text(title)
-                    .font(SabqFonts.app(size: 15, weight: .semibold))
+                    .font(SabqType.body)
                     .foregroundStyle(SabqTheme.ink)
 
                 Text(subtitle)
-                    .font(SabqFonts.app(size: 13, weight: .regular))
+                    .font(SabqType.caption)
                     .foregroundStyle(SabqTheme.secondaryInk)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
             Toggle(title, isOn: isOn)
-                .tint(SabqTheme.primaryEnd)
+                .tint(SabqTheme.actionFill)
                 .labelsHidden()
+                .frame(minWidth: SabqLayout.touchTarget, minHeight: SabqLayout.touchTarget)
         }
+        .frame(minHeight: SabqLayout.touchTarget)
     }
 
     private func settingsRow(title: String, subtitle: String, icon: String, tint: Color) -> some View {
-        HStack(spacing: 12) {
-            SmallSquareBadge(systemImage: icon, tint: tint)
-
-            VStack(alignment: .leading, spacing: 3) {
-                Text(title)
-                    .font(SabqFonts.app(size: 15, weight: .semibold))
-                    .foregroundStyle(SabqTheme.ink)
-
-                Text(subtitle)
-                    .font(SabqFonts.app(size: 13, weight: .regular))
-                    .foregroundStyle(SabqTheme.secondaryInk)
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: SabqLayout.space8) {
+                    settingsRowContent(title: title, subtitle: subtitle, icon: icon)
+                }
+            } else {
+                HStack(alignment: .top, spacing: SabqLayout.space12) {
+                    settingsRowContent(title: title, subtitle: subtitle, icon: icon)
+                }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-            Image(systemName: "chevron.forward")
-                .font(SabqFonts.app(size: 12, weight: .medium))
-                .foregroundStyle(SabqTheme.tertiaryInk)
         }
-        .padding(.vertical, 3)
+        .frame(minHeight: SabqLayout.touchTarget, alignment: .leading)
+        .contentShape(Rectangle())
+    }
+
+    @ViewBuilder
+    private func settingsRowContent(title: String, subtitle: String, icon: String) -> some View {
+        SmallSquareBadge(systemImage: icon, tint: SabqTheme.secondaryInk)
+
+        VStack(alignment: .leading, spacing: SabqLayout.space4) {
+            Text(title)
+                .font(SabqType.body)
+                .foregroundStyle(SabqTheme.ink)
+
+            Text(subtitle)
+                .font(SabqType.caption)
+                .foregroundStyle(SabqTheme.secondaryInk)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+
+        Image(systemName: "chevron.forward")
+            .font(SabqFonts.app(size: 12, weight: .medium))
+            .foregroundStyle(SabqTheme.tertiaryInk)
+            .frame(minWidth: SabqLayout.touchTarget, minHeight: SabqLayout.touchTarget)
     }
 }

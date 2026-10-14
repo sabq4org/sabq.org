@@ -82,7 +82,7 @@ struct HomeFeedView: View {
     @State private var feedContentWidth: CGFloat = 0
     /// ميزانية كتلة النص تحت الهيرو (سطر التصنيف + عنوان 3 أسطر + موجز سطرين + بيانات +
     /// حشو 20×2) — تتدرّج مع Dynamic Type كما تتدرّج خطوط البطاقة نفسها.
-    @ScaledMetric(relativeTo: .body) private var featuredTextBudget: CGFloat = 282
+    @ScaledMetric(relativeTo: .body) private var featuredTextBudget: CGFloat = 266
     /// Drives the modal push to "حسابي / نقاطي" when the user taps the
     /// LoyaltyStripView inside the personal-journey block.
     @State private var showLoyaltyAccount = false
@@ -137,7 +137,7 @@ struct HomeFeedView: View {
                     // Newspaper-first home: عاجل → هيرو → رياضة → رحلة → آخر الأخبار.
                     // Secondary blocks (ستوريز، تقويم، نشرة، ترند…) live in
                     // a collapsed «المزيد اليوم» disclosure.
-                    CollapsingVStack(spacing: 20) {
+                    CollapsingVStack(spacing: SabqLayout.space16) {
                         Color.clear
                             .frame(height: 0)
                             .id(Self.scrollTopID)
@@ -166,19 +166,19 @@ struct HomeFeedView: View {
                         greetingBlock
                     }
                     .buttonStyle(.plain)
-                    .animatedAppear(index: 0)
+
 
                     // عاجل — الشريط الوحيد المسموح فوق الهيرو.
                     if let ticker = breakingTicker, !ticker.headlines.isEmpty {
                         BreakingTickerBar(headlines: ticker.headlines)
-                            .animatedAppear(index: 1)
+
                     } else if !articlesStore.breakingNews.isEmpty {
                         breakingNewsSection
-                            .animatedAppear(index: 1)
+
                     }
 
                     featuredSection
-                        .animatedAppear(index: 2)
+
 
                     // الاقتصاد الحي: «أين أنفق السعوديون…» أو «السعوديون في شهر بالأرقام»
                     // عند نشرة جديدة — يختفي ذاتيًا بلا بيانات (نقل الويب #1493–#1506).
@@ -186,42 +186,42 @@ struct HomeFeedView: View {
                     // ولا يجب أن يحجز فراغ VStack عندما لا بيانات.
                     if EconomyFormat.homeMode(economyStore.snapshot) != .hidden {
                         EconomyHomeBlock()
-                            .animatedAppear(index: 3)
+
                     }
 
                     // بطاقات البطولات تأتي بعد بطاقة الاقتصاد، وتختفي ذاتيًا بلا بيانات.
                     WorldCupHomeStrip()
-                        .animatedAppear(index: 3)
+
 
                     AsianCupHomeStrip()
-                        .animatedAppear(index: 3)
+
 
                     KingsCupHomeStrip()
-                        .animatedAppear(index: 3)
+
 
                     RoshnHomeStrip()
-                        .animatedAppear(index: 3)
+
 
                     // رحلة معرفية: ولاء + مقاييس قراءة + HealthKit (خطوات/نوم)
                     if authStore.isLoggedIn {
                         personalJourneyBlock
-                            .animatedAppear(index: 4)
+
                     }
 
                     latestArticlesSection
                         .id(Self.latestSectionID)
-                        .animatedAppear(index: 5)
+
 
                     opinionsPreviewSection
-                        .animatedAppear(index: 6)
+
 
                     MuqtarabHomeStrip()
-                        .animatedAppear(index: 7)
+
 
                     // «الأكثر تداولًا» ظاهر مباشرة بدل طيّه خلف «المزيد اليوم»،
                     // وبعده البلوكات الاختيارية حين تتوفر لها بيانات فقط.
                     trendingPreviewSection
-                        .animatedAppear(index: 8)
+
 
                     if !articlesStore.stories.isEmpty {
                         storiesSection
@@ -241,7 +241,7 @@ struct HomeFeedView: View {
                 .padding(.horizontal, 16)
                 // 18 + مسافة العمود (20) التي كان VStack يحجزها بعد مرساة التمرير
                 // الصفرية؛ CollapsingVStack لا يحجزها فنعوّضها هنا لبقاء الرأس مكانه.
-                .padding(.top, 38)
+                .padding(.top, SabqLayout.space16)
                 .padding(.bottom, 40)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 } else {
@@ -449,9 +449,8 @@ struct HomeFeedView: View {
                 .padding(.vertical, 10)
                 .background(
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(SabqTheme.primaryEnd)
+                        .fill(SabqTheme.actionFill)
                 )
-                .shadow(color: SabqTheme.primaryEnd.opacity(0.35), radius: 10, x: 0, y: 4)
             }
             .buttonStyle(.plain)
             .padding(.bottom, 14)
@@ -542,7 +541,7 @@ struct HomeFeedView: View {
     private var headerSection: some View {
         HStack(alignment: .center, spacing: 14) {
             // 52 → 44 نقطة عند التمرير كما في الويب (الجوال 44×1.18 ثم 44)
-            SabqBrandLogo(height: isHeaderCompact ? 44 : 52)
+            SabqBrandLogo(height: 44)
 
             Spacer(minLength: 0)
 
@@ -564,16 +563,12 @@ struct HomeFeedView: View {
                             ZStack {
                                 Circle()
                                     .fill(
-                                        LinearGradient(
-                                            colors: [SabqTheme.primaryStart.opacity(0.10), SabqTheme.primaryEnd.opacity(0.05)],
-                                            startPoint: .topLeading,
-                                            endPoint: .bottomTrailing
-                                        )
+                                        SabqTheme.surface
                                     )
                                     .frame(width: 44, height: 44)
                                 Image(systemName: "bell.fill")
                                     .font(.system(size: 17, weight: .semibold))
-                                    .foregroundStyle(SabqTheme.primaryEnd)
+                                    .foregroundStyle(SabqTheme.ink)
                             }
                             // Red unread dot — driven by NotificationsStore's
                             // `unreadCount` which the EditorialNotificationsView
@@ -604,17 +599,13 @@ struct HomeFeedView: View {
                     ZStack {
                         Circle()
                             .fill(
-                                LinearGradient(
-                                    colors: [SabqTheme.primaryStart.opacity(0.10), SabqTheme.primaryEnd.opacity(0.05)],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                )
+                                SabqTheme.surface
                             )
                             .frame(width: 44, height: 44)
 
                         Image(systemName: "dot.radiowaves.left.and.right")
                             .font(.system(size: 18, weight: .semibold))
-                            .foregroundStyle(SabqTheme.primaryEnd)
+                            .foregroundStyle(SabqTheme.ink)
                     }
                 }
                 .buttonStyle(.plain)
@@ -643,17 +634,13 @@ struct HomeFeedView: View {
     private func headerIcon(_ systemName: String) -> some View {
         Circle()
             .fill(
-                LinearGradient(
-                    colors: [SabqTheme.primaryStart.opacity(0.10), SabqTheme.primaryEnd.opacity(0.05)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
+                SabqTheme.surface
             )
             .frame(width: 44, height: 44)
             .overlay {
                 Image(systemName: systemName)
                     .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(SabqTheme.primaryEnd)
+                    .foregroundStyle(SabqTheme.ink)
             }
     }
 
@@ -941,6 +928,7 @@ struct HomeFeedView: View {
                     )
                 }
                 .buttonStyle(.plain)
+                .accessibilityIdentifier("home.article.\(article.id)")
                 .contextMenu {
                     Button {
                         bookmarksStore.toggle(article.id, article: article)
@@ -1045,11 +1033,11 @@ struct HomeFeedView: View {
         return layout {
             ZStack {
                 Circle()
-                    .fill(tint.opacity(0.18))
+                    .fill(SabqTheme.primaryEnd.opacity(0.08))
                     .frame(width: 46, height: 46)
                 Image(systemName: icon)
                     .font(.system(size: 21, weight: .semibold))
-                    .foregroundStyle(tint)
+                    .foregroundStyle(SabqTheme.primaryEnd)
                     .symbolRenderingMode(.hierarchical)
             }
             .accessibilityHidden(true)
@@ -1066,7 +1054,7 @@ struct HomeFeedView: View {
                 }
 
                 Text("موجزك اليومي في سبق")
-                    .font(SabqFonts.app(size: 17, weight: .bold))
+                    .font(SabqType.headline)
                     .foregroundStyle(SabqTheme.ink)
                     .fixedSize(horizontal: false, vertical: true)
 
@@ -1085,9 +1073,9 @@ struct HomeFeedView: View {
                 .accessibilityHidden(true)
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 14)
+        .padding(.vertical, SabqLayout.space12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .sabqBlockSurface(SabqTheme.identityCard)
+        .sabqBlockSurface(SabqTheme.surface)
         .contentShape(RoundedRectangle(cornerRadius: SabqTheme.blockRadius, style: .continuous))
     }
 

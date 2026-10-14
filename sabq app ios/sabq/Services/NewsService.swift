@@ -165,13 +165,16 @@ enum NewsService {
     }
 
     static func search(query: String, page: Int = 1) async -> (articles: [Article], total: Int) {
-        do {
-            let result = try await APIClient.shared.search(query: query, page: page)
-            let articles = nonOpinionArticles(from: result.articles)
-            return (articles, result.total ?? articles.count)
-        } catch {
-            return ([], 0)
-        }
+        (try? await searchResult(query: query, page: page)) ?? (articles: [], total: 0)
+    }
+
+    /// Throwing search path for surfaces that must distinguish an empty result
+    /// from a failed network request. The legacy `search` wrapper above keeps
+    /// its non-throwing behavior for existing consumers.
+    static func searchResult(query: String, page: Int = 1) async throws -> (articles: [Article], total: Int) {
+        let result = try await APIClient.shared.search(query: query, page: page)
+        let articles = nonOpinionArticles(from: result.articles)
+        return (articles, result.total ?? articles.count)
     }
 
     static func fetchSearchSuggestions(query: String) async -> [String] {

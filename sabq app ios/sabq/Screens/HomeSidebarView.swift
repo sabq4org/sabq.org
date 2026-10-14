@@ -131,10 +131,10 @@ struct HomeSidebarView: View {
                         Text(newArticlesText)
                     }
                     .font(SabqFonts.app(size: 13, weight: .semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(SabqTheme.onAction)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
-                    .background(Capsule().fill(SabqTheme.primaryEnd))
+                    .background(Capsule().fill(SabqTheme.actionFill))
                 }
                 .buttonStyle(.plain)
             }

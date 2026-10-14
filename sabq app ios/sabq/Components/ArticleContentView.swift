@@ -38,7 +38,7 @@ struct ArticleContentView: View {
         // Lazy: off-screen blocks aren't built until scrolled near. Matters
         // for tweet embeds — each is a WKWebView, and eager VStack built
         // every one at open, a visible hitch on long multi-tweet articles.
-        LazyVStack(alignment: .leading, spacing: 24) {
+        LazyVStack(alignment: .leading, spacing: SabqLayout.space24) {
             ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
                 renderBlock(block)
             }
@@ -91,7 +91,7 @@ struct ArticleContentView: View {
                         .foregroundStyle(.white)
                 }
                 Text(phrase)
-                    .font(SabqFonts.app(size: 16, weight: .bold))
+                    .font(SabqType.body)
                     .foregroundStyle(.white)
                     .multilineTextAlignment(.leading)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -99,8 +99,8 @@ struct ArticleContentView: View {
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(.white.opacity(0.85))
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 14)
+            .padding(.horizontal, SabqLayout.cardInset)
+            .padding(.vertical, SabqLayout.space12)
             .background(
                 LinearGradient(
                     colors: [Color(red: 0.145, green: 0.827, blue: 0.4), Color(red: 0.071, green: 0.549, blue: 0.494)],
@@ -159,9 +159,9 @@ struct ArticleContentView: View {
     private func heading(level: Int, runs: [InlineRun]) -> some View {
         let size: CGFloat = {
             switch level {
-            case 1: return CGFloat(fontSize + 9)
-            case 2: return CGFloat(fontSize + 6)
-            case 3: return CGFloat(fontSize + 4)
+            case 1: return CGFloat(fontSize + 8)
+            case 2: return CGFloat(fontSize + 5)
+            case 3: return CGFloat(fontSize + 3)
             case 4: return CGFloat(fontSize + 2)
             default: return CGFloat(fontSize + 1)
             }
@@ -171,7 +171,7 @@ struct ArticleContentView: View {
             .multilineTextAlignment(.leading)
             .lineSpacing(CGFloat(lineSpacing))
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.top, 6)
+            .padding(.top, SabqLayout.space8)
     }
 
     private func paragraph(_ runs: [InlineRun]) -> some View {
@@ -189,7 +189,7 @@ struct ArticleContentView: View {
     }
 
     private func listView(ordered: Bool, items: [[InlineRun]]) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: SabqLayout.space8) {
             ForEach(Array(items.enumerated()), id: \.offset) { idx, runs in
                 HStack(alignment: .firstTextBaseline, spacing: 10) {
                     Text(ordered ? "\(idx + 1)." : "•")
@@ -278,7 +278,7 @@ struct ArticleContentView: View {
     private func quoteView(_ runs: [InlineRun], attribution: [InlineRun]?) -> some View {
         HStack(alignment: .top, spacing: 14) {
             RoundedRectangle(cornerRadius: 3, style: .continuous)
-                .fill(SabqTheme.primaryEnd)
+                .fill(SabqTheme.brandBlue)
                 .frame(width: 3)
 
             VStack(alignment: .leading, spacing: 8) {
@@ -387,13 +387,13 @@ struct ArticleContentView: View {
             HStack(spacing: 6) {
                 Image(systemName: "photo.stack")
                     .font(SabqFonts.app(size: 12, weight: .semibold))
-                    .foregroundStyle(SabqTheme.primaryEnd)
+                        .foregroundStyle(SabqTheme.brandBlue)
                 Text("ألبوم صور")
-                    .font(SabqFonts.app(size: 12, weight: .heavy))
-                    .foregroundStyle(SabqTheme.primaryEnd)
+                    .font(SabqType.label)
+                    .foregroundStyle(SabqTheme.brandBlue)
                 Spacer(minLength: 0)
                 Text("\(images.count) صورة")
-                    .font(SabqFonts.app(size: 11, weight: .semibold))
+                        .font(SabqType.caption)
                     .monospacedDigit()
                     .foregroundStyle(SabqTheme.tertiaryInk)
             }

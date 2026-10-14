@@ -7,17 +7,21 @@ import SwiftUI
 // (نموذج الرئيسية المعتمد 2026-10-09).
 
 struct HomeSectionHeader<Link: View>: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let title: String
     var context: String? = nil
     var showsLiveDot: Bool = false
     @ViewBuilder var link: () -> Link
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: SabqLayout.space8))
+            : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: SabqLayout.space12))
+        return layout {
             Text(title)
-                .font(SabqFonts.app(size: 20, weight: .bold))
+                .font(SabqType.sectionTitle)
                 .foregroundStyle(SabqTheme.ink)
-                .lineLimit(1)
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
                 .accessibilityAddTraits(.isHeader)
 
             if let context {
@@ -30,7 +34,7 @@ struct HomeSectionHeader<Link: View>: View {
                     Text(context)
                         .font(SabqFonts.app(size: 12, weight: .medium))
                         .foregroundStyle(SabqTheme.tertiaryInk)
-                        .lineLimit(1)
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
                 }
             }
 
@@ -49,7 +53,7 @@ extension HomeSectionHeader where Link == EmptyView {
 
 /// نص رابط «الكل ‹» في رأس القسم.
 struct HomeSectionLinkLabel: View {
-    var title: String = "الكل"
+    var title: String = "عرض الكل"
 
     var body: some View {
         HStack(spacing: 2) {
@@ -59,7 +63,8 @@ struct HomeSectionLinkLabel: View {
                 .font(SabqFonts.app(size: 11, weight: .semibold))
         }
         .foregroundStyle(SabqTheme.primaryEnd)
-        .fixedSize()
+        .fixedSize(horizontal: false, vertical: true)
+        .frame(minHeight: SabqLayout.touchTarget)
     }
 }
 

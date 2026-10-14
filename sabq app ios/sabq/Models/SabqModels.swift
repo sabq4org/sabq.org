@@ -416,11 +416,11 @@ enum AppAccent: String, CaseIterable, Identifiable {
 
     var color: Color {
         switch self {
-        case .blue:   Color(red: 0.36, green: 0.74, blue: 0.91)
-        case .teal:   Color(red: 0.16, green: 0.65, blue: 0.55)
-        case .purple: Color(red: 0.55, green: 0.35, blue: 0.85)
-        case .rose:   Color(red: 0.88, green: 0.34, blue: 0.46)
-        case .orange: Color(red: 0.95, green: 0.55, blue: 0.20)
+        case .blue:   Color(red: 0.043, green: 0.416, blue: 0.647)
+        case .teal:   Color(red: 0.027, green: 0.427, blue: 0.357)
+        case .purple: Color(red: 0.420, green: 0.251, blue: 0.690)
+        case .rose:   Color(red: 0.690, green: 0.204, blue: 0.341)
+        case .orange: Color(red: 0.627, green: 0.318, blue: 0.051)
         }
     }
 
@@ -563,8 +563,8 @@ struct Article: Identifiable, Equatable, Hashable {
     var lastUpdatedLabel: String? {
         editorialModifiedAt.map { SabqFormatters.riyadhDateTime.string(from: $0) }
     }
-    /// «قراءة N دقيقة» بصياغة الويب.
-    var readingLabel: String { "قراءة \(readingMinutes) دقيقة" }
+    /// صياغة عربية موحدة مع بيانات بطاقات الأخبار.
+    var readingLabel: String { readingTime }
 
     /// صفة الكاتب بقواعد الويب نفسها: صفة ملف المراسل إن وُجدت، وإلا
     /// «صحيفة إلكترونية سعودية» لحساب الصحيفة، وإلا «مراسل صحفي» عندما يكون

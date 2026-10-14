@@ -3,6 +3,7 @@ import SwiftUI
 struct BookmarksView: View {
     @Environment(ArticlesStore.self) private var articlesStore
     @Environment(BookmarksStore.self) private var bookmarksStore
+    @Environment(SabqNavigationState.self) private var navigation
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
@@ -14,7 +15,7 @@ struct BookmarksView: View {
 
     var body: some View {
         ScrollView(showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 20) {
+            VStack(alignment: .leading, spacing: SabqLayout.space24) {
                 SabqPageIntro("الأخبار التي حفظتها للقراءة لاحقاً")
 
                 if isSyncing {
@@ -38,9 +39,9 @@ struct BookmarksView: View {
                     articlesListSection
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 18)
-            .padding(.bottom, 40)
+            .padding(.horizontal, SabqLayout.pageInset)
+            .padding(.top, SabqLayout.space16)
+            .padding(.bottom, SabqLayout.space32)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .navigationTitle("محفوظاتي")
@@ -67,7 +68,9 @@ struct BookmarksView: View {
                 icon: "bookmark",
                 tint: SabqTheme.primaryEnd,
                 title: "لا توجد محفوظات",
-                subtitle: "احفظ الأخبار المهمة بالضغط على أيقونة الحفظ لقراءتها لاحقاً"
+                subtitle: "احفظ الأخبار المهمة لقراءتها لاحقاً.",
+                action: { navigation.selectedTab = .home },
+                actionTitle: "استعرض الأخبار"
             )
         }
     }
@@ -113,7 +116,7 @@ struct BookmarksView: View {
                 .foregroundStyle(tint)
                 .monospacedDigit()
             Text(title)
-                .font(SabqFonts.editorial(.caption, size: 12))
+                .font(SabqType.caption)
                 .foregroundStyle(SabqTheme.secondaryInk)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -137,6 +140,7 @@ struct BookmarksView: View {
                     )
                 }
                 .buttonStyle(.plain)
+                .accessibilityIdentifier("saved.article.\(article.id)")
             }
         }
     }
