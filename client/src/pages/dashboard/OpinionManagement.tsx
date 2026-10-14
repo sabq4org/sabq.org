@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
@@ -37,9 +37,18 @@ import {
   Eye,
   GripVertical,
   PenSquare,
+  Search,
+  RefreshCcw,
+  X,
+  FolderOpen,
+  Users,
+  CalendarClock,
+  CheckSquare,
 } from "lucide-react";
 import { ViewsCount } from "@/components/ViewsCount";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { DashboardPageShell } from "@/components/dashboard/DashboardPageShell";
+import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
 import {
   DndContext,
   closestCenter,
@@ -57,9 +66,10 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Card } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { EditorialDraftReviewCue } from "@/components/admin/EditorialDraftReviewCue";
 import { isResubmittedAfterRevision } from "@/lib/articleRevision";
+import { cn } from "@/lib/utils";
 
 type OpinionArticle = {
   id: string;
@@ -99,6 +109,14 @@ type OpinionMetrics = {
 
 type StatusKey = "total" | "pending_review" | "approved" | "published";
 
+type QuickFilterKey =
+  | "all"
+  | "pending_review"
+  | "approved"
+  | "published"
+  | "needs_changes"
+  | "rejected";
+
 const WEEKDAYS_AR = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
 
 function SortableRow({ article, children }: { article: OpinionArticle; children: React.ReactNode }) {
@@ -121,85 +139,142 @@ function SortableRow({ article, children }: { article: OpinionArticle; children:
     <tr
       ref={setNodeRef}
       style={style}
-      className="border-b border-border hover:bg-muted/30"
+      className={cn(
+        "border-b border-border/70 transition-colors hover:bg-muted/30 last:border-0",
+        isDragging && "bg-primary/5",
+      )}
       data-testid={`row-opinion-${article.id}`}
     >
-      <td className="py-3 px-2 text-center cursor-grab active:cursor-grabbing" {...attributes} {...listeners}>
-        <GripVertical className="h-4 w-4 mx-auto text-muted-foreground" data-testid={`drag-handle-${article.id}`} />
+      <td
+        className="w-10 cursor-grab py-3.5 px-2 text-center active:cursor-grabbing"
+        {...attributes}
+        {...listeners}
+      >
+        <GripVertical
+          className="mx-auto h-4 w-4 text-muted-foreground hover:text-foreground"
+          data-testid={`drag-handle-${article.id}`}
+        />
       </td>
       {children}
     </tr>
   );
 }
 
-function OpinionStatusCards({ metrics, activeStatus, onSelect }: {
+function OpinionStatusCards({
+  metrics,
+  activeStatus,
+  onSelect,
+}: {
   metrics: OpinionMetrics;
   activeStatus: StatusKey;
   onSelect: (status: StatusKey) => void;
 }) {
-  const statusConfigs = {
+  const totalSafe = Math.max(metrics.total || 0, 1);
+  const statusConfigs: Record<
+    StatusKey,
+    {
+      icon: typeof BookOpen;
+      label: string;
+      subtitle: string;
+      cardClass: string;
+      activeRing: string;
+      valueColor: string;
+      iconWrapClass: string;
+    }
+  > = {
     total: {
       icon: BookOpen,
       label: "إجمالي المقالات",
-      bgColor: "bg-blue-50 dark:bg-card",
-      textColor: "text-blue-700 dark:text-blue-300",
-      iconColor: "text-blue-600 dark:text-blue-400",
+      subtitle: "جميع مقالات الرأي المسجلة",
+      cardClass:
+        "border-border/80 bg-gradient-to-br from-primary/[0.06] via-card to-card",
+      activeRing: "ring-2 ring-primary/50",
+      valueColor: "text-foreground",
+      iconWrapClass: "bg-primary/10 text-primary border-primary/20",
     },
     pending_review: {
       icon: Clock,
       label: "قيد المراجعة",
-      bgColor: "bg-amber-50 dark:bg-card",
-      textColor: "text-amber-700 dark:text-amber-300",
-      iconColor: "text-amber-600 dark:text-amber-400",
+      subtitle:
+        metrics.pending_review > 0
+          ? "تنتظر قرار التحرير والاعتماد"
+          : "لا توجد مقالات معلّقة حالياً",
+      cardClass:
+        "border-amber-500/25 bg-gradient-to-br from-amber-500/[0.07] via-card to-card",
+      activeRing: "ring-2 ring-amber-500/50",
+      valueColor: "text-amber-700 dark:text-amber-300",
+      iconWrapClass:
+        "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/20",
     },
     approved: {
       icon: CheckCircle,
       label: "موافق عليه",
-      bgColor: "bg-emerald-50 dark:bg-card",
-      textColor: "text-emerald-700 dark:text-emerald-300",
-      iconColor: "text-emerald-600 dark:text-emerald-400",
+      subtitle: "معتمدة وجاهزة للنشر أو الجدولة",
+      cardClass:
+        "border-emerald-500/25 bg-gradient-to-br from-emerald-500/[0.07] via-card to-card",
+      activeRing: "ring-2 ring-emerald-500/50",
+      valueColor: "text-emerald-700 dark:text-emerald-300",
+      iconWrapClass:
+        "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/20",
     },
     published: {
       icon: Send,
       label: "منشور",
-      bgColor: "bg-indigo-50 dark:bg-card",
-      textColor: "text-indigo-700 dark:text-indigo-300",
-      iconColor: "text-indigo-600 dark:text-indigo-400",
+      subtitle: `${Math.round(((metrics.published || 0) / totalSafe) * 100)}% من إجمالي مقالات الرأي`,
+      cardClass:
+        "border-indigo-500/25 bg-gradient-to-br from-indigo-500/[0.07] via-card to-card",
+      activeRing: "ring-2 ring-indigo-500/50",
+      valueColor: "text-indigo-700 dark:text-indigo-300",
+      iconWrapClass:
+        "bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border-indigo-500/20",
     },
   };
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+    <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
       {(Object.keys(statusConfigs) as StatusKey[]).map((status) => {
         const config = statusConfigs[status];
         const Icon = config.icon;
         const isActive = activeStatus === status;
-        const count = metrics[status];
+        const count = metrics[status] ?? 0;
 
         return (
           <Card
             key={status}
-            className={`
-              p-4 cursor-pointer transition-all hover-elevate
-              ${config.bgColor}
-              ${isActive ? "ring-2 ring-primary" : ""}
-            `}
+            className={cn(
+              "group cursor-pointer rounded-2xl shadow-xs transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md",
+              config.cardClass,
+              isActive && config.activeRing,
+            )}
             onClick={() => onSelect(status)}
             data-testid={`card-status-${status}`}
           >
-            <div className="flex items-center justify-between">
-              <div className="flex flex-col gap-2">
-                <span className={`text-sm font-medium ${config.textColor}`}>
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs sm:text-sm font-semibold text-muted-foreground">
                   {config.label}
                 </span>
-                <span className={`text-2xl font-bold ${config.textColor}`}>
-                  {count.toLocaleString('en-US')}
+                <span
+                  className={cn(
+                    "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border transition-transform group-hover:scale-105",
+                    config.iconWrapClass,
+                  )}
+                >
+                  <Icon className="h-4 w-4" />
                 </span>
               </div>
-              <div className={`p-3 rounded-lg ${config.iconColor}`}>
-                <Icon className="w-6 h-6" />
+              <div
+                className={cn(
+                  "mt-2 text-2xl sm:text-3xl font-black tabular-nums tracking-tight",
+                  config.valueColor,
+                )}
+              >
+                {count.toLocaleString("en-US")}
               </div>
-            </div>
+              <div className="mt-2.5 border-t border-border/50 pt-2 text-[11px] text-muted-foreground truncate">
+                {config.subtitle}
+              </div>
+            </CardContent>
           </Card>
         );
       })}
@@ -216,6 +291,8 @@ export default function OpinionManagement() {
   const [activeStatus, setActiveStatus] = useState<StatusKey>("total");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [reviewStatusFilter, setReviewStatusFilter] = useState<string>("all");
+  const [authorFilter, setAuthorFilter] = useState<string>("all");
+  const [categoryFilter, setCategoryFilter] = useState<string>("all");
 
   const [reviewingArticle, setReviewingArticle] = useState<OpinionArticle | null>(null);
   const [reviewAction, setReviewAction] = useState<"approve" | "reject" | "request_revision" | null>(null);
@@ -233,10 +310,15 @@ export default function OpinionManagement() {
     useSensor(PointerSensor),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
-    })
+    }),
   );
 
-  const { data, isLoading } = useQuery<{
+  const {
+    data,
+    isLoading,
+    isFetching,
+    refetch: refetchOpinions,
+  } = useQuery<{
     articles: OpinionArticle[];
     metrics: OpinionMetrics;
     pagination: {
@@ -248,12 +330,38 @@ export default function OpinionManagement() {
     enabled: !!user,
   });
 
-  const articles = data?.articles || [];
+  const articles = Array.isArray(data?.articles) ? data.articles : [];
   const metrics = data?.metrics || { total: 0, pending_review: 0, approved: 0, published: 0 };
 
   useEffect(() => {
-    setLocalArticles(articles);
-  }, [articles]);
+    setLocalArticles(Array.isArray(data?.articles) ? data.articles : []);
+  }, [data?.articles]);
+
+  const availableAuthors = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const a of localArticles) {
+      if (a.author?.id) {
+        const name =
+          `${a.author.firstName || ""} ${a.author.lastName || ""}`.trim() || "غير معروف";
+        map.set(a.author.id, name);
+      }
+    }
+    return Array.from(map.entries())
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name, "ar"));
+  }, [localArticles]);
+
+  const availableCategories = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const a of localArticles) {
+      if (a.category?.id && a.category?.nameAr) {
+        map.set(a.category.id, a.category.nameAr);
+      }
+    }
+    return Array.from(map.entries())
+      .map(([id, nameAr]) => ({ id, nameAr }))
+      .sort((a, b) => a.nameAr.localeCompare(b.nameAr, "ar"));
+  }, [localArticles]);
 
   const approveMutation = useMutation({
     mutationFn: async (articleId: string) => {
@@ -457,7 +565,7 @@ export default function OpinionManagement() {
   };
 
   const toggleArticleSelection = (articleId: string) => {
-    setSelectedArticles(prev => {
+    setSelectedArticles((prev) => {
       const newSet = new Set(prev);
       if (newSet.has(articleId)) {
         newSet.delete(articleId);
@@ -468,20 +576,13 @@ export default function OpinionManagement() {
     });
   };
 
-  const toggleSelectAll = () => {
-    if (selectedArticles.size === localArticles.length) {
-      setSelectedArticles(new Set());
-    } else {
-      setSelectedArticles(new Set(localArticles.map(a => a.id)));
-    }
-  };
 
   const getReviewStatusBadge = (article: OpinionArticle) => {
     if (isResubmittedAfterRevision(article)) {
       return (
         <Badge
           variant="secondary"
-          className="gap-1 bg-amber-100 dark:bg-amber-900/40 text-amber-900 dark:text-amber-100 border-amber-400 dark:border-amber-600"
+          className="gap-1 border border-amber-400/60 bg-amber-100 text-amber-900 dark:border-amber-600/60 dark:bg-amber-900/40 dark:text-amber-100"
         >
           <PenSquare className="h-3 w-3" />
           مُعدَّل وفق التوجيه
@@ -492,14 +593,20 @@ export default function OpinionManagement() {
     switch (article.reviewStatus) {
       case "pending_review":
         return (
-          <Badge variant="secondary" className="gap-1">
+          <Badge
+            variant="secondary"
+            className="gap-1 border border-amber-500/25 bg-amber-500/15 text-amber-800 dark:text-amber-300"
+          >
             <Clock className="h-3 w-3" />
             قيد المراجعة
           </Badge>
         );
       case "approved":
         return (
-          <Badge variant="default" className="gap-1 bg-green-600 hover:bg-green-700">
+          <Badge
+            variant="default"
+            className="gap-1 border border-emerald-500/25 bg-emerald-600 text-white hover:bg-emerald-700"
+          >
             <CheckCircle className="h-3 w-3" />
             موافق عليه
           </Badge>
@@ -513,21 +620,43 @@ export default function OpinionManagement() {
         );
       case "needs_changes":
         return (
-          <Badge variant="secondary" className="gap-1 bg-orange-600 hover:bg-orange-700 text-white">
+          <Badge
+            variant="secondary"
+            className="gap-1 bg-orange-600 text-white hover:bg-orange-700"
+          >
             <Edit className="h-3 w-3" />
             يحتاج تعديل
           </Badge>
         );
       default:
-        return <Badge variant="outline">-</Badge>;
+        return <Badge variant="outline">—</Badge>;
     }
   };
 
   const getStatusBadge = (status: string) => {
     const badges = {
-      draft: <Badge variant="secondary">مسودة</Badge>,
-      scheduled: <Badge variant="outline">مجدول</Badge>,
-      published: <Badge variant="default">منشور</Badge>,
+      draft: (
+        <Badge variant="secondary" className="font-medium">
+          مسودة
+        </Badge>
+      ),
+      scheduled: (
+        <Badge
+          variant="outline"
+          className="gap-1 border-blue-500/30 bg-blue-500/10 text-blue-700 dark:text-blue-300"
+        >
+          <CalendarClock className="h-3 w-3" />
+          مجدول
+        </Badge>
+      ),
+      published: (
+        <Badge
+          variant="default"
+          className="border-indigo-500/25 bg-indigo-600 text-white hover:bg-indigo-700"
+        >
+          منشور
+        </Badge>
+      ),
       archived: <Badge variant="destructive">مؤرشف</Badge>,
     };
     return badges[status as keyof typeof badges] || <Badge>{status}</Badge>;
@@ -535,7 +664,7 @@ export default function OpinionManagement() {
 
   const handleStatusCardClick = (status: StatusKey) => {
     setActiveStatus(status);
-    
+
     if (status === "total") {
       setStatusFilter("all");
       setReviewStatusFilter("all");
@@ -548,418 +677,664 @@ export default function OpinionManagement() {
     }
   };
 
-  const filteredArticles = localArticles.filter((article) => {
-    const matchesSearch = article.title.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = statusFilter === "all" || article.status === statusFilter;
-    const matchesReviewStatus = reviewStatusFilter === "all" || article.reviewStatus === reviewStatusFilter;
-    return matchesSearch && matchesStatus && matchesReviewStatus;
-  });
+  const activeQuickFilter: QuickFilterKey = useMemo(() => {
+    if (statusFilter === "published" && reviewStatusFilter === "all") return "published";
+    if (statusFilter === "all" && reviewStatusFilter === "pending_review") return "pending_review";
+    if (statusFilter === "all" && reviewStatusFilter === "approved") return "approved";
+    if (statusFilter === "all" && reviewStatusFilter === "needs_changes") return "needs_changes";
+    if (statusFilter === "all" && reviewStatusFilter === "rejected") return "rejected";
+    if (statusFilter === "all" && reviewStatusFilter === "all") return "all";
+    return "all";
+  }, [statusFilter, reviewStatusFilter]);
+
+  const handleQuickFilterSelect = (pill: QuickFilterKey) => {
+    if (pill === "all") {
+      setActiveStatus("total");
+      setStatusFilter("all");
+      setReviewStatusFilter("all");
+    } else if (pill === "published") {
+      setActiveStatus("published");
+      setStatusFilter("published");
+      setReviewStatusFilter("all");
+    } else if (pill === "pending_review") {
+      setActiveStatus("pending_review");
+      setStatusFilter("all");
+      setReviewStatusFilter("pending_review");
+    } else if (pill === "approved") {
+      setActiveStatus("approved");
+      setStatusFilter("all");
+      setReviewStatusFilter("approved");
+    } else {
+      setActiveStatus("total");
+      setStatusFilter("all");
+      setReviewStatusFilter(pill);
+    }
+  };
+
+  const filteredArticles = useMemo(() => {
+    const q = searchTerm.trim().toLowerCase();
+    return localArticles.filter((article) => {
+      const authorName = article.author
+        ? `${article.author.firstName || ""} ${article.author.lastName || ""}`.trim().toLowerCase()
+        : "";
+      const matchesSearch =
+        !q ||
+        article.title.toLowerCase().includes(q) ||
+        authorName.includes(q) ||
+        (article.category?.nameAr?.toLowerCase().includes(q) ?? false);
+      const matchesStatus = statusFilter === "all" || article.status === statusFilter;
+      const matchesReviewStatus =
+        reviewStatusFilter === "all" || article.reviewStatus === reviewStatusFilter;
+      const matchesAuthor = authorFilter === "all" || article.author?.id === authorFilter;
+      const matchesCategory = categoryFilter === "all" || article.category?.id === categoryFilter;
+      return (
+        matchesSearch &&
+        matchesStatus &&
+        matchesReviewStatus &&
+        matchesAuthor &&
+        matchesCategory
+      );
+    });
+  }, [
+    localArticles,
+    searchTerm,
+    statusFilter,
+    reviewStatusFilter,
+    authorFilter,
+    categoryFilter,
+  ]);
+
+  const toggleSelectAll = () => {
+    if (selectedArticles.size === filteredArticles.length) {
+      setSelectedArticles(new Set());
+    } else {
+      setSelectedArticles(new Set(filteredArticles.map((a) => a.id)));
+    }
+  };
+
+  const hasActiveFilters =
+    Boolean(searchTerm.trim()) ||
+    statusFilter !== "all" ||
+    reviewStatusFilter !== "all" ||
+    authorFilter !== "all" ||
+    categoryFilter !== "all";
 
   return (
     <DashboardLayout>
-      <div className="space-y-4 md:space-y-6 p-3 md:p-0">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-          <div>
-            <h1 className="text-xl md:text-2xl font-bold" data-testid="heading-title">
-              إدارة مقالات الرأي
-            </h1>
-            <p className="text-xs md:text-sm text-muted-foreground">
-              إدارة ومراجعة مقالات الرأي
-            </p>
-          </div>
-          <Button
-            onClick={() => setLocation("/dashboard/article/new?type=opinion")}
-            className="gap-2 w-full sm:w-auto"
-            size="sm"
-            data-testid="button-create-opinion"
-          >
-            <Plus className="h-3.5 w-3.5 md:h-4 md:w-4" />
-            مقال جديد
-          </Button>
-        </div>
-
-        {isLoading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {[1, 2, 3, 4].map((i) => (
-              <div key={i} className="h-24 bg-muted/50 rounded-lg animate-pulse" />
-            ))}
-          </div>
-        ) : (
-          <OpinionStatusCards
-            metrics={metrics}
-            activeStatus={activeStatus}
-            onSelect={handleStatusCardClick}
+      <DashboardPageShell
+        maxWidthClassName="max-w-[1600px]"
+        contentClassName="px-3 pb-12 sm:px-6 space-y-5 sm:space-y-6"
+      >
+        <div dir="rtl" className="space-y-5 sm:space-y-6">
+          <DashboardPageHeader
+            icon={BookOpen}
+            title="إدارة مقالات الرأي"
+            description="مراجعة واعتماد ونشر مقالات الرأي وترتيب عرضها في الصفحة الرئيسية"
+            titleTestId="heading-title"
+            actions={
+              <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void refetchOpinions()}
+                  disabled={isFetching}
+                  className="no-min-touch-size h-9 gap-1.5 rounded-xl border-border/80 text-xs font-medium"
+                >
+                  <RefreshCcw className={cn("h-3.5 w-3.5", isFetching && "animate-spin")} />
+                  <span>تحديث</span>
+                </Button>
+                <Button
+                  onClick={() => setLocation("/dashboard/article/new?type=opinion")}
+                  className="no-min-touch-size h-9 gap-2 rounded-xl px-4 text-xs font-semibold sm:text-sm"
+                  size="sm"
+                  data-testid="button-create-opinion"
+                >
+                  <Plus className="h-4 w-4" />
+                  مقال رأي جديد
+                </Button>
+              </div>
+            }
           />
-        )}
 
-        <div className="bg-card rounded-lg border border-border p-3 md:p-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
-            <div>
-              <Input
-                placeholder="بحث بالعنوان..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="h-9 md:h-10 text-sm"
-                data-testid="input-search"
-              />
+          {isLoading ? (
+            <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+              {[1, 2, 3, 4].map((i) => (
+                <div
+                  key={i}
+                  className="h-28 rounded-2xl border border-border/60 bg-muted/40 animate-pulse"
+                />
+              ))}
             </div>
+          ) : (
+            <OpinionStatusCards
+              metrics={metrics}
+              activeStatus={activeStatus}
+              onSelect={handleStatusCardClick}
+            />
+          )}
 
-            <div>
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger data-testid="select-status-filter" className="h-9 md:h-10 text-sm">
-                  <SelectValue placeholder="الحالة" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">جميع الحالات</SelectItem>
-                  <SelectItem value="draft">مسودة</SelectItem>
-                  <SelectItem value="published">منشور</SelectItem>
-                  <SelectItem value="scheduled">مجدول</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+          {/* شريط البحث والفلاتر السريعة */}
+          <Card className="rounded-2xl border-border/80 shadow-xs">
+            <CardContent className="space-y-3.5 p-3.5 sm:p-4">
+              {/* الصف الأول: حقل البحث + الفلاتر المنسدلة */}
+              <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-5">
+                <div className="relative sm:col-span-2 lg:col-span-2">
+                  <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    placeholder="بحث بالعنوان أو اسم الكاتب..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="h-9 rounded-xl pr-9 pl-8 text-xs sm:text-sm"
+                    data-testid="input-search"
+                  />
+                  {searchTerm && (
+                    <button
+                      type="button"
+                      onClick={() => setSearchTerm("")}
+                      className="no-min-touch-size absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                      title="مسح البحث"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
 
-            <div>
-              <Select value={reviewStatusFilter} onValueChange={setReviewStatusFilter}>
-                <SelectTrigger data-testid="select-review-status-filter" className="h-9 md:h-10 text-sm">
-                  <SelectValue placeholder="حالة المراجعة" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">جميع حالات المراجعة</SelectItem>
-                  <SelectItem value="pending_review">قيد المراجعة</SelectItem>
-                  <SelectItem value="approved">موافق عليه</SelectItem>
-                  <SelectItem value="rejected">مرفوض</SelectItem>
-                  <SelectItem value="needs_changes">يحتاج تعديل</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        </div>
+                <div>
+                  <Select value={statusFilter} onValueChange={setStatusFilter}>
+                    <SelectTrigger
+                      data-testid="select-status-filter"
+                      className="h-9 rounded-xl text-xs sm:text-sm"
+                    >
+                      <SelectValue placeholder="الحالة" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">جميع الحالات</SelectItem>
+                      <SelectItem value="draft">مسودة</SelectItem>
+                      <SelectItem value="published">منشور</SelectItem>
+                      <SelectItem value="scheduled">مجدول</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
 
-        {selectedArticles.size > 0 && (
-          <div className="bg-card rounded-lg border border-border p-3 md:p-4">
-            <div className="flex items-center justify-between gap-4">
-              <div className="text-sm text-muted-foreground">
-                تم تحديد {selectedArticles.size.toLocaleString('en-US')} مقال
+                <div>
+                  <Select value={reviewStatusFilter} onValueChange={setReviewStatusFilter}>
+                    <SelectTrigger
+                      data-testid="select-review-status-filter"
+                      className="h-9 rounded-xl text-xs sm:text-sm"
+                    >
+                      <SelectValue placeholder="حالة المراجعة" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">جميع حالات المراجعة</SelectItem>
+                      <SelectItem value="pending_review">قيد المراجعة</SelectItem>
+                      <SelectItem value="approved">موافق عليه</SelectItem>
+                      <SelectItem value="rejected">مرفوض</SelectItem>
+                      <SelectItem value="needs_changes">يحتاج تعديل</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="flex gap-2">
+                  {availableAuthors.length > 0 && (
+                    <Select value={authorFilter} onValueChange={setAuthorFilter}>
+                      <SelectTrigger className="h-9 flex-1 rounded-xl text-xs sm:text-sm">
+                        <div className="flex items-center gap-1.5 truncate">
+                          <Users className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                          <SelectValue placeholder="كل الكتّاب" />
+                        </div>
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">كل الكتّاب</SelectItem>
+                        {availableAuthors.map((author) => (
+                          <SelectItem key={author.id} value={author.id}>
+                            {author.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+
+                  {availableCategories.length > 0 && (
+                    <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                      <SelectTrigger className="h-9 flex-1 rounded-xl text-xs sm:text-sm">
+                        <div className="flex items-center gap-1.5 truncate">
+                          <FolderOpen className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                          <SelectValue placeholder="كل التصنيفات" />
+                        </div>
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">كل التصنيفات</SelectItem>
+                        {availableCategories.map((cat) => (
+                          <SelectItem key={cat.id} value={cat.id}>
+                            {cat.nameAr}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
+              </div>
+
+              {/* الصف الثاني: أزرار الفلترة السريعة لحالات المراجعة والنشر */}
+              <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/50 pt-2.5">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="ml-1 text-xs font-semibold text-muted-foreground">
+                    تصفية سريعة:
+                  </span>
+                  {(
+                    [
+                      { id: "all" as const, label: `الكل (${metrics.total})` },
+                      {
+                        id: "pending_review" as const,
+                        label: `قيد المراجعة (${metrics.pending_review})`,
+                      },
+                      { id: "approved" as const, label: `معتمد (${metrics.approved})` },
+                      { id: "published" as const, label: `منشور (${metrics.published})` },
+                      { id: "needs_changes" as const, label: "يحتاج تعديل" },
+                      { id: "rejected" as const, label: "مرفوض" },
+                    ] as const
+                  ).map((pill) => {
+                    const isActive = activeQuickFilter === pill.id;
+                    return (
+                      <button
+                        key={pill.id}
+                        type="button"
+                        onClick={() => handleQuickFilterSelect(pill.id)}
+                        className={cn(
+                          "no-min-touch-size inline-flex items-center rounded-xl border px-3 py-1 text-xs font-semibold transition-all",
+                          isActive
+                            ? "border-primary bg-primary text-primary-foreground shadow-xs"
+                            : "border-border/70 bg-background text-muted-foreground hover:bg-muted/50 hover:text-foreground",
+                        )}
+                      >
+                        {pill.label}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <Badge
+                    variant="outline"
+                    className="rounded-lg border-border/70 px-2.5 py-0.5 text-xs font-semibold tabular-nums text-muted-foreground"
+                  >
+                    النتائج المعروضة: {filteredArticles.length.toLocaleString("en-US")}
+                  </Badge>
+                  {hasActiveFilters && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setSearchTerm("");
+                        setActiveStatus("total");
+                        setStatusFilter("all");
+                        setReviewStatusFilter("all");
+                        setAuthorFilter("all");
+                        setCategoryFilter("all");
+                      }}
+                      className="no-min-touch-size h-7 gap-1 rounded-lg px-2 text-xs text-muted-foreground hover:text-foreground"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                      <span>إعادة ضبط</span>
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* شريط الإجراءات الجماعية عند تحديد مقالات */}
+          {selectedArticles.size > 0 && (
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-primary/30 bg-primary/5 px-4 py-3 shadow-xs">
+              <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                <CheckSquare className="h-4 w-4 text-primary" />
+                <span>
+                  تم تحديد{" "}
+                  <b className="tabular-nums text-primary">
+                    {selectedArticles.size.toLocaleString("en-US")}
+                  </b>{" "}
+                  مقال
+                </span>
               </div>
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={() => setSelectedArticles(new Set())}
+                className="no-min-touch-size h-8 rounded-xl text-xs font-medium"
                 data-testid="button-clear-selection"
               >
                 إلغاء التحديد
               </Button>
             </div>
-          </div>
-        )}
+          )}
 
-        <div className="hidden md:block bg-card rounded-lg border border-border overflow-hidden">
-          {isLoading ? (
-            <div className="p-8 text-center text-muted-foreground">
-              جاري التحميل...
-            </div>
-          ) : filteredArticles.length === 0 ? (
-            <div className="p-8 text-center text-muted-foreground">
-              لا توجد مقالات رأي
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <DndContext
-                sensors={sensors}
-                collisionDetection={closestCenter}
-                onDragEnd={handleDragEnd}
-              >
-                <table className="w-full">
-                  <thead className="bg-muted/50 border-b border-border">
-                    <tr>
-                      <th className="text-center py-3 px-2 w-10" data-testid="header-drag"></th>
-                      <th className="text-center py-3 px-4 w-12">
-                        <Checkbox
-                          checked={filteredArticles.length > 0 && selectedArticles.size === filteredArticles.length}
-                          onCheckedChange={toggleSelectAll}
-                          data-testid="checkbox-select-all"
-                        />
-                      </th>
-                      <th className="text-right py-3 px-4 font-medium">العنوان</th>
-                      <th className="text-right py-3 px-4 font-medium">الكاتب</th>
-                      <th className="text-right py-3 px-4 font-medium">الحالة</th>
-                      <th className="text-right py-3 px-4 font-medium">حالة المراجعة</th>
-                      <th className="text-right py-3 px-4 font-medium">المشاهدات</th>
-                      <th className="text-right py-3 px-4 font-medium">الإجراءات</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <SortableContext
-                      items={filteredArticles.map(a => a.id)}
-                      strategy={verticalListSortingStrategy}
-                    >
-                      {filteredArticles.map((article) => {
-                        const authorName = article.author
-                          ? `${article.author.firstName || ""} ${article.author.lastName || ""}`.trim() || "غير معروف"
-                          : "غير معروف";
+          {/* جدول سطح المكتب (يدعم السحب والإفلات لترتيب العرض) */}
+          <div className="hidden md:block overflow-hidden rounded-2xl border border-border/80 bg-card shadow-xs">
+            {isLoading ? (
+              <div className="p-12 text-center text-sm text-muted-foreground">
+                جاري التحميل...
+              </div>
+            ) : filteredArticles.length === 0 ? (
+              <div className="p-12 text-center text-sm text-muted-foreground">
+                لا توجد مقالات رأي
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <DndContext
+                  sensors={sensors}
+                  collisionDetection={closestCenter}
+                  onDragEnd={handleDragEnd}
+                >
+                  <table className="w-full text-sm">
+                    <thead className="border-b border-border bg-muted/50 text-xs text-muted-foreground">
+                      <tr>
+                        <th className="w-10 py-3 px-2 text-center" data-testid="header-drag"></th>
+                        <th className="w-12 py-3 px-4 text-center">
+                          <Checkbox
+                            checked={
+                              filteredArticles.length > 0 &&
+                              selectedArticles.size === filteredArticles.length
+                            }
+                            onCheckedChange={toggleSelectAll}
+                            data-testid="checkbox-select-all"
+                          />
+                        </th>
+                        <th className="py-3 px-4 text-right font-bold">العنوان</th>
+                        <th className="py-3 px-4 text-right font-bold">الكاتب</th>
+                        <th className="py-3 px-4 text-right font-bold">الحالة</th>
+                        <th className="py-3 px-4 text-right font-bold">حالة المراجعة</th>
+                        <th className="py-3 px-4 text-right font-bold">المشاهدات</th>
+                        <th className="py-3 px-4 text-right font-bold">الإجراءات</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <SortableContext
+                        items={filteredArticles.map((a) => a.id)}
+                        strategy={verticalListSortingStrategy}
+                      >
+                        {filteredArticles.map((article) => {
+                          const authorName = article.author
+                            ? `${article.author.firstName || ""} ${article.author.lastName || ""}`.trim() ||
+                              "غير معروف"
+                            : "غير معروف";
 
-                        return (
-                          <SortableRow key={article.id} article={article}>
-                            <td className="py-3 px-4 text-center">
-                              <Checkbox
-                                checked={selectedArticles.has(article.id)}
-                                onCheckedChange={() => toggleArticleSelection(article.id)}
-                                data-testid={`checkbox-article-${article.id}`}
-                              />
-                            </td>
-                            <td className="py-3 px-4">
-                              <div className="space-y-1.5 max-w-md">
-                                <div className="flex items-center gap-1.5 flex-wrap">
-                                  <span className="font-medium truncate">{article.title}</span>
+                          return (
+                            <SortableRow key={article.id} article={article}>
+                              <td className="py-3.5 px-4 text-center">
+                                <Checkbox
+                                  checked={selectedArticles.has(article.id)}
+                                  onCheckedChange={() => toggleArticleSelection(article.id)}
+                                  data-testid={`checkbox-article-${article.id}`}
+                                />
+                              </td>
+                              <td className="py-3.5 px-4">
+                                <div className="max-w-md space-y-1.5">
+                                  <div className="flex flex-wrap items-center gap-1.5">
+                                    <span
+                                      className="truncate font-semibold text-foreground"
+                                      title={article.title}
+                                    >
+                                      {article.title}
+                                    </span>
+                                    <EditorialDraftReviewCue
+                                      article={article}
+                                      layout="inline"
+                                      testId={`badge-revised-opinion-${article.id}`}
+                                    />
+                                  </div>
+                                  {article.category?.nameAr && (
+                                    <div className="text-xs text-muted-foreground">
+                                      {article.category.nameAr}
+                                    </div>
+                                  )}
                                   <EditorialDraftReviewCue
                                     article={article}
-                                    layout="inline"
-                                    testId={`badge-revised-opinion-${article.id}`}
+                                    layout="banner"
+                                    testId={`banner-revised-opinion-${article.id}`}
                                   />
                                 </div>
-                                <EditorialDraftReviewCue
-                                  article={article}
-                                  layout="banner"
-                                  testId={`banner-revised-opinion-${article.id}`}
-                                />
-                              </div>
-                            </td>
-                            <td className="py-3 px-4">
-                              <div className="flex items-center gap-2">
-                                <Avatar className="h-6 w-6">
-                                  <AvatarImage src={article.author?.profileImageUrl || ""} />
-                                  <AvatarFallback className="text-xs">
-                                    <User className="h-3 w-3" />
-                                  </AvatarFallback>
-                                </Avatar>
-                                <span className="text-sm">{authorName}</span>
-                              </div>
-                            </td>
-                            <td className="py-3 px-4">
-                              {getStatusBadge(article.status)}
-                            </td>
-                            <td className="py-3 px-4">
-                              {getReviewStatusBadge(article)}
-                            </td>
-                            <td className="py-3 px-4">
-                              <ViewsCount 
-                                views={article.views}
-                                iconClassName="h-4 w-4"
-                              />
-                            </td>
-                            <td className="py-3 px-4">
-                              <div className="flex gap-1">
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  onClick={() => setLocation(`/dashboard/article/${article.id}/edit`)}
-                                  data-testid={`button-edit-${article.id}`}
-                                  title="تعديل"
-                                >
-                                  <Edit className="h-4 w-4" />
-                                </Button>
-
-                                {article.reviewStatus === "pending_review" && (
-                                  <>
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      onClick={() => handleApprove(article)}
-                                      className="text-green-600 hover:text-green-700"
-                                      data-testid={`button-approve-${article.id}`}
-                                      title="موافقة"
-                                    >
-                                      <CheckCircle className="h-4 w-4" />
-                                    </Button>
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      onClick={() => handleRequestRevision(article)}
-                                      className="text-orange-600 hover:text-orange-700"
-                                      data-testid={`button-request-revision-${article.id}`}
-                                      title="طلب تعديل"
-                                    >
-                                      <PenSquare className="h-4 w-4" />
-                                    </Button>
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      onClick={() => handleReject(article)}
-                                      className="text-destructive hover:text-destructive/90"
-                                      data-testid={`button-reject-${article.id}`}
-                                      title="رفض"
-                                    >
-                                      <XCircle className="h-4 w-4" />
-                                    </Button>
-                                  </>
-                                )}
-
-                                {article.reviewStatus === "approved" && article.status === "draft" && (
+                              </td>
+                              <td className="py-3.5 px-4">
+                                <div className="flex items-center gap-2.5">
+                                  <Avatar className="h-7 w-7 ring-1 ring-border/60">
+                                    <AvatarImage src={article.author?.profileImageUrl || ""} />
+                                    <AvatarFallback className="bg-primary/10 text-xs font-semibold text-primary">
+                                      <User className="h-3.5 w-3.5" />
+                                    </AvatarFallback>
+                                  </Avatar>
+                                  <span className="whitespace-nowrap text-sm font-medium">
+                                    {authorName}
+                                  </span>
+                                </div>
+                              </td>
+                              <td className="py-3.5 px-4">{getStatusBadge(article.status)}</td>
+                              <td className="py-3.5 px-4">{getReviewStatusBadge(article)}</td>
+                              <td className="py-3.5 px-4 tabular-nums">
+                                <ViewsCount views={article.views} iconClassName="h-4 w-4" />
+                              </td>
+                              <td className="py-3.5 px-4">
+                                <div className="flex items-center gap-1">
                                   <Button
                                     variant="ghost"
                                     size="icon"
-                                    onClick={() => handlePublishClick(article)}
-                                    className="text-indigo-600 hover:text-indigo-700"
-                                    data-testid={`button-publish-${article.id}`}
-                                    title="نشر"
+                                    className="no-min-touch-size h-8 w-8 rounded-lg"
+                                    onClick={() =>
+                                      setLocation(`/dashboard/article/${article.id}/edit`)
+                                    }
+                                    data-testid={`button-edit-${article.id}`}
+                                    title="تعديل"
                                   >
-                                    <Send className="h-4 w-4" />
+                                    <Edit className="h-4 w-4" />
                                   </Button>
-                                )}
 
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  onClick={() => window.open(`/opinion/${article.slug}`, "_blank")}
-                                  data-testid={`button-view-${article.id}`}
-                                  title="عرض"
-                                >
-                                  <Eye className="h-4 w-4" />
-                                </Button>
-                              </div>
-                            </td>
-                          </SortableRow>
-                        );
-                      })}
-                    </SortableContext>
-                  </tbody>
-                </table>
-              </DndContext>
-            </div>
-          )}
-        </div>
+                                  {article.reviewStatus === "pending_review" && (
+                                    <>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={() => handleApprove(article)}
+                                        className="no-min-touch-size h-8 w-8 rounded-lg text-emerald-600 hover:bg-emerald-500/10 hover:text-emerald-700"
+                                        data-testid={`button-approve-${article.id}`}
+                                        title="موافقة"
+                                      >
+                                        <CheckCircle className="h-4 w-4" />
+                                      </Button>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={() => handleRequestRevision(article)}
+                                        className="no-min-touch-size h-8 w-8 rounded-lg text-orange-600 hover:bg-orange-500/10 hover:text-orange-700"
+                                        data-testid={`button-request-revision-${article.id}`}
+                                        title="طلب تعديل"
+                                      >
+                                        <PenSquare className="h-4 w-4" />
+                                      </Button>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={() => handleReject(article)}
+                                        className="no-min-touch-size h-8 w-8 rounded-lg text-destructive hover:bg-destructive/10 hover:text-destructive/90"
+                                        data-testid={`button-reject-${article.id}`}
+                                        title="رفض"
+                                      >
+                                        <XCircle className="h-4 w-4" />
+                                      </Button>
+                                    </>
+                                  )}
 
-        <div className="md:hidden space-y-3">
-          {isLoading ? (
-            <div className="p-8 text-center text-muted-foreground text-sm">
-              جاري التحميل...
-            </div>
-          ) : filteredArticles.length === 0 ? (
-            <div className="p-8 text-center text-muted-foreground text-sm">
-              لا توجد مقالات رأي
-            </div>
-          ) : (
-            filteredArticles.map((article) => {
-              const authorName = article.author
-                ? `${article.author.firstName || ""} ${article.author.lastName || ""}`.trim() || "غير معروف"
-                : "غير معروف";
+                                  {article.reviewStatus === "approved" &&
+                                    article.status === "draft" && (
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={() => handlePublishClick(article)}
+                                        className="no-min-touch-size h-8 w-8 rounded-lg text-indigo-600 hover:bg-indigo-500/10 hover:text-indigo-700"
+                                        data-testid={`button-publish-${article.id}`}
+                                        title="نشر"
+                                      >
+                                        <Send className="h-4 w-4" />
+                                      </Button>
+                                    )}
 
-              return (
-                <div
-                  key={article.id}
-                  className="bg-card border rounded-lg p-3 space-y-3 hover-elevate"
-                  data-testid={`card-opinion-${article.id}`}
-                >
-                  <div className="flex items-start gap-2">
-                    <Checkbox
-                      checked={selectedArticles.has(article.id)}
-                      onCheckedChange={() => toggleArticleSelection(article.id)}
-                      data-testid={`checkbox-article-mobile-${article.id}`}
-                      className="mt-0.5"
-                    />
-                    <div className="flex-1 flex items-start justify-between gap-2">
-                      <h3 className="font-semibold text-sm flex-1 break-words leading-snug">
-                        {article.title}
-                      </h3>
-                      {getStatusBadge(article.status)}
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="no-min-touch-size h-8 w-8 rounded-lg"
+                                    onClick={() => window.open(`/opinion/${article.slug}`, "_blank")}
+                                    data-testid={`button-view-${article.id}`}
+                                    title="عرض"
+                                  >
+                                    <Eye className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                              </td>
+                            </SortableRow>
+                          );
+                        })}
+                      </SortableContext>
+                    </tbody>
+                  </table>
+                </DndContext>
+              </div>
+            )}
+          </div>
+
+          {/* بطاقات الجوال المتجاوبة */}
+          <div className="space-y-3 md:hidden">
+            {isLoading ? (
+              <div className="p-8 text-center text-sm text-muted-foreground">
+                جاري التحميل...
+              </div>
+            ) : filteredArticles.length === 0 ? (
+              <div className="rounded-2xl border border-border/70 bg-card p-8 text-center text-sm text-muted-foreground">
+                لا توجد مقالات رأي
+              </div>
+            ) : (
+              filteredArticles.map((article) => {
+                const authorName = article.author
+                  ? `${article.author.firstName || ""} ${article.author.lastName || ""}`.trim() ||
+                    "غير معروف"
+                  : "غير معروف";
+
+                return (
+                  <div
+                    key={article.id}
+                    className="space-y-3 rounded-2xl border border-border/80 bg-card p-3.5 shadow-xs transition-all hover-elevate"
+                    data-testid={`card-opinion-${article.id}`}
+                  >
+                    <div className="flex items-start gap-2.5">
+                      <Checkbox
+                        checked={selectedArticles.has(article.id)}
+                        onCheckedChange={() => toggleArticleSelection(article.id)}
+                        data-testid={`checkbox-article-mobile-${article.id}`}
+                        className="mt-1"
+                      />
+                      <div className="flex flex-1 items-start justify-between gap-2">
+                        <h3 className="flex-1 break-words text-sm font-bold leading-snug text-foreground">
+                          {article.title}
+                        </h3>
+                        {getStatusBadge(article.status)}
+                      </div>
                     </div>
-                  </div>
 
-                  <div className="flex items-center gap-3 text-xs">
-                    <div className="flex items-center gap-1.5">
-                      <Avatar className="h-5 w-5">
-                        <AvatarImage src={article.author?.profileImageUrl || ""} />
-                        <AvatarFallback className="text-xs">
-                          <User className="h-3 w-3" />
-                        </AvatarFallback>
-                      </Avatar>
-                      <span className="text-muted-foreground">{authorName}</span>
+                    <div className="flex flex-wrap items-center gap-2 text-xs">
+                      <div className="flex items-center gap-1.5">
+                        <Avatar className="h-5 w-5">
+                          <AvatarImage src={article.author?.profileImageUrl || ""} />
+                          <AvatarFallback className="text-xs">
+                            <User className="h-3 w-3" />
+                          </AvatarFallback>
+                        </Avatar>
+                        <span className="font-medium text-muted-foreground">{authorName}</span>
+                      </div>
+                      {article.category && (
+                        <>
+                          <span className="text-muted-foreground">•</span>
+                          <span className="text-muted-foreground">{article.category.nameAr}</span>
+                        </>
+                      )}
                     </div>
-                    {article.category && (
-                      <>
-                        <span className="text-muted-foreground">•</span>
-                        <span className="text-muted-foreground">{article.category.nameAr}</span>
-                      </>
-                    )}
-                  </div>
 
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      {getReviewStatusBadge(article)}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        {getReviewStatusBadge(article)}
+                      </div>
+                      <ViewsCount
+                        views={article.views}
+                        iconClassName="h-3.5 w-3.5"
+                        className="text-xs tabular-nums text-muted-foreground"
+                      />
                     </div>
-                    <ViewsCount
-                      views={article.views}
-                      iconClassName="h-3.5 w-3.5"
-                      className="text-xs text-muted-foreground"
-                    />
-                  </div>
 
-                  <div className="flex gap-2 pt-2 border-t">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => setLocation(`/dashboard/article/${article.id}/edit`)}
-                      className="flex-1"
-                      data-testid={`button-edit-mobile-${article.id}`}
-                    >
-                      <Edit className="ml-1.5 h-3.5 w-3.5" />
-                      تعديل
-                    </Button>
-
-                    {article.reviewStatus === "pending_review" && (
-                      <>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleApprove(article)}
-                          className="flex-1"
-                          data-testid={`button-approve-mobile-${article.id}`}
-                        >
-                          <CheckCircle className="ml-1.5 h-3.5 w-3.5" />
-                          موافقة
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleRequestRevision(article)}
-                          className="flex-1 border-orange-300 text-orange-700 hover:bg-orange-50 dark:border-orange-700 dark:text-orange-300"
-                          data-testid={`button-request-revision-mobile-${article.id}`}
-                        >
-                          <PenSquare className="ml-1.5 h-3.5 w-3.5" />
-                          طلب تعديل
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="destructive"
-                          onClick={() => handleReject(article)}
-                          className="flex-1"
-                          data-testid={`button-reject-mobile-${article.id}`}
-                        >
-                          <XCircle className="ml-1.5 h-3.5 w-3.5" />
-                          رفض
-                        </Button>
-                      </>
-                    )}
-
-                    {article.reviewStatus === "approved" && article.status === "draft" && (
+                    <div className="flex flex-wrap gap-2 border-t border-border/50 pt-2.5">
                       <Button
                         size="sm"
-                        variant="default"
-                        onClick={() => handlePublishClick(article)}
-                        className="flex-1"
-                        data-testid={`button-publish-mobile-${article.id}`}
+                        variant="outline"
+                        onClick={() => setLocation(`/dashboard/article/${article.id}/edit`)}
+                        className="no-min-touch-size h-8 flex-1 rounded-xl text-xs"
+                        data-testid={`button-edit-mobile-${article.id}`}
                       >
-                        <Send className="ml-1.5 h-3.5 w-3.5" />
-                        نشر
+                        <Edit className="ml-1.5 h-3.5 w-3.5" />
+                        تعديل
                       </Button>
-                    )}
+
+                      {article.reviewStatus === "pending_review" && (
+                        <>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleApprove(article)}
+                            className="no-min-touch-size h-8 flex-1 rounded-xl border-emerald-300 text-xs text-emerald-700 hover:bg-emerald-50 dark:border-emerald-700 dark:text-emerald-300"
+                            data-testid={`button-approve-mobile-${article.id}`}
+                          >
+                            <CheckCircle className="ml-1.5 h-3.5 w-3.5" />
+                            موافقة
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleRequestRevision(article)}
+                            className="no-min-touch-size h-8 flex-1 rounded-xl border-orange-300 text-xs text-orange-700 hover:bg-orange-50 dark:border-orange-700 dark:text-orange-300"
+                            data-testid={`button-request-revision-mobile-${article.id}`}
+                          >
+                            <PenSquare className="ml-1.5 h-3.5 w-3.5" />
+                            طلب تعديل
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={() => handleReject(article)}
+                            className="no-min-touch-size h-8 flex-1 rounded-xl text-xs"
+                            data-testid={`button-reject-mobile-${article.id}`}
+                          >
+                            <XCircle className="ml-1.5 h-3.5 w-3.5" />
+                            رفض
+                          </Button>
+                        </>
+                      )}
+
+                      {article.reviewStatus === "approved" && article.status === "draft" && (
+                        <Button
+                          size="sm"
+                          variant="default"
+                          onClick={() => handlePublishClick(article)}
+                          className="no-min-touch-size h-8 flex-1 rounded-xl text-xs"
+                          data-testid={`button-publish-mobile-${article.id}`}
+                        >
+                          <Send className="ml-1.5 h-3.5 w-3.5" />
+                          نشر
+                        </Button>
+                      )}
+                    </div>
                   </div>
-                </div>
-              );
-            })
-          )}
+                );
+              })
+            )}
+          </div>
         </div>
-      </div>
+      </DashboardPageShell>
 
       <Dialog
         open={!!reviewingArticle && !!reviewAction}
@@ -1134,3 +1509,4 @@ export default function OpinionManagement() {
     </DashboardLayout>
   );
 }
+
