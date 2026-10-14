@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -15,9 +15,15 @@ import {
   Loader2,
   FileText,
   Filter,
+  Search,
+  Clock,
+  Bell,
+  CalendarDays,
+  Flame,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -97,6 +103,20 @@ const categoryLabels: Record<string, string> = {
   other: "أخرى",
 };
 
+const categoryBadgeStyles: Record<string, string> = {
+  national: "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800/60 dark:bg-emerald-950/40 dark:text-emerald-300",
+  international: "border-sky-200 bg-sky-50 text-sky-800 dark:border-sky-800/60 dark:bg-sky-950/40 dark:text-sky-300",
+  religious: "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-300",
+  health: "border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-800/60 dark:bg-rose-950/40 dark:text-rose-300",
+  environmental: "border-teal-200 bg-teal-50 text-teal-800 dark:border-teal-800/60 dark:bg-teal-950/40 dark:text-teal-300",
+  cultural: "border-purple-200 bg-purple-50 text-purple-800 dark:border-purple-800/60 dark:bg-purple-950/40 dark:text-purple-300",
+  social: "border-indigo-200 bg-indigo-50 text-indigo-800 dark:border-indigo-800/60 dark:bg-indigo-950/40 dark:text-indigo-300",
+  educational: "border-blue-200 bg-blue-50 text-blue-800 dark:border-blue-800/60 dark:bg-blue-950/40 dark:text-blue-300",
+  sports: "border-orange-200 bg-orange-50 text-orange-800 dark:border-orange-800/60 dark:bg-orange-950/40 dark:text-orange-300",
+  economic: "border-cyan-200 bg-cyan-50 text-cyan-800 dark:border-cyan-800/60 dark:bg-cyan-950/40 dark:text-cyan-300",
+  other: "border-border bg-muted/60 text-muted-foreground",
+};
+
 const suggestionTypeLabels: Record<string, string> = {
   news: "خبر",
   report: "تقرير",
@@ -120,17 +140,127 @@ const arabicMonths = [
   { value: "12", label: "ديسمبر" },
 ];
 
+const monthNamesArray = [
+  "يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو",
+  "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"
+];
+
 function formatDate(date: string | Date | null | undefined): string {
   if (!date) return "-";
   const d = new Date(date);
-  const months = [
-    "يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو",
-    "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"
-  ];
-  const day = d.getDate().toString().padStart(2, '0');
-  const month = months[d.getMonth()];
+  if (isNaN(d.getTime())) return String(date);
+  const day = d.getDate().toString().padStart(2, "0");
+  const month = monthNamesArray[d.getMonth()];
   const year = d.getFullYear();
   return `${day} ${month} ${year}`;
+}
+
+function getWorldDayCountdown(worldDay: WorldDay) {
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const parsed = worldDay.eventDate ? new Date(worldDay.eventDate) : null;
+  const month =
+    worldDay.month ||
+    (parsed && !isNaN(parsed.getTime()) ? parsed.getMonth() + 1 : 1);
+  const day =
+    worldDay.day ||
+    (parsed && !isNaN(parsed.getTime()) ? parsed.getDate() : 1);
+
+  if (today.getMonth() + 1 === month && today.getDate() === day) {
+    return {
+      daysLeft: 0,
+      label: "اليوم!",
+      tone: "today" as const,
+      isWithinReminder: true,
+      monthName: monthNamesArray[(month - 1) % 12] || "",
+      dayNum: day,
+      badgeClass:
+        "border-emerald-300 bg-emerald-500/15 text-emerald-800 dark:border-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 font-semibold",
+    };
+  }
+
+  let targetDate = new Date(today.getFullYear(), month - 1, day);
+  if (worldDay.isRecurring === false && parsed && !isNaN(parsed.getTime())) {
+    targetDate = new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate());
+  } else if (targetDate < today) {
+    targetDate = new Date(today.getFullYear() + 1, month - 1, day);
+  }
+
+  const daysLeft = Math.round(
+    (targetDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
+  );
+  const reminderDays =
+    typeof worldDay.reminderDays === "number" ? worldDay.reminderDays : 7;
+  const isWithinReminder = daysLeft >= 0 && daysLeft <= reminderDays;
+
+  if (daysLeft < 0) {
+    return {
+      daysLeft,
+      label: `مضى (${Math.abs(daysLeft)} يوم)`,
+      tone: "past" as const,
+      isWithinReminder: false,
+      monthName: monthNamesArray[(month - 1) % 12] || "",
+      dayNum: day,
+      badgeClass: "border-border bg-muted/60 text-muted-foreground",
+    };
+  }
+  if (daysLeft === 1) {
+    return {
+      daysLeft,
+      label: "غداً!",
+      tone: "imminent" as const,
+      isWithinReminder,
+      monthName: monthNamesArray[(month - 1) % 12] || "",
+      dayNum: day,
+      badgeClass:
+        "border-amber-300 bg-amber-500/15 text-amber-800 dark:border-amber-700 dark:bg-amber-950/60 dark:text-amber-300 font-semibold",
+    };
+  }
+  if (daysLeft === 2) {
+    return {
+      daysLeft,
+      label: "خلال يومين",
+      tone: "imminent" as const,
+      isWithinReminder,
+      monthName: monthNamesArray[(month - 1) % 12] || "",
+      dayNum: day,
+      badgeClass:
+        "border-amber-300 bg-amber-500/15 text-amber-800 dark:border-amber-700 dark:bg-amber-950/60 dark:text-amber-300 font-medium",
+    };
+  }
+  if (daysLeft <= 10) {
+    return {
+      daysLeft,
+      label: `خلال ${daysLeft} أيام`,
+      tone: "imminent" as const,
+      isWithinReminder,
+      monthName: monthNamesArray[(month - 1) % 12] || "",
+      dayNum: day,
+      badgeClass:
+        "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-300 font-medium",
+    };
+  }
+  if (daysLeft <= 30) {
+    return {
+      daysLeft,
+      label: `خلال ${daysLeft} يوماً`,
+      tone: "upcoming" as const,
+      isWithinReminder,
+      monthName: monthNamesArray[(month - 1) % 12] || "",
+      dayNum: day,
+      badgeClass:
+        "border-sky-200 bg-sky-50 text-sky-800 dark:border-sky-800/60 dark:bg-sky-950/40 dark:text-sky-300",
+    };
+  }
+  return {
+    daysLeft,
+    label: `خلال ${daysLeft} يوم`,
+    tone: "future" as const,
+    isWithinReminder,
+    monthName: monthNamesArray[(month - 1) % 12] || "",
+    dayNum: day,
+    badgeClass: "border-border/80 bg-muted/50 text-muted-foreground",
+  };
 }
 
 export default function WorldDaysManagement() {
@@ -148,6 +278,8 @@ export default function WorldDaysManagement() {
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [monthFilter, setMonthFilter] = useState<string>("all");
   const [activeFilter, setActiveFilter] = useState<string>("all");
+  const [searchQuery, setSearchQuery] = useState<string>("");
+  const [quickTimeFilter, setQuickTimeFilter] = useState<"all" | "today" | "soon" | "month">("all");
 
   const form = useForm<WorldDayFormValues>({
     resolver: zodResolver(worldDayFormSchema),
@@ -202,6 +334,54 @@ export default function WorldDaysManagement() {
     enabled: !!selectedWorldDay,
   });
   const suggestions = Array.isArray(suggestionsRaw) ? suggestionsRaw : [];
+
+  // Enrich world days with countdown info and compute KPIs
+  const currentMonthIndex = new Date().getMonth() + 1;
+  const currentMonthLabel = monthNamesArray[currentMonthIndex - 1] || "";
+
+  const kpiStats = useMemo(() => {
+    let activeCount = 0;
+    let activeTodayCount = 0;
+    let thisMonthCount = 0;
+    let withinReminderCount = 0;
+
+    worldDays.forEach((wd) => {
+      const cd = getWorldDayCountdown(wd);
+      if (wd.isActive) activeCount++;
+      if (cd.daysLeft === 0) activeTodayCount++;
+      if (wd.month === currentMonthIndex) thisMonthCount++;
+      if (wd.isActive && cd.isWithinReminder) withinReminderCount++;
+    });
+
+    return {
+      total: worldDays.length,
+      activeCount,
+      inactiveCount: worldDays.length - activeCount,
+      activeTodayCount,
+      thisMonthCount,
+      withinReminderCount,
+    };
+  }, [worldDays, currentMonthIndex]);
+
+  const filteredWorldDays = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    return worldDays.filter((wd) => {
+      const matchesSearch =
+        !q ||
+        wd.nameAr.toLowerCase().includes(q) ||
+        (wd.nameEn && wd.nameEn.toLowerCase().includes(q)) ||
+        (wd.description && wd.description.toLowerCase().includes(q));
+
+      if (!matchesSearch) return false;
+
+      if (quickTimeFilter === "all") return true;
+      const cd = getWorldDayCountdown(wd);
+      if (quickTimeFilter === "today") return cd.daysLeft === 0;
+      if (quickTimeFilter === "soon") return cd.daysLeft >= 0 && cd.daysLeft <= 14;
+      if (quickTimeFilter === "month") return wd.month === currentMonthIndex;
+      return true;
+    });
+  }, [worldDays, searchQuery, quickTimeFilter, currentMonthIndex]);
 
   const createMutation = useMutation({
     mutationFn: async (data: WorldDayFormValues) => {
@@ -385,46 +565,232 @@ export default function WorldDaysManagement() {
     }
   };
 
+  const selectedCountdown = selectedWorldDay ? getWorldDayCountdown(selectedWorldDay) : null;
+
   return (
     <DashboardLayout>
-      <div className="space-y-6" dir="rtl">
+      <div className="mx-auto max-w-[1600px] space-y-6 pb-10" dir="rtl">
+        {/* Unified Editorial Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border/60 pb-5">
-          <div className="flex items-center gap-3">
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10"><Calendar className="h-5 w-5 text-primary" /></span>
+          <div className="flex items-start sm:items-center gap-3.5">
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary shadow-2xs">
+              <Calendar className="h-5 w-5" />
+            </span>
             <div>
-              <h1 className="text-xl sm:text-2xl font-bold" data-testid="text-page-title">
+              <h1 className="text-xl sm:text-2xl font-bold tracking-tight" data-testid="text-page-title">
                 إدارة الأيام العالمية
               </h1>
-              <p className="text-muted-foreground mt-1">
-                إدارة المناسبات والأيام العالمية للتخطيط المحتوى
+              <p className="text-xs sm:text-sm text-muted-foreground mt-1">
+                تخطيط وتغطية المناسبات الوطنية والدولية وتوليد الأفكار التحريرية بالذكاء الاصطناعي
               </p>
             </div>
           </div>
           <div className="flex w-full sm:w-auto items-center gap-2">
-            <Button className="flex-1 sm:flex-none" onClick={() => setIsImportDialogOpen(true)} variant="outline" data-testid="button-import-ics">
-              <Upload className="h-4 w-4 ml-2" />
-              استيراد من تقويم
+            <Button
+              className="flex-1 sm:flex-none gap-1.5"
+              onClick={() => setIsImportDialogOpen(true)}
+              variant="outline"
+              data-testid="button-import-ics"
+            >
+              <Upload className="h-4 w-4" />
+              <span>استيراد من تقويم</span>
             </Button>
-            <Button className="flex-1 sm:flex-none" onClick={handleCreate} data-testid="button-create-world-day">
-              <Plus className="h-4 w-4 ml-2" />
-              إضافة يوم جديد
+            <Button
+              className="flex-1 sm:flex-none gap-1.5"
+              onClick={handleCreate}
+              data-testid="button-create-world-day"
+            >
+              <Plus className="h-4 w-4" />
+              <span>إضافة يوم جديد</span>
             </Button>
           </div>
         </div>
 
-        <Card className="border-border/70 shadow-none" data-testid="card-filters">
+        {/* Top KPI Summary Strip */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4" data-testid="kpi-strip-world-days">
+          <Card className="border-border/70 shadow-xs">
+            <CardContent className="p-4 sm:p-5">
+              <div className="flex items-start justify-between gap-2">
+                <div className="space-y-1">
+                  <p className="text-xs sm:text-sm font-medium text-muted-foreground">إجمالي الأيام العالمية</p>
+                  <p className="text-2xl sm:text-3xl font-bold tracking-tight tabular-nums">
+                    {kpiStats.total}
+                  </p>
+                </div>
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                  <CalendarDays className="h-4 w-4 sm:h-5 sm:w-5" />
+                </span>
+              </div>
+              <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
+                <span className="text-emerald-600 dark:text-emerald-400 font-medium">
+                  {kpiStats.activeCount} نشط
+                </span>
+                <span>·</span>
+                <span>{kpiStats.inactiveCount} غير نشط</span>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border-border/70 shadow-xs">
+            <CardContent className="p-4 sm:p-5">
+              <div className="flex items-start justify-between gap-2">
+                <div className="space-y-1">
+                  <p className="text-xs sm:text-sm font-medium text-muted-foreground">مناسبات اليوم</p>
+                  <div className="flex items-baseline gap-2">
+                    <p className="text-2xl sm:text-3xl font-bold tracking-tight text-emerald-600 dark:text-emerald-400 tabular-nums">
+                      {kpiStats.activeTodayCount}
+                    </p>
+                    {kpiStats.activeTodayCount > 0 && (
+                      <Badge className="bg-emerald-600 text-white text-[10px] px-1.5 py-0">
+                        اليوم!
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                  <Flame className="h-4 w-4 sm:h-5 sm:w-5" />
+                </span>
+              </div>
+              <div className="mt-3 text-xs text-muted-foreground">
+                {kpiStats.activeTodayCount > 0
+                  ? "مناسبة جارية اليوم للتغطية المباشرة"
+                  : "لا توجد مناسبة مسجلة بتاريخ اليوم"}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border-border/70 shadow-xs">
+            <CardContent className="p-4 sm:p-5">
+              <div className="flex items-start justify-between gap-2">
+                <div className="space-y-1">
+                  <p className="text-xs sm:text-sm font-medium text-muted-foreground">مناسبات هذا الشهر</p>
+                  <p className="text-2xl sm:text-3xl font-bold tracking-tight text-sky-600 dark:text-sky-400 tabular-nums">
+                    {kpiStats.thisMonthCount}
+                  </p>
+                </div>
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-sky-500/10 text-sky-600 dark:text-sky-400">
+                  <Calendar className="h-4 w-4 sm:h-5 sm:w-5" />
+                </span>
+              </div>
+              <div className="mt-3 text-xs text-muted-foreground">
+                خلال شهر {currentMonthLabel} الحالي
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border-border/70 shadow-xs">
+            <CardContent className="p-4 sm:p-5">
+              <div className="flex items-start justify-between gap-2">
+                <div className="space-y-1">
+                  <p className="text-xs sm:text-sm font-medium text-muted-foreground">ضمن نافذة التذكير</p>
+                  <p className="text-2xl sm:text-3xl font-bold tracking-tight text-amber-600 dark:text-amber-400 tabular-nums">
+                    {kpiStats.withinReminderCount}
+                  </p>
+                </div>
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                  <Bell className="h-4 w-4 sm:h-5 sm:w-5" />
+                </span>
+              </div>
+              <div className="mt-3 text-xs text-muted-foreground">
+                مناسبات قريبة جاهزة لتوليد مقترحات التغطية
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Search & Filters Card */}
+        <Card className="border-border/70 shadow-xs" data-testid="card-filters">
           <CardHeader className="pb-3">
-            <CardTitle className="text-lg flex items-center gap-2">
-              <Filter className="h-5 w-5" />
-              الفلاتر
-            </CardTitle>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <CardTitle className="text-base sm:text-lg flex items-center gap-2">
+                <Filter className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
+                <span>البحث والفلاتر السريعة</span>
+              </CardTitle>
+
+              {/* Search Input */}
+              <div className="relative w-full sm:w-80">
+                <Search className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="ابحث باسم المناسبة أو الوصف..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pr-9 pl-8 h-9 text-sm"
+                  data-testid="input-search-world-days"
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery("")}
+                    className="no-min-touch-size absolute left-2.5 top-1/2 -translate-y-1/2 rounded-full p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                    aria-label="مسح البحث"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
+            </div>
           </CardHeader>
-          <CardContent>
-            <div className="flex flex-wrap gap-4">
-              <div className="flex-1 min-w-[180px]">
-                <label className="text-sm font-medium mb-2 block">التصنيف</label>
+          <CardContent className="space-y-4">
+            {/* Quick Filter Pills */}
+            <div className="flex flex-wrap items-center gap-1.5 border-b border-border/50 pb-3">
+              <span className="text-xs font-medium text-muted-foreground ml-1">الفترة:</span>
+              {(
+                [
+                  { id: "all", label: "كل الأوقات" },
+                  { id: "today", label: "اليوم!" },
+                  { id: "soon", label: "خلال 14 يوماً" },
+                  { id: "month", label: `شهر ${currentMonthLabel}` },
+                ] as const
+              ).map((pill) => (
+                <button
+                  key={pill.id}
+                  type="button"
+                  onClick={() => setQuickTimeFilter(pill.id)}
+                  className={`no-min-touch-size inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                    quickTimeFilter === pill.id
+                      ? "bg-primary text-primary-foreground shadow-2xs"
+                      : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground"
+                  }`}
+                >
+                  {pill.label}
+                </button>
+              ))}
+
+              <span className="mx-1 h-4 w-px bg-border/70 hidden sm:inline-block" />
+              <span className="text-xs font-medium text-muted-foreground ml-1">التصنيف السريع:</span>
+              <button
+                type="button"
+                onClick={() => setCategoryFilter("all")}
+                className={`no-min-touch-size inline-flex items-center rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                  categoryFilter === "all"
+                    ? "bg-sky-600 text-white"
+                    : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground"
+                }`}
+              >
+                الكل
+              </button>
+              {worldDayCategories.map((cat) => (
+                <button
+                  key={cat}
+                  type="button"
+                  onClick={() => setCategoryFilter(cat)}
+                  className={`no-min-touch-size inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium transition-colors ${
+                    categoryFilter === cat
+                      ? "bg-sky-600 text-white"
+                      : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground"
+                  }`}
+                >
+                  {categoryLabels[cat]}
+                </button>
+              ))}
+            </div>
+
+            {/* Select Filters Row */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1.5 block">التصنيف</label>
                 <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                  <SelectTrigger data-testid="select-category-filter">
+                  <SelectTrigger data-testid="select-category-filter" className="h-9">
                     <SelectValue placeholder="كل التصنيفات" />
                   </SelectTrigger>
                   <SelectContent>
@@ -435,10 +801,10 @@ export default function WorldDaysManagement() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="flex-1 min-w-[180px]">
-                <label className="text-sm font-medium mb-2 block">الشهر</label>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1.5 block">الشهر</label>
                 <Select value={monthFilter} onValueChange={setMonthFilter}>
-                  <SelectTrigger data-testid="select-month-filter">
+                  <SelectTrigger data-testid="select-month-filter" className="h-9">
                     <SelectValue placeholder="كل الشهور" />
                   </SelectTrigger>
                   <SelectContent>
@@ -449,10 +815,10 @@ export default function WorldDaysManagement() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="flex-1 min-w-[180px]">
-                <label className="text-sm font-medium mb-2 block">الحالة</label>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1.5 block">الحالة</label>
                 <Select value={activeFilter} onValueChange={setActiveFilter}>
-                  <SelectTrigger data-testid="select-active-filter">
+                  <SelectTrigger data-testid="select-active-filter" className="h-9">
                     <SelectValue placeholder="الكل" />
                   </SelectTrigger>
                   <SelectContent>
@@ -468,103 +834,195 @@ export default function WorldDaysManagement() {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2">
-            <Card className="border-border/70 shadow-none" data-testid="card-world-days-table">
-              <CardHeader>
-                <CardTitle>الأيام العالمية ({worldDays.length})</CardTitle>
+            <Card className="border-border/70 shadow-xs" data-testid="card-world-days-table">
+              <CardHeader className="border-b border-border/50 pb-4">
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <CardTitle className="text-lg">الأيام العالمية ({filteredWorldDays.length})</CardTitle>
+                    <CardDescription className="mt-0.5 text-xs">
+                      اضغط على اسم المناسبة لعرض أو توليد مقترحات التغطية التحريرية
+                    </CardDescription>
+                  </div>
+                </div>
               </CardHeader>
-              <CardContent>
+              <CardContent className="p-0 sm:p-6">
                 {isLoading ? (
-                  <div className="flex justify-center py-8" data-testid="loader-world-days">
+                  <div className="flex justify-center py-12" data-testid="loader-world-days">
                     <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
                   </div>
-                ) : worldDays.length === 0 ? (
-                  <div className="text-center py-8 text-muted-foreground" data-testid="text-no-world-days">
-                    لا توجد أيام عالمية. ابدأ بإضافة يوم جديد أو استيراد من تقويم.
+                ) : filteredWorldDays.length === 0 ? (
+                  <div className="text-center py-12 px-4 text-muted-foreground space-y-2" data-testid="text-no-world-days">
+                    <Calendar className="h-10 w-10 mx-auto text-muted-foreground/40" />
+                    <p className="font-medium text-foreground">
+                      لا توجد أيام عالمية. ابدأ بإضافة يوم جديد أو استيراد من تقويم.
+                    </p>
                   </div>
                 ) : (
                   <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="text-right">الاسم</TableHead>
-                          <TableHead className="text-right">التاريخ</TableHead>
+                    <Table className="block md:table" dir="rtl">
+                      <TableHeader className="hidden md:table-header-group">
+                        <TableRow className="bg-muted/40">
+                          <TableHead className="text-right">المناسبة</TableHead>
+                          <TableHead className="text-right">التاريخ والعد التنازلي</TableHead>
                           <TableHead className="text-right">التصنيف</TableHead>
                           <TableHead className="text-right">التذكير</TableHead>
                           <TableHead className="text-right">الحالة</TableHead>
-                          <TableHead className="text-right">إجراءات</TableHead>
+                          <TableHead className="text-left">إجراءات</TableHead>
                         </TableRow>
                       </TableHeader>
-                      <TableBody>
-                        {worldDays.map((worldDay) => (
-                          <TableRow
-                            key={worldDay.id}
-                            className={selectedWorldDay?.id === worldDay.id ? "bg-muted/50" : ""}
-                            data-testid={`row-world-day-${worldDay.id}`}
-                          >
-                            <TableCell>
-                              <button
-                                onClick={() => setSelectedWorldDay(worldDay)}
-                                className="text-right hover:underline font-medium"
-                                data-testid={`button-select-${worldDay.id}`}
+                      <TableBody className="block md:table-row-group p-3 sm:p-0 space-y-3 md:space-y-0">
+                        {filteredWorldDays.map((worldDay) => {
+                          const countdown = getWorldDayCountdown(worldDay);
+                          const isSelected = selectedWorldDay?.id === worldDay.id;
+                          const catBadgeStyle =
+                            categoryBadgeStyles[worldDay.category] || categoryBadgeStyles.other;
+
+                          return (
+                            <TableRow
+                              key={worldDay.id}
+                              className={`flex flex-col md:table-row rounded-xl border border-border/70 md:rounded-none md:border-0 md:border-b p-4 md:p-0 transition-colors gap-2.5 md:gap-0 ${
+                                isSelected
+                                  ? "bg-primary/5 border-primary/40"
+                                  : "bg-card hover:bg-muted/30"
+                              }`}
+                              data-testid={`row-world-day-${worldDay.id}`}
+                            >
+                              {/* Name & Calendar Date Box */}
+                              <TableCell className="block md:table-cell p-0 md:p-4 text-right">
+                                <div className="flex items-start gap-3">
+                                  <div className="flex h-11 w-11 shrink-0 flex-col items-center justify-center rounded-xl border border-border/70 bg-muted/40 text-center">
+                                    <span className="text-sm font-bold leading-none text-foreground tabular-nums">
+                                      {countdown.dayNum}
+                                    </span>
+                                    <span className="mt-0.5 text-[10px] font-medium text-muted-foreground leading-none">
+                                      {countdown.monthName}
+                                    </span>
+                                  </div>
+                                  <div className="min-w-0 flex-1">
+                                    <button
+                                      type="button"
+                                      onClick={() => setSelectedWorldDay(worldDay)}
+                                      className="no-min-touch-size text-right hover:text-primary hover:underline font-semibold text-foreground transition-colors"
+                                      data-testid={`button-select-${worldDay.id}`}
+                                    >
+                                      {worldDay.nameAr}
+                                    </button>
+                                    {worldDay.nameEn && (
+                                      <div className="text-xs text-muted-foreground font-mono truncate" dir="ltr">
+                                        {worldDay.nameEn}
+                                      </div>
+                                    )}
+                                    {worldDay.description && (
+                                      <p className="text-xs text-muted-foreground/80 line-clamp-1 mt-0.5">
+                                        {worldDay.description}
+                                      </p>
+                                    )}
+                                  </div>
+                                </div>
+                              </TableCell>
+
+                              {/* Date & Countdown Badge */}
+                              <TableCell className="block md:table-cell p-0 md:p-4 text-right">
+                                <div className="flex flex-wrap md:flex-col items-center md:items-start justify-between gap-1.5">
+                                  <span
+                                    className="text-xs sm:text-sm font-medium text-foreground"
+                                    data-testid={`text-date-${worldDay.id}`}
+                                  >
+                                    {formatDate(worldDay.eventDate)}
+                                  </span>
+                                  <Badge
+                                    variant="outline"
+                                    className={`gap-1 text-[11px] ${countdown.badgeClass}`}
+                                    data-testid={`badge-countdown-${worldDay.id}`}
+                                  >
+                                    {countdown.tone === "today" ? (
+                                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                    ) : (
+                                      <Clock className="h-3 w-3" />
+                                    )}
+                                    <span>{countdown.label}</span>
+                                  </Badge>
+                                </div>
+                              </TableCell>
+
+                              {/* Category */}
+                              <TableCell className="block md:table-cell p-0 md:p-4 text-right">
+                                <Badge
+                                  variant="outline"
+                                  className={catBadgeStyle}
+                                  data-testid={`badge-category-${worldDay.id}`}
+                                >
+                                  {categoryLabels[worldDay.category] || worldDay.category}
+                                </Badge>
+                              </TableCell>
+
+                              {/* Reminder */}
+                              <TableCell
+                                className="block md:table-cell p-0 md:p-4 text-right text-xs sm:text-sm text-muted-foreground"
+                                data-testid={`text-reminder-${worldDay.id}`}
                               >
-                                {worldDay.nameAr}
-                              </button>
-                              {worldDay.nameEn && (
-                                <div className="text-sm text-muted-foreground">{worldDay.nameEn}</div>
-                              )}
-                            </TableCell>
-                            <TableCell data-testid={`text-date-${worldDay.id}`}>
-                              {formatDate(worldDay.eventDate)}
-                            </TableCell>
-                            <TableCell>
-                              <Badge variant="outline" data-testid={`badge-category-${worldDay.id}`}>
-                                {categoryLabels[worldDay.category] || worldDay.category}
-                              </Badge>
-                            </TableCell>
-                            <TableCell data-testid={`text-reminder-${worldDay.id}`}>
-                              {worldDay.reminderDays} يوم
-                            </TableCell>
-                            <TableCell data-testid={`badge-status-${worldDay.id}`}>
-                              {worldDay.isActive ? (
-                                <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300">نشط</Badge>
-                              ) : (
-                                <Badge variant="secondary">غير نشط</Badge>
-                              )}
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex items-center gap-1">
-                                <Button
-                                  size="icon"
-                                  variant="ghost"
-                                  onClick={() => handleEdit(worldDay)}
-                                  data-testid={`button-edit-${worldDay.id}`}
-                                >
-                                  <Edit className="h-4 w-4" />
-                                </Button>
-                                <Button
-                                  size="icon"
-                                  variant="ghost"
-                                  onClick={() => {
-                                    setSelectedWorldDay(worldDay);
-                                    generateSuggestionsMutation.mutate(worldDay.id);
-                                  }}
-                                  disabled={generateSuggestionsMutation.isPending}
-                                  data-testid={`button-generate-${worldDay.id}`}
-                                >
-                                  <Sparkles className="h-4 w-4" />
-                                </Button>
-                                <Button
-                                  size="icon"
-                                  variant="ghost"
-                                  onClick={() => setDeletingWorldDay(worldDay)}
-                                  data-testid={`button-delete-${worldDay.id}`}
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        ))}
+                                <span className="inline-flex items-center gap-1">
+                                  <Bell className="h-3.5 w-3.5 text-muted-foreground/70" />
+                                  <span>{worldDay.reminderDays} يوم</span>
+                                </span>
+                              </TableCell>
+
+                              {/* Status */}
+                              <TableCell
+                                className="block md:table-cell p-0 md:p-4 text-right"
+                                data-testid={`badge-status-${worldDay.id}`}
+                              >
+                                {worldDay.isActive ? (
+                                  <Badge
+                                    variant="outline"
+                                    className="border-emerald-200 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300"
+                                  >
+                                    نشط
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="secondary">غير نشط</Badge>
+                                )}
+                              </TableCell>
+
+                              {/* Actions */}
+                              <TableCell className="block md:table-cell p-0 pt-2 md:pt-4 md:p-4 border-t border-border/40 md:border-0 text-left">
+                                <div className="flex items-center justify-end gap-1">
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    onClick={() => handleEdit(worldDay)}
+                                    title="تعديل المناسبة"
+                                    data-testid={`button-edit-${worldDay.id}`}
+                                  >
+                                    <Edit className="h-4 w-4" />
+                                  </Button>
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    onClick={() => {
+                                      setSelectedWorldDay(worldDay);
+                                      generateSuggestionsMutation.mutate(worldDay.id);
+                                    }}
+                                    disabled={generateSuggestionsMutation.isPending}
+                                    title="توليد اقتراحات بالذكاء الاصطناعي"
+                                    data-testid={`button-generate-${worldDay.id}`}
+                                  >
+                                    <Sparkles className="h-4 w-4 text-primary" />
+                                  </Button>
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    onClick={() => setDeletingWorldDay(worldDay)}
+                                    title="حذف المناسبة"
+                                    data-testid={`button-delete-${worldDay.id}`}
+                                  >
+                                    <Trash2 className="h-4 w-4 text-destructive" />
+                                  </Button>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
                       </TableBody>
                     </Table>
                   </div>
@@ -573,74 +1031,111 @@ export default function WorldDaysManagement() {
             </Card>
           </div>
 
+          {/* Content Suggestions Panel */}
           <div className="lg:col-span-1">
-            <Card className="border-border/70 shadow-none" data-testid="card-suggestions-panel">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Sparkles className="h-5 w-5" />
-                  اقتراحات المحتوى
+            <Card className="border-border/70 shadow-xs lg:sticky lg:top-6" data-testid="card-suggestions-panel">
+              <CardHeader className="border-b border-border/50 pb-4">
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Sparkles className="h-5 w-5 text-primary" />
+                  اقتراحات المحتوى الذكية
                 </CardTitle>
+                <CardDescription className="text-xs">
+                  أفكار وزوايا تحريرية مقترحة لتغطية المناسبة المختارة
+                </CardDescription>
               </CardHeader>
-              <CardContent>
+              <CardContent className="pt-4">
                 {!selectedWorldDay ? (
-                  <div className="text-center py-8 text-muted-foreground" data-testid="text-no-selection">
-                    اختر يوماً عالمياً لعرض اقتراحات المحتوى
+                  <div className="text-center py-10 px-4 text-muted-foreground space-y-2" data-testid="text-no-selection">
+                    <Sparkles className="h-9 w-9 mx-auto text-muted-foreground/40" />
+                    <p className="text-sm font-medium text-foreground">
+                      اختر يوماً عالمياً لعرض اقتراحات المحتوى
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      يمكنك توليد أفكار أخبار وتقارير وإنفوجرافيك بضغطة زر.
+                    </p>
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    <div className="p-3 bg-muted/50 rounded-lg">
-                      <h3 className="font-semibold">{selectedWorldDay.nameAr}</h3>
-                      <p className="text-sm text-muted-foreground">{formatDate(selectedWorldDay.eventDate)}</p>
+                    <div className="p-3.5 bg-muted/40 border border-border/60 rounded-xl space-y-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <h3 className="font-semibold text-foreground">{selectedWorldDay.nameAr}</h3>
+                        {selectedCountdown && (
+                          <Badge
+                            variant="outline"
+                            className={`shrink-0 text-[11px] ${selectedCountdown.badgeClass}`}
+                          >
+                            {selectedCountdown.label}
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                        <span>{formatDate(selectedWorldDay.eventDate)}</span>
+                        <span>·</span>
+                        <span>{categoryLabels[selectedWorldDay.category] || selectedWorldDay.category}</span>
+                      </div>
+                      {selectedWorldDay.description && (
+                        <p className="text-xs text-muted-foreground pt-1 border-t border-border/40">
+                          {selectedWorldDay.description}
+                        </p>
+                      )}
                     </div>
 
                     <Button
                       onClick={() => generateSuggestionsMutation.mutate(selectedWorldDay.id)}
                       disabled={generateSuggestionsMutation.isPending}
-                      className="w-full"
+                      className="w-full gap-2"
                       data-testid="button-generate-new-suggestions"
                     >
                       {generateSuggestionsMutation.isPending ? (
-                        <Loader2 className="h-4 w-4 animate-spin ml-2" />
+                        <Loader2 className="h-4 w-4 animate-spin" />
                       ) : (
-                        <Sparkles className="h-4 w-4 ml-2" />
+                        <Sparkles className="h-4 w-4" />
                       )}
                       توليد اقتراحات جديدة
                     </Button>
 
                     {isSuggestionsLoading ? (
-                      <div className="flex justify-center py-4">
+                      <div className="flex justify-center py-6">
                         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                       </div>
                     ) : suggestions.length === 0 ? (
-                      <div className="text-center py-4 text-muted-foreground text-sm" data-testid="text-no-suggestions">
+                      <div className="text-center py-6 text-muted-foreground text-sm" data-testid="text-no-suggestions">
                         لا توجد اقتراحات. اضغط على الزر أعلاه لتوليد اقتراحات.
                       </div>
                     ) : (
-                      <div className="space-y-3 max-h-[500px] overflow-y-auto">
+                      <div className="space-y-3 max-h-[520px] overflow-y-auto pr-1">
                         {suggestions.map((suggestion) => (
                           <div
                             key={suggestion.id}
-                            className="p-3 border rounded-lg space-y-2"
+                            className="p-3.5 border border-border/70 bg-card rounded-xl space-y-2 shadow-2xs"
                             data-testid={`suggestion-${suggestion.id}`}
                           >
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center justify-between gap-2">
                               <Badge variant="outline" className="text-xs">
                                 {suggestionTypeLabels[suggestion.suggestionType] || suggestion.suggestionType}
                               </Badge>
                               <Badge
                                 variant={
-                                  suggestion.status === "accepted" ? "default" :
-                                  suggestion.status === "rejected" ? "destructive" : "secondary"
+                                  suggestion.status === "accepted"
+                                    ? "default"
+                                    : suggestion.status === "rejected"
+                                    ? "destructive"
+                                    : "secondary"
                                 }
                                 className="text-xs"
                               >
-                                {suggestion.status === "accepted" ? "مقبول" :
-                                 suggestion.status === "rejected" ? "مرفوض" : "معلق"}
+                                {suggestion.status === "accepted"
+                                  ? "مقبول"
+                                  : suggestion.status === "rejected"
+                                  ? "مرفوض"
+                                  : "معلق"}
                               </Badge>
                             </div>
-                            <h4 className="font-medium text-sm">{suggestion.title}</h4>
+                            <h4 className="font-semibold text-sm text-foreground">{suggestion.title}</h4>
                             {suggestion.summary && (
-                              <p className="text-sm text-muted-foreground">{suggestion.summary}</p>
+                              <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
+                                {suggestion.summary}
+                              </p>
                             )}
                             {suggestion.status === "pending" && (
                               <div className="flex items-center gap-2 pt-2">
@@ -649,10 +1144,10 @@ export default function WorldDaysManagement() {
                                   variant="outline"
                                   onClick={() => acceptSuggestionMutation.mutate(suggestion.id)}
                                   disabled={acceptSuggestionMutation.isPending}
-                                  className="flex-1"
+                                  className="flex-1 border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700 dark:border-emerald-800/60 dark:hover:bg-emerald-950/40"
                                   data-testid={`button-accept-${suggestion.id}`}
                                 >
-                                  <CheckCircle className="h-4 w-4 ml-1" />
+                                  <CheckCircle className="h-4 w-4 ml-1 text-emerald-600" />
                                   قبول
                                 </Button>
                                 <Button
@@ -660,10 +1155,10 @@ export default function WorldDaysManagement() {
                                   variant="outline"
                                   onClick={() => rejectSuggestionMutation.mutate(suggestion.id)}
                                   disabled={rejectSuggestionMutation.isPending}
-                                  className="flex-1"
+                                  className="flex-1 border-rose-200 hover:bg-rose-50 hover:text-rose-700 dark:border-rose-800/60 dark:hover:bg-rose-950/40"
                                   data-testid={`button-reject-${suggestion.id}`}
                                 >
-                                  <XCircle className="h-4 w-4 ml-1" />
+                                  <XCircle className="h-4 w-4 ml-1 text-rose-600" />
                                   رفض
                                 </Button>
                               </div>
@@ -899,8 +1394,8 @@ export default function WorldDaysManagement() {
 
             <Tabs defaultValue="paste" className="w-full">
               <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="paste" data-testid="tab-paste">لصق المحتوى</TabsTrigger>
-                <TabsTrigger value="upload" data-testid="tab-upload">رفع ملف</TabsTrigger>
+                <TabsTrigger value="paste" className="no-min-touch-size" data-testid="tab-paste">لصق المحتوى</TabsTrigger>
+                <TabsTrigger value="upload" className="no-min-touch-size" data-testid="tab-upload">رفع ملف</TabsTrigger>
               </TabsList>
               <TabsContent value="paste" className="space-y-4">
                 <div>
