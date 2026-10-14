@@ -21965,8 +21965,12 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         entityType: "article",
         entityId: id,
         newValue: {
+          title: article.title,
           primary: classification.primaryCategory.categoryName,
+          confidence: classification.primaryCategory.confidence,
           suggested: classification.suggestedCategories.map(s => s.categoryName),
+          provider: classification.provider,
+          model: classification.model,
         },
       });
 
@@ -22156,6 +22160,14 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
           action: "generate_seo_metadata",
           entityType: "article",
           entityId: articleId,
+          newValue: {
+            title: article.title,
+            metaTitle: seoContent.metaTitle,
+            metaDescription: seoContent.metaDescription,
+            keywords: seoContent.keywords,
+            provider: seoResult.provider,
+            model: seoResult.model,
+          },
         });
 
         console.log('[SEO] Generated and saved for article:', articleId);
