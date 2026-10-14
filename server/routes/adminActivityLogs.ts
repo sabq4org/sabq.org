@@ -12,6 +12,7 @@ router.get("/api/admin/activity-logs", requireAuth, requirePermission("system.vi
       userId,
       action,
       entityType,
+      actorType,
       dateFrom,
       dateTo,
       searchQuery,
@@ -24,6 +25,7 @@ router.get("/api/admin/activity-logs", requireAuth, requirePermission("system.vi
     if (userId) filters.userId = userId;
     if (action) filters.action = action;
     if (entityType) filters.entityType = entityType;
+    if (actorType) filters.actorType = actorType;
 
     if (dateFrom) {
       const parsedDateFrom = new Date(dateFrom);

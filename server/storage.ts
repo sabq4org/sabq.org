@@ -1255,6 +1255,7 @@ export interface IStorage {
     userId?: string;
     action?: string;
     entityType?: string;
+    actorType?: string;
     dateFrom?: Date;
     dateTo?: Date;
     searchQuery?: string;
@@ -1277,6 +1278,12 @@ export interface IStorage {
         firstName: string | null;
         lastName: string | null;
         profileImageUrl: string | null;
+      } | null;
+      entityInfo?: {
+        title: string | null;
+        subtitle?: string | null;
+        url?: string | null;
+        status?: string | null;
       } | null;
     }>;
     total: number;
@@ -1301,6 +1308,12 @@ export interface IStorage {
       firstName: string | null;
       lastName: string | null;
       profileImageUrl: string | null;
+    } | null;
+    entityInfo?: {
+      title: string | null;
+      subtitle?: string | null;
+      url?: string | null;
+      status?: string | null;
     } | null;
   } | undefined>;
 
@@ -12077,11 +12090,230 @@ export class DatabaseStorage implements IStorage {
     return profile;
   }
 
+  private async enrichActivityLogsWithEntityInfo<
+    T extends {
+      entityType: string;
+      entityId: string;
+      oldValue: Record<string, any> | null;
+      newValue: Record<string, any> | null;
+    }
+  >(
+    items: T[]
+  ): Promise<
+    Array<
+      T & {
+        entityInfo: {
+          title: string | null;
+          subtitle?: string | null;
+          url?: string | null;
+          status?: string | null;
+        } | null;
+      }
+    >
+  > {
+    if (!items.length) return [];
+
+    const articleIds = new Set<string>();
+    const articleSlugs = new Set<string>();
+    const categoryIds = new Set<string>();
+
+    for (const item of items) {
+      const type = (item.entityType || "").toLowerCase();
+      if (
+        (type === "article" || type === "publisher_article") &&
+        item.entityId &&
+        !item.entityId.includes(",") &&
+        !item.entityId.startsWith("draft-")
+      ) {
+        articleIds.add(item.entityId);
+      } else if (type === "short_link") {
+        const orig =
+          typeof item.newValue?.originalUrl === "string"
+            ? item.newValue.originalUrl
+            : null;
+        if (orig) {
+          const match = orig.match(/\/article\/([^/?#\s]+)/i);
+          if (match?.[1]) {
+            try {
+              articleSlugs.add(decodeURIComponent(match[1]));
+            } catch {
+              articleSlugs.add(match[1]);
+            }
+          }
+        }
+      } else if (type === "category" && item.entityId && !item.entityId.includes(",")) {
+        categoryIds.add(item.entityId);
+      }
+    }
+
+    const articleById = new Map<
+      string,
+      { id: string; title: string; slug: string; englishSlug: string | null; status: string }
+    >();
+    const articleBySlug = new Map<
+      string,
+      { id: string; title: string; slug: string; englishSlug: string | null; status: string }
+    >();
+    const categoryById = new Map<string, { id: string; nameAr: string; slug: string }>();
+
+    try {
+      const articleConditions: any[] = [];
+      if (articleIds.size > 0) {
+        articleConditions.push(inArray(articles.id, Array.from(articleIds)));
+      }
+      if (articleSlugs.size > 0) {
+        const slugsArr = Array.from(articleSlugs);
+        articleConditions.push(inArray(articles.slug, slugsArr));
+        articleConditions.push(inArray(articles.englishSlug, slugsArr));
+      }
+      if (articleConditions.length > 0) {
+        const rows = await db
+          .select({
+            id: articles.id,
+            title: articles.title,
+            slug: articles.slug,
+            englishSlug: articles.englishSlug,
+            status: articles.status,
+          })
+          .from(articles)
+          .where(or(...articleConditions))
+          .limit(100);
+        for (const r of rows) {
+          articleById.set(r.id, r);
+          if (r.slug) articleBySlug.set(r.slug, r);
+          if (r.englishSlug) articleBySlug.set(r.englishSlug, r);
+        }
+      }
+    } catch (err) {
+      console.warn("[ActivityLogs] Failed to batch-resolve articles:", err);
+    }
+
+    try {
+      if (categoryIds.size > 0) {
+        const cats = await db
+          .select({
+            id: categories.id,
+            nameAr: categories.nameAr,
+            slug: categories.slug,
+          })
+          .from(categories)
+          .where(inArray(categories.id, Array.from(categoryIds)))
+          .limit(50);
+        for (const c of cats) {
+          categoryById.set(c.id, c);
+        }
+      }
+    } catch (err) {
+      console.warn("[ActivityLogs] Failed to batch-resolve categories:", err);
+    }
+
+    return items.map((item) => {
+      const type = (item.entityType || "").toLowerCase();
+      const nv = item.newValue || {};
+      const ov = item.oldValue || {};
+
+      if (type === "article" || type === "en_article" || type === "ur_article" || type === "publisher_article") {
+        const resolved = articleById.get(item.entityId);
+        const title =
+          resolved?.title ||
+          (typeof nv.title === "string" && nv.title.trim() ? nv.title : null) ||
+          (typeof ov.title === "string" && ov.title.trim() ? ov.title : null);
+        const slug =
+          resolved?.englishSlug ||
+          resolved?.slug ||
+          (typeof nv.englishSlug === "string" ? nv.englishSlug : null) ||
+          (typeof nv.slug === "string" ? nv.slug : null) ||
+          (typeof ov.englishSlug === "string" ? ov.englishSlug : null) ||
+          (typeof ov.slug === "string" ? ov.slug : null);
+        const status =
+          resolved?.status ||
+          (typeof nv.status === "string" ? nv.status : null) ||
+          (typeof ov.status === "string" ? ov.status : null);
+
+        let subtitle: string | null = null;
+        if (typeof nv.primary === "string") {
+          const suggested = Array.isArray(nv.suggested) && nv.suggested.length > 0
+            ? ` · مقترحات: ${nv.suggested.join("، ")}`
+            : "";
+          subtitle = `التصنيف الذكي: ${nv.primary}${suggested}`;
+        } else if (typeof nv.metaTitle === "string") {
+          subtitle = `عنوان SEO: ${nv.metaTitle}`;
+        } else if (typeof nv.count === "number") {
+          subtitle = `عدد المقالات المتأثرة: ${nv.count}`;
+        }
+
+        return {
+          ...item,
+          entityInfo:
+            title || subtitle || slug
+              ? {
+                  title,
+                  subtitle,
+                  url: slug ? `/article/${slug}` : null,
+                  status,
+                }
+              : null,
+        };
+      }
+
+      if (type === "short_link") {
+        const shortCode = typeof nv.shortCode === "string" ? nv.shortCode : null;
+        const originalUrl = typeof nv.originalUrl === "string" ? nv.originalUrl : null;
+        let linkedArticle: { title: string; slug: string; englishSlug: string | null; status: string } | undefined;
+        if (originalUrl) {
+          const match = originalUrl.match(/\/article\/([^/?#\s]+)/i);
+          if (match?.[1]) {
+            try {
+              linkedArticle = articleBySlug.get(decodeURIComponent(match[1])) || articleBySlug.get(match[1]);
+            } catch {
+              linkedArticle = articleBySlug.get(match[1]);
+            }
+          }
+        }
+        return {
+          ...item,
+          entityInfo: {
+            title: linkedArticle?.title || (shortCode ? `رابط مختصر: sabq.org/s/${shortCode}` : originalUrl),
+            subtitle: shortCode ? `sabq.org/s/${shortCode}` : originalUrl,
+            url: originalUrl || (shortCode ? `/s/${shortCode}` : null),
+            status: linkedArticle?.status || null,
+          },
+        };
+      }
+
+      if (type === "category") {
+        const cat = categoryById.get(item.entityId);
+        const title =
+          cat?.nameAr ||
+          (typeof nv.nameAr === "string" ? nv.nameAr : null) ||
+          (typeof ov.nameAr === "string" ? ov.nameAr : null) ||
+          (typeof nv.name === "string" ? nv.name : null);
+        return {
+          ...item,
+          entityInfo: title ? { title, subtitle: cat?.slug || null, url: cat?.slug ? `/category/${cat.slug}` : null } : null,
+        };
+      }
+
+      const genericTitle =
+        (typeof nv.title === "string" ? nv.title : null) ||
+        (typeof ov.title === "string" ? ov.title : null) ||
+        (typeof nv.nameAr === "string" ? nv.nameAr : null) ||
+        (typeof nv.name === "string" ? nv.name : null) ||
+        (typeof nv.email === "string" ? nv.email : null);
+
+      return {
+        ...item,
+        entityInfo: genericTitle ? { title: genericTitle } : null,
+      };
+    });
+  }
+
   // Activity Logs operations
   async getActivityLogs(filters?: {
     userId?: string;
     action?: string;
     entityType?: string;
+    actorType?: string;
     dateFrom?: Date;
     dateTo?: Date;
     searchQuery?: string;
@@ -12105,6 +12337,12 @@ export class DatabaseStorage implements IStorage {
         lastName: string | null;
         profileImageUrl: string | null;
       } | null;
+      entityInfo?: {
+        title: string | null;
+        subtitle?: string | null;
+        url?: string | null;
+        status?: string | null;
+      } | null;
     }>;
     total: number;
     page: number;
@@ -12122,12 +12360,143 @@ export class DatabaseStorage implements IStorage {
       conditions.push(eq(activityLogs.userId, filters.userId));
     }
 
+    if (filters?.actorType === "human") {
+      conditions.push(
+        sql`${activityLogs.userId} IS NOT NULL AND lower(${activityLogs.action}) NOT IN ('auto_categorize_article', 'generate_seo_metadata', 'analyze_sentiment', 'batch_analyze_sentiment', 'calendar_ai_draft_generated')`
+      );
+    } else if (filters?.actorType === "system") {
+      conditions.push(sql`${activityLogs.userId} IS NULL`);
+    } else if (filters?.actorType === "ai") {
+      conditions.push(
+        sql`(lower(${activityLogs.action}) IN ('auto_categorize_article', 'generate_seo_metadata', 'analyze_sentiment', 'batch_analyze_sentiment', 'calendar_ai_draft_generated', 'analyze', 'generate') OR lower(${activityLogs.entityType}) = 'ifox_ai')`
+      );
+    }
+
     if (filters?.action) {
-      conditions.push(eq(activityLogs.action, filters.action));
+      const act = filters.action.toLowerCase();
+      const actionGroups: Record<string, string[]> = {
+        create: [
+          "create",
+          "created",
+          "created_opinion",
+          "article_created_from_calendar",
+          "create_smart_block",
+          "create_en_smart_block",
+          "calendar_event_created",
+          "calendar_assignment_created",
+          "calendar_reminder_created",
+          "smart_entity_created",
+          "smart_term_created",
+          "entity_type_created",
+          "survey_created",
+          "storycreated",
+          "experimentcreated",
+          "variantcreated",
+        ],
+        update: [
+          "update",
+          "updated",
+          "updated_opinion",
+          "update_bulk",
+          "update_smart_block",
+          "update_en_smart_block",
+          "quad_categories_settings_update",
+          "en_quad_categories_settings_update",
+          "ur_quad_categories_settings_update",
+          "calendar_event_updated",
+          "calendar_assignment_updated",
+          "calendar_assignment_completed",
+          "smart_entity_updated",
+          "update_analysis_status",
+          "storyupdated",
+          "experimentupdated",
+          "variantupdated",
+          "articles_reordered",
+          "reordered",
+          "toggle_breaking",
+          "toggle_featured",
+          "toggle_status",
+          "modify",
+          "update_settings",
+        ],
+        publish: [
+          "publish",
+          "published",
+          "articlepublished",
+          "published_opinion",
+          "approve_publish",
+          "bot_social_publish",
+        ],
+        delete: [
+          "delete",
+          "deleted",
+          "deleted_opinion",
+          "permanent_delete",
+          "deleted_permanently",
+          "bulk_delete",
+          "bulk_deleted_permanently",
+          "delete_smart_block",
+          "delete_en_smart_block",
+          "calendar_event_deleted",
+          "calendar_reminder_deleted",
+          "smart_entity_deleted",
+          "storydeleted",
+          "experimentdeleted",
+          "variantdeleted",
+        ],
+        archive: ["archive", "archived", "bulk_archive", "bulk_archived"],
+        approve: ["approve", "approved_opinion", "approve_publish"],
+        reject: ["reject", "rejected_opinion"],
+        schedule: ["schedule", "scheduled_opinion", "bot_social_schedule"],
+        ai: [
+          "auto_categorize_article",
+          "generate_seo_metadata",
+          "analyze_sentiment",
+          "batch_analyze_sentiment",
+          "calendar_ai_draft_generated",
+          "analyze",
+          "generate",
+        ],
+      };
+
+      if (actionGroups[act]) {
+        conditions.push(inArray(sql`lower(${activityLogs.action})`, actionGroups[act]));
+      } else {
+        conditions.push(ilike(activityLogs.action, filters.action));
+      }
     }
 
     if (filters?.entityType) {
-      conditions.push(eq(activityLogs.entityType, filters.entityType));
+      const ent = filters.entityType.toLowerCase();
+      const entityGroups: Record<string, string[]> = {
+        article: ["article", "en_article", "ur_article", "publisher_article"],
+        settings: [
+          "settings",
+          "system_setting",
+          "quad_categories_settings",
+          "en_quad_categories_settings",
+          "ur_quad_categories_settings",
+          "ifox_settings",
+        ],
+        smart_block: ["smart_block", "en_smart_block", "ur_smart_block"],
+        ifox: [
+          "ifox_article",
+          "ifox_articles",
+          "ifox_category",
+          "ifox_category_settings",
+          "ifox_media",
+          "ifox_schedule",
+          "ifox_settings",
+          "ifox_ai",
+          "ifox_analytics",
+        ],
+      };
+
+      if (entityGroups[ent]) {
+        conditions.push(inArray(sql`lower(${activityLogs.entityType})`, entityGroups[ent]));
+      } else {
+        conditions.push(ilike(activityLogs.entityType, filters.entityType));
+      }
     }
 
     if (filters?.dateFrom) {
@@ -12139,22 +12508,30 @@ export class DatabaseStorage implements IStorage {
     }
 
     if (filters?.searchQuery) {
+      const q = `%${filters.searchQuery}%`;
       conditions.push(
         or(
-          ilike(activityLogs.action, `%${filters.searchQuery}%`),
-          ilike(activityLogs.entityType, `%${filters.searchQuery}%`),
-          ilike(activityLogs.entityId, `%${filters.searchQuery}%`)
+          ilike(activityLogs.action, q),
+          ilike(activityLogs.entityType, q),
+          ilike(activityLogs.entityId, q),
+          ilike(users.firstName, q),
+          ilike(users.lastName, q),
+          ilike(users.email, q),
+          sql`COALESCE(${activityLogs.newValue}->>'title', ${activityLogs.oldValue}->>'title', ${activityLogs.newValue}->>'shortCode', ${activityLogs.newValue}->>'originalUrl', ${activityLogs.newValue}->>'primary', '') ILIKE ${q}`
         )
       );
     }
 
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
-    // Get total count
-    const [countResult] = await db
+    // Get total count (join users when searchQuery is present so user name/email search works)
+    const countQuery = db
       .select({ count: sql<number>`count(*)::int` })
-      .from(activityLogs)
-      .where(whereClause);
+      .from(activityLogs);
+
+    const [countResult] = filters?.searchQuery
+      ? await countQuery.leftJoin(users, eq(activityLogs.userId, users.id)).where(whereClause)
+      : await countQuery.where(whereClause);
 
     const total = countResult?.count || 0;
     const totalPages = Math.ceil(total / limit);
@@ -12183,27 +12560,32 @@ export class DatabaseStorage implements IStorage {
       .limit(limit)
       .offset(offset);
 
-    return {
-      logs: logs.map((log) => ({
-        id: log.id,
-        userId: log.userId,
-        action: log.action,
-        entityType: log.entityType,
-        entityId: log.entityId,
-        oldValue: log.oldValue,
-        newValue: log.newValue,
-        metadata: log.metadata,
-        createdAt: log.createdAt,
-        user: log.userId
+    const mappedLogs = logs.map((log) => ({
+      id: log.id,
+      userId: log.userId,
+      action: log.action,
+      entityType: log.entityType,
+      entityId: log.entityId,
+      oldValue: log.oldValue,
+      newValue: log.newValue,
+      metadata: log.metadata,
+      createdAt: log.createdAt,
+      user:
+        log.userId && (log.userEmail || log.userName || log.userLastName)
           ? {
               id: log.userId,
-              email: log.userEmail || '',
+              email: log.userEmail || "",
               firstName: log.userName,
               lastName: log.userLastName,
               profileImageUrl: log.userProfileImage,
             }
           : null,
-      })),
+    }));
+
+    const enrichedLogs = await this.enrichActivityLogsWithEntityInfo(mappedLogs);
+
+    return {
+      logs: enrichedLogs,
       total,
       page,
       limit,
@@ -12227,6 +12609,12 @@ export class DatabaseStorage implements IStorage {
       firstName: string | null;
       lastName: string | null;
       profileImageUrl: string | null;
+    } | null;
+    entityInfo?: {
+      title: string | null;
+      subtitle?: string | null;
+      url?: string | null;
+      status?: string | null;
     } | null;
   } | undefined> {
     const [log] = await db
@@ -12254,7 +12642,7 @@ export class DatabaseStorage implements IStorage {
       return undefined;
     }
 
-    return {
+    const mapped = {
       id: log.id,
       userId: log.userId,
       action: log.action,
@@ -12264,16 +12652,20 @@ export class DatabaseStorage implements IStorage {
       newValue: log.newValue,
       metadata: log.metadata,
       createdAt: log.createdAt,
-      user: log.userId
-        ? {
-            id: log.userId,
-            email: log.userEmail || '',
-            firstName: log.userName,
-            lastName: log.userLastName,
-            profileImageUrl: log.userProfileImage,
-          }
-        : null,
+      user:
+        log.userId && (log.userEmail || log.userName || log.userLastName)
+          ? {
+              id: log.userId,
+              email: log.userEmail || "",
+              firstName: log.userName,
+              lastName: log.userLastName,
+              profileImageUrl: log.userProfileImage,
+            }
+          : null,
     };
+
+    const [enriched] = await this.enrichActivityLogsWithEntityInfo([mapped]);
+    return enriched;
   }
 
   async getActivityLogsAnalytics(days = 30): Promise<{
@@ -12315,9 +12707,9 @@ export class DatabaseStorage implements IStorage {
         totalCount: sql<number>`count(*) FILTER (WHERE ${activityLogs.createdAt} >= ${periodStart})::int`,
         previousCount: sql<number>`count(*) FILTER (WHERE ${activityLogs.createdAt} >= ${previousPeriodStart} AND ${activityLogs.createdAt} < ${periodStart})::int`,
         activeUsers: sql<number>`count(DISTINCT ${activityLogs.userId}) FILTER (WHERE ${activityLogs.createdAt} >= ${periodStart} AND ${activityLogs.userId} IS NOT NULL)::int`,
-        affectedEntities: sql<number>`count(DISTINCT (${activityLogs.entityType}, ${activityLogs.entityId})) FILTER (WHERE ${activityLogs.createdAt} >= ${periodStart})::int`,
-        sensitiveActions: sql<number>`count(*) FILTER (WHERE ${activityLogs.createdAt} >= ${periodStart} AND lower(${activityLogs.action}) IN ('delete', 'ban', 'reject', 'assign_role', 'remove_role', 'update_role_permissions', 'reset_password'))::int`,
-        automatedActions: sql<number>`count(*) FILTER (WHERE ${activityLogs.createdAt} >= ${periodStart} AND ${activityLogs.userId} IS NULL)::int`,
+        affectedEntities: sql<number>`count(DISTINCT (lower(${activityLogs.entityType}), ${activityLogs.entityId})) FILTER (WHERE ${activityLogs.createdAt} >= ${periodStart})::int`,
+        sensitiveActions: sql<number>`count(*) FILTER (WHERE ${activityLogs.createdAt} >= ${periodStart} AND lower(${activityLogs.action}) IN ('delete', 'deleted', 'deleted_opinion', 'permanent_delete', 'deleted_permanently', 'bulk_delete', 'bulk_deleted_permanently', 'ban', 'reject', 'rejected_opinion', 'assign_role', 'remove_role', 'update_role_permissions', 'reset_password', 'disable_2fa', 'bot_publisher_token_revoked'))::int`,
+        automatedActions: sql<number>`count(*) FILTER (WHERE ${activityLogs.createdAt} >= ${periodStart} AND (${activityLogs.userId} IS NULL OR lower(${activityLogs.action}) IN ('auto_categorize_article', 'generate_seo_metadata', 'analyze_sentiment', 'batch_analyze_sentiment')))::int`,
         lastActivityAt: sql<Date | null>`max(${activityLogs.createdAt}) FILTER (WHERE ${activityLogs.createdAt} >= ${periodStart})`,
       })
       .from(activityLogs);
@@ -12358,14 +12750,23 @@ export class DatabaseStorage implements IStorage {
       profileImageUrl: user.profileImageUrl,
     }));
 
+    const normalizedActionSql = sql<string>`CASE
+      WHEN lower(${activityLogs.action}) IN ('create', 'created') THEN 'create'
+      WHEN lower(${activityLogs.action}) IN ('update', 'updated') THEN 'update'
+      WHEN lower(${activityLogs.action}) IN ('publish', 'published', 'articlepublished') THEN 'publish'
+      WHEN lower(${activityLogs.action}) IN ('delete', 'deleted') THEN 'delete'
+      WHEN lower(${activityLogs.action}) IN ('archive', 'archived') THEN 'archive'
+      ELSE lower(${activityLogs.action})
+    END`;
+
     const topActionsQuery = await db
       .select({
-        action: activityLogs.action,
+        action: normalizedActionSql,
         count: sql<number>`count(*)::int`,
       })
       .from(activityLogs)
       .where(gte(activityLogs.createdAt, periodStart))
-      .groupBy(activityLogs.action)
+      .groupBy(normalizedActionSql)
       .orderBy(desc(sql`count(*)`))
       .limit(6);
 
@@ -12374,14 +12775,16 @@ export class DatabaseStorage implements IStorage {
       count: item.count,
     }));
 
+    const normalizedEntitySql = sql<string>`lower(${activityLogs.entityType})`;
+
     const topEntitiesQuery = await db
       .select({
-        entityType: activityLogs.entityType,
+        entityType: normalizedEntitySql,
         count: sql<number>`count(*)::int`,
       })
       .from(activityLogs)
       .where(gte(activityLogs.createdAt, periodStart))
-      .groupBy(activityLogs.entityType)
+      .groupBy(normalizedEntitySql)
       .orderBy(desc(sql`count(*)`))
       .limit(6);
 
