@@ -6,6 +6,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   AlertTriangle,
   BarChart3,
+  Building2,
   CalendarClock,
   Check,
   CheckCircle2,
@@ -13,8 +14,8 @@ import {
   Copy,
   Edit3,
   ExternalLink,
-  Layers,
-  Link2,
+  FileText,
+  Image as ImageIcon,
   ListTree,
   Loader2,
   Newspaper,
@@ -26,6 +27,7 @@ import {
   Sparkles,
   Unlink,
   User,
+  Video,
   X as XIcon,
 } from "lucide-react";
 import { DashboardLayout } from "@/components/DashboardLayout";
@@ -75,7 +77,7 @@ interface SafeAccount {
 
 interface SocialPostRow {
   id: string;
-  articleId: string;
+  articleId: string | null;
   articleTitle?: string | null;
   articleImageUrl?: string | null;
   createdByName?: string | null;
@@ -88,6 +90,9 @@ interface SocialPostRow {
   status: string;
   text: string;
   imageUrl: string | null;
+  mediaKind?: "none" | "image" | "video" | string | null;
+  mediaUrls?: string[] | null;
+  linkUrl?: string | null;
   attempts: number;
   scheduledAt: string | null;
   publishedAt: string | null;
@@ -131,7 +136,7 @@ const STATUS_META: Record<
 > = {
   draft: {
     label: "مسودة",
-    pill: "bg-muted text-muted-foreground border-border/70",
+    pill: "bg-slate-500/10 text-slate-700 dark:text-slate-300 border-slate-500/25",
     strip: "bg-slate-400",
     icon: Edit3,
   },
@@ -210,7 +215,7 @@ function renderHighlightedSocialText(text: string) {
           href={part}
           target="_blank"
           rel="noopener noreferrer"
-          className="text-primary hover:underline font-medium inline-flex items-center gap-0.5 mx-0.5 transition-colors"
+          className="no-min-touch-size text-primary hover:underline font-medium inline-flex items-center gap-0.5 mx-0.5 transition-colors"
           dir="ltr"
           onClick={(e) => e.stopPropagation()}
         >
@@ -245,7 +250,7 @@ function renderHighlightedSocialText(text: string) {
 
 export default function SocialPublishingPage() {
   const { toast } = useToast();
-  const { user, isLoading: authLoading } = useAuth();
+  const { user } = useAuth();
   const canManageAccounts = hasPermission(user, "social_publish.manage_accounts");
   const canManageScheduled = hasPermission(user, "social_publish.manage_scheduled");
   const canPublishNow = hasPermission(user, "social_publish.publish_now");
@@ -262,6 +267,7 @@ export default function SocialPublishingPage() {
     return "all";
   }, []);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>(initialFilter);
+  const [onlyOpinionProposals, setOnlyOpinionProposals] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [attemptsFor, setAttemptsFor] = useState<string | null>(null);
   const [composeOpen, setComposeOpen] = useState(false);
@@ -296,16 +302,26 @@ export default function SocialPublishingPage() {
   }>({
     queryKey: ["/api/social-publishing/accounts"],
   });
-  const accounts = Array.isArray(accountsRaw?.accounts) ? accountsRaw!.accounts : [];
+  const accounts = Array.isArray(accountsRaw?.accounts)
+    ? accountsRaw.accounts
+    : Array.isArray(accountsRaw)
+      ? (accountsRaw as unknown as SafeAccount[])
+      : [];
   const oauthConfigured = Boolean(accountsRaw?.oauthConfigured);
   const transport = accountsRaw?.transport ?? "x_api";
   const isPubler = transport === "publer";
   const xAccount = accounts.find((a) => a.platform === "x") ?? null;
 
-  const { data: postsRaw, isLoading: postsLoading } = useQuery<{ posts: SocialPostRow[] }>({
+  const { data: postsRaw, isLoading: postsLoading, isFetching: postsFetching } = useQuery<{
+    posts: SocialPostRow[];
+  }>({
     queryKey: ["/api/social-publishing/posts"],
   });
-  const posts = Array.isArray(postsRaw?.posts) ? postsRaw!.posts : [];
+  const posts = Array.isArray(postsRaw?.posts)
+    ? postsRaw.posts
+    : Array.isArray(postsRaw)
+      ? (postsRaw as unknown as SocialPostRow[])
+      : [];
 
   const { data: statsRaw } = useQuery<PublishStats>({
     queryKey: ["/api/social-publishing/stats"],
@@ -319,7 +335,11 @@ export default function SocialPublishingPage() {
     queryKey: [`/api/social-publishing/posts/${attemptsFor}`],
     enabled: Boolean(attemptsFor),
   });
-  const attempts = Array.isArray(attemptsRaw?.attempts) ? attemptsRaw!.attempts : [];
+  const attempts = Array.isArray(attemptsRaw?.attempts)
+    ? attemptsRaw.attempts
+    : Array.isArray(attemptsRaw)
+      ? (attemptsRaw as unknown as AttemptRow[])
+      : [];
 
   const handleCopyPost = (postId: string, text: string) => {
     navigator.clipboard.writeText(text);
@@ -337,11 +357,14 @@ export default function SocialPublishingPage() {
     } else if (statusFilter !== "all") {
       list = list.filter((p) => p.status === statusFilter);
     }
+    if (onlyOpinionProposals) {
+      list = list.filter((p) => Boolean(p.isAuthorProposal));
+    }
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim();
       list = list.filter(
         (p) =>
-          p.text.toLowerCase().includes(q) ||
+          (p.text || "").toLowerCase().includes(q) ||
           p.articleTitle?.toLowerCase().includes(q) ||
           p.createdByName?.toLowerCase().includes(q) ||
           p.agencyName?.toLowerCase().includes(q) ||
@@ -349,7 +372,7 @@ export default function SocialPublishingPage() {
       );
     }
     return list;
-  }, [posts, statusFilter, searchQuery]);
+  }, [posts, statusFilter, onlyOpinionProposals, searchQuery]);
 
   const filterCounts = useMemo(
     () => ({
@@ -359,6 +382,7 @@ export default function SocialPublishingPage() {
       published: posts.filter((p) => p.status === "published").length,
       scheduled: posts.filter((p) => p.status === "scheduled").length,
       failed: posts.filter((p) => p.status === "failed").length,
+      opinionProposals: posts.filter((p) => p.status === "draft" && p.isAuthorProposal).length,
     }),
     [posts]
   );
@@ -533,57 +557,9 @@ export default function SocialPublishingPage() {
   };
 
   // مقترحات كتّاب الرأي وطلبات الوكالات معًا
+  const pendingAuthorCount = stats?.pendingAuthorProposals ?? filterCounts.opinionProposals;
+  const pendingAgencyCount = stats?.pendingAgencyProposals ?? filterCounts.agency;
   const pendingProposals = (stats?.pendingAuthorProposals ?? 0) + (stats?.pendingAgencyProposals ?? 0);
-  const statTiles = [
-    {
-      key: "proposals",
-      label: "مقترحات معلقة",
-      value: pendingProposals,
-      icon: Sparkles,
-      valueClass:
-        pendingProposals > 0
-          ? "text-purple-600 dark:text-purple-400 font-bold"
-          : "text-foreground",
-      chip: "bg-purple-500/15 text-purple-600 dark:text-purple-400 border border-purple-500/20",
-      accent: "border-purple-500/30",
-    },
-    {
-      key: "today",
-      label: "نُشر اليوم",
-      value: stats?.publishedToday,
-      icon: CheckCircle2,
-      valueClass: "text-emerald-600 dark:text-emerald-400",
-      chip: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20",
-      accent: "border-emerald-500/30",
-    },
-    {
-      key: "scheduled",
-      label: "مجدولة قادمة",
-      value: stats?.scheduledUpcoming,
-      icon: CalendarClock,
-      valueClass: "text-amber-600 dark:text-amber-400",
-      chip: "bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/20",
-      accent: "border-amber-500/30",
-    },
-    {
-      key: "failed",
-      label: "تحتاج انتباهك",
-      value: stats?.failed,
-      icon: AlertTriangle,
-      valueClass: "text-red-600 dark:text-red-400",
-      chip: "bg-red-500/15 text-red-600 dark:text-red-400 border border-red-500/20",
-      accent: "border-red-500/30",
-    },
-    {
-      key: "total",
-      label: "إجمالي المنشورات",
-      value: stats?.total,
-      icon: BarChart3,
-      valueClass: "text-foreground",
-      chip: "bg-primary/15 text-primary border border-primary/20",
-      accent: "border-primary/30",
-    },
-  ];
 
   const filterButtons: Array<{ key: StatusFilter; label: string }> = [
     { key: "all", label: "الكل" },
@@ -607,113 +583,168 @@ export default function SocialPublishingPage() {
           titleTestId="heading-social-publishing"
           className="p-4 sm:p-5"
           actions={
-            canCreate ? (
+            <div className="flex flex-wrap items-center gap-2">
               <Button
-                onClick={() => setComposeOpen(true)}
-                disabled={!xAccount}
-                size="lg"
-                className="gap-2 bg-gradient-to-r from-primary to-blue-600 hover:from-primary/90 hover:to-blue-600/90 text-white shadow-md shadow-primary/20 font-semibold"
-                data-testid="button-new-tweet"
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={invalidate}
+                disabled={postsFetching}
+                className="no-min-touch-size h-9 gap-1.5 rounded-xl border-border/80 text-xs font-medium"
+                title="تحديث السجل والمؤشرات"
               >
-                <PenSquare className="w-4 h-4 ml-1" />
-                تغريدة جديدة
+                <RefreshCcw className={cn("h-3.5 w-3.5", postsFetching && "animate-spin")} />
+                <span className="hidden sm:inline">تحديث</span>
               </Button>
-            ) : undefined
+              {canCreate && (
+                <Button
+                  onClick={() => setComposeOpen(true)}
+                  disabled={!xAccount}
+                  size="lg"
+                  className="gap-2 bg-gradient-to-r from-primary to-blue-600 hover:from-primary/90 hover:to-blue-600/90 text-white shadow-md shadow-primary/20 font-semibold rounded-xl"
+                  data-testid="button-new-tweet"
+                >
+                  <PenSquare className="w-4 h-4 ml-1" />
+                  تغريدة جديدة
+                </Button>
+              )}
+            </div>
           }
         />
 
-        {/* الحساب المتصل — شريط تشغيلي عصري */}
+        {/* الحساب المتصل — شريط حالة حساب X التشغيلي */}
         <Card className="rounded-2xl border-border/80 bg-gradient-to-br from-card via-card to-muted/20 shadow-sm overflow-hidden">
-          <CardContent className="p-4 sm:p-6">
+          <CardContent className="p-4 sm:p-5">
             {accountsLoading ? (
               <div className="flex items-center gap-3 text-muted-foreground py-2">
                 <Loader2 className="w-5 h-5 animate-spin text-primary" />
-                <span className="text-sm font-medium">جاري تحميل الحساب المتصل…</span>
+                <span className="text-sm font-medium">جاري تحميل حالة حساب X المتصل…</span>
               </div>
             ) : xAccount ? (
-              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                <div className="flex min-w-0 items-start gap-4 sm:items-center">
-                  <div className="relative">
-                    <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-zinc-900 to-zinc-800 text-xl font-bold text-white shadow-inner border border-zinc-700/50 sm:h-16 sm:w-16">
-                      <XBrandIcon className="w-7 h-7 text-white" />
+              <div className="space-y-3">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="flex min-w-0 items-start gap-3.5 sm:items-center">
+                    <div className="relative shrink-0">
+                      <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-zinc-900 to-zinc-800 text-xl font-bold text-white shadow-inner border border-zinc-700/50 sm:h-14 sm:w-14">
+                        <XBrandIcon className="w-6 h-6 text-white sm:w-7 sm:h-7" />
+                      </div>
+                      <span className="absolute -bottom-1 -left-1 flex h-4 w-4 items-center justify-center rounded-full bg-background ring-2 ring-background">
+                        <span
+                          className={cn(
+                            "h-2.5 w-2.5 rounded-full",
+                            xAccount.status === "expired"
+                              ? "bg-amber-500"
+                              : xAccount.status === "revoked"
+                                ? "bg-red-500"
+                                : "bg-emerald-500"
+                          )}
+                        />
+                      </span>
                     </div>
-                    <span className="absolute -bottom-1 -left-1 flex h-4 w-4 items-center justify-center rounded-full bg-background ring-2 ring-background">
-                      <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
+
+                    <div className="min-w-0 space-y-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h2 className="truncate text-base font-bold tracking-tight text-foreground sm:text-lg">
+                          {xAccount.displayName || "صحيفة سبق الإلكترونية"}
+                        </h2>
+                        {accountStatusPill(xAccount.status)}
+                        <Badge className="border border-primary/20 bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-primary">
+                          {isPubler ? "عبر Publer" : "ربط مباشر X API"}
+                        </Badge>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs sm:text-sm text-muted-foreground">
+                        <span
+                          className="font-semibold text-foreground/90 inline-flex items-center gap-1"
+                          dir="ltr"
+                        >
+                          @{xAccount.handle || "sabqorg"}
+                        </span>
+                        {xAccount.lastVerifiedAt && (
+                          <span
+                            style={{ fontVariantNumeric: latn }}
+                            className="text-xs flex items-center gap-1"
+                          >
+                            <Clock className="w-3.5 h-3.5 opacity-70" />
+                            آخر تحقق: {fmtSocialDateTime(xAccount.lastVerifiedAt)}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2 pt-1 lg:pt-0">
+                    <Button
+                      asChild
+                      variant="outline"
+                      size="sm"
+                      className="no-min-touch-size h-9 gap-1.5 rounded-xl border-border/80 text-xs font-medium hover:bg-muted"
+                    >
+                      <a
+                        href={`https://x.com/${xAccount.handle || "sabqorg"}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="no-min-touch-size"
+                      >
+                        <XBrandIcon className="w-3.5 h-3.5" />
+                        <span>زيارة الحساب على X</span>
+                        <ExternalLink className="w-3.5 h-3.5 text-muted-foreground mr-0.5" />
+                      </a>
+                    </Button>
+
+                    {canManageAccounts &&
+                      (xAccount.status === "expired" || xAccount.status === "revoked") && (
+                        <Button
+                          size="sm"
+                          onClick={() =>
+                            isPubler ? publerSyncMutation.mutate() : connectMutation.mutate()
+                          }
+                          disabled={connectDisabled}
+                          className="no-min-touch-size h-9 gap-1.5 rounded-xl bg-amber-600 text-white hover:bg-amber-700 text-xs font-semibold"
+                        >
+                          <RefreshCcw className="w-3.5 h-3.5 ml-1" />
+                          إعادة ربط الحساب
+                        </Button>
+                      )}
+
+                    {canManageAccounts && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="no-min-touch-size h-9 text-xs text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-xl"
+                        disabled={disconnectMutation.isPending}
+                        onClick={() => setDisconnectTarget(xAccount)}
+                        data-testid="button-disconnect-x"
+                      >
+                        <Unlink className="w-3.5 h-3.5 ml-1.5" />
+                        فك الربط
+                      </Button>
+                    )}
+                  </div>
+                </div>
+
+                {(xAccount.status === "expired" || xAccount.status === "revoked") && (
+                  <div className="flex items-center gap-2.5 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3.5 py-2.5 text-xs text-amber-800 dark:text-amber-300">
+                    <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600" />
+                    <span>
+                      انتهت صلاحية تفويض حساب X أو سُحب الاعتماد. يرجى إعادة الربط لضمان استمرار النشر الفوري والمجدول دون توقف.
                     </span>
                   </div>
-
-                  <div className="min-w-0 space-y-1.5">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h2 className="truncate text-lg font-bold tracking-tight text-foreground sm:text-xl">
-                        {xAccount.displayName || "صحيفة سبق الإلكترونية"}
-                      </h2>
-                      {accountStatusPill(xAccount.status)}
-                      {isPubler && (
-                        <Badge className="border border-primary/20 bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-primary">
-                          عبر Publer
-                        </Badge>
-                      )}
-                    </div>
-                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
-                      <span className="font-semibold text-foreground/90 inline-flex items-center gap-1" dir="ltr">
-                        @{xAccount.handle || "sabqorg"}
-                      </span>
-                      {xAccount.lastVerifiedAt && (
-                        <span style={{ fontVariantNumeric: latn }} className="text-xs flex items-center gap-1">
-                          <Clock className="w-3.5 h-3.5 opacity-70" />
-                          آخر تحقق: {fmtSocialDateTime(xAccount.lastVerifiedAt)}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-2 pt-2 lg:pt-0">
-                  <Button
-                    asChild
-                    variant="outline"
-                    size="sm"
-                    className="h-9 gap-1.5 rounded-xl border-border/80 text-xs font-medium hover:bg-muted"
-                  >
-                    <a
-                      href={`https://x.com/${xAccount.handle || "sabqorg"}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      <XBrandIcon className="w-3.5 h-3.5" />
-                      <span>زيارة الحساب على X</span>
-                      <ExternalLink className="w-3.5 h-3.5 text-muted-foreground mr-0.5" />
-                    </a>
-                  </Button>
-
-                  {canManageAccounts && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-9 text-xs text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-xl"
-                      disabled={disconnectMutation.isPending}
-                      onClick={() => setDisconnectTarget(xAccount)}
-                      data-testid="button-disconnect-x"
-                    >
-                      <Unlink className="w-3.5 h-3.5 ml-1.5" />
-                      فك الربط
-                    </Button>
-                  )}
-                </div>
+                )}
               </div>
             ) : (
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-muted text-muted-foreground">
-                      <XBrandIcon className="w-5 h-5" />
-                    </div>
-                    <div>
+                <div className="flex items-start sm:items-center gap-3">
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-muted text-muted-foreground border border-border/60">
+                    <XBrandIcon className="w-5 h-5" />
+                  </div>
+                  <div className="space-y-0.5">
+                    <div className="flex flex-wrap items-center gap-2">
                       <h3 className="font-bold text-base">لم يتم ربط حساب X بعد</h3>
-                      <p className="text-sm text-muted-foreground">
-                        اربط حساب الصحيفة الرسمي لتفعيل النشر الفوري والمجدول مباشرة من لوحة التحكم.
-                      </p>
+                      {accountStatusPill("disconnected")}
                     </div>
+                    <p className="text-xs sm:text-sm text-muted-foreground">
+                      اربط حساب الصحيفة الرسمي لتفعيل النشر الفوري والمجدول مباشرة من لوحة التحكم.
+                    </p>
                   </div>
                 </div>
 
@@ -739,113 +770,236 @@ export default function SocialPublishingPage() {
           </CardContent>
         </Card>
 
-        {/* شبكة المؤشرات الإحصائية السريعة */}
-        <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-5">
-          {statTiles.map((tile) => (
-            <div
-              key={tile.key}
-              className={cn(
-                "rounded-2xl border border-border/80 bg-card/90 p-4 shadow-sm hover:shadow-md transition-all duration-200 hover:-translate-y-0.5 relative overflow-hidden group"
-              )}
+        {/* شريط المؤشرات الرئيسية (4 بطاقات KPI واضحة) */}
+        <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+          {/* 1. نُشر اليوم + إجمالي المنشورات */}
+          <div
+            onClick={() => {
+              setStatusFilter("published");
+              setOnlyOpinionProposals(false);
+            }}
+            className="cursor-pointer rounded-2xl border border-emerald-500/25 bg-card/95 p-4 shadow-sm hover:shadow-md transition-all duration-200 hover:-translate-y-0.5 group"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs sm:text-sm font-semibold text-muted-foreground">نُشر اليوم</p>
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 transition-transform group-hover:scale-105">
+                <CheckCircle2 className="h-4 w-4" />
+              </span>
+            </div>
+            <p
+              className="mt-2 text-2xl sm:text-3xl font-black tracking-tight leading-none text-emerald-600 dark:text-emerald-400"
+              dir="ltr"
+              style={{ fontVariantNumeric: latn }}
+              data-testid="stat-today"
             >
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-xs sm:text-sm font-semibold text-muted-foreground">{tile.label}</p>
-                <span
-                  className={cn(
-                    "flex h-8 w-8 items-center justify-center rounded-xl transition-transform group-hover:scale-110",
-                    tile.chip
-                  )}
-                >
-                  <tile.icon className="h-4 w-4" />
-                </span>
-              </div>
-              <p
-                className={cn(
-                  "mt-2 text-2xl sm:text-3xl font-black tracking-tight leading-none",
-                  tile.valueClass
-                )}
+              {stats?.publishedToday ?? "—"}
+            </p>
+            <div className="mt-2.5 flex items-center justify-between gap-1 border-t border-border/50 pt-2 text-[11px] text-muted-foreground">
+              <span className="inline-flex items-center gap-1">
+                <BarChart3 className="h-3 w-3 opacity-70" />
+                إجمالي المنشورات:
+              </span>
+              <span
+                className="font-bold text-foreground"
                 dir="ltr"
                 style={{ fontVariantNumeric: latn }}
-                data-testid={`stat-${tile.key}`}
+                data-testid="stat-total"
               >
-                {tile.value ?? "—"}
-              </p>
+                {stats?.total ?? "—"}
+              </span>
             </div>
-          ))}
+          </div>
+
+          {/* 2. مقترحات معلقة (كتّاب رأي + وكالات) */}
+          <div
+            onClick={() => {
+              setStatusFilter("draft");
+              setOnlyOpinionProposals(false);
+            }}
+            className="cursor-pointer rounded-2xl border border-purple-500/25 bg-card/95 p-4 shadow-sm hover:shadow-md transition-all duration-200 hover:-translate-y-0.5 group"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs sm:text-sm font-semibold text-muted-foreground">مقترحات معلقة</p>
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-purple-500/15 text-purple-600 dark:text-purple-400 border border-purple-500/20 transition-transform group-hover:scale-105">
+                <Sparkles className="h-4 w-4" />
+              </span>
+            </div>
+            <p
+              className={cn(
+                "mt-2 text-2xl sm:text-3xl font-black tracking-tight leading-none",
+                pendingProposals > 0
+                  ? "text-purple-600 dark:text-purple-400"
+                  : "text-foreground"
+              )}
+              dir="ltr"
+              style={{ fontVariantNumeric: latn }}
+              data-testid="stat-proposals"
+            >
+              {pendingProposals}
+            </p>
+            <div className="mt-2.5 flex flex-wrap items-center gap-x-2.5 gap-y-1 border-t border-border/50 pt-2 text-[11px] text-muted-foreground">
+              <span>رأي: <b className="text-foreground tabular-nums">{pendingAuthorCount}</b></span>
+              <span>·</span>
+              <span>وكالات: <b className="text-foreground tabular-nums">{pendingAgencyCount}</b></span>
+            </div>
+          </div>
+
+          {/* 3. مجدولة قادمة */}
+          <div
+            onClick={() => {
+              setStatusFilter("scheduled");
+              setOnlyOpinionProposals(false);
+            }}
+            className="cursor-pointer rounded-2xl border border-amber-500/25 bg-card/95 p-4 shadow-sm hover:shadow-md transition-all duration-200 hover:-translate-y-0.5 group"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs sm:text-sm font-semibold text-muted-foreground">مجدولة قادمة</p>
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/20 transition-transform group-hover:scale-105">
+                <CalendarClock className="h-4 w-4" />
+              </span>
+            </div>
+            <p
+              className="mt-2 text-2xl sm:text-3xl font-black tracking-tight leading-none text-amber-600 dark:text-amber-400"
+              dir="ltr"
+              style={{ fontVariantNumeric: latn }}
+              data-testid="stat-scheduled"
+            >
+              {stats?.scheduledUpcoming ?? "—"}
+            </p>
+            <div className="mt-2.5 flex items-center justify-between gap-1 border-t border-border/50 pt-2 text-[11px] text-muted-foreground">
+              <span>في طابور الجدولة الآلي</span>
+              <span className="font-semibold text-amber-600 dark:text-amber-400">عرض</span>
+            </div>
+          </div>
+
+          {/* 4. تحتاج انتباهك (فشل) */}
+          <div
+            onClick={() => {
+              setStatusFilter("failed");
+              setOnlyOpinionProposals(false);
+            }}
+            className="cursor-pointer rounded-2xl border border-red-500/25 bg-card/95 p-4 shadow-sm hover:shadow-md transition-all duration-200 hover:-translate-y-0.5 group"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs sm:text-sm font-semibold text-muted-foreground">تحتاج انتباهك</p>
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-red-500/15 text-red-600 dark:text-red-400 border border-red-500/20 transition-transform group-hover:scale-105">
+                <AlertTriangle className="h-4 w-4" />
+              </span>
+            </div>
+            <p
+              className="mt-2 text-2xl sm:text-3xl font-black tracking-tight leading-none text-red-600 dark:text-red-400"
+              dir="ltr"
+              style={{ fontVariantNumeric: latn }}
+              data-testid="stat-failed"
+            >
+              {stats?.failed ?? "—"}
+            </p>
+            <div className="mt-2.5 flex items-center justify-between gap-1 border-t border-border/50 pt-2 text-[11px] text-muted-foreground">
+              <span>منشورات تعذّر إرسالها</span>
+              <span className="font-semibold text-red-600 dark:text-red-400">مراجعة</span>
+            </div>
+          </div>
         </div>
 
         {/* سجل المنشورات — التصميم العصري الشبيه بـ X */}
         <section className="space-y-4">
-          <div className="flex flex-col gap-3 2xl:flex-row 2xl:items-center 2xl:justify-between border-b pb-4">
-            <div className="min-w-0">
-              <h2 className="text-xl font-bold tracking-tight text-foreground flex items-center gap-2">
-                <span>سجل التغريدات والمنشورات</span>
-                <Badge variant="outline" className="font-mono text-xs font-bold text-muted-foreground">
-                  {filteredPosts.length}
-                </Badge>
-              </h2>
-              <p className="mt-0.5 text-xs sm:text-sm text-muted-foreground">
-                إدارة وجدولة ومراجعة التغريدات مع فحص الحالة ومطابقة الأثر
-              </p>
-            </div>
-
-            {/* أدوات البحث والفلترة */}
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-              {/* حقل البحث السريع */}
-              <div className="relative min-w-[240px] sm:w-64">
-                <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-                <Input
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="بحث في التغريدات والعناوين..."
-                  className="pr-9 pl-8 h-9 text-xs rounded-xl bg-muted/40 border-border/80 focus:bg-background transition-all"
-                />
-                {searchQuery && (
-                  <button
-                    onClick={() => setSearchQuery("")}
-                    className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                    title="مسح البحث"
-                  >
-                    <XIcon className="h-3.5 w-3.5" />
-                  </button>
-                )}
+          <div className="flex flex-col gap-3 rounded-2xl border border-border/70 bg-card/60 p-3.5 sm:p-4">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div className="min-w-0">
+                <h2 className="text-base sm:text-lg font-bold tracking-tight text-foreground flex items-center gap-2">
+                  <span>سجل التغريدات والمنشورات</span>
+                  <Badge variant="outline" className="font-mono text-xs font-bold text-muted-foreground py-0.5">
+                    {filteredPosts.length}
+                  </Badge>
+                </h2>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  إدارة وجدولة ومراجعة التغريدات ومقترحات الكتّاب والوكالات مع فحص الحالة
+                </p>
               </div>
 
-              {/* أزرار التبويبات */}
-              <Tabs
-                value={statusFilter}
-                onValueChange={(v) => setStatusFilter(v as StatusFilter)}
-                className="w-full sm:w-auto overflow-x-auto"
-              >
-                <TabsList className="h-9 w-full sm:w-auto p-1 rounded-xl bg-muted/60 border border-border/60">
-                  {filterButtons.map((f) => {
-                    const active = statusFilter === f.key;
-                    return (
-                      <TabsTrigger
-                        key={f.key}
-                        value={f.key}
-                        className="gap-1.5 px-3 py-1 text-xs font-semibold rounded-lg transition-all"
-                        data-testid={`filter-${f.key}`}
-                      >
-                        {f.label}
-                        <span
-                          className={cn(
-                            "rounded-full px-1.5 py-0.2 text-[10px] font-bold tabular-nums",
-                            active
-                              ? "bg-primary text-primary-foreground"
-                              : "bg-background/80 text-muted-foreground"
-                          )}
-                          dir="ltr"
-                          style={{ fontVariantNumeric: latn }}
-                        >
-                          {filterCounts[f.key]}
-                        </span>
-                      </TabsTrigger>
-                    );
-                  })}
-                </TabsList>
-              </Tabs>
+              {/* حقل البحث السريع + فلتر مقترحات الرأي */}
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="relative flex-1 sm:flex-initial min-w-[220px] sm:w-64">
+                  <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                  <Input
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="بحث في التغريدات، العناوين، أو الكتّاب..."
+                    className="pr-9 pl-8 h-9 text-xs rounded-xl bg-background border-border/80 focus:bg-background transition-all"
+                  />
+                  {searchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setSearchQuery("")}
+                      className="no-min-touch-size absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                      title="مسح البحث"
+                    >
+                      <XIcon className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setOnlyOpinionProposals((prev) => !prev)}
+                  className={cn(
+                    "no-min-touch-size inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold transition-all",
+                    onlyOpinionProposals
+                      ? "border-purple-500/40 bg-purple-500/15 text-purple-700 dark:text-purple-300 shadow-xs"
+                      : "border-border/70 bg-background text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                  )}
+                >
+                  <Sparkles className="h-3.5 w-3.5 text-purple-500" />
+                  <span>مقترحات الرأي</span>
+                  <span
+                    className={cn(
+                      "rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums",
+                      onlyOpinionProposals
+                        ? "bg-purple-600 text-white"
+                        : "bg-muted text-muted-foreground"
+                    )}
+                    dir="ltr"
+                  >
+                    {filterCounts.opinionProposals}
+                  </span>
+                </button>
+              </div>
             </div>
+
+            {/* أزرار التبويبات السريعة */}
+            <Tabs
+              value={statusFilter}
+              onValueChange={(v) => setStatusFilter(v as StatusFilter)}
+              className="w-full overflow-x-auto"
+            >
+              <TabsList className="h-auto w-full sm:w-auto flex-wrap justify-start gap-1 p-1 rounded-xl bg-muted/60 border border-border/60">
+                {filterButtons.map((f) => {
+                  const active = statusFilter === f.key;
+                  return (
+                    <TabsTrigger
+                      key={f.key}
+                      value={f.key}
+                      className="no-min-touch-size gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition-all"
+                      data-testid={`filter-${f.key}`}
+                    >
+                      {f.label}
+                      <span
+                        className={cn(
+                          "rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums",
+                          active
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-background/80 text-muted-foreground"
+                        )}
+                        dir="ltr"
+                        style={{ fontVariantNumeric: latn }}
+                      >
+                        {filterCounts[f.key]}
+                      </span>
+                    </TabsTrigger>
+                  );
+                })}
+              </TabsList>
+            </Tabs>
           </div>
 
           {/* قائمة التغريدات بصيغة بطاقات عصرية Social Cards */}
@@ -867,14 +1021,18 @@ export default function SocialPublishingPage() {
                   ? "لا منشورات بعد — افتح خبراً منشوراً من «إدارة الأخبار» واختر «النشر على X» أو انقر على «تغريدة جديدة» أعلاه."
                   : "لا توجد منشورات تطابق هذه الحالة المحددة."}
               </p>
-              {searchQuery && (
+              {(searchQuery || onlyOpinionProposals || statusFilter !== "all") && (
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setSearchQuery("")}
-                  className="rounded-xl text-xs mt-2"
+                  onClick={() => {
+                    setSearchQuery("");
+                    setOnlyOpinionProposals(false);
+                    setStatusFilter("all");
+                  }}
+                  className="no-min-touch-size rounded-xl text-xs mt-2"
                 >
-                  إعادة ضبط البحث
+                  إعادة ضبط الفلاتر والبحث
                 </Button>
               )}
             </div>
@@ -883,14 +1041,18 @@ export default function SocialPublishingPage() {
               {filteredPosts.map((p) => {
                 const meta = STATUS_META[p.status] ?? STATUS_META.draft;
                 const StatusIcon = meta.icon;
-                const thumb = p.imageUrl || p.articleImageUrl || null;
-                const charCount = xWeightedLength(p.text);
+                const mediaList = Array.isArray(p.mediaUrls) ? p.mediaUrls : [];
+                const thumb = p.imageUrl || mediaList[0] || p.articleImageUrl || null;
+                const isVideo = p.mediaKind === "video";
+                const mediaCount = mediaList.length > 0 ? mediaList.length : thumb ? 1 : 0;
+                const charCount = xWeightedLength(p.text || "");
+                const isOverStandard = charCount > X_MAX_WEIGHTED_LENGTH;
                 const isCopied = copiedId === p.id;
 
                 return (
                   <article
                     key={p.id}
-                    className="relative rounded-2xl border border-border/80 bg-card hover:border-primary/40 hover:shadow-md transition-all duration-200 p-5 space-y-4 group overflow-hidden"
+                    className="relative rounded-2xl border border-border/80 bg-card hover:border-primary/40 hover:shadow-md transition-all duration-200 p-4 sm:p-5 space-y-4 group overflow-hidden"
                     data-testid={`social-log-row-${p.id}`}
                   >
                     {/* شريط تمييز الحالة اللوني في الجانب الأيمن */}
@@ -899,24 +1061,29 @@ export default function SocialPublishingPage() {
                       aria-hidden
                     />
 
-                    {/* ترويسة البطاقة: الكاتب/المصدر + وقت النشر + شارة الحالة */}
-                    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/50 pb-3">
+                    {/* ترويسة البطاقة: الكاتب/المصدر + وقت النشر + شارات الحالة */}
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-border/50 pb-3">
                       <div className="flex items-center gap-2.5 min-w-0">
                         {/* أيقونة الحساب / الكاتب */}
-                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-zinc-900 dark:bg-zinc-800 text-white shadow-xs">
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-zinc-900 dark:bg-zinc-800 text-white shadow-xs">
                           <XBrandIcon className="w-4 h-4" />
                         </div>
 
                         <div className="min-w-0 leading-tight">
-                          <div className="flex items-center gap-1.5">
+                          <div className="flex flex-wrap items-center gap-1.5">
                             <span className="font-bold text-sm text-foreground truncate">
-                              صحيفة سبق
+                              {xAccount?.displayName || "صحيفة سبق"}
                             </span>
                             <span className="text-xs text-muted-foreground" dir="ltr">
-                              @sabqorg
+                              @{xAccount?.handle || "sabqorg"}
                             </span>
+                            {!p.articleId && (
+                              <Badge variant="outline" className="text-[10px] px-1.5 py-0.5 font-medium">
+                                تغريدة مستقلة
+                              </Badge>
+                            )}
                           </div>
-                          <div className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                          <div className="text-xs text-muted-foreground flex flex-wrap items-center gap-1 mt-0.5">
                             {p.createdByName && (
                               <span className="inline-flex items-center gap-1">
                                 <User className="h-3 w-3 opacity-60" />
@@ -936,19 +1103,22 @@ export default function SocialPublishingPage() {
                       </div>
 
                       {/* شارات الحالة ونوع المنشور */}
-                      <div className="flex flex-wrap items-center gap-2">
-                        {p.agencyName && p.status === "draft" && (
+                      <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                        {p.agencyName && (
                           <Badge
                             className="border border-sky-500/30 bg-sky-500/15 text-sky-700 dark:text-sky-300 px-2.5 py-0.5 text-xs font-semibold gap-1 shadow-xs"
                             data-testid={`badge-agency-${p.id}`}
                           >
-                            طلب وكالة: {p.agencyName}
-                            <span className="font-normal opacity-90">
-                              · {p.requestedAt ? `تطلب ${fmtSocialDateTime(p.requestedAt)}` : "تطلب بعد الموافقة"}
-                            </span>
+                            <Building2 className="h-3 w-3 shrink-0" />
+                            <span>طلب وكالة: {p.agencyName}</span>
+                            {p.status === "draft" && (
+                              <span className="font-normal opacity-90">
+                                · {p.requestedAt ? `تطلب ${fmtSocialDateTime(p.requestedAt)}` : "تطلب بعد الموافقة"}
+                              </span>
+                            )}
                           </Badge>
                         )}
-                        {p.isAuthorProposal && p.status === "draft" && (
+                        {p.isAuthorProposal && (
                           <Badge className="border border-purple-500/30 bg-purple-500/15 text-purple-700 dark:text-purple-300 px-2.5 py-0.5 text-xs font-semibold gap-1 shadow-xs">
                             <Sparkles className="h-3 w-3 text-purple-600 dark:text-purple-400" />
                             مقترح كاتب رأي
@@ -961,7 +1131,7 @@ export default function SocialPublishingPage() {
                             "border px-2.5 py-0.5 text-xs font-semibold gap-1 shadow-xs"
                           )}
                         >
-                          <StatusIcon className="h-3 w-3" />
+                          <StatusIcon className={cn("h-3 w-3", p.status === "processing" && "animate-spin")} />
                           <span>{meta.label}</span>
                           {p.status === "scheduled" && p.scheduledAt && (
                             <span className="font-normal opacity-90">
@@ -972,7 +1142,7 @@ export default function SocialPublishingPage() {
 
                         {p.status === "failed" && (
                           <Badge
-                            className="border border-red-500/20 bg-red-500/10 text-red-700 dark:text-red-400 text-xs font-bold"
+                            className="border border-red-500/20 bg-red-500/10 text-red-700 dark:text-red-400 px-2 py-0.5 text-xs font-bold"
                             dir="ltr"
                             style={{ fontVariantNumeric: latn }}
                           >
@@ -981,7 +1151,7 @@ export default function SocialPublishingPage() {
                         )}
 
                         <span
-                          className="text-xs text-muted-foreground flex items-center gap-1 mr-1"
+                          className="text-xs text-muted-foreground flex items-center gap-1 mr-0.5"
                           style={{ fontVariantNumeric: latn }}
                         >
                           <Clock className="h-3.5 w-3.5 opacity-60" />
@@ -994,7 +1164,7 @@ export default function SocialPublishingPage() {
 
                     {/* الخبر المرتبط (إن وُجد) */}
                     {p.articleTitle && (
-                      <div className="flex items-center justify-between gap-2 bg-muted/40 hover:bg-muted/70 rounded-xl px-3.5 py-2.5 border border-border/60 transition-colors text-xs sm:text-sm">
+                      <div className="flex items-center justify-between gap-2 bg-muted/40 hover:bg-muted/70 rounded-xl px-3.5 py-2 border border-border/60 transition-colors text-xs sm:text-sm">
                         <div className="flex items-center gap-2 min-w-0">
                           <Newspaper className="h-4 w-4 text-primary shrink-0" />
                           <span className="font-medium text-muted-foreground shrink-0">مرتبط بخبر:</span>
@@ -1011,19 +1181,46 @@ export default function SocialPublishingPage() {
                           {renderHighlightedSocialText(p.text)}
                         </p>
 
-                        {/* مؤشر عدد الأحرف */}
-                        <div className="flex items-center justify-between pt-1 border-t border-border/40 text-xs text-muted-foreground">
-                          <div className="flex items-center gap-2">
-                            <span className="inline-flex items-center gap-1 font-mono text-[11px]" dir="ltr">
-                              <span className={cn(charCount > X_MAX_WEIGHTED_LENGTH ? "text-amber-600 font-bold" : "text-muted-foreground")}>
-                                {charCount}
-                              </span>
+                        {/* شريط شارات عدد الأحرف ومعاينة الوسائط ونسخ النص */}
+                        <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-border/40 text-xs text-muted-foreground">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            {/* شارة عدد الأحرف الموزون */}
+                            <Badge
+                              variant="outline"
+                              className={cn(
+                                "px-2 py-0.5 text-[11px] font-mono gap-1",
+                                isOverStandard
+                                  ? "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300 font-bold"
+                                  : "border-border/70 bg-muted/40 text-muted-foreground"
+                              )}
+                              dir="ltr"
+                            >
+                              <span>{charCount}</span>
                               <span>/ {X_MAX_WEIGHTED_LENGTH}</span>
-                            </span>
-                            {charCount > X_MAX_WEIGHTED_LENGTH && (
-                              <span className="text-[10px] text-amber-600 dark:text-amber-400 font-medium">
-                                (منشور طويل Premium)
-                              </span>
+                            </Badge>
+
+                            {isOverStandard && (
+                              <Badge className="border border-amber-500/30 bg-amber-500/15 text-amber-700 dark:text-amber-300 px-2 py-0.5 text-[10px] font-semibold">
+                                منشور طويل Long Post
+                              </Badge>
+                            )}
+
+                            {/* شارة الوسائط المرفقة */}
+                            {isVideo ? (
+                              <Badge className="border border-blue-500/30 bg-blue-500/10 text-blue-700 dark:text-blue-300 px-2 py-0.5 text-[11px] font-medium gap-1">
+                                <Video className="h-3 w-3" />
+                                فيديو مرفق
+                              </Badge>
+                            ) : mediaCount > 0 ? (
+                              <Badge className="border border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 text-[11px] font-medium gap-1">
+                                <ImageIcon className="h-3 w-3" />
+                                {mediaCount > 1 ? `${mediaCount} صور مرفقة` : "صورة مرفقة"}
+                              </Badge>
+                            ) : (
+                              <Badge variant="outline" className="px-2 py-0.5 text-[11px] text-muted-foreground gap-1">
+                                <FileText className="h-3 w-3 opacity-70" />
+                                نص فقط
+                              </Badge>
                             )}
                           </div>
 
@@ -1032,7 +1229,7 @@ export default function SocialPublishingPage() {
                             size="sm"
                             onClick={() => handleCopyPost(p.id, p.text)}
                             className={cn(
-                              "h-7 px-2 text-xs gap-1 rounded-lg transition-all",
+                              "no-min-touch-size h-7 px-2.5 text-xs gap-1 rounded-lg transition-all",
                               isCopied
                                 ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 font-bold"
                                 : "text-muted-foreground hover:text-foreground hover:bg-muted"
@@ -1056,7 +1253,7 @@ export default function SocialPublishingPage() {
 
                       {/* الصورة المرفقة إن وُجدت */}
                       {thumb && (
-                        <div className="relative shrink-0 w-full md:w-36 lg:w-44 aspect-square md:aspect-auto md:h-36 rounded-xl overflow-hidden border border-border bg-muted group/thumb shadow-xs">
+                        <div className="relative shrink-0 w-full md:w-36 lg:w-44 aspect-video md:aspect-auto md:h-36 rounded-xl overflow-hidden border border-border bg-muted group/thumb shadow-xs">
                           <img
                             src={thumb}
                             alt="صورة التغريدة"
@@ -1066,9 +1263,17 @@ export default function SocialPublishingPage() {
                               (e.target as HTMLImageElement).style.display = "none";
                             }}
                           />
+                          {mediaCount > 1 && (
+                            <span
+                              className="absolute top-2 left-2 rounded-md bg-black/75 px-1.5 py-0.5 text-[10px] font-bold text-white tabular-nums"
+                              dir="ltr"
+                            >
+                              +{mediaCount - 1}
+                            </span>
+                          )}
                           <div className="absolute inset-0 bg-black/30 opacity-0 group-hover/thumb:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
                             <span className="text-[10px] bg-background/90 text-foreground px-2 py-0.5 rounded-full font-semibold shadow-xs">
-                              معاينة الصورة
+                              معاينة الوسائط
                             </span>
                           </div>
                         </div>
@@ -1086,8 +1291,8 @@ export default function SocialPublishingPage() {
                       </div>
                     )}
 
-                    {/* شريط الإجراءات والتحكم أسفل البطاقة */}
-                    <div className="flex flex-wrap items-center justify-between gap-3 pt-1 border-t border-border/40">
+                    {/* شريط الإجراءات والتحكم أسفل البطاقة — متجاوب للجوال والديسكتوب */}
+                    <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between pt-2 border-t border-border/40">
                       {/* الإجراءات الخارجية والمحاولات */}
                       <div className="flex flex-wrap items-center gap-1.5">
                         {p.externalPostUrl && (
@@ -1095,12 +1300,13 @@ export default function SocialPublishingPage() {
                             asChild
                             size="sm"
                             variant="outline"
-                            className="h-8 gap-1.5 text-xs font-semibold rounded-xl bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 border-0 shadow-xs"
+                            className="no-min-touch-size h-8 gap-1.5 text-xs font-semibold rounded-xl bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 border-0 shadow-xs"
                           >
                             <a
                               href={p.externalPostUrl}
                               target="_blank"
                               rel="noopener noreferrer"
+                              className="no-min-touch-size"
                             >
                               <XBrandIcon className="h-3 w-3" />
                               <span>مشاهدة التغريدة على X</span>
@@ -1113,7 +1319,7 @@ export default function SocialPublishingPage() {
                           <Button
                             size="sm"
                             variant="ghost"
-                            className="h-8 text-xs text-muted-foreground hover:text-foreground rounded-xl gap-1"
+                            className="no-min-touch-size h-8 text-xs text-muted-foreground hover:text-foreground rounded-xl gap-1"
                             onClick={() =>
                               setAttemptsFor(attemptsFor === p.id ? null : p.id)
                             }
@@ -1126,28 +1332,13 @@ export default function SocialPublishingPage() {
                       </div>
 
                       {/* أزرار الإجراءات الإدارية (نشر، جدولة، تعديل، إلغاء) */}
-                      <div className="flex flex-wrap items-center gap-1.5 mr-auto">
+                      <div className="flex flex-wrap items-center gap-1.5 sm:mr-auto">
                         {p.status === "draft" && (
                           <>
-                            {(canCreate || canManageScheduled) && (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="h-8 gap-1 text-xs rounded-xl hover:bg-muted"
-                                onClick={() => {
-                                  setEditingPost(p);
-                                  setEditText(p.text);
-                                }}
-                                data-testid={`button-log-edit-${p.id}`}
-                              >
-                                <Edit3 className="h-3.5 w-3.5 ml-0.5" />
-                                تعديل النص
-                              </Button>
-                            )}
                             {canPublishNow && (
                               <Button
                                 size="sm"
-                                className="h-8 gap-1 text-xs font-semibold rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white shadow-xs"
+                                className="no-min-touch-size h-8 gap-1 text-xs font-semibold rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white shadow-xs"
                                 disabled={publishMutation.isPending}
                                 onClick={() => publishMutation.mutate(p.id)}
                                 data-testid={`button-log-publish-${p.id}`}
@@ -1160,7 +1351,7 @@ export default function SocialPublishingPage() {
                               <Button
                                 size="sm"
                                 variant="outline"
-                                className="h-8 gap-1 text-xs rounded-xl"
+                                className="no-min-touch-size h-8 gap-1 text-xs rounded-xl"
                                 onClick={() => {
                                   setSchedulingPost(p);
                                   // طلب الوكالة: الموعد المقترح جاهز في الحقل إن لم يمض
@@ -1179,8 +1370,23 @@ export default function SocialPublishingPage() {
                             {(canCreate || canManageScheduled) && (
                               <Button
                                 size="sm"
+                                variant="outline"
+                                className="no-min-touch-size h-8 gap-1 text-xs rounded-xl hover:bg-muted"
+                                onClick={() => {
+                                  setEditingPost(p);
+                                  setEditText(p.text);
+                                }}
+                                data-testid={`button-log-edit-${p.id}`}
+                              >
+                                <Edit3 className="h-3.5 w-3.5 ml-0.5" />
+                                تعديل النص
+                              </Button>
+                            )}
+                            {(canCreate || canManageScheduled) && (
+                              <Button
+                                size="sm"
                                 variant="ghost"
-                                className="h-8 text-xs text-red-600 hover:bg-red-500/10 rounded-xl"
+                                className="no-min-touch-size h-8 text-xs text-red-600 hover:bg-red-500/10 rounded-xl"
                                 disabled={cancelMutation.isPending}
                                 onClick={() => {
                                   if (p.agencyName) {
@@ -1201,7 +1407,7 @@ export default function SocialPublishingPage() {
                           <Button
                             size="sm"
                             variant="outline"
-                            className="h-8 text-xs text-red-600 border-red-500/30 hover:bg-red-500/10 rounded-xl"
+                            className="no-min-touch-size h-8 text-xs text-red-600 border-red-500/30 hover:bg-red-500/10 rounded-xl"
                             disabled={cancelMutation.isPending}
                             onClick={() => cancelMutation.mutate(p.id)}
                             data-testid={`button-log-cancel-${p.id}`}
@@ -1213,7 +1419,7 @@ export default function SocialPublishingPage() {
                         {p.status === "failed" && canPublishNow && (
                           <Button
                             size="sm"
-                            className="h-8 text-xs font-semibold rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground gap-1"
+                            className="no-min-touch-size h-8 text-xs font-semibold rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground gap-1"
                             disabled={retryMutation.isPending}
                             onClick={() => retryMutation.mutate(p.id)}
                             data-testid={`button-log-retry-${p.id}`}
@@ -1256,7 +1462,7 @@ export default function SocialPublishingPage() {
                                 {ATTEMPT_PHASES[a.phase] ?? a.phase}
                               </span>
                               {a.httpStatus && (
-                                <Badge variant="outline" className="text-[10px] font-mono" dir="ltr">
+                                <Badge variant="outline" className="text-[10px] font-mono py-0.5" dir="ltr">
                                   HTTP {a.httpStatus}
                                 </Badge>
                               )}
