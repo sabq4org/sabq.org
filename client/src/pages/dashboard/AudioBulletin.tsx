@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
+import { DashboardPageShell } from "@/components/dashboard/DashboardPageShell";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -10,6 +12,7 @@ import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAuth, hasPermission } from "@/hooks/useAuth";
+import { cn } from "@/lib/utils";
 import {
   AlertTriangle,
   ArrowDown,
@@ -114,6 +117,8 @@ interface AdminBulletinResponse {
   sourceTitles: Record<string, string>;
   candidates?: CandidateStory[];
 }
+
+type CandidateQuickFilter = "all" | "breaking" | "featured" | "available";
 
 const SABQ_VOCALIZED = "سَبْق";
 const LIVE_WINDOW_MS = 6 * 60 * 60 * 1000;
@@ -252,6 +257,7 @@ export default function AudioBulletinPage() {
   const [selectedEditionTitle, setSelectedEditionTitle] = useState<string>("");
   const [selectedCandidateIds, setSelectedCandidateIds] = useState<string[]>([]);
   const [candidateSearch, setCandidateSearch] = useState<string>("");
+  const [candidateFilter, setCandidateFilter] = useState<CandidateQuickFilter>("all");
   const [historySearch, setHistorySearch] = useState<string>("");
 
   // Live Studio Audio Player State
@@ -285,8 +291,8 @@ export default function AudioBulletinPage() {
   const current = data?.current ?? null;
   const isLive = Boolean(data?.live && current?.audio);
   const sourceTitles = data?.sourceTitles ?? {};
-  const candidates = data?.candidates ?? [];
-  const history = data?.history ?? [];
+  const candidates = Array.isArray(data?.candidates) ? data.candidates : [];
+  const history = Array.isArray(data?.history) ? data.history : [];
   const fixedIntro = data?.intro ?? "مرحباً بكم في نشرة سَبْق، نأخذكم في جولة سريعة لأهم الأخبار.";
   const fixedOutro = data?.outro ?? "كانت هذه أبرز الأخبار، والتفاصيل كاملة على سَبْق دوت أورغ. شكراً لاستماعكم.";
 
@@ -300,10 +306,12 @@ export default function AudioBulletinPage() {
   // Check if local draft has unsaved changes compared to server draft
   const hasUnsavedChanges = useMemo(() => {
     if (!draft || !data?.draft) return false;
+    const localItems = Array.isArray(draft.items) ? draft.items : [];
+    const remoteItems = Array.isArray(data.draft.items) ? data.draft.items : [];
     return (
       JSON.stringify({
         title: draft.title,
-        items: draft.items.map((i) => ({
+        items: localItems.map((i) => ({
           id: i.id,
           label: i.label,
           text: i.text,
@@ -312,7 +320,7 @@ export default function AudioBulletinPage() {
       }) !==
       JSON.stringify({
         title: data.draft.title,
-        items: data.draft.items.map((i) => ({
+        items: remoteItems.map((i) => ({
           id: i.id,
           label: i.label,
           text: i.text,
@@ -325,23 +333,24 @@ export default function AudioBulletinPage() {
   // Word count & estimated duration for the open draft
   const draftStats = useMemo(() => {
     if (!draft) return { totalWords: 0, estimatedSeconds: 0, itemCount: 0 };
+    const draftItems = Array.isArray(draft.items) ? draft.items : [];
     const introWords = countWords(fixedIntro);
     const outroWords = countWords(fixedOutro);
-    const itemsWords = draft.items.reduce((acc, item) => acc + countWords(item.text), 0);
+    const itemsWords = draftItems.reduce((acc, item) => acc + countWords(item.text || ""), 0);
     const totalWords = introWords + outroWords + itemsWords;
     const estimatedSeconds =
-      estimateSecondsFromWords(totalWords) + Math.max(0, draft.items.length + 1) * 0.45;
+      estimateSecondsFromWords(totalWords) + Math.max(0, draftItems.length + 1) * 0.45;
     return {
       totalWords,
       estimatedSeconds: Math.round(estimatedSeconds),
-      itemCount: draft.items.length,
+      itemCount: draftItems.length,
     };
   }, [draft, fixedIntro, fixedOutro]);
 
   // Active chapter index in the live player
   const activeChapterIndex = useMemo(() => {
-    const chapters = current?.audio?.chapters;
-    if (!chapters?.length) return 0;
+    const chapters = Array.isArray(current?.audio?.chapters) ? current.audio.chapters : [];
+    if (!chapters.length) return 0;
     let activeIdx = 0;
     for (let i = 0; i < chapters.length; i++) {
       if (currentTime + 0.15 >= chapters[i].start) {
@@ -355,26 +364,44 @@ export default function AudioBulletinPage() {
 
   // Set of articleIds already in the active draft
   const draftArticleIds = useMemo(() => {
-    if (!draft) return new Set<string>();
-    return new Set(draft.items.flatMap((i) => i.articleIds));
+    if (!draft || !Array.isArray(draft.items)) return new Set<string>();
+    return new Set(draft.items.flatMap((i) => (Array.isArray(i.articleIds) ? i.articleIds : [])));
   }, [draft]);
+
+  // Candidate filter counts
+  const candidateFilterCounts = useMemo(() => {
+    return {
+      all: candidates.length,
+      breaking: candidates.filter((c) => c.newsType === "breaking").length,
+      featured: candidates.filter((c) => Boolean(c.isFeatured)).length,
+      available: candidates.filter((c) => !draftArticleIds.has(c.id)).length,
+    };
+  }, [candidates, draftArticleIds]);
 
   // Filtered candidate stories
   const filteredCandidates = useMemo(() => {
+    let list = candidates;
+    if (candidateFilter === "breaking") {
+      list = list.filter((c) => c.newsType === "breaking");
+    } else if (candidateFilter === "featured") {
+      list = list.filter((c) => Boolean(c.isFeatured));
+    } else if (candidateFilter === "available") {
+      list = list.filter((c) => !draftArticleIds.has(c.id));
+    }
     const q = candidateSearch.trim().toLowerCase();
-    if (!q) return candidates;
-    return candidates.filter(
+    if (!q) return list;
+    return list.filter(
       (c) =>
         c.title.toLowerCase().includes(q) ||
         (c.category && c.category.toLowerCase().includes(q))
     );
-  }, [candidates, candidateSearch]);
+  }, [candidates, candidateFilter, candidateSearch, draftArticleIds]);
 
   // Filtered history entries
   const filteredHistory = useMemo(() => {
     const q = historySearch.trim().toLowerCase();
     if (!q) return history;
-    return history.filter((h) => h.title.toLowerCase().includes(q));
+    return history.filter((h) => (h.title || "").toLowerCase().includes(q));
   }, [history, historySearch]);
 
   function applyResponse(next: AdminBulletinResponse, message: string) {
@@ -390,10 +417,11 @@ export default function AudioBulletinPage() {
   }
 
   function serializeDraftPayload(value: Bulletin) {
+    const safeItems = Array.isArray(value.items) ? value.items : [];
     return {
       revision: value.revision,
       title: value.title.trim(),
-      items: value.items.map(({ id, label, text, articleIds, href }) => ({
+      items: safeItems.map(({ id, label, text, articleIds, href }) => ({
         id,
         label: label.trim().slice(0, 60),
         text: text.trim(),
@@ -517,7 +545,8 @@ export default function AudioBulletinPage() {
   // Draft item manipulation helpers
   function updateItem(index: number, patch: Partial<BulletinItem>) {
     if (!draft) return;
-    const items = draft.items.map((item, idx) =>
+    const currentItems = Array.isArray(draft.items) ? draft.items : [];
+    const items = currentItems.map((item, idx) =>
       idx === index ? { ...item, ...patch } : item
     );
     setDraft({ ...draft, items });
@@ -525,21 +554,43 @@ export default function AudioBulletinPage() {
 
   function moveItem(index: number, direction: -1 | 1) {
     if (!draft) return;
+    const currentItems = Array.isArray(draft.items) ? draft.items : [];
     const target = index + direction;
-    if (target < 0 || target >= draft.items.length) return;
-    const items = [...draft.items];
+    if (target < 0 || target >= currentItems.length) return;
+    const items = [...currentItems];
     [items[index], items[target]] = [items[target], items[index]];
     setDraft({ ...draft, items });
   }
 
   function removeItem(index: number) {
-    if (!draft || draft.items.length <= 1) return;
-    setDraft({ ...draft, items: draft.items.filter((_, idx) => idx !== index) });
+    if (!draft) return;
+    const currentItems = Array.isArray(draft.items) ? draft.items : [];
+    if (currentItems.length <= 1) return;
+    setDraft({ ...draft, items: currentItems.filter((_, idx) => idx !== index) });
+  }
+
+  function addManualParagraph() {
+    if (!draft) return;
+    const currentItems = Array.isArray(draft.items) ? draft.items : [];
+    if (currentItems.length >= 10) {
+      setErrorMessage("الحد الأقصى لفقرات النشرة هو 10 فقرات.");
+      return;
+    }
+    const newItem: BulletinItem = {
+      id: `item-manual-${Date.now().toString(36)}`,
+      label: `خبر رقم ${currentItems.length + 1}`,
+      text: `وفي مستجدات الأخبار عبر صحيفة ${SABQ_VOCALIZED}، `,
+      articleIds: [],
+      href: null,
+    };
+    setDraft({ ...draft, items: [...currentItems, newItem] });
+    setStatusMessage("تمت إضافة فقرة يدوية جديدة إلى المسودة.");
   }
 
   function addCandidateToDraft(story: CandidateStory) {
     if (!draft) return;
-    if (draft.items.length >= 10) {
+    const currentItems = Array.isArray(draft.items) ? draft.items : [];
+    if (currentItems.length >= 10) {
       setErrorMessage("الحد الأقصى لفقرات النشرة هو 10 فقرات.");
       return;
     }
@@ -551,7 +602,7 @@ export default function AudioBulletinPage() {
       articleIds: [story.id],
       href: story.href,
     };
-    setDraft({ ...draft, items: [...draft.items, newItem] });
+    setDraft({ ...draft, items: [...currentItems, newItem] });
     setStatusMessage(
       `تم إدراج الخبر «${story.title.slice(0, 45)}...» كفقرة جديدة في المسودة.`
     );
@@ -559,10 +610,11 @@ export default function AudioBulletinPage() {
 
   function vocalizeEntireDraft() {
     if (!draft) return;
+    const currentItems = Array.isArray(draft.items) ? draft.items : [];
     setDraft({
       ...draft,
       title: vocalizeAllSabqOccurrences(draft.title),
-      items: draft.items.map((item) => ({
+      items: currentItems.map((item) => ({
         ...item,
         label: vocalizeAllSabqOccurrences(item.label),
         text: vocalizeSabq(item.text),
@@ -631,122 +683,116 @@ export default function AudioBulletinPage() {
           history.reduce((acc, h) => acc + (h.durationSec || 0), 0) / history.length
         )
       : 0;
-  const chapters = current?.audio?.chapters ?? [];
+  const chapters = Array.isArray(current?.audio?.chapters) ? current.audio.chapters : [];
+  const currentItems = Array.isArray(current?.items) ? current.items : [];
+  const draftItems = Array.isArray(draft?.items) ? draft.items : [];
   const totalCurrentDuration = current?.audio?.durationSec ?? 0;
 
   return (
     <DashboardLayout>
-      <div className="mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6" dir="rtl">
-        {/* Executive Broadcast Studio Header */}
-        <Card className="relative overflow-hidden border-border/60 shadow-sm bg-gradient-to-l from-primary/[0.06] via-sky-500/[0.03] to-background">
-          <div className="h-1.5 w-full bg-gradient-to-l from-primary via-sky-500 to-indigo-500" />
-          <CardContent className="p-5 sm:p-6">
-            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-5">
-              <div className="flex items-start gap-4">
-                <div className="p-3.5 rounded-2xl bg-primary/10 text-primary ring-1 ring-primary/20 shadow-xs shrink-0">
-                  <Radio className="h-7 w-7" />
-                </div>
-                <div className="space-y-1.5">
-                  <div className="flex flex-wrap items-center gap-2.5">
-                    <h1 className="text-xl sm:text-2xl font-bold tracking-tight">
-                      استوديو النشرة الصوتية الإخبارية
-                    </h1>
-                    {isLive ? (
-                      <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30 gap-1.5 px-2.5 py-0.5">
-                        <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                        يبث الآن على الموقع · {broadcastWindow.label}
-                      </Badge>
-                    ) : current ? (
-                      <Badge variant="secondary" className="gap-1.5 px-2.5 py-0.5">
-                        <Clock className="h-3.5 w-3.5" />
-                        منشورة سابقاً · انتهت نافذة البث (6 ساعات)
-                      </Badge>
-                    ) : (
-                      <Badge
-                        variant="outline"
-                        className="gap-1.5 px-2.5 py-0.5 text-muted-foreground"
-                      >
-                        خارج الهواء حالياً
-                      </Badge>
-                    )}
-                    {data?.storageConfigured ? (
-                      <Badge
-                        variant="outline"
-                        className="text-xs border-sky-500/30 text-sky-700 dark:text-sky-300 bg-sky-500/5"
-                      >
-                        التخزين السحابي متصل
-                      </Badge>
-                    ) : null}
-                  </div>
-                  <p className="text-sm text-muted-foreground max-w-3xl leading-relaxed">
-                    إعداد وتحرير النصوص الإذاعية بالذكاء الاصطناعي، اختيار الأخبار المرشحة، التحكم في الفصول الصوتية، واعتماد التسجيل الصوتي الفوري في الشريط العلوي لـ {SABQ_VOCALIZED}.
-                  </p>
-                </div>
-              </div>
+      <DashboardPageShell
+        maxWidthClassName="max-w-[1600px]"
+        contentClassName="px-4 pb-12 sm:px-6 space-y-6"
+      >
+        {/* Unified Dashboard Page Header */}
+        <DashboardPageHeader
+          icon={Radio}
+          titleTestId="heading-audio-bulletin"
+          title={
+            <div className="flex flex-wrap items-center gap-2">
+              <span>استوديو النشرة الصوتية الإخبارية</span>
+              {isLive ? (
+                <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30 gap-1.5 px-2.5 py-0.5 text-xs font-semibold">
+                  <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                  يبث الآن · {broadcastWindow.label}
+                </Badge>
+              ) : current ? (
+                <Badge variant="secondary" className="gap-1.5 px-2.5 py-0.5 text-xs">
+                  <Clock className="h-3.5 w-3.5" />
+                  منشورة سابقاً · انتهت نافذة الـ 6 ساعات
+                </Badge>
+              ) : (
+                <Badge
+                  variant="outline"
+                  className="gap-1.5 px-2.5 py-0.5 text-xs text-muted-foreground"
+                >
+                  خارج الهواء حالياً
+                </Badge>
+              )}
+              {data?.storageConfigured ? (
+                <Badge
+                  variant="outline"
+                  className="text-xs border-primary/30 text-primary bg-primary/5"
+                >
+                  التخزين السحابي متصل
+                </Badge>
+              ) : null}
+            </div>
+          }
+          description={`إعداد وتحرير النصوص الإذاعية بالذكاء الاصطناعي، اختيار الأخبار المرشحة، التحكم في الفصول الصوتية، واعتماد التسجيل الصوتي الفوري في الشريط العلوي لـ ${SABQ_VOCALIZED}.`}
+          actions={
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => refetch()}
+                disabled={isFetching || busy}
+                className="gap-1.5 rounded-xl"
+                data-testid="button-refresh-bulletin"
+              >
+                <RefreshCw className={cn("h-4 w-4", isFetching && "animate-spin")} />
+                تحديث
+              </Button>
 
-              {/* Studio Action Toolbar */}
-              <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+              {current && (
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => refetch()}
-                  disabled={isFetching || busy}
-                  className="gap-1.5"
-                >
-                  <RefreshCw className={`h-4 w-4 ${isFetching ? "animate-spin" : ""}`} />
-                  تحديث
-                </Button>
-
-                {current && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => cloneCurrentMutation.mutate()}
-                    disabled={busy}
-                    className="gap-1.5 border-primary/30 hover:bg-primary/5"
-                    data-testid="button-clone-current-bulletin"
-                  >
-                    {cloneCurrentMutation.isPending ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Copy className="h-4 w-4 text-primary" />
-                    )}
-                    نسخ النشرة الحالية كمسودة
-                  </Button>
-                )}
-
-                <Button
-                  size="sm"
-                  onClick={() =>
-                    createDraftMutation.mutate({
-                      articleIds:
-                        selectedCandidateIds.length > 0 ? selectedCandidateIds : undefined,
-                      title: selectedEditionTitle || undefined,
-                    })
-                  }
+                  onClick={() => cloneCurrentMutation.mutate()}
                   disabled={busy}
-                  className="gap-2 shadow-xs"
-                  data-testid="button-create-bulletin-draft"
+                  className="gap-1.5 rounded-xl border-primary/30 hover:bg-primary/5"
+                  data-testid="button-clone-current-bulletin"
                 >
-                  {createDraftMutation.isPending ? (
+                  {cloneCurrentMutation.isPending ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
                   ) : (
-                    <Sparkles className="h-4 w-4" />
+                    <Copy className="h-4 w-4 text-primary" />
                   )}
-                  {selectedCandidateIds.length > 0
-                    ? `توليد مسودة من (${selectedCandidateIds.length}) أخبار محددة`
-                    : draft
-                    ? "إعادة توليد مسودة ذكية"
-                    : "توليد مسودة ذكية الآن"}
+                  نسخ النشرة الحالية كمسودة
                 </Button>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+              )}
+
+              <Button
+                size="sm"
+                onClick={() =>
+                  createDraftMutation.mutate({
+                    articleIds:
+                      selectedCandidateIds.length > 0 ? selectedCandidateIds : undefined,
+                    title: selectedEditionTitle || undefined,
+                  })
+                }
+                disabled={busy}
+                className="gap-2 rounded-xl shadow-xs"
+                data-testid="button-create-bulletin-draft"
+              >
+                {createDraftMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Sparkles className="h-4 w-4" />
+                )}
+                {selectedCandidateIds.length > 0
+                  ? `توليد مسودة من (${selectedCandidateIds.length}) أخبار محددة`
+                  : draft
+                  ? "إعادة توليد مسودة ذكية"
+                  : "توليد مسودة ذكية الآن"}
+              </Button>
+            </>
+          }
+        />
 
         {/* Alerts & Storage Check */}
         {data && !data.storageConfigured && (
-          <Card className="border-amber-500/40 bg-amber-500/10">
+          <Card className="rounded-2xl border-amber-500/40 bg-amber-500/10">
             <CardContent className="p-4 flex items-center gap-3 text-sm">
               <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0" />
               <div>
@@ -763,27 +809,28 @@ export default function AudioBulletinPage() {
 
         {(statusMessage || errorMessage || draft?.error) && (
           <Card
-            className={
+            className={cn(
+              "rounded-2xl",
               errorMessage || draft?.error
                 ? "border-destructive/40 bg-destructive/10"
                 : "border-emerald-500/40 bg-emerald-500/10"
-            }
+            )}
           >
             <CardContent className="p-3.5 px-4 flex items-center justify-between gap-3 text-sm">
-              <div className="flex items-center gap-2.5">
+              <div className="flex items-center gap-2.5 min-w-0">
                 {errorMessage || draft?.error ? (
                   <AlertTriangle className="h-4 w-4 text-destructive shrink-0" />
                 ) : (
                   <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
                 )}
-                <span className="font-medium">
+                <span className="font-medium break-words">
                   {errorMessage || draft?.error || statusMessage}
                 </span>
               </div>
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-7 px-2 text-xs"
+                className="h-7 px-2 text-xs shrink-0"
                 onClick={() => {
                   setStatusMessage(null);
                   setErrorMessage(null);
@@ -797,27 +844,27 @@ export default function AudioBulletinPage() {
 
         {isLoading ? (
           <div className="space-y-6">
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
               {[1, 2, 3, 4].map((n) => (
-                <Skeleton key={n} className="h-28 w-full rounded-xl" />
+                <Skeleton key={n} className="h-28 w-full rounded-2xl" />
               ))}
             </div>
-            <Skeleton className="h-64 w-full rounded-xl" />
-            <Skeleton className="h-96 w-full rounded-xl" />
+            <Skeleton className="h-64 w-full rounded-2xl" />
+            <Skeleton className="h-96 w-full rounded-2xl" />
           </div>
         ) : (
           <>
-            {/* 4-Card Executive KPI Strip */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+            {/* 4-Card KPI Summary Strip */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
               {/* KPI 1: Live Broadcast Status */}
-              <Card className="border-border/60 shadow-xs">
+              <Card className="rounded-2xl border-border/70 shadow-xs">
                 <CardContent className="p-4 flex items-start justify-between gap-3">
-                  <div className="space-y-1">
+                  <div className="min-w-0 space-y-1">
                     <p className="text-xs font-medium text-muted-foreground">
                       حالة البث الحي على الموقع
                     </p>
                     <div className="flex items-center gap-2">
-                      <span className="text-lg font-bold">
+                      <span className="text-base sm:text-lg font-bold truncate" data-testid="kpi-live-status">
                         {isLive
                           ? current?.title
                           : current
@@ -825,58 +872,52 @@ export default function AudioBulletinPage() {
                           : "متوقف حالياً"}
                       </span>
                     </div>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-[11px] sm:text-xs text-muted-foreground tabular-nums truncate">
                       {current
                         ? `نُشرت ${formatShortTime(current.publishedAt)} · ${broadcastWindow.label}`
                         : "لا توجد نشرة معروضة للزوار الآن"}
                     </p>
                   </div>
-                  <div
-                    className={`p-2.5 rounded-xl shrink-0 ${
-                      isLive
-                        ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                        : "bg-muted text-muted-foreground"
-                    }`}
-                  >
+                  <div className="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 shrink-0">
                     <Radio className="h-5 w-5" />
                   </div>
                 </CardContent>
               </Card>
 
               {/* KPI 2: Audio Duration & Chapters */}
-              <Card className="border-border/60 shadow-xs">
+              <Card className="rounded-2xl border-border/70 shadow-xs">
                 <CardContent className="p-4 flex items-start justify-between gap-3">
-                  <div className="space-y-1">
+                  <div className="min-w-0 space-y-1">
                     <p className="text-xs font-medium text-muted-foreground">
                       مدة البث والفصول الصوتية
                     </p>
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-xl font-bold tabular-nums">
+                    <div className="flex items-baseline gap-1.5">
+                      <span className="text-lg sm:text-xl font-bold tabular-nums" data-testid="kpi-audio-duration">
                         {current?.audio ? formatDuration(totalCurrentDuration) : "0:00"}
                       </span>
                       <span className="text-xs text-muted-foreground">دقيقة</span>
                     </div>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-[11px] sm:text-xs text-muted-foreground tabular-nums truncate">
                       {current
-                        ? `${current.items.length} فقرات خبرية · ${chapters.length} فصول صوتية`
+                        ? `${currentItems.length} فقرات خبرية · ${chapters.length} فصول صوتية`
                         : "بانتظار اعتماد النشرة القادمة"}
                     </p>
                   </div>
-                  <div className="p-2.5 rounded-xl bg-sky-500/10 text-sky-600 dark:text-sky-400 shrink-0">
+                  <div className="p-2.5 rounded-xl bg-primary/10 text-primary shrink-0">
                     <ListMusic className="h-5 w-5" />
                   </div>
                 </CardContent>
               </Card>
 
               {/* KPI 3: Editorial Draft & Candidate Pool */}
-              <Card className="border-border/60 shadow-xs">
+              <Card className="rounded-2xl border-border/70 shadow-xs">
                 <CardContent className="p-4 flex items-start justify-between gap-3">
-                  <div className="space-y-1">
+                  <div className="min-w-0 space-y-1">
                     <p className="text-xs font-medium text-muted-foreground">
                       المسودة وبنك الأخبار
                     </p>
                     <div className="flex items-center gap-2">
-                      <span className="text-lg font-bold">
+                      <span className="text-base sm:text-lg font-bold tabular-nums truncate" data-testid="kpi-draft-status">
                         {isGenerating
                           ? "جارٍ تسجيل الصوت..."
                           : draft
@@ -884,32 +925,32 @@ export default function AudioBulletinPage() {
                           : "لا توجد مسودة"}
                       </span>
                     </div>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-[11px] sm:text-xs text-muted-foreground tabular-nums truncate">
                       {draft
-                        ? `${draftStats.itemCount} فقرات · ~${formatDuration(draftStats.estimatedSeconds)} دقيقة متوقعة`
+                        ? `${draftStats.itemCount} فقرات · ~${formatDuration(draftStats.estimatedSeconds)} د متوقعة`
                         : `${candidates.length} خبر مرشح من الساعات الأخيرة`}
                     </p>
                   </div>
-                  <div className="p-2.5 rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 shrink-0">
+                  <div className="p-2.5 rounded-xl bg-violet-500/10 text-violet-600 dark:text-violet-400 shrink-0">
                     <Mic className="h-5 w-5" />
                   </div>
                 </CardContent>
               </Card>
 
               {/* KPI 4: Schedule & History */}
-              <Card className="border-border/60 shadow-xs">
+              <Card className="rounded-2xl border-border/70 shadow-xs">
                 <CardContent className="p-4 flex items-start justify-between gap-3">
-                  <div className="space-y-1">
+                  <div className="min-w-0 space-y-1">
                     <p className="text-xs font-medium text-muted-foreground">
                       الجدولة الآلية والأرشيف
                     </p>
                     <div className="flex items-center gap-2">
-                      <span className="text-lg font-bold">
+                      <span className="text-base sm:text-lg font-bold tabular-nums truncate" data-testid="kpi-schedule-status">
                         {data?.scheduleEnabled ? "مفعّلة (3 يومياً)" : "يدوي فقط"}
                       </span>
                     </div>
-                    <p className="text-xs text-muted-foreground">
-                      القادمة: {nextSlot.timeLabel} · {history.length} نشرة بالسجل (متوسط{" "}
+                    <p className="text-[11px] sm:text-xs text-muted-foreground tabular-nums truncate">
+                      القادمة: {nextSlot.timeLabel} · {history.length} بالسجل (متوسط{" "}
                       {formatDuration(avgHistoryDuration)})
                     </p>
                   </div>
@@ -922,7 +963,7 @@ export default function AudioBulletinPage() {
 
             {/* Live On-Air Broadcast Studio Player & Chapter Timeline */}
             {current?.audio && (
-              <Card className="border-border/60 shadow-xs overflow-hidden">
+              <Card className="rounded-2xl border-border/70 shadow-xs overflow-hidden">
                 <CardHeader className="pb-3 border-b bg-muted/20">
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                     <div className="space-y-1">
@@ -1093,7 +1134,7 @@ export default function AudioBulletinPage() {
                         className="h-8 text-xs gap-1.5"
                       >
                         <Newspaper className="h-3.5 w-3.5" />
-                        النص الإذاعي الكامل والمصادر ({current.items.length} أخبار)
+                        النص الإذاعي الكامل والمصادر ({currentItems.length} أخبار)
                       </Button>
                     </div>
 
@@ -1199,48 +1240,51 @@ export default function AudioBulletinPage() {
                       </div>
 
                       <div className="space-y-2.5">
-                        {current.items.map((item, idx) => (
-                          <div
-                            key={item.id}
-                            className="p-3.5 rounded-lg bg-background border border-border/50 space-y-2"
-                          >
-                            <div className="flex flex-wrap items-center justify-between gap-2">
-                              <div className="flex items-center gap-2">
-                                <Badge variant="secondary" className="text-xs">
-                                  الفقرة {idx + 1}
-                                </Badge>
-                                <span className="text-sm font-semibold">{item.label}</span>
+                        {currentItems.map((item, idx) => {
+                          const itemArticleIds = Array.isArray(item.articleIds) ? item.articleIds : [];
+                          return (
+                            <div
+                              key={item.id}
+                              className="p-3.5 rounded-lg bg-background border border-border/50 space-y-2"
+                            >
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <div className="flex items-center gap-2">
+                                  <Badge variant="secondary" className="text-xs">
+                                    الفقرة {idx + 1}
+                                  </Badge>
+                                  <span className="text-sm font-semibold">{item.label}</span>
+                                </div>
+                                <span className="text-xs text-muted-foreground tabular-nums">
+                                  {countWords(item.text)} كلمة · ~
+                                  {estimateSecondsFromWords(countWords(item.text))} ثانية
+                                </span>
                               </div>
-                              <span className="text-xs text-muted-foreground">
-                                {countWords(item.text)} كلمة · ~
-                                {estimateSecondsFromWords(countWords(item.text))} ثانية
-                              </span>
+                              <p className="text-sm leading-relaxed text-foreground/90">
+                                {item.text}
+                              </p>
+                              {itemArticleIds.length > 0 && (
+                                <div className="flex flex-wrap items-center gap-2 pt-1 text-xs text-muted-foreground">
+                                  <span>المصادر المرتبطة:</span>
+                                  {itemArticleIds.map((id) => {
+                                    const sourceTitle = sourceTitles[id];
+                                    return (
+                                      <a
+                                        key={id}
+                                        href={item.href || "#"}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="inline-flex items-center gap-1 text-primary hover:underline font-medium"
+                                      >
+                                        {sourceTitle || `خبر #${id.slice(0, 8)}`}
+                                        <ExternalLink className="h-3 w-3" />
+                                      </a>
+                                    );
+                                  })}
+                                </div>
+                              )}
                             </div>
-                            <p className="text-sm leading-relaxed text-foreground/90">
-                              {item.text}
-                            </p>
-                            {item.articleIds.length > 0 && (
-                              <div className="flex flex-wrap items-center gap-2 pt-1 text-xs text-muted-foreground">
-                                <span>المصادر المرتبطة:</span>
-                                {item.articleIds.map((id) => {
-                                  const sourceTitle = sourceTitles[id];
-                                  return (
-                                    <a
-                                      key={id}
-                                      href={item.href || "#"}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                      className="inline-flex items-center gap-1 text-primary hover:underline font-medium"
-                                    >
-                                      {sourceTitle || `خبر #${id.slice(0, 8)}`}
-                                      <ExternalLink className="h-3 w-3" />
-                                    </a>
-                                  );
-                                })}
-                              </div>
-                            )}
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
 
                       <div className="p-3 rounded-lg bg-background border border-border/50">
@@ -1260,7 +1304,7 @@ export default function AudioBulletinPage() {
               {/* Left/Main Column (8 cols): Draft Studio Editor */}
               <div className="lg:col-span-8 space-y-6">
                 {draft ? (
-                  <Card className="border-border/60 shadow-xs">
+                  <Card className="rounded-2xl border-border/70 shadow-xs overflow-hidden">
                     <CardHeader className="border-b bg-muted/20 pb-4">
                       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                         <div className="space-y-1">
@@ -1269,7 +1313,7 @@ export default function AudioBulletinPage() {
                               <Mic className="h-5 w-5 text-primary" />
                               استوديو تحرير المسودة الإذاعية
                             </CardTitle>
-                            <Badge variant="outline">مراجعة #{draft.revision}</Badge>
+                            <Badge variant="outline" className="tabular-nums">مراجعة #{draft.revision}</Badge>
                             {isGenerating ? (
                               <Badge className="bg-sky-500/15 text-sky-700 dark:text-sky-300 border-sky-500/30 gap-1.5">
                                 <Loader2 className="h-3 w-3 animate-spin" />
@@ -1285,7 +1329,7 @@ export default function AudioBulletinPage() {
                               </Badge>
                             )}
                           </div>
-                          <CardDescription>
+                          <CardDescription className="tabular-nums">
                             إجمالي الكلمات: {draftStats.totalWords} كلمة · المدة التقديرية للتسجيل:{" "}
                             <span className="font-semibold text-foreground">
                               ~{formatDuration(draftStats.estimatedSeconds)} دقيقة
@@ -1301,7 +1345,7 @@ export default function AudioBulletinPage() {
                             size="sm"
                             onClick={vocalizeEntireDraft}
                             disabled={busy}
-                            className="gap-1.5 text-xs"
+                            className="gap-1.5 text-xs rounded-xl"
                           >
                             <Wand2 className="h-3.5 w-3.5 text-primary" />
                             تشكيل «{SABQ_VOCALIZED}» في الكل
@@ -1314,7 +1358,7 @@ export default function AudioBulletinPage() {
                               size="sm"
                               onClick={() => setDraft(structuredClone(data.draft))}
                               disabled={busy}
-                              className="gap-1.5 text-xs"
+                              className="gap-1.5 text-xs rounded-xl"
                             >
                               <RotateCcw className="h-3.5 w-3.5" />
                               تراجع
@@ -1362,7 +1406,7 @@ export default function AudioBulletinPage() {
                           <Badge variant="outline" className="bg-background text-xs">
                             الافتتاحية الإذاعية (تُقرأ تلقائياً في بداية التسجيل)
                           </Badge>
-                          <span className="text-xs text-muted-foreground">
+                          <span className="text-xs text-muted-foreground tabular-nums">
                             {countWords(fixedIntro)} كلمة
                           </span>
                         </div>
@@ -1373,19 +1417,34 @@ export default function AudioBulletinPage() {
 
                       {/* Story Paragraphs List */}
                       <div className="space-y-3.5">
-                        <div className="flex items-center justify-between">
-                          <h3 className="text-sm font-bold flex items-center gap-2">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <h3 className="text-sm font-bold flex items-center gap-2 tabular-nums">
                             <Newspaper className="h-4 w-4 text-primary" />
-                            فقرات الأخبار ({draft.items.length} من 10)
+                            فقرات الأخبار ({draftItems.length} من 10)
                           </h3>
-                          <span className="text-xs text-muted-foreground">
-                            يمكنك إضافة أخبار إضافية مباشرة من «بنك الأخبار المرشحة»
-                          </span>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-xs text-muted-foreground hidden sm:inline">
+                              أضف من بنك الأخبار أو يدوياً
+                            </span>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              disabled={busy || draftItems.length >= 10}
+                              onClick={addManualParagraph}
+                              className="h-7 px-2.5 text-xs gap-1 rounded-lg border-primary/30 text-primary hover:bg-primary/5"
+                              data-testid="button-add-manual-paragraph"
+                            >
+                              <Plus className="h-3.5 w-3.5" />
+                              إضافة فقرة يدوية
+                            </Button>
+                          </div>
                         </div>
 
-                        {draft.items.map((item, index) => {
-                          const words = countWords(item.text);
+                        {draftItems.map((item, index) => {
+                          const words = countWords(item.text || "");
                           const estSec = estimateSecondsFromWords(words);
+                          const itemArticleIds = Array.isArray(item.articleIds) ? item.articleIds : [];
                           return (
                             <div
                               key={item.id}
@@ -1393,13 +1452,13 @@ export default function AudioBulletinPage() {
                             >
                               <div className="flex flex-wrap items-center justify-between gap-2">
                                 <div className="flex items-center gap-2">
-                                  <span className="inline-flex items-center justify-center h-6 w-6 rounded-full bg-primary/10 text-primary text-xs font-bold">
+                                  <span className="inline-flex items-center justify-center h-6 w-6 rounded-full bg-primary/10 text-primary text-xs font-bold tabular-nums">
                                     {index + 1}
                                   </span>
                                   <span className="text-sm font-semibold">
                                     الفقرة الخبرية {index + 1}
                                   </span>
-                                  <Badge variant="secondary" className="text-[11px] font-normal">
+                                  <Badge variant="secondary" className="text-[11px] font-normal tabular-nums">
                                     {words} كلمة · ~{estSec} ثانية
                                   </Badge>
                                 </div>
@@ -1436,7 +1495,7 @@ export default function AudioBulletinPage() {
                                     variant="ghost"
                                     size="icon"
                                     className="h-7 w-7"
-                                    disabled={busy || index === draft.items.length - 1}
+                                    disabled={busy || index === draftItems.length - 1}
                                     onClick={() => moveItem(index, 1)}
                                     aria-label="تحريك لأسفل"
                                   >
@@ -1447,7 +1506,7 @@ export default function AudioBulletinPage() {
                                     variant="ghost"
                                     size="icon"
                                     className="h-7 w-7 text-destructive hover:text-destructive"
-                                    disabled={busy || draft.items.length <= 1}
+                                    disabled={busy || draftItems.length <= 1}
                                     onClick={() => removeItem(index)}
                                     aria-label="حذف الفقرة"
                                   >
@@ -1483,10 +1542,10 @@ export default function AudioBulletinPage() {
                                 />
                               </div>
 
-                              {item.articleIds.length > 0 && (
+                              {itemArticleIds.length > 0 && (
                                 <div className="flex flex-wrap items-center gap-2 pt-1 text-xs text-muted-foreground border-t border-border/40">
                                   <span>المصدر الخبري:</span>
-                                  {item.articleIds.map((id) => {
+                                  {itemArticleIds.map((id) => {
                                     const sourceTitle = sourceTitles[id];
                                     return (
                                       <a
@@ -1514,7 +1573,7 @@ export default function AudioBulletinPage() {
                           <Badge variant="outline" className="bg-background text-xs">
                             الخاتمة الإذاعية (تُقرأ تلقائياً في نهاية التسجيل)
                           </Badge>
-                          <span className="text-xs text-muted-foreground">
+                          <span className="text-xs text-muted-foreground tabular-nums">
                             {countWords(fixedOutro)} كلمة
                           </span>
                         </div>
@@ -1529,7 +1588,7 @@ export default function AudioBulletinPage() {
                           <Button
                             onClick={() => approveMutation.mutate(draft)}
                             disabled={busy || !data?.storageConfigured}
-                            className="gap-2 shadow-xs"
+                            className="gap-2 rounded-xl shadow-xs"
                             data-testid="button-approve-bulletin"
                           >
                             {approveMutation.isPending || isGenerating ? (
@@ -1546,7 +1605,7 @@ export default function AudioBulletinPage() {
                             variant="outline"
                             onClick={() => saveDraftMutation.mutate(draft)}
                             disabled={busy}
-                            className="gap-2"
+                            className="gap-2 rounded-xl"
                             data-testid="button-save-bulletin-draft"
                           >
                             {saveDraftMutation.isPending ? (
@@ -1562,7 +1621,7 @@ export default function AudioBulletinPage() {
                           variant="ghost"
                           onClick={() => discardMutation.mutate()}
                           disabled={busy}
-                          className="text-destructive hover:text-destructive hover:bg-destructive/10 gap-1.5"
+                          className="text-destructive hover:text-destructive hover:bg-destructive/10 gap-1.5 rounded-xl"
                           data-testid="button-discard-bulletin-draft"
                         >
                           <Trash2 className="h-4 w-4" />
@@ -1573,7 +1632,7 @@ export default function AudioBulletinPage() {
                   </Card>
                 ) : (
                   /* Empty Draft State: Interactive Studio Launchpad */
-                  <Card className="border-border/60 shadow-xs">
+                  <Card className="rounded-2xl border-border/70 shadow-xs overflow-hidden">
                     <CardHeader className="border-b bg-muted/15">
                       <CardTitle className="text-lg flex items-center gap-2">
                         <Sparkles className="h-5 w-5 text-primary" />
@@ -1611,7 +1670,7 @@ export default function AudioBulletinPage() {
                           <p className="text-sm font-semibold">
                             2. منهجية اختيار الأخبار:{" "}
                             {selectedCandidateIds.length > 0 ? (
-                              <span className="text-primary">
+                              <span className="text-primary tabular-nums">
                                 اختيار يدوي ({selectedCandidateIds.length} أخبار محددة من البنك)
                               </span>
                             ) : (
@@ -1649,7 +1708,7 @@ export default function AudioBulletinPage() {
                             })
                           }
                           disabled={busy}
-                          className="gap-2"
+                          className="gap-2 rounded-xl"
                         >
                           {createDraftMutation.isPending ? (
                             <Loader2 className="h-4 w-4 animate-spin" />
@@ -1666,7 +1725,7 @@ export default function AudioBulletinPage() {
                             variant="outline"
                             onClick={() => cloneCurrentMutation.mutate()}
                             disabled={busy}
-                            className="gap-2"
+                            className="gap-2 rounded-xl"
                           >
                             {cloneCurrentMutation.isPending ? (
                               <Loader2 className="h-4 w-4 animate-spin" />
@@ -1685,14 +1744,14 @@ export default function AudioBulletinPage() {
               {/* Right/Side Column (4 cols): Candidate News Pool + Schedule + History */}
               <div className="lg:col-span-4 space-y-6">
                 {/* 1. Candidate News Pool Card */}
-                <Card className="border-border/60 shadow-xs">
+                <Card className="rounded-2xl border-border/70 shadow-xs overflow-hidden">
                   <CardHeader className="pb-3 border-b bg-muted/15">
                     <div className="flex items-center justify-between gap-2">
                       <CardTitle className="text-base flex items-center gap-2">
                         <Newspaper className="h-4 w-4 text-primary" />
                         بنك الأخبار المرشحة للنشرة
                       </CardTitle>
-                      <Badge variant="secondary" className="text-xs">
+                      <Badge variant="secondary" className="text-xs tabular-nums">
                         {candidates.length} خبر
                       </Badge>
                     </div>
@@ -1710,8 +1769,47 @@ export default function AudioBulletinPage() {
                         value={candidateSearch}
                         onChange={(e) => setCandidateSearch(e.target.value)}
                         placeholder="ابحث في الأخبار المرشحة..."
-                        className="h-8 pr-8 text-xs"
+                        className="h-8 pr-8 text-xs rounded-xl"
+                        data-testid="input-candidate-search"
                       />
+                    </div>
+
+                    {/* Quick Filter Pills for Candidate News Pool */}
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {(
+                        [
+                          { key: "all", label: "الكل", count: candidateFilterCounts.all },
+                          { key: "breaking", label: "عاجل", count: candidateFilterCounts.breaking },
+                          { key: "featured", label: "مميز", count: candidateFilterCounts.featured },
+                          { key: "available", label: "متاح للإدراج", count: candidateFilterCounts.available },
+                        ] as const
+                      ).map((pill) => {
+                        const active = candidateFilter === pill.key;
+                        return (
+                          <button
+                            key={pill.key}
+                            type="button"
+                            onClick={() => setCandidateFilter(pill.key)}
+                            className={cn(
+                              "inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors",
+                              active
+                                ? "border-primary bg-primary text-primary-foreground shadow-2xs"
+                                : "border-border/60 bg-muted/30 text-muted-foreground hover:bg-muted hover:text-foreground"
+                            )}
+                            data-testid={`filter-candidate-${pill.key}`}
+                          >
+                            <span>{pill.label}</span>
+                            <span
+                              className={cn(
+                                "rounded-full px-1.5 py-0 text-[10px] tabular-nums",
+                                active ? "bg-primary-foreground/20 text-primary-foreground" : "bg-background/80 text-muted-foreground"
+                              )}
+                            >
+                              {pill.count}
+                            </span>
+                          </button>
+                        );
+                      })}
                     </div>
 
                     {filteredCandidates.length === 0 ? (
@@ -1780,7 +1878,7 @@ export default function AudioBulletinPage() {
                                       {story.category}
                                     </Badge>
                                   )}
-                                  <span className="text-[10px] text-muted-foreground">
+                                  <span className="text-[10px] text-muted-foreground tabular-nums">
                                     {formatShortTime(story.publishedAt)}
                                   </span>
                                 </div>
@@ -1834,7 +1932,7 @@ export default function AudioBulletinPage() {
                 </Card>
 
                 {/* 2. Automated Broadcast Schedule Card */}
-                <Card className="border-border/60 shadow-xs">
+                <Card className="rounded-2xl border-border/70 shadow-xs overflow-hidden">
                   <CardHeader className="pb-3 border-b bg-muted/15">
                     <div className="flex items-center justify-between gap-3">
                       <div className="space-y-0.5">
@@ -1901,14 +1999,14 @@ export default function AudioBulletinPage() {
                 </Card>
 
                 {/* 3. Broadcast History Card */}
-                <Card className="border-border/60 shadow-xs">
+                <Card className="rounded-2xl border-border/70 shadow-xs overflow-hidden">
                   <CardHeader className="pb-3 border-b bg-muted/15">
                     <div className="flex items-center justify-between gap-2">
                       <CardTitle className="text-base flex items-center gap-2">
                         <History className="h-4 w-4 text-primary" />
                         سجل النشرات المسجلة
                       </CardTitle>
-                      <Badge variant="outline" className="text-xs">
+                      <Badge variant="outline" className="text-xs tabular-nums">
                         {history.length} نشرة
                       </Badge>
                     </div>
@@ -1921,7 +2019,7 @@ export default function AudioBulletinPage() {
                           value={historySearch}
                           onChange={(e) => setHistorySearch(e.target.value)}
                           placeholder="تصفية السجل..."
-                          className="h-8 pr-8 text-xs"
+                          className="h-8 pr-8 text-xs rounded-xl"
                         />
                       </div>
                     )}
@@ -1938,11 +2036,11 @@ export default function AudioBulletinPage() {
                             className="rounded-xl border border-border/60 p-2.5 text-xs space-y-1.5 hover:bg-muted/20 transition-colors"
                           >
                             <div className="flex items-center justify-between gap-2">
-                              <span className="font-semibold text-foreground flex items-center gap-1.5">
+                              <span className="font-semibold text-foreground flex items-center gap-1.5 min-w-0 truncate">
                                 <FileAudio className="h-3.5 w-3.5 text-primary shrink-0" />
-                                {entry.title}
+                                <span className="truncate">{entry.title}</span>
                               </span>
-                              <div className="flex items-center gap-1">
+                              <div className="flex items-center gap-1 shrink-0">
                                 <Badge
                                   variant="secondary"
                                   className="text-[10px] px-1.5 py-0 h-4 tabular-nums"
@@ -1957,7 +2055,7 @@ export default function AudioBulletinPage() {
                                 </Badge>
                               </div>
                             </div>
-                            <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                            <div className="flex items-center justify-between text-[11px] text-muted-foreground tabular-nums">
                               <span>{formatDateTime(entry.publishedAt)}</span>
                               {entry.hiddenAt ? (
                                 <span className="text-amber-600">أُخفيت يدوياً</span>
@@ -1983,7 +2081,7 @@ export default function AudioBulletinPage() {
             </div>
           </>
         )}
-      </div>
+      </DashboardPageShell>
     </DashboardLayout>
   );
 }
