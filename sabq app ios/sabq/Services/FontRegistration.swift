@@ -100,6 +100,33 @@ enum SabqFonts {
         }
     }
 
+    // MARK: - Alexandria (خط العرض في هوية V2 «حبر وسماء»)
+    //
+    // للعناوين الكبيرة وأسماء الأقسام والأرقام البارزة فقط؛ النص الجاري يبقى
+    // IBM Plex Sans Arabic.
+
+    nonisolated static let displaySemibold = "Alexandria-SemiBold"
+    nonisolated static let displayBold = "Alexandria-Bold"
+    nonisolated static let displayHeavy = "Alexandria-ExtraBold"
+
+    nonisolated private static func displayName(for weight: Font.Weight) -> String {
+        switch weight {
+        case .heavy, .black: return displayHeavy
+        case .bold: return displayBold
+        default: return displaySemibold
+        }
+    }
+
+    nonisolated static func display(size: CGFloat, weight: Font.Weight = .bold) -> Font {
+        .custom(displayName(for: weight), size: size, relativeTo: textStyle(for: size))
+    }
+
+    /// غير مُحجَّم عمدًا: `SabqRTLText` يطبّق Dynamic Type بنفسه.
+    nonisolated static func uiDisplay(size: CGFloat, weight: Font.Weight = .bold) -> UIFont {
+        UIFont(name: displayName(for: weight), size: size)
+            ?? .systemFont(ofSize: size, weight: weight == .heavy ? .heavy : .bold)
+    }
+
     /// Explicit semantic scaling for new editorial surfaces; legacy callers stay unchanged.
     nonisolated static func editorial(_ style: Font.TextStyle, size: CGFloat,
                                        weight: Font.Weight = .regular, boldText: Bool = false) -> Font {
@@ -118,6 +145,9 @@ enum SabqFonts {
             "IBMPlexSansArabic-Regular.woff2",
             "IBMPlexSansArabic-SemiBold.woff2",
             "IBMPlexSansArabic-Bold.woff2",
+            "Alexandria-SemiBold.ttf",
+            "Alexandria-Bold.ttf",
+            "Alexandria-ExtraBold.ttf",
         ]
         for filename in filenames {
             registerFont(named: filename)

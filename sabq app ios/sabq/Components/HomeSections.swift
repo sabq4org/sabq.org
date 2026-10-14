@@ -19,7 +19,7 @@ struct HomeSectionHeader<Link: View>: View {
             : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: SabqLayout.space12))
         return layout {
             Text(title)
-                .font(SabqType.sectionTitle)
+                .font(SabqFonts.display(size: 21, weight: .heavy))
                 .foregroundStyle(SabqTheme.ink)
                 .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
                 .accessibilityAddTraits(.isHeader)
