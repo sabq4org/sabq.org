@@ -215,17 +215,20 @@
   .article-detail-byline { align-items: flex-start; }
 }
 
-/* Muqtarab Topic Detail — Scoped Editorial Reading Enhancements */
-.muqtarab-topic-detail .muqtarab-prose :is(p, li) {
+/* Muqtarab & Opinion Detail — Scoped Editorial Reading Enhancements */
+.muqtarab-topic-detail .muqtarab-prose :is(p, li),
+.opinion-detail .opinion-prose :is(p, li) {
   font-size: inherit;
   line-height: inherit;
 }
-.muqtarab-topic-detail .muqtarab-prose :is(h2, h3, h4) {
+.muqtarab-topic-detail .muqtarab-prose :is(h2, h3, h4),
+.opinion-detail .opinion-prose :is(h2, h3, h4) {
   scroll-margin-top: 96px;
   padding-inline-start: 12px;
   border-inline-start: 3px solid var(--angle, var(--article-brand));
 }
-.muqtarab-topic-detail .muqtarab-prose blockquote {
+.muqtarab-topic-detail .muqtarab-prose blockquote,
+.opinion-detail .opinion-prose blockquote {
   border-inline-start: 4px solid var(--angle, var(--article-brand));
   background: var(--angle-soft, var(--article-surface));
   border-radius: 0 12px 12px 0;
@@ -248,3 +251,4 @@
   font-weight: 600;
   line-height: 2.15;
 }
+

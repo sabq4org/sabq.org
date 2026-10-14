@@ -244,7 +244,9 @@
         "server/routes/reporterMediaLicense.ts",
         "server/routes/reportersAdmin.ts",
         "client/src/pages/AuthorArticlesPage.tsx",
+        "client/src/pages/OpinionPage.tsx",
         "client/src/pages/OpinionDetailPage.tsx",
+        "client/src/components/public/OpinionCard.tsx",
         "client/src/pages/ArticlesManagement.tsx",
         "client/src/pages/dashboard/OpinionWritersPage.tsx",
         "server/services/writerWeeklySlot.ts",
@@ -450,7 +452,7 @@
       "owners": [
         "editorial"
       ],
-      "lastReviewed": "2026-10-13"
+      "lastReviewed": "2026-10-14"
     },
     {
       "id": "ifox",

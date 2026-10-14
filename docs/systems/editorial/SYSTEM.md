@@ -1,6 +1,6 @@
 # نظام التحرير وغرف الأخبار (`editorial`)
 
-> آخر مراجعة: 2026-10-10 | المالك: editorial
+> آخر مراجعة: 2026-10-14 | المالك: editorial
 
 ## الغرض
 غرفة الأخبار اليومية + أدوات التحرير بالذكاء الاصطناعي التي يستخدمها المحررون: عناوين، مقالات، تصنيف، SEO، روابط ذكية، صور، وكلاء بريد/واتساب، ومساعد كاتب الرأي، والإعلانات الداخلية الموجهة لفريق العمل.
@@ -303,3 +303,10 @@
 - مفاتيح الاستهلاك الإضافية: `editor-summarize`, `editor-headlines`, `editor-credibility`, `editor-seo-analysis`, `editor-smart-content`, `editor-rewrite`, `editor-media-keywords`, `editor-auto-format`, `image-focal-point`, `editor-social-post`, `editor-fact-check`, `editorial-edit-fallback`, `editorial-email-analysis`, `editorial-content-improvement`, `editorial-image-alt-text`.
 - استدعاءات OpenAI في `openai.ts` و`ai-content-tools.ts` و`seo-generator.ts` و`ai/contentAnalyzer.ts` تسجل تحت الوظيفة الفعلية، دون تغيير نماذج أو نصوص أو عقود النتائج. دمج الطلبات المتزامنة opt-in للموجز وتحليل SEO وتوليد SEO فقط؛ إعادة الصياغة والعناوين والتوليد الإبداعي لا تُدمج.
 - واجهة «تحرير وتوليد شامل» تنتقل من SSE إلى JSON فقط عند 404/405 (عدم توفر endpoint). أخطاء 401/403/429/5xx، الرد غير المبثوث، والانقطاع بعد بدء المعالجة تُعرض كخطأ دون إطلاق توليد مدفوع ثانٍ تلقائياً. تبقى إعادة المحاولة اليدوية متاحة.
+
+## تطوير قسم مقالات الرأي وتجربة القارئ (`/opinion` و `/opinion/:slug`) — 2026-10-14
+
+- **صفحة قسم مقالات الرأي (`client/src/pages/OpinionPage.tsx`):** تحافظ على عقد التخطيط المختبر (`section-hero` مباشرة تحت `Header` عند غياب إعلان القمة، ومعرّف `opinion-views-${id}` فريد في الشبكة). تضيف بحثًا فوريًا (`search`)، وشريط «منبر الكتّاب» الأفقي (`opinion-writers-strip`) للفلترة بنقرة واحدة حسب الكاتب (`authorId`)، وتبويبات فرز (`latest`, `trending`, `views`, وقائمة «محفوظاتي» المحلية)، وفلاتر المجالات التحريرية، ومنصة «مقال العدد + ترند مقالات الأسبوع» في الصفحة الأولى، والتبديل بين «عرض البطاقات» و«قراءة الخلاصات» (`digest`) مع نافذة معاينة سريعة للأطروحة (`dialog-opinion-preview`).
+- **بطاقة مقال الرأي (`client/src/components/public/OpinionCard.tsx`):** تنظّف نبذة الكاتب (`cleanOpinionAuthorBio`) لعرض تخصص الكاتب الفعلي بدل تكرار «كاتب رأي»، وتربط صورة واسم الكاتب بصفحة ملفه (`/author/:name`)، وتعرض تصنيف المقال في التذييل مع إجراءات المعاينة والحفظ الاختيارية دون المساس بأبعاد `.public-opinion-card-home` و`.public-opinion-card-grid`.
+- **صفحة تفاصيل مقال الرأي (`client/src/pages/OpinionDetailPage.tsx`):** تضيف شريط تقدّم القراءة العلوي، ومسار تنقّل (`nav-opinion-breadcrumbs`)، وشريط أدوات القراءة (`opinion-reader-toolbar` لتكبير/تصغير الخط `small|medium|large|xlarge`، وخلفيات القراءة `أبيض|ورقي|هادئ`، والوقت المتبقي، وزر الحفظ و«وضع التركيز» أعلى المقال)، وشريط اقتباس عائم عند تظليل النص للنسخ والمشاركة، وبطاقة كاتب مطوّرة تعرض أحدث مقالات الكاتب الأخرى (`authorId`)، ووحدتَي «مقالات رأي ذات صلة» و«الأكثر قراءة في الرأي» في الشريط الجانبي.
+
