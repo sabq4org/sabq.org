@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -13,6 +13,13 @@ import {
   Loader2,
   Upload,
   GripVertical,
+  Eye,
+  EyeOff,
+  CheckCircle2,
+  X,
+  FileText,
+  Layers,
+  Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -52,6 +59,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { DashboardLayout } from "@/components/DashboardLayout";
@@ -85,14 +93,23 @@ const categoryFormSchema = insertCategorySchema.extend({
 });
 
 type CategoryFormValues = z.infer<typeof categoryFormSchema>;
+type CategoryStatusFilter = "all" | "visible" | "active" | "inactive" | "with_hero";
+
+function getCategoryArticleCount(category: Category): number | null {
+  const record = category as unknown as Record<string, unknown>;
+  const raw = record.articleCount ?? record.articlesCount ?? record.usageCount;
+  return typeof raw === "number" && Number.isFinite(raw) ? raw : null;
+}
 
 // Sortable category item component
 function SortableCategoryItem({
   category,
+  index,
   onEdit,
   onDelete,
 }: {
   category: Category;
+  index: number;
   onEdit: (category: Category) => void;
   onDelete: (category: Category) => void;
 }) {
@@ -108,68 +125,168 @@ function SortableCategoryItem({
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
-    opacity: isDragging ? 0.5 : 1,
+    opacity: isDragging ? 0.55 : 1,
   };
+
+  const articleCount = getCategoryArticleCount(category);
+  const accentColor =
+    category.color && category.color.trim() !== ""
+      ? category.color
+      : category.status === "visible"
+      ? "#10b981"
+      : category.status === "active"
+      ? "#0284c7"
+      : "#94a3b8";
+
+  const statusBadgeClass =
+    category.status === "visible"
+      ? "border-emerald-200/80 bg-emerald-50/90 text-emerald-700 dark:border-emerald-800/60 dark:bg-emerald-950/40 dark:text-emerald-300"
+      : category.status === "active"
+      ? "border-sky-200/80 bg-sky-50/90 text-sky-700 dark:border-sky-800/60 dark:bg-sky-950/40 dark:text-sky-300"
+      : "border-border bg-muted/70 text-muted-foreground";
 
   return (
     <div
       ref={setNodeRef}
-      style={style}
-      className="flex flex-col justify-between gap-3 border-b border-border/60 bg-card px-4 py-3 transition-colors last:border-b-0 hover:bg-muted/30 sm:flex-row sm:items-center"
+      style={{
+        ...style,
+        borderRightColor: accentColor,
+      }}
+      className={`group relative flex flex-col justify-between gap-3.5 border-b border-border/60 border-r-4 bg-card px-3.5 py-3.5 transition-all last:border-b-0 hover:bg-muted/30 sm:flex-row sm:items-center sm:px-5 sm:py-4 ${
+        isDragging ? "z-10 shadow-lg ring-2 ring-primary/20" : ""
+      }`}
       data-testid={`category-row-${category.id}`}
     >
-      <div className="flex items-center gap-3 flex-1 min-w-0">
+      <div className="flex items-start gap-3 flex-1 min-w-0 sm:items-center">
         <div
           {...attributes}
           {...listeners}
-          className="cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground transition-colors"
+          className="mt-1 sm:mt-0 flex h-8 w-8 shrink-0 cursor-grab items-center justify-center rounded-lg border border-transparent text-muted-foreground transition-colors hover:border-border/80 hover:bg-muted/60 hover:text-foreground active:cursor-grabbing"
+          title="اسحب لإعادة الترتيب"
           data-testid={`drag-handle-${category.id}`}
         >
-          <GripVertical className="h-5 w-5" />
+          <GripVertical className="h-4 w-4 sm:h-5 sm:w-5" />
         </div>
 
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-3 mb-2">
-            {category.icon && (
-              <span className="text-2xl" data-testid={`icon-${category.id}`}>
-                {category.icon}
+        <div
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-border/60 shadow-xs"
+          style={{
+            backgroundColor: category.color ? `${category.color}18` : undefined,
+            borderColor: category.color ? `${category.color}40` : undefined,
+          }}
+        >
+          {category.icon ? (
+            <span className="text-2xl leading-none" data-testid={`icon-${category.id}`}>
+              {category.icon}
+            </span>
+          ) : (
+            <FolderOpen
+              className="h-5 w-5 text-muted-foreground"
+              style={{ color: category.color || undefined }}
+            />
+          )}
+        </div>
+
+        <div className="flex-1 min-w-0 space-y-1.5">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h3
+              className="font-bold text-base sm:text-lg text-foreground leading-snug"
+              data-testid={`name-ar-${category.id}`}
+            >
+              {category.nameAr}
+            </h3>
+            {category.nameEn && (
+              <span
+                className="text-xs sm:text-sm text-muted-foreground font-medium"
+                dir="ltr"
+                data-testid={`name-en-${category.id}`}
+              >
+                {category.nameEn}
               </span>
             )}
-            <div className="flex-1 min-w-0">
-              <h3 className="font-semibold text-lg" data-testid={`name-ar-${category.id}`}>
-                {category.nameAr}
-              </h3>
-              {category.nameEn && (
-                <p className="text-sm text-muted-foreground" data-testid={`name-en-${category.id}`}>
-                  {category.nameEn}
-                </p>
-              )}
-            </div>
+            <span className="inline-flex items-center rounded-md bg-muted/60 px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground tabular-nums">
+              #{(category.displayOrder ?? index + 1).toLocaleString("en-US")}
+            </span>
           </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <Badge variant="outline" data-testid={`slug-${category.id}`}>
-              {category.slug}
-            </Badge>
+
+          {category.description && (
+            <p className="text-xs text-muted-foreground line-clamp-1 max-w-2xl">
+              {category.description}
+            </p>
+          )}
+
+          <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap pt-0.5">
             <Badge
               variant="outline"
-              className={category.status === "visible" || category.status === "active" ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300" : "bg-muted text-muted-foreground"}
+              className="font-mono text-xs bg-muted/35 px-2 py-0.5"
+              dir="ltr"
+              data-testid={`slug-${category.id}`}
+            >
+              {category.slug}
+            </Badge>
+
+            <Badge
+              variant="outline"
+              className={`gap-1.5 text-xs font-medium ${statusBadgeClass}`}
               data-testid={`status-${category.id}`}
             >
-              {category.status === "visible" ? "ظاهر للزوار" : category.status === "active" ? "نشط (غير ظاهر في /categories)" : "معطل"}
+              <span
+                className={`h-1.5 w-1.5 rounded-full ${
+                  category.status === "visible"
+                    ? "bg-emerald-500"
+                    : category.status === "active"
+                    ? "bg-sky-500"
+                    : "bg-muted-foreground/60"
+                }`}
+              />
+              {category.status === "visible"
+                ? "ظاهر للزوار"
+                : category.status === "active"
+                ? "نشط (غير ظاهر في /categories)"
+                : "معطل"}
             </Badge>
+
+            {articleCount !== null && (
+              <Badge variant="secondary" className="gap-1 text-xs font-normal tabular-nums">
+                <FileText className="h-3 w-3 text-muted-foreground" />
+                {articleCount.toLocaleString("en-US")} مقال
+              </Badge>
+            )}
+
+            {category.color && (
+              <Badge
+                variant="outline"
+                className="gap-1.5 text-xs font-mono bg-background"
+                dir="ltr"
+              >
+                <span
+                  className="h-2.5 w-2.5 rounded-full border border-black/10 shrink-0"
+                  style={{ backgroundColor: category.color }}
+                />
+                {category.color}
+              </Badge>
+            )}
+
             {category.heroImageUrl && (
-              <Badge variant="outline">
+              <Badge
+                variant="outline"
+                className="gap-1.5 border-violet-200/80 bg-violet-50/70 text-violet-700 dark:border-violet-800/60 dark:bg-violet-950/30 dark:text-violet-300 text-xs"
+              >
+                <ImagePlus className="h-3 w-3" />
                 صورة بطل
               </Badge>
             )}
           </div>
         </div>
       </div>
-      <div className="flex items-center gap-1 self-end sm:self-auto">
+
+      <div className="flex items-center justify-end gap-1.5 border-t border-border/40 pt-2.5 sm:border-t-0 sm:pt-0 sm:self-center shrink-0">
         <Button
           variant="ghost"
           size="icon"
+          className="h-8 w-8 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/70"
           onClick={() => onEdit(category)}
+          title="تعديل التصنيف"
           data-testid={`button-edit-${category.id}`}
         >
           <Edit className="h-4 w-4" />
@@ -177,7 +294,9 @@ function SortableCategoryItem({
         <Button
           variant="ghost"
           size="icon"
+          className="h-8 w-8 rounded-lg text-destructive/80 hover:text-destructive hover:bg-destructive/10"
           onClick={() => onDelete(category)}
+          title="حذف التصنيف"
           data-testid={`button-delete-${category.id}`}
         >
           <Trash2 className="h-4 w-4 text-destructive" />
@@ -195,6 +314,7 @@ export default function CategoriesManagement() {
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
   const [deletingCategory, setDeletingCategory] = useState<Category | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<CategoryStatusFilter>("all");
   const [isUploadingHeroImage, setIsUploadingHeroImage] = useState(false);
 
   // Local state for sorting
@@ -224,11 +344,22 @@ export default function CategoriesManagement() {
 
   // Update local categories when data changes
   useEffect(() => {
-    if (categories.length > 0) {
-      const sorted = [...categories].sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0));
+    if (Array.isArray(categoriesRaw)) {
+      const sorted = [...categoriesRaw].sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0));
       setLocalCategories(sorted);
     }
-  }, [categories]);
+  }, [categoriesRaw]);
+
+  // KPI metrics
+  const stats = useMemo(() => {
+    const total = localCategories.length;
+    const visible = localCategories.filter((c) => c.status === "visible").length;
+    const activeInternal = localCategories.filter((c) => c.status === "active").length;
+    const inactive = localCategories.filter((c) => c.status === "inactive").length;
+    const withHero = localCategories.filter((c) => Boolean(c.heroImageUrl)).length;
+    const withVisuals = localCategories.filter((c) => Boolean(c.icon || c.color)).length;
+    return { total, visible, activeInternal, inactive, withHero, withVisuals };
+  }, [localCategories]);
 
   // Reorder mutation
   const reorderMutation = useMutation({
@@ -381,7 +512,7 @@ export default function CategoriesManagement() {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    if (!file.type.startsWith('image/')) {
+    if (!file.type.startsWith("image/")) {
       toast({
         title: "خطأ",
         description: "الرجاء اختيار ملف صورة فقط",
@@ -437,13 +568,33 @@ export default function CategoriesManagement() {
   };
 
   // Filter categories
-  const filteredCategories = localCategories.filter((cat) =>
-    searchQuery
-      ? cat.nameAr.includes(searchQuery) ||
-        cat.nameEn?.includes(searchQuery) ||
-        cat.slug.includes(searchQuery)
-      : true
-  );
+  const filteredCategories = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    return localCategories.filter((cat) => {
+      const matchesSearch = query
+        ? cat.nameAr.toLowerCase().includes(query) ||
+          (cat.nameEn && cat.nameEn.toLowerCase().includes(query)) ||
+          cat.slug.toLowerCase().includes(query)
+        : true;
+
+      const matchesFilter =
+        statusFilter === "all"
+          ? true
+          : statusFilter === "with_hero"
+          ? Boolean(cat.heroImageUrl)
+          : cat.status === statusFilter;
+
+      return matchesSearch && matchesFilter;
+    });
+  }, [localCategories, searchQuery, statusFilter]);
+
+  const filterPills: Array<{ id: CategoryStatusFilter; label: string; count: number }> = [
+    { id: "all", label: "الكل", count: stats.total },
+    { id: "visible", label: "ظاهر للزوار", count: stats.visible },
+    { id: "active", label: "نشط داخلياً", count: stats.activeInternal },
+    { id: "inactive", label: "معطل", count: stats.inactive },
+    { id: "with_hero", label: "بصورة بطل", count: stats.withHero },
+  ];
 
   return (
     <DashboardLayout>
@@ -451,52 +602,189 @@ export default function CategoriesManagement() {
         <DashboardPageHeader
           icon={FolderOpen}
           title="إدارة التصنيفات"
-          description="تنظيم أقسام الصحيفة وترتيب ظهورها للزوار"
+          description="تنظيم أقسام الصحيفة التحريرية وضبط ظهورها وهويتها البصرية وترتيبها للزوار"
           titleTestId="heading-categories"
-          actions={(
+          actions={
             <Button
-            onClick={() => {
-              setIsCreateDialogOpen(true);
-              form.reset();
-            }}
-            className="w-full gap-2 sm:w-auto"
-            data-testid="button-add-category"
-          >
-            <PlusCircle className="h-4 w-4" />
-            تصنيف جديد
+              onClick={() => {
+                setIsCreateDialogOpen(true);
+                form.reset();
+              }}
+              className="w-full gap-2 sm:w-auto shadow-xs"
+              data-testid="button-add-category"
+            >
+              <PlusCircle className="h-4 w-4" />
+              تصنيف جديد
             </Button>
-          )}
+          }
         />
 
+        {/* Top KPI Summary Strip */}
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 sm:gap-4">
+          <Card className="rounded-2xl border-border/70 bg-card shadow-xs">
+            <CardContent className="p-3.5 sm:p-4 flex items-start justify-between gap-3">
+              <div className="space-y-1 min-w-0">
+                <p className="text-xs font-medium text-muted-foreground">إجمالي التصنيفات</p>
+                <p className="text-2xl font-bold tracking-tight tabular-nums">
+                  {stats.total.toLocaleString("en-US")}
+                </p>
+                <p className="text-[11px] text-muted-foreground truncate">
+                  {stats.withVisuals.toLocaleString("en-US")} بهوية بصرية (أيقونة/لون)
+                </p>
+              </div>
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-sky-500/10 text-sky-600 dark:text-sky-400">
+                <Layers className="h-5 w-5" />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="rounded-2xl border-emerald-200/60 bg-gradient-to-br from-emerald-50/40 via-card to-card shadow-xs dark:border-emerald-900/40 dark:from-emerald-950/20">
+            <CardContent className="p-3.5 sm:p-4 flex items-start justify-between gap-3">
+              <div className="space-y-1 min-w-0">
+                <p className="text-xs font-medium text-muted-foreground">ظاهر للزوار</p>
+                <p className="text-2xl font-bold tracking-tight text-emerald-700 dark:text-emerald-300 tabular-nums">
+                  {stats.visible.toLocaleString("en-US")}
+                </p>
+                <p className="text-[11px] text-muted-foreground truncate">
+                  معروض في الرئيسية وصفحة الأقسام
+                </p>
+              </div>
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                <Eye className="h-5 w-5" />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="rounded-2xl border-border/70 bg-card shadow-xs">
+            <CardContent className="p-3.5 sm:p-4 flex items-start justify-between gap-3">
+              <div className="space-y-1 min-w-0">
+                <p className="text-xs font-medium text-muted-foreground">نشط داخلياً</p>
+                <p className="text-2xl font-bold tracking-tight text-sky-700 dark:text-sky-300 tabular-nums">
+                  {stats.activeInternal.toLocaleString("en-US")}
+                </p>
+                <p className="text-[11px] text-muted-foreground truncate">
+                  متاح للتصنيف دون الظهور في /categories
+                </p>
+              </div>
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-sky-500/10 text-sky-600 dark:text-sky-400">
+                <CheckCircle2 className="h-5 w-5" />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="rounded-2xl border-border/70 bg-card shadow-xs">
+            <CardContent className="p-3.5 sm:p-4 flex items-start justify-between gap-3">
+              <div className="space-y-1 min-w-0">
+                <p className="text-xs font-medium text-muted-foreground">معطل / صور الغلاف</p>
+                <div className="flex items-baseline gap-2">
+                  <p className="text-2xl font-bold tracking-tight tabular-nums">
+                    {stats.inactive.toLocaleString("en-US")}
+                  </p>
+                  <span className="text-xs text-muted-foreground">معطل</span>
+                </div>
+                <p className="text-[11px] text-muted-foreground truncate">
+                  {stats.withHero.toLocaleString("en-US")} تصنيف بصورة بطل (Hero)
+                </p>
+              </div>
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-500/10 text-violet-600 dark:text-violet-400">
+                <Sparkles className="h-5 w-5" />
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Search & Quick Filter Pills */}
         <Card className="rounded-2xl border-sky-200/55 bg-gradient-to-br from-sky-50/40 via-card to-card shadow-sm dark:border-sky-900/35 dark:from-sky-950/15">
-          <CardContent className="p-3 sm:p-4">
-            <div className="relative w-full sm:max-w-sm">
-              <Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                placeholder="ابحث باسم التصنيف أو المعرّف..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pr-10"
-                data-testid="input-search-categories"
-              />
+          <CardContent className="p-3.5 sm:p-4">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div className="relative w-full lg:max-w-sm">
+                <Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+                <Input
+                  placeholder="ابحث باسم التصنيف أو المعرّف..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pr-9 pl-8 bg-background/80"
+                  data-testid="input-search-categories"
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery("")}
+                    className="no-min-touch-size absolute left-2.5 top-1/2 -translate-y-1/2 rounded-full p-1 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                    aria-label="مسح البحث"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
+
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 lg:pb-0 no-scrollbar">
+                {filterPills.map((pill) => {
+                  const isActive = statusFilter === pill.id;
+                  return (
+                    <button
+                      key={pill.id}
+                      type="button"
+                      onClick={() => setStatusFilter(pill.id)}
+                      className={`no-min-touch-size inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-medium transition-all ${
+                        isActive
+                          ? "bg-primary text-primary-foreground shadow-xs"
+                          : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground"
+                      }`}
+                    >
+                      <span>{pill.label}</span>
+                      <span
+                        className={`rounded-full px-1.5 py-0.5 text-[10px] tabular-nums ${
+                          isActive
+                            ? "bg-primary-foreground/20 text-primary-foreground"
+                            : "bg-background/80 text-muted-foreground"
+                        }`}
+                      >
+                        {pill.count.toLocaleString("en-US")}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="rounded-2xl border-sky-200/55 bg-gradient-to-br from-sky-50/40 via-card to-card shadow-sm dark:border-sky-900/35 dark:from-sky-950/15">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 border-b border-sky-200/40 pb-4 dark:border-sky-900/30">
+        {/* Categories List Card */}
+        <Card className="rounded-2xl border-sky-200/55 bg-gradient-to-br from-sky-50/40 via-card to-card shadow-sm dark:border-sky-900/35 dark:from-sky-950/15 overflow-hidden">
+          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 border-b border-sky-200/40 px-4 py-3.5 sm:px-5 sm:py-4 dark:border-sky-900/30">
             <div>
-              <CardTitle className="text-base">ترتيب التصنيفات</CardTitle>
-              <p className="mt-1 text-xs text-muted-foreground">اسحب أي تصنيف لتغيير ترتيبه في الصحيفة.</p>
+              <CardTitle className="text-base font-bold">ترتيب التصنيفات</CardTitle>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                اسحب أي تصنيف من مقبض الترتيب لتغيير أولوية ظهوره في الصحيفة.
+              </p>
             </div>
-            <Badge variant="secondary" className="font-normal tabular-nums">
-              {filteredCategories.length.toLocaleString("en-US")} تصنيف
-            </Badge>
+            <div className="flex items-center gap-2 shrink-0">
+              {reorderMutation.isPending && (
+                <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  جاري حفظ الترتيب...
+                </span>
+              )}
+              <Badge variant="secondary" className="font-medium tabular-nums">
+                {filteredCategories.length.toLocaleString("en-US")} تصنيف
+              </Badge>
+            </div>
           </CardHeader>
           <CardContent className="p-0">
             {isLoading ? (
-              <div className="text-center py-12 text-muted-foreground">
-                جاري التحميل...
+              <div className="divide-y divide-border/60">
+                {[1, 2, 3, 4].map((i) => (
+                  <div key={i} className="flex items-center gap-3.5 px-4 py-4">
+                    <Skeleton className="h-8 w-8 rounded-lg" />
+                    <Skeleton className="h-11 w-11 rounded-xl" />
+                    <div className="flex-1 space-y-2">
+                      <Skeleton className="h-4 w-40" />
+                      <Skeleton className="h-3 w-64" />
+                    </div>
+                    <Skeleton className="h-8 w-16 rounded-lg" />
+                  </div>
+                ))}
               </div>
             ) : filteredCategories.length > 0 ? (
               <DndContext
@@ -509,10 +797,11 @@ export default function CategoriesManagement() {
                   strategy={verticalListSortingStrategy}
                 >
                   <div>
-                    {filteredCategories.map((category) => (
+                    {filteredCategories.map((category, idx) => (
                       <SortableCategoryItem
                         key={category.id}
                         category={category}
+                        index={idx}
                         onEdit={handleEdit}
                         onDelete={setDeletingCategory}
                       />
@@ -521,8 +810,34 @@ export default function CategoriesManagement() {
                 </SortableContext>
               </DndContext>
             ) : (
-              <div className="text-center py-12 text-muted-foreground">
-                {searchQuery ? "لا توجد نتائج" : "لا توجد تصنيفات"}
+              <div className="flex flex-col items-center justify-center py-14 px-4 text-center">
+                <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-muted text-muted-foreground">
+                  {statusFilter === "inactive" ? (
+                    <EyeOff className="h-6 w-6" />
+                  ) : (
+                    <FolderOpen className="h-6 w-6" />
+                  )}
+                </div>
+                <p className="text-sm font-medium text-foreground">
+                  {searchQuery || statusFilter !== "all" ? "لا توجد نتائج" : "لا توجد تصنيفات"}
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground max-w-sm">
+                  {searchQuery || statusFilter !== "all"
+                    ? "جرّب تعديل عبارة البحث أو تغيير فلتر الحالة لعرض التصنيفات الأخرى."
+                    : "ابدأ بإضافة أول تصنيف لتنظيم أقسام الصحيفة."}
+                </p>
+                {(searchQuery || statusFilter !== "all") && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearchQuery("");
+                      setStatusFilter("all");
+                    }}
+                    className="no-min-touch-size mt-3 inline-flex items-center gap-1.5 rounded-full bg-muted px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted/80 transition-colors"
+                  >
+                    إعادة ضبط الفلاتر
+                  </button>
+                )}
               </div>
             )}
           </CardContent>
@@ -530,13 +845,16 @@ export default function CategoriesManagement() {
       </DashboardPageShell>
 
       {/* Create/Edit Dialog */}
-      <Dialog open={isCreateDialogOpen || !!editingCategory} onOpenChange={(open) => {
-        if (!open) {
-          setIsCreateDialogOpen(false);
-          setEditingCategory(null);
-          form.reset();
-        }
-      }}>
+      <Dialog
+        open={isCreateDialogOpen || !!editingCategory}
+        onOpenChange={(open) => {
+          if (!open) {
+            setIsCreateDialogOpen(false);
+            setEditingCategory(null);
+            form.reset();
+          }
+        }}
+      >
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" dir="rtl">
           <DialogHeader>
             <DialogTitle>
@@ -571,7 +889,7 @@ export default function CategoriesManagement() {
                     <FormItem>
                       <FormLabel>الاسم بالإنجليزية</FormLabel>
                       <FormControl>
-                        <Input {...field} data-testid="input-name-en" />
+                        <Input {...field} value={field.value || ""} dir="ltr" data-testid="input-name-en" />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -586,7 +904,7 @@ export default function CategoriesManagement() {
                   <FormItem>
                     <FormLabel>المعرف (Slug) *</FormLabel>
                     <FormControl>
-                      <Input {...field} placeholder="technology" data-testid="input-slug" />
+                      <Input {...field} placeholder="technology" dir="ltr" data-testid="input-slug" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -628,9 +946,21 @@ export default function CategoriesManagement() {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>اللون</FormLabel>
-                      <FormControl>
-                        <Input {...field} value={field.value || ""} placeholder="#3b82f6" data-testid="input-color" />
-                      </FormControl>
+                      <div className="flex items-center gap-2">
+                        <span
+                          className="h-9 w-9 shrink-0 rounded-md border border-border shadow-2xs"
+                          style={{ backgroundColor: field.value || "#3b82f6" }}
+                        />
+                        <FormControl>
+                          <Input
+                            {...field}
+                            value={field.value || ""}
+                            placeholder="#3b82f6"
+                            dir="ltr"
+                            data-testid="input-color"
+                          />
+                        </FormControl>
+                      </div>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -643,8 +973,8 @@ export default function CategoriesManagement() {
                     <FormItem>
                       <FormLabel>الترتيب</FormLabel>
                       <FormControl>
-                        <Input 
-                          type="number" 
+                        <Input
+                          type="number"
                           {...field}
                           value={field.value ?? 0}
                           onChange={(e) => field.onChange(parseInt(e.target.value) || 0)}
@@ -698,7 +1028,13 @@ export default function CategoriesManagement() {
                       )}
                       <div className="flex gap-2">
                         <FormControl>
-                          <Input {...field} value={field.value || ""} placeholder="https://..." data-testid="input-hero-url" />
+                          <Input
+                            {...field}
+                            value={field.value || ""}
+                            placeholder="https://..."
+                            dir="ltr"
+                            data-testid="input-hero-url"
+                          />
                         </FormControl>
                         <Button
                           type="button"
@@ -727,7 +1063,7 @@ export default function CategoriesManagement() {
                 )}
               />
 
-              <DialogFooter>
+              <DialogFooter className="gap-2">
                 <Button
                   type="button"
                   variant="outline"
@@ -757,17 +1093,20 @@ export default function CategoriesManagement() {
       </Dialog>
 
       {/* Delete Confirmation Dialog */}
-      <AlertDialog open={!!deletingCategory} onOpenChange={(open) => {
-        if (!open) setDeletingCategory(null);
-      }}>
-        <AlertDialogContent>
+      <AlertDialog
+        open={!!deletingCategory}
+        onOpenChange={(open) => {
+          if (!open) setDeletingCategory(null);
+        }}
+      >
+        <AlertDialogContent dir="rtl">
           <AlertDialogHeader>
             <AlertDialogTitle>هل أنت متأكد؟</AlertDialogTitle>
             <AlertDialogDescription>
-              سيتم حذف التصنيف "{deletingCategory?.nameAr}" نهائياً. هذا الإجراء لا يمكن التراجع عنه.
+              سيتم حذف التصنيف &quot;{deletingCategory?.nameAr}&quot; نهائياً. هذا الإجراء لا يمكن التراجع عنه.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter>
+          <AlertDialogFooter className="gap-2">
             <AlertDialogCancel data-testid="button-cancel-delete">إلغاء</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => deletingCategory && deleteMutation.mutate(deletingCategory.id)}
