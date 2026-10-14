@@ -335,13 +335,13 @@ export default function OpinionPage() {
       <main className="flex-1">
         {/* Hero Section — رأس القسم */}
         <section
-          className="public-page-header relative overflow-hidden pt-8 pb-7 px-4"
+          className="public-page-header relative overflow-hidden pt-5 pb-5 sm:pt-8 sm:pb-7 px-3.5 sm:px-4"
           data-testid="section-hero"
         >
           <div className="container max-w-7xl mx-auto relative">
-            <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-6">
-              <div className="text-center lg:text-right max-w-2xl mx-auto lg:mx-0">
-                <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-primary/10 text-primary text-xs sm:text-sm font-semibold mb-4">
+            <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4 sm:gap-6">
+              <div className="text-right max-w-2xl lg:mx-0">
+                <div className="inline-flex items-center gap-1.5 sm:gap-2 px-3 py-1 sm:px-3.5 sm:py-1.5 rounded-full bg-primary/10 text-primary text-xs sm:text-sm font-semibold mb-2.5 sm:mb-4">
                   <PenTool className="w-3.5 h-3.5" />
                   <span>منبر الرأي والتحليل</span>
                   {data?.pagination?.total ? (
@@ -354,12 +354,12 @@ export default function OpinionPage() {
                   ) : null}
                 </div>
 
-                <h1 className="public-page-title mb-2" data-testid="text-page-title">
+                <h1 className="public-page-title mb-1.5 sm:mb-2" data-testid="text-page-title">
                   مقالات الرأي
                 </h1>
 
                 <p
-                  className="text-sm sm:text-base md:text-lg text-muted-foreground leading-relaxed"
+                  className="text-xs sm:text-base md:text-lg text-muted-foreground leading-relaxed"
                   data-testid="text-page-tagline"
                 >
                   آراء وتحليلات معمّقة من كتّابنا المتميزين حول قضايا المجتمع، الاقتصاد، التقنية، والحياة
@@ -367,15 +367,15 @@ export default function OpinionPage() {
               </div>
 
               {/* Search Box & View Mode Switcher */}
-              <div className="w-full lg:w-auto flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 max-w-xl mx-auto lg:mx-0">
-                <div className="relative flex-1 sm:w-72 md:w-80">
-                  <Search className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <div className="w-full lg:w-auto flex flex-row items-center gap-2 max-w-xl lg:mx-0">
+                <div className="relative flex-1 min-w-0 sm:w-72 md:w-80">
+                  <Search className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
                     type="search"
                     value={searchInput}
                     onChange={(e) => setSearchInput(e.target.value)}
                     placeholder="ابحث بعنوان المقال أو الفكرة..."
-                    className="h-10 rounded-xl bg-background pr-10 pl-9 text-sm border-border/80"
+                    className="h-9 sm:h-10 rounded-xl bg-background pr-9 pl-8 text-xs sm:text-sm border-border/80"
                     data-testid="input-opinion-search"
                   />
                   {searchInput && (
@@ -385,23 +385,23 @@ export default function OpinionPage() {
                         setSearchInput("");
                         setDebouncedSearch("");
                       }}
-                      className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                      className="no-min-touch-size absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                       aria-label="مسح البحث"
                     >
-                      <X className="h-4 w-4" />
+                      <X className="h-3.5 w-3.5" />
                     </button>
                   )}
                 </div>
 
                 <div
-                  className="inline-flex items-center self-center sm:self-auto rounded-xl border border-border/80 bg-background p-1 text-xs"
+                  className="inline-flex items-center shrink-0 rounded-xl border border-border/80 bg-background p-0.5 sm:p-1 text-[11px] sm:text-xs"
                   role="group"
                   aria-label="طريقة عرض المقالات"
                 >
                   <button
                     type="button"
                     onClick={() => setViewMode("grid")}
-                    className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 font-semibold transition-colors ${
+                    className={`no-min-touch-size inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 font-semibold transition-colors ${
                       viewMode === "grid"
                         ? "bg-primary text-primary-foreground shadow-sm"
                         : "text-muted-foreground hover:text-foreground"
@@ -415,7 +415,7 @@ export default function OpinionPage() {
                   <button
                     type="button"
                     onClick={() => setViewMode("digest")}
-                    className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 font-semibold transition-colors ${
+                    className={`no-min-touch-size inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 font-semibold transition-colors ${
                       viewMode === "digest"
                         ? "bg-primary text-primary-foreground shadow-sm"
                         : "text-muted-foreground hover:text-foreground"
@@ -424,7 +424,7 @@ export default function OpinionPage() {
                     title="عرض القراءة المعمّقة مع خلاصة كل مقال كاملة"
                   >
                     <Rows3 className="h-3.5 w-3.5" />
-                    <span>قراءة الخلاصات</span>
+                    <span>الخلاصات</span>
                   </button>
                 </div>
               </div>
@@ -432,11 +432,11 @@ export default function OpinionPage() {
 
             {/* Columnists Ribbon — منبر الكتّاب */}
             {columnists.length > 1 && (
-              <div className="mt-6 pt-5 border-t border-border/60" data-testid="opinion-writers-strip">
-                <div className="flex items-center justify-between gap-2 mb-3">
-                  <span className="text-xs font-bold text-muted-foreground flex items-center gap-1.5">
+              <div className="mt-4 pt-3.5 sm:mt-6 sm:pt-5 border-t border-border/60" data-testid="opinion-writers-strip">
+                <div className="flex items-center justify-between gap-2 mb-2.5">
+                  <span className="text-[11px] sm:text-xs font-bold text-muted-foreground flex items-center gap-1.5">
                     <User className="h-3.5 w-3.5 text-primary" />
-                    كتّاب الرأي في هذا العدد (اضغط للتصفية حسب الكاتب):
+                    كتّاب الرأي (اضغط للتصفية حسب الكاتب):
                   </span>
                   {selectedAuthorId && (
                     <button
@@ -445,15 +445,15 @@ export default function OpinionPage() {
                         setSelectedAuthorId(null);
                         setCurrentPage(1);
                       }}
-                      className="text-xs font-semibold text-primary hover:underline flex items-center gap-1"
+                      className="no-min-touch-size text-xs font-semibold text-primary hover:underline flex items-center gap-1"
                       data-testid="button-clear-author-filter"
                     >
                       <X className="h-3 w-3" />
-                      عرض جميع الكتّاب
+                      عرض الجميع
                     </button>
                   )}
                 </div>
-                <div className="flex items-center gap-2.5 overflow-x-auto pb-1.5 no-scrollbar">
+                <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
                   {columnists.map((writer) => {
                     const isSelected = selectedAuthorId === writer.id;
                     return (
@@ -464,14 +464,14 @@ export default function OpinionPage() {
                           setSelectedAuthorId(isSelected ? null : writer.id);
                           setCurrentPage(1);
                         }}
-                        className={`group flex items-center gap-2.5 shrink-0 rounded-full border pl-3.5 pr-1.5 py-1.5 text-right transition-all ${
+                        className={`no-min-touch-size group flex items-center gap-2 shrink-0 rounded-full border pl-3 pr-1.5 py-1 text-right transition-all ${
                           isSelected
                             ? "border-primary bg-primary text-primary-foreground shadow-sm"
                             : "border-border/80 bg-background hover:border-primary/50 hover:bg-background/90"
                         }`}
                         data-testid={`button-filter-writer-${writer.id}`}
                       >
-                        <Avatar className="h-8 w-8 shrink-0 border border-border/50">
+                        <Avatar className="h-7 w-7 sm:h-8 sm:w-8 shrink-0 border border-border/50">
                           <AvatarImage
                             src={writer.avatar || undefined}
                             alt={writer.name}
@@ -482,7 +482,7 @@ export default function OpinionPage() {
                             {writer.name.slice(0, 2)}
                           </AvatarFallback>
                         </Avatar>
-                        <div className="min-w-0 max-w-[150px]">
+                        <div className="min-w-0 max-w-[135px] sm:max-w-[150px]">
                           <p
                             className={`text-xs font-bold truncate ${
                               isSelected ? "text-primary-foreground" : "text-foreground"
@@ -491,7 +491,7 @@ export default function OpinionPage() {
                             {writer.name}
                           </p>
                           <p
-                            className={`text-[11px] truncate ${
+                            className={`text-[10px] sm:text-[11px] truncate ${
                               isSelected ? "text-primary-foreground/80" : "text-muted-foreground"
                             }`}
                           >
@@ -508,26 +508,26 @@ export default function OpinionPage() {
         </section>
 
         <section className="border-y border-[#e3ebf2] bg-[#f4f8fb] dark:border-border dark:bg-[#171e29]">
-          <div className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="container max-w-7xl mx-auto px-3.5 sm:px-6 lg:px-8 py-5 sm:py-8">
             {/* Editorial Lead Spotlight + Trending Rail on Page 1 */}
             {showEditorialSpotlight && leadArticle && (
               <div
-                className="mb-10 grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch"
+                className="mb-7 sm:mb-10 grid grid-cols-1 lg:grid-cols-12 gap-5 sm:gap-6 items-stretch"
                 data-testid="opinion-editorial-stage"
               >
                 {/* Lead Opinion Piece */}
                 <article
-                  className="lg:col-span-7 xl:col-span-8 relative flex flex-col justify-between rounded-3xl border border-[#d6e4ef] dark:border-border bg-card p-6 sm:p-8 shadow-sm overflow-hidden"
+                  className="lg:col-span-7 xl:col-span-8 relative flex flex-col justify-between rounded-2xl sm:rounded-3xl border border-[#d6e4ef] dark:border-border bg-card p-4 sm:p-8 shadow-sm overflow-hidden"
                   data-testid="opinion-lead-spotlight"
                 >
                   <Quote
-                    className="pointer-events-none absolute left-6 top-6 h-20 w-20 text-primary/10"
+                    className="pointer-events-none absolute left-4 top-4 sm:left-6 sm:top-6 h-14 w-14 sm:h-20 sm:w-20 text-primary/10"
                     aria-hidden="true"
                   />
 
-                  <div className="relative z-10 space-y-4">
+                  <div className="relative z-10 space-y-3 sm:space-y-4">
                     <div className="flex flex-wrap items-center gap-2">
-                      <Badge className="bg-primary text-primary-foreground gap-1.5 px-3 py-1 text-xs font-bold">
+                      <Badge className="bg-primary text-primary-foreground gap-1.5 px-2.5 py-0.5 sm:px-3 sm:py-1 text-xs font-bold">
                         <Sparkles className="h-3.5 w-3.5" />
                         مقال العدد
                       </Badge>
@@ -544,44 +544,44 @@ export default function OpinionPage() {
                       )}
                     </div>
 
-                    <h2 className="text-2xl sm:text-3xl font-extrabold leading-snug text-foreground hover:text-primary transition-colors">
+                    <h2 className="text-xl sm:text-3xl font-extrabold leading-snug text-foreground hover:text-primary transition-colors">
                       <Link href={`/opinion/${leadArticle.slug}`}>{leadArticle.title}</Link>
                     </h2>
 
                     {(leadArticle.excerpt || leadArticle.aiSummary) && (
-                      <div className="rounded-2xl border-r-4 border-primary bg-muted/40 p-4 sm:p-5">
-                        <p className="text-xs font-bold text-primary mb-1.5 flex items-center gap-1.5">
+                      <div className="rounded-xl sm:rounded-2xl border-r-4 border-primary bg-muted/40 p-3.5 sm:p-5">
+                        <p className="text-xs font-bold text-primary mb-1 flex items-center gap-1.5">
                           <Sparkles className="h-3.5 w-3.5" />
                           خلاصة الفكرة
                         </p>
-                        <p className="text-sm sm:text-base text-foreground/90 leading-relaxed">
+                        <p className="text-xs sm:text-base text-foreground/90 leading-relaxed line-clamp-3 sm:line-clamp-none">
                           {leadArticle.excerpt || leadArticle.aiSummary}
                         </p>
                       </div>
                     )}
                   </div>
 
-                  <div className="relative z-10 mt-6 pt-5 border-t border-border/70 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <div className="flex items-center gap-3.5 min-w-0">
+                  <div className="relative z-10 mt-4 pt-4 sm:mt-6 sm:pt-5 border-t border-border/70 flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
                       <Link
                         href={`/author/${encodeURIComponent(getOpinionAuthorName(leadArticle))}`}
-                        className="shrink-0"
+                        className="no-min-touch-size shrink-0"
                       >
-                        <Avatar className="h-14 w-14 border-2 border-primary/20 shadow-sm">
+                        <Avatar className="h-11 w-11 sm:h-14 sm:w-14 border-2 border-primary/20 shadow-sm">
                           <AvatarImage
                             src={leadArticle.author?.profileImageUrl || undefined}
                             alt={getOpinionAuthorName(leadArticle)}
                             className="object-cover"
                           />
                           <AvatarFallback>
-                            <User className="h-6 w-6" />
+                            <User className="h-5 w-5 sm:h-6 sm:w-6" />
                           </AvatarFallback>
                         </Avatar>
                       </Link>
                       <div className="min-w-0">
                         <Link
                           href={`/author/${encodeURIComponent(getOpinionAuthorName(leadArticle))}`}
-                          className="font-bold text-base text-foreground hover:text-primary transition-colors block truncate"
+                          className="no-min-touch-size font-bold text-sm sm:text-base text-foreground hover:text-primary transition-colors block truncate"
                         >
                           {getOpinionAuthorName(leadArticle)}
                         </Link>
@@ -591,9 +591,9 @@ export default function OpinionPage() {
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2 shrink-0">
+                    <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
                       <span
-                        className="text-xs text-muted-foreground inline-flex items-center gap-1 tabular-nums px-2"
+                        className="text-xs text-muted-foreground inline-flex items-center gap-1 tabular-nums px-1.5"
                         data-testid={`opinion-spotlight-views-${leadArticle.id}`}
                       >
                         <Eye className="h-3.5 w-3.5" />
@@ -603,19 +603,19 @@ export default function OpinionPage() {
                         variant="outline"
                         size="sm"
                         onClick={() => handleToggleSave(leadArticle)}
-                        className="gap-1.5 rounded-xl"
+                        className="no-min-touch-size h-8 px-2.5 text-xs gap-1.5 rounded-xl"
                       >
                         <Bookmark
-                          className={`h-4 w-4 ${
+                          className={`h-3.5 w-3.5 ${
                             savedIds.has(leadArticle.id) ? "fill-current text-primary" : ""
                           }`}
                         />
                         <span>{savedIds.has(leadArticle.id) ? "محفوظ" : "حفظ"}</span>
                       </Button>
-                      <Button asChild size="sm" className="gap-1.5 rounded-xl">
+                      <Button asChild size="sm" className="no-min-touch-size h-8 px-3 text-xs gap-1.5 rounded-xl">
                         <Link href={`/opinion/${leadArticle.slug}`}>
                           <span>اقرأ المقال</span>
-                          <ArrowLeft className="h-4 w-4" />
+                          <ArrowLeft className="h-3.5 w-3.5" />
                         </Link>
                       </Button>
                     </div>
@@ -625,14 +625,14 @@ export default function OpinionPage() {
                 {/* Trending Opinion Rail */}
                 {trendingRailArticles.length > 0 && (
                   <aside
-                    className="lg:col-span-5 xl:col-span-4 rounded-3xl border border-[#d6e4ef] dark:border-border bg-card p-5 sm:p-6 flex flex-col justify-between"
+                    className="lg:col-span-5 xl:col-span-4 rounded-2xl sm:rounded-3xl border border-[#d6e4ef] dark:border-border bg-card p-4 sm:p-6 flex flex-col justify-between"
                     aria-label="ترند المقالات هذا الأسبوع"
                     data-testid="opinion-trending-rail"
                   >
                     <div>
-                      <div className="flex items-center justify-between gap-2 pb-4 mb-4 border-b border-border/70">
-                        <h2 className="text-base sm:text-lg font-extrabold flex items-center gap-2 text-foreground">
-                          <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-amber-500/15 text-amber-600 dark:text-amber-400">
+                      <div className="flex items-center justify-between gap-2 pb-3 mb-3 sm:pb-4 sm:mb-4 border-b border-border/70">
+                        <h2 className="text-sm sm:text-lg font-extrabold flex items-center gap-2 text-foreground">
+                          <span className="flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-xl bg-amber-500/15 text-amber-600 dark:text-amber-400">
                             <Flame className="h-4 w-4" />
                           </span>
                           ترند مقالات الأسبوع
@@ -643,7 +643,7 @@ export default function OpinionPage() {
                             setSortMode("trending");
                             setCurrentPage(1);
                           }}
-                          className="text-xs font-semibold text-primary hover:underline"
+                          className="no-min-touch-size text-xs font-semibold text-primary hover:underline"
                         >
                           عرض الكل
                         </button>
@@ -655,15 +655,15 @@ export default function OpinionPage() {
                           return (
                             <div
                               key={item.id}
-                              className="py-3.5 first:pt-0 last:pb-0 flex items-start gap-3 group"
+                              className="py-3 first:pt-0 last:pb-0 flex items-start gap-2.5 sm:gap-3 group"
                             >
-                              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-muted text-xs font-extrabold tabular-nums text-muted-foreground group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
+                              <span className="flex h-6 w-6 sm:h-7 sm:w-7 shrink-0 items-center justify-center rounded-lg bg-muted text-xs font-extrabold tabular-nums text-muted-foreground group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
                                 {idx + 1}
                               </span>
                               <div className="min-w-0 flex-1 space-y-1">
                                 <Link
                                   href={`/opinion/${item.slug}`}
-                                  className="font-bold text-sm leading-snug text-foreground group-hover:text-primary transition-colors line-clamp-2 block"
+                                  className="no-min-touch-size font-bold text-xs sm:text-sm leading-snug text-foreground group-hover:text-primary transition-colors line-clamp-2 block"
                                 >
                                   {item.title}
                                 </Link>
@@ -681,7 +681,7 @@ export default function OpinionPage() {
                       </div>
                     </div>
 
-                    <div className="mt-4 pt-3 border-t border-border/60 flex items-center justify-between text-xs text-muted-foreground">
+                    <div className="mt-3 pt-2.5 sm:mt-4 sm:pt-3 border-t border-border/60 flex items-center justify-between text-xs text-muted-foreground">
                       <span>مرتبة حسب التفاعل والقراءة الكاملة</span>
                       <Sparkles className="h-3.5 w-3.5 text-primary" />
                     </div>
@@ -693,11 +693,11 @@ export default function OpinionPage() {
             {/* Active Writer Banner when filtering by a specific columnist */}
             {selectedWriter && (
               <div
-                className="mb-6 rounded-2xl border border-primary/30 bg-card p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm"
+                className="mb-5 rounded-2xl border border-primary/30 bg-card p-3.5 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 shadow-sm"
                 data-testid="banner-selected-writer"
               >
-                <div className="flex items-center gap-3.5 min-w-0">
-                  <Avatar className="h-14 w-14 border-2 border-primary/20 shrink-0">
+                <div className="flex items-center gap-3 min-w-0">
+                  <Avatar className="h-12 w-12 sm:h-14 sm:w-14 border-2 border-primary/20 shrink-0">
                     <AvatarImage
                       src={selectedWriter.avatar || undefined}
                       alt={selectedWriter.name}
@@ -709,7 +709,7 @@ export default function OpinionPage() {
                   </Avatar>
                   <div className="min-w-0 space-y-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <h2 className="font-bold text-lg text-foreground">{selectedWriter.name}</h2>
+                      <h2 className="font-bold text-base sm:text-lg text-foreground">{selectedWriter.name}</h2>
                       <Badge variant="secondary" className="text-xs">
                         كاتب رأي
                       </Badge>
@@ -722,7 +722,7 @@ export default function OpinionPage() {
                   </div>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
-                  <Button asChild variant="outline" size="sm" className="rounded-xl">
+                  <Button asChild variant="outline" size="sm" className="no-min-touch-size h-8 text-xs rounded-xl">
                     <Link href={`/author/${encodeURIComponent(selectedWriter.name)}`}>
                       صفحة الكاتب الكاملة
                     </Link>
@@ -731,9 +731,9 @@ export default function OpinionPage() {
                     variant="ghost"
                     size="sm"
                     onClick={() => setSelectedAuthorId(null)}
-                    className="rounded-xl text-muted-foreground"
+                    className="no-min-touch-size h-8 text-xs rounded-xl text-muted-foreground"
                   >
-                    <X className="h-4 w-4 ml-1" />
+                    <X className="h-3.5 w-3.5 ml-1" />
                     إلغاء
                   </Button>
                 </div>
@@ -741,9 +741,9 @@ export default function OpinionPage() {
             )}
 
             {/* Filter & Sort Controls Bar */}
-            <div className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
-              {/* Sort Buttons */}
-              <div className="flex flex-wrap items-center justify-center md:justify-start gap-2">
+            <div className="mb-5 sm:mb-6 flex flex-col md:flex-row md:items-center justify-between gap-2.5 sm:gap-4">
+              {/* Sort Buttons — شريط أفقي قابل للتمرير على الهاتف بدون التفاف */}
+              <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto no-scrollbar pb-0.5">
                 <Button
                   variant={sortMode === "latest" ? "default" : "outline"}
                   size="sm"
@@ -752,6 +752,7 @@ export default function OpinionPage() {
                     setCurrentPage(1);
                   }}
                   data-testid="button-opinion-sort-latest"
+                  className="no-min-touch-size h-8 px-3 text-xs shrink-0"
                 >
                   الأحدث
                 </Button>
@@ -763,7 +764,7 @@ export default function OpinionPage() {
                     setCurrentPage(1);
                   }}
                   data-testid="button-opinion-sort-trending"
-                  className="gap-1.5"
+                  className="no-min-touch-size h-8 px-3 text-xs gap-1.5 shrink-0"
                 >
                   <Flame className="h-3.5 w-3.5" />
                   الأكثر تداولاً
@@ -776,7 +777,7 @@ export default function OpinionPage() {
                     setCurrentPage(1);
                   }}
                   data-testid="button-opinion-sort-views"
-                  className="gap-1.5"
+                  className="no-min-touch-size h-8 px-3 text-xs gap-1.5 shrink-0"
                 >
                   <Eye className="h-3.5 w-3.5" />
                   الأعلى قراءة
@@ -789,7 +790,7 @@ export default function OpinionPage() {
                     setCurrentPage(1);
                   }}
                   data-testid="button-opinion-sort-saved"
-                  className="gap-1.5"
+                  className="no-min-touch-size h-8 px-3 text-xs gap-1.5 shrink-0"
                 >
                   <Bookmark className="h-3.5 w-3.5" />
                   <span>محفوظاتي</span>
@@ -804,7 +805,7 @@ export default function OpinionPage() {
               {/* Category Filter Pills */}
               {categories.length > 1 && (
                 <div
-                  className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar justify-center md:justify-end"
+                  className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar justify-start md:justify-end"
                   role="group"
                   aria-label="تصفية حسب المجال"
                   data-testid="opinion-category-filters"
@@ -812,7 +813,7 @@ export default function OpinionPage() {
                   <button
                     type="button"
                     onClick={() => setSelectedCategoryId(null)}
-                    className={`shrink-0 rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
+                    className={`no-min-touch-size shrink-0 rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
                       selectedCategoryId === null
                         ? "bg-foreground text-background"
                         : "bg-background/80 text-muted-foreground hover:text-foreground border border-border/70"
@@ -828,7 +829,7 @@ export default function OpinionPage() {
                       onClick={() =>
                         setSelectedCategoryId(selectedCategoryId === cat.id ? null : cat.id)
                       }
-                      className={`shrink-0 inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
+                      className={`no-min-touch-size shrink-0 inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
                         selectedCategoryId === cat.id
                           ? "bg-foreground text-background"
                           : "bg-background/80 text-muted-foreground hover:text-foreground border border-border/70"

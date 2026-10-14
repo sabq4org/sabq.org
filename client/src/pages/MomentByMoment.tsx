@@ -446,7 +446,7 @@ function TimelineEntry({
       >
         <article className="relative group" data-testid={`card-news-${item.id}`}>
           <span
-            className={`absolute top-1/2 -translate-y-1/2 right-[10px] z-[1] h-2.5 w-2.5 rounded-full ring-[3px] ring-background ${accent ? "mbm-node-pulse" : ""}`}
+            className={`absolute top-1/2 -translate-y-1/2 -right-[17px] z-[1] h-2.5 w-2.5 rounded-full ring-[3px] ring-background ${accent ? "mbm-node-pulse" : ""}`}
             style={{ backgroundColor: nodeColor, "--mbm-dot": nodeColor } as CSSProperties}
             aria-hidden="true"
             data-testid={`node-${item.id}`}
@@ -512,7 +512,7 @@ function TimelineEntry({
               <button
                 type="button"
                 onClick={handleQuickReadClick}
-                className="inline-flex items-center gap-1 rounded-lg border border-border/70 bg-muted/50 px-2 py-1 text-[11px] font-semibold text-foreground hover:bg-primary/10 hover:text-primary hover:border-primary/30 transition-colors"
+                className="no-min-touch-size inline-flex h-7 items-center gap-1 rounded-lg border border-border/70 bg-muted/50 px-2 py-0.5 text-[11px] font-semibold text-foreground hover:bg-primary/10 hover:text-primary hover:border-primary/30 transition-colors"
                 title="معاينة سريعة دون مغادرة البث"
                 data-testid={`button-quick-read-${item.id}`}
               >
@@ -535,14 +535,14 @@ function TimelineEntry({
       <article className="relative group" data-testid={`card-news-${item.id}`}>
         {/* Timeline node — centred on the parent spine (right gutter, RTL) */}
         <span
-          className={`absolute top-4 right-[10px] z-[1] h-3 w-3 rounded-full ring-[3px] ring-background ${accent ? "mbm-node-pulse" : ""}`}
+          className={`absolute top-4 -right-[18px] z-[1] h-3 w-3 rounded-full ring-[3px] ring-background ${accent ? "mbm-node-pulse" : ""}`}
           style={{ backgroundColor: nodeColor, "--mbm-dot": nodeColor } as CSSProperties}
           aria-hidden="true"
           data-testid={`node-${item.id}`}
         />
 
         <div
-          className={`rounded-xl bg-card border shadow-sm hover:shadow-md transition-all duration-300 p-3.5 sm:p-4 ${
+          className={`rounded-xl bg-card border shadow-sm hover:shadow-md transition-all duration-300 p-3 sm:p-4 ${
             item.isBreaking
               ? "border-destructive/45 bg-gradient-to-l from-destructive/[0.04] to-transparent"
               : isFirst
@@ -595,7 +595,7 @@ function TimelineEntry({
             </span>
           </div>
 
-          <div className="flex gap-3.5">
+          <div className="flex gap-3">
             <div className="flex-1 min-w-0">
               <h3
                 className="public-card-title font-bold text-sm sm:text-base md:text-[17px] mb-1.5 line-clamp-2 leading-relaxed text-foreground group-hover:text-primary transition-colors"
@@ -614,8 +614,8 @@ function TimelineEntry({
               )}
 
               {/* Footer stats + Reader Quick Actions */}
-              <div className="flex items-center justify-between gap-2 pt-1.5 border-t border-border/50 flex-wrap">
-                <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+              <div className="flex items-center justify-between gap-2 pt-1.5 border-t border-border/50">
+                <div className="flex items-center gap-2.5 sm:gap-3 text-[11px] text-muted-foreground">
                   <span className="flex items-center gap-1" data-testid={`text-views-${item.id}`}>
                     <Eye className="h-3.5 w-3.5" />
                     {formatNumber(item.viewsCount)}
@@ -630,7 +630,7 @@ function TimelineEntry({
                   <button
                     type="button"
                     onClick={handleQuickReadClick}
-                    className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-semibold text-primary hover:bg-primary hover:text-primary-foreground transition-colors"
+                    className="no-min-touch-size inline-flex h-7 items-center gap-1 rounded-full bg-primary/10 px-2.5 py-0.5 text-[11px] font-semibold text-primary hover:bg-primary hover:text-primary-foreground transition-colors"
                     data-testid={`button-quick-read-${item.id}`}
                   >
                     <BookOpen className="h-3 w-3" />
@@ -640,7 +640,7 @@ function TimelineEntry({
                   <button
                     type="button"
                     onClick={handleBookmarkClick}
-                    className={`inline-flex h-7 w-7 items-center justify-center rounded-full border transition-colors ${
+                    className={`no-min-touch-size inline-flex h-7 w-7 items-center justify-center rounded-full border transition-colors ${
                       isSaved
                         ? "border-primary/40 bg-primary/15 text-primary"
                         : "border-transparent text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -655,7 +655,7 @@ function TimelineEntry({
                   <button
                     type="button"
                     onClick={handleShareClick}
-                    className="inline-flex h-7 w-7 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                    className="no-min-touch-size inline-flex h-7 w-7 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
                     aria-label="نسخ أو مشاركة الرابط"
                     title="مشاركة الخبر"
                     data-testid={`button-share-${item.id}`}
@@ -671,7 +671,7 @@ function TimelineEntry({
             </div>
 
             {item.imageUrl && (
-              <div className="relative flex-shrink-0 w-24 h-20 sm:w-28 sm:h-24 rounded-xl overflow-hidden self-start border border-border/50">
+              <div className="relative flex-shrink-0 w-20 h-20 sm:w-28 sm:h-24 rounded-xl overflow-hidden self-start border border-border/50">
                 <OptimizedImage
                   src={item.imageUrl}
                   alt={item.title}
@@ -728,7 +728,7 @@ function TimelineSkeleton({ count = 8 }: { count?: number }) {
       <div className="space-y-3 sm:space-y-4">
         {Array.from({ length: count }).map((_, i) => (
           <div key={i} className="relative">
-            <span className="absolute top-4 right-[10px] z-[1] h-3 w-3 rounded-full ring-[3px] ring-background bg-muted" />
+            <span className="absolute top-4 -right-[18px] z-[1] h-3 w-3 rounded-full ring-[3px] ring-background bg-muted" />
             <div className="rounded-xl bg-card border border-border/70 shadow-sm p-3">
               <div className="flex items-center gap-2 mb-2">
                 <Skeleton className="h-4 w-12" />
@@ -845,8 +845,9 @@ export default function MomentByMoment() {
   const [autoRefresh, setAutoRefresh] = useState<boolean>(true);
   const [isRefreshingManual, setIsRefreshingManual] = useState<boolean>(false);
   const [lastUpdate, setLastUpdate] = useState<string>("");
-  const [showScrollTop, setShowScrollTop] = useState<boolean>(false);
+  const [filtersCollapsed, setFiltersCollapsed] = useState<boolean>(false);
   const [quickReadItem, setQuickReadItem] = useState<LiveUpdate | null>(null);
+  const lastScrollYRef = useRef<number>(0);
   const [savedIds, setSavedIds] = useState<string[]>(() => {
     if (typeof window === "undefined") return [];
     try {
@@ -1120,7 +1121,16 @@ export default function MomentByMoment() {
 
   useEffect(() => {
     const onScroll = () => {
-      setShowScrollTop(window.scrollY > 600);
+      const currentY = window.scrollY;
+      const delta = currentY - lastScrollYRef.current;
+      if (currentY <= 180) {
+        setFiltersCollapsed(false);
+      } else if (delta > 10 && currentY > 240) {
+        setFiltersCollapsed(true);
+      } else if (delta < -10) {
+        setFiltersCollapsed(false);
+      }
+      lastScrollYRef.current = currentY;
     };
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
@@ -1212,8 +1222,8 @@ export default function MomentByMoment() {
           className="public-page-header border-b border-[#e3ebf2] bg-gradient-to-b from-[#f4f8fb] to-background text-[#10202e] dark:border-border dark:from-[#171e29] dark:to-background dark:text-foreground"
           data-testid="header-hero"
         >
-          <div className="public-container container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-8">
-            <nav className="flex items-center gap-2 mb-4 text-xs text-[#6b7c8a] dark:text-muted-foreground" aria-label="مسار الصفحة">
+          <div className="public-container container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5 sm:py-6 lg:py-8">
+            <nav className="flex items-center gap-2 mb-2.5 sm:mb-4 text-xs text-[#6b7c8a] dark:text-muted-foreground" aria-label="مسار الصفحة">
               <Link href="/" className="inline-flex items-center gap-1.5 hover:text-primary transition-colors" data-testid="link-home">
                 <Home className="h-3.5 w-3.5" />
                 الرئيسية
@@ -1222,38 +1232,38 @@ export default function MomentByMoment() {
               <span className="text-foreground font-medium">لحظة بلحظة</span>
             </nav>
 
-            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
-              <div className="flex items-start gap-3 sm:gap-4">
-                <span className="w-1.5 h-14 sm:h-16 rounded-full bg-primary shrink-0" aria-hidden="true" />
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3.5 sm:gap-5">
+              <div className="flex items-start gap-2.5 sm:gap-4">
+                <span className="w-1.5 h-11 sm:h-16 rounded-full bg-primary shrink-0 mt-0.5" aria-hidden="true" />
                 <div>
-                  <p className="text-xs sm:text-sm font-bold text-primary mb-1">مركز سبق للتغطية الحية</p>
-                  <div className="flex items-center gap-2.5 flex-wrap">
-                    <h1 className="public-page-title text-2xl sm:text-3xl md:text-4xl font-black tracking-tight" data-testid="text-page-title">
+                  <p className="text-[11px] sm:text-sm font-bold text-primary mb-0.5 sm:mb-1">مركز سبق للتغطية الحية</p>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h1 className="public-page-title text-xl sm:text-3xl md:text-4xl font-black tracking-tight" data-testid="text-page-title">
                       لحظة بلحظة
                     </h1>
-                    <Badge variant="destructive" className="gap-1.5 px-2.5 py-0.5" data-testid="badge-live">
+                    <Badge variant="destructive" className="gap-1.5 px-2 py-0.5 text-[11px] sm:text-xs" data-testid="badge-live">
                       <span className="h-1.5 w-1.5 rounded-full bg-white animate-pulse" />
                       مباشر
                     </Badge>
                   </div>
-                  <p className="public-page-description mt-1.5 text-sm text-[#6b7c8a] dark:text-muted-foreground max-w-2xl" data-testid="text-page-subtitle">
+                  <p className="public-page-description mt-1 text-xs sm:text-sm text-[#6b7c8a] dark:text-muted-foreground max-w-2xl line-clamp-2 sm:line-clamp-none" data-testid="text-page-subtitle">
                     متابعة فورية لأهم الأخبار العاجلة والتحديثات من غرفة أخبار سبق — اضغط «قراءة سريعة» على أي خبر لاستعراضه كاملاً دون مغادرة البث
                   </p>
                 </div>
               </div>
 
               {/* Live Room Controls: Auto-refresh toggle + Density Switcher */}
-              <div className="flex flex-wrap items-center gap-2.5">
+              <div className="flex items-center justify-between sm:justify-start gap-2 overflow-x-auto no-scrollbar">
                 {/* Density Switcher */}
                 <div
-                  className="inline-flex items-center rounded-xl border border-border/80 bg-card p-1 shadow-sm"
+                  className="inline-flex items-center rounded-xl border border-border/80 bg-card p-0.5 sm:p-1 shadow-sm shrink-0"
                   role="group"
                   aria-label="نمط عرض البث"
                 >
                   <button
                     type="button"
                     onClick={() => setDensity("detailed")}
-                    className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-bold transition-colors ${
+                    className={`no-min-touch-size inline-flex h-7 sm:h-8 items-center gap-1 rounded-lg px-2 sm:px-2.5 text-[11px] sm:text-xs font-bold transition-colors ${
                       density === "detailed"
                         ? "bg-primary text-primary-foreground shadow-sm"
                         : "text-muted-foreground hover:text-foreground"
@@ -1261,13 +1271,13 @@ export default function MomentByMoment() {
                     aria-pressed={density === "detailed"}
                     data-testid="button-density-detailed"
                   >
-                    <Rows3 className="h-3.5 w-3.5" />
+                    <Rows3 className="h-3.5 w-3.5 shrink-0" />
                     <span>بطاقات مفصّلة</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => setDensity("compact")}
-                    className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-bold transition-colors ${
+                    className={`no-min-touch-size inline-flex h-7 sm:h-8 items-center gap-1 rounded-lg px-2 sm:px-2.5 text-[11px] sm:text-xs font-bold transition-colors ${
                       density === "compact"
                         ? "bg-primary text-primary-foreground shadow-sm"
                         : "text-muted-foreground hover:text-foreground"
@@ -1275,7 +1285,7 @@ export default function MomentByMoment() {
                     aria-pressed={density === "compact"}
                     data-testid="button-density-compact"
                   >
-                    <LayoutList className="h-3.5 w-3.5" />
+                    <LayoutList className="h-3.5 w-3.5 shrink-0" />
                     <span>برقيات سريعة</span>
                   </button>
                 </div>
@@ -1284,7 +1294,7 @@ export default function MomentByMoment() {
                 <button
                   type="button"
                   onClick={() => setAutoRefresh((prev) => !prev)}
-                  className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold transition-colors ${
+                  className={`no-min-touch-size inline-flex h-8 sm:h-9 items-center gap-1.5 rounded-xl border px-2.5 sm:px-3 text-[11px] sm:text-xs font-semibold transition-colors shrink-0 ${
                     autoRefresh
                       ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
                       : "border-border/80 bg-card text-muted-foreground hover:text-foreground"
@@ -1294,11 +1304,12 @@ export default function MomentByMoment() {
                   data-testid="button-toggle-autorefresh"
                 >
                   {autoRefresh ? (
-                    <Pause className="h-3.5 w-3.5" />
+                    <Pause className="h-3.5 w-3.5 shrink-0" />
                   ) : (
-                    <Play className="h-3.5 w-3.5" />
+                    <Play className="h-3.5 w-3.5 shrink-0" />
                   )}
-                  <span>{autoRefresh ? "تحديث تلقائي: مفعّل" : "تحديث تلقائي: متوقف"}</span>
+                  <span className="sm:hidden">{autoRefresh ? "تلقائي: مفعّل" : "تلقائي: متوقف"}</span>
+                  <span className="hidden sm:inline">{autoRefresh ? "تحديث تلقائي: مفعّل" : "تحديث تلقائي: متوقف"}</span>
                 </button>
               </div>
             </div>
@@ -1308,12 +1319,12 @@ export default function MomentByMoment() {
         <BreakingTicker items={breakingNews} />
 
         {/* Standard Sabq content width and two-column editorial grid */}
-        <div className="public-container container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-7">
+        <div className="public-container container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 sm:py-7">
           {/* DMS Leaderboard (full width) */}
           <DmsLeaderboardAd />
 
           {/* Statistics Section */}
-          <section className="mb-4 sm:mb-6" data-testid="section-statistics">
+          <section className="mb-3 sm:mb-6" data-testid="section-statistics">
             {isLoading ? (
               <StatisticsSkeleton />
             ) : (
@@ -1330,66 +1341,79 @@ export default function MomentByMoment() {
           <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px] lg:gap-7">
             {/* MAIN — live feed */}
             <main data-testid="main-content" className="min-w-0">
-              {/* Sticky Filter & Search Command Bar */}
+              {/* Sticky Filter & Search Command Bar — ultra-compact on mobile with scroll-down collapse */}
               <div
-                className="sticky top-16 z-20 mb-4"
+                className="sticky top-14 sm:top-16 z-20 mb-3 sm:mb-4"
                 data-testid="header-status-bar"
               >
-                <div className="public-card rounded-2xl bg-card/95 backdrop-blur-md border border-border/80 shadow-sm p-3 sm:p-4 space-y-3">
-                  {/* Top Row: Live Indicator + Search Input + Refresh */}
-                  <div className="flex items-center justify-between gap-2 sm:gap-3 flex-wrap">
-                    <div className="flex items-center gap-1.5 sm:gap-2.5 flex-wrap">
+                <div className="public-card rounded-xl sm:rounded-2xl bg-card/95 backdrop-blur-md border border-border/80 shadow-sm px-2.5 py-2 sm:p-3.5 space-y-2">
+                  {/* Top Row: Single non-wrapping row on mobile (Live + Count + Inline Search + Refresh) */}
+                  <div className="flex items-center justify-between gap-1.5 sm:gap-2.5 flex-nowrap">
+                    <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
                       {/* Live Indicator with Pulse Ring */}
-                      <div className="flex items-center gap-1.5 bg-destructive/10 px-2.5 py-1 rounded-full">
+                      <div className="flex items-center gap-1.5 bg-destructive/10 px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-full">
                         <div className="relative">
                           <div className="h-2 w-2 rounded-full bg-destructive animate-pulse" data-testid="indicator-live" />
                           <div className="absolute inset-0 h-2 w-2 rounded-full bg-destructive live-pulse-ring" />
                         </div>
-                        <span className="text-xs font-bold text-destructive" data-testid="text-live">مباشر</span>
+                        <span className="text-[11px] sm:text-xs font-bold text-destructive" data-testid="text-live">مباشر</span>
                       </div>
 
                       {lastUpdate && (
-                        <Badge variant="outline" className="text-[10px] sm:text-xs gap-1 px-2 py-0.5" data-testid="badge-last-update">
+                        <Badge variant="outline" className="hidden md:inline-flex text-xs gap-1 px-2 py-0.5" data-testid="badge-last-update">
                           <Clock className="h-3 w-3 text-primary" />
-                          <span className="hidden sm:inline">آخر تحديث:</span> {lastUpdate}
+                          <span>آخر تحديث:</span> {lastUpdate}
                         </Badge>
                       )}
 
-                      <Badge variant="secondary" className="text-[10px] sm:text-xs px-2 py-0.5" data-testid="badge-items-count">
+                      <Badge variant="secondary" className="text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 tabular-nums" data-testid="badge-items-count">
                         {filteredItems.length} <span className="hidden sm:inline">تحديث</span>
                       </Badge>
                     </div>
 
-                    {/* Search in Live Stream + Refresh Button */}
-                    <div className="flex items-center gap-2 flex-1 sm:flex-initial justify-end min-w-[200px]">
-                      <div className="relative flex-1 sm:w-56">
-                        <Search className="h-3.5 w-3.5 text-muted-foreground absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    {/* Search in Live Stream + Mobile Expand Filters + Refresh Button */}
+                    <div className="flex items-center gap-1.5 flex-1 justify-end min-w-0">
+                      <div className="relative flex-1 max-w-[185px] sm:max-w-[230px]">
+                        <Search className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-muted-foreground absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                         <Input
                           type="search"
                           value={searchQuery}
                           onChange={(e) => setSearchQuery(e.target.value)}
-                          placeholder="ابحث في أخبار البث..."
-                          className="h-8 pr-8 pl-7 text-xs rounded-full bg-muted/50 border-border/70"
+                          placeholder="ابحث في البث..."
+                          className="h-7 sm:h-8 pr-7 pl-6 text-[11px] sm:text-xs rounded-full bg-muted/50 border-border/70"
                           data-testid="input-live-search"
                         />
                         {searchQuery && (
                           <button
                             type="button"
                             onClick={() => setSearchQuery("")}
-                            className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                            className="no-min-touch-size absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                             aria-label="مسح البحث"
                           >
-                            <X className="h-3.5 w-3.5" />
+                            <X className="h-3 w-3" />
                           </button>
                         )}
                       </div>
+
+                      {filtersCollapsed && (
+                        <button
+                          type="button"
+                          onClick={() => setFiltersCollapsed(false)}
+                          className="no-min-touch-size sm:hidden inline-flex h-7 items-center gap-1 rounded-full border border-border/70 bg-muted/60 px-2 text-[10px] font-semibold text-foreground shrink-0"
+                          aria-label="إظهار فلاتر البث"
+                        >
+                          <span>الفلاتر</span>
+                          {hasActiveFilters && <span className="h-1.5 w-1.5 rounded-full bg-primary" />}
+                        </button>
+                      )}
 
                       <Button
                         variant="outline"
                         size="sm"
                         onClick={handleManualRefresh}
                         disabled={isRefreshingManual}
-                        className="gap-1.5 h-8 px-3 text-xs rounded-full shrink-0"
+                        className="no-min-touch-size gap-1.5 h-7 w-7 sm:h-8 sm:w-auto p-0 sm:px-3 text-xs rounded-full shrink-0"
+                        aria-label="تحديث البث المباشر"
                         data-testid="button-refresh"
                       >
                         <RefreshCw className={`h-3.5 w-3.5 ${isRefreshingManual ? "animate-spin text-primary" : ""}`} />
@@ -1398,13 +1422,17 @@ export default function MomentByMoment() {
                     </div>
                   </div>
 
-                  {/* Second Row: Filter Pills + Time Range + Category Select */}
-                  <div className="flex flex-wrap items-center gap-2">
-                    <div className="flex gap-1.5">
+                  {/* Second Row: Single-line horizontally scrollable filter strip on mobile, auto-collapses on scroll-down */}
+                  <div
+                    className={`${
+                      filtersCollapsed ? "hidden sm:flex" : "flex"
+                    } items-center gap-1.5 overflow-x-auto no-scrollbar flex-nowrap sm:flex-wrap`}
+                  >
+                    <div className="flex items-center gap-1 shrink-0">
                       <button
                         type="button"
                         onClick={() => setFilter("all")}
-                        className={`px-3 py-1 rounded-full text-xs font-semibold transition-all ${
+                        className={`no-min-touch-size h-7 px-2.5 rounded-full text-[11px] sm:text-xs font-semibold transition-all shrink-0 ${
                           filter === "all"
                             ? "filter-pill-active"
                             : "bg-muted/60 text-foreground hover-elevate"
@@ -1416,7 +1444,7 @@ export default function MomentByMoment() {
                       <button
                         type="button"
                         onClick={() => setFilter("breaking")}
-                        className={`px-3 py-1 rounded-full text-xs font-semibold transition-all flex items-center gap-1 ${
+                        className={`no-min-touch-size h-7 px-2.5 rounded-full text-[11px] sm:text-xs font-semibold transition-all inline-flex items-center gap-1 shrink-0 ${
                           filter === "breaking"
                             ? "filter-pill-breaking-active"
                             : "bg-muted/60 text-foreground hover-elevate"
@@ -1429,7 +1457,7 @@ export default function MomentByMoment() {
                       <button
                         type="button"
                         onClick={() => setFilter("saved")}
-                        className={`px-3 py-1 rounded-full text-xs font-semibold transition-all flex items-center gap-1 ${
+                        className={`no-min-touch-size h-7 px-2.5 rounded-full text-[11px] sm:text-xs font-semibold transition-all inline-flex items-center gap-1 shrink-0 ${
                           filter === "saved"
                             ? "bg-primary text-primary-foreground shadow-sm"
                             : "bg-muted/60 text-foreground hover-elevate"
@@ -1446,12 +1474,12 @@ export default function MomentByMoment() {
                       </button>
                     </div>
 
-                    <div className="h-5 w-px bg-border hidden sm:block" />
+                    <div className="h-4 w-px bg-border shrink-0" />
 
                     {/* Time Range Select */}
                     <Select value={timeRange} onValueChange={(value: TimeRange) => setTimeRange(value)}>
-                      <SelectTrigger className="w-[115px] sm:w-[150px] h-8 rounded-full bg-muted/60 text-xs px-3" data-testid="select-time-range">
-                        <Clock className="h-3.5 w-3.5 ml-1.5 text-primary" />
+                      <SelectTrigger className="no-min-touch-size shrink-0 w-[96px] sm:w-[135px] h-7 sm:h-8 rounded-full bg-muted/60 text-[11px] sm:text-xs px-2.5" data-testid="select-time-range">
+                        <Clock className="h-3 w-3 ml-1 text-primary shrink-0" />
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -1465,8 +1493,8 @@ export default function MomentByMoment() {
 
                     {/* Category Select */}
                     <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                      <SelectTrigger className="w-[125px] sm:w-[165px] h-8 rounded-full bg-muted/60 text-xs px-3" data-testid="select-category">
-                        <FolderOpen className="h-3.5 w-3.5 ml-1.5 text-primary" />
+                      <SelectTrigger className="no-min-touch-size shrink-0 w-[112px] sm:w-[155px] h-7 sm:h-8 rounded-full bg-muted/60 text-[11px] sm:text-xs px-2.5" data-testid="select-category">
+                        <FolderOpen className="h-3 w-3 ml-1 text-primary shrink-0" />
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -1493,7 +1521,7 @@ export default function MomentByMoment() {
                             onClick={() =>
                               setCategoryFilter((prev) => (prev === cat.id ? "all" : cat.id))
                             }
-                            className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                            className={`no-min-touch-size inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${
                               categoryFilter === cat.id
                                 ? "bg-primary/15 text-primary font-bold ring-1 ring-primary/30"
                                 : "bg-muted/50 text-muted-foreground hover:text-foreground"
@@ -1515,10 +1543,10 @@ export default function MomentByMoment() {
 
               {/* "New updates" live pill */}
               {newCount > 0 && (
-                <div className="sticky top-36 z-30 flex justify-center pointer-events-none mb-3">
+                <div className="sticky top-28 sm:top-36 z-30 flex justify-center pointer-events-none mb-3">
                   <button
                     onClick={revealNewUpdates}
-                    className="mbm-enter pointer-events-auto flex items-center gap-2 rounded-full bg-primary text-primary-foreground px-4 py-2 text-xs sm:text-sm font-semibold shadow-lg hover:brightness-110 transition"
+                    className="no-min-touch-size mbm-enter pointer-events-auto flex items-center gap-2 rounded-full bg-primary text-primary-foreground px-4 py-1.5 text-xs sm:text-sm font-semibold shadow-lg hover:brightness-110 transition"
                     data-testid="button-new-updates"
                   >
                     <span className="h-2 w-2 rounded-full bg-white animate-pulse" />
@@ -1770,19 +1798,6 @@ export default function MomentByMoment() {
         </div>
       </main>
 
-      {/* Floating Scroll-To-Top Button when deep in the live stream */}
-      {showScrollTop && (
-        <button
-          type="button"
-          onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
-          className="fixed bottom-6 left-6 z-40 inline-flex items-center gap-2 rounded-full bg-primary text-primary-foreground px-4 py-2.5 text-xs font-bold shadow-lg hover:brightness-110 transition-all"
-          data-testid="button-scroll-top"
-        >
-          <ChevronUp className="h-4 w-4" />
-          <span>أحدث التطورات</span>
-        </button>
-      )}
-
       {/* Quick Reader Modal — Read full update without leaving the live stream */}
       <Dialog
         open={!!quickReadItem}
@@ -1797,8 +1812,8 @@ export default function MomentByMoment() {
         >
           {quickReadItem && (
             <>
-              <div className="sticky top-0 z-10 flex items-center justify-between gap-2 border-b border-border/70 bg-background/95 backdrop-blur-md px-5 py-3.5">
-                <div className="flex items-center gap-2 flex-wrap">
+              <div className="sticky top-0 z-10 flex items-center justify-between gap-2 border-b border-border/70 bg-background/95 backdrop-blur-md px-4 sm:px-5 py-3">
+                <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
                   <span className="inline-flex items-center gap-1 rounded-md bg-primary/10 px-2 py-0.5 text-xs font-bold text-primary">
                     <Clock className="h-3 w-3" />
                     {formatClock(quickReadItem.publishedAt)}
@@ -1825,7 +1840,7 @@ export default function MomentByMoment() {
                         setQuickReadItem(filteredItems[quickReadIndex - 1]);
                       }
                     }}
-                    className="h-7 px-2 text-xs gap-1 rounded-lg"
+                    className="no-min-touch-size h-7 px-2 text-xs gap-1 rounded-lg"
                     title="الخبر الأحدث"
                     data-testid="button-quick-read-prev"
                   >
@@ -1841,7 +1856,7 @@ export default function MomentByMoment() {
                         setQuickReadItem(filteredItems[quickReadIndex + 1]);
                       }
                     }}
-                    className="h-7 px-2 text-xs gap-1 rounded-lg"
+                    className="no-min-touch-size h-7 px-2 text-xs gap-1 rounded-lg"
                     title="الخبر الأقدم"
                     data-testid="button-quick-read-next"
                   >

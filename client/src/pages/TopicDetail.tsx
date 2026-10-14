@@ -1289,7 +1289,7 @@ export default function TopicDetail() {
       {/* أداة مشاركة الاقتباس العائمة عند تحديد نص */}
       {selectedQuote && (
         <div
-          className="fixed z-[70] -translate-x-1/2 flex items-center gap-1 rounded-full border border-border bg-popover/95 px-2.5 py-1.5 text-xs font-semibold text-popover-foreground shadow-xl backdrop-blur animate-in fade-in zoom-in-95 duration-150"
+          className="fixed z-[70] -translate-x-1/2 flex items-center gap-1 rounded-full border border-border bg-popover/95 px-2.5 py-1 text-xs font-semibold text-popover-foreground shadow-xl backdrop-blur animate-in fade-in zoom-in-95 duration-150"
           style={{ top: `${selectedQuote.top}px`, left: `${selectedQuote.left}px` }}
           role="toolbar"
           aria-label="خيارات اقتباس النص المحدد"
@@ -1298,7 +1298,7 @@ export default function TopicDetail() {
           <button
             type="button"
             onClick={() => handleCopyQuote(selectedQuote.text)}
-            className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 hover:bg-muted transition-colors"
+            className="no-min-touch-size inline-flex h-7 items-center gap-1 rounded-full px-2.5 py-0.5 hover:bg-muted transition-colors"
             data-testid="button-copy-selected-quote"
           >
             <Quote className="h-3.5 w-3.5" style={{ color: theme.color }} />
@@ -1308,7 +1308,7 @@ export default function TopicDetail() {
           <button
             type="button"
             onClick={() => handleShareQuoteOnX(selectedQuote.text)}
-            className="inline-flex items-center gap-1 rounded-full px-2 py-1 hover:bg-muted transition-colors"
+            className="no-min-touch-size inline-flex h-7 w-7 items-center justify-center rounded-full hover:bg-muted transition-colors"
             aria-label="مشاركة الاقتباس على X"
             data-testid="button-share-selected-quote-x"
           >
@@ -1317,7 +1317,7 @@ export default function TopicDetail() {
           <button
             type="button"
             onClick={() => handleShareQuoteOnWhatsApp(selectedQuote.text)}
-            className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-[#25D366] hover:bg-muted transition-colors"
+            className="no-min-touch-size inline-flex h-7 w-7 items-center justify-center rounded-full text-[#25D366] hover:bg-muted transition-colors"
             aria-label="مشاركة الاقتباس عبر واتساب"
             data-testid="button-share-selected-quote-whatsapp"
           >
@@ -1334,23 +1334,23 @@ export default function TopicDetail() {
 
         {/* مسار التنقل (Breadcrumbs) */}
         <div className="border-b bg-muted/30">
-          <div className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
+          <div className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2.5 sm:py-3">
             <nav
               aria-label="مسار التنقل"
-              className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap"
+              className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm text-muted-foreground flex-wrap"
             >
               <Link href="/">
                 <a className="hover:text-foreground transition-colors" data-testid="link-breadcrumb-home">
-                  <Home className="h-4 w-4" />
+                  <Home className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                 </a>
               </Link>
-              <ChevronRight className="h-4 w-4 shrink-0" />
+              <ChevronRight className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
               <Link href="/muqtarab">
                 <a className="hover:text-foreground transition-colors" data-testid="link-breadcrumb-muqtarab">
                   مُقترب
                 </a>
               </Link>
-              <ChevronRight className="h-4 w-4 shrink-0" />
+              <ChevronRight className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
               <Link href={`/muqtarab/${angleSlug}`}>
                 <a
                   className="font-medium transition-colors hover:text-[color:var(--angle)]"
@@ -1359,7 +1359,7 @@ export default function TopicDetail() {
                   زاوية {angle.nameAr}
                 </a>
               </Link>
-              <ChevronRight className="h-4 w-4 shrink-0" />
+              <ChevronRight className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
               <span className="text-foreground line-clamp-1" data-testid="text-breadcrumb-topic">
                 {topic.title}
               </span>
@@ -1367,7 +1367,7 @@ export default function TopicDetail() {
           </div>
         </div>
 
-        <main className="article-detail-main flex-1 container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-10">
+        <main className="article-detail-main flex-1 container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8 md:py-10">
           <div className="article-detail-layout">
             {/* ==================== العمود الرئيسي للقراءة ==================== */}
             <article className="article-detail-content min-w-0">
@@ -1376,17 +1376,17 @@ export default function TopicDetail() {
                 <div className="article-detail-labels flex flex-wrap items-center gap-2">
                   <Link href={`/muqtarab/${angleSlug}`}>
                     <a
-                      className="inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-sm font-bold shadow-sm transition-transform hover:scale-[1.02]"
+                      className="inline-flex items-center gap-1.5 sm:gap-2 rounded-full px-3 py-1 sm:px-3.5 sm:py-1.5 text-xs sm:text-sm font-bold shadow-sm transition-transform hover:scale-[1.02]"
                       style={{ backgroundColor: theme.soft, color: theme.color }}
                       data-testid="chip-angle"
                     >
-                      <AngleIcon className="h-4 w-4" />
+                      <AngleIcon className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                       زاوية {angle.nameAr}
                     </a>
                   </Link>
 
                   <Link href="/muqtarab">
-                    <a className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-muted/40 px-3 py-1 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors">
+                    <a className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-muted/40 px-2.5 py-1 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors">
                       <Sparkles className="h-3.5 w-3.5" style={{ color: theme.color }} />
                       مُقترب
                     </a>
@@ -1404,7 +1404,7 @@ export default function TopicDetail() {
                 </div>
 
                 <h1
-                  className="article-detail-title mt-4"
+                  className="article-detail-title mt-3 sm:mt-4"
                   style={{ textWrap: "balance" } as CSSProperties}
                   data-testid="heading-topic-title"
                 >
@@ -1450,157 +1450,166 @@ export default function TopicDetail() {
                   </div>
                 </div>
 
-                {/* ---- شريط أدوات تجربة القارئ والمشاركة السريعة ---- */}
+                {/* ---- شريط أدوات تجربة القارئ والمشاركة السريعة (مدمج ومنظم للهواتف وسطح المكتب) ---- */}
                 <div
-                  className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border/70 bg-muted/25 p-3"
+                  className="mt-3.5 rounded-xl sm:rounded-2xl border border-border/70 bg-muted/25 p-2 sm:px-3.5 sm:py-2.5 space-y-1.5 lg:space-y-0 lg:flex lg:items-center lg:justify-between lg:gap-3"
                   data-testid="reader-experience-toolbar"
                 >
-                  {/* أدوات القراءة: حجم الخط + لون الخلفية + وضع التركيز + الحفظ */}
-                  <div className="flex flex-wrap items-center gap-2">
-                    {/* التحكم بحجم الخط */}
-                    <div
-                      className="inline-flex items-center rounded-xl border border-border/80 bg-background p-0.5 shadow-2xs"
-                      role="group"
-                      aria-label="التحكم بحجم الخط"
-                      data-testid="control-font-size"
-                    >
-                      <button
-                        type="button"
-                        onClick={() => stepFontSize(-1)}
-                        disabled={fontSize === "sm"}
-                        className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-xs font-bold text-foreground hover:bg-muted disabled:opacity-40 transition-colors"
-                        title="تصغير الخط"
-                        aria-label="تصغير الخط"
-                        data-testid="button-font-decrease"
+                  {/* الصف الأول: أدوات القراءة (حجم الخط + لون الخلفية + الحفظ + وضع التركيز) */}
+                  <div className="flex items-center justify-between lg:justify-start gap-1.5 sm:gap-2 overflow-x-auto no-scrollbar">
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {/* التحكم بحجم الخط */}
+                      <div
+                        className="inline-flex items-center rounded-lg border border-border/80 bg-background p-0.5 shadow-2xs shrink-0"
+                        role="group"
+                        aria-label="التحكم بحجم الخط"
+                        data-testid="control-font-size"
                       >
-                        A-
-                      </button>
-                      <span
-                        className="px-2 text-xs font-semibold text-muted-foreground select-none flex items-center gap-1"
-                        data-testid="text-font-size-label"
-                      >
-                        <Type className="h-3.5 w-3.5" style={{ color: theme.color }} />
-                        {activeFontConfig.label}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => stepFontSize(1)}
-                        disabled={fontSize === "xl"}
-                        className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-xs font-bold text-foreground hover:bg-muted disabled:opacity-40 transition-colors"
-                        title="تكبير الخط"
-                        aria-label="تكبير الخط"
-                        data-testid="button-font-increase"
-                      >
-                        A+
-                      </button>
-                    </div>
-
-                    {/* نمط خلفية القراءة (أبيض / ورقي دافئ / هادئ) */}
-                    <div
-                      className="hidden sm:inline-flex items-center gap-1 rounded-xl border border-border/80 bg-background p-1 shadow-2xs"
-                      role="group"
-                      aria-label="خلفية القراءة"
-                      data-testid="control-reading-surface"
-                    >
-                      {(
-                        [
-                          { id: "default", label: "أبيض", swatch: "bg-white border-border" },
-                          { id: "warm", label: "ورقي", swatch: "bg-[#fbf8f1] border-[#e2d5be]" },
-                          { id: "calm", label: "هادئ", swatch: "bg-[#f4f8fb] border-[#cbd9e4]" },
-                        ] as const
-                      ).map((mode) => (
                         <button
-                          key={mode.id}
                           type="button"
-                          onClick={() => setSurfaceMode(mode.id)}
-                          aria-pressed={surfaceMode === mode.id}
-                          className={`inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-medium transition-colors ${
-                            surfaceMode === mode.id
-                              ? "bg-[color:var(--angle-soft)] text-[color:var(--angle)] font-bold"
-                              : "text-muted-foreground hover:text-foreground"
-                          }`}
-                          data-testid={`button-surface-${mode.id}`}
+                          onClick={() => stepFontSize(-1)}
+                          disabled={fontSize === "sm"}
+                          className="no-min-touch-size inline-flex h-7 w-7 items-center justify-center rounded-md text-[11px] font-bold text-foreground hover:bg-muted disabled:opacity-40 transition-colors"
+                          title="تصغير الخط"
+                          aria-label="تصغير الخط"
+                          data-testid="button-font-decrease"
                         >
-                          <span className={`h-3 w-3 rounded-full border ${mode.swatch}`} />
-                          <span>{mode.label}</span>
+                          A-
                         </button>
-                      ))}
+                        <span
+                          className="px-1.5 text-[11px] font-semibold text-muted-foreground select-none flex items-center gap-1"
+                          data-testid="text-font-size-label"
+                        >
+                          <Type className="h-3 w-3 shrink-0" style={{ color: theme.color }} />
+                          <span className="hidden sm:inline">{activeFontConfig.label}</span>
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => stepFontSize(1)}
+                          disabled={fontSize === "xl"}
+                          className="no-min-touch-size inline-flex h-7 w-7 items-center justify-center rounded-md text-[11px] font-bold text-foreground hover:bg-muted disabled:opacity-40 transition-colors"
+                          title="تكبير الخط"
+                          aria-label="تكبير الخط"
+                          data-testid="button-font-increase"
+                        >
+                          A+
+                        </button>
+                      </div>
+
+                      {/* نمط خلفية القراءة (أبيض / ورقي دافئ / هادئ) — متاح على الجوال وسطح المكتب */}
+                      <div
+                        className="inline-flex items-center gap-0.5 rounded-lg border border-border/80 bg-background p-0.5 shadow-2xs shrink-0"
+                        role="group"
+                        aria-label="خلفية القراءة"
+                        data-testid="control-reading-surface"
+                      >
+                        {(
+                          [
+                            { id: "default", label: "أبيض", swatch: "bg-white border-border" },
+                            { id: "warm", label: "ورقي", swatch: "bg-[#fbf8f1] border-[#e2d5be]" },
+                            { id: "calm", label: "هادئ", swatch: "bg-[#f4f8fb] border-[#cbd9e4]" },
+                          ] as const
+                        ).map((mode) => (
+                          <button
+                            key={mode.id}
+                            type="button"
+                            onClick={() => setSurfaceMode(mode.id)}
+                            aria-pressed={surfaceMode === mode.id}
+                            className={`no-min-touch-size inline-flex h-7 items-center gap-1 rounded-md px-2 text-[11px] sm:text-xs font-medium transition-colors shrink-0 ${
+                              surfaceMode === mode.id
+                                ? "bg-[color:var(--angle-soft)] text-[color:var(--angle)] font-bold"
+                                : "text-muted-foreground hover:text-foreground"
+                            }`}
+                            data-testid={`button-surface-${mode.id}`}
+                          >
+                            <span className={`h-2.5 w-2.5 rounded-full border shrink-0 ${mode.swatch}`} />
+                            <span>{mode.label}</span>
+                          </button>
+                        ))}
+                      </div>
                     </div>
 
-                    {/* وضع القراءة المركّزة */}
-                    <FocusReaderTrigger
-                      language="ar"
-                      onClick={() => setFocusOpen(true)}
-                      className="h-9 rounded-xl border-border/80 bg-background text-xs font-semibold hover:bg-[color:var(--angle-soft)] hover:text-[color:var(--angle)]"
-                    />
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {/* حفظ الموضوع */}
+                      <Button
+                        variant={isTopicSaved ? "default" : "outline"}
+                        size="sm"
+                        onClick={handleToggleSaveTopic}
+                        aria-pressed={isTopicSaved}
+                        className={`no-min-touch-size h-7 sm:h-8 px-2 sm:px-2.5 rounded-lg gap-1 text-[11px] sm:text-xs font-semibold shrink-0 ${
+                          isTopicSaved
+                            ? ""
+                            : "bg-background hover:bg-[color:var(--angle-soft)] hover:text-[color:var(--angle)]"
+                        }`}
+                        style={isTopicSaved ? { backgroundColor: theme.color, color: "#fff" } : undefined}
+                        data-testid="button-save-topic"
+                      >
+                        <Bookmark className={`h-3.5 w-3.5 shrink-0 ${isTopicSaved ? "fill-current" : ""}`} />
+                        <span>{isTopicSaved ? "محفوظ" : "حفظ"}</span>
+                      </Button>
 
-                    {/* حفظ الموضوع */}
-                    <Button
-                      variant={isTopicSaved ? "default" : "outline"}
-                      size="sm"
-                      onClick={handleToggleSaveTopic}
-                      aria-pressed={isTopicSaved}
-                      className={`h-9 rounded-xl gap-1.5 text-xs font-semibold ${
-                        isTopicSaved
-                          ? ""
-                          : "bg-background hover:bg-[color:var(--angle-soft)] hover:text-[color:var(--angle)]"
-                      }`}
-                      style={isTopicSaved ? { backgroundColor: theme.color, color: "#fff" } : undefined}
-                      data-testid="button-save-topic"
-                    >
-                      <Bookmark className={`h-3.5 w-3.5 ${isTopicSaved ? "fill-current" : ""}`} />
-                      <span>{isTopicSaved ? "محفوظ" : "حفظ"}</span>
-                    </Button>
+                      {/* وضع القراءة المركّزة */}
+                      <FocusReaderTrigger
+                        language="ar"
+                        onClick={() => setFocusOpen(true)}
+                        className="no-min-touch-size h-7 sm:h-8 px-2 sm:px-2.5 rounded-lg border-border/80 bg-background text-[11px] sm:text-xs font-semibold hover:bg-[color:var(--angle-soft)] hover:text-[color:var(--angle)] shrink-0"
+                      />
+                    </div>
                   </div>
 
-                  {/* أزرار المشاركة السريعة العلوية (مع الحفاظ على جميع data-testid) */}
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleShare}
-                      className="h-9 rounded-xl gap-1.5 border-[color:var(--angle-border)] bg-background text-xs font-semibold text-[color:var(--angle)] hover:bg-[color:var(--angle-soft)] hover:text-[color:var(--angle)]"
-                      data-testid="button-share"
-                    >
-                      <Share2 className="h-3.5 w-3.5" />
-                      مشاركة
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={shareOnX}
-                      className="h-9 w-9 p-0 rounded-xl bg-background"
-                      aria-label="مشاركة على X"
-                      data-testid="button-share-x"
-                    >
-                      <span className="text-sm font-bold leading-none" aria-hidden="true">
-                        𝕏
-                      </span>
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={shareOnWhatsApp}
-                      className="h-9 w-9 p-0 rounded-xl bg-background text-[#25D366] hover:text-[#25D366]"
-                      aria-label="مشاركة عبر واتساب"
-                      data-testid="button-share-whatsapp"
-                    >
-                      <MessageCircle className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleCopyLink}
-                      className="h-9 w-9 p-0 rounded-xl bg-background"
-                      aria-label="نسخ الرابط"
-                      data-testid="button-copy-link"
-                    >
-                      {copied ? (
-                        <Check className="h-4 w-4 text-green-600" />
-                      ) : (
-                        <Copy className="h-4 w-4" />
-                      )}
-                    </Button>
+                  {/* الصف الثاني على الجوال / الطرف الأيسر على الشاشات الكبيرة: أزرار المشاركة السريعة العلوية */}
+                  <div className="flex items-center justify-between lg:justify-end gap-1.5 border-t border-border/50 pt-1.5 lg:border-t-0 lg:pt-0 shrink-0">
+                    <span className="text-[11px] font-semibold text-muted-foreground lg:hidden">
+                      مشاركة سريعة
+                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleShare}
+                        className="no-min-touch-size h-7 sm:h-8 px-2.5 rounded-lg gap-1 border-[color:var(--angle-border)] bg-background text-[11px] sm:text-xs font-semibold text-[color:var(--angle)] hover:bg-[color:var(--angle-soft)] hover:text-[color:var(--angle)]"
+                        data-testid="button-share"
+                      >
+                        <Share2 className="h-3.5 w-3.5 shrink-0" />
+                        مشاركة
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={shareOnX}
+                        className="no-min-touch-size h-7 w-7 sm:h-8 sm:w-8 p-0 rounded-lg bg-background"
+                        aria-label="مشاركة على X"
+                        data-testid="button-share-x"
+                      >
+                        <span className="text-xs sm:text-sm font-bold leading-none" aria-hidden="true">
+                          𝕏
+                        </span>
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={shareOnWhatsApp}
+                        className="no-min-touch-size h-7 w-7 sm:h-8 sm:w-8 p-0 rounded-lg bg-background text-[#25D366] hover:text-[#25D366]"
+                        aria-label="مشاركة عبر واتساب"
+                        data-testid="button-share-whatsapp"
+                      >
+                        <MessageCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleCopyLink}
+                        className="no-min-touch-size h-7 w-7 sm:h-8 sm:w-8 p-0 rounded-lg bg-background"
+                        aria-label="نسخ الرابط"
+                        data-testid="button-copy-link"
+                      >
+                        {copied ? (
+                          <Check className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-green-600" />
+                        ) : (
+                          <Copy className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                        )}
+                      </Button>
+                    </div>
                   </div>
                 </div>
               </header>
@@ -1648,17 +1657,17 @@ export default function TopicDetail() {
               {tocItems.length >= 2 && (
                 <nav
                   aria-label="محاور الموضوع"
-                  className="rounded-2xl border border-[color:var(--angle-border)] bg-[color:var(--angle-soft)]/35 p-4 sm:p-5"
+                  className="rounded-2xl border border-[color:var(--angle-border)] bg-[color:var(--angle-soft)]/35 p-3.5 sm:p-5"
                   data-testid="section-topic-toc"
                 >
                   <button
                     type="button"
                     onClick={() => setTocOpen((v) => !v)}
-                    className="flex w-full items-center justify-between gap-2 text-right"
+                    className="no-min-touch-size flex w-full items-center justify-between gap-2 text-right"
                     aria-expanded={tocOpen}
                     data-testid="button-toggle-toc"
                   >
-                    <span className="flex items-center gap-2 font-bold text-base text-foreground">
+                    <span className="flex items-center gap-2 font-bold text-sm sm:text-base text-foreground">
                       <span
                         className="flex h-7 w-7 items-center justify-center rounded-lg"
                         style={{ backgroundColor: theme.soft, color: theme.color }}
@@ -1682,7 +1691,7 @@ export default function TopicDetail() {
                   </button>
 
                   {tocOpen && (
-                    <ol className="mt-3 grid gap-2 sm:grid-cols-2 pt-3 border-t border-border/60">
+                    <ol className="mt-3 grid gap-1.5 sm:gap-2 sm:grid-cols-2 pt-3 border-t border-border/60">
                       {tocItems.map((item, idx) => (
                         <li key={item.id}>
                           <a
@@ -1693,11 +1702,11 @@ export default function TopicDetail() {
                                 .getElementById(item.id)
                                 ?.scrollIntoView({ behavior: "smooth", block: "start" });
                             }}
-                            className="group flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm text-foreground/90 hover:bg-background/80 hover:text-[color:var(--angle)] transition-colors"
+                            className="no-min-touch-size group flex items-center gap-2.5 rounded-xl px-2.5 py-1.5 sm:px-3 sm:py-2 text-xs sm:text-sm text-foreground/90 hover:bg-background/80 hover:text-[color:var(--angle)] transition-colors"
                             data-testid={`link-toc-${idx}`}
                           >
                             <span
-                              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold tabular-nums"
+                              className="flex h-5 w-5 sm:h-6 sm:w-6 shrink-0 items-center justify-center rounded-full text-[11px] sm:text-xs font-bold tabular-nums"
                               style={{ backgroundColor: theme.soft, color: theme.color }}
                             >
                               {formatNumber(idx + 1)}
@@ -1762,7 +1771,7 @@ export default function TopicDetail() {
               {/* ---- بطاقة أبرز اقتباس من الموضوع (قابلة للمشاركة بنقرة) ---- */}
               {standoutQuote && (
                 <section
-                  className="relative overflow-hidden rounded-2xl border p-6 sm:p-7"
+                  className="relative overflow-hidden rounded-2xl border p-4 sm:p-7"
                   style={{
                     backgroundColor: theme.softer,
                     borderColor: theme.border,
@@ -1770,24 +1779,24 @@ export default function TopicDetail() {
                   aria-label="اقتباس مميز من الموضوع"
                   data-testid="section-standout-quote"
                 >
-                  <div className="flex items-start justify-between gap-4">
+                  <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
                       <span
-                        className="flex h-8 w-8 items-center justify-center rounded-xl"
+                        className="flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-xl"
                         style={{ backgroundColor: theme.soft, color: theme.color }}
                       >
-                        <Quote className="h-4 w-4" />
+                        <Quote className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                       </span>
                       <span className="text-xs font-bold" style={{ color: theme.color }}>
                         اقتباس من الزاوية
                       </span>
                     </div>
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1">
                       <Button
                         variant="ghost"
                         size="sm"
                         onClick={() => handleCopyQuote(standoutQuote)}
-                        className="h-8 gap-1.5 text-xs font-semibold hover:bg-[color:var(--angle-soft)]"
+                        className="no-min-touch-size h-7 sm:h-8 px-2.5 gap-1.5 text-xs font-semibold hover:bg-[color:var(--angle-soft)]"
                         style={{ color: theme.color }}
                         data-testid="button-copy-standout-quote"
                       >
@@ -1798,7 +1807,7 @@ export default function TopicDetail() {
                         variant="ghost"
                         size="sm"
                         onClick={() => handleShareQuoteOnX(standoutQuote)}
-                        className="h-8 px-2.5 text-xs font-bold hover:bg-[color:var(--angle-soft)]"
+                        className="no-min-touch-size h-7 sm:h-8 px-2.5 text-xs font-bold hover:bg-[color:var(--angle-soft)]"
                         style={{ color: theme.color }}
                         aria-label="مشاركة الاقتباس على X"
                         data-testid="button-share-standout-quote-x"
@@ -1808,7 +1817,7 @@ export default function TopicDetail() {
                     </div>
                   </div>
 
-                  <blockquote className="mt-3 text-lg sm:text-xl font-bold leading-relaxed text-foreground">
+                  <blockquote className="mt-3 text-base sm:text-xl font-bold leading-relaxed text-foreground">
                     «{standoutQuote}»
                   </blockquote>
 
@@ -1861,7 +1870,7 @@ export default function TopicDetail() {
                       size="sm"
                       onClick={handleToggleSaveTopic}
                       aria-pressed={isTopicSaved}
-                      className="article-action gap-2"
+                      className="no-min-touch-size article-action h-9 gap-1.5 text-xs sm:text-sm"
                       data-testid="button-bottom-save-topic"
                     >
                       <Bookmark className={`h-4 w-4 ${isTopicSaved ? "fill-current" : ""}`} />
@@ -1870,7 +1879,7 @@ export default function TopicDetail() {
 
                     <FocusReaderTrigger
                       language="ar"
-                      className="article-action"
+                      className="no-min-touch-size article-action h-9 text-xs sm:text-sm"
                       onClick={() => setFocusOpen(true)}
                     />
                   </div>
@@ -1880,16 +1889,34 @@ export default function TopicDetail() {
               {/* ---- بطاقة الكاتب وتوقيع الزاوية ---- */}
               {(writer || angle.writerSignature) && (
                 <section
-                  className="rounded-2xl border p-6 sm:p-7"
+                  className="rounded-2xl border p-4 sm:p-7"
                   style={{ backgroundColor: theme.softer, borderColor: theme.border }}
                   aria-label="عن كاتب الزاوية"
                   data-testid="writer-signature"
                 >
-                  <div className="flex flex-col sm:flex-row items-start gap-4">
-                    {writer ? (
-                      writer.id ? (
-                        <Link href={`/muqtarab/writer/${writer.id}`}>
-                          <Avatar className="h-16 w-16 shrink-0 cursor-pointer ring-2 ring-[color:var(--angle-border)] ring-offset-2 ring-offset-background">
+                  <div className="flex flex-col sm:flex-row items-start gap-3.5 sm:gap-4">
+                    <div className="flex items-center gap-3 w-full sm:w-auto">
+                      {writer ? (
+                        writer.id ? (
+                          <Link href={`/muqtarab/writer/${writer.id}`}>
+                            <Avatar className="h-12 w-12 sm:h-16 sm:w-16 shrink-0 cursor-pointer ring-2 ring-[color:var(--angle-border)] ring-offset-2 ring-offset-background">
+                              {writer.avatar && (
+                                <AvatarImage
+                                  src={writer.avatar}
+                                  alt={writer.name}
+                                  className="object-cover"
+                                />
+                              )}
+                              <AvatarFallback
+                                className="text-lg sm:text-xl font-bold"
+                                style={{ backgroundColor: theme.soft, color: theme.color }}
+                              >
+                                {writer.name.charAt(0)}
+                              </AvatarFallback>
+                            </Avatar>
+                          </Link>
+                        ) : (
+                          <Avatar className="h-12 w-12 sm:h-16 sm:w-16 shrink-0 ring-2 ring-[color:var(--angle-border)]">
                             {writer.avatar && (
                               <AvatarImage
                                 src={writer.avatar}
@@ -1898,42 +1925,45 @@ export default function TopicDetail() {
                               />
                             )}
                             <AvatarFallback
-                              className="text-xl font-bold"
+                              className="text-lg sm:text-xl font-bold"
                               style={{ backgroundColor: theme.soft, color: theme.color }}
                             >
                               {writer.name.charAt(0)}
                             </AvatarFallback>
                           </Avatar>
-                        </Link>
+                        )
                       ) : (
-                        <Avatar className="h-16 w-16 shrink-0 ring-2 ring-[color:var(--angle-border)]">
-                          {writer.avatar && (
-                            <AvatarImage
-                              src={writer.avatar}
-                              alt={writer.name}
-                              className="object-cover"
-                            />
-                          )}
-                          <AvatarFallback
-                            className="text-xl font-bold"
-                            style={{ backgroundColor: theme.soft, color: theme.color }}
-                          >
-                            {writer.name.charAt(0)}
-                          </AvatarFallback>
-                        </Avatar>
-                      )
-                    ) : (
-                      <span
-                        className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full"
-                        style={{ backgroundColor: theme.soft, color: theme.color }}
-                      >
-                        <User className="h-5 w-5" />
-                      </span>
-                    )}
+                        <span
+                          className="flex h-11 w-11 sm:h-12 sm:w-12 shrink-0 items-center justify-center rounded-full"
+                          style={{ backgroundColor: theme.soft, color: theme.color }}
+                        >
+                          <User className="h-5 w-5" />
+                        </span>
+                      )}
 
-                    <div className="flex-1 min-w-0 space-y-2">
+                      <div className="sm:hidden min-w-0 flex-1">
+                        <p className="text-[11px] font-bold" style={{ color: theme.color }}>
+                          كاتب زاوية {angle.nameAr}
+                        </p>
+                        {writer && (
+                          <h3 className="text-base font-bold text-foreground truncate">
+                            {writer.id ? (
+                              <Link href={`/muqtarab/writer/${writer.id}`}>
+                                <a className="no-min-touch-size hover:text-[color:var(--angle)] transition-colors">
+                                  {writer.name}
+                                </a>
+                              </Link>
+                            ) : (
+                              writer.name
+                            )}
+                          </h3>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex-1 min-w-0 space-y-2.5 w-full">
                       <div className="flex flex-wrap items-center justify-between gap-2">
-                        <div>
+                        <div className="hidden sm:block">
                           <p className="text-xs font-bold" style={{ color: theme.color }}>
                             كاتب زاوية {angle.nameAr}
                           </p>
@@ -1941,7 +1971,7 @@ export default function TopicDetail() {
                             <h3 className="text-lg font-bold text-foreground">
                               {writer.id ? (
                                 <Link href={`/muqtarab/writer/${writer.id}`}>
-                                  <a className="hover:text-[color:var(--angle)] transition-colors">
+                                  <a className="no-min-touch-size hover:text-[color:var(--angle)] transition-colors">
                                     {writer.name}
                                   </a>
                                 </Link>
@@ -1958,11 +1988,11 @@ export default function TopicDetail() {
                               variant="outline"
                               size="sm"
                               asChild
-                              className="h-8 text-xs rounded-xl border-[color:var(--angle-border)]"
+                              className="no-min-touch-size h-8 px-3 text-xs rounded-xl border-[color:var(--angle-border)]"
                               data-testid="button-writer-profile"
                             >
                               <Link href={`/muqtarab/writer/${writer.id}`}>
-                                <a>صفحة الكاتب</a>
+                                <a className="no-min-touch-size">صفحة الكاتب</a>
                               </Link>
                             </Button>
                           )}
@@ -1970,11 +2000,11 @@ export default function TopicDetail() {
                             variant="outline"
                             size="sm"
                             asChild
-                            className="h-8 text-xs rounded-xl border-[color:var(--angle-border)] text-[color:var(--angle)] hover:bg-[color:var(--angle-soft)]"
+                            className="no-min-touch-size h-8 px-3 text-xs rounded-xl border-[color:var(--angle-border)] text-[color:var(--angle)] hover:bg-[color:var(--angle-soft)]"
                             data-testid="button-angle-archive"
                           >
                             <Link href={`/muqtarab/${angleSlug}`}>
-                              <a>أرشيف زاوية {angle.nameAr}</a>
+                              <a className="no-min-touch-size">أرشيف زاوية {angle.nameAr}</a>
                             </Link>
                           </Button>
                         </div>
@@ -1982,7 +2012,7 @@ export default function TopicDetail() {
 
                       {writer?.bio && (
                         <p
-                          className="text-sm leading-relaxed text-muted-foreground"
+                          className="text-xs sm:text-sm leading-relaxed text-muted-foreground"
                           data-testid="text-writer-bio"
                         >
                           {renderTextWithLinks(writer.bio, theme.color)}
@@ -1995,7 +2025,7 @@ export default function TopicDetail() {
                             <p className="text-xs font-semibold mb-0.5" style={{ color: theme.color }}>
                               توقيع الكاتب
                             </p>
-                            <p className="text-sm font-medium leading-relaxed whitespace-pre-wrap text-foreground/90">
+                            <p className="text-xs sm:text-sm font-medium leading-relaxed whitespace-pre-wrap text-foreground/90">
                               {renderTextWithLinks(angle.writerSignature, theme.color)}
                             </p>
                           </div>
@@ -2009,20 +2039,20 @@ export default function TopicDetail() {
               {(previousTopic || nextTopic) && (
                 <nav
                   aria-label="التنقل بين مواضيع الزاوية"
-                  className="grid gap-4 sm:grid-cols-2"
+                  className="grid gap-3 sm:gap-4 sm:grid-cols-2"
                   data-testid="nav-angle-sequence"
                 >
                   {nextTopic ? (
                     <Link href={`/muqtarab/${angleSlug}/topic/${nextTopic.slug}`}>
                       <a
-                        className="group flex flex-col justify-between rounded-2xl border border-border/80 bg-card p-4 transition-all hover:border-[color:var(--angle-border)] hover:shadow-md"
+                        className="group flex flex-col justify-between rounded-2xl border border-border/80 bg-card p-3.5 sm:p-4 transition-all hover:border-[color:var(--angle-border)] hover:shadow-md"
                         data-testid="link-next-topic"
                       >
                         <span className="flex items-center gap-1.5 text-xs font-bold text-muted-foreground group-hover:text-[color:var(--angle)]">
                           <ArrowRight className="h-3.5 w-3.5" />
                           الموضوع الأحدث في {angle.nameAr}
                         </span>
-                        <p className="mt-2 font-bold text-base text-foreground group-hover:text-[color:var(--angle)] line-clamp-2">
+                        <p className="mt-1.5 sm:mt-2 font-bold text-sm sm:text-base text-foreground group-hover:text-[color:var(--angle)] line-clamp-2">
                           {nextTopic.title}
                         </p>
                       </a>
@@ -2034,14 +2064,14 @@ export default function TopicDetail() {
                   {previousTopic ? (
                     <Link href={`/muqtarab/${angleSlug}/topic/${previousTopic.slug}`}>
                       <a
-                        className="group flex flex-col justify-between rounded-2xl border border-border/80 bg-card p-4 text-left sm:text-right transition-all hover:border-[color:var(--angle-border)] hover:shadow-md"
+                        className="group flex flex-col justify-between rounded-2xl border border-border/80 bg-card p-3.5 sm:p-4 text-left sm:text-right transition-all hover:border-[color:var(--angle-border)] hover:shadow-md"
                         data-testid="link-previous-topic"
                       >
                         <span className="flex items-center justify-end sm:justify-start gap-1.5 text-xs font-bold text-muted-foreground group-hover:text-[color:var(--angle)]">
                           <span>الموضوع السابق في {angle.nameAr}</span>
                           <ArrowLeft className="h-3.5 w-3.5" />
                         </span>
-                        <p className="mt-2 font-bold text-base text-foreground group-hover:text-[color:var(--angle)] line-clamp-2">
+                        <p className="mt-1.5 sm:mt-2 font-bold text-sm sm:text-base text-foreground group-hover:text-[color:var(--angle)] line-clamp-2">
                           {previousTopic.title}
                         </p>
                       </a>
@@ -2070,23 +2100,28 @@ export default function TopicDetail() {
 
               <Separator />
 
-              <div className="flex items-center justify-between gap-4 flex-wrap pb-2">
+              <div className="flex items-center justify-between gap-3 flex-wrap pb-2">
                 <Button
                   variant="ghost"
                   asChild
-                  className="gap-2 text-[color:var(--angle)] hover:text-[color:var(--angle)] hover:bg-[color:var(--angle-soft)]"
+                  className="no-min-touch-size h-9 gap-2 text-xs sm:text-sm text-[color:var(--angle)] hover:text-[color:var(--angle)] hover:bg-[color:var(--angle-soft)]"
                   data-testid="button-back-to-angle"
                 >
                   <Link href={`/muqtarab/${angleSlug}`}>
-                    <a className="flex items-center gap-2">
+                    <a className="no-min-touch-size flex items-center gap-2">
                       <ArrowRight className="h-4 w-4" />
                       العودة إلى زاوية {angle.nameAr}
                     </a>
                   </Link>
                 </Button>
-                <Button variant="outline" asChild className="gap-2" data-testid="button-explore-angles">
+                <Button
+                  variant="outline"
+                  asChild
+                  className="no-min-touch-size h-9 gap-2 text-xs sm:text-sm"
+                  data-testid="button-explore-angles"
+                >
                   <Link href="/muqtarab">
-                    <a>استكشف المزيد من الزوايا</a>
+                    <a className="no-min-touch-size">استكشف المزيد من الزوايا</a>
                   </Link>
                 </Button>
               </div>
@@ -2336,15 +2371,15 @@ export default function TopicDetail() {
         <Footer />
       </div>
 
-      {/* شريط عائم سفلي يوضح تقدم القراءة + زر العودة للأعلى */}
+      {/* شريط عائم سفلي يوضح تقدم القراءة + زر العودة للأعلى (في اليمين لتجنب التداخل مع زر الصعود العام في اليسار) */}
       <div
-        className={`fixed bottom-6 left-6 z-50 flex items-center gap-2 transition-all duration-300 ${
+        className={`fixed bottom-5 right-4 sm:bottom-6 sm:right-6 z-40 flex items-center gap-1.5 transition-all duration-300 ${
           showBackToTop ? "opacity-100 translate-y-0" : "pointer-events-none opacity-0 translate-y-3"
         }`}
       >
         {readingPct > 0 && readingPct < 100 && (
           <div
-            className="hidden sm:flex items-center gap-2 rounded-full border bg-background/95 px-3.5 py-2 text-xs font-semibold shadow-lg backdrop-blur"
+            className="flex items-center gap-1.5 rounded-full border bg-background/95 px-3 py-1.5 text-[11px] sm:text-xs font-semibold shadow-lg backdrop-blur"
             style={{ borderColor: theme.border }}
             data-testid="floating-reading-status"
           >
@@ -2360,12 +2395,12 @@ export default function TopicDetail() {
         <button
           type="button"
           onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
-          className="flex h-11 w-11 items-center justify-center rounded-full border bg-background/95 shadow-lg backdrop-blur transition-transform duration-300 hover:scale-105"
+          className="no-min-touch-size hidden sm:flex h-9 w-9 items-center justify-center rounded-full border bg-background/95 shadow-lg backdrop-blur transition-transform duration-300 hover:scale-105"
           style={{ borderColor: theme.border, color: theme.color }}
           aria-label="العودة إلى الأعلى"
           data-testid="button-back-to-top"
         >
-          <ArrowUp className="h-5 w-5" />
+          <ArrowUp className="h-4 w-4" />
         </button>
       </div>
     </div>
