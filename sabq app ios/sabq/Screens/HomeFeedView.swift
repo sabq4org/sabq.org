@@ -918,59 +918,58 @@ struct HomeFeedView: View {
         return articlesStore.filteredArticles.filter { $0.id != skip && !opinionIDs.contains($0.id) }
     }
 
-    /// فاصل اليوم: قبل أول خبر من يوم يختلف عن الخبر السابق (أو عن اليوم للخبر الأول).
-    private func startsNewDay(_ article: Article, after previous: Article?) -> Bool {
-        let reference = previous?.publishDate ?? Date()
-        return !SabqFormatters.riyadhCalendar.isDate(article.publishDate, inSameDayAs: reference)
-    }
-
     private var latestArticlesSection: some View {
         let articles = latestTimelineArticles
-        return VStack(alignment: .leading, spacing: 8) {
-            HomeSectionHeader(title: articlesStore.selectedCategory?.title ?? "آخر الأخبار")
-
-            // LazyVStack so the home feed only materialises rows
-            // for articles entering the viewport.
-            LazyVStack(alignment: .leading, spacing: 0) {
-                if articlesStore.selectedCategory == nil {
-                    LatestTimelineNowRow()
+        return HomeSectionCard(
+            title: articlesStore.selectedCategory?.title ?? "آخر الأخبار",
+            lazy: true
+        ) {
+            EmptyView()
+        } content: {
+            ForEach(Array(articles.enumerated()), id: \.element.id) { index, article in
+                if index > 0 {
+                    SidebarRowDivider()
                 }
 
-                ForEach(Array(articles.enumerated()), id: \.element.id) { index, article in
-                    if startsNewDay(article, after: index > 0 ? articles[index - 1] : nil) {
-                        LatestTimelineDayDivider(date: article.publishDate)
-                    } else if index > 0 {
-                        SidebarRowDivider()
-                            .padding(.leading, LatestTimelineStyle.dividerInset)
-                    }
-
-                    NavigationLink(value: article) {
-                        LatestTimelineRow(
-                            article: article,
-                            isNew: articlesStore.isRecentlyAdded(article.id)
+                NavigationLink(value: article) {
+                    CompactArticleRow(
+                        article: article,
+                        onBookmark: { bookmarksStore.toggle(article.id, article: article) },
+                        isBookmarked: bookmarksStore.isBookmarked(article.id),
+                        isNew: articlesStore.isRecentlyAdded(article.id),
+                        showsCategory: articlesStore.selectedCategory == nil
+                    )
+                }
+                .buttonStyle(.plain)
+                .contextMenu {
+                    Button {
+                        bookmarksStore.toggle(article.id, article: article)
+                    } label: {
+                        Label(
+                            bookmarksStore.isBookmarked(article.id) ? "إزالة من المحفوظات" : "حفظ المقال",
+                            systemImage: bookmarksStore.isBookmarked(article.id) ? "bookmark.slash" : "bookmark"
                         )
                     }
-                    .buttonStyle(.plain)
-                    .onAppear {
-                        // Prefetch images for the next 5 articles
-                        let upcoming = articles.dropFirst(index + 1).prefix(5)
-                        let urls = upcoming.compactMap { $0.imageURL.flatMap(URL.init(string:)) }
-                        if !urls.isEmpty { ImageCache.prefetch(urls: urls, maxPixelSize: LatestTimelineStyle.thumbnailPixels) }
-                    }
                 }
-            }
-            .background(alignment: .leading) {
-                LatestTimelineRail()
+                .onAppear {
+                    // Prefetch images for the next 5 articles
+                    let upcoming = articles.dropFirst(index + 1).prefix(5)
+                    let urls = upcoming.compactMap { $0.imageURL.flatMap(URL.init(string:)) }
+                    if !urls.isEmpty { ImageCache.prefetch(urls: urls, maxPixelSize: LatestTimelineStyle.thumbnailPixels) }
+                }
             }
 
             if articlesStore.hasMore && articlesStore.selectedCategory == nil {
-                VStack(spacing: 4) {
+                SidebarRowDivider()
+
+                VStack(spacing: 6) {
                     // فشل شبكي أثناء "تحميل المزيد": رسالة صريحة بدل
                     // إخفاء الزر بصمت كأن القائمة انتهت (تدقيق err-1).
                     if articlesStore.loadMoreFailed {
                         Text("تعذر تحميل المزيد. تحقق من اتصالك")
                             .font(SabqFonts.app(size: 12, weight: .medium))
                             .foregroundStyle(SabqTheme.coral)
+                            .padding(.top, 4)
                     }
                     Button {
                         Task { await articlesStore.loadMore() }
@@ -985,20 +984,17 @@ struct HomeFeedView: View {
                                 .foregroundStyle(articlesStore.loadMoreFailed ? SabqTheme.coral : SabqTheme.primaryEnd)
                         }
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 13)
+                        .padding(.vertical, 12)
                         .background(
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .fill(SabqTheme.surface)
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .stroke(SabqTheme.outline, lineWidth: 1)
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .fill(SabqTheme.paleFill)
                         )
                     }
                     .buttonStyle(.plain)
                     .disabled(articlesStore.isLoading)
                 }
-                .padding(.top, 8)
+                .padding(.top, 10)
+                .padding(.bottom, 8)
             }
         }
     }
