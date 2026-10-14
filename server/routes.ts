@@ -35498,7 +35498,18 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   // Admin: Create topic
   app.post("/api/admin/breaking-ticker/topics", requireAuth, requirePermission("breaking_ticker.manage"), async (req: any, res) => {
     try {
-      const parsed = insertBreakingTickerTopicSchema.safeParse({ ...req.body, createdBy: req.user.id });
+      const rawExpiresAt = req.body?.expiresAt;
+      const expiresAt =
+        rawExpiresAt === undefined
+          ? undefined
+          : rawExpiresAt === null || rawExpiresAt === ""
+          ? null
+          : new Date(rawExpiresAt);
+      const parsed = insertBreakingTickerTopicSchema.safeParse({
+        ...req.body,
+        ...(expiresAt !== undefined ? { expiresAt } : {}),
+        createdBy: req.user.id,
+      });
       if (!parsed.success) {
         return res.status(400).json({ message: "بيانات غير صالحة", errors: parsed.error.errors });
       }
@@ -35517,7 +35528,22 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   app.patch("/api/admin/breaking-ticker/topics/:id", requireAuth, requirePermission("breaking_ticker.manage"), async (req: any, res) => {
     try {
       const { id } = req.params;
-      const topic = await storage.updateBreakingTickerTopic(id, req.body);
+      const updatePayload: Record<string, any> = {};
+      if (typeof req.body?.topicTitle === "string" && req.body.topicTitle.trim()) {
+        updatePayload.topicTitle = req.body.topicTitle.trim();
+      }
+      if (typeof req.body?.isActive === "boolean") {
+        updatePayload.isActive = req.body.isActive;
+      }
+      if (req.body && "expiresAt" in req.body) {
+        const raw = req.body.expiresAt;
+        const parsedDate = raw === null || raw === "" ? null : new Date(raw);
+        if (parsedDate !== null && Number.isNaN(parsedDate.getTime())) {
+          return res.status(400).json({ message: "تاريخ انتهاء غير صالح" });
+        }
+        updatePayload.expiresAt = parsedDate;
+      }
+      const topic = await storage.updateBreakingTickerTopic(id, updatePayload);
       invalidatePublishedContent({ isBreaking: true, reason: "breaking-ticker" });
       res.json(topic);
     } catch (error) {
