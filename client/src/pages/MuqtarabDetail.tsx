@@ -295,15 +295,15 @@ export default function MuqtarabDetail() {
 
       {/* Breadcrumbs */}
       <div className="public-page-header border-b bg-muted/30">
-        <div className="public-container container mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-3">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <div className="public-container container mx-auto max-w-7xl px-3.5 sm:px-6 lg:px-8 py-2 sm:py-3">
+          <div className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm text-muted-foreground">
             <Link href="/muqtarab">
-              <a className="hover:text-foreground transition-colors" data-testid="link-breadcrumb-muqtarab">
+              <a className="no-min-touch-size hover:text-foreground transition-colors" data-testid="link-breadcrumb-muqtarab">
                 مُقترب
               </a>
             </Link>
-            <ChevronRight className="h-4 w-4" />
-            <span className="text-foreground line-clamp-1" data-testid="text-breadcrumb-angle">
+            <ChevronRight className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            <span className="text-foreground line-clamp-1 font-medium" data-testid="text-breadcrumb-angle">
               {angle.nameAr}
             </span>
           </div>
@@ -338,48 +338,48 @@ export default function MuqtarabDetail() {
           />
         )}
         
-        <div className="public-container container relative z-10 mx-auto max-w-7xl px-4 py-10 sm:px-6 md:py-12 lg:px-8">
+        <div className="public-container container relative z-10 mx-auto max-w-7xl px-4 py-6 sm:py-10 sm:px-6 md:py-12 lg:px-8">
           <div className="mx-auto max-w-3xl text-center text-white">
             {/* Icon */}
             <div 
-              className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full md:h-24 md:w-24"
+              className="mx-auto mb-3 sm:mb-4 flex h-14 w-14 sm:h-20 sm:w-20 items-center justify-center rounded-full md:h-24 md:w-24"
               style={{ 
                 backgroundColor: 'rgba(255, 255, 255, 0.2)',
                 backdropFilter: 'blur(10px)'
               }}
               data-testid="icon-container"
             >
-              <Icon className="h-10 w-10 text-white md:h-12 md:w-12" data-testid="icon-angle" />
+              <Icon className="h-7 w-7 sm:h-10 sm:w-10 text-white md:h-12 md:w-12" data-testid="icon-angle" />
             </div>
 
             {/* Title */}
-            <h1 className="mb-3 text-3xl font-bold leading-tight sm:text-4xl lg:text-5xl" data-testid="heading-angle-name">
+            <h1 className="mb-2 sm:mb-3 text-2xl font-bold leading-tight sm:text-4xl lg:text-5xl" data-testid="heading-angle-name">
               {angle.nameAr}
             </h1>
 
             {/* Writer */}
             {writer && (
               <div
-                className="mb-4 flex items-center justify-center gap-3"
+                className="mb-3 sm:mb-4 flex items-center justify-center gap-2.5 sm:gap-3"
                 data-testid="writer-byline"
               >
                 {writer.id ? (
                   <Link href={`/muqtarab/writer/${writer.id}`}>
-                    <Avatar className="h-11 w-11 cursor-pointer ring-2 ring-white/30 transition-all hover:ring-white/60">
+                    <Avatar className="h-9 w-9 sm:h-11 sm:w-11 cursor-pointer ring-2 ring-white/30 transition-all hover:ring-white/60">
                       {writer.avatar && (
                         <AvatarImage src={writer.avatar} alt={writer.name} className="object-cover" />
                       )}
-                      <AvatarFallback className="bg-white/20 text-white text-sm font-bold">
+                      <AvatarFallback className="bg-white/20 text-white text-xs sm:text-sm font-bold">
                         {writer.name.charAt(0)}
                       </AvatarFallback>
                     </Avatar>
                   </Link>
                 ) : (
-                  <Avatar className="h-11 w-11 ring-2 ring-white/30">
+                  <Avatar className="h-9 w-9 sm:h-11 sm:w-11 ring-2 ring-white/30">
                     {writer.avatar && (
                       <AvatarImage src={writer.avatar} alt={writer.name} className="object-cover" />
                     )}
-                    <AvatarFallback className="bg-white/20 text-white text-sm font-bold">
+                    <AvatarFallback className="bg-white/20 text-white text-xs sm:text-sm font-bold">
                       {writer.name.charAt(0)}
                     </AvatarFallback>
                   </Avatar>
@@ -388,18 +388,18 @@ export default function MuqtarabDetail() {
                   {writer.id ? (
                     <Link href={`/muqtarab/writer/${writer.id}`}>
                       <a
-                        className="font-bold text-white transition-colors hover:text-white/90"
+                        className="no-min-touch-size font-bold text-sm sm:text-base text-white transition-colors hover:text-white/90"
                         data-testid="text-writer-name"
                       >
                         {writer.name}
                       </a>
                     </Link>
                   ) : (
-                    <p className="font-bold text-white" data-testid="text-writer-name">
+                    <p className="font-bold text-sm sm:text-base text-white" data-testid="text-writer-name">
                       {writer.name}
                     </p>
                   )}
-                  <p className="text-sm text-white/75" data-testid="text-writer-role">
+                  <p className="text-xs sm:text-sm text-white/75" data-testid="text-writer-role">
                     كاتب الزاوية
                   </p>
                 </div>
@@ -408,7 +408,7 @@ export default function MuqtarabDetail() {
 
             {/* Description */}
             {angle.shortDesc && (
-              <p className="mx-auto mb-4 max-w-2xl text-base leading-7 text-white/90 md:text-lg" data-testid="text-angle-description">
+              <p className="mx-auto mb-3 sm:mb-4 max-w-2xl text-sm sm:text-base leading-relaxed sm:leading-7 text-white/90 md:text-lg" data-testid="text-angle-description">
                 {angle.shortDesc}
               </p>
             )}
@@ -416,12 +416,12 @@ export default function MuqtarabDetail() {
             {/* Writer bio / signature pill */}
             {(writer?.bio || angle.writerSignature) && (
               <div
-                className="mx-auto mb-5 max-w-2xl rounded-2xl border border-white/20 bg-black/15 px-4 py-3 text-sm leading-relaxed text-white/90 backdrop-blur-md"
+                className="mx-auto mb-4 sm:mb-5 max-w-2xl rounded-2xl border border-white/20 bg-black/15 px-3.5 py-2.5 sm:px-4 sm:py-3 text-xs sm:text-sm leading-relaxed text-white/90 backdrop-blur-md"
                 data-testid="card-angle-writer-bio"
               >
                 {writer?.bio && <p>{writer.bio}</p>}
                 {angle.writerSignature && (
-                  <p className="mt-1 whitespace-pre-line text-xs text-white/80">
+                  <p className="mt-1 whitespace-pre-line text-[11px] sm:text-xs text-white/80">
                     {angle.writerSignature}
                   </p>
                 )}
@@ -429,7 +429,7 @@ export default function MuqtarabDetail() {
             )}
 
             {/* Stats & Actions */}
-            <div className="flex flex-wrap items-center justify-center gap-3">
+            <div className="flex flex-wrap items-center justify-center gap-2.5 sm:gap-3">
               <Badge 
                 variant="secondary" 
                 className="bg-white/20 text-white border-white/30 backdrop-blur-sm"
@@ -440,11 +440,12 @@ export default function MuqtarabDetail() {
 
               <Button
                 variant="outline"
-                className="gap-2 bg-white/10 text-white border-white/30 hover:bg-white/20 backdrop-blur-sm"
+                size="sm"
+                className="no-min-touch-size h-8 px-3 text-xs gap-1.5 bg-white/10 text-white border-white/30 hover:bg-white/20 backdrop-blur-sm"
                 onClick={handleShare}
                 data-testid="button-share"
               >
-                <Share2 className="h-4 w-4" />
+                <Share2 className="h-3.5 w-3.5" />
                 مشاركة
               </Button>
             </div>
@@ -453,39 +454,55 @@ export default function MuqtarabDetail() {
       </div>
 
       {/* Topics Section */}
-      <main id="muqtarab-topics" className="container mx-auto flex-1 max-w-7xl scroll-mt-24 px-4 py-7 sm:px-6 lg:px-8 lg:py-10">
-        <div className="mb-6 flex flex-col gap-4 border-b border-border/60 pb-5 md:flex-row md:items-end md:justify-between">
-          <div>
-            <h2 className="mb-2 flex items-center gap-2 text-2xl font-bold md:text-3xl" data-testid="heading-topics">
-              <span
-                className="flex h-9 w-9 items-center justify-center rounded-lg"
-                style={{ backgroundColor: theme.soft, color: theme.color }}
-              >
-                <FileText className="h-5 w-5" />
-              </span>
-              المواضيع
-            </h2>
-            <div className="h-1 w-16 rounded-full" style={{ backgroundColor: theme.color }} />
+      <main id="muqtarab-topics" className="container mx-auto flex-1 max-w-7xl scroll-mt-24 px-3.5 sm:px-6 lg:px-8 py-5 sm:py-7 lg:py-10">
+        <div className="mb-5 sm:mb-6 flex flex-col gap-3.5 sm:gap-4 border-b border-border/60 pb-4 sm:pb-5 md:flex-row md:items-end md:justify-between">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <h2 className="mb-1.5 sm:mb-2 flex items-center gap-2 text-xl sm:text-2xl font-bold md:text-3xl" data-testid="heading-topics">
+                <span
+                  className="flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-lg"
+                  style={{ backgroundColor: theme.soft, color: theme.color }}
+                >
+                  <FileText className="h-4 w-4 sm:h-5 sm:w-5" />
+                </span>
+                المواضيع
+              </h2>
+              <div className="h-1 w-14 sm:w-16 rounded-full" style={{ backgroundColor: theme.color }} />
+            </div>
+
+            <Button
+              variant="ghost"
+              size="sm"
+              asChild
+              className="no-min-touch-size md:hidden h-8 px-2.5 text-xs gap-1.5 text-[color:var(--angle)] hover:bg-[color:var(--angle-soft)] hover:text-[color:var(--angle)]"
+            >
+              <Link href="/muqtarab">
+                <a className="no-min-touch-size flex items-center gap-1.5">
+                  <ArrowRight className="h-3.5 w-3.5" />
+                  جميع الزوايا
+                </a>
+              </Link>
+            </Button>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2.5">
+          <div className="flex flex-wrap items-center gap-2">
             {topics.length > 1 && (
               <>
-                <div className="relative w-full sm:w-64">
+                <div className="relative flex-1 min-w-[160px] sm:w-64">
                   <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
                     type="search"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="ابحث في مواضيع الزاوية..."
-                    className="h-9 pr-9 pl-8 text-sm"
+                    className="h-9 pr-9 pl-8 text-xs sm:text-sm"
                     data-testid="input-search-angle-topics"
                   />
                   {searchQuery && (
                     <button
                       type="button"
                       onClick={() => setSearchQuery("")}
-                      className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                      className="no-min-touch-size absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                       aria-label="مسح البحث"
                     >
                       <X className="h-3.5 w-3.5" />
@@ -494,14 +511,14 @@ export default function MuqtarabDetail() {
                 </div>
 
                 <div
-                  className="inline-flex items-center rounded-lg border border-border/70 bg-muted/30 p-0.5 text-xs"
+                  className="inline-flex items-center shrink-0 rounded-lg border border-border/70 bg-muted/30 p-0.5 text-xs"
                   role="group"
                   aria-label="ترتيب المواضيع"
                 >
                   <button
                     type="button"
                     onClick={() => setSortBy("latest")}
-                    className={`rounded-md px-2.5 py-1.5 font-medium transition-colors ${
+                    className={`no-min-touch-size rounded-md px-2.5 py-1.5 font-medium transition-colors ${
                       sortBy === "latest"
                         ? "bg-background text-foreground shadow-sm"
                         : "text-muted-foreground hover:text-foreground"
@@ -513,7 +530,7 @@ export default function MuqtarabDetail() {
                   <button
                     type="button"
                     onClick={() => setSortBy("popular")}
-                    className={`rounded-md px-2.5 py-1.5 font-medium transition-colors ${
+                    className={`no-min-touch-size rounded-md px-2.5 py-1.5 font-medium transition-colors ${
                       sortBy === "popular"
                         ? "bg-background text-foreground shadow-sm"
                         : "text-muted-foreground hover:text-foreground"
@@ -528,12 +545,13 @@ export default function MuqtarabDetail() {
 
             <Button
               variant="ghost"
+              size="sm"
               asChild
-              className="gap-2 text-[color:var(--angle)] hover:bg-[color:var(--angle-soft)] hover:text-[color:var(--angle)]"
+              className="no-min-touch-size hidden md:inline-flex h-8 gap-2 text-xs text-[color:var(--angle)] hover:bg-[color:var(--angle-soft)] hover:text-[color:var(--angle)]"
               data-testid="button-back"
             >
               <Link href="/muqtarab">
-                <a className="flex items-center gap-2">
+                <a className="no-min-touch-size flex items-center gap-2">
                   <ArrowRight className="h-4 w-4" />
                   جميع الزوايا
                 </a>

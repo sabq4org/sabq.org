@@ -584,7 +584,7 @@ export function FocusReaderTrigger({
       className={className}
       data-testid="button-focus-mode-toggle"
     >
-      <Eye className="me-2 h-4 w-4" />
+      <Eye className="me-1.5 h-3.5 w-3.5 shrink-0" />
       <span>{label}</span>
     </Button>
   );

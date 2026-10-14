@@ -173,7 +173,7 @@ export function OpinionCard({
             {authorHref ? (
               <Link
                 href={authorHref}
-                className="public-opinion-author-name relative z-10 block hover:text-primary transition-colors"
+                className="no-min-touch-size public-opinion-author-name relative z-10 block hover:text-primary transition-colors"
               >
                 {name}
               </Link>
@@ -219,7 +219,7 @@ export function OpinionCard({
           )}
         </span>
         {variant === "grid" ? (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2">
             {onQuickPreview && summaryText.length > 80 && (
               <button
                 type="button"
@@ -228,7 +228,7 @@ export function OpinionCard({
                   e.stopPropagation();
                   onQuickPreview(article);
                 }}
-                className="public-opinion-quick-btn relative z-10"
+                className="no-min-touch-size public-opinion-quick-btn relative z-10"
                 title="معاينة خلاصة المقال"
                 data-testid={`button-opinion-preview-${article.id}`}
               >
@@ -247,7 +247,7 @@ export function OpinionCard({
                 aria-pressed={!!isSaved}
                 aria-label={isSaved ? "إزالة من المحفوظات" : "حفظ المقال"}
                 title={isSaved ? "محفوظ في قائمتك" : "حفظ للقراءة لاحقاً"}
-                className={`public-opinion-save-btn relative z-10${isSaved ? " is-saved" : ""}`}
+                className={`no-min-touch-size public-opinion-save-btn relative z-10${isSaved ? " is-saved" : ""}`}
                 data-testid={`button-opinion-save-${article.id}`}
               >
                 <Bookmark className={`h-3.5 w-3.5${isSaved ? " fill-current" : ""}`} aria-hidden="true" />

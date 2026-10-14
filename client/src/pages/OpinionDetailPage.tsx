@@ -731,14 +731,14 @@ export default function OpinionDetailPage() {
       {/* Floating Selection Quote Share/Copy Toolbar */}
       {selectionQuote && (
         <div
-          className="fixed z-50 -translate-x-1/2 flex items-center gap-1.5 rounded-full border border-border bg-popover/95 px-3 py-1.5 text-xs font-medium text-popover-foreground shadow-lg backdrop-blur-md animate-in fade-in zoom-in-95 duration-150"
+          className="fixed z-50 -translate-x-1/2 flex items-center gap-1 rounded-full border border-border bg-popover/95 px-2.5 py-1 text-xs font-medium text-popover-foreground shadow-lg backdrop-blur-md animate-in fade-in zoom-in-95 duration-150"
           style={{ top: `${selectionQuote.top}px`, left: `${selectionQuote.left}px` }}
           data-testid="opinion-selection-toolbar"
         >
           <button
             type="button"
             onClick={handleCopySelectedQuote}
-            className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 hover:bg-muted transition-colors"
+            className="no-min-touch-size inline-flex h-7 items-center gap-1.5 rounded-full px-2.5 py-0.5 hover:bg-muted transition-colors"
             data-testid="button-copy-quote"
           >
             {copiedSelection ? (
@@ -752,7 +752,7 @@ export default function OpinionDetailPage() {
           <button
             type="button"
             onClick={handleShareSelectedQuote}
-            className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 hover:bg-muted transition-colors"
+            className="no-min-touch-size inline-flex h-7 items-center gap-1.5 rounded-full px-2.5 py-0.5 hover:bg-muted transition-colors"
             data-testid="button-share-quote"
           >
             <Share2 className="h-3.5 w-3.5 text-primary" />
@@ -770,7 +770,7 @@ export default function OpinionDetailPage() {
       </div>
 
       <main className="flex-1">
-        <div className="article-detail-main container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="article-detail-main container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8">
           <DmsMpuAd topSlot />
 
           {/* Breadcrumbs */}
@@ -892,23 +892,23 @@ export default function OpinionDetailPage() {
                 </div>
               </header>
 
-              {/* Reader Experience Toolbar: Font size, reading surface, Focus Mode, Quick Save */}
+              {/* Reader Experience Toolbar: Single sleek horizontal bar on mobile & desktop */}
               <div
-                className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border/70 bg-muted/30 px-4 py-2.5"
+                className="flex items-center justify-between gap-1.5 sm:gap-2.5 overflow-x-auto no-scrollbar rounded-xl sm:rounded-2xl border border-border/70 bg-muted/25 px-2.5 py-1.5 sm:px-3.5 sm:py-2"
                 data-testid="opinion-reader-toolbar"
               >
-                <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
                   {/* Font Size Controls */}
-                  <div className="inline-flex items-center gap-1 rounded-xl border border-border/70 bg-background/80 p-1">
-                    <span className="inline-flex items-center gap-1 px-2 text-xs font-medium text-muted-foreground">
+                  <div className="inline-flex items-center gap-0.5 rounded-lg border border-border/70 bg-background/90 p-0.5 shrink-0">
+                    <span className="hidden md:inline-flex items-center gap-1 px-2 text-xs font-medium text-muted-foreground">
                       <Type className="h-3.5 w-3.5" />
-                      <span className="hidden sm:inline">حجم الخط</span>
+                      <span>حجم الخط</span>
                     </span>
                     <button
                       type="button"
                       onClick={() => stepFontSize(-1)}
                       disabled={fontSize === "small"}
-                      className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-xs font-bold text-foreground hover:bg-muted disabled:opacity-40 transition-colors"
+                      className="no-min-touch-size inline-flex h-7 w-7 items-center justify-center rounded-md text-xs font-bold text-foreground hover:bg-muted disabled:opacity-40 transition-colors"
                       aria-label="تصغير حجم النص"
                       data-testid="button-font-decrease"
                     >
@@ -917,7 +917,7 @@ export default function OpinionDetailPage() {
                     <button
                       type="button"
                       onClick={() => setFontSize("medium")}
-                      className="px-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
+                      className="no-min-touch-size inline-flex h-7 items-center justify-center px-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
                       title={`الحجم الحالي: ${FONT_SIZE_STYLES[fontSize].label}`}
                       data-testid="button-font-reset"
                     >
@@ -927,7 +927,7 @@ export default function OpinionDetailPage() {
                       type="button"
                       onClick={() => stepFontSize(1)}
                       disabled={fontSize === "xlarge"}
-                      className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-xs font-bold text-foreground hover:bg-muted disabled:opacity-40 transition-colors"
+                      className="no-min-touch-size inline-flex h-7 w-7 items-center justify-center rounded-md text-xs font-bold text-foreground hover:bg-muted disabled:opacity-40 transition-colors"
                       aria-label="تكبير حجم النص"
                       data-testid="button-font-increase"
                     >
@@ -937,7 +937,7 @@ export default function OpinionDetailPage() {
 
                   {/* Reading Surface Controls */}
                   <div
-                    className="inline-flex items-center gap-1 rounded-xl border border-border/70 bg-background/80 p-1"
+                    className="inline-flex items-center gap-0.5 rounded-lg border border-border/70 bg-background/90 p-0.5 shrink-0"
                     role="group"
                     aria-label="خلفية القراءة"
                   >
@@ -952,7 +952,7 @@ export default function OpinionDetailPage() {
                         key={surface.id}
                         type="button"
                         onClick={() => setReadingSurface(surface.id)}
-                        className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium transition-colors ${
+                        className={`no-min-touch-size inline-flex h-7 items-center gap-1 rounded-md px-2 text-[11px] sm:text-xs font-medium transition-colors shrink-0 ${
                           readingSurface === surface.id
                             ? "bg-primary/15 text-primary font-semibold"
                             : "text-muted-foreground hover:text-foreground"
@@ -960,17 +960,17 @@ export default function OpinionDetailPage() {
                         aria-pressed={readingSurface === surface.id}
                         data-testid={`button-surface-${surface.id}`}
                       >
-                        <span className={`h-2.5 w-2.5 rounded-full border ${surface.dot}`} />
+                        <span className={`h-2.5 w-2.5 rounded-full border shrink-0 ${surface.dot}`} />
                         <span>{surface.label}</span>
                       </button>
                     ))}
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5 shrink-0">
                   {/* Live Reading Progress Indicator */}
                   <span
-                    className="hidden md:inline-flex items-center gap-1.5 text-xs text-muted-foreground"
+                    className="hidden lg:inline-flex items-center gap-1.5 text-xs text-muted-foreground"
                     data-testid="text-reading-progress"
                   >
                     <Clock className="h-3.5 w-3.5 text-primary" />
@@ -984,19 +984,19 @@ export default function OpinionDetailPage() {
                   <Button
                     variant={article.isBookmarked ? "default" : "outline"}
                     size="sm"
-                    className="h-8 rounded-xl px-2.5 text-xs gap-1.5"
+                    className="no-min-touch-size h-7 sm:h-8 rounded-lg px-2 sm:px-2.5 text-[11px] sm:text-xs gap-1 shrink-0"
                     onClick={handleBookmark}
                     disabled={bookmarkMutation.isPending}
                     aria-pressed={!!article.isBookmarked}
                     data-testid="button-top-bookmark"
                   >
-                    <Bookmark className={`h-3.5 w-3.5 ${article.isBookmarked ? "fill-current" : ""}`} />
+                    <Bookmark className={`h-3.5 w-3.5 shrink-0 ${article.isBookmarked ? "fill-current" : ""}`} />
                     <span>{article.isBookmarked ? "محفوظ" : "حفظ"}</span>
                   </Button>
 
                   <FocusReaderTrigger
                     language="ar"
-                    className="h-8 rounded-xl px-3 text-xs font-medium border border-border/70 bg-background/80 hover:bg-muted"
+                    className="no-min-touch-size h-7 sm:h-8 rounded-lg px-2 sm:px-2.5 text-[11px] sm:text-xs font-medium border border-border/70 bg-background/90 hover:bg-muted shrink-0"
                     onClick={() => setFocusOpen(true)}
                   />
                 </div>
@@ -1072,46 +1072,46 @@ export default function OpinionDetailPage() {
               {/* Upgraded Author Column Card + Other Articles by Same Columnist */}
               {article.author && (
                 <section
-                  className="rounded-2xl border border-border/80 bg-gradient-to-br from-muted/50 via-background to-muted/30 p-6 sm:p-7 space-y-6"
+                  className="rounded-2xl border border-border/80 bg-gradient-to-br from-muted/50 via-background to-muted/30 p-4 sm:p-7 space-y-4 sm:space-y-6"
                   aria-label="عن الكاتب ومقالاته"
                   data-testid="opinion-author-card"
                 >
-                  <div className="flex flex-col sm:flex-row items-start gap-5">
+                  <div className="flex items-start gap-3.5 sm:gap-5">
                     {authorProfileHref ? (
                       <Link href={authorProfileHref}>
-                        <Avatar className="h-20 w-20 cursor-pointer ring-2 ring-primary/20 hover:ring-primary/50 transition-all shrink-0">
+                        <Avatar className="h-14 w-14 sm:h-20 sm:w-20 cursor-pointer ring-2 ring-primary/20 hover:ring-primary/50 transition-all shrink-0">
                           <AvatarImage 
                             src={article.staff?.profileImage || article.author?.profileImageUrl || ""} 
                             alt={authorName}
                             className="object-cover"
                           />
-                          <AvatarFallback className="bg-primary/10 text-primary text-2xl font-bold">
+                          <AvatarFallback className="bg-primary/10 text-primary text-lg sm:text-2xl font-bold">
                             {getInitials(article.author?.firstName, article.author?.lastName, article.author?.email)}
                           </AvatarFallback>
                         </Avatar>
                       </Link>
                     ) : (
-                      <Avatar className="h-20 w-20 ring-2 ring-primary/20 shrink-0">
+                      <Avatar className="h-14 w-14 sm:h-20 sm:w-20 ring-2 ring-primary/20 shrink-0">
                         <AvatarImage 
                           src={article.author?.profileImageUrl || ""} 
                           alt={authorName}
                           className="object-cover"
                         />
-                        <AvatarFallback className="bg-primary/10 text-primary text-2xl font-bold">
+                        <AvatarFallback className="bg-primary/10 text-primary text-lg sm:text-2xl font-bold">
                           {getInitials(article.author?.firstName, article.author?.lastName, article.author?.email)}
                         </AvatarFallback>
                       </Avatar>
                     )}
-                    <div className="flex-1 min-w-0 space-y-2">
+                    <div className="flex-1 min-w-0 space-y-1.5 sm:space-y-2">
                       <div className="flex flex-wrap items-center justify-between gap-2">
-                        <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-0.5 text-xs font-bold text-primary">
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-0.5 text-[11px] sm:text-xs font-bold text-primary">
                           <PenTool className="h-3 w-3" />
                           عن الكاتب
                         </span>
                         <div className="flex flex-wrap items-center gap-2">
                           {authorProfileHref && (
                             <Link href={authorProfileHref}>
-                              <Button variant="outline" size="sm" className="h-8 rounded-full text-xs gap-1.5" data-testid="button-author-all-articles">
+                              <Button variant="outline" size="sm" className="no-min-touch-size h-7 sm:h-8 px-2.5 sm:px-3 rounded-full text-[11px] sm:text-xs gap-1.5" data-testid="button-author-all-articles">
                                 <span>جميع مقالات الكاتب</span>
                                 <ArrowLeft className="h-3.5 w-3.5" />
                               </Button>
@@ -1121,17 +1121,17 @@ export default function OpinionDetailPage() {
                       </div>
                       {authorProfileHref ? (
                         <Link href={authorProfileHref}>
-                          <h3 className="font-bold text-xl text-foreground hover:text-primary transition-colors cursor-pointer">
+                          <h3 className="font-bold text-lg sm:text-xl text-foreground hover:text-primary transition-colors cursor-pointer">
                             {authorName}
                           </h3>
                         </Link>
                       ) : (
-                        <h3 className="font-bold text-xl text-foreground">
+                        <h3 className="font-bold text-lg sm:text-xl text-foreground">
                           {authorName}
                         </h3>
                       )}
                       {((article as any).staff?.bioAr || article.author?.bio) && (
-                        <p className="text-sm sm:text-base text-muted-foreground leading-relaxed">
+                        <p className="text-xs sm:text-base text-muted-foreground leading-relaxed">
                           {(article as any).staff?.bioAr || article.author?.bio}
                         </p>
                       )}

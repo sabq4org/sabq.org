@@ -134,7 +134,7 @@ export default function Muqtarab() {
 
       <main className="relative overflow-hidden">
         {/* Hero Section with big centered title */}
-        <section className="public-page-header relative pt-16 pb-8 px-4" data-testid="section-hero">
+        <section className="public-page-header relative pt-6 pb-5 sm:pt-14 sm:pb-8 px-4" data-testid="section-hero">
           <div className="pointer-events-none absolute inset-0 h-full overflow-hidden">
             <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-background to-accent/5" />
             <div className="absolute top-20 right-10 w-72 h-72 bg-primary/5 rounded-full blur-3xl" />
@@ -142,22 +142,22 @@ export default function Muqtarab() {
           </div>
           
           <div className="public-container container max-w-4xl mx-auto text-center relative">
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 text-primary text-sm font-medium mb-6">
-              <Sparkles className="w-4 h-4" />
+            <div className="inline-flex items-center gap-1.5 sm:gap-2 px-3 py-1 sm:px-4 sm:py-2 rounded-full bg-primary/10 text-primary text-xs sm:text-sm font-medium mb-3 sm:mb-6">
+              <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
               <span>محتوى حصري ومتعمق</span>
             </div>
             
-            <h1 className="public-page-title text-5xl md:text-7xl font-black mb-6 bg-gradient-to-l from-foreground via-foreground to-muted-foreground bg-clip-text" data-testid="heading-title">
+            <h1 className="public-page-title text-3xl sm:text-5xl md:text-7xl font-black mb-2.5 sm:mb-6 bg-gradient-to-l from-foreground via-foreground to-muted-foreground bg-clip-text" data-testid="heading-title">
               مُقترب
             </h1>
             
-            <p className="public-page-description text-xl md:text-2xl text-muted-foreground max-w-2xl mx-auto leading-relaxed mb-6" data-testid="text-tagline">
+            <p className="public-page-description text-sm sm:text-xl md:text-2xl text-muted-foreground max-w-2xl mx-auto leading-relaxed mb-4 sm:mb-6" data-testid="text-tagline">
               زوايا فريدة تأخذك إلى أعماق القصص والأحداث
             </p>
             
             <Link href="/muqtarab/submit">
-              <Button size="lg" className="gap-2" data-testid="button-submit-angle">
-                <PenLine className="w-5 h-5" />
+              <Button size="default" className="no-min-touch-size h-9 sm:h-11 px-4 sm:px-6 text-xs sm:text-sm gap-2" data-testid="button-submit-angle">
+                <PenLine className="w-4 h-4 sm:w-5 sm:h-5" />
                 اقترح زاويتك
               </Button>
             </Link>
