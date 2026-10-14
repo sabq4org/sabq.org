@@ -1729,19 +1729,19 @@ struct FeaturedArticleCard: View {
 /// these values here lets custom row consumers adopt the same visual rhythm
 /// without changing the global surface-card treatment.
 enum NewsRowStyle {
-    /// 16:9 مقاس صور الأخبار الغالب — 104×84 (قرابة 5:4) كان يقص ربع العرض
-    /// فيبتر الشعارات والنصوص القريبة من الحافة (ملاحظة المالك 2026-10-09).
-    static let thumbnailWidth: CGFloat = 112
-    static let thumbnailHeight: CGFloat = 63
+    /// 16:9 مقاس صور الأخبار الغالب — 118×66 يحافظ على 16:9 كاملة دون قص الشعارات
+    /// ويتطابق بارتفاعه (66pt) مع عنوان من سطرين + سطر البيانات أسفله.
+    static let thumbnailWidth: CGFloat = 118
+    static let thumbnailHeight: CGFloat = 66
     static let thumbnailRadius: CGFloat = 10
     static let thumbnailStrokeWidth: CGFloat = 0.5
-    static let thumbnailGap: CGFloat = 12
-    static let textStackSpacing: CGFloat = 8
+    static let thumbnailGap: CGFloat = 14
+    static let textStackSpacing: CGFloat = 6
     static let titleSize: CGFloat = 15
-    /// عنوان الصف المضغوط في القوائم: أكبر بنقطة وبثلاثة أسطر بدل سطرين.
-    static let compactTitleSize: CGFloat = 16
+    /// عنوان الصف المضغوط في القوائم: مقاس مريح للعين مع هامش أسطر متوازن.
+    static let compactTitleSize: CGFloat = 15.5
     static let compactTitleLines = 3
-    static let titleLineSpacing: CGFloat = 4
+    static let titleLineSpacing: CGFloat = 3.5
     static let metadataSize: CGFloat = 12
     static let metadataLineSpacing: CGFloat = 3
 }
@@ -1778,7 +1778,7 @@ struct CompactArticleRow: View {
     // MARK: - Classic (thumbnail on the side)
 
     private var classicLayout: some View {
-        HStack(alignment: .top, spacing: NewsRowStyle.thumbnailGap) {
+        HStack(alignment: .center, spacing: NewsRowStyle.thumbnailGap) {
             compactThumbnail
 
             VStack(alignment: .leading, spacing: NewsRowStyle.textStackSpacing) {
@@ -1794,7 +1794,8 @@ struct CompactArticleRow: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(.vertical, 12)
+        .padding(.vertical, 14)
+        .contentShape(Rectangle())
     }
 
     // MARK: - Spacious (image on top, 16:10 hero)
@@ -1813,15 +1814,16 @@ struct CompactArticleRow: View {
 
             metadataRow
         }
-        .padding(.vertical, 8)
+        .padding(.vertical, 10)
+        .contentShape(Rectangle())
     }
 
-    /// The compact row follows the sidebar row's fixed 112×63 (16:9) thumbnail while
+    /// The compact row follows the sidebar row's fixed 118×66 (16:9) thumbnail while
     /// retaining focal-point cropping and the AI provenance badge.
     private var compactThumbnail: some View {
         Group {
             if let urlString = article.imageURL, let url = URL(string: urlString) {
-                FocalCachedAsyncImage(url: url, focalPoint: article.imageFocalPoint, maxPixelSize: 260, fitsMismatchedAspect: true) {
+                FocalCachedAsyncImage(url: url, focalPoint: article.imageFocalPoint, maxPixelSize: 360, fitsMismatchedAspect: true) {
                     thumbnailPlaceholder(size: NewsRowStyle.thumbnailWidth)
                 }
             } else {
@@ -1919,8 +1921,7 @@ struct CompactArticleRow: View {
     }
 
     /// سطر بيانات واحد بحجم واحد وبلا كبسولات: «جديد» أخضر شبه عريض عند
-    /// الحاجة، ثم اسم القسم بلون هادئ، ثم الوقت. الألوان المتعددة للأقسام
-    /// وكبسولة «جديد» كانت تكسر إيقاع القائمة (ملاحظة المالك 2026-09-20).
+    /// الحاجة، ثم اسم القسم بلون الهوية الموحّد الهادئ، ثم الوقت النسبي.
     @ViewBuilder
     private var metadataBadges: some View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
@@ -1933,8 +1934,8 @@ struct CompactArticleRow: View {
             }
             if showsCategory {
                 Text(article.categoryTitle)
-                    .font(SabqFonts.app(size: NewsRowStyle.metadataSize, weight: .medium))
-                    .foregroundStyle(SabqTheme.secondaryInk)
+                    .font(SabqFonts.app(size: NewsRowStyle.metadataSize, weight: .semibold))
+                    .foregroundStyle(SabqTheme.brandBlue)
                     .lineLimit(1)
                     .fixedSize(horizontal: true, vertical: false)
                 metadataSeparator
@@ -1963,11 +1964,11 @@ struct CompactArticleRow: View {
                     endPoint: .bottomTrailing
                 )
             )
-            .frame(width: size, height: size)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .overlay {
                 Image(systemName: article.category.icon)
-                    .font(SabqFonts.app(size: size * 0.33, weight: .light))
-                    .foregroundStyle(article.category.tint.opacity(0.6))
+                    .font(SabqFonts.app(size: 22, weight: .light))
+                    .foregroundStyle(article.category.tint.opacity(0.55))
             }
     }
 }

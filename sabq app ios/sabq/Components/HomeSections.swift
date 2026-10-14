@@ -69,20 +69,27 @@ struct HomeSectionCard<Link: View, Content: View>: View {
     let title: String
     var context: String? = nil
     var fill: Color = SabqTheme.surface
+    var lazy: Bool = false
     @ViewBuilder var link: () -> Link
     @ViewBuilder var content: () -> Content
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HomeSectionHeader(title: title, context: context, link: link)
-                .padding(.bottom, 6)
-            VStack(alignment: .leading, spacing: 0) {
-                content()
+                .padding(.bottom, 8)
+            if lazy {
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    content()
+                }
+            } else {
+                VStack(alignment: .leading, spacing: 0) {
+                    content()
+                }
             }
         }
         .padding(.horizontal, 16)
         .padding(.top, 16)
-        .padding(.bottom, 4)
+        .padding(.bottom, 6)
         .frame(maxWidth: .infinity, alignment: .leading)
         .sabqBlockSurface(fill)
         .accessibilityElement(children: .contain)
