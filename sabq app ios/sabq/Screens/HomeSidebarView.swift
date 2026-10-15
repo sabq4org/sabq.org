@@ -75,8 +75,8 @@ struct HomeSidebarView: View {
                         ArticleContextView(
                             context: context,
                             onOpenArticle: { navigation.openInReader($0) },
-                            onOpenOpinion: { navigation.paths[.home] = NavigationPath([$0]) },
-                            onOpenKeyword: { navigation.paths[.home, default: NavigationPath()].append(KeywordRoute(keyword: $0)) }
+                            onOpenOpinion: { navigation.openFromReaderContext($0, in: .home) },
+                            onOpenKeyword: { navigation.openFromReaderContext(KeywordRoute(keyword: $0), in: .home) }
                         )
                         .id(context.id)
                         .transition(.opacity)

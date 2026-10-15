@@ -36,9 +36,7 @@ struct KingsCupMatchCenter: View {
                 },
                 side: {
                     if let detail {
-                        if !detail.fixture.status.finished {
-                            KcFetchedPrediction(fixture: detail.fixture)
-                        }
+                        preMatchCards(detail.fixture)
                         tabBar(Self.columnTabs)
                         content(detail, tab: columnTab)
                     }
@@ -48,9 +46,12 @@ struct KingsCupMatchCenter: View {
                         tabBar(Tab.allCases)
                             .padding(.horizontal, 16)
                         ScrollView(showsIndicators: false) {
-                            content(detail, tab: tab)
-                                .padding(.horizontal, 16)
-                                .padding(.bottom, 24)
+                            VStack(spacing: 16) {
+                                preMatchCards(detail.fixture)
+                                content(detail, tab: tab)
+                            }
+                            .padding(.horizontal, 16)
+                            .padding(.bottom, 24)
                         }
                     }
                 },
@@ -91,6 +92,16 @@ struct KingsCupMatchCenter: View {
         .sabqRTL()
     }
 
+    /// التوقع والقنوات الناقلة قبل التبويبات حتى صافرة النهاية — في كل
+    /// تخطيطات المركز (الهاتف، وعمودا Duo، ووضع الطاولة).
+    @ViewBuilder
+    private func preMatchCards(_ f: KcFixture) -> some View {
+        if !f.status.finished {
+            KcFetchedPrediction(fixture: f)
+            KcTvStrip(fixtureId: f.id)
+        }
+    }
+
     /// تبويبات العمود الأيسر على Duo مفتوحًا — «الأحداث» في العمود الأيمن دائمًا.
     private static let columnTabs: [Tab] = [.lineups, .stats, .ratings]
     private var columnTab: Tab { tab == .events ? .lineups : tab }
@@ -102,10 +113,7 @@ struct KingsCupMatchCenter: View {
             VStack(spacing: 16) {
                 if let f = detail?.fixture ?? seed {
                     header(f)
-                    if !f.status.finished {
-                        KcFetchedPrediction(fixture: f)
-                        KcTvStrip(fixtureId: f.id)
-                    }
+                    preMatchCards(f)
                     tabBar(Tab.allCases)
                     if let detail {
                         content(detail, tab: tab)

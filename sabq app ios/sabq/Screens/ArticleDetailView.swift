@@ -438,7 +438,7 @@ struct ArticleDetailView: View {
     private func pushFromContext<Value: Hashable>(_ value: Value) {
         isContextSheetPresented = false
         guard let navigation else { return }
-        navigation.paths[navigation.selectedTab, default: NavigationPath()].append(value)
+        navigation.openFromReaderContext(value, in: navigation.selectedTab)
     }
 
     private var contextButton: some View {

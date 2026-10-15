@@ -182,4 +182,26 @@ struct DuoLayoutTests {
         #expect(state.readerContext == nil)
         #expect(state.homeSidebarMode == .news)
     }
+
+    /// كلمة مفتاحية من «سياق الخبر» تدفع صفحة لا سياق لها: لا يبقى العمود على
+    /// سياق خبر لم يعد في القارئ (مراجعة PR #1874).
+    @MainActor
+    @Test func nonArticleDestinationFromContextLeavesTheContext() {
+        let state = SabqNavigationState()
+        let current = article("a", daysAgo: 0)
+        state.openInReader(current)
+        state.publishReaderContext(ArticleContext.news(article: current, related: [], keywords: ["الرياض"]))
+
+        state.openFromReaderContext(KeywordRoute(keyword: "الرياض"), in: .home)
+        #expect(state.paths[.home]?.count == 1)
+        #expect(state.readerContext == nil)
+        #expect(state.homeSidebarMode == .news)
+
+        // خبر أو مقال رأي ينشر سياقه بنفسه عند ظهوره: يبقى العمود على السياق.
+        state.openInReader(current)
+        state.publishReaderContext(ArticleContext.news(article: current, related: [], keywords: []))
+        state.openFromReaderContext(article("b", daysAgo: 1), in: .home)
+        #expect(state.homeSidebarMode == .context)
+        #expect(state.paths[.home]?.count == 1)
+    }
 }

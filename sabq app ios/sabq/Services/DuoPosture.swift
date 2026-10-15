@@ -63,6 +63,12 @@ enum DuoPosture {
     }
 }
 
+// واجهات المفصلة موجودة في SDK ‏iOS 27.1 فقط؛ `#available` لا يكفي لأن الرموز
+// نفسها غائبة عن SDK أقدم (CI يبني بـ Xcode 26.x، وXcode 27.0 بلا 27.1).
+// `SwiftUICore` في SDK ‏27.1 إصداره 8.0.85 (و8.0.84 في 27.0)، فشرط الترجمة
+// يقبل SDK ‏27.1 فما بعد. البناء بأقدم منه يُبقي المفصلة «غير معروفة»: لا
+// وضع طاولة، ويبقى عمودا المركز بحسب العرض فقط.
+#if canImport(SwiftUICore, _version: 8.0.85)
 extension DuoHingeStatus {
     @available(iOS 27.1, *)
     init(_ status: DeviceHinge.Status?) {
@@ -74,6 +80,7 @@ extension DuoHingeStatus {
         }
     }
 }
+#endif
 
 extension View {
     /// يقرأ حالة المفصلة ومكان فاصلها داخل هذه الحاوية. لا يفعل شيئًا قبل
@@ -87,6 +94,7 @@ private struct DuoHingeReader: ViewModifier {
     @Binding var state: DuoHingeState
 
     func body(content: Content) -> some View {
+        #if canImport(SwiftUICore, _version: 8.0.85)
         if #available(iOS 27.1, *) {
             content
                 .onHingeChange { _, new in
@@ -105,5 +113,8 @@ private struct DuoHingeReader: ViewModifier {
         } else {
             content
         }
+        #else
+        content
+        #endif
     }
 }

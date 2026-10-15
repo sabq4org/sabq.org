@@ -41,6 +41,18 @@ final class SabqNavigationState {
         homeSidebarMode = .context
     }
 
+    /// يدفع وجهة اختارها القارئ من «سياق الخبر» (عمود أو ورقة) في مكدّس
+    /// التبويب. الخبر ومقال الرأي ينشران سياقهما عند ظهورهما؛ أي وجهة أخرى
+    /// (كلمة مفتاحية…) لا سياق لها، فيُمسح سياق الخبر السابق ويعود عمود
+    /// «الرئيسية» إلى «الأخبار» حتى لا يعرض سياق خبر لم يعد في القارئ.
+    func openFromReaderContext<Value: Hashable>(_ value: Value, in tab: AppTab) {
+        paths[tab, default: NavigationPath()].append(value)
+        if !(value is Article) && !(value is OpinionArticle) {
+            readerContext = nil
+            if tab == .home { homeSidebarMode = .news }
+        }
+    }
+
     /// ينشر سياق الخبر الظاهر في القارئ؛ النشر المكرر بالقيمة نفسها لا يعيد
     /// رسم العمود.
     func publishReaderContext(_ context: ArticleContext) {
