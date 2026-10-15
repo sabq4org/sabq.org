@@ -499,7 +499,8 @@ export default function ArticleEditor() {
     ),
   );
   const canPublish = Boolean(
-    user &&
+    !isOpinionAuthor &&
+      user &&
       (hasPermission(user, PERMISSION_CODES.ARTICLES_PUBLISH) ||
         (user as { publisherAccount?: { autoPublish?: boolean } }).publisherAccount
           ?.autoPublish === true),
@@ -554,7 +555,7 @@ export default function ArticleEditor() {
   
   // Permission checks for article editor features
   const canUseAIGenerate = user && hasPermission(user, PERMISSION_CODES.ARTICLES_AI_GENERATE);
-  const canSchedule = user && hasPermission(user, PERMISSION_CODES.ARTICLES_SCHEDULE);
+  const canSchedule = Boolean(!isOpinionAuthor && user && hasPermission(user, PERMISSION_CODES.ARTICLES_SCHEDULE));
   const canUsePolls = user && hasPermission(user, PERMISSION_CODES.ARTICLES_POLLS);
   const canUseSmartLinks = user && hasPermission(user, PERMISSION_CODES.ARTICLES_SMART_LINKS);
   const canGenerateImages = user && hasPermission(user, PERMISSION_CODES.ARTICLES_GENERATE_IMAGES);
@@ -668,18 +669,18 @@ export default function ArticleEditor() {
   // يشمل اليتامى بلا URL — الفلترة القديمة كانت تخفي المرفق فلا يظهر زر الحذف.
   const editableAttachments = listEditableAttachments(mediaAssets);
 
-  // مقالات الرأي: اليوم الأسبوعي المخصص لكاتب المقال — يعبّئ الجدولة تلقائياً ويبقى قابلاً للتغيير
+  // مقالات الرأي: اليوم الأسبوعي المخصص لكاتب المقال — يعبّئ الجدولة تلقائياً للمحررين فقط (وليس لكاتب الرأي)
   const writerSlotPrefillRef = useRef<string | null>(null);
   const { data: writerSlotData } = useQuery<{
     suggestion: { weekday: number; publishTime: string; nextSlot: string } | null;
   }>({
     queryKey: [`/api/opinion-writers/${opinionAuthorId}/next-slot`],
-    enabled: Boolean(canSchedule && articleType === "opinion" && opinionAuthorId),
+    enabled: Boolean(!isOpinionAuthor && canSchedule && articleType === "opinion" && opinionAuthorId),
     staleTime: 60 * 1000,
   });
 
   useEffect(() => {
-    if (!canSchedule || articleType !== "opinion" || !opinionAuthorId) return;
+    if (isOpinionAuthor || !canSchedule || articleType !== "opinion" || !opinionAuthorId) return;
     const suggestion = writerSlotData?.suggestion;
     if (!suggestion?.nextSlot) return;
     if (writerSlotPrefillRef.current === opinionAuthorId) return;
@@ -692,19 +693,63 @@ export default function ArticleEditor() {
     setScheduledAt(
       `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`,
     );
-  }, [canSchedule, articleType, opinionAuthorId, writerSlotData, article, publishType, scheduledAt]);
+  }, [isOpinionAuthor, canSchedule, articleType, opinionAuthorId, writerSlotData, article, publishType, scheduledAt]);
 
   // بوابة اليوم الأسبوعي: كاتب رأي بلا يوم محدد يختاره من حوار في مكانه
   // (دون مغادرة المحرر وفقدان المسودة)، ثم يُستكمل الإرسال تلقائياً.
-  const { data: writerOwnSchedule } = useQuery<{ canChoose?: boolean; dayLoads?: number[] }>({
+  const { data: writerOwnSchedule } = useQuery<{
+    canChoose?: boolean;
+    dayLoads?: number[];
+    activeArticle?: {
+      id: string;
+      title: string;
+      stage: "scheduled" | "pending_review" | "approved";
+      scheduledAt: string | null;
+    } | null;
+  }>({
     queryKey: ["/api/opinion-author/schedule"],
     enabled: Boolean(isOpinionAuthor),
-    staleTime: 5 * 60 * 1000,
+    staleTime: 30 * 1000,
   });
   const [showDayGate, setShowDayGate] = useState(false);
   const dayGateContinueRef = useRef(false);
+  const justSubmittedOpinionRef = useRef(false);
+  const redirectedActivePipelineRef = useRef(false);
+  const hasBlockingActiveOpinionArticle = Boolean(
+    isOpinionAuthor &&
+      writerOwnSchedule?.activeArticle &&
+      (isNewArticle || writerOwnSchedule.activeArticle.id !== id),
+  );
+
+  useEffect(() => {
+    if (!isOpinionAuthor || !isNewArticle || justSubmittedOpinionRef.current || redirectedActivePipelineRef.current) return;
+    const active = writerOwnSchedule?.activeArticle;
+    if (!active) return;
+    redirectedActivePipelineRef.current = true;
+    toast({
+      title: active.stage === "scheduled" ? "يوجد مقال مجدول للنشر بالفعل" : "يوجد مقال بانتظار المراجعة والجدولة",
+      description:
+        active.stage === "scheduled"
+          ? `مقالتك «${active.title}» مجدولة للنشر حالياً. لا يمكن كتابة أو إرسال مقالة جديدة حتى يُنشر المقال الحالي.`
+          : `مقالتك «${active.title}» قيد مراجعة هيئة التحرير وبانتظار الجدولة. لا يمكن كتابة أو إرسال مقالة جديدة حالياً.`,
+      variant: "destructive",
+    });
+    navigate("/dashboard/opinion-author");
+  }, [isOpinionAuthor, isNewArticle, writerOwnSchedule?.activeArticle, toast, navigate]);
 
   const handleSubmitForReviewGated = () => {
+    if (hasBlockingActiveOpinionArticle && writerOwnSchedule?.activeArticle) {
+      const active = writerOwnSchedule.activeArticle;
+      toast({
+        title: active.stage === "scheduled" ? "يوجد مقال مجدول للنشر" : "يوجد مقال بانتظار المراجعة والجدولة",
+        description:
+          active.stage === "scheduled"
+            ? `مقالتك «${active.title}» مجدولة للنشر حالياً. لا يمكن إرسال مقالة جديدة حتى يُنشر المقال الحالي.`
+            : `مقالتك «${active.title}» في انتظار مراجعة هيئة التحرير والجدولة. لا يمكن إرسال مقالة جديدة حالياً.`,
+        variant: "destructive",
+      });
+      return;
+    }
     if (isOpinionAuthor && writerOwnSchedule?.canChoose) {
       dayGateContinueRef.current = true;
       setShowDayGate(true);
@@ -1545,8 +1590,8 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
         albumImages: safeAlbumImages,
         imageFocalPoint: imageFocalPoint || null,
         articleType,
-        publishType,
-        scheduledAt: publishType === "scheduled" && scheduledAt ? new Date(scheduledAt).toISOString() : null,
+        publishType: isOpinionAuthor ? "instant" : publishType,
+        scheduledAt: !isOpinionAuthor && publishType === "scheduled" && scheduledAt ? new Date(scheduledAt).toISOString() : null,
         hideFromHomepage,
         isVideoTemplate,
         videoUrl: isVideoTemplate && normalizedVideoUrl ? normalizedVideoUrl : null,
@@ -1554,11 +1599,13 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
         // مادة مجدولة/منشورة: زر الحفظ يحفظ التعديلات على الحالة نفسها — إرسال
         // "draft" حرفيًا كان يُسقط الجدولة بصمت والكرون لا يلتقط المادة بعدها
         // (حادثة 2026-08-08). الخادم يتجاهل الهبوط الضمني من جهته أيضًا.
-        status: publishNow
-          ? (publishType === "scheduled" ? "scheduled" : "published")
-          : (!isNewArticle && (status === "scheduled" || status === "published" || status === BOT_DRAFT_READY_STATUS))
-            ? status
-            : "draft",
+        status: isOpinionAuthor
+          ? "draft"
+          : publishNow
+            ? (publishType === "scheduled" ? "scheduled" : "published")
+            : (!isNewArticle && (status === "scheduled" || status === "published" || status === BOT_DRAFT_READY_STATUS))
+              ? status
+              : "draft",
         ...(submitForReview ? { submitForReview: true } : {}),
         seo: {
           metaTitle: metaTitle ? metaTitle.substring(0, 70) : (title ? title.substring(0, 70) : ""),
@@ -1762,6 +1809,12 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/articles"] });
       queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
       queryClient.invalidateQueries({ queryKey: ["/api/homepage-lite"] });
+      if (isOpinionAuthor) {
+        queryClient.invalidateQueries({ queryKey: ["/api/opinion-author/schedule"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/opinion-author/workspace"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/opinion-author/analytics"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/opinion-author/articles"] });
+      }
       
       // If updating existing article, also invalidate its specific query
       if (!isNewArticle && id) {
@@ -1771,7 +1824,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
       
       // Determine the correct success message
       const isUpdate = !isNewArticle && status === "published";
-      const isScheduled = variables.publishNow && publishType === "scheduled";
+      const isScheduled = !isOpinionAuthor && variables.publishNow && publishType === "scheduled";
       const scheduledLabel = isScheduled && scheduledAt
         ? new Date(scheduledAt).toLocaleString("ar-SA-u-ca-gregory-nu-latn", {
             timeZone: "Asia/Riyadh",
@@ -1781,12 +1834,12 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
         : "";
       const successTitle = isScheduled
         ? "تمت الجدولة بنجاح"
-        : variables.publishNow
+        : variables.publishNow && !isOpinionAuthor
           ? (isUpdate ? "تم التحديث بنجاح" : "تم النشر بنجاح")
           : "تم الحفظ بنجاح";
       const successDescription = isScheduled
         ? (scheduledLabel ? `تمت جدولة المقال للنشر في ${scheduledLabel}` : "تمت جدولة المقال للنشر")
-        : variables.publishNow
+        : variables.publishNow && !isOpinionAuthor
           ? (isUpdate ? "تم تحديث الخبر بنجاح" : "تم نشر المقال بنجاح")
           : "تم حفظ المقال كمسودة";
       
@@ -2113,16 +2166,22 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
 
   /** Save + submit-for-review in one PATCH (no race with a follow-up POST). */
   const handleSaveAndSubmitForReview = async () => {
+    justSubmittedOpinionRef.current = true;
     const saveResult = await handleSave(false, {
       skipNavigate: true,
       skipToast: true,
       submitForReview: true,
     });
-    if (!saveResult.ok) return;
+    if (!saveResult.ok) {
+      justSubmittedOpinionRef.current = false;
+      return;
+    }
 
     toast({
-      title: "تم الإرسال",
-      description: "عاد المحتوى إلى مسودات فريق التحرير للمراجعة",
+      title: isOpinionAuthor ? "تم إرسال المقالة لهيئة التحرير" : "تم الإرسال",
+      description: isOpinionAuthor
+        ? "وصلت مقالتك إلى هيئة التحرير، وهي الآن في انتظار المراجعة وتحديد موعد الجدولة"
+        : "عاد المحتوى إلى مسودات فريق التحرير للمراجعة",
     });
     navigateAfterContributorSubmit();
   };
@@ -2922,7 +2981,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                 variant="outline"
                 size="sm"
                 onClick={() => handleSave(false)}
-                disabled={isSaving || isLockedByOther}
+                disabled={isSaving || isLockedByOther || (isNewArticle && hasBlockingActiveOpinionArticle)}
                 className="no-min-touch-size h-9 gap-1.5 sm:gap-2 w-full sm:w-auto justify-center"
                 data-testid="button-save-draft"
               >
@@ -2953,7 +3012,8 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                   disabled={
                     submitReviewMutation.isPending ||
                     isSaving ||
-                    isLockedByOther
+                    isLockedByOther ||
+                    hasBlockingActiveOpinionArticle
                   }
                   className="no-min-touch-size h-9 gap-1.5 sm:gap-2"
                   data-testid="button-resubmit-review"
@@ -2975,7 +3035,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                   }
                   void handleSave(true);
                 }}
-                disabled={isSaving || submitReviewMutation.isPending || isLockedByOther}
+                disabled={isSaving || submitReviewMutation.isPending || isLockedByOther || hasBlockingActiveOpinionArticle}
                 className="no-min-touch-size h-9 gap-1.5 sm:gap-2 w-full sm:w-auto justify-center font-semibold"
                 data-testid="button-publish"
               >
@@ -2983,20 +3043,54 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : !isNewArticle && status === "published" ? (
                   <RefreshCw className="h-4 w-4" />
-                ) : publishType === "scheduled" && canPublish ? (
+                ) : publishType === "scheduled" && canPublish && !isOpinionAuthor ? (
                   <Clock className="h-4 w-4" />
                 ) : (
                   <Send className="h-4 w-4" />
                 )}
-                {canPublish 
+                {canPublish && !isOpinionAuthor
                   ? (!isNewArticle && status === "published" ? "تحديث" : publishType === "scheduled" ? "جدولة" : "نشر")
-                  : <span className="hidden xs:inline">إرسال للمراجعة</span>
+                  : <span className="hidden xs:inline">{isOpinionAuthor ? "إرسال لهيئة التحرير" : "إرسال للمراجعة"}</span>
                 }
-                {!canPublish && <span className="xs:hidden">إرسال</span>}
+                {(!canPublish || isOpinionAuthor) && <span className="xs:hidden">إرسال</span>}
               </Button>
             </div>
           </div>
         </div>
+
+        {hasBlockingActiveOpinionArticle && writerOwnSchedule?.activeArticle && (
+          <div
+            className="mb-4 flex flex-col gap-2 rounded-xl border border-amber-400/70 bg-amber-50 p-3 dark:border-amber-700/60 dark:bg-amber-900/25 sm:flex-row sm:items-center sm:justify-between"
+            data-testid="banner-opinion-pipeline-busy"
+          >
+            <div className="flex items-start gap-2.5">
+              <Clock className="mt-0.5 h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
+              <div>
+                <p className="text-sm font-bold">
+                  {writerOwnSchedule.activeArticle.stage === "scheduled"
+                    ? "يوجد لديك مقال مجدول للنشر حالياً"
+                    : "يوجد لديك مقال في انتظار مراجعة هيئة التحرير والجدولة"}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  مقالتك «{writerOwnSchedule.activeArticle.title}»{" "}
+                  {writerOwnSchedule.activeArticle.stage === "scheduled"
+                    ? "مجدولة للنشر بالفعل."
+                    : "قيد المراجعة وتحديد موعد الجدولة من هيئة التحرير."}{" "}
+                  لا يمكن كتابة أو إرسال مقالة جديدة حتى يُنشر المقال الحالي.
+                </p>
+              </div>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              className="shrink-0 border-amber-400 text-amber-700 hover:bg-amber-100 dark:border-amber-600 dark:text-amber-300 dark:hover:bg-amber-900/40"
+              onClick={() => navigate("/dashboard/opinion-author")}
+              data-testid="button-return-opinion-workspace"
+            >
+              العودة للوحة الكاتب
+            </Button>
+          </div>
+        )}
 
         {isOpinionAuthor && writerOwnSchedule?.canChoose && (
           <div className="mb-4 flex flex-col gap-2 rounded-xl border border-amber-300/60 bg-amber-50 p-3 dark:border-amber-700/50 dark:bg-amber-900/20 sm:flex-row sm:items-center sm:justify-between" data-testid="banner-day-missing">

@@ -13,10 +13,13 @@ import {
   logActivity,
 } from "../rbac";
 import { ObjectStorageService } from "../objectStorage";
+import { notifyOpinionAuthorArticleScheduled } from "../notificationEngine";
+import { notifyArticleStakeholders } from "../services/editorialNotifications";
 import {
   canSelfAssignSchedule,
   getNextSlotForWriter,
   getOpinionWeekBoard,
+  getWriterActivePipelineArticle,
   getWriterArticlesWithStats,
   getWriterDayLoads,
   isWriterDayFull,
@@ -200,13 +203,15 @@ router.post(
       if (!parsed.success) {
         return res.status(400).json({ message: "تاريخ الجدولة غير صالح" });
       }
+      const scheduledDate = new Date(parsed.data.scheduledAt);
       const result = await scheduleApprovedOpinionArticle(
         req.params.articleId,
-        new Date(parsed.data.scheduledAt),
+        scheduledDate,
       );
       if (!result.ok) return res.status(result.status).json({ message: result.message });
+      const actorId = requestUserId(req);
       await logActivity({
-        userId: requestUserId(req),
+        userId: actorId,
         action: "scheduled_opinion",
         entityType: "article",
         entityId: req.params.articleId,
@@ -214,6 +219,17 @@ router.post(
         metadata: { ip: req.ip, userAgent: req.get("user-agent") },
       });
       res.json(result.article);
+
+      setImmediate(async () => {
+        try {
+          await notifyArticleStakeholders(result.article, "scheduled", undefined, {
+            excludeUserId: actorId,
+          });
+          await notifyOpinionAuthorArticleScheduled(result.article.id, scheduledDate);
+        } catch (notifyErr) {
+          console.error("[opinion-writers] schedule notification failed:", notifyErr);
+        }
+      });
     } catch (error) {
       console.error("[opinion-writers] schedule article failed:", error);
       res.status(500).json({ message: "تعذر جدولة المقال" });
@@ -263,12 +279,16 @@ router.get(
       if (!(await userHasAnyRole(userId, ["opinion_author"]))) {
         return res.status(403).json({ message: "هذه المساحة خاصة بكتّاب الرأي" });
       }
-      const banner = await getWriterScheduleBanner(userId);
-      if (banner) return res.json({ banner });
+      const [banner, activeArticle] = await Promise.all([
+        getWriterScheduleBanner(userId),
+        getWriterActivePipelineArticle(userId),
+      ]);
+      if (banner) return res.json({ banner, activeArticle });
       // لا يوم محدداً: هل يختار بنفسه؟ ومعه ازدحام كل يوم ليتوزع الكتّاب طبيعياً
       const canChoose = await canSelfAssignSchedule(userId);
       res.json({
         banner: null,
+        activeArticle,
         canChoose,
         dayLoads: canChoose ? await getWriterDayLoads() : undefined,
       });

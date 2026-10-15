@@ -23,9 +23,12 @@ import { isUniqueViolation } from "../utils/pgError";
 import { parseLimit, paginationOrReject, boundedLimit } from "../utils/pagination";
 import { EMAIL_FORMAT_REGEX } from "../services/phoneRegistrationService";
 import {
+  assertOpinionAuthorPipelineOpen,
   canSelfAssignSchedule,
+  getWriterActivePipelineArticle,
   getWriterDayLoads,
   getWriterScheduleBanner,
+  notifyOpinionArticleSubmittedForReview,
   selfAssignWriterSchedule,
 } from "../services/opinionWritersService";
 import {
@@ -4894,6 +4897,17 @@ router.post("/articles/submit", async (req: Request, res: Response) => {
       });
     }
 
+    if (kind === "opinion") {
+      const pipeGate = await assertOpinionAuthorPipelineOpen(session.userId, kind);
+      if (!pipeGate.ok) {
+        return res.status(pipeGate.status).json({
+          success: false,
+          code: pipeGate.code,
+          message: pipeGate.message,
+        });
+      }
+    }
+
     // Image-count rules per the user request:
     //   Opinion: one hero image at most.
     //   News: multiple (first = hero, rest = album).
@@ -5060,6 +5074,10 @@ router.post("/articles/submit", async (req: Request, res: Response) => {
       `(id=${created?.id}, images=${uploadedUrls.length})`
     );
 
+    if (kind === "opinion" && created?.id) {
+      setImmediate(() => { void notifyOpinionArticleSubmittedForReview(created); });
+    }
+
     // Fire-and-forget AI enrichment: summary, bullets, SEO meta,
     // keywords, newsletter fields, suggested category, quality check.
     // Title + content are preserved verbatim. The route returns 201 to
@@ -5076,7 +5094,7 @@ router.post("/articles/submit", async (req: Request, res: Response) => {
     res.status(201).json({
       success: true,
       message: kind === "opinion"
-        ? "تم استلام مقالتك بنجاح ✨ ستراجعها هيئة التحرير وسيصلك إشعار بالبريد عند النشر."
+        ? "تم إرسال مقالتك لهيئة التحرير ✨ وهي الآن في انتظار المراجعة وتحديد موعد الجدولة."
         : "وصل خبرك إلى غرفة الأخبار 📰 سيراجعه فريق التحرير وسيصلك إشعار بالبريد عند النشر أو الجدولة.",
       article: {
         id: created.id,
@@ -9227,11 +9245,14 @@ router.get("/contributor/schedule", async (req: Request, res: Response) => {
     }
     const userId = session.userId;
     if (!(await userHasAnyRole(userId, ["opinion_author"]))) {
-      return res.json({ success: true, banner: null, canChoose: false });
+      return res.json({ success: true, banner: null, canChoose: false, activeArticle: null });
     }
-    const banner = await getWriterScheduleBanner(userId);
+    const [banner, activeArticle] = await Promise.all([
+      getWriterScheduleBanner(userId),
+      getWriterActivePipelineArticle(userId),
+    ]);
     if (banner) {
-      return res.json({ success: true, banner, canChoose: false });
+      return res.json({ success: true, banner, canChoose: false, activeArticle });
     }
     const canChoose = await canSelfAssignSchedule(userId);
     res.json({
@@ -9239,6 +9260,7 @@ router.get("/contributor/schedule", async (req: Request, res: Response) => {
       banner: null,
       canChoose,
       dayLoads: canChoose ? await getWriterDayLoads() : [],
+      activeArticle,
     });
   } catch (error) {
     console.error("[Mobile API] GET /contributor/schedule error:", error);

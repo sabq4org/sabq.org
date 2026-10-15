@@ -255,12 +255,19 @@ export function WriterPriorityRail({
     banner: ScheduleBannerData | null;
     canChoose?: boolean;
     dayLoads?: number[];
+    activeArticle?: {
+      id: string;
+      title: string;
+      stage: "scheduled" | "pending_review" | "approved";
+      scheduledAt: string | null;
+    } | null;
   }>({
     queryKey: ["/api/opinion-author/schedule"],
-    staleTime: 5 * 60 * 1000,
+    staleTime: 30 * 1000,
   });
 
   const banner = data?.banner;
+  const activeArticle = data?.activeArticle ?? null;
   const canChoose = Boolean(data?.canChoose && Array.isArray(data?.dayLoads));
 
   const items = useMemo<RailItem[]>(() => {
@@ -282,8 +289,8 @@ export function WriterPriorityRail({
           ? "فات آخر موعد لإرسال مقالتك"
           : "فات موعد النشر لهذا الأسبوع",
         subtitle: publishStillAhead
-          ? `أرسلها الآن لتُجدول ليوم ${fmtDate(banner.nextPublishAt)}`
-          : `عند إرسال مقالتك الآن ستُجدول ليوم ${fmtDate(banner.nextPublishAt)}`,
+          ? `أرسلها الآن لتُراجع وتُجدول ليوم ${fmtDate(banner.nextPublishAt)}`
+          : `عند إرسال مقالتك الآن ستُراجع وتُجدول ليوم ${fmtDate(banner.nextPublishAt)}`,
       });
     } else if (banner?.state === "reminder") {
       list.push({
@@ -311,21 +318,34 @@ export function WriterPriorityRail({
         notification: n,
       });
     }
-    if (banner && banner.state === "ok") {
+    if (activeArticle) {
+      list.push({
+        key: "schedule-ok",
+        kind: "schedule_ok",
+        title:
+          activeArticle.stage === "scheduled"
+            ? `تمت جدولة مقالتك${banner ? ` — يوم ${WEEKDAYS_AR[banner.weekday]}` : ""}`
+            : "في انتظار مراجعة هيئة التحرير والجدولة",
+        subtitle:
+          activeArticle.stage === "scheduled"
+            ? `مقالتك «${activeArticle.title}» مجدولة للنشر من هيئة التحرير${activeArticle.scheduledAt ? ` في ${fmtDate(activeArticle.scheduledAt)}` : banner ? ` في ${fmtDate(banner.nextPublishAt)}` : ""} — لا يمكن كتابة أو إرسال مقالة جديدة حتى يُنشر المقال الحالي.`
+            : `وصلت مقالتك «${activeArticle.title}» إلى هيئة التحرير، وسيصلك إشعار فور تحديد موعد جدولتها — لا يمكن كتابة أو إرسال مقالة جديدة حالياً.`,
+      });
+    } else if (banner && banner.state === "ok") {
       const submitOpen = new Date(banner.submitDeadline).getTime() > Date.now();
       list.push({
         key: "schedule-ok",
         kind: "schedule_ok",
         title: `يومك المخصص: ${WEEKDAYS_AR[banner.weekday]}`,
         subtitle: banner.hasUpcoming
-          ? `مقالتك القادمة في مسار النشر — موعدها ${fmtDate(banner.nextPublishAt)}`
+          ? `لديك مقالة في انتظار المراجعة والجدولة من هيئة التحرير`
           : submitOpen
             ? `مقالتك القادمة تُنشر ${fmtDate(banner.nextPublishAt)} — آخر موعد للإرسال ${fmtDate(banner.submitDeadline, false)}`
             : `مقالتك القادمة تُنشر ${fmtDate(banner.nextPublishAt)} — أرسلها في أقرب وقت`,
       });
     }
     return list.sort((a, b) => KIND_PRIORITY[a.kind] - KIND_PRIORITY[b.kind]);
-  }, [banner, canChoose, notifications, createBlocked, createBlockedReason, pendingReview]);
+  }, [banner, activeArticle, canChoose, notifications, createBlocked, createBlockedReason, pendingReview]);
 
   if (items.length === 0) return null;
 
@@ -373,8 +393,8 @@ export function WriterPriorityRail({
     }
     const visual = scheduleItemVisual(item.kind);
     const isScheduleItem = item.kind === "late" || item.kind === "reminder" || item.kind === "schedule_ok";
-    // بعد اختيار اليوم: الكتابة متاحة مباشرة من بطاقة الموعد ما لم تكن مقالة الأسبوع في المسار
-    const showWrite = isScheduleItem && Boolean(onStartWriting) && !createBlocked && !banner?.hasUpcoming;
+    // بعد اختيار اليوم: الكتابة متاحة مباشرة من بطاقة الموعد ما لم تكن مقالة الأسبوع في المسار أو بانتظار الجدولة
+    const showWrite = isScheduleItem && Boolean(onStartWriting) && !createBlocked && !banner?.hasUpcoming && !activeArticle;
     const showLicense = item.kind === "license" && !pendingReview;
     return (
       <Card className={`${visual.card} shadow-none`} dir="rtl" data-testid={`writer-next-step-${item.kind}`}>

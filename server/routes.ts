@@ -109,6 +109,7 @@ import { getPublishingGate, submitPortalArticle, notifyPublisherUser, getPortalA
 import { SABQ_NEWSPAPER_ACCOUNT_ID } from "@shared/sabqNewspaper";
 import { LOYALTY_ACTIONS } from "@shared/loyalty";
 import { notifyArticleStakeholders } from "./services/editorialNotifications";
+import { assertOpinionAuthorPipelineOpen, notifyOpinionArticleSubmittedForReview } from "./services/opinionWritersService";
 import {
   assertMediaLicenseAllowsSubmission,
   isInstitutionalMediaByline,
@@ -7706,21 +7707,23 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         articleData.submitterId = req.user.id;
       }
 
-      // Contributor creation can save and submit in one request. Without
-      // this, the client navigates away believing the new article is pending
-      // while the database still has a plain draft.
-      // الناشر الموثوق (auto_publish): لا يُرسل للمراجعة — يُنشر مباشرة.
-      if (req.body?.submitForReview === true) {
-        if (await trustedPublisherCanPublish(req.user.id)) {
-          articleData.status = "published";
-          articleData.reviewStatus = null;
-          if (!articleData.publishedAt) articleData.publishedAt = new Date();
-        } else {
-          const isContributor = await userHasAnyRole(req.user.id, ["opinion_author", "reporter"]);
-          if (isContributor) {
-            articleData.reviewStatus = "pending_review";
-            articleData.status = "draft";
-          }
+      // Contributor creation can save and submit in one request.
+      // كاتب الرأي والمراسل لا يجدول ولا ينشر مباشرة — دائماً مسودة، وعند الإرسال pending_review.
+      const isTrustedPub = await trustedPublisherCanPublish(req.user.id);
+      if (req.body?.submitForReview === true && isTrustedPub) {
+        articleData.status = "published";
+        articleData.reviewStatus = null;
+        if (!articleData.publishedAt) articleData.publishedAt = new Date();
+      } else if (!isTrustedPub) {
+        const isContributor = await userHasAnyRole(req.user.id, ["opinion_author", "reporter"]);
+        const hasEditAny = await userHasPermission(req.user.id, PERMISSION_CODES.ARTICLES_EDIT_ANY);
+        if (isContributor && !hasEditAny) {
+          const pipeGate = await assertOpinionAuthorPipelineOpen(authorId, articleData.articleType);
+          if (!pipeGate.ok) return res.status(pipeGate.status).json({ message: pipeGate.message, code: pipeGate.code });
+          articleData.status = "draft";
+          articleData.publishType = "instant";
+          articleData.scheduledAt = null;
+          if (req.body?.submitForReview === true) articleData.reviewStatus = "pending_review";
         }
       }
       
@@ -7919,6 +7922,10 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       }
 
       
+      if (newArticle.status === "draft" && newArticle.articleType === "opinion" && newArticle.reviewStatus === "pending_review") {
+        setImmediate(() => { void notifyOpinionArticleSubmittedForReview(newArticle); });
+      }
+
       // Notify reporter/opinion author when article is scheduled
       if (newArticle.status === 'scheduled' && newArticle.scheduledAt) {
         const scheduledDate = newArticle.scheduledAt instanceof Date
@@ -8260,8 +8267,12 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
             updateData.publishedAt = new Date();
           }
         } else if (existingArticle.reviewStatus !== "pending_review") {
+          const pipeGate = await assertOpinionAuthorPipelineOpen(existingArticle.authorId, existingArticle.articleType, articleId);
+          if (!pipeGate.ok) return res.status(pipeGate.status).json({ message: pipeGate.message, code: pipeGate.code });
           updateData.reviewStatus = "pending_review";
           updateData.status = statusAfterSubmitForReview(existingArticle.status);
+          updateData.publishType = "instant";
+          updateData.scheduledAt = null;
         }
       }
 
@@ -8352,6 +8363,9 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       if ("status" in publishFirstSave) return res.status(publishFirstSave.status).json(publishFirstSave.body);
       const revisionPlan = publishFirstSave.revisionPlan;
 
+      if (updateData.status === "scheduled" && (updateData.articleType ?? existingArticle.articleType) === "opinion" && existingArticle.reviewStatus === "pending_review" && !updateData.reviewStatus) {
+        updateData.reviewStatus = "approved";
+      }
       // Ensure unique slug (appends -2, -3 if duplicate exists on another article)
       if (updateData.slug) {
         updateData.slug = await resolveUniqueArticleSlug(updateData.slug, articleId);
@@ -8442,6 +8456,12 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
             // status: draft/needs_review → scheduled
             if (updatedArticle.status === "scheduled" && existingArticle.status !== "scheduled") {
               await notifyArticleStakeholders(articleForNotify, "scheduled", undefined, { excludeUserId: userId });
+              if (updatedArticle.articleType === "opinion" && updatedArticle.scheduledAt) {
+                await notifyOpinionAuthorArticleScheduled(updatedArticle.id, new Date(updatedArticle.scheduledAt));
+              }
+            }
+            if (updatedArticle.articleType === "opinion" && updatedArticle.reviewStatus === "pending_review" && existingArticle.reviewStatus !== "pending_review") {
+              await notifyOpinionArticleSubmittedForReview(updatedArticle);
             }
 
             // status: anything → published (only first transition)
@@ -12398,11 +12418,16 @@ Respond in valid JSON format only:
         }
       }
 
+      const pipeGate = await assertOpinionAuthorPipelineOpen(existingArticle.authorId, existingArticle.articleType, articleId);
+      if (!pipeGate.ok) return res.status(pipeGate.status).json({ message: pipeGate.message, code: pipeGate.code });
+
       const [updatedArticle] = await db
         .update(articles)
         .set({
           reviewStatus: "pending_review",
           status: statusAfterSubmitForReview(existingArticle.status),
+          publishType: "instant",
+          scheduledAt: null,
           updatedAt: new Date(),
         })
         .where(eq(articles.id, articleId))
@@ -12417,6 +12442,9 @@ Respond in valid JSON format only:
         newValue: updatedArticle,
       });
 
+      if (updatedArticle.articleType === "opinion" && existingArticle.reviewStatus !== "pending_review") {
+        setImmediate(() => { void notifyOpinionArticleSubmittedForReview(updatedArticle); });
+      }
       res.json(updatedArticle);
     } catch (error) {
       console.error("Error submitting article for review:", error);
@@ -25885,11 +25913,16 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         }
       }
 
+      const pipeGate = await assertOpinionAuthorPipelineOpen(existingArticle.authorId, existingArticle.articleType, articleId);
+      if (!pipeGate.ok) return res.status(pipeGate.status).json({ message: pipeGate.message, code: pipeGate.code });
+
       const [updatedArticle] = await db
         .update(articles)
         .set({
           reviewStatus: "pending_review",
           status: statusAfterSubmitForReview(existingArticle.status),
+          publishType: "instant",
+          scheduledAt: null,
           updatedAt: new Date(),
         })
         .where(eq(articles.id, articleId))
@@ -25917,6 +25950,9 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       memoryCache.invalidatePattern('^sidebar:');
       console.log(`[Breaking News] Cache invalidated and SSE broadcast sent for article ${articleId}`);
 
+      if (existingArticle.reviewStatus !== "pending_review") {
+        setImmediate(() => { void notifyOpinionArticleSubmittedForReview(updatedArticle); });
+      }
       res.json(updatedArticle);
     } catch (error) {
       console.error("Error submitting opinion for review:", error);

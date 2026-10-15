@@ -167,18 +167,6 @@ export default function WriterWorkspacePage() {
   const { user } = useAuth();
   const { toast } = useToast();
   const { createBlocked, createBlockedReason, openMediaLicenseForm } = useMediaLicenseGate();
-  const startWriting = () => {
-    if (createBlocked) {
-      toast({
-        title: "الترخيص المهني مطلوب",
-        description: createBlockedReason,
-        variant: "destructive",
-      });
-      openMediaLicenseForm();
-      return;
-    }
-    navigate("/dashboard/articles/new");
-  };
   // شريط الأولويات للجوال — تطبيق iOS أولاً (أو ?writerRail=1 للاختبار)
   const railMode = useIsWriterRail();
   const [activeTab, setActiveTab] = useState("today");
@@ -190,6 +178,17 @@ export default function WriterWorkspacePage() {
   /** Ideas are AI-generated and slow — only fetch after explicit user action. */
   const [ideasRequested, setIdeasRequested] = useState(false);
 
+  const scheduleQuery = useQuery<{
+    activeArticle?: {
+      id: string;
+      title: string;
+      stage: "scheduled" | "pending_review" | "approved";
+      scheduledAt: string | null;
+    } | null;
+  }>({
+    queryKey: ["/api/opinion-author/schedule"],
+    staleTime: 30 * 1000,
+  });
   const analyticsQuery = useQuery<Analytics>({
     queryKey: ["/api/opinion-author/analytics"],
     staleTime: 5 * 60 * 1000,
@@ -235,6 +234,66 @@ export default function WriterWorkspacePage() {
   const needsChanges = trackedArticles.filter((article) => article.reviewStatus === "needs_changes");
   const firstName = user?.firstName || "كاتبنا";
 
+  const activePipelineArticle = useMemo(() => {
+    if (scheduleQuery.data?.activeArticle) return scheduleQuery.data.activeArticle;
+    const scheduled = trackedArticles.find((a) => a.status === "scheduled");
+    if (scheduled) {
+      return {
+        id: scheduled.id,
+        title: scheduled.title,
+        stage: "scheduled" as const,
+        scheduledAt: scheduled.scheduledAt,
+      };
+    }
+    const pending = trackedArticles.find(
+      (a) =>
+        a.status === "draft" &&
+        (a.reviewStatus === "pending_review" || a.reviewStatus === "approved"),
+    );
+    if (pending) {
+      return {
+        id: pending.id,
+        title: pending.title,
+        stage: (pending.reviewStatus === "approved" ? "approved" : "pending_review") as
+          | "approved"
+          | "pending_review",
+        scheduledAt: pending.scheduledAt,
+      };
+    }
+    return null;
+  }, [scheduleQuery.data?.activeArticle, trackedArticles]);
+
+  const writingBlockedByPipeline = Boolean(activePipelineArticle);
+  const pipelineBlockReason = activePipelineArticle
+    ? activePipelineArticle.stage === "scheduled"
+      ? `يوجد لديك مقال مجدول للنشر حالياً («${activePipelineArticle.title}»). لا يمكن كتابة أو إرسال مقال جديد حتى يُنشر المقال الحالي.`
+      : `يوجد لديك مقال في انتظار مراجعة هيئة التحرير والجدولة («${activePipelineArticle.title}»). لا يمكن كتابة أو إرسال مقال جديد حتى يُنشر المقال الحالي.`
+    : "";
+
+  const startWriting = () => {
+    if (createBlocked) {
+      toast({
+        title: "الترخيص المهني مطلوب",
+        description: createBlockedReason,
+        variant: "destructive",
+      });
+      openMediaLicenseForm();
+      return;
+    }
+    if (writingBlockedByPipeline && activePipelineArticle) {
+      toast({
+        title:
+          activePipelineArticle.stage === "scheduled"
+            ? "يوجد مقال مجدول للنشر حالياً"
+            : "يوجد مقال في انتظار المراجعة والجدولة",
+        description: pipelineBlockReason,
+        variant: "destructive",
+      });
+      return;
+    }
+    navigate("/dashboard/articles/new");
+  };
+
   const coachMutation = useMutation({
     mutationFn: () => apiRequest<CoachResult>("/api/opinion-author/idea-coach", { method: "POST", body: JSON.stringify({ idea: ideaInput }) }),
     onSuccess: (result) => setCoachResult(result),
@@ -256,9 +315,13 @@ export default function WriterWorkspacePage() {
   const submitReviewMutation = useMutation({
     mutationFn: (articleId: string) => apiRequest(`/api/my/articles/${articleId}/submit-review`, { method: "POST" }),
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/opinion-author/schedule"] });
       queryClient.invalidateQueries({ queryKey: ["/api/opinion-author/analytics"] });
       queryClient.invalidateQueries({ queryKey: ["/api/opinion-author/workspace"] });
-      toast({ title: "تم الإرسال", description: "وصل المقال إلى فريق التحرير للمراجعة" });
+      toast({
+        title: "تم إرسال المقالة لهيئة التحرير",
+        description: "وصلت مقالتك إلى هيئة التحرير، وهي الآن في انتظار المراجعة وتحديد موعد الجدولة",
+      });
     },
     onError: (error: Error) => toast({ title: "لم يتم الإرسال", description: error.message, variant: "destructive" }),
   });
@@ -326,8 +389,51 @@ export default function WriterWorkspacePage() {
             onOpenNotification={openEditorialNotification}
             onMarkAllRead={() => markAllNotificationsReadMutation.mutate()}
             markingAll={markAllNotificationsReadMutation.isPending}
-            onStartWriting={startWriting}
+            onStartWriting={writingBlockedByPipeline ? undefined : startWriting}
           />
+          {activePipelineArticle && (
+            <div
+              className="flex flex-col gap-2 rounded-xl border border-amber-300/70 bg-amber-50/90 p-3 dark:border-amber-700/50 dark:bg-amber-950/25 sm:flex-row sm:items-center sm:justify-between"
+              dir="rtl"
+              data-testid="writer-active-pipeline-notice"
+            >
+              <div className="flex items-start gap-2.5">
+                {activePipelineArticle.stage === "scheduled" ? (
+                  <CalendarClock className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
+                ) : (
+                  <Clock3 className="mt-0.5 h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
+                )}
+                <div>
+                  <p className="text-sm font-bold">
+                    {activePipelineArticle.stage === "scheduled"
+                      ? `مقالتك «${activePipelineArticle.title}» مجدولة للنشر`
+                      : `مقالتك «${activePipelineArticle.title}» في انتظار مراجعة هيئة التحرير والجدولة`}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {activePipelineArticle.stage === "scheduled"
+                      ? `تمت جدولة المقالة من قِبل هيئة التحرير${activePipelineArticle.scheduledAt ? ` ليوم ${format(new Date(activePipelineArticle.scheduledAt), "EEEE d MMMM — h:mm a", { locale: ar })}` : ""}. كتابة مقالة جديدة ستُتاح تلقائياً فور نشر المقالة الحالية.`
+                      : "وصلت مقالتك إلى هيئة التحرير، وسيصلك إشعار فور اعتماد جدولتها. لا يمكن كتابة أو إرسال مقالة جديدة حالياً."}
+                  </p>
+                </div>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="shrink-0"
+                onClick={() => {
+                  setActiveTab("articles");
+                  window.setTimeout(() => {
+                    document
+                      .getElementById(`writer-article-${activePipelineArticle.id}`)
+                      ?.scrollIntoView({ behavior: "smooth", block: "center" });
+                  }, 120);
+                }}
+                data-testid="button-view-active-pipeline-article"
+              >
+                متابعة حالة المقالة
+              </Button>
+            </div>
+          )}
           {railMode ? (
             <section className="rounded-xl border border-border bg-card p-3" dir="rtl">
               <div className="flex items-center justify-between gap-2">
@@ -336,12 +442,18 @@ export default function WriterWorkspacePage() {
                 </h1>
                 <Button
                   size="sm"
-                  className={`shrink-0 gap-1.5${createBlocked ? " opacity-60" : ""}`}
-                  title={createBlocked ? createBlockedReason : undefined}
+                  disabled={writingBlockedByPipeline}
+                  className={`shrink-0 gap-1.5${createBlocked || writingBlockedByPipeline ? " opacity-60" : ""}`}
+                  title={createBlocked ? createBlockedReason : writingBlockedByPipeline ? pipelineBlockReason : undefined}
                   onClick={startWriting}
                   data-testid="button-writer-start-writing"
                 >
-                  <PenLine className="h-4 w-4" /> ابدأ الكتابة
+                  <PenLine className="h-4 w-4" />
+                  {writingBlockedByPipeline
+                    ? activePipelineArticle?.stage === "scheduled"
+                      ? "لديك مقال مجدول"
+                      : "بانتظار الجدولة"
+                    : "ابدأ الكتابة"}
                 </Button>
               </div>
               <div className="-mx-1 mt-2.5 flex gap-2 overflow-x-auto px-1 pb-0.5">
@@ -403,12 +515,18 @@ export default function WriterWorkspacePage() {
                 </Button>
                 <Button
                   size="sm"
-                  className={`justify-center gap-1.5${createBlocked ? " opacity-60" : ""}`}
-                  title={createBlocked ? createBlockedReason : undefined}
+                  disabled={writingBlockedByPipeline}
+                  className={`justify-center gap-1.5${createBlocked || writingBlockedByPipeline ? " opacity-60" : ""}`}
+                  title={createBlocked ? createBlockedReason : writingBlockedByPipeline ? pipelineBlockReason : undefined}
                   onClick={startWriting}
                   data-testid="button-writer-start-writing-desktop"
                 >
-                  <PenLine className="h-4 w-4" /> ابدأ الكتابة
+                  <PenLine className="h-4 w-4" />
+                  {writingBlockedByPipeline
+                    ? activePipelineArticle?.stage === "scheduled"
+                      ? "لديك مقال مجدول"
+                      : "بانتظار الجدولة"
+                    : "ابدأ الكتابة"}
                 </Button>
               </div>
             </div>
@@ -453,7 +571,7 @@ export default function WriterWorkspacePage() {
                       </Button>
                       <Button variant="ghost" size="sm" onClick={() => setActiveTab("ideas")}>افتح استوديو الأفكار <ArrowLeft className="mr-1 h-4 w-4" /></Button>
                     </div>
-                    {coachResult && <CoachResultView result={coachResult} compact />}
+                    {coachResult && <CoachResultView result={coachResult} compact onStartWriting={startWriting} writingDisabled={writingBlockedByPipeline} />}
                   </CardContent>
                 </Card>
 
@@ -626,7 +744,7 @@ export default function WriterWorkspacePage() {
                     <Button size="sm" onClick={() => coachMutation.mutate()} disabled={ideaInput.trim().length < 12 || coachMutation.isPending} className="gap-2">
                       <WandSparkles className="h-4 w-4" /> ابنِ خريطة الفكرة
                     </Button>
-                    {coachResult && <CoachResultView result={coachResult} />}
+                    {coachResult && <CoachResultView result={coachResult} onStartWriting={startWriting} writingDisabled={writingBlockedByPipeline} />}
                   </CardContent>
                 </Card>
                 <StyleProfileCard profile={styleQuery.data} loading={styleQuery.isLoading} />
@@ -660,7 +778,7 @@ export default function WriterWorkspacePage() {
                 <p className="mt-1 hidden text-sm text-muted-foreground sm:block">كل قرار تحريري وسببه وموعده في مكان واحد. تتحدث اللوحة تلقائيًا.</p>
               </div>
               <div className="grid grid-cols-2 gap-2 lg:grid-cols-5 sm:gap-3">
-                <TrackingMetric icon={Clock3} label="تحت المراجعة" value={trackingCounts.pending} />
+                <TrackingMetric icon={Clock3} label="بانتظار المراجعة والجدولة" value={trackingCounts.pending} />
                 <TrackingMetric icon={Edit3} label="تحتاج إجراءك" value={trackingCounts.action} tone="warning" />
                 <TrackingMetric icon={CalendarClock} label="مجدولة" value={trackingCounts.scheduled} tone="info" />
                 <TrackingMetric icon={CircleX} label="غير صالحة للنشر" value={trackingCounts.declined} tone="danger" />
@@ -846,11 +964,11 @@ function EditorialAlertsPanel({ notifications, onOpen, onMarkAll, markingAll }: 
 
 function trackingState(article: TrackingArticle) {
   if (article.status === "published") return { label: "تم النشر", description: "المقال متاح الآن للقراء.", icon: CheckCircle2, tone: "success" as const, dateLabel: "نُشر في", date: article.publishedAt };
-  if (article.status === "scheduled") return { label: "مجدول للنشر", description: "اعتمد فريق التحرير المقال وحدد موعد نشره.", icon: CalendarClock, tone: "info" as const, dateLabel: "موعد النشر", date: article.scheduledAt };
+  if (article.status === "scheduled") return { label: "مجدول للنشر", description: "اعتمدت هيئة التحرير المقال وحددت موعد جدولته للنشر.", icon: CalendarClock, tone: "info" as const, dateLabel: "موعد النشر المجدول", date: article.scheduledAt };
   if (article.reviewStatus === "rejected" || article.status === "archived" || article.status === "rejected") return { label: "غير صالح للنشر", description: "أنهى فريق التحرير مراجعة المقال وقرر عدم نشره.", icon: CircleX, tone: "danger" as const, dateLabel: "صدر القرار في", date: article.reviewedAt || article.updatedAt };
   if (article.reviewStatus === "needs_changes") return { label: "عليه ملاحظات", description: "أعاد فريق التحرير المقال إليك لإجراء تعديلات محددة.", icon: Edit3, tone: "warning" as const, dateLabel: "وصلت الملاحظات في", date: article.reviewedAt || article.updatedAt };
-  if (article.reviewStatus === "pending_review") return { label: "تحت المراجعة", description: "وصل المقال إلى فريق التحرير، ولا يحتاج منك إجراء الآن.", icon: Clock3, tone: "default" as const, dateLabel: "آخر تحديث", date: article.updatedAt };
-  if (article.reviewStatus === "approved") return { label: "معتمد", description: "اعتمد فريق التحرير المقال وهو الآن بانتظار تحديد موعد النشر.", icon: FileCheck2, tone: "success" as const, dateLabel: "تم الاعتماد في", date: article.reviewedAt || article.updatedAt };
+  if (article.reviewStatus === "pending_review") return { label: "في انتظار المراجعة والجدولة", description: "وصلت المقالة إلى هيئة التحرير، وهي الآن في انتظار المراجعة وتحديد موعد الجدولة.", icon: Clock3, tone: "default" as const, dateLabel: "تاريخ الإرسال", date: article.updatedAt };
+  if (article.reviewStatus === "approved") return { label: "في انتظار الجدولة", description: "اعتمدت هيئة التحرير المقال وهو الآن بانتظار تحديد موعد النشر.", icon: FileCheck2, tone: "success" as const, dateLabel: "تم الاعتماد في", date: article.reviewedAt || article.updatedAt };
   return { label: "مسودة", description: "المقال محفوظ لديك ولم يُرسل إلى فريق التحرير بعد.", icon: Feather, tone: "default" as const, dateLabel: "آخر تعديل", date: article.updatedAt };
 }
 
@@ -1009,8 +1127,18 @@ function IdeaCard({ idea, onStart }: { idea: WriterIdea; onStart: () => void }) 
   );
 }
 
-function CoachResultView({ result, compact = false }: { result: CoachResult; compact?: boolean }) {
-  return <div className="mt-4 space-y-4 rounded-2xl border border-primary/20 bg-primary/[0.035] p-4"><div className="flex items-center gap-2 font-semibold text-primary dark:text-primary"><Sparkles className="h-4 w-4" /> خريطة الفكرة</div>{result.reflection && <p className="text-sm leading-7">{result.reflection}</p>}<div className={`grid gap-4 ${compact ? "md:grid-cols-2" : ""}`}>{result.questions?.length ? <ResultList title="أسئلة تستحق الإجابة" items={result.questions} /> : null}{result.thesisOptions?.length ? <ResultList title="مواقف محتملة" items={result.thesisOptions} /> : null}{!compact && result.outline?.length ? <ResultList title="بناء مقترح" items={result.outline} /> : null}{!compact && result.sourcesToSeek?.length ? <ResultList title="ما الذي يحتاج تحققًا؟" items={result.sourcesToSeek} /> : null}</div>{result.counterpoint && <div className="rounded-lg border-r-4 border-primary bg-background p-3 text-sm"><span className="font-medium">الرأي المقابل: </span>{result.counterpoint}</div>}<Button size="sm" className="gap-2" onClick={() => window.location.assign("/dashboard/articles/new")}><PenLine className="h-4 w-4" /> ابدأ مسودة بصوتك</Button></div>;
+function CoachResultView({
+  result,
+  compact = false,
+  onStartWriting,
+  writingDisabled = false,
+}: {
+  result: CoachResult;
+  compact?: boolean;
+  onStartWriting?: () => void;
+  writingDisabled?: boolean;
+}) {
+  return <div className="mt-4 space-y-4 rounded-2xl border border-primary/20 bg-primary/[0.035] p-4"><div className="flex items-center gap-2 font-semibold text-primary dark:text-primary"><Sparkles className="h-4 w-4" /> خريطة الفكرة</div>{result.reflection && <p className="text-sm leading-7">{result.reflection}</p>}<div className={`grid gap-4 ${compact ? "md:grid-cols-2" : ""}`}>{result.questions?.length ? <ResultList title="أسئلة تستحق الإجابة" items={result.questions} /> : null}{result.thesisOptions?.length ? <ResultList title="مواقف محتملة" items={result.thesisOptions} /> : null}{!compact && result.outline?.length ? <ResultList title="بناء مقترح" items={result.outline} /> : null}{!compact && result.sourcesToSeek?.length ? <ResultList title="ما الذي يحتاج تحققًا؟" items={result.sourcesToSeek} /> : null}</div>{result.counterpoint && <div className="rounded-lg border-r-4 border-primary bg-background p-3 text-sm"><span className="font-medium">الرأي المقابل: </span>{result.counterpoint}</div>}<Button size="sm" className="gap-2" disabled={writingDisabled} onClick={() => (onStartWriting ? onStartWriting() : window.location.assign("/dashboard/articles/new"))}><PenLine className="h-4 w-4" /> ابدأ مسودة بصوتك</Button></div>;
 }
 
 function ResultList({ title, items }: { title: string; items: string[] }) {

@@ -107,6 +107,23 @@ describe("decidePublish", () => {
     ).toBeNull();
   });
 
+  it("allows publishing and scheduling with wildcard ['*'] permissions", () => {
+    expect(
+      decidePublish({
+        nextStatus: "published",
+        gate: NO_PUBLISHER,
+        permissions: ["*"],
+      }),
+    ).toBeNull();
+    expect(
+      decidePublish({
+        nextStatus: "scheduled",
+        gate: NO_PUBLISHER,
+        permissions: ["*"],
+      }),
+    ).toBeNull();
+  });
+
   it("blocks a publisher whose publishing window has closed, even with the permission", () => {
     const denial = decidePublish({
       nextStatus: "published",

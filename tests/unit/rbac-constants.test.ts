@@ -81,6 +81,41 @@ describe("content_manager — meetings.create and staff productivity revoked", (
   it("denyPermissionsForRoles leaves wildcard untouched", () => {
     expect(denyPermissionsForRoles([ROLE_NAMES.CONTENT_MANAGER], ["*"])).toEqual(["*"]);
   });
+
+  it("strips stale DB publish/schedule grants for opinion_author so opinion authors never self-schedule or self-publish", () => {
+    const effective = resolveEffectivePermissions(
+      [ROLE_NAMES.OPINION_AUTHOR],
+      [
+        PERMISSION_CODES.ARTICLES_PUBLISH,
+        PERMISSION_CODES.ARTICLES_SCHEDULE,
+        PERMISSION_CODES.OPINION_PUBLISH,
+        PERMISSION_CODES.ARTICLES_EDIT_ANY,
+        PERMISSION_CODES.OPINION_CREATE,
+      ],
+    );
+    expect(effective).not.toContain(PERMISSION_CODES.ARTICLES_PUBLISH);
+    expect(effective).not.toContain(PERMISSION_CODES.ARTICLES_SCHEDULE);
+    expect(effective).not.toContain(PERMISSION_CODES.OPINION_PUBLISH);
+    expect(effective).not.toContain(PERMISSION_CODES.ARTICLES_EDIT_ANY);
+    expect(effective).toContain(PERMISSION_CODES.OPINION_CREATE);
+    expect(effective).toContain(PERMISSION_CODES.OPINION_EDIT_OWN);
+  });
+
+  it("strips stale DB publish/schedule grants for reporter while preserving dual-role editor permissions", () => {
+    const reporterEffective = resolveEffectivePermissions(
+      [ROLE_NAMES.REPORTER],
+      [PERMISSION_CODES.ARTICLES_PUBLISH, PERMISSION_CODES.ARTICLES_SCHEDULE],
+    );
+    expect(reporterEffective).not.toContain(PERMISSION_CODES.ARTICLES_PUBLISH);
+    expect(reporterEffective).not.toContain(PERMISSION_CODES.ARTICLES_SCHEDULE);
+
+    const dualRoleEffective = resolveEffectivePermissions(
+      [ROLE_NAMES.EDITOR, ROLE_NAMES.OPINION_AUTHOR],
+      [PERMISSION_CODES.ARTICLES_PUBLISH, PERMISSION_CODES.ARTICLES_SCHEDULE],
+    );
+    expect(dualRoleEffective).toContain(PERMISSION_CODES.ARTICLES_PUBLISH);
+    expect(dualRoleEffective).toContain(PERMISSION_CODES.ARTICLES_SCHEDULE);
+  });
 });
 
 describe("SUPERUSER_ROLE_NAMES — must stay in sync with seed data (audit H5)", () => {
