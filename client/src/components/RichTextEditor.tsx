@@ -109,7 +109,7 @@ function ToolbarButton({
       size="sm"
       onClick={onClick}
       disabled={disabled}
-      className="h-10 w-10 sm:h-8 sm:w-8 p-0 shrink-0"
+      className="no-min-touch-size h-8 w-8 rounded-md p-0 shrink-0"
       title={title}
       data-testid={`button-${title.replace(/\s+/g, '-')}`}
     >
@@ -187,7 +187,7 @@ export function RichTextEditor({
     editable: !disabled,
     editorProps: {
       attributes: {
-        class: "rich-text-editor__content prose prose-sm sm:prose lg:prose-lg dark:prose-invert !max-w-none w-full focus:outline-none min-h-[300px] px-4 py-3",
+        class: "rich-text-editor__content prose prose-sm sm:prose lg:prose-lg dark:prose-invert !max-w-none w-full focus:outline-none min-h-[340px] sm:min-h-[420px] px-4 sm:px-5 py-3.5 leading-relaxed",
         dir: dir,
         "data-testid": "rich-text-editor-content",
       },
@@ -482,13 +482,13 @@ export function RichTextEditor({
 
   return (
     <div
-      className="rich-text-editor border rounded-md"
+      className="rich-text-editor border rounded-xl"
       dir={dir}
       data-editor-shell
       data-testid="rich-text-editor"
     >
       {/* Toolbar */}
-      <div className="rich-text-editor__toolbar flex flex-wrap items-center gap-1 sm:gap-1 p-2 border-b">
+      <div className="rich-text-editor__toolbar flex flex-wrap items-center gap-0.5 sm:gap-1 px-2 py-1.5 border-b bg-muted/30 backdrop-blur-sm">
         <ToolbarButton
           onClick={() => editor.chain().focus().toggleBold().run()}
           isActive={editor.isActive("bold")}
@@ -536,7 +536,7 @@ export function RichTextEditor({
               type="button"
               variant="ghost"
               size="sm"
-              className="h-8 w-8 p-0"
+              className="no-min-touch-size h-8 w-8 rounded-md p-0 shrink-0"
               title="لون النص"
               data-testid="button-text-color"
             >
@@ -549,7 +549,7 @@ export function RichTextEditor({
                 <button
                   key={color.value}
                   type="button"
-                  className="h-8 w-8 rounded border hover-elevate"
+                  className="no-min-touch-size h-8 w-8 rounded border hover-elevate"
                   style={{ backgroundColor: color.value }}
                   onClick={() => {
                     editor.chain().focus().setColor(color.value).run();
@@ -561,7 +561,7 @@ export function RichTextEditor({
               ))}
               <button
                 type="button"
-                className="h-8 w-8 rounded border bg-card hover-elevate flex items-center justify-center text-xs"
+                className="no-min-touch-size h-8 w-8 rounded border bg-card hover-elevate flex items-center justify-center text-xs"
                 onClick={() => {
                   editor.chain().focus().unsetColor().run();
                   setColorPickerOpen(false);
@@ -575,7 +575,7 @@ export function RichTextEditor({
           </PopoverContent>
         </Popover>
 
-        <Separator orientation="vertical" className="h-6 mx-1" />
+        <Separator orientation="vertical" className="h-5 mx-1" />
 
         <ToolbarButton
           onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
@@ -601,7 +601,7 @@ export function RichTextEditor({
           <Heading3 className="h-4 w-4" />
         </ToolbarButton>
 
-        <Separator orientation="vertical" className="h-6 mx-1" />
+        <Separator orientation="vertical" className="h-5 mx-1" />
 
         <ToolbarButton
           onClick={() => editor.chain().focus().toggleBulletList().run()}
@@ -653,7 +653,7 @@ export function RichTextEditor({
           <TableIcon className="h-4 w-4" />
         </ToolbarButton>
 
-        <Separator orientation="vertical" className="h-6 mx-1" />
+        <Separator orientation="vertical" className="h-5 mx-1" />
 
         <ToolbarButton
           onClick={() => editor.chain().focus().setTextAlign("right").run()}
@@ -679,7 +679,7 @@ export function RichTextEditor({
           <AlignLeft className="h-4 w-4" />
         </ToolbarButton>
 
-        <Separator orientation="vertical" className="h-6 mx-1" />
+        <Separator orientation="vertical" className="h-5 mx-1" />
 
         <ToolbarButton
           onClick={() => {
@@ -715,7 +715,7 @@ export function RichTextEditor({
           size="sm"
           onClick={handleSmartFormat}
           disabled={isSmartFormatting}
-          className="h-8 gap-1 px-2"
+          className="no-min-touch-size h-8 rounded-md gap-1 px-2 shrink-0"
           title="تنسيق ذكي بالذكاء الاصطناعي"
           data-testid="button-smart-format"
         >
@@ -755,7 +755,7 @@ export function RichTextEditor({
               type="button"
               variant="ghost"
               size="sm"
-              className="h-8 w-8 p-0"
+              className="no-min-touch-size h-8 w-8 rounded-md p-0 shrink-0"
               title="إيموجي"
               data-testid="button-emoji"
             >
@@ -779,7 +779,7 @@ export function RichTextEditor({
           </PopoverContent>
         </Popover>
 
-        <Separator orientation="vertical" className="h-6 mx-1" />
+        <Separator orientation="vertical" className="h-5 mx-1" />
 
         <ToolbarButton
           onClick={() => editor.chain().focus().undo().run()}
@@ -804,33 +804,33 @@ export function RichTextEditor({
           className="flex flex-wrap items-center gap-1 p-1.5 border-b bg-muted/50"
           data-testid="table-controls"
         >
-          <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-xs"
+          <Button type="button" variant="ghost" size="sm" className="no-min-touch-size h-7 px-2 text-xs"
             onClick={() => editor.chain().focus().addRowAfter().run()} data-testid="button-table-add-row">
             صف +
           </Button>
-          <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-xs"
+          <Button type="button" variant="ghost" size="sm" className="no-min-touch-size h-7 px-2 text-xs"
             onClick={() => editor.chain().focus().addColumnAfter().run()} data-testid="button-table-add-column">
             عمود +
           </Button>
-          <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-xs"
+          <Button type="button" variant="ghost" size="sm" className="no-min-touch-size h-7 px-2 text-xs"
             onClick={() => editor.chain().focus().deleteRow().run()} data-testid="button-table-delete-row">
             حذف الصف
           </Button>
-          <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-xs"
+          <Button type="button" variant="ghost" size="sm" className="no-min-touch-size h-7 px-2 text-xs"
             onClick={() => editor.chain().focus().deleteColumn().run()} data-testid="button-table-delete-column">
             حذف العمود
           </Button>
           <Separator orientation="vertical" className="h-5 mx-1" />
-          <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-xs"
+          <Button type="button" variant="ghost" size="sm" className="no-min-touch-size h-7 px-2 text-xs"
             onClick={() => editor.chain().focus().toggleHeaderRow().run()} data-testid="button-table-header-row">
             صف عناوين
           </Button>
-          <Button type="button" variant={tableState.cardStyle ? "default" : "ghost"} size="sm" className="h-7 px-2 text-xs"
+          <Button type="button" variant={tableState.cardStyle ? "default" : "ghost"} size="sm" className="no-min-touch-size h-7 px-2 text-xs"
             onClick={() => editor.chain().focus().toggleTableCardStyle().run()} data-testid="button-table-card-style">
             مظهر بطاقة
           </Button>
           <Separator orientation="vertical" className="h-5 mx-1" />
-          <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-xs text-destructive"
+          <Button type="button" variant="ghost" size="sm" className="no-min-touch-size h-7 px-2 text-xs text-destructive"
             onClick={() => editor.chain().focus().deleteTable().run()} data-testid="button-table-delete">
             حذف الجدول
           </Button>
