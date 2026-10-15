@@ -252,7 +252,7 @@ export function AutoImageGenerator({
                   variant="outline"
                   size="sm"
                   onClick={onOpenGptDialog}
-                  className="no-min-touch-size h-8 gap-1.5 px-3 text-xs font-semibold border-sky-300 bg-sky-50/90 text-sky-900 hover:bg-sky-100 dark:border-sky-800 dark:bg-sky-950/70 dark:text-sky-100"
+                  className="no-min-touch-size h-9 gap-1.5 px-3 text-xs font-bold border-sky-300 bg-sky-50/90 text-sky-900 hover:bg-sky-100 hover:border-sky-400 shadow-xs dark:border-sky-800 dark:bg-sky-950/70 dark:text-sky-100"
                   data-testid="button-generate-openai-image"
                 >
                   <ImagePlus className="h-3.5 w-3.5 text-sky-600 dark:text-sky-400" />
@@ -265,10 +265,10 @@ export function AutoImageGenerator({
                   variant="outline"
                   size="sm"
                   onClick={onOpenCustomAiDialog}
-                  className="no-min-touch-size h-8 gap-1.5 px-3 text-xs font-medium bg-background/80"
+                  className="no-min-touch-size h-9 gap-1.5 px-3 text-xs font-bold border-violet-300 bg-violet-50/90 text-violet-900 hover:bg-violet-100 hover:border-violet-400 shadow-xs dark:border-violet-800 dark:bg-violet-950/70 dark:text-violet-100"
                   data-testid="button-generate-ai-image"
                 >
-                  <Sparkles className="h-3.5 w-3.5 text-primary" />
+                  <Sparkles className="h-3.5 w-3.5 text-violet-600 dark:text-violet-400" />
                   توليد بوصف مخصص
                 </Button>
               )}
@@ -278,10 +278,10 @@ export function AutoImageGenerator({
                   variant="outline"
                   size="sm"
                   onClick={onOpenInfographicDialog}
-                  className="no-min-touch-size h-8 gap-1.5 px-3 text-xs font-medium bg-background/80"
+                  className="no-min-touch-size h-9 gap-1.5 px-3 text-xs font-bold border-emerald-300 bg-emerald-50/90 text-emerald-900 hover:bg-emerald-100 hover:border-emerald-400 shadow-xs dark:border-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-100"
                   data-testid="button-generate-infographic"
                 >
-                  <LayoutGrid className="h-3.5 w-3.5 text-primary" />
+                  <LayoutGrid className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
                   إنفوجرافيك
                 </Button>
               )}
@@ -291,10 +291,10 @@ export function AutoImageGenerator({
                   variant="outline"
                   size="sm"
                   onClick={onOpenStoryCardsDialog}
-                  className="no-min-touch-size h-8 gap-1.5 px-3 text-xs font-medium bg-background/80"
+                  className="no-min-touch-size h-9 gap-1.5 px-3 text-xs font-bold border-amber-300 bg-amber-50/90 text-amber-900 hover:bg-amber-100 hover:border-amber-400 shadow-xs dark:border-amber-800 dark:bg-amber-950/70 dark:text-amber-100"
                   data-testid="button-generate-story-cards"
                 >
-                  <Layers className="h-3.5 w-3.5 text-primary" />
+                  <Layers className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
                   قصص مصورة
                 </Button>
               )}
