@@ -23,6 +23,7 @@ import { useMediaLicenseGate } from "@/hooks/useMediaLicenseGate";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { OPINION_WRITERS_PER_DAY_CAP } from "@shared/opinionWriterConstants";
 import {
+  Archive,
   ArrowLeft,
   BellRing,
   CalendarClock,
@@ -61,14 +62,25 @@ export type EditorialNotification = {
   reviewerNote: string | null;
   readAt: string | null;
   createdAt: string;
+  articleStatus?: string | null;
 };
 
-export function editorialNotificationStyle(type: EditorialNotification["type"]) {
-  if (type === "published") return { icon: CheckCircle2, label: "تم النشر", item: "border-border bg-muted/30", iconClass: "text-primary" };
-  if (type === "scheduled") return { icon: CalendarClock, label: "تمت الجدولة", item: "border-border bg-primary/5 dark:border-border dark:bg-primary/10", iconClass: "text-primary dark:text-primary" };
+export function editorialNotificationStyle(
+  type: EditorialNotification["type"],
+  articleStatus?: string | null,
+) {
+  const published = { icon: CheckCircle2, label: "تم النشر", item: "border-border bg-muted/30", iconClass: "text-primary" };
+  const scheduled = { icon: CalendarClock, label: "تمت الجدولة", item: "border-border bg-primary/5 dark:border-border dark:bg-primary/10", iconClass: "text-primary dark:text-primary" };
+  const archived = { icon: Archive, label: "مؤرشف", item: "border-border bg-muted/30", iconClass: "text-muted-foreground" };
+  const followsArticle = type === "published" || type === "scheduled" || type === "archived" || type === "rejected" || type === "deleted";
+  if (followsArticle && articleStatus === "published") return published;
+  if (followsArticle && articleStatus === "scheduled") return scheduled;
+  if (type === "archived" || (followsArticle && articleStatus === "archived")) return archived;
+  if (type === "published") return published;
+  if (type === "scheduled") return scheduled;
   if (type === "needs_revision") return { icon: Edit3, label: "ملاحظات تحريرية", item: "border-warning/40 bg-warning/10 dark:border-border dark:bg-warning/10", iconClass: "text-warning dark:text-warning" };
   if (type === "survey_invite") return { icon: ClipboardList, label: "دعوة استطلاع", item: "border-primary/40 bg-primary/5 dark:border-border dark:bg-primary/10", iconClass: "text-primary" };
-  if (type === "rejected" || type === "deleted" || type === "archived") return { icon: CircleX, label: type === "deleted" ? "حُذف نهائيًا" : "غير صالح للنشر", item: "border-destructive/30 bg-destructive/10 dark:border-border dark:bg-destructive/10", iconClass: "text-destructive" };
+  if (type === "rejected" || type === "deleted") return { icon: CircleX, label: type === "deleted" ? "حُذف نهائيًا" : "غير صالح للنشر", item: "border-destructive/30 bg-destructive/10 dark:border-border dark:bg-destructive/10", iconClass: "text-destructive" };
   if (type === "social_published") return { icon: Share2, label: "نُشر على X", item: "border-emerald-500/30 bg-emerald-500/10 dark:border-border dark:bg-emerald-950/20", iconClass: "text-emerald-600 dark:text-emerald-400" };
   if (type === "social_scheduled") return { icon: CalendarClock, label: "جدولة على X", item: "border-amber-500/30 bg-amber-500/10 dark:border-border dark:bg-amber-950/20", iconClass: "text-amber-600 dark:text-amber-400" };
   if (type === "social_rejected") return { icon: CircleX, label: "مقترح X", item: "border-border bg-muted/30", iconClass: "text-muted-foreground" };
@@ -328,8 +340,8 @@ export function WriterPriorityRail({
             : "في انتظار مراجعة هيئة التحرير والجدولة",
         subtitle:
           activeArticle.stage === "scheduled"
-            ? `مقالتك «${activeArticle.title}» مجدولة للنشر من هيئة التحرير${activeArticle.scheduledAt ? ` في ${fmtDate(activeArticle.scheduledAt)}` : banner ? ` في ${fmtDate(banner.nextPublishAt)}` : ""} — لا يمكن كتابة أو إرسال مقالة جديدة حتى يُنشر المقال الحالي.`
-            : `وصلت مقالتك «${activeArticle.title}» إلى هيئة التحرير، وسيصلك إشعار فور تحديد موعد جدولتها — لا يمكن كتابة أو إرسال مقالة جديدة حالياً.`,
+            ? `مقالتك «${activeArticle.title}» مجدولة للنشر من هيئة التحرير${activeArticle.scheduledAt ? ` في ${fmtDate(activeArticle.scheduledAt)}` : banner ? ` في ${fmtDate(banner.nextPublishAt)}` : ""}. يمكنك حفظ مسودة، لكن لا يمكن إرسالها حتى يُنشر المقال الحالي.`
+            : `وصلت مقالتك «${activeArticle.title}» إلى هيئة التحرير، وسيصلك إشعار فور تحديد موعد جدولتها. يمكنك حفظ مسودة، لكن لا يمكن إرسالها حالياً.`,
       });
     } else if (banner && banner.state === "ok") {
       const submitOpen = new Date(banner.submitDeadline).getTime() > Date.now();
@@ -362,7 +374,7 @@ export function WriterPriorityRail({
       return <WriterDayPicker dayLoads={data.dayLoads} />;
     }
     if (item.notification) {
-      const style = editorialNotificationStyle(item.notification.type);
+      const style = editorialNotificationStyle(item.notification.type, item.notification.articleStatus);
       const Icon = style.icon;
       return (
         <button
@@ -394,7 +406,7 @@ export function WriterPriorityRail({
     const visual = scheduleItemVisual(item.kind);
     const isScheduleItem = item.kind === "late" || item.kind === "reminder" || item.kind === "schedule_ok";
     // بعد اختيار اليوم: الكتابة متاحة مباشرة من بطاقة الموعد ما لم تكن مقالة الأسبوع في المسار أو بانتظار الجدولة
-    const showWrite = isScheduleItem && Boolean(onStartWriting) && !createBlocked && !banner?.hasUpcoming && !activeArticle;
+    const showWrite = isScheduleItem && Boolean(onStartWriting) && !createBlocked;
     const showLicense = item.kind === "license" && !pendingReview;
     return (
       <Card className={`${visual.card} shadow-none`} dir="rtl" data-testid={`writer-next-step-${item.kind}`}>
@@ -431,7 +443,7 @@ export function WriterPriorityRail({
         <div className="overflow-hidden rounded-xl border border-border bg-card">
           {compactRows.map((item) => {
             const style = item.notification
-              ? editorialNotificationStyle(item.notification.type)
+              ? editorialNotificationStyle(item.notification.type, item.notification.articleStatus)
               : { icon: scheduleItemVisual(item.kind).Icon, label: "", iconClass: "text-primary" };
             const Icon = style.icon;
             return (

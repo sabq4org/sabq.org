@@ -1,5 +1,5 @@
 import { getNextSlotsForWriters } from "./opinionWritersService";
-import type { WriterWeeklySlot } from "./writerWeeklySlot";
+import { attachWriterWeeklySlots, type WriterWeeklySlot } from "./writerWeeklySlot";
 
 /** Use the web's batch calculation, including its published/scheduled floor. */
 export async function enrichMobileAdminSchedules<T extends {
@@ -11,10 +11,12 @@ export async function enrichMobileAdminSchedules<T extends {
     && (row.status === "draft" || row.status === "scheduled") && Boolean(row.authorId);
   const writerIds = [...new Set(rows.filter(needsWriterSlot).map(row => row.authorId!))];
   const slots = writerIds.length ? await getNextSlotsForWriters(writerIds) : {};
-  // Scheduled opinion articles also need their next slot when rescheduling
-  // an overdue saved date. Keep the saved date untouched for the warning.
-  return rows.map((row): T & { writerWeeklySlot?: WriterWeeklySlot } => {
-    const slot = needsWriterSlot(row) ? slots[row.authorId!] : undefined;
+  // Drafts of the same writer get sequential weeks. A scheduled row keeps the
+  // base suggestion for rescheduling and does not consume a draft slot.
+  const withDraftSlots = attachWriterWeeklySlots(rows, slots);
+  return withDraftSlots.map((row): T & { writerWeeklySlot?: WriterWeeklySlot } => {
+    if (row.writerWeeklySlot || row.status !== "scheduled" || !row.authorId) return row;
+    const slot = slots[row.authorId];
     return slot ? { ...row, writerWeeklySlot: slot } : row;
   });
 }

@@ -109,7 +109,7 @@ import { getPublishingGate, submitPortalArticle, notifyPublisherUser, getPortalA
 import { SABQ_NEWSPAPER_ACCOUNT_ID } from "@shared/sabqNewspaper";
 import { LOYALTY_ACTIONS } from "@shared/loyalty";
 import { notifyArticleStakeholders } from "./services/editorialNotifications";
-import { assertOpinionAuthorPipelineOpen, notifyOpinionArticleSubmittedForReview } from "./services/opinionWritersService";
+import { assertOpinionAuthorPipelineOpen, notifyOpinionArticleSubmittedForReview, opinionResubmitReviewPatch } from "./services/opinionWritersService";
 import {
   assertMediaLicenseAllowsSubmission,
   isInstitutionalMediaByline,
@@ -7707,8 +7707,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         articleData.submitterId = req.user.id;
       }
 
-      // Contributor creation can save and submit in one request.
-      // كاتب الرأي والمراسل لا يجدول ولا ينشر مباشرة — دائماً مسودة، وعند الإرسال pending_review.
+      // مساهم: دائماً مسودة. بوابة المسار تُغلق الإرسال فقط، وحفظ المسودة يبقى مفتوحاً.
       const isTrustedPub = await trustedPublisherCanPublish(req.user.id);
       if (req.body?.submitForReview === true && isTrustedPub) {
         articleData.status = "published";
@@ -7718,12 +7717,14 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         const isContributor = await userHasAnyRole(req.user.id, ["opinion_author", "reporter"]);
         const hasEditAny = await userHasPermission(req.user.id, PERMISSION_CODES.ARTICLES_EDIT_ANY);
         if (isContributor && !hasEditAny) {
-          const pipeGate = await assertOpinionAuthorPipelineOpen(authorId, articleData.articleType);
-          if (!pipeGate.ok) return res.status(pipeGate.status).json({ message: pipeGate.message, code: pipeGate.code });
           articleData.status = "draft";
           articleData.publishType = "instant";
           articleData.scheduledAt = null;
-          if (req.body?.submitForReview === true) articleData.reviewStatus = "pending_review";
+          if (req.body?.submitForReview === true) {
+            const pipeGate = await assertOpinionAuthorPipelineOpen(authorId, articleData.articleType);
+            if (!pipeGate.ok) return res.status(pipeGate.status).json({ message: pipeGate.message, code: pipeGate.code });
+            articleData.reviewStatus = "pending_review";
+          }
         }
       }
       
@@ -8269,7 +8270,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         } else if (existingArticle.reviewStatus !== "pending_review") {
           const pipeGate = await assertOpinionAuthorPipelineOpen(existingArticle.authorId, existingArticle.articleType, articleId);
           if (!pipeGate.ok) return res.status(pipeGate.status).json({ message: pipeGate.message, code: pipeGate.code });
-          updateData.reviewStatus = "pending_review";
+          Object.assign(updateData, opinionResubmitReviewPatch());
           updateData.status = statusAfterSubmitForReview(existingArticle.status);
           updateData.publishType = "instant";
           updateData.scheduledAt = null;
@@ -12424,7 +12425,7 @@ Respond in valid JSON format only:
       const [updatedArticle] = await db
         .update(articles)
         .set({
-          reviewStatus: "pending_review",
+          ...opinionResubmitReviewPatch(),
           status: statusAfterSubmitForReview(existingArticle.status),
           publishType: "instant",
           scheduledAt: null,
@@ -25919,7 +25920,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       const [updatedArticle] = await db
         .update(articles)
         .set({
-          reviewStatus: "pending_review",
+          ...opinionResubmitReviewPatch(),
           status: statusAfterSubmitForReview(existingArticle.status),
           publishType: "instant",
           scheduledAt: null,

@@ -43,6 +43,7 @@ import {
   CalendarDays,
   CheckCircle2,
   CheckCheck,
+  Archive,
   CircleX,
   ClipboardList,
   Clock3,
@@ -263,11 +264,10 @@ export default function WriterWorkspacePage() {
     return null;
   }, [scheduleQuery.data?.activeArticle, trackedArticles]);
 
-  const writingBlockedByPipeline = Boolean(activePipelineArticle);
   const pipelineBlockReason = activePipelineArticle
     ? activePipelineArticle.stage === "scheduled"
-      ? `يوجد لديك مقال مجدول للنشر حالياً («${activePipelineArticle.title}»). لا يمكن كتابة أو إرسال مقال جديد حتى يُنشر المقال الحالي.`
-      : `يوجد لديك مقال في انتظار مراجعة هيئة التحرير والجدولة («${activePipelineArticle.title}»). لا يمكن كتابة أو إرسال مقال جديد حتى يُنشر المقال الحالي.`
+      ? `يوجد لديك مقال مجدول للنشر حالياً («${activePipelineArticle.title}»). يمكنك حفظ مسودة، لكن لا يمكن إرسالها حتى يُنشر المقال الحالي.`
+      : `يوجد لديك مقال في انتظار مراجعة هيئة التحرير والجدولة («${activePipelineArticle.title}»). يمكنك حفظ مسودة، لكن لا يمكن إرسالها حتى يُنشر المقال الحالي.`
     : "";
 
   const startWriting = () => {
@@ -278,17 +278,6 @@ export default function WriterWorkspacePage() {
         variant: "destructive",
       });
       openMediaLicenseForm();
-      return;
-    }
-    if (writingBlockedByPipeline && activePipelineArticle) {
-      toast({
-        title:
-          activePipelineArticle.stage === "scheduled"
-            ? "يوجد مقال مجدول للنشر حالياً"
-            : "يوجد مقال في انتظار المراجعة والجدولة",
-        description: pipelineBlockReason,
-        variant: "destructive",
-      });
       return;
     }
     navigate("/dashboard/articles/new");
@@ -375,7 +364,7 @@ export default function WriterWorkspacePage() {
     pending: trackedArticles.filter((article) => article.reviewStatus === "pending_review").length,
     action: trackedArticles.filter((article) => article.reviewStatus === "needs_changes").length,
     scheduled: trackedArticles.filter((article) => article.status === "scheduled").length,
-    declined: trackedArticles.filter((article) => article.reviewStatus === "rejected" || article.status === "archived" || article.status === "rejected").length,
+    declined: trackedArticles.filter((article) => article.reviewStatus === "rejected" || article.status === "rejected").length,
     completed: trackedArticles.filter((article) => article.status === "published").length,
   }), [trackedArticles]);
 
@@ -389,7 +378,7 @@ export default function WriterWorkspacePage() {
             onOpenNotification={openEditorialNotification}
             onMarkAllRead={() => markAllNotificationsReadMutation.mutate()}
             markingAll={markAllNotificationsReadMutation.isPending}
-            onStartWriting={writingBlockedByPipeline ? undefined : startWriting}
+            onStartWriting={startWriting}
           />
           {activePipelineArticle && (
             <div
@@ -411,8 +400,8 @@ export default function WriterWorkspacePage() {
                   </p>
                   <p className="text-xs text-muted-foreground">
                     {activePipelineArticle.stage === "scheduled"
-                      ? `تمت جدولة المقالة من قِبل هيئة التحرير${activePipelineArticle.scheduledAt ? ` ليوم ${format(new Date(activePipelineArticle.scheduledAt), "EEEE d MMMM — h:mm a", { locale: ar })}` : ""}. كتابة مقالة جديدة ستُتاح تلقائياً فور نشر المقالة الحالية.`
-                      : "وصلت مقالتك إلى هيئة التحرير، وسيصلك إشعار فور اعتماد جدولتها. لا يمكن كتابة أو إرسال مقالة جديدة حالياً."}
+                      ? `تمت جدولة المقالة من قِبل هيئة التحرير${activePipelineArticle.scheduledAt ? ` ليوم ${format(new Date(activePipelineArticle.scheduledAt), "EEEE d MMMM — h:mm a", { locale: ar })}` : ""}. يمكنك حفظ مسودة جديدة، لكن لا يمكن إرسالها حتى تُنشر المقالة الحالية.`
+                      : "وصلت مقالتك إلى هيئة التحرير، وسيصلك إشعار فور اعتماد جدولتها. يمكنك حفظ مسودة جديدة، لكن لا يمكن إرسالها حالياً."}
                   </p>
                 </div>
               </div>
@@ -442,18 +431,14 @@ export default function WriterWorkspacePage() {
                 </h1>
                 <Button
                   size="sm"
-                  disabled={writingBlockedByPipeline}
-                  className={`shrink-0 gap-1.5${createBlocked || writingBlockedByPipeline ? " opacity-60" : ""}`}
-                  title={createBlocked ? createBlockedReason : writingBlockedByPipeline ? pipelineBlockReason : undefined}
+                  disabled={createBlocked}
+                  className={`shrink-0 gap-1.5${createBlocked ? " opacity-60" : ""}`}
+                  title={createBlocked ? createBlockedReason : pipelineBlockReason || undefined}
                   onClick={startWriting}
                   data-testid="button-writer-start-writing"
                 >
                   <PenLine className="h-4 w-4" />
-                  {writingBlockedByPipeline
-                    ? activePipelineArticle?.stage === "scheduled"
-                      ? "لديك مقال مجدول"
-                      : "بانتظار الجدولة"
-                    : "ابدأ الكتابة"}
+                  ابدأ الكتابة
                 </Button>
               </div>
               <div className="-mx-1 mt-2.5 flex gap-2 overflow-x-auto px-1 pb-0.5">
@@ -515,18 +500,14 @@ export default function WriterWorkspacePage() {
                 </Button>
                 <Button
                   size="sm"
-                  disabled={writingBlockedByPipeline}
-                  className={`justify-center gap-1.5${createBlocked || writingBlockedByPipeline ? " opacity-60" : ""}`}
-                  title={createBlocked ? createBlockedReason : writingBlockedByPipeline ? pipelineBlockReason : undefined}
+                  disabled={createBlocked}
+                  className={`justify-center gap-1.5${createBlocked ? " opacity-60" : ""}`}
+                  title={createBlocked ? createBlockedReason : pipelineBlockReason || undefined}
                   onClick={startWriting}
                   data-testid="button-writer-start-writing-desktop"
                 >
                   <PenLine className="h-4 w-4" />
-                  {writingBlockedByPipeline
-                    ? activePipelineArticle?.stage === "scheduled"
-                      ? "لديك مقال مجدول"
-                      : "بانتظار الجدولة"
-                    : "ابدأ الكتابة"}
+                  ابدأ الكتابة
                 </Button>
               </div>
             </div>
@@ -571,7 +552,7 @@ export default function WriterWorkspacePage() {
                       </Button>
                       <Button variant="ghost" size="sm" onClick={() => setActiveTab("ideas")}>افتح استوديو الأفكار <ArrowLeft className="mr-1 h-4 w-4" /></Button>
                     </div>
-                    {coachResult && <CoachResultView result={coachResult} compact onStartWriting={startWriting} writingDisabled={writingBlockedByPipeline} />}
+                    {coachResult && <CoachResultView result={coachResult} compact onStartWriting={startWriting} writingDisabled={false} />}
                   </CardContent>
                 </Card>
 
@@ -744,7 +725,7 @@ export default function WriterWorkspacePage() {
                     <Button size="sm" onClick={() => coachMutation.mutate()} disabled={ideaInput.trim().length < 12 || coachMutation.isPending} className="gap-2">
                       <WandSparkles className="h-4 w-4" /> ابنِ خريطة الفكرة
                     </Button>
-                    {coachResult && <CoachResultView result={coachResult} onStartWriting={startWriting} writingDisabled={writingBlockedByPipeline} />}
+                    {coachResult && <CoachResultView result={coachResult} onStartWriting={startWriting} writingDisabled={false} />}
                   </CardContent>
                 </Card>
                 <StyleProfileCard profile={styleQuery.data} loading={styleQuery.isLoading} />
@@ -929,7 +910,7 @@ function EditorialAlertsPanel({ notifications, onOpen, onMarkAll, markingAll }: 
       </CardHeader>
       <CardContent className="grid gap-2 p-3 pt-0 md:grid-cols-2 sm:p-6 sm:pt-0">
         {notifications.slice(0, 4).map((notification) => {
-          const style = editorialNotificationStyle(notification.type);
+          const style = editorialNotificationStyle(notification.type, notification.articleStatus);
           const Icon = style.icon;
           return (
             <button
@@ -965,7 +946,8 @@ function EditorialAlertsPanel({ notifications, onOpen, onMarkAll, markingAll }: 
 function trackingState(article: TrackingArticle) {
   if (article.status === "published") return { label: "تم النشر", description: "المقال متاح الآن للقراء.", icon: CheckCircle2, tone: "success" as const, dateLabel: "نُشر في", date: article.publishedAt };
   if (article.status === "scheduled") return { label: "مجدول للنشر", description: "اعتمدت هيئة التحرير المقال وحددت موعد جدولته للنشر.", icon: CalendarClock, tone: "info" as const, dateLabel: "موعد النشر المجدول", date: article.scheduledAt };
-  if (article.reviewStatus === "rejected" || article.status === "archived" || article.status === "rejected") return { label: "غير صالح للنشر", description: "أنهى فريق التحرير مراجعة المقال وقرر عدم نشره.", icon: CircleX, tone: "danger" as const, dateLabel: "صدر القرار في", date: article.reviewedAt || article.updatedAt };
+  if (article.status === "archived") return { label: "مؤرشف", description: "أُرشف المقال ولم يعد معروضاً للقراء.", icon: Archive, tone: "default" as const, dateLabel: "أُرشف في", date: article.updatedAt };
+  if (article.reviewStatus === "rejected" || article.status === "rejected") return { label: "غير صالح للنشر", description: "أنهى فريق التحرير مراجعة المقال وقرر عدم نشره.", icon: CircleX, tone: "danger" as const, dateLabel: "صدر القرار في", date: article.reviewedAt || article.updatedAt };
   if (article.reviewStatus === "needs_changes") return { label: "عليه ملاحظات", description: "أعاد فريق التحرير المقال إليك لإجراء تعديلات محددة.", icon: Edit3, tone: "warning" as const, dateLabel: "وصلت الملاحظات في", date: article.reviewedAt || article.updatedAt };
   if (article.reviewStatus === "pending_review") return { label: "في انتظار المراجعة والجدولة", description: "وصلت المقالة إلى هيئة التحرير، وهي الآن في انتظار المراجعة وتحديد موعد الجدولة.", icon: Clock3, tone: "default" as const, dateLabel: "تاريخ الإرسال", date: article.updatedAt };
   if (article.reviewStatus === "approved") return { label: "في انتظار الجدولة", description: "اعتمدت هيئة التحرير المقال وهو الآن بانتظار تحديد موعد النشر.", icon: FileCheck2, tone: "success" as const, dateLabel: "تم الاعتماد في", date: article.reviewedAt || article.updatedAt };
@@ -1094,12 +1076,6 @@ function WriterTrackingCard({
             </p>
           </div>
         )}
-        {!needsChanges && !isInvalid && article.reviewNotes && article.reviewStatus !== "pending_review" && (
-          <div className="rounded-xl border bg-background/70 p-3">
-            <p className="text-xs font-semibold">ملاحظة فريق التحرير</p>
-            <p className="mt-1 text-sm leading-6 text-muted-foreground">{article.reviewNotes}</p>
-          </div>
-        )}
       </CardContent>
     </Card>
   );
@@ -1146,7 +1122,7 @@ function ResultList({ title, items }: { title: string; items: string[] }) {
 }
 
 function EditorialChecklist({ notes }: { notes: string }) {
-  const items = notes.split(/\n|[•؛]/).map((item) => item.trim()).filter(Boolean).slice(0, 5);
+  const items = notes.split(/\n|[•؛]/).map((item) => item.trim()).filter(Boolean);
   return <div className="rounded-xl border border-warning/40 bg-warning/10 p-3 dark:border-border dark:bg-warning/10"><p className="mb-2 text-xs font-semibold text-warning dark:text-warning">خطة ملاحظات التحرير</p><ul className="space-y-1.5">{items.map((item, index) => <li key={`${item}-${index}`} className="flex items-start gap-2 text-xs leading-5 text-warning dark:text-warning"><span className="mt-0.5 h-3.5 w-3.5 shrink-0 rounded border border-warning bg-background" />{item}</li>)}</ul></div>;
 }
 
