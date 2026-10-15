@@ -35,7 +35,7 @@ struct ArticleContext: Equatable {
 
     static func news(article: Article, related: [Article], keywords: [String]) -> ArticleContext {
         let summarySource = article.aiSummary.isEmpty ? article.excerpt : article.aiSummary
-        let timeline = storySoFar(current: article, related: related)
+        let timeline = storySoFar(current: article, related: related, keywords: keywords)
         let inTimeline = Set(timeline.map(\.id))
         let rest = related
             .filter { $0.id != article.id && !inTimeline.contains($0.id) }
@@ -107,24 +107,78 @@ struct ArticleContext: Equatable {
         }
     }
 
-    /// الخط الزمني: الأخبار المرتبطة المنشورة قبل الخبر الحالي مرتبة من الأقدم،
-    /// آخر `maxEarlierStories` منها، ثم الخبر الحالي. يُعرض فقط إن وُجد
-    /// `minimumEarlierStories` على الأقل — خبر سابق واحد لا يصنع «قصة».
+    /// الخط الزمني: الأخبار المرتبطة **من القصة نفسها** المنشورة قبل الخبر
+    /// الحالي، من الأقدم، آخر `maxEarlier` منها، ثم الخبر الحالي. يُعرض فقط إن
+    /// وُجد `minimumEarlier` على الأقل — خبر سابق واحد لا يصنع «قصة».
+    ///
+    /// «المرتبطة» من الخادم أخبار حديثة من القسم نفسه لا من القصة نفسها (مثبت
+    /// 2026-10-15: خبر لمجلس الأمن عن غزة جاءت معه أخبار كوسوفو وطوكيو)، فلا
+    /// يدخل الخط إلا ما يشارك العنوانَ كلمتين دالتين أو يحمل إحدى الكلمات
+    /// المفتاحية — خط زمني لأخبار متفرقة يضلل القارئ.
     static func storySoFar(
         current: Article,
         related: [Article],
+        keywords: [String] = [],
         minimumEarlier: Int = minimumEarlierStories,
         maxEarlier: Int = maxEarlierStories
     ) -> [ArticleContextTimelineItem] {
         var seen = Set<String>([current.id])
+        let storyTokens = significantTokens(current.title)
+        let storyKeywords = keywords.map(normalized).filter { $0.count >= 3 }
         let earlier = related
             .filter { $0.publishDate < current.publishDate && seen.insert($0.id).inserted }
+            .filter { isSameStory($0, tokens: storyTokens, keywords: storyKeywords) }
             .sorted { $0.publishDate < $1.publishDate }
             .suffix(maxEarlier)
         guard earlier.count >= minimumEarlier else { return [] }
         return earlier.map { ArticleContextTimelineItem(article: $0, isCurrent: false) }
             + [ArticleContextTimelineItem(article: current, isCurrent: true)]
     }
+
+    static func isSameStory(_ candidate: Article, tokens: Set<String>, keywords: [String]) -> Bool {
+        let title = normalized(candidate.title)
+        if keywords.contains(where: { title.contains($0) }) { return true }
+        return significantTokens(candidate.title).intersection(tokens).count >= 2
+    }
+
+    /// كلمات العنوان الدالة بعد التطبيع: بلا تشكيل، الألف والتاء المربوطة
+    /// والياء موحّدة، «ال» والواو والباء واللام البادئة محذوفة، والكلمات
+    /// القصيرة وأدوات الربط مستبعدة.
+    static func significantTokens(_ text: String) -> Set<String> {
+        var tokens = Set<String>()
+        for raw in normalized(text).split(whereSeparator: { !$0.isLetter && !$0.isNumber }) {
+            var word = String(raw)
+            for prefix in ["وال", "بال", "فال", "كال", "لل", "ال"] where word.count > prefix.count + 2 && word.hasPrefix(prefix) {
+                word.removeFirst(prefix.count)
+                break
+            }
+            if word.count > 4, let first = word.first, "وب".contains(first) { word.removeFirst() }
+            guard word.count >= 3, !stopWords.contains(word) else { continue }
+            tokens.insert(word)
+        }
+        return tokens
+    }
+
+    static func normalized(_ text: String) -> String {
+        var result = ""
+        for scalar in text.unicodeScalars {
+            switch scalar.value {
+            case 0x064B...0x0652, 0x0640: continue                // التشكيل والتطويل
+            case 0x0622, 0x0623, 0x0625: result.append("ا")       // آ أ إ
+            case 0x0629: result.append("ه")                      // ة
+            case 0x0649: result.append("ي")                      // ى
+            default: result.unicodeScalars.append(scalar)
+            }
+        }
+        return result.lowercased()
+    }
+
+    private static let stopWords: Set<String> = [
+        "في", "من", "علي", "الي", "عن", "مع", "بعد", "قبل", "هذا", "هذه", "التي", "الذي",
+        "ان", "كان", "قد", "لا", "ما", "ثم", "او", "حتي", "خلال", "بين", "عند", "لدي",
+        "ضد", "كل", "اي", "منذ", "حول", "عبر", "دون", "غير", "بها", "فيه", "فيها", "لها",
+        "له", "اليوم", "امس", "جديد", "جديده", "سبق", "عاجل",
+    ]
 }
 
 struct ArticleContextTimelineItem: Identifiable, Equatable {

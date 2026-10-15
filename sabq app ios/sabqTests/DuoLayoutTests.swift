@@ -68,17 +68,41 @@ struct DuoLayoutTests {
     }
 
     @Test func storySoFarNeedsTwoEarlierStories() {
-        let current = article("now", daysAgo: 0)
-        let oneEarlier = [article("a", daysAgo: 3), article("later", daysAgo: -1)]
+        let current = article("now", daysAgo: 0, title: "مجلس الأمن يدين هجمات الحوثيين على المملكة")
+        let oneEarlier = [story("a", daysAgo: 3), story("later", daysAgo: -1)]
         #expect(ArticleContext.storySoFar(current: current, related: oneEarlier).isEmpty)
     }
 
+    /// «المرتبطة» من الخادم أخبار القسم الحديثة لا القصة نفسها: خبر غزة في مجلس
+    /// الأمن جاءت معه أخبار كوسوفو وطوكيو (محاكي 2026-10-15) — لا تصنع خطًا زمنيًا.
+    @Test func storySoFarIgnoresSameSectionNoise() {
+        let current = article("now", daysAgo: 0, title: "مجلس الأمن يعقد اجتماعًا موسعًا حول الشرق الأوسط ومخاطر العودة إلى الحرب في غزة")
+        let noise = [
+            article("k", daysAgo: 0.2, title: "الناتو يُسلّم قيادة قوة كوسوفو إلى لواء إيطالي خلفًا للتركي أولوتاش"),
+            article("t", daysAgo: 0.3, title: "طوكيو تدرس تزويد قواتها بغواصات نووية.. وسط تصاعد التوترات الإقليمية"),
+            article("s", daysAgo: 0.4, title: "قوة إسرائيلية تتوغل في ريف درعا وتضرم النيران في مستودع ومنزل"),
+        ]
+        #expect(ArticleContext.storySoFar(current: current, related: noise).isEmpty)
+
+        // كلمة مفتاحية مشتركة تكفي وحدها، والتطبيع يوحّد «غزة/غزه» و«الأمن/امن».
+        let sameStory = [
+            article("g1", daysAgo: 2, title: "ارتفاع حصيلة الضحايا في غزه"),
+            article("g2", daysAgo: 1, title: "جلسة طارئة لمجلس الامن بشأن الشرق الاوسط"),
+        ]
+        let timeline = ArticleContext.storySoFar(current: current, related: noise + sameStory, keywords: ["غزة"])
+        #expect(timeline.map(\.id) == ["g1", "g2", "now"])
+    }
+
+    private func story(_ id: String, daysAgo: Double) -> Article {
+        article(id, daysAgo: daysAgo, title: "هجمات الحوثيين على المملكة: تطور \(id)")
+    }
+
     @Test func storySoFarIsOldestFirstWithCurrentLast() {
-        let current = article("now", daysAgo: 0)
+        let current = article("now", daysAgo: 0, title: "مجلس الأمن يدين هجمات الحوثيين على المملكة")
         let related = [
-            article("b", daysAgo: 6), article("later", daysAgo: -2), article("e", daysAgo: 1),
-            article("a", daysAgo: 13), article("c", daysAgo: 4), article("d", daysAgo: 2),
-            article("now", daysAgo: 0), article("c", daysAgo: 4),
+            story("b", daysAgo: 6), story("later", daysAgo: -2), story("e", daysAgo: 1),
+            story("a", daysAgo: 13), story("c", daysAgo: 4), story("d", daysAgo: 2),
+            story("now", daysAgo: 0), story("c", daysAgo: 4),
         ]
         let timeline = ArticleContext.storySoFar(current: current, related: related)
         // الأحدث أربعة من السابق فقط، بلا تكرار ولا لاحق ولا الخبر نفسه.
@@ -90,11 +114,11 @@ struct DuoLayoutTests {
     @Test func newsContextKeepsRelatedOutOfTheTimeline() {
         var current = article("now", daysAgo: 0)
         current = Article(
-            id: current.id, title: "خبر", excerpt: "مقتطف.", aiSummary: "", body: "", bodyHTML: "",
+            id: current.id, title: "مجلس الأمن يدين الهجمات", excerpt: "مقتطف.", aiSummary: "", body: "", bodyHTML: "",
             category: .saudi, author: "", publishDate: current.publishDate, isBreaking: false,
             isFeatured: false, tags: [], imageURL: nil, slug: "now", articleURL: nil
         )
-        let related = [article("a", daysAgo: 5), article("b", daysAgo: 3),
+        let related = [article("a", daysAgo: 5, title: "مجلس الأمن يناقش الهجمات"), article("b", daysAgo: 3, title: "مجلس الأمن يصدر بيانًا"),
                        article("x", daysAgo: -1), article("y", daysAgo: -3)]
         let context = ArticleContext.news(article: current, related: related, keywords: ["مجلس الأمن"])
         #expect(context.storySoFar.map(\.id) == ["a", "b", "now"])
