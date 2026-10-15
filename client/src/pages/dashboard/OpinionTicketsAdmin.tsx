@@ -157,6 +157,7 @@ export default function OpinionTicketsAdmin() {
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
+    const statusRank = (status: OpinionTicketStatus) => (status === "open" ? 0 : status === "answered" ? 1 : 2);
     return tickets.filter((t) => {
       if (kindFilter !== "all" && resolveKind(t.authorKind) !== kindFilter) return false;
       const dir = t.direction ?? "inbound";
@@ -167,7 +168,7 @@ export default function OpinionTicketsAdmin() {
         (t.writerName || "").toLowerCase().includes(q) ||
         (t.writerEmail || "").toLowerCase().includes(q)
       );
-    });
+    }).sort((a, b) => statusRank(a.status) - statusRank(b.status));
   }, [tickets, search, kindFilter, directionFilter]);
 
   const writersForSelect = useMemo(() => {
@@ -402,6 +403,15 @@ export default function OpinionTicketsAdmin() {
             </Select>
           </div>
         </div>
+
+        {stats.open > 0 && (
+          <div
+            className="rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm font-semibold text-rose-800 dark:text-rose-200"
+            data-testid="admin-unanswered-tickets-banner"
+          >
+            {stats.open} استفسار بلا رد — تظهر أولاً في القائمة
+          </div>
+        )}
 
         {/* القائمة */}
         <section className="space-y-2">
