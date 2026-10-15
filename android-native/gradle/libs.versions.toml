@@ -51,6 +51,8 @@ junit = "4.13.2"
 google-services = "4.4.2"
 
 [libraries]
+# SMS User Consent API — تعبئة رمز التحقق تلقائيًا من رسالة SABQ بلا صلاحية قراءة الرسائل
+play-services-auth-api-phone = { group = "com.google.android.gms", name = "play-services-auth-api-phone", version = "18.1.0" }
 # Core
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "core-ktx" }
 androidx-lifecycle-runtime-ktx = { group = "androidx.lifecycle", name = "lifecycle-runtime-ktx", version.ref = "lifecycle" }
