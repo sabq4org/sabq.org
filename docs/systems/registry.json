@@ -628,11 +628,14 @@
         "server/csrf.ts",
         "server/twoFactor.ts",
         "server/sessionFailoverStore.ts",
+        "server/routes/advertiserAuth.ts",
+        "server/utils/stagingRuntime.ts",
         "server/services/memberSessionService.ts",
         "server/services/phoneAuth.ts",
         "shared/rbac-constants.ts",
         "tests/unit/phoneAuth.test.ts",
         "client/src/hooks/useAuth.ts",
+        "client/src/lib/queryClient.ts",
         "client/src/hooks/useRoleProtection.ts",
         "client/src/components/ProtectedRoute.tsx",
         "docs/architecture/AUTHENTICATION_FLOW.md",
@@ -647,7 +650,7 @@
       "owners": [
         "platform"
       ],
-      "lastReviewed": "2026-07-31"
+      "lastReviewed": "2026-10-15"
     },
     {
       "id": "seo-ssr",
@@ -675,7 +678,7 @@
       "owners": [
         "platform"
       ],
-      "lastReviewed": "2026-08-01"
+      "lastReviewed": "2026-10-15"
     },
     {
       "id": "comments",

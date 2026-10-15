@@ -17,6 +17,23 @@ import { createHmac } from "node:crypto";
 const SERVER_API_ORIGIN = (process.env.API_ORIGIN || "").replace(/\/+$/, "");
 const CLIENT_API_BASE = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/+$/, "");
 const SERVICE_PROXY_IP = "127.0.0.1";
+const STAGING_FORBIDDEN_API_HOSTS = new Set([
+  "api.sabq.org",
+  "sabqorg-production.up.railway.app",
+]);
+
+function assertStagingApiOrigin(value: string): void {
+  if (process.env.STAGING_NO_INDEX !== "true") return;
+  let hostname = "";
+  try {
+    hostname = new URL(value).hostname;
+  } catch {
+    throw new Error("API_ORIGIN must be an absolute URL in staging");
+  }
+  if (STAGING_FORBIDDEN_API_HOSTS.has(hostname)) {
+    throw new Error("production API origin is forbidden in staging");
+  }
+}
 
 const isApiPath = (path: string) =>
   path.startsWith("/api/") ||
@@ -33,8 +50,15 @@ export function apiUrl(path: string): string {
 
 /** Absolute URL usable during server-side rendering / fetch. */
 export function serverApiUrl(path: string): string {
-  if (/^https?:\/\//i.test(path)) return path;
+  if (/^https?:\/\//i.test(path)) {
+    assertStagingApiOrigin(path);
+    return path;
+  }
+  if (!SERVER_API_ORIGIN && process.env.STAGING_NO_INDEX === "true") {
+    throw new Error("API_ORIGIN is required in staging");
+  }
   const base = SERVER_API_ORIGIN || "https://api.sabq.org";
+  assertStagingApiOrigin(base);
   return base + (path.startsWith("/") ? path : `/${path}`);
 }
 
@@ -60,6 +84,11 @@ export function serverApiFetch(path: string, init: RequestInit & { next?: { reva
     headers.set("X-Sabq-Client-IP", SERVICE_PROXY_IP);
     headers.set("X-Sabq-Proxy-Timestamp", timestamp);
     headers.set("X-Sabq-Proxy-Signature", signature);
+  }
+  if (process.env.STAGING_NO_INDEX === "true") {
+    const token = (process.env.STAGING_ACCESS_TOKEN || "").trim();
+    if (!token) return Promise.reject(new Error("STAGING_ACCESS_TOKEN is required in staging"));
+    headers.set("Authorization", `Basic ${Buffer.from(`sabq:${token}`).toString("base64")}`);
   }
   return fetch(url, { ...init, headers });
 }

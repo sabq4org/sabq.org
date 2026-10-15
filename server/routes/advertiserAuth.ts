@@ -4,6 +4,7 @@ import { eq, and, inArray } from "drizzle-orm";
 import { advertiserProfiles, insertAdvertiserProfileSchema, nativeAds, nativeAdDailySpend } from "@shared/schema";
 import bcrypt from "bcrypt";
 import { z } from "zod";
+import { stagingSessionCookieName } from "../utils/stagingRuntime";
 
 const router = Router();
 
@@ -110,7 +111,7 @@ router.post("/logout", (req: Request, res: Response) => {
       console.error("Error destroying session:", err);
       return res.status(500).json({ error: "حدث خطأ أثناء تسجيل الخروج" });
     }
-    res.clearCookie("connect.sid");
+    res.clearCookie(stagingSessionCookieName());
     res.json({ success: true });
   });
 });

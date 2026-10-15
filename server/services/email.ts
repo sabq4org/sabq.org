@@ -5,6 +5,7 @@ import { db } from '../db';
 import { emailVerificationTokens, users } from '@shared/schema';
 import { and, eq } from 'drizzle-orm';
 import { isEmailSuppressed } from './emailSuppressionService';
+import { stagingOutboundError } from '../utils/stagingRuntime';
 
 const MAILERSEND_API_KEY = process.env.MAILERSEND_API_KEY;
 const SENDGRID_API_KEY = process.env.SENDGRID_API_KEY;
@@ -64,6 +65,8 @@ async function sendTransactionalEmail(options: {
   text?: string;
   html?: string;
 }): Promise<void> {
+  const stagingError = stagingOutboundError("email");
+  if (stagingError) throw stagingError;
   // Deliverability guard (F-05): never (re)send to an address that hard-bounced
   // or filed a spam complaint — that's how a sending domain's reputation rots.
   // Single chokepoint for every transactional send.
@@ -134,6 +137,8 @@ export async function sendEmailNotification(options: {
   text?: string;
   html?: string;
 }): Promise<{ success: boolean; error?: string }> {
+  const stagingError = stagingOutboundError("email");
+  if (stagingError) return { success: false, error: stagingError.message };
   try {
     await sendTransactionalEmail(options);
     // لا نسجل عنوان المستلم (PII) — الموضوع يكفي للتشخيص (F-18).

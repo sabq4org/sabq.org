@@ -825,7 +825,29 @@ export async function serveMawaeedPage({ request, url, env, waitUntil, signProxy
     } catch (_) { /* fetch origin */ }
   }
 
-  const origin = String(env.API_ORIGIN || "https://api.sabq.org").replace(/\/+$/, "");
+  const configuredOrigin = String(env.API_ORIGIN || "").trim().replace(/\/+$/, "");
+  if (String(env.STAGING_NO_INDEX || "").toLowerCase() === "true" && !configuredOrigin) {
+    return new Response("Staging API origin is not configured.", {
+      status: 503,
+      headers: {
+        "Content-Type": "text/plain; charset=utf-8",
+        "Cache-Control": "private, no-store, no-cache, max-age=0",
+        "X-Robots-Tag": "noindex, nofollow, noarchive",
+      },
+    });
+  }
+  if (
+    String(env.STAGING_NO_INDEX || "").toLowerCase() === "true" &&
+    ["api.sabq.org", "sabqorg-production.up.railway.app"].includes(
+      (() => { try { return new URL(configuredOrigin).hostname; } catch (_) { return ""; } })(),
+    )
+  ) {
+    return new Response("Production API origin is forbidden in staging.", {
+      status: 503,
+      headers: { "Cache-Control": "private, no-store", "X-Robots-Tag": "noindex, nofollow, noarchive" },
+    });
+  }
+  const origin = configuredOrigin || "https://api.sabq.org";
   const region = normalizeRegion(url.searchParams.get("region"));
   const endpoint = slug
     ? `${origin}/api/mawaeed/${encodeURIComponent(slug)}?region=${region}`
@@ -837,6 +859,8 @@ export async function serveMawaeedPage({ request, url, env, waitUntil, signProxy
     const sourceHeaders = new Headers();
     const clientIp = request.headers.get("cf-connecting-ip");
     if (clientIp) sourceHeaders.set("cf-connecting-ip", clientIp);
+    const authorization = request.headers.get("authorization");
+    if (authorization) sourceHeaders.set("authorization", authorization);
     const metadataRequest = new Request(endpoint, { method: "GET", headers: sourceHeaders });
     const headers = await signProxyRequest(metadataRequest, endpoint, env.EDGE_PROXY_SHARED_SECRET);
     headers.set("User-Agent", "sabq-pages-fn/1.0");

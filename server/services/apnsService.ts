@@ -12,6 +12,7 @@ import jwt from "jsonwebtoken";
 import https from "https";
 import http2 from "http2";
 import { createPushBroadcastPacer } from "./pushBroadcastPacer";
+import { stagingOutboundError } from "../utils/stagingRuntime";
 
 // APNs Configuration
 const APNS_HOST_PRODUCTION = "api.push.apple.com";
@@ -376,6 +377,8 @@ export async function sendPushNotification(
     topic?: string;
   } = {}
 ): Promise<ApnsResponse> {
+  const stagingError = stagingOutboundError("apns");
+  if (stagingError) return { success: false, reason: stagingError.message };
   // اختر المفتاح حسب تطبيق الجهاز (topic = bundleId)؛ الرياضة قد تستخدم مفتاحًا منفصلًا.
   const credentials = getApnsCredentials(options.topic);
 
@@ -499,6 +502,8 @@ export async function sendLiveActivityStart(
   pushToStartToken: string,
   options: LiveActivityStartOptions,
 ): Promise<ApnsResponse> {
+  const stagingError = stagingOutboundError("apns-live-activity");
+  if (stagingError) return { success: false, reason: stagingError.message };
   const credentials = getApnsCredentials(options.bundleId);
   if (!credentials) return { success: false, reason: "APNs not configured" };
 
@@ -576,6 +581,8 @@ export async function sendLiveActivityUpdate(
   activityPushToken: string,
   options: LiveActivityUpdateOptions,
 ): Promise<ApnsResponse> {
+  const stagingError = stagingOutboundError("apns-live-activity-update");
+  if (stagingError) return { success: false, reason: stagingError.message };
   // اختر المفتاح حسب bundle التطبيق المُصدِر للنشاط (الرياضة قد تستخدم مفتاحًا منفصلًا).
   const credentials = getApnsCredentials(options.bundleId);
   if (!credentials) {
@@ -642,6 +649,8 @@ export async function sendBatchPushNotifications(
   payload: ApnsPayload,
   campaignId?: string
 ): Promise<{ success: number; failed: number; errors: string[] }> {
+  const stagingError = stagingOutboundError("apns-batch");
+  if (stagingError) return { success: 0, failed: deviceTokens.length, errors: [stagingError.message] };
   const results = { success: 0, failed: 0, errors: [] as string[] };
   
   // Log tokens being sent to for debugging

@@ -22,6 +22,10 @@
   `X-Robots-Tag: noindex, nofollow, noarchive` وrobots meta ويمنع كاش CDN.
 - **تقييد staging:** وجود `STAGING_ACCESS_TOKEN` يفرض Basic Auth (المستخدم
   `sabq`) على صفحات `web-next`، مع استثناء `/health` فقط لفحص Railway.
+- **عزل Pages staging:** عندما يكون `STAGING_NO_INDEX=true` في Pages، يجب وجود
+  `STAGING_ACCESS_TOKEN` وإلا تعيد الدالة 503. Basic Auth يسبق كل مسارات HTML
+  والملفات الثابتة و`/api/*`؛ الطلب المصرح يمرر ترويسة `Authorization` إلى API.
+  في هذا الوضع `API_ORIGIN` إلزامي ولا يوجد fallback إلى `api.sabq.org`.
 - `SSR_ROUTES=on/off` مفتاح تراجع فوري.
 - **Next.js 15:** معاملات `params` لمسارات App Router ديناميكية هي `Promise` ويجب انتظارها قبل القراءة. اعتماديات الإنتاج تُفحص مستقلة داخل `web-next/`، مع تثبيت بدائل `postcss` و`sharp` المصححة لأن Next يثبت نسخاً انتقالية قديمة داخلياً.
 - **`/api/edge/seo-meta` (2026-07-25):** كاش ذاكرة `edgeSeoMetaCache` (MATCH 5د / MISS 30ث) + single-flight لنفس المسار + تطبيع المسار (بدون `?utm_*`) + CDN `s-maxage=300, stale-while-revalidate=600` (كان 60ث فيعيد ضرب الأصل كل دقيقة — ظهر كـ APM بطيء بعد كل إقلاع).

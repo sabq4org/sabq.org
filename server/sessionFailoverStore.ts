@@ -1,6 +1,7 @@
 import session from "express-session";
 import { getRedisSessionAdapter } from "./redis";
 import type { SessionRevocations } from "./sessionRevocations";
+import { stagingSessionCookieName } from "./utils/stagingRuntime";
 
 /**
  * عمر مفتاح الفهرس العكسي. يُجدَّد مع كل كتابة جلسة، فيبقى حيًّا ما دام
@@ -62,7 +63,8 @@ export const SESSION_DEGRADED_HEADER = "X-Session-Degraded";
  */
 export function sessionIdFromCookieHeader(cookieHeader: unknown): string | null {
   if (typeof cookieHeader !== "string") return null;
-  const match = /(?:^|;\s*)connect\.sid=([^;]+)/.exec(cookieHeader);
+  const cookieName = stagingSessionCookieName().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = new RegExp(`(?:^|;\\s*)${cookieName}=([^;]+)`).exec(cookieHeader);
   if (!match) return null;
   let raw: string;
   try {

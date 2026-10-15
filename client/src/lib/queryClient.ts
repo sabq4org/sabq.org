@@ -14,6 +14,7 @@ import { toast } from "@/hooks/use-toast";
 // `apiUrl()` is exported so feature code making raw fetch() calls can opt in
 // without depending on apiRequest().
 const API_BASE = (import.meta.env.VITE_API_URL || "").replace(/\/+$/, "");
+const CSRF_COOKIE_NAME = import.meta.env.VITE_STAGING === "true" ? "sabq-staging.csrf" : "csrf-token";
 
 export function apiUrl(path: string): string {
   if (!API_BASE) return path;
@@ -49,8 +50,9 @@ export function withSportsLang(path: string): string {
 }
 
 function getCsrfTokenFromCookie(): string | null {
-  const match = document.cookie.match(/csrf-token=([^;]+)/);
-  return match ? match[1] : null;
+  const escapedName = CSRF_COOKIE_NAME.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = document.cookie.match(new RegExp(`(?:^|;\\s*)${escapedName}=([^;]+)`));
+  return match ? decodeURIComponent(match[1]) : null;
 }
 
 let csrfToken: string | null = null;

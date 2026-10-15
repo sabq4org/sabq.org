@@ -1,3 +1,5 @@
+import { stagingOutboundError } from "../utils/stagingRuntime";
+
 const CLOUDFLARE_ZONE_ID = process.env.CLOUDFLARE_ZONE_ID;
 const CLOUDFLARE_API_TOKEN = process.env.CLOUDFLARE_API_TOKEN;
 const SITE_URL = process.env.PUBLIC_SITE_URL || process.env.FRONTEND_URL || 'https://sabq.org';
@@ -126,6 +128,8 @@ process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 startFlushTimer();
 
 export async function purgeUrls(urls: string[], opts?: { immediate?: boolean }): Promise<PurgeResult> {
+  const stagingError = stagingOutboundError("cloudflare-purge");
+  if (stagingError) return { success: false, errors: [stagingError.message] };
   if (!CLOUDFLARE_ZONE_ID || !CLOUDFLARE_API_TOKEN) {
     console.log('[Cloudflare] Purge skipped - API credentials not configured');
     return { success: true };

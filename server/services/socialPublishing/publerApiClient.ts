@@ -29,6 +29,7 @@ import {
   type ProviderPostResult,
   type SocialPublishProvider,
 } from "./types";
+import { stagingOutboundError } from "../../utils/stagingRuntime";
 
 const PUBLER_API_BASE = "https://app.publer.com/api/v1";
 const DEFAULT_TIMEOUT_MS = 15_000;
@@ -115,6 +116,8 @@ async function publerFetch(
   phase: string,
   timeoutMs = DEFAULT_TIMEOUT_MS,
 ): Promise<any> {
+  const stagingError = stagingOutboundError("publer");
+  if (stagingError) throw new SocialProviderError(stagingError.message, { retryable: false });
   const res = await fetchWithTimeout(
     `${PUBLER_API_BASE}${path}`,
     { ...init, headers: { ...(init.headers as Record<string, string>), ...publerHeaders() } },

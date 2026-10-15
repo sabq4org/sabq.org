@@ -21,6 +21,7 @@ import {
   type ProviderPostResult,
   type SocialPublishProvider,
 } from "./types";
+import { stagingOutboundError } from "../../utils/stagingRuntime";
 
 const X_AUTHORIZE_URL = "https://x.com/i/oauth2/authorize";
 const X_TOKEN_URL = "https://api.x.com/2/oauth2/token";
@@ -302,6 +303,8 @@ async function xApiFetch(
   phase: string,
   timeoutMs = DEFAULT_TIMEOUT_MS,
 ): Promise<any> {
+  const stagingError = stagingOutboundError("x");
+  if (stagingError) throw new SocialProviderError(stagingError.message, { retryable: false });
   const accessToken = await getFreshAccessToken(accountId);
   const res = await fetchWithTimeout(
     `${X_API_BASE}${path}`,

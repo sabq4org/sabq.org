@@ -21,6 +21,7 @@ import {
   SessionFailoverStore,
   sessionIdFromCookieHeader,
 } from "./sessionFailoverStore";
+import { stagingSessionCookieName } from "./utils/stagingRuntime";
 
 /**
  * مرجع لمخزن الجلسات الثنائي حين يكون Redis مفعّلًا. يحتاجه الوسيط أدناه
@@ -85,6 +86,7 @@ export function getSession() {
     store,
     resave: false,
     saveUninitialized: false,
+    name: stagingSessionCookieName(),
     rolling: true,
     cookie: {
       httpOnly: true,
@@ -132,7 +134,7 @@ function needsSession(req: { method: string; path: string; headers: Record<strin
   if (req.method !== 'GET' && req.method !== 'HEAD' && req.method !== 'OPTIONS') {
     return true;
   }
-  const hasCookie = !!(req.headers.cookie && req.headers.cookie.includes('connect.sid'));
+  const hasCookie = !!(req.headers.cookie && req.headers.cookie.includes(`${stagingSessionCookieName()}=`));
   if (hasCookie) return true;
   for (const prefix of SESSION_REQUIRED_PREFIXES) {
     if (req.path.startsWith(prefix)) return true;

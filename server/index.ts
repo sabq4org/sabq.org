@@ -40,6 +40,7 @@ import { randomBytes } from "crypto";
 import { getRealIp, originGate, signProxyHeaders } from "./utils/trustedProxyIp";
 import { isNoindexPath } from "./utils/noindexPaths";
 import { httpPressure } from "./utils/httpPressure";
+import { stagingApiAuthStatus, stagingSessionCookieName } from "./utils/stagingRuntime";
 
 process.on('uncaughtException', (error) => {
   console.error('[CRITICAL] Uncaught Exception:', error.message);
@@ -53,6 +54,32 @@ process.on('unhandledRejection', (reason, promise) => {
 
 const app = express();
 app.set("trust proxy", 1);
+
+const stagingRuntime = process.env.STAGING_NO_INDEX === "true";
+
+// The staging API may be reachable through a temporary public hostname. Keep
+// the same Basic Auth contract as Pages/web-next, while leaving Railway's
+// liveness endpoint available to health checks. A missing token fails closed.
+if (stagingRuntime) {
+  app.use((req, res, next) => {
+    if (req.path === "/health") return next();
+    const authStatus = stagingApiAuthStatus(req.get("authorization"));
+    if (authStatus === "missing-config") {
+      return res.status(503).set({
+        "Cache-Control": "private, no-store",
+        "X-Robots-Tag": "noindex, nofollow, noarchive",
+      }).send("Staging access is not configured.");
+    }
+    if (authStatus === "unauthorized") {
+      return res.status(401).set({
+        "Cache-Control": "private, no-store",
+        "X-Robots-Tag": "noindex, nofollow, noarchive",
+        "WWW-Authenticate": 'Basic realm="Sabq staging", charset="UTF-8"',
+      }).send("Staging access is restricted.");
+    }
+    return next();
+  });
+}
 
 if ((globalThis as any).__sabqAttachExpress) {
   (globalThis as any).__sabqAttachExpress(app);
@@ -586,7 +613,7 @@ function rateLimitHandler(req: Request, res: Response) {
 }
 
 function hasSessionCookie(req: Request): boolean {
-  return !!(req.headers.cookie && req.headers.cookie.includes('connect.sid'));
+  return !!(req.headers.cookie && req.headers.cookie.includes(`${stagingSessionCookieName()}=`));
 }
 
 // Per-identity rate-limit key so one client can't be throttled by — or throttle

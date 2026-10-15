@@ -1,4 +1,5 @@
 import { db } from '../db';
+import { stagingOutboundError } from '../utils/stagingRuntime';
 import { pushNotificationLogs, pushDevices } from '@shared/schema';
 import { eq } from 'drizzle-orm';
 import {
@@ -319,6 +320,8 @@ async function sendToDevice(
   deliveryOptions: FcmDeliveryOptions = {},
   bundleId?: string | null,
 ): Promise<FCMResponse> {
+  const stagingError = stagingOutboundError("fcm");
+  if (stagingError) return { success: false, error: stagingError.message, errorCategory: "config_error" };
   const startTime = Date.now();
   const profile = resolveFcmProfile(bundleId);
   
@@ -448,6 +451,8 @@ async function sendToMultipleDevices(
   deliveryOptions: FcmDeliveryOptions = {},
   bundleId?: string | null,
 ): Promise<BatchFCMResult> {
+  const stagingError = stagingOutboundError("fcm-batch");
+  if (stagingError) return { successCount: 0, failureCount: tokens.length, results: [] };
   const startTime = Date.now();
   
   console.log(`[FCM] Starting batch send to ${tokens.length} devices...`);
@@ -590,6 +595,8 @@ async function sendToTopic(
   message: FCMMessage,
   context?: Partial<LogContext>
 ): Promise<FCMResponse> {
+  const stagingError = stagingOutboundError("fcm-topic");
+  if (stagingError) return { success: false, error: stagingError.message, errorCategory: "config_error" };
   const startTime = Date.now();
   
   console.log(`[FCM] Sending to topic: ${topic}...`);

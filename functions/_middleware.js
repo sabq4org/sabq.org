@@ -63,6 +63,56 @@ const pagesPublicApiBurstCache = createPublicApiBurstCache();
 
 const DEFAULT_API_ORIGIN = "https://api.sabq.org";
 
+const STAGING_NO_INDEX = "true";
+
+function isStagingEnvironment(env = {}) {
+  return String(env.STAGING_NO_INDEX || "").toLowerCase() === STAGING_NO_INDEX;
+}
+
+function stagingBasicAuth(token) {
+  return `Basic ${btoa(`sabq:${token}`)}`;
+}
+
+/**
+ * Staging must be authenticated before routing, cache lookup, static serving,
+ * or API proxying. A missing token fails closed so a partially configured
+ * Pages preview cannot become a public copy of the site.
+ */
+export function stagingAuthResponse(request, env = {}) {
+  if (!isStagingEnvironment(env)) return null;
+  const token = String(env.STAGING_ACCESS_TOKEN || "").trim();
+  if (!token) {
+    return new Response("Staging access is not configured.", {
+      status: 503,
+      headers: { ...HTML_NO_STORE_HEADERS, "X-Robots-Tag": "noindex, nofollow, noarchive", "Content-Type": "text/plain; charset=utf-8" },
+    });
+  }
+  if (request.headers.get("authorization") === stagingBasicAuth(token)) return null;
+  return new Response("Staging access is restricted.", {
+    status: 401,
+    headers: {
+      ...HTML_NO_STORE_HEADERS,
+      "X-Robots-Tag": "noindex, nofollow, noarchive",
+      "WWW-Authenticate": 'Basic realm="Sabq staging", charset="UTF-8"',
+      "Content-Type": "text/plain; charset=utf-8",
+    },
+  });
+}
+
+export function resolveApiOrigin(env = {}) {
+  const configured = String(env.API_ORIGIN || "").trim().replace(/\/+$/, "");
+  if (isStagingEnvironment(env) && !configured) {
+    throw new Error("API_ORIGIN is required in staging");
+  }
+  if (isStagingEnvironment(env)) {
+    const hostname = (() => { try { return new URL(configured).hostname; } catch (_) { return ""; } })();
+    if (hostname === "api.sabq.org" || hostname === "sabqorg-production.up.railway.app") {
+      throw new Error("production API origin is forbidden in staging");
+    }
+  }
+  return configured || DEFAULT_API_ORIGIN;
+}
+
 // Short TTLs so a freshly published/edited article's meta + slug canonical
 // surface at the edge within ~10s (mirrors the standalone worker).
 const SEO_META_TTL = 10;
@@ -488,7 +538,7 @@ export async function fetchWithStallRetry(target, init, opts = {}) {
   throw lastErr;
 }
 
-export async function proxyToApi(request, apiOrigin, timeoutMs = 0, proxySecret) {
+export async function proxyToApi(request, apiOrigin, timeoutMs = 0, proxySecret, stagingToken) {
   const url = new URL(request.url);
   const target = apiOrigin + url.pathname + url.search;
   // Pages Functions re-issue the request with `fetch()` to API_ORIGIN. Cloudflare
@@ -498,6 +548,7 @@ export async function proxyToApi(request, apiOrigin, timeoutMs = 0, proxySecret)
   // client IP from the inbound request (still correct here) and forward it in a
   // trusted header the backend reads first in rateLimitKey() (server/index.ts).
   const headers = await signProxyRequest(request, target, proxySecret);
+  if (stagingToken) headers.set("Authorization", stagingBasicAuth(String(stagingToken).trim()));
   const init = {
     method: request.method,
     headers,
@@ -561,6 +612,7 @@ function originOf(value) {
 // `API_FALLBACK_ORIGIN=off` disables it; anything equal to API_ORIGIN is
 // ignored so a misconfiguration can never double-hit the blocked path.
 export function resolveFallbackOrigin(apiOrigin, env = {}) {
+  if (isStagingEnvironment(env)) return null;
   const configured = String(env.API_FALLBACK_ORIGIN || "").trim().replace(/\/+$/, "");
   if (configured.toLowerCase() === "off") return null;
   const primary = originOf(apiOrigin);
@@ -574,8 +626,8 @@ export function resolveFallbackOrigin(apiOrigin, env = {}) {
 
 // GET/HEAD only: a request body is a one-shot stream, and a write that the
 // edge refused was never executed, so replaying it is pointless anyway.
-export async function proxyToApiWithFallback(request, apiOrigin, fallbackOrigin, timeoutMs = 0, proxySecret) {
-  const res = await proxyToApi(request, apiOrigin, timeoutMs, proxySecret);
+export async function proxyToApiWithFallback(request, apiOrigin, fallbackOrigin, timeoutMs = 0, proxySecret, stagingToken) {
+  const res = await proxyToApi(request, apiOrigin, timeoutMs, proxySecret, stagingToken);
   const idempotent = request.method === "GET" || request.method === "HEAD";
   if (!idempotent || !fallbackOrigin || !isEdgeRateLimited(res)) return res;
   const path = new URL(request.url).pathname;
@@ -586,6 +638,7 @@ export async function proxyToApiWithFallback(request, apiOrigin, fallbackOrigin,
       fallbackOrigin,
       timeoutMs > 0 ? timeoutMs : EDGE_429_FALLBACK_TIMEOUT_MS,
       proxySecret,
+      stagingToken,
     );
     if (!isEdgeRateLimited(alt)) return alt;
     console.warn(`[pages-fn] fallback origin also edge-429: ${path}`);
@@ -596,7 +649,7 @@ export async function proxyToApiWithFallback(request, apiOrigin, fallbackOrigin,
 }
 
 // Edge-cached JSON GET (slug-redirect / seo-meta), keyed on the full URL.
-export async function cachedJson(url, ttl, context, sourceRequest, proxySecret) {
+export async function cachedJson(url, ttl, context, sourceRequest, proxySecret, stagingToken) {
   const cache = caches.default;
   const key = new Request(url, { method: "GET" });
   const hit = await cache.match(key);
@@ -612,6 +665,7 @@ export async function cachedJson(url, ttl, context, sourceRequest, proxySecret) 
   if (clientIp) sourceHeaders.set("cf-connecting-ip", clientIp);
   const metadataRequest = new Request(url, { method: "GET", headers: sourceHeaders });
   const requestHeaders = await signProxyRequest(metadataRequest, url, proxySecret);
+  if (stagingToken) requestHeaders.set("Authorization", stagingBasicAuth(String(stagingToken).trim()));
   requestHeaders.set("User-Agent", "sabq-pages-fn/1.0");
   const res = await fetch(url, {
     headers: requestHeaders,
@@ -769,7 +823,7 @@ export function getApiCacheTtl(path, request) {
 
   // Bypass cache if there's a session cookie or auth header
   const cookie = request.headers.get("cookie") || "";
-  if (cookie.includes("connect.sid")) return 0;
+  if (cookie.includes("connect.sid") || cookie.includes("sabq-staging.sid")) return 0;
   if (request.headers.has("authorization")) return 0;
 
   // Bypass cache if client explicitly asks for fresh data
@@ -922,7 +976,16 @@ async function handleRequest(context) {
     return assetRes;
   }
 
-  const apiOrigin = env.API_ORIGIN || DEFAULT_API_ORIGIN;
+  let apiOrigin;
+  try {
+    apiOrigin = resolveApiOrigin(env);
+  } catch (error) {
+    console.error("[pages-fn] API_ORIGIN is required for staging", error);
+    return new Response("Staging API origin is not configured.", {
+      status: 503,
+      headers: { ...HTML_NO_STORE_HEADERS, "Content-Type": "text/plain; charset=utf-8" },
+    });
+  }
   const edgeProxyGateRequired = String(env.EDGE_PROXY_GATE_REQUIRED || "").toLowerCase() === "on";
   if (edgeProxyGateRequired && !env.EDGE_PROXY_SHARED_SECRET && (isProxyPath(path) || isInjectablePath(path))) {
     console.error("[pages-fn] EDGE_PROXY_GATE_REQUIRED is on but EDGE_PROXY_SHARED_SECRET is missing");
@@ -1091,6 +1154,7 @@ async function handleRequest(context) {
         resolveFallbackOrigin(apiOrigin, env),
         10_000,
         env.EDGE_PROXY_SHARED_SECRET,
+        env.STAGING_ACCESS_TOKEN,
       ),
     });
     if (newPublicApiResponse) return newPublicApiResponse;
@@ -1138,6 +1202,7 @@ async function handleRequest(context) {
         resolveFallbackOrigin(apiOrigin, env),
         useApiCache ? API_PROXY_TIMEOUT_MS : 0,
         env.EDGE_PROXY_SHARED_SECRET,
+        env.STAGING_ACCESS_TOKEN,
       );
 
       // Cacheable anonymous GETs: buffer the FULL body before cloning/caching.
@@ -1252,7 +1317,7 @@ async function handleRequest(context) {
   // these, which we pass through verbatim. Only when SSR is enabled.
   if (ssrEnabled && path.startsWith("/_next/")) {
     try {
-      return await proxyToApi(request, nextOrigin);
+      return await proxyToApi(request, nextOrigin, 0, env.EDGE_PROXY_SHARED_SECRET, env.STAGING_ACCESS_TOKEN);
     } catch (err) {
       console.error("[pages-fn] next asset proxy failed:", err);
       return next();
@@ -1317,6 +1382,7 @@ async function handleRequest(context) {
         context,
         request,
         env.EDGE_PROXY_SHARED_SECRET,
+        env.STAGING_ACCESS_TOKEN,
       );
       const redirectTo = slug && slug.redirect ? slug.redirect : null;
       if (redirectTo && redirectTo !== path) {
@@ -1325,7 +1391,7 @@ async function handleRequest(context) {
       // Archived/unpublished article → 410 Gone (not a 200 + noindex SSR page
       // Google re-crawls forever). The row exists but isn't published.
       if (slug && slug.gone) return goneHtmlResponse();
-      const ssrRes = await proxyToApi(request, nextOrigin, SSR_PROXY_TIMEOUT_MS, env.EDGE_PROXY_SHARED_SECRET);
+      const ssrRes = await proxyToApi(request, nextOrigin, SSR_PROXY_TIMEOUT_MS, env.EDGE_PROXY_SHARED_SECRET, env.STAGING_ACCESS_TOKEN);
       // Buffer and validate the complete render before caching it. A 200 SPA
       // fallback is not a usable SSR response and must never be cached for a
       // crawler.
@@ -1369,6 +1435,7 @@ async function handleRequest(context) {
         context,
         request,
         env.EDGE_PROXY_SHARED_SECRET,
+        env.STAGING_ACCESS_TOKEN,
       ),
       next(),
       cachedJson(
@@ -1377,6 +1444,7 @@ async function handleRequest(context) {
         context,
         request,
         env.EDGE_PROXY_SHARED_SECRET,
+        env.STAGING_ACCESS_TOKEN,
       ),
     ]);
     const redirectTo = slug && slug.redirect ? slug.redirect : null;
@@ -1440,13 +1508,20 @@ async function handleRequest(context) {
 }
 
 // Security-only outer layer. The inner handler owns routing, caching, redirects,
-// and response headers; this wrapper never rewrites those decisions. API and
-// other proxy responses are deliberately excluded so their existing contract
-// remains byte/header compatible.
+// and response headers. Staging authentication and no-store/noindex headers are
+// applied here so static, HTML, API, and proxy responses share one gate.
 export async function onRequest(context) {
+  const stagingAuth = stagingAuthResponse(context.request, context.env || {});
+  if (stagingAuth) return stagingAuth;
   const response = await handleRequest(context);
   const url = new URL(context.request.url);
-  return shouldApplyHtmlSecurityHeaders(url.pathname, response)
+  const secured = shouldApplyHtmlSecurityHeaders(url.pathname, response)
     ? applyHtmlSecurityHeaders(response, url.hostname)
     : response;
+  if (!isStagingEnvironment(context.env || {})) return secured;
+  const headers = new Headers(secured.headers);
+  headers.set("Cache-Control", "private, no-store, no-cache, must-revalidate, max-age=0");
+  headers.set("CDN-Cache-Control", "no-store, max-age=0, must-revalidate");
+  headers.set("X-Robots-Tag", "noindex, nofollow, noarchive");
+  return new Response(secured.body, { status: secured.status, statusText: secured.statusText, headers });
 }

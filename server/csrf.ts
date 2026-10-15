@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction, RequestHandler } from "express";
 import crypto from "crypto";
+import { stagingCsrfCookieName } from "./utils/stagingRuntime";
 
 declare module "express-session" {
   interface SessionData {
@@ -8,7 +9,7 @@ declare module "express-session" {
 }
 
 const CSRF_HEADER = "x-csrf-token";
-const CSRF_COOKIE = "csrf-token";
+const CSRF_COOKIE = stagingCsrfCookieName();
 
 export function generateCsrfToken(): string {
   return crypto.randomBytes(32).toString("hex");

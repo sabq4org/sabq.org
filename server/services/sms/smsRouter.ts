@@ -11,6 +11,7 @@ import { bevatelProvider } from "./bevatelProvider";
 import { twilioProvider } from "./twilioProvider";
 import { consoleProvider } from "./consoleProvider";
 import type { SmsProvider, SmsProviderName, SmsSendResult } from "./types";
+import { stagingOutboundError } from "../../utils/stagingRuntime";
 
 export interface SmsRouterDeps {
   providers?: SmsProvider[];
@@ -56,6 +57,10 @@ export function orderProviders(to: string, deps: SmsRouterDeps = {}): SmsProvide
 }
 
 export async function sendSms(to: string, body: string, deps: SmsRouterDeps = {}): Promise<RoutedSmsResult> {
+  const stagingError = stagingOutboundError("sms");
+  if (stagingError) {
+    return { ok: false, configured: false, provider: "bevatel", attempts: [], error: stagingError.message };
+  }
   const chain = orderProviders(to, deps);
   const attempts: RoutedSmsResult["attempts"] = [];
   if (chain.length === 0) {
