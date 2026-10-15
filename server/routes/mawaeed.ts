@@ -18,6 +18,7 @@ import {
 } from "../services/mawaeedService";
 import { occurrenceWriteSchema } from "@shared/mawaeed/validate";
 import { SERIES_CATALOG } from "@shared/mawaeed/model";
+import { SERVICE_PAGES } from "@shared/servicePages/catalog";
 
 const router = Router();
 const PUBLIC_CACHE = "public, max-age=30, s-maxage=60";
@@ -52,7 +53,14 @@ async function purgeMawaeed() {
   const paths = ["/mawaeed", ...SERIES_CATALOG.map((item) => `/mawaeed/${item.slug}`)];
   const regions = ["riyadh", "makkah", "madinah", "jeddah", "taif"];
   const urls = paths.flatMap((path) => [path, ...regions.map((region) => `${path}?region=${region}`)]);
-  urls.push("/sitemap-mawaeed.xml");
+  urls.push(
+    "/sitemap-mawaeed.xml",
+    ...SERVICE_PAGES.flatMap((page) => [
+      page.path,
+      `/api/service-pages/${page.id}/og.png`,
+      `/api/service-pages/${page.id}/calendar.ics`,
+    ]),
+  );
   try {
     await purgeContentSurfaces(urls, { immediate: true });
   } catch (error) {

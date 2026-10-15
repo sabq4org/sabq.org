@@ -38,6 +38,12 @@
 - [Sabq English](https://sabq.org/en)
 - [سبق اردو](https://sabq.org/ur)
 
+## مواعيد وخدمات / Service dates
+
+- [مواعيدك](https://sabq.org/mawaeed): أقرب موعد للراتب وحساب المواطن والضمان والتقاعد والإجازات
+- [موعد صرف حساب المواطن](https://sabq.org/services/citizen-account-date)
+- [موعد صرف رواتب موظفي الدولة](https://sabq.org/services/government-salaries-date)
+
 ## الاكتشاف الآلي / Machine-readable
 
 - [Sitemap](https://sabq.org/sitemap.xml)

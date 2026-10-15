@@ -56,6 +56,7 @@
 
 import { createPublicApiBurstCache, newPublicApiCacheKey, newPublicApiPolicy } from "../cloudflare-worker/public-api-burst-cache.js";
 import { mawaeedSlugFromPath, serveMawaeedPage } from "./mawaeedPage.js";
+import { servicePageIdFromPath, serveServicePage } from "./servicePage.js";
 
 export { newPublicApiCacheKey, newPublicApiPolicy };
 
@@ -1135,6 +1136,20 @@ async function handleRequest(context) {
     mawaeedSlugFromPath(path) !== null
   ) {
     return serveMawaeedPage({
+      request,
+      url,
+      env,
+      waitUntil: (promise) => context.waitUntil(promise),
+      signProxyRequest,
+    });
+  }
+
+  // صفحات الخدمة الدائمة: نفس الوثيقة للبشر والزواحف، والتواريخ من مواعيدك.
+  if (
+    (request.method === "GET" || request.method === "HEAD") &&
+    servicePageIdFromPath(path) !== null
+  ) {
+    return serveServicePage({
       request,
       url,
       env,

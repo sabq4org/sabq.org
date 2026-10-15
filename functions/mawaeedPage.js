@@ -265,7 +265,13 @@ function seriesRow(block, nowMs) {
       ${next ? tileHtml(next, nowMs) : ""}
     </a>
     <details class="more"><summary>التفاصيل والمصدر</summary><div class="more-body">${details}</div></details>
+    ${serviceJump(block)}
   </article>`;
+}
+
+function serviceJump(block) {
+  if (!block || !block.serviceHref) return "";
+  return `<p class="service-jump"><a href="${esc(block.serviceHref)}">${esc(block.serviceLabel || "صفحة الموعد")}</a></p>`;
 }
 
 /** ترتيب اللوحة من الأقرب (نمط تطبيقات العدّ التنازلي)؛ الأقسام بلا موعد قادم في الآخر. */
@@ -292,6 +298,7 @@ function seriesDetail(block) {
     <p class="answer answer-lg">${esc(block.answerLine)}</p>
     ${followHtml(block)}
     <p class="summary">${esc(block.summary)}</p>
+    ${serviceJump(block)}
     ${prevHtml(block)}
   </section>`;
 }
@@ -645,6 +652,8 @@ ${jsonLd}
   .src { font-size:.85rem; margin:10px 0 0; display:flex; flex-wrap:wrap; gap:4px 8px; align-items:baseline; }
   .src-label { font-size:.72rem; font-weight:700; color:var(--muted); background:var(--neutral-soft); border-radius:6px; padding:0 6px; }
   .prev { color:var(--muted); font-size:.8rem; margin:10px 0 0; }
+  .service-jump { margin:8px 14px 12px; font-size:.9rem; }
+  .service-jump a { font-weight:700; }
 
   /* لوحات نصية (صفحة القسم والمنهجية) */
   .panel { background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:14px 16px; margin-top:14px; box-shadow:var(--shadow); }
