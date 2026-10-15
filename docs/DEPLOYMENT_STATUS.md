@@ -48,33 +48,40 @@
 
 | الخدمة | المصدر | قاعدة البيانات/السلوك |
 |--------|--------|------------------------|
-| `sabq-staging-api` | جذر المستودع · `/railway.json` | Railway API خلف `staging-api.sabq.org`؛ يتصل بفرع Neon staging مستقل؛ `SERVE_SPA=false` وكل المجدولات/العمال معطّلة |
-| `sabq-staging-web-next` | `Root Directory=/web-next` · `/web-next/railway.json` | `PUBLIC_SITE_URL=https://staging.sabq.org`؛ API staging؛ `STAGING_NO_INDEX=true`؛ Basic Auth عبر `STAGING_ACCESS_TOKEN` |
-| `Neon staging branch` | فرع production-clone مستقل | `NEON_DATABASE_URL` خاص بـ staging؛ لا تُنسخ مفاتيح تخزين أو تكاملات الإنتاج |
+| `sabq-staging-api` | جذر المستودع · `/railway.json` | API staging؛ يتصل بفرع Neon الحالي؛ `SERVE_SPA=false` وكل المجدولات/العمال معطّلة |
+| `sabq-staging-web-next` | `Root Directory=/web-next` · `/web-next/railway.json` | SSR staging؛ `STAGING_NO_INDEX=true`؛ Basic Auth عبر `STAGING_ACCESS_TOKEN` |
+| `sabq-staging-meetings-agent` | مجلد `meetings-agent/` | خدمة موجودة في staging؛ لا تُعامل كخدمة production ولا تُشغّل تكاملات خارجية تلقائياً |
+| `Neon staging branch` | `br-rough-base-addy0giw`، نسخة production-clone بتاريخ 2026-10-15، وأصلها `br-bold-sound-admvvr1a` | هذا هو مصدر Postgres الحالي عبر `NEON_DATABASE_URL`؛ لا تُنسخ مفاتيح التخزين أو تكاملات الإنتاج |
+| `Postgres` القديم | خدمة Railway legacy محفوظة | غير مستخدمة من staging الحالي؛ لا تُحذف أو تُغيّر ضمن هذه الخطة |
 
-لا توجد خدمات `newsletter-worker` أو `meetings-agent` أو `sabq-mirror` في
-staging. لا تُنسخ قيم أسرار production؛ تُنشأ أسرار الجلسة/JWT خاصة بـ staging،
+لا توجد خدمة `newsletter-worker` أو `sabq-mirror` في staging. لا تُنسخ قيم أسرار production؛ تُنشأ أسرار الجلسة/JWT خاصة بـ staging،
 وتُترك تكاملات الطرف الثالث غير مضبوطة. الاستثناء الوحيد هو
 `OPENAI_API_KEY=staging-disabled-invalid-key`: قيمة حارسة غير صالحة وليست مفتاحاً،
 لأن استيراد عميل embeddings القديم يرفض الإقلاع عند غياب الاسم كلياً؛ وتظل كل
-مهام AI الخلفية معطّلة. كذلك يستخدم `PRIVATE_OBJECT_DIR` مجلداً مؤقتاً داخل
+مهام AI الخلفية معطّلة. يجب أيضاً ضبط `OPENAI_BASE_URL=http://127.0.0.1:9`
+في staging لمنع أي عميل OpenAI من الخروج إلى الإنترنت. كذلك يستخدم `PRIVATE_OBJECT_DIR` مجلداً مؤقتاً داخل
 حاوية staging بدلاً من أي مفاتيح R2 أو bucket إنتاجي.
 
 عند تشغيل API staging خلف hostname عام يجب ضبط `STAGING_NO_INDEX=true` و`STAGING_ACCESS_TOKEN`
 نفسه المستخدم في Pages/web-next؛ يحرس API كل المسارات باستثناء `/health`، وغياب
 الرمز يعيد 503. يجب ضبط `API_ORIGIN` صراحةً في Pages وweb-next، ولا يُسمح بأي
 fallback إلى `api.sabq.org`. اترك `COOKIE_DOMAIN` غير مضبوط لعزل كوكيز الجلسة.
+في Cloudflare Pages يجب ضبط `VITE_STAGING=true` حتى تستخدم الواجهة كوكي
+`sabq-staging.csrf`، مع أسماء الجلسة وCSRF الخاصة بـ staging (`sabq-staging.sid`
+و`sabq-staging.csrf`). النطاقات المخصصة وعناوين preview أعلاه هي إعدادات مقصودة
+وتبقى حالتها التشغيلية قيد التحقق؛ لا تُعدّ فعالة قبل فحص DNS والاستجابة الفعلية.
 الإرسال الخارجي محجوب افتراضياً في staging حتى لو وُجدت إعدادات أو مفاتيح في
 قاعدة منسوخة؛ لا يُفتح إلا بتعيين `STAGING_ALLOW_OUTBOUND=true` لاختبار معزول.
 
+أي preview قديم أو فرع يبدأ من `main` لا يملك بالضرورة حراس staging وأسماء
+الكوكيز؛ يجب أن يبدأ preview المعزول من فرع `staging` أو يدمج تغييرات العزل
+قبل الاختبار. وإلا قد يرفض API staging الطلب أو يحدث تعارض كوكيز متوقعاً.
+
 ### ترقية commit إلى staging
 
-بعد نجاح فحوصات الفرع، ادفع commit المطلوب إلى فرع `staging` ثم راقب خدمتي
-staging. لا تعدّل `main` ولا بيئة production في هذا الاختبار:
-
-```bash
-git push origin <COMMIT_SHA>:staging
-```
+بعد نجاح فحوصات الفرع، افتح PR قاعدته `staging` وادمج commit المطلوب عبر
+المراجعة المعتادة، ثم راقب خدمات staging. لا تدفع مباشرة إلى `main` أو إلى
+بيئة production.
 
 فحوصات القبول:
 
@@ -94,30 +101,12 @@ curl -fsSI https://sabq-staging-web-next-staging.up.railway.app/ \
 `X-Robots-Tag: noindex, nofollow, noarchive` و`Cache-Control: private, no-store`.
 بدون Basic Auth يجب أن يعيد الويب `401`، بينما يبقى `/health` عاماً لـ Railway.
 
-### تطبيق المخطط على staging أولاً
+### مخطط قاعدة البيانات
 
-يُستخدم فقط مع متغيرات خدمة `Postgres` داخل بيئة Railway `staging`:
-
-```bash
-# افتح TCP مؤقتاً وسجّل id الناتج
-railway tcp-proxy create --port 5432 \
-  --project 49260270-79b7-40af-9e91-2599a6161f46 \
-  --environment staging --service Postgres --json
-
-railway run --project 49260270-79b7-40af-9e91-2599a6161f46 \
-  --environment staging --service Postgres --no-local \
-  npm run db:push:staging
-
-# أغلق المنفذ العام فور نجاح Drizzle
-railway tcp-proxy delete <PROXY_ID> --yes \
-  --project 49260270-79b7-40af-9e91-2599a6161f46 \
-  --environment staging --service Postgres
-```
-
-السكربت يرفض أي بيئة غير `staging`، ويرفض Neon، ويتحقق من مشروع Railway
-والخدمة، ثم يفعّل pgvector قبل Drizzle. لا تترك TCP proxy فعالاً بعد العملية؛
-الوضع الطبيعي لقاعدة staging هو الشبكة الداخلية فقط. راجع أيضاً
-[`docs/setup/LOCAL_POSTGRES_AR.md`](setup/LOCAL_POSTGRES_AR.md).
+لا تُطبّق أي SQL أو `db:push` على Neon الحالي أو Postgres القديم ضمن هذا
+التغيير. أي تعديل مخطط يحتاج خطة مستقلة تحدد الفرع والبيئة، ومراجعة منفصلة
+لتوافق نسخة production-clone، ثم تنفيذ staging قبل production وفق سياسة
+المشروع. Postgres القديم محفوظ فقط للتوافق التاريخي وليس هدفاً للتنفيذ.
 
 ---
 
