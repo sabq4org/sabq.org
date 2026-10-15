@@ -7,6 +7,14 @@ struct OpinionDetailView: View {
 
     @State private var fullOpinion: OpinionArticle?
     @State private var moreOpinions: [OpinionArticle] = []
+    /// آخر مقالات الرأي كما جُلبت (قبل اقتطاع «المزيد») — منها «للكاتب نفسه»
+    /// في سياق العمود على Duo.
+    @State private var recentOpinions: [OpinionArticle] = []
+    @Environment(\.publishesReaderContext) private var publishesReaderContext
+    @Environment(SabqNavigationState.self) private var navigation: SabqNavigationState?
+    @AppStorage(FoldableDevice.observedDefaultsKey) private var foldableObserved = false
+    /// المقال ظاهر فعلًا (ليس مغطًّى بصفحة مدفوعة فوقه) — وحده ينشر سياقه.
+    @State private var isOnScreen = false
     @State private var isSummaryExpanded = false
     @State private var isCopyFeedbackVisible = false
     @State private var copyFeedbackTask: Task<Void, Never>?
@@ -212,6 +220,24 @@ struct OpinionDetailView: View {
             OpinionDetailView(opinion: opinion)
                 .duoContentInsets()
         }
+        .onAppear {
+            isOnScreen = true
+            publishContext(opinionContext)
+        }
+        .onDisappear { isOnScreen = false }
+        .onChange(of: opinionContext) { _, context in publishContext(context) }
+    }
+
+    // MARK: - سياق المقال (عمود Duo)
+
+    private var opinionContext: ArticleContext {
+        ArticleContext.opinion(displayOpinion, moreOpinions: recentOpinions)
+    }
+
+    private func publishContext(_ context: ArticleContext) {
+        guard publishesReaderContext, isOnScreen, displayOpinion.id != displayOpinion.slug,
+              FoldableDevice.isFoldable(observed: foldableObserved) else { return }
+        navigation?.publishReaderContext(context)
     }
 
     // MARK: - Loading
@@ -223,6 +249,7 @@ struct OpinionDetailView: View {
         }
 
         let opinions = await NewsService.fetchOpinions()
+        recentOpinions = opinions
         moreOpinions = opinions
             .filter { $0.id != displayOpinion.id }
             .prefix(4)

@@ -172,6 +172,7 @@ struct ContentView: View {
             // التبويبات تتشارك المكدّس بين التخطيطين بلا جسر.
             if tab == .home { navigation.homeLayoutDidChange(isWide: isWide) }
         }
+        .environment(\.publishesReaderContext, tab == .home)
     }
 
     private func path(for tab: AppTab) -> Binding<NavigationPath> {

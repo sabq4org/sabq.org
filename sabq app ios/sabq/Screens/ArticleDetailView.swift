@@ -116,6 +116,36 @@ struct ArticleDetailView: View {
     @State private var inlineLightboxURL: URL?
 
     @Environment(LiteModeManager.self) private var liteManager
+    /// قارئ «الرئيسية» ينشر سياق الخبر للعمود المجاور على الشاشة المفتوحة.
+    @Environment(\.publishesReaderContext) private var publishesReaderContext
+    @Environment(SabqNavigationState.self) private var navigation: SabqNavigationState?
+    /// غير `nil` على الشاشة الضيقة لـ Duo فقط (`DuoTabContainer`). صنف الحجم لا
+    /// يصلح هنا: الحاوية الثابتة تفرض `.regular` داخل مكدّسات UIKit.
+    @Environment(\.duoContentInsets) private var duoContentInsets
+    @AppStorage(FoldableDevice.observedDefaultsKey) private var foldableObserved = false
+    @State private var isContextSheetPresented = false
+    /// الخبر ظاهر فعلًا (ليس مغطًّى بصفحة مدفوعة فوقه) — وحده ينشر سياقه.
+    @State private var isOnScreen = false
+
+    private var articleContext: ArticleContext {
+        ArticleContext.news(article: displayArticle, related: relatedArticles, keywords: displayTags)
+    }
+
+    /// الشاشة الخارجية لـ Duo: زر «سياق الخبر» تحت العنوان يفتح ورقة. مفتوحًا
+    /// ينتقل السياق إلى العمود المجاور، والهاتف العادي وiPad لا يتغيران.
+    private var showsContextButton: Bool {
+        duoContentInsets != nil && !isFocusMode && !articleContext.isEmpty
+    }
+
+    /// مفتوحًا على Duo والعمود المجاور يعرض «سياق الخبر»: الموجز الذكي ينتقل
+    /// إليه (نموذج Duo المعتمد) فلا يتكرر في القارئ.
+    private var summaryMovedToContextColumn: Bool {
+        publishesReaderContext
+            && FoldableDevice.isFoldable(observed: foldableObserved)
+            && duoContentInsets == nil
+            && navigation?.homeSidebarMode == .context
+            && navigation?.readerContext?.id == displayArticle.id
+    }
 
     var body: some View {
         if let opinion = redirectToOpinion {
@@ -182,7 +212,11 @@ struct ArticleDetailView: View {
                         articleMeta
                             .animatedAppear(index: 2)
 
-                        if !isFocusMode {
+                        if showsContextButton {
+                            contextButton
+                        }
+
+                        if !isFocusMode, !summaryMovedToContextColumn {
                             smartSummaryCard
                                 .animatedAppear(index: 3)
                         }
@@ -297,28 +331,33 @@ struct ArticleDetailView: View {
             SabqAnalytics.beginReading(articleId: displayArticle.id)
         }
         .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Button {
-                    SabqHaptics.medium()
-                    bookmarksStore.toggle(displayArticle.id, article: displayArticle)
-                } label: {
-                    Label(bookmarksStore.isBookmarked(displayArticle.id) ? "إزالة من المحفوظات" : "حفظ المقال",
-                          systemImage: bookmarksStore.isBookmarked(displayArticle.id) ? "bookmark.fill" : "bookmark")
+            if FoldableDevice.isFoldable(observed: foldableObserved) {
+                // Duo: الحاوية الثابتة تجعل شريط القارئ «منتظمًا» فيرصّ النظام
+                // الأزرار المنفصلة عموديًا فوق صورة الخبر (حتى في مجموعة).
+                // عنصر واحد بصف أفقي يبقيها سطرًا واحدًا.
+                ToolbarItem(placement: .topBarTrailing) {
+                    HStack(spacing: 18) {
+                        bookmarkToolbarButton
+                        shareToolbarButton
+                        likeButton
+                            .accessibilityIdentifier("article.like")
+                    }
+                    .labelStyle(.iconOnly)
+                    .padding(.horizontal, 4)
                 }
-                .accessibilityIdentifier("article.bookmark")
-            }
-            ToolbarItem(placement: .primaryAction) {
-                Button("مشاركة المقال", systemImage: "square.and.arrow.up") {
-                    SabqHaptics.light()
-                    shareArticle()
+            } else {
+                ToolbarItem(placement: .primaryAction) {
+                    bookmarkToolbarButton
                 }
-                .accessibilityIdentifier("article.share")
-            }
-            // الإعجاب مباشر في الشريط؛ «تنسيق» و«قراءة» في شريط الإجراءات أسفل
-            // النص فقط — لا يتكرر زر في موضعين (مراجعة 10.3.3).
-            ToolbarItem(placement: .primaryAction) {
-                likeButton
-                    .accessibilityIdentifier("article.like")
+                ToolbarItem(placement: .primaryAction) {
+                    shareToolbarButton
+                }
+                // الإعجاب مباشر في الشريط؛ «تنسيق» و«قراءة» في شريط الإجراءات أسفل
+                // النص فقط — لا يتكرر زر في موضعين (مراجعة 10.3.3).
+                ToolbarItem(placement: .primaryAction) {
+                    likeButton
+                        .accessibilityIdentifier("article.like")
+                }
             }
         }
         .task {
@@ -348,6 +387,87 @@ struct ArticleDetailView: View {
             ArticleDetailView(article: related)
                 .duoContentInsets()
         }
+        .onAppear {
+            isOnScreen = true
+            publishContext(articleContext)
+        }
+        .onDisappear { isOnScreen = false }
+        .onChange(of: articleContext) { _, context in publishContext(context) }
+        .onChange(of: duoContentInsets == nil) { _, isWide in
+            // فُتح الجهاز والورقة ظاهرة: السياق ينتقل إلى العمود.
+            if isWide { isContextSheetPresented = false }
+        }
+        .sheet(isPresented: $isContextSheetPresented) {
+            ArticleContextSheet(
+                context: articleContext,
+                onOpenArticle: { pushFromContext($0) },
+                onOpenOpinion: { pushFromContext($0) },
+                onOpenKeyword: { pushFromContext(KeywordRoute(keyword: $0)) }
+            )
+        }
+    }
+
+    private var bookmarkToolbarButton: some View {
+        Button {
+            SabqHaptics.medium()
+            bookmarksStore.toggle(displayArticle.id, article: displayArticle)
+        } label: {
+            Label(bookmarksStore.isBookmarked(displayArticle.id) ? "إزالة من المحفوظات" : "حفظ المقال",
+                  systemImage: bookmarksStore.isBookmarked(displayArticle.id) ? "bookmark.fill" : "bookmark")
+        }
+        .accessibilityIdentifier("article.bookmark")
+    }
+
+    private var shareToolbarButton: some View {
+        Button("مشاركة المقال", systemImage: "square.and.arrow.up") {
+            SabqHaptics.light()
+            shareArticle()
+        }
+        .accessibilityIdentifier("article.share")
+    }
+
+    // MARK: - سياق الخبر
+
+    private func publishContext(_ context: ArticleContext) {
+        guard publishesReaderContext, isOnScreen, displayArticle.id != displayArticle.slug,
+              FoldableDevice.isFoldable(observed: foldableObserved) else { return }
+        navigation?.publishReaderContext(context)
+    }
+
+    /// لمس عنصر في ورقة السياق يغلقها ويدفع وجهته في مكدّس التبويب الحالي.
+    private func pushFromContext<Value: Hashable>(_ value: Value) {
+        isContextSheetPresented = false
+        guard let navigation else { return }
+        navigation.paths[navigation.selectedTab, default: NavigationPath()].append(value)
+    }
+
+    private var contextButton: some View {
+        Button {
+            SabqHaptics.light()
+            isContextSheetPresented = true
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "text.line.first.and.arrowtriangle.forward")
+                    .font(.system(size: 14, weight: .semibold))
+                Text(articleContext.storySoFar.isEmpty ? "سياق الخبر: الموجز والأخبار المرتبطة" : "سياق الخبر: الموجز والقصة حتى الآن")
+                    .font(SabqFonts.app(size: 13.5, weight: .semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+                Spacer(minLength: 4)
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 12, weight: .semibold))
+            }
+            .foregroundStyle(SabqTheme.primaryEnd)
+            .padding(.horizontal, 14)
+            .frame(minHeight: SabqLayout.touchTarget)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(SabqTheme.primaryEnd.opacity(0.10))
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("article.contextButton")
     }
 
     // MARK: - Reading Progress Bar
@@ -451,7 +571,16 @@ struct ArticleDetailView: View {
             }
             let store = commentsStore
 
-            async let detail = NewsService.fetchArticleDetail(slug: slug)
+            // نسخة الجلسة تُعرض فورًا (طيّ Duo، الرجوع من خبر مرتبط، إعادة
+            // الفتح من العمود)، والحديثة منها لا يُعاد جلبها.
+            let cached = ArticleDetailCache.shared.entry(for: slug)
+            if let cached, fullArticle == nil {
+                fullArticle = cached.article
+                relatedArticles = cached.related
+                updateResolvedTags(from: cached.article)
+            }
+
+            async let detail = Self.detailBundle(slug: slug, cached: cached)
             // Best-effort: returns sentiment + credibility hints when ai
             // processing has run for this article. Failures are silent.
             async let insights: [String: String]? = try? await APIClient.shared.fetchAIInsights(slug: slug)
@@ -503,6 +632,15 @@ struct ArticleDetailView: View {
         }
 
         _ = await prepareShareURL()
+    }
+
+    /// الحزمة المحفوظة إن كانت حديثة، وإلا الجلب من الشبكة.
+    private static func detailBundle(
+        slug: String,
+        cached: ArticleDetailCache.Entry?
+    ) async -> (article: Article, related: [Article])? {
+        if let cached, cached.isFresh() { return (cached.article, cached.related) }
+        return await NewsService.fetchArticleDetail(slug: slug)
     }
 
     // MARK: - Hero Image

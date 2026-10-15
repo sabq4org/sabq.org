@@ -13,6 +13,11 @@ final class SabqNavigationState {
     /// هل دُفع خبر القارئ إلى مكدّس «الرئيسية» عند آخر طيّ؟ يُستخدم عند الفتح
     /// التالي لإزالته من المكدّس بدل أن يظهر مرتين (في القارئ وفوقه).
     private var bridgedReaderArticleIntoStack = false
+    /// «سياق الخبر» المعروض في قارئ «الرئيسية» الآن. ينشره `ArticleDetailView`
+    /// و`OpinionDetailView` حين يظهران في ذلك القارئ.
+    var readerContext: ArticleContext?
+    /// ما يعرضه عمود «الرئيسية» على الشاشة المفتوحة: القائمة أو سياق الخبر.
+    var homeSidebarMode: HomeSidebarMode = .news
 
     func reset() {
         sessionID = UUID()
@@ -20,14 +25,26 @@ final class SabqNavigationState {
         selectedTab = .home
         homeReaderArticle = nil
         bridgedReaderArticleIntoStack = false
+        readerContext = nil
+        homeSidebarMode = .news
     }
 
     /// يفتح خبرًا في عمود القارئ ويعيد مكدّس التبويب إلى جذره حتى لا تتراكم
     /// صفحات خلفه (كلمة مفتاحية، كاتب…) من قراءة سابقة.
+    ///
+    /// اختيار المستخدم خبرًا يحوّل العمود إلى «سياق الخبر» (نموذج Duo المعتمد
+    /// 2026-10-15)، ويعود إلى القائمة بلمسة على «الأخبار».
     func openInReader(_ article: Article) {
         homeReaderArticle = article
         paths[.home] = NavigationPath()
         bridgedReaderArticleIntoStack = false
+        homeSidebarMode = .context
+    }
+
+    /// ينشر سياق الخبر الظاهر في القارئ؛ النشر المكرر بالقيمة نفسها لا يعيد
+    /// رسم العمود.
+    func publishReaderContext(_ context: ArticleContext) {
+        if readerContext != context { readerContext = context }
     }
 
     /// جسر الطي/الفتح على iPhone Duo (وتقسيم الشاشة على iPad).
@@ -54,6 +71,12 @@ final class SabqNavigationState {
             bridgedReaderArticleIntoStack = true
         }
     }
+}
+
+extension EnvironmentValues {
+    /// `true` داخل قارئ «الرئيسية» فقط: الخبر المعروض ينشر سياقه للعمود
+    /// المجاور (`SabqNavigationState.readerContext`).
+    @Entry var publishesReaderContext = false
 }
 
 /// Use the standard stack in compact windows so deep links and native back

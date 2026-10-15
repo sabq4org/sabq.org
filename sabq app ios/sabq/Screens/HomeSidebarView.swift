@@ -62,27 +62,90 @@ struct HomeSidebarView: View {
         ScrollView(showsIndicators: false) {
             LazyVStack(alignment: .leading, spacing: 18) {
                 header
-                briefingCard
 
-                if isEmpty {
-                    emptyState
-                } else {
-                    if !breaking.isEmpty {
-                        section("عاجل", icon: "bolt.fill", tint: SabqTheme.coral, articles: breaking)
+                if let context = navigation.readerContext {
+                    modePicker
+                    if navigation.homeSidebarMode == .context {
+                        ArticleContextView(
+                            context: context,
+                            onOpenArticle: { navigation.openInReader($0) },
+                            onOpenOpinion: { navigation.paths[.home] = NavigationPath([$0]) },
+                            onOpenKeyword: { navigation.paths[.home, default: NavigationPath()].append(KeywordRoute(keyword: $0)) }
+                        )
+                        .id(context.id)
+                        .transition(.opacity)
                     }
-                    if !highlights.isEmpty {
-                        section("أبرز الأخبار", icon: nil, tint: SabqTheme.primaryEnd, articles: highlights)
-                        if articlesStore.hasMore { loadMoreButton }
-                    }
+                }
+
+                if navigation.readerContext == nil || navigation.homeSidebarMode == .news {
+                    newsList
                 }
             }
             .padding(.horizontal, 16)
             .padding(.top, 8)
             .padding(.bottom, 32)
+            .animation(.easeOut(duration: 0.18), value: navigation.homeSidebarMode)
         }
         .background(SabqTheme.background)
         .refreshable {
             await articlesStore.loadArticles(ignoreCache: true)
+        }
+    }
+
+    /// «الأخبار | سياق الخبر» أعلى العمود (نموذج Duo المعتمد). يظهر فقط حين
+    /// يكون في القارئ خبر له سياق.
+    private var modePicker: some View {
+        HStack(spacing: 4) {
+            modeButton("الأخبار", mode: .news)
+            modeButton("سياق الخبر", mode: .context)
+        }
+        .padding(3)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(SabqTheme.surface)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(SabqTheme.outline.opacity(0.7), lineWidth: 0.5)
+        )
+    }
+
+    private func modeButton(_ title: String, mode: HomeSidebarMode) -> some View {
+        let isSelected = navigation.homeSidebarMode == mode
+        return Button {
+            guard !isSelected else { return }
+            SabqHaptics.light()
+            navigation.homeSidebarMode = mode
+        } label: {
+            Text(title)
+                .font(SabqFonts.app(size: 13.5, weight: isSelected ? .semibold : .medium))
+                .foregroundStyle(isSelected ? SabqTheme.onAction : SabqTheme.secondaryInk)
+                .frame(maxWidth: .infinity, minHeight: 34)
+                .background(
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .fill(isSelected ? SabqTheme.actionFill : Color.clear)
+                )
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .accessibilityIdentifier(mode == .context ? "homeSidebarMode.context" : "homeSidebarMode.news")
+    }
+
+    @ViewBuilder
+    private var newsList: some View {
+        briefingCard
+
+        if isEmpty {
+            emptyState
+        } else {
+            if !breaking.isEmpty {
+                section("عاجل", icon: "bolt.fill", tint: SabqTheme.coral, articles: breaking)
+            }
+            if !highlights.isEmpty {
+                section("أبرز الأخبار", icon: nil, tint: SabqTheme.primaryEnd, articles: highlights)
+                if articlesStore.hasMore { loadMoreButton }
+            }
         }
     }
 
