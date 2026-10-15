@@ -1,4 +1,10 @@
 import { draftDiffersFromArticle } from "@/lib/articleDraft";
+import {
+  draftIsStillRestorable,
+  readMigratedLocalDraft,
+  stableLocalDraftKey,
+} from "@/lib/articleAutosave";
+import { useArticleServerAutosave } from "@/hooks/useArticleServerAutosave";
 /* eslint-disable no-console, no-restricted-syntax -- legacy debt, predates the
    guardrails: 93 console.log (stripped from prod by vite esbuild.pure) and 14
    raw fetch('/api') callsites. Both get fixed properly as pieces are extracted
@@ -957,17 +963,12 @@ export default function ArticleEditor() {
       }
   }, [article, isNewArticle, id]);
 
-  // A recoverable URL identity isolates simultaneous drafts and survives reload.
-  // Legacy unowned keys remain untouched; never expose them to another account.
-  const [localDraftId] = useState(() => {
-    const url = new URL(window.location.href);
-    const draftId = url.searchParams.get("localDraft") || crypto.randomUUID();
-    url.searchParams.set("localDraft", draftId);
-    window.history.replaceState(window.history.state, "", url);
-    return draftId;
-  });
+  // Stable per article so reopening from the dashboard finds the same browser copy.
+  // A legacy ?localDraft= id is read once and copied onto that key; we no longer mint a new one.
+  const [legacyDraftId] = useState(() => new URL(window.location.href).searchParams.get("localDraft"));
   const autoSaveKey = user?.id
-    ? `article-draft-v2-${user.id}-${isNewArticle ? 'new' : id}-${localDraftId}` : null;
+    ? stableLocalDraftKey(user.id, isNewArticle ? null : id)
+    : null;
 
   // Function to save draft to localStorage
   const saveDraftToLocalStorage = useCallback(() => {
@@ -1064,47 +1065,39 @@ export default function ArticleEditor() {
     });
   }, [toast]);
 
-  // Check for saved draft on mount (only for new articles or after article is loaded)
+  // Check for saved draft on mount (only for new articles or after article is loaded).
+  // Age does not discard the copy — reopening from the dashboard or another day still prompts.
   useEffect(() => {
-    // For new articles, check immediately
-    // For existing articles, wait until the article is loaded
-    if (autoSaveKey && (isNewArticle || hasLoadedArticleRef.current)) {
-      try {
-        const savedDraft = localStorage.getItem(autoSaveKey);
-        if (savedDraft) {
-          const draft = JSON.parse(savedDraft);
-          const savedTime = new Date(draft.savedAt);
-          const now = new Date();
-          const hoursSinceSave = (now.getTime() - savedTime.getTime()) / (1000 * 60 * 60);
-          
-          // Only offer to restore if saved within last 24 hours
-          if (hoursSinceSave < 24) {
-            // For new articles, always show recovery dialog if there's content
-            // For existing articles, only show if draft has more content than current article
-            if (isNewArticle) {
-              if (draft.title || draft.content) {
-                setRecoveredDraft(draft);
-                setShowDraftRecoveryDialog(true);
-              }
-            } else if (article) {
-              // Check if draft has significant changes from saved article
-              const hasDraftChanges = draftDiffersFromArticle(draft, article);
-              
-              if (hasDraftChanges) {
-                setRecoveredDraft(draft);
-                setShowDraftRecoveryDialog(true);
-              }
-            }
-          } else {
-            // Draft is too old, clear it
-            clearDraftFromLocalStorage();
-          }
+    if (!user?.id || !(isNewArticle || hasLoadedArticleRef.current)) return;
+    try {
+      const found = readMigratedLocalDraft(localStorage, {
+        userId: user.id,
+        articleId: isNewArticle ? null : id,
+        legacyDraftId,
+      });
+      if (legacyDraftId) {
+        const url = new URL(window.location.href);
+        if (url.searchParams.has("localDraft")) {
+          url.searchParams.delete("localDraft");
+          window.history.replaceState(window.history.state, "", url);
         }
-      } catch (error) {
-        console.error('[Auto-save] Failed to check for saved draft:', error);
       }
+      if (!found.raw) return;
+      const draft = JSON.parse(found.raw);
+      if (!draftIsStillRestorable(draft.savedAt)) return;
+      if (isNewArticle) {
+        if (draft.title || draft.content) {
+          setRecoveredDraft(draft);
+          setShowDraftRecoveryDialog(true);
+        }
+      } else if (article && draftDiffersFromArticle(draft, article)) {
+        setRecoveredDraft(draft);
+        setShowDraftRecoveryDialog(true);
+      }
+    } catch (error) {
+      console.error('[Auto-save] Failed to check for saved draft:', error);
     }
-  }, [autoSaveKey, isNewArticle, article, clearDraftFromLocalStorage]);
+  }, [autoSaveKey, isNewArticle, article, user?.id, id, legacyDraftId]);
 
   // Auto-save effect - save every 30 seconds when there are changes
   useEffect(() => {
@@ -1136,6 +1129,40 @@ export default function ArticleEditor() {
     imageUrl, thumbnailUrl, keywords, newsType, metaTitle, metaDescription,
     saveDraftToLocalStorage
   ]);
+
+  useArticleServerAutosave({
+    enabled: Boolean(user?.id) && (isNewArticle || Boolean(article?.id)),
+    isNewArticle,
+    articleId: id,
+    userId: user?.id,
+    status,
+    reviewStatus,
+    localDraftKey: autoSaveKey,
+    fields: {
+      title,
+      content,
+      excerpt,
+      slug,
+      categoryId,
+      articleType,
+      imageUrl,
+      subtitle,
+      metaTitle,
+      metaDescription,
+      keywords,
+      expectedUpdatedAt: articleUpdatedAt,
+    },
+    onDraftCreated: (articleId) => {
+      navigate(`/dashboard/articles/${articleId}/edit`);
+    },
+    onServerSaved: (updatedAt) => {
+      if (updatedAt) setArticleUpdatedAt(updatedAt);
+      setLastAutoSaveTime(new Date());
+    },
+    onActivity: (phase) => {
+      if (phase === "saving" || phase === "saved") setAutoSaveStatus(phase);
+    },
+  });
 
   // حاجز الحقوق: معرّف الصورة التي أوقفت النشر، وتجاوزٌ لمرة واحدة بعد
   // قرار المحرر (توثيق أو نشر واعٍ بدون توثيق)
