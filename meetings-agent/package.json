@@ -10,15 +10,19 @@
     "dev": "tsx src/agent.ts dev"
   },
   "dependencies": {
-    "@livekit/agents": "^1.0.0",
-    "@livekit/agents-plugin-openai": "^1.0.0",
-    "@livekit/rtc-node": "^0.13.0"
+    "@livekit/agents": "1.6.1",
+    "@livekit/agents-plugin-openai": "1.6.1",
+    "@livekit/rtc-node": "0.13.33"
   },
   "devDependencies": {
+    "@types/node": "20.19.43",
     "tsx": "^4.19.0",
     "typescript": "^5.6.0"
   },
   "engines": {
     "node": ">=20"
+  },
+  "overrides": {
+    "brace-expansion": "5.0.9"
   }
 }

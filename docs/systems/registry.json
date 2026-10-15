@@ -1,7 +1,7 @@
 {
   "$schemaNote": "Machine-readable catalog of Sabq product systems. Consumed by scripts/systems-inventory.mjs and /api/admin/systems-catalog. aiFeatureKeys must be exclusive (one system owner) to avoid double-counting.",
   "version": 2,
-  "updatedAt": "2026-10-04",
+  "updatedAt": "2026-08-01",
   "systems": [
     {
       "id": "account-center",
@@ -35,7 +35,7 @@
       "owners": [
         "platform"
       ],
-      "lastReviewed": "2026-09-21"
+      "lastReviewed": "2026-07-25"
     },
     {
       "id": "official-letters",
@@ -66,7 +66,7 @@
       "owners": [
         "platform"
       ],
-      "lastReviewed": "2026-08-03"
+      "lastReviewed": "2026-07-26"
     },
     {
       "id": "loyalty",
@@ -124,27 +124,19 @@
         "server/routes/rslPredictions.ts",
         "client/src/pages/PredictionCenter.tsx",
         "client/src/components/predictions/**",
-        "client/src/components/rsl/RslPredictionsPromo.tsx",
-        "client/src/components/rsl/RslHero.tsx",
         "sports app ios/SabqSports/Services/PredictionCoreModels.swift",
         "sports app ios/SabqSports/Screens/PredictionCenterView.swift",
         "sports app ios/SabqSports/Screens/PredictionContestDetailView.swift",
         "android-native/vara/src/main/kotlin/com/sabq/vara/ui/AccountScreens.kt",
         "android-native/app/src/main/kotlin/com/sabq/smart/feature/predictions/**",
-        "docs/PREDICTION_CORE.md",
-        "android-native/app/src/main/kotlin/com/sabq/smart/feature/asiancup/AsianCupScreen.kt",
-        "android-native/app/src/main/kotlin/com/sabq/smart/feature/asiancup/AsianCupRepository.kt",
-        "android-native/app/src/main/kotlin/com/sabq/smart/feature/gulfcup/GcPredictionsHubScreen.kt",
-        "android-native/app/src/main/kotlin/com/sabq/smart/feature/gulfcup/GcPredictionsViewModel.kt",
-        "shared/schema.ts",
-        "tests/unit/schemaMismatch.test.ts"
+        "docs/PREDICTION_CORE.md"
       ],
       "aiFeatureKeys": [],
       "dashboardPath": null,
       "owners": [
         "sports"
       ],
-      "lastReviewed": "2026-09-15"
+      "lastReviewed": "2026-07-31"
     },
     {
       "id": "editorial",
@@ -152,28 +144,13 @@
       "nameEn": "Editorial / Newsroom",
       "status": "active",
       "category": "content",
-      "summary": "غرفة الأخبار + أدوات التحرير بالذكاء الاصطناعي: عناوين، مقالات، تصنيف، SEO، روابط ذكية، صور، وكلاء بريد/واتساب، ورأي الكاتب. الموجز العام يتزامن من excerpt عند الحفظ؛ BotDrafts يعيد حقلي SEO canonical ويحافظ على ضوابط التوكن والملكية والحصة.",
+      "summary": "غرفة الأخبار + أدوات التحرير بالذكاء الاصطناعي: عناوين، مقالات، تصنيف، SEO، روابط ذكية، صور، وكلاء بريد/واتساب، ورأي الكاتب. الموجز العام يتزامن من excerpt عند الحفظ.",
       "docPath": "docs/systems/editorial/SYSTEM.md",
       "relatedDocs": [
         "docs/editorial/sabq-unified-editorial-prompt.md",
-        "docs/ai-prompts-article-editor.md",
-        "docs/systems/editorial/BOT_DRAFTS_API.md",
-        "docs/systems/editorial/bot-drafts.openapi.yaml"
+        "docs/ai-prompts-article-editor.md"
       ],
       "pathGlobs": [
-        "server/services/mobileAdminSchedule.ts",
-        "tests/unit/mobileAdminSchedule.test.ts",
-        "sabq app ios/sabq/Models/AdminModels.swift",
-        "sabq app ios/sabq/Screens/AdminArticleEditorView.swift",
-        "sabq app ios/sabq/Screens/AdminDashboardView.swift",
-        "sabq app ios/sabq/Components/AdminDashboardComponents.swift",
-        "sabq app ios/sabqTests/AdminScheduleTests.swift",
-        "sabq app ios/sabqTests/AdminScheduleSnapshotTests.swift",
-        "client/src/pages/ArticleDetail.tsx",
-        "client/src/components/AiArticleStats.tsx",
-        "client/src/components/AIRecommendationsBlock.tsx",
-        "client/src/components/ArticleSidebarRecovery.tsx",
-        "client/src/hooks/useArticleSidebarData.ts",
         "client/src/components/staff/MyStaffProfileCard.tsx",
         "client/src/components/staff/MyServicesHomeLink.tsx",
         "client/src/components/staff/StaffProfileForm.tsx",
@@ -182,7 +159,6 @@
         "client/src/pages/dashboard/MyServicesPage.tsx",
         "server/routes/staffProfiles.ts",
         "server/services/staffProfileService.ts",
-        "server/services/staffRoleInference.ts",
         "server/routes/articleEditLocks.ts",
         "server/routes/editorAlerts.ts",
         "server/routes/editorPresence.ts",
@@ -216,26 +192,14 @@
         "server/services/aiSmartThumbnailService.ts",
         "server/services/autoImageGenerationService.ts",
         "server/services/aiImageGenerator.ts",
-        "server/services/imageStyleService.ts",
-        "server/routes/imageStyles.ts",
-        "shared/imageStyles.ts",
-        "client/src/components/AIImageGeneratorDialog.tsx",
-        "client/src/components/ImageStyleSelector.tsx",
-        "client/src/components/editor-extensions/ResizableImage.ts",
-        "client/src/components/editor-extensions/ResizableImageNodeView.tsx",
-        "client/src/components/admin/ImageStylesManager.tsx",
-        "client/src/pages/AutoImageSettings.tsx",
-        "tests/unit/imageStyles.test.ts",
         "server/services/opinionAuthorWorkspaceService.ts",
         "server/utils/internalAnnouncementTargeting.ts",
         "server/services/opinionWritersService.ts",
         "server/services/authorProfileService.ts",
         "server/services/mediaLicenseService.ts",
         "server/services/mediaLicenseUpload.ts",
-        "server/services/staffCommunications.ts",
         "shared/mediaLicense.ts",
         "client/src/hooks/useMediaLicenseGate.ts",
-        "client/src/pages/dashboard/StaffCommunicationsPage.tsx",
         "client/src/components/ReporterSelect.tsx",
         "client/src/components/OpinionAuthorSelect.tsx",
         "server/services/reportersAdminService.ts",
@@ -244,48 +208,26 @@
         "server/routes/reporterMediaLicense.ts",
         "server/routes/reportersAdmin.ts",
         "client/src/pages/AuthorArticlesPage.tsx",
-        "client/src/pages/OpinionPage.tsx",
         "client/src/pages/OpinionDetailPage.tsx",
-        "client/src/components/public/OpinionCard.tsx",
-        "client/src/pages/ArticlesManagement.tsx",
         "client/src/pages/dashboard/OpinionWritersPage.tsx",
-        "server/services/writerWeeklySlot.ts",
-        "tests/unit/writerWeeklySlot.test.ts",
         "client/src/pages/dashboard/ReportersPage.tsx",
         "client/src/pages/reporter/ReporterMyArticlesPage.tsx",
+        "server/journalist-agent-ai.ts",
+        "server/journalist-agent-routes.ts",
         "server/ai-content-tools.ts",
         "server/data-story-ai.ts",
         "server/data-story-routes.ts",
         "server/seo-generator.ts",
         "server/ai-classifier.ts",
         "server/ai/contentAnalyzer.ts",
-        "server/ai/editorialOutputGuards.ts",
-        "server/ai/editorialCompletenessRetry.ts",
-        "tests/unit/editorialCompletenessRetry.test.ts",
         "server/storyMatcher.ts",
         "server/smartCategoriesEngine.ts",
-        "client/src/components/DashboardLayout.tsx",
-        "client/src/components/DashboardSessionLoading.tsx",
-        "e2e/dashboard-session-loading.spec.ts",
-        "e2e/fixtures/dashboard-session.*",
-        "client/src/components/ui/sidebar.tsx",
         "client/src/pages/dashboard/NewsroomPulseDashboard.tsx",
-        "client/src/components/NewsMap.tsx",
-        "client/src/components/NewsMapHudhud.tsx",
-        "client/src/lib/hudhudMap.ts",
-        "client/src/lib/loadMapLibre.ts",
-        "client/src/lib/newsMapMarkers.ts",
-        "server/routes/newsMap.ts",
-        "tests/unit/hudhudMap.test.ts",
         "client/src/pages/dashboard/EditorAlertsSettings.tsx",
         "client/src/pages/dashboard/SmartLinksManagement.tsx",
         "client/src/pages/dashboard/CommunicationsManagement.tsx",
         "client/src/pages/en/EnglishArticlesPage.tsx",
         "client/src/pages/en/EnglishArticleEditor.tsx",
-        "client/src/pages/ArticleEditor.tsx",
-        "server/routes/liveNews.ts",
-        "client/src/pages/MomentByMoment.tsx",
-        "tests/unit/liveNewsVisibility.integration.test.ts",
         "client/src/pages/AnnouncementsList.tsx",
         "client/src/pages/AnnouncementEditor.tsx",
         "client/src/pages/AnnouncementDetail.tsx",
@@ -297,113 +239,15 @@
         "tests/unit/editorialStakeholders.test.ts",
         "server/routes/publisherPortal.ts",
         "server/services/publisherPortalService.ts",
-        "server/services/publisherCreditService.ts",
-        "scripts/publisher-credit-reconcile.ts",
-        "tests/unit/publisherCreditCharge.integration.test.ts",
-        "server/services/publisherInsightsService.ts",
-        "server/services/publisherRenewalService.ts",
-        "tests/unit/publisherRenewal.test.ts",
-        "tests/unit/publisherRenewal.integration.test.ts",
-        "tests/unit/publisherInsights.integration.test.ts",
-        "server/services/articleViewCounterService.ts",
-        "server/services/articleViewStatsService.ts",
         "client/src/pages/admin/publishers/**",
         "client/src/components/admin/publishers/**",
         "client/src/pages/publisher/**",
         "client/src/components/publisher/**",
-        "server/services/articleSlugService.ts",
-        "tests/unit/articleSlugService.test.ts",
-        "docs/editorial/**",
-        "server/services/editorialAiService.ts",
-        "client/src/components/article-editor/SabqEditorAssistant.tsx",
-        "client/src/lib/sanitizeEditorialAiResult.ts",
-        "shared/editorialAiSources.ts",
-        "tests/unit/editorialAiServiceSecurity.test.ts",
-        "tests/unit/sanitizeEditorialAiResult.test.ts",
-        "server/services/publishGate.ts",
-        "server/services/publishGateRules.ts",
-        "tests/unit/publishGate.test.ts",
-        "tests/unit/publisherPermissionDenies.test.ts",
-        "client/src/pages/ArticleEditor.tsx",
-        "server/routes/liveNews.ts",
-        "client/src/pages/MomentByMoment.tsx",
-        "tests/unit/liveNewsVisibility.integration.test.ts",
-        "server/services/articleWriteVersion.ts",
-        "server/services/articleDerivedWrites.ts",
-        "client/src/hooks/useArticleEditLock.ts",
-        "client/src/lib/articleDraft.ts",
-        "server/services/newsStatisticsService.ts",
-        "tests/unit/statisticsSingleFlight.test.ts",
-        "shared/schema.ts",
-        "client/src/components/article-editor/SabqEditorAssistant.tsx",
-        "client/src/lib/editorialSources.ts",
-        "server/utils/editorialDates.ts",
-        "server/utils/editorialDatesSql.ts",
-        "tests/unit/editorialDates.test.ts",
-        "tests/unit/editorialDatesSql.test.ts",
-        "tests/unit/editorialSources.test.ts",
-        "server/services/keywordService.ts",
-        "server/routes/keywordRoutes.ts",
-        "tests/unit/keywordService.test.ts",
-        "tests/unit/keywordCategoryContract.test.ts",
-        "shared/editorialImages.ts",
-        "server/routes/editorialImages.ts",
-        "server/services/editorialImagesService.ts",
-        "server/services/openaiImagesProvider.ts",
-        "client/src/components/OpenAIImageGeneratorDialog.tsx",
-        "tests/unit/openaiImagesProvider.test.ts",
-        "tests/unit/editorialImages.integration.test.ts",
-        "e2e/openai-editor-images.spec.ts",
-        "server/selectHelpers.ts",
-        "tests/unit/botPublisherAttribution.integration.test.ts",
-        "server/services/adminArticleList.ts",
-        "tests/unit/adminArticleList.integration.test.ts",
-        "e2e/articles-management-loading.spec.ts",
-        "server/services/articleImageProvenance.ts",
-        "tests/unit/articleImageProvenance.integration.test.ts",
-        "server/services/proofreadService.ts",
-        "client/src/hooks/useArticleAiTools.ts",
-        "client/src/components/article-editor/ProofreadDialog.tsx",
-        "client/src/lib/applyProofreadIssue.ts",
-        "tests/unit/proofreadService.test.ts",
-        "tests/unit/proofreadService.live.test.ts",
-        "e2e/proofread-editor.spec.ts",
-        "shared/editorialResearch.ts",
-        "server/services/editorialResearchProvider.ts",
-        "server/services/editorialResearchService.ts",
-        "server/routes/editorialResearch.ts",
-        "server/jobs/editorialResearchJob.ts",
-        "client/src/components/article-editor/EditorialResearchPanel.tsx",
-        "tests/unit/editorialResearch*.test.ts",
-        "e2e/editorial-research.spec.ts",
-        "scripts/sql/add-editorial-research-jobs-2026-09-12.sql",
-        "server/services/articleReadOverlay.ts",
-        "tests/unit/articleReadOverlay.test.ts",
-        "server/routes/botDrafts.ts",
-        "server/services/botDraftsService.ts",
-        "server/services/botDraftPublishEffects.ts",
-        "shared/botDrafts.ts",
-        "shared/publishFirst.ts",
-        "server/services/publishFirstService.ts",
-        "server/routes/publishFirst.ts",
-        "migrations/20260927_publish_first.sql",
-        "migrations/20261002_bot_publish_operations.sql",
-        "tests/unit/publishFirst.test.ts",
-        "client/src/components/article-editor/PublishFirstPanel.tsx",
-        "client/src/components/admin/PublishFirstFlagsCard.tsx",
-        "scripts/bot-drafts-client.ts",
-        "server/ai/prompts/editorialRequest.ts",
-        "scripts/prompt-audit/**",
-        "tests/unit/editorialJsonSchema.test.ts",
-        "tests/unit/dataStoryStructuredOutputs.test.ts",
-        "tests/unit/structuredOutputsComparison.test.ts",
-        "server/services/botPersonalScheduleService.ts",
-        "client/src/lib/editAndGenerateStream.ts",
-        "tests/unit/editAndGenerateStream.test.ts",
-        "tests/unit/openaiUsageAttribution.test.ts"
+        "docs/editorial/**"
       ],
       "aiFeatureKeys": [
         "content-tools",
+        "journalist-agent",
         "data-story",
         "ai-article-generator",
         "article-classification",
@@ -428,31 +272,13 @@
         "opinion-writer-coach",
         "opinion-writer-first-reader",
         "opinion-writer-style-profile",
-        "coverage-gap-matcher",
-        "editor-openai-images",
-        "proofread",
-        "editorial-research",
-        "editor-summarize",
-        "editor-headlines",
-        "editor-credibility",
-        "editor-seo-analysis",
-        "editor-smart-content",
-        "editor-rewrite",
-        "editor-media-keywords",
-        "editor-auto-format",
-        "image-focal-point",
-        "editor-social-post",
-        "editor-fact-check",
-        "editorial-edit-fallback",
-        "editorial-email-analysis",
-        "editorial-content-improvement",
-        "editorial-image-alt-text"
+        "coverage-gap-matcher"
       ],
       "dashboardPath": "/dashboard",
       "owners": [
         "editorial"
       ],
-      "lastReviewed": "2026-10-15"
+      "lastReviewed": "2026-07-31"
     },
     {
       "id": "ifox",
@@ -474,23 +300,19 @@
         "server/jobs/aiTasksCleanup.ts",
         "client/src/pages/admin/ifox/**",
         "client/src/components/admin/ifox/**",
-        "client/src/pages/ifox/**",
-        "server/jobs/ifoxContentGeneratorJob.ts"
+        "client/src/pages/ifox/**"
       ],
       "aiFeatureKeys": [
         "ifox-content",
         "ifox-quality",
         "ifox-strategy",
-        "ai-task-executor",
-        "ifox-title",
-        "ifox-content-suggestions",
-        "ifox-content-analysis"
+        "ai-task-executor"
       ],
       "dashboardPath": "/dashboard/admin/ifox",
       "owners": [
         "ai"
       ],
-      "lastReviewed": "2026-10-10"
+      "lastReviewed": "2026-07-17"
     },
     {
       "id": "ai-hub",
@@ -501,8 +323,7 @@
       "summary": "بوابة موحّدة للنماذج، الميزانيات، سجلات الاستخدام، المتجهات، واستوديو البرومبت، ومظلة الاستدعاءات القديمة.",
       "docPath": "docs/systems/ai-hub/SYSTEM.md",
       "relatedDocs": [
-        "docs/ai-models-migration.md",
-        "docs/systems/ai-hub/RUNTIME_READ_ACCESS.md"
+        "docs/ai-models-migration.md"
       ],
       "pathGlobs": [
         "server/ai/gateway/**",
@@ -515,33 +336,19 @@
         "server/jobs/aiUsageRollup.ts",
         "client/src/pages/dashboard/AiHub/**",
         "client/src/pages/PromptStudio.tsx",
-        "client/src/pages/PromptStudioPublic.tsx",
-        "server/services/aiPublicStatsService.ts",
-        "server/services/publishedArticleCountsCache.ts",
-        "server/routes/aiPublicStats.ts",
-        "tests/unit/publishedArticleCountsCache.test.ts",
-        "e2e/ai-hub-overview.spec.ts",
-        "server/ai/claudeStructuredOutputs.ts",
-        "tests/unit/claudeStructuredOutputs.test.ts",
-        "tests/unit/aiGatewayFailover.test.ts",
-        "server/openai.ts",
-        "tests/unit/trackedOpenAI.test.ts"
+        "client/src/pages/PromptStudioPublic.tsx"
       ],
       "aiFeatureKeys": [
         "legacy-ai-manager",
         "prompt-studio",
         "embeddings",
-        "entity-extraction",
-        "legacy-openai-completion",
-        "reader-recommendations",
-        "reader-assistant",
-        "moment-insights"
+        "entity-extraction"
       ],
       "dashboardPath": "/dashboard/ai-hub",
       "owners": [
         "ai"
       ],
-      "lastReviewed": "2026-10-10"
+      "lastReviewed": "2026-07-19"
     },
     {
       "id": "muqtarab",
@@ -558,12 +365,6 @@
       "pathGlobs": [
         "server/services/muqtarab*.ts",
         "server/routes/muqtarab*.ts",
-        "client/src/pages/Muqtarab.tsx",
-        "client/src/pages/MuqtarabDetail.tsx",
-        "client/src/pages/TopicDetail.tsx",
-        "client/src/pages/WriterProfilePage.tsx",
-        "client/src/lib/muqtarab.ts",
-        "client/src/lib/angleTheme.ts",
         "client/src/pages/dashboard/DashboardMuqtarab.tsx",
         "client/src/pages/dashboard/MuqtarabReview.tsx",
         "docs/MUQTARAB.md",
@@ -576,7 +377,7 @@
       "owners": [
         "editorial"
       ],
-      "lastReviewed": "2026-10-14"
+      "lastReviewed": "2026-07-17"
     },
     {
       "id": "radar",
@@ -584,7 +385,7 @@
       "nameEn": "Smart Radar",
       "status": "active",
       "category": "intelligence",
-      "summary": "رصد إخباري كثيف + قصص مجمّعة وزخم وصلة سعودية؛ مفتاح تشغيل شامل يحفظ الحالة. أوقفه المالك مؤقتًا في 2026-10-08.",
+      "summary": "رصد إخباري كثيف + قصص مجمّعة وزخم وصلة سعودية؛ يغذّي فجوات التغطية. أُعيد تفعيل الجلب بقرار المالك في 2026-07-31.",
       "docPath": "docs/systems/radar/SYSTEM.md",
       "relatedDocs": [
         "docs/RADAR_X_WATCHES.md",
@@ -595,7 +396,6 @@
       "pathGlobs": [
         "server/services/radar/**",
         "server/routes/radar.ts",
-        "server/jobs/radarJob.ts",
         "client/src/pages/dashboard/SmartRadar.tsx",
         "scripts/seed-packs/**",
         "scripts/seed-radar-pack.ts",
@@ -613,7 +413,7 @@
       "owners": [
         "editorial"
       ],
-      "lastReviewed": "2026-10-08"
+      "lastReviewed": "2026-08-01"
     },
     {
       "id": "audio-newsletter",
@@ -621,12 +421,10 @@
       "nameEn": "Audio Newsletters",
       "status": "active",
       "category": "content",
-      "summary": "موجز المقال الصوتي بصوت Gemini السعودي الإذاعي واحتياط HUMAIN ثم ElevenLabs ثم Google، إضافة إلى النشرة البريدية الباقية بعد إيقاف منتج النشرات الصوتية، و«نشرة سَبْق» الصوتية لأهم الأخبار تحت الهيدر بعد اعتماد محرر.",
+      "summary": "النشرة البريدية المجدولة الباقية؛ منتج النشرات الصوتية أُوقف في 2026-07-25 مع مسارات توافقية للعملاء القدامى.",
       "docPath": "docs/systems/audio-newsletter/SYSTEM.md",
       "relatedDocs": [
-        "docs/AUDIO_NEWSLETTER_SYSTEM.md",
-        "docs/systems/audio-newsletter/NEWSLETTER_PRODUCT.md",
-        "docs/systems/audio-newsletter/OPERATIONS.md"
+        "docs/AUDIO_NEWSLETTER_SYSTEM.md"
       ],
       "pathGlobs": [
         "server/services/aiNewsletterService.ts",
@@ -638,56 +436,16 @@
         "server/routes/smartNewsletterRoutes.ts",
         "server/routes/newsletterAnalyticsRoutes.ts",
         "client/src/pages/dashboard/NewsletterAnalytics.tsx",
-        "docs/AUDIO_NEWSLETTER_SYSTEM.md",
-        "server/services/humainTts.ts",
-        "server/services/geminiTts.ts",
-        "tests/unit/geminiTts.test.ts",
-        "server/services/summaryAudioSettings.ts",
-        "server/services/summaryAudioService.ts",
-        "server/services/elevenlabs.ts",
-        "server/services/googleTts.ts",
-        "server/routes/summaryAudioSettings.ts",
-        "client/src/components/admin/SummaryAudioSettings.tsx",
-        "tests/unit/humainTts.test.ts",
-        "tests/unit/summaryAudio*.test.ts",
-        "e2e/summary-audio-settings.spec.ts",
-        "e2e/fixtures/summary-audio.*",
-        "docs/systems/audio-newsletter/HUMAIN.md",
-        "tests/unit/ttsDeadlines.test.ts",
-        "client/src/hooks/useArticleSummaryAudio.ts",
-        "client/src/components/SummaryAudioAttribution.tsx",
-        "server/routes/mailerliteWebhookHandler.ts",
-        "server/services/mailerlite.ts",
-        "server/services/mailerliteWebhookSignature.ts",
-        "tests/unit/mailerlite*.test.ts",
-        "server/services/newsletterSubscriptionService.ts",
-        "server/services/newsletterEditorial*.ts",
-        "server/routes/newsletterEditorial*.ts",
-        "server/services/newsletterDeliveryQueue.ts",
-        "client/src/components/SmartNewsletterForm.tsx",
-        "client/src/components/newsletter/**",
-        "client/src/pages/NewsletterPage.tsx",
-        "tests/unit/newsletter*.test.ts",
-        "e2e/newsletter-*.spec.ts",
-        "e2e/fixtures/newsletter.*",
-        "server/services/audioBulletin*.ts",
-        "server/routes/audioBulletin.ts",
-        "server/jobs/audioBulletinJob.ts",
-        "client/src/components/AudioBulletinBar.tsx",
-        "client/src/lib/audioBulletinPlayer.ts",
-        "client/src/pages/dashboard/AudioBulletin.tsx",
-        "tests/unit/audioBulletin*.test.ts"
+        "docs/AUDIO_NEWSLETTER_SYSTEM.md"
       ],
       "aiFeatureKeys": [
-        "audio-newsletter",
-        "newsletter-editorial",
-        "audio-bulletin-script"
+        "audio-newsletter"
       ],
-      "dashboardPath": "/dashboard/system-settings",
+      "dashboardPath": "/dashboard/audio-newsletters",
       "owners": [
         "content"
       ],
-      "lastReviewed": "2026-10-14"
+      "lastReviewed": "2026-08-01"
     },
     {
       "id": "media-library",
@@ -705,12 +463,7 @@
         "server/services/newsImageStorageService.ts",
         "server/routes/mediaLibrary.ts",
         "server/routes/mediaStoreRoutes.ts",
-        "client/src/pages/dashboard/MediaLibrary.tsx",
-        "tests/unit/mediaStoreWebhook.test.ts",
-        "server/utils/mediaUploadDiagnostics.ts",
-        "tests/unit/mediaUploadDiagnostics.test.ts",
-        "shared/schema.ts",
-        "tests/unit/schemaMismatch.test.ts"
+        "client/src/pages/dashboard/MediaLibrary.tsx"
       ],
       "aiFeatureKeys": [
         "media-caption"
@@ -719,7 +472,7 @@
       "owners": [
         "content"
       ],
-      "lastReviewed": "2026-10-13"
+      "lastReviewed": "2026-07-17"
     },
     {
       "id": "sports-tournaments",
@@ -727,7 +480,7 @@
       "nameEn": "Sports Tournaments",
       "status": "active",
       "category": "sports",
-      "summary": "خليجي، آسيا، كأس الملك، كأس العالم، مجالس، فانتازي، أخبار Sportmonks، Snaps، والاستخبارات الرياضية. مركز المباراة + مركز الانتقالات (سعودي: API-Football + SportMonks فرق روشن). هوية روشن iOS: ملعب مشرق (فاتح). مؤشر الجولة يتقدّم بعد اكتمال مبارياتها.",
+      "summary": "خليجي، آسيا، كأس الملك، كأس العالم، مجالس، فانتازي، أخبار Sportmonks، Snaps، والاستخبارات الرياضية. مركز المباراة + مركز الانتقالات (سعودي: API-Football + SportMonks فرق روشن). هوية روشن iOS: ملعب مشرق (فاتح).",
       "docPath": "docs/systems/sports-tournaments/SYSTEM.md",
       "relatedDocs": [
         "docs/SPORTS_PORTAL_ROADMAP.md",
@@ -736,11 +489,6 @@
         "docs/MATCH_EVENT_ALERTS.md"
       ],
       "pathGlobs": [
-        "server/services/sportsComponentSnapshot.ts",
-        "client/src/hooks/useSportsHomeQuery.ts",
-        "client/src/components/kingscup/KingsCupHomeSection.tsx",
-        "client/src/components/sports/SportsPortalStrip.tsx",
-        "client/src/components/tournaments/CupHomeStrip.tsx",
         "server/services/gulfCup*.ts",
         "server/services/asianCup*.ts",
         "server/services/kingsCup*.ts",
@@ -754,15 +502,6 @@
         "server/services/saudiLeagueService.ts",
         "server/services/sportsTournamentsService.ts",
         "server/services/sportsNamesService.ts",
-        "server/services/sportsPlayerNameFixes.ts",
-        "server/services/sportsMatchStatus.ts",
-        "server/services/matchGoalEvents.ts",
-        "tests/unit/matchGoalEvents.test.ts",
-        "server/services/competitionStatus.ts",
-        "server/services/kingsCupR16Schedule.ts",
-        "server/services/sportsAlertsService.ts",
-        "server/services/sportsAlertPrefsService.ts",
-        "server/jobs/sportsAlertsJob.ts",
         "server/services/worldCupNewsGenerator.ts",
         "server/services/kingsCupNewsGenerator.ts",
         "server/services/newsPulseInsights.ts",
@@ -786,24 +525,13 @@
         "client/src/components/worldcup/WorldCupHomeSection.tsx",
         "client/src/components/SabqPulseSection.tsx",
         "client/src/pages/RoshnHub.tsx",
-        "client/src/pages/SportsHub.tsx",
-        "client/src/pages/SportsDashboard.tsx",
-        "client/src/pages/SportsMatchesBoard.tsx",
-        "client/src/components/sports/pickPortalDefaultCompetition.ts",
-        "client/src/components/sports/matchCenterTabs.ts",
         "client/src/components/rsl/**",
         "sabq app ios/sabq/Services/RoshnModels.swift",
         "sabq app ios/sabq/Components/RoshnHomeStrip.swift",
         "sabq app ios/sabq/Screens/Roshn*.swift",
-        "sabq app ios/sabq/Components/DuoMatchLayout.swift",
         "sabq app ios/sabqTests/RoshnModelsTests.swift",
         "sports app ios/SabqSports/Services/APIClient.swift",
-        "sports app ios/SabqSports/Services/AuthStore.swift",
-        "sports app ios/SabqSports/Screens/MatchCenterView.swift",
-        "android-native/vara/src/main/kotlin/com/sabq/vara/ui/MatchCenterScreen.kt",
-        "server/services/theSportsService.ts",
-        "sabq app ios/sabq/Services/SabqLiveStream.swift",
-        "sabq app ios/sabqTests/SabqLiveStreamTests.swift"
+        "sports app ios/SabqSports/Services/AuthStore.swift"
       ],
       "aiFeatureKeys": [
         "world-cup-news",
@@ -826,7 +554,7 @@
       "owners": [
         "sports"
       ],
-      "lastReviewed": "2026-10-15"
+      "lastReviewed": "2026-07-29"
     },
     {
       "id": "push-notifications",
@@ -847,23 +575,15 @@
         "server/jobs/pushWorker.ts",
         "server/notificationBus.ts",
         "server/routes/pushNotificationRoutes.ts",
-        "android-native/app/src/main/kotlin/com/sabq/smart/data/push/**",
         "android-native/vara/src/main/kotlin/com/sabq/vara/push/**",
-        "docs/APPLE_PUSH_SETUP.md",
-        "server/notificationWorker.ts",
-        "server/services/pushBroadcast*.ts",
-        "tests/unit/pushBroadcast*.test.ts",
-        "server/utils/httpPressure.ts",
-        "tests/unit/httpPressure.test.ts",
-        "sabq app ios/sabq/Services/PushNotifications.swift",
-        "tests/unit/apnsBroadcastBatch.test.ts"
+        "docs/APPLE_PUSH_SETUP.md"
       ],
       "aiFeatureKeys": [],
       "dashboardPath": "/dashboard/notification-admin",
       "owners": [
         "platform"
       ],
-      "lastReviewed": "2026-09-24"
+      "lastReviewed": "2026-07-29"
     },
     {
       "id": "ads",
@@ -882,16 +602,14 @@
         "server/routes/advertiserPayments.ts",
         "client/src/pages/dashboard/ads/**",
         "client/src/pages/dashboard/NativeAdsManagement.tsx",
-        "client/src/pages/dashboard/AdvertiserDashboard.tsx",
-        "client/src/hooks/useDmsTopAdsVisibility.ts",
-        "client/src/styles/dms-top-ads.css"
+        "client/src/pages/dashboard/AdvertiserDashboard.tsx"
       ],
       "aiFeatureKeys": [],
       "dashboardPath": "/dashboard/ads",
       "owners": [
         "monetization"
       ],
-      "lastReviewed": "2026-09-28"
+      "lastReviewed": "2026-07-25"
     },
     {
       "id": "auth-rbac",
@@ -902,8 +620,7 @@
       "summary": "Passport للويب، جلسات الأعضاء للموبايل، أدوار وصلاحيات.",
       "docPath": "docs/systems/auth-rbac/SYSTEM.md",
       "relatedDocs": [
-        "docs/architecture/AUTHENTICATION_FLOW.md",
-        "docs/architecture/PHONE_VERIFICATION_AND_MEMBERSHIP.md"
+        "docs/architecture/AUTHENTICATION_FLOW.md"
       ],
       "pathGlobs": [
         "server/auth.ts",
@@ -911,15 +628,8 @@
         "server/csrf.ts",
         "server/twoFactor.ts",
         "server/sessionFailoverStore.ts",
-        "server/services/authAttemptGuard.ts",
         "server/services/memberSessionService.ts",
         "server/services/phoneAuth.ts",
-        "server/services/otpService.ts",
-        "server/services/sms/**",
-        "tests/unit/otpService.test.ts",
-        "tests/unit/smsRouter.test.ts",
-        "tests/unit/bevatelProvider.test.ts",
-        "docs/SMS_OTP_BEVATEL.md",
         "shared/rbac-constants.ts",
         "tests/unit/phoneAuth.test.ts",
         "client/src/hooks/useAuth.ts",
@@ -930,56 +640,14 @@
         "server/services/phoneRegistrationService.ts",
         "server/routes/phoneRegistration.ts",
         "tests/unit/phoneRegistration.test.ts",
-        "client/src/pages/CompleteName.tsx",
-        "client/src/pages/UsersManagement.tsx",
-        "shared/effectiveRoles.ts",
-        "tests/unit/effectiveRoles.test.ts",
-        "server/services/staffRoleInference.ts",
-        "server/services/promoteCorrespondentService.ts",
-        "server/services/mobileUserRolePayload.ts",
-        "server/services/userRoleSync.ts",
-        "server/routes/promoteCorrespondent.ts",
-        "scripts/promote-correspondent.ts",
-        "tests/unit/rbacPersonalDenies.test.ts",
-        "server/sessionRevocations.ts",
-        "tests/unit/sessionRevocations.integration.test.ts",
-        "tests/unit/authSessionRevocation.test.ts",
-        "tests/unit/sessionFailoverStore.test.ts",
-        "tests/unit/sessionDegradedSignal.test.ts",
-        "tests/unit/authAttemptGuard.test.ts",
-        "server/utils/trustedProxyIp.ts",
-        "server/utils/rateLimiting.ts",
-        "sabq app ios/sabq/Stores/AuthStore.swift",
-        "sports app ios/SabqSports/Services/AuthStore.swift",
-        "android-native/app/src/main/kotlin/com/sabq/smart/data/AuthRepository.kt",
-        "android-native/app/src/main/kotlin/com/sabq/smart/data/auth/**",
-        "android-native/app/src/main/kotlin/com/sabq/smart/feature/auth/**",
-        "android-native/app/src/main/res/xml/backup_rules.xml",
-        "android-native/app/src/main/res/xml/data_extraction_rules.xml",
-        "android-native/vara/src/main/kotlin/com/sabq/vara/core/VaraViewModel.kt",
-        "server/utils/trustedProxyIp.ts",
-        "cloudflare-worker/api-origin-worker.js",
-        "cloudflare-worker/wrangler.api.toml",
-        "client/src/components/EditUserDialog.tsx",
-        "e2e/edit-user-biography.spec.ts",
-        "cloudflare-worker/public-api-burst-cache.js",
-        "tests/unit/apiOriginWorkerBurst.test.ts",
-        "shared/botPublisherTokens.ts",
-        "server/services/botPublisherTokenService.ts",
-        "server/routes/botPublisherTokens.ts",
-        "client/src/pages/dashboard/PublisherTokensPage.tsx",
-        "server/oauthWebCompletion.ts",
-        "tests/unit/oauthWebCompletion.test.ts",
-        "tests/unit/activityLogRedaction.test.ts",
-        "tests/unit/userRoleSync.test.ts",
-        "tests/unit/csrfExemptions.test.ts"
+        "client/src/pages/CompleteName.tsx"
       ],
       "aiFeatureKeys": [],
       "dashboardPath": "/dashboard/roles",
       "owners": [
         "platform"
       ],
-      "lastReviewed": "2026-10-13"
+      "lastReviewed": "2026-07-31"
     },
     {
       "id": "seo-ssr",
@@ -1000,39 +668,14 @@
         "server/routes/edgeMeta.ts",
         "server/utils/noindexPaths.ts",
         "web-next/**",
-        "functions/_middleware.js",
-        "web-next/lib/articleMetadata.ts",
-        "server/services/archiveSeo.ts",
-        "server/utils/apiListingRobots.ts",
-        "server/utils/robotsTxt.ts",
-        "tests/unit/robotsTxt.test.ts",
-        "shared/articleHeroPreload.ts",
-        "tests/unit/edgeMetadataBudget.test.ts",
-        "server/utils/creatorSchema.ts",
-        "server/utils/newsArticleSchema.ts",
-        "server/utils/seoArchive.ts",
-        "server/middleware/seoProjectionCache.ts",
-        "server/services/seoCacheInvalidation.ts",
-        "tests/unit/edgeSeoReadiness.test.ts",
-        "tests/unit/seoProjectionCache.test.ts",
-        "tests/unit/seoArchive.test.ts",
-        "tests/web-next/**",
-        "vitest.web-next.config.ts",
-        "client/src/pages/CategoryPage.tsx",
-        "client/src/components/CategoryArchivePage.tsx",
-        "tests/unit/edgeApiSurge.test.ts",
-        "server/utils/spaTopLevelRoutes.ts",
-        "tests/unit/spaTopLevelRoutes.test.ts",
-        "tests/unit/edgeSoftNotFound.test.ts",
-        "tests/unit/categoryCardPreload.test.ts",
-        "tests/unit/slugRedirectQuery.test.ts"
+        "functions/_middleware.js"
       ],
       "aiFeatureKeys": [],
       "dashboardPath": null,
       "owners": [
         "platform"
       ],
-      "lastReviewed": "2026-10-13"
+      "lastReviewed": "2026-08-01"
     },
     {
       "id": "comments",
@@ -1115,44 +758,6 @@
       "lastReviewed": "2026-07-17"
     },
     {
-      "id": "mawaeed",
-      "nameAr": "مواعيدك",
-      "nameEn": "Mawaeed",
-      "status": "active",
-      "category": "content",
-      "summary": "صفحة عامة لمواعيد الرواتب وحساب المواطن والضمان والتقاعد والتقويم الدراسي، مع لوحة تحرير وسجل تغيير.",
-      "docPath": "docs/systems/mawaeed/SYSTEM.md",
-      "relatedDocs": [
-        "docs/systems/seo-ssr/SYSTEM.md",
-        "docs/systems/auth-rbac/SYSTEM.md"
-      ],
-      "pathGlobs": [
-        "shared/mawaeed/**",
-        "server/services/mawaeedService.ts",
-        "server/routes/mawaeed.ts",
-        "functions/mawaeedPage.js",
-        "client/src/pages/dashboard/MawaeedManagement.tsx",
-        "scripts/seed-mawaeed.ts",
-        "migrations/20260927_mawaeed.sql",
-        "migrations/20260927_mawaeed_seed.sql",
-        "migrations/20260927_mawaeed_runtime_grants.sql",
-        "tests/unit/mawaeedSeedSql.test.ts",
-        "tests/unit/mawaeedGrants.test.ts",
-        "data/mawaeed/**",
-        "tests/unit/mawaeedDates.test.ts",
-        "tests/unit/mawaeedPage.test.ts",
-        "tests/unit/mawaeedApi.test.ts",
-        "tests/unit/mawaeedEdge.test.ts",
-        "docs/systems/mawaeed/**"
-      ],
-      "aiFeatureKeys": [],
-      "dashboardPath": "/dashboard/mawaeed",
-      "owners": [
-        "editorial"
-      ],
-      "lastReviewed": "2026-09-27"
-    },
-    {
       "id": "systems-catalog",
       "nameAr": "كتالوج الأنظمة (هذا النظام)",
       "nameEn": "Systems Catalog",
@@ -1178,7 +783,7 @@
       "owners": [
         "platform"
       ],
-      "lastReviewed": "2026-09-27"
+      "lastReviewed": "2026-07-17"
     },
     {
       "id": "smart-blocks",
@@ -1209,57 +814,6 @@
       "notes": "Homepage bundle + SWR cache under blocks:smart:* to avoid DB pressure"
     },
     {
-      "id": "social-publishing",
-      "nameAr": "النشر الاجتماعي",
-      "nameEn": "Social Publishing (X)",
-      "status": "active",
-      "category": "content",
-      "summary": "نشر أخبار سبق على منصة X من لوحة التحكم أو عبر بوت /api/internal/bot-social: فوري أو مجدول، بنص يدوي/عنوان/اقتراح ذكاء، مع صورة اختيارية وسجل محاولات append-only. البوت يقبل معرّف الخبر أو رابطه العام، ومنذ 2026-10-03 منشوراً بلا خبر (kind=original) بصور متعددة ووسوم قياس يضعها الخادم. المعمارية provider-based لإضافة منصات لاحقاً.",
-      "docPath": "docs/systems/social-publishing/SYSTEM.md",
-      "relatedDocs": [
-        "docs/setup/X_PUBLISHING_SETUP_AR.md",
-        "docs/systems/social-publishing/BOT_SOCIAL_API.md",
-        "docs/systems/editorial/SYSTEM.md",
-        "docs/systems/auth-rbac/SYSTEM.md"
-      ],
-      "pathGlobs": [
-        "shared/socialPostText.ts",
-        "server/services/socialPublishing/**",
-        "server/routes/socialPublishing.ts",
-        "server/routes/botSocial.ts",
-        "shared/botSocial.ts",
-        "server/jobs/socialPublishWorker.ts",
-        "client/src/components/social/SocialPublishDialog.tsx",
-        "client/src/pages/dashboard/SocialPublishingPage.tsx",
-        "client/src/pages/opinion-author/OpinionAuthorSocialProposalDialog.tsx",
-        "server/services/publisherSocialService.ts",
-        "client/src/pages/publisher/PublisherSocialCompose.tsx",
-        "client/src/pages/publisher/PublisherSocialPosts.tsx",
-        "client/src/components/publisher/TweetPreview.tsx",
-        "client/src/components/admin/publishers/PublisherSocialModeCard.tsx",
-        "tests/unit/publisherSocial.test.ts",
-        "tests/unit/publisherSocial.integration.test.ts",
-        "tests/unit/socialPostText.test.ts",
-        "tests/unit/socialTokenCrypto.test.ts",
-        "tests/unit/socialPublishingLogic.test.ts",
-        "tests/unit/opinionSocialProposal.test.ts",
-        "tests/unit/xApiClient.test.ts",
-        "tests/unit/botSocialLogic.test.ts",
-        "tests/unit/botSocialService.test.ts",
-        "tests/unit/botSocialRoute.test.ts",
-        "docs/systems/social-publishing/**"
-      ],
-      "aiFeatureKeys": [
-        "social-post-suggest"
-      ],
-      "dashboardPath": "/dashboard/social-publishing",
-      "owners": [
-        "editorial",
-        "platform"
-      ],
-      "lastReviewed": "2026-10-04"
-    },
-    {
       "id": "sahraa-tv-block",
       "nameAr": "بلوك قناة الصحراء",
       "nameEn": "Al-Sahraa TV Block",
@@ -1278,10 +832,7 @@
         "client/src/pages/dashboard/SahraaTvBlockSettings.tsx",
         "attached_assets/al-sahraa-channel-logo.png",
         "docs/systems/sahraa-tv-block/**",
-        "tests/unit/sahraaTvBlock.test.ts",
-        "server/services/sahraaTvMediaMirror.ts",
-        "server/services/sahraaTvBlockPersistence.ts",
-        "tests/unit/sahraaTvBlock*.test.ts"
+        "tests/unit/sahraaTvBlock.test.ts"
       ],
       "aiFeatureKeys": [],
       "dashboardPath": "/dashboard/sahraa-tv-block",
@@ -1289,154 +840,7 @@
         "editorial",
         "platform"
       ],
-      "lastReviewed": "2026-10-01"
-    },
-    {
-      "id": "ai-staff",
-      "nameAr": "فريق سبق الذكي",
-      "nameEn": "AI Staff Team",
-      "status": "active",
-      "category": "ai",
-      "summary": "طبقة هوية فوق بوابة AI Hub: موظفون رقميون بأسماء وأدوار وهيكل تنظيمي قمته بشرية، دليل وبطاقات هوية في اللوحة (/dashboard/ai/staff) وشريحة علنية في عقل سبق — كل المؤشرات مشتقة من ai_usage_logs/ai_feature_configs بلا محرك جديد.",
-      "docPath": "docs/systems/ai-staff/SYSTEM.md",
-      "relatedDocs": [
-        "docs/editorial-ai-unified-system-plan-2026-08-03.md",
-        "docs/ai-governance/README.md"
-      ],
-      "pathGlobs": [
-        "shared/aiStaffRoster.ts",
-        "server/services/aiStaffService.ts",
-        "server/routes/aiStaff.ts",
-        "client/src/pages/dashboard/AiStaff/**",
-        "scripts/seed-ai-staff.ts",
-        "client/public/ai-team/**"
-      ],
-      "lastReviewed": "2026-09-25"
-    },
-    {
-      "id": "ops-room",
-      "nameAr": "غرفة عمليات سبق الذكية",
-      "nameEn": "AI Ops Room",
-      "status": "experimental",
-      "category": "ai",
-      "summary": "نموذج تجريبي معزول: منسق مهام مركزي يوزّع مهامًا تحريرية حقيقية على وكلاء فريق سبق الذكي عبر سجل مهام ومخرجات منظمة وبوابات اعتماد بشري — لا نشر ولا إرسال.",
-      "docPath": "docs/systems/ops-room/SYSTEM.md",
-      "relatedDocs": [
-        "docs/systems/ai-staff/SYSTEM.md",
-        "docs/systems/ai-hub/SYSTEM.md",
-        "docs/editorial-ai-unified-system-plan-2026-08-03.md"
-      ],
-      "pathGlobs": [
-        "shared/opsRoom.ts",
-        "server/services/opsRoom/**",
-        "server/routes/opsRoom.ts",
-        "server/jobs/opsRoomJob.ts",
-        "scripts/seed-ops-room.ts",
-        "client/src/pages/dashboard/OpsRoom/**",
-        "tests/unit/opsRoomEngine.test.ts"
-      ],
-      "lastReviewed": "2026-09-05"
-    },
-    {
-      "id": "economy-live",
-      "nameAr": "اقتصاد سبق الحي",
-      "nameEn": "Economy Live (SAMA data)",
-      "status": "active",
-      "category": "content",
-      "summary": "قسم الاقتصاد الحي: رصد بيانات البنك المركزي السعودي (المؤشرات، أسعار الصرف، تقارير نقاط البيع وعرض النقود) بإيقاع ذكي، بث SSE للواجهة، محرك «أرقام الأسبوع» بعناوين صحفية، ومسودة خبر بحارس أرقام.",
-      "docPath": "docs/systems/economy-live/SYSTEM.md",
-      "relatedDocs": [
-        "docs/systems/ops-room/SYSTEM.md"
-      ],
-      "pathGlobs": [
-        "server/services/sama/**",
-        "server/services/economy/**",
-        "server/routes/economyRoutes.ts",
-        "server/jobs/samaWatchJob.ts",
-        "client/src/components/economy/**",
-        "tests/unit/economyWeeklyStory.test.ts",
-        "tests/unit/economyWatchCadence.test.ts",
-        "tests/unit/samaParsers.test.ts",
-        "tests/unit/economyNumberGuard.test.ts",
-        "tests/fixtures/sama/**"
-      ]
-    },
-    {
-      "id": "platform-runtime",
-      "nameAr": "تشغيل المنصة والبنية المشتركة",
-      "nameEn": "Platform Runtime",
-      "status": "active",
-      "category": "infra",
-      "summary": "الإقلاع والقيادة والإيقاف وملفات العقود المشتركة؛ منطق المنتج يبقى عند مالك نظامه.",
-      "docPath": "docs/systems/platform-runtime/SYSTEM.md",
-      "relatedDocs": [
-        "docs/systems/editorial/SYSTEM.md",
-        "docs/systems/push-notifications/SYSTEM.md",
-        "docs/systems/predictions-core/SYSTEM.md",
-        "docs/systems/seo-ssr/SYSTEM.md",
-        "docs/systems/ai-hub/SYSTEM.md",
-        "docs/systems/ops-room/SYSTEM.md",
-        "docs/systems/ifox/SYSTEM.md",
-        "docs/systems/auth-rbac/SYSTEM.md"
-      ],
-      "pathGlobs": [
-        "server/index.ts",
-        "server/bootstrap.ts",
-        "server/leaderElection.ts",
-        "server/leaderCron.ts",
-        "server/shutdown.ts",
-        "server/routes.ts",
-        "server/storage.ts",
-        "server/routes/mobileApiRoutes.ts",
-        "server/utils/freshWindowCache.ts",
-        "server/utils/postgresPoolErrors.ts",
-        "server/services/mobileCommentTreeService.ts",
-        "tests/unit/freshWindowCache.test.ts",
-        "client/src/lib/earlyErrorBuffer.ts",
-        "client/src/lib/sentryInit.ts",
-        "client/src/lib/sentryNoiseFilter.ts",
-        "tests/unit/earlyErrorBuffer.test.ts",
-        "tests/unit/sentryNoiseFilter.test.ts",
-        "shared/schema.ts",
-        "Dockerfile",
-        ".github/workflows/**",
-        "docs/systems/platform-runtime/**"
-      ],
-      "aiFeatureKeys": [],
-      "dashboardPath": null,
-      "owners": [
-        "platform"
-      ],
-      "lastReviewed": "2026-10-04"
-    },
-    {
-      "id": "mobile-analytics",
-      "nameAr": "قياس التطبيقات الأصلية",
-      "nameEn": "Native mobile analytics",
-      "status": "active",
-      "category": "infra",
-      "summary": "Firebase Analytics وموافقة المستخدم وأحداث تطبيقَي سبق iOS وأندرويد.",
-      "docPath": "docs/systems/mobile-analytics/SYSTEM.md",
-      "relatedDocs": [
-        "docs/setup/MOBILE_ANALYTICS.md",
-        "docs/setup/MOBILE_ANALYTICS_VALIDATION.md"
-      ],
-      "pathGlobs": [
-        "sabq app ios/sabq/Services/SabqAnalytics*.swift",
-        "sabq app ios/sabq/Services/Analytics*.swift",
-        "sabq app ios/sabq/Components/Analytics*.swift",
-        "sabq app ios/sabqTests/*Analytics*.swift",
-        "android-native/app/src/main/kotlin/com/sabq/smart/data/analytics/**",
-        "android-native/app/src/test/**/analytics/**",
-        "scripts/verify-mobile-firebase-config.py",
-        "tests/unit/test_mobile_firebase_config.py"
-      ],
-      "aiFeatureKeys": [],
-      "dashboardPath": null,
-      "owners": [
-        "platform"
-      ],
-      "lastReviewed": "2026-09-13"
+      "lastReviewed": "2026-07-30"
     }
   ]
 }

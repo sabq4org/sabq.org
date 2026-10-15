@@ -34,10 +34,20 @@ jobs:
       - name: Lint changed TS/TSX files
         run: |
           FILES=$(git diff --name-only --diff-filter=ACMR \
-            origin/${{ github.base_ref }}...HEAD -- '*.ts' '*.tsx' | tr '\n' ' ')
+            origin/${{ github.base_ref }}...HEAD -- '*.ts' '*.tsx' \
+            ':(exclude)web-next/**' | tr '\n' ' ')
           if [ -z "$FILES" ]; then
-            echo "No TypeScript changes — skipping lint."
+            echo "No root TypeScript changes — skipping root lint."
+          else
+            echo "Linting with root config: $FILES"
+            npx eslint --config eslint.config.js --no-warn-ignored $FILES
+          fi
+
+      - name: Lint web-next when changed
+        run: |
+          if git diff --quiet origin/${{ github.base_ref }}...HEAD -- web-next; then
+            echo "No web-next changes — skipping lint."
             exit 0
           fi
-          echo "Linting: $FILES"
-          npx eslint --no-warn-ignored $FILES
+          npm ci --prefix web-next
+          npm run lint --prefix web-next
