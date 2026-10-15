@@ -30,6 +30,8 @@ import {
   opinionTicketStatuses,
 } from "@shared/schema";
 import { SUPERUSER_ROLE_NAMES } from "@shared/rbac-constants";
+import { countUnansweredTickets, shouldNotifyDeskOfTicketMessage } from "../services/opinionTicketNotice";
+import { notifyDeskOfWriterInquiry } from "../services/opinionTicketNotifications";
 
 const router = Router();
 
@@ -247,6 +249,7 @@ router.get("/api/opinion-tickets/unread-count", requireAuth, async (req: any, re
     const rows = await db
       .select({
         id: opinionTickets.id,
+        status: opinionTickets.status,
         lastMessageAt: opinionTickets.lastMessageAt,
         lastReadByWriterAt: opinionTickets.lastReadByWriterAt,
         lastReadByAdminAt: opinionTickets.lastReadByAdminAt,
@@ -259,7 +262,10 @@ router.get("/api/opinion-tickets/unread-count", requireAuth, async (req: any, re
       return !lastRead || (r.lastMessageAt && r.lastMessageAt > lastRead);
     });
 
-    return res.json({ unreadCount: unread.length });
+    return res.json({
+      unreadCount: unread.length,
+      unansweredCount: countUnansweredTickets(rows),
+    });
   } catch (err) {
     console.error("[opinion-tickets] unread-count error", err);
     return res.status(500).json({ message: "Internal server error" });
@@ -327,6 +333,22 @@ router.post("/api/opinion-tickets", requireAuth, async (req: any, res: Response)
       senderRole,
       message: parsed.data.message,
     });
+
+    if (shouldNotifyDeskOfTicketMessage(senderRole)) {
+      const writerName = [req.user.firstName, req.user.lastName].filter(Boolean).join(" ").trim() || null;
+      try {
+        await notifyDeskOfWriterInquiry({
+          kind: "new_ticket",
+          ticketId: ticket.id,
+          title: parsed.data.title,
+          writerName,
+          message: parsed.data.message,
+          senderId: req.user.id,
+        });
+      } catch (notifyErr) {
+        console.error("[opinion-tickets] notify failed", notifyErr);
+      }
+    }
 
     return res.status(201).json({ ticket });
   } catch (err) {
@@ -580,6 +602,22 @@ router.post("/api/opinion-tickets/:id/messages", requireAuth, async (req: any, r
       if (ticket.status === "answered") updates.status = "open";
     }
     await db.update(opinionTickets).set(updates).where(eq(opinionTickets.id, ticket.id));
+
+    if (shouldNotifyDeskOfTicketMessage(senderRole)) {
+      const writerName = [req.user.firstName, req.user.lastName].filter(Boolean).join(" ").trim() || null;
+      try {
+        await notifyDeskOfWriterInquiry({
+          kind: "writer_message",
+          ticketId: ticket.id,
+          title: ticket.title,
+          writerName,
+          message: parsed.data.message,
+          senderId: req.user.id,
+        });
+      } catch (notifyErr) {
+        console.error("[opinion-tickets] notify failed", notifyErr);
+      }
+    }
 
     return res.status(201).json({ message: msg });
   } catch (err) {

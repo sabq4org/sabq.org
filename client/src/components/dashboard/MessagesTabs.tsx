@@ -14,6 +14,7 @@ interface ContactMessagesResponse {
 
 interface OpinionTicketsUnreadResponse {
   unreadCount: number;
+  unansweredCount?: number;
 }
 
 interface TabCardProps {
@@ -129,7 +130,9 @@ export function MessagesTabs({
     visitorQuery.data?.total ??
     visitorQuery.data?.messages?.filter((m) => m.status === "pending").length ??
     0;
-  const writerCount = writerQuery.data?.unreadCount ?? 0;
+  const writerUnread = writerQuery.data?.unreadCount ?? 0;
+  const writerUnanswered = writerQuery.data?.unansweredCount ?? 0;
+  const writerCount = Math.max(writerUnread, writerUnanswered);
 
   if (!showVisitorMessages && !showWriterTickets) return null;
 
@@ -154,17 +157,33 @@ export function MessagesTabs({
         />
       )}
       {showWriterTickets && (
-        <TabCard
-          title="تذاكر ورسائل الكتّاب"
-          subtitle={writerCount > 0 ? `${writerCount} استفسار وتذكرة جديدة من كتّاب الرأي` : ""}
-          href="/dashboard/opinion-tickets"
-          count={writerCount}
-          isLoading={writerQuery.isLoading}
-          icon={MessageSquare}
-          iconBoxClass="bg-violet-500/10 border-violet-500/20 text-violet-600 dark:text-violet-400"
-          urgent
-          testId="tab-writer-tickets"
-        />
+        <div className="space-y-2" data-testid="writer-tickets-surface">
+          {writerUnanswered > 0 && (
+            <div
+              className="rounded-xl border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-sm font-semibold text-rose-800 dark:text-rose-200"
+              data-testid="unanswered-tickets-banner"
+            >
+              {writerUnanswered} استفسار بلا رد — بانتظار رد التحرير
+            </div>
+          )}
+          <TabCard
+            title="تذاكر ورسائل الكتّاب"
+            subtitle={
+              writerUnanswered > 0
+                ? `${writerUnanswered} استفسار مفتوح بلا رد`
+                : writerCount > 0
+                  ? `${writerCount} استفسار وتذكرة جديدة من كتّاب الرأي`
+                  : ""
+            }
+            href="/dashboard/opinion-tickets"
+            count={writerCount}
+            isLoading={writerQuery.isLoading}
+            icon={MessageSquare}
+            iconBoxClass="bg-violet-500/10 border-violet-500/20 text-violet-600 dark:text-violet-400"
+            urgent={writerUnanswered > 0 || writerUnread > 0}
+            testId="tab-writer-tickets"
+          />
+        </div>
       )}
     </div>
   );
