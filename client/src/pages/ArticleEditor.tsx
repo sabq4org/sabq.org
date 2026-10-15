@@ -2177,11 +2177,12 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
       return;
     }
 
+    const isOpinionSubmission = isOpinionAuthor || articleType === "opinion";
     toast({
-      title: isOpinionAuthor ? "تم إرسال المقالة لهيئة التحرير" : "تم الإرسال",
-      description: isOpinionAuthor
-        ? "وصلت مقالتك إلى هيئة التحرير، وهي الآن في انتظار المراجعة وتحديد موعد الجدولة"
-        : "عاد المحتوى إلى مسودات فريق التحرير للمراجعة",
+      title: isOpinionSubmission ? "تم إرسال المقالة لهيئة التحرير" : "تم إرسال الخبر لهيئة التحرير",
+      description: isOpinionSubmission
+        ? "وصلت مقالتك إلى هيئة التحرير، وهي الآن بانتظار المراجعة وتحديد موعد الجدولة"
+        : "وصل الخبر إلى هيئة التحرير، وهو الآن بانتظار المراجعة والنشر",
     });
     navigateAfterContributorSubmit();
   };
@@ -3145,7 +3146,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                   {reviewNotes}
                 </p>
                 <p className="text-xs text-amber-700/80 dark:text-amber-300/80">
-                  بعد إجراء التعديلات، احفظ ثم اضغط «إرسال بعد التعديل» ليعود المحتوى إلى مسودات فريق التحرير.
+                  بعد إجراء التعديلات، اضغط «{isOpinionAuthor || articleType === "opinion" ? "إرسال لهيئة التحرير" : "إرسال بعد التعديل"}» لإعادة إرسال {articleType === "opinion" ? "المقالة" : "الخبر"} إلى هيئة التحرير للمراجعة.
                 </p>
               </div>
             )}
