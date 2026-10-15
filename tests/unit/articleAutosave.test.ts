@@ -115,4 +115,21 @@ describe("article draft autosave", () => {
     expect(AUTOSAVE_INTERVAL_MS).toBeGreaterThanOrEqual(30_000);
     expect(AUTOSAVE_INTERVAL_MS).toBeLessThanOrEqual(60_000);
   });
+  it("keeps the visible byline when a new draft is created on the server", () => {
+    const news = buildNewDraftCreateBody({
+      ...fields,
+      articleType: "news",
+      reporterId: "RnP7eDOAl5T5rGpib9_8d",
+      opinionAuthorId: "writer-1",
+    });
+    expect(news).toMatchObject({ reporterId: "RnP7eDOAl5T5rGpib9_8d" });
+    expect(news).not.toHaveProperty("opinionAuthorId");
+
+    const opinion = buildNewDraftCreateBody({ ...fields, reporterId: "rep-1", opinionAuthorId: "writer-1" });
+    expect(opinion).toMatchObject({ opinionAuthorId: "writer-1" });
+    expect(opinion).not.toHaveProperty("reporterId");
+
+    const unset = buildNewDraftCreateBody({ ...fields, articleType: "news", reporterId: null });
+    expect(unset).not.toHaveProperty("reporterId");
+  });
 });
