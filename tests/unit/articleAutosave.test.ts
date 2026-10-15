@@ -122,7 +122,7 @@ describe("article draft autosave", () => {
       reporterId: "RnP7eDOAl5T5rGpib9_8d",
       opinionAuthorId: "writer-1",
     });
-    expect(news).toMatchObject({ reporterId: "RnP7eDOAl5T5rGpib9_8d" });
+    expect(news).toMatchObject({ reporterId: "RnP7eDOAl5T5rGpib9_8d", autosave: true });
     expect(news).not.toHaveProperty("opinionAuthorId");
 
     const opinion = buildNewDraftCreateBody({ ...fields, reporterId: "rep-1", opinionAuthorId: "writer-1" });

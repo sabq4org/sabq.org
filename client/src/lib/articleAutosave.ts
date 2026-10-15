@@ -140,6 +140,8 @@ export function buildNewDraftCreateBody(
     status: "draft",
     publishType: "instant",
     seo: seoBlock(fields, title),
+    // يميّز الحفظ التلقائي عن الإرسال حتى لا يُنبَّه المحررون بمسودة قيد الكتابة.
+    autosave: true,
   };
   if (fields.categoryId) body.categoryId = fields.categoryId;
   const imageUrl = usableImageUrl(fields.imageUrl);
