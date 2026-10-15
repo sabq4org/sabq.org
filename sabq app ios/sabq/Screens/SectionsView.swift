@@ -35,6 +35,7 @@ struct SectionsView: View {
         .sabqRTL()
         .navigationDestination(for: ArticleCategory.self) { category in
             CategoryArticlesView(category: category)
+                .duoContentInsets()
         }
         .task {
             let fetchedKeywords = await NewsService.fetchTrending()
@@ -169,6 +170,7 @@ struct CategoryArticlesView: View {
         .navigationBarTitleDisplayMode(.inline)
         .navigationDestination(for: Article.self) { article in
             ArticleDetailView(article: article)
+                .duoContentInsets()
         }
         .task { await loadArticles() }
     }

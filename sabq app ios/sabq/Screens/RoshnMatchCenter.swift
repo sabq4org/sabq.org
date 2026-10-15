@@ -29,21 +29,36 @@ struct RoshnMatchCenter: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 14) {
+            DuoMatchLayout(
+                hasDetail: detail != nil,
+                isLive: detail?.fixture.status.live == true,
+                standard: { standardLayout },
+                header: { scale in
+                    if let d = detail { header(d, scale: scale) }
+                },
+                events: {
+                    if let d = detail { eventsTab(d) }
+                },
+                side: {
                     if let d = detail {
-                        header(d)
-                        tabBar
-                        content(d)
-                    } else if let loadError {
-                        errorBlock(loadError)
-                    } else {
-                        loadingBlock
+                        tabBar(Self.columnTabs)
+                        content(d, tab: columnTab)
                     }
-                }
-                .padding(.horizontal, 14)
-                .padding(.bottom, 24)
-            }
+                },
+                bottom: {
+                    if let d = detail {
+                        tabBar(Tab.allCases)
+                            .padding(.horizontal, 14)
+                        ScrollView {
+                            content(d, tab: tab)
+                                .padding(.horizontal, 14)
+                                .padding(.bottom, 24)
+                        }
+                    }
+                },
+                titleColor: RoshnTheme.ink,
+                dividerColor: RoshnTheme.inkSoft.opacity(0.15)
+            )
             .background(RoshnTheme.canvas)
             .environment(\.layoutDirection, .rightToLeft)
             .environment(\.locale, RsFormat.latinLocale)
@@ -90,9 +105,37 @@ struct RoshnMatchCenter: View {
         }
     }
 
+    // MARK: التخطيط
+
+    /// الهاتف والشاشة الخارجية: الترويسة ثم التبويبات، كما كان دائمًا. على
+    /// iPhone Duo مفتوحًا أو على الطاولة يرتّب `DuoMatchLayout` القطع نفسها.
+    private var standardLayout: some View {
+        ScrollView {
+            VStack(spacing: 14) {
+                if let d = detail {
+                    header(d)
+                    tabBar(Tab.allCases)
+                    content(d, tab: tab)
+                } else if let loadError {
+                    errorBlock(loadError)
+                } else {
+                    loadingBlock
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.bottom, 24)
+        }
+    }
+
+    /// تبويبات العمود الأيسر مفتوحًا — «الأحداث» في العمود الأيمن دائمًا.
+    private static let columnTabs: [Tab] = [.stats, .lineups, .ratings]
+
+    /// التبويب نفسه يبقى عند تغيير الوضعية؛ «الأحداث» ظاهرة أصلًا يمينًا.
+    private var columnTab: Tab { tab == .events ? .stats : tab }
+
     // MARK: الترويسة
 
-    private func header(_ d: RsMatchDetail) -> some View {
+    private func header(_ d: RsMatchDetail, scale: CGFloat = 1) -> some View {
         ZStack {
             RoshnTheme.hero
             Circle()
@@ -101,23 +144,23 @@ struct RoshnMatchCenter: View {
 
             VStack(spacing: 12) {
             HStack(alignment: .top, spacing: 10) {
-                teamColumn(d.fixture.home)
+                teamColumn(d.fixture.home, scale: scale)
                 VStack(spacing: 5) {
                     if d.fixture.started {
                         Text("\(d.fixture.goals.away ?? 0) - \(d.fixture.goals.home ?? 0)")
-                            .font(SabqFonts.app(size: 30, weight: .bold))
+                            .font(SabqFonts.app(size: 30 * scale, weight: .bold))
                             .foregroundStyle(RoshnTheme.heroOn)
                             .monospacedDigit()
                             .environment(\.layoutDirection, .leftToRight)
                     } else {
                         Text(RsFormat.time(d.fixture))
-                            .font(SabqFonts.app(size: 22, weight: .bold))
+                            .font(SabqFonts.app(size: 22 * scale, weight: .bold))
                             .foregroundStyle(RoshnTheme.heroOn)
                     }
                     statusChip(d.fixture)
                 }
-                .frame(minWidth: 96)
-                teamColumn(d.fixture.away)
+                .frame(minWidth: 96 * scale)
+                teamColumn(d.fixture.away, scale: scale)
             }
 
             VStack(spacing: 3) {
@@ -146,14 +189,14 @@ struct RoshnMatchCenter: View {
         .shadow(color: RoshnTheme.cardShadow, radius: 12, y: 6)
     }
 
-    private func teamColumn(_ team: RsTeam) -> some View {
+    private func teamColumn(_ team: RsTeam, scale: CGFloat = 1) -> some View {
         Button { selectedTeam = team } label: { VStack(spacing: 7) {
             WCRemoteImage(url: team.logo)
-                .padding(5).frame(width: 58, height: 58)
+                .padding(5).frame(width: 58 * scale, height: 58 * scale)
                 .background(Circle().fill(.white))
                 .shadow(color: RoshnTheme.navyDeep.opacity(0.18), radius: 5, y: 2)
             Text(team.name)
-                .font(SabqFonts.app(size: 13, weight: .semibold))
+                .font(SabqFonts.app(size: 13 * min(scale, 1.15), weight: .semibold))
                 .foregroundStyle(RoshnTheme.heroOn)
                 .lineLimit(2).minimumScaleFactor(0.7)
                 .multilineTextAlignment(.center)
@@ -191,9 +234,11 @@ struct RoshnMatchCenter: View {
 
     // MARK: التبويبات
 
-    private var tabBar: some View {
-        HStack(spacing: 6) {
-            ForEach(Tab.allCases, id: \.self) { item in
+    private func tabBar(_ items: [Tab]) -> some View {
+        // في العمود الأيسر مفتوحًا لا تظهر «الأحداث»؛ يُبرز أول تبويب حينها.
+        let current = items.contains(tab) ? tab : (items.first ?? tab)
+        return HStack(spacing: 6) {
+            ForEach(items, id: \.self) { item in
                 Button {
                     tab = item
                     if item == .ratings, !ratingsRequested {
@@ -202,13 +247,13 @@ struct RoshnMatchCenter: View {
                     }
                 } label: {
                     Text(item.rawValue)
-                        .font(SabqFonts.app(size: 12.5, weight: tab == item ? .semibold : .regular))
-                        .foregroundStyle(tab == item ? .white : RoshnTheme.inkSoft)
+                        .font(SabqFonts.app(size: 12.5, weight: current == item ? .semibold : .regular))
+                        .foregroundStyle(current == item ? .white : RoshnTheme.inkSoft)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 8)
                         .background(
                             RoundedRectangle(cornerRadius: 11, style: .continuous)
-                                .fill(tab == item ? RoshnTheme.sky : RoshnTheme.skySoft.opacity(0.6))
+                                .fill(current == item ? RoshnTheme.sky : RoshnTheme.skySoft.opacity(0.6))
                         )
                 }
                 .buttonStyle(.plain)
@@ -217,7 +262,7 @@ struct RoshnMatchCenter: View {
     }
 
     @ViewBuilder
-    private func content(_ d: RsMatchDetail) -> some View {
+    private func content(_ d: RsMatchDetail, tab: Tab) -> some View {
         switch tab {
         case .events: eventsTab(d)
         case .stats: statsTab(d)

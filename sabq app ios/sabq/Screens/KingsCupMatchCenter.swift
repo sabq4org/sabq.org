@@ -24,30 +24,40 @@ struct KingsCupMatchCenter: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView(showsIndicators: false) {
-                VStack(spacing: 16) {
-                    if let f = detail?.fixture ?? seed {
-                        header(f)
-                        if !f.status.finished {
-                            KcFetchedPrediction(fixture: f)
-                            KcTvStrip(fixtureId: f.id)
-                        }
-                        tabBar
-                        if let detail {
-                            content(detail)
-                        } else if loading {
-                            KcLoading()
-                        } else {
-                            retryBlock
-                        }
-                    } else if loading {
-                        KcLoading().padding(.top, 30)
-                    } else {
-                        retryBlock.padding(.top, 50)
+            DuoMatchLayout(
+                hasDetail: detail != nil,
+                isLive: detail?.fixture.status.live == true,
+                standard: { standardLayout },
+                header: { scale in
+                    if let f = detail?.fixture { header(f, scale: scale) }
+                },
+                events: {
+                    if let detail { KcEventsTimeline(detail: detail) }
+                },
+                side: {
+                    if let detail {
+                        preMatchCards(detail.fixture)
+                        tabBar(Self.columnTabs)
+                        content(detail, tab: columnTab)
                     }
-                }
-                .padding(16)
-            }
+                },
+                bottom: {
+                    if let detail {
+                        tabBar(Tab.allCases)
+                            .padding(.horizontal, 16)
+                        ScrollView(showsIndicators: false) {
+                            VStack(spacing: 16) {
+                                preMatchCards(detail.fixture)
+                                content(detail, tab: tab)
+                            }
+                            .padding(.horizontal, 16)
+                            .padding(.bottom, 24)
+                        }
+                    }
+                },
+                titleColor: WCTheme.onDark,
+                dividerColor: WCTheme.cardStroke
+            )
             .background(WCTheme.sectionBackground.ignoresSafeArea())
             .navigationTitle("مركز المباراة")
             .navigationBarTitleDisplayMode(.inline)
@@ -75,12 +85,52 @@ struct KingsCupMatchCenter: View {
                     }
                 }
             }
-            .refreshable { await load(force: true) }
             .sheet(item: $openPlayer) { sel in
                 KcPlayerSheet(playerId: sel.id).presentationDetents([.large])
             }
         }
         .sabqRTL()
+    }
+
+    /// التوقع والقنوات الناقلة قبل التبويبات حتى صافرة النهاية — في كل
+    /// تخطيطات المركز (الهاتف، وعمودا Duo، ووضع الطاولة).
+    @ViewBuilder
+    private func preMatchCards(_ f: KcFixture) -> some View {
+        if !f.status.finished {
+            KcFetchedPrediction(fixture: f)
+            KcTvStrip(fixtureId: f.id)
+        }
+    }
+
+    /// تبويبات العمود الأيسر على Duo مفتوحًا — «الأحداث» في العمود الأيمن دائمًا.
+    private static let columnTabs: [Tab] = [.lineups, .stats, .ratings]
+    private var columnTab: Tab { tab == .events ? .lineups : tab }
+
+    /// الهاتف والشاشة الخارجية كما كان دائمًا؛ على Duo مفتوحًا أو على الطاولة
+    /// يرتّب `DuoMatchLayout` القطع نفسها.
+    private var standardLayout: some View {
+        ScrollView(showsIndicators: false) {
+            VStack(spacing: 16) {
+                if let f = detail?.fixture ?? seed {
+                    header(f)
+                    preMatchCards(f)
+                    tabBar(Tab.allCases)
+                    if let detail {
+                        content(detail, tab: tab)
+                    } else if loading {
+                        KcLoading()
+                    } else {
+                        retryBlock
+                    }
+                } else if loading {
+                    KcLoading().padding(.top, 30)
+                } else {
+                    retryBlock.padding(.top, 50)
+                }
+            }
+            .padding(16)
+        }
+        .refreshable { await load(force: true) }
     }
 
     private var retryBlock: some View {
@@ -113,22 +163,22 @@ struct KingsCupMatchCenter: View {
 
     // MARK: ترويسة
 
-    private func header(_ f: KcFixture) -> some View {
+    private func header(_ f: KcFixture, scale: CGFloat = 1) -> some View {
         VStack(spacing: 8) {
             HStack(alignment: .top) {
-                teamHead(f.home)
+                teamHead(f.home, scale: scale)
                 VStack(spacing: 4) {
                     if f.started {
                         Text("\(f.goals.away ?? 0) - \(f.goals.home ?? 0)")
-                            .font(SabqFonts.app(size: 24, weight: .semibold)).foregroundStyle(WCTheme.onDark)
+                            .font(SabqFonts.app(size: 24 * scale, weight: .semibold)).foregroundStyle(WCTheme.onDark)
                             .environment(\.layoutDirection, .leftToRight)
                     } else {
-                        Text(KcFormat.time(f)).font(SabqFonts.app(size: 20, weight: .semibold)).foregroundStyle(WCTheme.onDark)
+                        Text(KcFormat.time(f)).font(SabqFonts.app(size: 20 * scale, weight: .semibold)).foregroundStyle(WCTheme.onDark)
                     }
                     KcStatusPill(fixture: f)
                 }
-                .frame(minWidth: 90)
-                teamHead(f.away)
+                .frame(minWidth: 90 * scale)
+                teamHead(f.away, scale: scale)
             }
             if let po = f.penaltyOutcome {
                 Text("فاز \(po.winnerName) بركلات الترجيح (\(po.winnerScore)-\(po.loserScore))")
@@ -148,9 +198,9 @@ struct KingsCupMatchCenter: View {
         return parts.joined(separator: " · ")
     }
 
-    private func teamHead(_ team: KcTeam) -> some View {
+    private func teamHead(_ team: KcTeam, scale: CGFloat = 1) -> some View {
         VStack(spacing: 6) {
-            KcTeamLogo(team: team, size: 48, ring: WCTheme.cardStroke)
+            KcTeamLogo(team: team, size: 48 * scale, ring: WCTheme.cardStroke)
             Text(team.name).font(SabqFonts.app(size: 12, weight: .medium)).foregroundStyle(WCTheme.onDark)
                 .multilineTextAlignment(.center)
         }
@@ -159,23 +209,25 @@ struct KingsCupMatchCenter: View {
 
     // MARK: التبويبات
 
-    private var tabBar: some View {
-        HStack(spacing: 8) {
-            ForEach(Tab.allCases, id: \.self) { t in
+    private func tabBar(_ items: [Tab]) -> some View {
+        // في العمود الأيسر على Duo لا تظهر «الأحداث»؛ يُبرز أول تبويب حينها.
+        let current = items.contains(tab) ? tab : (items.first ?? tab)
+        return HStack(spacing: 8) {
+            ForEach(items, id: \.self) { t in
                 Button { withAnimation(.easeOut(duration: 0.2)) { tab = t } } label: {
                     Text(t.rawValue)
                         .font(SabqFonts.app(size: 12, weight: .medium))
-                        .foregroundStyle(tab == t ? .white : WCTheme.onDarkDim)
+                        .foregroundStyle(current == t ? .white : WCTheme.onDarkDim)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 8)
-                        .background(Capsule().fill(tab == t ? WCTheme.emeraldDeep : WCTheme.chipFill))
+                        .background(Capsule().fill(current == t ? WCTheme.emeraldDeep : WCTheme.chipFill))
                 }
                 .buttonStyle(.plain)
             }
         }
     }
 
-    @ViewBuilder private func content(_ d: KcMatchDetail) -> some View {
+    @ViewBuilder private func content(_ d: KcMatchDetail, tab: Tab) -> some View {
         switch tab {
         case .events: KcEventsTimeline(detail: d)
         case .lineups: KcLineupsView(detail: d)

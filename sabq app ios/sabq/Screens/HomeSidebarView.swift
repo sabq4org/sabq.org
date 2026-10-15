@@ -58,31 +58,112 @@ struct HomeSidebarView: View {
         }
     }
 
+    private static let columnTopID = "homeSidebarTop"
+
     private var column: some View {
+        ScrollViewReader { scrollProxy in
         ScrollView(showsIndicators: false) {
             LazyVStack(alignment: .leading, spacing: 18) {
+                Color.clear
+                    .frame(height: 0)
+                    .id(Self.columnTopID)
                 header
-                briefingCard
 
-                if isEmpty {
-                    emptyState
-                } else {
-                    if !breaking.isEmpty {
-                        section("عاجل", icon: "bolt.fill", tint: SabqTheme.coral, articles: breaking)
+                if let context = navigation.readerContext {
+                    modePicker
+                    if navigation.homeSidebarMode == .context {
+                        ArticleContextView(
+                            context: context,
+                            onOpenArticle: { navigation.openInReader($0) },
+                            onOpenOpinion: { navigation.openFromReaderContext($0, in: .home) },
+                            onOpenKeyword: { navigation.openFromReaderContext(KeywordRoute(keyword: $0), in: .home) }
+                        )
+                        .id(context.id)
+                        .transition(.opacity)
                     }
-                    if !highlights.isEmpty {
-                        section("أبرز الأخبار", icon: nil, tint: SabqTheme.primaryEnd, articles: highlights)
-                        if articlesStore.hasMore { loadMoreButton }
-                    }
+                }
+
+                if navigation.readerContext == nil || navigation.homeSidebarMode == .news {
+                    newsList
                 }
             }
             .padding(.horizontal, 16)
             .padding(.top, 8)
             .padding(.bottom, 32)
+            .animation(.easeOut(duration: 0.18), value: navigation.homeSidebarMode)
         }
         .background(SabqTheme.background)
         .refreshable {
             await articlesStore.loadArticles(ignoreCache: true)
+        }
+        // اختيار خبر من أسفل القائمة يبدّل العمود إلى سياقه الأقصر؛ بلا هذا
+        // يبقى موضع التمرير بعد نهاية المحتوى فيظهر العمود فارغًا (محاكي
+        // 2026-10-15).
+        .onChange(of: navigation.homeSidebarMode) { _, _ in
+            scrollProxy.scrollTo(Self.columnTopID, anchor: .top)
+        }
+        .onChange(of: navigation.readerContext?.id) { _, _ in
+            if navigation.homeSidebarMode == .context {
+                scrollProxy.scrollTo(Self.columnTopID, anchor: .top)
+            }
+        }
+        }
+    }
+
+    /// «الأخبار | سياق الخبر» أعلى العمود (نموذج Duo المعتمد). يظهر فقط حين
+    /// يكون في القارئ خبر له سياق.
+    private var modePicker: some View {
+        HStack(spacing: 4) {
+            modeButton("الأخبار", mode: .news)
+            modeButton("سياق الخبر", mode: .context)
+        }
+        .padding(3)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(SabqTheme.surface)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(SabqTheme.outline.opacity(0.7), lineWidth: 0.5)
+        )
+    }
+
+    private func modeButton(_ title: String, mode: HomeSidebarMode) -> some View {
+        let isSelected = navigation.homeSidebarMode == mode
+        return Button {
+            guard !isSelected else { return }
+            SabqHaptics.light()
+            navigation.homeSidebarMode = mode
+        } label: {
+            Text(title)
+                .font(SabqFonts.app(size: 13.5, weight: isSelected ? .semibold : .medium))
+                .foregroundStyle(isSelected ? SabqTheme.onAction : SabqTheme.secondaryInk)
+                .frame(maxWidth: .infinity, minHeight: 34)
+                .background(
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .fill(isSelected ? SabqTheme.actionFill : Color.clear)
+                )
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .accessibilityIdentifier(mode == .context ? "homeSidebarMode.context" : "homeSidebarMode.news")
+    }
+
+    @ViewBuilder
+    private var newsList: some View {
+        briefingCard
+
+        if isEmpty {
+            emptyState
+        } else {
+            if !breaking.isEmpty {
+                section("عاجل", icon: "bolt.fill", tint: SabqTheme.coral, articles: breaking)
+            }
+            if !highlights.isEmpty {
+                section("أبرز الأخبار", icon: nil, tint: SabqTheme.primaryEnd, articles: highlights)
+                if articlesStore.hasMore { loadMoreButton }
+            }
         }
     }
 

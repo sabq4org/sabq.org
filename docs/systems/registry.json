@@ -795,6 +795,7 @@
         "sabq app ios/sabq/Services/RoshnModels.swift",
         "sabq app ios/sabq/Components/RoshnHomeStrip.swift",
         "sabq app ios/sabq/Screens/Roshn*.swift",
+        "sabq app ios/sabq/Components/DuoMatchLayout.swift",
         "sabq app ios/sabqTests/RoshnModelsTests.swift",
         "sports app ios/SabqSports/Services/APIClient.swift",
         "sports app ios/SabqSports/Services/AuthStore.swift",
@@ -825,7 +826,7 @@
       "owners": [
         "sports"
       ],
-      "lastReviewed": "2026-10-13"
+      "lastReviewed": "2026-10-15"
     },
     {
       "id": "push-notifications",

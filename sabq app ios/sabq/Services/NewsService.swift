@@ -153,6 +153,7 @@ enum NewsService {
             }
         }
         let related = nonOpinionArticles(from: api.relatedArticles ?? []).filter { $0.id != main.id }
+        ArticleDetailCache.shared.store(slug: slug, article: main, related: related)
         return (main, related)
     }
 
@@ -353,6 +354,61 @@ private actor CategoryCacheActor {
 
     func removeAll() {
         cache.removeAll()
+        order.removeAll()
+    }
+}
+
+/// ذاكرة الجلسة لتفاصيل الأخبار (الخبر الكامل + المرتبطة).
+///
+/// القارئ يُعاد بناؤه كثيرًا والخبر نفسه: طيّ Duo وفتحه (الجسر يدفع الخبر إلى
+/// المكدّس)، والرجوع من خبر مرتبط، وفتح الخبر من العمود بعد قراءته. كان كل
+/// بناء يعيد الجلب ويعرض الهيكل الفارغ حتى يصل. الآن يُعرض المحفوظ فورًا،
+/// ولا يُعاد الجلب إن كان عمره أقل من `freshInterval`.
+final class ArticleDetailCache: @unchecked Sendable {
+    static let shared = ArticleDetailCache()
+
+    struct Entry {
+        let article: Article
+        let related: [Article]
+        let fetchedAt: Date
+
+        func isFresh(now: Date = Date(), interval: TimeInterval = ArticleDetailCache.freshInterval) -> Bool {
+            now.timeIntervalSince(fetchedAt) < interval
+        }
+    }
+
+    /// خبر حديث الجلب لا يُعاد طلبه خلال هذه المدة (التعديلات التحريرية
+    /// تصل بعدها أو بالسحب للتحديث في القوائم).
+    static let freshInterval: TimeInterval = 120
+    let capacity: Int
+
+    private var entries: [String: Entry] = [:]
+    /// الأقدم أولًا — يُطرد عند تجاوز السعة.
+    private var order: [String] = []
+    private let lock = NSLock()
+
+    init(capacity: Int = 40) {
+        self.capacity = capacity
+    }
+
+    func entry(for slug: String) -> Entry? {
+        lock.lock(); defer { lock.unlock() }
+        return entries[slug]
+    }
+
+    func store(slug: String, article: Article, related: [Article], at date: Date = Date()) {
+        lock.lock(); defer { lock.unlock() }
+        entries[slug] = Entry(article: article, related: related, fetchedAt: date)
+        order.removeAll { $0 == slug }
+        order.append(slug)
+        while order.count > capacity {
+            entries.removeValue(forKey: order.removeFirst())
+        }
+    }
+
+    func removeAll() {
+        lock.lock(); defer { lock.unlock() }
+        entries.removeAll()
         order.removeAll()
     }
 }
