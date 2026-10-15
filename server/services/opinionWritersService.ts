@@ -5,6 +5,7 @@ import { and, desc, asc, eq, exists, gte, inArray, or, sql } from "drizzle-orm";
 import { db } from "../db";
 import {
   articles,
+  notificationsInbox,
   opinionWriterSchedules,
   roles,
   userRoles,
@@ -638,6 +639,154 @@ export async function getWriterArticlesWithStats(
   };
 }
 
+export type WriterActivePipelineArticle = {
+  id: string;
+  title: string;
+  status: string;
+  reviewStatus: string | null;
+  scheduledAt: string | null;
+  updatedAt: string | null;
+  stage: "scheduled" | "pending_review" | "approved";
+};
+
+export function formatActivePipelineBlockMessage(active: WriterActivePipelineArticle): string {
+  if (active.stage === "scheduled") {
+    return `يوجد لديك مقالة مجدولة للنشر حالياً («${active.title}») — لا يمكن كتابة أو إرسال مقالة جديدة حتى يتم نشر المقالة المجدولة.`;
+  }
+  return `يوجد لديك مقالة في انتظار مراجعة وجدولة هيئة التحرير («${active.title}») — لا يمكن كتابة أو إرسال مقالة جديدة حتى يكتمل نشرها.`;
+}
+
+export async function assertOpinionAuthorPipelineOpen(
+  writerId: string | null | undefined,
+  articleType: string | null | undefined,
+  excludeArticleId?: string,
+): Promise<{ ok: true } | { ok: false; status: number; message: string; code: string }> {
+  if (articleType !== "opinion" || !writerId) return { ok: true };
+  const active = await getWriterActivePipelineArticle(writerId, excludeArticleId);
+  if (!active) return { ok: true };
+  return {
+    ok: false,
+    status: 409,
+    message: formatActivePipelineBlockMessage(active),
+    code: "OPINION_PIPELINE_BUSY",
+  };
+}
+
+/**
+ * يتحقق مما إذا كان للكاتب مقال رأي قيد المراجعة/الاعتماد أو مجدول للنشر حالياً
+ * لمنع إنشاء أو إرسال مقالة ثانية قبل نشر المقالة الحالية.
+ */
+export async function getWriterActivePipelineArticle(
+  writerId: string,
+  excludeArticleId?: string,
+): Promise<WriterActivePipelineArticle | null> {
+  if (!writerId) return null;
+  const conditions = [
+    eq(articles.articleType, "opinion"),
+    eq(articles.authorId, writerId),
+    or(
+      eq(articles.status, "scheduled"),
+      and(
+        eq(articles.status, "draft"),
+        or(awaitingEditorialSql, eq(articles.reviewStatus, "approved")),
+      ),
+    ),
+  ];
+  if (excludeArticleId) {
+    conditions.push(sql`${articles.id} <> ${excludeArticleId}`);
+  }
+  const [row] = await db
+    .select({
+      id: articles.id,
+      title: articles.title,
+      status: articles.status,
+      reviewStatus: articles.reviewStatus,
+      scheduledAt: articles.scheduledAt,
+      updatedAt: articles.updatedAt,
+    })
+    .from(articles)
+    .where(and(...conditions))
+    .orderBy(
+      desc(sql`case when ${articles.status} = 'scheduled' then 1 else 0 end`),
+      desc(articles.scheduledAt),
+      desc(articles.updatedAt),
+    )
+    .limit(1);
+
+  if (!row) return null;
+  const stage: WriterActivePipelineArticle["stage"] =
+    row.status === "scheduled"
+      ? "scheduled"
+      : row.reviewStatus === "approved"
+        ? "approved"
+        : "pending_review";
+  return {
+    id: row.id,
+    title: row.title,
+    status: row.status,
+    reviewStatus: row.reviewStatus,
+    scheduledAt: toIsoOrNull(row.scheduledAt),
+    updatedAt: toIsoOrNull(row.updatedAt),
+    stage,
+  };
+}
+
+/**
+ * إشعار الكاتب وهيئة التحرير عند إرسال مقال رأي للمراجعة والجدولة (وليس عند الجدولة).
+ */
+export async function notifyOpinionArticleSubmittedForReview(article: {
+  id: string;
+  title: string;
+  slug: string;
+  authorId: string | null;
+}): Promise<void> {
+  if (!article.authorId) return;
+  try {
+    const [author] = await db
+      .select({ firstName: users.firstName, lastName: users.lastName })
+      .from(users)
+      .where(eq(users.id, article.authorId))
+      .limit(1);
+    const authorName = author
+      ? [author.firstName, author.lastName].filter(Boolean).join(" ") || "كاتب رأي"
+      : "كاتب رأي";
+
+    const titleText = "تم إرسال مقالتك لهيئة التحرير";
+    const bodyText = `وصلت مقالتك «${article.title}» إلى هيئة التحرير، وهي الآن في انتظار المراجعة وتحديد موعد الجدولة.`;
+
+    await db.insert(notificationsInbox).values({
+      userId: article.authorId,
+      type: "OpinionSubmittedForReview",
+      title: titleText,
+      body: bodyText,
+      deeplink: "/dashboard/opinion-author",
+      read: false,
+      metadata: {
+        articleId: article.id,
+        articleTitle: article.title,
+        articleSlug: article.slug,
+      },
+    });
+
+    const { notificationBus } = await import("../notificationBus");
+    notificationBus.emit("new-notification", {
+      userId: article.authorId,
+      type: "OpinionSubmittedForReview",
+      title: titleText,
+      body: bodyText,
+    });
+
+    const { sendDraftSubmittedNotification } = await import("../notificationService");
+    await sendDraftSubmittedNotification(
+      { id: article.id, title: article.title, slug: article.slug },
+      authorName,
+      article.authorId,
+    );
+  } catch (err) {
+    console.error("[opinion-writers] notifyOpinionArticleSubmittedForReview failed:", err);
+  }
+}
+
 /**
  * جدولة مقال رأي معتمد لموعد مستقبلي (بديل النشر الفوري).
  * يلتقطه ناشر المجدولات في notificationWorker كل دقيقتين.
@@ -646,7 +795,22 @@ export async function scheduleApprovedOpinionArticle(
   articleId: string,
   scheduledAt: Date,
 ): Promise<
-  | { ok: true; article: { id: string; status: string; scheduledAt: Date | null } }
+  | {
+      ok: true;
+      article: {
+        id: string;
+        title: string;
+        slug: string;
+        englishSlug: string | null;
+        articleType: string | null;
+        status: string;
+        scheduledAt: Date | null;
+        publishedAt: Date | null;
+        authorId: string | null;
+        reporterId: string | null;
+        submitterId: string | null;
+      };
+    }
   | { ok: false; status: number; message: string }
 > {
   const [existing] = await db
@@ -659,7 +823,7 @@ export async function scheduleApprovedOpinionArticle(
     .where(and(eq(articles.id, articleId), eq(articles.articleType, "opinion")))
     .limit(1);
   if (!existing) return { ok: false, status: 404, message: "مقال الرأي غير موجود" };
-  if (existing.reviewStatus !== "approved")
+  if (existing.reviewStatus !== "approved" && existing.reviewStatus !== "pending_review")
     return { ok: false, status: 400, message: "يجب اعتماد المقال قبل جدولته" };
   if (existing.status === "published")
     return { ok: false, status: 400, message: "المقال منشور بالفعل" };
@@ -671,14 +835,23 @@ export async function scheduleApprovedOpinionArticle(
     .set({
       status: "scheduled",
       publishType: "scheduled",
+      reviewStatus: "approved",
       scheduledAt,
       updatedAt: new Date(),
     })
     .where(eq(articles.id, articleId))
     .returning({
       id: articles.id,
+      title: articles.title,
+      slug: articles.slug,
+      englishSlug: articles.englishSlug,
+      articleType: articles.articleType,
       status: articles.status,
       scheduledAt: articles.scheduledAt,
+      publishedAt: articles.publishedAt,
+      authorId: articles.authorId,
+      reporterId: articles.reporterId,
+      submitterId: articles.submitterId,
     });
   return { ok: true, article: updated };
 }
@@ -708,7 +881,7 @@ export async function getWriterScheduleBanner(
   const [agg] = await db
     .select({
       lastPublishedAt: sql<string | null>`max(${articles.publishedAt}) filter (where ${articles.status} = 'published')`,
-      upcomingCount: sql<number>`count(*) filter (where (${articles.status} = 'scheduled' and ${articles.scheduledAt} >= now()) or ${awaitingEditorialSql})::int`,
+      upcomingCount: sql<number>`count(*) filter (where ${articles.status} = 'scheduled' or (${articles.status} = 'draft' and (${awaitingEditorialSql} or ${articles.reviewStatus} = 'approved')))::int`,
       maxScheduledAt: sql<string | null>`max(${articles.scheduledAt}) filter (where ${articles.status} = 'scheduled')`,
     })
     .from(articles)

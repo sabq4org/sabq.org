@@ -586,19 +586,45 @@ export const ROLE_PERMISSION_DENY_MAP: Record<string, readonly string[]> = {
     "meetings.create",
     PERMISSION_CODES.VIEW_STAFF_PRODUCTIVITY,
   ],
+  [ROLE_NAMES.OPINION_AUTHOR]: [
+    PERMISSION_CODES.ARTICLES_PUBLISH,
+    PERMISSION_CODES.ARTICLES_SCHEDULE,
+    PERMISSION_CODES.ARTICLES_UNPUBLISH,
+    PERMISSION_CODES.ARTICLES_EDIT_ANY,
+    PERMISSION_CODES.ARTICLES_DELETE,
+    PERMISSION_CODES.ARTICLES_ARCHIVE,
+    PERMISSION_CODES.ARTICLES_FEATURE,
+    PERMISSION_CODES.OPINION_PUBLISH,
+    PERMISSION_CODES.OPINION_REVIEW,
+    PERMISSION_CODES.OPINION_REJECT,
+    PERMISSION_CODES.OPINION_EDIT_ANY,
+    PERMISSION_CODES.OPINION_DELETE_ANY,
+  ],
+  [ROLE_NAMES.REPORTER]: [
+    PERMISSION_CODES.ARTICLES_PUBLISH,
+    PERMISSION_CODES.ARTICLES_SCHEDULE,
+    PERMISSION_CODES.ARTICLES_UNPUBLISH,
+    PERMISSION_CODES.ARTICLES_EDIT_ANY,
+    PERMISSION_CODES.ARTICLES_DELETE,
+    PERMISSION_CODES.ARTICLES_ARCHIVE,
+    PERMISSION_CODES.ARTICLES_FEATURE,
+  ],
 };
 
-/** يستبعد صلاحيات ROLE_PERMISSION_DENY_MAP من قائمة فعّالة حسب أدوار المستخدم. */
+/** يستبعد صلاحيات ROLE_PERMISSION_DENY_MAP من قائمة فعّالة حسب أدوار المستخدم (مع الحفاظ على ما يمنحه دور آخر صراحةً في الكود). */
 export function denyPermissionsForRoles(
   roleNames: string[],
   permissions: string[],
 ): string[] {
   if (permissions.includes("*")) return permissions;
 
+  const codeGranted = new Set(getPermissionsForRoles(roleNames));
   const denied = new Set<string>();
   for (const roleName of roleNames) {
     for (const code of ROLE_PERMISSION_DENY_MAP[roleName] || []) {
-      denied.add(code);
+      if (!codeGranted.has(code)) {
+        denied.add(code);
+      }
     }
   }
   if (denied.size === 0) return permissions;

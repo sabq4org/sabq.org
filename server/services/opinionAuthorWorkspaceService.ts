@@ -106,7 +106,7 @@ export async function getOpinionAuthorWorkspace(userId: string) {
 
   const articleTitleById = new Map(writerArticles.map((article) => [article.id, article.title]));
   const desk = writerArticles
-    .filter((article) => article.status === "draft" || article.reviewStatus === "pending_review" || article.reviewStatus === "needs_changes")
+    .filter((article) => article.status === "draft" || article.status === "scheduled" || article.reviewStatus === "pending_review" || article.reviewStatus === "needs_changes")
     .sort((a, b) => Number(b.reviewStatus === "needs_changes") - Number(a.reviewStatus === "needs_changes"))
     .slice(0, 6)
     .map((article) => ({
@@ -116,11 +116,15 @@ export async function getOpinionAuthorWorkspace(userId: string) {
       reviewStatus: article.reviewStatus,
       reviewNotes: article.reviewNotes,
       updatedAt: article.updatedAt || article.createdAt,
-      nextAction: article.reviewStatus === "needs_changes"
-        ? "معالجة ملاحظات التحرير"
-        : article.reviewStatus === "pending_review"
-          ? "بانتظار مراجعة التحرير"
-          : "متابعة الكتابة",
+      nextAction: article.status === "scheduled"
+        ? "مجدول للنشر من هيئة التحرير"
+        : article.reviewStatus === "needs_changes"
+          ? "معالجة ملاحظات التحرير"
+          : article.reviewStatus === "pending_review"
+            ? "في انتظار مراجعة هيئة التحرير والجدولة"
+            : article.reviewStatus === "approved"
+              ? "معتمد وفي انتظار الجدولة"
+              : "متابعة الكتابة",
     }));
 
   const published = writerArticles.filter((article) => article.status === "published");

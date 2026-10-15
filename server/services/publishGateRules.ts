@@ -143,6 +143,7 @@ export function decidePublish(input: {
   // الناشر الموثوق (auto_publish) ينشر دون articles.publish العامة —
   // بوابته المفتوحة هي التفويض.
   const canPublish =
+    permissions.includes("*") ||
     permissions.includes("articles.publish") ||
     (gate.allowed && gate.publisher?.autoPublish === true);
 

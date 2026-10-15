@@ -11,7 +11,8 @@
  * decision itself lives in ./publishGateRules so it stays db-free and unit
  * testable — see tests/unit/publishGate.test.ts.
  */
-import { getUserPermissionData } from "../rbac";
+import { resolveEffectivePermissions } from "@shared/rbac-constants";
+import { getUserPermissionData, getUserRoleNames } from "../rbac";
 import { getPublishingGate } from "./publisherPortalService";
 import { decidePublish, isPublishingStatus, type PublishDenial } from "./publishGateRules";
 
@@ -44,10 +45,22 @@ export async function denyPublish(
     return { httpStatus: 401, message: "يجب تسجيل الدخول للنشر" };
   }
 
-  const [gate, permissionData] = await Promise.all([
+  const [gate, permissionData, roleNames] = await Promise.all([
     getPublishingGate(userId),
     getUserPermissionData(userId),
+    getUserRoleNames(userId),
   ]);
 
-  return decidePublish({ nextStatus, gate, ...permissionData });
+  const effectivePermissions = resolveEffectivePermissions(
+    roleNames,
+    permissionData.permissions,
+    permissionData.deniedPermissionCodes,
+  );
+
+  return decidePublish({
+    nextStatus,
+    gate,
+    permissions: effectivePermissions,
+    deniedPermissionCodes: permissionData.deniedPermissionCodes,
+  });
 }
