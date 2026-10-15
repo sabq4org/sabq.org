@@ -5,6 +5,7 @@
 import { and, asc, desc, eq, isNotNull } from "drizzle-orm";
 import { mawaeedChanges, mawaeedOccurrences, mawaeedSeries, users } from "@shared/schema";
 import {
+  mawaeedSitemapEntries,
   planOccurrenceWrite,
   type Certainty,
   type OccurrenceRecord,
@@ -160,13 +161,7 @@ export async function getAdminBundle(): Promise<AdminBundle> {
 }
 
 export async function listSitemapEntries(): Promise<{ loc: string; lastmod: string }[]> {
-  const series = (await loadSeries()).filter((item) => item.published);
-  if (series.length === 0) return [];
-  const latest = series.map((item) => item.contentUpdatedAt).sort().at(-1)!;
-  return [
-    { loc: "https://sabq.org/mawaeed", lastmod: latest },
-    ...series.map((item) => ({ loc: `https://sabq.org/mawaeed/${item.slug}`, lastmod: item.contentUpdatedAt })),
-  ];
+  return mawaeedSitemapEntries(await loadSeries());
 }
 
 function applyWrite(seriesId: string, id: string, write: OccurrenceWrite, previous: OccurrenceRecord | null): OccurrenceRecord {

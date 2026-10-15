@@ -1,19 +1,19 @@
 # مواعيدك (`mawaeed`)
 
-> آخر مراجعة: 2026-09-28 | المالك: التحرير (البيانات) / المنصة (الصفحة والحافة)
+> آخر مراجعة: 2026-10-15 | المالك: التحرير (البيانات) / المنصة (الصفحة والحافة)
 
 ## الغرض
 صفحة عامة على `/mawaeed` تعرض مواعيد الخدمات العامة القادمة في السعودية: الرواتب، حساب المواطن، الضمان الاجتماعي، التقاعد، وإجازات التقويم الدراسي 1448. الصفحة HTML خفيف من حافة Pages، والبيانات من JSON على الـ API.
 
 ## الحدود (In / Out of scope)
-- داخل النطاق: السلاسل والمواعيد وسجل التغيير، صلاحية `mawaeed.edit`، لوحة `/dashboard/mawaeed`، الصفحة العامة وأقسامها، خريطة `sitemap-mawaeed.xml`.
-- خارج النطاق: ملف `.ics`، صور المشاركة وواتساب، واجهة سجل التغيير للجمهور، وربط الأخبار بالوسوم. التقويم التحريري (`calendar`) ليس مصدر هذه الصفحة.
+- داخل النطاق: السلاسل والمواعيد وسجل التغيير، صلاحية `mawaeed.edit`، لوحة `/dashboard/mawaeed`، الصفحة العامة وأقسامها، صفحة الجواب `/services/citizen-account-date`، خريطة `sitemap-mawaeed.xml`.
+- خارج النطاق: ملف `.ics`، صور المشاركة وواتساب، واجهة سجل التغيير للجمهور، وكتابة وسوم على صفوف المواعيد. التقويم التحريري (`calendar`) ليس مصدر هذه الصفحة.
 
 ## نقاط الدخول
 | الطبقة | المسار |
 |--------|--------|
 | Backend | `server/services/mawaeedService.ts`, `server/routes/mawaeed.ts` |
-| Web | `functions/mawaeedPage.js`, `functions/_middleware.js`, `client/src/pages/dashboard/MawaeedManagement.tsx` |
+| Web | `functions/mawaeedPage.js`, `functions/citizenAccountDatePage.js`, `functions/_middleware.js`, `client/src/pages/dashboard/MawaeedManagement.tsx` |
 | Shared | `shared/mawaeed/*` |
 | Schema | `mawaeed_series`, `mawaeed_occurrences`, `mawaeed_changes` في `shared/schema.ts` و`migrations/20260927_mawaeed.sql` |
 | Seed | `scripts/seed-mawaeed.ts`, `migrations/20260927_mawaeed_seed.sql`, `data/mawaeed/2026-09-27-mawaeed-dates.csv` |
@@ -40,6 +40,7 @@
 - ملف الهجرة مؤرخ `20260927_mawaeed.sql` ويمكن إعادة تسميته إن تعارض مع هجرة أخرى. الجداول جديدة فقط.
 - حساب التشغيل `sabq_runtime` لا يرث صلاحية الجداول التي ينشئها `neondb_owner`. `migrations/20260927_mawaeed_runtime_grants.sql` يمنح `SELECT, INSERT, UPDATE, DELETE` على الجداول الثلاثة داخل `DO` يفحص `pg_roles`، فيُتخطى حيث لا يوجد الدور. يُشغَّل بمالك الجداول ولا يُنفَّذ مع نشر الكود. غيابه يعيد `42501 permission denied for table mawaeed_series` و500. الخطأ يُسجَّل في الطرفية ويُرسل إلى Sentry مع رمز Postgres.
 - لا تُضاف حقائق هوية عن سبق (سنة التأسيس وغيرها) إلى الصفحة أو المخطط. `FAQPage` للقراءة الآلية بعد توقف نتائج الأسئلة الغنية في 7 مايو 2026.
+- صفحة الجواب `/services/citizen-account-date` تقرأ `GET /api/mawaeed/citizen-account` ولا تخزّن مواعيدها. التاريخ والشارة («متوقع» أو «مؤكد») والعدّاد من البطاقة المنشورة. صف «يحتاج تحقق» لا يظهر. أخبار «حساب المواطن» من `GET /api/keyword/حساب المواطن`؛ فشلها يحذف قائمة الأخبار ولا يُسقط الصفحة. `dateModified` من `content_updated_at` للسلسلة. الرابط موجود في `/mawaeed` وصفحة القسم، والعنوان داخل `sitemap-mawaeed.xml`.
 
 ## صحة وتشغيل
 - `GET /api/mawaeed` و`GET /api/mawaeed/:slug` بكاش `public, max-age=30, s-maxage=60`.

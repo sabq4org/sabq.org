@@ -38,6 +38,11 @@
 - [Sabq English](https://sabq.org/en)
 - [سبق اردو](https://sabq.org/ur)
 
+## خدمات ومواعيد / Services
+
+- [موعد صرف حساب المواطن](https://sabq.org/services/citizen-account-date): موعد الدفعة القادمة (هجري وميلادي) وجدول الصرف من بيانات مواعيدك. التواريخ المحسوبة موسومة «متوقع».
+- [مواعيدك](https://sabq.org/mawaeed): الرواتب وحساب المواطن والضمان والتقاعد والتقويم الدراسي
+
 ## الاكتشاف الآلي / Machine-readable
 
 - [Sitemap](https://sabq.org/sitemap.xml)

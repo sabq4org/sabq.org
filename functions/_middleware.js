@@ -56,6 +56,7 @@
 
 import { createPublicApiBurstCache, newPublicApiCacheKey, newPublicApiPolicy } from "../cloudflare-worker/public-api-burst-cache.js";
 import { mawaeedSlugFromPath, serveMawaeedPage } from "./mawaeedPage.js";
+import { isCitizenAccountDatePath, serveCitizenAccountDatePage } from "./citizenAccountDatePage.js";
 
 export { newPublicApiCacheKey, newPublicApiPolicy };
 
@@ -1135,6 +1136,20 @@ async function handleRequest(context) {
     mawaeedSlugFromPath(path) !== null
   ) {
     return serveMawaeedPage({
+      request,
+      url,
+      env,
+      waitUntil: (promise) => context.waitUntil(promise),
+      signProxyRequest,
+    });
+  }
+
+  // صفحة جواب «موعد صرف حساب المواطن»: نفس بيانات مواعيدك، HTML مبكر للزواحف.
+  if (
+    (request.method === "GET" || request.method === "HEAD") &&
+    isCitizenAccountDatePath(path)
+  ) {
+    return serveCitizenAccountDatePage({
       request,
       url,
       env,

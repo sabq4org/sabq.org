@@ -6,6 +6,8 @@
  * بساعة أيام/ساعات/دقائق، ثم بطاقات أقسام بمربع «باقي N يوم» مرتبة من الأقرب، ثم منهجية وأسئلة.
  */
 
+import { CITIZEN_ACCOUNT_DATE_PATH } from "./citizenAccountDatePage.js";
+
 const REGIONS = ["riyadh", "makkah", "madinah", "jeddah", "taif"];
 
 /** تطبيع للعربية: إزالة التشكيل والتطويل وتوحيد المسافات — لمقارنة العناوين فقط. */
@@ -61,6 +63,12 @@ function regionHref(pathname, id) {
 
 function kindClass(kind) {
   return KIND_CLASS[kind] || "k-school";
+}
+
+/** رابط صفحة الجواب. يظهر مع سلسلة حساب المواطن فقط. */
+function citizenServiceLink(block) {
+  if (!block || block.slug !== "citizen-account") return "";
+  return `<p class="service-link"><a href="${CITIZEN_ACCOUNT_DATE_PATH}">موعد صرف حساب المواطن</a></p>`;
 }
 
 /* ───────── الوقت المتبقي (نفس منطق السكربت في المتصفح) ───────── */
@@ -264,6 +272,7 @@ function seriesRow(block, nowMs) {
       </div>
       ${next ? tileHtml(next, nowMs) : ""}
     </a>
+    ${citizenServiceLink(block)}
     <details class="more"><summary>التفاصيل والمصدر</summary><div class="more-body">${details}</div></details>
   </article>`;
 }
@@ -293,6 +302,7 @@ function seriesDetail(block) {
     ${followHtml(block)}
     <p class="summary">${esc(block.summary)}</p>
     ${prevHtml(block)}
+    ${citizenServiceLink(block)}
   </section>`;
 }
 
@@ -628,6 +638,8 @@ ${jsonLd}
   .tile-word { font-size:.85rem; font-weight:700; padding:0 4px; line-height:1.4; }
   .tile-past { color:var(--neutral); background:var(--neutral-soft); }
 
+  .service-link { margin:0 14px 12px; font-size:.92rem; font-weight:700; }
+  .panel .service-link { margin:12px 0 0; }
   .answer { margin:0; font-size:.92rem; color:var(--ink); }
   .answer-lg { padding:0; font-size:1rem; }
   .more { border-top:1px solid var(--line); }

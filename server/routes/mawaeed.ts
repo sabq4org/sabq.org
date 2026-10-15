@@ -17,7 +17,7 @@ import {
   updateOccurrence,
 } from "../services/mawaeedService";
 import { occurrenceWriteSchema } from "@shared/mawaeed/validate";
-import { SERIES_CATALOG } from "@shared/mawaeed/model";
+import { CITIZEN_ACCOUNT_DATE_PATH, SERIES_CATALOG } from "@shared/mawaeed/model";
 
 const router = Router();
 const PUBLIC_CACHE = "public, max-age=30, s-maxage=60";
@@ -49,7 +49,7 @@ function sendError(res: Response, error: unknown) {
 }
 
 async function purgeMawaeed() {
-  const paths = ["/mawaeed", ...SERIES_CATALOG.map((item) => `/mawaeed/${item.slug}`)];
+  const paths = ["/mawaeed", CITIZEN_ACCOUNT_DATE_PATH, ...SERIES_CATALOG.map((item) => `/mawaeed/${item.slug}`)];
   const regions = ["riyadh", "makkah", "madinah", "jeddah", "taif"];
   const urls = paths.flatMap((path) => [path, ...regions.map((region) => `${path}?region=${region}`)]);
   urls.push("/sitemap-mawaeed.xml");

@@ -1,6 +1,6 @@
 # SEO و SSR (`seo-ssr`)
 
-> آخر مراجعة: 2026-10-13 (حجب زواحف التدريب في robots.txt) | المالك: platform
+> آخر مراجعة: 2026-10-15 (صفحة جواب حساب المواطن) | المالك: platform
 
 ## الغرض
 ميتادات للدوالش، إعادة توجيه السلاق، وSSR للمحتوى العام عبر `web-next`.
@@ -125,4 +125,12 @@
 - `GET/HEAD /mawaeed` و`/mawaeed/:slug` يخرجان من `functions/_middleware.js` قبل البروكسي وقبل قشرة SPA، عبر `functions/mawaeedPage.js`. البشر والزواحف يرون الوثيقة نفسها. المسار ليس في `spaTopLevelRoutes`.
 - المصدر `GET /api/mawaeed` على Railway. الفشل 503 مع `noindex` و`no-store` ولا سقوط إلى القشرة. `dateModified` يأتي من JSON (`content_updated_at`) لا من ساعة الطلب.
 - كاش المتصفح `private, no-cache`. `CDN-Cache-Control: public, max-age=60`. مفتاح Workers يضم المنطقة ووسم النشر حتى لا تختلط نسخة الرياض بمكة. المسح العادي لا يفرغ مفاتيح Workers المخصصة.
+
+## موعد صرف حساب المواطن — 2026-10-15
+
+- `GET/HEAD /services/citizen-account-date` يخرج من `functions/_middleware.js` قبل البروكسي وقبل قشرة SPA، عبر `functions/citizenAccountDatePage.js`. البشر والزواحف يرون الوثيقة نفسها.
+- المصدر `GET /api/mawaeed/citizen-account`. لا تواريخ في القالب. الفشل 503 مع `noindex` و`no-store` ولا سقوط إلى القشرة. `dateModified` من JSON.
+- أخبار مرتبطة اختيارية من `GET /api/keyword/حساب المواطن`. فشلها لا يغيّر حالة الصفحة.
+- على غير `sabq.org` تُعلَن `noindex`. في staging يفرض `onRequest` أيضاً `noindex, nofollow, noarchive` و`no-store`.
+- العنوان مذكور في `sitemap-mawaeed.xml`، والرابط من `/mawaeed`.
 

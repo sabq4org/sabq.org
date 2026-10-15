@@ -259,6 +259,33 @@ export function publicSnapshot(row: OccurrenceRecord | null): PublicSnapshot | n
   };
 }
 
+export const CITIZEN_ACCOUNT_DATE_PATH = "/services/citizen-account-date";
+export const SITE_ORIGIN = "https://sabq.org";
+
+/** روابط خريطة مواعيدك. صفحة موعد الصرف تُضاف فقط إن كانت سلسلة حساب المواطن منشورة. */
+export function mawaeedSitemapEntries(
+  series: Pick<SeriesRecord, "slug" | "published" | "contentUpdatedAt">[],
+): { loc: string; lastmod: string }[] {
+  const published = series.filter((item) => item.published);
+  if (published.length === 0) return [];
+  const latest = published.map((item) => item.contentUpdatedAt).sort().at(-1)!;
+  const entries = [
+    { loc: `${SITE_ORIGIN}/mawaeed`, lastmod: latest },
+    ...published.map((item) => ({
+      loc: `${SITE_ORIGIN}/mawaeed/${item.slug}`,
+      lastmod: item.contentUpdatedAt,
+    })),
+  ];
+  const citizen = published.find((item) => item.slug === "citizen-account");
+  if (citizen) {
+    entries.push({
+      loc: `${SITE_ORIGIN}${CITIZEN_ACCOUNT_DATE_PATH}`,
+      lastmod: citizen.contentUpdatedAt,
+    });
+  }
+  return entries;
+}
+
 export function planOccurrenceWrite(before: OccurrenceRecord | null, after: OccurrenceRecord): {
   action: "create" | "update";
   publicChanged: boolean;

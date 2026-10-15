@@ -1,7 +1,7 @@
 {
   "$schemaNote": "Machine-readable catalog of Sabq product systems. Consumed by scripts/systems-inventory.mjs and /api/admin/systems-catalog. aiFeatureKeys must be exclusive (one system owner) to avoid double-counting.",
   "version": 2,
-  "updatedAt": "2026-08-01",
+  "updatedAt": "2026-10-15",
   "systems": [
     {
       "id": "account-center",
@@ -844,6 +844,36 @@
         "platform"
       ],
       "lastReviewed": "2026-07-30"
+    },
+    {
+      "id": "mawaeed",
+      "nameAr": "مواعيدك",
+      "nameEn": "Mawaeed",
+      "status": "active",
+      "category": "content",
+      "summary": "مواعيد الرواتب وحساب المواطن والضمان والتقاعد والتقويم الدراسي، وصفحة جواب موعد صرف حساب المواطن من نفس البيانات.",
+      "docPath": "docs/systems/mawaeed/SYSTEM.md",
+      "relatedDocs": [
+        "docs/systems/seo-ssr/SYSTEM.md"
+      ],
+      "pathGlobs": [
+        "server/services/mawaeedService.ts",
+        "server/routes/mawaeed.ts",
+        "shared/mawaeed/**",
+        "functions/mawaeedPage.js",
+        "functions/citizenAccountDatePage.js",
+        "client/src/pages/dashboard/MawaeedManagement.tsx",
+        "docs/systems/mawaeed/**",
+        "tests/unit/mawaeed*.test.ts",
+        "tests/unit/citizenAccountDate*.test.ts"
+      ],
+      "aiFeatureKeys": [],
+      "dashboardPath": "/dashboard/mawaeed",
+      "owners": [
+        "editorial",
+        "platform"
+      ],
+      "lastReviewed": "2026-10-15"
     }
   ]
 }
