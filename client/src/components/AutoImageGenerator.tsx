@@ -16,7 +16,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Loader2, Wand2, AlertCircle, Sparkles } from "lucide-react";
+import { ImagePlus, Layers, LayoutGrid, Loader2, Wand2, AlertCircle, Sparkles } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { ImageStyleSelector } from "@/components/ImageStyleSelector";
@@ -32,6 +32,11 @@ interface AutoImageGeneratorProps {
   articleType?: string;
   hasImage?: boolean;
   onImageGenerated?: (imageUrl: string, altText: string) => void;
+  onOpenGptDialog?: () => void;
+  onOpenCustomAiDialog?: () => void;
+  onOpenInfographicDialog?: () => void;
+  onOpenStoryCardsDialog?: () => void;
+  canUseInfographics?: boolean;
 }
 
 export function AutoImageGenerator({
@@ -43,7 +48,12 @@ export function AutoImageGenerator({
   language = "ar",
   articleType = "news",
   hasImage = false,
-  onImageGenerated
+  onImageGenerated,
+  onOpenGptDialog,
+  onOpenCustomAiDialog,
+  onOpenInfographicDialog,
+  onOpenStoryCardsDialog,
+  canUseInfographics = false,
 }: AutoImageGeneratorProps) {
   const [isGenerating, setIsGenerating] = useState(false);
   const [autoGenerate, setAutoGenerate] = useState(false);
@@ -85,20 +95,63 @@ export function AutoImageGenerator({
       : stylesDataRaw?.defaultSlug ?? null);
 
   const handleGenerateImage = async (forceGeneration = false) => {
-    if (!articleId) {
+    if (!title.trim()) {
       toast({
-        title: language === "ar" ? "خطأ" : "Error",
-        description: language === "ar" ? 
-          "يجب حفظ المقال أولاً قبل توليد الصورة" : 
-          "Article must be saved before generating image",
-        variant: "destructive"
+        title: language === "ar" ? "تنبيه" : "Notice",
+        description:
+          language === "ar"
+            ? "يرجى كتابة عنوان الخبر أولاً لتوليد صورة مناسبة له"
+            : "Please enter an article title first",
+        variant: "destructive",
       });
       return;
     }
 
     setIsGenerating(true);
-    
+
     try {
+      // إذا لم يُحفظ المقال بعد (مسودة جديدة بدون articleId)، نولّد مباشرة عبر مسار Nano Banana بالنمط المختار
+      if (!articleId) {
+        const promptSeed = `صورة صحفية تعبيرية للخبر: ${title.trim()}${
+          excerpt?.trim() ? `\n${excerpt.trim().slice(0, 220)}` : ""
+        }`;
+        const directRes = await apiRequest<{
+          imageUrl?: string;
+          error?: string;
+          message?: string;
+        }>("/api/nano-banana/generate", {
+          method: "POST",
+          body: JSON.stringify({
+            prompt: promptSeed,
+            imageSize: "2K",
+            aspectRatio: "16:9",
+            enableThinking: true,
+            enableSearchGrounding: false,
+            intent: effectiveStyleSlug === "infographic" ? "infographic" : "photo",
+            ...(effectiveStyleSlug ? { styleSlug: effectiveStyleSlug, category } : {}),
+          }),
+        });
+
+        if (directRes?.imageUrl) {
+          toast({
+            title: language === "ar" ? "تم التوليد بنجاح" : "Generated Successfully",
+            description:
+              language === "ar"
+                ? "تم توليد الصورة بالذكاء الاصطناعي وتعيينها كصورة بارزة"
+                : "AI image generated successfully",
+          });
+          onImageGenerated?.(directRes.imageUrl, title.trim());
+          setShowConfirmDialog(false);
+        } else {
+          toast({
+            title: language === "ar" ? "فشل التوليد" : "Generation Failed",
+            description: directRes?.error || directRes?.message || "تعذر توليد الصورة",
+            variant: "destructive",
+          });
+        }
+        return;
+      }
+
       const response = await apiRequest<{
         success: boolean;
         imageUrl?: string;
@@ -117,20 +170,20 @@ export function AutoImageGenerator({
           articleType,
           forceGeneration,
           // نمط هذه التوليدة (من بطاقات الاختيار) — لا يغيّر إعدادات النظام
-          styleSlug: effectiveStyleSlug || undefined
-        })
+          styleSlug: effectiveStyleSlug || undefined,
+        }),
       });
 
       if (response.success && response.imageUrl) {
         toast({
           title: language === "ar" ? "تم التوليد بنجاح" : "Generated Successfully",
-          description: response.message || 
-            (language === "ar" ? 
-              "تم توليد الصورة بالذكاء الاصطناعي" : 
-              "AI image generated successfully")
+          description:
+            response.message ||
+            (language === "ar"
+              ? "تم توليد الصورة بالذكاء الاصطناعي"
+              : "AI image generated successfully"),
         });
 
-        // Call callback with generated image
         if (onImageGenerated) {
           onImageGenerated(response.imageUrl, response.altText || "");
         }
@@ -140,14 +193,14 @@ export function AutoImageGenerator({
         toast({
           title: language === "ar" ? "فشل التوليد" : "Generation Failed",
           description: response.error || response.message,
-          variant: "destructive"
+          variant: "destructive",
         });
       }
     } catch (error: any) {
       toast({
         title: language === "ar" ? "تعذّر توليد الصورة" : "Image generation failed",
         description: error.message || "Failed to generate image",
-        variant: "destructive"
+        variant: "destructive",
       });
     } finally {
       setIsGenerating(false);
@@ -165,45 +218,104 @@ export function AutoImageGenerator({
 
   const isAutoGenerationEligible = () => {
     if (!settings) return false;
-    
-    // Check if enabled
     if (!settings.enabled) return false;
-    
-    // Check article type
     if (!settings.articleTypes.includes(articleType)) return false;
-    
-    // Check if category is skipped
     if (category && settings.skipCategories.includes(category)) return false;
-    
-    // Article must not have an image
     if (hasImage) return false;
-    
     return true;
   };
 
   return (
     <>
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Wand2 className="h-4 w-4" />
-            {language === "ar" ? "التوليد التلقائي للصور" : "Auto Image Generation"}
-          </CardTitle>
+      <Card className="border-primary/20 bg-gradient-to-b from-primary/[0.03] to-transparent shadow-sm" data-testid="ai-image-studio-block">
+        <CardHeader className="pb-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <CardTitle className="text-sm sm:text-base flex items-center gap-2">
+              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                <Wand2 className="h-4 w-4" />
+              </span>
+              <span>
+                {language === "ar" ? "توليد الصور بالذكاء الاصطناعي" : "AI Image Generation"}
+              </span>
+            </CardTitle>
+            <span className="text-[11px] text-muted-foreground">
+              اختر نمطاً للتوليد الفوري من العنوان أو افتح أداة متخصصة
+            </span>
+          </div>
+
+          {/* شريط أدوات التوليد الذكي الموحد — صور GPT + استوديو مخصص + إنفوجرافيك + قصص مصورة في مكان واحد */}
+          {language === "ar" && (onOpenGptDialog || onOpenCustomAiDialog || onOpenInfographicDialog || onOpenStoryCardsDialog) && (
+            <div className="pt-2.5 grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2">
+              {onOpenGptDialog && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={onOpenGptDialog}
+                  className="no-min-touch-size h-8 gap-1.5 px-3 text-xs font-semibold border-sky-300 bg-sky-50/90 text-sky-900 hover:bg-sky-100 dark:border-sky-800 dark:bg-sky-950/70 dark:text-sky-100"
+                  data-testid="button-generate-openai-image"
+                >
+                  <ImagePlus className="h-3.5 w-3.5 text-sky-600 dark:text-sky-400" />
+                  صور GPT
+                </Button>
+              )}
+              {onOpenCustomAiDialog && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={onOpenCustomAiDialog}
+                  className="no-min-touch-size h-8 gap-1.5 px-3 text-xs font-medium bg-background/80"
+                  data-testid="button-generate-ai-image"
+                >
+                  <Sparkles className="h-3.5 w-3.5 text-primary" />
+                  توليد بوصف مخصص
+                </Button>
+              )}
+              {canUseInfographics && onOpenInfographicDialog && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={onOpenInfographicDialog}
+                  className="no-min-touch-size h-8 gap-1.5 px-3 text-xs font-medium bg-background/80"
+                  data-testid="button-generate-infographic"
+                >
+                  <LayoutGrid className="h-3.5 w-3.5 text-primary" />
+                  إنفوجرافيك
+                </Button>
+              )}
+              {onOpenStoryCardsDialog && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={onOpenStoryCardsDialog}
+                  className="no-min-touch-size h-8 gap-1.5 px-3 text-xs font-medium bg-background/80"
+                  data-testid="button-generate-story-cards"
+                >
+                  <Layers className="h-3.5 w-3.5 text-primary" />
+                  قصص مصورة
+                </Button>
+              )}
+            </div>
+          )}
         </CardHeader>
-        <CardContent className="space-y-4">
+
+        <CardContent className="space-y-3.5 pt-0">
           {/* Auto Generation Toggle */}
           {!hasImage && isAutoGenerationEligible() && (
-            <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+            <div className="flex items-center justify-between p-2.5 bg-muted/50 rounded-lg border border-border/60">
               <div>
-                <Label htmlFor="auto-generate">
-                  {language === "ar" ? 
-                    "توليد صورة تلقائياً عند النشر" : 
-                    "Auto-generate image on publish"}
+                <Label htmlFor="auto-generate" className="text-xs font-semibold cursor-pointer">
+                  {language === "ar"
+                    ? "توليد صورة تلقائياً عند النشر"
+                    : "Auto-generate image on publish"}
                 </Label>
-                <p className="text-xs text-muted-foreground mt-1">
-                  {language === "ar" ? 
-                    "سيتم توليد صورة بالذكاء الاصطناعي إذا لم يكن للمقال صورة" : 
-                    "An AI image will be generated if article has no image"}
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  {language === "ar"
+                    ? "سيتم توليد صورة بالذكاء الاصطناعي إذا لم يكن للمقال صورة"
+                    : "An AI image will be generated if article has no image"}
                 </p>
               </div>
               <Switch
@@ -225,54 +337,51 @@ export function AutoImageGenerator({
             />
           )}
 
-          {/* Manual Generation Button */}
+          {/* Manual Generation Button + GPT Quick Action */}
           <div className="flex flex-col gap-2">
-            {hasImage && (
-              <Alert>
-                <AlertCircle className="h-4 w-4" />
-                <AlertTitle>
-                  {language === "ar" ? "المقال له صورة بالفعل" : "Article already has an image"}
-                </AlertTitle>
-                <AlertDescription>
-                  {language === "ar" ? 
-                    "يمكنك توليد صورة جديدة لاستبدال الصورة الحالية" : 
-                    "You can generate a new image to replace the current one"}
-                </AlertDescription>
-              </Alert>
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+              <Button
+                type="button"
+                variant={hasImage ? "outline" : "default"}
+                onClick={() => (hasImage ? setShowConfirmDialog(true) : handleGenerateImage(false))}
+                disabled={isGenerating || !title.trim()}
+                className="flex-1 gap-2"
+                data-testid="button-auto-generate-by-style"
+              >
+                {isGenerating ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    {language === "ar" ? "جاري التوليد..." : "Generating..."}
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="h-4 w-4" />
+                    {language === "ar"
+                      ? hasImage
+                        ? "توليد صورة جديدة بالنمط المختار"
+                        : "توليد فوري بالنمط المختار"
+                      : hasImage
+                        ? "Generate New Image"
+                        : "Generate AI Image"}
+                  </>
+                )}
+              </Button>
+            </div>
+
+            {!title.trim() && language === "ar" && (
+              <p className="text-[11px] text-amber-600 dark:text-amber-400">
+                اكتب عنوان الخبر أولاً لتفعيل التوليد الفوري بالنمط المختار، أو استخدم «صور GPT» / «توليد بوصف مخصص».
+              </p>
             )}
 
-            <Button
-              variant={hasImage ? "outline" : "default"}
-              onClick={() => hasImage ? setShowConfirmDialog(true) : handleGenerateImage(false)}
-              disabled={isGenerating || !title}
-            >
-              {isGenerating ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin ml-2" />
-                  {language === "ar" ? "جاري التوليد..." : "Generating..."}
-                </>
-              ) : (
-                <>
-                  <Sparkles className="h-4 w-4 ml-2" />
-                  {language === "ar" ? 
-                    (hasImage ? "توليد صورة جديدة" : "توليد صورة بالذكاء الاصطناعي") : 
-                    (hasImage ? "Generate New Image" : "Generate AI Image")}
-                </>
-              )}
-            </Button>
-
-            {/* AI Disclaimer */}
-            <Alert className="mt-2">
-              <AlertCircle className="h-4 w-4" />
-              <AlertTitle>
-                {language === "ar" ? "تنبيه مهم" : "Important Notice"}
-              </AlertTitle>
-              <AlertDescription>
-                {language === "ar" ? 
-                  `الصور المُولّدة بالذكاء الاصطناعي سيتم تعريفها تلقائياً بعبارة: "${getAiDisclaimer()}"` : 
-                  `AI-generated images will be automatically labeled with: "${getAiDisclaimer()}"`}
-              </AlertDescription>
-            </Alert>
+            <p className="text-[11px] text-muted-foreground flex items-center gap-1.5">
+              <AlertCircle className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              <span>
+                {language === "ar"
+                  ? `تُوسم الصور المولّدة تلقائياً بعبارة: «${getAiDisclaimer()}»`
+                  : `AI-generated images are automatically labeled: "${getAiDisclaimer()}"`}
+              </span>
+            </p>
           </div>
         </CardContent>
       </Card>

@@ -3390,12 +3390,11 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                         <ImagePlus className="h-4 w-4 text-primary" />
                       </div>
                       <p className="min-w-0 flex-1 leading-relaxed">
-                        اختر صورة من مكتبة الوسائط، أو ارفع من جهازك، أو ولّد صورة بالذكاء الاصطناعي.
+                        اختر صورة جاهزة من المكتبة أو جهازك، أو استخدم بلك توليد الصور بالذكاء الاصطناعي أدناه.
                       </p>
                     </div>
                   )}
-                  {/* على الجوال: شبكة عمودين بعرض ثابت حتى لا تتزاحم العبارات أو تُقصّ؛
-                      من sm فما فوق: صف مرن كالمعتاد. */}
+                  {/* صف المصادر الجاهزة (المكتبة / رفع من الجهاز / دمج شعار) — واضح بالكامل بدون قوائم مخفية */}
                   <div
                     className={cn(
                       "grid gap-2 sm:flex sm:flex-wrap sm:items-center",
@@ -3405,15 +3404,17 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                   >
                     {!isOpinionAuthor ? (
                       <Button
+                        type="button"
                         onClick={() => setShowMediaPicker(true)}
                         className="no-min-touch-size h-9 gap-2 w-full min-w-0 px-3 text-sm sm:w-auto sm:min-w-[9.5rem]"
                         data-testid="button-choose-from-library"
                       >
                         <ImageIcon className="h-4 w-4" />
-                        {imageUrl ? "تغيير الصورة" : "اختر صورة"}
+                        {imageUrl ? "تغيير الصورة" : "اختر من المكتبة"}
                       </Button>
                     ) : null}
                     <Button
+                      type="button"
                       variant={isOpinionAuthor ? "default" : "outline"}
                       onClick={() => document.getElementById("image-upload")?.click()}
                       disabled={isUploadingImage}
@@ -3427,29 +3428,53 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                       )}
                       {isOpinionAuthor ? (imageUrl ? "تغيير الصورة" : "رفع صورة") : "رفع من الجهاز"}
                     </Button>
-                    {!isOpinionAuthor && canGenerateImages && (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => setShowOpenAIImageDialog(true)}
-                        className="no-min-touch-size h-9 gap-2 w-full min-w-0 px-3 text-sm sm:w-auto border-sky-300 bg-sky-50 text-sky-900 hover:bg-sky-100 dark:border-sky-800 dark:bg-sky-950 dark:text-sky-100"
-                        data-testid="button-generate-openai-image"
-                      >
-                        <ImagePlus className="h-4 w-4" />
-                        صور GPT
-                      </Button>
-                    )}
                     {!isOpinionAuthor && (
                       <Button
                         type="button"
+                        variant="outline"
+                        onClick={() => setShowLogoComposer(true)}
+                        disabled={isUploadingImage}
+                        className="no-min-touch-size h-9 gap-2 w-full min-w-0 px-3 text-sm sm:w-auto"
+                        data-testid="button-logo-composer"
+                      >
+                        <Frame className="h-4 w-4" />
+                        أدوات الشعار
+                      </Button>
+                    )}
+                    {!isOpinionAuthor && imageUrl && (
+                      <span title={!article?.id ? "متاح بعد حفظ الخبر" : undefined} className="w-full sm:w-auto">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={handleGenerateHeroCaption}
+                          disabled={!article?.id || generatingCaption}
+                          className="no-min-touch-size h-9 gap-2 w-full sm:w-auto px-3 text-sm"
+                          data-testid="button-ai-hero-caption"
+                        >
+                          {generatingCaption ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <FileText className="h-4 w-4 text-primary" />
+                          )}
+                          وصف وتعليق ذكي
+                        </Button>
+                      </span>
+                    )}
+                    {!isOpinionAuthor && canGenerateImages && (
+                      <Button
+                        type="button"
                         variant="ghost"
-                        onClick={() => setImageToolsOpen((open) => !open)}
-                        className="no-min-touch-size h-9 gap-1.5 w-full min-w-0 px-3 text-sm text-muted-foreground sm:w-auto border border-transparent hover:border-border/70"
+                        onClick={() => {
+                          setAutoImageOpen(true);
+                          document
+                            .querySelector('[data-testid="ai-image-studio-block"]')
+                            ?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+                        }}
+                        className="no-min-touch-size h-9 gap-1.5 w-full min-w-0 px-3 text-xs font-semibold text-primary hover:bg-primary/10 sm:w-auto sm:mr-auto"
                         data-testid="button-toggle-image-tools"
                       >
-                        <MoreHorizontal className="h-4 w-4" />
-                        المزيد
-                        <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", imageToolsOpen && "rotate-180")} />
+                        <Sparkles className="h-3.5 w-3.5" />
+                        استوديو توليد الصور (AI)
                       </Button>
                     )}
                   </div>
@@ -3457,76 +3482,6 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                     <div className="space-y-2" role="status" aria-live="polite" data-testid="hero-upload-progress">
                       <p className="text-xs text-muted-foreground">{newsImageUploadLabel(imageUploadProgress)}</p>
                       <Progress value={imageUploadProgress.percent} className="h-1.5" />
-                    </div>
-                  )}
-                  {!isOpinionAuthor && imageToolsOpen && (
-                    <div className="grid grid-cols-2 gap-2 rounded-xl border border-border/70 bg-muted/30 p-2.5 sm:flex sm:flex-wrap [&>button]:w-full [&>button]:min-w-0 [&>span]:min-w-0 [&>span>button]:w-full sm:[&>button]:w-auto sm:[&>span>button]:w-auto">
-                      {imageUrl && (
-                        <span title={!article?.id ? "متاح بعد حفظ الخبر" : undefined}>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={handleGenerateHeroCaption}
-                            disabled={!article?.id || generatingCaption}
-                            className="no-min-touch-size h-8 gap-2"
-                            data-testid="button-ai-hero-caption"
-                          >
-                            {generatingCaption ? (
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                            ) : (
-                              <FileText className="h-4 w-4 text-primary" />
-                            )}
-                            وصف وتعليق ذكي
-                          </Button>
-                        </span>
-                      )}
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setShowLogoComposer(true)}
-                        disabled={isUploadingImage}
-                        className="no-min-touch-size h-8 gap-2"
-                        data-testid="button-logo-composer"
-                      >
-                        <Frame className="h-4 w-4" />
-                        أدوات الشعار
-                      </Button>
-                      {canGenerateImages && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setShowAIImageDialog(true)}
-                          className="no-min-touch-size h-8 gap-2"
-                          data-testid="button-generate-ai-image"
-                        >
-                          <Sparkles className="h-4 w-4 text-primary" />
-                          توليد بالذكاء الاصطناعي
-                        </Button>
-                      )}
-                      {canUseInfographics && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setShowInfographicDialog(true)}
-                          className="no-min-touch-size h-8 gap-2"
-                          data-testid="button-generate-infographic"
-                        >
-                          <LayoutGrid className="h-4 w-4 text-primary" />
-                          إنفوجرافيك
-                        </Button>
-                      )}
-                      {canGenerateImages && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setShowStoryCardsDialog(true)}
-                          className="no-min-touch-size h-8 gap-2"
-                          data-testid="button-generate-story-cards"
-                        >
-                          <Layers className="h-4 w-4 text-primary" />
-                          قصص مصورة
-                        </Button>
-                      )}
                     </div>
                   )}
                   <input
@@ -3655,52 +3610,31 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
               </Collapsible>
             )}
             
-            {/* Auto Image Generation — مطوي افتراضياً لعدم ازدحام الصفحة قبل المتن */}
+            {/* بلك توليد الصور بالذكاء الاصطناعي الموحد — يجمع صور GPT + استوديو التوليد + الأنماط التلقائية + الإنفوجرافيك والقصص المصورة */}
             {!isOpinionAuthor && canGenerateImages && articleType !== "infographic" && (
-              <Collapsible open={autoImageOpen} onOpenChange={setAutoImageOpen}>
-                {!autoImageOpen ? (
-                  <CollapsibleTrigger asChild>
-                    <button
-                      type="button"
-                      className="no-min-touch-size flex w-full items-center justify-between rounded-xl border border-dashed border-border/80 bg-card/70 px-3.5 py-2.5 text-xs sm:text-sm font-semibold text-muted-foreground transition-colors hover:border-primary/30 hover:bg-muted/40 hover:text-foreground"
-                      data-testid="collapsible-auto-image"
-                    >
-                      <span className="flex items-center gap-2">
-                        <Sparkles className="h-4 w-4 text-primary" />
-                        التوليد التلقائي للصور (اختيار النمط الفني)
-                      </span>
-                      <ChevronDown className="h-4 w-4" />
-                    </button>
-                  </CollapsibleTrigger>
-                ) : null}
-                <CollapsibleContent>
-                  <AutoImageGenerator
-                    articleId={id}
-                    title={title}
-                    content={content}
-                    excerpt={excerpt}
-                    category={categories.find(c => c.id === categoryId)?.nameAr}
-                    language="ar"
-                    articleType={articleType}
-                    hasImage={!!imageUrl}
-                    onImageGenerated={(url, altText) => {
-                      setImageUrl(url);
-                      setIsAiGeneratedImage(true);
-                      toast({
-                        title: "تم توليد الصورة بنجاح",
-                        description: `${altText}`,
-                      });
-                    }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setAutoImageOpen(false)}
-                    className="no-min-touch-size mt-2 text-xs text-muted-foreground hover:text-foreground"
-                  >
-                    طي القسم
-                  </button>
-                </CollapsibleContent>
-              </Collapsible>
+              <AutoImageGenerator
+                articleId={id}
+                title={title}
+                content={content}
+                excerpt={excerpt}
+                category={categories.find(c => c.id === categoryId)?.nameAr}
+                language="ar"
+                articleType={articleType}
+                hasImage={!!imageUrl}
+                canUseInfographics={!!canUseInfographics}
+                onOpenGptDialog={() => setShowOpenAIImageDialog(true)}
+                onOpenCustomAiDialog={() => setShowAIImageDialog(true)}
+                onOpenInfographicDialog={() => setShowInfographicDialog(true)}
+                onOpenStoryCardsDialog={() => setShowStoryCardsDialog(true)}
+                onImageGenerated={(url, altText) => {
+                  setImageUrl(url);
+                  setIsAiGeneratedImage(true);
+                  toast({
+                    title: "تم توليد الصورة بنجاح",
+                    description: `${altText}`,
+                  });
+                }}
+              />
             )}
             
             {/* Thumbnail Generation - Collapsible - Hidden for infographics */}

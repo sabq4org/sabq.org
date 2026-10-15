@@ -95,8 +95,48 @@ export function OpenAIImageGeneratorDialog({ userId, open, onClose, onImageGener
         <div className="grid gap-6 md:grid-cols-2">
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="gpt-image-prompt">وصف الصورة</Label>
-              <Textarea id="gpt-image-prompt" value={prompt} onChange={(event) => setPrompt(event.target.value)} maxLength={4000} disabled={working} rows={7} placeholder="اكتب المشهد المطلوب والأسلوب وأي نص تريد ظهوره…" className="resize-y leading-7" />
+              <div className="flex flex-wrap items-center justify-between gap-1.5">
+                <Label htmlFor="gpt-image-prompt">وصف الصورة</Label>
+                <div className="flex flex-wrap items-center gap-1" data-testid="gpt-image-presets">
+                  {[
+                    {
+                      id: "photo",
+                      label: "صحفي واقعي",
+                      build: (base: string) =>
+                        `${base}\nأسلوب تصوير صحفي واقعي احترافي، إضاءة طبيعية، بدون أي نصوص أو شعارات مكتوبة داخل الصورة.`,
+                    },
+                    {
+                      id: "symbolic",
+                      label: "تعبيري رمزي",
+                      build: (base: string) =>
+                        `${base}\nتكوين فني تعبيري رمزي هادئ يناسب المقالات والتحليلات الصحفية، بدون أي نصوص أو حروف داخل الصورة.`,
+                    },
+                    {
+                      id: "economy",
+                      label: "اقتصادي/تقني",
+                      build: (base: string) =>
+                        `${base}\nمشهد بصري عصري يعكس قطاع الأعمال والتقنية في السعودية، إضاءة احترافية، بدون نصوص أو شعارات.`,
+                    },
+                  ].map((preset) => (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      disabled={working}
+                      onClick={() => {
+                        const seed =
+                          articleTitle.trim()
+                            ? `صورة توضيحية للخبر: ${articleTitle.trim()}${articleExcerpt ? `\n${articleExcerpt.trim()}` : ""}`
+                            : prompt.trim() || "مشهد إخباري احترافي";
+                        setPrompt(preset.build(seed).slice(0, 4000));
+                      }}
+                      className="no-min-touch-size rounded-md border border-border/80 bg-muted/40 px-2 py-0.5 text-[11px] font-medium text-muted-foreground transition-colors hover:border-sky-400 hover:bg-sky-50 hover:text-sky-900 dark:hover:bg-sky-950/60 dark:hover:text-sky-100 disabled:opacity-50"
+                    >
+                      + {preset.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <Textarea id="gpt-image-prompt" value={prompt} onChange={(event) => setPrompt(event.target.value)} maxLength={4000} disabled={working} rows={6} placeholder="اكتب المشهد المطلوب والأسلوب وأي نص تريد ظهوره…" className="resize-y leading-7" />
               <p className="text-xs text-muted-foreground">راجع النصوص والأرقام في الصورة قبل استخدامها.</p>
             </div>
             <div className="space-y-2">
