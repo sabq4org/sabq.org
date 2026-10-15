@@ -50,7 +50,7 @@
 |--------|--------|------------------------|
 | `sabq-staging-api` | جذر المستودع · `/railway.json` | API staging؛ يتصل بفرع Neon الحالي؛ `SERVE_SPA=false` وكل المجدولات/العمال معطّلة |
 | `sabq-staging-web-next` | `Root Directory=/web-next` · `/web-next/railway.json` | SSR staging؛ `STAGING_NO_INDEX=true`؛ Basic Auth عبر `STAGING_ACCESS_TOKEN` |
-| `sabq-staging-meetings-agent` | مجلد `meetings-agent/` | خدمة موجودة في staging؛ لا تُعامل كخدمة production ولا تُشغّل تكاملات خارجية تلقائياً |
+| `sabq-staging-meetings-agent` | مجلد `meetings-agent/` | خدمة قائمة أُبقيت دون تعديل؛ خارج نطاق تجهيز API وSSR الحالي |
 | `Neon staging branch` | `br-rough-base-addy0giw`، نسخة production-clone بتاريخ 2026-10-15، وأصلها `br-bold-sound-admvvr1a` | هذا هو مصدر Postgres الحالي عبر `NEON_DATABASE_URL`؛ لا تُنسخ مفاتيح التخزين أو تكاملات الإنتاج |
 | `Postgres` القديم | خدمة Railway legacy محفوظة | غير مستخدمة من staging الحالي؛ لا تُحذف أو تُغيّر ضمن هذه الخطة |
 
@@ -58,7 +58,7 @@
 وتُترك تكاملات الطرف الثالث غير مضبوطة. الاستثناء الوحيد هو
 `OPENAI_API_KEY=staging-disabled-invalid-key`: قيمة حارسة غير صالحة وليست مفتاحاً،
 لأن استيراد عميل embeddings القديم يرفض الإقلاع عند غياب الاسم كلياً؛ وتظل كل
-مهام AI الخلفية معطّلة. يجب أيضاً ضبط `OPENAI_BASE_URL=http://127.0.0.1:9`
+مهام AI الخلفية معطّلة. يجب أيضاً ضبط `OPENAI_BASE_URL=http://127.0.0.1:9/v1`
 في staging لمنع أي عميل OpenAI من الخروج إلى الإنترنت. كذلك يستخدم `PRIVATE_OBJECT_DIR` مجلداً مؤقتاً داخل
 حاوية staging بدلاً من أي مفاتيح R2 أو bucket إنتاجي.
 
@@ -68,14 +68,25 @@
 fallback إلى `api.sabq.org`. اترك `COOKIE_DOMAIN` غير مضبوط لعزل كوكيز الجلسة.
 في Cloudflare Pages يجب ضبط `VITE_STAGING=true` حتى تستخدم الواجهة كوكي
 `sabq-staging.csrf`، مع أسماء الجلسة وCSRF الخاصة بـ staging (`sabq-staging.sid`
-و`sabq-staging.csrf`). النطاقات المخصصة وعناوين preview أعلاه هي إعدادات مقصودة
-وتبقى حالتها التشغيلية قيد التحقق؛ لا تُعدّ فعالة قبل فحص DNS والاستجابة الفعلية.
+و`sabq-staging.csrf`).
 الإرسال الخارجي محجوب افتراضياً في staging حتى لو وُجدت إعدادات أو مفاتيح في
 قاعدة منسوخة؛ لا يُفتح إلا بتعيين `STAGING_ALLOW_OUTBOUND=true` لاختبار معزول.
 
 أي preview قديم أو فرع يبدأ من `main` لا يملك بالضرورة حراس staging وأسماء
 الكوكيز؛ يجب أن يبدأ preview المعزول من فرع `staging` أو يدمج تغييرات العزل
 قبل الاختبار. وإلا قد يرفض API staging الطلب أو يحدث تعارض كوكيز متوقعاً.
+
+### حالة التفعيل — 2026-10-15
+
+- الواجهة: `https://staging.sabq.org`؛ سجل CNAME **Proxied** إلى `staging.sabq-frontend-test.pages.dev`، وحالة Pages custom domain هي `active`.
+- API: `https://staging-api.sabq.org`؛ DNS only إلى `w4qhn46y.up.railway.app`، وإثبات الملكية وشهادة HTTPS صالحان.
+- يستخدم Pages preview قيمة `API_ORIGIN=https://sabq-staging-api-staging.up.railway.app`، العنوان الموثق لنفس خدمة API التجريبية؛ لا يوجد fallback للإنتاج.
+- `VITE_API_URL` فارغ لكي تستخدم الواجهة `/api` على أصل المعاينة نفسه. `VITE_STAGING=true` مطلوب لاسم كوكي CSRF المعزول.
+- كود التشغيل في Railway هو merge commit `58c3a9b29043b4b81520866e5cc8bf485cb479f7` من PR #1877 إلى `staging` فقط. Auto Deploy مفعّل للفرع `staging`.
+- التحقق الحي: `/health` يعيد `200` و`database=connected`؛ API categories يرفض بلا Basic Auth (`401`) وينجح معه (`200`). SSR وPages preview يعيدان `401` بلا المصادقة و`200` معها، مع `noindex` و`no-store`.
+- اسم مستخدم الحماية `sabq`؛ كلمة المرور هي قيمة `STAGING_ACCESS_TOKEN` في Railway > staging > sabq-staging-api > Variables. لا تُحفظ في المستودع.
+- نجحت اختبارات الوحدة والبناء وTypeScript وفحص الأسرار وSemgrep. فشل lint الموروث متابع في #1878؛ تدقيق مكتبات meetings-agent متابع في #1337. لم يُجرَ اختبار تحرير محتوى بحساب موظف.
+- لم تُغيّر إعدادات إنتاج Pages أو نشرات خدمات Railway الإنتاجية. نشر main متزامن من عمل آخر لا يخص هذه التهيئة.
 
 ### ترقية commit إلى staging
 
