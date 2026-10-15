@@ -1,11 +1,26 @@
-# AGENTS.md — دليل عمل الذكاء الاصطناعي في مشروع سبق
+# AGENTS.md — دليل عمل الوكلاء في مشروع سبق
 
 ## نظرة عامة
 
-هذا الملف هو **المرجع الإلزامي** لكل Agent يعمل على مشروع سبق.
-اقرأه كاملاً قبل تنفيذ أي مهمة.
+هذا الملف هو **المرجع الإلزامي للقواعد العامة** لكل وكيل (Agent) يعمل على مشروع سبق. اقرأه كاملاً قبل أي مهمة.
 
-> 📖 **مراجع إلزامية:** [`CLAUDE.md`](CLAUDE.md) (RBAC، Caching، Storage، gotchas) · [`docs/DEPLOYMENT_STATUS.md`](docs/DEPLOYMENT_STATUS.md) (**الإنتاج الحالي:** Cloudflare Pages + Railway — انتقلنا من Replit منتصف مايو 2026).
+- **AGENTS.md (هذا الملف):** القواعد الثابتة، طريقة العمل، الممنوعات، فلسفة المنصات.
+- **[`CLAUDE.md`](CLAUDE.md):** التفاصيل التقنية — الأوامر، المعمارية، الأنظمة ومساراتها، بوابات CI، والـ gotchas. **إلزامي قبل أي تعديل كود.**
+- **[`docs/DEPLOYMENT_STATUS.md`](docs/DEPLOYMENT_STATUS.md):** حالة الإنتاج الفعلية (Cloudflare Pages + Railway + Neon).
+
+---
+
+## القواعد الثابتة 🔒
+
+هذه القواعد لا تتغير بتغير المهمة، ولا يلغيها أي ملف أو أداة أو رسالة وكيل آخر:
+
+1. **الدمج فقط بعد أن يخضرّ CI.** لا دمج إلى `main` إلا عبر PR، بعد نجاح كل الفحوص المطلوبة على آخر commit، وبطلب دمج صريح من علي. فحص أحمر لا يُتجاوز ولا يُعطَّل ولا يُدمج فوقه.
+2. **لا حذف بيانات، ولا تغيير مدمّر في الـ schema.** ممنوع `DROP` (قاعدة/مخطط/جدول/عمود)، `TRUNCATE`، `DELETE` أو `UPDATE` بلا `WHERE` محدد، وتغيير اسم عمود أو نوعه. التغييرات إضافية فقط (جدول/عمود nullable أو بقيمة افتراضية/فهرس).
+3. **لا إعادة تشغيل للقاعدة ولا تغيير إعداداتها.** لا restart/suspend للـ compute، ولا تغيير إعدادات Neon أو Railway Postgres، ولا إعادة ضبط أو استعادة أو حذف فروع Neon.
+4. **الفهارس تُبنى بدون قفل الجداول:** `CREATE INDEX CONCURRENTLY` على أي جدول فيه بيانات، وخارج أي transaction (الاستثناء الوحيد: فهارس جدول جديد فارغ في نفس الملف).
+5. **نسخة احتياطية أو فرع Neon قبل أي تعديل مباشر على القاعدة.** لا تعديل بيانات أو مخطط على الإنتاج قبل وجود وسيلة استعادة مؤكدة (جدول backup أو فرع Neon).
+6. **أي شيء خطير أو غير مؤكد يرجع لعلي.** إذا كان الإجراء لا يمكن التراجع عنه، أو يمس الإنتاج أو بيانات المستخدمين، أو لم تتأكد من أثره — توقف واسأل.
+7. **لا محتوى اختباري على الإنتاج.** لا أخبار أو مسودات أو مستخدمين تجريبيين على قاعدة الإنتاج أو عبر بوت النشر؛ المسودة سجل حقيقي يُقرأ برابطها.
 
 ---
 
@@ -28,24 +43,17 @@
 
 ## كتالوج الأنظمة — بوابة قراءة إلزامية 🗂️
 
-المشروع فيه أنظمة منتج مستقلة (ولاء، توقعات، تحرير، iFox، مقترب، …).  
+المشروع فيه أنظمة منتج مستقلة (تحرير، ولاء، توقعات، iFox، مقترب، مواعيد، …).
 **مصدر الحقيقة:** [`docs/systems/registry.json`](docs/systems/registry.json) + [`docs/systems/<id>/SYSTEM.md`](docs/systems/README.md).
 
-### قاعدة الـ Agent (لا تُتخطى)
+### قاعدة الوكيل (لا تُتخطى)
 1. قبل أي تعديل: طابق المسارات مع `pathGlobs` في السجل → حدّد `id`.
 2. اقرأ `docs/systems/<id>/SYSTEM.md` كاملاً.
 3. صرّح في أول تنفيذ أنك قرأت الملف.
 4. لا توسّع لنظام مجاور دون Issue/موافقة.
 5. إن تغيّر العقد أو نقاط الدخول: حدّث `SYSTEM.md` و`lastReviewed` في نفس الـ PR.
 
-التفاصيل: [`docs/systems/README.md`](docs/systems/README.md) · [`docs/systems/GOVERNANCE.md`](docs/systems/GOVERNANCE.md) · [`.cursor/rules/systems-docs-gate.mdc`](.cursor/rules/systems-docs-gate.mdc).
-
-```bash
-# جرد محلي + تحديث لقطة الإنتاج
-node scripts/systems-inventory.mjs --write-snapshot
-```
-
-لوحة الأدمن: `/dashboard/systems-catalog` (صلاحية `system.manage_settings`).
+التفاصيل: [`docs/systems/README.md`](docs/systems/README.md) · [`docs/systems/GOVERNANCE.md`](docs/systems/GOVERNANCE.md) · [`.cursor/rules/systems-docs-gate.mdc`](.cursor/rules/systems-docs-gate.mdc). الجرد: `npm run systems:inventory`. لوحة الأدمن: `/dashboard/systems-catalog`.
 
 ---
 
@@ -53,19 +61,19 @@ node scripts/systems-inventory.mjs --write-snapshot
 
 ```
 sabq.org/
-├── client/           ← الويب (React + Vite + TailwindCSS + Wouter)
-├── ios/              ← iOS (Swift / SwiftUI)
-├── android-native/   ← Android (Kotlin / Jetpack Compose)
-├── android/          ← (قديم — Capacitor، في طور الإيقاف؛ لا تطوّر فيه)
-├── server/           ← Backend (Node.js + Express + Drizzle)
-├── shared/           ← كود مشترك (Schema, Types, RBAC, Models)
-└── migrations/       ← ملفات SQL يدوية لإجراءات إنتاج خاصة (تغييرات المخطط عبر `npm run db:push`)
+├── client/              ← الويب (React + Vite + TailwindCSS + Wouter) — SPA ولوحة التحكم
+├── web-next/            ← Next.js للصفحات العامة المرسومة على الخادم (SSR)
+├── server/              ← Backend (Node.js + Express + Drizzle)
+├── shared/              ← كود مشترك (Schema, Types, RBAC, Models)
+├── sabq app ios/        ← تطبيق سبق iOS (Swift / SwiftUI) — المرجع لأندرويد
+├── sports app ios/      ← تطبيق VARA الرياضي (SwiftUI)
+├── gulf-cup app ios/ · asian-cup app ios/ ← تطبيقات البطولات
+├── android-native/      ← Android (Kotlin / Jetpack Compose)
+├── android/             ← (قديم — Capacitor، في طور الإيقاف؛ لا تطوّر فيه)
+├── functions/           ← Cloudflare Pages middleware (proxy، SEO، redirects)
+├── meetings-agent/      ← خدمة Railway مستقلة (لا يبنيها CI الجذر)
+└── migrations/          ← ملفات SQL يدوية مؤرخة لإجراءات الإنتاج
 ```
-
-### Path aliases (في `client/`)
-- `@/*` → `client/src/*`
-- `@shared/*` → `shared/*`
-- `@assets/*` → `attached_assets/*` (Vite فقط)
 
 ---
 
@@ -79,7 +87,7 @@ sabq.org/
 |---------|------------------|
 | iOS ↔ Android | **parity صارم** — نفس الشاشة، نفس التوزيع، نفس الألوان والمسافات. اقرأ كود iOS كاملاً قبل أي port إلى Android. |
 | Web ↔ iOS/Android | **parity وظيفي فقط** — الميزة متوفرة، الـ API واحد، لكن الـ UI يتبع تصميم الويب |
-| Backend ↔ الثلاث | **مصدر واحد** — `/api/v1/*` للموبايل (Bearer)، `/api/*` للويب (Passport) |
+| Backend ↔ الثلاث | **مصدر واحد** — `/api/v1/*` للموبايل (Bearer)، `/api/*` للويب (Passport). لا تخلط بين النظامين |
 
 ### تصنيف المهام
 
@@ -88,112 +96,74 @@ sabq.org/
 | **Schema / Database** | server/ + shared/ + الثلاث | schema → backend → iOS → Android → web |
 | **API / Backend** | server/ + الثلاث (مستهلكي API) | backend → iOS → Android → web |
 | **Business Logic** | حسب الموقع | حدّد الـ source of truth أولاً |
-| **UI iOS** | ios/ → android-native/ يلحق | iOS أولاً، Android يطابق |
-| **UI Web** | client/ فقط | لا يلزم Android/iOS |
+| **UI iOS** | تطبيق iOS → android-native/ يلحق | iOS أولاً، Android يطابق |
+| **UI Web** | client/ أو web-next/ فقط | لا يلزم Android/iOS |
 | **Platform-specific** | منصة واحدة | (مثل widget، إشعار محلي) |
+
+تغيير backend أو shared يتطلب تقييم المستهلكين الثلاثة؛ إصلاح واجهة ويب وحدها لا يفرض تعديل التطبيقين. وثّق أي تأجيل بدل إعلان التكافؤ.
 
 ---
 
 ## Workflow A — ميزة جديدة
 
-### الخطوة 1: Spec قبل الكود
-افتح **Umbrella Issue** بعنوان `[FEATURE] <اسم الميزة>` وحدّد فيها:
-- **Spec UI**: سكتشات/وصف من iOS (المرجع البصري لأندرويد)
-- **Spec API**: endpoint + payload + auth (Bearer `/api/v1` أم Passport؟)
-- **Spec Schema**: هل يحتاج جدول/عمود جديد؟
-- **Spec Web**: هل يحتاج تصميماً مستقلاً (الافتراضي نعم)؟
+1. **Spec قبل الكود:** Umbrella Issue بعنوان `[FEATURE] <اسم الميزة>` يحدد: Spec UI (من iOS)، Spec API (endpoint + payload + نوع المصادقة)، Spec Schema، Spec Web.
+2. **نموذج بصري معتمد قبل أي كود واجهة:** أي واجهة جديدة (ومنها التقارير المطبوعة) تبدأ بنموذج يراجعه علي ويعتمده. لا يلزم لإضافة عنصر جديد في قائمة قائمة.
+3. **Backend أولاً:** PR يضم schema + endpoint، ينشر على Railway قبل عمل المنصات.
+4. **iOS:** بجودة المرجع، ثم TestFlight ثم Apple Review. الويب/أندرويد يبدآن بالتوازي.
+5. **Android-native:** يطابق iOS 1:1 بلا تبسيط.
+6. **Web:** نفس endpoints، تصميم يتبع نظام الويب الحالي.
+7. **إقفال Umbrella:** بعد shipping الثلاث أو تحديد `status:deferred-to-vX.Y` مع سبب.
 
-> ❗ لا تبدأ كود قبل اكتمال هذه الأربعة. هذا يمنع 80% من إعادة العمل.
+## Workflow B — إصلاح خطأ
 
-### الخطوة 2: Backend أولاً
-PR منفصل يضم schema + endpoint. ينشر على Railway قبل أي عمل منصة.
-
-### الخطوة 3: iOS أولاً (بعد الـ backend)
-- يبني بجودة عالية (هو المرجع لأندرويد)
-- يرفع TestFlight ثم Apple Review مباشرة
-- التطوير على الويب/أندرويد يبدأ بالتوازي بدون انتظار
-
-### الخطوة 4: Android-native (يطابق iOS 1:1)
-- اقرأ كود iOS كاملاً قبل أي port
-- نفس التخطيط، الألوان، المسافات، المكونات
-- لا تبسيط ولا "أول إصدار خفيف"
-
-### الخطوة 5: Web (تصميم مستقل، نفس الميزة)
-- يستهلك نفس endpoints
-- التصميم يتبع نظام التصميم الحالي للويب
-
-### الخطوة 6: إقفال Umbrella
-لا تُقفل إلا لما الثلاث تكون shipped أو محددة بـ `status:deferred-to-vX.Y` مع سبب.
-
----
-
-## Workflow B — إصلاح خطأ (Bug Fix)
-
-### قاعدة الفلتر السريع
 ```
-البق في UI منصة واحدة؟        → فرع واحد، PR واحد، خلاص
+البق في UI منصة واحدة؟        → فرع واحد، PR واحد
 البق في الـ API/Schema؟       → backend fix → فحص استهلاك كل منصة → PRs منفصلة
 البق في shared/ ؟             → cross-platform — Umbrella Issue
 ```
-
-> أكثر الأخطاء منصة واحدة فقط. لا تجبر فحص الثلاث على كل bug fix.
-
----
+ابدأ التشخيص باستعلامات قراءة فقط، ولا تختبر الكتابة على مستخدمين أو أخبار حقيقية.
 
 ## Workflow C — تغيير Schema (الأخطر)
 
-> أي PR يمس `shared/schema.ts` لازم **يضيف عمود ما يحذف**، إلا في تنظيف مخطط له.
-
-### تسلسل آمن
-1. **PR 1**: أضف الحقل الجديد (nullable أو default) → `npm run db:push` على staging
-2. **PR 2**: backend يكتب فيه ويعيده في الـ response
-3. **PR 3-5**: iOS / Android / Web تستهلكه أو تتجاهله
-4. **PR 6 (لاحقاً)**: لو فيه عمود قديم بدّلناه، نحذفه بعد تأكيد عدم الاستخدام
+1. أضف الحقل في `shared/schema.ts` (nullable أو default)، وحافظ على عائلات ar/en/ur حيث ينطبق.
+2. اكتب ملف SQL جديداً مؤرخاً في `migrations/` يشمل: الإضافة، الصلاحيات اللازمة لدور التشغيل، والتحقق بعد التنفيذ. لا تعدّل ملفاً قديماً.
+3. **علي ينفّذ الملف على الإنتاج بنفسه قبل دمج الكود الذي يقرأ العمود**، بعد نسخة احتياطية أو فرع Neon (القاعدة 5).
+4. بعدها PR الـ backend، ثم المنصات.
+5. حذف عمود قديم أو تغيير اسمه أو نوعه = خطة منفصلة واعتماد منفصل؛ لا يدخل ضمن أي مهمة إضافة.
 
 ---
 
-## قواعد الكود
+## قواعد العمل والكود
 
-### عام
-- لا تغيّر شيئاً خارج نطاق المهمة
-- إذا اكتشفت مشكلة جانبية → افتح Issue منفصل، لا تصلحها في نفس الـ PR
-- التوثيق باللغة العربية مسموح في التعليقات
-- **تحقق من الفرع قبل أي push:** `git branch --show-current` — الفرع ينقلب أحياناً إلى main بصمت
+### Git والـ PR
+- لا تعمل مباشرة على `main`. افرع من `main` الحالي (يتحرك يومياً)، لا من SHA قديم.
+- تحقق من الفرع قبل أي push: `git branch --show-current`.
+- لا `reset --hard` ولا `checkout -- .` ولا `clean -f` على شجرة عمل فيها تغييرات، ولا force-push على `main`، ولا إعادة كتابة تاريخ فرع مشترك.
+- لا `--no-verify` ولا `--no-gpg-sign`.
+- لا تغيّر شيئاً خارج نطاق المهمة. المشكلة الجانبية → Issue أو اقتراح منفصل.
+- لا تضف dependency جديدة بدون موافقة.
+- شغّل قبل الـ PR: `npm run check` و`lint` على الملفات المتأثرة والاختبارات المناسبة، وراجع بوابات CI في `CLAUDE.md` (حدود طول الملفات، gitleaks، رقم بناء iOS).
 
-### الويب (client/)
-- Framework: React + Vite + Wouter
-- Styling: TailwindCSS
-- State: TanStack Query (لاحظ: يعيد `null` لا `undefined` — اضمن guard على المصفوفات)
-- لا تضف dependencies جديدة بدون موافقة
+### النشر
+- الدمج في `main` ينشر تلقائياً (Pages + Railway). النشر يُتحقق منه: `/api/version` يطابق SHA الدمج، و`https://api.sabq.org/health` سليم، ثم مسار المستخدم المتأثر. نجاح البناء أو HTTP 200 وحده لا يكفي.
+- خدمات منفصلة لا تُنشر إلا بطلب صريح (مثل بوت «نشر سبق» في مستودع `sabq-publisher`).
 
-### iOS (ios/)
-- Language: Swift
-- UI: SwiftUI
-- **Deployment Target: iOS 17.0** (إجباري — Apple رفضت بناء 26.2-locked سابقاً)
-- iOS 18+ APIs خلف `if #available(iOS 18, *)`
+### المنصات
+- **iOS:** Deployment Target **iOS 17.0** إجباري. أي API أحدث خلف `if #available(...)`.
+- **Android:** في `android-native/` فقط، API 26+، يطابق iOS 1:1.
+- **Backend:** الموبايل `/api/v1/*` + Bearer (`verifyMemberSession`)، الويب `/api/*` + Passport.
+- **shared/:** يؤثر على الثلاث، والتغييرات additive فقط.
 
-### Android (android-native/)
-- Language: Kotlin
-- UI: Jetpack Compose
-- Target: Android API 26+
-- **يطابق iOS 1:1** — اقرأ ملف iOS المقابل كاملاً قبل البدء
-
-### Backend (server/)
-- Language: TypeScript / Node.js + Express
-- ORM: Drizzle (`shared/schema.ts` هو الـ source of truth)
-- **Endpoints الموبايل:** `/api/v1/*` فقط + `verifyMemberSession` (Bearer token)
-- **Endpoints الويب:** `/api/*` + Passport session
-- لا تخلط بين النظامين — Mobile auth ≠ Web auth
-
-### Shared (shared/)
-- أي تغيير هنا يأثر على الثلاث — تأكد دائماً
-- التغييرات additive only (راجع Workflow C)
+### السياسة التحريرية والهوية
+- وسم «حساسة» **معلوماتي فقط**: لا شيء في سبق يمنع النشر أو يؤخره أو يحوّله للمراجعة بسبب الحساسية. لا تُعِد أي بوابة من هذا النوع.
+- العربية وRTL أولاً؛ الأرقام وأزواج النتائج داخل LTR؛ الفريق المضيف يميناً في الرياضة.
+- الخط: IBM Plex Sans Arabic. تجنّب الواجهات المثقلة بالبطاقات والزخرفة.
+- لغة التواصل: عربية بسيطة واضحة.
 
 ---
 
 ## إدارة المهام عبر GitHub Issues
 
-### Labels
 | Label | المعنى |
 |-------|--------|
 | `platform:web` `platform:ios` `platform:android` `platform:all` | المنصة المتأثرة |
@@ -203,42 +173,24 @@ PR منفصل يضم schema + endpoint. ينشر على Railway قبل أي عم
 | `status:blocked-by-backend` | ينتظر API |
 | `status:behind-platform` | متأخر عن منصة ثانية (parity gap) |
 
-### Project Board: "Sabq Roadmap"
-الأعمدة: `Backlog → Spec → Backend → iOS → Android → Web → In Apple Review → Shipped`
+Project Board "Sabq Roadmap": `Backlog → Spec → Backend → iOS → Android → Web → In Apple Review → Shipped`. الـ sub-PRs تترابط بـ `Tracked by #123`.
 
-كل Umbrella Issue تتنقل عبر الأعمدة. الـ sub-PRs تترابط بـ `Tracked by #123`.
-
-### تسلسل العمل
-1. Issue مفتوح بـ template صحيح
-2. Agent يقرأ AGENTS.md + CLAUDE.md
-3. Agent يحدد المنصات المتأثرة والترتيب (Workflow A/B/C)
-4. Agent ينفّذ بالتسلسل عبر PRs منفصلة
-5. كل PR يقفل sub-issue، Umbrella تُقفل في النهاية
-
----
-
-## الأولويات
-
-```
-P1 (Critical)  → يوقف المستخدم عن القراءة أو التسجيل
-P2 (High)      → خطأ واضح يزعج المستخدم
-P3 (Medium)    → تحسين مطلوب
-P4 (Low)       → تلميع وتجميل
-```
+الأولويات: **P1** يوقف المستخدم عن القراءة أو التسجيل · **P2** خطأ واضح يزعج المستخدم · **P3** تحسين مطلوب · **P4** تلميع.
 
 ---
 
 ## ممنوع مطلقاً ❌
 
-- لا ترسل أي بيانات مستخدمين خارج المشروع
-- لا تغيّر ملفات `.env` أو `secrets`
-- لا تدمج إلى `main` مباشرة — دائماً عبر PR
-- لا تحذف migrations موجودة
-- **لا تعدّل ملف SQL قديماً في `migrations/`** — تغييرات المخطط عبر `schema.ts` و`db:push`، وإجراءات الإنتاج الخاصة في ملف SQL جديد مؤرخ
-- **لا تستخدم `--no-verify` أو `--no-gpg-sign`** بدون إذن صريح
-- **لا تشغّل `npm run db:push` ضد Neon أو الإنتاج** — للتطوير: `npm run db:push:local` (localhost فقط). للإنتاج: `./push-to-production.sh` التفاعلي. دليل المحلي: [`docs/setup/LOCAL_POSTGRES_AR.md`](docs/setup/LOCAL_POSTGRES_AR.md)
-- لا تطوّر داخل `android/` (Capacitor قديم) — كل عمل أندرويد في `android-native/`
+(إضافة إلى القواعد الثابتة أعلاه)
+
+- لا ترسل بيانات مستخدمين خارج المشروع.
+- لا تطبع الأسرار أو روابط الاتصال، ولا تحفظها في Git أو المحادثة، ولا تعدّل ملفات `.env`.
+- لا تحذف migrations موجودة ولا تعدّل ملف SQL قديماً في `migrations/`.
+- لا تشغّل `npm run db:push` أو `drizzle-kit push` ضد Neon أو الإنتاج، ولا `--force`. للتطوير: `npm run db:push:local` (localhost فقط).
+- لا تحذف خدمات Railway أو بيئاتها أو volumes.
+- لا تعطّل المصادقة أو الحماية أو فحوص CI لتجاوز عائق.
+- لا تطوّر داخل `android/` (Capacitor قديم).
 
 ---
 
-*آخر تحديث: 2026-09-07 | المسؤول: فريق سبق التقني*
+*آخر تحديث: 2026-10-15 | المسؤول: فريق سبق التقني*
