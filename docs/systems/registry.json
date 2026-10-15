@@ -681,6 +681,41 @@
       "lastReviewed": "2026-10-15"
     },
     {
+      "id": "mawaeed",
+      "nameAr": "مواعيدك",
+      "nameEn": "Mawaeed",
+      "status": "active",
+      "category": "content",
+      "summary": "مواعيد الرواتب وحساب المواطن والضمان والتقاعد والإجازات، وصفحات الخدمة الدائمة التي تقرأ السجل نفسه.",
+      "docPath": "docs/systems/mawaeed/SYSTEM.md",
+      "relatedDocs": [
+        "docs/systems/seo-ssr/SYSTEM.md"
+      ],
+      "pathGlobs": [
+        "shared/mawaeed/**",
+        "shared/servicePages/**",
+        "server/services/mawaeedService.ts",
+        "server/services/servicePageOgImage.ts",
+        "server/routes/mawaeed.ts",
+        "server/routes/servicePages.ts",
+        "functions/mawaeedPage.js",
+        "functions/servicePage.js",
+        "client/src/pages/dashboard/MawaeedManagement.tsx",
+        "scripts/seed-mawaeed.ts",
+        "tests/unit/mawaeed*.test.ts",
+        "tests/unit/servicePages.test.ts",
+        "tests/unit/servicePageEdge.test.ts",
+        "docs/systems/mawaeed/**"
+      ],
+      "aiFeatureKeys": [],
+      "dashboardPath": "/dashboard/mawaeed",
+      "owners": [
+        "editorial",
+        "platform"
+      ],
+      "lastReviewed": "2026-10-15"
+    },
+    {
       "id": "comments",
       "nameAr": "التعليقات والتفاعل",
       "nameEn": "Comments & Reactions",

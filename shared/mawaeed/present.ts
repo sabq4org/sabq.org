@@ -5,6 +5,7 @@
 
 import { buildFaq, METHODOLOGY, type FaqItem } from "./content";
 import { daysPhrase, formatGregorian, formatHijri, formatRiyadhDayLabel, riyadhDateISO } from "./dates";
+import { serviceLinkForSeries } from "../servicePages/catalog";
 import {
   EXPECTED_HINT,
   HOME_COPY,
@@ -59,6 +60,8 @@ export type MawaeedSeriesBlock = {
   title: string;
   kind: SeriesKind;
   href: string;
+  serviceHref: string | null;
+  serviceLabel: string | null;
   summary: string;
   previous: MawaeedCard | null;
   next: MawaeedCard | null;
@@ -176,11 +179,14 @@ function buildBlock(series: SeriesRecord, rows: OccurrenceRecord[], region: Regi
   const next = upcoming[0] ?? null;
   const following = upcoming[1] ?? null;
   const previous = past.length ? past[past.length - 1] : null;
+  const serviceLink = serviceLinkForSeries(series.slug);
   return {
     slug: series.slug,
     title: series.titleAr,
     kind: series.kind,
     href: `/mawaeed/${series.slug}`,
+    serviceHref: serviceLink?.path ?? null,
+    serviceLabel: serviceLink?.navLabel ?? null,
     summary: series.summaryAr,
     previous,
     next,

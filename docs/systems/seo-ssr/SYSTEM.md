@@ -1,6 +1,6 @@
 # SEO و SSR (`seo-ssr`)
 
-> آخر مراجعة: 2026-10-13 (حجب زواحف التدريب في robots.txt) | المالك: platform
+> آخر مراجعة: 2026-10-15 (صفحات خدمة المواعيد على الحافة) | المالك: platform
 
 ## الغرض
 ميتادات للدوالش، إعادة توجيه السلاق، وSSR للمحتوى العام عبر `web-next`.
@@ -123,6 +123,7 @@
 ## مواعيدك — HTML مبكر — 2026-09-27
 
 - `GET/HEAD /mawaeed` و`/mawaeed/:slug` يخرجان من `functions/_middleware.js` قبل البروكسي وقبل قشرة SPA، عبر `functions/mawaeedPage.js`. البشر والزواحف يرون الوثيقة نفسها. المسار ليس في `spaTopLevelRoutes`.
+- `GET/HEAD /services/:id` يخرج بالطريقة نفسها عبر `functions/servicePage.js` قبل قشرة SPA. الوثيقة واحدة لكل الزوار ولكل الزواحف، بما فيها التي لا يطابقها مسار SSR الخاص بالمقالات. `dateModified` من JSON مواعيدك. الفشل 503 مع noindex ولا سقوط إلى القشرة. المضيف غير `sabq.org` يبقى noindex. `og:image` المطلق يشير إلى `GET /api/service-pages/:id/og.png` (1200×630)، ورابط التقويم إلى `GET /api/service-pages/:id/calendar.ics`. التفاصيل في [`docs/systems/mawaeed/SYSTEM.md`](../mawaeed/SYSTEM.md).
 - المصدر `GET /api/mawaeed` على Railway. الفشل 503 مع `noindex` و`no-store` ولا سقوط إلى القشرة. `dateModified` يأتي من JSON (`content_updated_at`) لا من ساعة الطلب.
 - كاش المتصفح `private, no-cache`. `CDN-Cache-Control: public, max-age=60`. مفتاح Workers يضم المنطقة ووسم النشر حتى لا تختلط نسخة الرياض بمكة. المسح العادي لا يفرغ مفاتيح Workers المخصصة.
 
