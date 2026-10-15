@@ -58,9 +58,15 @@ struct HomeSidebarView: View {
         }
     }
 
+    private static let columnTopID = "homeSidebarTop"
+
     private var column: some View {
+        ScrollViewReader { scrollProxy in
         ScrollView(showsIndicators: false) {
             LazyVStack(alignment: .leading, spacing: 18) {
+                Color.clear
+                    .frame(height: 0)
+                    .id(Self.columnTopID)
                 header
 
                 if let context = navigation.readerContext {
@@ -89,6 +95,18 @@ struct HomeSidebarView: View {
         .background(SabqTheme.background)
         .refreshable {
             await articlesStore.loadArticles(ignoreCache: true)
+        }
+        // اختيار خبر من أسفل القائمة يبدّل العمود إلى سياقه الأقصر؛ بلا هذا
+        // يبقى موضع التمرير بعد نهاية المحتوى فيظهر العمود فارغًا (محاكي
+        // 2026-10-15).
+        .onChange(of: navigation.homeSidebarMode) { _, _ in
+            scrollProxy.scrollTo(Self.columnTopID, anchor: .top)
+        }
+        .onChange(of: navigation.readerContext?.id) { _, _ in
+            if navigation.homeSidebarMode == .context {
+                scrollProxy.scrollTo(Self.columnTopID, anchor: .top)
+            }
+        }
         }
     }
 
