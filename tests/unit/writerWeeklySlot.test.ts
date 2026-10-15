@@ -64,4 +64,23 @@ describe("attachWriterWeeklySlots", () => {
     expect(result[3].writerWeeklySlot).toBeUndefined();
     expect(result[0].title).toBe("عمود");
   });
+
+  it("يوزّع مسودات الكاتب على أسابيع متتالية ويقدّم قيد المراجعة", () => {
+    const result = attachWriterWeeklySlots(
+      [
+        { id: "older", status: "draft", articleType: "opinion", authorId: "w1", createdAt: "2026-08-01T00:00:00.000Z" },
+        {
+          id: "review",
+          status: "draft",
+          articleType: "opinion",
+          authorId: "w1",
+          reviewStatus: "pending_review",
+          createdAt: "2026-08-20T00:00:00.000Z",
+        },
+      ],
+      { w1: SLOT },
+    );
+    expect(result[1].writerWeeklySlot?.nextSlot).toBe(SLOT.nextSlot);
+    expect(result[0].writerWeeklySlot?.nextSlot).toBe("2026-09-01T03:00:00.000Z");
+  });
 });

@@ -209,8 +209,25 @@ export async function getOpinionAuthorWorkspace(userId: string) {
 export async function getWriterEditorialNotifications(userId: string, limit: number) {
   const [items, unreadRows] = await Promise.all([
     db
-      .select()
+      .select({
+        id: editorialNotifications.id,
+        userId: editorialNotifications.userId,
+        type: editorialNotifications.type,
+        title: editorialNotifications.title,
+        body: editorialNotifications.body,
+        articleId: editorialNotifications.articleId,
+        articleTitle: editorialNotifications.articleTitle,
+        articleSlug: editorialNotifications.articleSlug,
+        deepLink: editorialNotifications.deepLink,
+        reviewerNote: editorialNotifications.reviewerNote,
+        deliveryStatus: editorialNotifications.deliveryStatus,
+        deliveryError: editorialNotifications.deliveryError,
+        readAt: editorialNotifications.readAt,
+        createdAt: editorialNotifications.createdAt,
+        articleStatus: articles.status,
+      })
       .from(editorialNotifications)
+      .leftJoin(articles, eq(articles.id, editorialNotifications.articleId))
       .where(eq(editorialNotifications.userId, userId))
       .orderBy(desc(editorialNotifications.createdAt))
       .limit(limit),

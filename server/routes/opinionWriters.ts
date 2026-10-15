@@ -260,7 +260,10 @@ router.get(
   requireAnyPermission(PERMISSION_CODES.OPINION_REVIEW, PERMISSION_CODES.ARTICLES_SCHEDULE),
   async (req: Request, res: Response) => {
     try {
-      res.json({ suggestion: await getNextSlotForWriter(req.params.writerId) });
+      const excludeArticleId = typeof req.query.excludeArticleId === "string"
+        ? req.query.excludeArticleId
+        : undefined;
+      res.json({ suggestion: await getNextSlotForWriter(req.params.writerId, excludeArticleId) });
     } catch (error) {
       console.error("[opinion-writers] next-slot failed:", error);
       res.status(500).json({ message: "تعذر حساب الموعد المقترح" });

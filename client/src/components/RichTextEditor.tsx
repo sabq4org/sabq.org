@@ -556,6 +556,7 @@ export function RichTextEditor({
                     setColorPickerOpen(false);
                   }}
                   title={color.name}
+                  aria-label={color.name}
                   data-testid={`color-${color.name}`}
                 />
               ))}
@@ -567,6 +568,7 @@ export function RichTextEditor({
                   setColorPickerOpen(false);
                 }}
                 title="إزالة اللون"
+                aria-label="إزالة اللون"
                 data-testid="color-reset"
               >
                 ×

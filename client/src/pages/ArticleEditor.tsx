@@ -674,7 +674,7 @@ export default function ArticleEditor() {
   const { data: writerSlotData } = useQuery<{
     suggestion: { weekday: number; publishTime: string; nextSlot: string } | null;
   }>({
-    queryKey: [`/api/opinion-writers/${opinionAuthorId}/next-slot`],
+    queryKey: [`/api/opinion-writers/${opinionAuthorId}/next-slot`, { excludeArticleId: id || "" }],
     enabled: Boolean(!isOpinionAuthor && canSchedule && articleType === "opinion" && opinionAuthorId),
     staleTime: 60 * 1000,
   });
@@ -714,28 +714,11 @@ export default function ArticleEditor() {
   const [showDayGate, setShowDayGate] = useState(false);
   const dayGateContinueRef = useRef(false);
   const justSubmittedOpinionRef = useRef(false);
-  const redirectedActivePipelineRef = useRef(false);
   const hasBlockingActiveOpinionArticle = Boolean(
     isOpinionAuthor &&
       writerOwnSchedule?.activeArticle &&
       (isNewArticle || writerOwnSchedule.activeArticle.id !== id),
   );
-
-  useEffect(() => {
-    if (!isOpinionAuthor || !isNewArticle || justSubmittedOpinionRef.current || redirectedActivePipelineRef.current) return;
-    const active = writerOwnSchedule?.activeArticle;
-    if (!active) return;
-    redirectedActivePipelineRef.current = true;
-    toast({
-      title: active.stage === "scheduled" ? "يوجد مقال مجدول للنشر بالفعل" : "يوجد مقال بانتظار المراجعة والجدولة",
-      description:
-        active.stage === "scheduled"
-          ? `مقالتك «${active.title}» مجدولة للنشر حالياً. لا يمكن كتابة أو إرسال مقالة جديدة حتى يُنشر المقال الحالي.`
-          : `مقالتك «${active.title}» قيد مراجعة هيئة التحرير وبانتظار الجدولة. لا يمكن كتابة أو إرسال مقالة جديدة حالياً.`,
-      variant: "destructive",
-    });
-    navigate("/dashboard/opinion-author");
-  }, [isOpinionAuthor, isNewArticle, writerOwnSchedule?.activeArticle, toast, navigate]);
 
   const handleSubmitForReviewGated = () => {
     if (hasBlockingActiveOpinionArticle && writerOwnSchedule?.activeArticle) {
@@ -2982,7 +2965,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                 variant="outline"
                 size="sm"
                 onClick={() => handleSave(false)}
-                disabled={isSaving || isLockedByOther || (isNewArticle && hasBlockingActiveOpinionArticle)}
+                disabled={isSaving || isLockedByOther}
                 className="no-min-touch-size h-9 gap-1.5 sm:gap-2 w-full sm:w-auto justify-center"
                 data-testid="button-save-draft"
               >
@@ -3051,9 +3034,8 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                 )}
                 {canPublish && !isOpinionAuthor
                   ? (!isNewArticle && status === "published" ? "تحديث" : publishType === "scheduled" ? "جدولة" : "نشر")
-                  : <span className="hidden xs:inline">{isOpinionAuthor ? "إرسال لهيئة التحرير" : "إرسال للمراجعة"}</span>
+                  : <span>{isOpinionAuthor ? "إرسال للتحرير" : "إرسال للمراجعة"}</span>
                 }
-                {(!canPublish || isOpinionAuthor) && <span className="xs:hidden">إرسال</span>}
               </Button>
             </div>
           </div>
@@ -3077,7 +3059,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                   {writerOwnSchedule.activeArticle.stage === "scheduled"
                     ? "مجدولة للنشر بالفعل."
                     : "قيد المراجعة وتحديد موعد الجدولة من هيئة التحرير."}{" "}
-                  لا يمكن كتابة أو إرسال مقالة جديدة حتى يُنشر المقال الحالي.
+                  يمكنك حفظ مسودة، لكن لا يمكن إرسالها حتى يُنشر المقال الحالي.
                 </p>
               </div>
             </div>
@@ -3946,6 +3928,8 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                                   description: "تم حذف الصورة من الألبوم",
                                 });
                               }}
+                              aria-label={`حذف صورة الألبوم ${index + 1}`}
+                              title={`حذف صورة الألبوم ${index + 1}`}
                               data-testid={`button-delete-album-image-${index}`}
                             >
                               <Trash2 className="h-4 w-4" />
@@ -5329,6 +5313,8 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                                   deleteAttachmentMutation.mutate(asset.id);
                                 }}
                                 disabled={deleteAttachmentMutation.isPending}
+                                aria-label="حذف المرفق"
+                                title="حذف المرفق"
                                 data-testid={`button-delete-attachment-sidebar-${index}`}
                               >
                                 {deleteAttachmentMutation.isPending ? (
@@ -5636,7 +5622,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                 }
                 void handleSave(true);
               }}
-              disabled={isSaving || submitReviewMutation.isPending || isLockedByOther}
+              disabled={isSaving || submitReviewMutation.isPending || isLockedByOther || (!canPublish && hasBlockingActiveOpinionArticle)}
               className="no-min-touch-size h-9 gap-1.5 min-w-[5.5rem]"
               data-testid="button-publish-mobile-bar"
             >
@@ -5647,7 +5633,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
               )}
               {canPublish
                 ? (!isNewArticle && status === "published" ? "تحديث" : publishType === "scheduled" ? "جدولة" : "نشر")
-                : "إرسال"}
+                : isOpinionAuthor ? "إرسال للتحرير" : "إرسال للمراجعة"}
             </Button>
           </div>
         </div>
@@ -5759,6 +5745,8 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                 variant="ghost"
                 size="icon"
                 onClick={() => setShowStoryCardsDialog(false)}
+                aria-label="إغلاق"
+                title="إغلاق"
                 data-testid="button-close-story-cards"
               >
                 <X className="h-4 w-4" />

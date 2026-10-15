@@ -195,8 +195,8 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
     role === "opinion_author" ? (opinionScheduleData?.activeArticle ?? null) : null;
   const opinionPipelineBlockedReason = activeOpinionPipelineArticle
     ? activeOpinionPipelineArticle.stage === "scheduled"
-      ? `يوجد لديك مقال مجدول للنشر حالياً («${activeOpinionPipelineArticle.title}»). لا يمكن كتابة أو إرسال مقال جديد حتى يُنشر المقال الحالي.`
-      : `يوجد لديك مقال في انتظار مراجعة هيئة التحرير والجدولة («${activeOpinionPipelineArticle.title}»). لا يمكن كتابة أو إرسال مقال جديد حتى يُنشر المقال الحالي.`
+      ? `يوجد لديك مقال مجدول للنشر حالياً («${activeOpinionPipelineArticle.title}»). يمكنك حفظ مسودة، لكن لا يمكن إرسالها حتى يُنشر المقال الحالي.`
+      : `يوجد لديك مقال في انتظار مراجعة هيئة التحرير والجدولة («${activeOpinionPipelineArticle.title}»). يمكنك حفظ مسودة، لكن لا يمكن إرسالها حتى يُنشر المقال الحالي.`
     : "";
 
   // بطاقة هوية أعلى الشريط — كتّاب الرأي/الزاوية والمراسل ومدير المحتوى
@@ -554,39 +554,24 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                       <Plus className="h-4 w-4" />
                       <span>{role === "opinion_author" ? "إنشاء مقال جديد" : "إنشاء خبر جديد"}</span>
                     </Button>
-                  ) : activeOpinionPipelineArticle ? (
-                    <div className="space-y-1.5" data-testid="sidebar-quick-create-article-pipeline-busy">
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        disabled
-                        className="w-full justify-start gap-2 shadow-sm opacity-65"
-                        title={opinionPipelineBlockedReason}
-                      >
-                        <Plus className="h-4 w-4" />
-                        <span>
-                          {activeOpinionPipelineArticle.stage === "scheduled"
-                            ? "يوجد مقال مجدول للنشر"
-                            : "يوجد مقال بانتظار الجدولة"}
-                        </span>
-                      </Button>
-                      <p className="px-1 text-[11px] leading-relaxed text-amber-700 dark:text-amber-300">
-                        {activeOpinionPipelineArticle.stage === "scheduled"
-                          ? `مقالتك «${activeOpinionPipelineArticle.title}» مجدولة للنشر — ستُتاح كتابة مقال جديد بعد نشرها.`
-                          : `مقالتك «${activeOpinionPipelineArticle.title}» في انتظار مراجعة هيئة التحرير والجدولة.`}
-                      </p>
-                    </div>
                   ) : (
-                    <Button asChild className="w-full justify-start gap-2 shadow-sm">
-                      <Link
-                        href={quickCreateItem.path || "/dashboard/articles/new"}
-                        onClick={() => handleNavClick(quickCreateItem)}
-                        data-testid="sidebar-quick-create-article"
-                      >
-                        <Plus className="h-4 w-4" />
-                        <span>{role === "opinion_author" ? "إنشاء مقال جديد" : "إنشاء خبر جديد"}</span>
-                      </Link>
-                    </Button>
+                    <div className="space-y-1.5">
+                      <Button asChild className="w-full justify-start gap-2 shadow-sm">
+                        <Link
+                          href={quickCreateItem.path || "/dashboard/articles/new"}
+                          onClick={() => handleNavClick(quickCreateItem)}
+                          data-testid="sidebar-quick-create-article"
+                        >
+                          <Plus className="h-4 w-4" />
+                          <span>{role === "opinion_author" ? "إنشاء مقال جديد" : "إنشاء خبر جديد"}</span>
+                        </Link>
+                      </Button>
+                      {activeOpinionPipelineArticle && (
+                        <p className="px-1 text-[11px] leading-relaxed text-amber-700 dark:text-amber-300" data-testid="sidebar-quick-create-article-pipeline-busy">
+                          {opinionPipelineBlockedReason}
+                        </p>
+                      )}
+                    </div>
                   )
                 )}
 

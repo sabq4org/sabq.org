@@ -1,7 +1,7 @@
 // خدمة إدارة كتّاب الرأي: قائمة الكتّاب بإحصائياتهم، اليوم الأسبوعي المخصص،
 // وحساب موعد النشر القادم بتوقيت الرياض.
 // Per ADR-001 all Drizzle access lives here; the route module is HTTP-only.
-import { and, desc, asc, eq, exists, gte, inArray, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, exists, gte, inArray, or, sql } from "drizzle-orm";
 import { db } from "../db";
 import {
   articles,
@@ -17,6 +17,14 @@ import {
   mediaLicenseFlags,
   resolveMediaLicenseReviewStatus,
 } from "./mediaLicenseService";
+import {
+  collectOccupiedScheduleInstants,
+  opinionResubmitReviewPatch,
+  resolveWriterScheduleBannerState,
+  scheduleConflictsWith,
+} from "./opinionScheduleRules";
+
+export { opinionResubmitReviewPatch };
 
 export { OPINION_WRITERS_PER_DAY_CAP };
 
@@ -484,12 +492,15 @@ export async function canSelfAssignSchedule(writerId: string): Promise<boolean> 
 }
 
 /** الموعد المقترح القادم لكاتب — يُستخدم لتعبئة الجدولة تلقائياً عند المراجعة */
-export async function getNextSlotForWriter(writerId: string): Promise<{
+export async function getNextSlotForWriter(
+  writerId: string,
+  excludeArticleId?: string | null,
+): Promise<{
   weekday: number;
   publishTime: string;
   nextSlot: string;
 } | null> {
-  const slots = await getNextSlotsForWriters([writerId]);
+  const slots = await getNextSlotsForWriters([writerId], { excludeArticleId });
   return slots[writerId] ?? null;
 }
 
@@ -499,6 +510,7 @@ export async function getNextSlotForWriter(writerId: string): Promise<{
  */
 export async function getNextSlotsForWriters(
   writerIds: string[],
+  options?: { excludeArticleId?: string | null },
 ): Promise<Record<string, { weekday: number; publishTime: string; nextSlot: string }>> {
   const unique = [...new Set(writerIds.filter((id) => typeof id === "string" && id.length > 0))];
   if (unique.length === 0) return {};
@@ -513,19 +525,26 @@ export async function getNextSlotsForWriters(
   if (schedules.length === 0) return {};
 
   const scheduledWriterIds = schedules.map((row) => row.writerId);
+  const excludeArticleId = options?.excludeArticleId?.trim();
+  const floorWhere = [
+    eq(articles.articleType, "opinion"),
+    inArray(articles.authorId, scheduledWriterIds),
+  ];
+  if (excludeArticleId) floorWhere.push(sql`${articles.id} <> ${excludeArticleId}`);
   const floorRows = await db
     .select({
       authorId: articles.authorId,
       floor: sql<string | null>`greatest(
         max(${articles.publishedAt}) filter (where ${articles.status} = 'published'),
-        max(${articles.scheduledAt}) filter (where ${articles.status} = 'scheduled')
+        max(${articles.scheduledAt}) filter (where ${articles.status} = 'scheduled'),
+        max(coalesce(${articles.scheduledAt}, ${articles.updatedAt})) filter (
+          where ${articles.status} not in ('published', 'archived')
+            and (${articles.reviewStatus} in ('pending_review', 'approved'))
+        )
       )`,
     })
     .from(articles)
-    .where(and(
-      eq(articles.articleType, "opinion"),
-      inArray(articles.authorId, scheduledWriterIds),
-    ))
+    .where(and(...floorWhere))
     .groupBy(articles.authorId);
 
   const floorByWriter = new Map(
@@ -651,9 +670,9 @@ export type WriterActivePipelineArticle = {
 
 export function formatActivePipelineBlockMessage(active: WriterActivePipelineArticle): string {
   if (active.stage === "scheduled") {
-    return `يوجد لديك مقالة مجدولة للنشر حالياً («${active.title}») — لا يمكن كتابة أو إرسال مقالة جديدة حتى يتم نشر المقالة المجدولة.`;
+    return `يوجد لديك مقالة مجدولة للنشر حالياً («${active.title}») — يمكنك حفظ مسودة، لكن لا يمكن إرسالها حتى يتم نشر المقالة المجدولة.`;
   }
-  return `يوجد لديك مقالة في انتظار مراجعة وجدولة هيئة التحرير («${active.title}») — لا يمكن كتابة أو إرسال مقالة جديدة حتى يكتمل نشرها.`;
+  return `يوجد لديك مقالة في انتظار مراجعة وجدولة هيئة التحرير («${active.title}») — يمكنك حفظ مسودة، لكن لا يمكن إرسالها حتى يكتمل نشر المقالة الحالية.`;
 }
 
 export async function assertOpinionAuthorPipelineOpen(
@@ -673,8 +692,8 @@ export async function assertOpinionAuthorPipelineOpen(
 }
 
 /**
- * يتحقق مما إذا كان للكاتب مقال رأي قيد المراجعة/الاعتماد أو مجدول للنشر حالياً
- * لمنع إنشاء أو إرسال مقالة ثانية قبل نشر المقالة الحالية.
+ * يتحقق مما إذا كان للكاتب مقال رأي قيد المراجعة/الاعتماد أو مجدول للنشر حالياً.
+ * يُستخدم عند الإرسال فقط؛ حفظ المسودة يبقى متاحاً.
  */
 export async function getWriterActivePipelineArticle(
   writerId: string,
@@ -818,6 +837,7 @@ export async function scheduleApprovedOpinionArticle(
       id: articles.id,
       status: articles.status,
       reviewStatus: articles.reviewStatus,
+      authorId: articles.authorId,
     })
     .from(articles)
     .where(and(eq(articles.id, articleId), eq(articles.articleType, "opinion")))
@@ -829,6 +849,30 @@ export async function scheduleApprovedOpinionArticle(
     return { ok: false, status: 400, message: "المقال منشور بالفعل" };
   if (scheduledAt.getTime() <= Date.now())
     return { ok: false, status: 400, message: "موعد الجدولة يجب أن يكون في المستقبل" };
+
+  if (existing.authorId) {
+    const others = await db
+      .select({
+        status: articles.status,
+        reviewStatus: articles.reviewStatus,
+        publishedAt: articles.publishedAt,
+        scheduledAt: articles.scheduledAt,
+        updatedAt: articles.updatedAt,
+      })
+      .from(articles)
+      .where(and(
+        eq(articles.articleType, "opinion"),
+        eq(articles.authorId, existing.authorId),
+        sql`${articles.id} <> ${articleId}`,
+      ));
+    if (scheduleConflictsWith(scheduledAt, collectOccupiedScheduleInstants(others))) {
+      return {
+        ok: false,
+        status: 409,
+        message: "هذا الموعد قريب من مقال آخر للكاتب نفسه. اختر أسبوعاً مختلفاً.",
+      };
+    }
+  }
 
   const [updated] = await db
     .update(articles)
@@ -882,6 +926,7 @@ export async function getWriterScheduleBanner(
     .select({
       lastPublishedAt: sql<string | null>`max(${articles.publishedAt}) filter (where ${articles.status} = 'published')`,
       upcomingCount: sql<number>`count(*) filter (where ${articles.status} = 'scheduled' or (${articles.status} = 'draft' and (${awaitingEditorialSql} or ${articles.reviewStatus} = 'approved')))::int`,
+      inReviewCount: sql<number>`count(*) filter (where ${articles.status} not in ('published', 'archived') and (${awaitingEditorialSql} or ${articles.reviewStatus} = 'approved'))::int`,
       maxScheduledAt: sql<string | null>`max(${articles.scheduledAt}) filter (where ${articles.status} = 'scheduled')`,
     })
     .from(articles)
@@ -889,7 +934,8 @@ export async function getWriterScheduleBanner(
 
   const lastPublishedAt = parseDbTimestamp(agg?.lastPublishedAt);
   const maxScheduledAt = parseDbTimestamp(agg?.maxScheduledAt);
-  const hasUpcoming = (agg?.upcomingCount ?? 0) > 0;
+  const hasInReview = (agg?.inReviewCount ?? 0) > 0;
+  const hasUpcoming = (agg?.upcomingCount ?? 0) > 0 || hasInReview;
 
   const floor =
     lastPublishedAt && maxScheduledAt
@@ -900,26 +946,20 @@ export async function getWriterScheduleBanner(
 
   const submitDeadline = new Date(nextSlot.getTime() - SUBMIT_LEAD_MS);
 
-  // فترة سماح: لا نُظهر "متأخر" لكاتب خُصص له يومه قبل أقل من أسبوع
+  // فترة سماح: لا نُظهر "متأخر" لكاتب خُصص له يومه قبل أقل من أسبوع.
+  // والمقال قيد المراجعة لا يُحسب متأخراً حتى لو فات موعد الإرسال.
   const scheduleIsFresh =
     schedule.createdAt != null && now.getTime() - schedule.createdAt.getTime() < 7 * DAY_MS;
-  let state: WriterScheduleBanner["state"] = "ok";
-  if (!hasUpcoming) {
-    // فات آخر موعد للإرسال → متأخر (حتى لو بقي وقت قبل لحظة النشر)
-    // التذكير فقط والمهلة ما زالت في المستقبل — يمنع «أرسلها قبل 18» ونحن في 20
-    if (
-      !scheduleIsFresh &&
-      (now.getTime() >= submitDeadline.getTime() ||
-        (lastPublishedAt != null && now.getTime() - lastPublishedAt.getTime() > 8 * DAY_MS))
-    ) {
-      state = "late";
-    } else if (
-      now.getTime() < submitDeadline.getTime() &&
-      submitDeadline.getTime() - now.getTime() <= REMINDER_WINDOW_MS
-    ) {
-      state = "reminder";
-    }
-  }
+  const state = resolveWriterScheduleBannerState({
+    hasUpcoming,
+    hasInReview,
+    scheduleIsFresh,
+    nowMs: now.getTime(),
+    submitDeadlineMs: submitDeadline.getTime(),
+    lastPublishedAtMs: lastPublishedAt ? lastPublishedAt.getTime() : null,
+    reminderWindowMs: REMINDER_WINDOW_MS,
+    lateAfterPublishMs: 8 * DAY_MS,
+  });
 
   return {
     weekday: schedule.weekday,
