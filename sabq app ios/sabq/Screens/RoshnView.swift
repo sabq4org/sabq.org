@@ -226,9 +226,11 @@ struct RoshnView: View {
         }
         .navigationDestination(item: $selectedTeam) { team in
             RoshnTeamView(teamId: team.id, previewName: team.name, previewLogo: team.logo)
+                .duoContentInsets()
         }
         .navigationDestination(isPresented: $showPredictions) {
             RoshnPredictionsView()
+                .duoContentInsets()
         }
     }
 

@@ -346,6 +346,7 @@ struct ArticleDetailView: View {
         }
         .navigationDestination(for: Article.self) { related in
             ArticleDetailView(article: related)
+                .duoContentInsets()
         }
     }
 

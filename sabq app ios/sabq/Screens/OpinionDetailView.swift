@@ -210,6 +210,7 @@ struct OpinionDetailView: View {
         }
         .navigationDestination(for: OpinionArticle.self) { opinion in
             OpinionDetailView(opinion: opinion)
+                .duoContentInsets()
         }
     }
 

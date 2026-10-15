@@ -20,26 +20,11 @@ struct ContentView: View {
     @State private var notificationsStore = NotificationsStore.shared
     @State private var seasonal = SeasonalThemeStore.shared
     @State private var showCompleteName = false
+    @AppStorage(FoldableDevice.observedDefaultsKey) private var foldableObserved = false
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
-        TabView(selection: $navigation.selectedTab) {
-            ForEach(AppTab.allCases) { tab in
-                SabqTabNavigation(path: path(for: tab), usesReaderColumns: tab != .profile) {
-                    tabRoot(tab)
-                } sidebar: {
-                    tabSidebar(tab)
-                } detail: {
-                    tabDetail(tab)
-                } onLayoutChange: { isWide in
-                    // «الرئيسية» وحدها تحمل خبر القارئ خارج المكدّس؛ بقية
-                    // التبويبات تتشارك المكدّس بين التخطيطين بلا جسر.
-                    if tab == .home { navigation.homeLayoutDidChange(isWide: isWide) }
-                }
-                .tabItem { Label(tab.title, systemImage: tab.systemImage) }
-                .tag(tab)
-            }
-        }
+        tabs
         .id(navigation.sessionID)
         .tint(SabqTheme.primaryEnd)
         // ألوان `SabqTheme` ثابتة تُقرأ وقت الرسم، فلا يتتبّعها SwiftUI.
@@ -150,6 +135,43 @@ struct ContentView: View {
         .onChange(of: authStore.isLoggedIn) { _, _ in syncNameGate() }
         .onChange(of: authStore.needsDisplayName) { _, _ in syncNameGate() }
         .onChange(of: authStore.isAuthSheetPresented) { _, _ in syncNameGate() }
+    }
+
+    /// iPhone Duo: حاوية تبويبات خاصة بشريط سفلي على الشاشة الخارجية وشريط
+    /// جانبي مفتوحًا (`DuoTabContainer`) — `TabView` يحجز 84 نقطة لشريطه الرأسي
+    /// في وضعية «الكتاب المغلق» فيضغط المحتوى إلى 298 من 466 نقطة. الآيفون
+    /// العادي وiPad يبقيان على `TabView` النظامي كما هو.
+    @ViewBuilder
+    private var tabs: some View {
+        if FoldableDevice.isFoldable(observed: foldableObserved) {
+            DuoTabContainer(selection: $navigation.selectedTab, onReselect: { tab in
+                navigation.paths[tab] = NavigationPath()
+            }) { tab in
+                tabNavigation(tab)
+            }
+        } else {
+            TabView(selection: $navigation.selectedTab) {
+                ForEach(AppTab.allCases) { tab in
+                    tabNavigation(tab)
+                        .tabItem { Label(tab.title, systemImage: tab.systemImage) }
+                        .tag(tab)
+                }
+            }
+        }
+    }
+
+    private func tabNavigation(_ tab: AppTab) -> some View {
+        SabqTabNavigation(path: path(for: tab), usesReaderColumns: tab != .profile) {
+            tabRoot(tab)
+        } sidebar: {
+            tabSidebar(tab)
+        } detail: {
+            tabDetail(tab)
+        } onLayoutChange: { isWide in
+            // «الرئيسية» وحدها تحمل خبر القارئ خارج المكدّس؛ بقية
+            // التبويبات تتشارك المكدّس بين التخطيطين بلا جسر.
+            if tab == .home { navigation.homeLayoutDidChange(isWide: isWide) }
+        }
     }
 
     private func path(for tab: AppTab) -> Binding<NavigationPath> {

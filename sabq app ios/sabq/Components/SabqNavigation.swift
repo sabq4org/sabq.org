@@ -149,6 +149,7 @@ struct SabqTabNavigation<Root: View, Sidebar: View, Detail: View>: View {
                     if isWide { detail() } else { root() }
                 }
                 .background(SabqTheme.background)
+                .duoContentInsets()
                 .modifier(SabqDestinations())
             }
             .toolbar(removing: .sidebarToggle)
@@ -178,6 +179,7 @@ struct SabqTabNavigation<Root: View, Sidebar: View, Detail: View>: View {
     private var stackLayout: some View {
         NavigationStack(path: $path) {
             root()
+                .duoContentInsets()
                 .modifier(SabqDestinations())
         }
     }
@@ -227,60 +229,79 @@ private struct SabqDestinations: ViewModifier {
         content
             .navigationDestination(for: Article.self) { article in
                 ArticleDetailView(article: article)
+                    .duoContentInsets()
             }
             .navigationDestination(for: OpinionArticle.self) { opinion in
                 OpinionDetailView(opinion: opinion)
+                    .duoContentInsets()
             }
             .navigationDestination(for: KeywordRoute.self) { route in
                 KeywordArticlesView(keyword: route.keyword)
+                    .duoContentInsets()
             }
             .navigationDestination(for: AuthorRoute.self) { route in
                 AuthorArticlesView(authorName: route.name)
+                    .duoContentInsets()
             }
             .navigationDestination(for: CalendarRoute.self) { _ in
                 CalendarView()
+                    .duoContentInsets()
             }
             .navigationDestination(for: OmqRoute.self) { _ in
                 OmqListView()
+                    .duoContentInsets()
             }
             .navigationDestination(for: OmqDetailRoute.self) { route in
                 OmqDetailView(id: route.id, initialTitle: route.title)
+                    .duoContentInsets()
             }
             .navigationDestination(for: DailyBriefRoute.self) { _ in
                 DailyBriefView()
+                    .duoContentInsets()
             }
             .navigationDestination(for: AudioNewslettersRoute.self) { _ in
                 AudioNewslettersView()
+                    .duoContentInsets()
             }
             .navigationDestination(for: SearchRoute.self) { _ in
                 SearchView()
+                    .duoContentInsets()
             }
             .navigationDestination(for: TrendingRoute.self) { _ in
                 TrendingView()
+                    .duoContentInsets()
             }
             .navigationDestination(for: LiveCoverageRoute.self) { _ in
                 LiveCoverageView()
+                    .duoContentInsets()
             }
             .navigationDestination(for: WorldCupRoute.self) { _ in
                 WorldCupView()
+                    .duoContentInsets()
             }
             .navigationDestination(for: AsianCupRoute.self) { _ in
                 AsianCupView()
+                    .duoContentInsets()
             }
             .navigationDestination(for: KingsCupRoute.self) { _ in
                 KingsCupView()
+                    .duoContentInsets()
             }
             .navigationDestination(for: RoshnRoute.self) { _ in
                 RoshnView()
+                    .duoContentInsets()
             }
             .navigationDestination(for: EconomyRoute.self) { _ in
                 EconomyView()
+                    .duoContentInsets()
             }
             .navigationDestination(for: RoshnTeamRoute.self) { route in
                 RoshnTeamView(teamId: route.teamId)
+                    .duoContentInsets()
             }
             .navigationDestination(for: MuqtarabRoute.self) { _ in
                 MuqtarabLandingView()
+                    .duoContentInsets()
             }
             .navigationDestination(for: MuqtarabAngleRoute.self) { route in
                 MuqtarabAngleView(
@@ -288,6 +309,7 @@ private struct SabqDestinations: ViewModifier {
                     initialName: route.name,
                     initialColorHex: route.colorHex
                 )
+                .duoContentInsets()
             }
             .navigationDestination(for: MuqtarabTopicRoute.self) { route in
                 MuqtarabTopicView(
@@ -295,48 +317,63 @@ private struct SabqDestinations: ViewModifier {
                     topicSlug: route.topicSlug,
                     initialTitle: route.title
                 )
+                .duoContentInsets()
             }
             .navigationDestination(for: MuqtarabWriterRoute.self) { route in
                 MuqtarabWriterView(id: route.id, initialName: route.name)
+                    .duoContentInsets()
             }
             .navigationDestination(for: MomentByMomentRoute.self) { _ in
                 MomentByMomentView()
+                    .duoContentInsets()
             }
             .navigationDestination(for: OpinionsRoute.self) { _ in
                 OpinionsView()
+                    .duoContentInsets()
             }
             .navigationDestination(for: EditorialNotificationsRoute.self) { _ in
                 EditorialNotificationsView()
+                    .duoContentInsets()
             }
             .navigationDestination(for: SurveyDeepLinkRoute.self) { route in
                 SurveyView(token: route.token)
+                    .duoContentInsets()
             }
             .navigationDestination(for: ContributorDashboardRoute.self) { _ in
                 WriterWorkspaceView()
+                    .duoContentInsets()
             }
             .navigationDestination(for: AdminDashboardRoute.self) { _ in
                 AdminDashboardView()
+                    .duoContentInsets()
             }
             .navigationDestination(for: AdminContactMessagesRoute.self) { _ in
                 AdminContactMessagesView()
+                    .duoContentInsets()
             }
             .navigationDestination(for: AdminOpinionTicketsRoute.self) { _ in
                 AdminOpinionTicketsView()
+                    .duoContentInsets()
             }
             .navigationDestination(for: AdminContactMessageRoute.self) { route in
                 AdminContactMessageDetailView(id: route.id)
+                    .duoContentInsets()
             }
             .navigationDestination(for: AdminOpinionTicketRoute.self) { route in
                 AdminOpinionTicketDetailView(id: route.id)
+                    .duoContentInsets()
             }
             .navigationDestination(for: LoyaltyAccountRoute.self) { _ in
                 LoyaltyAccountView()
+                    .duoContentInsets()
             }
             .navigationDestination(for: SabqPlusRoute.self) { _ in
                 SabqPlusView()
+                    .duoContentInsets()
             }
             .navigationDestination(for: PressCardRoute.self) { _ in
                 PressCardActivationView()
+                    .duoContentInsets()
             }
             .navigationDestination(for: ArticleSlugRoute.self) { route in
                 // Wraps a slug-based deep link in the existing
@@ -344,6 +381,7 @@ private struct SabqDestinations: ViewModifier {
                 // shell — ArticleDetailView already refetches the
                 // full payload from the slug via NewsService.
                 ArticleDetailView(article: Article.placeholder(slug: route.slug))
+                    .duoContentInsets()
             }
             .navigationDestination(for: OpinionSlugRoute.self) { route in
                 // Same pattern as ArticleSlugRoute but for opinion
@@ -351,6 +389,7 @@ private struct SabqDestinations: ViewModifier {
                 // hydrates the real payload (title, body, author, etc.)
                 // from `/api/opinion/<slug>` on first appear.
                 OpinionDetailView(opinion: OpinionArticle.placeholder(slug: route.slug))
+                    .duoContentInsets()
             }
             .navigationDestination(for: DraftDeepLinkRoute.self) { route in
                 // Resolves `sabq://draft/<id>` deep links and the
@@ -358,12 +397,15 @@ private struct SabqDestinations: ViewModifier {
                 // Loads the latest draft from the server and
                 // presents the revision form.
                 ArticleRevisionView(articleId: route.articleId)
+                    .duoContentInsets()
             }
             .navigationDestination(for: ArticleRevisionsRoute.self) { _ in
                 ArticleRevisionsListView()
+                    .duoContentInsets()
             }
             .navigationDestination(for: ArticleCategory.self) { category in
                 CategoryArticlesView(category: category)
+                    .duoContentInsets()
             }
     }
 }
