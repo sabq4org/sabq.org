@@ -1,35 +1,50 @@
-import { useEffect, useRef } from "react";
-import { useLocation } from "wouter";
+import { useEffect, useLayoutEffect } from "react";
+import { useLocation, useSearch } from "wouter";
+import {
+  hasExplicitAnalyticsMetadata,
+  signalAnalyticsPageReady,
+  synchronizeAnalyticsNavigation,
+} from "@/lib/analytics-pageviews";
 
-// Single source of truth for GA4 pageviews. The matching `gtag('config')`
-// call in client/index.html ships with `send_page_view: false` so this
-// hook owns every event — no double-counting on the initial load, and
-// every wouter route change (article ↔ article ↔ search ↔ category)
-// fires its own pageview.
-//
-// Without this, the SPA was registering a single pageview per session
-// regardless of how many articles the reader opened — which collapsed
-// the GA totals after launch traffic shifted from "direct article URL"
-// (one full-document load per article) to "homepage → drill in" (one
-// load, many wouter navigations).
-const GA_MEASUREMENT_ID = "G-EEB5593GY7";
+/** One coordinator handles initial load, query changes, Back and Forward. */
+export function useAnalytics() {
+  const [path] = useLocation();
+  const search = useSearch();
+  useLayoutEffect(() => {
+    // Clear the previous route's title before child metadata effects run. Pages
+    // without their own metadata use the publication title, never another story.
+    document.title = path.startsWith("/en") ? "Sabq News" : path.startsWith("/ur") ? "سبق اردو" : "سبق";
+    synchronizeAnalyticsNavigation();
+  }, [path, search]);
+}
 
-export const useAnalytics = () => {
-  const [location] = useLocation();
-  const lastTracked = useRef<string | null>(null);
-
+/** null means metadata is pending; failed queries supply an explicit error title. */
+export function useAnalyticsPageMetadata(title: string | null) {
+  const [path] = useLocation();
+  const search = useSearch();
+  const href = typeof window === "undefined" ? "" : window.location.href;
   useEffect(() => {
-    if (location === lastTracked.current) return;
-    lastTracked.current = location;
-
-    const gtag = (window as unknown as { gtag?: (...args: unknown[]) => void }).gtag;
-    if (typeof gtag !== "function") return;
-
-    gtag("event", "page_view", {
-      send_to: GA_MEASUREMENT_ID,
-      page_path: location,
-      page_title: document.title,
-      page_location: window.location.href,
+    if (title === null) return;
+    document.title = title;
+    // Let Wouter finish replacing the outgoing route on popstate. Its effects
+    // can briefly observe the incoming URL; cleanup cancels their pending commit.
+    const frame = requestAnimationFrame(() => {
+      document.title = title;
+      signalAnalyticsPageReady(href, title);
     });
-  }, [location]);
-};
+    return () => cancelAnimationFrame(frame);
+  }, [path, search, href, title]);
+}
+
+/** Mounted inside Suspense, after the actual route's child effects. */
+export function AnalyticsRouteCommit() {
+  const [path] = useLocation();
+  const search = useSearch();
+  const href = typeof window === "undefined" ? "" : window.location.href;
+  useEffect(() => {
+    if (hasExplicitAnalyticsMetadata(path)) return;
+    const frame = requestAnimationFrame(() => signalAnalyticsPageReady(href, document.title));
+    return () => cancelAnimationFrame(frame);
+  }, [path, search, href]);
+  return null;
+}

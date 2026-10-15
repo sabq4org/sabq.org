@@ -79,13 +79,13 @@ export default function GulfCup() {
   };
 
   return (
-    <div className="flex min-h-screen flex-col bg-[#EEF1F2] dark:bg-[#090E0F]" dir="rtl">
+    <div className="public-page flex min-h-screen flex-col bg-[#EEF1F2] dark:bg-[#090E0F]" dir="rtl" lang="ar-SA-u-nu-latn">
       <Header user={user || undefined} />
       <NavigationBar />
 
       <main className="flex-1">
         <GcHero overview={overview} onJump={handleJump} titleHolder={titleHolder} />
-        <GcSectionNav />
+        <GcSectionNav overview={overview} fixtures={fixtures} />
         <GcSaudiSpotlight saudi={overview?.saudi} onOpenMatch={setOpenFixtureId} />
         <GcSchedule
           fixtures={fixtures}

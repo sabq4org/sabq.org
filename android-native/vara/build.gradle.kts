@@ -22,8 +22,8 @@ android {
         applicationId = "com.sabq.sports"
         minSdk = 26
         targetSdk = 36
-        versionCode = 4
-        versionName = "1.0.2"
+        versionCode = 10
+        versionName = "1.0.3"
         vectorDrawables { useSupportLibrary = true }
     }
 
@@ -95,6 +95,8 @@ android {
 
 dependencies {
     implementation(libs.androidx.core.ktx)
+    // ترقية صريحة فوق fragment:1.1.0 التي يجرّها play-services (تنبيه Play Console 2026-08-08)
+    implementation(libs.androidx.fragment.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)

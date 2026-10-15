@@ -14,6 +14,7 @@ import { toast } from "@/hooks/use-toast";
 // `apiUrl()` is exported so feature code making raw fetch() calls can opt in
 // without depending on apiRequest().
 const API_BASE = (import.meta.env.VITE_API_URL || "").replace(/\/+$/, "");
+const CSRF_COOKIE_NAME = import.meta.env.VITE_STAGING === "true" ? "sabq-staging.csrf" : "csrf-token";
 
 export function apiUrl(path: string): string {
   if (!API_BASE) return path;
@@ -49,8 +50,9 @@ export function withSportsLang(path: string): string {
 }
 
 function getCsrfTokenFromCookie(): string | null {
-  const match = document.cookie.match(/csrf-token=([^;]+)/);
-  return match ? match[1] : null;
+  const escapedName = CSRF_COOKIE_NAME.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = document.cookie.match(new RegExp(`(?:^|;\\s*)${escapedName}=([^;]+)`));
+  return match ? decodeURIComponent(match[1]) : null;
 }
 
 let csrfToken: string | null = null;
@@ -447,6 +449,8 @@ export async function apiRequest<T = any>(
     headers?: Record<string, string>;
     isFormData?: boolean;
     onUploadProgress?: (progress: { loaded: number; total: number }) => void;
+    /** FormData (XHR) uploads only: abort after this many ms instead of hanging forever. */
+    timeoutMs?: number;
     _csrfRetry?: boolean;
     silent?: boolean;
   }
@@ -552,9 +556,20 @@ export async function apiRequest<T = any>(
       xhr.addEventListener('error', () => {
         reject(new Error('Network error'));
       });
+      // Without these a stalled or cancelled upload never settles and the
+      // caller's spinner stays on forever.
+      xhr.addEventListener('timeout', () => {
+        reject(new Error('Network error: upload timed out'));
+      });
+      xhr.addEventListener('abort', () => {
+        reject(new Error('Network error: upload aborted'));
+      });
 
       xhr.open(options?.method || 'POST', apiUrl(withSportsLang(url)));
       xhr.withCredentials = true;
+      if (options.timeoutMs && options.timeoutMs > 0) {
+        xhr.timeout = options.timeoutMs;
+      }
       
       const token = getCsrfToken();
       if (token) {

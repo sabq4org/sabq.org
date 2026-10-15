@@ -1,3 +1,4 @@
+import { sportsLastFetchLabel } from "@/hooks/useSportsHomeQuery";
 import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import { ChevronLeft, Radio, Trophy } from "lucide-react";
@@ -83,6 +84,7 @@ export interface CupStripTheme {
 }
 
 interface CupHomeStripProps {
+  staleUpdatedAt?: string;
   title: string;
   subtitle: string;
   championSubtitle: string;
@@ -105,6 +107,8 @@ interface CupHomeStripProps {
   /** شعار البطولة الرسمي — يُعرض على رقعة بيضاء بدل أيقونة الكأس العامة */
   emblemSrc?: string;
   emblemAlt?: string;
+  /** إخفاء رقعة الشعار على شاشات الجوال فقط */
+  hideEmblemOnMobile?: boolean;
 }
 
 function arabicDays(n: number): string {
@@ -187,7 +191,7 @@ function CountdownChipsRow({ timestamp, soft }: { timestamp: number; soft: strin
  * اسم الدور + التاريخ وعدد المباريات + عدّاد تنازلي مشترك (توقيت الانطلاق واحد
  * غالبًا)، وتتحوّل لمؤشّر مباشر عند انطلاق المباريات.
  */
-function MatchdayBlock({ matchday, theme }: { matchday: CupMatchday; theme: CupStripTheme }) {
+function MatchdayBlock({ matchday, theme, stale = false }: { matchday: CupMatchday; theme: CupStripTheme; stale?: boolean }) {
   return (
     <div className="flex flex-col items-center gap-1.5 min-w-0 text-center" data-testid="cup-matchday-block">
       <p className="text-lg font-black text-white leading-tight">
@@ -199,7 +203,7 @@ function MatchdayBlock({ matchday, theme }: { matchday: CupMatchday; theme: CupS
           <> · تنطلق جميعها {formatKickoffTime(new Date(matchday.nextKickoffTs * 1000).toISOString())}</>
         )}
       </p>
-      {matchday.liveCount > 0 ? (
+      {stale ? <p className={`text-[11px] ${theme.soft}`}>حالة الجولة حسب آخر تحديث متاح</p> : matchday.liveCount > 0 ? (
         <p className="flex items-center gap-1.5 text-sm font-bold text-red-300">
           <Radio className="h-3.5 w-3.5 animate-pulse" />
           {matchday.liveCount === 1 ? "مباراة تجري الآن" : `${matchday.liveCount} مباريات تجري الآن`}
@@ -254,7 +258,7 @@ function TeamChip({ team }: { team: CupTeam }) {
   );
 }
 
-function MatchBlock({ fixture, theme }: { fixture: CupFixture; theme: CupStripTheme }) {
+function MatchBlock({ fixture, theme, stale = false }: { fixture: CupFixture; theme: CupStripTheme; stale?: boolean }) {
   const started = fixture.status.live || fixture.status.finished;
   return (
     <div className="flex items-center justify-center gap-3 sm:gap-5 min-w-0">
@@ -269,13 +273,13 @@ function MatchBlock({ fixture, theme }: { fixture: CupFixture; theme: CupStripTh
             </span>
             <Badge
               className={
-                fixture.status.live
+                fixture.status.live && !stale
                   ? "bg-red-500 text-white border-0 gap-1 text-[10px] px-2 py-0"
                   : "bg-white/10 text-white/85 border-0 text-[10px] px-2 py-0"
               }
             >
-              {fixture.status.live && <Radio className="h-2.5 w-2.5 animate-pulse" />}
-              {fixture.status.live && fixture.status.elapsed != null
+              {fixture.status.live && !stale && <Radio className="h-2.5 w-2.5 animate-pulse" />}
+              {stale ? "آخر نتيجة متاحة" : fixture.status.live && fixture.status.elapsed != null
                 ? `${fixture.status.label} · ${fixture.status.elapsed}'`
                 : fixture.status.label}
             </Badge>
@@ -286,7 +290,7 @@ function MatchBlock({ fixture, theme }: { fixture: CupFixture; theme: CupStripTh
               {formatKickoffTime(fixture.date)}
             </span>
             <span className={`text-[10px] ${theme.soft}`}>{formatKickoffDay(fixture.date)}</span>
-            <TickingCountdown timestamp={fixture.timestamp} accent={theme.accent} soft={theme.soft} />
+            {!stale && <TickingCountdown timestamp={fixture.timestamp} accent={theme.accent} soft={theme.soft} />}
           </>
         )}
       </div>
@@ -345,6 +349,7 @@ function ChampionBlock({
 }
 
 export default function CupHomeStrip({
+  staleUpdatedAt,
   title,
   subtitle,
   championSubtitle,
@@ -358,6 +363,7 @@ export default function CupHomeStrip({
   preSeason,
   emblemSrc,
   emblemAlt,
+  hideEmblemOnMobile = false,
 }: CupHomeStripProps) {
   if (!fixture && !champion && !preSeason) return null;
   // 3 مباريات فأكثر في اليوم = إبراز مباراة واحدة اعتباطي — نعرض عدّاد الجولة
@@ -393,7 +399,7 @@ export default function CupHomeStrip({
               <span className="flex items-center gap-3 cursor-pointer group">
                 {emblemSrc ? (
                   // الشعار الرسمي على رقعة بيضاء — نص الهوية الداكن يحتاج خلفية فاتحة
-                  <span className="rounded-xl bg-white p-1.5 shadow-lg shrink-0">
+                  <span className={`${hideEmblemOnMobile ? "hidden sm:block " : ""}rounded-xl bg-white p-1.5 shadow-lg shrink-0`}>
                     <img
                       src={emblemSrc}
                       alt={emblemAlt ?? title}
@@ -426,9 +432,9 @@ export default function CupHomeStrip({
               ) : preSeasonMode ? (
                 <PreSeasonBlock preSeason={preSeason!} theme={theme} />
               ) : matchdayMode ? (
-                <MatchdayBlock matchday={matchday!} theme={theme} />
+                <MatchdayBlock matchday={matchday!} theme={theme} stale={!!staleUpdatedAt} />
               ) : (
-                fixture && <MatchBlock fixture={fixture} theme={theme} />
+                fixture && <MatchBlock fixture={fixture} theme={theme} stale={!!staleUpdatedAt} />
               )}
             </div>
 
@@ -440,6 +446,7 @@ export default function CupHomeStrip({
               </Button>
             </Link>
           </div>
+          {staleUpdatedAt && <p role="status" className={`relative px-4 pb-3 text-center text-xs ${theme.soft}`}>{sportsLastFetchLabel(staleUpdatedAt)}</p>}
         </section>
       </div>
     </div>

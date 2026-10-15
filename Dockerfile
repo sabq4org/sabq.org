@@ -2,7 +2,7 @@
 # Sabq backend Dockerfile (Railway-aligned headless build)
 # ============================================================
 # Builds ONLY the Express server bundle. The frontend (Vite) is
-# built separately on Vercel — Railway runs the API in headless
+# built separately on Cloudflare Pages — Railway runs the API in headless
 # mode (SERVE_SPA=false default below).
 #
 # Note: this image does NOT serve the SPA. Local docker-compose
@@ -12,7 +12,7 @@
 # locally and mount dist/public into the container).
 
 # Stage 1: Builder
-FROM node:20.20.2-alpine AS builder
+FROM node:24.20.0-alpine AS builder
 
 # Bumped to bust Railway's docker layer cache when mobileApiRoutes.ts
 # changes weren't being picked up despite commits landing on main. Any
@@ -35,14 +35,15 @@ COPY . .
 RUN npm run build:server
 
 # Stage 2: Production
-FROM node:20.20.2-alpine AS production
+FROM node:24.20.0-alpine AS production
 
 WORKDIR /app
 
 # System Chromium for admin HTML→PDF (PR client report) and any other
 # puppeteer callers. Alpine's bundled chrome from npm does not ship in
 # this image (PUPPETEER_SKIP_DOWNLOAD below), so we point Puppeteer at
-# the distro binary instead.
+# the distro binary instead. `lame` encodes the audio news bulletin to MP3
+# (server/services/audioBulletinAudio.ts).
 RUN apk add --no-cache \
       chromium \
       nss \
@@ -52,6 +53,7 @@ RUN apk add --no-cache \
       ttf-freefont \
       font-noto \
       font-noto-arabic \
+      lame \
     && CHROME_BIN="$(command -v chromium-browser || command -v chromium)" \
     && test -n "$CHROME_BIN" \
     && ln -sf "$CHROME_BIN" /usr/bin/sabq-chromium \

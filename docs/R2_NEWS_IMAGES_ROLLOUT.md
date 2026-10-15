@@ -89,6 +89,10 @@ NEWS_IMAGES_R2_SECRET_ACCESS_KEY=<R2 Secret Access Key>
 NEWS_IMAGES_R2_BUCKET_NAME=sabq-news-images
 NEWS_IMAGES_R2_PUBLIC_URL=https://media.sabq.org
 NEWS_IMAGES_R2_ROLLOUT_PERCENT=0
+# اختياريان (2026-09-03): مهلة كل PUT إلى R2 والميزانية الكلية لخطوة المزوّد
+# (R2 ثم Cloudflare Images) داخل طلب الرفع. الافتراضي 10s و20s.
+NEWS_IMAGES_R2_PUT_TIMEOUT_MS=10000
+NEWS_IMAGES_UPLOAD_BUDGET_MS=20000
 ```
 
 قواعد مهمة:

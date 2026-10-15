@@ -2,6 +2,7 @@
 
 import Anthropic from "@anthropic-ai/sdk";
 import type { AdapterCompleteParams, AdapterCompleteResult, ProviderAdapter } from "../types";
+import { claudeJsonOutput } from "../../claudeStructuredOutputs";
 
 let client: Anthropic | null = null;
 
@@ -28,6 +29,7 @@ export const anthropicAdapter: ProviderAdapter = {
   async complete(modelId: string, params: AdapterCompleteParams): Promise<AdapterCompleteResult> {
     // Anthropic takes system prompts as a top-level param, not a message role.
     const systemParts = params.messages.filter((m) => m.role === "system").map((m) => m.content);
+    const systemText = systemParts.join("\n\n");
     const chat = params.messages
       .filter((m) => m.role !== "system")
       .map((m) => ({ role: m.role as "user" | "assistant", content: m.content }));
@@ -37,16 +39,35 @@ export const anthropicAdapter: ProviderAdapter = {
         model: modelId,
         max_tokens: params.maxTokens ?? DEFAULT_MAX_TOKENS,
         ...(params.temperature !== undefined ? { temperature: params.temperature } : {}),
-        ...(systemParts.length ? { system: systemParts.join("\n\n") } : {}),
+        ...(systemParts.length
+          ? {
+              system: params.cacheSystemPrompt
+                ? [{ type: "text", text: systemText, cache_control: { type: "ephemeral" } }]
+                : systemText,
+            }
+          : {}),
         messages: chat.length ? chat : [{ role: "user", content: "" }],
-      },
-      { timeout: params.timeoutMs },
+        ...(params.jsonSchema ? claudeJsonOutput(params.jsonSchema) : {}),
+      } as Anthropic.MessageCreateParamsNonStreaming,
+      { timeout: params.timeoutMs, signal: params.signal, maxRetries: 0 },
     );
 
-    const content = response.content[0];
+    // Collect every text block: on models where thinking is on by default the first
+    // block is a thinking block, and reading content[0] alone returns "" silently.
+    const text = response.content
+      .filter((block): block is Anthropic.TextBlock => block.type === "text")
+      .map((block) => block.text)
+      .join("");
     return {
-      content: content?.type === "text" ? content.text : "",
-      inputTokens: response.usage.input_tokens,
+      content: text,
+      // input_tokens excludes cached prefix tokens; add them back so usage is the full
+      // prompt size, and report them separately so cost prices each at its own rate.
+      inputTokens:
+        response.usage.input_tokens +
+        (response.usage.cache_read_input_tokens ?? 0) +
+        (response.usage.cache_creation_input_tokens ?? 0),
+      cacheReadTokens: response.usage.cache_read_input_tokens ?? 0,
+      cacheWriteTokens: response.usage.cache_creation_input_tokens ?? 0,
       outputTokens: response.usage.output_tokens,
       truncated: response.stop_reason === "max_tokens",
     };

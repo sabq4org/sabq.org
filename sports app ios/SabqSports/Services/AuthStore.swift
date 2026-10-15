@@ -299,7 +299,7 @@ final class SpAuthStore {
             let resp = try await APIClient.shared.verifyTwoFactor(
                 challengeToken: challenge, code: code, backupCode: backupCode
             )
-            try await applySession(resp)
+            guard try await applySession(resp) else { return false }
             if let pending = pendingMembershipCredentials {
                 rememberMembershipCredentials(identifier: pending.identifier, password: pending.password)
             }
@@ -346,8 +346,7 @@ final class SpAuthStore {
         defer { isLoading = false }
         do {
             let resp = try await APIClient.shared.verifyPhoneCode(phone, code: code)
-            try await applySession(resp)
-            return true
+            return try await applySession(resp)
         } catch {
             errorMessage = friendly(error)
             errorSource = .phone
@@ -356,7 +355,16 @@ final class SpAuthStore {
     }
 
     /// تثبيت الجلسة بعد أي مسار دخول (Apple/بريد/جوال): الرمز + العضو + Keychain + العميل.
-    private func applySession(_ resp: SpLoginResponse) async throws {
+    @discardableResult
+    private func applySession(_ resp: SpLoginResponse) async throws -> Bool {
+        if resp.requires2FA == true {
+            guard let challenge = resp.challengeToken, !challenge.isEmpty else {
+                throw NSError(domain: "sabqsports", code: 401,
+                    userInfo: [NSLocalizedDescriptionKey: L("تعذّر بدء التحقق بخطوتين")])
+            }
+            pending2FAChallengeToken = challenge
+            return false
+        }
         guard let t = resp.token, !t.isEmpty else {
             throw NSError(domain: "sabqsports", code: 401,
                           userInfo: [NSLocalizedDescriptionKey: resp.message ?? L("بيانات الدخول غير صحيحة")])
@@ -366,6 +374,7 @@ final class SpAuthStore {
         SpKeychain.save(tokenKey, value: t)
         await APIClient.shared.setAuthToken(t)
         await loadUserData()
+        return true
     }
 
     /// رفع صورة شخصية — نفس `profileImageUrl` على حساب سبق (ويب + VARA).
@@ -462,31 +471,40 @@ final class SpAuthStore {
         return error.localizedDescription
     }
 
-    func signOut() {
-        // إلغاء ربط رمز الدفع على الخادم أولًا كي لا تستمر تنبيهات العضو السابق لهذا الجهاز.
-        let devicePushToken = pushToken
-        token = nil
-        member = nil
-        // نمسح فقط ما هو مرتبط بالحساب: المتابعات وتفضيلات التنبيهات المُحمَّلة من
-        // الخادم بعد الدخول. أمّا التخصيص المحلّي (الفريق المفضّل + متابعة المباريات
-        // + البطولات المفضّلة) فيعمل بلا تسجيل دخول ويجب أن يبقى بعد الخروج —
-        // مسحه كان يُفقد المستخدم فريقه ومبارياته المتابَعة عند كل خروج.
-        followedKeys = []
-        follows = []
-        alertPrefs = SpAlertPrefs()
-        // تنبيهات الخادم تتوقّف أصلًا بإلغاء تسجيل رمز الدفع أعلاه؛ نُنهي الأنشطة
-        // الحيّة فقط لأنها مرتبطة بدفع APNs للجلسة.
-        SpLiveActivityManager.shared.endAll()
-        SpKeychain.delete(tokenKey)
-        UserDefaults.standard.removeObject(forKey: memberKey)
-        // الترتيب مهم: مسار Push-to-Start محمي بالجلسة، لذلك نلغيه قبل مسح
-        // Bearer token. إلغاء توكن الجهاز العام لا يحتاج جلسة لكنه يسير معه.
+    func signOut(localOnly: Bool = false) {
+        guard !isLoading || localOnly else { return }
         Task {
-            await SpLiveActivityManager.shared.unregisterPushToStartToken()
-            if let devicePushToken {
-                try? await APIClient.shared.unregisterDevice(deviceToken: devicePushToken)
+            isLoading = true
+            defer { isLoading = false }
+            if !localOnly, let sessionToken = token {
+                do { try await APIClient.shared.revokeSession(sessionToken) }
+                catch { errorMessage = L("تعذّر إنهاء الجلسة على الخادم. حاول مجددًا"); return }
             }
-            await APIClient.shared.setAuthToken(nil)
+            // إلغاء ربط رمز الدفع على الخادم أولًا كي لا تستمر تنبيهات العضو السابق لهذا الجهاز.
+            let devicePushToken = pushToken
+            token = nil
+            member = nil
+            // نمسح فقط ما هو مرتبط بالحساب: المتابعات وتفضيلات التنبيهات المُحمَّلة من
+            // الخادم بعد الدخول. أمّا التخصيص المحلّي (الفريق المفضّل + متابعة المباريات
+            // + البطولات المفضّلة) فيعمل بلا تسجيل دخول ويجب أن يبقى بعد الخروج —
+            // مسحه كان يُفقد المستخدم فريقه ومبارياته المتابَعة عند كل خروج.
+            followedKeys = []
+            follows = []
+            alertPrefs = SpAlertPrefs()
+            // تنبيهات الخادم تتوقّف أصلًا بإلغاء تسجيل رمز الدفع أعلاه؛ نُنهي الأنشطة
+            // الحيّة فقط لأنها مرتبطة بدفع APNs للجلسة.
+            SpLiveActivityManager.shared.endAll()
+            SpKeychain.delete(tokenKey)
+            UserDefaults.standard.removeObject(forKey: memberKey)
+            // الترتيب مهم: مسار Push-to-Start محمي بالجلسة، لذلك نلغيه قبل مسح
+            // Bearer token. إلغاء توكن الجهاز العام لا يحتاج جلسة لكنه يسير معه.
+            do {
+                await SpLiveActivityManager.shared.unregisterPushToStartToken()
+                if let devicePushToken {
+                    try? await APIClient.shared.unregisterDevice(deviceToken: devicePushToken)
+                }
+                await APIClient.shared.setAuthToken(nil)
+            }
         }
     }
 
@@ -495,7 +513,7 @@ final class SpAuthStore {
     func handleUnauthorizedSession() {
         guard token != nil else { return }
         errorMessage = L("انتهت جلستك، يرجى تسجيل الدخول")
-        signOut()
+        signOut(localOnly: true)
     }
 
     /// حذف الحساب نهائيًّا (Apple 5.1.1(v)). أصحاب كلمة المرور: تُطلب للتأكيد؛
@@ -510,7 +528,7 @@ final class SpAuthStore {
             _ = try await APIClient.shared.send(method: "DELETE", path: "/members/account",
                                                 jsonBody: body, apiRoot: URLConstants.mobileAPI)
             clearSavedMembershipCredentials()
-            signOut()
+            signOut(localOnly: true)
             return true
         } catch let e as APIError {
             switch e {

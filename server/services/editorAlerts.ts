@@ -126,8 +126,20 @@ function getFrontendUrl(): string {
  * Format timestamp to Arabic locale
  */
 function formatArabicDateTime(date: Date): string {
-  return new Intl.DateTimeFormat("ar-SA-u-ca-gregory", {
+  return new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-latn", {
     weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "Asia/Riyadh",
+  }).format(date);
+}
+
+/** Compact WhatsApp datetime: Latin digits, Gregorian, no weekday. */
+function formatWhatsAppDateTime(date: Date): string {
+  return new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-latn", {
     year: "numeric",
     month: "long",
     day: "numeric",
@@ -338,23 +350,29 @@ ${articleUrl}
 }
 
 /**
- * Generate WhatsApp message for article published alert
+ * Generate WhatsApp message for article published alert.
+ * Forward-friendly: title first, «بواسطة», Latin digits, light emoji.
  */
 function generateWhatsAppMessage(article: ArticlePublishData): string {
   const frontendUrl = getFrontendUrl();
   const articleUrl = getArticleUrl(frontendUrl, article);
-  const publishTime = article.publishedAt ? formatArabicDateTime(article.publishedAt) : formatArabicDateTime(new Date());
+  const publishTime = article.publishedAt
+    ? formatWhatsAppDateTime(article.publishedAt)
+    : formatWhatsAppDateTime(new Date());
 
-  return `📢 *نشرنا للتو:*
+  const categoryLine = article.categoryName
+    ? `🗂️ ${article.categoryName}\n`
+    : "";
 
-「 *${article.title}* 」
+  return `*خبر جديد من سبق*
 
-👤 ${article.authorName}
-${article.categoryName ? `🗂️ ${article.categoryName}\n` : ""}🕐 ${publishTime}
+${article.title}
 
-▶️ ${articleUrl}
+👤 بواسطة ${article.authorName}
+${categoryLine}🕐 ${publishTime}
 
-_صحيفة سبق الإلكترونية_`;
+اقرأ الخبر:
+${articleUrl}`;
 }
 
 /**
@@ -446,6 +464,30 @@ export async function sendEditorPublishAlert(article: ArticlePublishData): Promi
     result.errors.push(error instanceof Error ? error.message : "Unexpected error");
     return result;
   }
+}
+
+/**
+ * تنبيه واتساب قصير لأرقام رئيس التحرير المسجلة في إعدادات التنبيهات، لأحداث
+ * تحتاج انتباهه (مثل طلب وكالة نشر تغريدة). يتبع مفتاح الواتساب فقط لا مفتاح
+ * تنبيهات النشر. نص حر: يصل داخل نافذة الـ 24 ساعة كتنبيهات النشر نفسها.
+ */
+export async function sendEditorWhatsAppNotice(body: string): Promise<number> {
+  const settings = await getEditorAlertSettings();
+  if (!settings.whatsappEnabled) return 0;
+  const numbers = settings.whatsappNumbers?.length
+    ? settings.whatsappNumbers
+    : settings.whatsappNumber
+      ? [settings.whatsappNumber]
+      : [];
+  let sent = 0;
+  for (const to of numbers) {
+    try {
+      if (await sendWhatsAppMessage({ to, body })) sent++;
+    } catch (error) {
+      console.error(`[EditorAlerts] ❌ WhatsApp notice failed for ${to.substring(0, 8)}...:`, error);
+    }
+  }
+  return sent;
 }
 
 /**
@@ -2579,17 +2621,17 @@ function generateReporterScheduleEmailTemplate(data: {
   // Pin to Asia/Riyadh — the Railway server runs in UTC, so omitting the
   // timezone caused scheduled-publish emails to display "4:25 ص" for an
   // article actually scheduled at 7:25 AM Saudi time.
-  const scheduledDateStr = data.scheduledAt.toLocaleDateString('ar-SA-u-ca-gregory', {
-    timeZone: 'Asia/Riyadh',
-    weekday: 'long',
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
+  const scheduledDateStr = data.scheduledAt.toLocaleDateString("ar-SA-u-ca-gregory-nu-latn", {
+    timeZone: "Asia/Riyadh",
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
   });
-  const scheduledTimeStr = data.scheduledAt.toLocaleTimeString('ar-SA', {
-    timeZone: 'Asia/Riyadh',
-    hour: '2-digit',
-    minute: '2-digit',
+  const scheduledTimeStr = data.scheduledAt.toLocaleTimeString("ar-SA-u-ca-gregory-nu-latn", {
+    timeZone: "Asia/Riyadh",
+    hour: "2-digit",
+    minute: "2-digit",
   });
   
   const html = `
@@ -2780,17 +2822,17 @@ function generateOpinionAuthorScheduleEmailTemplate(data: {
   // Pin to Asia/Riyadh — the Railway server runs in UTC, so omitting the
   // timezone caused scheduled-publish emails to display "4:25 ص" for an
   // article actually scheduled at 7:25 AM Saudi time.
-  const scheduledDateStr = data.scheduledAt.toLocaleDateString('ar-SA-u-ca-gregory', {
-    timeZone: 'Asia/Riyadh',
-    weekday: 'long',
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
+  const scheduledDateStr = data.scheduledAt.toLocaleDateString("ar-SA-u-ca-gregory-nu-latn", {
+    timeZone: "Asia/Riyadh",
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
   });
-  const scheduledTimeStr = data.scheduledAt.toLocaleTimeString('ar-SA', {
-    timeZone: 'Asia/Riyadh',
-    hour: '2-digit',
-    minute: '2-digit',
+  const scheduledTimeStr = data.scheduledAt.toLocaleTimeString("ar-SA-u-ca-gregory-nu-latn", {
+    timeZone: "Asia/Riyadh",
+    hour: "2-digit",
+    minute: "2-digit",
   });
   
   const html = `

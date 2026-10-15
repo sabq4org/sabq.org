@@ -1,3 +1,4 @@
+import { isLeader } from "../leaderElection";
 import { staffCommunicationsService } from "../services/staffCommunications";
 
 let schedulerTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -45,6 +46,7 @@ export function stopStaffCommunicationsScheduler() {
 }
 
 async function processScheduledCampaigns() {
+  if (!isLeader()) return;
   try {
     const result = await staffCommunicationsService.processScheduledCampaigns();
     

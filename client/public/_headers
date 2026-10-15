@@ -20,3 +20,10 @@
 /.well-known/apple-app-site-association
   Content-Type: application/json; charset=utf-8
   Cache-Control: public, max-age=300, must-revalidate
+
+# Android App Links verification (VARA com.sabq.sports + سبق com.sabqorg.sabq).
+# البصمات الحالية لمفاتيح الرفع؛ عند تفعيل Play App Signing أضف بصمة
+# «App signing key certificate» من Play Console إلى نفس المصفوفة.
+/.well-known/assetlinks.json
+  Content-Type: application/json; charset=utf-8
+  Cache-Control: public, max-age=300, must-revalidate

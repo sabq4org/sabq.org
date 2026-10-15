@@ -1,3 +1,4 @@
+import { isLeader } from "../leaderElection";
 /**
  * Comment Moderation Queue Job
  *
@@ -7,7 +8,7 @@
  *      وبلا مخالفات جسيمة — بدل أن تموت في الطابور (رُصد طابور عمره 6 أشهر).
  *   3. يومياً: تنبيه SLA للمشرفين إذا تجاوزت تعليقات معلقة 24 ساعة.
  */
-import cron from "node-cron";
+import cron from "../leaderCron";
 import { db } from "../db";
 import { comments, users } from "@shared/schema";
 import { and, asc, eq, isNull, lt, or, sql } from "drizzle-orm";
@@ -176,5 +177,5 @@ export function startCommentModerationQueueJob() {
 
   // First pass shortly after boot so a stuck queue starts draining without
   // waiting up to an hour.
-  setTimeout(() => void processQueue(), 30 * 1000);
+  setTimeout(() => { if (isLeader()) void processQueue(); }, 30 * 1000);
 }

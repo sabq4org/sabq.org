@@ -53,7 +53,7 @@ export default function CategoriesListPage() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-background" dir="rtl">
+    <div className="public-page min-h-screen bg-background" dir="rtl">
       <Header user={user} />
       <main>
         <CategoriesDirectory

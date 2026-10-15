@@ -7,13 +7,22 @@ import { Router } from "express";
 import type { Request, Response } from "express";
 import { db } from "../db";
 import { aiImageGenerations, insertAiImageGenerationSchema, mediaFiles } from "../../shared/schema";
-import { eq, desc, and } from "drizzle-orm";
-import { 
-  generateAndUploadImage, 
-  type ImageGenerationRequest 
+import { eq, desc, and, sql } from "drizzle-orm";
+import {
+  generateAndUploadImage,
+  type ImageGenerationRequest
 } from "../services/nanoBananaService";
 import { z } from "zod";
-import { requireAuth } from "../rbac";
+import { requireAuth, requireAnyPermission } from "../rbac";
+import { PERMISSION_CODES } from "@shared/rbac-constants";
+import { composeImagePrompt } from "@shared/imageStyles";
+import {
+  getImageStyleSettings,
+  resolveGenerationStyle,
+} from "../services/imageStyleService";
+import { resolveImageModel } from "@shared/imageStyles";
+import { EDITORIAL_IMAGE_FEATURE_KEY } from "@shared/editorialImages";
+import { parseLimit, parseOffset } from "../utils/pagination";
 
 // Request body schema (excludes userId - taken from session)
 const generateImageRequestSchema = insertAiImageGenerationSchema.omit({ 
@@ -34,9 +43,19 @@ const generateImageRequestSchema = insertAiImageGenerationSchema.omit({
     backgroundColor: z.string().optional(),
     position: z.enum(["center", "top", "bottom"]).optional(),
   }).optional(),
+  // نمط توليد من السجلّ المركزي: عند وجوده يُركَّب البرومبت النهائي في الخادم
+  // (prompt المرسل = وصف المضمون فقط). غيابه = السلوك القديم حرفيًا.
+  styleSlug: z.string().trim().max(50).optional(),
+  // تصنيف الخبر (slug أو اسم) لمطابقة التوجيه السياقي داخل النمط
+  category: z.string().trim().max(80).optional(),
+  // نية التوليد البصري (إنفوجرافيك / واقعية / مقال رأي / بانر)
+  intent: z.enum(["infographic", "photo", "opinion_art", "breaking_banner", "custom"]).optional(),
+  dataPoints: z.array(z.string()).optional(),
 });
 
 const router = Router();
+// The separate GPT editor tool shares the table, but not this history/API.
+const legacyImageFilter = sql`coalesce(${aiImageGenerations.metadata}->>'featureKey', '') <> ${EDITORIAL_IMAGE_FEATURE_KEY}`;
 
 // ============================================================
 // NANO BANANA PRO IMAGE GENERATION ROUTES
@@ -44,32 +63,91 @@ const router = Router();
 
 /**
  * POST /api/nano-banana/generate
- * Generate image using Nano Banana Pro
+ * Generate image using Nano Banana (مع نمط اختياري من السجلّ المركزي)
+ *
+ * الصلاحية: توليد صور المقالات أو رفع للوسائط (تغطي محرري المقالات ومكتبة الوسائط) —
+ * كانت requireAuth فقط، ما فتح توليدًا غير محدود لأي مستخدم مسجّل.
  */
-router.post("/generate", requireAuth, async (req: Request, res: Response) => {
+router.post(
+  "/generate",
+  requireAuth,
+  requireAnyPermission(
+    PERMISSION_CODES.ARTICLES_GENERATE_IMAGES,
+    PERMISSION_CODES.MEDIA_UPLOAD
+  ),
+  async (req: Request, res: Response) => {
   try {
     const user = req.user as any;
-    
+
     // Validate request body (userId comes from session, includes overlay options)
     // DEBUG: Log raw request body to trace overlayText
     console.log(`[API DEBUG] Raw request body keys:`, Object.keys(req.body));
     console.log(`[API DEBUG] overlayText in req.body:`, req.body.overlayText ? `"${req.body.overlayText.substring(0, 50)}..."` : "undefined");
     const validatedData = generateImageRequestSchema.parse(req.body);
-    
+
     console.log(`[API] Image generation request from user ${user.id}`);
     if (validatedData.overlayText) {
       console.log(`[API] Text overlay requested: "${validatedData.overlayText.substring(0, 50)}..."`);
     }
-    
+
+    // حسم النمط والنموذج من السجلّ المركزي:
+    // - مع styleSlug: البرومبت المرسل هو «المضمون» ويُركَّب النهائي هنا في الخادم.
+    // - بدونه: السلوك القديم كما هو، مع تطبيق النموذج الافتراضي من الإعدادات فقط.
+    let finalPrompt = validatedData.prompt;
+    let finalNegativePrompt = validatedData.negativePrompt || undefined;
+    let resolvedModel: string;
+    let styleMeta: { styleSlug?: string; variantSlug?: string } = {};
+
+    if (validatedData.styleSlug) {
+      const { style, variant, model } = await resolveGenerationStyle(
+        validatedData.styleSlug,
+        validatedData.category,
+        validatedData.model
+      );
+      const composed = composeImagePrompt({
+        style,
+        variant,
+        content: validatedData.prompt,
+      });
+      finalPrompt = composed.prompt;
+      finalNegativePrompt =
+        [validatedData.negativePrompt, composed.negativePrompt]
+          .filter(Boolean)
+          .join(", ") || undefined;
+      resolvedModel = model;
+      styleMeta = { styleSlug: style.slug, variantSlug: variant?.slug };
+    } else {
+      const { suggestOptimalModel, detectImageIntent, buildIntentOptimizedPrompt } = await import(
+        "../services/imageModelRouter"
+      );
+      const detectedIntent = validatedData.intent || detectImageIntent(validatedData.prompt, validatedData.category);
+      const suggested = suggestOptimalModel(detectedIntent, null, validatedData.category);
+      resolvedModel = validatedData.model?.trim() || suggested.model;
+      
+      if (detectedIntent === "infographic" && validatedData.dataPoints?.length) {
+        const optimized = buildIntentOptimizedPrompt(
+          detectedIntent,
+          validatedData.prompt,
+          validatedData.category,
+          validatedData.dataPoints
+        );
+        finalPrompt = optimized.prompt;
+        finalNegativePrompt = [validatedData.negativePrompt, optimized.negativePrompt].filter(Boolean).join(", ");
+      } else {
+        const settings = await getImageStyleSettings();
+        resolvedModel = resolveImageModel(settings, null, validatedData.model || suggested.model);
+      }
+    }
+
     // Create pending record
     const [record] = await db
       .insert(aiImageGenerations)
       .values({
         userId: user.id,
         articleId: validatedData.articleId,
-        prompt: validatedData.prompt,
-        negativePrompt: validatedData.negativePrompt,
-        model: validatedData.model || "gemini-3-pro-image-preview",
+        prompt: finalPrompt,
+        negativePrompt: finalNegativePrompt,
+        model: resolvedModel,
         aspectRatio: validatedData.aspectRatio || "16:9",
         imageSize: validatedData.imageSize || "2K",
         numImages: validatedData.numImages || 1,
@@ -80,11 +158,12 @@ router.post("/generate", requireAuth, async (req: Request, res: Response) => {
         brandingConfig: validatedData.brandingConfig as any,
       })
       .returning();
-    
+
     // Generate image with optional text overlay
     const generationRequest = {
-      prompt: validatedData.prompt,
-      negativePrompt: validatedData.negativePrompt,
+      prompt: finalPrompt,
+      negativePrompt: finalNegativePrompt,
+      model: resolvedModel,
       aspectRatio: validatedData.aspectRatio as any,
       imageSize: validatedData.imageSize as any,
       numImages: validatedData.numImages,
@@ -96,9 +175,9 @@ router.post("/generate", requireAuth, async (req: Request, res: Response) => {
       overlayText: validatedData.overlayText,
       overlayOptions: validatedData.overlayOptions,
     };
-    
+
     const result = await generateAndUploadImage(generationRequest, user.id);
-    
+
     // Update record
     await db
       .update(aiImageGenerations)
@@ -108,12 +187,12 @@ router.post("/generate", requireAuth, async (req: Request, res: Response) => {
         thumbnailUrl: result.thumbnailUrl,
         generationTime: result.generationTime,
         cost: result.cost,
-        metadata: result.metadata as any,
+        metadata: { ...(result.metadata || {}), ...styleMeta } as any,
         errorMessage: result.error,
         updatedAt: new Date(),
       })
       .where(eq(aiImageGenerations.id, record.id));
-    
+
     if (!result.success) {
       return res.status(500).json({
         message: "فشل توليد الصورة",
@@ -121,7 +200,7 @@ router.post("/generate", requireAuth, async (req: Request, res: Response) => {
         generationId: record.id,
       });
     }
-    
+
     // Return success
     res.json({
       message: "تم توليد الصورة بنجاح",
@@ -130,7 +209,8 @@ router.post("/generate", requireAuth, async (req: Request, res: Response) => {
       thumbnailUrl: result.thumbnailUrl,
       generationTime: result.generationTime,
       cost: result.cost,
-      metadata: result.metadata,
+      metadata: { ...(result.metadata || {}), ...styleMeta },
+      styleSlug: styleMeta.styleSlug,
     });
   } catch (error: any) {
     console.error("[API] Image generation error:", error);
@@ -161,13 +241,13 @@ router.get("/generations", requireAuth, async (req: Request, res: Response) => {
     let query = db
       .select()
       .from(aiImageGenerations)
-      .where(eq(aiImageGenerations.userId, user.id))
+      .where(and(eq(aiImageGenerations.userId, user.id), legacyImageFilter))
       .$dynamic();
     
     if (status) {
       query = query.where(
         and(
-          eq(aiImageGenerations.userId, user.id),
+          and(eq(aiImageGenerations.userId, user.id), legacyImageFilter),
           eq(aiImageGenerations.status, status as string)
         )
       );
@@ -176,7 +256,7 @@ router.get("/generations", requireAuth, async (req: Request, res: Response) => {
     if (articleId) {
       query = query.where(
         and(
-          eq(aiImageGenerations.userId, user.id),
+          and(eq(aiImageGenerations.userId, user.id), legacyImageFilter),
           eq(aiImageGenerations.articleId, articleId as string)
         )
       );
@@ -184,8 +264,8 @@ router.get("/generations", requireAuth, async (req: Request, res: Response) => {
     
     const generations = await query
       .orderBy(desc(aiImageGenerations.createdAt))
-      .limit(Number(limit))
-      .offset(Number(offset));
+      .limit(parseLimit(limit, 20, 200))
+      .offset(parseOffset(offset));
     
     res.json({
       generations,
@@ -215,7 +295,7 @@ router.get("/generations/:id", requireAuth, async (req: Request, res: Response) 
       .where(
         and(
           eq(aiImageGenerations.id, id),
-          eq(aiImageGenerations.userId, user.id)
+          and(eq(aiImageGenerations.userId, user.id), legacyImageFilter)
         )
       )
       .limit(1);
@@ -250,7 +330,7 @@ router.delete("/generations/:id", requireAuth, async (req: Request, res: Respons
       .where(
         and(
           eq(aiImageGenerations.id, id),
-          eq(aiImageGenerations.userId, user.id)
+          and(eq(aiImageGenerations.userId, user.id), legacyImageFilter)
         )
       )
       .limit(1);
@@ -285,7 +365,7 @@ router.get("/stats", requireAuth, async (req: Request, res: Response) => {
     const allGenerations = await db
       .select()
       .from(aiImageGenerations)
-      .where(eq(aiImageGenerations.userId, user.id));
+      .where(and(eq(aiImageGenerations.userId, user.id), legacyImageFilter));
     
     const stats = {
       total: allGenerations.length,
@@ -331,7 +411,7 @@ router.post("/generations/:id/save-to-library", requireAuth, async (req: Request
       .where(
         and(
           eq(aiImageGenerations.id, id),
-          eq(aiImageGenerations.userId, user.id)
+          and(eq(aiImageGenerations.userId, user.id), legacyImageFilter)
         )
       )
       .limit(1);

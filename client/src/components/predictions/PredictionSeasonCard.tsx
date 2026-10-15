@@ -59,6 +59,7 @@ export function PredictionSeasonCard({ contest, competitionSlug, isAuthenticated
       toast({ title: "تم حفظ توقّعك ✅", description: "يمكنك تعديله حتى إقفال المسابقة" });
       setEditing(false);
       queryClient.invalidateQueries({ queryKey: [`/api/predictions/competitions/${competitionSlug}`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/predictions/me/entries"] });
     },
     onError: () =>
       toast({

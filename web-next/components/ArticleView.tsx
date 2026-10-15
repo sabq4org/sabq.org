@@ -2,6 +2,8 @@ import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
 import { ShareButtons } from "@/components/ShareButtons";
 import type { SeoBundle, Lang } from "@/lib/seoBundle";
+import { NewsletterSignup } from "@/components/NewsletterSignup";
+import { INLINE_NEWSLETTER_SIGNUP_ENABLED } from "@/lib/newsletter";
 
 const LOCALE: Record<Lang, string> = {
   ar: "ar-SA",
@@ -13,8 +15,10 @@ function formatDate(iso: string | null, lang: Lang): string {
   if (!iso) return "";
   try {
     return new Intl.DateTimeFormat(LOCALE[lang], {
+      calendar: "gregory",
       dateStyle: "long",
       timeStyle: "short",
+      timeZone: "Asia/Riyadh",
     }).format(new Date(iso));
   } catch {
     return "";
@@ -35,6 +39,20 @@ export function ArticleView({
 }) {
   const dir = lang === "en" ? "ltr" : "rtl";
   const published = formatDate(bundle.publishedAt, lang);
+  const resolvedModified = bundle.meta.modifiedTime || null;
+  const updated = formatDate(resolvedModified, lang);
+  const hasMeaningfulUpdate = Boolean(
+    bundle.publishedAt && resolvedModified &&
+      new Date(resolvedModified).getTime() > new Date(bundle.publishedAt).getTime(),
+  );
+  const articleTypeLabel = bundle.articleType === "opinion"
+    ? lang === "en" ? "Opinion" : lang === "ur" ? "رائے" : "مقال رأي"
+    : bundle.articleType === "analysis"
+      ? lang === "en" ? "Analysis" : lang === "ur" ? "تجزیہ" : "تحليل"
+      : null;
+  const updatedLabel = lang === "en" ? "Updated" : lang === "ur" ? "آخری تازہ کاری" : "آخر تحديث";
+  const timezoneLabel = lang === "en" ? "Riyadh time" : lang === "ur" ? "ریاض کا وقت" : "بتوقيت الرياض";
+  const aiImageLabel = lang === "en" ? "AI-generated image" : lang === "ur" ? "مصنوعی ذہانت سے تیار کردہ تصویر" : "صورة مولدة بالذكاء الاصطناعي";
   const siteUrl = process.env.PUBLIC_SITE_URL || "https://sabq.org";
   const breadcrumbItems = [
     {
@@ -91,6 +109,9 @@ export function ArticleView({
           </h1>
 
           <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
+            {articleTypeLabel && (
+              <span className="font-semibold text-primary">{articleTypeLabel}</span>
+            )}
             {bundle.author &&
               (bundle.reporterHref ? (
                 <a href={bundle.reporterHref} className="hover:text-primary">
@@ -100,22 +121,34 @@ export function ArticleView({
                 <span>{bundle.author}</span>
               ))}
             {published && (
-              <time dateTime={bundle.publishedAt ?? undefined}>{published}</time>
+              <time dateTime={bundle.publishedAt ?? undefined}>{published} ({timezoneLabel})</time>
+            )}
+            {hasMeaningfulUpdate && updated && (
+              <time dateTime={resolvedModified ?? undefined}>{updatedLabel} {updated} ({timezoneLabel})</time>
             )}
           </div>
 
           {bundle.imageUrl && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={bundle.imageUrl}
-              alt={bundle.title}
-              width={1200}
-              height={675}
-              loading="eager"
-              fetchPriority="high"
-              decoding="async"
-              className="mt-4 aspect-[16/9] w-full rounded-lg object-cover"
-            />
+            <figure className="mt-4">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={bundle.imageUrl}
+                alt={bundle.imageAlt || bundle.title}
+                width={1200}
+                height={675}
+                loading="eager"
+                fetchPriority="high"
+                decoding="async"
+                className="aspect-[16/9] w-full rounded-lg object-cover"
+              />
+              {(bundle.imageCaption || bundle.imageSource || bundle.isAiGeneratedImage) && (
+                <figcaption className="mt-2 text-sm text-muted-foreground">
+                  {bundle.imageCaption && <span>{bundle.imageCaption}</span>}
+                  {bundle.imageSource && <span>{bundle.imageCaption ? " — " : ""}{bundle.imageSource}</span>}
+                  {bundle.isAiGeneratedImage && <span>{bundle.imageCaption || bundle.imageSource ? " — " : ""}{aiImageLabel}</span>}
+                </figcaption>
+              )}
+            </figure>
           )}
 
           {bundle.excerpt && (
@@ -131,6 +164,14 @@ export function ArticleView({
             // contentHtml is sanitized server-side (stripUnsafeHtml in edgeMeta.ts).
             dangerouslySetInnerHTML={{ __html: bundle.contentHtml }}
           />
+
+          {bundle.updateLines && bundle.updateLines.length > 0 && (
+            <ul className="mt-6 space-y-2 border-t pt-4 text-sm text-muted-foreground" data-testid="article-update-lines">
+              {bundle.updateLines.map((line) => (
+                <li key={line.id}>{line.text}</li>
+              ))}
+            </ul>
+          )}
 
           {bundle.articleTags && bundle.articleTags.length > 0 && (
             <section aria-label="الكلمات المفتاحية" className="mt-8">
@@ -152,6 +193,8 @@ export function ArticleView({
           )}
 
           <ShareButtons url={bundle.meta.canonical} title={bundle.title} />
+
+          {INLINE_NEWSLETTER_SIGNUP_ENABLED && lang === "ar" && <NewsletterSignup source="article" />}
 
           {bundle.categoryLatest && bundle.categoryLatest.length > 0 && (
             <section

@@ -3,20 +3,21 @@
  * تصميم أقرب لقائمة الرأي: هيرو خفيف + شبكة عناوين (بدون صفوف صور مكدّسة).
  */
 import { useEffect } from "react";
-import { Link, useParams } from "wouter";
+import { Link, useParams, useSearch } from "wouter";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { Header } from "@/components/Header";
 import { NavigationBar } from "@/components/NavigationBar";
 import { Footer } from "@/components/Footer";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/hooks/useAuth";
 import { useCanonical } from "@/hooks/useCanonical";
 import { apiUrl } from "@/lib/queryClient";
+import { OpinionCard } from "@/components/public/OpinionCard";
 import { Eye, Loader2, PenLine } from "lucide-react";
-import { formatDistanceToNow } from "date-fns";
-import { ar } from "date-fns/locale";
+import { formatNumber } from "@/lib/format";
+import { NewsArticleCard } from "@/components/NewsArticleCard";
+import type { ArticleWithDetails } from "@shared/schema";
 
 const PAGE_SIZE = 18;
 
@@ -72,6 +73,11 @@ export default function AuthorArticlesPage() {
   const rawName = params.name ? decodeURIComponent(params.name) : "";
   const name = rawName.trim().replace(/\s+/g, " ");
   const { user } = useAuth();
+  const search = useSearch();
+  const requestedPage = new URLSearchParams(search).get("page");
+  const pageNumber = requestedPage && /^[1-9]\d*$/.test(requestedPage) && Number(requestedPage) <= 10_000 ? Number(requestedPage) : 1;
+  const authorPath = `/author/${encodeURIComponent(name)}`;
+  const pageHref = (page: number) => page === 1 ? authorPath : `${authorPath}?page=${page}`;
 
   const {
     data,
@@ -81,7 +87,7 @@ export default function AuthorArticlesPage() {
     hasNextPage,
     isFetchingNextPage,
   } = useInfiniteQuery({
-    queryKey: ["/api/authors/by-name", name, PAGE_SIZE],
+    queryKey: ["/api/authors/by-name", name, PAGE_SIZE, pageNumber],
     queryFn: async ({ pageParam }): Promise<AuthorPage> => {
       const page = typeof pageParam === "number" ? pageParam : 1;
       const res = await fetch(
@@ -96,7 +102,7 @@ export default function AuthorArticlesPage() {
       }
       return res.json();
     },
-    initialPageParam: 1,
+    initialPageParam: pageNumber,
     getNextPageParam: (lastPage) => {
       if (lastPage.pagination?.hasMore) {
         return (lastPage.pagination.page || 1) + 1;
@@ -126,10 +132,10 @@ export default function AuthorArticlesPage() {
         : "كاتب — سبق";
   }, [firstPage?.author.name, name]);
 
-  useCanonical(name ? `https://sabq.org/author/${encodeURIComponent(name)}` : null);
+  useCanonical(name ? `https://sabq.org${pageHref(pageNumber)}` : null);
 
   return (
-    <div className="min-h-screen bg-background flex flex-col" dir="rtl">
+    <div className="public-page min-h-screen bg-background flex flex-col" dir="rtl">
       <Header user={user || undefined} />
       <NavigationBar />
 
@@ -161,10 +167,14 @@ export default function AuthorArticlesPage() {
           </div>
         ) : (
           <>
-            <section className="border-b border-border bg-muted/30">
-              <div className="container max-w-6xl mx-auto px-4 py-8 sm:py-10">
+            <section className="public-page-header relative overflow-hidden border-b border-border">
+              <div
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-0 bg-gradient-to-b from-primary/[0.06] via-transparent to-transparent"
+              />
+              <div className="container relative max-w-6xl mx-auto px-4 py-8 sm:py-10">
                 <div className="flex flex-col sm:flex-row sm:items-start gap-5 sm:gap-7">
-                  <Avatar className="h-20 w-20 sm:h-24 sm:w-24 shrink-0 border border-border">
+                  <Avatar className="h-20 w-20 sm:h-24 sm:w-24 shrink-0 border-2 border-background shadow-md ring-1 ring-border">
                     {firstPage.author.avatarUrl ? (
                       <AvatarImage
                         src={firstPage.author.avatarUrl}
@@ -179,7 +189,7 @@ export default function AuthorArticlesPage() {
 
                   <div className="min-w-0 space-y-2">
                     <h1
-                      className="text-2xl sm:text-3xl md:text-4xl font-bold tracking-tight"
+                      className="public-page-title text-2xl sm:text-3xl md:text-4xl font-bold tracking-tight"
                       data-testid="text-author-page-name"
                     >
                       {firstPage.author.name}
@@ -193,6 +203,15 @@ export default function AuthorArticlesPage() {
                       <span className="tabular-nums">
                         {firstPage.stats.articleCount.toLocaleString("en-US")} مقال
                       </span>
+                      {firstPage.stats.totalViews > 0 && (
+                        <>
+                          <span className="text-border">·</span>
+                          <span className="inline-flex items-center gap-1.5 tabular-nums">
+                            <Eye className="h-3.5 w-3.5" />
+                            {formatNumber(firstPage.stats.totalViews)} مشاهدة
+                          </span>
+                        </>
+                      )}
                     </p>
                     {firstPage.author.bio ? (
                       <p className="text-sm sm:text-base text-muted-foreground leading-7 max-w-2xl pt-1">
@@ -204,8 +223,16 @@ export default function AuthorArticlesPage() {
               </div>
             </section>
 
-            <section className="container max-w-6xl mx-auto px-4 py-8 sm:py-10">
-              <h2 className="text-lg font-bold mb-6">أحدث المقالات</h2>
+            {/* شريط ملوّن خلف البطاقات البيضاء حتى لا تذوب في خلفية بيضاء */}
+            <section className="public-surface flex-1">
+              <div className="container max-w-6xl mx-auto px-4 py-8 sm:py-10">
+              {pageNumber > 1 && <a href={pageHref(pageNumber - 1)} rel="prev" className="inline-block mb-4 text-primary">الصفحة السابقة</a>}
+              <h2 className="text-lg font-bold mb-6 flex items-baseline gap-2">
+                أحدث المقالات
+                <span className="text-sm font-normal text-muted-foreground tabular-nums">
+                  ({firstPage.stats.articleCount.toLocaleString("en-US")})
+                </span>
+              </h2>
 
               {articles.length === 0 ? (
                 <p className="text-sm text-muted-foreground py-12 text-center">
@@ -214,48 +241,36 @@ export default function AuthorArticlesPage() {
               ) : (
                 <>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {articles.map((article) => (
-                      <Link key={article.id} href={articleHref(article)}>
-                        <Card
-                          className="hover-elevate active-elevate-2 cursor-pointer h-full overflow-hidden flex flex-col"
-                          data-testid={`card-author-article-${article.id}`}
-                        >
-                          <CardContent className="p-5 space-y-4 flex-1 flex flex-col">
-                            <h3 className="font-bold text-xl line-clamp-3 text-foreground leading-snug">
-                              {article.title}
-                            </h3>
-
-                            {article.publishedAt ? (
-                              <p className="text-xs text-muted-foreground">
-                                {formatDistanceToNow(new Date(article.publishedAt), {
-                                  addSuffix: true,
-                                  locale: ar,
-                                })}
-                              </p>
-                            ) : null}
-
-                            {article.excerpt ? (
-                              <p className="text-sm text-muted-foreground line-clamp-2 flex-1">
-                                {article.excerpt}
-                              </p>
-                            ) : (
-                              <div className="flex-1" />
-                            )}
-
-                            <div className="flex items-center gap-1 text-xs text-muted-foreground pt-2 border-t border-border">
-                              <Eye className="h-3 w-3" />
-                              <span className="tabular-nums">
-                                {(article.views || 0).toLocaleString("en-US")}
-                              </span>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      </Link>
+                    {articles.map((article) => article.articleType === "opinion" ? (
+                      <OpinionCard
+                        key={article.id}
+                        variant="grid"
+                        hideAuthor
+                        article={{
+                          ...article,
+                          author: {
+                            name: firstPage.author.name,
+                            profileImageUrl: firstPage.author.avatarUrl,
+                          },
+                        }}
+                      />
+                    ) : (
+                      <NewsArticleCard
+                        key={article.id}
+                        article={{
+                          ...article,
+                          articleType: "news",
+                          category: undefined,
+                        } as unknown as ArticleWithDetails}
+                        viewMode="grid"
+                        metadata={{ views: true }}
+                      />
                     ))}
                   </div>
 
                   {hasNextPage ? (
-                    <div className="flex justify-center pt-10">
+                    <div className="flex justify-center items-center gap-4 pt-10">
+                      <a href={pageHref((data?.pages.at(-1)?.pagination?.page || pageNumber) + 1)} rel="next" className="text-primary">الصفحة التالية</a>
                       <Button
                         variant="outline"
                         onClick={() => fetchNextPage()}
@@ -279,6 +294,7 @@ export default function AuthorArticlesPage() {
                   ) : null}
                 </>
               )}
+              </div>
             </section>
           </>
         )}

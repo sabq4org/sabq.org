@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useSportsHomeQuery, type SportsFreshness } from "@/hooks/useSportsHomeQuery";
 import kingsCupLogo from "@assets/kings-cup-logo.png";
 import CupHomeStrip, {
   type CupChampion,
@@ -15,8 +15,11 @@ import CupHomeStrip, {
  */
 
 interface KcOverviewLite {
+  configured?: boolean;
+  freshness?: SportsFreshness;
   started: boolean;
   nextMatch: CupFixture | null;
+  live?: CupFixture[];
   champion?: CupChampion | null;
   matchday?: CupMatchday | null;
   blockHidden?: boolean;
@@ -33,13 +36,17 @@ const KINGS_CUP_THEME: CupStripTheme = {
 };
 
 export default function KingsCupHomeSection() {
-  const { data } = useQuery<KcOverviewLite>({
-    queryKey: ["/api/kings-cup/overview"],
-    refetchInterval: (query) =>
-      query.state.data?.nextMatch?.status.live ? 15_000 : 5 * 60_000,
-    refetchIntervalInBackground: false,
-    staleTime: 30_000,
-  });
+  const { data, lastData, stale, unavailable } = useSportsHomeQuery<KcOverviewLite>(
+    "/api/kings-cup/overview",
+    d => d?.configured === false ? false : (d?.live?.length ?? 0) > 0 || Boolean(d?.nextMatch?.status.live) || (d?.matchday?.liveCount ?? 0) > 0
+      ? 15_000 : 5 * 60_000,
+  );
+  if (lastData?.configured === false || lastData?.blockHidden) return null;
+  if (unavailable) return (
+    <p role="status" dir="rtl" className="container py-3 text-sm text-muted-foreground">
+      تعذّر تحديث بيانات كأس الملك مؤقتًا.
+    </p>
+  );
 
   if (!data || data.blockHidden) return null;
 
@@ -57,6 +64,7 @@ export default function KingsCupHomeSection() {
       matchday={data.matchday ?? null}
       emblemSrc={kingsCupLogo}
       emblemAlt="شعار كأس خادم الحرمين الشريفين"
+      staleUpdatedAt={stale ? data.freshness?.updatedAt : undefined}
     />
   );
 }

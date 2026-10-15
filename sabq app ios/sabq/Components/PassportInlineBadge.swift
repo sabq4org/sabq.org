@@ -10,7 +10,6 @@ struct PassportInlineBadge: View {
 
     @State private var isPresented = false
 
-    private static let emerald = Color(red: 0.16, green: 0.68, blue: 0.40)
 
     var body: some View {
         Button {
@@ -19,10 +18,11 @@ struct PassportInlineBadge: View {
         } label: {
             DetailLabelPill(
                 title: "موثَّق",
-                tint: Self.emerald,
+                tint: SabqTheme.success,
                 icon: "checkmark.shield.fill"
             )
         }
+        .frame(minWidth: SabqLayout.touchTarget, minHeight: SabqLayout.touchTarget)
         .buttonStyle(.plain)
         .accessibilityLabel("جواز المحتوى — موثَّق")
         .sheet(isPresented: $isPresented) {

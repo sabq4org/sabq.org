@@ -142,8 +142,11 @@ export function DmsAdSlot({ id, type, className = '', lazyLoad = false, idActive
   // empty space is invisible to readers anyway. The trade is: a small
   // unused space when the ad fails to fill, versus content jumping
   // 250px upward — SEO + reader experience both prefer the former.
+  // Leaderboard height is fixed in dms-top-ads.css (100px mobile / 250px
+  // desktop, DMS ask 2026-09-28) so it also applies after the skin script
+  // moves #Leaderboard outside this tree.
   const innerStyle: React.CSSProperties = type === 'leaderboard'
-    ? { minHeight: '90px', width: '100%', textAlign: 'center', overflow: 'hidden' }
+    ? { width: '100%', textAlign: 'center', overflow: 'hidden' }
     : { minHeight: '250px', width: '100%', textAlign: 'center', overflow: 'hidden' };
 
   // CRITICAL: the wrapper/inner tree shape MUST be constant across
@@ -208,7 +211,7 @@ export function DmsLeaderboardAd({ className }: { className?: string }) {
   }, [topAdsEnabled]);
 
   if (topAdsEnabled === false) return null;
-  return <DmsAdSlot id="Leaderboard" type="leaderboard" className={`hidden md:block ${className}`} idActive={topAdsEnabled === true} />;
+  return <DmsAdSlot id="Leaderboard" type="leaderboard" className={className} idActive={topAdsEnabled === true} />;
 }
 
 // MPU يظهر أعلى الصفحة (مقابل الليدربورد على الجوال) وداخل المحتوى أيضًا؛

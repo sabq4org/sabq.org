@@ -9,6 +9,7 @@ import {
   updateFocusReadingSessionSchema,
   type FocusReadingSession,
 } from "@shared/schema";
+import { getRealIp as getTrustedRealIp } from "../utils/trustedProxyIp";
 
 // Minimum focused seconds before a session can be marked as a "successful read"
 const MIN_SUCCESSFUL_READ_SECONDS = 30;
@@ -18,9 +19,7 @@ interface AuthedRequest extends Request {
 }
 
 function getRealIp(req: Request): string {
-  return (req.headers["cf-connecting-ip"] as string) ||
-    (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() ||
-    req.ip || "unknown";
+  return getTrustedRealIp(req);
 }
 
 const focusLimiter = rateLimit({

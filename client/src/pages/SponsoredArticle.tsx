@@ -76,7 +76,7 @@ export default function SponsoredArticle() {
     document.documentElement.dir = "rtl";
     document.documentElement.lang = "ar";
     return () => {
-      document.documentElement.dir = previousDir || "ltr";
+      document.documentElement.dir = previousDir || "rtl";
       document.documentElement.lang = previousLang || "en";
     };
   }, []);

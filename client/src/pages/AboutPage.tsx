@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { motion } from "framer-motion";
 import { 
   Sparkles, 
@@ -18,9 +19,14 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Link } from "wouter";
 import { Header } from "@/components/Header";
+import { Footer } from "@/components/Footer";
 import { useQuery } from "@tanstack/react-query";
 
 export default function AboutPage() {
+  // يطابق <title> المحقون على الحافة (/api/edge/seo-meta) بعد تشغيل جافاسكربت.
+  useEffect(() => {
+    document.title = "من نحن — سبق";
+  }, []);
   // Fetch current user
   const { data: user } = useQuery<{ name?: string | null; email?: string; role?: string; profileImageUrl?: string | null }>({
     queryKey: ["/api/auth/user"],
@@ -140,7 +146,7 @@ export default function AboutPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background" dir="rtl">
+    <div className="public-page min-h-screen overflow-x-hidden bg-background" dir="rtl">
       {/* Header */}
       <Header user={user} />
 
@@ -451,6 +457,7 @@ export default function AboutPage() {
           </motion.div>
         </div>
       </section>
+      <Footer />
     </div>
   );
 }

@@ -13,6 +13,7 @@ import { Router, type Request, type Response } from "express";
 import { z } from "zod";
 import { isAuthenticated } from "../auth";
 import { getUserPermissions, getUserRoleNames, userHasAnyRole } from "../rbac";
+import { inferStaffRolesFromWork } from "../services/staffRoleInference";
 import { upload } from "../utils/uploadMiddleware";
 import { ObjectStorageService, isPrivateObjectStorageConfigured } from "../objectStorage";
 import {
@@ -69,7 +70,10 @@ async function requireSelfStaffAccess(req: Request, res: Response, next: () => v
   if (!user) return res.status(401).json({ message: "غير مصرح" });
   const ok = await userHasAnyRole(user.id, [...SELF_STAFF_PROFILE_ROLES]);
   if (!ok) {
-    return res.status(403).json({ message: "استكمال الملف متاح لكتّاب الرأي والمراسلين فقط" });
+    const inferred = await inferStaffRolesFromWork(user.id);
+    if (!inferred.some((role) => (SELF_STAFF_PROFILE_ROLES as readonly string[]).includes(role))) {
+      return res.status(403).json({ message: "استكمال الملف متاح لكتّاب الرأي والمراسلين فقط" });
+    }
   }
   return next();
 }
@@ -235,7 +239,7 @@ router.put(
       }
 
       const result = await upsertStaffProfile(userId, patch, userId, { actorIsSelf: true });
-      if (!result.success) return res.status(404).json({ message: result.message });
+      if (!result.success) return res.status(result.status ?? 404).json({ message: result.message });
       res.json(result);
     } catch (error: unknown) {
       console.error("[StaffProfiles] self upsert error:", error);
@@ -394,7 +398,7 @@ router.put(
         patch as StaffProfilePatch,
         (req.user as { id: string }).id,
       );
-      if (!result.success) return res.status(404).json({ message: result.message });
+      if (!result.success) return res.status(result.status ?? 404).json({ message: result.message });
       res.json(result);
     } catch (error: unknown) {
       console.error("[StaffProfiles] upsert error:", error);

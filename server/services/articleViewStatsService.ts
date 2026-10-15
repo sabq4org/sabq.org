@@ -1,3 +1,4 @@
+import { registerShutdownHook } from "../shutdown";
 import crypto from "crypto";
 import { pool } from "../db";
 import {
@@ -111,9 +112,12 @@ export async function flushArticleViewStats(): Promise<void> {
 export function initArticleViewStats(): void {
   if (timer) return;
   timer = setInterval(flushArticleViewStats, FLUSH_INTERVAL_MS);
-  const onExit = () => { void flushArticleViewStats(); };
-  process.on("SIGTERM", onExit);
-  process.on("SIGINT", onExit);
+  registerShutdownHook("article-ip-views", async () => {
+    if (timer) clearInterval(timer);
+    while (flushing) await new Promise(resolve => setTimeout(resolve, 25));
+    await flushArticleViewStats();
+    if (buffer.size) throw new Error("Article IP view buffer remains unflushed");
+  });
 }
 
 export interface ArticleIpBreakdown {

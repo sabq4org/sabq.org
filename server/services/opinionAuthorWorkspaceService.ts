@@ -1,6 +1,7 @@
 import { and, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { db } from "../db";
 import { aiGateway } from "../ai/gateway";
+import { memoryCache } from "../memoryCache";
 import { articles, comments, editorialNotifications, worldDays } from "@shared/schema";
 
 type WriterArticle = {
@@ -105,7 +106,7 @@ export async function getOpinionAuthorWorkspace(userId: string) {
 
   const articleTitleById = new Map(writerArticles.map((article) => [article.id, article.title]));
   const desk = writerArticles
-    .filter((article) => article.status === "draft" || article.reviewStatus === "pending_review" || article.reviewStatus === "needs_changes")
+    .filter((article) => article.status === "draft" || article.status === "scheduled" || article.reviewStatus === "pending_review" || article.reviewStatus === "needs_changes")
     .sort((a, b) => Number(b.reviewStatus === "needs_changes") - Number(a.reviewStatus === "needs_changes"))
     .slice(0, 6)
     .map((article) => ({
@@ -115,11 +116,15 @@ export async function getOpinionAuthorWorkspace(userId: string) {
       reviewStatus: article.reviewStatus,
       reviewNotes: article.reviewNotes,
       updatedAt: article.updatedAt || article.createdAt,
-      nextAction: article.reviewStatus === "needs_changes"
-        ? "معالجة ملاحظات التحرير"
-        : article.reviewStatus === "pending_review"
-          ? "بانتظار مراجعة التحرير"
-          : "متابعة الكتابة",
+      nextAction: article.status === "scheduled"
+        ? "مجدول للنشر من هيئة التحرير"
+        : article.reviewStatus === "needs_changes"
+          ? "معالجة ملاحظات التحرير"
+          : article.reviewStatus === "pending_review"
+            ? "في انتظار مراجعة هيئة التحرير والجدولة"
+            : article.reviewStatus === "approved"
+              ? "معتمد وفي انتظار الجدولة"
+              : "متابعة الكتابة",
     }));
 
   const published = writerArticles.filter((article) => article.status === "published");
@@ -132,12 +137,18 @@ export async function getOpinionAuthorWorkspace(userId: string) {
 
   const trackingPriority = (article: WriterArticle) => {
     if (article.reviewStatus === "needs_changes") return 0;
-    if (article.reviewStatus === "rejected" || article.status === "archived" || article.status === "rejected") return 1;
-    if (article.reviewStatus === "pending_review") return 2;
-    if (article.status === "scheduled") return 3;
-    if (article.reviewStatus === "approved") return 4;
+    if (article.reviewStatus === "pending_review") return 1;
+    if (article.status === "scheduled") return 2;
+    if (article.reviewStatus === "approved") return 3;
+    if (article.status === "published") return 4;
     if (article.status === "draft") return 5;
-    return 6;
+    if (article.reviewStatus === "rejected" || article.status === "archived" || article.status === "rejected") return 6;
+    return 7;
+  };
+
+  const articleEffectiveTime = (art: WriterArticle) => {
+    const d = art.publishedAt || art.updatedAt || art.createdAt;
+    return d ? new Date(d).getTime() : 0;
   };
 
   return {
@@ -146,7 +157,7 @@ export async function getOpinionAuthorWorkspace(userId: string) {
       .sort((a, b) => {
         const priorityDifference = trackingPriority(a) - trackingPriority(b);
         if (priorityDifference !== 0) return priorityDifference;
-        return (b.updatedAt || b.createdAt).getTime() - (a.updatedAt || a.createdAt).getTime();
+        return articleEffectiveTime(b) - articleEffectiveTime(a);
       })
       .map((article) => ({
         id: article.id,
@@ -198,8 +209,25 @@ export async function getOpinionAuthorWorkspace(userId: string) {
 export async function getWriterEditorialNotifications(userId: string, limit: number) {
   const [items, unreadRows] = await Promise.all([
     db
-      .select()
+      .select({
+        id: editorialNotifications.id,
+        userId: editorialNotifications.userId,
+        type: editorialNotifications.type,
+        title: editorialNotifications.title,
+        body: editorialNotifications.body,
+        articleId: editorialNotifications.articleId,
+        articleTitle: editorialNotifications.articleTitle,
+        articleSlug: editorialNotifications.articleSlug,
+        deepLink: editorialNotifications.deepLink,
+        reviewerNote: editorialNotifications.reviewerNote,
+        deliveryStatus: editorialNotifications.deliveryStatus,
+        deliveryError: editorialNotifications.deliveryError,
+        readAt: editorialNotifications.readAt,
+        createdAt: editorialNotifications.createdAt,
+        articleStatus: articles.status,
+      })
       .from(editorialNotifications)
+      .leftJoin(articles, eq(articles.id, editorialNotifications.articleId))
       .where(eq(editorialNotifications.userId, userId))
       .orderBy(desc(editorialNotifications.createdAt))
       .limit(limit),
@@ -350,11 +378,31 @@ export async function reviewWriterArticle(userId: string, articleId: string, ove
   return parseJson<Record<string, unknown>>(response.content);
 }
 
+// الملف الأسلوبي لا يتغير إلا بنشر مقال جديد (بصمة أحدث مقال ضمن المفتاح)،
+// فيوم كامل آمن. فشل التوليد يُحفظ لفترة أقصر كي لا يُعاد استدعاء AI بطيء
+// (15-19 ثانية في حادثة 2026-08-07) مع كل فتح للوحة الكاتب.
+const STYLE_PROFILE_TTL_MS = 24 * 60 * 60 * 1000;
+const STYLE_PROFILE_FALLBACK_TTL_MS = 15 * 60 * 1000;
+
 export async function getWriterStyleProfile(userId: string) {
-  const published = (await getWriterArticles(userId)).filter((article) => article.status === "published").slice(0, 8);
+  // استعلام مخصص بدل getWriterArticles: ذاك يجلب محتوى كل مقالات الكاتب كاملة
+  // بينما الملف الأسلوبي يحتاج أحدث 8 منشورة فقط.
+  const published = await db
+    .select({ id: articles.id, title: articles.title, content: articles.content, excerpt: articles.excerpt })
+    .from(articles)
+    .where(and(
+      eq(articles.articleType, "opinion"),
+      eq(articles.status, "published"),
+      or(eq(articles.authorId, userId), eq(articles.submitterId, userId)),
+    ))
+    .orderBy(desc(articles.updatedAt))
+    .limit(8);
   if (published.length === 0) {
     return { ready: false, message: "يُبنى ملف أسلوبك بعد نشر أول مقال.", traits: [], guidance: [] };
   }
+  const cacheKey = `writer:style-profile:v1:${userId}:${published[0].id}:${published.length}`;
+  const cached = memoryCache.get<Record<string, unknown>>(cacheKey);
+  if (cached) return cached;
   try {
     const response = await aiGateway.complete({
       feature: "opinion-writer-style-profile",
@@ -373,17 +421,23 @@ export async function getWriterStyleProfile(userId: string) {
           }))),
         },
       ],
-      options: { jsonMode: true, temperature: 0.3, maxTokens: 1200 },
+      // 1200 كانت تُبتر دائمًا (JSON عربي ≈ توكن لكل حرف تقريبًا) فيفشل parse
+      // ويظهر الـ fallback الثابت لكل الكتّاب — حادثة "Unterminated string".
+      options: { jsonMode: true, temperature: 0.3, maxTokens: 2500 },
     });
-    return parseJson<Record<string, unknown>>(response.content);
+    const profile = parseJson<Record<string, unknown>>(response.content);
+    memoryCache.set(cacheKey, profile, STYLE_PROFILE_TTL_MS);
+    return profile;
   } catch (error) {
     console.warn("[Writer Workspace] style profile fallback:", error instanceof Error ? error.message : error);
-    return {
+    const fallback = {
       ready: true,
       signature: "صوتك يتضح أكثر مع كل مقال جديد.",
       traits: ["لغة رأي مباشرة", "اهتمام بالقضايا القريبة من القارئ"],
       guidance: ["حافظ على وضوح موقفك في المقدمة", "امنح الرأي المضاد مساحة عادلة"],
     };
+    memoryCache.set(cacheKey, fallback, STYLE_PROFILE_FALLBACK_TTL_MS);
+    return fallback;
   }
 }
 

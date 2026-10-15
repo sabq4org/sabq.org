@@ -1,0 +1,21 @@
+{
+  "0": {
+    "ms": 547,
+    "rows": [
+      {
+        "total_published": "945213",
+        "today_published": "42"
+      }
+    ]
+  },
+  "1": {
+    "ms": 334,
+    "rows": [
+      {
+        "total_published": "945213",
+        "today_published": "42"
+      }
+    ]
+  },
+  "equal": true
+}

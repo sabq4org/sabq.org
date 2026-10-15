@@ -152,7 +152,7 @@ export default function NationalDayBlockSettings() {
                       value={form.subtitle ?? ""}
                       onChange={(e) => setForm({ ...form, subtitle: e.target.value || null })}
                       maxLength={160}
-                      placeholder="مثلاً: تغطية خاصة لليوم الوطني السعودي الـ96"
+                      placeholder="مثلاً: تغطية خاصة لليوم الوطني السعودي"
                       data-testid="input-nd96-subtitle"
                     />
                   </div>
@@ -375,7 +375,7 @@ type NDConfig = {
 function emptyConfig(): NDConfig {
   return {
     isActive: false,
-    title: "اليوم الوطني السعودي الـ96",
+    title: "اليوم الوطني السعودي",
     subtitle: null,
     keywords: ["اليوم الوطني", "العيد الوطني", "عزنا بطبعنا", "عزّنا بطبعنا"],
     articleLimit: 3,

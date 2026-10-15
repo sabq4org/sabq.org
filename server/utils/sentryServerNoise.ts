@@ -29,7 +29,7 @@ export function isClientAbortError(err: unknown): boolean {
 
   if (code === "ECONNABORTED") return true;
   if (type === "request.aborted") return true;
-  if (message === "request aborted") return true;
+  if (typeof message === "string" && message.toLowerCase() === "request aborted") return true;
   if (code === "ECONNRESET" && syscall === "read") return true;
   if (code === "EPIPE" && (syscall === "write" || syscall === undefined)) return true;
 

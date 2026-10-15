@@ -1473,6 +1473,11 @@ export default function EnglishArticleEditor() {
         open={showAIImageDialog}
         onClose={() => setShowAIImageDialog(false)}
         initialPrompt={title ? `Professional featured image for article titled: ${title}` : "Professional featured image for news article"}
+        articleContext={{
+          title,
+          excerpt,
+          category: allCategories.find((cat) => cat.id === categoryId)?.slug,
+        }}
         onImageGenerated={(url) => {
           setImageUrl(url);
           setShowAIImageDialog(false);

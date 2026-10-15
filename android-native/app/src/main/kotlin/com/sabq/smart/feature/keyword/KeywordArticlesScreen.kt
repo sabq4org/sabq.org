@@ -48,6 +48,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.sabq.smart.data.Article
 import com.sabq.smart.data.BookmarksStore
+import com.sabq.smart.ui.components.EmptyStateView
 import com.sabq.smart.ui.components.CompactArticleRow
 import com.sabq.smart.ui.components.OpinionCard
 import com.sabq.smart.ui.components.rememberSabqHaptics
@@ -68,6 +69,7 @@ interface KeywordEntryPoint {
 fun KeywordArticlesScreen(
     onBack: () -> Unit,
     onArticleClick: (Article) -> Unit,
+    onSearchClick: () -> Unit,
     viewModel: KeywordArticlesViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.state.collectAsState()
@@ -117,7 +119,8 @@ fun KeywordArticlesScreen(
                         state = s,
                         isFollowed = s.isFollowed,
                         onFollowToggle = viewModel::toggleFollow,
-                        onArticleClick = onArticleClick
+                        onArticleClick = onArticleClick,
+                        onSearchClick = onSearchClick,
                     )
                 }
             }
@@ -159,6 +162,7 @@ private fun KeywordFeed(
     isFollowed: Boolean,
     onFollowToggle: () -> Unit,
     onArticleClick: (Article) -> Unit,
+    onSearchClick: () -> Unit,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -238,6 +242,19 @@ private fun KeywordFeed(
         item {
             FollowToggleButton(isFollowed = isFollowed, onFollowToggle = onFollowToggle)
             Spacer(modifier = Modifier.height(4.dp))
+        }
+
+        if (state.articles.isEmpty()) {
+            item {
+                EmptyStateView(
+                    icon = Icons.Default.LocalOffer,
+                    tint = SabqTheme.colors.secondaryInk,
+                    title = "لا توجد مواد",
+                    subtitle = "لم نجد أخبارًا أو مقالات رأي تحمل هذا الوسم حاليًا",
+                    actionTitle = "البحث عن أخبار",
+                    onAction = onSearchClick,
+                )
+            }
         }
 
         // Articles List

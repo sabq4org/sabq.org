@@ -23,6 +23,7 @@ const adminPutSchema = z.object({
 
 // PUBLIC: GET /api/sahraa-tv-block
 router.get("/", async (_req: Request, res: Response) => {
+  res.setHeader("Cache-Control", "private, no-store");
   try {
     const payload = await getPublicSahraaTvBlock();
     res.json(payload);
@@ -70,6 +71,11 @@ router.put(
       const config = await saveSahraaTvBlockConfig(parsed.data);
       res.json({ success: true, config });
     } catch (err: any) {
+      if (err?.code === "SAHRAA_TV_BLOCK_WRITE_CONFLICT") {
+        return res.status(409).json({
+          message: "تغيّرت إعدادات بلوك الصحراء أثناء الحفظ — أعد تحميل الصفحة ثم حاول مرة أخرى",
+        });
+      }
       if (err?.code === "INVALID_X_POST_URL" || err?.message === "INVALID_X_POST_URL") {
         return res.status(400).json({
           message: "رابط منشور إكس غير صالح — استخدم رابطاً مثل https://x.com/user/status/123/video/1",

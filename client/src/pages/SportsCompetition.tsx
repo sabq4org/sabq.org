@@ -357,19 +357,19 @@ function MatchesPane({ slug, onOpen }: { slug: string; onOpen: (id: number) => v
   });
   const { data: roundsData } = useQuery<{ rounds: SpRound[]; current: string | null }>({
     queryKey: [`/api/sports/${slug}/rounds`],
-    staleTime: 30 * 60_000,
+    staleTime: 60_000,
+    refetchInterval: 60_000,
   });
   const rounds = Array.isArray(roundsData?.rounds) ? roundsData.rounds : [];
+  // null = اتبع current من الخادم بعد انتهاء الجولة؛ النقرة تثبّت الاختيار يدويًا.
   const [selectedRound, setSelectedRound] = useState<string | null>(null);
   const effectiveRound = selectedRound ?? roundsData?.current ?? rounds[0]?.key ?? null;
-  useEffect(() => {
-    if (!selectedRound && effectiveRound) setSelectedRound(effectiveRound);
-  }, [effectiveRound, selectedRound]);
   const { data: roundData, isLoading: roundLoading } = useQuery<{ fixtures: SpLiveItem[] }>({
     queryKey: [`/api/sports/${slug}/round`, { name: effectiveRound }],
     enabled: !!effectiveRound,
-    staleTime: 60_000,
-    refetchInterval: 60_000,
+    staleTime: 15_000,
+    refetchInterval: (q) =>
+      (q.state.data?.fixtures ?? []).some((f) => f.status.live) ? 15_000 : 60_000,
     refetchIntervalInBackground: false,
   });
   const roundFixturesRaw = Array.isArray(roundData?.fixtures) ? roundData.fixtures : [];

@@ -84,13 +84,14 @@ describe("isValidXPostUrl", () => {
 });
 
 describe("parseSahraaTvBlockConfig", () => {
-  it("applies launch defaults (Sahraa video visible after resolve)", () => {
+  it("fails closed when no setting has been saved", () => {
     expect(parseSahraaTvBlockConfig(null)).toEqual({
-      isActive: true,
+      isActive: false,
       title: DEFAULT_SAHRAA_TITLE,
       description: DEFAULT_SAHRAA_DESCRIPTION,
       xPostUrl: DEFAULT_SAHRAA_X_POST_URL,
       videoUrl: "",
+      mirroredVideoUrl: "",
       posterUrl: "",
       updatedAt: null,
     });
@@ -114,6 +115,22 @@ describe("parseSahraaTvBlockConfig", () => {
     expect(parsed.posterUrl).toBe("https://pbs.twimg.com/x.jpg");
     expect(parsed.updatedAt).toBe("2026-07-30T10:00:00.000Z");
   });
+
+  it("fails closed for a malformed setting", () => {
+    expect(
+      parseSahraaTvBlockConfig({
+        isActive: "true",
+        videoUrl: "https://video.example/a.mp4",
+      }).isActive,
+    ).toBe(false);
+    expect(
+      parseSahraaTvBlockConfig({
+        isActive: true,
+        xPostUrl: "https://x.com/home",
+        videoUrl: "https://video.example/a.mp4",
+      }).isActive,
+    ).toBe(false);
+  });
 });
 
 describe("toPublicSahraaTvBlock", () => {
@@ -125,6 +142,7 @@ describe("toPublicSahraaTvBlock", () => {
         description: "x",
         xPostUrl: "https://x.com/a/status/1234567890",
         videoUrl: "https://video.twimg.com/x.mp4",
+        mirroredVideoUrl: "",
         posterUrl: "",
         updatedAt: null,
       }).isVisible,
@@ -149,6 +167,7 @@ describe("toPublicSahraaTvBlock", () => {
       description: "وصف اليوم",
       xPostUrl: "https://x.com/AlSahraa/status/1234567890123456789",
       videoUrl: "https://video.twimg.com/clip.mp4",
+      mirroredVideoUrl: "",
       posterUrl: "https://pbs.twimg.com/thumb.jpg",
       updatedAt: "2026-07-30T10:00:00.000Z",
     });
@@ -181,6 +200,7 @@ describe("mergeSahraaTvBlockConfig", () => {
         description: "وصف",
         xPostUrl: "https://x.com/a/status/1111111111",
         videoUrl: "https://video.twimg.com/old.mp4",
+        mirroredVideoUrl: "https://media.sabq.org/sahraa-tv/1111111111.mp4",
         posterUrl: "https://pbs.twimg.com/old.jpg",
         updatedAt: null,
       },
@@ -188,6 +208,27 @@ describe("mergeSahraaTvBlockConfig", () => {
       "2026-07-30T12:00:00.000Z",
     );
     expect(merged.videoUrl).toBe("");
+    expect(merged.mirroredVideoUrl).toBe("");
     expect(merged.posterUrl).toBe("");
+  });
+
+  it("keeps the R2 mirror when the x url is unchanged", () => {
+    const merged = mergeSahraaTvBlockConfig(
+      {
+        isActive: true,
+        title: "قناة الصحراء",
+        description: "وصف",
+        xPostUrl: "https://x.com/a/status/1111111111",
+        videoUrl: "https://video.twimg.com/old.mp4",
+        mirroredVideoUrl: "https://media.sabq.org/sahraa-tv/1111111111.mp4",
+        posterUrl: "https://pbs.twimg.com/old.jpg",
+        updatedAt: null,
+      },
+      { description: "وصف جديد" },
+      "2026-07-30T12:00:00.000Z",
+    );
+    expect(merged.mirroredVideoUrl).toBe(
+      "https://media.sabq.org/sahraa-tv/1111111111.mp4",
+    );
   });
 });

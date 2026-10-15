@@ -88,9 +88,11 @@ export const ImageGallery = Node.create<ImageGalleryOptions>({
     ];
   },
 
-  renderHTML({ HTMLAttributes }) {
-    const images: GalleryImage[] = HTMLAttributes.images || [];
-    const galleryId = HTMLAttributes.galleryId || '';
+  renderHTML({ node }) {
+    // node.attrs فقط يحمل الخصائص الخام هنا — HTMLAttributes يصل بأسمائها
+    // المُصيَّرة (data-images) فقراءتها باسمها الخام تُفرّغ الألبوم في كل getHTML
+    const images: GalleryImage[] = node.attrs.images || [];
+    const galleryId = node.attrs.galleryId || '';
     
     // Build children array for TipTap rendering (for HTML output/saving)
     const children: any[] = [];

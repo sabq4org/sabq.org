@@ -13,6 +13,11 @@ export interface RadarAnalysis {
   translatedTitle: string;
   translatedSummary: string;
   categorySlug: string | null;
+  /** توقيت الحدث كما يدل عليه النص — لا تخمين تاريخ */
+  eventTiming: "new" | "ongoing" | "old" | "unknown";
+  /** العبارة/السبب الذي استند إليه التوقيت */
+  timingEvidence: string | null;
+  contentType: "news" | "claim" | "analysis" | "opinion" | "press_release" | "other";
   breakdown: {
     breaking?: number;
     saudiRelevance?: number;
@@ -21,6 +26,9 @@ export interface RadarAnalysis {
     reason?: string;
   };
 }
+
+const EVENT_TIMINGS = new Set(["new", "ongoing", "old", "unknown"]);
+const CONTENT_TYPES = new Set(["news", "claim", "analysis", "opinion", "press_release", "other"]);
 
 function stripCodeFences(raw: string): string {
   let jsonStr = raw.trim();
@@ -48,6 +56,9 @@ export function parseAnalysisPayload(raw: string): RadarAnalysis[] {
       translatedTitle: String(entry.translatedTitle || "").trim(),
       translatedSummary: String(entry.translatedSummary || "").trim(),
       categorySlug: entry.categorySlug ? String(entry.categorySlug) : null,
+      eventTiming: EVENT_TIMINGS.has(entry.eventTiming) ? entry.eventTiming : "unknown",
+      timingEvidence: entry.timingEvidence ? String(entry.timingEvidence).trim().substring(0, 300) || null : null,
+      contentType: CONTENT_TYPES.has(entry.contentType) ? entry.contentType : "news",
       breakdown: {
         breaking: numOrUndefined(entry.breakdown?.breaking),
         saudiRelevance: numOrUndefined(entry.breakdown?.saudiRelevance),

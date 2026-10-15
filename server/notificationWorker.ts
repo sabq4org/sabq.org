@@ -1,4 +1,7 @@
-import cron, { type ScheduledTask } from "node-cron";
+import { personalBotScheduledWriteCondition, stopUnauthorizedPersonalSchedule } from "./services/botPersonalScheduleService";
+import { isLeader } from "./leaderElection";
+import type { ScheduledTask } from "node-cron";
+import cron from "./leaderCron";
 import { db } from "./db";
 import { eq, and, lte, isNull, sql } from "drizzle-orm";
 import { notificationQueue, notificationsInbox, notificationMetrics, articles } from "@shared/schema";
@@ -62,6 +65,7 @@ let isProcessingDigests = false;
 let isProcessingRecommendations = false;
 
 async function processNotificationQueue() {
+  if (!isLeader()) return;
   if (isProcessingQueue) {
     console.log("[NotificationWorker] Skipping - already processing");
     return;
@@ -93,6 +97,11 @@ async function processNotificationQueue() {
     console.log(`[NotificationWorker] Found ${pendingNotifications.length} notifications to process`);
 
     await runWithConcurrency(pendingNotifications, async (queueItem) => {
+      if (!isLeader()) return;
+      const [claimed] = await db.update(notificationQueue).set({ status: "processing" })
+        .where(and(eq(notificationQueue.id, queueItem.id), eq(notificationQueue.status, "queued")))
+        .returning({ id: notificationQueue.id });
+      if (!claimed) return;
       try {
         const payload = queueItem.payload as any;
         const articleId = payload.articleId;
@@ -255,6 +264,7 @@ async function processNotificationQueue() {
 }
 
 async function cleanupOldNotifications() {
+  if (!isLeader()) return;
   try {
     console.log("[NotificationWorker] Starting cleanup of old notifications...");
 
@@ -295,6 +305,7 @@ async function cleanupOldNotifications() {
 }
 
 async function publishScheduledArticles() {
+  if (!isLeader()) return;
   if (isPublishing) {
     console.log("[ScheduledPublisher] Skipping - already publishing");
     return;
@@ -324,17 +335,48 @@ async function publishScheduledArticles() {
 
     for (const article of scheduledArticles) {
       await new Promise(resolve => setImmediate(resolve));
+      if (!isLeader()) break;
       try {
+        // A scheduled personal-bot operation must still be authorized at execution time.
+        if (article.source === "bot" && article.sourceMetadata?.publisherUserId) {
+          const { personalBotScheduledReleaseAllowed } = await import("./services/botPersonalScheduleService");
+          if (!await personalBotScheduledReleaseAllowed(article)) {
+            console.warn(`[ScheduledPublisher] personal authorization no longer valid for ${article.id}`);
+            await stopUnauthorizedPersonalSchedule(article);
+            continue;
+          }
+        }
+
         const publishTime = new Date();
         
-        await db
+        const [published] = await db
           .update(articles)
           .set({
             status: "published",
             publishedAt: publishTime,
             updatedAt: publishTime,
           })
-          .where(eq(articles.id, article.id));
+          .where(and(eq(articles.id, article.id), eq(articles.status, "scheduled"),
+            lte(articles.scheduledAt, publishTime), personalBotScheduledWriteCondition(article)))
+          .returning({ id: articles.id });
+        if (!published) continue;
+
+        if (article.source === "bot" && article.sourceMetadata?.publisherUserId) {
+          const { recordPersonalBotScheduledPublish } = await import("./services/botPersonalScheduleService");
+          await recordPersonalBotScheduledPublish(article);
+        }
+
+        // Agency news: the scheduled publisher used to release it without
+        // charging the package. The shared rule never charges an article twice,
+        // so the personal-bot charge above can't double up. Never throws.
+        if (article.publisherId) {
+          const { deductPublisherCreditSafely } = await import("./services/publisherCreditService");
+          await deductPublisherCreditSafely({
+            authorUserId: article.authorId,
+            articleId: article.id,
+            actorId: article.submitterId ?? article.authorId,
+          });
+        }
 
         console.log(`[ScheduledPublisher] Published article: ${article.id} - ${article.title}`);
 
@@ -457,7 +499,7 @@ async function publishScheduledArticles() {
         try {
           const { logActivity } = await import("./rbac");
           await logActivity({
-            userId: article.authorId,
+            userId: article.source === "bot" ? article.sourceMetadata?.publisherUserId ?? article.authorId : article.authorId,
             action: 'ArticlePublished',
             entityType: 'Article',
             entityId: article.id,
@@ -483,6 +525,7 @@ async function publishScheduledArticles() {
 }
 
 async function processDailyDigestsWorker() {
+  if (!isLeader()) return;
   if (isProcessingDigests) {
     console.log("[DigestWorker] Skipping - already processing");
     return;
@@ -500,6 +543,7 @@ async function processDailyDigestsWorker() {
 }
 
 async function processRecommendationsWorker() {
+  if (!isLeader()) return;
   if (isProcessingRecommendations) {
     console.log("[REC WORKER] Skipping - already processing");
     return;
@@ -544,6 +588,7 @@ async function processRecommendationsWorker() {
 }
 
 async function processScheduledAnnouncements() {
+  if (!isLeader()) return;
   if (isProcessingAnnouncements) {
     console.log("[AnnouncementScheduler] Skipping - already processing");
     return;
@@ -559,7 +604,10 @@ async function processScheduledAnnouncements() {
   }
 }
 
+let notificationWorkerStarted = false;
 export function startNotificationWorker() {
+  if (notificationWorkerStarted) return;
+  notificationWorkerStarted = true;
   try {
     console.log("[NotificationWorker] Starting notification worker...");
 
@@ -567,7 +615,7 @@ export function startNotificationWorker() {
 
     scheduledTasks.push(
       cron.schedule("0,5,10,15,20,25,30,35,40,45,50,55 * * * *", () => {
-        withTimeout(() => processNotificationQueue(), "NotificationQueue", 120000).catch(error => {
+        return withTimeout(() => processNotificationQueue(), "NotificationQueue", 120000).catch(error => {
           console.error("[NotificationWorker] Cron job error:", error);
         });
       })
@@ -575,7 +623,7 @@ export function startNotificationWorker() {
 
     scheduledTasks.push(
       cron.schedule("0,2,4,6,8,10,12,14,16,18,20,22,24,26,28,30,32,34,36,38,40,42,44,46,48,50,52,54,56,58 * * * *", () => {
-        withTimeout(() => publishScheduledArticles(), "ScheduledPublisher", 180000).catch(error => {
+        return withTimeout(() => publishScheduledArticles(), "ScheduledPublisher", 180000).catch(error => {
           console.error("[ScheduledPublisher] Cron job error:", error);
         });
       })
@@ -583,7 +631,7 @@ export function startNotificationWorker() {
 
     scheduledTasks.push(
       cron.schedule("0 3 * * *", () => {
-        withTimeout(() => cleanupOldNotifications(), "Cleanup", 300000).catch(error => {
+        return withTimeout(() => cleanupOldNotifications(), "Cleanup", 300000).catch(error => {
           console.error("[NotificationWorker] Cleanup cron job error:", error);
         });
       })
@@ -591,7 +639,7 @@ export function startNotificationWorker() {
 
     scheduledTasks.push(
       cron.schedule("5 * * * *", () => {
-        withTimeout(() => processDailyDigestsWorker(), "DailyDigests", 300000).catch(error => {
+        return withTimeout(() => processDailyDigestsWorker(), "DailyDigests", 300000).catch(error => {
           console.error("[DigestWorker] Cron job error:", error);
         });
       })
@@ -599,7 +647,7 @@ export function startNotificationWorker() {
 
     scheduledTasks.push(
       cron.schedule("30 */2 * * *", () => {
-        withTimeout(() => processRecommendationsWorker(), "Recommendations", 300000).catch(error => {
+        return withTimeout(() => processRecommendationsWorker(), "Recommendations", 300000).catch(error => {
           console.error("[REC WORKER] Cron job error:", error);
         });
       })
@@ -607,7 +655,7 @@ export function startNotificationWorker() {
 
     scheduledTasks.push(
       cron.schedule("2,5,8,11,14,17,20,23,26,29,32,35,38,41,44,47,50,53,56,59 * * * *", () => {
-        withTimeout(() => processScheduledAnnouncements(), "AnnouncementScheduler", 120000).catch(error => {
+        return withTimeout(() => processScheduledAnnouncements(), "AnnouncementScheduler", 120000).catch(error => {
           console.error("[AnnouncementScheduler] Cron job error:", error);
         });
       })

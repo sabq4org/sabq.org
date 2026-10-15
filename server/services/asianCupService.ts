@@ -54,6 +54,7 @@ import {
 } from "./theSportsService";
 import { apiFootballGet } from "./apiFootballClient";
 import { isEnglishSports } from "./sportsLang";
+import { isWithinLiveOverlayWindow, mergeLiveMatchProgress } from "./sportsMatchStatus";
 import pLimit from "p-limit";
 import {
   getCommentary,
@@ -212,7 +213,10 @@ const TS_STATUS_TO_AC: Record<number, { code: string; label: string }> = {
 
 /** تركيب النتيجة الأسرع على مباراة كأس آسيا الجارية، بأفضل جهد. */
 async function overlayAcLiveScore(fixture: AcFixture): Promise<AcFixture> {
-  if (!fixture.status.live || !AC_TS_COMPETITION_ID) return fixture;
+  const nowSec = Math.floor(Date.now() / 1000);
+  if ((!fixture.status.live && !isWithinLiveOverlayWindow(fixture.timestamp, nowSec)) || !AC_TS_COMPETITION_ID) {
+    return fixture;
+  }
   try {
     const live = await getTheSportsFastScore(
       fixture.id,
@@ -221,18 +225,33 @@ async function overlayAcLiveScore(fixture: AcFixture): Promise<AcFixture> {
     );
     if (!live || (!live.live && !live.finished)) return fixture;
     const mapped = TS_STATUS_TO_AC[live.statusId];
+    const merged = mergeLiveMatchProgress(
+      {
+        ...fixture.status,
+        extra: null,
+      },
+      {
+        live: live.live,
+        finished: live.finished,
+        elapsed: live.elapsed,
+        extra: live.extra,
+        statusId: live.statusId,
+        statusCode: mapped?.code,
+        kickoffTs: fixture.timestamp,
+      },
+    );
     return {
       ...fixture,
       goals: { home: live.home, away: live.away },
       status: {
         ...fixture.status,
-        code: mapped?.code ?? fixture.status.code,
+        code: merged.code,
         label: isEnglishSports()
-          ? WC_STATUS_EN[mapped?.code ?? fixture.status.code] ?? fixture.status.label
-          : mapped?.label ?? fixture.status.label,
-        elapsed: live.elapsed ?? fixture.status.elapsed,
-        live: live.live,
-        finished: live.finished || fixture.status.finished,
+          ? WC_STATUS_EN[merged.code] ?? merged.label
+          : merged.label,
+        elapsed: merged.elapsed,
+        live: merged.live,
+        finished: merged.finished,
       },
     };
   } catch {

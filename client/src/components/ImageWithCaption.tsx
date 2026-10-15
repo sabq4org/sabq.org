@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import DOMPurify from "isomorphic-dompurify";
 import { useState } from "react";
 import { OptimizedImage } from "@/components/OptimizedImage";
+import { ARTICLE_HERO_QUALITY } from "@shared/articleHeroPreload";
 import { HERO_SIZES_ATTR } from "@/lib/cdnImage";
 
 interface ImageWithCaptionProps {
@@ -62,6 +63,7 @@ export function ImageWithCaption({
             src={imageUrl}
             alt={altText}
             priority={priority}
+            quality={priority ? ARTICLE_HERO_QUALITY : undefined}
             fetchPriority={priority ? "high" : "auto"}
             wrapperClassName="w-full"
             className="w-full h-auto"

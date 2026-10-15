@@ -1,5 +1,6 @@
-// أدوات معالجة الشعارات (اللوقوهات) لصورة الخبر البارزة:
-// رسم الشعار على لوحة 16:9 بخلفية بيضاء بدل قصّه بـ object-fit: cover.
+// أدوات معالجة الشعارات (اللوقوهات) وصور الأشخاص لصورة الخبر البارزة:
+// رسم الشعار على لوحة 16:9 بخلفية بيضاء بدل قصّه بـ object-fit: cover،
+// والصورة الشخصية الطولية على امتداد خلفيتها الأصلية.
 // المعالجة كلها في المتصفح — الناتج ملف جاهز للرفع عبر /api/media/upload.
 
 export const LOGO_CANVAS_WIDTH = 1200;
@@ -349,6 +350,201 @@ export async function renderMergedPhotos(
   } finally {
     first.cleanup();
     second.cleanup();
+  }
+}
+
+// ── صورة شخص (بورتريه) ──
+// صورة رسمية طولية لا تُقص ولا تُموَّه ولا توضع على أبيض: تتوسط اللوحة بكامل
+// ارتفاعها، وتُمدّ خلفيتها الأصلية على بقية العرض ثم تذوب حافتاها فيها.
+
+type Rgb = [number, number, number];
+
+// نصف الصورة العلوي فقط يُعتمد للون الخلفية — السفلي غالباً كتفان وبشت
+const BACKDROP_SAMPLE_RATIO = 0.5;
+// تنعيم رأسي (نسبة من الارتفاع) يمحو تفاصيل الحافة ويُبقي تدرّج الاستوديو
+const BACKDROP_SMOOTH_RATIO = 0.09;
+// تعتيم تدريجي للنصف السفلي الممتد حتى لا يبدو اللون مسطحاً
+const BACKDROP_BOTTOM_DARKEN = 0.35;
+// متوسط انحراف بكسلات الحافة عن لون صفها — فوقه الخلفية «مزدحمة» (مكتب، شارع)
+const BACKDROP_BUSY_THRESHOLD = 18;
+// بديل الخلفية المزدحمة: لون محايد داكن مشتق من ألوان الصورة نفسها
+const BACKDROP_NEUTRAL: Rgb = [20, 22, 26];
+const BACKDROP_NEUTRAL_MIX = 0.82;
+
+/**
+ * يبني لون كل صف في الخلفية الممتدة من شريطي حافتي الصورة (RGBA بعرض stripWidth).
+ * يرجع busy=true حين لا تكون الحافة خلفية متجانسة — عندها تُستبدل بلون محايد
+ * داكن بدل مدّ تفاصيل مزدحمة تتحول إلى خطوط قبيحة.
+ */
+export function buildPortraitBackdrop(
+  left: Uint8ClampedArray,
+  right: Uint8ClampedArray,
+  stripWidth: number,
+  height: number,
+): { rows: Rgb[]; busy: boolean } {
+  const sampleRows = Math.max(1, Math.floor(height * BACKDROP_SAMPLE_RATIO));
+  const rowColors: Rgb[] = [];
+  let deviation = 0;
+  let samples = 0;
+
+  for (let y = 0; y < sampleRows; y++) {
+    const sum: Rgb = [0, 0, 0];
+    for (const strip of [left, right]) {
+      for (let x = 0; x < stripWidth; x++) {
+        const i = (y * stripWidth + x) * 4;
+        sum[0] += strip[i];
+        sum[1] += strip[i + 1];
+        sum[2] += strip[i + 2];
+      }
+    }
+    const n = stripWidth * 2;
+    const avg: Rgb = [sum[0] / n, sum[1] / n, sum[2] / n];
+    rowColors.push(avg);
+    for (const strip of [left, right]) {
+      for (let x = 0; x < stripWidth; x++) {
+        const i = (y * stripWidth + x) * 4;
+        deviation +=
+          (Math.abs(strip[i] - avg[0]) +
+            Math.abs(strip[i + 1] - avg[1]) +
+            Math.abs(strip[i + 2] - avg[2])) /
+          3;
+        samples++;
+      }
+    }
+  }
+
+  const busy = samples > 0 && deviation / samples > BACKDROP_BUSY_THRESHOLD;
+
+  if (busy) {
+    const mean: Rgb = [0, 0, 0];
+    for (const c of rowColors) {
+      mean[0] += c[0];
+      mean[1] += c[1];
+      mean[2] += c[2];
+    }
+    const base = mean.map(
+      (v, i) =>
+        (v / rowColors.length) * (1 - BACKDROP_NEUTRAL_MIX) +
+        BACKDROP_NEUTRAL[i] * BACKDROP_NEUTRAL_MIX,
+    ) as Rgb;
+    const rows: Rgb[] = [];
+    for (let y = 0; y < height; y++) {
+      const k = 1 - 0.2 * (y / Math.max(1, height - 1));
+      rows.push([base[0] * k, base[1] * k, base[2] * k].map(Math.round) as Rgb);
+    }
+    return { rows, busy };
+  }
+
+  const radius = Math.max(1, Math.round(height * BACKDROP_SMOOTH_RATIO));
+  const rows: Rgb[] = [];
+  for (let y = 0; y < sampleRows; y++) {
+    const from = Math.max(0, y - radius);
+    const to = Math.min(sampleRows - 1, y + radius);
+    const acc: Rgb = [0, 0, 0];
+    for (let j = from; j <= to; j++) {
+      acc[0] += rowColors[j][0];
+      acc[1] += rowColors[j][1];
+      acc[2] += rowColors[j][2];
+    }
+    const count = to - from + 1;
+    rows.push(acc.map((v) => Math.round(v / count)) as Rgb);
+  }
+  const last = rows[rows.length - 1];
+  for (let y = sampleRows; y < height; y++) {
+    const t = (y - sampleRows) / Math.max(1, height - sampleRows);
+    const k = 1 - BACKDROP_BOTTOM_DARKEN * t;
+    rows.push([last[0] * k, last[1] * k, last[2] * k].map(Math.round) as Rgb);
+  }
+  return { rows, busy };
+}
+
+// أطول صورة تُعرض كاملة (عرض/ارتفاع) — الأطول منها تُقص من الأعلى حول الوجه
+// حتى لا يصغر الوجه في صور الجسم الكامل
+const PORTRAIT_MIN_ASPECT = 0.62;
+const PORTRAIT_CROP_ASPECT = 0.75;
+const PORTRAIT_FEATHER_PX = 110;
+const PORTRAIT_EDGE_STRIP_PX = 8;
+
+export interface PortraitOptions {
+  /** مركز الوجه — يوجّه القص في الصور الطويلة جداً فقط */
+  focal?: FocalPoint | null;
+}
+
+/**
+ * صورة شخص: الصورة الطولية تتوسط لوحة 1200×675 بكامل ارتفاعها دون قص،
+ * وتُمدّ خلفيتها الأصلية (لون الاستوديو) على بقية العرض مع تذويب الحافتين.
+ * التوسيط مقصود: قوائم الموقع تقص الصورة مربعاً أو 4:3 من المنتصف،
+ * فيبقى الوجه سليماً في كل القصّات.
+ */
+export async function renderPortraitPhoto(
+  file: File,
+  options: PortraitOptions = {},
+): Promise<Blob> {
+  const photo = await loadLogo(file);
+  try {
+    const W = LOGO_CANVAS_WIDTH;
+    const H = LOGO_CANVAS_HEIGHT;
+    const { canvas, ctx } = createWhiteCanvas();
+    const fx = clamp(options.focal?.fx ?? 0.5, 0, 1);
+    const fy = clamp(options.focal?.fy ?? 0.3, 0, 1);
+
+    // صورة أعرض من 16:9 أصلاً لا تحتاج امتداداً: تملأ اللوحة حول الوجه
+    if (photo.width / photo.height >= W / H) {
+      const sw = photo.height * (W / H);
+      const sx = clamp(fx * photo.width - sw / 2, 0, photo.width - sw);
+      ctx.drawImage(photo.source, sx, 0, sw, photo.height, 0, 0, W, H);
+      return await canvasToBlob(canvas);
+    }
+
+    let sy = 0;
+    let sh = photo.height;
+    if (photo.width / photo.height < PORTRAIT_MIN_ASPECT) {
+      sh = photo.width / PORTRAIT_CROP_ASPECT;
+      // الوجه في الثلث العلوي من القصّة؛ بلا اكتشاف وجه نثبت أعلى الصورة
+      sy = options.focal ? clamp(fy * photo.height - sh * 0.35, 0, photo.height - sh) : 0;
+    }
+
+    const drawnW = Math.max(1, Math.round((photo.width * H) / sh));
+    const layer = document.createElement("canvas");
+    layer.width = drawnW;
+    layer.height = H;
+    const lctx = layer.getContext("2d", { willReadFrequently: true });
+    if (!lctx) throw new Error("المتصفح لا يدعم معالجة الصور (Canvas)");
+    lctx.imageSmoothingEnabled = true;
+    lctx.imageSmoothingQuality = "high";
+    lctx.drawImage(photo.source, 0, sy, photo.width, sh, 0, 0, drawnW, H);
+
+    const strip = Math.max(1, Math.min(PORTRAIT_EDGE_STRIP_PX, Math.floor(drawnW / 10)));
+    const left = lctx.getImageData(0, 0, strip, H).data;
+    const right = lctx.getImageData(drawnW - strip, 0, strip, H).data;
+    const { rows } = buildPortraitBackdrop(left, right, strip, H);
+    rows.forEach(([r, g, b], y) => {
+      ctx.fillStyle = `rgb(${r},${g},${b})`;
+      ctx.fillRect(0, y, W, 1);
+    });
+
+    // تعتيم خفيف للأطراف يعطي عمق خلفية الاستوديو
+    const vignette = ctx.createRadialGradient(W / 2, H * 0.45, H * 0.35, W / 2, H * 0.45, W * 0.75);
+    vignette.addColorStop(0, "rgba(0,0,0,0)");
+    vignette.addColorStop(1, "rgba(0,0,0,0.28)");
+    ctx.fillStyle = vignette;
+    ctx.fillRect(0, 0, W, H);
+
+    // تذويب حافتي الصورة في الخلفية الممتدة — لا خط فاصل
+    const feather = Math.min(PORTRAIT_FEATHER_PX, drawnW * 0.18) / drawnW;
+    const mask = lctx.createLinearGradient(0, 0, drawnW, 0);
+    mask.addColorStop(0, "rgba(0,0,0,0)");
+    mask.addColorStop(feather, "rgba(0,0,0,1)");
+    mask.addColorStop(1 - feather, "rgba(0,0,0,1)");
+    mask.addColorStop(1, "rgba(0,0,0,0)");
+    lctx.globalCompositeOperation = "destination-in";
+    lctx.fillStyle = mask;
+    lctx.fillRect(0, 0, drawnW, H);
+
+    ctx.drawImage(layer, Math.round((W - drawnW) / 2), 0);
+    return await canvasToBlob(canvas);
+  } finally {
+    photo.cleanup();
   }
 }
 

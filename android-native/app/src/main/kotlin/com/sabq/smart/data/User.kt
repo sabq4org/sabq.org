@@ -117,6 +117,12 @@ data class User(
     val isAdminLike: Boolean
         get() = roles.plus(role).filterNotNull().any { it.lowercase() in ADMIN_LIKE_KEYS }
 
+    /** مسؤول منصة حصراً — مجموعة أضيق من [isAdminLike] عمداً (المحررون
+     *  مستثنون): بوابة معاينة «سبق بلس» الداخلية، والخادم بدوره يرد
+     *  بـ404 لغير المسؤول فالبوابة مزدوجة. */
+    val isPlatformAdmin: Boolean
+        get() = roles.plus(role).filterNotNull().any { it.lowercase() in PLATFORM_ADMIN_KEYS }
+
     /** True when city + gender are filled in — drives the "البيانات
      *  الشخصية" half of the Settings completion banner. firstName /
      *  lastName are NOT in the gate because they're locked at
@@ -142,6 +148,10 @@ data class User(
         )
         private val REPORTER_KEYS = setOf(
             "reporter", "correspondent", "journalist",
+        )
+        // لا تُعِد استخدام ADMIN_LIKE_KEYS هنا — «بلس» لمسؤولي النظام فقط.
+        private val PLATFORM_ADMIN_KEYS = setOf(
+            "admin", "system_admin", "system-admin", "system.admin", "superadmin",
         )
         private val ADMIN_LIKE_KEYS = setOf(
             "admin", "system_admin", "system-admin", "superadmin",

@@ -6,6 +6,15 @@ import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
+import java.io.File
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
+import okhttp3.Request
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -32,7 +41,11 @@ import kotlinx.coroutines.flow.asStateFlow
 @Singleton
 class AudioPlayerController @Inject constructor(
     @ApplicationContext private val context: Context,
+    private val httpClient: OkHttpClient,
 ) {
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private var prepareJob: Job? = null
+    private var localFile: File? = null
 
     /** Playback state surfaced to the UI. `playingSlug` is null when
      *  nothing is loaded; when set, [isPlaying] reflects the live
@@ -41,7 +54,11 @@ class AudioPlayerController @Inject constructor(
         val playingSlug: String? = null,
         val isPlaying: Boolean = false,
         val isLoading: Boolean = false,
-    )
+        /** مزوّد المقطع الحالي (`humain` / `elevenlabs` / `google`) من رأس `X-TTS-Provider`. */
+        val provider: String? = null,
+    ) {
+        val isHumain: Boolean get() = provider == "humain"
+    }
 
     private val _state = MutableStateFlow(State())
     val state: StateFlow<State> = _state.asStateFlow()
@@ -55,7 +72,59 @@ class AudioPlayerController @Inject constructor(
     fun toggle(slug: String) {
         if (slug.isBlank()) return
         val url = "https://sabq.org/api/articles/$slug/summary-audio?tts=tafqit-v2"
-        toggleUrl(id = slug, url = url)
+        toggleDownloaded(id = slug, url = url)
+    }
+
+    /**
+     * موجز الخبر يُنزَّل كاملًا ثم يُشغَّل من ملف محلي — كما في iOS — لأن إسناد
+     * «الصوت عبر HUMAIN» يحتاج رأس `X-TTS-Provider` الذي لا يراه ExoPlayer وهو
+     * يبثّ. الخادم `no-store` فيُعاد الجلب كل تشغيل (نقل الويب 2debc08).
+     */
+    private fun toggleDownloaded(id: String, url: String) {
+        val current = _state.value
+        val activePlayer = player
+        if (activePlayer != null && current.playingSlug == id && !current.isLoading) {
+            if (activePlayer.isPlaying) {
+                activePlayer.pause()
+                _state.value = current.copy(isPlaying = false)
+            } else {
+                activePlayer.play()
+                _state.value = current.copy(isPlaying = true)
+            }
+            return
+        }
+        prepareJob?.cancel()
+        player?.let { it.stop(); it.clearMediaItems() }
+        _state.value = State(playingSlug = id, isPlaying = false, isLoading = true)
+        prepareJob = scope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    httpClient.newCall(Request.Builder().url(url).build()).execute().use { response ->
+                        if (!response.isSuccessful) error("HTTP ${response.code}")
+                        val provider = providerName(response.header("X-TTS-Provider"))
+                        val ext = fileExtension(response.header("Content-Type"))
+                        val file = File(context.cacheDir, "sabq-summary-${System.nanoTime()}.$ext")
+                        file.outputStream().use { out -> response.body!!.byteStream().copyTo(out) }
+                        file to provider
+                    }
+                }
+            }
+            if (_state.value.playingSlug != id) {
+                result.getOrNull()?.first?.delete()
+                return@launch
+            }
+            result.onSuccess { (file, provider) ->
+                localFile?.delete()
+                localFile = file
+                val freshPlayer = getOrCreatePlayer()
+                freshPlayer.setMediaItem(MediaItem.fromUri(android.net.Uri.fromFile(file)))
+                freshPlayer.prepare()
+                freshPlayer.playWhenReady = true
+                _state.value = State(playingSlug = id, isPlaying = false, isLoading = true, provider = provider)
+            }.onFailure {
+                _state.value = State()
+            }
+        }
     }
 
     /**
@@ -96,9 +165,30 @@ class AudioPlayerController @Inject constructor(
      *  the user navigates away from the article. Defensive — the
      *  player will recreate next play. */
     fun release() {
+        prepareJob?.cancel()
         player?.release()
         player = null
+        localFile?.delete()
+        localFile = null
         _state.value = State()
+    }
+
+    companion object {
+        /** اسم المزوّد من رأس `X-TTS-Provider` بحروف صغيرة (`humain`…). */
+        fun providerName(header: String?): String? =
+            header?.trim()?.lowercase()?.takeIf { it.isNotEmpty() }
+
+        /** امتداد الملف المؤقت من نوع المحتوى (HUMAIN يرسل WAV، والبدائل MP3). */
+        fun fileExtension(contentType: String?): String {
+            val t = contentType.orEmpty().lowercase()
+            return when {
+                t.contains("wav") -> "wav"
+                t.contains("mpeg") || t.contains("mp3") -> "mp3"
+                t.contains("ogg") -> "ogg"
+                t.contains("aac") || t.contains("mp4") || t.contains("m4a") -> "m4a"
+                else -> "mp3"
+            }
+        }
     }
 
     private fun getOrCreatePlayer(): ExoPlayer {

@@ -21,8 +21,14 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.foundation.layout.height
+import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import androidx.compose.foundation.border
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material3.CircularProgressIndicator
+import com.sabq.smart.ui.components.EmptyStateView
+import com.sabq.smart.ui.components.ErrorStateView
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -67,19 +73,13 @@ fun CategoryArticlesScreen(
                 )
             }
             is CategoryArticlesUiState.Error -> {
-                Column(
+                // حالة الخطأ الموحدة (أيقونة + رسالة القارئ + إعادة المحاولة)
+                // كما في الوسم والرائج — نقل #1573.
+                ErrorStateView(
+                    message = s.message,
+                    onRetry = { viewModel.retry() },
                     modifier = Modifier.align(Alignment.Center).padding(32.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    Text(s.message, color = SabqTheme.colors.tertiaryInk, fontSize = 14.sp)
-                    Text(
-                        "إعادة المحاولة",
-                        color = SabqTheme.colors.primaryEnd,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.clickable { viewModel.retry() },
-                    )
-                }
+                )
             }
             is CategoryArticlesUiState.Loaded -> {
                 val visual = ArticleCategory.fromSlug(s.slug)
@@ -99,6 +99,17 @@ fun CategoryArticlesScreen(
                             visual = visual,
                         )
                     }
+                    if (s.articles.isEmpty()) {
+                        item {
+                            EmptyStateView(
+                                icon = visual.icon,
+                                tint = visual.tint(),
+                                title = "لا أخبار في هذا القسم حاليًا",
+                                subtitle = "تابع الأقسام الأخرى أو عد لاحقًا.",
+                                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                            )
+                        }
+                    }
                     item {
                         SurfaceCard {
                             s.articles.forEachIndexed { idx, article ->
@@ -111,6 +122,8 @@ fun CategoryArticlesScreen(
                                         isBookmarked = false,
                                         onBookmark = {},
                                         onClick = { onArticleClick(article) },
+                                        // رأس الصفحة يسمّي القسم — لا تكرار في البطاقات (#1642)
+                                        showsCategory = false,
                                     )
                                 }
                             }
@@ -179,33 +192,56 @@ private fun HeroSection(
     count: Int,
     visual: ArticleCategory,
 ) {
+    // شريط علوي بلون القسم + توهّج شعاعي 12٪ من الزاوية الأمامية + مسار
+    // «الرئيسية › التصنيفات › القسم» + مربع أيقونة 36 — نقل الويب 8afef17.
     val topPadding = androidx.compose.foundation.layout.WindowInsets
         .statusBars.asPaddingValues().calculateTopPadding() + 56.dp
-    Row(
+    val tint = visual.tint()
+    val shape = RoundedCornerShape(16.dp)
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = topPadding),
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
-        verticalAlignment = Alignment.Top,
+            .padding(top = topPadding)
+            .clip(shape)
+            .background(SabqTheme.colors.publicSurface, shape)
+            .background(
+                androidx.compose.ui.graphics.Brush.radialGradient(
+                    colors = listOf(tint.copy(alpha = 0.12f), androidx.compose.ui.graphics.Color.Transparent),
+                    center = androidx.compose.ui.geometry.Offset(Float.POSITIVE_INFINITY, 0f),
+                    radius = 900f,
+                ),
+            )
+            .border(1.dp, SabqTheme.colors.outline, shape),
     ) {
+        Box(Modifier.fillMaxWidth().height(3.dp).background(tint))
         Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.padding(horizontal = 16.dp).padding(top = 12.dp, bottom = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Text(
-                text = name,
-                fontSize = 26.sp,
-                fontWeight = FontWeight.Bold,
-                color = SabqTheme.colors.ink,
-            )
-            Text(
-                text = subtitle,
-                fontSize = 15.sp,
-                color = SabqTheme.colors.secondaryInk,
-                lineHeight = 22.sp,
-            )
-            StatusChip(title = "$count خبر", tint = visual.tint())
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Icon(Icons.Outlined.Home, contentDescription = null, tint = SabqTheme.colors.secondaryInk, modifier = Modifier.size(12.dp))
+                Text("الرئيسية", fontSize = 12.sp, color = SabqTheme.colors.secondaryInk)
+                Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = null, tint = SabqTheme.colors.secondaryInk.copy(alpha = 0.6f), modifier = Modifier.size(12.dp))
+                Text("التصنيفات", fontSize = 12.sp, color = SabqTheme.colors.secondaryInk)
+                Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = null, tint = SabqTheme.colors.secondaryInk.copy(alpha = 0.6f), modifier = Modifier.size(12.dp))
+                Text(name, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = SabqTheme.colors.ink, maxLines = 1)
+            }
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(tint.copy(alpha = 0.12f))
+                        .border(1.dp, tint.copy(alpha = 0.30f), RoundedCornerShape(8.dp)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(visual.icon, contentDescription = null, tint = tint, modifier = Modifier.size(18.dp))
+                }
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.weight(1f)) {
+                    Text(name, fontSize = 22.sp, fontWeight = FontWeight.Bold, color = SabqTheme.colors.ink)
+                    StatusChip(title = "$count خبر", tint = tint)
+                }
+            }
         }
-        SmallSquareBadge(icon = visual.icon, tint = visual.tint())
     }
 }

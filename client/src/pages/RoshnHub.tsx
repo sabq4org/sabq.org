@@ -122,7 +122,11 @@ export default function RoshnHub() {
             previousSeason={previousSeason}
           />
         )}
-        <RslScorers inSeason={inSeason} previousSeason={previousSeason} />
+        <RslScorers
+          inSeason={inSeason}
+          previousSeason={previousSeason}
+          hasLiveMatch={buckets.live.some((f) => f.status.live)}
+        />
         <TeamOfTheWeekSection
           endpoint="/api/sports/pro-league/totw"
           subtitle="الأعلى تقييمًا في آخر جولة من دوري روشن"

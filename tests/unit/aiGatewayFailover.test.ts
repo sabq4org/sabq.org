@@ -43,6 +43,10 @@ function ok(content: string): AdapterCompleteResult {
   return { content, inputTokens: 10, outputTokens: 20, truncated: false };
 }
 
+function truncated(content: string): AdapterCompleteResult {
+  return { content, inputTokens: 11, outputTokens: 21, truncated: true };
+}
+
 function quotaError(provider: string, modelId: string): AIGatewayError {
   return new AIGatewayError(`${provider}/${modelId}: quota exceeded`, {
     code: "QUOTA_EXCEEDED",
@@ -89,6 +93,45 @@ function buildHarness(
 }
 
 describe("AIGateway failover", () => {
+  it("keeps a truncated completion successful and annotates its single usage row", async () => {
+    const { gateway, logs } = buildHarness([
+      makeAdapter("openai", async () => truncated("partial")),
+    ], makeConfig({ fallbackChain: [] }));
+
+    const result = await gateway.complete({ feature: "test-feature", prompt: "hi" });
+
+    expect(result).toMatchObject({
+      content: "partial",
+      provider: "openai",
+      truncated: true,
+      fallbackUsed: false,
+      usage: { inputTokens: 11, outputTokens: 21 },
+    });
+    expect(logs).toHaveLength(1);
+    expect(logs[0]).toMatchObject({
+      status: "success",
+      inputTokens: 11,
+      outputTokens: 21,
+      errorCode: "OUTPUT_TRUNCATED",
+      errorMessage: "Model output was truncated before completion.",
+    });
+    expect(logs[0].estimatedCostUsd).toBeCloseTo(0.000053, 10);
+  });
+
+  it("leaves an untruncated completion unannotated with one successful usage row", async () => {
+    const { gateway, logs } = buildHarness([
+      makeAdapter("openai", async () => ok("complete")),
+    ], makeConfig({ fallbackChain: [] }));
+
+    const result = await gateway.complete({ feature: "test-feature", prompt: "hi" });
+
+    expect(result).toMatchObject({ content: "complete", truncated: false, fallbackUsed: false });
+    expect(logs).toHaveLength(1);
+    expect(logs[0]).toMatchObject({ status: "success", inputTokens: 10, outputTokens: 20 });
+    expect(logs[0].errorCode).toBeUndefined();
+    expect(logs[0].errorMessage).toBeUndefined();
+  });
+
   it("falls back to the next model on QUOTA_EXCEEDED and logs status=fallback", async () => {
     const calls: string[] = [];
     const { gateway, logs, incidents } = buildHarness(
@@ -237,5 +280,31 @@ describe("AIGateway failover", () => {
     expect(err).toBeInstanceOf(AIGatewayError);
     expect((err as AIGatewayError).attempts).toHaveLength(3);
     expect(incidents.some((i) => i.kind === "chain_exhausted")).toBe(true);
+  });
+});
+
+describe("AIGateway total deadline", () => {
+  it("aborts transport and never dispatches a fallback after expiry", async () => {
+    let signal: AbortSignal | undefined;
+    let fallbacks = 0;
+    const { gateway } = buildHarness([
+      makeAdapter("openai", async (_m, p) => { signal = p.signal; return new Promise((_r, reject) => p.signal!.addEventListener("abort", () => reject(p.signal!.reason), { once: true })); }),
+      makeAdapter("anthropic", async () => { fallbacks++; return ok("unexpected"); }),
+    ], makeConfig());
+    await expect(gateway.complete({ feature: "test-feature", prompt: "test", timeoutMs: 15 })).rejects.toMatchObject({ code: "TIMEOUT" });
+    expect(signal?.aborted).toBe(true); expect(fallbacks).toBe(0);
+  });
+  it("expires a queued request without starting provider transport later", async () => {
+    const release: (() => void)[] = [];
+    const { gateway } = buildHarness([makeAdapter("openai", async () => new Promise(resolve => {
+      release.push(() => resolve(ok("done")));
+    }))], makeConfig({ fallbackChain: [] }));
+    const running = Array.from({ length: 8 }, () => gateway.complete({ feature: "test-feature", prompt: "occupy", timeoutMs: 1000 }));
+    await new Promise(resolve => setImmediate(resolve));
+    expect(release).toHaveLength(8);
+    await expect(gateway.complete({ feature: "test-feature", prompt: "queued", timeoutMs: 15 })).rejects.toMatchObject({ code: "TIMEOUT" });
+    release.forEach(r => r()); await Promise.all(running);
+    await new Promise(resolve => setImmediate(resolve));
+    expect(release).toHaveLength(8);
   });
 });

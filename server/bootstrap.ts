@@ -1,3 +1,4 @@
+import { installShutdown } from "./shutdown";
 import { createServer, type IncomingMessage, type ServerResponse } from "http";
 
 const port = parseInt(process.env.PORT || "5000", 10);
@@ -41,7 +42,6 @@ server.listen(port, "0.0.0.0", () => {
   });
 });
 
-process.on("SIGTERM", () => process.exit(0));
-process.on("SIGINT", () => process.exit(0));
+installShutdown(server);
 process.on("uncaughtException", (e) => console.error("[CRITICAL]", e));
 process.on("unhandledRejection", (r) => console.error("[CRITICAL]", r));

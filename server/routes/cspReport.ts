@@ -1,16 +1,70 @@
-import express, { type Router } from "express";
+import express, {
+  type NextFunction,
+  type Request,
+  type Response,
+  type Router,
+} from "express";
+import rateLimit, { ipKeyGenerator } from "express-rate-limit";
+import { getRealIp } from "../utils/trustedProxyIp";
 
 const router: Router = express.Router();
+
+export function sanitizeCspLogValue(value: unknown, fallback = "?"): string {
+  if (typeof value !== "string" || !value) return fallback;
+  try {
+    const parsed = new URL(value);
+    return `${parsed.origin}${parsed.pathname}`.slice(0, 300);
+  } catch {
+    return value.replace(/[\r\n\t]/g, " ").slice(0, 120);
+  }
+}
+
+const cspReportLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => ipKeyGenerator(getRealIp(req)),
+  validate: { xForwardedForHeader: false, ip: false, keyGeneratorIpFallback: false },
+  message: { error: "Too many CSP reports" },
+});
+
+const parseCspReportJson = express.json({
+  type: ["application/csp-report", "application/reports+json", "application/json"],
+  limit: "16kb",
+});
+
+/**
+ * CSP reports are best-effort telemetry sent by the browser. A navigation or
+ * network loss can close the request stream while body-parser is still reading
+ * it; that must not escape as an application 500. Keep deliberate size-limit
+ * rejections visible to the sender, and discard every other unreadable or
+ * malformed report with the endpoint's normal empty response.
+ */
+function parseCspReportBody(req: Request, res: Response, next: NextFunction): void {
+  parseCspReportJson(req, res, (error?: unknown) => {
+    if (!error) {
+      next();
+      return;
+    }
+
+    const bodyError = error as { status?: number; type?: string };
+    if (bodyError.status === 413 || bodyError.type === "entity.too.large") {
+      res.status(413).end();
+      return;
+    }
+
+    res.status(204).end();
+  });
+}
 
 // Browsers POST Content-Security-Policy violation reports here while the
 // strict policy runs in Report-Only mode (see server/index.ts). Keep this
 // endpoint cheap and resilient: cap the body size, never throw, always 204.
 router.post(
   "/api/security/csp-report",
-  express.json({
-    type: ["application/csp-report", "application/reports+json", "application/json"],
-    limit: "16kb",
-  }),
+  cspReportLimiter,
+  parseCspReportBody,
   (req, res) => {
     try {
       const body: any = req.body;
@@ -21,9 +75,9 @@ router.post(
         const report = entry?.["csp-report"] || entry?.body || entry;
         const directive = report?.["violated-directive"] || report?.effectiveDirective;
         if (!directive) continue;
-        const blocked = report?.["blocked-uri"] || report?.blockedURL || "?";
-        const docUri = report?.["document-uri"] || report?.documentURL || "?";
-        console.warn(`[CSP-Report] directive=${directive} blocked=${blocked} doc=${docUri}`);
+        const blocked = sanitizeCspLogValue(report?.["blocked-uri"] || report?.blockedURL);
+        const docUri = sanitizeCspLogValue(report?.["document-uri"] || report?.documentURL);
+        console.warn(`[CSP-Report] directive=${sanitizeCspLogValue(directive)} blocked=${blocked} doc=${docUri}`);
       }
     } catch {
       // Never let a malformed report surface as an error.

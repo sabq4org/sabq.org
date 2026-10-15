@@ -16,14 +16,26 @@ function getCacheKey(img: HTMLImageElement): string {
   return img.getAttribute("src") || "";
 }
 
+// صور المحرر تحمل عرضًا مخصصًا (سحب أو 25%/33%/50%/75%). إعادة فرض
+// width: 100% هنا كانت تلغي ضبط المحرر فتظهر الصورة بعرض المقال كاملًا.
+function hasCustomWidth(img: HTMLImageElement): boolean {
+  const style = img.getAttribute("style") || "";
+  return (
+    img.hasAttribute("data-width") ||
+    img.classList.contains("sabq-article-image") ||
+    /(?:^|;)\s*width\s*:/i.test(style)
+  );
+}
+
 function applyMeasuredRatio(img: HTMLImageElement, ratio: number): void {
   if (!Number.isFinite(ratio) || ratio < MIN_RATIO || ratio > MAX_RATIO) return;
   const formatted = formatAspectRatio(ratio);
   const existingStyle = img.getAttribute("style") || "";
   const cleaned = existingStyle.replace(/aspect-ratio\s*:[^;]+;?/gi, "").trim();
+  const sizeRule = hasCustomWidth(img) ? "height: auto;" : "width: 100%; height: auto;";
   const next = cleaned
-    ? `${cleaned}${cleaned.endsWith(";") ? "" : ";"} aspect-ratio: ${formatted}; width: 100%; height: auto;`
-    : `aspect-ratio: ${formatted}; width: 100%; height: auto;`;
+    ? `${cleaned}${cleaned.endsWith(";") ? "" : ";"} aspect-ratio: ${formatted}; ${sizeRule}`
+    : `aspect-ratio: ${formatted}; ${sizeRule}`;
   img.setAttribute("style", next);
   img.setAttribute("data-legacy-aspect", "measured");
 }

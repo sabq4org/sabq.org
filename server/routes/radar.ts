@@ -12,6 +12,8 @@ import { requireAuth, requireRole } from "../rbac";
 import { insertRadarAlertRuleSchema, insertRadarSourceSchema } from "@shared/schema";
 import {
   countActiveXWatches,
+  countAnalyzedToday,
+  lastAnalyzedAt,
   createRule,
   createSource,
   deleteRule,
@@ -26,14 +28,27 @@ import {
   updateRule,
   updateSource,
 } from "../services/radar/repo";
-import { fetchSingleSource, runRadarCycle } from "../services/radar/cycle";
-import { isRadarForceDisabled } from "../services/radar/flags";
+import { DAILY_ANALYZE_CAP, fetchSingleSource, getLastCycle, runRadarCycle } from "../services/radar/cycle";
+import {
+  isClusteringEnabled,
+  isMomentumEnabled,
+  isRadarForceDisabled,
+  isRelevanceEnabled,
+} from "../services/radar/flags";
 import { transformItem } from "../services/radar/transformer";
+import { developItem } from "../services/radar/developer";
 import { exportItemToArticle } from "../services/radar/exporter";
+import { isWebSearchConfigured } from "../services/webSearchService";
 import { isTelegramConfigured } from "../services/radar/alerts";
 import { detectWatchType, xProvidersConfigured } from "../services/radar/xProvider";
+import {
+  assertRadarEnabled,
+  getRadarRuntimeState,
+  isRadarDisabledError,
+  setRadarEnabled,
+} from "../services/radar/runtime";
 
-const RADAR_DISABLED_MESSAGE = "الرادار متوقف إجبارياً — الجلب معطّل";
+const RADAR_DISABLED_MESSAGE = "الرادار متوقف — الجلب والتحليل معطّلان";
 
 const SYSTEM_ADMIN_ONLY = requireRole(
   "system_admin",
@@ -45,7 +60,42 @@ const canView = SYSTEM_ADMIN_ONLY;
 const canWork = SYSTEM_ADMIN_ONLY;
 const canManage = SYSTEM_ADMIN_ONLY;
 
-const RADAR_STATUSES = ["new", "analyzed", "ready", "exported", "dismissed"] as const;
+const RADAR_STATUSES = ["new", "analyzed", "ready", "exported", "dismissed", "filtered", "merged"] as const;
+
+function disabledResponse(error?: unknown) {
+  const reason = isRadarDisabledError(error) ? error.reason : undefined;
+  return {
+    message: RADAR_DISABLED_MESSAGE,
+    enabled: false,
+    reason: reason ?? (isRadarForceDisabled() ? "force_disabled" : "paused"),
+    forceDisabled: isRadarForceDisabled(),
+  };
+}
+
+async function radarStatusPayload() {
+  const [analyzedToday, lastAnalysis, runtime] = await Promise.all([
+    countAnalyzedToday(),
+    lastAnalyzedAt(),
+    getRadarRuntimeState(),
+  ]);
+  return {
+    enabled: runtime.enabled,
+    reason: runtime.reason,
+    runtimeSettingSource: runtime.source,
+    forceDisabled: isRadarForceDisabled(),
+    // يبقى الاسم في العقد القديم، لكنه يعكس الآن حالة الجدولة الفعلية
+    // التي يقرأها الـ cron في كل نبضة.
+    cronEnabled: runtime.enabled,
+    clustering: isClusteringEnabled(),
+    momentum: isMomentumEnabled(),
+    relevance: isRelevanceEnabled(),
+    autoTransform: process.env.RADAR_AUTO_TRANSFORM !== "false",
+    dailyAnalyzeCap: DAILY_ANALYZE_CAP,
+    analyzedToday,
+    lastAnalyzedAt: lastAnalysis ? lastAnalysis.toISOString() : null,
+    lastCycle: getLastCycle(),
+  };
+}
 
 const itemsQuerySchema = z.object({
   // قائمة حالات مفصولة بفواصل — التبويبات تجمع أكثر من حالة (مثل new,analyzed)
@@ -59,6 +109,8 @@ const itemsQuerySchema = z.object({
   channel: z.enum(["x", "feed"]).optional(),
   breaking: z.coerce.boolean().optional(),
   sinceHours: z.coerce.number().int().min(1).max(168).optional(),
+  lane: z.enum(["opportunity", "watch", "background"]).optional(),
+  sort: z.enum(["priority", "recent"]).optional(),
   limit: z.coerce.number().int().min(1).max(100).optional(),
   offset: z.coerce.number().int().min(0).optional(),
 });
@@ -69,10 +121,43 @@ export function registerRadarRoutes(app: Express) {
   app.get("/api/radar/stats", requireAuth, canView, async (_req, res) => {
     try {
       const stats = await radarStats();
-      res.json({ ...stats, telegramConfigured: isTelegramConfigured() });
+      res.json({
+        ...stats,
+        telegramConfigured: isTelegramConfigured(),
+        webSearchConfigured: isWebSearchConfigured(),
+      });
     } catch (error) {
       console.error("[Radar API] stats failed:", error);
       res.status(500).json({ message: "تعذر جلب إحصاءات الرادار" });
+    }
+  });
+
+  // حالة تشغيل حقيقية من الخادم — بدل نص «متوقف» الثابت في الواجهة
+  app.get("/api/radar/status", requireAuth, canView, async (_req, res) => {
+    try {
+      res.json(await radarStatusPayload());
+    } catch (error) {
+      console.error("[Radar API] status failed:", error);
+      res.status(500).json({ message: "تعذر جلب حالة الرادار" });
+    }
+  });
+
+  app.patch("/api/radar/status", requireAuth, canManage, async (req, res) => {
+    const parsed = z.object({ enabled: z.boolean() }).safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: "يجب تحديد enabled بقيمة boolean" });
+    }
+    try {
+      await setRadarEnabled(parsed.data.enabled);
+      res.json(await radarStatusPayload());
+    } catch (error) {
+      console.error("[Radar API] runtime setting write failed:", error);
+      res.status(503).json({
+        message: "تعذر حفظ حالة الرادار",
+        enabled: false,
+        reason: "runtime_setting_write_failed",
+        forceDisabled: isRadarForceDisabled(),
+      });
     }
   });
 
@@ -94,7 +179,13 @@ export function registerRadarRoutes(app: Express) {
     }
     try {
       const { breaking, status, ...rest } = parsed.data;
-      const result = await listItems({ ...rest, statuses: status, breakingOnly: breaking });
+      // ترتيب الأولوية = عرض تحريري: بطاقة واحدة لكل قصة
+      const result = await listItems({
+        ...rest,
+        statuses: status,
+        breakingOnly: breaking,
+        collapseStories: rest.sort === "priority",
+      });
       res.json(result);
     } catch (error) {
       console.error("[Radar API] items failed:", error);
@@ -104,6 +195,7 @@ export function registerRadarRoutes(app: Express) {
 
   app.post("/api/radar/items/:id/transform", requireAuth, canWork, async (req, res) => {
     try {
+      await assertRadarEnabled();
       const item = await getItem(String(req.params.id));
       if (!item) return res.status(404).json({ message: "المادة غير موجودة" });
       if (item.status === "exported") {
@@ -112,13 +204,33 @@ export function registerRadarRoutes(app: Express) {
       const updated = await transformItem(item);
       res.json({ item: updated });
     } catch (error) {
+      if (isRadarDisabledError(error)) return res.status(503).json(disabledResponse(error));
       console.error("[Radar API] transform failed:", error);
       res.status(502).json({ message: "تعذر التحويل التحريري — حاول مجددًا" });
     }
   });
 
+  // «طوّر ببحث» — نظام التحرير الموحد: بحث تحقق + مسودة مثراة بعزو (المرحلة 2)
+  app.post("/api/radar/items/:id/develop", requireAuth, canWork, async (req, res) => {
+    try {
+      await assertRadarEnabled();
+      const item = await getItem(String(req.params.id));
+      if (!item) return res.status(404).json({ message: "المادة غير موجودة" });
+      if (item.status === "exported") {
+        return res.status(409).json({ message: "المادة صُدّرت مسبقًا" });
+      }
+      const updated = await developItem(item);
+      res.json({ item: updated });
+    } catch (error) {
+      if (isRadarDisabledError(error)) return res.status(503).json(disabledResponse(error));
+      console.error("[Radar API] develop failed:", error);
+      res.status(502).json({ message: "تعذر التطوير التحريري — حاول مجددًا" });
+    }
+  });
+
   app.post("/api/radar/items/:id/export", requireAuth, canWork, async (req: any, res) => {
     try {
+      await assertRadarEnabled();
       const overrideCategoryId = req.body?.categoryId ? String(req.body.categoryId) : undefined;
       const { articleId } = await exportItemToArticle(
         String(req.params.id),
@@ -127,6 +239,7 @@ export function registerRadarRoutes(app: Express) {
       );
       res.json({ articleId });
     } catch (error) {
+      if (isRadarDisabledError(error)) return res.status(503).json(disabledResponse(error));
       const message = error instanceof Error ? error.message : String(error);
       if (message === "RADAR_ITEM_NOT_FOUND") {
         return res.status(404).json({ message: "المادة غير موجودة" });
@@ -158,7 +271,8 @@ export function registerRadarRoutes(app: Express) {
     try {
       const item = await getItem(String(req.params.id));
       if (!item) return res.status(404).json({ message: "المادة غير موجودة" });
-      if (item.status !== "dismissed") {
+      // المستبعد آليًا (filtered) يُستعاد أيضًا: قرار المحرر يغلب الفرز
+      if (item.status !== "dismissed" && item.status !== "filtered") {
         return res.status(409).json({ message: "المادة ليست مستبعدة" });
       }
       const updated = await updateItem(item.id, {
@@ -221,13 +335,12 @@ export function registerRadarRoutes(app: Express) {
   });
 
   app.post("/api/radar/sources/:id/fetch", requireAuth, canManage, async (req, res) => {
-    if (isRadarForceDisabled()) {
-      return res.status(503).json({ message: RADAR_DISABLED_MESSAGE, forceDisabled: true });
-    }
     try {
+      await assertRadarEnabled();
       const inserted = await fetchSingleSource(String(req.params.id));
       res.json({ inserted });
     } catch (error) {
+      if (isRadarDisabledError(error)) return res.status(503).json(disabledResponse(error));
       const message = error instanceof Error ? error.message : String(error);
       if (message === "RADAR_SOURCE_NOT_FOUND") {
         return res.status(404).json({ message: "المصدر غير موجود" });
@@ -387,12 +500,11 @@ export function registerRadarRoutes(app: Express) {
   // ---------- تشغيل يدوي لدورة كاملة (تشخيص/تجربة) ----------
 
   app.post("/api/radar/run", requireAuth, canManage, async (_req, res) => {
-    if (isRadarForceDisabled()) {
-      return res.status(503).json({ message: RADAR_DISABLED_MESSAGE, forceDisabled: true });
-    }
     try {
+      await assertRadarEnabled();
       res.json({ summary: await runRadarCycle() });
     } catch (error) {
+      if (isRadarDisabledError(error)) return res.status(503).json(disabledResponse(error));
       console.error("[Radar API] manual run failed:", error);
       res.status(500).json({ message: "فشل تشغيل دورة الرادار" });
     }

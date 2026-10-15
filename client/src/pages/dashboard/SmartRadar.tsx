@@ -58,6 +58,7 @@ import {
   FileCheck2,
   Globe,
   Plus,
+  SearchCheck,
   Radar,
   RotateCcw,
   Satellite,
@@ -81,6 +82,21 @@ interface RadarStatsResponse {
   lastFetchedAt: string | null;
   newsapiLastFetchedAt: string | null;
   telegramConfigured: boolean;
+  webSearchConfigured: boolean;
+  filteredToday?: number;
+  mergedToday?: number;
+}
+
+interface RadarStatusResponse {
+  enabled: boolean;
+  forceDisabled: boolean;
+  cronEnabled: boolean;
+  clustering: boolean;
+  autoTransform: boolean;
+  dailyAnalyzeCap: number;
+  analyzedToday: number;
+  lastAnalyzedAt: string | null;
+  lastCycle: { finishedAt: string; summary: { analysisCapped?: boolean } } | null;
 }
 
 interface RadarItemRow {
@@ -96,14 +112,37 @@ interface RadarItemRow {
   originalLanguage: string | null;
   publishedAt: string | null;
   fetchedAt: string;
-  status: "new" | "analyzed" | "ready" | "exported" | "dismissed";
+  status: "new" | "analyzed" | "ready" | "exported" | "dismissed" | "filtered" | "merged";
   newsValue: number | null;
-  scoreBreakdown: { reason?: string; saudiRelevance?: number } | null;
+  scoreBreakdown: { reason?: string; saudiRelevance?: number; breakingDeniedBy?: string | null } | null;
   isBreaking: boolean;
+  breakingUntil?: string | null;
+  // فرز الدقة — محاور منفصلة بدل رقم واحد يوحي باحتمال صحة
+  publisherType?: string | null;
+  wireOrigin?: string | null;
+  textBasis?: "body" | "title_only" | null;
+  qualityFlags?: string[] | null;
+  screenReason?: string | null;
+  eventTiming?: "new" | "ongoing" | "old" | "unknown" | null;
+  timingEvidence?: string | null;
+  contentType?: string | null;
+  evidenceScore?: number | null;
+  freshnessScore?: number | null;
+  priorityScore?: number | null;
+  lane?: "opportunity" | "watch" | "background" | null;
+  storySourceCount?: number | null;
+  mergedCopies?: number;
+  storySiblings?: number;
   matchedKeywords: string[] | null;
   translatedTitle: string | null;
   translatedSummary: string | null;
   exportedArticleId: string | null;
+  // حقول مسار «طوّر ببحث» فقط — بقية المسودة لا تعرضها البطاقة
+  draft: {
+    developNotes?: string[];
+    developSources?: { title: string; url: string }[];
+    developedWithSearch?: boolean;
+  } | null;
 }
 
 interface RadarSourceRow {
@@ -154,16 +193,49 @@ interface CategoryRow {
 
 // ---------- ثوابت العرض ----------
 
+// المسارات الثلاثة: فرص (مرتبة بالأولوية المركبة) · يحتاج تحققًا (ادعاءات/دليل ضعيف)
+// · خلفية (قديم/ترويجي) — لا تزاحم الخلفية الوارد الحي
 const TABS: { id: string; label: string; params: Record<string, string> }[] = [
-  { id: "inbox", label: "الرصد", params: { status: "new,analyzed" } },
-  { id: "breaking", label: "عاجل", params: { status: "new,analyzed,ready", breaking: "true" } },
+  { id: "inbox", label: "فرص", params: { status: "new,analyzed", lane: "opportunity", sort: "priority" } },
+  { id: "watch", label: "يحتاج تحققًا", params: { status: "new,analyzed", lane: "watch", sort: "priority" } },
+  { id: "breaking", label: "عاجل", params: { status: "new,analyzed,ready", breaking: "true", sort: "priority" } },
   { id: "ready", label: "جاهز للنشر", params: { status: "ready" } },
+  { id: "background", label: "خلفية", params: { status: "analyzed", lane: "background" } },
   { id: "exported", label: "صُدِّر", params: { status: "exported" } },
   { id: "dismissed", label: "مستبعد", params: { status: "dismissed" } },
+  { id: "filtered", label: "مستبعد آليًا", params: { status: "filtered" } },
 ];
 
+const PUBLISHER_TYPE_LABELS: Record<string, string> = {
+  official: "جهة رسمية",
+  wire: "وكالة",
+  major: "مؤسسة كبرى",
+  press_release: "بيان صحفي",
+  aggregator: "مجمّع",
+  social: "تواصل",
+};
+
+const TIMING_LABELS: Record<string, string> = {
+  new: "حدث جديد",
+  ongoing: "تطور مستمر",
+  old: "حدث قديم",
+  unknown: "توقيت غير محسوم",
+};
+
+/** عاجل نشط = وسم لم تنتهِ صلاحيته (المواد القديمة بلا صلاحية: 3 ساعات من الرصد) */
+function isActiveBreaking(item: RadarItemRow): boolean {
+  if (!item.isBreaking) return false;
+  const until = item.breakingUntil
+    ? new Date(item.breakingUntil).getTime()
+    : new Date(item.fetchedAt).getTime() + 3 * 3_600_000;
+  return until > Date.now();
+}
+
 const EMPTY_MESSAGES: Record<string, string> = {
-  inbox: "لا مواد مرصودة بعد — أضف مصادر وسيبدأ الرادار بالتقاط الجديد تلقائيًا",
+  inbox: "لا فرص في هذه النافذة — جرّب نافذة أوسع أو تبويب «يحتاج تحققًا»",
+  watch: "لا ادعاءات أو مواد ضعيفة الدليل تحتاج تحققًا الآن",
+  background: "لا مواد خلفية",
+  filtered: "لا مواد مستبعدة آليًا — البيانات الصحفية والتواريخ المستحيلة تظهر هنا مع السبب",
   breaking: "لا رصد عاجلًا الآن — التنبيهات تظهر هنا فور مطابقة قواعدك",
   ready: "لا مسودات جاهزة — حوّل مادة من تبويب الرصد لتظهر هنا",
   exported: "لم يُصدَّر شيء بعد — المواد المصدَّرة تبقى هنا للتوثيق",
@@ -186,6 +258,22 @@ function timeAgo(iso: string | null): string {
   }
 }
 
+function describeRunStatus(status: RadarStatusResponse | undefined): string {
+  if (!status) return "تعذر التحقق من حالة الرادار — أزرار التنفيذ معطلة مؤقتًا.";
+  if (status.forceDisabled) {
+    return "الرادار متوقف بقفل طارئ — لا يمكن تشغيله من هذا الزر. البيانات السابقة محفوظة.";
+  }
+  if (!status.enabled) {
+    return "الرادار متوقف بالكامل — البيانات السابقة محفوظة، ولن تُجرى عمليات جلب أو تحليل أو تحويل جديدة.";
+  }
+  const parts: string[] = [status.cronEnabled ? "الرصد الآلي يعمل" : "الرصد الآلي متوقف"];
+  if (status.lastAnalyzedAt) parts.push(`آخر تحليل ${timeAgo(status.lastAnalyzedAt)}`);
+  parts.push(`تحليل اليوم ${status.analyzedToday}/${status.dailyAnalyzeCap}`);
+  if (status.analyzedToday >= status.dailyAnalyzeCap) parts.push("بلغ السقف اليومي — التحليل مؤجل");
+  parts.push(status.autoTransform ? "التحويل التلقائي مفعّل" : "التحويل التلقائي معطّل");
+  return parts.join(" · ");
+}
+
 // ---------- الصفحة ----------
 
 export default function SmartRadar() {
@@ -194,7 +282,8 @@ export default function SmartRadar() {
   const [activeTab, setActiveTab] = useState("inbox");
   const [sourceFilter, setSourceFilter] = useState<string>("all");
   const [channelFilter, setChannelFilter] = useState<"all" | "feed" | "x">("all");
-  const [timeFilter, setTimeFilter] = useState<"all" | "1" | "3" | "24">("all");
+  // الافتراضي آخر 24 ساعة: «كل الأوقات» مع الترتيب بالرصد كان يخلط القديم بالحي
+  const [timeFilter, setTimeFilter] = useState<"all" | "1" | "3" | "24">("24");
   const [limit, setLimit] = useState(30);
 
   const tabParams = TABS.find((t) => t.id === activeTab)?.params ?? {};
@@ -206,6 +295,43 @@ export default function SmartRadar() {
     refetchInterval: 60_000,
   });
   const stats = statsRaw ?? null;
+
+  const {
+    data: runStatus,
+    isLoading: statusLoading,
+    isError: statusError,
+  } = useQuery<RadarStatusResponse>({
+    queryKey: ["/api/radar/status"],
+    refetchInterval: 60_000,
+  });
+  const statusAvailable = Boolean(runStatus) && !statusError;
+
+  const invalidateRadar = () => {
+    queryClient.invalidateQueries({ queryKey: ["/api/radar/items"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/radar/stats"] });
+  };
+
+  const statusMutation = useMutation({
+    mutationFn: (enabled: boolean) =>
+      apiRequest<RadarStatusResponse>("/api/radar/status", {
+        method: "PATCH",
+        body: JSON.stringify({ enabled }),
+      }),
+    onSuccess: (nextStatus) => {
+      queryClient.setQueryData(["/api/radar/status"], nextStatus);
+      queryClient.invalidateQueries({ queryKey: ["/api/radar/status"] });
+      invalidateRadar();
+      toast({
+        title: "تم تحديث حالة الرادار",
+        description: "البيانات السابقة محفوظة، وستتبع العمليات الجديدة الحالة المحدّثة.",
+      });
+    },
+    onError: (error: Error) =>
+      toast({ title: "تعذر تحديث حالة الرادار", description: error.message, variant: "destructive" }),
+  });
+  // لا نسمح بأي عملية قد تجلب أو تحلل أو تولّد تكلفة قبل تأكيد الحالة من الخادم.
+  const radarActionsEnabled =
+    statusAvailable && runStatus?.enabled === true && !runStatus.forceDisabled && !statusMutation.isPending;
 
   const { data: itemsRaw, isLoading: itemsLoading } = useQuery<{
     items: RadarItemRow[];
@@ -246,9 +372,16 @@ export default function SmartRadar() {
   const { data: categoriesRaw } = useQuery<CategoryRow[]>({ queryKey: ["/api/categories"] });
   const categories = Array.isArray(categoriesRaw) ? categoriesRaw : [];
 
-  const invalidateRadar = () => {
-    queryClient.invalidateQueries({ queryKey: ["/api/radar/items"] });
-    queryClient.invalidateQueries({ queryKey: ["/api/radar/stats"] });
+  const guardedRadarAction = (action: () => void) => {
+    if (!radarActionsEnabled) {
+      toast({
+        title: "الرادار متوقف",
+        description: "البيانات السابقة محفوظة، ويمكن إعادة التشغيل من زر حالة الرادار.",
+        variant: "destructive",
+      });
+      return;
+    }
+    action();
   };
 
   // ---------- إجراءات المواد ----------
@@ -261,6 +394,17 @@ export default function SmartRadar() {
     },
     onError: (error: Error) =>
       toast({ title: "❌ فشل التحويل التحريري", description: error.message, variant: "destructive" }),
+  });
+
+  // «طوّر ببحث» — نظام التحرير الموحد: بحث تحقق + مسودة مثراة بعزو
+  const developMutation = useMutation({
+    mutationFn: (id: string) => apiRequest(`/api/radar/items/${id}/develop`, { method: "POST" }),
+    onSuccess: () => {
+      invalidateRadar();
+      toast({ title: "✅ طُوّرت المادة — المسودة وملاحظات المراجع في تبويب «جاهز للنشر»" });
+    },
+    onError: (error: Error) =>
+      toast({ title: "❌ فشل التطوير التحريري", description: error.message, variant: "destructive" }),
   });
 
   const exportMutation = useMutation({
@@ -296,8 +440,8 @@ export default function SmartRadar() {
   });
 
   const pendingItemId =
-    transformMutation.isPending || exportMutation.isPending
-      ? (transformMutation.variables ?? exportMutation.variables)
+    transformMutation.isPending || exportMutation.isPending || developMutation.isPending
+      ? (transformMutation.variables ?? exportMutation.variables ?? developMutation.variables)
       : null;
 
   return (
@@ -307,15 +451,52 @@ export default function SmartRadar() {
         <DashboardPageHeader
           icon={Radar}
           title="رادار سبق الذكي"
-          description="الرصد الآلي والجلب اليدوي متوقفان إجبارياً. يمكن مراجعة المواد والمصادر الموجودة فقط."
+          description={statusLoading ? "جارٍ التحقق من حالة الرادار..." : describeRunStatus(statusError ? undefined : runStatus)}
           actions={
             <>
-            <SourcesSheet sources={sources} categories={categories} />
-            <WatchesSheet watches={xWatches} categories={categories} />
+            <Button
+              variant={radarActionsEnabled ? "destructive" : "default"}
+              size="sm"
+              className="font-semibold"
+              disabled={
+                !statusAvailable ||
+                statusLoading ||
+                statusMutation.isPending ||
+                Boolean(runStatus?.forceDisabled)
+              }
+              onClick={() => statusMutation.mutate(!radarActionsEnabled)}
+              aria-pressed={radarActionsEnabled}
+              data-testid="button-radar-master-switch"
+              title={
+                !statusAvailable
+                  ? "جارٍ التحقق من حالة الرادار"
+                  : runStatus?.forceDisabled
+                    ? "لا يمكن تشغيل الرادار أثناء القفل الطارئ"
+                  : radarActionsEnabled
+                    ? "إيقاف الجلب والتحليل والتحويلات الجديدة"
+                    : "إعادة تشغيل عمليات الرادار"
+              }
+            >
+              {statusLoading || statusMutation.isPending
+                ? "جارٍ تحديث الحالة..."
+                : runStatus?.forceDisabled
+                  ? "التشغيل غير متاح"
+                  : radarActionsEnabled
+                  ? "إيقاف الرادار بالكامل"
+                  : "تشغيل الرادار"}
+            </Button>
+            <SourcesSheet sources={sources} categories={categories} allowFetching={radarActionsEnabled} />
+            <WatchesSheet watches={xWatches} categories={categories} allowFetching={radarActionsEnabled} />
             <RulesDialog rules={rules} telegramConfigured={stats?.telegramConfigured ?? false} />
             </>
           }
         />
+
+        {statusError && !statusLoading && (
+          <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+            تعذر التحقق من حالة الرادار؛ أزرار التنفيذ معطلة مؤقتًا. ستتجدد المحاولة تلقائيًا.
+          </div>
+        )}
 
         {health && health.withError > 0 && (
           <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
@@ -326,7 +507,16 @@ export default function SmartRadar() {
 
         {/* ---------- مؤشرات سريعة ---------- */}
         <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
-          <KpiCard icon={<Satellite className="h-4 w-4" />} label="وارد اليوم" value={stats?.newToday} />
+          <KpiCard
+            icon={<Satellite className="h-4 w-4" />}
+            label="وارد اليوم"
+            value={stats?.newToday}
+            hint={
+              stats?.mergedToday || stats?.filteredToday
+                ? `${stats?.mergedToday ?? 0} نسخة ضُمّت · ${stats?.filteredToday ?? 0} استُبعدت آليًا`
+                : undefined
+            }
+          />
           <KpiCard
             icon={<Zap className="h-4 w-4 text-red-500" />}
             label="عاجل نشط"
@@ -437,8 +627,11 @@ export default function SmartRadar() {
                   key={item.id}
                   item={item}
                   busy={pendingItemId === item.id}
-                  onTransform={() => transformMutation.mutate(item.id)}
-                  onExport={() => exportMutation.mutate(item.id)}
+                  searchConfigured={stats?.webSearchConfigured ?? false}
+                  onTransform={() => guardedRadarAction(() => transformMutation.mutate(item.id))}
+                  onDevelop={() => guardedRadarAction(() => developMutation.mutate(item.id))}
+                  onExport={() => guardedRadarAction(() => exportMutation.mutate(item.id))}
+                  radarActionsEnabled={radarActionsEnabled}
                   onDismiss={() => dismissMutation.mutate(item.id)}
                   onRestore={() => restoreMutation.mutate(item.id)}
                   onOpenArticle={(articleId) => setLocation(`/dashboard/articles/${articleId}/edit`)}
@@ -491,28 +684,38 @@ function KpiCard({
 function RadarItemCard({
   item,
   busy,
+  radarActionsEnabled,
   onTransform,
   onExport,
   onDismiss,
   onRestore,
   onOpenArticle,
+  onDevelop,
+  searchConfigured,
 }: {
   item: RadarItemRow;
   busy: boolean;
+  radarActionsEnabled: boolean;
   onTransform: () => void;
   onExport: () => void;
   onDismiss: () => void;
   onRestore: () => void;
   onOpenArticle: (articleId: string) => void;
+  onDevelop: () => void;
+  searchConfigured: boolean;
 }) {
   const score = item.newsValue;
   const keywords = Array.isArray(item.matchedKeywords) ? item.matchedKeywords : [];
+  const flags = Array.isArray(item.qualityFlags) ? item.qualityFlags : [];
+  const breaking = isActiveBreaking(item);
+  const timeUnreliable = flags.includes("future_date") || flags.includes("missing_date");
+  const pastYear = flags.find((f) => f.startsWith("past_year:"))?.split(":")[1];
 
   return (
-    <Card className={`flex flex-col ${item.isBreaking ? "border-red-300 dark:border-border" : ""}`}>
+    <Card className={`flex flex-col ${breaking ? "border-red-300 dark:border-border" : ""}`}>
       <CardHeader className="space-y-2 pb-2">
         <div className="flex flex-wrap items-center gap-2 text-xs">
-          {item.isBreaking && (
+          {breaking && (
             <Badge variant="destructive" className="animate-pulse">
               <Zap className="ml-0.5 h-3 w-3" /> عاجل
             </Badge>
@@ -530,7 +733,39 @@ function RadarItemCard({
           {/* لمواد ممرات الاصطياد (Google News/GDELT) الناشر الحقيقي أهم من اسم الممر */}
           <Badge variant="secondary" title={item.publisher ? item.sourceName ?? undefined : undefined}>
             {item.publisher ?? item.sourceName ?? "مصدر"}
+            {item.publisherType && PUBLISHER_TYPE_LABELS[item.publisherType]
+              ? ` · ${PUBLISHER_TYPE_LABELS[item.publisherType]}`
+              : ""}
           </Badge>
+          {(item.storySourceCount ?? 0) > 1 && (
+            <Badge variant="outline" title="ناشرون/وكالات مستقلة — نسخ الناشر نفسه بلغات مختلفة تُعد مصدرًا واحدًا">
+              {item.storySourceCount} مصادر مستقلة
+            </Badge>
+          )}
+          {(item.mergedCopies ?? 0) + (item.storySiblings ?? 0) > 0 && (
+            <Badge variant="outline" title="تغطيات أخرى للقصة نفسها من ناشرين ولغات مختلفة — تظهر بطاقة واحدة للقصة">
+              +{(item.mergedCopies ?? 0) + (item.storySiblings ?? 0)} تغطية
+            </Badge>
+          )}
+          {item.eventTiming && item.eventTiming !== "new" && (
+            <Badge
+              variant="outline"
+              className={item.eventTiming === "old" ? "border-red-400 text-red-700 dark:text-red-300" : ""}
+              title={item.timingEvidence ?? undefined}
+            >
+              {TIMING_LABELS[item.eventTiming]}
+            </Badge>
+          )}
+          {item.textBasis === "title_only" && (
+            <Badge variant="outline" className="border-amber-400 text-amber-700 dark:text-amber-300" title="وصل العنوان وحده — لا ملخص حتى لا يُنسب للمصدر ما لم يُقرأ">
+              المتن لم يُقرأ
+            </Badge>
+          )}
+          {item.contentType === "claim" && (
+            <Badge variant="outline" className="border-amber-400 text-amber-700 dark:text-amber-300">
+              ادعاء غير مؤكد
+            </Badge>
+          )}
           {item.sourceType === "x" ? (
             <Badge className="bg-sky-600 text-white hover:bg-sky-600">
               X{item.xValue ? ` · ${item.xValue}` : ""}
@@ -547,15 +782,24 @@ function RadarItemCard({
           {/* «نُشر» = تاريخ المصدر الحقيقي؛ غيابه يُعلن صراحةً بوقت الرصد —
               عرض وقت الجلب كأنه وقت النشر أوهم بأن خبرًا قديمًا «منذ دقائق» */}
           <span className="text-muted-foreground">
-            {item.publishedAt
+            {item.publishedAt && !timeUnreliable
               ? `نُشر ${timeAgo(item.publishedAt)}`
-              : `رُصد ${timeAgo(item.fetchedAt)} — تاريخ النشر غير معروف`}
+              : `رُصد ${timeAgo(item.fetchedAt)} — ${flags.includes("future_date") ? "تاريخ النشر مستقبلي غير موثوق" : "تاريخ النشر غير معروف"}`}
+            {pastYear ? ` · يذكر عام ${pastYear}` : ""}
           </span>
         </div>
         {score != null && (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2" title="الصلة لجمهور سبق — ليست احتمال صحة الخبر">
+            <span className="text-[11px] text-muted-foreground">صلة</span>
             <Progress value={score} className="h-1.5 flex-1" indicatorClassName={scoreColor(score)} />
-            <span className="text-xs font-bold tabular-nums">{score}%</span>
+            <span className="text-xs font-bold tabular-nums">{score}</span>
+          </div>
+        )}
+        {item.evidenceScore != null && item.freshnessScore != null && (
+          <div className="flex gap-3 text-[11px] text-muted-foreground tabular-nums">
+            <span title="نوع الناشر + التأييد المستقل">دليل {item.evidenceScore}</span>
+            <span title="عمر الزمن الموثوق للحدث">حداثة {item.freshnessScore}</span>
+            {item.priorityScore != null && <span className="font-medium text-foreground">أولوية {item.priorityScore}</span>}
           </div>
         )}
       </CardHeader>
@@ -571,10 +815,31 @@ function RadarItemCard({
         {item.translatedSummary && (
           <p className="text-sm text-muted-foreground line-clamp-3">{item.translatedSummary}</p>
         )}
+        {item.status === "filtered" && item.screenReason && (
+          <p className="text-xs text-red-700 dark:text-red-300">استُبعد آليًا: {item.screenReason}</p>
+        )}
         {item.scoreBreakdown?.reason && (
           <p className="text-xs italic text-muted-foreground line-clamp-2">
             {item.scoreBreakdown.reason}
           </p>
+        )}
+        {/* ملاحظات المراجع من مسار «طوّر ببحث» — تظهر مع المسودة الجاهزة */}
+        {item.status === "ready" && (item.draft?.developNotes?.length ?? 0) > 0 && (
+          <div className="space-y-1 rounded-md border bg-muted/40 p-2">
+            <div className="flex items-center gap-1.5 text-[11px] font-medium">
+              <SearchCheck className="h-3 w-3" />
+              {item.draft?.developedWithSearch
+                ? `طُوّرت ببحث تحقق (${item.draft?.developSources?.length ?? 0} مصدر)`
+                : "طُوّرت بوضع متحفظ — بلا بحث خارجي"}
+            </div>
+            <ul className="space-y-0.5">
+              {(item.draft?.developNotes ?? []).slice(0, 3).map((note, i) => (
+                <li key={i} className="text-[11px] leading-4 text-muted-foreground">
+                  • {note}
+                </li>
+              ))}
+            </ul>
+          </div>
         )}
         {keywords.length > 0 && (
           <div className="flex flex-wrap gap-1">
@@ -589,13 +854,30 @@ function RadarItemCard({
       </CardContent>
       <CardFooter className="flex flex-wrap items-center gap-2 pt-0">
         {(item.status === "new" || item.status === "analyzed") && (
-          <Button size="sm" onClick={onTransform} disabled={busy}>
-            <Wand2 className={`ml-1 h-4 w-4 ${busy ? "animate-pulse" : ""}`} />
-            {busy ? "جارٍ التحويل..." : "تحويل تحريري"}
-          </Button>
+          <>
+            <Button size="sm" onClick={onTransform} disabled={busy || !radarActionsEnabled}>
+              <Wand2 className={`ml-1 h-4 w-4 ${busy ? "animate-pulse" : ""}`} />
+              {busy ? "جارٍ التحويل..." : "تحويل تحريري"}
+            </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={onDevelop}
+              disabled={busy || !radarActionsEnabled}
+              title={
+                searchConfigured
+                  ? "تطوير معزز ببحث تحقق من الويب — مسودة مثراة بعزو + ملاحظات مراجع"
+                  : "البحث غير مهيأ (TAVILY_API_KEY / SERPER_API_KEY) — سيُطوَّر بوضع متحفظ مع قائمة ما يلزم تحققه"
+              }
+              data-testid={`button-radar-develop-${item.id}`}
+            >
+              <SearchCheck className={`ml-1 h-4 w-4 ${busy ? "animate-pulse" : ""}`} />
+              {busy ? "جارٍ التطوير..." : "طوّر ببحث"}
+            </Button>
+          </>
         )}
         {item.status === "ready" && (
-          <Button size="sm" onClick={onExport} disabled={busy}>
+          <Button size="sm" onClick={onExport} disabled={busy || !radarActionsEnabled}>
             <Send className="ml-1 h-4 w-4" />
             {busy ? "جارٍ التصدير..." : "تصدير وفتح المحرر"}
           </Button>
@@ -606,7 +888,7 @@ function RadarItemCard({
             فتح المقال
           </Button>
         )}
-        {item.status === "dismissed" && (
+        {(item.status === "dismissed" || item.status === "filtered") && (
           <Button size="sm" variant="outline" onClick={onRestore}>
             <RotateCcw className="ml-1 h-4 w-4" />
             استعادة
@@ -645,9 +927,11 @@ const EMPTY_SOURCE_FORM = {
 function SourcesSheet({
   sources,
   categories,
+  allowFetching,
 }: {
   sources: RadarSourceRow[];
   categories: CategoryRow[];
+  allowFetching: boolean;
 }) {
   const { toast } = useToast();
   const [form, setForm] = useState(EMPTY_SOURCE_FORM);
@@ -800,8 +1084,9 @@ function SourcesSheet({
           <Button
             size="sm"
             className="w-full"
-            disabled={!form.name.trim() || !form.url.trim() || createMutation.isPending}
+            disabled={!allowFetching || !form.name.trim() || !form.url.trim() || createMutation.isPending}
             onClick={() => createMutation.mutate(form)}
+            title={!allowFetching ? "الرادار متوقف: ستتمكن من إضافة المصدر بعد إعادة التشغيل" : undefined}
           >
             {createMutation.isPending ? "جارٍ الإضافة..." : "إضافة المصدر"}
           </Button>
@@ -900,9 +1185,11 @@ const EMPTY_WATCH_FORM = {
 function WatchesSheet({
   watches,
   categories,
+  allowFetching,
 }: {
   watches: RadarSourceRow[];
   categories: CategoryRow[];
+  allowFetching: boolean;
 }) {
   const { toast } = useToast();
   const [form, setForm] = useState(EMPTY_WATCH_FORM);
@@ -980,7 +1267,7 @@ function WatchesSheet({
         <SheetHeader className="text-right">
           <SheetTitle>رصدات إكس</SheetTitle>
           <SheetDescription>
-            حساب أو كلمة أو هاشتاق أو ترند — الجلب الآلي واليدوي متوقفان إجبارياً حالياً
+            حساب أو كلمة أو هاشتاق أو ترند — الرصدات تُجلب ضمن دورة الرادار وفق فترتها
           </SheetDescription>
         </SheetHeader>
 
@@ -1090,8 +1377,9 @@ function WatchesSheet({
           <Button
             size="sm"
             className="w-full"
-            disabled={!form.value.trim() || createMutation.isPending}
+            disabled={!allowFetching || !form.value.trim() || createMutation.isPending}
             onClick={() => createMutation.mutate(form)}
+            title={!allowFetching ? "الرادار متوقف: ستتمكن من إضافة الرصدة بعد إعادة التشغيل" : undefined}
           >
             {createMutation.isPending ? "جارٍ الإضافة..." : "إضافة الرصدة"}
           </Button>

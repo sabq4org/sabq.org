@@ -1,5 +1,6 @@
 import Foundation
 import Security
+import os
 #if canImport(UIKit)
 import UIKit
 #endif
@@ -59,7 +60,16 @@ actor APIClient {
     /// session lifts the resource cap so those calls can complete.
     private let longSession: URLSession
     private let decoder: JSONDecoder
-    private var authToken: String?
+    private var authToken: String? {
+        didSet {
+            let present = authToken != nil
+            sessionFlag.withLock { $0 = present }
+        }
+    }
+    /// مرآة خيطية-آمنة لوجود التوكن كي تقرأها الواجهات (MainActor) بلا
+    /// عبور الـactor — كانت `hasSession` معزولة فتُقرأ من RoshnView بتحذير
+    /// «actor-isolated property … from the main actor» (تدقيق iOS 27، F12).
+    private nonisolated let sessionFlag = OSAllocatedUnfairLock(initialState: false)
     private var csrfToken: String?
 
     private init() {
@@ -120,6 +130,9 @@ actor APIClient {
         } else {
             authToken = KeychainHelper.load(forKey: "sabq_auth_token")
         }
+        // didSet لا يعمل داخل init — نزامن المرآة يدويًا.
+        let present = authToken != nil
+        sessionFlag.withLock { $0 = present }
     }
 
     // MARK: - Auth
@@ -163,8 +176,8 @@ actor APIClient {
     /// on init). Replaces the prior UserDefaults flag — keychain
     /// presence is now the single source of truth so the session can't
     /// be flipped on by editing UserDefaults from outside the app.
-    var hasSession: Bool {
-        authToken != nil
+    nonisolated var hasSession: Bool {
+        sessionFlag.withLock { $0 }
     }
 
     // MARK: - CSRF
@@ -191,20 +204,18 @@ actor APIClient {
         ignoreCache: Bool = false,
         apiRoot: String? = nil
     ) async throws -> T {
-        var finalQuery = query
-        if ignoreCache {
-            finalQuery["_t"] = String(Int(Date().timeIntervalSince1970 * 1000))
-            finalQuery["_nc"] = UUID().uuidString.prefix(8).lowercased()
-        }
-        let url = try buildURL(path: path, query: finalQuery, apiRoot: apiRoot)
+        let url = try buildURL(path: path, query: query, apiRoot: apiRoot)
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         applyHeaders(&request)
         if ignoreCache {
-            request.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
-            request.setValue("no-cache, no-store, must-revalidate", forHTTPHeaderField: "Cache-Control")
-            request.setValue("no-cache", forHTTPHeaderField: "Pragma")
-            return try await decode(type, from: ephemeralSession, request: request)
+            // كانت تُلحق _t/_nc بالرابط وتمر عبر ephemeralSession — رابط فريد
+            // في كل نداء يبطل CDN وURLCache ويفتح اتصال TLS جديدًا، والمسارات
+            // الدورية (فاحص التحديث/الشريط العاجل/أشرطة البطولات) كانت تفعل
+            // ذلك كل 30-60ث فترفع حمل الخادم على المنصتين (تدقيق 2026-08-02).
+            // يكفي تجاوز الكاش المحلي عبر الجلسة المجمّعة نفسها.
+            request.cachePolicy = .reloadIgnoringLocalCacheData
+            request.setValue("no-cache", forHTTPHeaderField: "Cache-Control")
         }
         return try await perform(request, as: type)
     }
@@ -370,6 +381,11 @@ actor APIClient {
         }
     }
 
+    /// ملف المراسل العام — الصفة لسطر الكاتب («مراسل صحفي»…). مسار عام فقط.
+    func fetchReporterProfile(slug: String) async throws -> APIReporterProfile {
+        try await get(APIReporterProfile.self, path: "/reporters/\(slug)", apiRoot: publicAPIBaseURL)
+    }
+
     func fetchRelated(slug: String) async throws -> [APIArticle] {
         // Public API returns a bare JSON array; v1 doesn't have this
         // endpoint (404). Mirror fetchArticle: public-first, v1 fallback.
@@ -399,6 +415,17 @@ actor APIClient {
     /// NOT under v1, so route through publicAPIBaseURL.
     func fetchPassport(slug: String) async throws -> APIPassport {
         try await get(APIPassport.self, path: "/articles/\(slug)/passport", apiRoot: publicAPIBaseURL)
+    }
+
+    /// مفتاح ثيم اليوم الوطني لتطبيق iOS، يضبطه محرّر من لوحة التحكم.
+    /// عام بلا مصادقة، وخارج /v1، فيمرّ عبر publicAPIBaseURL.
+    func fetchIosNationalDayTheme() async throws -> IosNationalDayThemeFlag {
+        try await get(
+            IosNationalDayThemeFlag.self,
+            path: "/system/ios-national-day-theme",
+            ignoreCache: true,
+            apiRoot: publicAPIBaseURL
+        )
     }
 
     func fetchComments(slug: String) async throws -> [APIComment] {
@@ -578,6 +605,20 @@ actor APIClient {
                 query: query
             ).items
         }
+    }
+
+    /// مقالات رأي من التصنيف نفسه (ترتيب ذكي: حداثة + مشاهدات + تمييز) —
+    /// المصدر نفسه لبلوك «مقالات قد تهمك» في الويب.
+    func fetchRelatedOpinions(categoryId: String, excludeId: String?, limit: Int = 5) async throws -> [APIOpinion] {
+        var query: [String: String] = ["limit": "\(limit)"]
+        if let excludeId, !excludeId.isEmpty { query["excludeId"] = excludeId }
+        // المسار عام فقط (`/api/opinion/...`)؛ لا نظير له تحت v1.
+        return try await get(
+            WrappedArray<APIOpinion>.self,
+            path: "/opinion/related/category/\(categoryId)",
+            query: query,
+            apiRoot: publicAPIBaseURL
+        ).items
     }
 
     func fetchOpinion(slug: String) async throws -> APIOpinion {

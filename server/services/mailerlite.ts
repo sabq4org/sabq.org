@@ -7,7 +7,7 @@ const MAILERLITE_API_KEY = process.env.MAILERLITE_API_KEY;
 const MAILERLITE_BASE_URL = 'https://connect.mailerlite.com/api';
 
 // Custom field IDs for MailerLite (will be created on first use)
-interface MailerLiteSubscriber {
+export interface MailerLiteSubscriber {
   id: string;
   email: string;
   status: 'active' | 'unsubscribed' | 'unconfirmed' | 'bounced' | 'junk';
@@ -36,12 +36,15 @@ interface SubscribeOptions {
   source?: string;
   groupIds?: string[];
   customFields?: Record<string, string | number>;
+  status?: MailerLiteSubscriber['status'];
 }
 
 interface ApiResponse<T> {
   success: boolean;
   data?: T;
   error?: string;
+  statusCode?: number;
+  notFound?: boolean;
 }
 
 /**
@@ -54,7 +57,7 @@ async function mailerliteRequest<T>(
 ): Promise<ApiResponse<T>> {
   if (!MAILERLITE_API_KEY) {
     console.warn('⚠️ MAILERLITE_API_KEY not configured');
-    return { success: false, error: 'MailerLite API key not configured' };
+    return { success: false, error: 'MailerLite API key not configured', statusCode: 0 };
   }
 
   try {
@@ -71,10 +74,12 @@ async function mailerliteRequest<T>(
     const data = await response.json();
 
     if (!response.ok) {
-      console.error(`❌ MailerLite API error (${response.status}):`, data);
+      console.error(`❌ MailerLite API error (${response.status})`);
       return {
         success: false,
         error: data.message || `API error: ${response.status}`,
+        statusCode: response.status,
+        notFound: response.status === 404,
       };
     }
 
@@ -102,6 +107,7 @@ export async function subscribeToMailerLite(options: SubscribeOptions): Promise<
     source,
     groupIds = [],
     customFields = {},
+    status = 'active',
   } = options;
 
   // Build custom fields
@@ -120,7 +126,7 @@ export async function subscribeToMailerLite(options: SubscribeOptions): Promise<
   const body: Record<string, unknown> = {
     email,
     fields,
-    status: 'active', // or 'unconfirmed' for double opt-in
+    status: status || 'active',
   };
 
   // Add to groups if specified
@@ -128,11 +134,11 @@ export async function subscribeToMailerLite(options: SubscribeOptions): Promise<
     body.groups = groupIds;
   }
 
-  console.log(`📧 Subscribing ${email} to MailerLite...`);
+  console.log('📧 Syncing confirmed newsletter subscriber to MailerLite');
   const result = await mailerliteRequest<MailerLiteSubscriber>('/subscribers', 'POST', body);
 
   if (result.success) {
-    console.log(`✅ Successfully subscribed ${email} to MailerLite`);
+    console.log('✅ MailerLite subscriber sync completed');
   }
 
   return result;
@@ -159,15 +165,34 @@ export async function updateMailerLiteSubscriber(
     body.groups = updates.groupIds;
   }
 
-  console.log(`📝 Updating MailerLite subscriber ${subscriberId}...`);
+  console.log('📝 Updating MailerLite subscriber');
   return mailerliteRequest<MailerLiteSubscriber>(`/subscribers/${subscriberId}`, 'PUT', body);
+}
+
+/** Keep Sabq's daily/weekly groups mutually exclusive while preserving all
+ * unrelated groups owned by the MailerLite account. */
+export async function reconcileMailerLiteCadenceGroups(
+  email: string,
+  desiredGroupId: string,
+): Promise<ApiResponse<MailerLiteSubscriber>> {
+  const current = await getMailerLiteSubscriber(email);
+  if (!current.success || !current.data) {
+    return { success: false, error: current.error || 'Subscriber not found' };
+  }
+  const cadenceIds = [process.env.MAILERLITE_DAILY_GROUP_ID, process.env.MAILERLITE_WEEKLY_GROUP_ID]
+    .filter((id): id is string => Boolean(id));
+  const groups = current.data.groups
+    .map((group) => group.id)
+    .filter((id) => !cadenceIds.includes(id));
+  groups.push(desiredGroupId);
+  return updateMailerLiteSubscriber(current.data.id, { groupIds: [...new Set(groups)] });
 }
 
 /**
  * Get subscriber by email from MailerLite
  */
 export async function getMailerLiteSubscriber(email: string): Promise<ApiResponse<MailerLiteSubscriber>> {
-  console.log(`🔍 Looking up subscriber: ${email}`);
+  console.log('🔍 Looking up MailerLite subscriber');
   return mailerliteRequest<MailerLiteSubscriber>(`/subscribers/${encodeURIComponent(email)}`);
 }
 
@@ -175,8 +200,8 @@ export async function getMailerLiteSubscriber(email: string): Promise<ApiRespons
  * Unsubscribe a user from MailerLite
  */
 export async function unsubscribeFromMailerLite(subscriberId: string): Promise<ApiResponse<void>> {
-  console.log(`🚫 Unsubscribing ${subscriberId} from MailerLite...`);
-  return mailerliteRequest<void>(`/subscribers/${subscriberId}`, 'DELETE');
+  console.log('🚫 Marking MailerLite subscriber as unsubscribed');
+  return mailerliteRequest<void>(`/subscribers/${subscriberId}`, 'PUT', { status: 'unsubscribed' });
 }
 
 /**
@@ -215,7 +240,7 @@ export async function removeSubscriberFromGroup(subscriberId: string, groupId: s
  * Process webhook from MailerLite
  */
 export interface MailerLiteWebhookEvent {
-  type: 'subscriber.created' | 'subscriber.updated' | 'subscriber.unsubscribed' | 'subscriber.bounced' | 'campaign.sent';
+  type: 'subscriber.created' | 'subscriber.updated' | 'subscriber.unsubscribed' | 'subscriber.bounced' | 'campaign.sent' | string;
   data: {
     subscriber?: MailerLiteSubscriber;
     campaign?: {
@@ -226,18 +251,40 @@ export interface MailerLiteWebhookEvent {
   created_at: string;
 }
 
+export function parseMailerLiteWebhooks(payload: unknown): MailerLiteWebhookEvent[] {
+  const input = payload && typeof payload === 'object' &&
+    Array.isArray((payload as { events?: unknown }).events)
+    ? (payload as { events: unknown[] }).events
+    : Array.isArray(payload) ? payload : [payload];
+
+  return input.flatMap((entry): MailerLiteWebhookEvent[] => {
+    if (!entry || typeof entry !== 'object') return [];
+    const raw = entry as Record<string, unknown>;
+    const type = typeof raw.type === 'string' ? raw.type
+      : typeof raw.event === 'string' ? raw.event : '';
+    if (!type) return [];
+
+    // MailerLite's current subscriber payload puts the subscriber fields at
+    // the top level. Older integration examples use data.subscriber or
+    // subscriber directly; normalize all shapes before route handling.
+    const subscriber = raw.data && typeof raw.data === 'object'
+      ? (raw.data as Record<string, unknown>).subscriber
+      : raw.subscriber || (typeof raw.email === 'string' ? raw : undefined);
+    const data = raw.data && typeof raw.data === 'object'
+      ? raw.data as MailerLiteWebhookEvent['data']
+      : { subscriber: subscriber as MailerLiteSubscriber | undefined,
+          campaign: raw.campaign as MailerLiteWebhookEvent['data']['campaign'] };
+
+    return [{
+      type,
+      data,
+      created_at: typeof raw.created_at === 'string' ? raw.created_at : new Date().toISOString(),
+    }];
+  });
+}
+
 export function parseMailerLiteWebhook(payload: unknown): MailerLiteWebhookEvent | null {
-  try {
-    const event = payload as MailerLiteWebhookEvent;
-    if (!event.type || !event.data) {
-      console.warn('⚠️ Invalid MailerLite webhook payload');
-      return null;
-    }
-    return event;
-  } catch (error) {
-    console.error('❌ Error parsing MailerLite webhook:', error);
-    return null;
-  }
+  return parseMailerLiteWebhooks(payload)[0] || null;
 }
 
 /**
@@ -253,7 +300,7 @@ export async function syncUserInterestsToMailerLite(
   const existingResult = await getMailerLiteSubscriber(email);
   
   if (!existingResult.success || !existingResult.data) {
-    console.warn(`⚠️ Subscriber ${email} not found in MailerLite`);
+    console.warn('⚠️ Confirmed subscriber not found in MailerLite');
     return { success: false, error: 'Subscriber not found' };
   }
 

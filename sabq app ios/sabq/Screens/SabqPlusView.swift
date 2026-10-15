@@ -280,7 +280,7 @@ struct SabqPlusView: View {
                 ("arrow.turn.down.left", "دخول يومي", "+5 × السلسلة"),
                 ("trophy", "فوز توقّع رياضي", "حسب البركة"),
             ]
-            LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
+            LazyVGrid(columns: SabqGrid.adaptive(spacing: 8), spacing: 8) {
                 ForEach(earns, id: \.1) { icon, label, value in
                     HStack(spacing: 8) {
                         Image(systemName: icon)

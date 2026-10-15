@@ -14,69 +14,85 @@ struct ExploreView: View {
     @Environment(BookmarksStore.self) private var bookmarksStore
 
     @State private var searchText = ""
-    @FocusState private var isSearchFocused: Bool
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @State private var requestID = UUID()
 
     @State private var recentSearches: [String] = {
         UserDefaults.standard.stringArray(forKey: "sabq_recent_searches") ?? []
     }()
     @State private var apiResults: [Article] = []
     @State private var isSearching = false
+    @State private var searchFailed = false
     @State private var submittedQuery = ""
     @State private var searchTask: Task<Void, Never>?
+    @State private var scrollRequest = 0
 
-    private let columns = [
-        GridItem(.flexible(), spacing: 14),
-        GridItem(.flexible(), spacing: 14)
-    ]
+    private let resultsAnchor = "explore-results-top"
+
+    private var columns: [GridItem] {
+        [GridItem(.adaptive(minimum: dynamicTypeSize.isAccessibilitySize ? 280 : 155), spacing: 14)]
+    }
 
     private var trimmedSearchText: String {
         searchText.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private var displayResults: [Article] {
-        if trimmedSearchText == submittedQuery && !apiResults.isEmpty {
+        if trimmedSearchText == submittedQuery {
             return apiResults
         }
         return articlesStore.search(query: trimmedSearchText)
     }
 
+    private var localResults: [Article] { articlesStore.search(query: trimmedSearchText) }
+
     var body: some View {
-        ScrollView(showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 22) {
-                CompactScreenHeader(
-                    title: "استكشف",
-                    subtitle: "تصفّح الأقسام والمواضيع الأكثر تأثيراً"
-                )
-                .animatedAppear(index: 0)
+        ScrollViewReader { proxy in
+            ScrollView(showsIndicators: false) {
+                VStack(alignment: .leading, spacing: SabqLayout.space24) {
+                    Text("تصفّح الأقسام والمواضيع الأكثر تأثيراً")
+                        .font(SabqType.body)
+                        .foregroundStyle(SabqTheme.secondaryInk)
+                        .fixedSize(horizontal: false, vertical: true)
 
-                SabqSearchBar(
-                    text: $searchText,
-                    placeholder: "ابحث عن خبر أو موضوع…",
-                    onSubmit: { performSearch() },
-                    focusState: $isSearchFocused
-                )
-                .animatedAppear(index: 1)
-
-                if trimmedSearchText.isEmpty {
-                    idleContent
-                } else {
-                    searchContent
+                    if trimmedSearchText.isEmpty {
+                        idleContent
+                    } else {
+                        searchContent
+                    }
                 }
+                .padding(.horizontal, SabqLayout.pageInset)
+                .padding(.top, SabqLayout.space16)
+                .padding(.bottom, SabqLayout.space24)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .id(resultsAnchor)
             }
-            .padding(.horizontal, 18)
-            .padding(.top, 18)
-            .padding(.bottom, 100)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(SabqTheme.background)
+            .onChange(of: scrollRequest) { _, _ in
+                proxy.scrollTo(resultsAnchor, anchor: .top)
+            }
         }
-        .background(SabqTheme.background)
+        .navigationTitle("استكشف")
+        .navigationBarTitleDisplayMode(.inline)
+        .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always),
+                    prompt: "ابحث عن خبر أو موضوع…")
+        .onSubmit(of: .search) { performSearch() }
         .sabqRTL()
         .sabqScreen("Explore")
         .scrollDismissesKeyboard(.interactively)
-        .navigationDestination(for: ArticleCategory.self) { category in
-            CategoryArticlesView(category: category)
-        }
+
         .onChange(of: trimmedSearchText) { _, newValue in
             scheduleSearch(for: newValue)
+        }
+        .onAppear {
+            if !trimmedSearchText.isEmpty && trimmedSearchText != submittedQuery {
+                scheduleSearch(for: trimmedSearchText)
+            }
+        }
+        .onDisappear {
+            searchTask?.cancel()
+            requestID = UUID()
+            isSearching = false
         }
     }
 
@@ -85,19 +101,19 @@ struct ExploreView: View {
     @ViewBuilder
     private var idleContent: some View {
         sectionsGridSection
-            .animatedAppear(index: 3)
+
 
         if !recentSearches.isEmpty {
             recentSearchesSection
-                .animatedAppear(index: 4)
+
         }
     }
 
     private var sectionsGridSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            sectionTitle(icon: "square.grid.2x2.fill", title: "تصفّح حسب التصنيف", tint: SabqTheme.primaryEnd)
+        VStack(alignment: .leading, spacing: SabqLayout.space12) {
+            sectionTitle(icon: "square.grid.2x2.fill", title: "التصنيفات", tint: SabqTheme.primaryEnd)
 
-            LazyVGrid(columns: columns, spacing: 14) {
+            LazyVGrid(columns: columns, spacing: SabqLayout.space12) {
                 ForEach(Array(ArticleCategory.allCases.enumerated()), id: \.element.id) { _, category in
                     NavigationLink(value: category) {
                         CategoryTile(category: category)
@@ -109,15 +125,15 @@ struct ExploreView: View {
     }
 
     private var recentSearchesSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SabqLayout.space12) {
             HStack {
-                sectionTitle(icon: "clock.arrow.circlepath", title: "آخر عمليات البحث", tint: SabqTheme.secondaryInk)
+                sectionTitle(icon: "clock.arrow.circlepath", title: "عمليات البحث الأخيرة", tint: SabqTheme.secondaryInk)
                 Spacer(minLength: 0)
-                Button("مسح") {
+                Button("مسح السجل") {
                     recentSearches.removeAll()
                     UserDefaults.standard.set([String](), forKey: "sabq_recent_searches")
                 }
-                .font(SabqFonts.app(size: 11, weight: .regular))
+                .font(SabqType.caption)
                 .foregroundStyle(SabqTheme.tertiaryInk)
             }
 
@@ -125,7 +141,7 @@ struct ExploreView: View {
                 ForEach(recentSearches.prefix(10), id: \.self) { recent in
                     Button {
                         searchText = recent
-                        performSearch()
+                        performSearch(query: recent)
                     } label: {
                         HStack(spacing: 5) {
                             Image(systemName: "magnifyingglass")
@@ -134,8 +150,9 @@ struct ExploreView: View {
                                 .font(SabqFonts.app(size: 12, weight: .medium))
                         }
                         .foregroundStyle(SabqTheme.secondaryInk)
-                        .padding(.horizontal, 11)
-                        .padding(.vertical, 7)
+                        .padding(.horizontal, SabqLayout.space12)
+                        .padding(.vertical, SabqLayout.space8)
+                        .frame(minHeight: SabqLayout.touchTarget)
                         .background(
                             Capsule(style: .continuous)
                                 .fill(SabqTheme.softFill)
@@ -152,24 +169,37 @@ struct ExploreView: View {
     @ViewBuilder
     private var searchContent: some View {
         if isSearching && displayResults.isEmpty {
-            VStack(spacing: 14) {
+            VStack(spacing: SabqLayout.space16) {
                 SkeletonBox(height: 90, radius: SabqTheme.tileRadius)
                 SkeletonBox(height: 90, radius: SabqTheme.tileRadius)
                 SkeletonBox(height: 90, radius: SabqTheme.tileRadius)
             }
-            .animatedAppear(index: 2)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("جارٍ البحث")
+
+        } else if searchFailed && displayResults.isEmpty {
+            ErrorStateView(
+                message: "تعذّر الاتصال للبحث. تحقق من اتصالك ثم أعد المحاولة.",
+                retryAction: { performSearch() }
+            )
+
         } else if displayResults.isEmpty {
             EmptyStateView(
                 icon: "doc.text.magnifyingglass",
                 tint: SabqTheme.tertiaryInk,
                 title: "لا توجد نتائج",
-                subtitle: "جرّب كلمات مختلفة أو تصفّح الأقسام بالأسفل."
+                subtitle: "جرّب كلمة أخرى أو امسح البحث لتصفح التصنيفات."
             )
-            .animatedAppear(index: 2)
+
         } else {
             VStack(alignment: .leading, spacing: 14) {
+                if searchFailed {
+                    Text("تُعرض نتائج محفوظة من الجهاز")
+                        .font(SabqType.caption)
+                        .foregroundStyle(SabqTheme.secondaryInk)
+                }
                 Text("\(displayResults.count) نتيجة")
-                    .font(SabqFonts.app(size: 11, weight: .regular))
+                    .font(SabqType.caption)
                     .foregroundStyle(SabqTheme.tertiaryInk)
 
                 ForEach(Array(displayResults.enumerated()), id: \.element.id) { index, article in
@@ -184,7 +214,7 @@ struct ExploreView: View {
                         )
                     }
                     .buttonStyle(.plain)
-                    .animatedAppear(index: index + 2)
+
                 }
             }
         }
@@ -198,7 +228,7 @@ struct ExploreView: View {
                 .font(SabqFonts.app(size: 11, weight: .regular))
                 .foregroundStyle(tint)
             Text(title)
-                .font(SabqFonts.app(size: 14, weight: .bold))
+                .font(SabqType.sectionTitle)
                 .foregroundStyle(SabqTheme.ink)
             Spacer(minLength: 0)
         }
@@ -206,10 +236,14 @@ struct ExploreView: View {
 
     private func scheduleSearch(for query: String) {
         searchTask?.cancel()
+        requestID = UUID()
+        isSearching = false
+        searchFailed = false
         guard !query.isEmpty else {
             apiResults = []
             submittedQuery = ""
             isSearching = false
+            scrollRequest &+= 1
             return
         }
         searchTask = Task {
@@ -219,24 +253,37 @@ struct ExploreView: View {
         }
     }
 
-    private func performSearch() {
-        let q = trimmedSearchText
+    private func performSearch(query explicitQuery: String? = nil) {
+        let q = (explicitQuery ?? trimmedSearchText).trimmingCharacters(in: .whitespacesAndNewlines)
         guard !q.isEmpty else { return }
         if !recentSearches.contains(q) {
             recentSearches.insert(q, at: 0)
             recentSearches = Array(recentSearches.prefix(10))
             UserDefaults.standard.set(recentSearches, forKey: "sabq_recent_searches")
         }
-        Task { await runSearch(query: q) }
+        searchTask?.cancel()
+        searchTask = Task { await runSearch(query: q) }
+        searchFailed = false
+        scrollRequest &+= 1
     }
 
     private func runSearch(query: String) async {
+        let id = UUID()
+        requestID = id
         isSearching = true
-        defer { isSearching = false }
-        let result = await NewsService.search(query: query)
-        if trimmedSearchText == query {
+        do {
+            let result = try await NewsService.searchResult(query: query)
+            guard !Task.isCancelled, requestID == id, trimmedSearchText == query else { return }
             apiResults = result.articles
             submittedQuery = query
+            searchFailed = false
+            isSearching = false
+        } catch {
+            guard !Task.isCancelled, requestID == id, trimmedSearchText == query else { return }
+            apiResults = localResults
+            submittedQuery = query
+            searchFailed = true
+            isSearching = false
         }
     }
 }

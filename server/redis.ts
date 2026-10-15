@@ -18,6 +18,8 @@ export interface RedisSessionClient {
   sadd(key: string, ...members: string[]): Promise<number>;
   smembers(key: string): Promise<string[]>;
   /** SET NX PX الذرّي — للأقفال/الـleases (انتخاب القائد). يعيد "OK" عند النجاح وإلا null. */
+  renewLock(key: string, val: string, ttlMs: number): Promise<number>;
+  releaseLock(key: string, val: string): Promise<number>;
   setLock(key: string, val: string, ttlMs: number): Promise<"OK" | null>;
 }
 
@@ -40,6 +42,10 @@ function createSessionAdapter(client: Redis): RedisSessionClient {
     sadd: (key: string, ...members: string[]) =>
       members.length ? client.sadd(key, ...members) : Promise.resolve(0),
     smembers: (key: string) => client.smembers(key),
+    renewLock: async (key, val, ttlMs) => Number(await client.eval(
+      "if redis.call('get',KEYS[1]) == ARGV[1] then return redis.call('pexpire',KEYS[1],ARGV[2]) else return 0 end", 1, key, val, ttlMs)),
+    releaseLock: async (key, val) => Number(await client.eval(
+      "if redis.call('get',KEYS[1]) == ARGV[1] then return redis.call('del',KEYS[1]) else return 0 end", 1, key, val)),
     setLock: (key: string, val: string, ttlMs: number) =>
       client.set(key, val, "PX", ttlMs, "NX") as Promise<"OK" | null>,
   };

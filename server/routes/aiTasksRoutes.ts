@@ -3,6 +3,7 @@ import { storage } from '../storage';
 import { aiTaskExecutor } from '../services/aiTaskExecutor';
 import { insertAiScheduledTaskSchema, type InsertAiScheduledTask } from '@shared/schema';
 import { ZodError } from 'zod';
+import { parsePage, parseLimit } from '../utils/pagination';
 
 const router = Router();
 
@@ -78,8 +79,8 @@ router.get('/', isAuthenticated, isAdmin, async (req: Request, res: Response) =>
 
     const result = await storage.listAiTasks({
       status: status as any,
-      page: parseInt(page as string, 10),
-      limit: parseInt(limit as string, 10),
+      page: parsePage(page),
+      limit: parseLimit(limit, 20, 200),
       categoryId: categoryId as string,
       createdBy: createdBy as string
     });

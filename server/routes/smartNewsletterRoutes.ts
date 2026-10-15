@@ -4,11 +4,11 @@
  */
 
 import { Express, Request, Response, NextFunction } from 'express';
-import crypto from 'crypto';
 import { z } from 'zod';
 import rateLimit from 'express-rate-limit';
 import { db } from '../db';
-import { eq, and, desc } from 'drizzle-orm';
+import { eq, and, desc, sql } from 'drizzle-orm';
+import { withStatementTimeout } from '../db';
 import { 
   newsletterSubscriptions,
   userDynamicInterests,
@@ -16,28 +16,26 @@ import {
   categories,
 } from '@shared/schema';
 import {
-  subscribeToMailerLite,
   getMailerLiteSubscriber,
-  updateMailerLiteSubscriber,
   unsubscribeFromMailerLite,
   syncUserInterestsToMailerLite,
-  parseMailerLiteWebhook,
   isMailerLiteConfigured,
   getMailerLiteGroups,
 } from '../services/mailerlite';
-import { sendNewsletterWelcomeEmail, sendNewsletterUnsubscribeEmail } from '../services/email';
+import {
+  confirmNewsletterSubscription,
+  createPendingNewsletterSubscription,
+  retryNewsletterMailerLiteSync,
+  syncConfirmedSubscription,
+  hasConfirmedNewsletterMarker,
+  newsletterSubscribeInputSchema,
+} from '../services/newsletterSubscriptionService';
+import { addEmailSuppression } from '../services/emailSuppressionService';
 import { isAuthenticated } from '../auth';
 import { requireRole } from '../rbac';
+import { createMailerLiteWebhookHandler } from './mailerliteWebhookHandler';
+import { cfKeyGenerator, cfValidate } from '../utils/rateLimiting';
 
-/**
- * Verify MailerLite webhook signature using HMAC-SHA256.
- * MailerLite signs the raw request body with the webhook secret and sends the
- * result in the X-MailerLite-Signature header. The header value may be:
- *   - bare hex digest
- *   - "sha256=<hex>" (GitHub-style prefix)
- *   - base64-encoded digest
- * All three formats are handled and compared using constant-time equality.
- */
 /**
  * Resolve which subscription the caller is allowed to act on.
  *
@@ -54,29 +52,44 @@ import { requireRole } from '../rbac';
  *    subscriber.id`), or
  *  - being signed in as the owner of that address.
  *
- * Returns the subscription row, or a ready-to-send denial. The denial is
- * deliberately uniform so it cannot be used to test whether an address exists.
+ * Returns the subscription row, or a ready-to-send denial. The status route
+ * may additionally receive an empty result after a verified owner is proved;
+ * mutations never use that mode. The denial is deliberately uniform so it
+ * cannot be used to test whether an address exists.
  */
+type SubscriberResolution =
+  | { ok: true; subscription: typeof newsletterSubscriptions.$inferSelect }
+  | { ok: false; httpStatus: number; message: string };
+
+type SubscriberResolutionWithEmptyOwner =
+  | SubscriberResolution
+  | { ok: true; subscription: null };
+
+function resolveSubscriber(
+  req: any,
+  emailFromRequest?: string,
+): Promise<SubscriberResolution>;
+function resolveSubscriber(
+  req: any,
+  emailFromRequest: string | undefined,
+  options: { allowMissingVerifiedOwner: true },
+): Promise<SubscriberResolutionWithEmptyOwner>;
 async function resolveSubscriber(
   req: any,
   emailFromRequest?: string,
-): Promise<
-  | { ok: true; subscription: typeof newsletterSubscriptions.$inferSelect }
-  | { ok: false; httpStatus: number; message: string }
-> {
+  options?: { allowMissingVerifiedOwner?: boolean },
+): Promise<SubscriberResolutionWithEmptyOwner> {
   const denied = {
     ok: false as const,
     httpStatus: 403,
     message: 'رابط غير صالح. استخدم رابط إلغاء الاشتراك من رسالة النشرة، أو سجّل الدخول.',
   };
 
-  const token = typeof req.body?.token === 'string'
-    ? req.body.token
-    : typeof req.query?.token === 'string'
-      ? req.query.token
-      : null;
+  const bodyToken = typeof req.body?.token === 'string' ? req.body.token : null;
+  const queryToken = typeof req.query?.token === 'string' ? req.query.token : null;
+  const token = bodyToken ?? queryToken;
 
-  if (token) {
+  if (token !== null) {
     const [row] = await db
       .select()
       .from(newsletterSubscriptions)
@@ -85,67 +98,28 @@ async function resolveSubscriber(
     return row ? { ok: true, subscription: row } : denied;
   }
 
-  const sessionEmail = req.user?.email;
-  if (sessionEmail) {
+  const sessionEmail = typeof req.user?.email === 'string' ? req.user.email.trim().toLowerCase() : null;
+  if (sessionEmail && req.user?.emailVerified === true) {
     // A signed-in reader may only act on their own address, whether or not
     // they also passed one in the body.
-    if (emailFromRequest && emailFromRequest.toLowerCase() !== sessionEmail.toLowerCase()) {
+    if (emailFromRequest && emailFromRequest.trim().toLowerCase() !== sessionEmail) {
       return denied;
     }
     const [row] = await db
       .select()
       .from(newsletterSubscriptions)
-      .where(eq(newsletterSubscriptions.email, sessionEmail))
+      .where(sql`lower(${newsletterSubscriptions.email}) = ${sessionEmail}`)
       .limit(1);
-    return row ? { ok: true, subscription: row } : denied;
+    if (row) return { ok: true, subscription: row };
+    return options?.allowMissingVerifiedOwner ? { ok: true, subscription: null } : denied;
   }
 
   return denied;
 }
 
-function verifyMailerLiteSignature(rawBody: Buffer, signatureHeader: string): boolean {
-  const secret = process.env.MAILERLITE_WEBHOOK_SECRET;
-  if (!secret) {
-    console.error('[MailerLite Webhook] CRITICAL: MAILERLITE_WEBHOOK_SECRET is not configured - rejecting webhook');
-    return false;
-  }
-  if (!signatureHeader) {
-    console.error('[MailerLite Webhook] Missing X-MailerLite-Signature header');
-    return false;
-  }
-
-  // Compute HMAC-SHA256 directly from the raw Buffer
-  const computedBuf = crypto
-    .createHmac('sha256', secret)
-    .update(rawBody)
-    .digest();
-
-  // Normalise the received signature to a Buffer, tolerating hex, "sha256=<hex>",
-  // and base64 encodings so provider format changes don't silently break delivery.
-  const rawHeader = signatureHeader.startsWith('sha256=')
-    ? signatureHeader.slice(7)
-    : signatureHeader;
-
-  let receivedBuf: Buffer;
-  // Hex strings for SHA-256 are always exactly 64 chars
-  if (/^[0-9a-fA-F]{64}$/.test(rawHeader)) {
-    receivedBuf = Buffer.from(rawHeader, 'hex');
-  } else {
-    // Assume base64 / base64url
-    receivedBuf = Buffer.from(rawHeader, 'base64');
-  }
-
-  if (computedBuf.length !== receivedBuf.length) {
-    console.error('[MailerLite Webhook] Signature length mismatch');
-    return false;
-  }
-
-  try {
-    return crypto.timingSafeEqual(computedBuf, receivedBuf);
-  } catch {
-    console.error('[MailerLite Webhook] Signature comparison failed');
-    return false;
-  }
+function setNoStore(res: Response): void {
+  res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('Pragma', 'no-cache');
 }
 
 // Rate limiter for newsletter trigger (max 2 per minute)
@@ -155,19 +129,32 @@ const newsletterTriggerLimiter = rateLimit({
   message: { success: false, message: 'تم تجاوز حد تشغيل النشرة. يرجى الانتظار دقيقة' },
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req: any) => req.headers['cf-connecting-ip'] as string || (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.ip || 'unknown',
-  validate: { xForwardedForHeader: false, ip: false, keyGeneratorIpFallback: false },
+  keyGenerator: cfKeyGenerator,
+  validate: cfValidate,
+});
+
+const newsletterSubscribeLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  message: { success: true, pendingConfirmation: true, message: 'إذا كان العنوان مؤهلًا، ستصلك رسالة لتأكيد الاشتراك.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: cfKeyGenerator,
+  validate: cfValidate,
+});
+
+const newsletterConfirmationLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  message: { success: false, message: 'محاولات تأكيد كثيرة، حاول لاحقًا.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: cfKeyGenerator,
+  validate: cfValidate,
 });
 
 // Subscription request schema
-const subscribeSchema = z.object({
-  email: z.string().email('البريد الإلكتروني غير صحيح'),
-  firstName: z.string().optional(),
-  lastName: z.string().optional(),
-  language: z.enum(['ar', 'en', 'ur']).default('ar'),
-  interests: z.array(z.string()).optional(),
-  source: z.string().optional(),
-});
+const subscribeSchema = newsletterSubscribeInputSchema;
 
 // Update subscription schema
 const updateSubscriptionSchema = z.object({
@@ -175,7 +162,7 @@ const updateSubscriptionSchema = z.object({
   lastName: z.string().optional(),
   language: z.enum(['ar', 'en', 'ur']).optional(),
   interests: z.array(z.string()).optional(),
-  frequency: z.enum(['daily', 'weekly', 'monthly']).optional(),
+  frequency: z.enum(['daily', 'weekly']).optional(),
 });
 
 export function registerSmartNewsletterRoutes(app: Express) {
@@ -187,137 +174,32 @@ export function registerSmartNewsletterRoutes(app: Express) {
    * POST /api/smart-newsletter/subscribe
    * Subscribe to smart newsletter with MailerLite sync
    */
-  app.post('/api/smart-newsletter/subscribe', async (req: any, res) => {
+  app.post('/api/smart-newsletter/subscribe', newsletterSubscribeLimiter, async (req: any, res) => {
+    setNoStore(res);
     try {
       const data = subscribeSchema.parse(req.body);
-      const userId = req.user?.id;
-
-      // Check if already subscribed locally
-      const [existing] = await db
-        .select()
-        .from(newsletterSubscriptions)
-        .where(eq(newsletterSubscriptions.email, data.email))
-        .limit(1);
-
-      let localSubscription;
-
-      if (existing) {
-        if (existing.status === 'active') {
-          return res.status(400).json({ 
-            success: false,
-            message: 'هذا البريد مشترك بالفعل في النشرة الذكية' 
-          });
-        }
-        // Reactivate subscription
-        [localSubscription] = await db
-          .update(newsletterSubscriptions)
-          .set({
-            status: 'active',
-            language: data.language,
-            userId: userId || existing.userId,
-            preferences: {
-              ...existing.preferences,
-              categories: data.interests,
-            },
-            unsubscribedAt: null,
-            unsubscribeReason: null,
-            updatedAt: new Date(),
-          })
-          .where(eq(newsletterSubscriptions.id, existing.id))
-          .returning();
-      } else {
-        // Create new local subscription
-        const ipAddress = req.headers['x-forwarded-for'] || req.connection?.remoteAddress;
-        const userAgent = req.headers['user-agent'];
-
-        [localSubscription] = await db
-          .insert(newsletterSubscriptions)
-          .values({
-            email: data.email,
-            status: 'active',
-            language: data.language,
-            userId: userId || null,
-            preferences: {
-              frequency: 'weekly',
-              categories: data.interests || [],
-            },
-            ipAddress: typeof ipAddress === 'string' ? ipAddress : ipAddress?.[0] || null,
-            userAgent: userAgent || null,
-            source: data.source || 'smart-newsletter',
-            verifiedAt: new Date(),
-          })
-          .returning();
-      }
-
-      // Determine persona based on interests if user is logged in
-      let persona: string | undefined;
-      if (userId) {
-        persona = await determineUserPersona(userId);
-      }
-
-      // Sync to MailerLite
-      let mailerliteResult = null;
-      if (isMailerLiteConfigured()) {
-        mailerliteResult = await subscribeToMailerLite({
-          email: data.email,
-          firstName: data.firstName,
-          lastName: data.lastName,
-          language: data.language,
-          interests: data.interests,
-          persona,
-          source: data.source || 'smart-newsletter',
-        });
-
-        if (!mailerliteResult.success) {
-          console.warn(`⚠️ MailerLite sync failed for ${data.email}:`, mailerliteResult.error);
-        }
-      }
-
-      // Resolve category names from IDs for welcome email
-      let interestNames: string[] = [];
-      if (data.interests && data.interests.length > 0) {
-        // Check if interests are UUIDs or names
-        const isUUID = (str: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
-        
-        if (isUUID(data.interests[0])) {
-          // Fetch all categories and filter by IDs
-          const allCategories = await db
-            .select({ id: categories.id, nameAr: categories.nameAr })
-            .from(categories);
-          
-          interestNames = data.interests
-            .map(id => allCategories.find(c => c.id === id)?.nameAr)
-            .filter((name): name is string => !!name);
-        } else {
-          // Already names, use as-is
-          interestNames = data.interests;
-        }
-      }
-
-      // Send welcome email to new subscriber
-      const welcomeResult = await sendNewsletterWelcomeEmail({
-        to: data.email,
-        firstName: data.firstName,
+      const ipAddress = req.headers['x-forwarded-for'] || req.connection?.remoteAddress;
+      await createPendingNewsletterSubscription({
+        email: data.email,
+        frequency: data.frequency,
+        source: data.source,
         language: data.language,
-        interests: interestNames.length > 0 ? interestNames : data.interests,
+        consent: data.consent,
+        interests: data.interests,
+        userId: req.user?.id || null,
+        ipAddress: typeof ipAddress === 'string' ? ipAddress : ipAddress?.[0] || null,
+        userAgent: req.headers['user-agent'] || null,
       });
-      
-      if (!welcomeResult.success) {
-        console.warn(`⚠️ Welcome email failed for ${data.email}:`, welcomeResult.error);
-      }
 
-      res.status(201).json({
+      // Keep this response uniform so the endpoint does not reveal subscriber
+      // existence, terminal suppression, or current provider state.
+      res.status(202).json({
         success: true,
-        message: 'تم الاشتراك بنجاح في النشرة الذكية! ستصلك أخبار مخصصة حسب اهتماماتك.',
-        subscription: {
-          id: localSubscription.id,
-          email: localSubscription.email,
-          language: localSubscription.language,
-        },
-        mailerliteSynced: mailerliteResult?.success || false,
+        pendingConfirmation: true,
+        message: 'إذا كان العنوان مؤهلًا، ستصلك رسالة لتأكيد الاشتراك.',
       });
     } catch (error: any) {
-      console.error('Error in smart newsletter subscribe:', error);
+      console.error('Error in smart newsletter subscribe');
       if (error instanceof z.ZodError) {
         return res.status(400).json({ 
           success: false,
@@ -339,17 +221,59 @@ export function registerSmartNewsletterRoutes(app: Express) {
   });
 
   /**
+   * POST /api/smart-newsletter/confirm
+   * Activate a pending subscription only after the emailed token is proven.
+   */
+  app.post('/api/smart-newsletter/confirm', newsletterConfirmationLimiter, async (req: any, res) => {
+    setNoStore(res);
+    try {
+      const token = z.string().regex(/^[a-f0-9]{64}$/i).parse(req.body?.token);
+      const result = await confirmNewsletterSubscription(token);
+      res.status(result.mailerlite?.success ? 200 : 202).json({
+        success: true,
+        confirmed: true,
+        mailerliteSynced: result.mailerlite?.success ?? false,
+      });
+    } catch (error: any) {
+      const code = error?.message;
+      if (code === 'NEWSLETTER_CONFIRMATION_EXPIRED') {
+        return res.status(410).json({ success: false, message: 'انتهت صلاحية رابط التأكيد.' });
+      }
+      if (code === 'NEWSLETTER_CONFIRMATION_SUPPRESSED' || code === 'NEWSLETTER_CONFIRMATION_PROVIDER_TERMINAL') {
+        return res.status(409).json({ success: false, message: 'تعذر تأكيد هذا الاشتراك.' });
+      }
+      if (code === 'NEWSLETTER_CONFIRMATION_INVALID' || error instanceof z.ZodError) {
+        return res.status(400).json({ success: false, message: 'رابط التأكيد غير صالح.' });
+      }
+      console.error('Error confirming newsletter subscription');
+      return res.status(500).json({ success: false, message: 'تعذر تأكيد الاشتراك.' });
+    }
+  });
+
+  app.post('/api/smart-newsletter/admin/retry-sync/:subscriptionId', isAuthenticated, requireRole('admin', 'super_admin'), async (req: any, res) => {
+    setNoStore(res);
+    try {
+      const result = await retryNewsletterMailerLiteSync(req.params.subscriptionId);
+      res.json({ success: Boolean(result?.success), mailerliteSynced: Boolean(result?.success) });
+    } catch {
+      console.error('Error retrying newsletter provider sync');
+      res.status(500).json({ success: false, message: 'تعذر إعادة مزامنة الاشتراك.' });
+    }
+  });
+
+  /**
    * GET /api/smart-newsletter/status/:email
    * Check subscription status
    */
   app.get('/api/smart-newsletter/status/:email', async (req: any, res) => {
+    setNoStore(res);
     try {
       const { email } = req.params;
 
       // This answered "is <email> subscribed?" for any address, which is a
       // subscriber-enumeration oracle over the whole reader base. Require the
       // same proof of ownership as unsubscribe/update.
-      const resolved = await resolveSubscriber(req, email);
+      const resolved = await resolveSubscriber(req, email, { allowMissingVerifiedOwner: true });
       if (!resolved.ok) {
         return res.status(resolved.httpStatus).json({
           success: false,
@@ -357,6 +281,19 @@ export function registerSmartNewsletterRoutes(app: Express) {
         });
       }
       const localSub = resolved.subscription;
+
+      // A verified account may not have a local newsletter row yet. This is a
+      // normal empty state for the preferences page, not an invalid link. The
+      // ownership proof above is still required, and no provider lookup is
+      // meaningful without a local subscription address.
+      if (!localSub) {
+        return res.json({
+          success: true,
+          subscribed: false,
+          local: null,
+          mailerlite: null,
+        });
+      }
 
       // Check MailerLite status — for the resolved subscription's own address.
       let mailerliteSub = null;
@@ -373,12 +310,13 @@ export function registerSmartNewsletterRoutes(app: Express) {
 
       res.json({
         success: true,
-        subscribed: localSub?.status === 'active' || mailerliteSub?.status === 'active',
+        subscribed: localSub?.status === 'active',
         local: localSub ? {
           status: localSub.status,
           language: localSub.language,
           preferences: localSub.preferences,
           subscribedAt: localSub.createdAt,
+          confirmed: Boolean(localSub.verifiedAt && hasConfirmedNewsletterMarker(localSub)),
         } : null,
         mailerlite: mailerliteSub,
       });
@@ -396,6 +334,7 @@ export function registerSmartNewsletterRoutes(app: Express) {
    * Update subscription preferences
    */
   app.put('/api/smart-newsletter/update', async (req: any, res) => {
+    setNoStore(res);
     try {
       const { email, token: _token, ...updates } = req.body;
 
@@ -408,6 +347,9 @@ export function registerSmartNewsletterRoutes(app: Express) {
         });
       }
       const existing = resolved.subscription;
+      if (existing.status !== 'active' || !existing.verifiedAt || !hasConfirmedNewsletterMarker(existing)) {
+        return res.status(403).json({ success: false, message: 'رابط غير صالح.' });
+      }
       const subscriberEmail = existing.email;
 
       const data = updateSubscriptionSchema.parse(updates);
@@ -427,22 +369,14 @@ export function registerSmartNewsletterRoutes(app: Express) {
         .where(eq(newsletterSubscriptions.id, existing.id))
         .returning();
 
-      // Sync updates to MailerLite
-      if (isMailerLiteConfigured()) {
-        const mlSub = await getMailerLiteSubscriber(subscriberEmail);
-        if (mlSub.success && mlSub.data) {
-          await updateMailerLiteSubscriber(mlSub.data.id, {
-            firstName: data.firstName,
-            lastName: data.lastName,
-            language: data.language,
-            interests: data.interests,
-          });
-        }
-      }
+      const mailerlite = await syncConfirmedSubscription(updated);
 
-      res.json({
+      res.status(mailerlite?.success ? 200 : 202).json({
         success: true,
-        message: 'تم تحديث تفضيلاتك بنجاح',
+        mailerliteSynced: Boolean(mailerlite?.success),
+        message: mailerlite?.success
+          ? 'تم تحديث تفضيلاتك بنجاح'
+          : 'حُفظ اختيارك، لكن تطبيقه على الرسائل لم يكتمل. أعد المحاولة لاحقًا.',
         subscription: {
           email: updated.email,
           language: updated.language,
@@ -463,6 +397,7 @@ export function registerSmartNewsletterRoutes(app: Express) {
    * Unsubscribe from newsletter
    */
   app.post('/api/smart-newsletter/unsubscribe', async (req: any, res) => {
+    setNoStore(res);
     try {
       const { email, reason } = req.body;
 
@@ -488,29 +423,42 @@ export function registerSmartNewsletterRoutes(app: Express) {
         })
         .where(eq(newsletterSubscriptions.id, existing.id));
 
-      // Unsubscribe from MailerLite
+      await addEmailSuppression(subscriberEmail, 'unsubscribe', 'newsletter_unsubscribe');
+
+      let mailerliteSynced = false;
+      let syncReason = 'MAILERLITE_NOT_CONFIGURED';
       if (isMailerLiteConfigured()) {
         const mlSub = await getMailerLiteSubscriber(subscriberEmail);
-        if (mlSub.success && mlSub.data) {
-          await unsubscribeFromMailerLite(mlSub.data.id);
-        }
+        const remoteResult = mlSub.success && mlSub.data
+          ? await unsubscribeFromMailerLite(mlSub.data.id)
+          : mlSub.notFound
+            ? { success: true, error: undefined }
+            : { success: false, error: 'MAILERLITE_UNSUBSCRIBE_SYNC_FAILED' };
+        mailerliteSynced = remoteResult.success;
+        syncReason = mailerliteSynced ? 'UNSUBSCRIBED' : 'UNSUBSCRIBE_SYNC_FAILED';
       }
+      await db
+        .update(newsletterSubscriptions)
+        .set({
+          metadata: {
+            ...(existing.metadata && typeof existing.metadata === 'object' ? existing.metadata : {}),
+            mailerliteSync: {
+              status: mailerliteSynced ? 'synced' : 'error',
+              reason: syncReason,
+              attemptedAt: new Date().toISOString(),
+            },
+          },
+          updatedAt: new Date(),
+        })
+        .where(eq(newsletterSubscriptions.id, existing.id));
 
-      // Send unsubscribe confirmation email
-      const unsubscribeResult = await sendNewsletterUnsubscribeEmail({
-        to: subscriberEmail,
-      });
-
-      if (!unsubscribeResult.success) {
-        console.warn(`⚠️ Unsubscribe email failed for ${subscriberEmail}:`, unsubscribeResult.error);
-      }
-
-      res.json({
+      res.status(mailerliteSynced ? 200 : 202).json({
         success: true,
-        message: 'تم إلغاء اشتراكك بنجاح. نأسف لرؤيتك تذهب!',
+        mailerliteSynced,
+        message: mailerliteSynced ? 'تم إلغاء اشتراكك.' : 'سُجل الإلغاء محليًا، لكن إيقاف الرسائل لدى مزود البريد لم يكتمل بعد.',
       });
     } catch (error) {
-      console.error('Error unsubscribing from newsletter:', error);
+      console.error('Error unsubscribing from newsletter');
       res.status(500).json({
         success: false,
         message: 'خطأ في إلغاء الاشتراك',
@@ -524,87 +472,7 @@ export function registerSmartNewsletterRoutes(app: Express) {
    * req.rawBody is populated by the verify callback on the global express.json()
    * middleware (server/index.ts), giving us the exact bytes MailerLite signed.
    */
-  app.post('/api/webhooks/mailerlite', async (req: any, res) => {
-    try {
-      // req.rawBody is a Buffer set by the express.json verify callback.
-      // Without it we cannot verify the signature — reject immediately.
-      if (!req.rawBody) {
-        console.error('[MailerLite Webhook] Raw body unavailable — cannot verify signature');
-        return res.status(400).json({ error: 'Unable to verify request signature' });
-      }
-      const rawBodyBuf: Buffer = req.rawBody;
-      const signatureHeader = (req.headers['x-mailerlite-signature'] as string) || '';
-
-      if (!verifyMailerLiteSignature(rawBodyBuf, signatureHeader)) {
-        console.error('[MailerLite Webhook] Rejected request with invalid or missing signature');
-        return res.status(401).json({ error: 'Unauthorized: invalid webhook signature' });
-      }
-
-      // req.body is already parsed by express.json(); use it directly.
-      console.log('Received MailerLite webhook:', JSON.stringify(req.body));
-
-      const event = parseMailerLiteWebhook(req.body);
-      if (!event) {
-        return res.status(400).json({ error: 'Invalid webhook payload' });
-      }
-
-      const { type, data } = event;
-
-      switch (type) {
-        case 'subscriber.created':
-          if (data.subscriber) {
-            console.log(`✅ MailerLite: New subscriber ${data.subscriber.email}`);
-            // Could sync back to local DB if needed
-          }
-          break;
-
-        case 'subscriber.unsubscribed':
-          if (data.subscriber) {
-            console.log(`🚫 MailerLite: Unsubscribed ${data.subscriber.email}`);
-            // Update local subscription status
-            await db
-              .update(newsletterSubscriptions)
-              .set({
-                status: 'unsubscribed',
-                unsubscribedAt: new Date(),
-                updatedAt: new Date(),
-              })
-              .where(eq(newsletterSubscriptions.email, data.subscriber.email));
-          }
-          break;
-
-        case 'subscriber.bounced':
-          if (data.subscriber) {
-            console.log(`⚠️ MailerLite: Bounced ${data.subscriber.email}`);
-            // Mark as bounced
-            await db
-              .update(newsletterSubscriptions)
-              .set({
-                status: 'bounced',
-                updatedAt: new Date(),
-              })
-              .where(eq(newsletterSubscriptions.email, data.subscriber.email));
-          }
-          break;
-
-        case 'subscriber.updated':
-          console.log(`📝 MailerLite: Subscriber updated`);
-          break;
-
-        case 'campaign.sent':
-          console.log(`📧 MailerLite: Campaign sent - ${data.campaign?.name}`);
-          break;
-
-        default:
-          console.log(`ℹ️ MailerLite: Unhandled event type ${type}`);
-      }
-
-      res.json({ success: true, received: type });
-    } catch (error) {
-      console.error('Error processing MailerLite webhook:', error);
-      res.status(500).json({ error: 'Webhook processing failed' });
-    }
-  });
+  app.post('/api/webhooks/mailerlite', createMailerLiteWebhookHandler({ db, withStatementTimeout }));
 
   /**
    * POST /api/smart-newsletter/sync-interests
@@ -751,7 +619,7 @@ export function registerSmartNewsletterRoutes(app: Express) {
   app.post('/api/smart-newsletter/trigger-real', isAuthenticated, requireRole('admin', 'super_admin'), newsletterTriggerLimiter, async (req: any, res) => {
     try {
       const { type } = req.body;
-      const newsletterType = type || 'evening_digest';
+      const newsletterType = type || 'morning_brief';
       
       const { newsletterScheduler } = await import('../services/newsletterScheduler');
       
@@ -762,7 +630,7 @@ export function registerSmartNewsletterRoutes(app: Express) {
       
       res.json({
         success: true,
-        message: `تم تشغيل النشرة ${newsletterType} بنجاح - سيتم إرسالها للمشتركين`,
+        message: `تم تشغيل إعداد مسودة النشرة ${newsletterType} للمراجعة؛ لم يُرسل بريد للمشتركين`,
       });
     } catch (error) {
       console.error('Error triggering newsletter:', error);

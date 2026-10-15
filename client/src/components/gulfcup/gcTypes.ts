@@ -273,7 +273,7 @@ export interface GcScorer {
 }
 
 export interface GcScorersBoard {
-  /** الموسم الذي جاءت منه البيانات (2026 = النسخة الحالية، 2024 = خليجي 26). */
+  /** موسم البيانات لدى المزوّد — دائمًا النسخة الحالية (2026 = خليجي 27). */
   season: number;
   isCurrent: boolean;
   scorers: GcScorer[];
@@ -305,6 +305,71 @@ export interface GcHistory {
   titles: GcTitleRow[];
 }
 
+export interface GcTeamStats {
+  groupName: string | null;
+  rank: number | null;
+  played: number;
+  win: number;
+  draw: number;
+  lose: number;
+  goalsFor: number;
+  goalsAgainst: number;
+  goalsDiff: number;
+  points: number;
+  form: ("W" | "D" | "L")[];
+}
+
+export interface GcSquadPlayer {
+  id: number;
+  name: string;
+  number: number | null;
+  position: string;
+  positionEn: string | null;
+  age: number | null;
+  photo: string | null;
+}
+
+export interface GcTeamLegacy {
+  titles: number;
+  runnerUps: number;
+  hosted: number;
+  titleYears: string[];
+  lastTitleYear: string | null;
+}
+
+export interface GcTeamProfile {
+  team: GcTeam;
+  isSaudi: boolean;
+  coach: string | null;
+  group: GcGroup | null;
+  stats: GcTeamStats;
+  nextMatch: GcFixture | null;
+  fixtures: GcFixture[];
+  squad: GcSquadPlayer[];
+  legacy: GcTeamLegacy | null;
+  fifaRank?: GcFifaRank | null;
+  injuries?: GcInjury[];
+}
+
+export interface GcFantasyPoolPlayer {
+  id: string;
+  name: string;
+  team: GcTeam | null;
+  position: string | null;
+  price: number;
+}
+
+export interface GcFantasySquadView {
+  players: (GcFantasyPoolPlayer & { isCaptain: boolean; points: number })[];
+  captainId: string;
+  spent: number;
+  budget: number;
+  totalPoints: number;
+}
+
+/** هامش التمرير حتى لا تُخفى العناوين خلف هيدر سبق + شريط الأقسام. */
+export const GC_SECTION_SCROLL_MT = "scroll-mt-[calc(var(--public-header-height,4rem)+3.75rem)] md:scroll-mt-[calc(var(--public-header-height,4rem)+6.5rem)]";
+
 /** عدّ تنازلي من سلسلة ISO (تصل بإزاحة +03:00 فالتحويل مباشر). */
 export function countdownFromIso(iso: string | null): {
   days: number;
@@ -330,7 +395,24 @@ export interface GcDayGroup {
   items: GcFixture[];
 }
 
-/** تجميع المباريات حسب اليوم (بتوقيت الرياض)، مع تصدّر مباراة المضيف يومها. */
+/** موعد المباراة غير محدد بعد (API-Football يعيد TBD أو طابعًا زمنيًا فارغًا). */
+function isKickoffTimeTbd(f: GcFixture): boolean {
+  return f.status.code === "TBD" || !(f.timestamp > 0);
+}
+
+/**
+ * ترتيب زمني تصاعدي حسب موعد الانطلاق الفعلي، ثم رقم المباراة عند التساوي؛
+ * المباريات غير محددة الوقت في نهاية يومها. لا أولوية لمباراة المضيف هنا —
+ * تمييزها بصري فقط في البطاقة.
+ */
+export function compareFixturesByKickoff(a: GcFixture, b: GcFixture): number {
+  const aTbd = isKickoffTimeTbd(a);
+  const bTbd = isKickoffTimeTbd(b);
+  if (aTbd !== bTbd) return aTbd ? 1 : -1;
+  return (aTbd ? 0 : a.timestamp - b.timestamp) || a.matchNo - b.matchNo;
+}
+
+/** تجميع المباريات حسب اليوم (بتوقيت الرياض)، الأيام والمباريات داخلها تصاعديًا. */
 export function groupFixturesByDay(fixtures: GcFixture[]): GcDayGroup[] {
   const map = new Map<string, GcFixture[]>();
   for (const f of fixtures) {
@@ -338,24 +420,19 @@ export function groupFixturesByDay(fixtures: GcFixture[]): GcDayGroup[] {
     if (!map.has(key)) map.set(key, []);
     map.get(key)!.push(f);
   }
-  const involvesSaudi = (f: GcFixture) =>
-    f.home.id === SAUDI_TEAM_ID || f.away.id === SAUDI_TEAM_ID;
   return Array.from(map.entries())
     .sort((a, b) => a[0].localeCompare(b[0]))
     .map(([key, items]) => ({
       key,
       label: formatKickoffDay(items[0].date),
-      items: [...items].sort(
-        (a, b) =>
-          (involvesSaudi(a) ? 0 : 1) - (involvesSaudi(b) ? 0 : 1) || a.timestamp - b.timestamp,
-      ),
+      items: [...items].sort(compareFixturesByKickoff),
     }));
 }
 
-/** نطاق تواريخ البطولة بصيغة عربية مختصرة (يوم البداية – يوم النهاية). */
+/** نطاق تواريخ البطولة بصيغة عربية مختصرة (يوم البداية – يوم النهاية) بأرقام لاتينية. */
 export function formatDateRange(startIso: string | null, endIso: string | null): string {
   if (!startIso) return "";
-  const fmt = new Intl.DateTimeFormat("ar-SA", {
+  const fmt = new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-latn", {
     timeZone: "Asia/Riyadh",
     day: "numeric",
     month: "long",

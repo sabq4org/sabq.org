@@ -20,7 +20,7 @@ import {
   localizeRound,
   localizeTeamName,
 } from "./worldCupNames";
-import { localizeGcTeam, localizeGcVenue } from "./gulfCupNames";
+import { dedupeGcVenues, localizeGcTeam, localizeGcVenue } from "./gulfCupNames";
 import {
   GC_FIXTURES,
   GC_GROUPS,
@@ -33,9 +33,17 @@ import {
   resolveGcFixtureIdentities,
   type GcProviderFixtureIdentity,
 } from "./gulfCupFixtureIdentity";
+import { applyGcKnockoutTeams } from "./gulfCupKnockout";
+import { localizeGcPlayerName } from "./gulfCupPlayerNames";
 import { GC_EDITIONS, getGcTeamLegacy, type GcTeamLegacy } from "./gulfCupHistory";
 import { resolveNames } from "./worldCupNameTranslator";
+import { tallyGcScorersFromFixtures } from "./gulfCupScorerTally";
 import { apiFootballGet } from "./apiFootballClient";
+import {
+  isWithinLiveOverlayWindow,
+  latestPositiveEventMinute,
+  mergeLiveMatchProgress,
+} from "./sportsMatchStatus";
 import {
   getCommentary,
   getExpectedLineups,
@@ -320,6 +328,10 @@ export async function getGcTeams(): Promise<GcTeam[]> {
   });
 }
 
+const GC_KNOCKOUT_SLOTS = new Map(
+  GC_FIXTURES.map((seed) => [seed.matchNo, { homeSlot: seed.homeSlot, awaySlot: seed.awaySlot }]),
+);
+
 /**
  * جدول المباريات كاملًا مع دمج بيانات المزوّد. `forceFresh` مخصص لحدود كتابة
  * حساسة مثل قبول رهان؛ القراءات العادية تبقى على SWR لتفادي ضغط المزوّد.
@@ -333,7 +345,10 @@ export async function getGcFixtures(forceFresh = false): Promise<GcFixture[]> {
   }, forceFresh);
   // فوق الكاش: نتيجة TheSports اللحظية (MQTT/بولينغ 2ث) للمباريات الجارية فقط —
   // تصل الأهداف بثوانٍ بدل انتظار دورة كاش المزوّد الأساسي.
-  return overlayGcLiveScores(base);
+  const live = await overlayGcLiveScores(base);
+  // فتحات نصف النهائي/النهائي: منتخب المزوّد إن وُجد، وإلا مركز المجموعة
+  // المحسوم من النتائج المنتهية. placeholder يبقى إن لم يُحسم المركز.
+  return applyGcKnockoutTeams(live, GC_KNOCKOUT_SLOTS, GC_GROUPS, seedTeam);
 }
 
 /** يبني ترتيب المجموعات من النتائج المنتهية ثم يطبّق المباريات الجارية مبدئيًّا. */
@@ -473,14 +488,7 @@ export async function getGcOverview(): Promise<GcOverview> {
     const now = Date.now();
     const started = sorted.some((f) => f.status.live || f.status.finished);
 
-    const venueSeen = new Set<string>();
-    const venues: { name: string; city: string }[] = [];
-    for (const f of sorted) {
-      const key = `${f.venue.name}|${f.venue.city}`;
-      if (!f.venue.name || venueSeen.has(key)) continue;
-      venueSeen.add(key);
-      venues.push(f.venue);
-    }
+    const venues = dedupeGcVenues(sorted.map((f) => f.venue));
 
     const saudiTeam = teams.find((t) => t.id === SAUDI_TEAM_ID) ?? null;
     const saudiGroup =
@@ -783,16 +791,17 @@ export interface GcScorer {
 }
 
 export interface GcScorersBoard {
-  /** الموسم الذي جاءت منه البيانات (2026 = النسخة الحالية، 2024 = خليجي 26). */
+  /** موسم البيانات لدى المزوّد — دائمًا النسخة الحالية (خليجي 27 = 2026). */
   season: number;
-  /** هل هذه أرقام النسخة الحالية أم آخر نسخة منتهية؟ */
+  /** يبقى true دائمًا: لا تُعرض أرقام نسخة سابقة (يُبقى الحقل لتوافق تطبيق iOS). */
   isCurrent: boolean;
   scorers: GcScorer[];
   assists: GcScorer[];
 }
 
-const SCORERS_TTL = 10 * 60 * 1000;
-const SCORERS_FALLBACK_SEASON = 2024; // خليجي 26 (الكويت 2024–25)
+const SCORERS_TTL = 5 * 60 * 1000;
+/** حدّ API-Football لعدد المعرّفات في طلب `fixtures?ids=` الواحد. */
+const FIXTURE_IDS_PER_REQUEST = 20;
 
 function mapScorerRows(rows: any[], tr: (n: string | null | undefined) => string): GcScorer[] {
   return rows.map((row: any, index: number): GcScorer => {
@@ -801,7 +810,7 @@ function mapScorerRows(rows: any[], tr: (n: string | null | undefined) => string
     return {
       rank: index + 1,
       id: row.player?.id ?? 0,
-      name: tr(row.player?.name),
+      name: localizeGcPlayerName(row.player?.id ?? 0, tr(row.player?.name)),
       photo: row.player?.photo ?? "",
       team: {
         id: teamId,
@@ -818,29 +827,68 @@ function mapScorerRows(rows: any[], tr: (n: string | null | undefined) => string
 }
 
 /**
- * لوحتا الهدّافين وصنّاع الأهداف — موسم 2026 أولًا، وإن لم يتوفّر لدى المزوّد بعد
- * تُعرض أرقام خليجي 26 (موسم 2024) بوسمها صراحةً `isCurrent=false`.
+ * يبني اللوحتين من أحداث أهداف مباريات النسخة الحالية التي بدأت (منتهية أو جارية)
+ * حين تتأخر قائمة `players/topscorers` لدى المزوّد عن النتائج.
+ */
+async function tallyGcScorersFromEvents(): Promise<Pick<GcScorersBoard, "scorers" | "assists">> {
+  const fixtures = await getGcFixtures().catch(() => [] as GcFixture[]);
+  const providerIds = fixtures
+    .filter((f) => (f.status.finished || f.status.live) && f.providerId)
+    .map((f) => f.providerId as number);
+  if (providerIds.length === 0) return { scorers: [], assists: [] };
+
+  const batches: number[][] = [];
+  for (let i = 0; i < providerIds.length; i += FIXTURE_IDS_PER_REQUEST) {
+    batches.push(providerIds.slice(i, i + FIXTURE_IDS_PER_REQUEST));
+  }
+  const rawFixtures = (
+    await Promise.all(
+      batches.map((ids) =>
+        apiGet("fixtures", { ids: ids.join("-"), timezone: TIMEZONE }).catch(() => [] as any[]),
+      ),
+    )
+  ).flat();
+
+  const names = rawFixtures.flatMap((raw: any) =>
+    (raw?.events ?? [])
+      .filter((ev: any) => ev?.type === "Goal")
+      .flatMap((ev: any) => [ev?.player?.name, ev?.assist?.name]),
+  );
+  const tr = await resolveNames(names).catch(() => (n: string | null | undefined) => n ?? "");
+  const tally = tallyGcScorersFromFixtures(rawFixtures, (n) => tr(n), seedTeam);
+  const nameById = <T extends { id: number; name: string }>(row: T): T => ({
+    ...row,
+    name: localizeGcPlayerName(row.id, row.name),
+  });
+  return {
+    scorers: tally.scorers.slice(0, 15).map(nameById),
+    assists: tally.assists.slice(0, 10).map(nameById),
+  };
+}
+
+/**
+ * لوحتا الهدّافين وصنّاع الأهداف لخليجي 27 فقط: قائمة المزوّد متى توفّرت، وإلا
+ * تجميع من أحداث المباريات. لا رجوع لأرقام نسخة سابقة إطلاقًا — عند غياب أي
+ * أهداف تعود اللوحتان فارغتين فيختفي القسم في الواجهة.
  */
 export async function getGcScorers(): Promise<GcScorersBoard> {
   const empty: GcScorersBoard = { season: SEASON, isCurrent: true, scorers: [], assists: [] };
   if (!apiFootballEnabled()) return empty;
-  return withSWR("gc:scorers", SCORERS_TTL, SCORERS_TTL * 3, async () => {
-    for (const season of [SEASON, SCORERS_FALLBACK_SEASON]) {
-      const [goalRows, assistRows] = await Promise.all([
-        apiGet("players/topscorers", { league: LEAGUE_ID, season }).catch(() => [] as any[]),
-        apiGet("players/topassists", { league: LEAGUE_ID, season }).catch(() => [] as any[]),
-      ]);
-      if (goalRows.length === 0 && assistRows.length === 0) continue;
+  return withSWR("gc:scorers:current", SCORERS_TTL, SCORERS_TTL * 3, async () => {
+    const [goalRows, assistRows] = await Promise.all([
+      apiGet("players/topscorers", { league: LEAGUE_ID, season: SEASON }).catch(() => [] as any[]),
+      apiGet("players/topassists", { league: LEAGUE_ID, season: SEASON }).catch(() => [] as any[]),
+    ]);
+    if (goalRows.length > 0 || assistRows.length > 0) {
       const names = [...goalRows, ...assistRows].map((r: any) => r.player?.name);
       const tr = await resolveNames(names).catch(() => (n: string | null | undefined) => n ?? "");
       return {
-        season,
-        isCurrent: season === SEASON,
+        ...empty,
         scorers: mapScorerRows(goalRows.slice(0, 15), tr),
         assists: mapScorerRows(assistRows.slice(0, 10), tr),
       };
     }
-    return empty;
+    return { ...empty, ...(await tallyGcScorersFromEvents()) };
   }).catch(() => empty);
 }
 
@@ -1095,9 +1143,21 @@ export async function getGcMatchDetail(fixtureId: number): Promise<GcMatchDetail
           goals: { home: liveTs.home, away: liveTs.away },
           status: {
             ...fixture.status,
-            elapsed: liveTs.elapsed ?? fixture.status.elapsed,
-            live: liveTs.live,
-            finished: liveTs.finished || fixture.status.finished,
+            ...mergeLiveMatchProgress(
+              {
+                ...fixture.status,
+                extra: null,
+              },
+              {
+                live: liveTs.live,
+                finished: liveTs.finished,
+                elapsed: liveTs.elapsed,
+                extra: liveTs.extra,
+                statusId: liveTs.statusId,
+                latestEventMinute: latestPositiveEventMinute(liveTs.events),
+                kickoffTs: fixture.timestamp,
+              },
+            ),
           },
         };
       }
@@ -1354,10 +1414,10 @@ async function getGcMatchTsId(fx: GcFixture): Promise<string | null> {
 /** نتيجة TheSports اللحظية فوق المباريات الجارية فقط (الجسر الزمني ±دقيقتين). */
 async function overlayGcLiveScores(fixtures: GcFixture[]): Promise<GcFixture[]> {
   if (!GC_TS_COMPETITION_ID) return fixtures;
-  if (!fixtures.some((f) => f.status.live && !f.status.finished)) return fixtures;
+  if (!fixtures.some((f) => f.status.live || isWithinLiveOverlayWindow(f.timestamp))) return fixtures;
   return Promise.all(
     fixtures.map(async (f) => {
-      if (!f.status.live || f.status.finished) return f;
+      if (!f.status.live && !isWithinLiveOverlayWindow(f.timestamp)) return f;
       const ts = await getTheSportsFastScore(f.id, f.timestamp, GC_TS_COMPETITION_ID).catch(
         () => null,
       );
@@ -1367,9 +1427,20 @@ async function overlayGcLiveScores(fixtures: GcFixture[]): Promise<GcFixture[]> 
         goals: { home: ts.home, away: ts.away },
         status: {
           ...f.status,
-          elapsed: ts.elapsed ?? f.status.elapsed,
-          live: ts.live,
-          finished: ts.finished || f.status.finished,
+          ...mergeLiveMatchProgress(
+            {
+              ...f.status,
+              extra: null,
+            },
+            {
+              live: ts.live,
+              finished: ts.finished,
+              elapsed: ts.elapsed,
+              extra: ts.extra,
+              statusId: ts.statusId,
+              kickoffTs: f.timestamp,
+            },
+          ),
         },
       };
     }),

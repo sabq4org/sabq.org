@@ -34,6 +34,9 @@ export function NavigationBar() {
 
   const coreCategories = useMemo(() => filterAICategories(allCoreCategories), [allCoreCategories]);
 
+  // لا نحجز شريطاً فارغاً أسفل الهيدر عندما لا يعيد المصدر تصنيفات.
+  if (coreCategories.length === 0) return null;
+
   return (
     <div className="w-full border-b bg-background hidden md:block">
       <div className="sticky top-16 z-40 bg-background/95 backdrop-blur-sm border-b border-border/30">

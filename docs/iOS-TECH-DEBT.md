@@ -29,20 +29,6 @@ When you fix something, **delete the entry** (don't just check it off) — git h
 - **Fix**: In `loadExtras()`, immediately `audioPlayer = nil` if `audioSummary == nil` after the fetch resolves.
 - **Effort**: 15 min.
 
-### sec-1: Deep-link parser has no origin validation
-
-- **Where**: [sabq app ios/sabq/Services/PushNotifications.swift:122](../sabq%20app%20ios/sabq/Services/PushNotifications.swift#L122) (`parseSabqDeepLink`)
-- **Problem**: Validates scheme = `sabq` but trusts any path/id/slug. A locally-crafted `sabq://draft/<attacker-id>` link (from another app, Mail, etc.) is accepted as if it came from APNs.
-- **Fix**: Two layers — (a) restrict accepted paths to a hardcoded whitelist (`article/`, `opinion/`, `omq/`, etc.); (b) sanitize slug values against `^[a-z0-9-]{1,200}$` regex; (c) for editorial-notification deep-links, require an `apns_signed` field in userInfo proving the payload was server-generated.
-- **Effort**: 1 hour (whitelist + regex). APNs signing is a separate larger task.
-
-### err-1: NewsService swallows errors → blank UI
-
-- **Where**: [sabq app ios/sabq/Services/NewsService.swift:68-78, 82-90](../sabq%20app%20ios/sabq/Services/NewsService.swift#L68)
-- **Problem**: `fetchHomepage()` and `fetchArticles()` return `([], false)` on any failure. User sees an empty feed with no explanation — can't tell if it's network, server downtime, or genuinely no content.
-- **Fix**: Define a `Result<HomepageBundle, FeedError>` return type with cases for `.network`, `.server(Int)`, `.empty`. Surface to view layer; render `ErrorStateView` with a retry button when not `.empty`.
-- **Effort**: 3-4 hours (touches NewsService + ArticlesStore + 3 screen views + needs ErrorStateView component).
-
 ---
 
 ## 🟡 WARNING — fix this sprint
@@ -56,6 +42,7 @@ When you fix something, **delete the entry** (don't just check it off) — git h
 - ArticleHtmlParser regex unbounded — [Services/ArticleHtmlParser.swift](../sabq%20app%20ios/sabq/Services/ArticleHtmlParser.swift). Add max HTML size guard (5MB).
 
 ### sec
+- APNs deep-link payloads aren't cryptographically signed — `parseSabqDeepLink` (fixed 2026-09-23 to whitelist hosts/paths and regex-validate slug/id/token values, widened same day after a production sitemap audit — see below) still trusts any well-formed `sabq://` or push `deeplink` field as if server-issued. A locally-crafted `sabq://draft/<valid-looking-id>` from another app or Mail still resolves to a real navigation target — it just can't smuggle malformed input anymore. Requires an `apns_signed` field in userInfo proving server origin. Separate larger task (backend signing + iOS verification).
 - BookmarksStore swallows API errors — [BookmarksStore.swift:39](../sabq%20app%20ios/sabq/Stores/BookmarksStore.swift#L39). Local state desyncs from server on 401/500. Revert toggle or queue retry.
 - CommentsStore refresh has empty `catch { }` — [CommentsStore.swift:72](../sabq%20app%20ios/sabq/Stores/CommentsStore.swift#L72). Set `loadState` to `.failed`.
 - `last_auth_date` in UserDefaults — [AuthStore.swift:28](../sabq%20app%20ios/sabq/Stores/AuthStore.swift#L28). Clock-tampering bypasses 30-day timeout. Move to Keychain.
@@ -109,3 +96,7 @@ When you fix something, **delete the entry** (don't just check it off) — git h
 Track recently-shipped items here for ~1 sprint, then remove. Helps future-you not re-flag something that was just fixed.
 
 - **2026-05-17 build 2026051709**: LazyVStack in HomeFeedView; HTML parse cache; URLCache 30/100→10/50 MB; URLConstants enum; removed `sabq_is_authenticated` UserDefaults flag (Keychain-only); profile fetch resilient to transient errors; `ensureSuccess()` helper replacing 5 duplicated status checks (now surfaces 401/403/404/429 as typed APIErrors).
+- **2026-09-23**: sec-1 (deep-link parser had no origin validation) — `parseSabqDeepLink`/`extractDeepLink` in `PushNotifications.swift` now whitelist scheme+host explicitly (already did) and additionally regex-validate every slug/id/token, rejecting path-traversal/script-injection/empty values before they reach navigation. Added `DeepLinkValidationTests.swift`. APNs payload signing (item c in the old fix plan) remains open — see 🟡 sec list above.
+  - First pass used `^[\p{Arabic}a-z0-9-]{1,200}$` for slugs (matching the server's `generateSlug`). A same-day audit of the *entire* production sitemap (568,558 `<loc>` entries → 567,788 unique `/article/<slug>` values, crawled via `robots.txt` → `sitemap.xml`/`sitemap-news.xml` → all 524 sub-sitemaps) found that pattern rejected **96.3%** of real slugs: the archive overwhelmingly uses nanoid-style ids (uppercase `A-Z` + underscore `_`, e.g. `--0_fRl`, `a_ov112`), and a handful of recent Arabic titles carry actual tashkeel (e.g. fatḥatan/kasra, U+064B–U+065F and U+0670), which Unicode classifies `Script=Inherited` rather than `Arabic` so `\p{Arabic}` alone missed it.
+  - Widened to `^[\p{Arabic}A-Za-z0-9_\u064B-\u065F\u0670-]{1,200}$`. Re-crawling the full sitemap against this pattern: **100.0% acceptance (567,788 / 567,788)**, while still rejecting `..`, `/`, `<`, `>`, `(`, `)`, spaces, and empty values. Added `acceptsNanoidStyleArchiveSlugs` / `acceptsRealArchiveSlugsWithArabicDiacritics` to `DeepLinkValidationTests.swift` with the real rejected-then-fixed examples.
+- **2026-09-23**: err-1 (NewsService swallows errors → blank UI) — the `fetchHomepage()` half was already fixed (returns `nil` on total failure, surfaced via `ArticlesStore.errorMessage` + retry in `HomeFeedView`). This pass fixes the remaining `fetchArticles()` pagination path: it now returns `nil` (not `([], false)`) on network/server failure; `ArticlesStore.loadMore()` sets a new `loadMoreFailed` flag instead of silently treating the failure as "end of list"; `HomeFeedView`'s "تحميل المزيد" button shows an error line + relabels itself "إعادة المحاولة" instead of just vanishing.

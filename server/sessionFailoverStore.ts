@@ -1,5 +1,7 @@
 import session from "express-session";
 import { getRedisSessionAdapter } from "./redis";
+import type { SessionRevocations } from "./sessionRevocations";
+import { stagingSessionCookieName } from "./utils/stagingRuntime";
 
 /**
  * عمر مفتاح الفهرس العكسي. يُجدَّد مع كل كتابة جلسة، فيبقى حيًّا ما دام
@@ -61,7 +63,8 @@ export const SESSION_DEGRADED_HEADER = "X-Session-Degraded";
  */
 export function sessionIdFromCookieHeader(cookieHeader: unknown): string | null {
   if (typeof cookieHeader !== "string") return null;
-  const match = /(?:^|;\s*)connect\.sid=([^;]+)/.exec(cookieHeader);
+  const cookieName = stagingSessionCookieName().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = new RegExp(`(?:^|;\\s*)${cookieName}=([^;]+)`).exec(cookieHeader);
   if (!match) return null;
   let raw: string;
   try {
@@ -132,8 +135,9 @@ export class SessionFailoverStore extends session.Store {
   private degradedSids = new Map<string, number>();
 
   constructor(
-    private readonly primary: session.Store,
+    private readonly primary: session.Store | null,
     private readonly fallback: session.Store,
+    private readonly revocations: SessionRevocations,
     private readonly cooldownMs = 30_000,
     /** عدد إخفاقات Redis داخل failureWindowMs قبل التحويل الكامل. */
     private readonly failureThreshold = 3,
@@ -214,7 +218,7 @@ export class SessionFailoverStore extends session.Store {
       this.loggedDegradedRead = now;
       const reason = (err as StoreErrorShape)?.message ?? err;
       console.warn(
-        `[Session] كلا المخزنين فشل على قراءة الجلسة (${String(reason)}) — يُعامل الطلب كزائر بلا جلسة`,
+        `[Session] تعذّرت قراءة الجلسة أو التحقق من إبطالها (${String(reason)}) — يُعامل الطلب كزائر بلا جلسة`,
       );
     }
     callback(null, null);
@@ -229,18 +233,25 @@ export class SessionFailoverStore extends session.Store {
   }
 
   get(sid: string, callback: StoreCallback): void {
-    const fromFallback: StoreCallback = (err, sess) => {
+    const accept: StoreCallback = (err, sess) => {
       if (err && this.degradeRead(sid, err, callback)) return;
-      callback(err, sess);
+      if (err || !sess) return callback(err, sess);
+      void this.revocations.isRevoked(sid, sess, { allowCached: true }).then(
+        revoked => callback(null, revoked ? null : sess),
+        error => { if (!this.degradeRead(sid, error, callback)) callback(error); },
+      );
     };
-    if (this.useFallbackOnly()) {
+    const fromFallback: StoreCallback = (err, sess) => {
+      accept(err, sess);
+    };
+    if (!this.primary || this.useFallbackOnly()) {
       this.fallback.get(sid, fromFallback);
       return;
     }
     this.primary.get(sid, (err, sess) => {
       if (!err) {
         this.clearFailoverFlag();
-        callback(null, sess);
+        accept(null, sess);
         return;
       }
       this.recordRedisFailure(err?.message || "get failed");
@@ -249,7 +260,14 @@ export class SessionFailoverStore extends session.Store {
   }
 
   set(sid: string, sess: session.SessionData, callback?: SimpleCallback): void {
-    if (this.useFallbackOnly()) {
+    void this.revocations.isRevoked(sid, sess).then(revoked => {
+      if (revoked) return callback?.(new Error("Session has been revoked"));
+      this.setActiveSession(sid, sess, callback);
+    }, error => callback?.(error));
+  }
+
+  private setActiveSession(sid: string, sess: session.SessionData, callback?: SimpleCallback): void {
+    if (!this.primary || this.useFallbackOnly()) {
       this.fallback.set(sid, sess, callback);
       return;
     }
@@ -271,8 +289,15 @@ export class SessionFailoverStore extends session.Store {
    * رغم أن المصادقة نجحت (LocalStrategy Success).
    */
   destroy(sid: string, callback?: SimpleCallback): void {
-    if (this.useFallbackOnly()) {
-      this.fallback.destroy(sid, callback);
+    // Persist first: success means the SID stays rejected after Redis recovery/restart.
+    void this.revocations.revokeSid(sid).then(() => {
+      this.destroyRevokedSession(sid, callback);
+    }, error => callback?.(error));
+  }
+
+  private destroyRevokedSession(sid: string, callback?: SimpleCallback): void {
+    if (!this.primary || this.useFallbackOnly()) {
+      this.fallback.destroy(sid, () => callback?.());
       return;
     }
     this.primary.destroy(sid, (err) => {
@@ -283,7 +308,7 @@ export class SessionFailoverStore extends session.Store {
         return;
       }
       this.recordRedisFailure(err?.message || "destroy failed");
-      this.fallback.destroy(sid, callback);
+      this.fallback.destroy(sid, () => callback?.());
     });
   }
 
@@ -294,6 +319,13 @@ export class SessionFailoverStore extends session.Store {
    * قنوات تحول نفاد مسبح PG إلى صفحات 500 أثناء نوبة 2026-07-25.
    */
   touch(sid: string, sess: session.SessionData, callback?: SimpleCallback): void {
+    void this.revocations.isRevoked(sid, sess, { allowCached: true }).then(revoked => {
+      if (revoked) return callback?.();
+      this.touchActiveSession(sid, sess, callback);
+    }, () => callback?.()); // Failed revocation read must never renew the session.
+  }
+
+  private touchActiveSession(sid: string, sess: session.SessionData, callback?: SimpleCallback): void {
     const fallbackTouch = (this.fallback as any).touch;
     const touchFallback = () => {
       if (typeof fallbackTouch !== "function") {
@@ -303,7 +335,7 @@ export class SessionFailoverStore extends session.Store {
       fallbackTouch.call(this.fallback, sid, sess, () => callback?.());
     };
 
-    if (this.useFallbackOnly()) {
+    if (!this.primary || this.useFallbackOnly()) {
       touchFallback();
       return;
     }

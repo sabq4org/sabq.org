@@ -22,13 +22,46 @@ export const GC_CITY_AR: Record<string, string> = {
   Jiddah: "جدة",
 };
 
+const KASC = { name: "مدينة الملك عبدالله الرياضية", city: "جدة" } as const;
+const FAISAL = { name: "ملعب الأمير عبدالله الفيصل", city: "جدة" } as const;
+
 /** الملاعب (اسم API-Football الإنجليزي → اسم ومدينة بالعربية). */
 export const GC_VENUE_AR: Record<string, { name: string; city: string }> = {
-  "King Abdullah Sports City": { name: "مدينة الملك عبدالله الرياضية", city: "جدة" },
-  "King Abdullah Sports City Stadium": { name: "مدينة الملك عبدالله الرياضية", city: "جدة" },
-  "Prince Abdullah al-Faisal Stadium": { name: "ملعب الأمير عبدالله الفيصل", city: "جدة" },
-  "Prince Abdullah Al Faisal Stadium": { name: "ملعب الأمير عبدالله الفيصل", city: "جدة" },
+  "King Abdullah Sports City": KASC,
+  "King Abdullah Sports City Stadium": KASC,
+  "Prince Abdullah al-Faisal Stadium": FAISAL,
+  "Prince Abdullah Al Faisal Stadium": FAISAL,
+  "Prince Abdullah Al-Faisal Sports City Stadium": FAISAL,
+  "Prince Abdullah Al Faisal Sports City Stadium": FAISAL,
 };
+
+function normalizeVenueToken(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[’'`]/g, "")
+    .replace(/[-_.]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function resolveKnownVenue(name: string): { name: string; city: string } | undefined {
+  const exact = GC_VENUE_AR[name];
+  if (exact) return exact;
+  const normalized = normalizeVenueToken(name);
+  for (const [key, value] of Object.entries(GC_VENUE_AR)) {
+    if (normalizeVenueToken(key) === normalized) return value;
+  }
+  // الفيصل أولًا: اسمه يحوي Sports City في بعض ردود المزوّد.
+  if (normalized.includes("faisal") || name.includes("الفيصل")) return FAISAL;
+  if (
+    normalized.includes("king abdullah") ||
+    name.includes("الملك عبدالله") ||
+    (normalized.includes("sports city") && !normalized.includes("faisal"))
+  ) {
+    return KASC;
+  }
+  return undefined;
+}
 
 /** اسم منتخب بالعربية (معرّف API-Football) — fallback للاسم الإنجليزي إن لم يُعرَّف. */
 export function localizeGcTeam(id: number | null | undefined, fallback: string): string {
@@ -41,7 +74,22 @@ export function localizeGcVenue(
   name: string | null | undefined,
   city: string | null | undefined,
 ): { name: string; city: string } {
-  const mapped = name ? GC_VENUE_AR[name] : undefined;
+  const mapped = name ? resolveKnownVenue(name) : undefined;
   const cityAr = mapped?.city ?? (city ? (GC_CITY_AR[city] ?? city) : "");
   return { name: mapped?.name ?? name ?? "", city: cityAr };
+}
+
+/** إزالة تكرار الملاعب بعد التعريب (صف إنجليزي + صف عربي لنفس الملعب). */
+export function dedupeGcVenues(venues: { name: string; city: string }[]): { name: string; city: string }[] {
+  const seen = new Set<string>();
+  const out: { name: string; city: string }[] = [];
+  for (const venue of venues) {
+    const localized = localizeGcVenue(venue.name, venue.city);
+    if (!localized.name) continue;
+    const key = `${localized.name}|${localized.city}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(localized);
+  }
+  return out;
 }

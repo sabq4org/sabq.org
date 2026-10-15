@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   Dialog,
   DialogContent,
@@ -23,9 +23,17 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { apiRequest } from "@/lib/queryClient";
-import { Sparkles, Image, FileText, ChartBar, Loader2, Download, AlertCircle } from "lucide-react";
+import { Sparkles, Image, FileText, ChartBar, Loader2, Download, AlertCircle, Cpu } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { ImageStyleSelector } from "@/components/ImageStyleSelector";
+import {
+  suggestOptimalModel,
+  KNOWN_IMAGE_MODELS,
+  type EditorImageStyle,
+  type ImageTaskIntent,
+} from "@shared/imageStyles";
 
 interface AIImageGeneratorDialogProps {
   open: boolean;
@@ -34,7 +42,20 @@ interface AIImageGeneratorDialogProps {
   initialPrompt?: string;
   /** Label for the confirm action (default "إدراج في المقال"). */
   insertLabel?: string;
+  /**
+   * سياق الخبر الحالي (اختياري): يحسّن الوصف المبدئي ويغذّي مطابقة
+   * التوجيه السياقي للنمط (مثل الواقعية الغذائية/الطبية) عبر التصنيف.
+   */
+  articleContext?: {
+    title?: string;
+    excerpt?: string;
+    /** slug التصنيف أو اسمه */
+    category?: string;
+  };
 }
+
+/** التبويبات التي ينطبق عليها نظام الأنماط (القوالب الأخرى تحمل توجيهها الكامل) */
+const STYLE_ENABLED_TABS = ["custom", "featured"];
 
 // Color style options for news graphics - Sabq branding, minimal and elegant
 const colorStyles = {
@@ -98,17 +119,60 @@ export function AIImageGeneratorDialog({
   onImageGenerated,
   initialPrompt = "",
   insertLabel = "إدراج في المقال",
+  articleContext,
 }: AIImageGeneratorDialogProps) {
   const [activeTab, setActiveTab] = useState("custom");
   const [prompt, setPrompt] = useState(initialPrompt);
   const [templateFields, setTemplateFields] = useState<Record<string, string>>({});
   const [selectedColorStyle, setSelectedColorStyle] = useState<keyof typeof colorStyles>("red");
+  const [selectedStyleSlug, setSelectedStyleSlug] = useState<string | null>(null);
+  const [selectedModel, setSelectedModel] = useState<string>("");
+  const [dataPoints, setDataPoints] = useState<string[]>(["", "", ""]);
   const [imageSize, setImageSize] = useState("2K");
   const [aspectRatio, setAspectRatio] = useState("16:9");
   const [enableThinking, setEnableThinking] = useState(true);
   const [enableSearchGrounding, setEnableSearchGrounding] = useState(false);
   const [generatedImage, setGeneratedImage] = useState<{url: string; alt?: string} | null>(null);
   const { toast } = useToast();
+
+  // أنماط التوليد من السجلّ المركزي (تُدار من لوحة التحكم)
+  const { data: stylesDataRaw } = useQuery<{ styles: EditorImageStyle[]; defaultSlug: string }>({
+    queryKey: ["/api/image-styles"],
+    enabled: open,
+    staleTime: 5 * 60 * 1000,
+  });
+  const availableStyles = Array.isArray(stylesDataRaw?.styles) ? stylesDataRaw.styles : [];
+  // فشل الجلب أو لا أنماط → التوليد يستمر بدون styleSlug (سلوك الخادم الافتراضي)
+  const effectiveStyleSlug = selectedStyleSlug ?? stylesDataRaw?.defaultSlug ?? null;
+
+  // تحديد نية التوليد البصري واقتراح النموذج الأمثل
+  const detectedIntent: ImageTaskIntent =
+    activeTab === "infographic" || effectiveStyleSlug === "infographic"
+      ? "infographic"
+      : activeTab === "breaking"
+      ? "breaking_banner"
+      : activeTab === "comparison"
+      ? "infographic"
+      : "photo";
+
+  const suggestedModelInfo = suggestOptimalModel(
+    detectedIntent,
+    effectiveStyleSlug,
+    articleContext?.category
+  );
+
+  // عند فتح الحوار: لو الوصف فارغ نزرعه من initialPrompt أو من سياق الخبر
+  useEffect(() => {
+    if (!open || prompt.trim()) return;
+    const contextPrompt = articleContext?.title
+      ? `مشهد تعبيري للخبر: ${articleContext.title}${
+          articleContext.excerpt ? `\n${articleContext.excerpt.slice(0, 200)}` : ""
+        }`
+      : "";
+    const seed = initialPrompt || contextPrompt;
+    if (seed) setPrompt(seed);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   const generateMutation = useMutation({
     mutationFn: async (data: any) => {
@@ -119,16 +183,20 @@ export function AIImageGeneratorDialog({
     },
     onSuccess: (data) => {
       if (data.imageUrl) {
-        setGeneratedImage({ 
-          url: data.imageUrl, 
-          alt: prompt || "صورة مولدة بالذكاء الاصطناعي" 
+        setGeneratedImage({
+          url: data.imageUrl,
+          alt: prompt || "صورة مولدة بالذكاء الاصطناعي"
         });
         toast({
           title: "تم توليد الصورة بنجاح",
           description: "يمكنك الآن إدراج الصورة في المقال",
         });
       } else {
-        throw new Error(data.error || data.message || "فشل توليد الصورة");
+        toast({
+          title: "خطأ في التوليد",
+          description: data.error || data.message || "فشل توليد الصورة",
+          variant: "destructive",
+        });
       }
     },
     onError: (error: any) => {
@@ -145,19 +213,29 @@ export function AIImageGeneratorDialog({
     let overlayText: string | undefined = undefined;
     let overlayOptions: any = undefined;
 
+    // هل نظام الأنماط فعّال لهذا التبويب؟ (البرومبت النهائي يُركَّب في الخادم)
+    const styleActive =
+      STYLE_ENABLED_TABS.includes(activeTab) && !!effectiveStyleSlug && availableStyles.length > 0;
+
     // If using template, build prompt from template
     if (activeTab !== "custom") {
       const template = templates[activeTab as keyof typeof templates];
       if (template) {
-        finalPrompt = template.prompt;
-        template.fields.forEach((field) => {
-          finalPrompt = finalPrompt.replace(`{${field}}`, templateFields[field] || "");
-        });
+        if (activeTab === "featured" && styleActive) {
+          finalPrompt = templateFields.subject
+            ? `صورة بارزة لمقال إخباري عن: ${templateFields.subject}`
+            : "";
+        } else {
+          finalPrompt = template.prompt;
+          template.fields.forEach((field) => {
+            finalPrompt = finalPrompt.replace(`{${field}}`, templateFields[field] || "");
+          });
+        }
         // Replace color style placeholder if template has color option
         if (template.hasColorOption) {
           const colorStyle = colorStyles[selectedColorStyle];
           finalPrompt = finalPrompt.replace("{colorStyle}", colorStyle.prompt);
-          
+
           // For "breaking" template, add text overlay with the headline
           if (activeTab === "breaking" && templateFields.headline) {
             overlayText = templateFields.headline;
@@ -181,6 +259,8 @@ export function AIImageGeneratorDialog({
       return;
     }
 
+    const validDataPoints = dataPoints.filter((dp) => dp.trim().length > 0);
+
     const payload = {
       prompt: finalPrompt,
       imageSize,
@@ -189,6 +269,13 @@ export function AIImageGeneratorDialog({
       enableSearchGrounding,
       overlayText,
       overlayOptions,
+      intent: detectedIntent,
+      model: selectedModel.trim() || undefined,
+      dataPoints: validDataPoints.length > 0 ? validDataPoints : undefined,
+      // النمط + تصنيف الخبر (للتوجيه السياقي) — الخادم يتكفل بالتركيب والحسم
+      ...(styleActive
+        ? { styleSlug: effectiveStyleSlug, category: articleContext?.category }
+        : {}),
     };
     generateMutation.mutate(payload);
   };
@@ -223,6 +310,29 @@ export function AIImageGeneratorDialog({
         <div className="space-y-4">
           {!generatedImage ? (
             <>
+              {/* شريط محرك التوجيه الذكي للنماذج */}
+              <div className="flex items-center justify-between p-3 rounded-lg bg-primary/5 border border-primary/15 text-xs">
+                <div className="flex items-center gap-2">
+                  <Cpu className="w-4 h-4 text-primary shrink-0" />
+                  <div>
+                    <div className="font-semibold text-foreground flex items-center gap-1.5">
+                      <span>محرك التوجيه الذكي للنماذج</span>
+                      <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                        {selectedModel ? "تحديد يدوي" : "آلي تلقائي"}
+                      </Badge>
+                    </div>
+                    <p className="text-muted-foreground text-[11px] mt-0.5">
+                      {selectedModel
+                        ? `النموذج المختار يدوياً: ${KNOWN_IMAGE_MODELS.find((m) => m.id === selectedModel)?.label || selectedModel}`
+                        : suggestedModelInfo.reasonAr}
+                    </p>
+                  </div>
+                </div>
+                <Badge variant="outline" className="text-[11px] font-mono shrink-0 bg-background">
+                  {selectedModel || suggestedModelInfo.model}
+                </Badge>
+              </div>
+
               <Tabs value={activeTab} onValueChange={setActiveTab}>
                 <TabsList className="grid grid-cols-5 w-full">
                   <TabsTrigger value="custom">مخصص</TabsTrigger>
@@ -235,6 +345,13 @@ export function AIImageGeneratorDialog({
                 </TabsList>
 
                 <TabsContent value="custom" className="space-y-4">
+                  <ImageStyleSelector
+                    styles={availableStyles}
+                    selectedSlug={effectiveStyleSlug || ""}
+                    onSelect={setSelectedStyleSlug}
+                    category={articleContext?.category}
+                    disabled={generateMutation.isPending}
+                  />
                   <div>
                     <Label htmlFor="prompt">وصف الصورة</Label>
                     <Textarea
@@ -256,7 +373,17 @@ export function AIImageGeneratorDialog({
                         قالب {template.name} - املأ الحقول المطلوبة
                       </AlertDescription>
                     </Alert>
-                    
+
+                    {key === "featured" && (
+                      <ImageStyleSelector
+                        styles={availableStyles}
+                        selectedSlug={effectiveStyleSlug || ""}
+                        onSelect={setSelectedStyleSlug}
+                        category={articleContext?.category}
+                        disabled={generateMutation.isPending}
+                      />
+                    )}
+
                     {/* Color Style Selector for templates that support it */}
                     {template.hasColorOption && (
                       <div className="space-y-3">
@@ -285,7 +412,7 @@ export function AIImageGeneratorDialog({
                     {template.fields.map((field) => (
                       <div key={field}>
                         <Label htmlFor={field}>
-                          {field === "data" && "البيانات الإحصائية"}
+                          {field === "data" && "موضوع الإنفوجرافيك والبيانات"}
                           {field === "subject" && "موضوع الصورة"}
                           {field === "headline" && "العنوان"}
                           {field === "item1" && "العنصر الأول"}
@@ -299,15 +426,73 @@ export function AIImageGeneratorDialog({
                           }
                           className="mt-2"
                           dir="rtl"
-                          placeholder={field === "headline" ? "أدخل العنوان الذي سيظهر في الصورة..." : undefined}
+                          placeholder={
+                            field === "headline"
+                              ? "أدخل العنوان الذي سيظهر في الصورة..."
+                              : field === "data"
+                              ? "مثال: تطور الاقتصاد السعودي وصادرات الطاقة النظيفة لعام 2026..."
+                              : undefined
+                          }
                         />
                       </div>
                     ))}
+
+                    {key === "infographic" && (
+                      <div className="space-y-3 pt-2 border-t">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-xs font-semibold">مؤشرات وبيانات الإنفوجرافيك (اختياري)</Label>
+                          <span className="text-[11px] text-muted-foreground">تُعزز دقة الرسم البياني وعناصر الفيكتور</span>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                          <Input
+                            placeholder="مؤشر ١ (مثال: ٧٥٪ نمو)"
+                            value={dataPoints[0]}
+                            onChange={(e) => setDataPoints([e.target.value, dataPoints[1], dataPoints[2]])}
+                            className="text-xs"
+                            dir="rtl"
+                          />
+                          <Input
+                            placeholder="مؤشر ٢ (مثال: ١٢ مليار ريال)"
+                            value={dataPoints[1]}
+                            onChange={(e) => setDataPoints([dataPoints[0], e.target.value, dataPoints[2]])}
+                            className="text-xs"
+                            dir="rtl"
+                          />
+                          <Input
+                            placeholder="مؤشر ٣ (مثال: +٣٠ ألف وظيفة)"
+                            value={dataPoints[2]}
+                            onChange={(e) => setDataPoints([dataPoints[0], dataPoints[1], e.target.value])}
+                            className="text-xs"
+                            dir="rtl"
+                          />
+                        </div>
+                      </div>
+                    )}
                   </TabsContent>
                 ))}
               </Tabs>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <Label htmlFor="modelSelector">نموذج التوليد</Label>
+                  <Select
+                    value={selectedModel || "auto"}
+                    onValueChange={(val) => setSelectedModel(val === "auto" ? "" : val)}
+                  >
+                    <SelectTrigger id="modelSelector">
+                      <SelectValue placeholder="توجيه ذكي تلقائي" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="auto">توجيه ذكي تلقائي (موصى به)</SelectItem>
+                      {KNOWN_IMAGE_MODELS.map((m) => (
+                        <SelectItem key={m.id} value={m.id}>
+                          {m.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
                 <div>
                   <Label htmlFor="imageSize">حجم الصورة</Label>
                   <Select value={imageSize} onValueChange={setImageSize}>

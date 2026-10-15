@@ -14,6 +14,7 @@ import { userRoles, roles, users, comments } from "@shared/schema";
 import { eq, sql } from "drizzle-orm";
 import { PERMISSION_CODES, SUPERUSER_ROLE_NAMES } from "@shared/rbac-constants";
 import { userHasPermission } from "../rbac";
+import { parsePage, parseLimit, parseOffset } from "../utils/pagination";
 
 const router = Router();
 
@@ -148,7 +149,7 @@ router.get("/results", async (req: Request, res: Response) => {
       classification: classification as string | undefined,
       minScore: minScore ? parseInt(minScore as string, 10) : undefined,
       maxScore: maxScore ? parseInt(maxScore as string, 10) : undefined,
-      limit: parseInt(limit as string, 10),
+      limit: parseLimit(limit, 50, 200),
     });
     
     res.json(results);
@@ -219,8 +220,8 @@ router.get("/comments", async (req: Request, res: Response) => {
       classification: classification as string | undefined,
       status: status as string | undefined,
       search: search as string | undefined,
-      page: parseInt(page as string, 10),
-      limit: parseInt(limit as string, 10),
+      page: parsePage(page),
+      limit: parseLimit(limit, 20, 200),
     };
 
     const result = await storage.getCommentsForModeration(filters);
@@ -502,8 +503,8 @@ router.get("/member/:memberId/comments", async (req: Request, res: Response) => 
       classification: classification as string,
       sortBy: sortBy as 'date' | 'score',
       sortOrder: sortOrder as 'asc' | 'desc',
-      limit: limit ? parseInt(limit as string) : undefined,
-      offset: offset ? parseInt(offset as string) : undefined,
+      limit: limit ? parseLimit(limit, 20, 200) : undefined,
+      offset: offset ? parseOffset(offset) : undefined,
     });
     
     res.json(result);
@@ -788,7 +789,7 @@ router.get("/search/commenters", async (req: Request, res: Response) => {
             )`
           : undefined
       )
-      .limit(parseInt(limit as string, 10));
+      .limit(parseLimit(limit, 20, 200));
     
     res.json(commentersData);
   } catch (error) {

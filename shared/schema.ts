@@ -2,6 +2,12 @@ import { sql, relations } from "drizzle-orm";
 import { pgTable, text, varchar, timestamp, boolean, integer, bigint, jsonb, index, real, primaryKey, uniqueIndex, serial, date, vector } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
+import { whatsappCtaFieldSchema } from "./whatsappCta";
+export {
+  whatsappCtaSchema,
+  whatsappCtaFieldSchema,
+  type WhatsAppCta,
+} from "./whatsappCta";
 
 // ============================================
 // ZOD SCHEMAS FOR JSONB COLUMNS
@@ -725,6 +731,21 @@ export const emailVerificationTokens = pgTable("email_verification_tokens", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// Email deliverability suppression list (F-05). Populated by the MailerSend
+// bounce/spam-complaint webhook; checked before sending any transactional mail
+// so a hard-bounced/complained address isn't retried forever (which silently
+// degrades sender reputation). email is stored lowercased for exact matching.
+export const emailSuppressions = pgTable("email_suppressions", {
+  email: text("email").primaryKey(),
+  // 'hard_bounce' | 'spam_complaint' | 'unsubscribe' | 'manual'
+  reason: text("reason").notNull(),
+  // 'mailersend_webhook' | 'admin' | ...
+  source: text("source").notNull(),
+  detail: text("detail"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+export type EmailSuppression = typeof emailSuppressions.$inferSelect;
+
 // إثبات توثيق الجوال بين نجاح OTP وإكمال بيانات التسجيل (اسم/بريد/كلمة مرور).
 // قصير العمر وأحادي الاستخدام: usedAt يُقفل ذريًا عند إنشاء الحساب، فلا يُنشئ
 // نفس الإثبات أكثر من حساب مهما تكررت الطلبات أو تزامنت.
@@ -920,7 +941,7 @@ export const articles = pgTable("articles", {
   newsType: text("news_type").default("regular").notNull(), // breaking, featured, regular
   publishType: text("publish_type").default("instant").notNull(), // instant, scheduled
   scheduledAt: timestamp("scheduled_at"),
-  status: text("status").notNull().default("draft"), // draft, scheduled, published, archived
+  status: text("status").notNull().default("draft"), // draft, ready_to_publish, scheduled, published, archived
   reviewStatus: text("review_status"), // null, pending_review, approved, rejected, needs_changes (for opinion articles)
   reviewedBy: varchar("reviewed_by").references(() => users.id),
   reviewedAt: timestamp("reviewed_at"),
@@ -941,6 +962,7 @@ export const articles = pgTable("articles", {
   categorySuggestionReason: text("category_suggestion_reason"), // سبب الاقتراح
   
   isFeatured: boolean("is_featured").default(false).notNull(),
+  isReading: boolean("is_reading").default(false).notNull(), // تمييز المادة بأنها قراءة / قراءة من سبق
   views: integer("views").default(0).notNull(),
   /** Manual override for avg read time (seconds); when set, ai-insights uses this instead of reading_history AVG */
   avgReadTimeOverride: integer("avg_read_time_override"),
@@ -971,13 +993,23 @@ export const articles = pgTable("articles", {
   credibilityScore: integer("credibility_score"),
   credibilityAnalysis: text("credibility_analysis"),
   credibilityLastUpdated: timestamp("credibility_last_updated"),
-  source: text("source").default("manual").notNull(), // 'email' | 'whatsapp' | 'manual'
+  source: text("source").default("manual").notNull(), // 'email' | 'whatsapp' | 'manual' | 'bot' (+ ios-app/android-app/ai)
   sourceMetadata: jsonb("source_metadata").$type<{
-    type: 'email' | 'whatsapp' | 'manual';
+    type: 'email' | 'whatsapp' | 'manual' | 'bot';
     from?: string;
     token?: string;
     originalMessage?: string;
     webhookLogId?: string;
+    // Bot Drafts API (docs/systems/editorial/BOT_DRAFTS_API.md) — type-only, no DDL.
+    bot?: string;
+    clientReference?: string;
+    notes?: string;
+    receivedAt?: string;
+    // Personal publisher bot attribution — type-only JSON additions; no DDL.
+    publisherUserId?: string;
+    publisherTokenId?: string;
+    publisherOwnerUserId?: string;
+    scheduleFailure?: { at: string; reason: string };
   }>(),
   sourceUrl: text("source_url"), // URL of the original source
   
@@ -1012,12 +1044,26 @@ export const articles = pgTable("articles", {
   isVideoTemplate: boolean("is_video_template").default(false), // Show video instead of hero image
   videoUrl: text("video_url"), // YouTube/Dailymotion URL or direct video path
   videoThumbnailUrl: text("video_thumbnail_url"), // Custom thumbnail for video
+
+  // زر تواصل واتساب تحريري (رقم + عبارة + موضع: نهاية المقال أو مضمّن في النص)
+  whatsappCta: jsonb("whatsapp_cta").$type<{
+    enabled: boolean;
+    phone: string;
+    phrase: string;
+    message?: string;
+    placement: "end" | "inline";
+  } | null>(),
   
   // Paid Content / Paywall fields
   isPaid: boolean("is_paid").default(false).notNull(), // Is this a paid article?
   priceHalalas: integer("price_halalas").default(0), // Price in halalas (1 SAR = 100 halalas)
   previewLength: integer("preview_length").default(300), // Characters shown before paywall
   
+  // ضمانات «النشر أولاً». الأعمدة اختيارية بلا افتراض متطاير حتى لا يُعاد
+  // كتابة جدول articles عند الإضافة. الطوابع يكتبها الخادم فقط.
+  riskLabel: text("risk_label"), // safe | needs_look | sensitive
+  draftCreatedAt: timestamp("draft_created_at"),
+  correctedAt: timestamp("corrected_at"),
   publishedAt: timestamp("published_at"),
   // «إنعاش»: يعيد الخبر لصدارة الموجز بترتيب COALESCE(resurfaced_at, published_at)
   // دون المساس بتاريخ النشر الظاهر أو المشاهدات أو الرابط.
@@ -1045,6 +1091,10 @@ export const articles = pgTable("articles", {
   index("idx_articles_homepage").on(table.status, table.hideFromHomepage, table.publishedAt.desc()),
   index("idx_articles_homepage_order").on(table.status, table.hideFromHomepage, table.displayOrder.desc(), table.publishedAt.desc()),
   index("idx_articles_views").on(table.views.desc()),
+  // «أحدث المقالات» في لوحة التحكم تفرز created_at بلا شرط — بدون الفهرس مسحٌ
+  // كامل لمليون صف كل 4 دقائق (حادثة بطء اللوحة 2026-08-07). هذا الفهرس وفهرس
+  // views أعلاه أُنشئا يدوياً CONCURRENTLY في الإنتاج 2026-08-07.
+  index("idx_articles_created_at").on(table.createdAt.desc()),
   index("idx_articles_slug").on(table.slug),
   // Edge slug-redirect does OR(englishSlug, slug); englishSlug was unindexed → full scan.
   index("idx_articles_english_slug").on(table.englishSlug),
@@ -1056,6 +1106,10 @@ export const articles = pgTable("articles", {
   // فهارس trigram لبحث اللوحة (ILIKE %..%) — بدونها يمسح الجدول كاملاً (6.9GB):
   // شرط OR يتطلب فهرساً صالحاً لكل طرف، والفهرس القديم على lower(title) الجزئي
   // لا يطابق title ILIKE. أُنشئت يدوياً CONCURRENTLY في الإنتاج 2026-07-23.
+  // ⚠️ كل فهارس GIN الستة على articles مضبوطة في الإنتاج بـ fastupdate=off
+  // (حادثة 2026-08-08: تفريغ قائمة الانتظار المؤجلة كان يسكّت أي كاتب صدفةً
+  // 27-38 ثانية فتفشل حفوظات المحررين بمهلة الدور 15s). أي REINDEX أو إعادة
+  // إنشاء يجب أن يتبعها ALTER INDEX ... SET (fastupdate=off) وإلا عادت السكتات.
   index("idx_articles_title_trgm_raw").using("gin", table.title.op("gin_trgm_ops")),
   index("idx_articles_excerpt_trgm").using("gin", table.excerpt.op("gin_trgm_ops")),
   // idx_articles_subtitle_trgm حُذف من الإنتاج 2026-07-25: ظل 176MB بصفر
@@ -1124,6 +1178,68 @@ export const insertArticleEventSchema = createInsertSchema(articleEvents).omit({
 
 export type InsertArticleEvent = z.infer<typeof insertArticleEventSchema>;
 export type ArticleEvent = typeof articleEvents.$inferSelect;
+
+// حكم مراجع «النشر أولاً» — أي قيمة (ok/minor/major) تفك بوابة الحساسية.
+export const articleReviewerVerdicts = pgTable("article_reviewer_verdicts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  articleId: varchar("article_id").references(() => articles.id, { onDelete: "cascade" }).notNull(),
+  verdict: text("verdict").notNull(), // ok | minor | major
+  reviewerName: text("reviewer_name").notNull(),
+  note: text("note"),
+  verdictAt: timestamp("verdict_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_article_reviewer_verdicts_article").on(table.articleId, table.verdictAt.desc()),
+]);
+
+// لقطة ما قبل تعديل خبر منشور، مع سبب التحديث الظاهر للقارئ إن وُجد.
+export const articleRevisions = pgTable("article_revisions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  articleId: varchar("article_id").references(() => articles.id, { onDelete: "cascade" }).notNull(),
+  editorUserId: varchar("editor_user_id").references(() => users.id, { onDelete: "set null" }),
+  editorName: text("editor_name"),
+  changedFields: jsonb("changed_fields").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+  previousValues: jsonb("previous_values").$type<Record<string, unknown>>().notNull().default(sql`'{}'::jsonb`),
+  updateReason: text("update_reason"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_article_revisions_article").on(table.articleId, table.createdAt.asc()),
+]);
+
+// تجاوز مسؤول لبوابة الحساسية. قابل للاستعلام ويُعرض في تاريخ المقال.
+export const articlePublishOverrides = pgTable("article_publish_overrides", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  articleId: varchar("article_id").references(() => articles.id, { onDelete: "cascade" }).notNull(),
+  actorUserId: varchar("actor_user_id").references(() => users.id, { onDelete: "set null" }),
+  actorName: text("actor_name"),
+  action: text("action").notNull(), // publish | correct
+  reason: text("reason"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_article_publish_overrides_article").on(table.articleId, table.createdAt.desc()),
+]);
+
+// Durable receipt for bot publish idempotency. The operation key is scoped to
+// the authenticated actor and article; the body fingerprint rejects reuse of
+// the same key for a different publish intent.
+export const articlePublishOperations = pgTable("article_publish_operations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  operationId: varchar("operation_id").notNull(),
+  actorKey: varchar("actor_key").notNull(),
+  articleId: varchar("article_id").references(() => articles.id, { onDelete: "cascade" }).notNull(),
+  bodyFingerprint: varchar("body_fingerprint").notNull(),
+  status: text("status").notNull(), // processing | succeeded | failed
+  response: jsonb("response").$type<Record<string, unknown> | null>(),
+  error: jsonb("error").$type<Record<string, unknown> | null>(),
+  claimedAt: timestamp("claimed_at").defaultNow().notNull(),
+  completedAt: timestamp("completed_at"),
+}, (table) => [
+  uniqueIndex("uq_article_publish_operations_actor_article_operation").on(
+    table.actorKey,
+    table.articleId,
+    table.operationId,
+  ),
+  index("idx_article_publish_operations_article").on(table.articleId, table.claimedAt.desc()),
+]);
 
 // RSS feeds for import
 export const rssFeeds = pgTable("rss_feeds", {
@@ -1204,6 +1320,7 @@ export const radarItems = pgTable("radar_items", {
   publishedAt: timestamp("published_at"),
   fetchedAt: timestamp("fetched_at").defaultNow().notNull(),
   // new → analyzed → ready (مسودة جاهزة) → exported | dismissed
+  // filtered = استبعاد آلي قبل التحليل · merged = نسخة شبه مطابقة ضُمّت لقصتها بلا تحليل
   status: text("status").notNull().default("new"),
   newsValue: integer("news_value"), // 0–100 قيمة إخبارية لجمهور سبق
   scoreBreakdown: jsonb("score_breakdown").$type<{
@@ -1212,6 +1329,10 @@ export const radarItems = pgTable("radar_items", {
     regionalRelevance?: number;
     novelty?: number;
     reason?: string;
+    /** طلب العاجل من التحليل أو قاعدة تنبيه — القرار النهائي لبوابة triage.decideBreaking */
+    breakingRequested?: boolean;
+    /** لماذا رُفض طلب العاجل */
+    breakingDeniedBy?: string | null;
   }>(),
   isBreaking: boolean("is_breaking").notNull().default(false),
   matchedKeywords: jsonb("matched_keywords").$type<string[]>(),
@@ -1239,6 +1360,10 @@ export const radarItems = pgTable("radar_items", {
     categorySlug?: string;
     provider?: string;
     model?: string;
+    // مسار «طوّر ببحث» (نظام التحرير الموحد): ملاحظات المراجع ومصادر التحقق
+    developNotes?: string[];
+    developSources?: { title: string; url: string }[];
+    developedWithSearch?: boolean;
   }>(),
   draftGeneratedAt: timestamp("draft_generated_at"),
   analyzedAt: timestamp("analyzed_at"),
@@ -1247,8 +1372,25 @@ export const radarItems = pgTable("radar_items", {
   exportedAt: timestamp("exported_at"),
   exportedBy: varchar("exported_by").references(() => users.id, { onDelete: "set null" }),
   error: text("error"), // آخر خطأ تحليل/تحويل لهذه المادة
+  // ---- فرز الدقة (2026-09-28) — additive، راجع server/services/radar/triage.ts ----
+  publisherKey: text("publisher_key"), // هوية الناشر الفعلي (نطاق/سجل) — أساس عدّ المستقل
+  publisherType: text("publisher_type"), // official | wire | major | press_release | aggregator | social | unknown
+  wireOrigin: text("wire_origin"), // وكالة أصل النقل إن وُجد عزو (رويترز/واس…)
+  textBasis: text("text_basis"), // body | title_only — العنوان وحده لا يُلخَّص
+  qualityFlags: jsonb("quality_flags").$type<string[]>(), // missing_date, future_date, past_year:YYYY, title_only…
+  screenReason: text("screen_reason"), // سبب الاستبعاد الآلي قبل التحليل (status=filtered)
+  duplicateOfId: varchar("duplicate_of_id"), // نسخة شبه مطابقة ضُمّت شاهدًا (status=merged)
+  eventTiming: text("event_timing"), // new | ongoing | old | unknown — من التحليل مع دليل
+  timingEvidence: text("timing_evidence"),
+  contentType: text("content_type"), // news | claim | analysis | opinion | press_release | other
+  evidenceScore: integer("evidence_score"), // 0–100 قوة الدليل
+  freshnessScore: integer("freshness_score"), // 0–100 حداثة الزمن الموثوق
+  priorityScore: integer("priority_score"), // 0–100 أولوية مركبة بسقوف
+  lane: text("lane"), // opportunity | watch | background
+  breakingUntil: timestamp("breaking_until"), // العاجل صفة مؤقتة تنتهي هنا
 }, (table) => [
   uniqueIndex("uq_radar_items_source_guid").on(table.sourceId, table.guid),
+  index("idx_radar_items_priority").on(table.priorityScore.desc()),
   index("idx_radar_items_status").on(table.status, table.fetchedAt.desc()),
   index("idx_radar_items_news_value").on(table.newsValue),
   index("idx_radar_items_story").on(table.storyId),
@@ -1431,6 +1573,10 @@ export const comments = pgTable("comments", {
   moderatedBy: varchar("moderated_by").references(() => users.id),
   moderatedAt: timestamp("moderated_at"),
   moderationReason: text("moderation_reason"),
+  // اعتراض صاحب التعليق على قرار الرفض الآلي — يُضبط مرة واحدة عند طلب
+  // المراجعة البشرية ويعيد التعليق لحالة pending (قناة معالجة للمتضررين
+  // وفق متطلبات اعتماد أخلاقيات الذكاء الاصطناعي)
+  appealedAt: timestamp("appealed_at"),
   // Sentiment analysis fields
   currentSentiment: text("current_sentiment"), // positive, neutral, negative (denormalized for performance)
   currentSentimentConfidence: real("current_sentiment_confidence"), // 0-1
@@ -2748,9 +2894,9 @@ export const sportsPoolPlayerPicks = pgTable("sports_pool_player_picks", {
   teamName: text("team_name"),
   status: text("status").notNull().default("pending"), // pending | correct | incorrect
   pointsAwarded: integer("points_awarded").notNull().default(0),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-  settledAt: timestamp("settled_at"), // حارس التسوية (مثل sports_pool_predictions)
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  settledAt: timestamp("settled_at", { withTimezone: true }), // حارس التسوية (مثل sports_pool_predictions)
 }, (table) => [
   uniqueIndex("uq_pool_player_pick").on(table.fixtureId, table.userId, table.kind),
   index("idx_sp_pool_pick_user").on(table.userId),
@@ -2775,8 +2921,8 @@ export const sportsPoolMatchPicks = pgTable("sports_pool_match_picks", {
   actualScorers: jsonb("actual_scorers").$type<Array<{ playerId: number; name: string; teamId: number; minute: number | null }>>(),
   firstScorerId: integer("first_scorer_id"), // null حتى تنتهي المباراة
   status: text("status").notNull().default("open"), // open | locked | settled
-  settledAt: timestamp("settled_at"),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  settledAt: timestamp("settled_at", { withTimezone: true }),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 }, (table) => [
   index("idx_sp_pool_match_picks_status").on(table.status),
   index("idx_sp_pool_match_picks_comp").on(table.competitionSlug, table.kickoffTs),
@@ -2796,8 +2942,8 @@ export const sportsPoolUserDivisions = pgTable("sports_pool_user_divisions", {
   seasonPoints: integer("season_points").notNull().default(0),
   lastPromotedTo: integer("last_promoted_to"),
   lastRelegatedTo: integer("last_relegated_to"),
-  computedAt: timestamp("computed_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  computedAt: timestamp("computed_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 }, (table) => [
   index("idx_sp_pool_div_week").on(table.weekId),
   index("idx_sp_pool_div_div").on(table.division, table.seasonPoints),
@@ -2811,8 +2957,8 @@ export const sportsPoolWeeklyPoints = pgTable("sports_pool_weekly_points", {
   points: integer("points").notNull().default(0),
   matchesPlayed: integer("matches_played").notNull().default(0),
   matchesWon: integer("matches_won").notNull().default(0),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 }, (table) => [
   uniqueIndex("uq_sp_pool_weekly_user").on(table.userId, table.weekId),
   index("idx_sp_pool_weekly_week").on(table.weekId, sql`${table.points} DESC`),
@@ -3222,6 +3368,17 @@ export const articleIpViews = pgTable("article_ip_views", {
 }, (table) => [
   uniqueIndex("uq_article_ip_views_article_ip").on(table.articleId, table.ipHash),
   index("idx_article_ip_views_article").on(table.articleId),
+]);
+
+// Pending view increments — hot-path flush never locks `articles` rows.
+// Memory buffer → UPSERT here → periodic merge into articles.views (SKIP LOCKED).
+// See server/services/articleViewCounterService.ts (2026-08-06 contention fix).
+export const articleViewDeltas = pgTable("article_view_deltas", {
+  articleId: varchar("article_id").primaryKey().references(() => articles.id, { onDelete: "cascade" }),
+  pending: integer("pending").default(0).notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_article_view_deltas_pending").on(table.pending),
 ]);
 
 // Feed Recommendations - التوصيات المخصصة للعرض في الفيد
@@ -3652,13 +3809,14 @@ export const adminUpdateUserRolesSchema = z.object({
 
 export const suspendUserSchema = z.object({
   reason: z.string().min(5, "يجب إدخال سبب التعليق (5 أحرف على الأقل)"),
-  duration: z.number().int().positive().optional(), // in days
+  // coerce: dashboard Selects submit "30"-style strings
+  duration: z.coerce.number().int().positive().optional(), // in days
 });
 
 export const banUserSchema = z.object({
   reason: z.string().min(5, "يجب إدخال سبب الحظر (5 أحرف على الأقل)"),
   isPermanent: z.boolean().default(false),
-  duration: z.number().int().positive().optional(), // in days, only if not permanent
+  duration: z.coerce.number().int().positive().optional(), // in days, only if not permanent
 });
 export const insertCategorySchema = createInsertSchema(categories).omit({ 
   id: true, 
@@ -3715,12 +3873,17 @@ export const insertArticleSchema = createInsertSchema(articles).omit({
   publisherCreditDeducted: true,
   publisherApprovedAt: true,
   publisherApprovedBy: true,
+  // طوابع «النشر أولاً» يملكها الخادم. riskLabel يبقى مقبولاً من المحرر.
+  draftCreatedAt: true,
+  correctedAt: true,
 }).extend({
   slug: z.string().max(150, "الرابط (slug) يجب أن لا يتجاوز 150 حرف"),
   imageFocalPoint: imageFocalPointSchema.nullable().optional(),
   seo: seoSchema,
   seoMetadata: seoMetadataSchema,
   sourceMetadata: sourceMetadataSchema,
+  whatsappCta: whatsappCtaFieldSchema,
+  riskLabel: z.enum(["safe", "needs_look", "sensitive"]).nullable().optional(),
 });
 
 // iFox Article Schemas - Accept categorySlug instead of categoryId
@@ -3792,6 +3955,7 @@ export const insertCommentSchema = createInsertSchema(comments).omit({
   moderatedBy: true,
   moderatedAt: true,
   moderationReason: true,
+  appealedAt: true,
   currentSentiment: true,
   currentSentimentConfidence: true,
   sentimentAnalyzedAt: true,
@@ -4278,11 +4442,13 @@ export const updateArticleSchema = z.object({
     x: z.number().min(0).max(100),
     y: z.number().min(0).max(100),
   }).nullable().optional(),
+  // varchar في القاعدة، ومعرفات الاستيراد ليست كلها UUID. الوجود يُفحص في المسار.
   categoryId: z.union([
-    z.string().uuid("معرف التصنيف غير صحيح"),
+    z.string().trim().min(1).max(64, "معرف التصنيف غير صحيح"),
     z.literal(""),
     z.null()
   ]).optional(),
+  riskLabel: z.enum(["safe", "needs_look", "sensitive"]).nullable().optional(),
   reporterId: z.union([
     z.string().min(1, "معرف المراسل غير صحيح"),
     z.null()
@@ -4295,7 +4461,7 @@ export const updateArticleSchema = z.object({
     z.string().datetime(),
     z.null()
   ]).optional(),
-  status: z.enum(["draft", "scheduled", "published", "archived"]).optional(),
+  status: z.enum(["draft", "ready_to_publish", "scheduled", "published", "archived"]).optional(),
   aiSummary: z.union([
     z.string(),
     z.null()
@@ -4304,6 +4470,7 @@ export const updateArticleSchema = z.object({
   aiBullets: z.union([z.array(z.string()), z.null()]).optional(),
   aiBulletsGeneratedAt: z.union([z.string().datetime(), z.null()]).optional(),
   isFeatured: z.boolean().optional(),
+  isReading: z.boolean().optional(),
   hideFromHomepage: z.boolean().optional(),
   publishedAt: z.union([
     z.string().datetime(),
@@ -4358,6 +4525,7 @@ export const updateArticleSchema = z.object({
     sources: z.array(z.string()).optional(),
     lastUpdated: z.string().optional(),
   }).nullable().optional(),
+  whatsappCta: whatsappCtaFieldSchema,
   // Editorial review fields. Without these here, Zod's `.strict()`-like
   // strip behavior silently drops them from PATCH bodies — which means
   // archive/rejection/needs-revision reasons never make it to the DB or
@@ -4370,7 +4538,7 @@ export const updateArticleSchema = z.object({
 });
 
 export const adminArticleFiltersSchema = z.object({
-  status: z.enum(["draft", "scheduled", "published", "archived", "all"]).optional(),
+  status: z.enum(["draft", "ready_to_publish", "scheduled", "published", "archived", "all"]).optional(),
   articleType: z.enum(["news", "opinion", "analysis", "column", "infographic", "weekly_photos", "all"]).optional(),
   categoryId: z.string().uuid().optional(),
   authorId: z.string().optional(),
@@ -4650,6 +4818,12 @@ export type ReporterArticle = {
   title: string;
   slug: string;
   englishSlug?: string | null;
+  excerpt?: string | null;
+  imageUrl?: string | null;
+  thumbnailUrl?: string | null;
+  imageFocalPoint?: { x: number; y: number } | null;
+  isAiGeneratedImage?: boolean;
+  updatedAt?: Date | null;
   publishedAt: Date | null;
   category: {
     name: string;
@@ -4951,7 +5125,20 @@ export function canUserInteract(user: User): boolean {
 
 export function canUserLogin(user: User): boolean {
   const status = getUserEffectiveStatus(user);
-  return status !== "banned" && status !== "deleted";
+  // Block hard-negative states everywhere this gate runs (web LocalStrategy,
+  // deserializeUser, mobile verifyMemberSession, OAuth/phone). "pending"
+  // (email not yet verified) stays allowed on purpose — accounts are
+  // auto-activated and unverified users may browse. Previously only
+  // banned/deleted were blocked, so an admin "suspend" / a security "lock"
+  // had NO effect on web login or on existing sessions (mobile already
+  // rejected suspended explicitly). Now suspension/lock take effect on the
+  // next request across all surfaces.
+  return (
+    status !== "banned" &&
+    status !== "deleted" &&
+    status !== "suspended" &&
+    status !== "locked"
+  );
 }
 
 export function getUserStatusMessage(user: User): string | null {
@@ -5233,15 +5420,15 @@ export const smartBlocks = pgTable("smart_blocks", {
   }>(),
   // Homepage Stage fields (additive — 2026-07-19)
   sortOrder: integer("sort_order").notNull().default(0),
-  sourceType: varchar("source_type", { length: 30 }).notNull().default("keyword"),
-  subtitle: varchar("subtitle", { length: 160 }),
+  sourceType: varchar("source_type").notNull().default("keyword"),
+  subtitle: varchar("subtitle"),
   keywords: jsonb("keywords").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
   pinnedArticleIds: jsonb("pinned_article_ids").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
   scheduleStartAt: timestamp("schedule_start_at"),
   scheduleEndAt: timestamp("schedule_end_at"),
   lookbackHours: integer("lookback_hours"),
   minArticles: integer("min_articles").notNull().default(1),
-  playbook: varchar("playbook", { length: 60 }),
+  playbook: varchar("playbook"),
   isActive: boolean("is_active").notNull().default(true),
   createdBy: varchar("created_by").references(() => users.id),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -5264,11 +5451,18 @@ export const smartBlocksRelations = relations(smartBlocks, ({ one }) => ({
 
 // Smart Blocks Types
 export type SmartBlock = typeof smartBlocks.$inferSelect;
+// Database storage matches production; API validation retains its existing limits.
+const smartBlockInputLimits = {
+  sourceType: z.string().max(30).optional(),
+  subtitle: z.string().max(160).nullish(),
+  playbook: z.string().max(60).nullish(),
+  backgroundColor: z.string().max(20).nullish(),
+};
 export const insertSmartBlockSchema = createInsertSchema(smartBlocks).omit({
   id: true,
   createdAt: true,
   updatedAt: true,
-});
+}).extend(smartBlockInputLimits);
 export type InsertSmartBlock = z.infer<typeof insertSmartBlockSchema>;
 export type UpdateSmartBlock = Partial<InsertSmartBlock>;
 
@@ -5321,7 +5515,7 @@ export type HajjBlockConfig = typeof hajjBlockConfig.$inferSelect;
 export const nationalDayBlockConfig = pgTable("national_day_block_config", {
   id: varchar("id").primaryKey().default("default"), // enforced singleton
   isActive: boolean("is_active").notNull().default(false),
-  title: varchar("title", { length: 80 }).notNull().default("اليوم الوطني السعودي الـ96"),
+  title: varchar("title", { length: 80 }).notNull().default("اليوم الوطني السعودي"),
   subtitle: varchar("subtitle", { length: 160 }),
   // كلمات الاكتشاف التلقائي — تشمل «عزنا بطبعنا» بالهمزة وبدونها لأن
   // المطابقة نصية (ilike) لا تطبيعية.
@@ -5347,7 +5541,7 @@ export const enSmartBlocks = pgTable("en_smart_blocks", {
   title: varchar("title", { length: 60 }).notNull(),
   keyword: varchar("keyword", { length: 100 }).notNull().default(""),
   color: varchar("color", { length: 20 }).notNull(),
-  backgroundColor: varchar("background_color", { length: 20 }),
+  backgroundColor: varchar("background_color"),
   placement: varchar("placement", { length: 30 }).notNull(),
   layoutStyle: varchar("layout_style", { length: 20 }).notNull().default('grid'),
   limitCount: integer("limit_count").notNull().default(6),
@@ -5356,15 +5550,15 @@ export const enSmartBlocks = pgTable("en_smart_blocks", {
     dateRange?: { from: string; to: string };
   }>(),
   sortOrder: integer("sort_order").notNull().default(0),
-  sourceType: varchar("source_type", { length: 30 }).notNull().default("keyword"),
-  subtitle: varchar("subtitle", { length: 160 }),
+  sourceType: varchar("source_type").notNull().default("keyword"),
+  subtitle: varchar("subtitle"),
   keywords: jsonb("keywords").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
   pinnedArticleIds: jsonb("pinned_article_ids").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
   scheduleStartAt: timestamp("schedule_start_at"),
   scheduleEndAt: timestamp("schedule_end_at"),
   lookbackHours: integer("lookback_hours"),
   minArticles: integer("min_articles").notNull().default(1),
-  playbook: varchar("playbook", { length: 60 }),
+  playbook: varchar("playbook"),
   isActive: boolean("is_active").notNull().default(true),
   createdBy: varchar("created_by").references(() => users.id),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -5388,7 +5582,7 @@ export const insertEnSmartBlockSchema = createInsertSchema(enSmartBlocks).omit({
   id: true,
   createdAt: true,
   updatedAt: true,
-});
+}).extend(smartBlockInputLimits);
 export type InsertEnSmartBlock = z.infer<typeof insertEnSmartBlockSchema>;
 
 // ============================================
@@ -6659,6 +6853,7 @@ export const enArticles = pgTable("en_articles", {
   smartSummary: text("smart_summary"),
   aiGenerated: boolean("ai_generated").default(false),
   isFeatured: boolean("is_featured").default(false).notNull(),
+  isReading: boolean("is_reading").default(false).notNull(),
   views: integer("views").default(0).notNull(),
   avgReadTimeOverride: integer("avg_read_time_override"),
   completionRateOverride: integer("completion_rate_override"),
@@ -6883,6 +7078,7 @@ export const urArticles = pgTable("ur_articles", {
   smartSummary: text("smart_summary"),
   aiGenerated: boolean("ai_generated").default(false),
   isFeatured: boolean("is_featured").default(false).notNull(),
+  isReading: boolean("is_reading").default(false).notNull(),
   views: integer("views").default(0).notNull(),
   avgReadTimeOverride: integer("avg_read_time_override"),
   completionRateOverride: integer("completion_rate_override"),
@@ -7076,7 +7272,7 @@ export const urSmartBlocks = pgTable("ur_smart_blocks", {
   title: varchar("title", { length: 60 }).notNull(),
   keyword: varchar("keyword", { length: 100 }).notNull().default(""),
   color: varchar("color", { length: 20 }).notNull(),
-  backgroundColor: varchar("background_color", { length: 20 }),
+  backgroundColor: varchar("background_color"),
   placement: varchar("placement", { length: 30 }).notNull(),
   layoutStyle: varchar("layout_style", { length: 20 }).notNull().default('grid'),
   limitCount: integer("limit_count").notNull().default(6),
@@ -7085,15 +7281,15 @@ export const urSmartBlocks = pgTable("ur_smart_blocks", {
     dateRange?: { from: string; to: string };
   }>(),
   sortOrder: integer("sort_order").notNull().default(0),
-  sourceType: varchar("source_type", { length: 30 }).notNull().default("keyword"),
-  subtitle: varchar("subtitle", { length: 160 }),
+  sourceType: varchar("source_type").notNull().default("keyword"),
+  subtitle: varchar("subtitle"),
   keywords: jsonb("keywords").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
   pinnedArticleIds: jsonb("pinned_article_ids").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
   scheduleStartAt: timestamp("schedule_start_at"),
   scheduleEndAt: timestamp("schedule_end_at"),
   lookbackHours: integer("lookback_hours"),
   minArticles: integer("min_articles").notNull().default(1),
-  playbook: varchar("playbook", { length: 60 }),
+  playbook: varchar("playbook"),
   isActive: boolean("is_active").notNull().default(true),
   createdBy: varchar("created_by").references(() => users.id),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -7117,7 +7313,7 @@ export const insertUrSmartBlockSchema = createInsertSchema(urSmartBlocks).omit({
   id: true,
   createdAt: true,
   updatedAt: true,
-});
+}).extend(smartBlockInputLimits);
 export type InsertUrSmartBlock = z.infer<typeof insertUrSmartBlockSchema>;
 
 // ============================================
@@ -9558,7 +9754,7 @@ export const insertArticleMediaAssetSchema = createInsertSchema(articleMediaAsse
   articleId: z.string().min(1, "Article ID is required"),
   mediaFileId: z.string().optional().nullable(),
   locale: z.enum(["ar", "en", "ur"]),
-  altText: z.string().max(125, "Alt text should be concise (max 125 chars)").optional().nullable(),
+  altText: z.string().max(125, "Alt text should be concise (max 125 chars)"),
   captionHtml: z.string().optional().nullable(),
   captionPlain: z.string().max(500, "Caption should be concise (max 500 chars)").optional().nullable(),
   sourceName: z.string().optional().nullable(),
@@ -9570,7 +9766,7 @@ export const insertArticleMediaAssetSchema = createInsertSchema(articleMediaAsse
 
 // Update schema
 export const updateArticleMediaAssetSchema = z.object({
-  altText: z.string().max(125).optional().nullable(),
+  altText: z.string().max(125).optional(),
   captionHtml: z.string().optional().nullable(),
   captionPlain: z.string().max(500).optional().nullable(),
   keywordTags: z.array(z.string()).optional().nullable(),
@@ -9622,6 +9818,9 @@ export const publishers = pgTable("publishers", {
   // directly (the old hardcoded contentManagerPublisherMap behavior,
   // now a per-publisher flag).
   autoPublish: boolean("auto_publish").default(false).notNull(),
+  // النشر الاجتماعي من لوحة الوكالة: off = مخفي، approval = كل تغريدة
+  // تنتظر موافقة فريق سبق (الافتراضي)، direct = تنشر الوكالة أو تجدول بنفسها.
+  socialPublishMode: text("social_publish_mode").default("approval").notNull(),
 
   // Metadata
   notes: text("notes"), // Internal admin notes
@@ -9734,11 +9933,34 @@ export const publisherRequests = pgTable("publisher_requests", {
   // ملاحظة الإدارة عند المعالجة — سبب الرفض تحديداً. كان يُرسل في الإشعار
   // فقط، فيضيع بمجرد أن تمر الوكالة على إشعاراتها.
   adminNote: text("admin_note"),
+  // عرض التجديد من الإدارة ورد الوكالة عليه (طلبات renewal فقط).
+  // الحالة تتقدم: open → offered → accepted → closed (بعد تأكيد الدفع والتفعيل).
+  offer: jsonb("offer").$type<PublisherRenewalOffer>(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => [
   index("publisher_requests_publisher_idx").on(table.publisherId),
   index("publisher_requests_status_idx").on(table.status),
 ]);
+
+export type PublisherRenewalOffer = {
+  packageType: "unlimited" | "limited";
+  /** عدد الأخبار للباقة المحدودة فقط */
+  totalCredits: number | null;
+  durationMonths: number;
+  /** ISO — تبدأ عادة لحظة انتهاء الباقة الحالية فلا ينقطع النشر */
+  startDate: string;
+  price: number | null;
+  currency: string;
+  /** ISO — آخر يوم يمكن فيه قبول العرض */
+  validUntil: string;
+  note: string | null;
+  sentAt: string;
+  sentBy: string;
+  response?: "accepted" | "contact";
+  respondedAt?: string;
+  respondedBy?: string;
+  activatedCreditId?: string;
+};
 
 export type PublisherRequest = typeof publisherRequests.$inferSelect;
 
@@ -9801,6 +10023,7 @@ export const updatePublisherSchema = z.object({
   taxNumber: z.string().optional(),
   address: z.string().optional(),
   isActive: z.boolean().optional(),
+  socialPublishMode: z.enum(["off", "approval", "direct"]).optional(),
   suspendedUntil: z.string().nullable().optional(),
   suspensionReason: z.string().optional(),
   publishingEndsAt: z.string().nullable().optional(),
@@ -12058,7 +12281,7 @@ export type CorrespondentApplicationWithDetails = CorrespondentApplication & {
 
 // جدول طلبات تسجيل كتّاب الرأي
 export const opinionAuthorApplications = pgTable("opinion_author_applications", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
   
   // معلومات كاتب الرأي
   arabicName: text("arabic_name").notNull(), // الاسم بالعربية
@@ -12082,17 +12305,17 @@ export const opinionAuthorApplications = pgTable("opinion_author_applications", 
   consentAt: timestamp("consent_at"),
   
   // حالة الطلب
-  status: text("status").default("pending").notNull(), // pending, approved, rejected
+  status: varchar("status", { length: 20 }).default("pending").notNull(), // pending, approved, rejected
   
   // معلومات المراجعة
   reviewedBy: varchar("reviewed_by").references(() => users.id), // من راجع الطلب
-  reviewedAt: timestamp("reviewed_at"), // تاريخ المراجعة
+  reviewedAt: timestamp("reviewed_at", { withTimezone: true }), // تاريخ المراجعة
   reviewNotes: text("review_notes"), // ملاحظات المراجعة (سبب الرفض مثلاً)
   
   // المستخدم الناتج عن الموافقة
   createdUserId: varchar("created_user_id").references(() => users.id), // المستخدم المُنشأ بعد الموافقة
   
-  createdAt: timestamp("created_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 }, (table) => [
   index("idx_opinion_author_applications_status").on(table.status),
   index("idx_opinion_author_applications_email").on(table.email),
@@ -13997,6 +14220,29 @@ export const appMemberSessions = pgTable("app_member_sessions", {
 // Type for mobile app sessions
 export type AppMemberSession = typeof appMemberSessions.$inferSelect;
 
+// Personal credentials used by the Sabq publisher bot/iOS client. This table
+// is deliberately separate from app_member_sessions and the legacy global bot
+// token so revocation and attribution remain per human user.
+export const botPublisherTokens = pgTable("bot_publisher_tokens", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  tokenHash: text("token_hash").notNull().unique(),
+  tokenPrefix: varchar("token_prefix", { length: 32 }).notNull(),
+  label: varchar("label", { length: 120 }),
+  expiresAt: timestamp("expires_at").notNull(),
+  revokedAt: timestamp("revoked_at"),
+  issuedBy: varchar("issued_by").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  lastUsedAt: timestamp("last_used_at"),
+}, (table) => [
+  index("bot_publisher_tokens_user_id_idx").on(table.userId),
+  index("bot_publisher_tokens_expires_at_idx").on(table.expiresAt),
+  index("bot_publisher_tokens_revoked_at_idx").on(table.revokedAt),
+]);
+
+export type BotPublisherToken = typeof botPublisherTokens.$inferSelect;
+export type InsertBotPublisherToken = typeof botPublisherTokens.$inferInsert;
+
 // ============================================================================
 // EMAIL AGENT PROCESSED (تكرار البريد الذكي)
 // ============================================================================
@@ -14174,6 +14420,8 @@ export const opinionTicketMessagesRelations = relations(opinionTicketMessages, (
 export const insertOpinionTicketSchema = z.object({
   title: z.string().trim().min(3, "العنوان قصير جداً").max(255, "العنوان طويل جداً"),
   message: z.string().trim().min(1, "نص الاستفسار مطلوب").max(10000, "النص طويل جداً"),
+  /** أدمن فقط: إنشاء تذكرة صادرة إلى مساهم (مراسل / كاتب رأي / زاوية). */
+  writerId: z.string().trim().min(1).optional(),
 });
 
 export const insertOpinionTicketMessageSchema = z.object({
@@ -14349,6 +14597,11 @@ export const aiUsageLogs = pgTable("ai_usage_logs", {
   errorCode: varchar("error_code", { length: 32 }),
   errorMessage: text("error_message"),
   userId: varchar("user_id"),
+  // نصّت عليهما خطة «محرر سبق» الموحد (المرحلة 4 — قياس الجودة): نوع المهمة
+  // التحريرية (edit/develop/review/…) ونسخة البرومبت وقت الاستدعاء، ليُحسب
+  // لاحقًا مقياس «نسبة تعديل البشر» لكل مهمة ولكل نسخة برومبت.
+  taskType: varchar("task_type", { length: 32 }),
+  promptVersion: varchar("prompt_version", { length: 16 }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => [
   index("idx_ai_usage_logs_created").on(table.createdAt),
@@ -14445,6 +14698,122 @@ export type AiUsageDailyRow = typeof aiUsageDaily.$inferSelect;
 export type AiProviderHealthRow = typeof aiProviderHealth.$inferSelect;
 export type AiConfigAuditRow = typeof aiConfigAudit.$inferSelect;
 export type AiBudget = typeof aiBudgets.$inferSelect;
+
+// فريق سبق الذكي — سجلّ «الموظفين» الرقميين (طبقة هوية فوق البوابة).
+// السجل الافتراضي في shared/aiStaffRoster.ts (نمط gateway/defaults.ts):
+// الجدول يتقدم على الثوابت متى زُرع عبر scripts/seed-ai-staff.ts، وكل
+// المؤشرات تُشتق من ai_usage_logs/ai_usage_daily عبر feature_keys — لا
+// ازدواج بيانات. القيم المقيّدة نصوص موثقة في aiStaffRoster.ts (لا pgEnum).
+export const aiStaff = pgTable("ai_staff", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  slug: varchar("slug", { length: 64 }).notNull().unique(),
+  employeeCode: varchar("employee_code", { length: 16 }).notNull(),
+  nameAr: varchar("name_ar", { length: 64 }).notNull(),
+  titleAr: varchar("title_ar", { length: 128 }).notNull(),
+  bioAr: text("bio_ar").default("").notNull(),
+  departmentKey: varchar("department_key", { length: 32 }).notNull(),
+  managerSlug: varchar("manager_slug", { length: 64 }),
+  avatarUrl: varchar("avatar_url", { length: 512 }).default("").notNull(),
+  featureKeys: jsonb("feature_keys").$type<string[]>().default([]).notNull(),
+  featureKeyPrefixes: jsonb("feature_key_prefixes").$type<string[]>().default([]).notNull(),
+  systems: jsonb("systems").$type<string[]>().default([]).notNull(),
+  triggerMode: varchar("trigger_mode", { length: 16 }).default("on-demand").notNull(),
+  scheduleNoteAr: varchar("schedule_note_ar", { length: 128 }).default("").notNull(),
+  metricsSource: varchar("metrics_source", { length: 16 }).default("gateway").notNull(),
+  status: varchar("status", { length: 16 }).default("active").notNull(), // active | paused
+  sortOrder: integer("sort_order").default(100).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export type AiStaffRow = typeof aiStaff.$inferSelect;
+export type InsertAiStaff = typeof aiStaff.$inferInsert;
+
+// ============================================
+// غرفة عمليات سبق الذكية — سجل مهام الوكلاء (إضافي، معزول، بادئة ops_)
+// ============================================
+// النموذج المشترك (الحالات، الأنواع، المسارات، الصلاحيات) في shared/opsRoom.ts.
+// صف واحد لكل «مهمة رئيسية» (parent_id فارغ) ولكل «خطوة وكيل» (parent_id
+// يشير للرئيسية). الوكلاء لا يتحادثون — يتبادلون المخرجات المنظمة هنا.
+// لا يوجد أي عمود نشر/إرسال: القرار النهائي بشري دائمًا.
+export const opsTasks = pgTable("ops_tasks", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  parentId: varchar("parent_id"),                       // null = مهمة رئيسية
+  title: varchar("title", { length: 300 }).notNull(),
+  description: text("description").default("").notNull(),
+  taskType: varchar("task_type", { length: 32 }).notNull(),      // OPS_TASK_TYPES
+  priority: varchar("priority", { length: 16 }).default("normal").notNull(),
+  status: varchar("status", { length: 32 }).default("new").notNull(), // OPS_TASK_STATUSES
+  origin: varchar("origin", { length: 16 }).default("manual").notNull(),
+  createdById: varchar("created_by_id"),
+  articleId: varchar("article_id"),
+  radarItemId: varchar("radar_item_id"),
+  // خطوة الوكيل
+  agentSlug: varchar("agent_slug", { length: 32 }),
+  stepKey: varchar("step_key", { length: 64 }),
+  stepIndex: integer("step_index").default(0).notNull(),
+  dependsOn: jsonb("depends_on").$type<string[]>().default([]).notNull(), // مفاتيح خطوات
+  approvalGate: boolean("approval_gate").default(false).notNull(),
+  // الرئيسية
+  routeType: varchar("route_type", { length: 32 }),
+  currentAgentSlug: varchar("current_agent_slug", { length: 32 }),
+  participants: jsonb("participants").$type<string[]>().default([]).notNull(),
+  // البيانات
+  input: jsonb("input").$type<Record<string, unknown>>().default({}).notNull(),
+  output: jsonb("output").$type<Record<string, unknown> | null>(),
+  sources: jsonb("sources").$type<{ title: string; url: string }[]>().default([]).notNull(),
+  confidence: real("confidence"),
+  riskLevel: varchar("risk_level", { length: 16 }).default("low").notNull(),
+  // التنفيذ
+  attempts: integer("attempts").default(0).notNull(),
+  maxAttempts: integer("max_attempts").default(2).notNull(),
+  timeoutMs: integer("timeout_ms").default(90000).notNull(),
+  retryAfter: timestamp("retry_after"),
+  lastError: text("last_error"),
+  failedAtAgent: varchar("failed_at_agent", { length: 32 }),
+  reassignCount: integer("reassign_count").default(0).notNull(),
+  autoReturnCount: integer("auto_return_count").default(0).notNull(),
+  humanNote: text("human_note"),
+  // الاعتماد البشري
+  approvedById: varchar("approved_by_id"),
+  approvedAt: timestamp("approved_at"),
+  approvalNote: text("approval_note"),
+  humanEdited: boolean("human_edited").default(false).notNull(),
+  // الأوقات
+  startedAt: timestamp("started_at"),
+  finishedAt: timestamp("finished_at"),
+  dueAt: timestamp("due_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_ops_tasks_parent").on(table.parentId),
+  index("idx_ops_tasks_status").on(table.status, table.updatedAt),
+  index("idx_ops_tasks_created").on(table.createdAt),
+]);
+
+// سجل أحداث زمني append-only لكل مهمة — يُعرض كملخص تشغيلي قابل للتدقيق،
+// لا رسائل داخلية ولا أسرار ولا سلسلة تفكير النموذج.
+export const opsTaskEvents = pgTable("ops_task_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  taskId: varchar("task_id").notNull(),                 // المهمة الرئيسية
+  stepId: varchar("step_id"),
+  actorType: varchar("actor_type", { length: 16 }).notNull(), // agent | human | system
+  actor: varchar("actor", { length: 128 }).notNull(),         // agent slug أو معرّف المستخدم
+  eventType: varchar("event_type", { length: 32 }).notNull(), // OPS_EVENT_TYPES
+  statusFrom: varchar("status_from", { length: 32 }),
+  statusTo: varchar("status_to", { length: 32 }),
+  messageAr: text("message_ar").notNull(),
+  data: jsonb("data").$type<Record<string, unknown>>().default({}).notNull(),
+  durationMs: integer("duration_ms"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_ops_task_events_task").on(table.taskId, table.createdAt),
+]);
+
+export type OpsTaskRow = typeof opsTasks.$inferSelect;
+export type InsertOpsTask = typeof opsTasks.$inferInsert;
+export type OpsTaskEventRow = typeof opsTaskEvents.$inferSelect;
+export type InsertOpsTaskEvent = typeof opsTaskEvents.$inferInsert;
 
 // ============================================================================
 // المنصة المركزية لتوقعات سبق الرياضي — Prediction Core
@@ -15083,3 +15452,290 @@ export type Meeting = typeof meetings.$inferSelect;
 export type MeetingParticipant = typeof meetingParticipants.$inferSelect;
 export type MeetingEvent = typeof meetingEvents.$inferSelect;
 export type MeetingTranscript = typeof meetingTranscripts.$inferSelect;
+
+// ════════════════════════════════════════════════════════════════════
+// النشر الاجتماعي (منصة X أولاً) — حسابات المنصات، المنشورات، والمحاولات
+// docs/systems/social-publishing/SYSTEM.md
+// ════════════════════════════════════════════════════════════════════
+
+// حساب منصة تواصل مرتبط (v1: حساب واحد لكل منصة — unique على platform).
+// بيانات الاعتماد مشفرة AES-256-GCM (v1:iv:tag:ct) — لا تُعاد للعميل أبداً.
+export const socialPlatformAccounts = pgTable("social_platform_accounts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  platform: text("platform").notNull(), // 'x'
+  handle: text("handle"), // @sabqorg — بدون @
+  externalAccountId: text("external_account_id"),
+  displayName: text("display_name"),
+  status: text("status").default("connected").notNull(), // connected | expired | revoked | disconnected
+  credentialsEncrypted: text("credentials_encrypted"),
+  tokenExpiresAt: timestamp("token_expires_at"),
+  scopes: text("scopes"),
+  lastVerifiedAt: timestamp("last_verified_at"),
+  connectedByUserId: varchar("connected_by_user_id").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("social_platform_accounts_platform_unique").on(table.platform),
+]);
+
+export const socialPosts = pgTable("social_posts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  // null = تغريدة مستقلة (تأليف مباشر من صفحة النشر الاجتماعي بلا خبر)
+  articleId: varchar("article_id").references(() => articles.id, { onDelete: "cascade" }),
+  platform: text("platform").default("x").notNull(),
+  accountId: varchar("account_id").references(() => socialPlatformAccounts.id),
+  textSource: text("text_source").default("custom").notNull(), // title | title_link | custom | ai
+  text: text("text").notNull(),
+  linkUrl: text("link_url"),
+  imageSource: text("image_source").default("none").notNull(), // article | upload | library | none
+  imageUrl: text("image_url"),
+  // وسائط متعددة (التأليف المستقل): image = حتى 4 صور، video = رابط واحد
+  mediaKind: text("media_kind").default("none").notNull(), // none | image | video
+  mediaUrls: jsonb("media_urls").$type<string[]>().default([]),
+  // تغريدة طلبتها وكالة لخبرها (null = منشور من فريق سبق أو كاتب رأي)
+  publisherId: varchar("publisher_id").references(() => publishers.id, { onDelete: "set null" }),
+  // الموعد الذي اقترحته الوكالة وهي تنتظر الموافقة (null = بعد الموافقة مباشرة)
+  requestedAt: timestamp("requested_at"),
+  // draft | scheduled | processing | published | failed | canceled
+  status: text("status").default("draft").notNull(),
+  scheduledAt: timestamp("scheduled_at"),
+  publishedAt: timestamp("published_at"),
+  externalPostId: text("external_post_id"),
+  externalPostUrl: text("external_post_url"),
+  createdByUserId: varchar("created_by_user_id").notNull().references(() => users.id),
+  publishedByUserId: varchar("published_by_user_id").references(() => users.id),
+  canceledByUserId: varchar("canceled_by_user_id").references(() => users.id),
+  attempts: integer("attempts").default(0).notNull(),
+  lastError: text("last_error"),
+  lockedAt: timestamp("locked_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("social_posts_article_idx").on(table.articleId),
+  index("social_posts_status_scheduled_idx").on(table.status, table.scheduledAt),
+  index("social_posts_status_locked_idx").on(table.status, table.lockedAt),
+  index("social_posts_publisher_idx").on(table.publisherId).where(sql`publisher_id IS NOT NULL`),
+]);
+
+// سجل محاولات append-only — كل محاولة نشر (فورية أو من العامل) بصفّها
+export const socialPostAttempts = pgTable("social_post_attempts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  postId: varchar("post_id").notNull().references(() => socialPosts.id, { onDelete: "cascade" }),
+  phase: text("phase").notNull(), // media_upload | create_post | token_refresh
+  outcome: text("outcome").notNull(), // success | error
+  httpStatus: integer("http_status"),
+  errorCode: text("error_code"),
+  errorMessage: text("error_message"), // مُنظّف — بلا توكنات
+  retryable: boolean("retryable"),
+  durationMs: integer("duration_ms"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("social_post_attempts_post_idx").on(table.postId, table.createdAt),
+]);
+
+// مفتاح عدم التكرار لبوت النشر على X. جدول جانبي حتى لا تتغير قراءات
+// social_posts (اللوحة والعامل) قبل دفع المخطط. المرجع الواحد = منشور واحد.
+export const socialPostBotKeys = pgTable("social_post_bot_keys", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  botName: text("bot_name").notNull(),
+  clientReference: text("client_reference").notNull(),
+  postId: varchar("post_id").notNull().references(() => socialPosts.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("social_post_bot_keys_bot_ref_unique").on(table.botName, table.clientReference),
+  uniqueIndex("social_post_bot_keys_post_unique").on(table.postId),
+]);
+
+export type SocialPlatformAccount = typeof socialPlatformAccounts.$inferSelect;
+export type SocialPost = typeof socialPosts.$inferSelect;
+export type SocialPostAttempt = typeof socialPostAttempts.$inferSelect;
+export type SocialPostBotKey = typeof socialPostBotKeys.$inferSelect;
+
+// ============================================================
+// اقتصاد سبق الحي — بيانات البنك المركزي السعودي (ساما)
+// ============================================================
+
+/** رصد قيمة مؤشر/سعر: يُسجَّل صف عند أول مشاهدة وعند كل تغيّر فقط (لا كل استطلاع). */
+export const economyObservations = pgTable("economy_observations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  /** sama_indicator | sama_fx | sama_news | sama_report */
+  source: text("source").notNull(),
+  /** repo | inflation | fx:USD | news:1323 … */
+  key: text("key").notNull(),
+  value: real("value"),
+  valueText: text("value_text"),
+  /** تاريخ البيان كما تنشره ساما */
+  asOf: date("as_of"),
+  payload: jsonb("payload").$type<Record<string, unknown>>().default({}),
+  previousValue: real("previous_value"),
+  observedAt: timestamp("observed_at").defaultNow().notNull(),
+}, (table) => [
+  index("economy_observations_key_idx").on(table.source, table.key, table.observedAt),
+]);
+
+/** ملفات ساما الدورية (PDF/Excel) بعد تحليلها — الملف الواحد صف واحد. */
+export const economyReports = pgTable("economy_reports", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  /** pos_weekly | money_supply_weekly | reserve_assets_monthly */
+  kind: text("kind").notNull(),
+  fileName: text("file_name").notNull(),
+  fileUrl: text("file_url").notNull(),
+  publishedAt: date("published_at"),
+  periodStart: date("period_start"),
+  periodEnd: date("period_end"),
+  parsed: jsonb("parsed").$type<Record<string, unknown>>().notNull(),
+  /** parsed | failed */
+  status: text("status").notNull().default("parsed"),
+  error: text("error"),
+  /** مسودة الخبر الآلي المرتبطة (إن وُلّدت) */
+  articleId: varchar("article_id"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("economy_reports_file_uidx").on(table.fileName),
+  index("economy_reports_kind_idx").on(table.kind, table.publishedAt),
+]);
+
+export type EconomyObservation = typeof economyObservations.$inferSelect;
+export type EconomyReport = typeof economyReports.$inferSelect;
+
+// Durable editorial research jobs; Agents API sessions are private to the initiating editor.
+export const editorialResearchJobs = pgTable("editorial_research_jobs", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  topic: text("topic").notNull(),
+  status: varchar("status", { length: 20 }).notNull().default("queued"),
+  sessionId: text("session_id"),
+  research: jsonb("research").$type<import("./editorialResearch").ResearchBundle>(),
+  result: jsonb("result").$type<import("./editorialResearch").ResearchResult>(),
+  usage: jsonb("usage").$type<import("./editorialResearch").ResearchUsage>(),
+  error: text("error"),
+  leaseUntil: timestamp("lease_until", { withTimezone: true }),
+  remoteClosedAt: timestamp("remote_closed_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, table => [
+  index("editorial_research_jobs_owner_created_idx").on(table.userId, table.createdAt),
+  index("editorial_research_jobs_status_idx").on(table.status),
+]);
+
+// مواعيدك — مواعيد الخدمات العامة. جداول جديدة إضافية؛ لا علاقة لها بتقويم التحرير.
+export const mawaeedSeries = pgTable("mawaeed_series", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  slug: varchar("slug", { length: 80 }).notNull(),
+  kind: varchar("kind", { length: 40 }).notNull(),
+  titleAr: text("title_ar").notNull(),
+  summaryAr: text("summary_ar").notNull().default(""),
+  sortOrder: integer("sort_order").notNull().default(0),
+  published: boolean("published").notNull().default(true),
+  /** لربط الأخبار لاحقًا. المرحلة 1 لا تقرأه. */
+  tagId: varchar("tag_id").references(() => tags.id, { onDelete: "set null" }),
+  contentUpdatedAt: timestamp("content_updated_at", { withTimezone: true }).notNull().defaultNow(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex("mawaeed_series_slug_uidx").on(table.slug),
+]);
+
+export const mawaeedOccurrences = pgTable("mawaeed_occurrences", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  seriesId: varchar("series_id").notNull().references(() => mawaeedSeries.id, { onDelete: "cascade" }),
+  seedKey: varchar("seed_key", { length: 400 }),
+  titleAr: text("title_ar").notNull(),
+  startsOn: date("starts_on").notNull(),
+  endsOn: date("ends_on"),
+  sourceUrl: text("source_url").notNull(),
+  sourceTitle: text("source_title").notNull(),
+  /** confirmed | expected | unverified */
+  certainty: varchar("certainty", { length: 20 }).notNull().default("confirmed"),
+  /** scheduled | cancelled | superseded */
+  status: varchar("status", { length: 20 }).notNull().default("scheduled"),
+  published: boolean("published").notNull().default(false),
+  /** all | riyadh_most | western */
+  regionGroup: varchar("region_group", { length: 20 }).notNull().default("all"),
+  hijriLabel: text("hijri_label"),
+  publicNote: text("public_note"),
+  ruleNote: text("rule_note"),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex("mawaeed_occurrences_seed_key_uidx").on(table.seedKey),
+  index("mawaeed_occurrences_series_date_idx").on(table.seriesId, table.startsOn),
+]);
+
+export const mawaeedChanges = pgTable("mawaeed_changes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  seriesId: varchar("series_id").notNull().references(() => mawaeedSeries.id, { onDelete: "cascade" }),
+  occurrenceId: varchar("occurrence_id").references(() => mawaeedOccurrences.id, { onDelete: "set null" }),
+  actorUserId: varchar("actor_user_id").references(() => users.id, { onDelete: "set null" }),
+  action: varchar("action", { length: 20 }).notNull(),
+  beforeJson: jsonb("before_json").$type<Record<string, unknown> | null>(),
+  afterJson: jsonb("after_json").$type<Record<string, unknown> | null>(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  index("mawaeed_changes_series_idx").on(table.seriesId, table.createdAt),
+]);
+
+// ============================================
+// مكتبة الشعارات — منقولة من salogos إلى R2 (sabq-news-images/logos/)
+// المستورد: scripts/import-logos/import.ts — يحفظ الحقول الأصلية كما هي.
+// ============================================
+
+export const logos = pgTable("logos", {
+  /** id الأصلي من المصدر — لا يتغير */
+  id: varchar("id").primaryKey(),
+  displayId: integer("display_id").notNull(),
+  title: text("title").notNull(),
+  categoryId: varchar("category_id"),
+  status: varchar("status", { length: 32 }),
+  sourceCreatedAt: timestamp("source_created_at", { withTimezone: true }),
+  sourceUpdatedAt: timestamp("source_updated_at", { withTimezone: true }),
+  websiteUrl: text("website_url"),
+  downloadCount: integer("download_count").notNull().default(0),
+  tags: text("tags").array().notNull().default(sql`'{}'::text[]`),
+  slug: text("slug"),
+  ownerId: varchar("owner_id"),
+  /** الروابط الأصلية للمرجعية فقط — لا تُستخدم في الأخبار */
+  sourceImageUrl: text("source_image_url"),
+  sourceSvgUrl: text("source_svg_url"),
+  sourcePngUrl: text("source_png_url"),
+  /** روابط النسخ المخزنة في R2 (media.sabq.org) */
+  svgUrl: text("svg_url"),
+  pngUrl: text("png_url"),
+  /** الرابط المعتمد للأخبار: SVG إن وُجد وإلا PNG */
+  primaryUrl: text("primary_url"),
+  /** العنوان + الوسوم بعد توحيد الحروف (normalizeArabicForSearch في shared/logoSearch.ts) */
+  searchText: text("search_text").notNull().default(""),
+  importedAt: timestamp("imported_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex("logos_display_id_uidx").on(table.displayId),
+  index("logos_search_text_trgm_idx").using("gin", table.searchText.op("gin_trgm_ops")),
+  index("logos_tags_gin_idx").using("gin", table.tags),
+]);
+
+export const logoAssets = pgTable("logo_assets", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  logoId: varchar("logo_id").notNull().references(() => logos.id, { onDelete: "cascade" }),
+  /** svg | png | original */
+  variant: varchar("variant", { length: 16 }).notNull(),
+  sourceUrl: text("source_url").notNull(),
+  r2Key: text("r2_key"),
+  publicUrl: text("public_url"),
+  contentType: varchar("content_type", { length: 64 }),
+  bytes: integer("bytes"),
+  sha256: varchar("sha256", { length: 64 }),
+  /** uploaded | failed */
+  status: varchar("status", { length: 16 }).notNull(),
+  error: text("error"),
+  attempts: integer("attempts").notNull().default(0),
+  uploadedAt: timestamp("uploaded_at", { withTimezone: true }),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex("logo_assets_source_url_uidx").on(table.sourceUrl),
+  index("logo_assets_logo_idx").on(table.logoId),
+  index("logo_assets_status_idx").on(table.status),
+]);
+
+export type Logo = typeof logos.$inferSelect;
+export type LogoAsset = typeof logoAssets.$inferSelect;

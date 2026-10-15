@@ -6,37 +6,26 @@ import type { Request, Response } from "express";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { getSahraaTvBlockConfig } from "./sahraaTvBlockService";
-import { resolveXVideoFromPostUrl } from "./sahraaTvVideoResolver";
-import { SAHRAA_TV_BLOCK_KEY } from "./sahraaTvBlockUtils";
-import { storage } from "../storage";
 
 const UPSTREAM_TIMEOUT_MS = 30_000;
 
 async function resolveUpstreamVideoUrl(): Promise<string | null> {
-  let config = await getSahraaTvBlockConfig();
+  const config = await getSahraaTvBlockConfig();
   if (!config.isActive) return null;
-
-  if (!config.videoUrl && config.xPostUrl) {
-    try {
-      const resolved = await resolveXVideoFromPostUrl(config.xPostUrl);
-      config = {
-        ...config,
-        videoUrl: resolved.videoUrl,
-        posterUrl: resolved.posterUrl || config.posterUrl,
-        updatedAt: config.updatedAt ?? new Date().toISOString(),
-      };
-      await storage.upsertSystemSetting(SAHRAA_TV_BLOCK_KEY, config, "content", true);
-    } catch (e) {
-      console.warn("[SahraaTvBlock] media resolve failed:", e);
-      return null;
-    }
-  }
-
-  return config.videoUrl || null;
+  // Playback only uses URLs already saved by an admin. A media request must
+  // never resolve a post or write settings as a side effect.
+  return config.mirroredVideoUrl || config.videoUrl || null;
 }
 
 export async function proxySahraaTvMedia(req: Request, res: Response): Promise<void> {
-  const upstreamUrl = await resolveUpstreamVideoUrl();
+  let upstreamUrl: string | null;
+  try {
+    upstreamUrl = await resolveUpstreamVideoUrl();
+  } catch (err) {
+    console.error("[SahraaTvBlock] media config read failed:", err);
+    res.status(404).json({ message: "لا يوجد فيديو" });
+    return;
+  }
   if (!upstreamUrl) {
     res.status(404).json({ message: "لا يوجد فيديو" });
     return;

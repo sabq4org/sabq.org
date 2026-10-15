@@ -1,0 +1,23 @@
+/* Keep the logo's layout width stable so the navigation and tools do not
+   move sideways as the brand contracts. Non-sticky headers stay unchanged. */
+.sabq-adaptive-header .sabq-header-row {
+  height: 80px;
+  transition: height 180ms ease-out;
+}
+.sabq-adaptive-header .sabq-header-logo {
+  transform: scale(1.25);
+  transform-origin: center;
+  transition: transform 180ms ease-out;
+}
+.sabq-adaptive-header[data-compact-brand="true"] .sabq-header-row { height: 64px; }
+.sabq-adaptive-header[data-compact-brand="true"] .sabq-header-logo { transform: scale(1); }
+@media (max-width: 767px) {
+  .sabq-adaptive-header .sabq-header-row { height: 72px; }
+  .sabq-adaptive-header .sabq-header-logo-mobile { transform: scale(1.181818); }
+  .sabq-adaptive-header[data-compact-brand="true"] .sabq-header-row { height: 64px; }
+  .sabq-adaptive-header[data-compact-brand="true"] .sabq-header-logo-mobile { transform: scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sabq-adaptive-header .sabq-header-row,
+  .sabq-adaptive-header .sabq-header-logo { transition: none; }
+}

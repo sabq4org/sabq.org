@@ -22,6 +22,7 @@ import {
 import { getLiveFixtures, isWorldCupConfigured, type WcFixture } from "../services/worldCupService";
 import { getLiveScore, isSportmonksConfigured } from "../services/sportmonksService";
 import { clockStartEpochFor } from "../services/matchClock";
+import { isWithinLiveOverlayWindow, mergeLiveMatchProgress } from "../services/sportsMatchStatus";
 
 /** عنصر موجز مضغوط — مفاتيح قصيرة لتقليل حجم كل دفعة. */
 interface LiveDigestItem {
@@ -52,7 +53,8 @@ let version = 0;
 
 /** تركيب نتيجة TheSports اللحظية على مباراة مونديال (نفس منطق overlayLiveScore في worldCup.ts). */
 async function overlayWc(fx: WcFixture): Promise<WcFixture> {
-  if (!isSportmonksConfigured() || fx.status.finished) return fx;
+  if (!isSportmonksConfigured()) return fx;
+  if (fx.status.finished && !isWithinLiveOverlayWindow(fx.timestamp)) return fx;
   try {
     const live = await getLiveScore(fx.id);
     if (!live) return fx;
@@ -60,10 +62,13 @@ async function overlayWc(fx: WcFixture): Promise<WcFixture> {
       ...fx,
       goals: { home: live.home, away: live.away },
       status: {
-        ...fx.status,
-        elapsed: live.minute > 0 ? live.minute : fx.status.elapsed,
-        live: live.live,
-        finished: live.finished || fx.status.finished,
+        ...mergeLiveMatchProgress(fx.status, {
+          live: live.live,
+          finished: live.finished,
+          elapsed: live.minute > 0 ? live.minute : fx.status.elapsed,
+          statusCode: live.stateDevName,
+          kickoffTs: fx.timestamp,
+        }),
       },
     };
   } catch {

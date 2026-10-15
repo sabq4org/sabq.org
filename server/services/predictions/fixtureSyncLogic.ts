@@ -33,6 +33,8 @@ export type ContestSnapshot = {
   status: string;
   locksAt: Date;
   resultVersion: number;
+  metadata?: unknown;
+  resultPayload?: unknown;
 };
 
 export type SyncAction =

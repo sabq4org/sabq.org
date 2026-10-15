@@ -48,9 +48,9 @@
 
 | الخدمة | المصدر | قاعدة البيانات/السلوك |
 |--------|--------|------------------------|
-| `sabq-staging-api` | جذر المستودع · `/railway.json` | شبكة Railway الداخلية فقط؛ PostgreSQL staging مستقل؛ `SERVE_SPA=false` وكل المجدولات/العمال معطّلة |
-| `sabq-staging-web-next` | `Root Directory=/web-next` · `/web-next/railway.json` | API داخلي؛ `STAGING_NO_INDEX=true`؛ Basic Auth عبر `STAGING_ACCESS_TOKEN` |
-| `Postgres` | Railway Postgres 18 + pgvector | volume مستقل، ولا يوجد `NEON_DATABASE_URL` |
+| `sabq-staging-api` | جذر المستودع · `/railway.json` | Railway API خلف `staging-api.sabq.org`؛ يتصل بفرع Neon staging مستقل؛ `SERVE_SPA=false` وكل المجدولات/العمال معطّلة |
+| `sabq-staging-web-next` | `Root Directory=/web-next` · `/web-next/railway.json` | `PUBLIC_SITE_URL=https://staging.sabq.org`؛ API staging؛ `STAGING_NO_INDEX=true`؛ Basic Auth عبر `STAGING_ACCESS_TOKEN` |
+| `Neon staging branch` | فرع production-clone مستقل | `NEON_DATABASE_URL` خاص بـ staging؛ لا تُنسخ مفاتيح تخزين أو تكاملات الإنتاج |
 
 لا توجد خدمات `newsletter-worker` أو `meetings-agent` أو `sabq-mirror` في
 staging. لا تُنسخ قيم أسرار production؛ تُنشأ أسرار الجلسة/JWT خاصة بـ staging،
@@ -59,6 +59,13 @@ staging. لا تُنسخ قيم أسرار production؛ تُنشأ أسرار ا
 لأن استيراد عميل embeddings القديم يرفض الإقلاع عند غياب الاسم كلياً؛ وتظل كل
 مهام AI الخلفية معطّلة. كذلك يستخدم `PRIVATE_OBJECT_DIR` مجلداً مؤقتاً داخل
 حاوية staging بدلاً من أي مفاتيح R2 أو bucket إنتاجي.
+
+عند تشغيل API staging خلف hostname عام يجب ضبط `STAGING_NO_INDEX=true` و`STAGING_ACCESS_TOKEN`
+نفسه المستخدم في Pages/web-next؛ يحرس API كل المسارات باستثناء `/health`، وغياب
+الرمز يعيد 503. يجب ضبط `API_ORIGIN` صراحةً في Pages وweb-next، ولا يُسمح بأي
+fallback إلى `api.sabq.org`. اترك `COOKIE_DOMAIN` غير مضبوط لعزل كوكيز الجلسة.
+الإرسال الخارجي محجوب افتراضياً في staging حتى لو وُجدت إعدادات أو مفاتيح في
+قاعدة منسوخة؛ لا يُفتح إلا بتعيين `STAGING_ALLOW_OUTBOUND=true` لاختبار معزول.
 
 ### ترقية commit إلى staging
 

@@ -339,6 +339,46 @@ export async function saveMediaLicense(
   });
 }
 
+/**
+ * أعمدة الترخيص التي تُنسخ من طلب الانضمام (كاتب رأي / مراسل) إلى الحساب عند القبول.
+ * قبول الطلب بعد الاطلاع على ملفه هو اعتماد للترخيص نفسه — لا مراجعة ثانية ولا إعادة رفع.
+ * null = الطلب بلا ترخيص كامل (لا نمسح ما في الحساب). يرمي خطأ إن كان الترخيص منتهياً.
+ */
+export function mediaLicenseFromApplication(
+  application: {
+    licenseNumber?: string | null;
+    licenseFileKey?: string | null;
+    licenseExpiresAt?: Date | null;
+  },
+  now: Date = new Date(),
+): {
+  mediaLicenseNumber: string;
+  mediaLicenseFileKey: string;
+  mediaLicenseExpiresAt: Date | null;
+  mediaLicenseSubmittedAt: Date;
+  mediaLicenseReviewStatus: MediaLicenseReviewStatus;
+  mediaLicenseAdminNote: null;
+  mediaLicenseCorrectionRequestedAt: null;
+  mediaLicenseCorrectionRequestedBy: null;
+} | null {
+  const licenseNumber = application.licenseNumber?.trim();
+  const licenseFileKey = application.licenseFileKey?.trim();
+  if (!licenseNumber || !licenseFileKey) return null;
+  if (application.licenseExpiresAt && isMediaLicenseExpired(application.licenseExpiresAt, now)) {
+    throw new Error("لا يمكن قبول طلب بترخيص منتهٍ — اطلب من المتقدم تجديد الترخيص أولاً");
+  }
+  return {
+    mediaLicenseNumber: licenseNumber,
+    mediaLicenseFileKey: licenseFileKey,
+    mediaLicenseExpiresAt: application.licenseExpiresAt ?? null,
+    mediaLicenseSubmittedAt: now,
+    mediaLicenseReviewStatus: "approved",
+    mediaLicenseAdminNote: null,
+    mediaLicenseCorrectionRequestedAt: null,
+    mediaLicenseCorrectionRequestedBy: null,
+  };
+}
+
 /** يطلب من الكاتب/المراسل إعادة رفع ملف الترخيص مع ملاحظة واضحة. */
 export async function requestMediaLicenseCorrection(
   userId: string,

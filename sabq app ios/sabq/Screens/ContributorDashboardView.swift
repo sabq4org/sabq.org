@@ -411,7 +411,7 @@ struct ContributorDashboardView: View {
 
     @ViewBuilder
     private func statsCardsSection(_ data: ContributorAnalytics) -> some View {
-        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+        LazyVGrid(columns: SabqGrid.adaptive(spacing: 12), spacing: 12) {
             statCard(title: "المشاهدات", value: data.totalViews, icon: "eye.fill", color: accentBlue, bgColor: accentBlue, trend: trendPct(data.comparison.viewsThisMonth, data.comparison.viewsLastMonth))
             statCard(title: "الإعجابات", value: data.totalLikes, icon: "heart.fill", color: accentPink, bgColor: accentPink, trend: trendPct(data.comparison.likesThisMonth, data.comparison.likesLastMonth))
             statCard(title: "التعليقات", value: data.totalComments, icon: "bubble.left.fill", color: accentCyan, bgColor: accentCyan, trend: nil)

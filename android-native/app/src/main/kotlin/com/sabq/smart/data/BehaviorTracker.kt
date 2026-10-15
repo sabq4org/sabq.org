@@ -3,6 +3,7 @@ package com.sabq.smart.data
 import android.util.Log
 import com.sabq.smart.data.api.ApiBehaviorEventRequest
 import com.sabq.smart.data.api.SabqApi
+import com.sabq.smart.feature.lite.LiteModeManager
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineScope
@@ -13,11 +14,15 @@ import kotlin.math.roundToInt
 /**
  * Unified reader-side analytics for Android. Mirrors iOS [BehaviorTracker]
  * (Services/BehaviorTracker.swift) 1:1.
+ *
+ * وضع Lite يطفئ التتبع السلوكي بالكامل (بوابة iOS نفسها) — لا دورة
+ * DI هنا: LiteModeManager يعتمد على SettingsStore + OkHttp فقط.
  */
 @Singleton
 class BehaviorTracker @Inject constructor(
     private val api: SabqApi,
     private val loyaltyQueue: LoyaltyEventQueue,
+    private val liteModeManager: LiteModeManager,
 ) {
     private var activeArticleId: String? = null
     private var startedAt: Long? = null
@@ -26,6 +31,7 @@ class BehaviorTracker @Inject constructor(
 
     @Synchronized
     fun startSession(articleId: String) {
+        if (liteModeManager.isLiteActive.value) return
         // Idempotent — if the view re-appears (push/pop) we keep the
         // same session running rather than double-counting.
         if (activeArticleId == articleId && !endedForCurrentSession) {
@@ -79,6 +85,7 @@ class BehaviorTracker @Inject constructor(
      */
     @Synchronized
     fun endSession() {
+        if (liteModeManager.isLiteActive.value) return
         if (endedForCurrentSession || activeArticleId == null) return
         endedForCurrentSession = true
 

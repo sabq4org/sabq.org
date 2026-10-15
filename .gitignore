@@ -127,3 +127,6 @@ docs/security/تقرير_المراجعة_الأمنية_سبق.json
 .idea/
 .vscode/
 .worktrees/
+
+# Native Firebase QA config is provisioned locally; never bundle it in release.
+/android-native/app/src/debug/google-services.json

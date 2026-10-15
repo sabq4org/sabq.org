@@ -2,8 +2,8 @@
 // (sabq app ios/sabq/Services/SabqAnalytics.swift) so events from both
 // platforms unify cleanly in GA4 → Engagement → Events.
 //
-// gtag.js (loaded in client/index.html) handles session_id, engagement
-// time, client_id, and user_id automatically — we only pass event-specific
+// gtag.js (loaded by analytics-privacy.ts) handles session_id, engagement
+// time and client_id automatically — we only pass event-specific
 // params here.
 
 declare global {
@@ -13,12 +13,18 @@ declare global {
   }
 }
 
+import {
+  ensureAnalyticsReady,
+  isAnalyticsAllowed,
+  sanitizeAnalyticsParams,
+} from "./analytics-privacy";
+
 const truncate = (s: string, max: number): string =>
   s.length <= max ? s : s.slice(0, max);
 
 const gtagEvent = (name: string, params: Record<string, unknown>) => {
-  if (typeof window === "undefined" || typeof window.gtag !== "function") return;
-  window.gtag("event", name, params);
+  if (!ensureAnalyticsReady() || !isAnalyticsAllowed() || typeof window.gtag !== "function") return;
+  window.gtag("event", name, sanitizeAnalyticsParams(params));
 };
 
 // ---------- Content views ----------
@@ -77,8 +83,16 @@ export const trackSearch = (query: string) => {
   gtagEvent("search", { search_term: truncate(query, 100) });
 };
 
+export const trackLoginStart = (method: string) => {
+  gtagEvent("login_start", { method });
+};
+
 export const trackLogin = (method: string) => {
   gtagEvent("login", { method });
+};
+
+export const trackSignUp = (method: string) => {
+  gtagEvent("sign_up", { method });
 };
 
 // ---------- Legacy helpers (kept for backwards compat) ----------
@@ -102,4 +116,18 @@ export const trackScrollDepth = (depth: number, articleId?: string) => {
 
 export const trackReadingTime = (seconds: number, articleId: string) => {
   trackEvent("reading_time", "engagement", articleId, seconds);
+};
+
+export const trackReadingEngagement = (
+  name: "scroll_depth" | "reading_time",
+  params: {
+    article_id: string;
+    percent_scrolled?: number;
+    reading_time_seconds?: number;
+    page_location: string;
+    page_title?: string;
+    page_referrer?: string;
+  },
+) => {
+  gtagEvent(name, params);
 };

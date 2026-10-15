@@ -36,17 +36,8 @@ struct DailyBriefView: View {
         }
         .background(SabqTheme.background)
         .sabqRTL()
+        .navigationTitle("لك")
         .navigationBarTitleDisplayMode(.inline)
-        .navigationBarBackButtonHidden(true)
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button { dismiss() } label: {
-                    Image(systemName: "chevron.right")
-                        .font(SabqFonts.app(size: 16, weight: .semibold))
-                        .foregroundStyle(SabqTheme.ink)
-                }
-            }
-        }
         .sheet(isPresented: $showLogin, onDismiss: { }) {
             LoginSheet(initialMode: false)
         }
@@ -180,7 +171,7 @@ struct DailyBriefView: View {
                     .fill(article.category.tint.opacity(0.15))
                     .frame(width: 220, height: 124)
             }
-            Text(article.category.title)
+            Text(article.categoryTitle)
                 .font(SabqFonts.app(size: 10, weight: .regular))
                 .foregroundStyle(SabqTheme.secondaryInk)
             SabqRTLText(
@@ -414,7 +405,7 @@ struct DailyBriefView: View {
     }
 
     private var valueGrid: some View {
-        let columns = [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)]
+        let columns = SabqGrid.adaptive(spacing: 12)
         return LazyVGrid(columns: columns, spacing: 12) {
             featureTile(title: "موجز يومي", subtitle: "أهم ما يهمك في دقائق", icon: "doc.text.magnifyingglass", tint: SabqTheme.teal)
             featureTile(title: "اقتراحات ذكية", subtitle: "توصيات من سبق AI", icon: "sparkles", tint: SabqTheme.coral)

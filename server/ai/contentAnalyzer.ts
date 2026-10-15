@@ -10,6 +10,13 @@ import {
   SABQ_PRIMARY_EDITOR_MODEL,
   SABQ_FALLBACK_EDITOR_MODEL,
 } from "./sabqEditorialPrompt";
+import { assertEditedContentComplete, extractLockedSourceNumbers, restoreSourceNumbers } from "./editorialOutputGuards";
+import { PartialStringFieldTracker } from "./partialJsonString";
+import { EDITORIAL_PRESERVATION_INSTRUCTION, withEditorialCompletenessRepair } from "./editorialCompletenessRetry";
+import { trackedOpenAICompletion } from "./gateway/trackedOpenAI";
+
+/** تقدم إعادة الصياغة أثناء البث: نص جديد من optimized.content، أو إعادة بدء بعد فشل. */
+export type SabqEditorProgress = { type: "delta"; text: string } | { type: "reset" };
 
 // حدود صريحة بدل افتراضات SDK (10 دقائق × 2 retries) — انظر نظيرتها في
 // server/openai.ts. fallback التحرير هنا 8000 توكن فالمهلة أسخى قليلًا.
@@ -260,8 +267,10 @@ interface SabqEditorialResult {
 export async function analyzeAndEditWithSabqStyle(
   text: string,
   language: "ar" | "en" | "ur" = "ar",
-  availableCategories?: Array<{ nameAr: string; nameEn: string }>
+  availableCategories?: Array<{ nameAr: string; nameEn: string }>,
+  opts?: { onProgress?: (event: SabqEditorProgress) => void }
 ): Promise<SabqEditorialResult> {
+  const onProgress = opts?.onProgress;
   try {
     // Normalize language code to ensure it's valid
     const normalizedLang = normalizeLanguageCode(language);
@@ -432,8 +441,11 @@ ${SABQ_FEWSHOT_AR}
 ✅ **نظّف**: النص من أي شيء لا يتعلق بالخبر
 ✅ **حرّر**: بأسلوب سبق الاحترافي
 ✅ **احتفظ**: بكل التفاصيل والمعلومات الإخبارية
+✅ **الاقتباس**: استخدم القوسين «...» لكل اقتباس أو تسمية داخل النصوص
 ❌ **لا تضيف**: حقائق غير موجودة
 ❌ **لا تغيّر**: الحقائق الواردة أو المصادر
+❌ **لا تغيّر أي رقم** من المصدر (أسعار، نسب، كميات، تواريخ رقمية) — انسخ الخانات كما هي حتى لو بدا الرقم غير مألوف
+❌ **لا تستخدم أبدًا** علامة التنصيص المزدوجة (") داخل قيم JSON — استبدلها بـ«...»
 
 ## 🎯 الهدف النهائي
 خبر نظيف، محرّر باحترافية، جاهز للنشر فوراً وفق معايير صحيفة سبق! 🚀`,
@@ -565,9 +577,12 @@ Evaluate the ORIGINAL text (after cleaning, before editing) on a 0-100 scale:
 ✅ **Edit**: In Sabq English professional style for international readers
 ✅ **Keep**: All news details, verified facts, and proper attribution
 ✅ **Reflect**: Saudi Arabia positively, emphasizing achievements and development
+✅ **Quotes**: Use curly quotation marks "…" for quotes inside text values
 ❌ **Don't add**: Facts not in original
 ❌ **Don't change**: Stated facts or sources
+❌ **Don't change any number** from the source (prices, percentages, quantities, numeric dates) — copy digits exactly even if the figure looks unusual
 ❌ **Don't use**: Sensationalism, clickbait, or casual language
+❌ **Never use** straight double quotes (") inside JSON string values — use curly "…" instead
 
 ## 🎯 Final Goal
 Professional English news story, ready for immediate publication, presenting Saudi Arabia to the world with accuracy and polish! 🚀`,
@@ -663,8 +678,11 @@ Professional English news story, ready for immediate publication, presenting Sau
 ✅ **صاف کریں**: متن سے کوئی بھی چیز جو خبر سے متعلق نہیں
 ✅ **ترمیم کریں**: سبق پیشہ ورانہ انداز میں
 ✅ **رکھیں**: تمام خبری تفصیلات اور معلومات
+✅ **اقتباس**: متن کے اندر اقتباسات کے لیے ہمیشہ «...» استعمال کریں
 ❌ **شامل نہ کریں**: حقائق جو اصل میں نہیں
 ❌ **تبدیل نہ کریں**: بیان شدہ حقائق یا ذرائع
+❌ **کوئی عدد نہ بدلیں** ماخذ سے (قیمتیں، فیصد، مقدار) — ہندسے جوں کے توں نقل کریں چاہے عدد غیر مانوس لگے
+❌ JSON اقدار کے اندر سیدھی ڈبل کوٹیشن (") کبھی استعمال نہ کریں — «...» استعمال کریں
 
 ## 🎯 حتمی ہدف
 صاف خبر، پیشہ ورانہ طور پر ترمیم شدہ، سبق کے معیار کے مطابق فوری اشاعت کے لیے تیار! 🚀`,
@@ -688,21 +706,44 @@ Professional English news story, ready for immediate publication, presenting Sau
     if (text.length > MAX_EDITOR_INPUT_CHARS) {
       console.warn(`[Sabq Editor] Input trimmed from ${text.length} to ${MAX_EDITOR_INPUT_CHARS} chars (safety cap)`);
     }
-    const userPrompt = `قم بتحليل وتحرير المحتوى التالي:\n\n${editorInput}`;
+    const lockedNumbers = extractLockedSourceNumbers(editorInput);
+    const lockBlock =
+      lockedNumbers.length > 0
+        ? `\n\n## أرقام المصدر — انسخها حرفياً دون تغيير أي خانة:\n${lockedNumbers.map((n) => `- ${n}`).join("\n")}`
+        : "";
+    const userPrompt = `${EDITORIAL_PRESERVATION_INSTRUCTION}\n\nقم بتحليل وتحرير المحتوى التالي:${lockBlock}\n\n${editorInput}`;
     let result: any;
     try {
       const anthropic = getAnthropicClient();
-      const message = await anthropic.messages.create({
+      // withRetry يعيد استدعاء الدالة كاملة عند الفشل — نبلّغ المستمع ليمسح المعاينة
+      onProgress?.({ type: "reset" });
+      const claudeRequest = {
         model: SABQ_PRIMARY_EDITOR_MODEL,
         max_tokens: 8000,
         temperature: 0.3,
-        system: systemPrompt,
-        messages: [{ role: "user", content: userPrompt }],
+        // تعليمات النظام ثابتة بين الأخبار (~5 آلاف توكن) فتُخزَّن مؤقتًا وتُقرأ بجزء صغير من سعر الإدخال
+        system: [{ type: "text" as const, text: systemPrompt, cache_control: { type: "ephemeral" as const } }],
+        messages: [{ role: "user" as const, content: userPrompt }],
         // Structured Outputs: تضمن JSON صالحاً مطابقاً للمخطط (output_config غير موجود في أنواع SDK 0.68 لكنه GA في الـ API)
         output_config: {
           format: { type: "json_schema", schema: SABQ_EDITORIAL_JSON_SCHEMA },
         },
-      } as any);
+      } as any;
+      let message: Anthropic.Message;
+      if (onProgress) {
+        // بث: نفك optimized.content من JSON الجزئي ونرسل الجديد منه أولًا بأول
+        const stream = anthropic.messages.stream(claudeRequest);
+        const tracker = new PartialStringFieldTracker("content", '"optimized"');
+        let rawSoFar = "";
+        stream.on("text", (delta) => {
+          rawSoFar += delta;
+          const chunk = tracker.next(rawSoFar);
+          if (chunk) onProgress({ type: "delta", text: chunk });
+        });
+        message = await stream.finalMessage();
+      } else {
+        message = await anthropic.messages.create(claudeRequest);
+      }
 
       if (message.stop_reason === "max_tokens") {
         throw new Error("Claude response truncated (stop_reason=max_tokens)");
@@ -716,37 +757,47 @@ Professional English news story, ready for immediate publication, presenting Sau
         throw new Error("Empty response from Claude");
       }
       result = JSON.parse(stripJsonCodeFences(responseText));
+      // بتر Structured Outputs الصامت (علامة " غير مهرَّبة تُغلق السلسلة مبكرًا)
+      // يمر من فحص stop_reason لأن JSON يصل صالحًا — نفحص اكتمال المحتوى نفسه
+      assertEditedContentComplete(result?.optimized?.content || "", editorInput);
       console.log(`[Sabq Editor] Edited with ${SABQ_PRIMARY_EDITOR_MODEL}`);
     } catch (claudeError: any) {
       console.warn(
         `[Sabq Editor] ${SABQ_PRIMARY_EDITOR_MODEL} failed (${claudeError?.message || claudeError}); falling back to ${SABQ_FALLBACK_EDITOR_MODEL}`
       );
-      const response = await withOpenAIRetry(
-        () => openai.chat.completions.create({
-          model: SABQ_FALLBACK_EDITOR_MODEL,
-          messages: [
-            {
-              role: "system",
-              content: systemPrompt,
-            },
-            {
-              role: "user",
-              content: userPrompt,
-            },
-          ],
-          response_format: { type: "json_object" },
-          max_completion_tokens: 8000,
-        }),
-        3,
-        "SabqEditor"
-      );
+      // البديل بلا بث — نمسح معاينة كلود الناقصة حتى لا تبقى معلّقة على الشاشة
+      onProgress?.({ type: "reset" });
+      result = await withEditorialCompletenessRepair(async (feedback) => {
+        const response = await withOpenAIRetry(
+          () => trackedOpenAICompletion(openai, "editorial-edit-fallback", {
+            model: SABQ_FALLBACK_EDITOR_MODEL,
+            messages: [
+              {
+                role: "system",
+                content: systemPrompt,
+              },
+              {
+                role: "user",
+                content: feedback ? `${feedback}\n\n${userPrompt}` : userPrompt,
+              },
+            ],
+            response_format: { type: "json_object" },
+            max_completion_tokens: 8000,
+          }),
+          3,
+          "SabqEditor"
+        );
 
-      // احرس من المخرجات المبتورة حتى لا يُنشر خبر ناقص بصمت
-      if (response.choices[0].finish_reason === "length") {
-        throw new Error("OpenAI fallback response truncated (finish_reason=length)");
-      }
+        // احرس من المخرجات المبتورة حتى لا يُنشر خبر ناقص بصمت
+        if (response.choices[0].finish_reason === "length") {
+          throw new Error("OpenAI fallback response truncated (finish_reason=length)");
+        }
 
-      result = JSON.parse(response.choices[0].message.content || "{}");
+        const fallbackResult = JSON.parse(response.choices[0].message.content || "{}");
+        // فحص البديل أيضًا؛ المساعد يضيف توجيهًا تصحيحيًا مرة واحدة ثم يصعّد الفشل.
+        assertEditedContentComplete(fallbackResult?.optimized?.content || "", editorInput);
+        return fallbackResult;
+      }, claudeError);
     }
 
     console.log("[Sabq Editor] Analysis and editing completed successfully");
@@ -755,8 +806,24 @@ Professional English news story, ready for immediate publication, presenting Sau
     console.log("[Sabq Editor] Category:", result.detectedCategory);
     console.log("[Sabq Editor] Has news value:", result.hasNewsValue);
     console.log("[Sabq Editor] Optimized title:", result.optimized?.title?.substring(0, 60));
+    console.log("[Sabq Editor] Optimized content length:", result.optimized?.content?.length || 0, "(input:", text.length + ")");
 
     const finalLang = normalizeLanguageCode(result.language || normalizedLang);
+
+    const title = applyPoliticalFactsFilter(result.optimized?.title || "", finalLang);
+    const lead = applyPoliticalFactsFilter(result.optimized?.lead || "", finalLang);
+    const content = applyPoliticalFactsFilter(result.optimized?.content || "", finalLang);
+
+    const restoredTitle = restoreSourceNumbers(editorInput, title);
+    const restoredLead = restoreSourceNumbers(editorInput, lead);
+    const restoredContent = restoreSourceNumbers(editorInput, content);
+    const restoredAll = [...restoredTitle.restored, ...restoredLead.restored, ...restoredContent.restored];
+    if (restoredAll.length > 0) {
+      console.warn(
+        "[Sabq Editor] Restored source numbers mutated by the model:",
+        restoredAll.map((item) => `${item.from}→${item.to}`).join(", "),
+      );
+    }
 
     return {
       qualityScore: result.qualityScore || 0,
@@ -770,9 +837,9 @@ Professional English news story, ready for immediate publication, presenting Sau
         // "former president Trump" / "الرئيس السابق ترامب" that the model
         // emitted despite the preamble gets rewritten before the article
         // hits the database.
-        title: applyPoliticalFactsFilter(result.optimized?.title || "", finalLang),
-        lead: applyPoliticalFactsFilter(result.optimized?.lead || "", finalLang),
-        content: applyPoliticalFactsFilter(result.optimized?.content || "", finalLang),
+        title: restoredTitle.text,
+        lead: restoredLead.text,
+        content: restoredContent.text,
         seoKeywords: result.optimized?.seoKeywords || [],
       },
     };
@@ -839,7 +906,7 @@ export async function analyzeEmailContent(text: string): Promise<EmailContentAna
 أعد النتيجة بصيغة JSON فقط.`;
 
     // Migrated from gpt-5 to gpt-5.1
-    const response = await openai.chat.completions.create({
+    const response = await trackedOpenAICompletion(openai, "editorial-email-analysis", {
       model: "gpt-4o-mini",
       messages: [
         {
@@ -938,7 +1005,7 @@ Return the result in JSON format only.`,
     };
 
     // Migrated from gpt-5 to gpt-5.1
-    const response = await openai.chat.completions.create({
+    const response = await trackedOpenAICompletion(openai, "editorial-content-improvement", {
       model: "gpt-4o-mini",
       messages: [
         {
@@ -1155,7 +1222,7 @@ ${articleLead}
 
     const prompt = PROMPTS[language];
     
-    const response = await openai.chat.completions.create({
+    const response = await trackedOpenAICompletion(openai, "editorial-image-alt-text", {
       model: "gpt-4o-mini",
       messages: [
         { role: "system", content: "You are an expert in generating SEO-optimized, accessible alt text for news images." },

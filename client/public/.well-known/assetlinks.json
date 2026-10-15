@@ -1,0 +1,22 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.sabq.sports",
+      "sha256_cert_fingerprints": [
+        "A8:85:F6:91:D5:33:A8:C8:40:6D:E6:F6:72:E3:6B:33:51:91:8B:6C:2F:6F:A6:3C:A5:0E:05:6D:50:3A:F5:7A"
+      ]
+    }
+  },
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.sabqorg.sabq",
+      "sha256_cert_fingerprints": [
+        "38:46:AD:90:45:02:B1:FD:6E:1D:29:72:A0:96:A8:59:50:7F:0A:A2:62:E2:F8:91:96:19:80:FE:A0:1D:AA:D3"
+      ]
+    }
+  }
+]

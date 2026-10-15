@@ -31,6 +31,10 @@ export function isChunkErrorMessage(message: string | undefined | null): boolean
   const m = message.toLowerCase();
   return (
     m.includes("failed to fetch dynamically imported module") ||
+    // Firefox phrasing (2026-09-18): "error loading dynamically imported module:
+    // https://cdn.sabq.org/assets/Dashboard-xxxx.js". Was missing, so Firefox
+    // skipped retry + deploy-recovery and fell straight to the generic "حدث خطأ".
+    m.includes("error loading dynamically imported module") ||
     m.includes("importing a module script failed") ||
     m.includes("loading chunk") ||
     m.includes("loading css chunk") ||
@@ -93,8 +97,21 @@ export function retryImport<T>(
         }
         resolve(mod);
       })
-      .catch((error: Error) => {
-        const isModuleError = isChunkErrorMessage(error.message);
+      .catch((error: unknown) => {
+        // Some browsers reject a failed Vite preload with `undefined` instead
+        // of an Error (JAVASCRIPT-REACT-3A). Reading `error.message` then throws
+        // a second TypeError and bypasses the chunk recovery path entirely.
+        // Normalize every rejection before classification so the original
+        // failure is retried and, if necessary, reaches the existing recovery
+        // UI rather than becoming an unrelated unhandled exception.
+        const normalizedError = error instanceof Error
+          ? error
+          : new Error(
+              error == null
+                ? "Loading chunk failed: import rejected without an Error"
+                : String(error),
+            );
+        const isModuleError = isChunkErrorMessage(normalizedError.message);
 
         if (retries > 0 && isModuleError) {
           console.warn(`[LazyLoad] Retrying import, ${retries} attempts left...`);
@@ -131,7 +148,7 @@ export function retryImport<T>(
           });
           return;
         } else {
-          reject(error);
+          reject(normalizedError);
         }
       });
   });

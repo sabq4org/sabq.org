@@ -1,5 +1,6 @@
 package com.sabq.smart.feature.trending
 
+import com.sabq.smart.data.readerErrorMessage
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.sabq.smart.data.Article
@@ -52,7 +53,7 @@ class TrendingViewModel @Inject constructor(
                     _state.update {
                         it.copy(
                             isLoading = false,
-                            loadError = e.localizedMessage ?: "تعذر تحميل الأكثر تداولاً",
+                            loadError = readerErrorMessage(e, "تعذر تحميل الأكثر تداولاً"),
                         )
                     }
                 }

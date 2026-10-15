@@ -18,7 +18,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Progress } from "@/components/ui/progress";
 import {
   FileText,
   Eye,
@@ -46,7 +45,9 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { cn } from "@/lib/utils";
-import { formatCompactNumber, formatDateShort } from "@/lib/format";
+import { formatCompactNumber, formatDateShort, formatNumber } from "@/lib/format";
+import { PublisherRenewalCard, daysLabel } from "@/components/publisher/PublisherRenewalCard";
+import { UsualComparison, type VsUsual } from "@/components/publisher/ArticleInsights";
 
 interface PortalOverview {
   publisher: {
@@ -62,7 +63,19 @@ interface PortalOverview {
     autoPublish: boolean;
   };
   publishBlock: { reason: string; requestType: string } | null;
-  openRequest: { id: string; type: string; createdAt: string } | null;
+  openRequest: { id: string; type: string; status: string; createdAt: string } | null;
+  renewal: {
+    due: boolean;
+    request: { id: string; status: string } | null;
+    upcoming: { packageName: string; startDate: string } | null;
+  } | null;
+  benchmark: {
+    agencyMedian: number;
+    agencySample: number;
+    categoryName: string;
+    categoryMedian: number;
+    windowDays: number;
+  } | null;
   stats: {
     totalArticles: number;
     publishedArticles: number;
@@ -88,6 +101,8 @@ interface PortalOverview {
     views: number | null;
     createdAt: string;
     publishedAt: string | null;
+    authorName?: string | null;
+    vsUsual?: VsUsual | null;
   }>;
   topArticles: Array<{
     id: string;
@@ -247,15 +262,32 @@ export default function PublisherDashboard() {
     ? Math.ceil((new Date(publisher.publishingEndsAt).getTime() - Date.now()) / 86_400_000)
     : null;
 
-  const creditPercent =
-    activeCredit && activeCredit.totalCredits > 0
-      ? Math.round((activeCredit.remainingCredits / activeCredit.totalCredits) * 100)
-      : 0;
+
 
   const isOpenEndedCredit = !!activeCredit?.isUnlimited;
 
   const firstName = user?.firstName?.trim();
   const greeting = firstName ? `أهلاً ${firstName}` : "أهلاً بك";
+
+  const benchmark = data.benchmark ?? null;
+  const nowMonth = new Date().toISOString().slice(0, 7);
+  const currentMonth = monthlyPublishing.find((m) => m.month === nowMonth) ?? null;
+  const previousMonth = [...monthlyPublishing].reverse().find((m) => m.month < nowMonth) ?? null;
+  const previousMonthLabel = previousMonth
+    ? new Date(`${previousMonth.month}-01T00:00:00Z`).toLocaleDateString("ar-SA-u-ca-gregory", { month: "long" })
+    : "";
+  const expiryDays = activeCredit?.expiryDate
+    ? Math.ceil((new Date(activeCredit.expiryDate).getTime() - Date.now()) / 86_400_000)
+    : null;
+  const renewalState = data.renewal?.upcoming
+    ? `جُددت · تبدأ ${formatDateShort(data.renewal.upcoming.startDate)}`
+    : data.renewal?.request
+      ? ({ open: "طلبكم قيد المعالجة", offered: "عرض بانتظار ردكم", accepted: "بانتظار الدفع" } as Record<string, string>)[
+          data.renewal.request.status
+        ] ?? "قيد المعالجة"
+      : data.renewal?.due
+        ? "حان وقت التجديد"
+        : "لا حاجة الآن";
 
   const publishBlock = data.publishBlock;
   const openRequest = data.openRequest;
@@ -314,8 +346,38 @@ export default function PublisherDashboard() {
           )}
         </div>
 
-        {/* طلب مفتوح لدى الإدارة */}
-        {openRequest && (
+        {/* شريط الحالة: كل ما يخص الحساب في سطر واحد */}
+        <div
+          className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-border/60 bg-border/60 text-sm shadow-sm lg:grid-cols-4"
+          data-testid="status-strip"
+        >
+          {[
+            {
+              label: "الباقة",
+              value: activeCredit
+                ? isOpenEndedCredit
+                  ? "مفتوحة · بلا حد"
+                  : `${formatNumber(activeCredit.remainingCredits)} / ${formatNumber(activeCredit.totalCredits)} متبقٍ`
+                : "لا توجد باقة",
+            },
+            {
+              label: "تنتهي بعد",
+              value: expiryDays !== null ? (expiryDays >= 0 ? daysLabel(expiryDays) : "انتهت") : "بلا تاريخ",
+            },
+            { label: "طريقة النشر", value: publisher.autoPublish ? "فوري بلا مراجعة" : "بعد مراجعة المحرر" },
+            { label: "التجديد", value: renewalState },
+          ].map((item) => (
+            <div key={item.label} className="flex flex-col gap-0.5 bg-card px-4 py-3">
+              <span className="text-xs text-muted-foreground">{item.label}</span>
+              <span className="font-semibold tabular-nums">{item.value}</span>
+            </div>
+          ))}
+        </div>
+
+        <PublisherRenewalCard onlyWithRequest />
+
+        {/* طلب مفتوح لدى الإدارة (غير التجديد — التجديد له بطاقته) */}
+        {openRequest && openRequest.type !== "renewal" && (
           <div
             className="flex flex-wrap items-center gap-2 rounded-xl border border-sky-200 bg-sky-50/80 px-4 py-3 text-sm text-sky-900 dark:border-sky-900 dark:bg-sky-950/30 dark:text-sky-100"
             data-testid="banner-open-request"
@@ -374,53 +436,57 @@ export default function PublisherDashboard() {
         {/* مؤشرات الأداء */}
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <KpiCard
-            testId="card-kpi-credits"
-            title="الرصيد المتبقي"
-            icon={Package}
-            iconClass="bg-teal-500/10 text-teal-600 dark:text-teal-300"
-            value={
-              activeCredit ? (
-                <span data-testid="text-remaining-credits">
-                  {isOpenEndedCredit ? (
-                    <span className="inline-flex items-baseline gap-1.5">
-                      مفتوحة
-                      <span className="text-2xl text-muted-foreground">∞</span>
-                    </span>
-                  ) : (
-                    <>
-                      {activeCredit.remainingCredits}
-                      <span className="text-base font-normal text-muted-foreground">
-                        {" "}
-                        / {activeCredit.totalCredits}
-                      </span>
-                    </>
-                  )}
-                </span>
-              ) : (
-                <span className="text-lg font-semibold text-muted-foreground">لا توجد باقة</span>
-              )
-            }
-            hint={
-              activeCredit
-                ? `${activeCredit.packageName}${
-                    activeCredit.expiryDate ? ` · حتى ${formatDateShort(activeCredit.expiryDate)}` : ""
-                  }`
-                : undefined
-            }
-          >
-            {activeCredit && !isOpenEndedCredit ? (
-              <Progress value={creditPercent} className="mt-3 h-1.5" />
-            ) : null}
-          </KpiCard>
-
-          <KpiCard
             testId="card-kpi-month"
             title="منشور هذا الشهر"
             icon={TrendingUp}
             iconClass="bg-sky-500/10 text-sky-600 dark:text-sky-300"
             value={<span data-testid="text-published-month">{stats.publishedThisMonth}</span>}
-            hint={`من إجمالي ${stats.publishedArticles} منشور`}
+            hint={previousMonth ? `${previousMonthLabel} كاملًا: ${formatNumber(previousMonth.published)}` : `من إجمالي ${stats.publishedArticles} منشور`}
           />
+
+          <KpiCard
+            testId="card-kpi-month-views"
+            title="قراءات أخبار الشهر"
+            icon={Eye}
+            iconClass="bg-emerald-500/10 text-emerald-600 dark:text-emerald-300"
+            value={<span data-testid="text-month-views">{formatViews(currentMonth?.views ?? 0)}</span>}
+            hint={
+              previousMonth
+                ? `${previousMonthLabel} كاملًا: ${formatViews(previousMonth.views)}`
+                : `الإجمالي: ${formatViews(stats.totalViews)}`
+            }
+          />
+
+          {/* المقارنة بالمعتاد في القسم نفسه داخل سبق — الوسيط لا المتوسط */}
+          <KpiCard
+            testId="card-kpi-benchmark"
+            title="القراءة المعتادة لخبرك"
+            icon={TrendingUp}
+            iconClass="bg-violet-500/10 text-violet-600 dark:text-violet-300"
+            value={
+              benchmark ? (
+                <span className="tabular-nums" data-testid="text-benchmark">{formatNumber(benchmark.agencyMedian)}</span>
+              ) : (
+                <span className="text-lg font-semibold text-muted-foreground">لا تكفي البيانات</span>
+              )
+            }
+          >
+            {benchmark ? (
+              <p
+                className={cn(
+                  "mt-1.5 text-xs font-medium",
+                  benchmark.agencyMedian >= benchmark.categoryMedian
+                    ? "text-emerald-700 dark:text-emerald-300"
+                    : "text-muted-foreground",
+                )}
+              >
+                {benchmark.agencyMedian >= benchmark.categoryMedian ? "أعلى من" : "أقل من"} المعتاد في {benchmark.categoryName} سبق (
+                {formatNumber(benchmark.categoryMedian)})
+              </p>
+            ) : (
+              <p className="mt-1.5 text-xs text-muted-foreground">تظهر بعد 5 أخبار منشورة خلال 90 يومًا</p>
+            )}
+          </KpiCard>
 
           {/* رقم واحد لا يكفي: «تحتاج تعديلاتك» مطلوب منكم، و«عند المحرر»
               ليس مطلوباً منكم، و«مسودة» لم تُرسل أصلاً. */}
@@ -460,14 +526,6 @@ export default function PublisherDashboard() {
             </div>
           </KpiCard>
 
-          <KpiCard
-            testId="card-kpi-views"
-            title="إجمالي المشاهدات"
-            icon={Eye}
-            iconClass="bg-emerald-500/10 text-emerald-600 dark:text-emerald-300"
-            value={<span data-testid="text-total-views">{formatViews(stats.totalViews)}</span>}
-            hint={`على ${stats.publishedArticles} مادة منشورة`}
-          />
         </div>
 
         {/* النشر الشهري */}
@@ -481,7 +539,7 @@ export default function PublisherDashboard() {
                 <span className="rounded-lg bg-primary/10 p-1.5 text-primary">
                   <TrendingUp className="h-4 w-4" />
                 </span>
-                النشر خلال الأشهر الأخيرة
+                القراءات حسب الشهر
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -489,8 +547,19 @@ export default function PublisherDashboard() {
                 <BarChart data={monthlyPublishing}>
                   <CartesianGrid strokeDasharray="3 3" className="stroke-border/60" vertical={false} />
                   <XAxis dataKey="month" reversed tickLine={false} axisLine={false} fontSize={12} />
-                  <YAxis orientation="right" allowDecimals={false} tickLine={false} axisLine={false} fontSize={12} />
+                  <YAxis
+                    orientation="right"
+                    allowDecimals={false}
+                    tickLine={false}
+                    axisLine={false}
+                    fontSize={12}
+                    tickFormatter={(v: number) => formatCompactNumber(v)}
+                  />
                   <Tooltip
+                    formatter={(value: number, _name, item) => [
+                      `${formatNumber(value)} قراءة · ${formatNumber((item?.payload as { published?: number })?.published ?? 0)} خبر`,
+                      "",
+                    ]}
                     contentStyle={{
                       borderRadius: 12,
                       border: "1px solid hsl(var(--border))",
@@ -498,8 +567,8 @@ export default function PublisherDashboard() {
                     }}
                   />
                   <Bar
-                    dataKey="published"
-                    name="مواد منشورة"
+                    dataKey="views"
+                    name="قراءات أخبار الشهر"
                     fill="hsl(var(--primary))"
                     radius={[6, 6, 0, 0]}
                     maxBarSize={48}
@@ -540,10 +609,23 @@ export default function PublisherDashboard() {
                       data-testid={`recent-article-${article.id}`}
                     >
                       <div className="min-w-0 flex-1">
-                        <p className="truncate font-medium">{article.title}</p>
-                        <p className="mt-0.5 text-xs text-muted-foreground">
-                          {formatDateShort(article.publishedAt || article.createdAt)}
-                          {article.status === "published" && ` · ${formatViews(article.views)}`}
+                        {article.status === "published" ? (
+                          <Link
+                            href={`/dashboard/publisher/articles/${article.id}/report`}
+                            className="block truncate font-medium hover:text-primary hover:underline"
+                          >
+                            {article.title}
+                          </Link>
+                        ) : (
+                          <p className="truncate font-medium">{article.title}</p>
+                        )}
+                        <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
+                          <span>
+                            {formatDateShort(article.publishedAt || article.createdAt)}
+                            {article.authorName ? ` · ${article.authorName}` : ""}
+                            {article.status === "published" && ` · ${formatViews(article.views)}`}
+                          </span>
+                          {article.status === "published" ? <UsualComparison value={article.vsUsual} /> : null}
                         </p>
                       </div>
                       <div className="flex shrink-0 items-center gap-2">

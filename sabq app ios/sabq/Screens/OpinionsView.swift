@@ -15,10 +15,7 @@ struct OpinionsView: View {
     var body: some View {
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 22) {
-                CompactScreenHeader(
-                    title: "المقالات",
-                    subtitle: "أكثر مقالات الرأي قراءةً، وأحدث ما نشر"
-                )
+                SabqPageIntro("أكثر مقالات الرأي قراءةً، وأحدث ما نشر")
 
                 if isLoading && latest.isEmpty && mostViewed.isEmpty {
                     loadingSection
@@ -49,6 +46,8 @@ struct OpinionsView: View {
         .refreshable {
             await loadAll(isRefresh: true)
         }
+        .navigationTitle("المقالات")
+        .navigationBarTitleDisplayMode(.inline)
         .background(SabqTheme.background)
         .sabqRTL()
         .task {
@@ -163,7 +162,7 @@ struct OpinionsView: View {
                 tint: SabqTheme.primaryEnd
             )
 
-            SurfaceCard {
+            SurfaceCard(lazy: true) {
                 ForEach(Array(latest.enumerated()), id: \.element.id) { index, opinion in
                     if index > 0 {
                         Divider().foregroundStyle(SabqTheme.outline)
@@ -219,6 +218,20 @@ struct OpinionsView: View {
             Text(opinion.authorName)
                 .font(SabqFonts.app(size: 12, weight: .medium))
                 .foregroundStyle(SabqTheme.secondaryInk)
+                .lineLimit(1)
+
+            Spacer(minLength: 0)
+
+            // عدد المشاهدات في طرف الصف بدل «اقرأ المقال» — بطاقة أرشيف الرأي في الويب (#1605)
+            HStack(spacing: 5) {
+                Image(systemName: "eye")
+                    .font(SabqFonts.app(size: 10, weight: .regular))
+                Text(opinion.viewsLabel)
+                    .monospacedDigit()
+            }
+            .font(SabqFonts.app(size: 12, weight: .regular))
+            .foregroundStyle(SabqTheme.tertiaryInk)
+            .lineLimit(1)
         }
     }
 

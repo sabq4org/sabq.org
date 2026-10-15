@@ -25,6 +25,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
+import { DashboardPageShell } from "@/components/dashboard/DashboardPageShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -84,6 +85,15 @@ import {
   Clock,
   Eye,
   Power,
+  Search,
+  X,
+  CheckCircle2,
+  CalendarClock,
+  Layers,
+  Newspaper,
+  SlidersHorizontal,
+  Pin,
+  LayoutGrid,
 } from "lucide-react";
 import type { SmartBlock, InsertSmartBlock, Category } from "@shared/schema";
 import { insertSmartBlockSchema, smartBlockSourceTypes } from "@shared/schema";
@@ -181,20 +191,25 @@ function SortableSceneCard({
     transition,
   };
 
+  const pinnedCount = Array.isArray(block.pinnedArticleIds)
+    ? block.pinnedArticleIds.length
+    : 0;
+  const keywordsCount = Array.isArray(block.keywords) ? block.keywords.length : 0;
+
   return (
     <div
       ref={setNodeRef}
       style={style}
       className={cn(
-        "group relative flex gap-3 rounded-xl border border-white/10 bg-slate-950/40 p-3 backdrop-blur-sm transition-all",
-        isDragging && "z-20 scale-[1.02] shadow-xl ring-2 ring-sky-400/40",
-        !block.isActive && "opacity-60",
+        "group relative flex gap-3 rounded-xl border border-white/10 bg-slate-950/55 p-3.5 backdrop-blur-sm transition-all hover:border-sky-400/30 hover:bg-slate-900/70",
+        isDragging && "z-20 scale-[1.02] shadow-xl ring-2 ring-sky-400/50",
+        !block.isActive && "opacity-65",
       )}
       data-testid={`stage-card-${block.id}`}
     >
       <button
         type="button"
-        className="mt-1 cursor-grab text-slate-400 hover:text-slate-200 active:cursor-grabbing"
+        className="no-min-touch-size mt-1 flex h-7 w-6 shrink-0 cursor-grab items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-white/5 hover:text-slate-200 active:cursor-grabbing"
         {...attributes}
         {...listeners}
         aria-label="سحب لإعادة الترتيب"
@@ -203,27 +218,66 @@ function SortableSceneCard({
       </button>
 
       <div
-        className="w-1.5 self-stretch rounded-full"
-        style={{ backgroundColor: block.color }}
+        className="w-1.5 self-stretch rounded-full shadow-xs"
+        style={{ backgroundColor: block.color || "#0B6E4F" }}
       />
 
       <div className="min-w-0 flex-1 space-y-2">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
-            <h3 className="truncate font-semibold text-slate-50">{block.title}</h3>
-            <div className="mt-1 flex flex-wrap gap-1.5">
-              <Badge variant="secondary" className="bg-slate-800 text-slate-200">
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="truncate font-semibold text-slate-50">{block.title}</h3>
+              <span
+                className={cn(
+                  "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium",
+                  block.isActive
+                    ? "bg-emerald-500/15 text-emerald-300 border border-emerald-500/25"
+                    : "bg-slate-800 text-slate-400 border border-slate-700",
+                )}
+              >
+                <span
+                  className={cn(
+                    "h-1.5 w-1.5 rounded-full",
+                    block.isActive ? "bg-emerald-400" : "bg-slate-500",
+                  )}
+                />
+                {block.isActive ? "نشط" : "متوقف"}
+              </span>
+            </div>
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              <Badge variant="secondary" className="bg-slate-800/90 text-slate-200 border border-slate-700/80 text-[11px]">
                 {sourceTypeLabels[block.sourceType || "keyword"] || block.sourceType}
               </Badge>
-              <Badge variant="outline" className="border-slate-600 text-slate-300">
+              <Badge variant="outline" className="border-slate-600/80 text-slate-300 text-[11px]">
+                <LayoutGrid className="ml-1 h-3 w-3 opacity-70" />
                 {layoutStyleOptions.find((l) => l.value === block.layoutStyle)?.label ||
                   block.layoutStyle}
               </Badge>
+              <Badge
+                variant="outline"
+                className="border-slate-700 bg-slate-900/60 text-slate-300 text-[11px] tabular-nums"
+              >
+                <Newspaper className="ml-1 h-3 w-3 opacity-70" />
+                {block.limitCount} مقالات (أدنى {block.minArticles || 1})
+              </Badge>
+              {pinnedCount > 0 ? (
+                <Badge className="bg-purple-500/20 text-purple-200 border border-purple-500/30 text-[11px] tabular-nums">
+                  <Pin className="ml-1 h-3 w-3" />
+                  {pinnedCount} مثبت
+                </Badge>
+              ) : null}
+              {block.lookbackHours ? (
+                <Badge className="bg-indigo-500/20 text-indigo-200 border border-indigo-500/30 text-[11px] tabular-nums">
+                  آخر {block.lookbackHours}س
+                </Badge>
+              ) : null}
               {block.playbook ? (
-                <Badge className="bg-amber-500/20 text-amber-200">{block.playbook}</Badge>
+                <Badge className="bg-amber-500/20 text-amber-200 border border-amber-500/30 text-[11px]">
+                  {block.playbook}
+                </Badge>
               ) : null}
               {block.scheduleStartAt || block.scheduleEndAt ? (
-                <Badge className="bg-sky-500/15 text-sky-200">
+                <Badge className="bg-sky-500/15 text-sky-200 border border-sky-500/30 text-[11px]">
                   <Clock className="ml-1 h-3 w-3" />
                   مجدول
                 </Badge>
@@ -240,29 +294,42 @@ function SortableSceneCard({
         <p className="line-clamp-1 text-xs text-slate-400">
           {block.subtitle ||
             (block.keyword
-              ? `مصدر: ${block.keyword}`
-              : `${block.limitCount} مقالات · ${block.minArticles || 1} حد أدنى`)}
+              ? `مصدر الكلمة: ${block.keyword}${keywordsCount > 0 ? ` (+${keywordsCount} كلمات)` : ""}`
+              : `${block.limitCount} مقالات · ${block.minArticles || 1} حد أدنى للإظهار`)}
         </p>
 
-        <div className="flex gap-1 opacity-90 transition-opacity group-hover:opacity-100">
-          <Button size="sm" variant="ghost" className="h-8 text-slate-200" onClick={onEdit}>
-            <Pencil className="ml-1 h-3.5 w-3.5" />
-            تحرير
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            className="h-8 text-rose-300 hover:text-rose-200"
-            onClick={onDelete}
-          >
-            <Trash2 className="ml-1 h-3.5 w-3.5" />
-            حذف
-          </Button>
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-0.5">
+          <div className="flex gap-1 opacity-90 transition-opacity group-hover:opacity-100">
+            <Button
+              size="sm"
+              variant="ghost"
+              className="no-min-touch-size h-7 px-2.5 text-xs text-slate-200 hover:bg-white/10 hover:text-white"
+              onClick={onEdit}
+            >
+              <Pencil className="ml-1 h-3.5 w-3.5" />
+              تحرير
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="no-min-touch-size h-7 px-2.5 text-xs text-rose-300 hover:bg-rose-500/15 hover:text-rose-200"
+              onClick={onDelete}
+            >
+              <Trash2 className="ml-1 h-3.5 w-3.5" />
+              حذف
+            </Button>
+          </div>
+          <span className="text-[11px] text-slate-500 tabular-nums">
+            ترتيب #{(block.sortOrder ?? 0) + 1}
+          </span>
         </div>
       </div>
     </div>
   );
 }
+
+type PlacementFilter = "all" | (typeof placementOptions)[number]["value"];
+type StatusFilter = "all" | "active" | "inactive" | "scheduled";
 
 export default function SmartBlocksPage() {
   const { toast } = useToast();
@@ -272,6 +339,9 @@ export default function SmartBlocksPage() {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [previewArticles, setPreviewArticles] = useState<PreviewArticle[]>([]);
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [placementFilter, setPlacementFilter] = useState<PlacementFilter>("all");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -357,6 +427,69 @@ export default function SmartBlocksPage() {
     }
     return map;
   }, [blocks]);
+
+  const matchesFilters = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    return (b: SmartBlock) => {
+      if (statusFilter === "active" && !b.isActive) return false;
+      if (statusFilter === "inactive" && b.isActive) return false;
+      if (
+        statusFilter === "scheduled" &&
+        !b.scheduleStartAt &&
+        !b.scheduleEndAt &&
+        b.sourceType !== "event_window"
+      ) {
+        return false;
+      }
+      if (!q) return true;
+      const haystack = [
+        b.title,
+        b.subtitle,
+        b.keyword,
+        b.playbook,
+        ...(Array.isArray(b.keywords) ? b.keywords : []),
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(q);
+    };
+  }, [searchQuery, statusFilter]);
+
+  const filteredBlocksByPlacement = useMemo(() => {
+    const map: Record<string, SmartBlock[]> = {};
+    for (const p of placementOptions) {
+      map[p.value] = (blocksByPlacement[p.value] || []).filter(matchesFilters);
+    }
+    return map;
+  }, [blocksByPlacement, matchesFilters]);
+
+  const visiblePlacements = useMemo(() => {
+    if (placementFilter === "all") return placementOptions;
+    return placementOptions.filter((p) => p.value === placementFilter);
+  }, [placementFilter]);
+
+  const totalBlocks = summary?.total ?? blocks.length;
+  const activeBlocks = summary?.active ?? blocks.filter((b) => b.isActive).length;
+  const inactiveBlocks = summary?.inactive ?? blocks.filter((b) => !b.isActive).length;
+  const scheduledBlocks =
+    summary?.scheduled ??
+    blocks.filter(
+      (b) => Boolean(b.scheduleStartAt || b.scheduleEndAt || b.sourceType === "event_window"),
+    ).length;
+  const activeArticlesCapacity = blocks
+    .filter((b) => b.isActive)
+    .reduce((sum, b) => sum + (b.limitCount || 0), 0);
+  const totalArticlesCapacity = blocks.reduce((sum, b) => sum + (b.limitCount || 0), 0);
+  const activeShelvesCount = placementOptions.filter((p) =>
+    (blocksByPlacement[p.value] || []).some((b) => b.isActive),
+  ).length;
+  const playbooksList = Array.isArray(summary?.playbooks) ? summary.playbooks : [];
+  const directorSuggestions = Array.isArray(directorData?.suggestions)
+    ? directorData.suggestions
+    : [];
+  const hasActiveFilters =
+    searchQuery.trim() !== "" || placementFilter !== "all" || statusFilter !== "all";
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["/api/smart-blocks"] });
@@ -639,23 +772,34 @@ export default function SmartBlocksPage() {
 
   return (
     <DashboardLayout>
-      <div
-        className="mx-auto w-full max-w-[1600px] space-y-6 px-4 pb-10 sm:px-6"
-        dir="rtl"
+      <DashboardPageShell
+        maxWidthClassName="max-w-[1600px]"
+        contentClassName="px-4 pb-10 pt-2 sm:px-6"
       >
         <DashboardPageHeader
           icon={Clapperboard}
           title="مسرح الصفحة الرئيسية"
-          description="إدارة المشاهد التحريرية الحية على الصفحة الرئيسية — ترتيب، جدولة، ومخرج يقترح التركيب"
+          description={
+            <span className="inline-flex flex-wrap items-center gap-2">
+              <span>
+                إدارة المشاهد التحريرية الحية على الصفحة الرئيسية — ترتيب الرفوف، الجدولة الزمنية، ومخرج ذكي يقترح التركيب
+              </span>
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 dark:text-emerald-300 tabular-nums">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                {activeBlocks} مشاهد نشطة · {activeShelvesCount}/4 رفوف مفعّلة
+              </span>
+            </span>
+          }
           titleTestId="heading-smart-blocks"
           actions={
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Button
                 variant="outline"
                 onClick={() => setDirectorOpen(true)}
                 data-testid="button-director-suggest"
+                className="border-amber-500/30 bg-amber-500/5 hover:bg-amber-500/10"
               >
-                <Sparkles className="ml-2 h-4 w-4" />
+                <Sparkles className="ml-2 h-4 w-4 text-amber-500" />
                 اقترح مشهد الليلة
               </Button>
               <Button onClick={() => openCreate()} data-testid="button-create-smart-block">
@@ -666,45 +810,144 @@ export default function SmartBlocksPage() {
           }
         />
 
-        {/* Pulse strip */}
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-          {[
-            { label: "إجمالي المشاهد", value: summary?.total ?? blocks.length, testId: "stat-total" },
-            { label: "حية الآن", value: summary?.active ?? 0, testId: "stat-active", accent: "text-emerald-600" },
-            { label: "مجدولة", value: summary?.scheduled ?? 0, testId: "stat-scheduled", accent: "text-sky-600" },
-            { label: "متوقفة", value: summary?.inactive ?? 0, testId: "stat-inactive" },
-          ].map((s) => (
-            <div
-              key={s.label}
-              className="rounded-2xl border bg-gradient-to-br from-slate-50 to-white p-4 dark:from-slate-900 dark:to-slate-950"
-              data-testid={s.testId}
-            >
-              <p className="text-xs text-muted-foreground">{s.label}</p>
-              <p className={cn("mt-1 text-3xl font-bold tracking-tight", s.accent)}>
-                {s.value}
+        {/* Editorial 4-Card KPI Grid */}
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {/* 1. Total Blocks */}
+          <div
+            onClick={() => setStatusFilter("all")}
+            className="cursor-pointer rounded-2xl border border-border/80 bg-gradient-to-br from-slate-50/90 via-card to-card p-4 shadow-xs transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md dark:from-slate-900/80 dark:via-slate-950 dark:to-slate-950"
+            data-testid="stat-total"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs sm:text-sm font-semibold text-muted-foreground">
+                إجمالي المشاهد
               </p>
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-primary/20 bg-primary/10 text-primary">
+                <Layers className="h-4 w-4" />
+              </span>
             </div>
-          ))}
+            <p
+              className="mt-2 text-2xl sm:text-3xl font-black tracking-tight tabular-nums text-foreground"
+              dir="ltr"
+            >
+              {totalBlocks}
+            </p>
+            <div className="mt-2.5 flex items-center justify-between gap-1 border-t border-border/50 pt-2 text-[11px] text-muted-foreground">
+              <span>موزعة على 4 رفوف رئيسية</span>
+              <span className="font-semibold text-foreground tabular-nums">
+                نشط {activeBlocks} · متوقف {inactiveBlocks}
+              </span>
+            </div>
+          </div>
+
+          {/* 2. Active on Stage */}
+          <div
+            onClick={() => setStatusFilter(statusFilter === "active" ? "all" : "active")}
+            className="cursor-pointer rounded-2xl border border-emerald-500/25 bg-gradient-to-br from-emerald-500/[0.06] via-card to-card p-4 shadow-xs transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
+            data-testid="stat-active"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs sm:text-sm font-semibold text-muted-foreground">
+                حية الآن على المسرح
+              </p>
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-emerald-500/25 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
+                <CheckCircle2 className="h-4 w-4" />
+              </span>
+            </div>
+            <p
+              className="mt-2 text-2xl sm:text-3xl font-black tracking-tight tabular-nums text-emerald-600 dark:text-emerald-400"
+              dir="ltr"
+            >
+              {activeBlocks}
+            </p>
+            <div className="mt-2.5 flex items-center justify-between gap-1 border-t border-border/50 pt-2 text-[11px] text-muted-foreground">
+              <span>تغطية المواضع الحية</span>
+              <span className="font-semibold text-emerald-600 dark:text-emerald-400 tabular-nums">
+                {activeShelvesCount} من 4 رفوف
+              </span>
+            </div>
+          </div>
+
+          {/* 3. Scheduled / Event Windows */}
+          <div
+            onClick={() => setStatusFilter(statusFilter === "scheduled" ? "all" : "scheduled")}
+            className="cursor-pointer rounded-2xl border border-sky-500/25 bg-gradient-to-br from-sky-500/[0.06] via-card to-card p-4 shadow-xs transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
+            data-testid="stat-scheduled"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs sm:text-sm font-semibold text-muted-foreground">
+                مجدولة ونوافذ أحداث
+              </p>
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-sky-500/25 bg-sky-500/15 text-sky-600 dark:text-sky-400">
+                <CalendarClock className="h-4 w-4" />
+              </span>
+            </div>
+            <p
+              className="mt-2 text-2xl sm:text-3xl font-black tracking-tight tabular-nums text-sky-600 dark:text-sky-400"
+              dir="ltr"
+            >
+              {scheduledBlocks}
+            </p>
+            <div className="mt-2.5 flex items-center justify-between gap-1 border-t border-border/50 pt-2 text-[11px] text-muted-foreground">
+              <span>سيناريوهات الصفحة</span>
+              <span className="font-semibold text-sky-600 dark:text-sky-400 tabular-nums">
+                {playbooksList.length} سيناريو
+              </span>
+            </div>
+          </div>
+
+          {/* 4. Director Suggestions / Total Articles & Inactive */}
+          <div
+            onClick={() => setDirectorOpen(true)}
+            className="cursor-pointer rounded-2xl border border-amber-500/25 bg-gradient-to-br from-amber-500/[0.06] via-card to-card p-4 shadow-xs transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
+            data-testid="stat-inactive"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs sm:text-sm font-semibold text-muted-foreground">
+                سعة المقالات والمخرج الذكي
+              </p>
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-amber-500/25 bg-amber-500/15 text-amber-600 dark:text-amber-400">
+                <Sparkles className="h-4 w-4" />
+              </span>
+            </div>
+            <div className="mt-2 flex items-baseline gap-2">
+              <p
+                className="text-2xl sm:text-3xl font-black tracking-tight tabular-nums text-amber-600 dark:text-amber-400"
+                dir="ltr"
+              >
+                {activeArticlesCapacity || totalArticlesCapacity}
+              </p>
+              <span className="text-xs text-muted-foreground">
+                مقال معروض · متوقفة: <b className="tabular-nums text-foreground">{inactiveBlocks}</b>
+              </span>
+            </div>
+            <div className="mt-2.5 flex items-center justify-between gap-1 border-t border-border/50 pt-2 text-[11px] text-muted-foreground">
+              <span>اقتراحات المخرج لآخر 24س</span>
+              <span className="font-semibold text-amber-600 dark:text-amber-400">
+                استعرض المقترحات ←
+              </span>
+            </div>
+          </div>
         </div>
 
         {/* Playbooks */}
-        {(summary?.playbooks?.length || 0) > 0 && (
-          <div className="flex flex-wrap items-center gap-2 rounded-2xl border bg-amber-50/60 p-3 dark:bg-amber-950/20">
-            <span className="text-sm font-medium text-amber-900 dark:text-amber-100">
-              سيناريوهات الصفحة:
+        {playbooksList.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-amber-500/30 bg-amber-50/60 p-3 dark:bg-amber-950/20">
+            <span className="text-sm font-semibold text-amber-900 dark:text-amber-100">
+              سيناريوهات الصفحة الجاهزة:
             </span>
-            {summary!.playbooks.map((pb) => (
+            {playbooksList.map((pb) => (
               <Button
                 key={pb.key}
                 size="sm"
                 variant="outline"
-                className="border-amber-300"
+                className="no-min-touch-size h-8 border-amber-300 dark:border-amber-700"
                 onClick={() => activatePlaybookMutation.mutate(pb.key)}
                 disabled={activatePlaybookMutation.isPending}
               >
                 <Power className="ml-1 h-3.5 w-3.5" />
                 {pb.key}
-                <Badge variant="secondary" className="mr-2">
+                <Badge variant="secondary" className="mr-2 tabular-nums">
                   {pb.activeCount}/{pb.blockCount}
                 </Badge>
               </Button>
@@ -712,46 +955,192 @@ export default function SmartBlocksPage() {
           </div>
         )}
 
+        {/* Filter & Search Bar */}
+        <div className="space-y-3 rounded-2xl border border-border/70 bg-card/80 p-3.5 sm:p-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+              <SlidersHorizontal className="h-4 w-4 text-primary" />
+              <span>تصفية الرفوف والمشاهد</span>
+              {hasActiveFilters && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchQuery("");
+                    setPlacementFilter("all");
+                    setStatusFilter("all");
+                  }}
+                  className="no-min-touch-size inline-flex items-center gap-1 rounded-lg border border-border px-2 py-0.5 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+                >
+                  <X className="h-3 w-3" />
+                  إعادة ضبط
+                </button>
+              )}
+            </div>
+
+            {/* Search Input + Status Pills */}
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="relative min-w-[220px] flex-1 sm:w-64 sm:flex-initial">
+                <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="ابحث بالعنوان، الكلمة المفتاحية، أو السيناريو…"
+                  className="h-9 rounded-xl pr-9 pl-8 text-xs"
+                  data-testid="input-search-smart-blocks"
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery("")}
+                    className="no-min-touch-size absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    aria-label="مسح البحث"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
+
+              {/* Status quick pills */}
+              <div className="flex flex-wrap items-center gap-1 rounded-xl border border-border/70 bg-muted/50 p-1">
+                {(
+                  [
+                    { key: "all", label: "الكل", count: totalBlocks },
+                    { key: "active", label: "نشط", count: activeBlocks },
+                    { key: "inactive", label: "متوقف", count: inactiveBlocks },
+                    { key: "scheduled", label: "مجدول", count: scheduledBlocks },
+                  ] as const
+                ).map((item) => {
+                  const active = statusFilter === item.key;
+                  return (
+                    <button
+                      key={item.key}
+                      type="button"
+                      onClick={() => setStatusFilter(item.key)}
+                      className={cn(
+                        "no-min-touch-size inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold transition-all",
+                        active
+                          ? "bg-primary text-primary-foreground shadow-xs"
+                          : "text-muted-foreground hover:bg-background/70 hover:text-foreground",
+                      )}
+                      data-testid={`filter-status-${item.key}`}
+                    >
+                      <span>{item.label}</span>
+                      <span
+                        className={cn(
+                          "rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums",
+                          active
+                            ? "bg-primary-foreground/20 text-primary-foreground"
+                            : "bg-background text-muted-foreground",
+                        )}
+                      >
+                        {item.count}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          {/* Placement Shelf Filter Pills */}
+          <div className="flex flex-wrap items-center gap-1.5 pt-1">
+            <span className="ml-1 text-xs font-medium text-muted-foreground">رف العرض:</span>
+            <button
+              type="button"
+              onClick={() => setPlacementFilter("all")}
+              className={cn(
+                "no-min-touch-size inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold transition-all",
+                placementFilter === "all"
+                  ? "border-primary bg-primary text-primary-foreground shadow-xs"
+                  : "border-border/70 bg-background text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+              )}
+              data-testid="filter-placement-all"
+            >
+              <span>الكل</span>
+              <span className="tabular-nums text-[10px] opacity-85">({blocks.length})</span>
+            </button>
+            {placementOptions.map((p) => {
+              const count = (blocksByPlacement[p.value] || []).length;
+              const active = placementFilter === p.value;
+              return (
+                <button
+                  key={p.value}
+                  type="button"
+                  onClick={() => setPlacementFilter(active ? "all" : p.value)}
+                  className={cn(
+                    "no-min-touch-size inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold transition-all",
+                    active
+                      ? "border-primary bg-primary text-primary-foreground shadow-xs"
+                      : "border-border/70 bg-background text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                  )}
+                  data-testid={`filter-placement-${p.value}`}
+                >
+                  <span>{p.label}</span>
+                  <span className="tabular-nums text-[10px] opacity-85">({count})</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         {/* Homepage Stage */}
         <section
           className="overflow-hidden rounded-3xl border border-slate-800 bg-[radial-gradient(ellipse_at_top,_#0f2744_0%,_#020617_55%,_#000_100%)] p-4 text-slate-100 shadow-2xl sm:p-6"
           data-testid="homepage-stage"
         >
-          <div className="mb-5 flex items-center justify-between gap-3">
+          <div className="mb-5 flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-4">
             <div>
               <p className="text-xs uppercase tracking-[0.2em] text-sky-300/80">
-                Homepage Stage
+                Homepage Stage · مسرح الصفحة
               </p>
-              <h2 className="text-xl font-bold text-white">خريطة الصفحة من الأعلى للأسفل</h2>
+              <h2 className="mt-0.5 text-lg font-bold text-white sm:text-xl">
+                خريطة الصفحة من الأعلى للأسفل
+              </h2>
             </div>
-            <Blocks className="h-6 w-6 text-sky-300/70" />
+            <div className="flex items-center gap-2">
+              <span className="rounded-full border border-sky-400/30 bg-sky-500/10 px-3 py-1 text-xs text-sky-200 tabular-nums">
+                {visiblePlacements.length} رفوف معروضة
+              </span>
+              <Blocks className="h-6 w-6 text-sky-300/70" />
+            </div>
           </div>
 
           {isLoading ? (
             <p className="py-12 text-center text-slate-400">جاري تحميل المسرح…</p>
           ) : (
             <div className="space-y-5">
-              {placementOptions.map((placement, idx) => {
-                const shelfBlocks = blocksByPlacement[placement.value] || [];
+              {visiblePlacements.map((placement, idx) => {
+                const allShelfBlocks = blocksByPlacement[placement.value] || [];
+                const shelfBlocks = filteredBlocksByPlacement[placement.value] || [];
+                const activeInShelf = allShelfBlocks.filter((b) => b.isActive).length;
+                const shelfIndex =
+                  placementOptions.findIndex((p) => p.value === placement.value) + 1;
                 return (
                   <div key={placement.value} className="relative">
                     {idx > 0 && (
                       <div className="absolute -top-3 right-6 h-3 w-px bg-gradient-to-b from-transparent via-sky-400/40 to-transparent" />
                     )}
-                    <div className="mb-2 flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-sky-500/20 text-xs text-sky-200">
-                          {idx + 1}
+                    <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-2.5">
+                        <span className="flex h-7 w-7 items-center justify-center rounded-full border border-sky-400/30 bg-sky-500/20 text-xs font-bold text-sky-200 tabular-nums">
+                          {shelfIndex}
                         </span>
                         <div>
-                          <p className="text-sm font-semibold text-white">{placement.label}</p>
-                          <p className="text-[11px] text-slate-400">رف «{placement.shelf}»</p>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="text-sm font-semibold text-white">{placement.label}</p>
+                            <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] text-slate-300 tabular-nums">
+                              {activeInShelf} نشط / {allShelfBlocks.length} إجمالي
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-slate-400">
+                            رف «{placement.shelf}» — اسحب المشاهد لترتيب أولوية الظهور
+                          </p>
                         </div>
                       </div>
                       <Button
                         size="sm"
                         variant="ghost"
-                        className="text-sky-200 hover:bg-sky-500/10 hover:text-white"
+                        className="no-min-touch-size h-8 text-xs text-sky-200 hover:bg-sky-500/15 hover:text-white"
                         onClick={() => openCreate(placement.value)}
                       >
                         <Plus className="ml-1 h-3.5 w-3.5" />
@@ -759,10 +1148,12 @@ export default function SmartBlocksPage() {
                       </Button>
                     </div>
 
-                    <div className="min-h-[72px] rounded-2xl border border-dashed border-slate-600/70 bg-slate-950/30 p-3">
+                    <div className="min-h-[76px] rounded-2xl border border-dashed border-slate-600/70 bg-slate-950/35 p-3">
                       {shelfBlocks.length === 0 ? (
-                        <p className="py-6 text-center text-sm text-slate-500">
-                          رف فارغ — اسحب مشهداً أو أنشئ واحداً جديداً
+                        <p className="py-6 text-center text-sm text-slate-400">
+                          {allShelfBlocks.length === 0
+                            ? "رف فارغ — اسحب مشهداً أو أنشئ واحداً جديداً"
+                            : "لا توجد مشاهد مطابقة للفلتر الحالي في هذا الرف"}
                         </p>
                       ) : (
                         <DndContext
@@ -774,7 +1165,7 @@ export default function SmartBlocksPage() {
                             items={shelfBlocks.map((b) => b.id)}
                             strategy={verticalListSortingStrategy}
                           >
-                            <div className="space-y-2">
+                            <div className="space-y-2.5">
                               {shelfBlocks.map((block) => (
                                 <SortableSceneCard
                                   key={block.id}
@@ -942,7 +1333,7 @@ export default function SmartBlocksPage() {
                               key={cat.id}
                               type="button"
                               className={cn(
-                                "rounded-full border px-3 py-1 text-xs transition-colors",
+                                "no-min-touch-size rounded-full border px-3 py-1 text-xs transition-colors",
                                 selected
                                   ? "border-primary bg-primary text-primary-foreground"
                                   : "hover:bg-muted",
@@ -1249,9 +1640,13 @@ export default function SmartBlocksPage() {
             </DialogHeader>
             {directorLoading ? (
               <p className="py-8 text-center text-muted-foreground">يحضّر الاقتراحات…</p>
+            ) : directorSuggestions.length === 0 ? (
+              <p className="py-8 text-center text-sm text-muted-foreground">
+                لا توجد اقتراحات جديدة في الوقت الحالي.
+              </p>
             ) : (
               <div className="max-h-[60vh] space-y-3 overflow-y-auto">
-                {(directorData?.suggestions || []).map((s, i) => (
+                {directorSuggestions.map((s, i) => (
                   <button
                     key={`${s.title}-${i}`}
                     type="button"
@@ -1270,6 +1665,9 @@ export default function SmartBlocksPage() {
                           </Badge>
                           <Badge variant="secondary">
                             {placementOptions.find((p) => p.value === s.placement)?.label}
+                          </Badge>
+                          <Badge variant="outline" className="tabular-nums">
+                            {s.limitCount} مقالات
                           </Badge>
                         </div>
                       </div>
@@ -1300,7 +1698,7 @@ export default function SmartBlocksPage() {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
-      </div>
+      </DashboardPageShell>
     </DashboardLayout>
   );
 }

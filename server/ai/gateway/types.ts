@@ -71,6 +71,8 @@ interface BaseRequest {
   /** Explicit model override (dashboard "test" button, migration escape hatch). */
   model?: ModelRef;
   timeoutMs?: number;
+  /** Optional caller gate checked immediately before every provider transport. */
+  beforeAttempt?: () => Promise<void>;
 }
 
 export interface CompleteRequest extends BaseRequest {
@@ -80,6 +82,18 @@ export interface CompleteRequest extends BaseRequest {
     maxTokens?: number;
     temperature?: number;
     jsonMode?: boolean;
+    /**
+     * JSON Schema for the output. Anthropic has no schema-less JSON mode, so jsonMode alone
+     * is prompt-only there; with a schema (and CLAUDE_STRUCTURED_OUTPUTS=on) Claude is held
+     * to it via Structured Outputs. Other providers ignore it and keep using jsonMode.
+     */
+    jsonSchema?: Record<string, unknown>;
+    /**
+     * Mark the system prompt for Anthropic prompt caching (5-minute TTL). Only for callers
+     * whose system prompt is fixed across requests; a varying one would pay the cache-write
+     * premium every call. Other providers ignore it.
+     */
+    cacheSystemPrompt?: boolean;
   };
 }
 
@@ -151,13 +165,19 @@ export interface AdapterCompleteParams {
   maxTokens?: number;
   temperature?: number;
   jsonMode?: boolean;
+  jsonSchema?: Record<string, unknown>;
+  cacheSystemPrompt?: boolean;
   timeoutMs: number;
+  signal?: AbortSignal;
 }
 
 export interface AdapterCompleteResult {
   content: string;
+  /** All prompt tokens, including prompt-cache reads and writes. */
   inputTokens: number;
   outputTokens: number;
+  cacheReadTokens?: number;
+  cacheWriteTokens?: number;
   truncated: boolean;
 }
 
@@ -165,6 +185,7 @@ export interface AdapterEmbedParams {
   input: string[];
   dimensions?: number;
   timeoutMs: number;
+  signal?: AbortSignal;
 }
 
 export interface AdapterEmbedResult {
@@ -178,6 +199,7 @@ export interface AdapterImageParams {
   quality?: string;
   n?: number;
   timeoutMs: number;
+  signal?: AbortSignal;
 }
 
 export interface AdapterImageResult {
@@ -189,6 +211,7 @@ export interface AdapterTTSParams {
   voice?: string;
   format?: string;
   timeoutMs: number;
+  signal?: AbortSignal;
 }
 
 export interface AdapterTTSResult {

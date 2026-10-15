@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
@@ -17,6 +18,9 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavType
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -60,6 +64,7 @@ import com.sabq.smart.feature.settings.SettingsViewModel
 import com.sabq.smart.feature.settings.TermsOfUseScreen
 import com.sabq.smart.ui.components.SabqTabBar
 import com.sabq.smart.ui.theme.SabqTheme
+import com.sabq.smart.data.analytics.SabqAnalytics
 
 /**
  * App routes — one per visible tab plus the inner article detail.
@@ -79,7 +84,17 @@ object SabqRoutes {
     const val Loyalty = "loyalty"
     const val LoyaltyHistory = "loyalty/history"
     const val LoyaltyRewards = "loyalty/rewards"
+    // «سبق بلس» — معاينة داخلية لمسؤول المنصة، و«بطاقتي الصحفية».
+    const val SabqPlus = "plus"
+    const val PressCard = "press-card"
+    // مسودات الكاتب — قائمة المراجعات ومحرر إعادة الإرسال
+    const val Revisions = "revisions"
+    const val RevisionEditor = "revisions/{id}"
+    fun revisionEditor(id: String): String = "revisions/${android.net.Uri.encode(id)}"
     const val Opinions = "opinions"
+    /** «الاقتصاد بالأرقام» — نقل الويب /economy (#1493–#1506). */
+    const val Economy = "economy"
+    const val AiTeam = "about/ai-team"
     const val Trending = "trending"
     const val DailyBrief = "brief"
     const val InterestsPicker = "interests/picker"
@@ -120,6 +135,14 @@ object SabqRoutes {
     const val AsianCup = "asian-cup"
     const val AsianCupMatch = "asian-cup/match/{id}"
     const val AsianCupTeam = "asian-cup/team/{id}"
+    const val Roshn = "roshn"
+    const val RoshnPredictions = "roshn/predictions"
+    const val KingsCup = "kings-cup"
+    const val KingsCupPredictions = "kings-cup/predictions"
+    const val KingsCupMatch = "kings-cup/match/{id}"
+    const val KingsCupTeam = "kings-cup/team/{id}?name={name}&logo={logo}"
+    const val RoshnMatch = "roshn/match/{id}"
+    const val RoshnTeam = "roshn/team/{id}?name={name}&logo={logo}"
     // مُقترب — analytical-angles surface (landing + angle + topic + writer).
     const val Muqtarab = "muqtarab"
     const val MuqtarabAngle = "muqtarab/angle/{slug}"
@@ -138,6 +161,16 @@ object SabqRoutes {
 
     fun asianCupMatch(id: Int): String = "asian-cup/match/$id"
     fun asianCupTeam(id: Int): String = "asian-cup/team/$id"
+
+    fun roshnMatch(id: Int): String = "roshn/match/$id"
+
+    fun roshnTeam(id: Int, name: String, logo: String): String =
+        "roshn/team/$id?name=${Uri.encode(name)}&logo=${Uri.encode(logo)}"
+
+    fun kingsCupMatch(id: Int): String = "kings-cup/match/$id"
+
+    fun kingsCupTeam(id: Int, name: String, logo: String): String =
+        "kings-cup/team/$id?name=${Uri.encode(name)}&logo=${Uri.encode(logo)}"
 
     fun muqtarabAngle(slug: String): String = "muqtarab/angle/${Uri.encode(slug)}"
 
@@ -196,6 +229,22 @@ fun SabqApp(
         androidx.compose.foundation.isSystemInDarkTheme()
     else settings.isDarkMode
 
+    // تحديث مسودات الكاتب عند الدخول وعند عودة التطبيق للواجهة —
+    // المخزن يمسح نفسه عند الخروج بمراقبة AuthRepository داخليًا.
+    val appContext = androidx.compose.ui.platform.LocalContext.current.applicationContext
+    var showAnalyticsConsent by androidx.compose.runtime.remember {
+        androidx.compose.runtime.mutableStateOf(SabqAnalytics.consentState(appContext) == SabqAnalytics.Consent.UNKNOWN)
+    }
+    val revisionsStore = androidx.compose.runtime.remember {
+        dagger.hilt.android.EntryPointAccessors.fromApplication(
+            appContext,
+            com.sabq.smart.feature.revisions.RevisionsStoreEntryPoint::class.java,
+        ).revisionsStore()
+    }
+    androidx.compose.runtime.LaunchedEffect(currentUser?.id) {
+        if (currentUser != null) revisionsStore.refresh()
+    }
+
     SabqTheme(
         darkTheme = isDarkTheme,
         accent = settings.accent,
@@ -206,6 +255,24 @@ fun SabqApp(
         val currentRoute = currentEntry?.destination?.route
         val currentTab = SabqRoutes.tabFor(currentRoute)
 
+        // One owner for native screen_view events. Sensitive account,
+        // auth, dashboard and editor routes are intentionally excluded.
+        val analyticsEnabled by SabqAnalytics.collectionEnabled.collectAsStateWithLifecycle()
+        androidx.compose.runtime.LaunchedEffect(currentEntry?.id, currentRoute, analyticsEnabled) {
+            val route = currentRoute.orEmpty()
+            val publicRoute = route in setOf(
+                SabqRoutes.Home, SabqRoutes.Explore, SabqRoutes.Search,
+                SabqRoutes.Opinions, SabqRoutes.Trending, SabqRoutes.DailyBrief,
+                SabqRoutes.MomentByMoment, SabqRoutes.LiveCoverage,
+                SabqRoutes.Calendar,
+                SabqRoutes.ArticleDetail, SabqRoutes.CategoryArticles,
+                SabqRoutes.KeywordArticles, SabqRoutes.AuthorArticles,
+                SabqRoutes.WorldCup, SabqRoutes.Predictions, SabqRoutes.GulfCup,
+                SabqRoutes.AsianCup, SabqRoutes.Roshn, SabqRoutes.KingsCup,
+            )
+            if (publicRoute) SabqAnalytics.screen(route)
+        }
+
         // Push-notification deep link. When a notification tap fires
         // MainActivity → PendingPushDeepLink → this VM, navigate to the
         // most specific destination (article > notification row) and
@@ -214,6 +281,9 @@ fun SabqApp(
         androidx.compose.runtime.LaunchedEffect(pendingPush) {
             val target = pendingPush ?: return@LaunchedEffect
             when {
+                // إشعار needs_revision يفتح محرر المسودة مباشرة
+                !target.draftArticleId.isNullOrBlank() ->
+                    navController.navigate(SabqRoutes.revisionEditor(target.draftArticleId!!))
                 // دعوة استطلاع — الأعلى أولوية: توكن شخصي يفتح شاشته مباشرة
                 !target.surveyToken.isNullOrBlank() ->
                     navController.navigate(SabqRoutes.survey(target.surveyToken!!))
@@ -226,6 +296,29 @@ fun SabqApp(
                 target.deepLinkPath?.startsWith("/asian-cup/team/") == true ->
                     target.deepLinkPath.substringAfterLast('/').toIntOrNull()?.let {
                         navController.navigate(SabqRoutes.asianCupTeam(it))
+                    }
+                // روشن — نفس مسارات iOS العامة: /roshn و/roshn/match/:id
+                // و/sports/team/:id (رابط صفحة النادي على الويب).
+                target.deepLinkPath == "/roshn" ->
+                    navController.navigate(SabqRoutes.Roshn)
+                target.deepLinkPath?.startsWith("/roshn/match/") == true ->
+                    target.deepLinkPath.substringAfterLast('/').toIntOrNull()?.let {
+                        navController.navigate(SabqRoutes.roshnMatch(it))
+                    }
+                target.deepLinkPath?.startsWith("/sports/team/") == true ->
+                    target.deepLinkPath.substringAfterLast('/').toIntOrNull()?.let {
+                        navController.navigate(SabqRoutes.roshnTeam(it, "", ""))
+                    }
+                // كأس الملك — /kings-cup و/kings-cup/match/:id و/kings-cup/team/:id
+                target.deepLinkPath == "/kings-cup" ->
+                    navController.navigate(SabqRoutes.KingsCup)
+                target.deepLinkPath?.startsWith("/kings-cup/match/") == true ->
+                    target.deepLinkPath.substringAfterLast('/').toIntOrNull()?.let {
+                        navController.navigate(SabqRoutes.kingsCupMatch(it))
+                    }
+                target.deepLinkPath?.startsWith("/kings-cup/team/") == true ->
+                    target.deepLinkPath.substringAfterLast('/').toIntOrNull()?.let {
+                        navController.navigate(SabqRoutes.kingsCupTeam(it, "", ""))
                     }
                 !target.articleSlug.isNullOrBlank() ->
                     navController.navigate(SabqRoutes.articleDetail(target.articleSlug!!))
@@ -262,11 +355,19 @@ fun SabqApp(
                 navController = navController,
                 startDestination = SabqRoutes.Home,
                 modifier = Modifier.fillMaxSize(),
+                // navigation-compose 2.8 يجعل الافتراضي fade بمدة 700ms — كان
+                // يجعل كل تنقّل يبدو ثقيلًا (تدقيق الأداء 2026-08-02). ‏120ms
+                // هي وتيرة المنصة المعتادة.
+                enterTransition = { fadeIn(animationSpec = tween(120)) },
+                exitTransition = { fadeOut(animationSpec = tween(90)) },
+                popEnterTransition = { fadeIn(animationSpec = tween(120)) },
+                popExitTransition = { fadeOut(animationSpec = tween(90)) },
             ) {
                 composable(SabqRoutes.Home) {
                     HomeFeedScreen(
                         onArticleClick = { article ->
                             article.slug?.let { slug ->
+                                com.sabq.smart.data.ArticleHandoff.put(article)
                                 navController.navigate(SabqRoutes.articleDetail(slug))
                             }
                         },
@@ -293,6 +394,15 @@ fun SabqApp(
                         },
                         onAsianCupClick = {
                             navController.navigate(SabqRoutes.AsianCup)
+                        },
+                        onKingsCupClick = {
+                            navController.navigate(SabqRoutes.KingsCup)
+                        },
+                        onRoshnClick = {
+                            navController.navigate(SabqRoutes.Roshn)
+                        },
+                        onEconomyClick = {
+                            navController.navigate(SabqRoutes.Economy)
                         },
                         onCalendarAllClick = {
                             navController.navigate(SabqRoutes.Calendar)
@@ -337,6 +447,7 @@ fun SabqApp(
                     ExploreScreen(
                         onArticleClick = { article ->
                             article.slug?.let { slug ->
+                                com.sabq.smart.data.ArticleHandoff.put(article)
                                 navController.navigate(SabqRoutes.articleDetail(slug))
                             }
                         },
@@ -353,6 +464,7 @@ fun SabqApp(
                         onBack = { navController.popBackStack() },
                         onArticleClick = { article ->
                             article.slug?.let { slug ->
+                                com.sabq.smart.data.ArticleHandoff.put(article)
                                 navController.navigate(SabqRoutes.articleDetail(slug))
                             }
                         },
@@ -378,6 +490,7 @@ fun SabqApp(
                     BookmarksScreen(
                         onArticleClick = { article ->
                             article.slug?.let { slug ->
+                                com.sabq.smart.data.ArticleHandoff.put(article)
                                 navController.navigate(SabqRoutes.articleDetail(slug))
                             }
                         },
@@ -409,13 +522,26 @@ fun SabqApp(
                         onNewsletterClick = { navController.navigate(SabqRoutes.Newsletter) },
                         onPrivacyClick = { navController.navigate(SabqRoutes.PrivacyPolicy) },
                         onTermsClick = { navController.navigate(SabqRoutes.TermsOfUse) },
+                        onAiTeamClick = { navController.navigate(SabqRoutes.AiTeam) },
                         onOpenWebsite = { openUrl("https://sabq.org") },
                         onOpenTwitter = { openUrl("https://x.com/sabqorg") },
                         onSubmitOpinionClick = { navController.navigate(SabqRoutes.SubmitOpinion) },
                         onSubmitNewsClick = { navController.navigate(SabqRoutes.SubmitNews) },
                         onPickInterestsClick = { navController.navigate(SabqRoutes.InterestsPicker) },
                         onDashboardClick = { navController.navigate(SabqRoutes.ContributorDashboard) },
+                        onSabqPlusClick = { navController.navigate(SabqRoutes.SabqPlus) },
+                        onPressCardClick = { navController.navigate(SabqRoutes.PressCard) },
                         onLogout = { coroutineScope.launch { authVm.logout() } },
+                    )
+                }
+                composable(SabqRoutes.SabqPlus) {
+                    com.sabq.smart.feature.plus.SabqPlusScreen(
+                        onBack = { navController.popBackStack() },
+                    )
+                }
+                composable(SabqRoutes.PressCard) {
+                    com.sabq.smart.feature.presscard.PressCardScreen(
+                        onBack = { navController.popBackStack() },
                     )
                 }
                 composable(SabqRoutes.Login) {
@@ -467,6 +593,34 @@ fun SabqApp(
                         onOpenNotifications = {
                             navController.navigate(SabqRoutes.Notifications)
                         },
+                        onOpenRevisions = {
+                            navController.navigate(SabqRoutes.Revisions)
+                        },
+                    )
+                }
+                composable(SabqRoutes.Revisions) {
+                    com.sabq.smart.feature.revisions.RevisionsListScreen(
+                        onBack = { navController.popBackStack() },
+                        onOpenEditor = { id -> navController.navigate(SabqRoutes.revisionEditor(id)) },
+                    )
+                }
+                composable(
+                    route = SabqRoutes.RevisionEditor,
+                    arguments = listOf(navArgument("id") { type = NavType.StringType }),
+                ) {
+                    com.sabq.smart.feature.revisions.RevisionEditorScreen(
+                        onBack = { navController.popBackStack() },
+                    )
+                }
+                composable(SabqRoutes.AiTeam) {
+                    com.sabq.smart.feature.settings.AiTeamScreen(onBack = { navController.popBackStack() })
+                }
+                composable(SabqRoutes.Economy) {
+                    com.sabq.smart.feature.economy.EconomyScreen(
+                        onBack = { navController.popBackStack() },
+                        onBusinessNewsClick = {
+                            navController.navigate(SabqRoutes.categoryArticles("business", "اقتصاد"))
+                        },
                     )
                 }
                 composable(SabqRoutes.Opinions) {
@@ -474,6 +628,7 @@ fun SabqApp(
                         onBack = { navController.popBackStack() },
                         onArticleClick = { article ->
                             article.slug?.let { slug ->
+                                com.sabq.smart.data.ArticleHandoff.put(article)
                                 navController.navigate(SabqRoutes.articleDetail(slug))
                             }
                         },
@@ -484,6 +639,7 @@ fun SabqApp(
                         onBack = { navController.popBackStack() },
                         onArticleClick = { article ->
                             article.slug?.let { slug ->
+                                com.sabq.smart.data.ArticleHandoff.put(article)
                                 navController.navigate(SabqRoutes.articleDetail(slug))
                             }
                         },
@@ -502,6 +658,7 @@ fun SabqApp(
                         },
                         onArticleClick = { article ->
                             article.slug?.let { slug ->
+                                com.sabq.smart.data.ArticleHandoff.put(article)
                                 navController.navigate(SabqRoutes.articleDetail(slug))
                             }
                         },
@@ -517,6 +674,7 @@ fun SabqApp(
                         onBack = { navController.popBackStack() },
                         onArticleClick = { article ->
                             article.slug?.let { slug ->
+                                com.sabq.smart.data.ArticleHandoff.put(article)
                                 navController.navigate(SabqRoutes.articleDetail(slug))
                             }
                         },
@@ -616,6 +774,90 @@ fun SabqApp(
                         teamId = teamId,
                         onBack = { navController.popBackStack() },
                         onOpenMatch = { id -> navController.navigate(SabqRoutes.asianCupMatch(id)) },
+                    )
+                }
+                composable(SabqRoutes.Roshn) {
+                    com.sabq.smart.feature.roshn.RoshnScreen(
+                        onBack = { navController.popBackStack() },
+                        onOpenMatch = { id -> navController.navigate(SabqRoutes.roshnMatch(id)) },
+                        onOpenTeam = { team -> navController.navigate(SabqRoutes.roshnTeam(team.id, team.name, team.logo)) },
+                        onOpenPredictions = { navController.navigate(SabqRoutes.RoshnPredictions) },
+                    )
+                }
+                composable(SabqRoutes.RoshnPredictions) {
+                    com.sabq.smart.feature.roshn.RoshnPredictionsScreen(
+                        onBack = { navController.popBackStack() },
+                        onRequireLogin = { navController.navigate(SabqRoutes.Login) },
+                    )
+                }
+                composable(
+                    route = SabqRoutes.RoshnMatch,
+                    arguments = listOf(navArgument("id") { type = NavType.StringType }),
+                ) { entry ->
+                    val fixtureId = entry.arguments?.getString("id")?.toIntOrNull() ?: 0
+                    com.sabq.smart.feature.roshn.RoshnMatchScreen(
+                        fixtureId = fixtureId,
+                        onBack = { navController.popBackStack() },
+                        onOpenTeam = { team -> navController.navigate(SabqRoutes.roshnTeam(team.id, team.name, team.logo)) },
+                    )
+                }
+                composable(
+                    route = SabqRoutes.RoshnTeam,
+                    arguments = listOf(
+                        navArgument("id") { type = NavType.StringType },
+                        navArgument("name") { type = NavType.StringType; defaultValue = "" },
+                        navArgument("logo") { type = NavType.StringType; defaultValue = "" },
+                    ),
+                ) { entry ->
+                    val teamId = entry.arguments?.getString("id")?.toIntOrNull() ?: 0
+                    com.sabq.smart.feature.roshn.RoshnTeamScreen(
+                        teamId = teamId,
+                        previewName = entry.arguments?.getString("name").orEmpty(),
+                        previewLogo = entry.arguments?.getString("logo").orEmpty(),
+                        onBack = { navController.popBackStack() },
+                        onOpenMatch = { id -> navController.navigate(SabqRoutes.roshnMatch(id)) },
+                    )
+                }
+                composable(SabqRoutes.KingsCup) {
+                    com.sabq.smart.feature.kingscup.KingsCupScreen(
+                        onBack = { navController.popBackStack() },
+                        onOpenMatch = { id -> navController.navigate(SabqRoutes.kingsCupMatch(id)) },
+                        onOpenTeam = { team -> navController.navigate(SabqRoutes.kingsCupTeam(team.id, team.name, team.logo)) },
+                        onOpenPredictions = { navController.navigate(SabqRoutes.KingsCupPredictions) },
+                    )
+                }
+                composable(SabqRoutes.KingsCupPredictions) {
+                    com.sabq.smart.feature.kingscup.KingsCupPredictionsScreen(
+                        onBack = { navController.popBackStack() },
+                        onRequireLogin = { navController.navigate(SabqRoutes.Login) },
+                    )
+                }
+                composable(
+                    route = SabqRoutes.KingsCupMatch,
+                    arguments = listOf(navArgument("id") { type = NavType.StringType }),
+                ) { entry ->
+                    val fixtureId = entry.arguments?.getString("id")?.toIntOrNull() ?: 0
+                    com.sabq.smart.feature.kingscup.KingsCupMatchScreen(
+                        fixtureId = fixtureId,
+                        onBack = { navController.popBackStack() },
+                        onOpenTeam = { team -> navController.navigate(SabqRoutes.kingsCupTeam(team.id, team.name, team.logo)) },
+                    )
+                }
+                composable(
+                    route = SabqRoutes.KingsCupTeam,
+                    arguments = listOf(
+                        navArgument("id") { type = NavType.StringType },
+                        navArgument("name") { type = NavType.StringType; defaultValue = "" },
+                        navArgument("logo") { type = NavType.StringType; defaultValue = "" },
+                    ),
+                ) { entry ->
+                    val teamId = entry.arguments?.getString("id")?.toIntOrNull() ?: 0
+                    com.sabq.smart.feature.kingscup.KingsCupTeamScreen(
+                        teamId = teamId,
+                        previewName = entry.arguments?.getString("name").orEmpty(),
+                        previewLogo = entry.arguments?.getString("logo").orEmpty(),
+                        onBack = { navController.popBackStack() },
+                        onOpenMatch = { id -> navController.navigate(SabqRoutes.kingsCupMatch(id)) },
                     )
                 }
                 composable(
@@ -802,6 +1044,7 @@ fun SabqApp(
                         onAuthorClick = { name ->
                             navController.navigate(SabqRoutes.authorArticles(name))
                         },
+                        onOpinionsSeeAll = { navController.navigate(SabqRoutes.Opinions) },
                     )
                 }
                 composable(
@@ -815,6 +1058,7 @@ fun SabqApp(
                         onBack = { navController.popBackStack() },
                         onArticleClick = { article ->
                             article.slug?.let { slug ->
+                                com.sabq.smart.data.ArticleHandoff.put(article)
                                 navController.navigate(SabqRoutes.articleDetail(slug))
                             }
                         },
@@ -825,9 +1069,16 @@ fun SabqApp(
                     arguments = listOf(navArgument("keyword") { type = NavType.StringType }),
                 ) { entry ->
                     KeywordArticlesScreen(
+                        onSearchClick = {
+                            navController.navigate(SabqRoutes.Search) {
+                                popUpTo(SabqRoutes.KeywordArticles) { inclusive = true }
+                                launchSingleTop = true
+                            }
+                        },
                         onBack = { navController.popBackStack() },
                         onArticleClick = { article ->
                             article.slug?.let { slug ->
+                                com.sabq.smart.data.ArticleHandoff.put(article)
                                 navController.navigate(SabqRoutes.articleDetail(slug))
                             }
                         }
@@ -841,6 +1092,7 @@ fun SabqApp(
                         onBack = { navController.popBackStack() },
                         onArticleClick = { article ->
                             article.slug?.let { slug ->
+                                com.sabq.smart.data.ArticleHandoff.put(article)
                                 navController.navigate(SabqRoutes.articleDetail(slug))
                             }
                         }
@@ -895,6 +1147,29 @@ fun SabqApp(
                 CompleteNameScreen(
                     onDone = { /* AuthRepository cache updates → needsDisplayName flips */ },
                     phoneHint = currentUser?.phone,
+                )
+            }
+
+            if (showAnalyticsConsent) {
+                androidx.compose.material3.AlertDialog(
+                    onDismissRequest = {
+                        SabqAnalytics.setConsent(appContext, granted = false)
+                        showAnalyticsConsent = false
+                    },
+                    title = { androidx.compose.material3.Text("تحسين تجربة سبق") },
+                    text = { androidx.compose.material3.Text("السماح بإرسال بيانات استخدام لتحسين التطبيق اختياري، ويمكن سحبه من الإعدادات. يبقى جمع بيانات الإعلانات معطلاً.") },
+                    confirmButton = {
+                        androidx.compose.material3.TextButton(onClick = {
+                            SabqAnalytics.setConsent(appContext, granted = true)
+                            showAnalyticsConsent = false
+                        }) { androidx.compose.material3.Text("السماح") }
+                    },
+                    dismissButton = {
+                        androidx.compose.material3.TextButton(onClick = {
+                            SabqAnalytics.setConsent(appContext, granted = false)
+                            showAnalyticsConsent = false
+                        }) { androidx.compose.material3.Text("رفض") }
+                    },
                 )
             }
         }

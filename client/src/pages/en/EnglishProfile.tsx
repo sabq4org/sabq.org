@@ -44,17 +44,17 @@ import {
   Tag,
   X,
 } from "lucide-react";
-import { ArticleCard } from "@/components/ArticleCard";
+import { NewsArticleCard } from "@/components/NewsArticleCard";
 import { SmartInterestsBlock } from "@/components/SmartInterestsBlock";
 import { TwoFactorSettings } from "@/components/TwoFactorSettings";
 import type { ArticleWithDetails, User as UserType, UserPointsTotal } from "@shared/schema";
 import { hasRole } from "@/hooks/useAuth";
+import { PhoneVerificationCard } from "@/components/account/PhoneVerificationCard";
 
 const updateUserSchema = z.object({
   firstName: z.string().min(2, "First name must be at least 2 characters").optional(),
   lastName: z.string().min(2, "Last name must be at least 2 characters").optional(),
   bio: z.string().max(500, "Bio must not exceed 500 characters").optional(),
-  phoneNumber: z.string().regex(/^[0-9+\-\s()]*$/, "Invalid phone number").optional(),
   profileImageUrl: z.string().url("Invalid image URL").optional().or(z.literal("")),
 });
 
@@ -75,7 +75,6 @@ export default function EnglishProfile() {
       firstName: user?.firstName || "",
       lastName: user?.lastName || "",
       bio: user?.bio || "",
-      phoneNumber: user?.phoneNumber || "",
       profileImageUrl: user?.profileImageUrl || "",
     },
   });
@@ -702,7 +701,7 @@ export default function EnglishProfile() {
           </aside>
 
           {/* Main Content */}
-          <main>
+          <main className="public-page">
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle>Profile</CardTitle>
@@ -759,10 +758,7 @@ export default function EnglishProfile() {
                                 exit={{ opacity: 0, scale: 0.95 }}
                                 transition={{ duration: 0.3, delay: index * 0.05 }}
                               >
-                                <ArticleCard
-                                  article={article}
-                                  variant="grid"
-                                />
+                                <NewsArticleCard article={article} viewMode="grid" locale="en" metadata={{ views: true }} />
                               </motion.div>
                             ))}
                           </AnimatePresence>
@@ -818,10 +814,7 @@ export default function EnglishProfile() {
                                 exit={{ opacity: 0, scale: 0.95 }}
                                 transition={{ duration: 0.3, delay: index * 0.05 }}
                               >
-                                <ArticleCard
-                                  article={article}
-                                  variant="grid"
-                                />
+                                <NewsArticleCard article={article} viewMode="grid" locale="en" metadata={{ views: true }} />
                               </motion.div>
                             ))}
                           </AnimatePresence>
@@ -877,10 +870,7 @@ export default function EnglishProfile() {
                                 exit={{ opacity: 0, scale: 0.95 }}
                                 transition={{ duration: 0.3, delay: index * 0.05 }}
                               >
-                                <ArticleCard
-                                  article={article}
-                                  variant="grid"
-                                />
+                                <NewsArticleCard article={article} viewMode="grid" locale="en" metadata={{ views: true }} />
                               </motion.div>
                             ))}
                           </AnimatePresence>
@@ -914,7 +904,15 @@ export default function EnglishProfile() {
                         <p className="text-sm text-muted-foreground mb-6">
                           Update your personal information. All fields are optional.
                         </p>
-                        
+
+                        <PhoneVerificationCard
+                          locale="en"
+                          phoneNumber={user?.phoneNumber}
+                          phoneVerified={user?.phoneVerified}
+                          testIdPrefix="en-phone"
+                          className="mb-6"
+                        />
+
                         <Form {...form}>
                           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
                             <div className="grid gap-6 md:grid-cols-2">
@@ -954,24 +952,6 @@ export default function EnglishProfile() {
                                 )}
                               />
                             </div>
-
-                            <FormField
-                              control={form.control}
-                              name="phoneNumber"
-                              render={({ field }) => (
-                                <FormItem>
-                                  <FormLabel>Phone Number</FormLabel>
-                                  <FormControl>
-                                    <Input 
-                                      placeholder="+966 123 456 789" 
-                                      {...field}
-                                      data-testid="input-phoneNumber"
-                                    />
-                                  </FormControl>
-                                  <FormMessage />
-                                </FormItem>
-                              )}
-                            />
 
                             <FormField
                               control={form.control}

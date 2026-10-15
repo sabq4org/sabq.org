@@ -22,6 +22,7 @@ import {
   renderFittedLogo,
   renderMergedLogos,
   renderMergedPhotos,
+  renderPortraitPhoto,
   type CropRect,
   type FocalPoint,
 } from "@/lib/logoCanvas";
@@ -32,6 +33,8 @@ interface LogoComposerDialogProps {
   /** يستلم الصورة النهائية (16:9 بخلفية بيضاء) — يرجع true عند نجاح الرفع */
   onImageReady: (file: File) => Promise<boolean>;
 }
+
+type ComposerTab = "fit" | "merge" | "photos" | "crop" | "portrait";
 
 const ACCEPTED_TYPES =
   "image/jpeg,image/jpg,image/png,image/webp,image/gif,image/svg+xml";
@@ -46,9 +49,11 @@ interface LogoSlotProps {
   /** عند تمريرهما: النقر على الصورة يحدد نقطة التركيز (وجه الشخص) بدل فتح منتقي الملفات */
   focal?: FocalPoint | null;
   onFocalChange?: (focal: FocalPoint) => void;
+  /** نص الخانة الفارغة — الافتراضي بحسب وضع الخانة */
+  placeholder?: string;
 }
 
-function LogoSlot({ label, file, onSelect, onClear, testId, focal, onFocalChange }: LogoSlotProps) {
+function LogoSlot({ label, file, onSelect, onClear, testId, focal, onFocalChange, placeholder }: LogoSlotProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [thumbUrl, setThumbUrl] = useState<string | null>(null);
   const focalMode = Boolean(onFocalChange);
@@ -126,7 +131,7 @@ function LogoSlot({ label, file, onSelect, onClear, testId, focal, onFocalChange
         ) : (
           <div className="text-muted-foreground">
             <Upload className="h-6 w-6 mx-auto mb-1" />
-            <p className="text-xs">{focalMode ? "اضغط لاختيار الصورة" : "اضغط لاختيار الشعار"}</p>
+            <p className="text-xs">{placeholder ?? (focalMode ? "اضغط لاختيار الصورة" : "اضغط لاختيار الشعار")}</p>
           </div>
         )}
       </div>
@@ -140,9 +145,13 @@ export function LogoComposerDialog({
   onImageReady,
 }: LogoComposerDialogProps) {
   const { toast } = useToast();
-  const [tab, setTab] = useState<"fit" | "merge" | "photos" | "crop">("fit");
+  const [tab, setTab] = useState<ComposerTab>("fit");
 
   const [fitFile, setFitFile] = useState<File | null>(null);
+  // صورة طولية في «ضبط شعار» غالباً صورة شخص — نقترح نقلها لتبويبها
+  const [fitLooksPortrait, setFitLooksPortrait] = useState(false);
+  const [portraitFile, setPortraitFile] = useState<File | null>(null);
+  const [portraitFocal, setPortraitFocal] = useState<FocalPoint | null>(null);
   const [firstLogo, setFirstLogo] = useState<File | null>(null);
   const [secondLogo, setSecondLogo] = useState<File | null>(null);
   const [showDivider, setShowDivider] = useState(false);
@@ -181,7 +190,9 @@ export function LogoComposerDialog({
             ? firstLogo !== null && secondLogo !== null
             : tab === "crop"
               ? cropFile !== null && cropRect !== null
-              : firstPhoto !== null && secondPhoto !== null;
+              : tab === "portrait"
+                ? portraitFile !== null
+                : firstPhoto !== null && secondPhoto !== null;
       if (!ready) {
         setPreviewBlob(null);
         return;
@@ -197,7 +208,9 @@ export function LogoComposerDialog({
                 })
               : tab === "crop"
                 ? await renderCroppedImage(cropFile!, cropRect!)
-                : await renderMergedPhotos(firstPhoto!, secondPhoto!, {
+                : tab === "portrait"
+                  ? await renderPortraitPhoto(portraitFile!, { focal: portraitFocal })
+                  : await renderMergedPhotos(firstPhoto!, secondPhoto!, {
                     firstFocal,
                     secondFocal,
                     firstZoom,
@@ -220,7 +233,7 @@ export function LogoComposerDialog({
       }
     };
     generate();
-  }, [tab, fitFile, firstLogo, secondLogo, showDivider, firstPhoto, secondPhoto, firstFocal, secondFocal, firstZoom, secondZoom, cropFile, cropRect, toast]);
+  }, [tab, fitFile, firstLogo, secondLogo, showDivider, firstPhoto, secondPhoto, firstFocal, secondFocal, firstZoom, secondZoom, cropFile, cropRect, portraitFile, portraitFocal, toast]);
 
   // رابط عرض صورة الاقتصاص داخل أداة التحديد
   useEffect(() => {
@@ -232,6 +245,33 @@ export function LogoComposerDialog({
     setCropImageUrl(url);
     return () => URL.revokeObjectURL(url);
   }, [cropFile]);
+
+  const selectFitFile = (file: File) => {
+    setFitFile(file);
+    setFitLooksPortrait(false);
+    createImageBitmap(file)
+      .then((bitmap) => {
+        setFitLooksPortrait(bitmap.height > bitmap.width * 1.1);
+        bitmap.close();
+      })
+      .catch(() => setFitLooksPortrait(false));
+  };
+
+  const selectPortraitFile = (file: File) => {
+    setPortraitFile(file);
+    setPortraitFocal(null);
+    detectFaceFocalPoint(file).then((focal) => {
+      if (focal) setPortraitFocal(focal);
+    });
+  };
+
+  const moveFitToPortrait = () => {
+    if (!fitFile) return;
+    selectPortraitFile(fitFile);
+    setFitFile(null);
+    setFitLooksPortrait(false);
+    setTab("portrait");
+  };
 
   const selectCropFile = (file: File) => {
     setCrop(undefined);
@@ -404,6 +444,9 @@ export function LogoComposerDialog({
   const resetState = () => {
     renderTokenRef.current++;
     setFitFile(null);
+    setFitLooksPortrait(false);
+    setPortraitFile(null);
+    setPortraitFocal(null);
     setFirstLogo(null);
     setSecondLogo(null);
     setShowDivider(false);
@@ -439,7 +482,9 @@ export function LogoComposerDialog({
             ? "logo-merge"
             : tab === "crop"
               ? "image-crop"
-              : "photo-merge";
+              : tab === "portrait"
+                ? "portrait"
+                : "photo-merge";
       const file = new File([previewBlob], `${name}-${Date.now()}.jpg`, {
         type: "image/jpeg",
       });
@@ -467,9 +512,9 @@ export function LogoComposerDialog({
 
         <Tabs
           value={tab}
-          onValueChange={(v) => setTab(v as "fit" | "merge" | "photos" | "crop")}
+          onValueChange={(v) => setTab(v as ComposerTab)}
         >
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="fit" data-testid="tab-fit-logo">
               ضبط شعار
             </TabsTrigger>
@@ -482,16 +527,37 @@ export function LogoComposerDialog({
             <TabsTrigger value="crop" data-testid="tab-crop-image">
               اقتصاص حر
             </TabsTrigger>
+            <TabsTrigger value="portrait" data-testid="tab-portrait">
+              صورة شخص
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="fit" className="space-y-4 pt-2">
             <LogoSlot
               label="الشعار"
               file={fitFile}
-              onSelect={(f) => validateAndSet(f, setFitFile)}
-              onClear={() => setFitFile(null)}
+              onSelect={(f) => validateAndSet(f, selectFitFile)}
+              onClear={() => {
+                setFitFile(null);
+                setFitLooksPortrait(false);
+              }}
               testId="slot-fit-logo"
             />
+            {fitLooksPortrait && (
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-muted/40 px-3 py-2">
+                <p className="text-xs text-muted-foreground">
+                  تبدو صورة شخص — تبويب «صورة شخص» يمدّ خلفيتها بدل الأبيض.
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={moveFitToPortrait}
+                  data-testid="button-move-to-portrait"
+                >
+                  استخدام «صورة شخص»
+                </Button>
+              </div>
+            )}
           </TabsContent>
 
           <TabsContent value="merge" className="space-y-4 pt-2">
@@ -657,6 +723,24 @@ export function LogoComposerDialog({
               </div>
             )}
           </TabsContent>
+
+          <TabsContent value="portrait" className="space-y-4 pt-2">
+            <LogoSlot
+              label="الصورة"
+              file={portraitFile}
+              onSelect={(f) => validateAndSet(f, selectPortraitFile)}
+              onClear={() => {
+                setPortraitFile(null);
+                setPortraitFocal(null);
+              }}
+              testId="slot-portrait"
+              placeholder="اضغط لاختيار الصورة"
+            />
+            <p className="text-xs text-muted-foreground">
+              للصور الشخصية الطولية: الصورة كاملة في المنتصف بلا قص، وخلفيتها الأصلية
+              تمتد على العرض بلا أبيض ولا تمويه. إن كانت الخلفية مزدحمة يُستخدم لون داكن محايد.
+            </p>
+          </TabsContent>
         </Tabs>
 
         {/* المعاينة النهائية — في دمج الصورتين: اسحب أي نصف لضبط موضع صورته */}
@@ -746,7 +830,7 @@ export function LogoComposerDialog({
                   "اختر الشعار لعرض المعاينة"
                 ) : tab === "merge" ? (
                   "اختر الشعارين لعرض المعاينة"
-                ) : tab === "crop" ? (
+                ) : tab === "crop" || tab === "portrait" ? (
                   "اختر الصورة لعرض المعاينة"
                 ) : (
                   "اختر الصورتين لعرض المعاينة"

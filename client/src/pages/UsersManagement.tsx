@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useAuth, hasRole } from "@/hooks/useAuth";
@@ -27,6 +27,10 @@ import {
   Cake,
   MapPin,
   Clock,
+  X,
+  SlidersHorizontal,
+  Mail,
+  AlertCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -49,14 +53,6 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
-import {
   Select,
   SelectContent,
   SelectItem,
@@ -74,6 +70,8 @@ import { AddUserDialog } from "@/components/AddUserDialog";
 import { EditUserDialog } from "@/components/EditUserDialog";
 import { RolesPanel } from "@/components/RolesPanel";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
+import { DashboardPageShell } from "@/components/dashboard/DashboardPageShell";
 import {
   Sheet,
   SheetContent,
@@ -150,14 +148,14 @@ function adminUserLabel(user: {
 function EmailCell({ email, emailVerified }: { email?: string | null; emailVerified?: boolean }) {
   if (!hasRealEmail(email)) {
     return (
-      <Badge variant="outline" className="text-xs font-normal text-muted-foreground">
+      <Badge variant="outline" className="py-0.5 text-xs font-normal text-muted-foreground border-dashed">
         لم يُضف بريد
       </Badge>
     );
   }
   return (
     <div className="flex items-start gap-1.5">
-      <span className="text-sm break-all">{email}</span>
+      <span className="text-sm break-all font-mono text-[13px]">{email}</span>
       {emailVerified && (
         <BadgeCheck className="h-4 w-4 text-emerald-500 shrink-0 mt-0.5" aria-label="بريد موثق" />
       )}
@@ -185,16 +183,24 @@ interface KPIs {
   bannedTrend: number;
 }
 
+type VerificationQuickFilter =
+  | "all"
+  | "email_verified"
+  | "phone_verified"
+  | "two_factor"
+  | "missing_email";
+
 const LATIN_DATE = "ar-SA-u-ca-gregory-nu-latn";
 
-function formatLatinNumber(value: number) {
-  return value.toLocaleString("en-US");
+function formatLatinNumber(value: number | undefined | null) {
+  const safe = typeof value === "number" && Number.isFinite(value) ? value : 0;
+  return safe.toLocaleString("en-US");
 }
 
 type UserFormValues = z.infer<typeof adminUpdateUserSchema>;
 
 export default function UsersManagement() {
-  const [location, setLocation] = useLocation();
+  const [, setLocation] = useLocation();
   const { user, isLoading: isUserLoading } = useAuth({ redirectToLogin: true });
   const { toast } = useToast();
 
@@ -211,11 +217,15 @@ export default function UsersManagement() {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [roleFilter, setRoleFilter] = useState("all");
+  const [verificationFilter, setVerificationFilter] = useState<VerificationQuickFilter>("all");
   // Pagination state (added 2026-05-20). Resets to page 1 whenever a
   // filter changes so we don't end up on page 5 of an empty result.
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(100);
-  useEffect(() => { setPage(1); }, [searchQuery, statusFilter, roleFilter, pageSize]);
+  useEffect(() => {
+    setPage(1);
+  }, [searchQuery, statusFilter, roleFilter, verificationFilter, pageSize]);
+
   const [editingUserRoles, setEditingUserRoles] = useState<{
     userId: string;
     currentRoles: string[];
@@ -224,6 +234,7 @@ export default function UsersManagement() {
   const [newPassword, setNewPassword] = useState("");
   const [permanentDeletingUser, setPermanentDeletingUser] = useState<UserListItem | null>(null);
   const [viewingDetails, setViewingDetails] = useState<UserListItem | null>(null);
+  const [promotingUser, setPromotingUser] = useState<UserListItem | null>(null);
 
   const form = useForm<UserFormValues>({
     resolver: zodResolver(adminUpdateUserSchema),
@@ -235,11 +246,6 @@ export default function UsersManagement() {
 
   // Fetch users (paged). Response shape:
   //   { users, items, total, page, pageSize, hasMore }
-  // We pre-fetch slightly more than `pageSize` and then filter out
-  // staff-roles client-side because that filter doesn't exist server-side.
-  // The `total` we display is the server-reported total before the
-  // staff-roles filter — it can be slightly off when the page boundary
-  // straddles a staff row, but it's good enough for "صفحة X من Y".
   type UsersResponse = {
     items?: UserListItem[];
     users?: UserListItem[];
@@ -269,13 +275,45 @@ export default function UsersManagement() {
   const allFetchedUsers: UserListItem[] = Array.isArray(usersResponse?.users)
     ? usersResponse!.users
     : Array.isArray(usersResponse?.items)
-      ? usersResponse!.items as any
+      ? (usersResponse!.items as UserListItem[])
       : [];
   const totalUsers = usersResponse?.total ?? allFetchedUsers.length;
   // Filter to show only regular readers (not staff members).
   // Staff roles are managed in /dashboard/staff.
-  const staffRoles = ['admin', 'system_admin', 'editor', 'correspondent', 'reporter', 'moderator', 'content_manager', 'opinion_author'];
-  const users = allFetchedUsers.filter((u) => !staffRoles.includes(u.role));
+  const staffRoles = [
+    "admin",
+    "system_admin",
+    "editor",
+    "correspondent",
+    "reporter",
+    "moderator",
+    "content_manager",
+    "opinion_author",
+  ];
+  const baseUsers = useMemo(
+    () => allFetchedUsers.filter((u) => !staffRoles.includes(u.role)),
+    [allFetchedUsers]
+  );
+
+  const users = useMemo(() => {
+    if (verificationFilter === "all") return baseUsers;
+    return baseUsers.filter((u) => {
+      if (verificationFilter === "email_verified") {
+        return hasRealEmail(u.email) && Boolean(u.emailVerified);
+      }
+      if (verificationFilter === "phone_verified") {
+        return Boolean(u.phoneNumber && u.phoneVerified);
+      }
+      if (verificationFilter === "two_factor") {
+        return Boolean(u.twoFactorEnabled);
+      }
+      if (verificationFilter === "missing_email") {
+        return !hasRealEmail(u.email);
+      }
+      return true;
+    });
+  }, [baseUsers, verificationFilter]);
+
   const totalPages = Math.max(1, Math.ceil(totalUsers / pageSize));
 
   // Fetch roles
@@ -400,12 +438,35 @@ export default function UsersManagement() {
     },
   });
 
+  const promoteReporterMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return await apiRequest(`/api/admin/users/${id}/promote-reporter`, {
+        method: "POST",
+      });
+    },
+    onSuccess: (data: { message?: string }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      setPromotingUser(null);
+      toast({
+        title: "تمت الترقية إلى مراسل",
+        description: data?.message || "ستظهر العضوية مراسل في التطبيق واستكمال الملف",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "تعذر الترقية",
+        description: error.message || "فشل في ترقية العضوية إلى مراسل",
+        variant: "destructive",
+      });
+    },
+  });
+
   // Handlers
-  const handleEdit = (user: UserListItem) => {
-    setEditingUser(user);
+  const handleEdit = (targetUser: UserListItem) => {
+    setEditingUser(targetUser);
     form.reset({
-      status: user.status as "active" | "suspended" | "banned",
-      roleId: user.roleId || undefined,
+      status: targetUser.status as "active" | "suspended" | "banned",
+      roleId: targetUser.roleId || undefined,
     });
   };
 
@@ -419,14 +480,14 @@ export default function UsersManagement() {
     deleteMutation.mutate(deletingUser.id);
   };
 
-  const handleEditRoles = async (user: UserListItem) => {
+  const handleEditRoles = async (targetUser: UserListItem) => {
     try {
-      const roles = await apiRequest(`/api/admin/users/${user.id}/roles`);
+      const fetchedRoles = await apiRequest(`/api/admin/users/${targetUser.id}/roles`);
       setEditingUserRoles({
-        userId: user.id,
-        currentRoles: (Array.isArray(roles) ? roles : []).map((r: Role) => r.id),
+        userId: targetUser.id,
+        currentRoles: (Array.isArray(fetchedRoles) ? fetchedRoles : []).map((r: Role) => r.id),
       });
-    } catch (error) {
+    } catch {
       toast({
         title: "خطأ",
         description: "فشل في جلب أدوار المستخدم",
@@ -451,6 +512,19 @@ export default function UsersManagement() {
   const handlePermanentDelete = () => {
     if (!permanentDeletingUser) return;
     permanentDeleteMutation.mutate(permanentDeletingUser.id);
+  };
+
+  const hasActiveFilters =
+    Boolean(searchQuery) ||
+    statusFilter !== "all" ||
+    roleFilter !== "all" ||
+    verificationFilter !== "all";
+
+  const clearAllFilters = () => {
+    setSearchQuery("");
+    setStatusFilter("all");
+    setRoleFilter("all");
+    setVerificationFilter("all");
   };
 
   // Formatters & badges
@@ -485,11 +559,16 @@ export default function UsersManagement() {
   };
   const getRankColor = (level?: number) => {
     switch (level) {
-      case 5: return "bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950/40 dark:text-amber-200 dark:border-amber-800";
-      case 4: return "bg-purple-100 text-purple-800 border-purple-300 dark:bg-purple-950/40 dark:text-purple-200 dark:border-purple-800";
-      case 3: return "bg-blue-100 text-blue-800 border-blue-300 dark:bg-blue-950/40 dark:text-blue-200 dark:border-blue-800";
-      case 2: return "bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-200 dark:border-emerald-800";
-      default: return "bg-slate-100 text-slate-700 border-slate-300 dark:bg-slate-900/50 dark:text-slate-200 dark:border-slate-700";
+      case 5:
+        return "bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950/40 dark:text-amber-200 dark:border-amber-800";
+      case 4:
+        return "bg-purple-100 text-purple-800 border-purple-300 dark:bg-purple-950/40 dark:text-purple-200 dark:border-purple-800";
+      case 3:
+        return "bg-blue-100 text-blue-800 border-blue-300 dark:bg-blue-950/40 dark:text-blue-200 dark:border-blue-800";
+      case 2:
+        return "bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-200 dark:border-emerald-800";
+      default:
+        return "bg-slate-100 text-slate-700 border-slate-300 dark:bg-slate-900/50 dark:text-slate-200 dark:border-slate-700";
     }
   };
   const getGenderLabel = (g?: string | null) => {
@@ -512,7 +591,11 @@ export default function UsersManagement() {
       banned: "محظور",
     };
     return (
-      <Badge variant={variants[status] || "default"} data-testid={`badge-status-${status}`}>
+      <Badge
+        variant={variants[status] || "default"}
+        className="py-0.5"
+        data-testid={`badge-status-${status}`}
+      >
         {labels[status] || status}
       </Badge>
     );
@@ -528,429 +611,773 @@ export default function UsersManagement() {
 
   return (
     <DashboardLayout>
-      <div className="relative min-h-full overflow-hidden">
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_top,_rgba(27,173,248,0.07),_transparent_55%),radial-gradient(ellipse_at_bottom_left,_rgba(16,185,129,0.045),_transparent_45%),linear-gradient(180deg,_rgba(240,249,255,0.55)_0%,_transparent_26%)] dark:bg-[radial-gradient(ellipse_at_top,_rgba(27,173,248,0.1),_transparent_50%),radial-gradient(ellipse_at_bottom_left,_rgba(16,185,129,0.05),_transparent_45%),linear-gradient(180deg,_rgba(8,47,73,0.22)_0%,_transparent_28%)]"
-        />
-        <div className="relative space-y-6" dir="rtl">
-        {/* Header */}
-        <header className="relative overflow-hidden rounded-2xl border border-sky-200/60 bg-gradient-to-l from-sky-50/80 via-background to-emerald-50/40 p-5 shadow-sm dark:border-sky-900/40 dark:from-sky-950/30 dark:via-background dark:to-emerald-950/20 sm:p-6">
-          <div aria-hidden className="pointer-events-none absolute -left-16 -top-20 h-44 w-44 rounded-full bg-[#1BADF8]/10 blur-3xl dark:bg-[#1BADF8]/15" />
-          <div aria-hidden className="pointer-events-none absolute -bottom-16 -right-10 h-40 w-40 rounded-full bg-emerald-400/10 blur-3xl" />
-          <div className="relative flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
-            <div className="flex items-center gap-3">
-              <span className="rounded-xl bg-[#1BADF8]/15 p-2.5 text-[#078fd1] dark:text-[#45c0f5]">
-                <Users className="h-5 w-5 sm:h-6 sm:w-6" />
-              </span>
-              <div>
-                <h1 className="text-2xl font-bold tracking-tight" data-testid="heading-title">
-                  إدارة المستخدمين
-                </h1>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  إدارة حسابات المستخدمين والصلاحيات
+      <DashboardPageShell maxWidthClassName="max-w-[1600px]" contentClassName="px-4 pb-10 sm:px-6">
+        <div className="space-y-6" dir="rtl">
+          {/* Unified Editorial Header */}
+          <DashboardPageHeader
+            icon={Users}
+            title="إدارة المستخدمين"
+            description="سجل أعضاء وقراء صحيفة سبق — متابعة التوثيق، برنامج الولاء، وإدارة الحسابات والصلاحيات"
+            titleTestId="heading-title"
+            actions={
+              <Button
+                onClick={() => setAddingUser(true)}
+                data-testid="button-add-user"
+                className="gap-2 shadow-xs"
+              >
+                <PlusCircle className="h-4 w-4" />
+                إضافة مستخدم
+              </Button>
+            }
+          />
+
+          {/* Top 4-Card KPI Summary Strip */}
+          <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
+            <Card
+              className={`cursor-pointer rounded-2xl border-sky-200/60 bg-gradient-to-br from-sky-50/55 via-card to-card shadow-xs transition-all hover:shadow-md dark:border-sky-900/40 dark:from-sky-950/20 ${
+                statusFilter === "all" && verificationFilter === "all"
+                  ? "ring-2 ring-sky-500/40"
+                  : ""
+              }`}
+              onClick={() => {
+                setStatusFilter("all");
+                setVerificationFilter("all");
+              }}
+              data-testid="card-kpi-total"
+            >
+              <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">
+                  إجمالي المستخدمين
+                </CardTitle>
+                <span className="rounded-xl bg-sky-100/80 p-2 dark:bg-sky-950/50">
+                  <Users className="h-4 w-4 text-sky-700 dark:text-sky-300" />
+                </span>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold tabular-nums tracking-tight" data-testid="text-total">
+                  {kpisLoading ? (
+                    <Loader2 className="h-6 w-6 animate-spin text-sky-600" />
+                  ) : (
+                    formatLatinNumber(kpis?.total ?? totalUsers ?? 0)
+                  )}
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  جميع حسابات القراء والأعضاء المسجلة
                 </p>
-              </div>
-            </div>
-            <Button onClick={() => setAddingUser(true)} data-testid="button-add-user" className="gap-2">
-              <PlusCircle className="h-4 w-4" />
-              إضافة مستخدم
-            </Button>
+              </CardContent>
+            </Card>
+
+            <Card
+              className={`cursor-pointer rounded-2xl border-emerald-200/60 bg-gradient-to-br from-emerald-50/55 via-card to-card shadow-xs transition-all hover:shadow-md dark:border-emerald-900/40 dark:from-emerald-950/20 ${
+                verificationFilter === "email_verified" ? "ring-2 ring-emerald-500/40" : ""
+              }`}
+              onClick={() => {
+                setStatusFilter("all");
+                setVerificationFilter((prev) =>
+                  prev === "email_verified" ? "all" : "email_verified"
+                );
+              }}
+              data-testid="card-kpi-verified"
+            >
+              <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">
+                  الموثقون بالبريد
+                </CardTitle>
+                <span className="rounded-xl bg-emerald-100/80 p-2 dark:bg-emerald-950/50">
+                  <UserCheck className="h-4 w-4 text-emerald-700 dark:text-emerald-300" />
+                </span>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold tabular-nums tracking-tight" data-testid="text-verified">
+                  {kpisLoading ? (
+                    <Loader2 className="h-6 w-6 animate-spin text-emerald-600" />
+                  ) : (
+                    formatLatinNumber(kpis?.emailVerified || 0)
+                  )}
+                </div>
+                {!kpisLoading && kpis && (
+                  <div className="mt-1 flex items-center justify-between gap-2 text-xs">
+                    <span
+                      className={`inline-flex items-center font-medium tabular-nums ${
+                        (Number(kpis.emailVerifiedTrend) || 0) >= 0 ? "text-emerald-600" : "text-red-600"
+                      }`}
+                    >
+                      {(Number(kpis.emailVerifiedTrend) || 0) >= 0 ? (
+                        <TrendingUp className="ml-1 h-3 w-3" />
+                      ) : (
+                        <TrendingDown className="ml-1 h-3 w-3" />
+                      )}
+                      {formatLatinNumber(Math.abs(Number(kpis.emailVerifiedTrend) || 0))}%
+                    </span>
+                    {(Number(kpis.total) || 0) > 0 && (
+                      <span className="text-muted-foreground tabular-nums">
+                        {formatLatinNumber(
+                          Math.round(((Number(kpis.emailVerified) || 0) / Number(kpis.total)) * 100)
+                        )}
+                        % من الإجمالي
+                      </span>
+                    )}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card
+              className={`cursor-pointer rounded-2xl border-cyan-200/60 bg-gradient-to-br from-cyan-50/55 via-card to-card shadow-xs transition-all hover:shadow-md dark:border-cyan-900/40 dark:from-cyan-950/20 ${
+                verificationFilter === "phone_verified" ? "ring-2 ring-cyan-500/40" : ""
+              }`}
+              onClick={() => {
+                setStatusFilter("all");
+                setVerificationFilter((prev) =>
+                  prev === "phone_verified" ? "all" : "phone_verified"
+                );
+              }}
+              data-testid="card-kpi-with-phone"
+            >
+              <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">
+                  الجوالات المسجّلة
+                </CardTitle>
+                <span className="rounded-xl bg-cyan-100/80 p-2 dark:bg-cyan-950/50">
+                  <Phone className="h-4 w-4 text-cyan-700 dark:text-cyan-300" />
+                </span>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold tabular-nums tracking-tight" data-testid="text-with-phone">
+                  {kpisLoading ? (
+                    <Loader2 className="h-6 w-6 animate-spin text-cyan-600" />
+                  ) : (
+                    formatLatinNumber(kpis?.withPhone || 0)
+                  )}
+                </div>
+                {!kpisLoading && kpis && (
+                  <div className="mt-1 flex items-center justify-between gap-2 text-xs">
+                    <span
+                      className={`inline-flex items-center font-medium tabular-nums ${
+                        (Number(kpis.withPhoneTrend) || 0) >= 0 ? "text-emerald-600" : "text-red-600"
+                      }`}
+                    >
+                      {(Number(kpis.withPhoneTrend) || 0) >= 0 ? (
+                        <TrendingUp className="ml-1 h-3 w-3" />
+                      ) : (
+                        <TrendingDown className="ml-1 h-3 w-3" />
+                      )}
+                      {formatLatinNumber(Math.abs(Number(kpis.withPhoneTrend) || 0))}%
+                    </span>
+                    {(Number(kpis.total) || 0) > 0 && (
+                      <span className="text-muted-foreground tabular-nums">
+                        {formatLatinNumber(
+                          Math.round(((Number(kpis.withPhone) || 0) / Number(kpis.total)) * 100)
+                        )}
+                        % من الإجمالي
+                      </span>
+                    )}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card
+              className={`cursor-pointer rounded-2xl border-rose-200/60 bg-gradient-to-br from-rose-50/50 via-card to-card shadow-xs transition-all hover:shadow-md dark:border-rose-900/40 dark:from-rose-950/20 ${
+                statusFilter === "banned" ? "ring-2 ring-rose-500/40" : ""
+              }`}
+              onClick={() => setStatusFilter((prev) => (prev === "banned" ? "all" : "banned"))}
+              data-testid="card-kpi-banned"
+            >
+              <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">
+                  المحظورون
+                </CardTitle>
+                <span className="rounded-xl bg-rose-100/80 p-2 dark:bg-rose-950/50">
+                  <Ban className="h-4 w-4 text-rose-700 dark:text-rose-300" />
+                </span>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold tabular-nums tracking-tight" data-testid="text-banned">
+                  {kpisLoading ? (
+                    <Loader2 className="h-6 w-6 animate-spin text-rose-600" />
+                  ) : (
+                    formatLatinNumber(kpis?.banned || 0)
+                  )}
+                </div>
+                {!kpisLoading && kpis && (
+                  <div className="mt-1 flex items-center justify-between gap-2 text-xs">
+                    <span
+                      className={`inline-flex items-center font-medium tabular-nums ${
+                        (Number(kpis.bannedTrend) || 0) >= 0 ? "text-red-600" : "text-emerald-600"
+                      }`}
+                    >
+                      {(Number(kpis.bannedTrend) || 0) >= 0 ? (
+                        <TrendingUp className="ml-1 h-3 w-3" />
+                      ) : (
+                        <TrendingDown className="ml-1 h-3 w-3" />
+                      )}
+                      {formatLatinNumber(Math.abs(Number(kpis.bannedTrend) || 0))}%
+                    </span>
+                    <span className="text-muted-foreground tabular-nums">
+                      معلق: {formatLatinNumber(kpis.suspended || 0)}
+                    </span>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </div>
-        </header>
 
-        {/* KPI Cards */}
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          <Card
-            className="cursor-pointer rounded-2xl border-sky-200/55 bg-gradient-to-br from-sky-50/50 via-card to-card shadow-sm transition-shadow hover:shadow-md dark:border-sky-900/35 dark:from-sky-950/15"
-            onClick={() => setStatusFilter("all")}
-            data-testid="card-kpi-total"
-          >
-            <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">إجمالي المستخدمين</CardTitle>
-              <span className="rounded-lg bg-sky-100/80 p-1.5 dark:bg-sky-950/40">
-                <Users className="h-4 w-4 text-sky-700 dark:text-sky-300" />
-              </span>
+          {/* Main User Directory Card */}
+          <Card className="rounded-2xl border-sky-200/55 bg-gradient-to-br from-sky-50/35 via-card to-card shadow-xs dark:border-sky-900/35 dark:from-sky-950/15">
+            <CardHeader className="border-b border-border/60 pb-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-center gap-2.5">
+                  <CardTitle className="text-lg font-bold" data-testid="heading-users">
+                    قائمة المستخدمين
+                  </CardTitle>
+                  <Badge variant="secondary" className="py-0.5 tabular-nums">
+                    {formatLatinNumber(totalUsers)} عضو
+                  </Badge>
+                </div>
+                {hasActiveFilters && (
+                  <button
+                    type="button"
+                    onClick={clearAllFilters}
+                    className="no-min-touch-size inline-flex items-center gap-1.5 self-start rounded-full border border-border bg-background/80 px-3 py-0.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground sm:self-auto"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                    إعادة ضبط الفلاتر
+                  </button>
+                )}
+              </div>
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold tabular-nums" data-testid="text-total">
-                {kpisLoading ? <Loader2 className="h-6 w-6 animate-spin" /> : formatLatinNumber(kpis?.total || 0)}
-              </div>
-            </CardContent>
-          </Card>
 
-          <Card
-            className="cursor-pointer rounded-2xl border-emerald-200/55 bg-gradient-to-br from-emerald-50/50 via-card to-card shadow-sm transition-shadow hover:shadow-md dark:border-emerald-900/35 dark:from-emerald-950/15"
-            onClick={() => setStatusFilter("all")}
-            data-testid="card-kpi-verified"
-          >
-            <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">الموثقون بالبريد</CardTitle>
-              <span className="rounded-lg bg-emerald-100/80 p-1.5 dark:bg-emerald-950/40">
-                <UserCheck className="h-4 w-4 text-emerald-700 dark:text-emerald-300" />
-              </span>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold tabular-nums" data-testid="text-verified">
-                {kpisLoading ? <Loader2 className="h-6 w-6 animate-spin" /> : formatLatinNumber(kpis?.emailVerified || 0)}
-              </div>
-              {!kpisLoading && kpis && (
-                <div className={`mt-1 flex items-center text-xs tabular-nums ${kpis.emailVerifiedTrend >= 0 ? "text-emerald-600" : "text-red-600"}`}>
-                  {kpis.emailVerifiedTrend >= 0 ? <TrendingUp className="ml-1 h-3 w-3" /> : <TrendingDown className="ml-1 h-3 w-3" />}
-                  <span>{formatLatinNumber(Math.abs(kpis.emailVerifiedTrend))}%</span>
+            <CardContent className="pt-5">
+              {/* Search & Select Filters */}
+              <div className="mb-4 flex flex-col gap-3 md:flex-row">
+                <div className="flex-1">
+                  <div className="relative">
+                    <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      placeholder="بحث بالاسم، البريد الإلكتروني، أو رقم الجوال..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="pr-10 pl-9"
+                      data-testid="input-search"
+                    />
+                    {searchQuery && (
+                      <button
+                        type="button"
+                        onClick={() => setSearchQuery("")}
+                        aria-label="مسح البحث"
+                        className="no-min-touch-size absolute left-2.5 top-1/2 -translate-y-1/2 rounded-full p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
                 </div>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card
-            className="cursor-pointer rounded-2xl border-cyan-200/55 bg-gradient-to-br from-cyan-50/50 via-card to-card shadow-sm transition-shadow hover:shadow-md dark:border-cyan-900/35 dark:from-cyan-950/15"
-            onClick={() => setStatusFilter("all")}
-            data-testid="card-kpi-with-phone"
-          >
-            <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">الجوالات المسجّلة</CardTitle>
-              <span className="rounded-lg bg-cyan-100/80 p-1.5 dark:bg-cyan-950/40">
-                <Phone className="h-4 w-4 text-cyan-700 dark:text-cyan-300" />
-              </span>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold tabular-nums" data-testid="text-with-phone">
-                {kpisLoading ? <Loader2 className="h-6 w-6 animate-spin" /> : formatLatinNumber(kpis?.withPhone || 0)}
-              </div>
-              {!kpisLoading && kpis && (
-                <div className={`mt-1 flex items-center text-xs tabular-nums ${kpis.withPhoneTrend >= 0 ? "text-emerald-600" : "text-red-600"}`}>
-                  {kpis.withPhoneTrend >= 0 ? <TrendingUp className="ml-1 h-3 w-3" /> : <TrendingDown className="ml-1 h-3 w-3" />}
-                  <span>{formatLatinNumber(Math.abs(kpis.withPhoneTrend))}%</span>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card
-            className="cursor-pointer rounded-2xl border-rose-200/55 bg-gradient-to-br from-rose-50/45 via-card to-card shadow-sm transition-shadow hover:shadow-md dark:border-rose-900/35 dark:from-rose-950/15"
-            onClick={() => setStatusFilter("banned")}
-            data-testid="card-kpi-banned"
-          >
-            <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">المحظورون</CardTitle>
-              <span className="rounded-lg bg-rose-100/80 p-1.5 dark:bg-rose-950/40">
-                <Ban className="h-4 w-4 text-rose-700 dark:text-rose-300" />
-              </span>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold tabular-nums" data-testid="text-banned">
-                {kpisLoading ? <Loader2 className="h-6 w-6 animate-spin" /> : formatLatinNumber(kpis?.banned || 0)}
-              </div>
-              {!kpisLoading && kpis && (
-                <div className={`mt-1 flex items-center text-xs tabular-nums ${kpis.bannedTrend >= 0 ? "text-red-600" : "text-emerald-600"}`}>
-                  {kpis.bannedTrend >= 0 ? <TrendingUp className="ml-1 h-3 w-3" /> : <TrendingDown className="ml-1 h-3 w-3" />}
-                  <span>{formatLatinNumber(Math.abs(kpis.bannedTrend))}%</span>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Main Card */}
-        <Card className="rounded-2xl border-sky-200/55 bg-gradient-to-br from-sky-50/40 via-card to-card shadow-sm dark:border-sky-900/35 dark:from-sky-950/15">
-          <CardHeader>
-            <CardTitle data-testid="heading-users">قائمة المستخدمين</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {/* Filters */}
-            <div className="mb-6 flex flex-col gap-4 md:flex-row">
-              <div className="flex-1">
-                <div className="relative">
-                  <Search className="absolute right-3 top-3 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    placeholder="بحث بالاسم أو البريد..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pr-10"
-                    data-testid="input-search"
-                  />
+                <div className="grid grid-cols-2 gap-2.5 sm:flex">
+                  <Select value={statusFilter} onValueChange={setStatusFilter}>
+                    <SelectTrigger className="w-full sm:w-[170px]" data-testid="select-status-filter">
+                      <SelectValue placeholder="الحالة" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">كل الحالات</SelectItem>
+                      <SelectItem value="active">نشط</SelectItem>
+                      <SelectItem value="suspended">معلق</SelectItem>
+                      <SelectItem value="banned">محظور</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select value={roleFilter} onValueChange={setRoleFilter}>
+                    <SelectTrigger className="w-full sm:w-[180px]" data-testid="select-role-filter">
+                      <SelectValue placeholder="الدور" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">كل الأدوار</SelectItem>
+                      {roles.map((role) => (
+                        <SelectItem key={role.id} value={role.id}>
+                          {role.nameAr}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-full md:w-[200px]" data-testid="select-status-filter">
-                  <SelectValue placeholder="الحالة" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">كل الحالات</SelectItem>
-                  <SelectItem value="active">نشط</SelectItem>
-                  <SelectItem value="suspended">معلق</SelectItem>
-                  <SelectItem value="banned">محظور</SelectItem>
-                </SelectContent>
-              </Select>
-              <Select value={roleFilter} onValueChange={setRoleFilter}>
-                <SelectTrigger className="w-full md:w-[200px]" data-testid="select-role-filter">
-                  <SelectValue placeholder="الدور" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">كل الأدوار</SelectItem>
-                  {roles.map((role) => (
-                    <SelectItem key={role.id} value={role.id}>
-                      {role.nameAr}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
 
-            {/* Users Table */}
-            <div className="overflow-x-auto">
-              {isLoading ? (
-                <div className="text-center py-8" data-testid="text-loading">جاري التحميل...</div>
-              ) : users.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground" data-testid="text-empty">
-                  لا توجد مستخدمون
+              {/* Quick Filter Pills (Status + Verification) */}
+              <div className="mb-5 flex flex-col gap-2.5 rounded-xl border border-border/60 bg-muted/25 p-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="ml-1 inline-flex items-center gap-1 text-xs font-medium text-muted-foreground">
+                    <SlidersHorizontal className="h-3.5 w-3.5" />
+                    الحالة:
+                  </span>
+                  {[
+                    { id: "all", label: "الكل" },
+                    { id: "active", label: "نشط" },
+                    { id: "suspended", label: "معلق" },
+                    { id: "banned", label: "محظور" },
+                  ].map((pill) => {
+                    const active = statusFilter === pill.id;
+                    return (
+                      <button
+                        key={pill.id}
+                        type="button"
+                        onClick={() => setStatusFilter(pill.id)}
+                        className={`no-min-touch-size inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-medium transition-colors ${
+                          active
+                            ? "border-sky-600 bg-sky-600 text-white shadow-2xs dark:border-sky-500 dark:bg-sky-500"
+                            : "border-border/70 bg-background text-muted-foreground hover:bg-muted hover:text-foreground"
+                        }`}
+                      >
+                        {pill.label}
+                      </button>
+                    );
+                  })}
                 </div>
-              ) : (
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b">
-                      <th className="text-right py-3 px-4">المستخدم</th>
-                      <th className="text-right py-3 px-4">البريد الإلكتروني</th>
-                      <th className="text-right py-3 px-4 hidden md:table-cell">الجوال</th>
-                      <th className="text-right py-3 px-4 hidden lg:table-cell">العضوية</th>
-                      <th className="text-right py-3 px-4">الحالة</th>
-                      <th className="text-right py-3 px-4 hidden xl:table-cell">آخر نشاط</th>
-                      <th className="text-right py-3 px-4 hidden lg:table-cell">تاريخ التسجيل</th>
-                      <th className="text-right py-3 px-4">الإجراءات</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {users.map((user) => (
-                      <tr key={user.id} className="border-b hover-elevate" data-testid={`row-user-${user.id}`}>
-                        <td className="py-3 px-4 align-top">
-                          <div className="flex items-start gap-3">
-                            <Avatar className="shrink-0 mt-0.5" data-testid={`avatar-${user.id}`}>
-                              <AvatarImage src={user.profileImageUrl || undefined} />
-                              <AvatarFallback>
-                                {(user.firstName?.[0] || "") + (user.lastName?.[0] || "")}
-                              </AvatarFallback>
-                            </Avatar>
-                            <div className="min-w-0 flex-1">
-                              <div className="font-medium flex items-start gap-1 flex-wrap" data-testid={`text-name-${user.id}`}>
-                                <span className="break-words">
-                                  {adminUserLabel(user)}
+
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="ml-1 text-xs font-medium text-muted-foreground">التوثيق والأمان:</span>
+                  {(
+                    [
+                      { id: "all", label: "الكل" },
+                      { id: "email_verified", label: "بريد موثق" },
+                      { id: "phone_verified", label: "جوال موثق" },
+                      { id: "two_factor", label: "2FA مفعّل" },
+                      { id: "missing_email", label: "بدون بريد" },
+                    ] as { id: VerificationQuickFilter; label: string }[]
+                  ).map((pill) => {
+                    const active = verificationFilter === pill.id;
+                    return (
+                      <button
+                        key={pill.id}
+                        type="button"
+                        onClick={() => setVerificationFilter(pill.id)}
+                        className={`no-min-touch-size inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-medium transition-colors ${
+                          active
+                            ? "border-emerald-600 bg-emerald-600 text-white shadow-2xs dark:border-emerald-500 dark:bg-emerald-500"
+                            : "border-border/70 bg-background text-muted-foreground hover:bg-muted hover:text-foreground"
+                        }`}
+                      >
+                        {pill.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Users Directory (Responsive Mobile Cards + Desktop Table) */}
+              <div className="overflow-x-auto">
+                {isLoading ? (
+                  <div
+                    className="flex flex-col items-center justify-center gap-2 py-12 text-center text-muted-foreground"
+                    data-testid="text-loading"
+                  >
+                    <Loader2 className="h-7 w-7 animate-spin text-sky-600" />
+                    <span>جاري التحميل...</span>
+                  </div>
+                ) : users.length === 0 ? (
+                  <div
+                    className="flex flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-border/80 py-12 text-center text-muted-foreground"
+                    data-testid="text-empty"
+                  >
+                    <Users className="h-8 w-8 text-muted-foreground/60" />
+                    <p className="font-medium">لا توجد مستخدمون</p>
+                    {hasActiveFilters && (
+                      <button
+                        type="button"
+                        onClick={clearAllFilters}
+                        className="no-min-touch-size mt-1 rounded-full border border-border bg-background px-3 py-0.5 text-xs font-medium text-foreground hover:bg-muted"
+                      >
+                        عرض جميع المستخدمين
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <table className="w-full border-collapse">
+                    <thead className="hidden md:table-header-group">
+                      <tr className="border-b border-border/70 bg-muted/30 text-xs font-semibold text-muted-foreground">
+                        <th className="py-3 px-4 text-right">المستخدم</th>
+                        <th className="py-3 px-4 text-right">البريد الإلكتروني والتوثيق</th>
+                        <th className="py-3 px-4 text-right">الجوال</th>
+                        <th className="py-3 px-4 text-right">العضوية والولاء</th>
+                        <th className="py-3 px-4 text-right">الحالة</th>
+                        <th className="py-3 px-4 text-right">آخر نشاط</th>
+                        <th className="py-3 px-4 text-right">تاريخ التسجيل</th>
+                        <th className="py-3 px-4 text-right">الإجراءات</th>
+                      </tr>
+                    </thead>
+                    <tbody className="flex flex-col gap-3 md:table-row-group md:divide-y md:divide-border/60">
+                      {users.map((rowUser) => {
+                        const isSelf = rowUser.id === (globalThis as any).__currentUserId;
+                        const realEmail = hasRealEmail(rowUser.email);
+                        return (
+                          <tr
+                            key={rowUser.id}
+                            className="flex flex-col gap-2.5 rounded-2xl border border-border/75 bg-card/95 p-4 shadow-2xs transition-colors hover:bg-muted/30 md:table-row md:rounded-none md:border-0 md:bg-transparent md:p-0 md:shadow-none"
+                            data-testid={`row-user-${rowUser.id}`}
+                          >
+                            {/* User Identity */}
+                            <td className="block md:table-cell md:py-3.5 md:px-4 md:align-top">
+                              <div className="flex items-start gap-3">
+                                <Avatar
+                                  className="h-10 w-10 shrink-0 ring-1 ring-border/60 mt-0.5"
+                                  data-testid={`avatar-${rowUser.id}`}
+                                >
+                                  <AvatarImage src={rowUser.profileImageUrl || undefined} />
+                                  <AvatarFallback className="bg-sky-100/80 text-sky-800 dark:bg-sky-950/60 dark:text-sky-200 font-semibold">
+                                    {(rowUser.firstName?.[0] || "") + (rowUser.lastName?.[0] || "") || "ع"}
+                                  </AvatarFallback>
+                                </Avatar>
+                                <div className="min-w-0 flex-1">
+                                  <div
+                                    className="font-semibold flex items-center gap-1.5 flex-wrap text-foreground"
+                                    data-testid={`text-name-${rowUser.id}`}
+                                  >
+                                    <span className="break-words">{adminUserLabel(rowUser)}</span>
+                                    {rowUser.verificationBadge === "gold" && (
+                                      <BadgeCheck
+                                        className="h-4 w-4 text-amber-500 shrink-0"
+                                        aria-label="موثق ذهبي"
+                                      />
+                                    )}
+                                    {rowUser.verificationBadge === "silver" && (
+                                      <BadgeCheck
+                                        className="h-4 w-4 text-slate-400 shrink-0"
+                                        aria-label="موثق فضي"
+                                      />
+                                    )}
+                                  </div>
+                                  <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                                    <Badge
+                                      variant="secondary"
+                                      className="py-0.5 text-[11px] font-medium"
+                                    >
+                                      {rowUser.roleNameAr || "قارئ"}
+                                    </Badge>
+                                    {(rowUser.country || rowUser.city) && (
+                                      <span className="inline-flex items-center gap-0.5 text-xs text-muted-foreground">
+                                        <MapPin className="h-3 w-3 shrink-0" />
+                                        <span className="break-words">
+                                          {[rowUser.city, rowUser.country].filter(Boolean).join("، ")}
+                                        </span>
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            </td>
+
+                            {/* Email & Verification Indicators */}
+                            <td
+                              className="flex flex-col gap-1.5 border-t border-border/40 pt-2.5 md:table-cell md:border-0 md:py-3.5 md:px-4 md:align-top"
+                              data-testid={`text-email-${rowUser.id}`}
+                            >
+                              <div className="flex items-center justify-between gap-2 md:block">
+                                <span className="text-xs font-medium text-muted-foreground md:hidden">
+                                  البريد الإلكتروني
                                 </span>
-                                {user.verificationBadge === "gold" && (
-                                  <BadgeCheck className="h-4 w-4 text-amber-500 shrink-0 mt-1" aria-label="موثق ذهبي" />
+                                <EmailCell
+                                  email={rowUser.email}
+                                  emailVerified={rowUser.emailVerified}
+                                />
+                              </div>
+                              {/* Verification Chips Strip (Email / Phone / 2FA) */}
+                              <div className="flex flex-wrap items-center gap-1 md:mt-1">
+                                {realEmail && rowUser.emailVerified && (
+                                  <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:text-emerald-300">
+                                    <Mail className="h-2.5 w-2.5" />
+                                    بريد موثق
+                                  </span>
                                 )}
-                                {user.verificationBadge === "silver" && (
-                                  <BadgeCheck className="h-4 w-4 text-slate-400 shrink-0 mt-1" aria-label="موثق فضي" />
+                                {realEmail && !rowUser.emailVerified && (
+                                  <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:text-amber-300">
+                                    <AlertCircle className="h-2.5 w-2.5" />
+                                    بريد غير موثق
+                                  </span>
+                                )}
+                                {rowUser.phoneNumber && rowUser.phoneVerified && (
+                                  <span className="inline-flex items-center gap-1 rounded-full border border-sky-500/30 bg-sky-500/10 px-2 py-0.5 text-[11px] font-medium text-sky-700 dark:text-sky-300">
+                                    <Phone className="h-2.5 w-2.5" />
+                                    جوال موثق
+                                  </span>
+                                )}
+                                {rowUser.twoFactorEnabled && (
+                                  <span className="inline-flex items-center gap-1 rounded-full border border-violet-500/30 bg-violet-500/10 px-2 py-0.5 text-[11px] font-medium text-violet-700 dark:text-violet-300">
+                                    <ShieldCheck className="h-2.5 w-2.5" />
+                                    2FA
+                                  </span>
                                 )}
                               </div>
-                              {(user.country || user.city) && (
-                                <div className="text-xs text-muted-foreground flex items-start gap-1 mt-0.5">
-                                  <MapPin className="h-3 w-3 shrink-0 mt-0.5" />
-                                  <span className="break-words">{[user.city, user.country].filter(Boolean).join("، ")}</span>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        </td>
-                        <td className="py-3 px-4 align-top" data-testid={`text-email-${user.id}`}>
-                          <EmailCell email={user.email} emailVerified={user.emailVerified} />
-                        </td>
-                        <td className="py-3 px-4 hidden md:table-cell align-top" data-testid={`text-phone-${user.id}`}>
-                          {user.phoneNumber ? (
-                            <div className="flex items-center gap-1.5 text-sm" dir="ltr">
-                              <Phone className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                              <span className="break-all">{user.phoneNumber}</span>
-                              {user.phoneVerified && (
-                                <BadgeCheck className="h-4 w-4 text-emerald-500 shrink-0" aria-label="جوال موثق" />
-                              )}
-                            </div>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">—</span>
-                          )}
-                        </td>
-                        <td className="py-3 px-4 hidden lg:table-cell align-top" data-testid={`text-loyalty-${user.id}`}>
-                          {user.loyalty ? (
-                            <div className="flex flex-col gap-0.5">
-                              <Badge variant="outline" className={`gap-1 w-fit ${getRankColor(user.loyalty.rankLevel)}`}>
-                                <Award className="h-3 w-3" />
-                                <span className="text-xs">{user.loyalty.currentRank}</span>
-                              </Badge>
-                              <span className="text-xs text-muted-foreground">
-                                {formatLatinNumber(user.loyalty.totalPoints)} نقطة
+                            </td>
+
+                            {/* Phone */}
+                            <td
+                              className="flex items-center justify-between gap-2 md:table-cell md:py-3.5 md:px-4 md:align-top"
+                              data-testid={`text-phone-${rowUser.id}`}
+                            >
+                              <span className="text-xs font-medium text-muted-foreground md:hidden">
+                                رقم الجوال
                               </span>
-                            </div>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">—</span>
-                          )}
-                        </td>
-                        <td className="py-3 px-4 align-top">{getStatusBadge(user.status)}</td>
-                        <td className="py-3 px-4 hidden xl:table-cell text-sm text-muted-foreground align-top" data-testid={`text-last-activity-${user.id}`}>
-                          <div className="flex items-center gap-1">
-                            <Clock className="h-3 w-3 shrink-0" />
-                            <span>{formatRelative(user.lastActivityAt || user.lastLoginAt)}</span>
-                          </div>
-                          {getPlatformLabel(user.lastDeviceInfo) && (
-                            <div className="text-xs flex items-center gap-1 mt-0.5">
-                              <Smartphone className="h-3 w-3 shrink-0" />
-                              <span>{getPlatformLabel(user.lastDeviceInfo)}</span>
-                            </div>
-                          )}
-                        </td>
-                        <td className="py-3 px-4 hidden lg:table-cell align-top" data-testid={`text-date-${user.id}`}>
-                          {formatDate(user.createdAt)}
-                        </td>
-                        <td className="py-3 px-4 align-top">
-                          <div className="flex gap-2">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => setViewingDetails(user)}
-                              data-testid={`button-view-details-${user.id}`}
-                              title="عرض التفاصيل"
-                            >
-                              <Eye className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleEditRoles(user)}
-                              disabled={user.id === (globalThis as any).__currentUserId}
-                              data-testid={`button-edit-roles-${user.id}`}
-                            >
-                              <Users className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleEdit(user)}
-                              disabled={user.id === (globalThis as any).__currentUserId}
-                              data-testid={`button-edit-${user.id}`}
-                            >
-                              <Edit className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => {
-                                setResettingPassword(user);
-                                setNewPassword("");
-                              }}
-                              disabled={user.id === (globalThis as any).__currentUserId}
-                              data-testid={`button-reset-password-${user.id}`}
-                            >
-                              <KeyRound className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => setDeletingUser(user)}
-                              disabled={user.id === (globalThis as any).__currentUserId}
-                              data-testid={`button-delete-${user.id}`}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                            {/* Permanent delete button - only for banned users */}
-                            {(user.status === "banned" || user.status === "deleted") && (
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => setPermanentDeletingUser(user)}
-                                disabled={user.id === (globalThis as any).__currentUserId}
-                                className="text-destructive hover:text-destructive"
-                                title="حذف نهائي"
-                                data-testid={`button-permanent-delete-${user.id}`}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
+                              {rowUser.phoneNumber ? (
+                                <div className="flex items-center gap-1.5 text-sm font-mono" dir="ltr">
+                                  <Phone className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                                  <span className="break-all">{rowUser.phoneNumber}</span>
+                                  {rowUser.phoneVerified && (
+                                    <BadgeCheck
+                                      className="h-4 w-4 text-emerald-500 shrink-0"
+                                      aria-label="جوال موثق"
+                                    />
+                                  )}
+                                </div>
+                              ) : (
+                                <span className="text-xs text-muted-foreground">—</span>
+                              )}
+                            </td>
 
-            {/* Pagination controls — only render once we know how many
-                pages exist. Shows page X of Y, count of currently-shown
-                rows, page-size selector, and prev/next/first/last
-                buttons. Resets to page 1 when filters change (see the
-                effect above the useQuery). */}
-            {totalUsers > 0 && (
-              <div className="mt-4 flex flex-col items-center justify-between gap-3 px-4 pb-4 text-sm sm:flex-row">
-                <div className="text-muted-foreground" data-testid="pagination-status">
-                  عرض <span className="font-bold tabular-nums text-foreground">{formatLatinNumber((page - 1) * pageSize + 1)}</span>
-                  {" – "}
-                  <span className="font-bold tabular-nums text-foreground">
-                    {formatLatinNumber(Math.min(page * pageSize, totalUsers))}
-                  </span>
-                  {" من "}
-                  <span className="font-bold tabular-nums text-foreground">{formatLatinNumber(totalUsers)}</span>
-                  {" قارئ"}
-                </div>
+                            {/* Loyalty / Membership */}
+                            <td
+                              className="flex items-center justify-between gap-2 md:table-cell md:py-3.5 md:px-4 md:align-top"
+                              data-testid={`text-loyalty-${rowUser.id}`}
+                            >
+                              <span className="text-xs font-medium text-muted-foreground md:hidden">
+                                العضوية والولاء
+                              </span>
+                              {rowUser.loyalty ? (
+                                <div className="flex items-center gap-2 md:flex-col md:items-start md:gap-0.5">
+                                  <Badge
+                                    variant="outline"
+                                    className={`gap-1 py-0.5 w-fit ${getRankColor(rowUser.loyalty.rankLevel)}`}
+                                  >
+                                    <Award className="h-3 w-3" />
+                                    <span className="text-xs">{rowUser.loyalty.currentRank}</span>
+                                  </Badge>
+                                  <span className="text-xs text-muted-foreground tabular-nums">
+                                    {formatLatinNumber(rowUser.loyalty.totalPoints)} نقطة
+                                  </span>
+                                </div>
+                              ) : (
+                                <span className="text-xs text-muted-foreground">—</span>
+                              )}
+                            </td>
 
-                <div className="flex items-center gap-2">
-                  <span className="text-muted-foreground">صفوف لكل صفحة:</span>
-                  <select
-                    value={pageSize}
-                    onChange={(e) => setPageSize(Number(e.target.value))}
-                    className="rounded-md border border-input bg-background px-2 py-1 text-sm tabular-nums"
-                    data-testid="select-page-size"
-                  >
-                    {[50, 100, 200, 500].map((n) => (
-                      <option key={n} value={n}>{formatLatinNumber(n)}</option>
-                    ))}
-                  </select>
-                </div>
+                            {/* Account Status */}
+                            <td className="flex items-center justify-between gap-2 md:table-cell md:py-3.5 md:px-4 md:align-top">
+                              <span className="text-xs font-medium text-muted-foreground md:hidden">
+                                الحالة
+                              </span>
+                              <div className="flex flex-wrap items-center gap-1.5 md:flex-col md:items-start md:gap-1">
+                                {getStatusBadge(rowUser.status)}
+                                {!rowUser.isProfileComplete && (
+                                  <span className="text-[11px] text-amber-600 dark:text-amber-400">
+                                    ملف غير مكتمل
+                                  </span>
+                                )}
+                              </div>
+                            </td>
 
-                <div className="flex items-center gap-1">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setPage(1)}
-                    disabled={page === 1}
-                    data-testid="button-page-first"
-                  >
-                    الأولى
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setPage((p) => Math.max(1, p - 1))}
-                    disabled={page === 1}
-                    data-testid="button-page-prev"
-                  >
-                    السابقة
-                  </Button>
-                  <span className="px-3 text-muted-foreground tabular-nums">
-                    {formatLatinNumber(page)} / {formatLatinNumber(totalPages)}
-                  </span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                    disabled={page >= totalPages}
-                    data-testid="button-page-next"
-                  >
-                    التالية
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setPage(totalPages)}
-                    disabled={page >= totalPages}
-                    data-testid="button-page-last"
-                  >
-                    الأخيرة
-                  </Button>
-                </div>
+                            {/* Last Activity */}
+                            <td
+                              className="flex items-center justify-between gap-2 text-sm text-muted-foreground md:table-cell md:py-3.5 md:px-4 md:align-top"
+                              data-testid={`text-last-activity-${rowUser.id}`}
+                            >
+                              <span className="text-xs font-medium text-muted-foreground md:hidden">
+                                آخر نشاط
+                              </span>
+                              <div className="flex items-center gap-2 md:flex-col md:items-start md:gap-0.5">
+                                <div className="flex items-center gap-1">
+                                  <Clock className="h-3 w-3 shrink-0" />
+                                  <span>
+                                    {formatRelative(rowUser.lastActivityAt || rowUser.lastLoginAt)}
+                                  </span>
+                                </div>
+                                {getPlatformLabel(rowUser.lastDeviceInfo) && (
+                                  <div className="text-xs flex items-center gap-1 rounded-md bg-muted/60 px-1.5 py-0.5">
+                                    <Smartphone className="h-3 w-3 shrink-0" />
+                                    <span>{getPlatformLabel(rowUser.lastDeviceInfo)}</span>
+                                  </div>
+                                )}
+                              </div>
+                            </td>
+
+                            {/* Registration Date */}
+                            <td
+                              className="flex items-center justify-between gap-2 text-sm tabular-nums md:table-cell md:py-3.5 md:px-4 md:align-top"
+                              data-testid={`text-date-${rowUser.id}`}
+                            >
+                              <span className="text-xs font-medium text-muted-foreground md:hidden">
+                                تاريخ التسجيل
+                              </span>
+                              <span>{formatDate(rowUser.createdAt)}</span>
+                            </td>
+
+                            {/* Actions */}
+                            <td className="block border-t border-border/50 pt-2.5 md:table-cell md:border-0 md:py-3.5 md:px-4 md:align-top">
+                              <div className="flex flex-wrap items-center justify-end gap-1 md:justify-start">
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => setViewingDetails(rowUser)}
+                                  data-testid={`button-view-details-${rowUser.id}`}
+                                  title="عرض التفاصيل"
+                                >
+                                  <Eye className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => setPromotingUser(rowUser)}
+                                  disabled={isSelf}
+                                  data-testid={`button-promote-reporter-${rowUser.id}`}
+                                  title="ترقية إلى مراسل"
+                                >
+                                  <UserCheck className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => handleEditRoles(rowUser)}
+                                  disabled={isSelf}
+                                  data-testid={`button-edit-roles-${rowUser.id}`}
+                                  title="إدارة الأدوار"
+                                >
+                                  <Users className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => handleEdit(rowUser)}
+                                  disabled={isSelf}
+                                  data-testid={`button-edit-${rowUser.id}`}
+                                  title="تعديل الحساب"
+                                >
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => {
+                                    setResettingPassword(rowUser);
+                                    setNewPassword("");
+                                  }}
+                                  disabled={isSelf}
+                                  data-testid={`button-reset-password-${rowUser.id}`}
+                                  title="إعادة تعيين كلمة المرور"
+                                >
+                                  <KeyRound className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => setDeletingUser(rowUser)}
+                                  disabled={isSelf}
+                                  data-testid={`button-delete-${rowUser.id}`}
+                                  title="حظر المستخدم"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                                {/* Permanent delete button - only for banned users */}
+                                {(rowUser.status === "banned" || rowUser.status === "deleted") && (
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => setPermanentDeletingUser(rowUser)}
+                                    disabled={isSelf}
+                                    className="text-destructive hover:text-destructive"
+                                    title="حذف نهائي"
+                                    data-testid={`button-permanent-delete-${rowUser.id}`}
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                )}
               </div>
-            )}
-          </CardContent>
-        </Card>
+
+              {/* Pagination controls */}
+              {totalUsers > 0 && (
+                <div className="mt-5 flex flex-col items-center justify-between gap-3 border-t border-border/60 pt-4 text-sm sm:flex-row">
+                  <div className="text-muted-foreground" data-testid="pagination-status">
+                    عرض{" "}
+                    <span className="font-bold tabular-nums text-foreground">
+                      {formatLatinNumber((page - 1) * pageSize + 1)}
+                    </span>
+                    {" – "}
+                    <span className="font-bold tabular-nums text-foreground">
+                      {formatLatinNumber(Math.min(page * pageSize, totalUsers))}
+                    </span>
+                    {" من "}
+                    <span className="font-bold tabular-nums text-foreground">
+                      {formatLatinNumber(totalUsers)}
+                    </span>
+                    {" قارئ"}
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <span className="text-muted-foreground">صفوف لكل صفحة:</span>
+                    <select
+                      value={pageSize}
+                      onChange={(e) => setPageSize(Number(e.target.value))}
+                      className="rounded-lg border border-input bg-background px-2.5 py-1 text-sm tabular-nums"
+                      data-testid="select-page-size"
+                    >
+                      {[50, 100, 200, 500].map((n) => (
+                        <option key={n} value={n}>
+                          {formatLatinNumber(n)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="flex flex-wrap items-center justify-center gap-1">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setPage(1)}
+                      disabled={page === 1}
+                      data-testid="button-page-first"
+                    >
+                      الأولى
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setPage((p) => Math.max(1, p - 1))}
+                      disabled={page === 1}
+                      data-testid="button-page-prev"
+                    >
+                      السابقة
+                    </Button>
+                    <span className="px-3 text-muted-foreground tabular-nums font-medium">
+                      {formatLatinNumber(page)} / {formatLatinNumber(totalPages)}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                      disabled={page >= totalPages}
+                      data-testid="button-page-next"
+                    >
+                      التالية
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setPage(totalPages)}
+                      disabled={page >= totalPages}
+                      data-testid="button-page-last"
+                    >
+                      الأخيرة
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </div>
-      </div>
+      </DashboardPageShell>
 
       {/* Edit Dialog */}
       <EditUserDialog 
@@ -958,6 +1385,28 @@ export default function UsersManagement() {
         onOpenChange={(open) => !open && setEditingUser(null)}
         userId={editingUser?.id || null}
       />
+
+      <AlertDialog open={!!promotingUser} onOpenChange={(open) => !open && setPromotingUser(null)}>
+        <AlertDialogContent data-testid="dialog-promote-reporter">
+          <AlertDialogHeader>
+            <AlertDialogTitle>ترقية إلى مراسل</AlertDialogTitle>
+            <AlertDialogDescription>
+              سيتم تحويل عضوية "{promotingUser ? adminUserLabel(promotingUser) : ""}" من قارئ إلى مراسل،
+              ومزامنة الدور في الصلاحيات وصفحة المراسل حتى يتمكن من استكمال الملف وإصدار شهادة التعريف.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-promote-reporter">إلغاء</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => promotingUser && promoteReporterMutation.mutate(promotingUser.id)}
+              disabled={promoteReporterMutation.isPending}
+              data-testid="button-confirm-promote-reporter"
+            >
+              {promoteReporterMutation.isPending ? "جاري الترقية..." : "ترقية إلى مراسل"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={!!deletingUser} onOpenChange={(open) => !open && setDeletingUser(null)}>
@@ -1299,29 +1748,31 @@ export default function UsersManagement() {
 }
 
 function UserRoles({ userId }: { userId: string }) {
-  const { data: userRoles, isLoading } = useQuery<Role[]>({
+  const { data: userRolesRaw, isLoading } = useQuery<Role[]>({
     queryKey: ["/api/admin/users", userId, "roles"],
     queryFn: async () => {
       try {
-        return await apiRequest(`/api/admin/users/${userId}/roles`);
+        const res = await apiRequest(`/api/admin/users/${userId}/roles`);
+        return Array.isArray(res) ? res : [];
       } catch {
         return [];
       }
     },
   });
+  const userRoles = Array.isArray(userRolesRaw) ? userRolesRaw : [];
 
   if (isLoading) {
     return <span className="text-muted-foreground text-sm" data-testid={`text-roles-loading-${userId}`}>...</span>;
   }
 
-  if (!userRoles || userRoles.length === 0) {
+  if (userRoles.length === 0) {
     return <span className="text-muted-foreground" data-testid={`text-no-roles-${userId}`}>بدون أدوار</span>;
   }
 
   return (
     <div className="flex gap-1 flex-wrap" data-testid={`div-roles-${userId}`}>
       {userRoles.map((role) => (
-        <Badge key={role.id} variant="outline" data-testid={`badge-role-${userId}-${role.id}`}>
+        <Badge key={role.id} variant="outline" className="py-0.5" data-testid={`badge-role-${userId}-${role.id}`}>
           {role.nameAr}
         </Badge>
       ))}

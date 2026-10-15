@@ -694,98 +694,6 @@ nonisolated struct KcPlayerMarket: Decodable, Hashable {
     let history: [KcMarketPoint]
 }
 
-// MARK: - توقّعات المجتمع (sports_pool الموحّد — /api/v1/sports/*)
-//
-// نظائر الويب: توقّع نتيجة (3 نقاط دقيقة/1 اتجاه) + البطل والهدّاف
-// (مجمّع 5000/5000) + المتصدّرون. كلها بجلسة العضو (Bearer) على جذر v1.
-
-nonisolated struct KcPoolPrediction: Decodable, Identifiable, Hashable {
-    let id: String
-    let fixtureId: Int
-    let competitionSlug: String?
-    let kickoffTs: Int
-    let homeId: Int?
-    let awayId: Int?
-    let homeName: String
-    let awayName: String
-    let homeLogo: String?
-    let awayLogo: String?
-    let predHome: Int
-    let predAway: Int
-    let actualHome: Int?
-    let actualAway: Int?
-    /// null = لم تُسوَّ بعد؛ 3 = نتيجة دقيقة، 1 = اتجاه صحيح، 0 = لم تُصب
-    let points: Int?
-    let settledAt: String?
-}
-
-nonisolated struct KcPoolStats: Decodable, Hashable {
-    let totalPoints: Int
-    let predictions: Int
-    let exact: Int
-    let correct: Int
-}
-
-nonisolated struct KcPoolMine: Decodable, Hashable {
-    let predictions: [KcPoolPrediction]?
-    let stats: KcPoolStats?
-}
-
-nonisolated struct KcPoolLeader: Decodable, Identifiable, Hashable {
-    let userId: String
-    let name: String
-    let avatar: String?
-    let totalPoints: Int
-    let predictions: Int
-    let exact: Int
-    let correct: Int
-    let rank: Int
-
-    var id: String { userId }
-}
-
-nonisolated struct KcLongTeam: Decodable, Identifiable, Hashable {
-    let id: Int
-    let name: String
-    let logo: String
-}
-
-nonisolated struct KcLongPools: Decodable, Hashable {
-    let champion: Int
-    let topScorer: Int
-
-    private enum CodingKeys: String, CodingKey {
-        case champion
-        case topScorer = "top_scorer"
-    }
-}
-
-nonisolated struct KcLongVote: Decodable, Hashable {
-    let teamId: Int?
-    let n: Int
-}
-
-nonisolated struct KcLongMine: Decodable, Identifiable, Hashable {
-    let kind: String
-    let teamId: Int?
-    let teamName: String?
-    let teamLogo: String?
-    let playerName: String?
-    let status: String
-    let pointsAwarded: Int
-
-    var id: String { kind }
-}
-
-nonisolated struct KcLongData: Decodable, Hashable {
-    let competitionSlug: String
-    let teams: [KcLongTeam]
-    let pools: KcLongPools
-    let championVotes: [KcLongVote]
-    let locked: Bool
-    let mine: [KcLongMine]
-}
-
 // MARK: - APIClient — Kings Cup reads
 //
 // كل النقاط عامة (لا مصادقة) فتُمرَّر عبر apiRoot=publicAPI. الكاش على الخادم
@@ -908,58 +816,12 @@ extension APIClient {
                       apiRoot: URLConstants.publicAPI)
     }
 
-    // MARK: توقّعات المجتمع — جذر v1 المصادَق (جلسة العضو Bearer)
-
-    func fetchKcPoolMine() async throws -> KcPoolMine {
-        try await get(KcPoolMine.self, path: "/sports/predictions/me", ignoreCache: true)
-    }
-
-    func submitKcPoolPrediction(fixture: KcFixture, home: Int, away: Int) async throws -> KcPoolPrediction? {
-        struct Body: Encodable {
-            let predHome: Int
-            let predAway: Int
-            let kickoffTs: Int
-            let competitionSlug: String
-            let homeId: Int
-            let awayId: Int
-            let homeName: String
-            let awayName: String
-            let homeLogo: String
-            let awayLogo: String
-        }
-        struct Envelope: Decodable { let prediction: KcPoolPrediction? }
-        let body = Body(
-            predHome: home, predAway: away,
-            kickoffTs: fixture.timestamp, competitionSlug: "kings-cup",
-            homeId: fixture.home.id, awayId: fixture.away.id,
-            homeName: fixture.home.name, awayName: fixture.away.name,
-            homeLogo: fixture.home.logo, awayLogo: fixture.away.logo
-        )
-        return try await post(Envelope.self, path: "/sports/match/\(fixture.id)/predict", body: body).prediction
-    }
-
-    func fetchKcPoolLeaderboard() async throws -> [KcPoolLeader] {
-        struct Envelope: Decodable { let leaders: [KcPoolLeader] }
-        return try await get(Envelope.self, path: "/sports/predictions/leaderboard").leaders
-    }
-
-    func fetchKcPoolLong() async throws -> KcLongData {
-        try await get(KcLongData.self, path: "/sports/predictions/long",
-                      query: ["comp": "kings-cup"], ignoreCache: true)
-    }
-
-    func submitKcPoolLong(kind: String, teamId: Int?, playerName: String?) async throws {
-        struct Body: Encodable {
-            let competitionSlug: String
-            let kind: String
-            let teamId: Int?
-            let playerName: String?
-        }
-        struct Envelope: Decodable { let success: Bool }
-        _ = try await post(Envelope.self, path: "/sports/predictions/long",
-                           body: Body(competitionSlug: "kings-cup", kind: kind, teamId: teamId, playerName: playerName))
-    }
 }
+
+// توقّعات الكأس صارت على المنصة المركزية predictions-core حصرًا
+// (/api/v1/predictions/* — النماذج والطلبات المشتركة Pred* في RoshnModels).
+// مسارات sports_pool القديمة حُذفت من الخادم في PR #938 وكانت شاشة الكأس
+// آخر من يستدعيها — لا تُعِد أي نداء إلى /api/v1/sports/predictions/*.
 
 // MARK: - Kings Cup — تنسيق التوقيت
 //

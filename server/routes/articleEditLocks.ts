@@ -5,7 +5,10 @@
  * mount to coordinate concurrent editors:
  *
  *   GET    /api/admin/articles/:id/lock            check current lock
- *   POST   /api/admin/articles/:id/lock            acquire (or refresh own)
+ *   POST   /api/admin/articles/:id/lock            acquire (or refresh own);
+ *                                                   body { force: true } takes
+ *                                                   over a colleague's lock
+ *                                                   (admin / editor-in-chief)
  *   DELETE /api/admin/articles/:id/lock            release
  *   POST   /api/admin/articles/:id/lock/heartbeat  keep-alive
  *
@@ -21,10 +24,19 @@
 import { Router } from "express";
 import { db } from "../db";
 import { articleEditLocks, users } from "@shared/schema";
-import { eq } from "drizzle-orm";
+import { and, eq, lte, or, sql } from "drizzle-orm";
+import { authorizeArticleWrite } from "../services/articleAccessService";
+import { getEffectiveUserPermissions } from "../rbac";
 
 const router = Router();
 const LOCK_TTL_MS = 10 * 60 * 1000;
+
+// تجاوز قفل زميل: للمدير ومن يملك النشر وتعديل أي مقال معًا (رئيس التحرير).
+// الخبر العاجل لا ينتظر انتهاء مهلة قفل محرر غائب.
+export function canTakeOverLock(permissions: string[]): boolean {
+  return permissions.includes("*")
+    || (permissions.includes("articles.publish") && permissions.includes("articles.edit_any"));
+}
 
 function requireAuth(req: any, res: any, next: any) {
   if (!req.isAuthenticated || !req.isAuthenticated() || !req.user?.id) {
@@ -78,25 +90,22 @@ router.post("/api/admin/articles/:id/lock", requireAuth, async (req: any, res) =
     const articleId = req.params.id;
     const userId = req.user.id;
 
-    const [existing] = await db
-      .select()
-      .from(articleEditLocks)
-      .where(eq(articleEditLocks.articleId, articleId))
-      .limit(1);
+    // القفل تصريحُ تحرير: لا يُمنح إلا لمن يستطيع فعلًا تعديل هذه المادة
+    // (edit_any، أو opinion.edit_any لمواد الرأي، أو مالكها). كان requireAuth
+    // وحده يكفي فيستولي أي حساب مسجّل على قفل أي مقال ويرى «حق التحرير
+    // الحصري» على مواد غيره (حادثة 2026-08-08).
+    const permissions = await getEffectiveUserPermissions(userId);
+    const access = await authorizeArticleWrite(userId, articleId, permissions);
+    if (!access.ok) {
+      return res.status(access.httpStatus).json({ message: access.message });
+    }
+    const force = req.body?.force === true;
+    if (force && !canTakeOverLock(permissions)) {
+      return res.status(403).json({ message: "تجاوز القفل متاح للمدير ورئيس التحرير فقط" });
+    }
 
     const now = new Date();
     const expiresAt = new Date(now.getTime() + LOCK_TTL_MS);
-
-    if (existing) {
-      const lock = existing as LockRow;
-      const expired = lock.expiresAt.getTime() <= Date.now();
-      if (!expired && lock.userId !== userId) {
-        return res.status(409).json({
-          message: "المقالة مقفلة من مستخدم آخر",
-          ...shape(lock, userId),
-        });
-      }
-    }
 
     const userName = await resolveUserName(userId, req.user);
 
@@ -113,9 +122,19 @@ router.post("/api/admin/articles/:id/lock", requireAuth, async (req: any, res) =
       .onConflictDoUpdate({
         target: articleEditLocks.articleId,
         set: { userId, userName, acquiredAt: now, expiresAt, lastHeartbeat: now },
+        // التجاوز ينقل القفل دون شرط؛ نبضة المالك السابق تفشل بعدها فيُبلَّغ
+        setWhere: force
+          ? undefined
+          : or(eq(articleEditLocks.userId, userId), lte(articleEditLocks.expiresAt, sql`(clock_timestamp() at time zone 'UTC')`)),
       })
       .returning();
 
+    if (!upserted) {
+      const [owner] = await db.select().from(articleEditLocks)
+        .where(eq(articleEditLocks.articleId, articleId)).limit(1);
+      return res.status(409).json({ message: "المقالة مقفلة من مستخدم آخر", ...shape(owner, userId) });
+    }
+    if (force) console.info(`[edit-lock] takeover article=${articleId} by=${userId}`);
     res.json(shape(upserted as LockRow, userId));
   } catch (err) {
     console.error("[edit-lock] POST error:", err);
@@ -130,22 +149,14 @@ const heartbeatHandler = async (req: any, res: any) => {
     const now = new Date();
     const expiresAt = new Date(now.getTime() + LOCK_TTL_MS);
 
-    const [existing] = await db
-      .select()
-      .from(articleEditLocks)
-      .where(eq(articleEditLocks.articleId, articleId))
-      .limit(1);
-
-    if (!existing || (existing as LockRow).userId !== userId) {
-      return res.status(409).json({ message: "Lock no longer owned" });
-    }
-
     const [updated] = await db
       .update(articleEditLocks)
       .set({ lastHeartbeat: now, expiresAt })
-      .where(eq(articleEditLocks.articleId, articleId))
+      .where(and(eq(articleEditLocks.articleId, articleId), eq(articleEditLocks.userId, userId),
+        sql`${articleEditLocks.expiresAt} > (clock_timestamp() at time zone 'UTC')`))
       .returning();
 
+    if (!updated) return res.status(409).json({ message: "Lock no longer owned" });
     res.json(shape(updated as LockRow, userId));
   } catch (err) {
     console.error("[edit-lock] heartbeat error:", err);
@@ -165,15 +176,9 @@ router.delete("/api/admin/articles/:id/lock", requireAuth, async (req: any, res)
 
     // Only the lock owner can release. Silently no-op for anyone else so
     // navigating away doesn't surface a confusing error.
-    const [existing] = await db
-      .select()
-      .from(articleEditLocks)
-      .where(eq(articleEditLocks.articleId, articleId))
-      .limit(1);
-
-    if (existing && (existing as LockRow).userId === userId) {
-      await db.delete(articleEditLocks).where(eq(articleEditLocks.articleId, articleId));
-    }
+    await db.delete(articleEditLocks).where(and(
+      eq(articleEditLocks.articleId, articleId), eq(articleEditLocks.userId, userId),
+    ));
 
     res.json({ released: true });
   } catch (err) {

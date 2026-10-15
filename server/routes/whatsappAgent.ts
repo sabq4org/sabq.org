@@ -16,6 +16,7 @@ import mammoth from "mammoth";
 import OpenAI from "openai";
 import { newsImageStorageService } from "../services/newsImageStorageService";
 import { riyadhDayRange } from "../utils/riyadhDay";
+import { parseLimit, parseOffset } from "../utils/pagination";
 
 const router = Router();
 
@@ -1758,8 +1759,8 @@ router.delete("/tokens/:id", requireAuth, requireRole('admin', 'manager'), async
 
 router.get("/logs", requireAuth, requireRole('admin', 'manager'), async (req: Request, res: Response) => {
   try {
-    const limit = parseInt(req.query.limit as string) || 50;
-    const offset = parseInt(req.query.offset as string) || 0;
+    const limit = parseLimit(req.query.limit, 50, 200);
+    const offset = parseOffset(req.query.offset);
     const status = normalizeLogStatus(req.query.status as string | undefined);
     
     const result = await storage.getWhatsappWebhookLogs({ limit, offset, status });

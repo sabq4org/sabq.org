@@ -17,7 +17,7 @@ import {
 } from "@shared/schema";
 import { sendEmailNotification } from "./email";
 import { createCustomNotificationPayload, isApnsConfigured, sendPushNotification } from "./apnsService";
-import { isFcmConfigured, sendToMultipleDevices } from "./fcmService";
+import { isAnyFcmConfigured, sendToFcmTargets } from "./fcmService";
 
 export const SURVEY_QUESTION_TYPES = ["single", "multi", "short_text", "long_text", "stars", "scale"] as const;
 export type SurveyQuestionType = (typeof SURVEY_QUESTION_TYPES)[number];
@@ -397,14 +397,16 @@ export async function sendSurvey(surveyId: string): Promise<{ invited: number; e
 async function pushSurveyInvite(userId: string, notificationId: string, title: string, body: string, deepLink: string): Promise<void> {
   try {
     const devices = await db
-      .select({ token: pushDevices.deviceToken, provider: pushDevices.tokenProvider, platform: pushDevices.platform })
+      .select({ token: pushDevices.deviceToken, provider: pushDevices.tokenProvider, platform: pushDevices.platform, bundleId: pushDevices.bundleId })
       .from(pushDevices)
       .where(and(eq(pushDevices.userId, userId), eq(pushDevices.isActive, true)));
 
     const apnsTokens = devices.filter((device) => device.platform === "ios" && device.provider === "apns").map((device) => device.token);
-    const fcmTokens = devices.filter((device) => device.platform === "android" && device.provider === "fcm").map((device) => device.token);
+    const fcmTargets = devices
+      .filter((device) => device.platform === "android" && device.provider === "fcm")
+      .map((device) => ({ token: device.token, bundleId: device.bundleId }));
 
-    if (apnsTokens.length === 0 && fcmTokens.length === 0) {
+    if (apnsTokens.length === 0 && fcmTargets.length === 0) {
       await db.update(editorialNotifications).set({ deliveryStatus: "no_device" }).where(eq(editorialNotifications.id, notificationId));
       return;
     }
@@ -433,9 +435,9 @@ async function pushSurveyInvite(userId: string, notificationId: string, title: s
       }
     }
 
-    if (fcmTokens.length > 0) {
-      if (isFcmConfigured()) {
-        const batch = await sendToMultipleDevices(fcmTokens, {
+    if (fcmTargets.length > 0) {
+      if (isAnyFcmConfigured()) {
+        const batch = await sendToFcmTargets(fcmTargets, {
           title,
           body,
           data: { deeplink: deepLink, type: "survey_invite" },

@@ -1,3 +1,5 @@
+> **تصحيح تشغيلي — 2026-09-08:** هذا سجل سابق. لا تستخدم Google Indexing API للأخبار العامة، ولا تعتبر مدد الفهرسة أو نسب النمو أدناه ضمانًا أو معيار قبول. المرجع الحالي: [تنفيذ جاهزية اكتشاف الأخبار](editorial/seo-readiness-delivery-ar.md).
+
 # توثيق تنفيذ Technical SEO — صحيفة سبق
 
 **التاريخ:** 2026-06-02
@@ -14,7 +16,7 @@
 | سرعة استجابة المقال (TTFB) | **1529 ms** | **~300–500 ms** (انخفاض ~3–5×) |
 | التخزين المؤقت على الحافة | لا يوجد (`no-store`) | `x-edge-cache: HIT` |
 | بيانات Google News (JSON-LD) | ناقصة | كاملة (نص + 3 صور + صوتي) |
-| الأرشفة الفورية | زحف دوري | IndexNow فوري + Indexing API (عند المفتاح) |
+| الأرشفة الفورية | زحف دوري | إشعار IndexNow؛ قرار الفهرسة للمحرك |
 
 تم التحقق على مقال حقيقي منشور:
 `https://sabq.org/article/qzVBFf1`
@@ -156,15 +158,8 @@ sabq-edge-meta-injected ×1  (حقن مرة واحدة)
 
 ## 8. ما تبقّى (خارج الكود — صلاحيات)
 
-### لإكمال أرشفة Google الفورية
-1. **Railway** (`api.sabq.org`) →
-   `GOOGLE_INDEXING_CLIENT_EMAIL`، `GOOGLE_INDEXING_PRIVATE_KEY`
-2. **Google Cloud** → تفعيل Web Search Indexing API + Service Account (JSON key)
-3. **Search Console** → إضافة بريد الـ Service Account كـ **Owner** على sabq.org
-4. (موجودان غالباً) `CLOUDFLARE_ZONE_ID` + `CLOUDFLARE_API_TOKEN` على Railway لـ purge
-
-بعد المفاتيح: كل خبر يُرسَل تلقائياً إلى Google لحظة النشر.
-إعادة فهرسة دفعة (عند الحاجة): `tsx scripts/reindex-recent-articles.ts`
+### إشعار المحركات
+الأخبار العامة غير مؤهلة لـGoogle Indexing API. لا إعداد مفاتيح أو تشغيل إعادة إرسال لهذا الغرض. استخدم خرائط الموقع وSearch Console وIndexNow للمحركات التي تدعمه.
 
 ---
 
@@ -180,8 +175,8 @@ sabq-edge-meta-injected ×1  (حقن مرة واحدة)
 | المقياس | أين | هدف |
 |---------|-----|-----|
 | TTFB مقالة | curl (runbook) | < 200ms |
-| Indexing delay (عاجل) | GSC → Pages | < 15 دقيقة (مع API) |
-| Impressions | GSC Performance | +50% / 30 يوم |
+| Indexing delay (عاجل) | GSC → Pages | قياس فعلي؛ لا مدة مضمونة |
+| Impressions | GSC Performance | مقارنة بخط الأساس |
 | CTR (News/Discover) | GSC | +30% / 30 يوم |
 | Core Web Vitals | GSC + Lighthouse | > 90 |
 

@@ -42,6 +42,19 @@ const CRAWLER_USER_AGENTS = [
   'MJ12bot',
 ];
 
+/**
+ * يُبقي استعلام الطلب على هدف التحويل 301.
+ * وسوم القياس (utm_source / utm_medium / utm_campaign / utm_content) تصل مع
+ * الزائر إلى الصفحة، وحافة Pages تفعل الشيء نفسه بإلحاق url.search.
+ */
+export function redirectTargetWithSearch(targetPath: string, originalUrl: string): string {
+  const queryIndex = originalUrl.indexOf("?");
+  if (queryIndex === -1) return targetPath;
+  const query = originalUrl.slice(queryIndex);
+  if (query === "?") return targetPath;
+  return `${targetPath}${query}`;
+}
+
 function isCrawler(req: Request): boolean {
   const userAgent = (req.headers['user-agent'] || '').toLowerCase();
   return CRAWLER_USER_AGENTS.some(crawler => userAgent.includes(crawler.toLowerCase()));
@@ -74,7 +87,7 @@ export async function slugRedirectMiddleware(
           // Article exists in DB — 301 to its canonical English-slug URL.
           // Preserves backlink equity for legacy /news/ + Arabic-slug links.
           const newPath = `/article/${article[0].englishSlug}`;
-          res.redirect(301, newPath);
+          res.redirect(301, redirectTargetWithSearch(newPath, req.originalUrl || req.url));
           return;
         }
 
@@ -112,7 +125,7 @@ export async function slugRedirectMiddleware(
         
         if (category.length > 0 && category[0].englishSlug) {
           const newPath = `/category/${category[0].englishSlug}`;
-          res.redirect(301, newPath);
+          res.redirect(301, redirectTargetWithSearch(newPath, req.originalUrl || req.url));
           return;
         }
       }

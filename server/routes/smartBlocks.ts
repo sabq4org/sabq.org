@@ -31,6 +31,7 @@ import {
   updateSmartBlockRecord,
   type SmartBlockLocale,
 } from "../services/smartBlocksService";
+import { paginationOrReject } from "../utils/pagination";
 
 const router = Router();
 
@@ -300,8 +301,10 @@ function mountLocale(base: string) {
     try {
       const locale = localeFromPath(base);
       const preview = req.query.preview === "true";
+      const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 20, maxLimit: 50 });
+      if (!pg) return;
       const result = await resolveSavedBlockArticlesCached(locale, req.params.id, {
-        limit: req.query.limit ? parseInt(String(req.query.limit), 10) : undefined,
+        limit: req.query.limit ? pg.limit : undefined,
         preview,
       });
       if (result.hiddenReason === "missing") {

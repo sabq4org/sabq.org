@@ -5,6 +5,8 @@
  * For devices that register with ExponentPushToken format
  */
 
+import { stagingOutboundError } from "../utils/stagingRuntime";
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -64,6 +66,8 @@ export async function sendToExpoDevice(
   token: string,
   message: ExpoMessage
 ): Promise<ExpoResponse> {
+  const stagingError = stagingOutboundError("expo");
+  if (stagingError) return { success: false, error: stagingError.message, errorCategory: "server_error" };
   try {
     const expoMessage: any = {
       to: token,
@@ -126,6 +130,14 @@ export async function sendToMultipleExpoDevices(
   tokens: string[],
   message: ExpoMessage
 ): Promise<BatchExpoResult> {
+  const stagingError = stagingOutboundError("expo-batch");
+  if (stagingError) {
+    return {
+      successCount: 0,
+      failureCount: tokens.length,
+      results: tokens.map((token) => ({ token, success: false, error: stagingError.message, errorCategory: "server_error" })),
+    };
+  }
   const startTime = Date.now();
   
   console.log(`[Expo] Starting batch send to ${tokens.length} devices...`);

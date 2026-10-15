@@ -75,7 +75,9 @@ import {
   AlertTriangle,
   Wallet,
   Shield,
-  FileDown
+  FileDown,
+  RefreshCw,
+  X,
 } from "lucide-react";
 // pdfmake is dynamic-imported inside generateAdPDF below (perf audit
 // 2026-05-11). Static import was pulling pdfmake/build/vfs_fonts —
@@ -579,7 +581,12 @@ export default function NativeAdsManagement() {
     },
   });
 
-  const { data: adsRaw, isLoading } = useQuery<NativeAd[]>({
+  const {
+    data: adsRaw,
+    isLoading,
+    isFetching,
+    refetch: refetchAds,
+  } = useQuery<NativeAd[]>({
     queryKey: ["/api/native-ads", statusFilter],
     queryFn: async () => {
       const params = new URLSearchParams();
@@ -592,7 +599,7 @@ export default function NativeAdsManagement() {
         throw new Error("فشل في جلب الإعلانات");
       }
       const data = await response.json();
-      return data.ads || [];
+      return Array.isArray(data?.ads) ? data.ads : [];
     },
   });
   const ads = Array.isArray(adsRaw) ? adsRaw : [];
@@ -711,8 +718,8 @@ export default function NativeAdsManagement() {
         callToAction: ad.callToAction || "اقرأ المزيد",
         advertiserName: ad.advertiserName,
         advertiserLogo: ad.advertiserLogo || "",
-        targetCategories: ad.targetCategories || [],
-        targetKeywords: ad.targetKeywords || [],
+        targetCategories: Array.isArray(ad.targetCategories) ? ad.targetCategories : [],
+        targetKeywords: Array.isArray(ad.targetKeywords) ? ad.targetKeywords : [],
         targetDevices: ad.targetDevices as "all" | "desktop" | "mobile" | "tablet",
         startDate: new Date(ad.startDate),
         endDate: ad.endDate ? new Date(ad.endDate) : null,
@@ -766,16 +773,25 @@ export default function NativeAdsManagement() {
     toggleStatusMutation.mutate({ id: ad.id, newStatus });
   };
 
-  const filteredAds = ads.filter((ad) =>
-    ad.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    ad.advertiserName.toLowerCase().includes(searchTerm.toLowerCase())
+  const filteredAds = ads.filter(
+    (ad) =>
+      (ad.title || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (ad.advertiserName || "").toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const totalAds = ads.length;
   // Use derivedStatus for accurate count (considers expired/pending based on dates)
   const activeAds = ads.filter((a) => ((a as any).derivedStatus || a.status) === "active").length;
-  const totalImpressions = ads.reduce((sum, a) => sum + a.impressions, 0);
-  const totalClicks = ads.reduce((sum, a) => sum + a.clicks, 0);
+  const pausedAds = ads.filter((a) => ((a as any).derivedStatus || a.status) === "paused").length;
+  const pendingAds = ads.filter((a) => {
+    const st = (a as any).derivedStatus || a.status;
+    return st === "pending_approval" || st === "pending";
+  }).length;
+  const draftAds = ads.filter((a) => ((a as any).derivedStatus || a.status) === "draft").length;
+  const expiredAds = ads.filter((a) => ((a as any).derivedStatus || a.status) === "expired").length;
+  const rejectedAds = ads.filter((a) => ((a as any).derivedStatus || a.status) === "rejected").length;
+  const totalImpressions = ads.reduce((sum, a) => sum + (a.impressions || 0), 0);
+  const totalClicks = ads.reduce((sum, a) => sum + (a.clicks || 0), 0);
   const overallCTR = totalImpressions > 0 ? ((totalClicks / totalImpressions) * 100).toFixed(2) : "0";
 
   return (
@@ -783,158 +799,518 @@ export default function NativeAdsManagement() {
       <div className="mx-auto max-w-[1600px] space-y-6 pb-10" dir="rtl">
         <DashboardPageHeader
           icon={Megaphone}
-          title="إدارة المحتوى المدفوع"
-          description="إدارة الإعلانات المدفوعة والمحتوى الراعي."
+          titleTestId="heading-native-ads"
+          title={
+            <span className="inline-flex flex-wrap items-center gap-2">
+              <span>إدارة المحتوى المدفوع</span>
+              <Badge variant="secondary" className="text-xs font-medium tabular-nums">
+                {formatNumber(totalAds)} إعلان
+              </Badge>
+            </span>
+          }
+          description="إدارة الإعلانات المدفوعة والمحتوى الراعي، ومتابعة الأداء والميزانيات اليومية."
           actions={
-          <Button onClick={() => handleOpenDialog()} data-testid="button-create-ad">
-            <Plus className="h-4 w-4 ml-2" />
-            إنشاء إعلان جديد
-          </Button>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => refetchAds()}
+                disabled={isFetching}
+                className="gap-1.5"
+                data-testid="button-refresh-ads"
+              >
+                <RefreshCw className={`h-4 w-4 ${isFetching ? "animate-spin" : ""}`} />
+                <span>تحديث</span>
+              </Button>
+              <Button onClick={() => handleOpenDialog()} size="sm" data-testid="button-create-ad">
+                <Plus className="h-4 w-4 ml-1.5" />
+                إنشاء إعلان جديد
+              </Button>
+            </div>
           }
         />
 
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">إجمالي الإعلانات</CardTitle>
-              <div className="rounded-lg bg-muted p-2 text-muted-foreground">
-                <BarChart3 className="h-4 w-4" />
+        {/* 4-Card KPI Summary Strip */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4" data-testid="kpi-strip-native-ads">
+          <Card className="rounded-xl border-border/60 shadow-xs">
+            <CardContent className="p-4 sm:p-5">
+              <div className="flex items-start justify-between gap-2">
+                <div className="space-y-1">
+                  <p className="text-xs sm:text-sm font-medium text-muted-foreground">إجمالي الإعلانات</p>
+                  <div
+                    className="text-2xl font-bold tracking-tight tabular-nums"
+                    data-testid="text-total-ads"
+                  >
+                    {formatNumber(totalAds)}
+                  </div>
+                </div>
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                  <BarChart3 className="h-4 w-4 sm:h-5 sm:w-5" />
+                </span>
               </div>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold" data-testid="text-total-ads">
-                {formatNumber(totalAds)}
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">الإعلانات النشطة</CardTitle>
-              <div className="rounded-lg bg-muted p-2 text-emerald-600">
-                <Play className="h-4 w-4" />
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold" data-testid="text-active-ads">
-                {formatNumber(activeAds)}
+              <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
+                <span className="tabular-nums">{formatNumber(draftAds)} مسودة</span>
+                <span>·</span>
+                <span className="tabular-nums">{formatNumber(pendingAds)} قيد المراجعة</span>
               </div>
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">إجمالي المشاهدات</CardTitle>
-              <div className="rounded-lg bg-muted p-2 text-muted-foreground">
-                <Eye className="h-4 w-4" />
+          <Card className="rounded-xl border-border/60 shadow-xs">
+            <CardContent className="p-4 sm:p-5">
+              <div className="flex items-start justify-between gap-2">
+                <div className="space-y-1">
+                  <p className="text-xs sm:text-sm font-medium text-muted-foreground">الإعلانات النشطة</p>
+                  <div
+                    className="text-2xl font-bold tracking-tight text-emerald-600 dark:text-emerald-400 tabular-nums"
+                    data-testid="text-active-ads"
+                  >
+                    {formatNumber(activeAds)}
+                  </div>
+                </div>
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                  <Play className="h-4 w-4 sm:h-5 sm:w-5" />
+                </span>
               </div>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold" data-testid="text-total-impressions">
-                {formatNumber(totalImpressions)}
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">إجمالي النقرات</CardTitle>
-              <div className="rounded-lg bg-muted p-2 text-muted-foreground">
-                <MousePointer className="h-4 w-4" />
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold" data-testid="text-total-clicks">
-                {formatNumber(totalClicks)}
+              <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
+                <span className="tabular-nums">{formatNumber(pausedAds)} متوقف مؤقتاً</span>
+                <span>·</span>
+                <span className="tabular-nums">{formatNumber(expiredAds)} منتهي</span>
               </div>
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">معدل النقر (CTR)</CardTitle>
-              <div className="rounded-lg bg-muted p-2 text-muted-foreground">
-                <TrendingUp className="h-4 w-4" />
+          <Card className="rounded-xl border-border/60 shadow-xs">
+            <CardContent className="p-4 sm:p-5">
+              <div className="flex items-start justify-between gap-2">
+                <div className="space-y-1">
+                  <p className="text-xs sm:text-sm font-medium text-muted-foreground">إجمالي المشاهدات</p>
+                  <div
+                    className="text-2xl font-bold tracking-tight tabular-nums"
+                    data-testid="text-total-impressions"
+                  >
+                    {formatNumber(totalImpressions)}
+                  </div>
+                </div>
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-sky-500/10 text-sky-600 dark:text-sky-400">
+                  <Eye className="h-4 w-4 sm:h-5 sm:w-5" />
+                </span>
               </div>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold" data-testid="text-overall-ctr">
-                {overallCTR}%
+              <div className="mt-3 flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span>عبر جميع الحملات المعروضة</span>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="rounded-xl border-border/60 shadow-xs">
+            <CardContent className="p-4 sm:p-5">
+              <div className="flex items-start justify-between gap-2">
+                <div className="space-y-1">
+                  <p className="text-xs sm:text-sm font-medium text-muted-foreground">
+                    إجمالي النقرات ومعدل النقر
+                  </p>
+                  <div className="flex items-baseline gap-2">
+                    <div
+                      className="text-2xl font-bold tracking-tight tabular-nums"
+                      data-testid="text-total-clicks"
+                    >
+                      {formatNumber(totalClicks)}
+                    </div>
+                    <span className="text-xs text-muted-foreground">نقرة</span>
+                  </div>
+                </div>
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                  <TrendingUp className="h-4 w-4 sm:h-5 sm:w-5" />
+                </span>
+              </div>
+              <div className="mt-3 flex items-center gap-1.5 text-xs text-muted-foreground">
+                <MousePointer className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+                <span>معدل النقر (CTR):</span>
+                <span
+                  className="font-semibold text-foreground tabular-nums"
+                  data-testid="text-overall-ctr"
+                >
+                  {overallCTR}%
+                </span>
               </div>
             </CardContent>
           </Card>
         </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>الفلاتر</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-col md:flex-row gap-4">
-              <div className="flex-1">
-                <div className="relative">
-                  <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    placeholder="بحث بالعنوان أو اسم المعلن..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pr-10"
-                    data-testid="input-search"
-                  />
-                </div>
+        {/* Search & Quick Filter Toolbar */}
+        <div className="rounded-xl border border-border/60 bg-card p-4 shadow-xs space-y-3">
+          <div className="flex flex-col md:flex-row gap-3">
+            <div className="flex-1">
+              <div className="relative">
+                <Search className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="بحث بالعنوان أو اسم المعلن..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pr-10 pl-9 h-10"
+                  data-testid="input-search"
+                />
+                {searchTerm && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchTerm("")}
+                    className="no-min-touch-size absolute left-2.5 top-1/2 -translate-y-1/2 rounded-full p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                    aria-label="مسح البحث"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
               </div>
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-full md:w-[200px]" data-testid="select-status-filter">
-                  <SelectValue placeholder="الحالة" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">جميع الحالات</SelectItem>
-                  <SelectItem value="draft">مسودة</SelectItem>
-                  <SelectItem value="pending_approval">قيد المراجعة</SelectItem>
-                  <SelectItem value="active">نشط</SelectItem>
-                  <SelectItem value="paused">متوقف مؤقتاً</SelectItem>
-                  <SelectItem value="expired">منتهي</SelectItem>
-                  <SelectItem value="rejected">مرفوض</SelectItem>
-                </SelectContent>
-              </Select>
             </div>
-          </CardContent>
-        </Card>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-full md:w-[200px] h-10" data-testid="select-status-filter">
+                <SelectValue placeholder="الحالة" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">جميع الحالات</SelectItem>
+                <SelectItem value="draft">مسودة</SelectItem>
+                <SelectItem value="pending_approval">قيد المراجعة</SelectItem>
+                <SelectItem value="active">نشط</SelectItem>
+                <SelectItem value="paused">متوقف مؤقتاً</SelectItem>
+                <SelectItem value="expired">منتهي</SelectItem>
+                <SelectItem value="rejected">مرفوض</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 border-t border-border/50 pt-3">
+            <span className="text-xs font-medium text-muted-foreground ml-1">تصفية سريعة:</span>
+            {(
+              [
+                { id: "all", label: "الكل", count: totalAds },
+                { id: "active", label: "نشط", count: activeAds },
+                { id: "paused", label: "متوقف مؤقتاً", count: pausedAds },
+                { id: "pending_approval", label: "قيد المراجعة", count: pendingAds },
+                { id: "draft", label: "مسودة", count: draftAds },
+                { id: "expired", label: "منتهي", count: expiredAds },
+                { id: "rejected", label: "مرفوض", count: rejectedAds },
+              ] as const
+            ).map((pill) => (
+              <button
+                key={pill.id}
+                type="button"
+                onClick={() => setStatusFilter(pill.id)}
+                data-testid={`status-pill-${pill.id}`}
+                className={`no-min-touch-size inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                  statusFilter === pill.id
+                    ? "bg-primary text-primary-foreground shadow-2xs"
+                    : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground"
+                }`}
+              >
+                <span>{pill.label}</span>
+                <Badge
+                  variant={statusFilter === pill.id ? "secondary" : "outline"}
+                  className="h-4 px-1.5 text-[10px] tabular-nums"
+                >
+                  {formatNumber(pill.count)}
+                </Badge>
+              </button>
+            ))}
+          </div>
+        </div>
 
         {isLoading ? (
           <TableSkeleton />
         ) : filteredAds.length === 0 ? (
           <EmptyState onCreateClick={() => handleOpenDialog()} />
         ) : (
-          <Card>
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-[100px]">الصورة</TableHead>
-                    <TableHead>العنوان</TableHead>
-                    <TableHead>المعلن</TableHead>
-                    <TableHead>الحالة</TableHead>
-                    <TableHead className="text-center">المشاهدات</TableHead>
-                    <TableHead className="text-center">النقرات</TableHead>
-                    <TableHead className="text-center">CTR</TableHead>
-                    <TableHead className="text-center">التكلفة الإجمالية</TableHead>
-                    <TableHead className="text-center">الأولوية</TableHead>
-                    <TableHead>التواريخ</TableHead>
-                    <TableHead className="text-left">الإجراءات</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredAds.map((ad) => (
-                    <TableRow key={ad.id} data-testid={`row-ad-${ad.id}`}>
-                      <TableCell>
-                        <div className="w-20 h-14 rounded overflow-hidden bg-muted">
+          <>
+            {/* Desktop Table */}
+            <Card className="hidden md:block rounded-xl border-border/60 shadow-xs overflow-hidden">
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-muted/40">
+                      <TableHead className="w-[64px] px-2">الصورة</TableHead>
+                      <TableHead className="min-w-[170px] max-w-[230px] px-2">العنوان</TableHead>
+                      <TableHead className="min-w-[115px] max-w-[150px] px-2">المعلن</TableHead>
+                      <TableHead className="px-2">الحالة</TableHead>
+                      <TableHead className="text-center whitespace-nowrap px-1.5">المشاهدات</TableHead>
+                      <TableHead className="text-center whitespace-nowrap px-1.5">النقرات</TableHead>
+                      <TableHead className="text-center whitespace-nowrap px-1.5">CTR</TableHead>
+                      <TableHead className="text-center whitespace-nowrap px-1.5">التكلفة</TableHead>
+                      <TableHead className="text-center whitespace-nowrap px-1.5">الأولوية</TableHead>
+                      <TableHead className="whitespace-nowrap px-2">التواريخ</TableHead>
+                      <TableHead className="text-left whitespace-nowrap px-2">الإجراءات</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredAds.map((ad) => (
+                      <TableRow key={ad.id} data-testid={`row-ad-${ad.id}`}>
+                        <TableCell className="px-2 py-2.5">
+                          <div className="w-14 h-10 rounded-lg overflow-hidden bg-muted shrink-0">
+                            {ad.imageUrl ? (
+                              <img
+                                src={ad.imageUrl}
+                                alt={ad.title}
+                                className="w-full h-full object-cover"
+                                data-testid={`img-ad-${ad.id}`}
+                              />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center">
+                                <ImageIcon className="h-4 w-4 text-muted-foreground" />
+                              </div>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="min-w-[170px] max-w-[230px] px-2 py-2.5">
+                          <div className="font-medium text-sm leading-snug line-clamp-2" data-testid={`text-title-${ad.id}`}>
+                            {ad.title}
+                          </div>
+                          {ad.description && (
+                            <div className="text-xs text-muted-foreground line-clamp-1 mt-0.5">
+                              {ad.description}
+                            </div>
+                          )}
+                        </TableCell>
+                        <TableCell className="min-w-[115px] max-w-[150px] px-2 py-2.5" data-testid={`text-advertiser-${ad.id}`}>
+                          <div className="flex flex-col gap-1">
+                            <span className="text-xs font-medium line-clamp-1">{ad.advertiserName}</span>
+                            {(ad as any).isSelfServe ? (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Badge variant="secondary" className="text-[11px] w-fit cursor-help bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300">
+                                    <UserCircle className="h-3 w-3 ml-1" />
+                                    خدمة ذاتية
+                                  </Badge>
+                                </TooltipTrigger>
+                                <TooltipContent side="bottom" className="text-right" dir="rtl">
+                                  <div className="space-y-1 text-sm">
+                                    {(ad as any).advertiserEmail && (
+                                      <div className="flex items-center gap-2">
+                                        <Mail className="h-3 w-3" />
+                                        <span>{(ad as any).advertiserEmail}</span>
+                                      </div>
+                                    )}
+                                    {(ad as any).advertiserPhone && (
+                                      <div className="flex items-center gap-2">
+                                        <Phone className="h-3 w-3" />
+                                        <span dir="ltr">{(ad as any).advertiserPhone}</span>
+                                      </div>
+                                    )}
+                                    {(ad as any).advertiserCompany && (
+                                      <div className="flex items-center gap-2">
+                                        <Building2 className="h-3 w-3" />
+                                        <span>{(ad as any).advertiserCompany}</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                </TooltipContent>
+                              </Tooltip>
+                            ) : (
+                              <Badge variant="outline" className="text-[11px] w-fit bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400">
+                                <Shield className="h-3 w-3 ml-1" />
+                                إدارة سبق
+                              </Badge>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="px-2 py-2.5">
+                          <div className="flex flex-col gap-1 items-start">
+                            <Badge
+                              variant="outline"
+                              className={statusColors[((ad as any).derivedStatus || ad.status) as NativeAdStatus]}
+                              data-testid={`badge-status-${ad.id}`}
+                            >
+                              {statusLabels[((ad as any).derivedStatus || ad.status) as NativeAdStatus]}
+                            </Badge>
+                            {((ad as any).dailyBudgetEnabled || (ad as any).dailyBudget > 0) && (ad as any).dailyBudget > 0 && (() => {
+                              const usagePercent = (ad as any).dailyBudgetUsagePercent || 0;
+                              const todaySpend = (ad as any).todaySpendHalalas || 0;
+                              const dailyBudget = (ad as any).dailyBudget || 0;
+                              const remainingToday = Math.max(0, dailyBudget - todaySpend);
+                              const isExhausted = isBudgetExhaustedToday((ad as any).dailyBudgetExhaustedAt) || usagePercent >= 100;
+                              const isWarning = usagePercent >= 80 && usagePercent < 100;
+                              
+                              return (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Badge 
+                                      variant={isExhausted ? "destructive" : "secondary"}
+                                      className={`text-[11px] gap-1 cursor-help whitespace-nowrap ${isWarning ? "bg-orange-500 hover:bg-orange-600 text-white" : ""}`}
+                                      data-testid={`badge-daily-budget-${ad.id}`}
+                                    >
+                                      {isExhausted ? (
+                                        <>
+                                          <AlertCircle className="h-3 w-3" />
+                                          انتهى الحد اليومي
+                                        </>
+                                      ) : isWarning ? (
+                                        <>
+                                          <AlertTriangle className="h-3 w-3" />
+                                          متبقي: {formatBudgetSAR(remainingToday)}
+                                        </>
+                                      ) : (
+                                        <>
+                                          <Wallet className="h-3 w-3" />
+                                          {formatBudgetSAR(dailyBudget)}/يوم
+                                        </>
+                                      )}
+                                    </Badge>
+                                  </TooltipTrigger>
+                                  <TooltipContent side="bottom" dir="rtl">
+                                    <div className="text-sm space-y-1">
+                                      <p className="font-semibold border-b pb-1 mb-1">الميزانية اليومية</p>
+                                      <p>الحد اليومي: {formatBudgetSAR(dailyBudget)}</p>
+                                      <p>الإنفاق اليوم: {formatBudgetSAR(todaySpend)}</p>
+                                      <p className={isExhausted ? "text-destructive font-semibold" : isWarning ? "text-orange-500 font-semibold" : "text-green-600 dark:text-green-400"}>
+                                        المتبقي اليوم: {formatBudgetSAR(remainingToday)}
+                                      </p>
+                                      <p className="text-muted-foreground text-xs">نسبة الاستخدام: {usagePercent}%</p>
+                                      {isExhausted && (
+                                        <p className="text-muted-foreground text-xs mt-2 border-t pt-1">سيتم إعادة التفعيل عند منتصف الليل</p>
+                                      )}
+                                    </div>
+                                  </TooltipContent>
+                                </Tooltip>
+                              );
+                            })()}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-center tabular-nums whitespace-nowrap px-1.5 py-2.5 text-sm" data-testid={`text-impressions-${ad.id}`}>
+                          {formatNumber(ad.impressions)}
+                        </TableCell>
+                        <TableCell className="text-center tabular-nums whitespace-nowrap px-1.5 py-2.5 text-sm" data-testid={`text-clicks-${ad.id}`}>
+                          {formatNumber(ad.clicks)}
+                        </TableCell>
+                        <TableCell className="text-center tabular-nums whitespace-nowrap px-1.5 py-2.5 text-sm" data-testid={`text-ctr-${ad.id}`}>
+                          {calculateCTR(ad.impressions, ad.clicks)}
+                        </TableCell>
+                        <TableCell className="text-center tabular-nums whitespace-nowrap px-1.5 py-2.5 text-sm" data-testid={`text-cost-${ad.id}`}>
+                          <div className="flex flex-col items-center gap-0.5">
+                            <span className="font-medium">
+                              {((ad.clicks * (ad.costPerClick || 100)) / 100).toFixed(2)} ر.س
+                            </span>
+                            {((ad as any).dailyBudgetEnabled || (ad as any).dailyBudget > 0) && (ad as any).dailyBudget > 0 && (
+                              <span className="text-[11px] text-muted-foreground" data-testid={`text-today-spend-${ad.id}`}>
+                                اليوم: {formatBudgetSAR((ad as any).todaySpendHalalas || 0)}
+                              </span>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-center tabular-nums whitespace-nowrap px-1.5 py-2.5" data-testid={`text-priority-${ad.id}`}>
+                          <Badge variant="secondary">{ad.priority}</Badge>
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap px-2 py-2.5">
+                          <div className="text-xs">
+                            <div className="flex items-center gap-1">
+                              <Calendar className="h-3 w-3 text-muted-foreground" />
+                              <span>{formatDate(ad.startDate)}</span>
+                            </div>
+                            {ad.endDate && (
+                              <div className="text-[11px] text-muted-foreground mt-0.5">
+                                إلى: {formatDate(ad.endDate)}
+                              </div>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap px-2 py-2.5">
+                          <div className="flex items-center justify-end gap-0.5">
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  className="h-7 w-7"
+                                  onClick={() => generateAdPDF(
+                                    ad,
+                                    () => toast({
+                                      title: "تم تصدير التقرير",
+                                      description: "تم تحميل تقرير PDF بنجاح",
+                                    }),
+                                    (error) => toast({
+                                      title: "فشل التصدير",
+                                      description: "حدث خطأ أثناء إنشاء التقرير",
+                                      variant: "destructive",
+                                    })
+                                  )}
+                                  data-testid={`button-export-pdf-${ad.id}`}
+                                >
+                                  <FileDown className="h-3.5 w-3.5" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent side="bottom">
+                                <p>تصدير تقرير PDF</p>
+                              </TooltipContent>
+                            </Tooltip>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-7 w-7"
+                              onClick={() => handleOpenDialog(ad)}
+                              data-testid={`button-edit-${ad.id}`}
+                            >
+                              <Edit2 className="h-3.5 w-3.5" />
+                            </Button>
+                            {(ad.status === "active" || ad.status === "paused") && (
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-7 w-7"
+                                onClick={() => handleToggleStatus(ad)}
+                                disabled={toggleStatusMutation.isPending}
+                                data-testid={`button-toggle-${ad.id}`}
+                              >
+                                {ad.status === "active" ? (
+                                  <Pause className="h-3.5 w-3.5" />
+                                ) : (
+                                  <Play className="h-3.5 w-3.5" />
+                                )}
+                              </Button>
+                            )}
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-7 w-7 text-destructive hover:text-destructive"
+                              onClick={() => setAdToDelete(ad)}
+                              data-testid={`button-delete-${ad.id}`}
+                              >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+
+            {/* Mobile Stacked Cards */}
+            <div className="md:hidden space-y-3" data-testid="ads-mobile-list">
+              {filteredAds.map((ad) => {
+                const currentStatus = ((ad as any).derivedStatus || ad.status) as NativeAdStatus;
+                const hasDailyBudget =
+                  ((ad as any).dailyBudgetEnabled || (ad as any).dailyBudget > 0) &&
+                  (ad as any).dailyBudget > 0;
+                const usagePercent = (ad as any).dailyBudgetUsagePercent || 0;
+                const todaySpend = (ad as any).todaySpendHalalas || 0;
+                const dailyBudget = (ad as any).dailyBudget || 0;
+                const remainingToday = Math.max(0, dailyBudget - todaySpend);
+                const isExhausted =
+                  isBudgetExhaustedToday((ad as any).dailyBudgetExhaustedAt) || usagePercent >= 100;
+                const isWarning = usagePercent >= 80 && usagePercent < 100;
+
+                return (
+                  <Card
+                    key={ad.id}
+                    className="rounded-xl border-border/60 shadow-xs overflow-hidden"
+                    data-testid={`row-ad-${ad.id}-mobile`}
+                  >
+                    <CardContent className="p-4 space-y-3">
+                      <div className="flex items-start gap-3">
+                        <div className="w-20 h-16 shrink-0 rounded-lg overflow-hidden bg-muted">
                           {ad.imageUrl ? (
                             <img
                               src={ad.imageUrl}
                               alt={ad.title}
                               className="w-full h-full object-cover"
-                              data-testid={`img-ad-${ad.id}`}
+                              data-testid={`img-ad-${ad.id}-mobile`}
                             />
                           ) : (
                             <div className="w-full h-full flex items-center justify-center">
@@ -942,191 +1318,168 @@ export default function NativeAdsManagement() {
                             </div>
                           )}
                         </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="font-medium" data-testid={`text-title-${ad.id}`}>
-                          {ad.title}
-                        </div>
-                        {ad.description && (
-                          <div className="text-xs text-muted-foreground line-clamp-1">
-                            {ad.description}
-                          </div>
-                        )}
-                      </TableCell>
-                      <TableCell data-testid={`text-advertiser-${ad.id}`}>
-                        <div className="flex flex-col gap-1">
-                          <span>{ad.advertiserName}</span>
-                          {(ad as any).isSelfServe ? (
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Badge variant="secondary" className="text-xs w-fit cursor-help bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300">
-                                  <UserCircle className="h-3 w-3 ml-1" />
-                                  خدمة ذاتية
-                                </Badge>
-                              </TooltipTrigger>
-                              <TooltipContent side="bottom" className="text-right" dir="rtl">
-                                <div className="space-y-1 text-sm">
-                                  {(ad as any).advertiserEmail && (
-                                    <div className="flex items-center gap-2">
-                                      <Mail className="h-3 w-3" />
-                                      <span>{(ad as any).advertiserEmail}</span>
-                                    </div>
-                                  )}
-                                  {(ad as any).advertiserPhone && (
-                                    <div className="flex items-center gap-2">
-                                      <Phone className="h-3 w-3" />
-                                      <span dir="ltr">{(ad as any).advertiserPhone}</span>
-                                    </div>
-                                  )}
-                                  {(ad as any).advertiserCompany && (
-                                    <div className="flex items-center gap-2">
-                                      <Building2 className="h-3 w-3" />
-                                      <span>{(ad as any).advertiserCompany}</span>
-                                    </div>
-                                  )}
-                                </div>
-                              </TooltipContent>
-                            </Tooltip>
-                          ) : (
-                            <Badge variant="outline" className="text-xs w-fit bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400">
-                              <Shield className="h-3 w-3 ml-1" />
-                              إدارة سبق
+
+                        <div className="flex-1 min-w-0 space-y-1">
+                          <div className="flex items-start justify-between gap-2">
+                            <h3
+                              className="font-semibold text-sm line-clamp-2"
+                              data-testid={`text-title-${ad.id}-mobile`}
+                            >
+                              {ad.title}
+                            </h3>
+                            <Badge
+                              variant="outline"
+                              className={`shrink-0 text-xs ${statusColors[currentStatus]}`}
+                              data-testid={`badge-status-${ad.id}-mobile`}
+                            >
+                              {statusLabels[currentStatus]}
                             </Badge>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex flex-col gap-1">
-                          <Badge
-                            variant="outline"
-                            className={statusColors[((ad as any).derivedStatus || ad.status) as NativeAdStatus]}
-                            data-testid={`badge-status-${ad.id}`}
-                          >
-                            {statusLabels[((ad as any).derivedStatus || ad.status) as NativeAdStatus]}
-                          </Badge>
-                          {((ad as any).dailyBudgetEnabled || (ad as any).dailyBudget > 0) && (ad as any).dailyBudget > 0 && (() => {
-                            const usagePercent = (ad as any).dailyBudgetUsagePercent || 0;
-                            const todaySpend = (ad as any).todaySpendHalalas || 0;
-                            const dailyBudget = (ad as any).dailyBudget || 0;
-                            const remainingToday = Math.max(0, dailyBudget - todaySpend);
-                            const isExhausted = isBudgetExhaustedToday((ad as any).dailyBudgetExhaustedAt) || usagePercent >= 100;
-                            const isWarning = usagePercent >= 80 && usagePercent < 100;
-                            
-                            return (
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Badge 
-                                    variant={isExhausted ? "destructive" : "secondary"}
-                                    className={`text-xs gap-1 cursor-help ${isWarning ? "bg-orange-500 hover:bg-orange-600 text-white" : ""}`}
-                                    data-testid={`badge-daily-budget-${ad.id}`}
-                                  >
-                                    {isExhausted ? (
-                                      <>
-                                        <AlertCircle className="h-3 w-3" />
-                                        انتهى الحد اليومي
-                                      </>
-                                    ) : isWarning ? (
-                                      <>
-                                        <AlertTriangle className="h-3 w-3" />
-                                        متبقي: {formatBudgetSAR(remainingToday)}
-                                      </>
-                                    ) : (
-                                      <>
-                                        <Wallet className="h-3 w-3" />
-                                        {formatBudgetSAR(dailyBudget)}/يوم ({100 - usagePercent}% متبقي)
-                                      </>
-                                    )}
-                                  </Badge>
-                                </TooltipTrigger>
-                                <TooltipContent side="bottom" dir="rtl">
-                                  <div className="text-sm space-y-1">
-                                    <p className="font-semibold border-b pb-1 mb-1">الميزانية اليومية</p>
-                                    <p>الحد اليومي: {formatBudgetSAR(dailyBudget)}</p>
-                                    <p>الإنفاق اليوم: {formatBudgetSAR(todaySpend)}</p>
-                                    <p className={isExhausted ? "text-destructive font-semibold" : isWarning ? "text-orange-500 font-semibold" : "text-green-600 dark:text-green-400"}>
-                                      المتبقي اليوم: {formatBudgetSAR(remainingToday)}
-                                    </p>
-                                    <p className="text-muted-foreground text-xs">نسبة الاستخدام: {usagePercent}%</p>
-                                    {isExhausted && (
-                                      <p className="text-muted-foreground text-xs mt-2 border-t pt-1">سيتم إعادة التفعيل عند منتصف الليل</p>
-                                    )}
-                                  </div>
-                                </TooltipContent>
-                              </Tooltip>
-                            );
-                          })()}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-center" data-testid={`text-impressions-${ad.id}`}>
-                        {formatNumber(ad.impressions)}
-                      </TableCell>
-                      <TableCell className="text-center" data-testid={`text-clicks-${ad.id}`}>
-                        {formatNumber(ad.clicks)}
-                      </TableCell>
-                      <TableCell className="text-center" data-testid={`text-ctr-${ad.id}`}>
-                        {calculateCTR(ad.impressions, ad.clicks)}
-                      </TableCell>
-                      <TableCell className="text-center" data-testid={`text-cost-${ad.id}`}>
-                        <div className="flex flex-col items-center gap-1">
-                          <span className="font-medium">
-                            {((ad.clicks * (ad.costPerClick || 100)) / 100).toFixed(2)} ر.س
-                          </span>
-                          {((ad as any).dailyBudgetEnabled || (ad as any).dailyBudget > 0) && (ad as any).dailyBudget > 0 && (
-                            <span className="text-xs text-muted-foreground" data-testid={`text-today-spend-${ad.id}`}>
-                              اليوم: {formatBudgetSAR((ad as any).todaySpendHalalas || 0)}
-                            </span>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-center" data-testid={`text-priority-${ad.id}`}>
-                        <Badge variant="secondary">{ad.priority}</Badge>
-                      </TableCell>
-                      <TableCell>
-                        <div className="text-sm">
-                          <div className="flex items-center gap-1">
-                            <Calendar className="h-3 w-3" />
-                            <span>{formatDate(ad.startDate)}</span>
                           </div>
-                          {ad.endDate && (
-                            <div className="text-xs text-muted-foreground mt-1">
-                              إلى: {formatDate(ad.endDate)}
-                            </div>
+
+                          <div
+                            className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground"
+                            data-testid={`text-advertiser-${ad.id}-mobile`}
+                          >
+                            <span className="font-medium text-foreground">{ad.advertiserName}</span>
+                            <span>·</span>
+                            {(ad as any).isSelfServe ? (
+                              <Badge
+                                variant="secondary"
+                                className="text-[10px] px-1.5 py-0 bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300"
+                              >
+                                خدمة ذاتية
+                              </Badge>
+                            ) : (
+                              <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                                إدارة سبق
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {hasDailyBudget && (
+                        <div>
+                          <Badge
+                            variant={isExhausted ? "destructive" : "secondary"}
+                            className={`text-xs gap-1 ${
+                              isWarning ? "bg-orange-500 hover:bg-orange-600 text-white" : ""
+                            }`}
+                            data-testid={`badge-daily-budget-${ad.id}-mobile`}
+                          >
+                            {isExhausted ? (
+                              <>
+                                <AlertCircle className="h-3 w-3" />
+                                انتهى الحد اليومي
+                              </>
+                            ) : isWarning ? (
+                              <>
+                                <AlertTriangle className="h-3 w-3" />
+                                متبقي: {formatBudgetSAR(remainingToday)}
+                              </>
+                            ) : (
+                              <>
+                                <Wallet className="h-3 w-3" />
+                                {formatBudgetSAR(dailyBudget)}/يوم ({100 - usagePercent}% متبقي)
+                              </>
+                            )}
+                          </Badge>
+                        </div>
+                      )}
+
+                      <div className="grid grid-cols-4 gap-2 rounded-lg bg-muted/40 p-2.5 text-center">
+                        <div>
+                          <p className="text-[11px] text-muted-foreground">المشاهدات</p>
+                          <p
+                            className="text-xs font-semibold tabular-nums mt-0.5"
+                            data-testid={`text-impressions-${ad.id}-mobile`}
+                          >
+                            {formatNumber(ad.impressions)}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[11px] text-muted-foreground">النقرات</p>
+                          <p
+                            className="text-xs font-semibold tabular-nums mt-0.5"
+                            data-testid={`text-clicks-${ad.id}-mobile`}
+                          >
+                            {formatNumber(ad.clicks)}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[11px] text-muted-foreground">CTR</p>
+                          <p
+                            className="text-xs font-semibold tabular-nums mt-0.5"
+                            data-testid={`text-ctr-${ad.id}-mobile`}
+                          >
+                            {calculateCTR(ad.impressions, ad.clicks)}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[11px] text-muted-foreground">التكلفة</p>
+                          <p
+                            className="text-xs font-semibold tabular-nums mt-0.5"
+                            data-testid={`text-cost-${ad.id}-mobile`}
+                          >
+                            {((ad.clicks * (ad.costPerClick || 100)) / 100).toFixed(2)} ر.س
+                          </p>
+                          {hasDailyBudget && (
+                            <p
+                              className="text-[10px] text-muted-foreground tabular-nums"
+                              data-testid={`text-today-spend-${ad.id}-mobile`}
+                            >
+                              اليوم: {formatBudgetSAR(todaySpend)}
+                            </p>
                           )}
                         </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1">
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                size="icon"
-                                variant="ghost"
-                                onClick={() => generateAdPDF(
-                                  ad,
-                                  () => toast({
+                      </div>
+
+                      <div className="flex items-center justify-between gap-2 pt-1 border-t border-border/40 text-xs text-muted-foreground">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="inline-flex items-center gap-1 truncate">
+                            <Calendar className="h-3 w-3 shrink-0" />
+                            <span>{formatDate(ad.startDate)}</span>
+                          </span>
+                          <Badge
+                            variant="secondary"
+                            className="text-[10px] px-1.5 py-0 tabular-nums"
+                            data-testid={`text-priority-${ad.id}-mobile`}
+                          >
+                            أولوية {ad.priority}
+                          </Badge>
+                        </div>
+
+                        <div className="flex items-center gap-1 shrink-0">
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-8 w-8"
+                            onClick={() =>
+                              generateAdPDF(
+                                ad,
+                                () =>
+                                  toast({
                                     title: "تم تصدير التقرير",
                                     description: "تم تحميل تقرير PDF بنجاح",
                                   }),
-                                  (error) => toast({
+                                () =>
+                                  toast({
                                     title: "فشل التصدير",
                                     description: "حدث خطأ أثناء إنشاء التقرير",
                                     variant: "destructive",
                                   })
-                                )}
-                                data-testid={`button-export-pdf-${ad.id}`}
-                              >
-                                <FileDown className="h-4 w-4" />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent side="bottom">
-                              <p>تصدير تقرير PDF</p>
-                            </TooltipContent>
-                          </Tooltip>
+                              )
+                            }
+                            data-testid={`button-export-pdf-${ad.id}-mobile`}
+                          >
+                            <FileDown className="h-4 w-4" />
+                          </Button>
                           <Button
                             size="icon"
                             variant="ghost"
+                            className="h-8 w-8"
                             onClick={() => handleOpenDialog(ad)}
-                            data-testid={`button-edit-${ad.id}`}
+                            data-testid={`button-edit-${ad.id}-mobile`}
                           >
                             <Edit2 className="h-4 w-4" />
                           </Button>
@@ -1134,9 +1487,10 @@ export default function NativeAdsManagement() {
                             <Button
                               size="icon"
                               variant="ghost"
+                              className="h-8 w-8"
                               onClick={() => handleToggleStatus(ad)}
                               disabled={toggleStatusMutation.isPending}
-                              data-testid={`button-toggle-${ad.id}`}
+                              data-testid={`button-toggle-${ad.id}-mobile`}
                             >
                               {ad.status === "active" ? (
                                 <Pause className="h-4 w-4" />
@@ -1148,20 +1502,20 @@ export default function NativeAdsManagement() {
                           <Button
                             size="icon"
                             variant="ghost"
+                            className="h-8 w-8 text-destructive hover:text-destructive"
                             onClick={() => setAdToDelete(ad)}
-                            className="text-destructive hover:text-destructive"
-                            data-testid={`button-delete-${ad.id}`}
+                            data-testid={`button-delete-${ad.id}-mobile`}
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
                         </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          </>
         )}
 
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -1341,55 +1695,57 @@ export default function NativeAdsManagement() {
                 <FormField
                   control={form.control}
                   name="targetCategories"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>التصنيفات المستهدفة</FormLabel>
-                      <Select
-                        onValueChange={(value) => {
-                          const current = field.value || [];
-                          if (!current.includes(value)) {
-                            field.onChange([...current, value]);
-                          }
-                        }}
-                      >
-                        <FormControl>
-                          <SelectTrigger data-testid="select-target-categories">
-                            <SelectValue placeholder="اختر التصنيفات المستهدفة" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {categories.map((cat) => (
-                            <SelectItem key={cat.id} value={cat.id}>
-                              {cat.nameAr}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      {field.value && field.value.length > 0 && (
-                        <div className="flex flex-wrap gap-2 mt-2">
-                          {field.value.map((catId) => {
-                            const cat = categories.find((c) => c.id === catId);
-                            return (
-                              <Badge
-                                key={catId}
-                                variant="secondary"
-                                className="cursor-pointer"
-                                onClick={() =>
-                                  field.onChange(field.value?.filter((id) => id !== catId))
-                                }
-                              >
-                                {cat?.nameAr || catId} ×
-                              </Badge>
-                            );
-                          })}
-                        </div>
-                      )}
-                      <FormDescription>
-                        اختر التصنيفات التي سيظهر فيها الإعلان
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
+                  render={({ field }) => {
+                    const selectedCategoryIds = Array.isArray(field.value) ? field.value : [];
+                    return (
+                      <FormItem>
+                        <FormLabel>التصنيفات المستهدفة</FormLabel>
+                        <Select
+                          onValueChange={(value) => {
+                            if (!selectedCategoryIds.includes(value)) {
+                              field.onChange([...selectedCategoryIds, value]);
+                            }
+                          }}
+                        >
+                          <FormControl>
+                            <SelectTrigger data-testid="select-target-categories">
+                              <SelectValue placeholder="اختر التصنيفات المستهدفة" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {categories.map((cat) => (
+                              <SelectItem key={cat.id} value={cat.id}>
+                                {cat.nameAr}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        {selectedCategoryIds.length > 0 && (
+                          <div className="flex flex-wrap gap-2 mt-2">
+                            {selectedCategoryIds.map((catId) => {
+                              const cat = categories.find((c) => c.id === catId);
+                              return (
+                                <Badge
+                                  key={catId}
+                                  variant="secondary"
+                                  className="cursor-pointer"
+                                  onClick={() =>
+                                    field.onChange(selectedCategoryIds.filter((id) => id !== catId))
+                                  }
+                                >
+                                  {cat?.nameAr || catId} ×
+                                </Badge>
+                              );
+                            })}
+                          </div>
+                        )}
+                        <FormDescription>
+                          اختر التصنيفات التي سيظهر فيها الإعلان
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    );
+                  }}
                 />
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

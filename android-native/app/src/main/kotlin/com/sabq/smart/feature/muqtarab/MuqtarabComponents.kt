@@ -30,6 +30,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
+import com.sabq.smart.util.ImageAlign
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -380,19 +383,32 @@ private fun MuqBlock(block: BlockNode, accent: Color) {
             val url = muqAbsolutize(block.url)
             if (url != null) {
                 val shape = RoundedCornerShape(SabqTheme.dimens.tileRadius)
-                SubcomposeAsyncImage(
-                    model = url,
-                    contentDescription = block.alt,
-                    contentScale = ContentScale.Fit,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(shape)
-                        .background(SabqTheme.colors.paleFill, shape),
-                    loading = {
-                        Box(Modifier.fillMaxWidth().height(200.dp).background(SabqTheme.colors.paleFill))
-                    },
-                    error = { Box(Modifier.size(0.dp)) },
-                )
+                // عرض جزئي ومحاذاة من المحرر (نقل الويب #1512) — كما في جسم الخبر.
+                val fraction = block.layout.widthFraction ?: 1f
+                val isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl
+                val boxAlignment = when (block.layout.align) {
+                    ImageAlign.Center -> Alignment.Center
+                    ImageAlign.Right -> if (isRtl) Alignment.CenterStart else Alignment.CenterEnd
+                    ImageAlign.Left -> if (isRtl) Alignment.CenterEnd else Alignment.CenterStart
+                }
+                Box(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentAlignment = if (fraction < 1f) boxAlignment else Alignment.CenterStart,
+                ) {
+                    SubcomposeAsyncImage(
+                        model = url,
+                        contentDescription = block.alt,
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier
+                            .fillMaxWidth(fraction)
+                            .clip(shape)
+                            .background(SabqTheme.colors.paleFill, shape),
+                        loading = {
+                            Box(Modifier.fillMaxWidth().height((200f * fraction).dp).background(SabqTheme.colors.paleFill))
+                        },
+                        error = { Box(Modifier.size(0.dp)) },
+                    )
+                }
             }
         }
         is BlockNode.ImageGallery -> {
@@ -422,6 +438,17 @@ private fun MuqBlock(block: BlockNode, accent: Color) {
         }
         is BlockNode.VideoEmbed -> {
             MuqLinkCard(label = "مشاهدة الفيديو", url = block.sourceUrl ?: block.embedUrl, accent = accent)
+        }
+        is BlockNode.WhatsAppCta -> {
+            MuqLinkCard(label = block.phrase, url = block.url, accent = Color(0xFF25D366))
+        }
+        is BlockNode.Table -> {
+            com.sabq.smart.ui.components.ArticleTableBlock(
+                block = block,
+                fontSize = 16f,
+                lineSpacing = 6f,
+                useSerif = false,
+            )
         }
         BlockNode.Divider -> {
             Box(

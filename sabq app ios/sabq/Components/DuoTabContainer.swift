@@ -1,0 +1,204 @@
+import SwiftUI
+
+/// حاوية التبويبات على iPhone Duo بدل `TabView`.
+///
+/// `TabView` على الشاشة الخارجية بوضعية «الكتاب المغلق» يعرض شريطًا رأسيًا
+/// ويحجز له 84 نقطة، ومع حسّاس الكاميرا (84 أخرى) يبقى للمحتوى 298 من 466
+/// نقطة — والحجز يبقى حتى لو أُخفي الشريط لأنه يأتي من `UITabBarController`.
+/// هنا التبويبات الأربعة أحياء داخل `ZStack` (كما يبقيها `TabView`، فلا تضيع
+/// الحالة عند التبديل)، والشريط:
+/// - سفلي حين تضيق النافذة عن عمودين (الشاشة الخارجية بأي وضعية).
+/// - جانبي في الجهة المقابلة للعمود الجانبي حين تتسع (مفتوحًا أو كتابًا)،
+///   كالشريط النظامي اليوم.
+///
+/// التبويب يُبنى أول مرة يُختار فيها فقط، كما يفعل `TabView`.
+struct DuoTabContainer<Content: View>: View {
+    @Binding var selection: AppTab
+    var onReselect: (AppTab) -> Void = { _ in }
+    @ViewBuilder var content: (AppTab) -> Content
+
+    @State private var loaded: Set<AppTab> = []
+
+    var body: some View {
+        GeometryReader { proxy in
+            let windowWidth = proxy.size.width + proxy.safeAreaInsets.leading + proxy.safeAreaInsets.trailing
+            let bottomBar = DuoPosture.usesBottomTabBar(windowWidth: windowWidth)
+            ZStack {
+                ForEach(AppTab.allCases) { tab in
+                    if loaded.contains(tab) || tab == selection {
+                        let isSelected = tab == selection
+                        content(tab)
+                            .opacity(isSelected ? 1 : 0)
+                            .allowsHitTesting(isSelected)
+                            .accessibilityHidden(!isSelected)
+                            .zIndex(isSelected ? 1 : 0)
+                    }
+                }
+            }
+            .environment(\.duoContentInsets, bottomBar
+                ? DuoContentInsets(
+                    leading: proxy.safeAreaInsets.leading,
+                    trailing: proxy.safeAreaInsets.trailing,
+                    bottom: DuoBottomTabBar.height
+                )
+                : nil)
+            .overlay(alignment: .bottom) {
+                if bottomBar {
+                    DuoBottomTabBar(selection: $selection, onReselect: onReselect)
+                }
+            }
+            // مفتوحًا: UIKit يحجز لعمود القارئ شريطًا بعرض حسّاس الكاميرا على
+            // الحافة البعيدة (حواف متماثلة)، والشريط يقع داخله كما يقع شريط
+            // النظام اليوم، فلا يغطي نصًا.
+            .overlay(alignment: .bottomTrailing) {
+                if !bottomBar {
+                    DuoTabRail(selection: $selection, onReselect: onReselect)
+                }
+            }
+        }
+        .onChange(of: selection, initial: true) { _, tab in loaded.insert(tab) }
+    }
+}
+
+/// زر تبويب واحد بسلوك الشريط النظامي: اللمس يختار، ولمس المختار يعيده إلى
+/// جذره.
+private struct DuoTabButton<Label: View>: View {
+    let tab: AppTab
+    @Binding var selection: AppTab
+    var onReselect: (AppTab) -> Void
+    @ViewBuilder var label: (_ isSelected: Bool) -> Label
+
+    var body: some View {
+        let isSelected = tab == selection
+        Button {
+            if isSelected {
+                onReselect(tab)
+            } else {
+                SabqHaptics.light()
+                selection = tab
+            }
+        } label: {
+            label(isSelected)
+                .foregroundStyle(isSelected ? SabqTheme.primaryEnd : SabqTheme.secondaryInk)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(tab.title)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .accessibilityIdentifier("duoTab.\(tab.rawValue)")
+    }
+}
+
+/// الشريط السفلي للشاشة الضيقة: أربعة تبويبات بعرض متساوٍ، أيقونة واسم،
+/// خلفية مادة الشريط وخط علوي رفيع.
+struct DuoBottomTabBar: View {
+    /// ارتفاع الشريط فوق حافة الأمان السفلية — يُضاف إلى حواف المحتوى.
+    static let height: CGFloat = 54
+    @Binding var selection: AppTab
+    var onReselect: (AppTab) -> Void = { _ in }
+
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(AppTab.allCases) { tab in
+                DuoTabButton(tab: tab, selection: $selection, onReselect: onReselect) { isSelected in
+                    VStack(spacing: 3) {
+                        Image(systemName: tab.systemImage)
+                            .symbolVariant(isSelected ? .fill : .none)
+                            .font(.system(size: 19, weight: .medium))
+                            .frame(height: 24)
+                        Text(tab.title)
+                            .font(SabqFonts.app(size: 10.5, weight: isSelected ? .semibold : .medium))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                    }
+                    .frame(maxWidth: .infinity, minHeight: SabqLayout.touchTarget)
+                }
+            }
+        }
+        .frame(height: Self.height)
+        .background(.bar, ignoresSafeAreaEdges: [.bottom, .horizontal])
+        .overlay(alignment: .top) {
+            Rectangle()
+                .fill(SabqTheme.outline.opacity(0.7))
+                .frame(height: 0.5)
+        }
+    }
+}
+
+/// الشريط الجانبي للشاشة المفتوحة: أيقونات فقط في عمود أسفل حافة القارئ،
+/// بالمكان الذي يضع فيه النظام شريطه الرأسي اليوم.
+struct DuoTabRail: View {
+    @Binding var selection: AppTab
+    var onReselect: (AppTab) -> Void = { _ in }
+
+    var body: some View {
+        VStack {
+            Spacer(minLength: 0)
+            VStack(spacing: 6) {
+                ForEach(AppTab.allCases) { tab in
+                    DuoTabButton(tab: tab, selection: $selection, onReselect: onReselect) { isSelected in
+                        Image(systemName: tab.systemImage)
+                            .symbolVariant(isSelected ? .fill : .none)
+                            .font(.system(size: 18, weight: .medium))
+                            .frame(width: SabqLayout.touchTarget, height: SabqLayout.touchTarget)
+                            .background {
+                                if isSelected {
+                                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                        .fill(SabqTheme.primaryEnd.opacity(0.12))
+                                }
+                            }
+                    }
+                }
+            }
+            .padding(6)
+            .background(.bar, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .strokeBorder(SabqTheme.outline.opacity(0.6), lineWidth: 0.5)
+            }
+            .padding(.bottom, 12)
+        }
+        .padding(.horizontal, 10)
+    }
+}
+
+// MARK: - حواف المحتوى داخل حاويات UIKit
+
+/// الحواف التي يجب أن يحترمها محتوى كل مكدّس تنقّل على الشاشة الضيقة لـ Duo.
+///
+/// `NavigationSplitView`/`NavigationStack` (‏UIKit) تحسب حواف الأمان لمحتواها
+/// بالطريقة القديمة على وضعية «الكتاب المغلق»: 84 نقطة متماثلة على الجانبين
+/// (كهاتف أفقي)، رغم أن الحسّاس في جهة واحدة، وتتجاهل الشريط السفلي الذي
+/// أضافته SwiftUI. هذه القيمة تحمل الحواف الحقيقية فيستبدلها المحتوى بها.
+struct DuoContentInsets: Equatable {
+    var leading: CGFloat = 0
+    var trailing: CGFloat = 0
+    /// ارتفاع الشريط السفلي فوق حافة الأمان السفلية.
+    var bottom: CGFloat = 0
+}
+
+extension EnvironmentValues {
+    /// `nil` خارج الشاشة الضيقة لـ Duo — لا يتغير شيء.
+    @Entry var duoContentInsets: DuoContentInsets? = nil
+}
+
+extension View {
+    /// يطبَّق على جذر محتوى كل مكدّس تنقّل (والوجهات المدفوعة). على Duo مطويًا
+    /// يلغي حجز UIKit الأفقي المتماثل ويضع مكانه حواف الجهاز الحقيقية، ويضيف
+    /// ارتفاع الشريط السفلي. في غير ذلك لا يفعل شيئًا، وبنية العرض ثابتة في
+    /// الحالتين فلا تُفقد حالة التمرير عند الطيّ والفتح.
+    func duoContentInsets() -> some View {
+        modifier(DuoContentInsetsModifier())
+    }
+}
+
+private struct DuoContentInsetsModifier: ViewModifier {
+    @Environment(\.duoContentInsets) private var insets
+
+    func body(content: Content) -> some View {
+        let value = insets ?? DuoContentInsets()
+        content
+            .safeAreaPadding(EdgeInsets(top: 0, leading: value.leading, bottom: value.bottom, trailing: value.trailing))
+            .ignoresSafeArea(insets == nil ? [] : .container, edges: .horizontal)
+    }
+}

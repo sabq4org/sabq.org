@@ -18,6 +18,7 @@ import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { useAuth } from "@/hooks/useAuth";
 import { useCanonical } from "@/hooks/useCanonical";
+import { useAnalyticsPageMetadata } from "@/hooks/use-analytics";
 import { ACCENT, MatchDialog, competitionHref, type SpLiveItem } from "./SportsHub";
 import { MatchRow } from "./SportsMatchesBoard";
 
@@ -106,12 +107,10 @@ function cleanLeagueName(name: string, countryAr: string, country: string): stri
 
 export default function SportsLive() {
   const { user } = useAuth();
+  useAnalyticsPageMetadata("البث المباشر · العالم | سبق");
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
   const [openMatch, setOpenMatch] = useState<number | null>(null);
 
-  useEffect(() => {
-    document.title = "البث المباشر · العالم | سبق";
-  }, []);
   useCanonical("https://sabq.org/sports/live");
 
   const { data, isLoading, isFetching, refetch } = useQuery<{ matches: SpWorldLiveItem[] }>({

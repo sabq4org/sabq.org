@@ -1,6 +1,6 @@
 import { motion } from "framer-motion";
 import { MapPin, Radio, Trophy } from "lucide-react";
-import { SAUDI_TEAM_ID, formatKickoffDay, formatKickoffTime, type GcFixture } from "./gcTypes";
+import { SAUDI_TEAM_ID, formatKickoffDay, formatKickoffTime, GC_SECTION_SCROLL_MT, type GcFixture } from "./gcTypes";
 
 /**
  * شجرة «الطريق إلى اللقب» — نصفَا النهائي يتفرّعان بموصل SVG واضح إلى النهائي.
@@ -204,15 +204,22 @@ export function GcKnockoutSection({
     .filter((f) => (f.roundEn ?? "").toLowerCase().includes("semi"))
     .sort((a, b) => a.timestamp - b.timestamp);
   const final = fixtures.find((f) => (f.roundEn ?? "").trim().startsWith("Final"));
+  const resolvedSemis = semis.filter((f) => f.home.id && f.away.id);
+  const resolvedFinal = final && final.home.id && final.away.id ? final : null;
   if (semis.length === 0 && !final) return null;
 
   return (
-    <section id="gc-knockout" dir="rtl" className="container mx-auto max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
+    <section id="gc-knockout" dir="rtl" className={`container mx-auto max-w-6xl px-4 py-10 sm:px-6 lg:px-8 ${GC_SECTION_SCROLL_MT}`}>
       <div className="mb-6 flex items-center gap-2">
         <Trophy className="h-6 w-6 text-sky-500" />
         <h2 className="text-2xl font-black text-foreground">الطريق إلى اللقب</h2>
       </div>
 
+      {resolvedSemis.length === 0 && !resolvedFinal ? (
+        <p className="rounded-2xl border border-dashed border-border py-10 text-center text-sm text-muted-foreground">
+          تُحدد مواجهات نصف النهائي والنهائي بعد اكتمال دور المجموعات.
+        </p>
+      ) : (
       <motion.div
         initial={{ opacity: 0, y: 14 }}
         whileInView={{ opacity: 1, y: 0 }}
@@ -220,31 +227,32 @@ export function GcKnockoutSection({
         transition={{ duration: 0.4 }}
         className="mx-auto max-w-3xl"
       >
-        {semis.length > 0 && (
+        {resolvedSemis.length > 0 && (
           <div>
             <p className="mb-3 text-center text-xs font-bold tracking-wide text-muted-foreground">
               نصف النهائي
             </p>
             <div className="grid gap-3 sm:grid-cols-2 sm:gap-8">
-              {semis.map((f) => (
+              {resolvedSemis.map((f) => (
                 <BracketMatch key={f.id} fixture={f} onOpen={onOpenMatch} />
               ))}
             </div>
           </div>
         )}
 
-        {semis.length > 0 && final && <BracketConnector />}
+        {resolvedSemis.length > 0 && resolvedFinal && <BracketConnector />}
 
-        {final && (
+        {resolvedFinal && (
           <div className="mx-auto max-w-sm">
             <p className="mb-3 flex items-center justify-center gap-1.5 text-xs font-black text-sky-700 dark:text-sky-300">
               <Trophy className="h-3.5 w-3.5" />
               النهائي
             </p>
-            <BracketMatch fixture={final} onOpen={onOpenMatch} featured />
+            <BracketMatch fixture={resolvedFinal} onOpen={onOpenMatch} featured />
           </div>
         )}
       </motion.div>
+      )}
     </section>
   );
 }

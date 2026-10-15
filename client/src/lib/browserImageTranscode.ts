@@ -1,5 +1,41 @@
 const MAX_BROWSER_TRANSCODE_PIXELS = 32_000_000;
 
+/** News display images: reduce transport cost before multipart upload. */
+export async function prepareNewsImage(file: File): Promise<File> {
+  if (file.size <= 512 * 1024 || !/^image\/(jpeg|jpg|png|heic|heif)$/i.test(file.type)) return file;
+  let decoded: Awaited<ReturnType<typeof decodeImageInBrowser>> | undefined;
+  let canvas: HTMLCanvasElement | undefined;
+  try {
+    decoded = await decodeImageInBrowser(file);
+    if (!decoded.width || !decoded.height) return file;
+    const scale = Math.min(1, 2560 / Math.max(decoded.width, decoded.height));
+    canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(decoded.width * scale));
+    canvas.height = Math.max(1, Math.round(decoded.height * scale));
+    const context = canvas.getContext("2d");
+    if (!context) return file;
+    context.drawImage(decoded.source, 0, 0, canvas.width, canvas.height);
+    let blob = await canvasToBlob(canvas, "image/webp", 0.9);
+    if (!blob || blob.type !== "image/webp") {
+      // PNG fallback preserves transparency on browsers without WebP encoding.
+      const type = /image\/jpe?g/i.test(file.type) ? "image/jpeg" : "image/png";
+      blob = await new Promise<Blob | null>(resolve => canvas!.toBlob(resolve, type, 0.9));
+    }
+    // Never increase the payload or replace the original for a trivial saving.
+    if (!blob || !blob.size || blob.size >= file.size * 0.9) return file;
+    const extension = blob.type === "image/webp" ? "webp" : blob.type === "image/png" ? "png" : "jpg";
+    return new File([blob], `${file.name.replace(/\.[^.]+$/, "")}.${extension}`, {
+      type: blob.type, lastModified: file.lastModified,
+    });
+  } catch {
+    // Server decoding remains available (e.g. HEIC on an older browser).
+    return file;
+  } finally {
+    decoded?.cleanup();
+    if (canvas) canvas.width = canvas.height = 0;
+  }
+}
+
 export function isAvifFile(file: File): boolean {
   return file.type.toLowerCase() === "image/avif" || /\.avif$/i.test(file.name);
 }

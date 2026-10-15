@@ -1,3 +1,5 @@
+import { stagingOutboundError } from "../utils/stagingRuntime";
+
 const CLOUDFLARE_ZONE_ID = process.env.CLOUDFLARE_ZONE_ID;
 const CLOUDFLARE_API_TOKEN = process.env.CLOUDFLARE_API_TOKEN;
 const SITE_URL = process.env.PUBLIC_SITE_URL || process.env.FRONTEND_URL || 'https://sabq.org';
@@ -126,6 +128,8 @@ process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 startFlushTimer();
 
 export async function purgeUrls(urls: string[], opts?: { immediate?: boolean }): Promise<PurgeResult> {
+  const stagingError = stagingOutboundError("cloudflare-purge");
+  if (stagingError) return { success: false, errors: [stagingError.message] };
   if (!CLOUDFLARE_ZONE_ID || !CLOUDFLARE_API_TOKEN) {
     console.log('[Cloudflare] Purge skipped - API credentials not configured');
     return { success: true };
@@ -140,12 +144,29 @@ export async function purgeUrls(urls: string[], opts?: { immediate?: boolean }):
   return { success: true };
 }
 
+/**
+ * مسارات عامة تُطهَّر بعد أرشفة خبر: خرائط الموقع على موقع القرّاء،
+ * ومسارات `/api/` على الموقع وعلى أصل الـ API معاً.
+ */
+export async function purgeContentSurfaces(
+  paths: string[],
+  opts?: { immediate?: boolean },
+): Promise<PurgeResult> {
+  const urls = paths.flatMap((path) => {
+    if (!path.startsWith("/")) return [];
+    if (path.startsWith("/api/")) return bothHosts(path);
+    return [`${SITE_URL}${path}`];
+  });
+  return purgeUrls(urls, opts);
+}
+
 export async function purgeHomepage(opts?: { immediate?: boolean }): Promise<PurgeResult> {
   return purgeUrls([
     `${SITE_URL}/`,
     ...bothHosts('/api/homepage-lite'),
     ...bothHosts('/api/lite-feed'),
     ...bothHosts('/api/ai-insights'),
+    ...bothHosts('/api/edge/home-bundle'),
   ], opts);
 }
 
@@ -169,6 +190,12 @@ export async function purgeArticle(slug: string, opts?: { immediate?: boolean })
     // serving stale.
     ...bothHosts(`/api/articles/${slug}`),
     ...bothHosts(`/api/articles/${slug}/sidebar`),
+    // The Next SSR app reads these aggregated projections directly. Purge
+    // each locale variant as well as the ordinary article API response so a
+    // published edit cannot leave a stale SEO bundle at the API edge.
+    ...bothHosts(`/api/articles/${slug}/seo-bundle?lang=ar`),
+    ...bothHosts(`/api/articles/${slug}/seo-bundle?lang=en`),
+    ...bothHosts(`/api/articles/${slug}/seo-bundle?lang=ur`),
     // Edge SEO injection caches (functions/_middleware.js + edgeMeta TTL).
     // Purging these makes the next crawl pick up fresh title/meta/JSON-LD
     // immediately after publish instead of waiting for the 10s edge JSON TTL

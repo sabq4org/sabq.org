@@ -18,6 +18,7 @@ import {
   insertIfoxWorkflowRuleSchema, 
   insertIfoxEditorialCalendarSchema 
 } from "@shared/schema";
+import { parsePage, parseLimit } from "../../utils/pagination";
 
 const router = Router();
 
@@ -164,8 +165,8 @@ router.get("/templates", async (req, res) => {
       templateType: templateType as string | undefined,
       language: language as string | undefined,
       isActive: isActive === "true" ? true : isActive === "false" ? false : undefined,
-      page: page ? parseInt(page as string) : undefined,
-      limit: limit ? parseInt(limit as string) : undefined,
+      page: page ? parsePage(page) : undefined,
+      limit: limit ? parseLimit(limit, 20, 200) : undefined,
     };
 
     const templates = await ifoxTemplatesService.listTemplates(filters);
@@ -290,8 +291,8 @@ router.get("/workflows", async (req, res) => {
     const filters = {
       ruleType: ruleType as string | undefined,
       isActive: isActive === "true" ? true : isActive === "false" ? false : undefined,
-      page: page ? parseInt(page as string) : undefined,
-      limit: limit ? parseInt(limit as string) : undefined,
+      page: page ? parsePage(page) : undefined,
+      limit: limit ? parseLimit(limit, 20, 200) : undefined,
     };
 
     const rules = await ifoxWorkflowsService.listRules(filters);
@@ -447,8 +448,8 @@ router.get("/quality", async (req, res) => {
       articleId: articleId as string | undefined,
       taskId: taskId as string | undefined,
       passed: passed === "true" ? true : passed === "false" ? false : undefined,
-      page: page ? parseInt(page as string) : undefined,
-      limit: limit ? parseInt(limit as string) : undefined,
+      page: page ? parsePage(page) : undefined,
+      limit: limit ? parseLimit(limit, 20, 200) : undefined,
     };
 
     const checks = await ifoxQualityService.listQualityChecks(filters);
@@ -532,8 +533,8 @@ router.get("/strategy", async (req, res) => {
       insightType: insightType as string | undefined,
       status: status as string | undefined,
       priority: priority as string | undefined,
-      page: page ? parseInt(page as string) : undefined,
-      limit: limit ? parseInt(limit as string) : undefined,
+      page: page ? parsePage(page) : undefined,
+      limit: limit ? parseLimit(limit, 20, 200) : undefined,
     };
 
     const insights = await ifoxStrategyService.listInsights(filters);
@@ -620,8 +621,8 @@ router.get("/calendar", async (req, res) => {
       scheduledDateTo: scheduledDateTo ? new Date(scheduledDateTo as string) : undefined,
       status: status as string | undefined,
       assignmentType: assignmentType as string | undefined,
-      page: page ? parseInt(page as string) : undefined,
-      limit: limit ? parseInt(limit as string) : undefined,
+      page: page ? parsePage(page) : undefined,
+      limit: limit ? parseLimit(limit, 20, 200) : undefined,
     };
 
     const entries = await ifoxCalendarService.listEntries(filters);
@@ -798,8 +799,8 @@ router.get("/performance", async (req, res) => {
       isAiGenerated: isAiGenerated === "true" ? true : isAiGenerated === "false" ? false : undefined,
       publishedAtFrom: publishedAtFrom ? new Date(publishedAtFrom as string) : undefined,
       publishedAtTo: publishedAtTo ? new Date(publishedAtTo as string) : undefined,
-      page: page ? parseInt(page as string) : undefined,
-      limit: limit ? parseInt(limit as string) : undefined,
+      page: page ? parsePage(page) : undefined,
+      limit: limit ? parseLimit(limit, 20, 200) : undefined,
     };
 
     const metrics = await ifoxPerformanceService.listPerformanceMetrics(filters);
@@ -865,8 +866,8 @@ router.get("/budget", async (req, res) => {
       period: period as string | undefined,
       startDate: startDate ? new Date(startDate as string) : undefined,
       endDate: endDate ? new Date(endDate as string) : undefined,
-      page: page ? parseInt(page as string) : undefined,
-      limit: limit ? parseInt(limit as string) : undefined,
+      page: page ? parsePage(page) : undefined,
+      limit: limit ? parseLimit(limit, 20, 200) : undefined,
     };
 
     const budgets = await ifoxBudgetService.listBudgetHistory(filters);

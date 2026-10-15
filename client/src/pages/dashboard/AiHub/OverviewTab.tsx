@@ -22,6 +22,7 @@ import {
 } from "recharts";
 import { ArrowDownLeft, ArrowUpLeft, Timer } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -109,7 +110,7 @@ export default function OverviewTab() {
   const isDark = useIsDark();
   const [days, setDays] = useState(30);
 
-  const { data: overview } = useQuery<OverviewStats>({
+  const { data: overview, isPending, isFetching, isError, refetch } = useQuery<OverviewStats>({
     queryKey: ["/api/admin/ai-hub/overview"],
     refetchInterval: 30_000,
   });
@@ -161,9 +162,23 @@ export default function OverviewTab() {
       ? Math.min((overview.month.costUsd / overview.month.budgetUsd) * 100, 100)
       : null;
 
+  if (!overview && !isPending) {
+    return (
+      <Card className="rounded-2xl">
+        <CardContent className="py-10 text-center space-y-3" role="alert">
+          <p className="font-semibold">تعذر تحميل بيانات مركز الذكاء الاصطناعي</p>
+          <p className="text-sm text-muted-foreground">لم تصل بيانات النظرة العامة. أعد المحاولة، وإذا استمرت المشكلة فتواصل مع مسؤول النظام.</p>
+          <Button variant="outline" disabled={isFetching} onClick={() => void refetch()}>
+            {isFetching ? "جارٍ إعادة المحاولة…" : "إعادة المحاولة"}
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
+
   if (!overview) {
     return (
-      <div className="space-y-4">
+      <div className="space-y-4" data-testid="ai-hub-overview-loading">
         <Skeleton className="h-14 rounded-2xl" />
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
           {Array.from({ length: 5 }).map((_, i) => (
@@ -177,6 +192,12 @@ export default function OverviewTab() {
 
   return (
     <div className="space-y-4">
+      {isError && (
+        <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border p-3 text-sm">
+          <span>تعذر تحديث البيانات؛ المعروض هو آخر بيانات تم تحميلها.</span>
+          <Button variant="outline" size="sm" disabled={isFetching} onClick={() => void refetch()}>إعادة المحاولة</Button>
+        </div>
+      )}
       {/* Provider status strip */}
       <Card className="rounded-2xl shadow-sm">
         <CardContent className="p-3.5 flex flex-wrap items-center gap-2.5">

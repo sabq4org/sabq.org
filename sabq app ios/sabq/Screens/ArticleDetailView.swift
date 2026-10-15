@@ -35,6 +35,7 @@ struct ReadingProgressOverlay: View {
 }
 
 struct ArticleDetailView: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let article: Article
     @Environment(BookmarksStore.self) private var bookmarksStore
     @Environment(AuthStore.self) private var authStore
@@ -48,8 +49,14 @@ struct ArticleDetailView: View {
     @State private var aiInsights: [String: String] = [:]
 
     @State private var relatedArticles: [Article] = []
-    @State private var isPlayingAudio = false
-    @State private var audioPlayer: AVPlayer?
+    /// مقالات رأي من تصنيف الخبر — بلوك «مقالات قد تهمك» (نقل الويب #1609/#1624).
+    @State private var relatedOpinions: [OpinionArticle] = []
+    /// صفة الكاتب من ملف المراسل (`/api/reporters/:slug`) — تسبق القواعد المحلية.
+    @State private var reporterTitle: String?
+    /// حالة الاستماع تأتي من المشغّل المشترك (Now Playing + شاشة القفل) —
+    /// لا AVPlayer محلي بعد تدقيق iOS 27 (F03).
+    private var audioKey: String { "article:\(displayArticle.slug ?? displayArticle.id)" }
+    private var isPlayingAudio: Bool { SabqAudioPlayer.shared.isPlaying(key: audioKey) }
     /// Comments are owned by a per-article store. Lazily created the first time
     /// the article slug is available — `nil` for articles that have no slug
     /// (extremely rare; we hide the section in that case).
@@ -68,6 +75,7 @@ struct ArticleDetailView: View {
     /// the type-level doc comment for the rationale (same root cause as
     /// the home-feed perf fix logged in `ScrollOffsetRef`).
     @State private var scrollProgress = ArticleScrollProgress()
+    @State private var isAnalyticsVisible = false
     @Environment(LikesStore.self) private var likesStore
     @State private var likesCount: Int = 0
     @State private var isLikeBusy: Bool = false
@@ -108,6 +116,36 @@ struct ArticleDetailView: View {
     @State private var inlineLightboxURL: URL?
 
     @Environment(LiteModeManager.self) private var liteManager
+    /// قارئ «الرئيسية» ينشر سياق الخبر للعمود المجاور على الشاشة المفتوحة.
+    @Environment(\.publishesReaderContext) private var publishesReaderContext
+    @Environment(SabqNavigationState.self) private var navigation: SabqNavigationState?
+    /// غير `nil` على الشاشة الضيقة لـ Duo فقط (`DuoTabContainer`). صنف الحجم لا
+    /// يصلح هنا: الحاوية الثابتة تفرض `.regular` داخل مكدّسات UIKit.
+    @Environment(\.duoContentInsets) private var duoContentInsets
+    @AppStorage(FoldableDevice.observedDefaultsKey) private var foldableObserved = false
+    @State private var isContextSheetPresented = false
+    /// الخبر ظاهر فعلًا (ليس مغطًّى بصفحة مدفوعة فوقه) — وحده ينشر سياقه.
+    @State private var isOnScreen = false
+
+    private var articleContext: ArticleContext {
+        ArticleContext.news(article: displayArticle, related: relatedArticles, keywords: displayTags)
+    }
+
+    /// الشاشة الخارجية لـ Duo: زر «سياق الخبر» تحت العنوان يفتح ورقة. مفتوحًا
+    /// ينتقل السياق إلى العمود المجاور، والهاتف العادي وiPad لا يتغيران.
+    private var showsContextButton: Bool {
+        duoContentInsets != nil && !isFocusMode && !articleContext.isEmpty
+    }
+
+    /// مفتوحًا على Duo والعمود المجاور يعرض «سياق الخبر»: الموجز الذكي ينتقل
+    /// إليه (نموذج Duo المعتمد) فلا يتكرر في القارئ.
+    private var summaryMovedToContextColumn: Bool {
+        publishesReaderContext
+            && FoldableDevice.isFoldable(observed: foldableObserved)
+            && duoContentInsets == nil
+            && navigation?.homeSidebarMode == .context
+            && navigation?.readerContext?.id == displayArticle.id
+    }
 
     var body: some View {
         if let opinion = redirectToOpinion {
@@ -156,7 +194,7 @@ struct ArticleDetailView: View {
                             corner: .topLeading
                         )
 
-                    VStack(alignment: .leading, spacing: 18) {
+                    VStack(alignment: .leading, spacing: SabqLayout.space16) {
                         // Editorial column order (per user 2026-05-14):
                         //   labels → title → metadata → smart summary →
                         //   audio (if any) → divider → body.
@@ -174,13 +212,18 @@ struct ArticleDetailView: View {
                         articleMeta
                             .animatedAppear(index: 2)
 
-                        if !isFocusMode {
+                        if showsContextButton {
+                            contextButton
+                        }
+
+                        if !isFocusMode, !summaryMovedToContextColumn {
                             smartSummaryCard
                                 .animatedAppear(index: 3)
                         }
 
                         Divider().foregroundStyle(SabqTheme.outline.opacity(0.6))
                         articleBody
+                            .analyticsReadingBody()
                         mediaAssetsGallery
 
                         // Weekly-photos pack — only renders when the
@@ -206,9 +249,14 @@ struct ArticleDetailView: View {
                                 .padding(.top, 20)
                         }
 
+                        if !isFocusMode, !relatedOpinions.isEmpty {
+                            relatedOpinionsSection
+                                .padding(.top, 24)
+                        }
+
                         if !isFocusMode, !relatedArticles.isEmpty {
                             relatedSection
-                                .padding(.top, 24)
+                                .padding(.top, 16)
                         }
 
                         if !isFocusMode, let store = commentsStore {
@@ -216,19 +264,24 @@ struct ArticleDetailView: View {
                                 .padding(.top, 24)
                         }
                     }
-                    .frame(width: max(0, proxy.size.width - 40), alignment: .leading)
-                    .padding(.horizontal, 20)
-                    .padding(.top, 24)
-                    .padding(.bottom, 60)
+                    .frame(width: max(0, min(proxy.size.width - (SabqLayout.pageInset * 2), SabqLayout.readingWidth)), alignment: .leading)
+                    .padding(.horizontal, SabqLayout.pageInset)
+                    .padding(.top, SabqLayout.space24)
+                    .padding(.bottom, 40)
+                    .frame(maxWidth: .infinity)
                 }
                 .frame(width: proxy.size.width, alignment: .leading)
             }
+            .sabqNavigationEdge()
             .sabqScrollProgressTracker { progress in
                 // Update through the class — does NOT invalidate this view
                 // body, only the `ReadingProgressOverlay` subview observes
                 // via @ObservedObject so the bar still animates smoothly.
                 scrollProgress.value = progress
                 BehaviorTracker.shared.updateScroll(percent: Double(progress))
+            }
+            .analyticsReadingProgress { progress in
+                SabqAnalytics.updateReading(articleId: displayArticle.id, percent: Int(progress * 100))
             }
 
             .sabqAutoHideTabBar()
@@ -237,10 +290,10 @@ struct ArticleDetailView: View {
             }
         }
         .background(focusBackground)
+        .environment(\.sabqJustifiesBody, false)
         .sabqRTL()
         .sabqScreen("ArticleDetail")
         .navigationBarTitleDisplayMode(.inline)
-        .navigationBarBackButtonHidden(true)
         .fullScreenCover(isPresented: $isHeroLightboxPresented) {
             ImageLightbox(
                 url: displayArticle.imageURL.flatMap(URL.init(string:)),
@@ -271,66 +324,39 @@ struct ArticleDetailView: View {
             SabqAnalytics.articleView(
                 id: displayArticle.id,
                 title: displayArticle.title,
-                category: displayArticle.category.title
+                category: displayArticle.categoryTitle
             )
             BehaviorTracker.shared.startSession(articleId: displayArticle.id)
+            isAnalyticsVisible = true
+            SabqAnalytics.beginReading(articleId: displayArticle.id)
         }
         .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button {
-                    SabqHaptics.light()
-                    dismiss()
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "chevron.right")
-                            .font(SabqFonts.app(size: 14, weight: .bold))
+            if FoldableDevice.isFoldable(observed: foldableObserved) {
+                // Duo: الحاوية الثابتة تجعل شريط القارئ «منتظمًا» فيرصّ النظام
+                // الأزرار المنفصلة عموديًا فوق صورة الخبر (حتى في مجموعة).
+                // عنصر واحد بصف أفقي يبقيها سطرًا واحدًا.
+                ToolbarItem(placement: .topBarTrailing) {
+                    HStack(spacing: 18) {
+                        bookmarkToolbarButton
+                        shareToolbarButton
+                        likeButton
+                            .accessibilityIdentifier("article.like")
                     }
-                    .foregroundStyle(SabqTheme.ink)
-                    .padding(8)
-                    .background(
-                        Circle()
-                            .fill(.ultraThinMaterial)
-                    )
+                    .labelStyle(.iconOnly)
+                    .padding(.horizontal, 4)
                 }
-                .accessibilityLabel("رجوع")
-            }
-
-            ToolbarItem(placement: .primaryAction) {
-                HStack(spacing: 8) {
+            } else {
+                ToolbarItem(placement: .primaryAction) {
+                    bookmarkToolbarButton
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    shareToolbarButton
+                }
+                // الإعجاب مباشر في الشريط؛ «تنسيق» و«قراءة» في شريط الإجراءات أسفل
+                // النص فقط — لا يتكرر زر في موضعين (مراجعة 10.3.3).
+                ToolbarItem(placement: .primaryAction) {
                     likeButton
-
-                    Button {
-                        SabqHaptics.medium()
-                        bookmarksStore.toggle(displayArticle.id, article: displayArticle)
-                    } label: {
-                        Image(systemName: bookmarksStore.isBookmarked(displayArticle.id) ? "bookmark.fill" : "bookmark")
-                            .font(SabqFonts.app(size: 16, weight: .semibold))
-                            .foregroundStyle(
-                                bookmarksStore.isBookmarked(displayArticle.id) ? SabqTheme.primaryEnd : SabqTheme.secondaryInk
-                            )
-                            .padding(8)
-                            .background(
-                                Circle()
-                                    .fill(.ultraThinMaterial)
-                            )
-                    }
-                    .accessibilityLabel(bookmarksStore.isBookmarked(displayArticle.id) ? "إزالة من المحفوظات" : "حفظ المقال")
-
-                    Button {
-                        SabqHaptics.light()
-                        shareArticle()
-                    } label: {
-                        Image(systemName: "square.and.arrow.up")
-                            .font(SabqFonts.app(size: 16, weight: .semibold))
-                            .foregroundStyle(SabqTheme.secondaryInk)
-                            .padding(8)
-                            .background(
-                                Circle()
-                                    .fill(.ultraThinMaterial)
-                            )
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("مشاركة المقال")
+                        .accessibilityIdentifier("article.like")
                 }
             }
         }
@@ -346,25 +372,102 @@ struct ArticleDetailView: View {
             prefetchInlineImages(from: cachedBlocks.items)
         }
         .onDisappear {
-            if audioPlayer != nil {
-                audioPlayer?.pause()
-                audioPlayer = nil
-                SabqAudioSession.deactivate()
-            }
-            isPlayingAudio = false
+            isAnalyticsVisible = false
+            // مغادرة المقال توقف ملخصه فقط (لا صوت شاشة أخرى)، وتُسلّم جلسة
+            // الصوت للآخرين. نهاية المقطع يعالجها المشغّل المشترك نفسه.
+            SabqAudioPlayer.shared.stopIfCurrent(key: audioKey)
             BehaviorTracker.shared.endSession()
+            SabqAnalytics.endReading(articleId: displayArticle.id)
         }
-        // انتهاء الملخص الصوتي: بدون هذا كان الزر يبقى على «جاري التشغيل...»
-        // وجلسة الصوت محتجزة، فتبقى موسيقى المستخدم موقوفة بعد انتهاء المقطع.
-        .onReceive(NotificationCenter.default.publisher(for: AVPlayerItem.didPlayToEndTimeNotification)) { note in
-            guard let item = note.object as? AVPlayerItem, item === audioPlayer?.currentItem else { return }
-            isPlayingAudio = false
-            audioPlayer = nil
-            SabqAudioSession.deactivate()
+        .onReceive(NotificationCenter.default.publisher(for: SabqAnalytics.collectionDidChange)) { _ in
+            guard isAnalyticsVisible, SabqAnalytics.analyticsCollectionEnabled else { return }
+            SabqAnalytics.beginReading(articleId: displayArticle.id)
         }
         .navigationDestination(for: Article.self) { related in
             ArticleDetailView(article: related)
+                .duoContentInsets()
         }
+        .onAppear {
+            isOnScreen = true
+            publishContext(articleContext)
+        }
+        .onDisappear { isOnScreen = false }
+        .onChange(of: articleContext) { _, context in publishContext(context) }
+        .onChange(of: duoContentInsets == nil) { _, isWide in
+            // فُتح الجهاز والورقة ظاهرة: السياق ينتقل إلى العمود.
+            if isWide { isContextSheetPresented = false }
+        }
+        .sheet(isPresented: $isContextSheetPresented) {
+            ArticleContextSheet(
+                context: articleContext,
+                onOpenArticle: { pushFromContext($0) },
+                onOpenOpinion: { pushFromContext($0) },
+                onOpenKeyword: { pushFromContext(KeywordRoute(keyword: $0)) }
+            )
+        }
+    }
+
+    private var bookmarkToolbarButton: some View {
+        Button {
+            SabqHaptics.medium()
+            bookmarksStore.toggle(displayArticle.id, article: displayArticle)
+        } label: {
+            Label(bookmarksStore.isBookmarked(displayArticle.id) ? "إزالة من المحفوظات" : "حفظ المقال",
+                  systemImage: bookmarksStore.isBookmarked(displayArticle.id) ? "bookmark.fill" : "bookmark")
+        }
+        .accessibilityIdentifier("article.bookmark")
+    }
+
+    private var shareToolbarButton: some View {
+        Button("مشاركة المقال", systemImage: "square.and.arrow.up") {
+            SabqHaptics.light()
+            shareArticle()
+        }
+        .accessibilityIdentifier("article.share")
+    }
+
+    // MARK: - سياق الخبر
+
+    private func publishContext(_ context: ArticleContext) {
+        guard publishesReaderContext, isOnScreen, displayArticle.id != displayArticle.slug,
+              FoldableDevice.isFoldable(observed: foldableObserved) else { return }
+        navigation?.publishReaderContext(context)
+    }
+
+    /// لمس عنصر في ورقة السياق يغلقها ويدفع وجهته في مكدّس التبويب الحالي.
+    private func pushFromContext<Value: Hashable>(_ value: Value) {
+        isContextSheetPresented = false
+        guard let navigation else { return }
+        navigation.openFromReaderContext(value, in: navigation.selectedTab)
+    }
+
+    private var contextButton: some View {
+        Button {
+            SabqHaptics.light()
+            isContextSheetPresented = true
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "text.line.first.and.arrowtriangle.forward")
+                    .font(.system(size: 14, weight: .semibold))
+                Text(articleContext.storySoFar.isEmpty ? "سياق الخبر: الموجز والأخبار المرتبطة" : "سياق الخبر: الموجز والقصة حتى الآن")
+                    .font(SabqFonts.app(size: 13.5, weight: .semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+                Spacer(minLength: 4)
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 12, weight: .semibold))
+            }
+            .foregroundStyle(SabqTheme.primaryEnd)
+            .padding(.horizontal, 14)
+            .frame(minHeight: SabqLayout.touchTarget)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(SabqTheme.primaryEnd.opacity(0.10))
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("article.contextButton")
     }
 
     // MARK: - Reading Progress Bar
@@ -398,11 +501,7 @@ struct ArticleDetailView: View {
             SabqHaptics.medium()
             toggleLike()
         } label: {
-            Image(systemName: isLiked ? "heart.fill" : "heart")
-                .font(SabqFonts.app(size: 16, weight: .semibold))
-                .foregroundStyle(isLiked ? Color(red: 0.95, green: 0.30, blue: 0.36) : SabqTheme.secondaryInk)
-                .padding(8)
-                .background(Circle().fill(.ultraThinMaterial))
+            Label(isLiked ? "إلغاء الإعجاب" : "أعجبني", systemImage: isLiked ? "heart.fill" : "heart")
         }
         .disabled(isLikeBusy)
         .buttonStyle(.plain)
@@ -441,7 +540,7 @@ struct ArticleDetailView: View {
         var urls: [URL] = []
         for block in blocks {
             switch block {
-            case .image(let url, _, _):
+            case .image(let url, _, _, _):
                 urls.append(url)
             case .imageGallery(let images):
                 urls.append(contentsOf: images.map(\.url))
@@ -472,7 +571,16 @@ struct ArticleDetailView: View {
             }
             let store = commentsStore
 
-            async let detail = NewsService.fetchArticleDetail(slug: slug)
+            // نسخة الجلسة تُعرض فورًا (طيّ Duo، الرجوع من خبر مرتبط، إعادة
+            // الفتح من العمود)، والحديثة منها لا يُعاد جلبها.
+            let cached = ArticleDetailCache.shared.entry(for: slug)
+            if let cached, fullArticle == nil {
+                fullArticle = cached.article
+                relatedArticles = cached.related
+                updateResolvedTags(from: cached.article)
+            }
+
+            async let detail = Self.detailBundle(slug: slug, cached: cached)
             // Best-effort: returns sentiment + credibility hints when ai
             // processing has run for this article. Failures are silent.
             async let insights: [String: String]? = try? await APIClient.shared.fetchAIInsights(slug: slug)
@@ -505,9 +613,34 @@ struct ArticleDetailView: View {
             if relatedArticles.isEmpty {
                 relatedArticles = await NewsService.fetchRelated(slug: slug)
             }
+
+            // صفة الكاتب من ملف المراسل (كما يفعل الويب) — فشلها يسقط على القواعد المحلية.
+            if let staffSlug = displayArticle.authorSlug, displayArticle.articleType != "infographic" {
+                let title = (try? await APIClient.shared.fetchReporterProfile(slug: staffSlug))?.title?
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                if let title, !title.isEmpty { reporterTitle = title }
+            }
+
+            // بلوك الرأي يحتاج معرّف التصنيف (يأتي مع حمولة التفاصيل)؛ بلا معرّف
+            // يختفي البلوك بصمت كما في الويب.
+            if let categoryId = displayArticle.categoryId, !categoryId.isEmpty {
+                relatedOpinions = await NewsService.fetchRelatedOpinions(
+                    categoryId: categoryId,
+                    excludeId: displayArticle.id
+                )
+            }
         }
 
         _ = await prepareShareURL()
+    }
+
+    /// الحزمة المحفوظة إن كانت حديثة، وإلا الجلب من الشبكة.
+    private static func detailBundle(
+        slug: String,
+        cached: ArticleDetailCache.Entry?
+    ) async -> (article: Article, related: [Article])? {
+        if let cached, cached.isFresh() { return (cached.article, cached.related) }
+        return await NewsService.fetchArticleDetail(slug: slug)
     }
 
     // MARK: - Hero Image
@@ -551,28 +684,25 @@ struct ArticleDetailView: View {
     }
 
     private func toggleAudio() {
-        if isPlayingAudio {
-            audioPlayer?.pause()
-            isPlayingAudio = false
-            // Hand the audio focus back so CarPlay / Spotify / Podcasts
-            // can resume the music the user was on when they opened sabq.
-            SabqAudioSession.deactivate()
-            return
-        }
-        // The backend's /api/articles/:slug/summary-audio streams
-        // ElevenLabs (or Google fallback) MP3 bytes directly, not a
-        // JSON envelope. We don't need to pre-fetch metadata — point
-        // AVPlayer at the URL and let it start streaming. ElevenLabs
-        // synthesis takes ~3-8s the first time; subsequent loads hit
-        // the backend's 24h Cache-Control header.
+        // The backend's /api/articles/:slug/summary-audio returns the
+        // whole clip (HUMAIN WAV, or ElevenLabs/Google MP3 fallback)
+        // with an `X-TTS-Provider` header. The shared player downloads
+        // it first so the provider is known for the attribution label,
+        // then plays the local file. The route is `no-store` since the
+        // HUMAIN rollout, so every play re-fetches (server-side cache
+        // keeps synthesis to once per article).
         guard let slug = displayArticle.slug, !slug.isEmpty,
               let url = URL(string: "\(URLConstants.publicAPI)/articles/\(slug)/summary-audio?tts=tafqit-v2")
         else { return }
         SabqHaptics.medium()
-        SabqAudioSession.activate()
-        audioPlayer = AVPlayer(url: url)
-        audioPlayer?.play()
-        isPlayingAudio = true
+        SabqAudioPlayer.shared.toggle(SabqAudioPlayer.Item(
+            key: audioKey,
+            url: url,
+            title: displayArticle.title,
+            subtitle: "الملخص الصوتي · سبق",
+            artworkURL: displayArticle.imageURL.flatMap { URL(string: $0) },
+            delivery: .download
+        ))
     }
 
     // MARK: - Meta
@@ -581,11 +711,17 @@ struct ArticleDetailView: View {
     /// + sentiment (when AI insights returned one) + موثوق passport pill.
     /// FlowLayout wraps onto a second line on narrow screens.
     private var labelsRow: some View {
-        FlowLayout(spacing: 8) {
-            DetailLabelPill(
-                title: article.category.title,
-                tint: article.category.tint
-            )
+        FlowLayout(spacing: 14) {
+            // Category is context, not severity. Keep red reserved for the
+            // explicit breaking state below so ordinary sections stay calm.
+            DetailLabelPill(title: article.categoryTitle, tint: SabqTheme.secondaryInk)
+
+            // شارة «قراءة» التحريرية — تطابق شارة صفحة الخبر في الويب (#1420).
+            // من `displayArticle` كي تظهر بعد وصول حمولة التفاصيل حتى لو دخل
+            // القارئ من قائمة أو رابط عميق بلا الشارة.
+            if displayArticle.isReading {
+                DetailLabelPill(title: "قراءة", tint: SabqTheme.emerald, icon: "book")
+            }
 
             // Breaking pill (only when applicable)
             if article.isBreaking {
@@ -594,12 +730,10 @@ struct ArticleDetailView: View {
                         .scaleEffect(0.6)
                         .frame(width: 12, height: 12)
                     Text("عاجل")
-                        .font(SabqFonts.app(size: 10, weight: .regular))
-                        .foregroundStyle(SabqTheme.coral)
+                        .font(SabqFonts.app(size: 13, weight: .semibold))
+                        .foregroundStyle(SabqTheme.danger)
                 }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
-                .background(Capsule(style: .continuous).fill(SabqTheme.coral.opacity(0.10)))
+                .padding(.vertical, 2)
             }
 
             sentimentPill
@@ -621,19 +755,10 @@ struct ArticleDetailView: View {
                 Image(systemName: mapped.icon)
                     .font(SabqFonts.app(size: 11, weight: .regular))
                 Text(mapped.label)
-                    .font(SabqFonts.app(size: 10, weight: .regular))
+                    .font(SabqFonts.app(size: 13, weight: .semibold))
             }
             .foregroundStyle(mapped.tint)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 5)
-            .background(
-                Capsule(style: .continuous)
-                    .fill(mapped.tint.opacity(0.10))
-            )
-            .overlay(
-                Capsule(style: .continuous)
-                    .stroke(mapped.tint.opacity(0.25), lineWidth: 0.5)
-            )
+            .padding(.vertical, 2)
         }
     }
 
@@ -644,7 +769,7 @@ struct ArticleDetailView: View {
         case "neutral", "محايد":
             return ("محايد", "minus.circle", SabqTheme.secondaryInk)
         case "negative", "سلبي":
-            return ("سلبي", "exclamationmark.triangle.fill", SabqTheme.coral)
+            return ("سلبي", "exclamationmark.triangle.fill", SabqTheme.danger)
         case "mixed", "مختلط":
             return ("مختلط", "circle.lefthalf.fill", Color(red: 0.62, green: 0.36, blue: 0.92))
         default:
@@ -696,22 +821,28 @@ struct ArticleDetailView: View {
             EmptyView()
         } else {
             VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 8) {
+                let summaryLayout = dynamicTypeSize.isAccessibilitySize
+                    ? AnyLayout(VStackLayout(alignment: .leading, spacing: SabqLayout.space12))
+                    : AnyLayout(HStackLayout(spacing: SabqLayout.space8))
+                summaryLayout {
                     Image(systemName: "sparkles")
                         .font(SabqFonts.app(size: 11, weight: .regular))
                         .foregroundStyle(SabqTheme.primaryEnd)
                     Text("الموجز الذكي")
-                        .font(SabqFonts.app(size: 12, weight: .medium))
-                        .foregroundStyle(SabqTheme.ink)
+                        .font(SabqType.sectionTitle)
+                        .foregroundStyle(SabqTheme.brandBlue)
                     Spacer(minLength: 0)
                     if canListen {
+                        if SabqAudioPlayer.shared.provider(for: audioKey) == "humain" {
+                            summaryAudioAttribution
+                        }
                         listenButton
                     }
                 }
 
                 if !body.isEmpty {
                     Text(body)
-                        .font(SabqFonts.app(size: 14, weight: .medium))
+                        .font(SabqType.body)
                         .foregroundStyle(SabqTheme.secondaryInk)
                         .multilineTextAlignment(.leading)
                         .lineSpacing(4)
@@ -726,12 +857,13 @@ struct ArticleDetailView: View {
                             SabqHaptics.light()
                         } label: {
                             HStack(spacing: 4) {
-                                Text(isSummaryExpanded ? "طيّ" : "عرض المزيد")
-                                    .font(SabqFonts.app(size: 11, weight: .regular))
+                                Text(isSummaryExpanded ? "إخفاء التفاصيل" : "قراءة الموجز كاملًا")
+                                    .font(SabqType.label)
                                 Image(systemName: isSummaryExpanded ? "chevron.up" : "chevron.down")
                                     .font(SabqFonts.app(size: 10, weight: .regular))
                             }
-                            .foregroundStyle(SabqTheme.primaryEnd)
+                            .foregroundStyle(SabqTheme.brandBlue)
+                            .frame(minHeight: SabqLayout.touchTarget)
                         }
                         .buttonStyle(.plain)
                     }
@@ -739,18 +871,7 @@ struct ArticleDetailView: View {
             }
             .padding(16)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                    .fill(.ultraThinMaterial)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                            .fill(SabqTheme.primaryEnd.opacity(0.04))
-                    )
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                    .stroke(SabqTheme.primaryEnd.opacity(0.18), lineWidth: 0.5)
-            )
+            .sabqBlockSurface(SabqTheme.publicSurface)
         }
     }
 
@@ -761,6 +882,16 @@ struct ArticleDetailView: View {
     /// due to long Arabic words, so we err on the generous side at 120 chars.
     private static func summaryNeedsToggle(_ text: String) -> Bool {
         text.count > 120
+    }
+
+    /// إسناد المزوّد بعبارة الويب حرفيًا (`SummaryAudioAttribution.tsx`) — يظهر
+    /// فقط عندما يكون مقطع هذا الخبر عبر HUMAIN (رأس `X-TTS-Provider`).
+    private var summaryAudioAttribution: some View {
+        Text("الصوت عبر HUMAIN")
+            .font(SabqFonts.app(size: 11, weight: .regular))
+            .foregroundStyle(SabqTheme.emerald)
+            .lineLimit(1)
+            .accessibilityLabel("الصوت عبر هيومن")
     }
 
     /// Compact play/pause pill for the audio summary. Sits in the smart-
@@ -775,102 +906,116 @@ struct ArticleDetailView: View {
                 Image(systemName: isPlayingAudio ? "pause.fill" : "play.fill")
                     .font(SabqFonts.app(size: 10, weight: .regular))
                 Text(isPlayingAudio ? "إيقاف" : "استماع")
-                    .font(SabqFonts.app(size: 10, weight: .regular))
+                    .font(SabqFonts.app(size: 13, weight: .semibold))
             }
-            .foregroundStyle(.white)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
+            .foregroundStyle(SabqTheme.onAction)
+            .padding(.horizontal, SabqLayout.space12)
+            .frame(minHeight: SabqLayout.touchTarget)
             .background(
-                Capsule(style: .continuous).fill(SabqTheme.primaryEnd)
+                RoundedRectangle(cornerRadius: SabqTheme.buttonRadius, style: .continuous)
+                    .fill(SabqTheme.actionFill)
             )
-            .shadow(color: SabqTheme.primaryEnd.opacity(0.30), radius: 6, x: 0, y: 3)
         }
         .buttonStyle(.plain)
     }
 
-    // Publication metadata between title and excerpt. Single calm row,
-    // tertiary ink, bullet separators — should not visually disrupt the
-    // text flow above or below it.
+    // Two compact lines beside the avatar: author and role, then publication details.
+    // Keep the full update timestamp available without adding another visual line.
     private var articleMeta: some View {
-        HStack(spacing: 8) {
-            // Use `displayArticle.author` (not `article.author`) so the byline
-            // refreshes from the home-feed cached value to the freshly-loaded
-            // full-article value. The backend prefers `reporterId` over
-            // `authorId`, so the full-article fetch can replace a "staff who
-            // entered" name with the actual reporter chosen in the dashboard.
-            NavigationLink(value: AuthorRoute(name: displayArticle.author)) {
-                Text(displayArticle.author)
-                    .font(SabqFonts.app(size: 12, weight: .medium))
-                    .foregroundStyle(SabqTheme.primaryEnd)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: SabqLayout.space8))
+            : AnyLayout(HStackLayout(spacing: SabqLayout.space8))
+        return layout {
+            OpinionAuthorAvatar(
+                name: displayArticle.author,
+                imageURL: displayArticle.authorImageURL,
+                size: 34
+            )
+            .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 3) {
+                let authorLayout = dynamicTypeSize.isAccessibilitySize
+                    ? AnyLayout(VStackLayout(alignment: .leading, spacing: SabqLayout.space4))
+                    : AnyLayout(HStackLayout(spacing: SabqLayout.space4))
+                authorLayout {
+                    NavigationLink(value: AuthorRoute(name: displayArticle.author)) {
+                        HStack(spacing: 3) {
+                            Text(displayArticle.author)
+                                .font(SabqType.label)
+                                .foregroundStyle(SabqTheme.ink)
+                                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+                            if displayArticle.isAuthorVerified {
+                                Image(systemName: "checkmark.seal.fill")
+                                    .font(.system(size: 10, weight: .semibold))
+                                    .foregroundStyle(SabqTheme.primaryEnd)
+                            }
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .frame(minHeight: SabqLayout.touchTarget, alignment: .leading)
+                    .layoutPriority(1)
+
+                    if !dynamicTypeSize.isAccessibilitySize {
+                        Text("·").accessibilityHidden(true)
+                    }
+                    Text(reporterTitle ?? displayArticle.authorRole ?? "كاتب الخبر")
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+                        .truncationMode(.tail)
+                }
+                .font(SabqType.caption)
+                .foregroundStyle(SabqTheme.secondaryInk)
+
+                publicationSummary
+                    .accessibilityLabel(publicationAccessibilityLabel)
+
+                // «آخر تحديث» سطر ظاهر كما في الويب (#1598) لا خلف قائمة؛ يُقرأ من
+                // `seoMetadata.editorialModifiedAt` فقط فلا يظهر بلا تعديل تحريري.
+                if let updated = displayArticle.lastUpdatedLabel {
+                    HStack(spacing: 3) {
+                        Image(systemName: "arrow.triangle.2.circlepath")
+                            .font(.system(size: 9, weight: .regular))
+                            .accessibilityHidden(true)
+                        Text("آخر تحديث: \(updated)")
+                            .monospacedDigit()
+                            .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+                    }
+                .font(SabqType.caption)
+                    .foregroundStyle(SabqTheme.secondaryInk)
+                    .accessibilityLabel("آخر تحديث \(updated)")
+                }
             }
-            .buttonStyle(.plain)
-            .layoutPriority(2)
-
-            Text("·")
-                .font(SabqFonts.app(size: 11))
-                .foregroundStyle(SabqTheme.tertiaryInk.opacity(0.6))
-
-            Text(article.readingTime)
-                .font(SabqFonts.app(size: 11, weight: .regular))
-                .foregroundStyle(SabqTheme.tertiaryInk)
-                .monospacedDigit()
-                .lineLimit(1)
-                .layoutPriority(1)
-
-            Text("·")
-                .font(SabqFonts.app(size: 11))
-                .foregroundStyle(SabqTheme.tertiaryInk.opacity(0.6))
-
-            Text(article.dateFormatted)
-                .font(SabqFonts.app(size: 11, weight: .regular))
-                .foregroundStyle(SabqTheme.tertiaryInk)
-                .lineLimit(1)
-                .minimumScaleFactor(0.85)
-                .layoutPriority(3)
-
-            Spacer(minLength: 0)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    private var publicationSummary: some View {
+        // U+200F في أول السطر: التاريخ يبدأ برقم («9 أكتوبر») فيُقرأ السطر LTR
+        // وينقلب ترتيب العناصر الثلاثة بلا علامة اتجاه عربية.
+        Text("\u{200F}\(displayArticle.publicationDate) · \(displayArticle.publicationClock) · \(displayArticle.readingLabel)")
+                .font(SabqType.caption)
+        .foregroundStyle(SabqTheme.secondaryInk)
+        .monospacedDigit()
+        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+        .fixedSize(horizontal: false, vertical: true)
+        .accessibilityElement(children: .ignore)
+    }
+
+    private var publicationAccessibilityLabel: String {
+        "نُشر في \(displayArticle.publicationDate) \(displayArticle.publicationClock)، \(displayArticle.readingLabel)"
+    }
+
     // MARK: - Action Bar
 
-    // Bar trimmed to 4 calmer buttons: مشاركة / حفظ / Aa / قراءة.
-    // Passport is reachable from the inline pill above; copy-link lives
-    // inside the iOS share sheet.
+    // شريط الإجراءات أسفل النص: أدوات القراءة فقط («تنسيق» و«قراءة»).
+    // المشاركة والحفظ والإعجاب في شريط التنقل الأصلي (#1642) ولا تتكرر هنا.
     private var actionBar: some View {
         HStack(spacing: 0) {
             Button {
                 SabqHaptics.light()
-                shareArticle()
-            } label: {
-                actionButton(icon: "square.and.arrow.up", label: "مشاركة")
-            }
-            .buttonStyle(.plain)
-
-            Divider().frame(height: 28)
-
-            Button {
-                SabqHaptics.medium()
-                bookmarksStore.toggle(displayArticle.id, article: displayArticle)
-            } label: {
-                actionButton(
-                    icon: bookmarksStore.isBookmarked(displayArticle.id) ? "bookmark.fill" : "bookmark",
-                    label: bookmarksStore.isBookmarked(displayArticle.id) ? "تم الحفظ" : "حفظ",
-                    isActive: bookmarksStore.isBookmarked(displayArticle.id)
-                )
-            }
-            .buttonStyle(.plain)
-
-            Divider().frame(height: 28)
-
-            Button {
-                SabqHaptics.light()
                 showReaderControls = true
             } label: {
-                actionButton(icon: "textformat.size", label: "تنسيق")
+                actionButton(glyph: "Aa", label: "تنسيق")
             }
             .buttonStyle(.plain)
 
@@ -890,19 +1035,8 @@ struct ArticleDetailView: View {
             }
             .buttonStyle(.plain)
         }
-        .padding(.vertical, 8)
-        .background(
-            RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                .fill(.ultraThinMaterial)
-                .overlay(
-                    RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                        .fill(SabqTheme.paleFill.opacity(0.4))
-                )
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                .stroke(SabqTheme.outline.opacity(0.4), lineWidth: 0.5)
-        )
+        .padding(.vertical, 4)
+        .sabqBlockSurface(SabqTheme.publicSurface)
         .sheet(isPresented: $isPassportPresented) {
             if let slug = article.slug {
                 PassportSheetView(slug: slug)
@@ -917,16 +1051,24 @@ struct ArticleDetailView: View {
         }
     }
 
-    private func actionButton(icon: String, label: String, isActive: Bool = false) -> some View {
+    /// `glyph`: نص بدل رمز النظام — `textformat.size` يتعرّب في الواجهة العربية
+    /// فيظهر «ﻉﻉ» حروفًا مفككة.
+    private func actionButton(icon: String? = nil, glyph: String? = nil, label: String, isActive: Bool = false) -> some View {
         HStack(spacing: 6) {
-            Image(systemName: icon)
-                .font(SabqFonts.app(size: 16, weight: .semibold))
+            if let glyph {
+                Text(glyph)
+                    .font(.system(size: 15, weight: .semibold))
+                    .environment(\.layoutDirection, .leftToRight)
+            } else if let icon {
+                Image(systemName: icon)
+                    .font(SabqFonts.app(size: 16, weight: .semibold))
+            }
             Text(label)
-                .font(SabqFonts.app(size: 10, weight: .regular))
+                .font(SabqType.label)
         }
         .foregroundStyle(isActive ? SabqTheme.primaryEnd : SabqTheme.secondaryInk)
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity, minHeight: SabqLayout.touchTarget)
+        .padding(.vertical, SabqLayout.space8)
     }
 
     // MARK: - Title
@@ -934,7 +1076,10 @@ struct ArticleDetailView: View {
     private var articleTitle: some View {
         SabqRTLText(
             displayArticle.title,
-            uiFont: SabqFonts.uiHeadline(size: CGFloat(fontSize + 8)),
+            // The UIKit bridge remains the source of truth for mixed-script
+            // Arabic/Latin wrapping; its UIFontMetrics scaling preserves AX
+            // sizes while the token keeps the title hierarchy consistent.
+            uiFont: SabqFonts.uiHeadline(size: CGFloat(fontSize + 4)),
             color: SabqTheme.ink,
             lineLimit: 0,
             lineSpacing: 3
@@ -1116,9 +1261,8 @@ struct ArticleDetailView: View {
                     .padding(.vertical, 5)
                     .background(
                         Capsule(style: .continuous)
-                            .fill(SabqTheme.primaryEnd)
+                            .fill(SabqTheme.actionFill)
                     )
-                    .shadow(color: SabqTheme.primaryEnd.opacity(0.4), radius: 5, y: 2)
                     .padding(12)
             }
         }
@@ -1199,12 +1343,21 @@ struct ArticleDetailView: View {
                 // tweet/video). Honours the Aa controls live. Parse result
                 // is memoised in `cachedBlocks` so the heavy regex/scanner
                 // work only runs on the first render of a new article.
-                let blocks: [ArticleBlock] = {
-                    if cachedBlocks.html == html { return cachedBlocks.items }
-                    let parsed = ArticleHtmlParser.parse(html)
-                    DispatchQueue.main.async { cachedBlocks = (html, parsed) }
-                    return parsed
-                }()
+                // التحليل لم يعد يجري داخل body على MainActor (كان يجمّد حركة
+                // الدفع في المقالات الطويلة — تدقيق 2026-08-02): task(id:) أدناه
+                // يحلّل خارج الخيط الرئيسي ويملأ cachedBlocks، وbody يقرأ فقط.
+                let blocks: [ArticleBlock] = cachedBlocks.html == html ? cachedBlocks.items : []
+                if blocks.isEmpty {
+                    ProgressView()
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 28)
+                        .task(id: html) {
+                            let parsed = await Task.detached(priority: .userInitiated) {
+                                ArticleHtmlParser.parse(html)
+                            }.value
+                            if !Task.isCancelled { cachedBlocks = (html, parsed) }
+                        }
+                }
                 ArticleContentView(
                     blocks: blocks,
                     fontSize: fontSize,
@@ -1290,6 +1443,7 @@ struct ArticleDetailView: View {
     private func shareArticle() {
         Task {
             let url = await prepareShareURL()
+            SabqAnalytics.shareIntent(articleId: displayArticle.id)
             presentShareSheet(with: url)
         }
     }
@@ -1307,7 +1461,10 @@ struct ArticleDetailView: View {
 
     @MainActor
     private func presentShareSheet(with url: URL) {
-        SabqShareHelper.presentShareSheet(with: url)
+        let articleId = displayArticle.id
+        SabqShareHelper.presentShareSheet(with: url) { completed in
+            if completed { SabqAnalytics.shareCompleted(articleId: articleId, stage: "ios_completion") }
+        }
     }
 
     // MARK: - Tags
@@ -1315,20 +1472,24 @@ struct ArticleDetailView: View {
     private var tagsSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("الوسوم")
-                .font(SabqFonts.app(size: 14, weight: .bold))
-                .foregroundStyle(SabqTheme.secondaryInk)
+                .font(SabqFonts.app(size: 15, weight: .bold))
+                .foregroundStyle(SabqTheme.ink)
 
             FlowLayout(spacing: 8) {
                 ForEach(displayTags, id: \.self) { tag in
                     NavigationLink(value: KeywordRoute(keyword: tag)) {
                         Text(tag)
-                            .font(SabqFonts.app(size: 12, weight: .medium))
-                            .foregroundStyle(SabqTheme.primaryStart)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 7)
+                            .font(SabqFonts.app(size: 13, weight: .medium))
+                            .foregroundStyle(SabqTheme.secondaryInk)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
                             .background(
-                                Capsule(style: .continuous)
-                                    .fill(SabqTheme.primaryEnd.opacity(0.08))
+                                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                    .fill(SabqTheme.publicSurface)
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                    .stroke(SabqTheme.outline, lineWidth: 1)
                             )
                     }
                     .buttonStyle(.plain)
@@ -1339,80 +1500,62 @@ struct ArticleDetailView: View {
 
     // MARK: - Related Articles
 
+    // الحاوية الموحدة (نقل الويب #1610/#1612): سطح أزرق فاتح، عنوان واحد،
+    // صفوف بشكل بطاقة الخبر المضغوطة 104×84 بإطار خفيف.
     private var relatedSection: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Divider().foregroundStyle(SabqTheme.outline)
-
-            SectionHeader(
-                title: "أخبار ذات صلة",
-                subtitle: "مقالات مشابهة قد تهمك",
-                icon: "link",
-                tint: SabqTheme.primaryEnd
-            )
-
-            ForEach(relatedArticles.prefix(5)) { related in
+        // تسمية الويب (4ad1892): القائمة آخر ما نُشر في القسم لا تشابهًا.
+        HomeSectionCard(title: "اقرأ أيضًا", context: "آخر ما نُشر في القسم", fill: SabqTheme.publicSurface) {
+            EmptyView()
+        } content: {
+            ForEach(Array(relatedArticles.prefix(5).enumerated()), id: \.element.id) { index, related in
+                if index > 0 { SidebarRowDivider() }
                 NavigationLink(value: related) {
-                    HStack(spacing: 12) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            SabqRTLText(
-                                related.title,
-                                uiFont: SabqFonts.uiApp(size: 14, weight: .semibold),
-                                color: SabqTheme.ink,
-                                lineLimit: 2,
-                                lineSpacing: 2
-                            )
-
-                            Text(related.relativeDate)
-                                .font(SabqFonts.app(size: 10, weight: .regular))
-                                .foregroundStyle(SabqTheme.tertiaryInk)
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-
-                        if let urlStr = related.imageURL, let url = URL(string: urlStr) {
-                            CachedAsyncImage(url: url, contentMode: .fill) {
-                                relatedPlaceholder(related)
-                            }
-                            .frame(width: 56, height: 56)
-                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                        } else {
-                            relatedPlaceholder(related)
-                        }
-                    }
-                    .padding(.vertical, 4)
+                    SidebarArticleRow(
+                        title: related.title,
+                        imageURL: related.imageURL,
+                        date: related.relativeDate,
+                        placeholderIcon: related.category.icon,
+                        placeholderTint: related.category.tint
+                    )
                 }
                 .buttonStyle(.plain)
-
-                if related.id != relatedArticles.prefix(5).last?.id {
-                    Divider().foregroundStyle(SabqTheme.outline.opacity(0.5))
-                }
             }
         }
     }
 
-    private func relatedPlaceholder(_ article: Article) -> some View {
-        RoundedRectangle(cornerRadius: 12, style: .continuous)
-            .fill(article.category.tint.opacity(0.1))
-            .frame(width: 56, height: 56)
-            .overlay {
-                Image(systemName: article.category.icon)
-                    .font(SabqFonts.app(size: 18, weight: .light))
-                    .foregroundStyle(article.category.tint.opacity(0.4))
+    /// «مقالات قد تهمك»: مقالات رأي من تصنيف الخبر — صورة الكاتب الصغيرة قبل
+    /// اسمه وبلا توقيت (تُقرأ كقائمة كتّاب لا خطًّا زمنيًا)، ومقال الرأي بلا
+    /// صورة يعرض صورة الكاتب داخل الإطار نفسه. نقل الويب #1609/#1624.
+    private var relatedOpinionsSection: some View {
+        HomeSectionCard(title: "مقالات قد تهمك", context: "من \(displayArticle.categoryTitle)", fill: SabqTheme.publicSurface) {
+            NavigationLink(value: OpinionsRoute()) {
+                HomeSectionLinkLabel(title: "المزيد")
             }
+            .buttonStyle(.plain)
+        } content: {
+            ForEach(Array(relatedOpinions.prefix(5).enumerated()), id: \.element.id) { index, opinion in
+                if index > 0 { SidebarRowDivider() }
+                NavigationLink(value: opinion) {
+                    SidebarArticleRow(
+                        title: opinion.title,
+                        // مقال بلا صورة (أو بصورة فارغة) يعرض صورة الكاتب داخل الإطار نفسه
+                        imageURL: opinion.imageURL.flatMap { $0.isEmpty ? nil : $0 } ?? opinion.authorImageURL,
+                        byline: opinion.authorName.isEmpty ? "كاتب رأي" : opinion.authorName,
+                        bylineAvatarURL: opinion.authorImageURL,
+                        placeholderIcon: "text.quote"
+                    )
+                }
+                .buttonStyle(.plain)
+            }
+        }
     }
 
     // MARK: - Comments
 
     @ViewBuilder
     private func commentsSection(store: CommentsStore) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Divider().foregroundStyle(SabqTheme.outline)
-
-            SectionHeader(
-                title: "التعليقات",
-                subtitle: commentsSubtitle(for: store),
-                icon: "bubble.left.and.bubble.right.fill",
-                tint: SabqTheme.teal
-            )
+        VStack(alignment: .leading, spacing: 12) {
+            HomeSectionHeader(title: "التعليقات", context: commentsSubtitle(for: store))
 
             if let feedback = commentFeedback {
                 commentFeedbackBanner(feedback)
@@ -1442,6 +1585,10 @@ struct ArticleDetailView: View {
 
             commentsList(store: store)
         }
+        .padding(.horizontal, 16)
+        .padding(.top, 16)
+        .padding(.bottom, 6)
+        .sabqBlockSurface(SabqTheme.publicSurface)
         .sheet(isPresented: $showLoginForCommentSheet) {
             LoginSheet()
         }
@@ -1471,44 +1618,47 @@ struct ArticleDetailView: View {
         } else {
             LazyVStack(alignment: .leading, spacing: 6) {
                 ForEach(store.comments) { comment in
+                    if comment.id != store.comments.first?.id {
+                        SidebarRowDivider()
+                    }
                     CommentRow(comment: comment) { tapped in
                         store.replyingTo = tapped
                     }
-                    Divider().foregroundStyle(SabqTheme.outline.opacity(0.4))
                 }
             }
         }
     }
 
+    /// دعوة الدخول سطر واحد بزر مستطيل (نموذج صفحة الخبر المعتمد 2026-10-09).
     private var signInPromptCard: some View {
-        VStack(spacing: 10) {
-            Image(systemName: "person.crop.circle.badge.plus")
-                .font(SabqFonts.app(size: 26, weight: .light))
-                .foregroundStyle(SabqTheme.primaryEnd)
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: SabqLayout.space12))
+            : AnyLayout(HStackLayout(spacing: SabqLayout.space12))
+        return layout {
             Text("سجّل دخولك لإضافة تعليق")
-                .font(SabqFonts.app(size: 14, weight: .semibold))
-                .foregroundStyle(SabqTheme.ink)
+                .font(SabqFonts.app(size: 14, weight: .medium))
+                .foregroundStyle(SabqTheme.secondaryInk)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 8)
             Button {
                 SabqHaptics.light()
                 showLoginForCommentSheet = true
             } label: {
                 Text("تسجيل الدخول")
-                    .font(SabqFonts.app(size: 12, weight: .medium))
+                    .font(SabqFonts.app(size: 13, weight: .semibold))
                     .foregroundStyle(.white)
-                    .padding(.horizontal, 18)
-                    .padding(.vertical, 8)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 7)
+                    .frame(minHeight: SabqLayout.touchTarget)
                     .background(
-                        Capsule().fill(SabqTheme.primaryEnd)
+                        RoundedRectangle(cornerRadius: 8, style: .continuous).fill(SabqTheme.actionFill)
                     )
             }
             .buttonStyle(.plain)
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 18)
-        .background(
-            RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
-                .fill(SabqTheme.paleFill)
-        )
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .sabqBlockSurface()
     }
 
     private var commentEmptyState: some View {
@@ -1876,7 +2026,7 @@ struct WeeklyPhotosLightbox: View {
                                 .padding(.vertical, 6)
                                 .background(
                                     Capsule(style: .continuous)
-                                        .fill(SabqTheme.primaryEnd)
+                                        .fill(SabqTheme.actionFill)
                                 )
                                 .shadow(color: .black.opacity(0.4), radius: 6, y: 2)
                             Spacer()

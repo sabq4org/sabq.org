@@ -198,6 +198,19 @@ export const PERMISSION_CODES = {
   MUQTARAB_OWN_TOPIC_CREATE: "muqtarab.own.topic.create",
   MUQTARAB_OWN_TOPIC_EDIT: "muqtarab.own.topic.edit",
   MUQTARAB_OWN_TOPIC_SUBMIT: "muqtarab.own.topic.submit",
+
+  // Social Publishing (X) - النشر الاجتماعي على منصة X
+  SOCIAL_PUBLISH_VIEW: "social_publish.view",
+  SOCIAL_PUBLISH_CREATE: "social_publish.create",
+  SOCIAL_PUBLISH_AI_GENERATE: "social_publish.ai_generate",
+  SOCIAL_PUBLISH_NOW: "social_publish.publish_now",
+  SOCIAL_PUBLISH_SCHEDULE: "social_publish.schedule",
+  SOCIAL_PUBLISH_MANAGE_SCHEDULED: "social_publish.manage_scheduled",
+  SOCIAL_PUBLISH_VIEW_LOG: "social_publish.view_log",
+  SOCIAL_PUBLISH_MANAGE_ACCOUNTS: "social_publish.manage_accounts",
+
+  // مواعيدك — تحرير الصفحة العامة /mawaeed. الأدمن يمر عبر "*".
+  MAWAEED_EDIT: "mawaeed.edit",
 } as const;
 
 // Role to permissions mapping (for UI display)
@@ -267,6 +280,14 @@ export const ROLE_PERMISSIONS_MAP: Record<string, string[]> = {
     PERMISSION_CODES.DASHBOARD_VIEW_VISITORS,
     // Breaking News Ticker
     PERMISSION_CODES.BREAKING_TICKER_MANAGE,
+    // Social Publishing — المحرر ينشر ويجدول على X (بلا إدارة الحسابات)
+    PERMISSION_CODES.SOCIAL_PUBLISH_VIEW,
+    PERMISSION_CODES.SOCIAL_PUBLISH_CREATE,
+    PERMISSION_CODES.SOCIAL_PUBLISH_AI_GENERATE,
+    PERMISSION_CODES.SOCIAL_PUBLISH_NOW,
+    PERMISSION_CODES.SOCIAL_PUBLISH_SCHEDULE,
+    PERMISSION_CODES.SOCIAL_PUBLISH_MANAGE_SCHEDULED,
+    PERMISSION_CODES.SOCIAL_PUBLISH_VIEW_LOG,
     // اجتماعات سبق — أكواد نصية كنمط hr أدناه
     "meetings.view",
     "meetings.create",
@@ -299,6 +320,14 @@ export const ROLE_PERMISSIONS_MAP: Record<string, string[]> = {
     PERMISSION_CODES.CATEGORIES_VIEW,
     PERMISSION_CODES.DASHBOARD_VIEW,
     PERMISSION_CODES.BREAKING_TICKER_MANAGE,
+    // Social Publishing — مدير المحتوى ينشر ويجدول على X
+    PERMISSION_CODES.SOCIAL_PUBLISH_VIEW,
+    PERMISSION_CODES.SOCIAL_PUBLISH_CREATE,
+    PERMISSION_CODES.SOCIAL_PUBLISH_AI_GENERATE,
+    PERMISSION_CODES.SOCIAL_PUBLISH_NOW,
+    PERMISSION_CODES.SOCIAL_PUBLISH_SCHEDULE,
+    PERMISSION_CODES.SOCIAL_PUBLISH_MANAGE_SCHEDULED,
+    PERMISSION_CODES.SOCIAL_PUBLISH_VIEW_LOG,
     "meetings.view",
   ],
 
@@ -511,6 +540,16 @@ export const PERMISSION_LABELS_AR: Record<string, string> = {
   [PERMISSION_CODES.MUQTARAB_OWN_TOPIC_CREATE]: "إضافة موضوع في زاويتي",
   [PERMISSION_CODES.MUQTARAB_OWN_TOPIC_EDIT]: "تعديل مواضيع زاويتي",
   [PERMISSION_CODES.MUQTARAB_OWN_TOPIC_SUBMIT]: "إرسال موضوع لمراجعة الإدارة",
+
+  // Social Publishing - النشر الاجتماعي على X
+  [PERMISSION_CODES.SOCIAL_PUBLISH_VIEW]: "عرض واجهة النشر الاجتماعي",
+  [PERMISSION_CODES.SOCIAL_PUBLISH_CREATE]: "إنشاء مسودة منشور اجتماعي",
+  [PERMISSION_CODES.SOCIAL_PUBLISH_AI_GENERATE]: "توليد نص المنشور بالذكاء",
+  [PERMISSION_CODES.SOCIAL_PUBLISH_NOW]: "النشر الفوري على X",
+  [PERMISSION_CODES.SOCIAL_PUBLISH_SCHEDULE]: "جدولة منشور على X",
+  [PERMISSION_CODES.SOCIAL_PUBLISH_MANAGE_SCHEDULED]: "تعديل/إلغاء المنشورات المجدولة",
+  [PERMISSION_CODES.SOCIAL_PUBLISH_VIEW_LOG]: "عرض سجل النشر الاجتماعي",
+  [PERMISSION_CODES.SOCIAL_PUBLISH_MANAGE_ACCOUNTS]: "إدارة حسابات المنصات وربطها",
 };
 
 // Helper function to get all permissions for given roles.
@@ -547,34 +586,62 @@ export const ROLE_PERMISSION_DENY_MAP: Record<string, readonly string[]> = {
     "meetings.create",
     PERMISSION_CODES.VIEW_STAFF_PRODUCTIVITY,
   ],
+  [ROLE_NAMES.OPINION_AUTHOR]: [
+    PERMISSION_CODES.ARTICLES_PUBLISH,
+    PERMISSION_CODES.ARTICLES_SCHEDULE,
+    PERMISSION_CODES.ARTICLES_UNPUBLISH,
+    PERMISSION_CODES.ARTICLES_EDIT_ANY,
+    PERMISSION_CODES.ARTICLES_DELETE,
+    PERMISSION_CODES.ARTICLES_ARCHIVE,
+    PERMISSION_CODES.ARTICLES_FEATURE,
+    PERMISSION_CODES.OPINION_PUBLISH,
+    PERMISSION_CODES.OPINION_REVIEW,
+    PERMISSION_CODES.OPINION_REJECT,
+    PERMISSION_CODES.OPINION_EDIT_ANY,
+    PERMISSION_CODES.OPINION_DELETE_ANY,
+  ],
+  [ROLE_NAMES.REPORTER]: [
+    PERMISSION_CODES.ARTICLES_PUBLISH,
+    PERMISSION_CODES.ARTICLES_SCHEDULE,
+    PERMISSION_CODES.ARTICLES_UNPUBLISH,
+    PERMISSION_CODES.ARTICLES_EDIT_ANY,
+    PERMISSION_CODES.ARTICLES_DELETE,
+    PERMISSION_CODES.ARTICLES_ARCHIVE,
+    PERMISSION_CODES.ARTICLES_FEATURE,
+  ],
 };
 
-/** يستبعد صلاحيات ROLE_PERMISSION_DENY_MAP من قائمة فعّالة حسب أدوار المستخدم. */
+/** يستبعد صلاحيات ROLE_PERMISSION_DENY_MAP من قائمة فعّالة حسب أدوار المستخدم (مع الحفاظ على ما يمنحه دور آخر صراحةً في الكود). */
 export function denyPermissionsForRoles(
   roleNames: string[],
   permissions: string[],
 ): string[] {
   if (permissions.includes("*")) return permissions;
 
+  const codeGranted = new Set(getPermissionsForRoles(roleNames));
   const denied = new Set<string>();
   for (const roleName of roleNames) {
     for (const code of ROLE_PERMISSION_DENY_MAP[roleName] || []) {
-      denied.add(code);
+      if (!codeGranted.has(code)) {
+        denied.add(code);
+      }
     }
   }
   if (denied.size === 0) return permissions;
   return permissions.filter((code) => !denied.has(code));
 }
 
-/** دمج صلاحيات DB مع خريطة الكود ثم تطبيق الاستبعادات الصريحة للدور. */
+/** دمج المنح ثم تطبيق استبعادات الدور والمنع الفردي؛ عقد الأدمن "*" يبقى كما هو. */
 export function resolveEffectivePermissions(
   roleNames: string[],
   dbPermissions: string[] = [],
+  deniedPermissionCodes: string[] = [],
 ): string[] {
   const codePerms = getPermissionsForRoles(roleNames);
   if (codePerms.includes("*")) return ["*"];
   const merged = [...new Set([...dbPermissions, ...codePerms])];
-  return denyPermissionsForRoles(roleNames, merged);
+  const denied = new Set(deniedPermissionCodes);
+  return denyPermissionsForRoles(roleNames, merged).filter(code => !denied.has(code));
 }
 
 // Roles that grant full superuser via getUserPermissions' name check — assigning

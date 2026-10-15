@@ -1604,7 +1604,10 @@ html[data-dashboard-theme] .text-indigo-600,
   }
 
   .rich-text-editor {
-    overflow: hidden;
+    /* overflow: visible عمداً — hidden/clip هنا يمنع شريط الأدوات اللاصق من
+       العمل داخل حاوية التمرير على iOS Safari. الزوايا المدوّرة تُحفظ عبر
+       الشريط (أعلى) والسطح (أسفل) بدل القص. */
+    overflow: visible;
     background-color: hsl(var(--editor-background));
     border-color: hsl(var(--editor-border));
     color: hsl(var(--editor-foreground));
@@ -1619,6 +1622,32 @@ html[data-dashboard-theme] .text-indigo-600,
   .rich-text-editor__toolbar {
     background-color: hsl(var(--editor-toolbar));
     border-color: hsl(var(--editor-border));
+    border-start-start-radius: inherit;
+    border-start-end-radius: inherit;
+  }
+
+  .rich-text-editor__surface {
+    border-end-start-radius: inherit;
+    border-end-end-radius: inherit;
+  }
+
+  /* على الجوال: صف واحد قابل للتمرير أفقياً بدل 3-4 صفوف ملفوفة تأكل الشاشة
+     وهي لاصقة أعلى المحرر. */
+  @media (max-width: 639px) {
+    .rich-text-editor__toolbar {
+      flex-wrap: nowrap;
+      overflow-x: auto;
+      overflow-y: hidden;
+      overscroll-behavior-x: contain;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+    }
+    .rich-text-editor__toolbar::-webkit-scrollbar {
+      display: none;
+    }
+    .rich-text-editor__toolbar > * {
+      flex-shrink: 0;
+    }
   }
 
   .rich-text-editor__surface,
@@ -3020,6 +3049,94 @@ html[data-dashboard-theme] .text-indigo-600,
   height: auto;
 }
 
+/* ===== صور المقالات: المحاذاة والتفاف النص (Float & Wrap) ===== */
+.prose img.sabq-image--right,
+.prose img[data-align="right"],
+.prose img[align="right"],
+.prose img[style*="float: right"],
+.prose img[style*="float:right"],
+.prose .sabq-image--right {
+  float: right !important;
+  display: inline-block !important;
+  max-width: 100%;
+  height: auto;
+  margin-inline-start: 0 !important;
+  margin-inline-end: 1.5rem !important;
+  margin-block-start: 0.5rem !important;
+  margin-block-end: 1rem !important;
+  border-radius: 0.5rem;
+  clear: none;
+}
+
+.prose img.sabq-image--left,
+.prose img[data-align="left"],
+.prose img[align="left"],
+.prose img[style*="float: left"],
+.prose img[style*="float:left"],
+.prose .sabq-image--left {
+  float: left !important;
+  display: inline-block !important;
+  max-width: 100%;
+  height: auto;
+  margin-inline-start: 1.5rem !important;
+  margin-inline-end: 0 !important;
+  margin-block-start: 0.5rem !important;
+  margin-block-end: 1rem !important;
+  border-radius: 0.5rem;
+  clear: none;
+}
+
+.prose img.sabq-image--center,
+.prose img[data-align="center"],
+.prose .sabq-image--center {
+  float: none !important;
+  display: block !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+  margin-top: 1.5rem !important;
+  margin-bottom: 1.5rem !important;
+  max-width: 100%;
+  height: auto;
+  border-radius: 0.5rem;
+  clear: both;
+}
+
+/* في الشاشات الصغيرة، نضمن عدم تضييق النص بشكل مفرط */
+@media (max-width: 640px) {
+  .prose img.sabq-image--right,
+  .prose img[data-align="right"],
+  .prose img.sabq-image--left,
+  .prose img[data-align="left"] {
+    max-width: 55% !important;
+    margin-inline-end: 1rem !important;
+  }
+}
+
+/* تفاعل محاذاة الصور داخل محرر TipTap */
+.rich-text-editor__content .sabq-editor-image-wrapper[data-align="right"] {
+  float: right;
+  margin-inline-start: 0;
+  margin-inline-end: 1.5rem;
+  margin-block-start: 0.5rem;
+  margin-block-end: 1rem;
+  clear: none;
+}
+
+.rich-text-editor__content .sabq-editor-image-wrapper[data-align="left"] {
+  float: left;
+  margin-inline-start: 1.5rem;
+  margin-inline-end: 0;
+  margin-block-start: 0.5rem;
+  margin-block-end: 1rem;
+  clear: none;
+}
+
+.rich-text-editor__content .sabq-editor-image-wrapper[data-align="center"] {
+  float: none;
+  margin: 1.5rem auto;
+  clear: both;
+}
+
 /*
  * Paragraph spacing in article bodies. Tailwind Typography's defaults
  * sit at 1.25em which reads cramped at our prose-lg size — bumped to
@@ -3387,4 +3504,228 @@ html[data-dashboard-theme] .text-indigo-600,
 .wc-round:not(.is-last) .wc-slot:nth-child(even)::before {
   top: 0;
   height: 50%;
+}
+
+/* ——— زر واتساب داخل المقال (هوية واتساب) ——— */
+.whatsapp-cta-card {
+  margin: 1.25rem 0;
+  border-radius: 1rem;
+  overflow: hidden;
+  background: linear-gradient(135deg, #25d366 0%, #128c7e 100%);
+  box-shadow: 0 8px 24px rgba(18, 140, 126, 0.22);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.whatsapp-cta-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 28px rgba(18, 140, 126, 0.3);
+}
+.whatsapp-cta-card .whatsapp-cta-link,
+a.whatsapp-cta-card .whatsapp-cta-link {
+  display: flex;
+  align-items: center;
+  gap: 0.875rem;
+  padding: 1rem 1.15rem;
+  color: #fff !important;
+  text-decoration: none !important;
+  font-weight: 700;
+}
+.whatsapp-cta-glyph {
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.18);
+  flex-shrink: 0;
+  display: inline-block;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='white'%3E%3Cpath d='M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.435 9.884-9.85 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 1.35rem 1.35rem;
+}
+.whatsapp-cta-icon-wrap {
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.18);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.whatsapp-cta-icon {
+  width: 1.4rem;
+  height: 1.4rem;
+  color: #fff;
+}
+.whatsapp-cta-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+  flex: 1;
+  text-align: start;
+}
+.whatsapp-cta-text {
+  font-size: 1rem;
+  line-height: 1.35;
+  color: #fff !important;
+}
+.whatsapp-cta-phone {
+  font-size: 0.8rem;
+  font-weight: 500;
+  opacity: 0.9;
+  color: #fff !important;
+}
+.whatsapp-cta-chevron {
+  font-size: 1.4rem;
+  opacity: 0.85;
+  line-height: 1;
+}
+/* محرّر TipTap: معاينة الكتلة */
+.ProseMirror .whatsapp-cta-card {
+  cursor: default;
+  user-select: none;
+}
+
+/* ===== بلوك «سؤال وجواب» للحوارات الصحفية =====
+ * يُدرج من زر «س/ج» في المحرر. classes فقط (بلا style/data-*)
+ * حتى يظهر مطابقًا في صفحة المقال SPA وفي نسخة SSR (web-next).
+ * أي تعديل هنا يجب مزامنته مع web-next/app/globals.css. */
+.prose .qa-block {
+  margin: 1.75em 0;
+}
+.prose .qa-block .qa-q {
+  display: flex;
+  gap: 0.8rem;
+  align-items: flex-start;
+  margin: 0 0 0.7em;
+}
+.prose .qa-block .qa-mark {
+  flex: none;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 9999px;
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+  font-size: 0.85rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 0.3rem;
+  user-select: none;
+}
+.prose .qa-block .qa-q-text {
+  flex: 1;
+  min-width: 0;
+  font-weight: 700;
+  font-size: 1.05em;
+  line-height: 1.85;
+  color: hsl(var(--primary));
+  padding-top: 0.15rem;
+}
+.prose .qa-block .qa-a {
+  position: relative;
+  padding-inline-start: 2.8rem;
+}
+.prose .qa-block .qa-a::before {
+  content: "";
+  position: absolute;
+  top: 0.4rem;
+  bottom: 0.4rem;
+  inset-inline-start: 0.95rem;
+  width: 2.5px;
+  border-radius: 2px;
+  background: hsl(var(--border));
+}
+.prose .qa-block .qa-a p {
+  margin-top: 0;
+  margin-bottom: 0.9em;
+}
+.prose .qa-block .qa-a p:last-child {
+  margin-bottom: 0;
+}
+@media (max-width: 640px) {
+  .prose .qa-block .qa-a {
+    padding-inline-start: 0;
+  }
+  .prose .qa-block .qa-a::before {
+    display: none;
+  }
+}
+
+/* محرّر TipTap: مؤشر داخل نص السؤال + placeholder للسؤال الفارغ */
+.ProseMirror .qa-q-text:has(> .ProseMirror-trailingBreak:only-child)::before {
+  content: "اكتب السؤال…";
+  color: hsl(var(--muted-foreground));
+  float: inline-start;
+  height: 0;
+  pointer-events: none;
+}
+
+/* ===== جداول المقالات (sabq-table) =====
+ * تُدرج من زر «جدول» في المحرر. التنسيق كله من هنا — لا خيارات يدوية.
+ * أي تعديل هنا يجب مزامنته مع web-next/app/globals.css. */
+.prose table.sabq-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  margin: 1.5em 0;
+  font-size: 0.95em;
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.6rem;
+  overflow: hidden;
+}
+.prose table.sabq-table th {
+  background: hsl(var(--accent));
+  color: hsl(var(--accent-foreground));
+  font-weight: 700;
+  text-align: start;
+  padding: 0.7rem 1rem;
+  border-bottom: 2px solid hsl(var(--primary));
+  font-size: 0.92em;
+}
+.prose table.sabq-table td {
+  padding: 0.7rem 1rem;
+  border-bottom: 1px solid hsl(var(--border));
+  vertical-align: top;
+  line-height: 1.9;
+}
+.prose table.sabq-table tr:last-child td {
+  border-bottom: none;
+}
+.prose table.sabq-table th p,
+.prose table.sabq-table td p {
+  margin: 0;
+}
+
+/* مظهر «بطاقة تعريفية» — لجداول عمودين مثل قوائم المسارات/المواصفات */
+.prose table.sabq-table--card {
+  border-radius: 0.75rem;
+}
+.prose table.sabq-table--card th {
+  background: transparent;
+  color: hsl(var(--primary));
+  font-size: 0.85em;
+  border-bottom: 1px solid hsl(var(--border));
+  padding: 0.85rem 1rem 0.6rem;
+}
+.prose table.sabq-table--card td:first-child {
+  font-weight: 700;
+  color: hsl(var(--primary));
+  width: 9.5rem;
+}
+
+/* محرّر TipTap: تمرير أفقي للجدول وتظليل الخلايا المحددة */
+.ProseMirror .tableWrapper {
+  overflow-x: auto;
+}
+.ProseMirror table.sabq-table .selectedCell {
+  position: relative;
+}
+.ProseMirror table.sabq-table .selectedCell::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: hsl(var(--primary) / 0.12);
+  pointer-events: none;
 }

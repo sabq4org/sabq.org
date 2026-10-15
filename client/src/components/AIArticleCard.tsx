@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { Link } from "wouter";
 import type { ArticleWithDetails } from "@shared/schema";
-import { getObjectPosition } from "@/lib/imageUtils";
+import { getObjectPosition, getArticleDisplayImageUrl } from "@/lib/imageUtils";
 import { formatDistanceToNow } from "date-fns";
 import { arSA } from "date-fns/locale";
 import FollowStoryButton from "./FollowStoryButton";
@@ -70,12 +70,9 @@ export function AIArticleCard({
   const reasonBadge = getReasonBadge(selectionReason);
   const scorePercentage = Math.round(aiScore * 100);
 
-  // For infographic articles, prefer the horizontal banner URL for card display
+  // For infographic articles, prefer the horizontal banner URL, else getArticleDisplayImageUrl
   const getDisplayImageUrl = () => {
-    if (article.articleType === 'infographic' && (article as any).infographicBannerUrl) {
-      return (article as any).infographicBannerUrl;
-    }
-    return article.imageUrl || article.thumbnailUrl;
+    return getArticleDisplayImageUrl(article);
   };
   const displayImageUrl = getDisplayImageUrl();
 

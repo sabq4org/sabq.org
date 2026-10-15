@@ -1,13 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { Target, Handshake } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import type { GcScorer, GcScorersBoard } from "./gcTypes";
+import { GC_SECTION_SCROLL_MT } from "./gcTypes";
 
 /**
  * «الهدّافون وصنّاع اللعب» — منصة تتويج للثلاثة الأوائل + جدول للبقية،
- * وعمود جانبي لصنّاع الأهداف. قبل توفر أرقام 2026 لدى المزوّد تُعرض
- * أرقام خليجي 26 موسومة صراحةً. يختفي القسم كليًا عند غياب البيانات.
+ * وعمود جانبي لصنّاع الأهداف. أرقام خليجي 27 وحدها (لا تُعرض نسخة سابقة)،
+ * ويختفي القسم كليًا قبل تسجيل أول هدف.
  */
 
 function PodiumCard({ scorer, place }: { scorer: GcScorer; place: 1 | 2 | 3 }) {
@@ -51,8 +51,10 @@ export function GcScorersSection() {
     staleTime: 5 * 60_000,
   });
 
-  // صفوف الأصفار ضجيج بصري (تظهر في أرقام الأرشيف) — نعرض المُنتِجين فقط،
-  // وإن خلت قائمة الصنّاع بالكامل يختفي عمودها ويتمدّد الهدّافون.
+  // حماية إضافية: لا نعرض أرقام نسخة سابقة ولو ردّ بها خادم أقدم.
+  if (data && data.isCurrent === false) return null;
+  // صفوف الأصفار ضجيج بصري — نعرض المُنتِجين فقط، وإن خلت قائمة الصنّاع
+  // بالكامل يختفي عمودها ويتمدّد الهدّافون.
   const scorers = (Array.isArray(data?.scorers) ? data.scorers : []).filter((s) => s.goals > 0);
   const assists = (Array.isArray(data?.assists) ? data.assists : []).filter((s) => s.assists > 0);
   if (scorers.length === 0 && assists.length === 0) return null;
@@ -61,15 +63,10 @@ export function GcScorersSection() {
   const rest = scorers.slice(3, 11);
 
   return (
-    <section id="gc-scorers" dir="rtl" className="container max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+    <section id="gc-scorers" dir="rtl" className={`container max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10 ${GC_SECTION_SCROLL_MT}`}>
       <div className="mb-6 flex flex-wrap items-center gap-2">
         <Target className="h-6 w-6 text-sky-600 dark:text-sky-400" />
         <h2 className="text-2xl font-black text-foreground">الهدّافون وصنّاع اللعب</h2>
-        {data && !data.isCurrent && (
-          <Badge variant="outline" className="border-sky-400/50 text-sky-700 dark:text-sky-300">
-            أرقام خليجي 26 — إلى حين انطلاق البطولة
-          </Badge>
-        )}
       </div>
 
       <div className={assists.length > 0 ? "grid gap-6 lg:grid-cols-[1fr_300px]" : ""}>

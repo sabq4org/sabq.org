@@ -11,6 +11,7 @@ import {
   articleEvents,
   articleSeoHistory,
   aiImageGenerations,
+  activityLogs,
   auditLogs,
 } from "@shared/schema";
 import { and, desc, eq, inArray, or } from "drizzle-orm";
@@ -261,23 +262,28 @@ function computeBodyAiTier(params: {
 }
 
 /**
- * Return the count of audit-log entries that represent AI-driven edits to the
+ * Return the count of activity-log entries that represent AI-driven edits to the
  * article (e.g. SEO regeneration, summary/title rewrite, smart classification).
+ *
+ * ملاحظة حوكمة: تعديلات المقالات تُسجَّل في activity_logs (عبر logActivity)؛
+ * جدول audit_logs يكتب فيه نظام الإعلانات فقط. الاستعلام السابق كان يقرأ من
+ * audit_logs فيعيد صفرًا دائمًا، ما بخس نسبة مساهمة الذكاء الاصطناعي في
+ * «جواز المحتوى» وصنّف مقالات محرَّرة آليًا كـ«تحرير بشري».
  */
 async function fetchAiEditCount(articleId: string): Promise<number> {
   const rows = await db
-    .select({ action: auditLogs.action })
-    .from(auditLogs)
+    .select({ action: activityLogs.action })
+    .from(activityLogs)
     .where(
       and(
-        eq(auditLogs.entityType, "article"),
-        eq(auditLogs.entityId, articleId),
+        eq(activityLogs.entityType, "article"),
+        eq(activityLogs.entityId, articleId),
       ),
     )
     .limit(200);
   const AI_EDIT_PATTERN =
     /^(ai[_-]|generate|enhance|smart[_-]|rewrite|translate|summari|auto[_-]|seo[_-]|calendar_ai)/i;
-  return rows.filter((r) => AI_EDIT_PATTERN.test(r.action)).length;
+  return rows.filter((r) => r.action && AI_EDIT_PATTERN.test(r.action)).length;
 }
 
 const URL_PATTERN = /^https?:\/\/[^\s]+$/i;

@@ -88,6 +88,8 @@ export interface AutoImageGenerationRequest {
   language: "ar" | "en" | "ur";
   articleType?: string;
   forceGeneration?: boolean;
+  /** اختيار المحرر لنمط هذه التوليدة — يتقدم على نمط الإعدادات (newsStyle/articleStyle) */
+  styleSlug?: string;
 }
 
 export interface AutoImageGenerationResult {
@@ -97,6 +99,11 @@ export interface AutoImageGenerationResult {
   mediaFileId?: string;
   message?: string;
   error?: string;
+  /**
+   * سبب الفشل: قيود الإعدادات (DISABLED، ARTICLE_TYPE_NOT_ENABLED، CATEGORY_SKIPPED،
+   * MONTHLY_LIMIT_REACHED) أو تصنيف خطأ المزوّد (QUOTA_EXCEEDED، AUTH_ERROR…).
+   */
+  errorCode?: string;
 }
 
 /**
@@ -214,6 +221,7 @@ export async function autoGenerateImage(
     if (!settings.enabled && !request.forceGeneration) {
       return {
         success: false,
+        errorCode: "DISABLED",
         message: "Auto image generation is disabled"
       };
     }
@@ -223,6 +231,7 @@ export async function autoGenerateImage(
         !settings.articleTypes.includes(request.articleType)) {
       return {
         success: false,
+        errorCode: "ARTICLE_TYPE_NOT_ENABLED",
         message: `Auto generation not enabled for ${request.articleType} articles`
       };
     }
@@ -232,6 +241,7 @@ export async function autoGenerateImage(
         settings.skipCategories.includes(request.category)) {
       return {
         success: false,
+        errorCode: "CATEGORY_SKIPPED",
         message: `Auto generation skipped for category ${request.category}`
       };
     }
@@ -239,6 +249,7 @@ export async function autoGenerateImage(
     if (!request.forceGeneration && await isGenerationLimitReached()) {
       return {
         success: false,
+        errorCode: "MONTHLY_LIMIT_REACHED",
         message: "Monthly generation limit reached"
       };
     }
@@ -250,16 +261,18 @@ export async function autoGenerateImage(
     const generationResult = await generateNewsImage({
       articleTitle: request.title,
       articleSummary: request.excerpt || extractSummary(request.content || ""),
+      articleContent: request.content,
       category: request.category || "عام",
       language: request.language,
-      style: resolveStyleForArticleType(request.articleType, settings) as any,
+      style: request.styleSlug || resolveStyleForArticleType(request.articleType, settings),
       mood: "neutral"
     });
     
     if (!generationResult.success || !generationResult.imageUrl) {
       return {
         success: false,
-        error: generationResult.error || "Image generation failed"
+        error: generationResult.error || "Image generation failed",
+        errorCode: generationResult.errorCode
       };
     }
     
@@ -282,22 +295,26 @@ export async function autoGenerateImage(
       caption: AI_DISCLAIMER[request.language],
       keywords: extractKeywords(request.title),
       isAiGenerated: true,
-      aiGenerationModel: settings.provider,
-      aiGenerationPrompt: smartPrompt,
+      // النموذج والبرومبت الفعليان من نتيجة التوليد (كان يُخزَّن smartPrompt
+      // بينما النموذج يستلم برومبتًا آخر — أثر مضلل)
+      aiGenerationModel: generationResult.model || settings.provider,
+      aiGenerationPrompt: generationResult.finalPrompt || smartPrompt,
       category: "articles",
       usedIn: [request.articleId],
       usageCount: 1,
       uploadedBy: userId
     }).returning();
     
+    // بلا updatedAt: هو نسخة الحفظ لدى المحرر (expectedUpdatedAt)، والمحرر المفتوح
+    // يضع الصورة نفسها في نموذجه عبر onImageGenerated فيحفظها مع الحفظ التالي.
+    // رفعه هنا كان يجعل ذلك الحفظ يُرفض بـ«تغير المقال منذ فتحه» (قاعدة 2026-09-24).
     await db.update(articles)
       .set({ 
         imageUrl: generationResult.imageUrl,
         thumbnailUrl: generationResult.thumbnailUrl || generationResult.imageUrl, // Also set thumbnail
         isAiGeneratedImage: true,
-        aiImageModel: settings.provider,
-        aiImagePrompt: smartPrompt,
-        updatedAt: new Date()
+        aiImageModel: generationResult.model || settings.provider,
+        aiImagePrompt: generationResult.finalPrompt || smartPrompt,
       })
       .where(eq(articles.id, request.articleId));
     

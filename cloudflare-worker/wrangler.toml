@@ -3,6 +3,10 @@ main = "seo-404-worker.js"
 compatibility_date = "2024-01-01"
 account_id = ""
 
+[observability]
+enabled = true
+head_sampling_rate = 1
+
 [env.production]
 routes = [
   { pattern = "sabq.org/*", zone_id = "" }

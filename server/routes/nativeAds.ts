@@ -14,6 +14,7 @@ import rateLimit from "express-rate-limit";
 import { cfKeyGenerator, cfValidate } from "../utils/rateLimiting";
 import { objectStorageClient } from "../objectStorage";
 import { setObjectAclPolicy } from "../objectAcl";
+import { paginationOrReject, parsePage, parseLimit } from "../utils/pagination";
 
 const router = Router();
 
@@ -417,9 +418,11 @@ async function getTodaySpendMap(adIds: string[]): Promise<Map<string, number>> {
 
 router.get("/public", async (req: Request, res: Response) => {
   try {
-    const { category, keyword, limit: limitParam } = req.query;
+    const { category, keyword } = req.query;
+    const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 5, maxLimit: 6 });
+    if (!pg) return;
     const now = new Date();
-    const maxLimit = Math.min(parseInt(limitParam as string) || 5, 6);
+    const maxLimit = pg.limit;
 
     let baseConditions = and(
       eq(nativeAds.status, "active"),
@@ -945,8 +948,8 @@ router.get("/analytics", requireAuth, isAdminOrEditor, async (req: Request, res:
 router.get("/", requireAuth, isAdminOrEditor, async (req: Request, res: Response) => {
   try {
     const { status, page = "1", limit = "20" } = req.query;
-    const pageNum = parseInt(page as string);
-    const limitNum = Math.min(parseInt(limit as string), 100);
+    const pageNum = parsePage(page);
+    const limitNum = parseLimit(limit, 20, 100);
     const offset = (pageNum - 1) * limitNum;
 
     let query = db.select().from(nativeAds);

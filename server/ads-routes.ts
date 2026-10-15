@@ -36,6 +36,7 @@ import type {
 } from "@shared/schema";
 import multer from "multer";
 import { ObjectStorageService } from "./objectStorage";
+import { paginationOrReject } from "./utils/pagination";
 
 const router = Router();
 
@@ -3353,7 +3354,9 @@ router.post("/track/impression/:impressionId", async (req, res) => {
 // Returns multiple ads for rotation in the swipe feed
 router.get("/lite-feed", async (req, res) => {
   try {
-    const limit = Math.min(parseInt(req.query.limit as string) || 10, 20);
+    const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 10, maxLimit: 20 });
+    if (!pg) return;
+    const limit = pg.limit;
     const now = new Date();
     
     // Find ALL active placements for lite-feed slot

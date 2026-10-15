@@ -24,7 +24,7 @@ struct ForgotPasswordSheet: View {
 
     private var canSubmitReset: Bool {
         code.count == 6
-            && newPassword.count >= 6
+            && newPassword.count >= 8
             && newPassword == confirmPassword
             && !authStore.isLoading
     }
@@ -51,14 +51,14 @@ struct ForgotPasswordSheet: View {
                 }
                 .padding(20)
             }
+            .sabqNavigationEdge()
             .background(SabqTheme.background)
             .sabqRTL()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button { dismiss() } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(SabqFonts.app(size: 22))
-                            .foregroundStyle(SabqTheme.tertiaryInk)
+                        Label("إغلاق", systemImage: "xmark")
+                            .labelStyle(.iconOnly)
                     }
                 }
             }
@@ -128,7 +128,7 @@ struct ForgotPasswordSheet: View {
         }
 
         textInput(
-            "كلمة المرور الجديدة (٦ أحرف فأكثر)",
+            "كلمة المرور الجديدة (٨ أحرف فأكثر)",
             text: $newPassword,
             isSecure: true,
             contentType: .newPassword

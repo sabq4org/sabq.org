@@ -20,7 +20,7 @@ export function GcHistorySection() {
   const holder = editions.find((e) => !e.upcoming && e.champion);
 
   return (
-    <section id="gc-history" dir="rtl" className="relative overflow-hidden py-12">
+    <section id="gc-history" dir="rtl" className="relative overflow-hidden py-12 scroll-mt-[calc(var(--public-header-height,4rem)+3.75rem)] md:scroll-mt-[calc(var(--public-header-height,4rem)+6.5rem)]">
       <div className="absolute inset-0 bg-gradient-to-bl from-[#041C22] via-[#052830] to-[#0A3D45]" />
       <div className="absolute -top-24 -right-16 h-72 w-72 rounded-full bg-sky-400/10 blur-3xl" />
 

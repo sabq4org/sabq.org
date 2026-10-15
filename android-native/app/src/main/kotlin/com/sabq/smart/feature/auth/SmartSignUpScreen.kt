@@ -385,9 +385,8 @@ private fun TextInputBar(
     val canSubmit = when (step) {
         SmartSignUpViewModel.Step.AskName -> input.trim().isNotEmpty()
         SmartSignUpViewModel.Step.AskEmail -> input.contains('@') && input.contains('.')
-        // Mirrors iOS ≥6 chars. Repo also accepts this; deeper validation
-        // lives server-side.
-        SmartSignUpViewModel.Step.AskPassword -> input.length >= 6
+        // حد الخادم الموحد 8 (passwordPolicy) — القيمة الأدنى هنا يجب أن تطابقه.
+        SmartSignUpViewModel.Step.AskPassword -> input.length >= 8
         else -> false
     }
     val keyboardType = when (step) {
@@ -990,7 +989,7 @@ private suspend fun handleSubmit(
             viewModel.setStep(SmartSignUpViewModel.Step.AskPassword)
         }
         SmartSignUpViewModel.Step.AskPassword -> {
-            if (trimmed.length < 6) return
+            if (trimmed.length < 8) return
             viewModel.setPassword(trimmed)
             viewModel.appendUserBubble("•".repeat(trimmed.length))
             onInputCleared()

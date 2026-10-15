@@ -1,5 +1,7 @@
 # Audio Newsletter System Documentation
 
+> Historical documentation: the audio newsletter product was retired on 2026-07-25. Do not use the old routes, widget, or enablement instructions below. Current email product: [NEWSLETTER_PRODUCT.md](systems/audio-newsletter/NEWSLETTER_PRODUCT.md). Current operating instructions: [OPERATIONS.md](systems/audio-newsletter/OPERATIONS.md).
+
 ## Overview
 
 The Audio Newsletter System provides automated generation and publishing of audio newsletters with Text-to-Speech (TTS) capabilities using ElevenLabs. The system includes scheduling, public access, RSS feed support, and a homepage audio widget.

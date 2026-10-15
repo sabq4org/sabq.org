@@ -1,14 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { motion } from "framer-motion";
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Newspaper, ArrowLeft, Clock } from "lucide-react";
+import { Newspaper, ArrowLeft } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
-import { formatDistanceToNow } from "date-fns";
-import { arSA } from "date-fns/locale";
-import { getObjectPosition } from "@/lib/imageUtils";
-import { buildCloudflareUrl } from "@/lib/cdnImage";
+import { apiUrl } from "@/lib/queryClient";
+import { ArticleSidebarModule } from "@/components/ArticleSidebarModule";
+import { SidebarArticleCard } from "@/components/SidebarArticleCard";
 
 interface NewsArticle {
   id: string;
@@ -19,6 +15,7 @@ interface NewsArticle {
   featuredImage?: string;
   thumbnailUrl?: string;
   publishedAt?: string;
+  updatedAt?: string;
   articleType?: string;
   category?: {
     id: string;
@@ -32,60 +29,17 @@ interface RecentNewsSectionProps {
   limit?: number;
 }
 
-function NewsCard({ article }: { article: NewsArticle }) {
-  const imageUrl = article.imageUrl || article.thumbnailUrl || article.featuredImage;
-  const timeAgo = article.publishedAt 
-    ? formatDistanceToNow(new Date(article.publishedAt), { addSuffix: true, locale: arSA })
-    : null;
-  
-  const articleUrl = `/article/${article.englishSlug || article.slug}`;
-
-  return (
-    <Link href={articleUrl}>
-      <Card 
-        className="hover-elevate active-elevate-2 overflow-hidden group"
-        data-testid={`recent-news-${article.id}`}
-      >
-        <CardContent className="p-3">
-          <div className="flex gap-3">
-            {imageUrl && (
-              <div className="relative w-20 h-16 rounded-md overflow-hidden flex-shrink-0">
-                <img
-                  src={buildCloudflareUrl(imageUrl, { width: 160, height: 128, quality: 85 })}
-                  alt={article.title}
-                  className="w-full h-full object-cover"
-                  style={{ objectPosition: getObjectPosition(article, 'center') }}
-                />
-              </div>
-            )}
-            <div className="flex-1 min-w-0">
-              <h3 className="font-bold text-sm leading-tight line-clamp-2 group-hover:text-primary transition-colors">
-                {article.title}
-              </h3>
-              {timeAgo && (
-                <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
-                  <Clock className="h-3 w-3" />
-                  {timeAgo}
-                </p>
-              )}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-    </Link>
-  );
-}
-
 function LoadingSkeleton() {
   return (
-    <div className="space-y-4">
+    <div className="article-sidebar-module" aria-hidden="true">
       <Skeleton className="h-8 w-48" />
-      <div className="space-y-3">
+      <div className="article-sidebar-module-list mt-4">
         {[1, 2, 3, 4, 5].map((i) => (
-          <div key={i} className="flex gap-3 p-3 border rounded-lg">
-            <Skeleton className="w-20 h-16 rounded-md flex-shrink-0" />
+          <div key={i} className="flex gap-3 rounded-xl border p-3">
+            <Skeleton className="h-20 w-24 shrink-0 rounded-lg" />
             <div className="flex-1 space-y-2">
               <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-4 w-3/4" />
               <Skeleton className="h-3 w-24" />
             </div>
           </div>
@@ -95,6 +49,7 @@ function LoadingSkeleton() {
   );
 }
 
+/** Latest news beside an opinion piece, in the shared sidebar card shape. */
 export function RecentNewsSection({
   excludeArticleId,
   limit = 5,
@@ -109,7 +64,7 @@ export function RecentNewsSection({
       if (excludeArticleId) {
         params.append("excludeId", excludeArticleId);
       }
-      const res = await fetch(`/api/articles/recent?${params}`, {
+      const res = await fetch(apiUrl(`/api/articles/recent?${params}`), {
         credentials: "include",
       });
       if (!res.ok) return { articles: [] };
@@ -118,62 +73,37 @@ export function RecentNewsSection({
     },
   });
 
-  if (isLoading) {
-    return (
-      <section className="py-4" dir="rtl">
-        <LoadingSkeleton />
-      </section>
-    );
-  }
+  if (isLoading) return <LoadingSkeleton />;
 
-  if (!data || data.articles.length === 0) {
-    return null;
-  }
+  const articles = Array.isArray(data?.articles) ? data.articles.slice(0, limit) : [];
+  if (articles.length === 0) return null;
 
   return (
-    <section className="py-4" dir="rtl">
-      <div className="space-y-4">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-1 h-8 rounded-full bg-primary" />
-            <div>
-              <h2 className="text-xl font-bold flex items-center gap-2">
-                <Newspaper className="h-5 w-5 text-primary" />
-                أخبار نُشرت مؤخراً
-              </h2>
-              <p className="text-sm text-muted-foreground mt-0.5">
-                قد تعجبك أيضاً
-              </p>
-            </div>
-          </div>
-          <Link href="/news">
-            <Button 
-              variant="ghost" 
-              size="sm"
-              className="gap-1" 
-              data-testid="button-view-more-news"
-            >
-              المزيد
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-          </Link>
-        </div>
-
-        {/* News List - No numbers */}
-        <div className="space-y-2">
-          {data?.articles?.slice(0, limit).map((article, index) => (
-            <motion.div
-              key={article.id}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.2, delay: index * 0.03 }}
-            >
-              <NewsCard article={article} />
-            </motion.div>
-          ))}
-        </div>
-      </div>
-    </section>
+    <ArticleSidebarModule
+      title="أخبار نُشرت مؤخراً"
+      description="قد تعجبك أيضاً"
+      icon={Newspaper}
+      testId="sidebar-recent-news"
+      action={
+        <Link href="/news" data-testid="button-view-more-news">
+          المزيد <ArrowLeft aria-hidden="true" />
+        </Link>
+      }
+    >
+      {articles.map((article) => (
+        <SidebarArticleCard
+          key={article.id}
+          item={{
+            id: article.id,
+            href: `/article/${article.englishSlug || article.slug}`,
+            title: article.title,
+            imageUrl: article.imageUrl || article.thumbnailUrl || article.featuredImage || null,
+            updatedAt: article.updatedAt,
+            publishedAt: article.publishedAt,
+            byline: article.category?.nameAr,
+          }}
+        />
+      ))}
+    </ArticleSidebarModule>
   );
 }

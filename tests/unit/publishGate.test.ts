@@ -35,7 +35,7 @@ describe("isPublishingStatus", () => {
     expect(isPublishingStatus("published")).toBe(true);
   });
 
-  it.each(["draft", "pending", "archived", "review", ""])(
+  it.each(["draft", "ready_to_publish", "pending", "archived", "review", ""])(
     "leaves %s alone — the gate is only about reaching readers",
     (status) => {
       expect(isPublishingStatus(status)).toBe(false);
@@ -48,6 +48,20 @@ describe("isPublishingStatus", () => {
 });
 
 describe("decidePublish", () => {
+  it.each(["published", "scheduled"])("personal deny blocks trusted-publisher %s", nextStatus => {
+    expect(decidePublish({
+      nextStatus, gate: publisherGate({ autoPublish: true }),
+      permissions: ["articles.publish"], deniedPermissionCodes: ["articles.publish"],
+    })?.httpStatus).toBe(403);
+  });
+
+  it("personal publish denial still permits saving a draft", () => {
+    expect(decidePublish({
+      nextStatus: "draft", gate: publisherGate({ autoPublish: true }),
+      permissions: [], deniedPermissionCodes: ["articles.publish"],
+    })).toBeNull();
+  });
+
   it("lets a draft through for a user with no publish permission", () => {
     expect(
       decidePublish({ nextStatus: "draft", gate: NO_PUBLISHER, permissions: [] }),
@@ -89,6 +103,23 @@ describe("decidePublish", () => {
         nextStatus: "scheduled",
         gate: NO_PUBLISHER,
         permissions: ["articles.publish"],
+      }),
+    ).toBeNull();
+  });
+
+  it("allows publishing and scheduling with wildcard ['*'] permissions", () => {
+    expect(
+      decidePublish({
+        nextStatus: "published",
+        gate: NO_PUBLISHER,
+        permissions: ["*"],
+      }),
+    ).toBeNull();
+    expect(
+      decidePublish({
+        nextStatus: "scheduled",
+        gate: NO_PUBLISHER,
+        permissions: ["*"],
       }),
     ).toBeNull();
   });

@@ -1,6 +1,7 @@
 import {
   LayoutDashboard,
   CalendarClock,
+  CalendarDays,
   FileText,
   FolderOpen,
   Users,
@@ -44,6 +45,7 @@ import {
   LayoutGrid,
   MapPin,
   Wand2,
+  FlaskConical,
   BarChart,
   ListTodo,
   Globe,
@@ -63,9 +65,12 @@ import {
   Tv,
   Inbox,
   Radar,
+  Share2,
   HeartPulse,
   Headphones,
   Briefcase,
+  Bot,
+  Radio,
 } from "lucide-react";
 import type { NavItem } from "./types";
 
@@ -285,6 +290,24 @@ export const navConfig: NavItem[] = [
         permissions: ["articles.create"], // Users with articles.create permission can access
       },
       {
+        id: "audio_bulletin",
+        labelKey: "nav.audio_bulletin",
+        labelAr: "نشرة سبق الصوتية",
+        path: "/dashboard/audio-bulletin",
+        icon: Radio,
+        roles: ["admin", "editor"],
+        permissions: ["articles.publish"],
+      },
+      {
+        id: "social_publishing",
+        labelKey: "nav.social_publishing",
+        labelAr: "النشر الاجتماعي",
+        path: "/dashboard/social-publishing",
+        icon: Share2,
+        roles: ["admin", "editor"],
+        permissions: ["social_publish.view"],
+      },
+      {
         id: "smart_radar",
         labelKey: "nav.smart_radar",
         labelAr: "رادار سبق الذكي",
@@ -399,6 +422,15 @@ export const navConfig: NavItem[] = [
         path: "/dashboard/world-days",
         icon: Globe,
         roles: ["admin", "editor", "content_manager"],
+      },
+      {
+        id: "mawaeed",
+        labelKey: "nav.mawaeed",
+        labelAr: "مواعيدك",
+        path: "/dashboard/mawaeed",
+        icon: CalendarDays,
+        roles: ["admin"],
+        permissions: ["mawaeed.edit"],
       },
       {
         id: "media_library",
@@ -634,6 +666,27 @@ export const navConfig: NavItem[] = [
     ],
   },
 
+  // ===== فريق سبق الذكي / AI Staff Team =====
+  {
+    id: "ai_staff",
+    labelKey: "nav.ai_staff",
+    labelAr: "فريق سبق الذكي",
+    path: "/dashboard/ai/staff",
+    icon: Bot,
+    roles: ["admin", "system_admin", "editor", "analyst"],
+  },
+
+  // ===== غرفة عمليات سبق الذكية (تجريبية) =====
+  {
+    id: "ops_room",
+    labelKey: "nav.ops_room",
+    labelAr: "غرفة العمليات الذكية",
+    path: "/dashboard/ops-room",
+    icon: Radio,
+    roles: ["admin", "system_admin", "editor"],
+    permissions: ["ops_room.view"],
+  },
+
   // ===== مركز التحكم بالذكاء الاصطناعي / AI Hub (admin) =====
   {
     id: "ai_hub",
@@ -670,6 +723,15 @@ export const navConfig: NavItem[] = [
         labelAr: "مختبر البرومبت",
         path: "/dashboard/prompt-studio",
         icon: Wand2,
+        roles: ["admin", "editor"],
+        permissions: ["ai.view", "ai.manage", "tools.view"],
+      },
+      {
+        id: "deepseek_lab",
+        labelKey: "nav.deepseek_lab",
+        labelAr: "مختبر DeepSeek",
+        path: "/dashboard/deepseek-lab",
+        icon: FlaskConical,
         roles: ["admin", "editor"],
         permissions: ["ai.view", "ai.manage", "tools.view"],
       },
@@ -831,6 +893,17 @@ export const navConfig: NavItem[] = [
     icon: Flag,
     path: "/dashboard/national-day-block",
     roles: ["admin"],
+  },
+
+  // ===== ثيم اليوم الوطني لتطبيق iOS / iOS National Day theme =====
+  {
+    id: "ios_national_day_theme",
+    labelKey: "nav.ios_national_day_theme",
+    labelAr: "ثيم اليوم الوطني — تطبيق iOS",
+    icon: Flag,
+    path: "/dashboard/ios-national-day-theme",
+    roles: ["admin"],
+    permissions: ["system.manage_settings"],
   },
 
   // ===== بلوك قناة الصحراء / Al-Sahraa TV =====
@@ -1079,6 +1152,15 @@ export const navConfig: NavItem[] = [
         path: "/dashboard/system-settings",
         icon: Settings,
         roles: ["admin"],
+        permissions: ["system.manage_settings"],
+      },
+      {
+        id: "publisher_tokens",
+        labelKey: "nav.publisher_tokens",
+        labelAr: "توكنات نشر سبق",
+        path: "/dashboard/publisher-tokens",
+        icon: KeyRound,
+        roles: ["admin", "system_admin"],
         permissions: ["system.manage_settings"],
       },
       {

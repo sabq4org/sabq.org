@@ -1,7 +1,9 @@
 import type { Express } from "express";
 import { aiHubRouter } from "./aiHub";
+import { editAndGenerateStreamRouter } from "./editAndGenerateStream";
 import { integrationsStatusRouter } from "./integrationsStatus";
 import systemSettingsRouter from "./systemSettings";
+import audioBulletinRouter from "./audioBulletin";
 import userDashboardThemeRouter from "./userDashboardTheme";
 import adminActivityLogsRouter from "./adminActivityLogs";
 import keywordFollowingRouter from "./keywordFollowing";
@@ -22,6 +24,8 @@ import { registerAbTestRoutes } from "./abTests";
 import focusSessionsRouter from "./focusSessions";
 import edgeMetaRouter from "./edgeMeta";
 import aiPublicStatsRouter from "./aiPublicStats";
+import aiStaffRouter from "./aiStaff";
+import opsRoomRouter from "./opsRoom";
 import articleEditLocksRouter from "./articleEditLocks";
 import opinionTicketsRouter from "./opinionTickets";
 import opinionAuthorWorkspaceRouter from "./opinionAuthorWorkspace";
@@ -33,9 +37,14 @@ import nationalDayBlockRouter from "./nationalDayBlock";
 import staffProfilesRouter from "./staffProfiles";
 import meetingsRouter from "./meetingsRoutes";
 import meetingMinutesRouter from "./meetingMinutesRoutes";
+import botDraftsRouter from "./botDrafts";
+import botPublisherTokensRouter from "./botPublisherTokens";
+import botSocialRouter from "./botSocial";
+import publishFirstRouter from "./publishFirst";
 import reportersAdminRouter from "./reportersAdmin";
 import replyPolishRouter from "./replyPolish";
 import deployWebhooksRouter from "./deployWebhooks";
+import mailersendWebhookRouter from "./mailersendWebhook";
 import cspReportRouter from "./cspReport";
 import muqtarabOwnRouter from "./muqtarabOwn";
 import muqtarabAIRouter from "./muqtarabAI";
@@ -55,12 +64,15 @@ import { registerSportsIntelRoutes } from "./sportsIntel";
 import { registerSportsSnapsRoutes } from "./sportsSnaps";
 import sportsTournamentsRouter from "./sportsTournaments";
 import { registerSportsLiveStreamRoutes } from "./sportsLiveStream";
+import { registerEconomyRoutes } from "./economyRoutes";
 import { registerRadarRoutes } from "./radar";
 import { registerCoverageGapRoutes } from "./coverageGaps";
 import { registerSportmonksNewsRoutes } from "./sportmonksNews";
 import { registerSportsNamesRoutes } from "./sportsNames";
 import commentReactionsRouter from "./commentReactions";
 import topicCommentsRouter from "./topicComments";
+import commentAppealsRouter from "./commentAppeals";
+import topicSummaryAudioRouter from "./topicSummaryAudio";
 import wcPredictionsRouter from "./wcPredictions";
 import predictionsCoreRouter from "./predictionsCore";
 import predictionsMobileRouter from "./predictionsMobile";
@@ -68,6 +80,8 @@ import gcMajlisRouter from "./gcMajlis";
 import gcFantasyRouter from "./gcFantasy";
 import rslPredictionsRouter from "./rslPredictions";
 import mediaLibraryRouter from "./mediaLibrary";
+import logoLibraryRouter from "./logoLibrary";
+import socialPublishingRouter from "./socialPublishing";
 import promptStudioRouter from "./promptStudio";
 import articleViewStatsRouter from "./articleViewStats";
 import articleResurfaceRouter from "./articleResurface";
@@ -79,6 +93,7 @@ import adminToolsRouter from "./adminToolsRoutes";
 import { systemsCatalogRouter } from "./systemsCatalog";
 import surveysRouter from "./surveys";
 import correspondentApplicationsRouter from "./correspondentApplications";
+import promoteCorrespondentRouter from "./promoteCorrespondent";
 import publisherPortalRouter from "./publisherPortal";
 import smartBlocksRouter from "./smartBlocks";
 import sahraaTvBlockRouter from "./sahraaTvBlock";
@@ -87,6 +102,13 @@ import officialLettersRouter from "./officialLetters";
 import accountSecurityRouter from "./accountSecurity";
 import phoneRegistrationRouter from "./phoneRegistration";
 import audioNewsletterCompatibilityRouter from "./audioNewsletterCompatibility";
+import editorialAiRouter from "./editorialAi";
+import editorialResearchRouter from "./editorialResearch";
+import imageStylesRouter from "./imageStyles";
+import deepseekLabRouter from "./deepseekLab";
+import editorialImagesRouter from "./editorialImages";
+import videoResolverRouter from "./videoResolver";
+import mawaeedRouter from "./mawaeed";
 
 /**
  * Registers all route modules that were split out of the monolithic server/routes.ts.
@@ -96,8 +118,10 @@ import audioNewsletterCompatibilityRouter from "./audioNewsletterCompatibility";
 export function registerSplitRoutes(app: Express) {
   // Must run after setupAuth (caller guarantees that).
   app.use(systemSettingsRouter);
+  app.use(audioBulletinRouter);
   app.use(userDashboardThemeRouter);
   app.use(aiHubRouter);
+  app.use(editAndGenerateStreamRouter);
   app.use(integrationsStatusRouter);
   app.use(adminActivityLogsRouter);
   app.use(keywordFollowingRouter);
@@ -118,6 +142,8 @@ export function registerSplitRoutes(app: Express) {
   app.use(focusSessionsRouter);
   app.use(edgeMetaRouter);
   app.use(aiPublicStatsRouter);
+  app.use(aiStaffRouter);
+  app.use(opsRoomRouter);
   app.use(articleEditLocksRouter);
   app.use(opinionTicketsRouter);
   app.use(opinionAuthorWorkspaceRouter);
@@ -129,11 +155,19 @@ export function registerSplitRoutes(app: Express) {
   app.use(staffProfilesRouter);
   app.use(meetingsRouter);
   app.use(meetingMinutesRouter);
+  // مسودات البوتات (نشر سبق / Grok) — /api/internal/bot-drafts، Bearer لكل بوت، draft فقط
+  app.use(botDraftsRouter);
+  app.use(botPublisherTokensRouter);
+  // نشر X للبوت الخارجي — /api/internal/bot-social، توكن منفصل عن مسودات البوت
+  app.use(botSocialRouter);
+  app.use(publishFirstRouter);
   app.use(reportersAdminRouter);
   app.use(replyPolishRouter);
   app.use(correspondentApplicationsRouter);
+  app.use(promoteCorrespondentRouter);
   app.use(publisherPortalRouter);
   app.use(deployWebhooksRouter);
+  app.use(mailersendWebhookRouter);
   app.use(cspReportRouter);
   app.use(muqtarabOwnRouter);
   app.use(muqtarabAIRouter);
@@ -153,12 +187,16 @@ export function registerSplitRoutes(app: Express) {
   registerSportsSnapsRoutes(app);
   app.use(sportsTournamentsRouter);
   registerSportsLiveStreamRoutes(app);
+  // اقتصاد سبق الحي — بيانات ساما + SSE
+  registerEconomyRoutes(app);
   registerRadarRoutes(app);
   registerCoverageGapRoutes(app);
   registerSportmonksNewsRoutes(app);
   registerSportsNamesRoutes(app);
   app.use(commentReactionsRouter);
   app.use(topicCommentsRouter);
+  app.use(commentAppealsRouter);
+  app.use(topicSummaryAudioRouter);
   app.use(wcPredictionsRouter);
   app.use(predictionsCoreRouter);
   app.use(predictionsMobileRouter);
@@ -166,6 +204,8 @@ export function registerSplitRoutes(app: Express) {
   app.use(gcFantasyRouter);
   app.use(rslPredictionsRouter);
   app.use(mediaLibraryRouter);
+  app.use(logoLibraryRouter);
+  app.use(socialPublishingRouter);
   app.use(promptStudioRouter);
   app.use(articleViewStatsRouter);
   app.use(articleResurfaceRouter);
@@ -185,4 +225,14 @@ export function registerSplitRoutes(app: Express) {
   // إكمال تسجيل عضوية الجوال + استكمال الحسابات القديمة (auth-rbac)
   app.use(phoneRegistrationRouter);
   app.use(audioNewsletterCompatibilityRouter);
+  // نظام التحرير الموحد «محرر سبق» (docs/editorial-ai-unified-system-plan-2026-08-03.md)
+  app.use(editorialAiRouter);
+  app.use(editorialResearchRouter);
+  // أنماط توليد الصور (editorial)
+  app.use(imageStylesRouter);
+  app.use(deepseekLabRouter);
+  app.use(editorialImagesRouter);
+  // معالج استخراج ومعاينة روابط الفيديو (YouTube, Dailymotion, X/Twitter)
+  app.use(videoResolverRouter);
+  app.use(mawaeedRouter);
 }

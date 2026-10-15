@@ -490,7 +490,7 @@ private fun SuggestionCard(article: Article, onClick: () -> Unit) {
             )
         }
         Text(
-            text = article.category.title,
+            text = article.categoryLabel.ifBlank { article.category.title },
             fontSize = 10.sp,
             fontWeight = FontWeight.Bold,
             color = article.category.tint(),

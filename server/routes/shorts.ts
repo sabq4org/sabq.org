@@ -12,6 +12,7 @@ import {
   updateShortSchema,
   insertShortAnalyticSchema,
 } from "@shared/schema";
+import { paginationOrReject, parsePage, parseLimit } from "../utils/pagination";
 
 export function registerShortsRoutes(app: Express) {
   // ============================================================
@@ -32,8 +33,10 @@ export function registerShortsRoutes(app: Express) {
         reporterId 
       } = req.query;
 
-      const pageNum = Math.max(1, parseInt(page as string));
-      const limitNum = Math.min(50, Math.max(1, parseInt(limit as string)));
+      const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 20, maxLimit: 50, allowPage: true, defaultPage: 1 });
+      if (!pg) return;
+      const pageNum = pg.page;
+      const limitNum = pg.limit;
 
       const filters: any = {
         status: "published",
@@ -64,7 +67,9 @@ export function registerShortsRoutes(app: Express) {
   app.get("/api/shorts/featured", async (req, res) => {
     try {
       const { limit = "10" } = req.query;
-      const limitNum = Math.min(20, Math.max(1, parseInt(limit as string)));
+      const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 10, maxLimit: 20 });
+      if (!pg) return;
+      const limitNum = pg.limit;
 
       const featuredShorts = await storage.getFeaturedShorts(limitNum);
 
@@ -316,8 +321,8 @@ export function registerShortsRoutes(app: Express) {
           reporterId 
         } = req.query;
 
-        const pageNum = Math.max(1, parseInt(page as string));
-        const limitNum = Math.min(100, Math.max(1, parseInt(limit as string)));
+        const pageNum = parsePage(page);
+        const limitNum = parseLimit(limit, 20, 100);
 
         const { shorts: shortsWithDetails, total } = await listShortsForAdmin({
           status,

@@ -8,15 +8,17 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import { SiApple } from "react-icons/si";
 import { ChevronLeft, Eye, EyeOff, Loader2, AlertCircle, Bookmark, Bell, Sparkles, History, Crown, Zap } from "lucide-react";
 import { GoogleIcon } from "@/components/GoogleIcon";
 import sabqLogo from "@assets/sabq-logo.png";
+import { trackLoginStart } from "@/lib/analytics";
+import { enqueueConversion } from "@/lib/analytics-conversion-queue";
 
 const registerSchema = z.object({
   email: z.string().email("البريد الإلكتروني غير صحيح"),
-  password: z.string().min(6, "كلمة المرور يجب أن تكون 6 أحرف على الأقل"),
+  password: z.string().min(8, "كلمة المرور يجب أن تكون 8 أحرف على الأقل"),
   confirmPassword: z.string(),
   firstName: z.string().min(2, "الاسم الأول مطلوب"),
   lastName: z.string().min(2, "الاسم الأخير مطلوب"),
@@ -92,10 +94,18 @@ export default function Register() {
           lastName: data.lastName,
         }),
       });
+      enqueueConversion("sign_up", "email");
+
+      // The server auto-logs-in the new user (sets the session). Prime the auth
+      // cache with staleTime:0 BEFORE navigating (F-09) — otherwise the global
+      // guards' cached anonymous `null` (5-min staleTime) is served on
+      // /onboarding/welcome, whose redirectToLogin bounces the freshly-created
+      // user straight to /login.
+      await queryClient.fetchQuery({ queryKey: ["/api/auth/user"], staleTime: 0 });
 
       toast({
         title: "تم إنشاء الحساب بنجاح",
-        description: "يمكنك الآن تسجيل الدخول",
+        description: "أرسلنا رابط تفعيل إلى بريدك — أكمل اهتماماتك الآن.",
       });
 
       navigate("/onboarding/welcome");
@@ -111,7 +121,7 @@ export default function Register() {
   };
 
   return (
-    <div className="relative min-h-screen bg-background" dir="rtl">
+    <div className="public-page public-auth-page relative min-h-screen bg-background" dir="rtl">
       <div className="flex flex-col lg:flex-row min-h-screen">
         {/* Right Side - Form Content */}
         <div className="flex flex-col w-full lg:w-1/2 overflow-y-auto px-4 sm:px-6 md:px-8">
@@ -180,7 +190,10 @@ export default function Register() {
                   <Button
                     type="button"
                     variant="outline"
-                    onClick={() => window.location.href = '/api/auth/google'}
+                    onClick={() => {
+                      trackLoginStart("google");
+                      window.location.href = '/api/auth/google';
+                    }}
                     className="w-full inline-flex items-center justify-center gap-2 sm:gap-3"
                     data-testid="button-google-register"
                   >
@@ -190,7 +203,10 @@ export default function Register() {
                   <Button
                     type="button"
                     variant="outline"
-                    onClick={() => window.location.href = '/api/auth/apple'}
+                    onClick={() => {
+                      trackLoginStart("apple");
+                      window.location.href = '/api/auth/apple';
+                    }}
                     className="w-full inline-flex items-center justify-center gap-2 sm:gap-3"
                     data-testid="button-apple-register"
                   >
@@ -209,7 +225,7 @@ export default function Register() {
                 </div>
 
               <Form {...form}>
-                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-3 sm:space-y-4">
+                <form onSubmit={form.handleSubmit(onSubmit)} className="public-auth-form space-y-3 sm:space-y-4">
                   <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
                     <FormField
                       control={form.control}
@@ -223,6 +239,7 @@ export default function Register() {
                               placeholder="محمد"
                               disabled={isLoading}
                               data-testid="input-firstName"
+                              autoComplete="given-name"
                               className="text-right"
                             />
                           </FormControl>
@@ -243,6 +260,7 @@ export default function Register() {
                               placeholder="أحمد"
                               disabled={isLoading}
                               data-testid="input-lastName"
+                              autoComplete="family-name"
                               className="text-right"
                             />
                           </FormControl>
@@ -265,6 +283,7 @@ export default function Register() {
                             placeholder="email@example.com"
                             disabled={isLoading}
                             data-testid="input-email"
+                            autoComplete="email"
                             className="text-right"
                             dir="ltr"
                           />
@@ -288,6 +307,7 @@ export default function Register() {
                               placeholder="••••••"
                               disabled={isLoading}
                               data-testid="input-password"
+                              autoComplete="new-password"
                               dir="ltr"
                               className="pl-11"
                             />
@@ -296,6 +316,7 @@ export default function Register() {
                               onClick={() => setShowPassword(!showPassword)}
                               className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                               data-testid="button-toggle-password"
+                              aria-label={showPassword ? "إخفاء كلمة المرور" : "إظهار كلمة المرور"}
                             >
                               {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                             </button>
@@ -320,6 +341,7 @@ export default function Register() {
                               placeholder="••••••"
                               disabled={isLoading}
                               data-testid="input-confirmPassword"
+                              autoComplete="new-password"
                               dir="ltr"
                             />
                             <button
@@ -327,6 +349,7 @@ export default function Register() {
                               onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                               className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                               data-testid="button-toggle-confirmPassword"
+                              aria-label={showConfirmPassword ? "إخفاء كلمة المرور" : "إظهار كلمة المرور"}
                             >
                               {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                             </button>

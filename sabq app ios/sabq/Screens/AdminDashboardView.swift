@@ -172,6 +172,7 @@ struct AdminDashboardView: View {
     @StateObject private var vm = AdminDashboardViewModel()
     @State private var pendingAction: AdminWorkflowAction?
     @State private var showNewArticleChoice = false
+    @State private var pendingPublish: AdminNewsItem?
     /// Drives the push into the editor in "new article" mode ("news"/"opinion").
     @State private var newArticleType: String?
 
@@ -205,6 +206,19 @@ struct AdminDashboardView: View {
             Button("خبر") { newArticleType = "news" }
             Button("مقال رأي") { newArticleType = "opinion" }
             Button("إلغاء", role: .cancel) {}
+        }
+        .alert("تأكيد النشر الآن", isPresented: Binding(
+            get: { pendingPublish != nil },
+            set: { if !$0 { pendingPublish = nil } }
+        ), presenting: pendingPublish) { item in
+            Button("نشر الآن") { Task { await vm.publish(item) } }
+            Button("إلغاء", role: .cancel) {}
+        } message: { item in
+            if let schedule = item.schedulePresentation(), let when = schedule.fullLabel {
+                Text("سيُنشر المقال فورًا. موعده المعروض: \(when). للجدولة في موعد آخر، افتح تعديل المقال.")
+            } else {
+                Text("سيُنشر المقال فورًا. للجدولة في موعد لاحق، افتح تعديل المقال.")
+            }
         }
         // Registered here (not in ContentView) so the editor's save callback
         // can reach this screen's view model directly.
@@ -244,10 +258,7 @@ struct AdminDashboardView: View {
                 .font(SabqFonts.app(size: 16, weight: .semibold))
                 .foregroundStyle(SabqTheme.ink)
 
-            let columns = [
-                GridItem(.flexible(), spacing: 10),
-                GridItem(.flexible(), spacing: 10)
-            ]
+            let columns = SabqGrid.adaptive(spacing: 10)
             LazyVGrid(columns: columns, spacing: 10) {
                 NavigationLink(value: AdminContactMessagesRoute()) {
                     adminShortcut(
@@ -317,7 +328,7 @@ struct AdminDashboardView: View {
                 .font(SabqFonts.app(size: 18, weight: .heavy))
                 .foregroundStyle(SabqTheme.ink)
 
-            let columns = [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)]
+            let columns = SabqGrid.adaptive(spacing: 10)
             if let counts = vm.counts {
                 LazyVGrid(columns: columns, spacing: 10) {
                     AdminStatGridCard(
@@ -357,7 +368,7 @@ struct AdminDashboardView: View {
                     AdminNewsRow(
                         item: item,
                         isPublishing: vm.publishingIds.contains(item.id),
-                        onPublish: { Task { await vm.publish(item) } },
+                        onPublish: { pendingPublish = item },
                         onRequestRevision: { pendingAction = .requestRevision(item) },
                         onArchive: { pendingAction = .archive(item) },
                         onPermanentDelete: { pendingAction = .permanentDelete(item) }

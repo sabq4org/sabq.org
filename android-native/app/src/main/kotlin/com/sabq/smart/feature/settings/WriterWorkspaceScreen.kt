@@ -228,6 +228,9 @@ fun WriterWorkspaceScreen(
     onOpenSurvey: (token: String) -> Unit = {},
     onOpenNotifications: () -> Unit = {},
     onSubmitArticle: () -> Unit = {},
+    /** فتح قائمة «مقالات تنتظر التعديل» — الافتراضي يسقط لمركز الإشعارات
+     *  حتى تُوصَّل وجهة revisions في طبقة الملاحة. */
+    onOpenRevisions: (() -> Unit)? = null,
     viewModel: WriterWorkspaceViewModel = hiltViewModel(),
     authViewModel: AuthViewModel = hiltViewModel(),
 ) {
@@ -329,7 +332,12 @@ fun WriterWorkspaceScreen(
         when (tab) {
             WorkspaceTab.Today -> TodaySegment(state, viewModel, onOpenNotifications) { tab = WorkspaceTab.Ideas }
             WorkspaceTab.Ideas -> IdeasSegment(state, viewModel)
-            WorkspaceTab.Articles -> ArticlesSegment(state, viewModel, onOpenNotifications)
+            WorkspaceTab.Articles -> ArticlesSegment(
+                state,
+                viewModel,
+                onOpenNotifications,
+                onOpenRevisions = onOpenRevisions ?: onOpenNotifications,
+            )
             WorkspaceTab.Performance -> ContributorDashboardScreen(
                 onBack = onBack,
                 onOpenSurvey = onOpenSurvey,
@@ -633,6 +641,7 @@ private fun ArticlesSegment(
     state: WriterWorkspaceState,
     viewModel: WriterWorkspaceViewModel,
     onOpenNotifications: () -> Unit,
+    onOpenRevisions: () -> Unit,
 ) {
     if (state.isLoading) {
         Box(Modifier.fillMaxWidth().heightIn(min = 200.dp), contentAlignment = Alignment.Center) {
@@ -676,7 +685,8 @@ private fun ArticlesSegment(
                     .clip(RoundedCornerShape(14.dp))
                     .background(SabqTheme.colors.gold.copy(alpha = 0.10f))
                     .border(1.dp, SabqTheme.colors.gold.copy(alpha = 0.35f), RoundedCornerShape(14.dp))
-                    .clickable { onOpenNotifications() }
+                    // يفتح محرر المسودات مباشرة (revisions) لا مركز الإشعارات
+                    .clickable { onOpenRevisions() }
                     .padding(12.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalAlignment = Alignment.CenterVertically,

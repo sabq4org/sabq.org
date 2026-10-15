@@ -1,6 +1,7 @@
 import { motion } from "framer-motion";
 import { ArrowDown, ArrowUp, LayoutGrid, Minus } from "lucide-react";
-import { SAUDI_TEAM_ID, type GcGroup } from "./gcTypes";
+import { Link } from "wouter";
+import { GC_SECTION_SCROLL_MT, SAUDI_TEAM_ID, type GcGroup } from "./gcTypes";
 
 function GroupTable({ group }: { group: GcGroup }) {
   const started = group.rows.some((r) => r.played > 0);
@@ -73,9 +74,12 @@ function GroupTable({ group }: { group: GcGroup }) {
                         <img src={row.team.logo} alt={row.team.name} className="h-full w-full object-contain" loading="lazy" />
                       ) : null}
                     </div>
-                    <span className={`truncate ${isSaudi ? "font-extrabold text-emerald-700 dark:text-emerald-300" : "font-semibold"}`}>
+                    <Link
+                      href={`/gulf-cup/team/${row.team.id}`}
+                      className={`truncate hover:underline ${isSaudi ? "font-extrabold text-emerald-700 dark:text-emerald-300" : "font-semibold"}`}
+                    >
                       {row.team.name}
-                    </span>
+                    </Link>
                     {row.live && (
                       <span className="inline-flex items-center gap-1 shrink-0 rounded-full bg-[#DE2B3D]/10 px-1.5 py-0.5 text-[9px] font-black text-[#DE2B3D] dark:text-red-400">
                         <span className="h-1.5 w-1.5 rounded-full bg-[#DE2B3D] animate-pulse" />
@@ -103,7 +107,7 @@ export function GcGroups({ groups }: { groups: GcGroup[] }) {
   const isLive = groups.some((g) => g.rows.some((r) => r.live));
 
   return (
-    <section id="gc-groups" dir="rtl" className="container max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+    <section id="gc-groups" dir="rtl" className={`container max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10 ${GC_SECTION_SCROLL_MT}`}>
       <div className="mb-6 flex flex-wrap items-center gap-2">
         <LayoutGrid className="h-6 w-6 text-sky-600 dark:text-sky-400" />
         <h2 className="text-2xl font-black text-foreground">المجموعات والترتيب</h2>

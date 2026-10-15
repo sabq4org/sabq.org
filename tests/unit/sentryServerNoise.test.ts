@@ -41,6 +41,7 @@ describe("isClientAbortError", () => {
     expect(isClientAbortError(nodeError({ code: "EPIPE", syscall: "write" }))).toBe(true);
     expect(isClientAbortError(nodeError({ type: "request.aborted" }))).toBe(true);
     expect(isClientAbortError(nodeError({ message: "request aborted" }))).toBe(true);
+    expect(isClientAbortError(nodeError({ message: "Request aborted" }))).toBe(true);
   });
 
   it("لا يبتلع أخطاء التطبيق ولا انقطاعات قواعد البيانات المكتوبة", () => {
@@ -64,6 +65,11 @@ describe("hasFirstPartyFrame", () => {
 describe("shouldSendServerEvent", () => {
   it("NODE-EXPRESS-A: قطع العميل بمكدس مكتبات فقط → يسقط", () => {
     const err = nodeError({ code: "ECONNRESET", syscall: "read", message: "read ECONNRESET" });
+    expect(shouldSendServerEvent(VENDOR_ONLY_EVENT, err)).toBe(false);
+  });
+
+  it("NODE-EXPRESS-J: قطع Multer بحرف R كبير ومكدس مكتبات فقط → يسقط", () => {
+    const err = nodeError({ message: "Request aborted" });
     expect(shouldSendServerEvent(VENDOR_ONLY_EVENT, err)).toBe(false);
   });
 

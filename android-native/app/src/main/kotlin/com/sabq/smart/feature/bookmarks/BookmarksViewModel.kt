@@ -1,5 +1,6 @@
 package com.sabq.smart.feature.bookmarks
 
+import com.sabq.smart.data.readerErrorMessage
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.sabq.smart.data.Article
@@ -49,7 +50,7 @@ class BookmarksViewModel @Inject constructor(
                     _state.value = BookmarksUiState.Empty
                 } else {
                     _state.value = BookmarksUiState.Error(
-                        e.localizedMessage ?: "تعذّر تحميل المحفوظات"
+                        readerErrorMessage(e, "تعذّر تحميل المحفوظات")
                     )
                 }
             }

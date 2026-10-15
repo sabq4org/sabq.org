@@ -6,8 +6,11 @@
 import { Modality } from "@google/genai";
 import { createGoogleGenAI } from "../utils/googleGenAi";
 import { ObjectStorageService } from "../objectStorage";
-import pRetry from "p-retry";
+import pRetry, { AbortError } from "p-retry";
+import { normalizeProviderError } from "../ai/gateway/errors";
 import { newsImageStorageService } from "./newsImageStorageService";
+import { withAiProvenance } from "../utils/aiImageProvenance";
+import { DEFAULT_IMAGE_MODEL, LEGACY_IMAGE_MODEL } from "@shared/imageStyles";
 
 // Validate required environment variables - Try both possible key names
 const apiKey = process.env.GEMINI_API_KEY || process.env.AI_INTEGRATIONS_GEMINI_API_KEY;
@@ -37,9 +40,44 @@ function isRateLimitError(error: any): boolean {
   );
 }
 
+// نموذج غير متاح/غير موجود (وليس فشل توليد) → يبرر fallback للنموذج القديم
+function isModelUnavailableError(error: any): boolean {
+  const msg = (error?.message || String(error)).toLowerCase();
+  return (
+    msg.includes("not found") ||
+    msg.includes("not_found") ||
+    msg.includes("does not exist") ||
+    (msg.includes("model") && (msg.includes("invalid") || msg.includes("unsupported")))
+  );
+}
+
+// تقدير التكلفة حسب النموذج (تقديرات، لا تسوية فوترة)
+const MODEL_IMAGE_COSTS: Record<string, { standard: number; fourK: number }> = {
+  "gemini-3-pro-image-preview": { standard: 0.134, fourK: 0.24 },
+  "gemini-3.1-flash-image-preview": { standard: 0.067, fourK: 0.067 },
+  // سعر قوقل المعلن 2026-10-06: 0.0336 (1K) و0.0504 (2K)؛ مصادر 4K متضاربة
+  // (0.0756 أو 0.113) فنأخذ الأعلى. standard يغطي 1K و2K فنحسبه بسعر 2K.
+  "gemini-nano-banana-2.1": { standard: 0.0504, fourK: 0.113 },
+  "recraft-v3": { standard: 0.08, fourK: 0.08 },
+  "flux-1.1-pro": { standard: 0.05, fourK: 0.05 },
+  "ideogram-2": { standard: 0.08, fourK: 0.08 },
+};
+
+function estimateImageCost(model: string, imageSize?: string, numImages?: number): number {
+  const pricing = MODEL_IMAGE_COSTS[model] ?? MODEL_IMAGE_COSTS[DEFAULT_IMAGE_MODEL] ?? MODEL_IMAGE_COSTS[LEGACY_IMAGE_MODEL];
+  const perImage = imageSize === "4K" ? pricing.fourK : pricing.standard;
+  return perImage * (numImages || 1);
+}
+
 export interface ImageGenerationRequest {
   prompt: string;
   negativePrompt?: string;
+  /**
+   * معرّف نموذج التوليد. عند الغياب يبقى النموذج القديم المجرَّب حفاظًا على
+   * سلوك المستدعين المباشرين؛ المسارات الحديثة تمرر النموذج المحسوم من
+   * imageStyleService (الافتراضي: Nano Banana 2).
+   */
+  model?: string;
   aspectRatio?: "1:1" | "16:9" | "4:3" | "9:16" | "21:9" | "3:4";
   imageSize?: "1K" | "2K" | "4K";
   numImages?: number;
@@ -136,35 +174,64 @@ export async function generateImage(
     }
     
     // Generate with retry logic
-    const response = await pRetry(
-      async () => {
-        try {
-          return await geminiClient.models.generateContent({
-            model: "gemini-3-pro-image-preview", // Nano Banana Pro
-            contents,
-            config
-          });
-        } catch (error: any) {
-          console.error(`[Nano Banana Pro] Generation error:`, error);
-          if (isRateLimitError(error)) {
-            throw error; // Retry
+    const callModel = (model: string) =>
+      pRetry(
+        async () => {
+          try {
+            return await geminiClient.models.generateContent({
+              model,
+              contents,
+              config
+            });
+          } catch (error: any) {
+            console.error(`[Nano Banana Pro] Generation error (${model}):`, error);
+            // نفاد الرصيد/الفوترة أو مفتاح غير صالح لا تحلّه إعادة المحاولة — كانت
+            // رسالة «quota» تُعامل كتقييد معدّل فينتظر المحرر نحو دقيقة قبل الفشل.
+            const code = normalizeProviderError("gemini", model, error).code;
+            if (isRateLimitError(error) && code !== "QUOTA_EXCEEDED" && code !== "AUTH_ERROR") {
+              throw error; // Retry
+            }
+            // Don't retry other errors. p-retry يوقف المحاولات فقط مع مثيل AbortError
+            // الخاص به (لا يكفي ضبط name)، ونُبقي الرسالة الأصلية لتصنيفها لاحقًا.
+            throw new AbortError(error instanceof Error ? error : String(error));
           }
-          // Don't retry non-rate-limit errors
-          const abortError: any = new Error(error.message);
-          abortError.name = 'AbortError';
-          throw abortError;
+        },
+        {
+          retries: 5,
+          minTimeout: 3000,
+          maxTimeout: 30000,
+          factor: 2,
+          onFailedAttempt: (error) => {
+            console.log(`[Nano Banana Pro] Attempt ${error.attemptNumber} failed. ${error.retriesLeft} retries left.`);
+          }
         }
-      },
-      {
-        retries: 5,
-        minTimeout: 3000,
-        maxTimeout: 30000,
-        factor: 2,
-        onFailedAttempt: (error) => {
-          console.log(`[Nano Banana Pro] Attempt ${error.attemptNumber} failed. ${error.retriesLeft} retries left.`);
-        }
+      );
+
+    // النموذج المطلوب، مع fallback تلقائي للنموذج القديم المجرَّب إذا كان
+    // المطلوب غير متاح لدى المزود (حماية الإنتاج من معرّف نموذج خاطئ في الإعدادات)
+    let modelUsed = request.model?.trim() || LEGACY_IMAGE_MODEL;
+    const GOOGLE_MODEL_MAP: Record<string, string> = {
+      "recraft-v3": DEFAULT_IMAGE_MODEL,
+      "flux-1.1-pro": "gemini-3-pro-image-preview",
+      "ideogram-2": DEFAULT_IMAGE_MODEL,
+    };
+    const executionModel = GOOGLE_MODEL_MAP[modelUsed] || modelUsed;
+    // وسم السجل «Nano Banana Pro» عام — هذا السطر هو الدليل على النموذج الفعلي
+    console.log(`[Nano Banana Pro] Engine: ${executionModel} (requested: ${request.model || "default"}), grounding=${!!request.enableSearchGrounding}`);
+    let response: Awaited<ReturnType<typeof callModel>>;
+    try {
+      response = await callModel(executionModel);
+    } catch (error: any) {
+      if (executionModel !== LEGACY_IMAGE_MODEL && isModelUnavailableError(error)) {
+        console.warn(
+          `[Nano Banana Pro] Model "${modelUsed}" (engine: ${executionModel}) unavailable — falling back to ${LEGACY_IMAGE_MODEL}`
+        );
+        modelUsed = LEGACY_IMAGE_MODEL;
+        response = await callModel(LEGACY_IMAGE_MODEL);
+      } else {
+        throw error;
       }
-    );
+    }
     
     const generationTime = Math.round((Date.now() - startTime) / 1000);
     
@@ -308,17 +375,16 @@ export async function generateImage(
     
     console.log(`[Nano Banana Pro] ✅ Image generated successfully in ${generationTime}s (${imageBase64.length} bytes)`);
     
-    // Calculate estimated cost (based on Nov 2025 pricing)
-    const costPerImage = request.imageSize === "4K" ? 0.24 : 0.134;
-    const totalCost = costPerImage * (request.numImages || 1);
-    
+    // Calculate estimated cost per model
+    const totalCost = estimateImageCost(modelUsed, request.imageSize, request.numImages);
+
     return {
       success: true,
       imageData: imageBase64,
       generationTime,
       cost: totalCost,
       metadata: {
-        model: "gemini-3-pro-image-preview",
+        model: modelUsed,
         aspectRatio: request.aspectRatio,
         imageSize: request.imageSize,
         thinking: request.enableThinking,
@@ -362,7 +428,7 @@ export async function uploadImageToStorage(
     const uniqueBase = `${baseName}_${timestamp}`;
     
     // Convert to WebP with smart compression (maintains quality, reduces size by ~30-50%)
-    const webpBuffer = await sharp(originalBuffer)
+    const webpBuffer = await withAiProvenance(sharp(originalBuffer))
       .webp({ 
         quality: 85,
         effort: 6,
@@ -371,7 +437,7 @@ export async function uploadImageToStorage(
       .toBuffer();
     
     // Generate thumbnail (640x360 for 16:9 ratio)
-    const thumbnailBuffer = await sharp(originalBuffer)
+    const thumbnailBuffer = await withAiProvenance(sharp(originalBuffer))
       .resize(640, 360, { fit: 'cover', position: 'center' })
       .webp({ quality: 80 })
       .toBuffer();

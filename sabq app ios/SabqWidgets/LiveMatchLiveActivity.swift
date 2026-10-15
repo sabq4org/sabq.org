@@ -47,7 +47,7 @@ struct LiveMatchLiveActivity: Widget {
                         } else {
                             ScoreText(state: context.state)
                                 .font(.system(size: 22, weight: .black, design: .rounded))
-                            minutePill(context.state)
+                            minutePill(context.state, stale: context.isStale)
                         }
                     }
                 }
@@ -116,14 +116,17 @@ struct LiveMatchLiveActivity: Widget {
         }
     }
 
-    private func minutePill(_ state: LiveMatchAttributes.ContentState) -> some View {
-        HStack(spacing: 4) {
-            if state.isLive {
+    // عند تقادم البيانات (تجاوز staleDate بلا دفعة) نخفي النبض ونجمّد الساعة
+    // ونعلن الانتظار صراحة — لا نوحي بأن النتيجة حية (تدقيق iOS 27، F06).
+    private func minutePill(_ state: LiveMatchAttributes.ContentState, stale: Bool) -> some View {
+        let showsPulse = state.isLive && !stale
+        return HStack(spacing: 4) {
+            if showsPulse {
                 Circle().fill(WidgetTheme.live).frame(width: 6, height: 6)
             }
-            minutePillContent(state)
+            minutePillContent(state, stale: stale)
                 .font(.system(size: 11, weight: .bold))
-                .foregroundStyle(state.isLive ? WidgetTheme.live : WidgetTheme.dim)
+                .foregroundStyle(showsPulse ? WidgetTheme.live : WidgetTheme.dim)
         }
     }
 }
@@ -135,8 +138,10 @@ struct LiveMatchLiveActivity: Widget {
 // عند التوقّف (استراحة/ترجيح) تكون المرساة nil فنجمّد على النص المدفوع.
 
 @ViewBuilder
-private func minutePillContent(_ state: LiveMatchAttributes.ContentState) -> some View {
-    if state.isLive, let epoch = state.clockStartEpoch {
+private func minutePillContent(_ state: LiveMatchAttributes.ContentState, stale: Bool) -> some View {
+    if stale, state.isLive {
+        Text(staleLabel(state))
+    } else if state.isLive, let epoch = state.clockStartEpoch {
         let start = Date(timeIntervalSince1970: epoch)
         Text(timerInterval: start...start.addingTimeInterval(200 * 60),
              countsDown: false, showsHours: false)
@@ -148,8 +153,14 @@ private func minutePillContent(_ state: LiveMatchAttributes.ContentState) -> som
 }
 
 @ViewBuilder
-private func statusLineContent(_ s: LiveMatchAttributes.ContentState) -> some View {
-    Text(staticStatusLabel(s))
+private func statusLineContent(_ s: LiveMatchAttributes.ContentState, stale: Bool) -> some View {
+    Text(stale && s.isLive ? staleLabel(s) : staticStatusLabel(s))
+}
+
+/// نص التقادم: آخر دقيقة معروفة + «بانتظار التحديث» — النتيجة المعروضة تبقى
+/// آخر نتيجة موثوقة، لكن لا عدّاد يتقدّم ولا نبض.
+private func staleLabel(_ s: LiveMatchAttributes.ContentState) -> String {
+    s.minute.isEmpty ? "بانتظار التحديث" : "\(s.minute) · بانتظار التحديث"
 }
 
 private func staticStatusLabel(_ s: LiveMatchAttributes.ContentState) -> String {
@@ -356,13 +367,14 @@ struct LockScreenMatchView: View {
     }
 
     private var statusPill: some View {
-        HStack(spacing: 5) {
-            if context.state.isLive {
+        let showsPulse = context.state.isLive && !context.isStale
+        return HStack(spacing: 5) {
+            if showsPulse {
                 Circle().fill(WidgetTheme.live).frame(width: 7, height: 7)
             }
-            statusLineContent(context.state)
+            statusLineContent(context.state, stale: context.isStale)
                 .font(.system(size: 12, weight: .bold))
-                .foregroundStyle(context.state.isLive ? WidgetTheme.live : WidgetTheme.dim)
+                .foregroundStyle(showsPulse ? WidgetTheme.live : WidgetTheme.dim)
         }
     }
 }

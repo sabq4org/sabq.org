@@ -46,10 +46,13 @@ import {
   Clock,
   Folder,
   FolderOpen,
+  Shapes,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { uploadNewsImage, newsImageUploadLabel, type NewsImageUploadProgress } from "@/lib/newsImageUpload";
 import type { MediaFile, MediaFolder } from "@shared/schema";
+import { LogoLibraryTab, type LogoItem } from "./LogoLibraryTab";
 
 interface MediaLibraryPickerProps {
   onSelect: (media: MediaFile) => void;
@@ -57,6 +60,8 @@ interface MediaLibraryPickerProps {
   isOpen: boolean;
   articleTitle?: string;
   articleContent?: string;
+  /** متن الخبر كاملًا — لاقتراح شعارات الجهات المذكورة فيه (articleContent مقتطع). */
+  articleBody?: string;
   currentImageUrl?: string;
   uploadPurpose?: string;
 }
@@ -85,6 +90,7 @@ export function MediaLibraryPicker({
   isOpen,
   articleTitle,
   articleContent,
+  articleBody,
   currentImageUrl,
   uploadPurpose,
 }: MediaLibraryPickerProps) {
@@ -103,6 +109,7 @@ export function MediaLibraryPicker({
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadStatus, setUploadStatus] = useState<NewsImageUploadProgress>({ phase: "preparing", percent: 0 });
 
   const form = useForm<UploadFormValues>({
     resolver: zodResolver(uploadFormSchema),
@@ -244,6 +251,22 @@ export function MediaLibraryPicker({
     refetchOnWindowFocus: false,
   });
 
+  // شعارات الجهات المذكورة في الخبر — تُجلب عند الفتح ليظهر عددها على التبويب.
+  const logoSuggestText = articleBody ?? articleContent ?? "";
+  const { data: logoSuggestData, isLoading: isLoadingLogoSuggest } = useQuery<{ logos: LogoItem[] }>({
+    queryKey: ["/api/logos/suggest-for-article", articleTitle, logoSuggestText],
+    queryFn: () =>
+      apiRequest<{ logos: LogoItem[] }>("/api/logos/suggest-for-article", {
+        method: "POST",
+        body: JSON.stringify({ title: articleTitle ?? "", content: logoSuggestText, limit: 12 }),
+        silent: true,
+      }),
+    enabled: isOpen && !!(articleTitle || logoSuggestText),
+    staleTime: 10 * 60 * 1000,
+    refetchOnWindowFocus: false,
+  });
+  const logoSuggestions = Array.isArray(logoSuggestData?.logos) ? logoSuggestData.logos : [];
+
   // Upload mutation
   const uploadMutation = useMutation({
     mutationFn: async (data: UploadFormValues & { file: File }) => {
@@ -255,13 +278,9 @@ export function MediaLibraryPicker({
       if (data.category) formData.append("category", data.category);
       formData.append("isFavorite", String(data.isFavorite));
 
-      return apiRequest<MediaFile>("/api/media/upload", {
-        method: "POST",
-        body: formData,
-        isFormData: true,
-        onUploadProgress: (progress) => {
-          setUploadProgress(Math.round((progress.loaded / progress.total) * 100));
-        },
+      return uploadNewsImage<MediaFile>(formData, (progress) => {
+        setUploadProgress(progress.percent);
+        setUploadStatus(progress);
       });
     },
     onSuccess: (uploadedMedia) => {
@@ -534,7 +553,7 @@ export function MediaLibraryPicker({
           onValueChange={setActiveTab}
           className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden"
         >
-          <TabsList className="mx-4 mt-3 grid h-10 w-auto shrink-0 grid-cols-3 sm:mx-6 sm:mt-4">
+          <TabsList className={`mx-4 mt-3 grid h-10 w-auto shrink-0 sm:mx-6 sm:mt-4 ${articleTitle ? "grid-cols-4" : "grid-cols-3"}`}>
             <TabsTrigger value="library" className="px-2 text-xs sm:text-sm" data-testid="tab-library">
               <ImageIcon className="ml-1.5 h-3.5 w-3.5 sm:h-4 sm:w-4" />
               المكتبة
@@ -549,10 +568,23 @@ export function MediaLibraryPicker({
                 اقتراحات ذكية
               </TabsTrigger>
             )}
+            <TabsTrigger value="logos" className="px-2 text-xs sm:text-sm" data-testid="tab-logos">
+              <Shapes className="ml-1.5 h-3.5 w-3.5 sm:h-4 sm:w-4" />
+              الشعارات
+              {logoSuggestions.length > 0 && (
+                <span
+                  className="mr-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold leading-none text-primary-foreground"
+                  aria-label={`${logoSuggestions.length} شعار مقترح`}
+                  data-testid="badge-logo-suggestions"
+                >
+                  {logoSuggestions.length}
+                </span>
+              )}
+            </TabsTrigger>
           </TabsList>
 
           {/* Tab 1: Library Browser */}
-          <TabsContent value="library" className="mt-0 flex h-full min-h-0 flex-col gap-3 overflow-hidden p-4 sm:gap-4 sm:p-6 sm:pt-4">
+          <TabsContent value="library" className="mt-0 flex h-full min-h-0 flex-col data-[state=inactive]:hidden gap-3 overflow-hidden p-4 sm:gap-4 sm:p-6 sm:pt-4">
             {/* Search Bar */}
             <div className="relative">
               <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -780,11 +812,11 @@ export function MediaLibraryPicker({
                       </Button>
                     </div>
 
-                    {uploadProgress > 0 && uploadProgress < 100 && (
-                      <div className="mt-4">
+                    {uploadMutation.isPending && (
+                      <div className="mt-4" role="status" aria-live="polite">
                         <Progress value={uploadProgress} className="h-2" />
                         <p className="text-xs text-muted-foreground text-center mt-2">
-                          جاري الرفع... {uploadProgress}%
+                          {newsImageUploadLabel(uploadStatus)}
                         </p>
                       </div>
                     )}
@@ -957,6 +989,16 @@ export function MediaLibraryPicker({
               </div>
             </TabsContent>
           )}
+
+          {/* Tab 4: Logos */}
+          <TabsContent value="logos" className="mt-0 h-full min-h-0 overflow-hidden px-3 pb-3 pt-3 sm:px-6 sm:pb-6 sm:pt-4">
+            <LogoLibraryTab
+              isActive={isOpen && activeTab === "logos"}
+              suggestions={logoSuggestions}
+              isLoadingSuggestions={isLoadingLogoSuggest && !!(articleTitle || logoSuggestText)}
+              onPick={handleMediaSelect}
+            />
+          </TabsContent>
         </Tabs>
       </DialogContent>
     </Dialog>

@@ -1,34 +1,85 @@
 # النشرات الصوتية (`audio-newsletter`)
 
-> آخر مراجعة: 2026-08-01 | المالك: content
+> آخر مراجعة: 2026-10-14 | المالك: content
 
 ## الغرض
-النشرة البريدية المجدولة الباقية بعد إيقاف منتج النشرات الصوتية وتوليد ملفاته في 2026-07-25.
+موجز المقالات والأخبار الصوتي وإعدادات أصواته، والنشرة البريدية المجدولة الباقية بعد إيقاف منتج النشرات الصوتية وتوليد ملفاته في 2026-07-25.
 
 ## الحدود
-- **داخل النطاق:** خدمات النشرة الصوتية، الجدولة، التحليلات، سجل المزودين.
+- **داخل النطاق:** موجز المقال الصوتي، إعدادات ومعاينة الأصوات، خدمات الجدولة والتحليلات وسجل المزودين.
 - **خارج النطاق:** البودكاست الخارجي غير المدار من سبق.
 
 ## نقاط الدخول
 | الطبقة | المسار |
 |--------|--------|
-| Backend | `newsletterScheduler`, `newsletterDeliveryQueue`, `newsletterWorker`, `ttsProviderRegistry`, `audioNewsletterCompatibility` |
-| Web | لا توجد واجهة نشرة صوتية بعد الإيقاف |
+| Backend | `newsletterScheduler`, `newsletterEditorialRoutes`, `newsletterEditorialService`, `newsletterSubscriptionService`, `smartNewsletterRoutes`, `newsletterDeliveryQueue`, `newsletterWorker`, `ttsProviderRegistry`, `audioNewsletterCompatibility` |
+| Web | `/newsletter` و`/dashboard/newsletter-analytics` للنشرات البريدية؛ `/dashboard/system-settings` → `SummaryAudioSettings` للصوت؛ لا إعادة لمنتج النشرات الصوتية المتوقف |
+| Backend / summary | `/api/articles/:slug/summary-audio` → `summaryAudioService`؛ `/api/system/summary-audio-settings` و`/preview` → `summaryAudioSettings` |
+| Backend / bulletin | `/api/audio-bulletin/current` (عام) و`/api/audio-bulletin/admin/*` (`articles.publish`) → `audioBulletinService` + `audioBulletinAudio`؛ الجوب `audioBulletinJob` |
+| Web / bulletin | `AudioBulletinBar` داخل `Header` فوق شريط العاجل، ولوحة `/dashboard/audio-bulletin` |
 | Docs | `docs/AUDIO_NEWSLETTER_SYSTEM.md` |
 
 ## عقود مهمة / Gotchas
+- الويب يعرض «الصوت عبر HUMAIN» بحجم 11px وأخضر غامق بجوار الاستماع، بناءً على `X-TTS-Provider` الفعلي بعد نجاح التشغيل. يستعمل نفس GET للصوت والنسبة مع Blob URL؛ لا طلب توليد إضافي ولا استنتاج من إعداد المزود الافتراضي. الترويسة مكشوفة لـCORS لتشغيل DIRECT mode.
 - منتج الصوت ومسارات الإنشاء والإدارة محذوفة عمداً منذ PR #1216. مسارا القائمة القديمان `/api/audio-newsletters` و`/api/audio-newsletters/public` يعيدان قائمة فارغة متوافقة لعملاء الويب المخزنين، وروابط الحلقات القديمة تعيد 410.
-- ElevenLabs/Google TTS يحتاجان مفاتيح بيئة؛ الغياب = تعطيل لا انهيار.
-- **نفاد رصيد ElevenLabs:** `isElevenLabsQuotaCoolingDown` يتخطّى المزوّد 15 دقيقة بعد 401/402/quota بدل إعادة المحاولة في كل طلب. `/api/articles/:slug/summary-audio` يكاش الصوت في الذاكرة (`summary-audio:v2:*`) ويُزيل `must-revalidate` حتى لا يُعاد التوليد في كل مشاهدة.
+- Gemini بصوت Orus هو الافتراضي للإعدادات الجديدة؛ يليه HUMAIN (عبدالله)، ثم ElevenLabs (علي)، ثم Google. يمكن اختيار المزود الأساسي من إعدادات النظام، وتبقى الإعدادات السابقة حتى تغييرها صراحة. غياب المفتاح يتخطّى المزود؛ لا تُحفظ المفاتيح في الواجهة أو قاعدة البيانات.
+- الإعداد `summary_audio_settings` خاص في جدول الإعدادات الحالي، ومستقل عن `tts_settings` لمنتج النشرات المتوقف. إعداد الموجز الجديد يتقدم على متغير `TTS_PROVIDER` القديم في مسار المقال فقط.
+- GET/PUT إعدادات ومعاينة POST تحتاج Passport + `system.manage_settings`. المعاينة نص ثابت، 6 طلبات/دقيقة لكل IP، ولا تستخدم fallback أو تحفظ الاختيار.
+- Gemini وHUMAIN يعيدان WAV/PCM16/24kHz/mono؛ ElevenLabs/Google يعيدان MP3. مسار المقال يعيد بايتات ومحتوى MIME صحيحاً، وليس JSON. مستهلكو الويب وAVPlayer وExoPlayer يظلون على نفس URL.
+- كاش الذاكرة محدود 64 MiB ويشمل بصمة النص والمزود والصوتين. الاستجابة `private, no-store` لإظهار الإعداد الجديد عند الطلب التالي؛ الكاش الداخلي يوم للنجاح الأساسي ودقيقة للاحتياط. لا يُستبدل التسجيل الجاري تشغيله عند الحفظ.
+- **نفاد رصيد ElevenLabs:** يبقى cooldown القائم 15 دقيقة. HUMAIN يُتخطى دقيقة بعد الفشل التقني. لا fallback لرفض المحتوى. HUMAIN مهلة كلية 25 ثانية تشمل الاتصال وجميع الأجزاء، ويُنهى Worker عند انتهائها. تُدمج الأجزاء المكتملة فقط؛ أي فشل يعيد توليد النص الكامل عبر ElevenLabs.
+- تفاصيل التفعيل والتحقق وحدود التشغيل: [`HUMAIN.md`](HUMAIN.md).
 - الجدولة والتسليم لا يعملان داخل عملية API؛ كلاهما في Railway Worker مستقل.
 - الإيقاف الكامل يحتاج `ENABLE_NEWSLETTER_SCHEDULER=false` و`ENABLE_NEWSLETTER_DELIVERY_WORKER=false`.
 - التسليم دائم في Postgres ومقسّم إلى دفعات؛ لا تحذف سجلات الطابور لمعالجة تعثر.
 
 ## صحة وتشغيل
-- لوحة: `/dashboard/audio-newsletters`
+- لوحة اختيار الأصوات: `/dashboard/system-settings`
 - AI/TTS: عبر `aiFeatureKeys` في السجل
 - تشغيل/إيقاف واستعادة الطابور: [`OPERATIONS.md`](OPERATIONS.md)
 
 ## عند التعديل
 - [ ] قرأت هذا الملف + `docs/AUDIO_NEWSLETTER_SYSTEM.md`
 - [ ] قرأت `OPERATIONS.md` قبل تغيير أعلام الإنتاج أو تشغيل Worker
+- Webhook MailerLite يقرأ ترويسة `Signature` الرسمية (مع دعم الاسم التاريخي
+  `X-MailerLite-Signature`) ويتحقق من HMAC على raw body قبل parsing؛ لا تُسجل
+  أجسام webhooks أو عناوين المشتركين.
+- نقطة webhook الحالية تقبل حدثًا واحدًا فقط من `subscriber.unsubscribed` أو
+  `subscriber.bounced`. التحديث الشرطي يحافظ على الحالات النهائية ولا يغير
+  `updatedAt` عند إعادة الحدث؛ التنفيذ المباشر ينتظر كتابة Postgres بمهلة
+  statement قدرها 1800ms، والفشل يعيد non-2xx كي يعيد MailerLite المحاولة.
+
+## سبق في ٣ دقائق — 2026-09-24
+
+- [عقد المنتج](NEWSLETTER_PRODUCT.md) و[إجراءات التشغيل](OPERATIONS.md). التغيير لا يثبت نشرًا أو إطلاق إرسال.
+- مسارا الاشتراك العام القديم والجديد يطلبان موافقة صريحة ووتيرة `daily | weekly`، ويعيدان استجابة انتظار موحدة لا تكشف وجود البريد. لا تفعيل فوري ولا مزامنة MailerLite قبل التأكيد.
+- الاشتراك التاريخي `active` الذي يفتقد marker الموافقة الحالي لا يُعد موافقة صالحة: طلب opt-in جديد وصريح فقط ينقله إلى `pending_confirmation` ويرسل رابط DOI جديدًا، مع الحفاظ على مهلة إعادة الإرسال 10 دقائق. الصف النشط ذي `newsletterConsentVersion: 1` و`confirmedAt` النصي يبقى كما هو، والحالات `unsubscribed` و`bounced` و`junk` نهائية.
+- التأكيد POST صريح برمز عشوائي مخزن كبصمة ومحدود الصلاحية. الحالات المحظورة لا يعيد فورم عام تفعيلها. التفضيلات تتطلب إثبات ملكية، ومجموعتا MailerLite تعكسان الوتيرة.
+- `GET /api/smart-newsletter/status/:email` يعيد حالة فارغة (`200` مع `local: null` و`mailerlite: null`) فقط للحساب الموثق الذي يطلب عنوانه نفسه؛ غياب السجل المحلي لا يستدعي MailerLite. الطلب المجهول أو غير الموثق أو العابر لحساب آخر، وكذلك التوكن غير الصالح، يبقى مرفوضًا. عند وجود سجل محلي، يوضح `local.confirmed` اجتماع `verifiedAt` مع علامة التأكيد الحالية لتحديد الحاجة إلى DOI.
+- مسارات التحرير تحتاج جلسة و`articles.publish` عبر RBAC الفعلي، لا اسم دور مفترض.
+- المسودات تحفظ في `audio_newsletters.customContent` بغلاف JSON مرقّم؛ لا Schema جديد ولا توليد صوت. المراجعة والاعتماد يسبقان تصدير HTML؛ التعديل يبطل الاعتماد. لا إنشاء حملة بعيدة أو إرسال من زر التصدير.
+- واجهة الاشتراك العربية موجودة في SPA وSSR؛ الروابط في التنقل والتذييل، والفورم في الرئيسية وبعد المقال. صفحة التأكيد/التفضيلات `/newsletter` صامتة للتحليلات والإعلانات الخارجية؛ قياس مواضع الدعوة في المقال والرئيسية بلا بريد أو رموز ملكية.
+- عقود `/api/v1` للموبايل لم تتغير، وإدراج النموذج داخل iOS وAndroid مؤجل إلى مرحلة منتج مستقلة.
+
+## Gemini summary voice (2026-09-26)
+
+Gemini 3.8 Flash TTS with Orus and the approved Saudi radio style is the default for new settings. Previously saved selections are preserved until explicitly changed to `gemini`. Technical failures fall back to HUMAIN first, then the existing ElevenLabs and Google Cloud TTS providers.
+
+`geminiTts.ts` uses the Interactions API with server-only `GEMINI_API_KEY` (then `AI_INTEGRATIONS_GEMINI_API_KEY`). The verbatim transcript and `speech_metadata.style` are separate. Requests have bounded time and size; content refusals do not fall back.
+
+Settings add `primaryProvider: "gemini"`, `geminiVoices`, and `configured.gemini`. Preview accepts Orus only and never falls back. Gemini returns WAV and `X-TTS-Provider: gemini`; the HUMAIN credit remains tied to actual HUMAIN audio. The cache includes the Gemini profile version and expires fallback audio quickly to recover the primary provider. No schema change is needed.
+
+## «نشرة سَبْق» الصوتية — 2026-10-09 (تحديث استوديو التحرير: 2026-10-14)
+
+جولة مسموعة لأهم الأخبار (نحو 3 دقائق) في شريط رفيع تحت الهيدر. ليست عودة لمنتج النشرات الصوتية المحذوف: لا أرشيف حلقات ولا جدول جديد.
+
+- **المسار:** اختيار حتى 10 أخبار منشورة (`articleType = news`، غير مخفية من الرئيسية، آخر 6 ساعات أو 12/24 إن قلّت) مرتبة: عاجل ← مميز ← الأكثر قراءة. يدعم `POST /api/audio-bulletin/admin/draft` أيضاً تمرير `articleIds` مختارة يدوياً من المحرر وعنوان نشرة مخصص `title`. النموذج (`SABQ_EDITOR_MODEL` ثم `gpt-5.1`، الميزة `audio-bulletin-script`، بلا temperature) يكتب 5 إلى 8 فقرات JSON؛ أي معرّف خبر غير موجود في المواد يُحذف، وأقل من 3 فقرات صالحة (أو فقرة واحدة عند التحديد اليدوي لعدد أقل) يُرفض.
+- **استوديو التحرير (`/dashboard/audio-bulletin`):** يعرض مشغل بث حي تفاعلي مرتبط بالفصول الصوتية (`chapters`) والنص الكامل المنشور ومصادره (`sourceTitles` تُحلّ لكل من `current` و`draft`)، وبنك الأخبار المرشحة (`candidates`) لاختيار أخبار محددة أو إضافتها مباشرة كفقرة للمسودة المفتوحة، بالإضافة إلى `POST /api/audio-bulletin/admin/draft/from-current` لنسخ النشرة الحالية كمسودة قابلة للتعديل وإعادة التسجيل دون استدعاء LLM جديد.
+- **الترحيب والختام ثابتان في الكود** ومكتوب فيهما «سَبْق» مشكولة. `vowelSabq` يشكّل اسم الصحيفة في فقرات النموذج فقط عند «نشرة/صحيفة/موقع/تطبيق سبق» و«سبق دوت»، ولا يمس الفعل «سبق أن».
+- **لا يُسمع شيء قبل اعتماد محرر** يملك `articles.publish`. الاعتماد يرفض المسودة إن تغيّرت `revision` منذ فتحها.
+- **الصوت:** نفس ترتيب موجز المقال (`summaryVoiceOrder`)، لكن بمزود واحد للنشرة كلها: فشل أي فقرة يعيد النشرة كاملة على المزود التالي حتى لا يتبدل الصوت في منتصفها. رفض المحتوى يوقف ولا ينتقل. كل فقرة تُولَّد منفصلة، وبدايات الفقرات تُحسب من عدد العينات (فصول دقيقة). `lame` (مثبت في `Dockerfile`) يفك MP3 ويرمّز الناتج MP3 أحادي 64kbps؛ بدونه تُحفظ WAV.
+- **التخزين:** R2 الأخبار (`NEWS_IMAGES_R2_*`) تحت `audio-bulletin/YYYY/MM/<id>.mp3` بـ`immutable`، ويُقدَّم من `media.sabq.org`. التوليد مرة واحدة لكل نشرة، وكل المستمعين يسمعون الملف نفسه من الحافة.
+- **الحالة:** إعداد نظام واحد `audio_bulletin_state` (مسودة، النشرة الحالية، آخر 30 في السجل، الجدولة). الكتابة مسلسلة داخل العملية.
+- **الظهور:** `/api/audio-bulletin/current` يعيد `null` بعد 6 ساعات من النشر (`public, max-age=60`). الشريط يظهر في الرئيسية، وفي بقية الصفحات فقط أثناء الاستماع؛ عنصر الصوت مفرد خارج React فيستمر التشغيل عبر التنقل.
+- **الجدولة:** معطّلة افتراضياً، وتفعيلها يحتاج `system.manage_settings`. عند التفعيل يكتب الجوب (القائد فقط، كل 5 دقائق) مسودة واحدة في أول 20 دقيقة من 7 و13 و21 بتوقيت الرياض، ولا يستبدل مسودة حديثة تنتظر محرراً.
+- **مؤجل:** iOS وAndroid (العقد العام جاهز لهما)، وتنبيه المحرر عند جاهزية المسودة المجدولة.

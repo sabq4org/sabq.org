@@ -1,5 +1,10 @@
-import cron from "node-cron";
-import { ifoxCalendarService } from "../services/ifox";
+import { claimCalendarTask, completeCalendarTask } from "../services/ifox/taskPersistence";
+import { db } from "../db";
+import { ifoxEditorialCalendar } from "@shared/schema";
+import { and, eq, sql } from "drizzle-orm";
+import { isLeader } from "../leaderElection";
+import cron from "../leaderCron";
+import { ifoxCalendarService, ifoxPreferencesService, ifoxQualityService } from "../services/ifox";
 import { AIArticleGenerator } from "../services/aiArticleGenerator";
 import { aiImageGenerator } from "../services/aiImageGenerator";
 import { sendArticleNotification } from "../notificationService";
@@ -9,8 +14,12 @@ import { nanoid } from "nanoid";
 /**
  * iFox Content Generator Job
  * معالج تلقائي لمهام توليد المحتوى المجدولة
- * 
- * يعمل كل 5 دقائق للتحقق من المهام المجدولة وتنفيذها
+ *
+ * يعمل كل 15 دقيقة للتحقق من المهام المجدولة وتنفيذها.
+ *
+ * حوكمة النشر: قرار «نشر مباشر أم مسودة» يخضع لإعدادات ifox_ai_preferences
+ * (autoPublishEnabled / enableQualityCheck / autoPublishThreshold / requireHumanReview)
+ * عبر resolvePublishDecision أدناه — الافتراضي الآمن هو المسودة.
  */
 
 let isProcessing = false;
@@ -22,6 +31,68 @@ const MAX_BATCH_SIZE = 10;
 // Maximum retry attempts before moving task to 'failed' status
 const MAX_RETRY_ATTEMPTS = 3;
 
+type PublishDecision = {
+  status: 'published' | 'draft';
+  reason: string;
+  qualityScore?: number;
+};
+
+/**
+ * يحسم قرار النشر وفق إعدادات الحوكمة الفعّالة.
+ *
+ * القاعدة: النشر الآلي لا يحدث إلا إذا فعّله المشغّل صراحة، ولم يشترط
+ * مراجعة بشرية، واجتاز المقال بوابة الجودة (عند تفعيلها) بعتبة النشر الآلي.
+ * أي غموض أو تعذّر (لا إعدادات، فشل فحص الجودة) يهبط بأمان إلى مسودة.
+ */
+async function resolvePublishDecision(params: {
+  taskId: string;
+  title: string;
+  content: string;
+  keywords: string[];
+}): Promise<PublishDecision> {
+  let prefs;
+  try {
+    prefs = await ifoxPreferencesService.getActivePreferences();
+  } catch (prefsError) {
+    console.error(`[iFox Generator] ⚠️ Failed to load AI preferences, defaulting to draft:`, prefsError);
+    return { status: 'draft', reason: 'preferences_unavailable' };
+  }
+
+  if (!prefs || prefs.autoPublishEnabled !== true) {
+    return { status: 'draft', reason: 'auto_publish_disabled' };
+  }
+
+  if (prefs.requireHumanReview === true) {
+    return { status: 'draft', reason: 'human_review_required' };
+  }
+
+  const qualityCheckEnabled = prefs.enableQualityCheck !== false;
+  if (!qualityCheckEnabled) {
+    return { status: 'published', reason: 'auto_publish_enabled_no_quality_check' };
+  }
+
+  try {
+    const check = await ifoxQualityService.checkArticleQuality({
+      taskId: params.taskId,
+      title: params.title,
+      content: params.content,
+      keywords: params.keywords,
+    });
+
+    const score = check.overallScore ?? 0;
+    const threshold = prefs.autoPublishThreshold ?? 90;
+
+    if (score >= threshold) {
+      return { status: 'published', reason: 'quality_gate_passed', qualityScore: score };
+    }
+    return { status: 'draft', reason: `quality_below_threshold (${score} < ${threshold})`, qualityScore: score };
+  } catch (qualityError) {
+    // الفشل نحو الإنسان: تعذّر الفحص لا يعني تجاوز البوابة
+    console.error(`[iFox Generator] ⚠️ Quality check failed, defaulting to draft:`, qualityError);
+    return { status: 'draft', reason: 'quality_check_failed' };
+  }
+}
+
 export const processScheduledContentTasks = cron.schedule('4,19,34,49 * * * *', async () => {
   if (isProcessing) {
     return;
@@ -31,6 +102,9 @@ export const processScheduledContentTasks = cron.schedule('4,19,34,49 * * * *', 
 
   try {
     const now = new Date();
+    await db.update(ifoxEditorialCalendar).set({ status: "failed", lastErrorReason: "توقف العامل قبل اكتمال المهمة؛ تحتاج مراجعة", updatedAt: now })
+      .where(and(eq(ifoxEditorialCalendar.status, "in_progress"),
+        sql`${ifoxEditorialCalendar.updatedAt} < (clock_timestamp() at time zone 'UTC') - interval '30 minutes'`));
     
     // Get ALL scheduled tasks that are ready to run
     // Process all planned tasks with scheduledDate <= now (no age limit)
@@ -58,6 +132,8 @@ export const processScheduledContentTasks = cron.schedule('4,19,34,49 * * * *', 
     console.log(`[iFox Generator] 🤖 Found ${tasksToProcess.length} tasks ready to process`);
 
     for (const entry of tasksToProcess) {
+      if (!isLeader()) break;
+      let claimedAt: Date | undefined;
       try {
         const topicIdea = entry.topicIdea || 'محتوى جديد';
         console.log(`[iFox Generator] 🚀 Processing task: ${topicIdea}`);
@@ -65,9 +141,9 @@ export const processScheduledContentTasks = cron.schedule('4,19,34,49 * * * *', 
         // Update status to processing
         // Use system user ID if creator is not available
         const userId = entry.createdBy || 'system';
-        await ifoxCalendarService.updateEntry(entry.id, {
-          status: 'in_progress',
-        }, userId);
+        const claim = await claimCalendarTask(entry.id, userId);
+        if (!claim) continue;
+        claimedAt = claim.updatedAt;
 
         // ========================================
         // STEP 1: Extract parameters from calendar entry
@@ -128,7 +204,21 @@ export const processScheduledContentTasks = cron.schedule('4,19,34,49 * * * *', 
         }
 
         // ========================================
-        // STEP 4: Create Article in Database
+        // STEP 4: Resolve publish decision (governance gate)
+        // ========================================
+        const decision = await resolvePublishDecision({
+          taskId: entry.id,
+          title: generatedArticle.title,
+          content: generatedArticle.content,
+          keywords,
+        });
+        console.log(
+          `[iFox Generator] 🛂 Publish decision: ${decision.status} (${decision.reason})` +
+          (decision.qualityScore !== undefined ? ` — quality ${decision.qualityScore}/100` : '')
+        );
+
+        // ========================================
+        // STEP 5: Create Article in Database
         // ========================================
         const now = new Date();
         
@@ -167,9 +257,9 @@ export const processScheduledContentTasks = cron.schedule('4,19,34,49 * * * *', 
           newsType: 'regular' as const,
           publishType: 'instant' as const,
           
-          // Publishing status
-          status: 'published' as const,
-          publishedAt: now,
+          // Publishing status — governed by resolvePublishDecision above
+          status: decision.status,
+          publishedAt: decision.status === 'published' ? now : undefined,
           
           // CRITICAL: Mark as AI-generated to filter from Sabq main site
           aiGenerated: true,
@@ -197,35 +287,16 @@ export const processScheduledContentTasks = cron.schedule('4,19,34,49 * * * *', 
           },
         } as any; // Cast to bypass InsertArticle schema (authorId + aiGenerated are excluded but required here)
 
-        let createdArticle;
-        try {
-          createdArticle = await storage.createArticle(articleData);
-          console.log(`[iFox Generator] ✅ Article created in database: ${createdArticle.id}`);
-        } catch (dbError) {
-          console.error(`[iFox Generator] ❌ Failed to create article in database:`, dbError);
-          throw new Error(`Database error: ${dbError instanceof Error ? dbError.message : String(dbError)}`);
-        }
-
-        // ========================================
-        // STEP 5: Link Article to Calendar Entry
-        // ========================================
-        try {
-          await ifoxCalendarService.updateEntry(entry.id, {
-            status: 'completed',
-            articleId: createdArticle.id,
-            actualPublishedAt: new Date(),
-          }, userId);
-          
-          console.log(`[iFox Generator] ✅ Calendar entry updated with article link`);
-        } catch (updateError) {
-          console.error(`[iFox Generator] ⚠️ Failed to update calendar entry (article created successfully):`, updateError);
-          // Non-critical - article is created, just the link failed
-        }
+        const createdArticle = await completeCalendarTask(entry.id, claimedAt!, userId,
+          decision.status === "published", async tx => {
+            if (!isLeader()) throw new Error("iFox task leadership lost");
+            return storage.createArticle(articleData, tx);
+          });
 
         // ========================================
         // STEP 6: Send Notifications
         // ========================================
-        if (articleData.status === 'published') {
+        if (decision.status === 'published') {
           try {
             await sendArticleNotification(createdArticle, 'published');
             console.log(`[iFox Generator] 📢 Notification sent for published article`);
@@ -236,8 +307,17 @@ export const processScheduledContentTasks = cron.schedule('4,19,34,49 * * * *', 
         }
 
         console.log(`[iFox Generator] ✅ Task completed successfully: ${topicIdea}`);
-        console.log(`[iFox Generator] 📰 Article published: ${createdArticle.id} - "${createdArticle.title}"`);
+        console.log(
+          decision.status === 'published'
+            ? `[iFox Generator] 📰 Article published: ${createdArticle.id} - "${createdArticle.title}"`
+            : `[iFox Generator] 📝 Article saved as draft pending review: ${createdArticle.id} - "${createdArticle.title}"`
+        );
       } catch (error) {
+        if (!claimedAt) continue;
+        const updateOwned = (values: Record<string, unknown>) => db.update(ifoxEditorialCalendar)
+          .set({ ...values, updatedAt: new Date(), updatedBy: entry.createdBy || "system" })
+          .where(and(eq(ifoxEditorialCalendar.id, entry.id), eq(ifoxEditorialCalendar.status, "in_progress"),
+            eq(ifoxEditorialCalendar.updatedAt, claimedAt!)));
         const errorMessage = error instanceof Error ? error.message : String(error);
         console.error(`[iFox Generator] ❌ Error processing task ${entry.id}:`, errorMessage);
         
@@ -246,18 +326,17 @@ export const processScheduledContentTasks = cron.schedule('4,19,34,49 * * * *', 
         const newRetryCount = currentRetryCount + 1;
         
         // Use system user ID for error handling if creator is not available
-        const errorUserId = entry.createdBy || 'system';
         
         if (newRetryCount >= MAX_RETRY_ATTEMPTS) {
           // Move to failed status after max retries
           console.error(`[iFox Generator] 💀 Task ${entry.id} failed after ${MAX_RETRY_ATTEMPTS} attempts, moving to 'failed' status`);
           try {
-            await ifoxCalendarService.updateEntry(entry.id, {
+            await updateOwned({
               status: 'failed',
               retryCount: newRetryCount,
               lastErrorAt: new Date(),
               lastErrorReason: errorMessage,
-            }, errorUserId);
+            });
           } catch (updateError) {
             console.error(`[iFox Generator] ❌ Failed to update task to failed status:`, updateError);
           }
@@ -265,12 +344,12 @@ export const processScheduledContentTasks = cron.schedule('4,19,34,49 * * * *', 
           // Reset to planned for retry, but increment retry counter
           console.log(`[iFox Generator] 🔄 Task ${entry.id} will retry (attempt ${newRetryCount}/${MAX_RETRY_ATTEMPTS})`);
           try {
-            await ifoxCalendarService.updateEntry(entry.id, {
+            await updateOwned({
               status: 'planned',
               retryCount: newRetryCount,
               lastErrorAt: new Date(),
               lastErrorReason: errorMessage,
-            }, errorUserId);
+            });
           } catch (updateError) {
             console.error(`[iFox Generator] ❌ Failed to update task status:`, updateError);
           }

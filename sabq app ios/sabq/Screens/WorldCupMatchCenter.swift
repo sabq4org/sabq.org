@@ -73,6 +73,8 @@ struct WorldCupMatchCenter: View {
             .task { await load() }
             // شبكة أمان: استطلاع أبطأ عند انقطاع SSE؛ مع البث الحي يكفي ~20ث.
             .task(id: detail?.fixture.id) {
+                liveStream.acquire()
+                defer { liveStream.release() }
                 var tick = 0
                 while !Task.isCancelled {
                     let interval: UInt64 = liveStream.connected ? 20_000_000_000 : 8_000_000_000

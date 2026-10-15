@@ -68,7 +68,7 @@ describe("علامة «تعذّرت القراءة» على الخادم", () =>
   beforeEach(() => {
     primary = new FakeStore();
     fallback = new FakeStore();
-    store = new SessionFailoverStore(primary, fallback, 30_000, 3, 10_000);
+    store = new SessionFailoverStore(primary, fallback, { isRevoked: async () => false, revokeSid: async () => {}, revokeUser: async () => {}, generationForUser: async () => "" }, 30_000, 3, 10_000);
     vi.spyOn(console, "warn").mockImplementation(() => {});
   });
 
@@ -106,7 +106,7 @@ describe("علامة «تعذّرت القراءة» على الخادم", () =>
   });
 
   it("تنتهي صلاحيتها فلا تُوسم بها طلبات لاحقة", async () => {
-    const shortTtl = new SessionFailoverStore(primary, fallback, 30_000, 3, 10_000, 50);
+    const shortTtl = new SessionFailoverStore(primary, fallback, { isRevoked: async () => false, revokeSid: async () => {}, revokeUser: async () => {}, generationForUser: async () => "" }, 30_000, 3, 10_000, 50);
     primary.getError = new Error("Command timed out");
     fallback.getError = CONNECT_TIMEOUT();
     await get(shortTtl, "sid-abc");

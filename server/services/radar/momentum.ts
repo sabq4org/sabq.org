@@ -7,6 +7,7 @@ import { db } from "../../db";
 import { radarItems, radarStories, radarStorySnapshots, type RadarStory } from "@shared/schema";
 import { isMomentumEnabled } from "./flags";
 import { computeMomentumScore } from "./momentumMath";
+import { independenceKey } from "./triage";
 
 export { computeMomentumScore, isMomentumEnabled };
 
@@ -37,6 +38,8 @@ async function storyMentionStats(storyId: string): Promise<{
     .select({
       fetchedAt: radarItems.fetchedAt,
       sourceId: radarItems.sourceId,
+      publisherKey: radarItems.publisherKey,
+      wireOrigin: radarItems.wireOrigin,
       metrics: radarItems.metrics,
     })
     .from(radarItems)
@@ -49,7 +52,8 @@ async function storyMentionStats(storyId: string): Promise<{
   let lastFetchedAt: Date | null = null;
 
   for (const item of items) {
-    sources.add(item.sourceId);
+    // مصدر مستقل = وكالة الأصل/الناشر الفعلي، لا الممر (triage.independenceKey)
+    sources.add(independenceKey(item));
     const t = item.fetchedAt?.getTime() ?? 0;
     if (!lastFetchedAt || (item.fetchedAt && item.fetchedAt > lastFetchedAt)) {
       lastFetchedAt = item.fetchedAt;
@@ -104,7 +108,7 @@ export async function refreshStoryMomentum(limit = 50): Promise<number> {
       ? (Date.now() - stats.lastFetchedAt.getTime()) / (60 * 60 * 1000)
       : 72;
     const { momentumScore } = computeMomentumScore({
-      sourceCount: Math.max(stats.sourceCount, story.sourceCount),
+      sourceCount: stats.sourceCount,
       mentionsLastHour: stats.mentionsLastHour,
       mentionsPrevHour: stats.mentionsPrevHour,
       xEngagement: stats.xEngagement,
@@ -115,7 +119,7 @@ export async function refreshStoryMomentum(limit = 50): Promise<number> {
       .update(radarStories)
       .set({
         momentumScore,
-        sourceCount: Math.max(stats.sourceCount, story.sourceCount),
+        sourceCount: stats.sourceCount,
       })
       .where(eq(radarStories.id, story.id));
 
@@ -123,7 +127,7 @@ export async function refreshStoryMomentum(limit = 50): Promise<number> {
       await db.insert(radarStorySnapshots).values({
         storyId: story.id,
         mentionCount: stats.mentionsLastHour,
-        sourceCount: Math.max(stats.sourceCount, story.sourceCount),
+        sourceCount: stats.sourceCount,
         xEngagement: stats.xEngagement,
       });
     }
@@ -140,7 +144,7 @@ export async function refreshMomentumForStories(stories: RadarStory[]): Promise<
       ? (Date.now() - stats.lastFetchedAt.getTime()) / (60 * 60 * 1000)
       : 72;
     const { momentumScore } = computeMomentumScore({
-      sourceCount: Math.max(stats.sourceCount, story.sourceCount),
+      sourceCount: stats.sourceCount,
       mentionsLastHour: stats.mentionsLastHour,
       mentionsPrevHour: stats.mentionsPrevHour,
       xEngagement: stats.xEngagement,
@@ -148,7 +152,7 @@ export async function refreshMomentumForStories(stories: RadarStory[]): Promise<
     });
     await db
       .update(radarStories)
-      .set({ momentumScore, sourceCount: Math.max(stats.sourceCount, story.sourceCount) })
+      .set({ momentumScore, sourceCount: stats.sourceCount })
       .where(eq(radarStories.id, story.id));
   }
 }

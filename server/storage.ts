@@ -1,17 +1,22 @@
+import { getAdminArticleMetrics } from "./services/adminArticleList";
+import { resetChangedImageProvenance, resolveArticleImageProvenance } from "./services/articleImageProvenance";
 // Reference: javascript_database blueprint + javascript_log_in_with_replit blueprint
 import { db } from "./db";
 import { log } from "./utils/logger";
 import { isUniqueViolation } from "./utils/pgError";
-import { memoryCache, CACHE_TTL, withCache } from "./memoryCache";
+import { buildEditorialMetadataUpdate } from "./utils/editorialDatesSql";
+import { memoryCache, CACHE_TTL, withCache, withSWR } from "./memoryCache";
 import { articleCardSelect, articleListSelect, categoryBasicSelect, userPublicSelect } from "./selectHelpers";
 import { eq, desc, asc, sql, and, or, not, inArray, ne, gte, lt, lte, isNull, isNotNull, ilike, count, getTableColumns, type SQL } from "drizzle-orm";
 import { alias as aliasedTable } from "drizzle-orm/pg-core";
 import { nanoid } from 'nanoid';
+import { resolvePrimaryRoleName, setUserSingleRole, syncLegacyRoleFromRoleIds } from "./services/userRoleSync";
 import bcrypt from 'bcrypt';
 import { generateEnglishSlug } from './utils/slugTransliterator';
 import { notificationBus } from "./notificationBus";
 import { bufferArticleViewIncrement } from "./services/articleViewCounterService";
 import { matchesInternalAnnouncementAudience } from "./utils/internalAnnouncementTargeting";
+import { chargePublishInTx } from "./services/publisherCreditService";
 import {
   users,
   categories,
@@ -613,13 +618,13 @@ export interface IStorage {
   getArticleBySlug(slug: string, userId?: string, userRole?: string): Promise<ArticleWithDetails | undefined>;
   getLatestArticlesForFooter(limit: number): Promise<{ id: number; title: string; slug: string }[]>;
   getArticleById(id: string, userId?: string): Promise<ArticleWithDetails | undefined>;
-  createArticle(article: InsertArticle): Promise<Article>;
+  createArticle(article: InsertArticle, executor?: Pick<typeof db, "insert">): Promise<Article>;
   updateArticle(id: string, article: Partial<InsertArticle>): Promise<Article>;
   deleteArticle(id: string): Promise<void>;
   incrementArticleViews(id: string): Promise<void>;
   getFeaturedArticle(userId?: string): Promise<ArticleWithDetails | undefined>;
   getRelatedArticles(articleId: string, categoryId?: string): Promise<ArticleWithDetails[]>;
-  getArticlesMetrics(): Promise<{ published: number; scheduled: number; draft: number; archived: number }>;
+  getArticlesMetrics(): Promise<{ published: number; scheduled: number; draft: number; archived: number; readyToPublish: number }>;
   archiveArticle(id: string, userId: string): Promise<Article>;
   restoreArticle(id: string, userId: string): Promise<Article>;
   toggleArticleBreaking(id: string, userId: string): Promise<Article>;
@@ -962,7 +967,7 @@ export interface IStorage {
   publishTopic(id: string, userId: string): Promise<Topic>;
   unpublishTopic(id: string, userId: string): Promise<Topic>;
   getPublishedTopicsByAngle(angleSlug: string, limit?: number): Promise<Topic[]>;
-  getLatestPublishedTopics(limit?: number): Promise<Array<Topic & { angle: { id: string; name: string; slug: string; icon?: string | null; colorHex?: string | null } }>>;
+  getLatestPublishedTopics(limit?: number): Promise<Array<Topic & { angle: { id: string; name: string; slug: string; icon?: string | null; colorHex?: string | null }; writer: { name: string; avatar: string | null } | null }>>;
   
   // Angle Submissions operations - طلبات كتابة الزوايا
   createAngleSubmission(data: InsertAngleSubmission): Promise<AngleSubmission>;
@@ -1250,6 +1255,7 @@ export interface IStorage {
     userId?: string;
     action?: string;
     entityType?: string;
+    actorType?: string;
     dateFrom?: Date;
     dateTo?: Date;
     searchQuery?: string;
@@ -1272,6 +1278,12 @@ export interface IStorage {
         firstName: string | null;
         lastName: string | null;
         profileImageUrl: string | null;
+      } | null;
+      entityInfo?: {
+        title: string | null;
+        subtitle?: string | null;
+        url?: string | null;
+        status?: string | null;
       } | null;
     }>;
     total: number;
@@ -1296,6 +1308,12 @@ export interface IStorage {
       firstName: string | null;
       lastName: string | null;
       profileImageUrl: string | null;
+    } | null;
+    entityInfo?: {
+      title: string | null;
+      subtitle?: string | null;
+      url?: string | null;
+      status?: string | null;
     } | null;
   } | undefined>;
 
@@ -2979,12 +2997,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateUserRole(userId: string, role: string): Promise<User> {
-    const [user] = await db
-      .update(users)
-      .set({ role })
-      .where(eq(users.id, userId))
-      .returning();
-
+    const user = await setUserSingleRole(userId, role);
+    if (role === "reporter") {
+      try { await this.ensureReporterStaffRecord(userId); } catch (err) {
+        console.error("[updateUserRole] ensureReporterStaffRecord failed:", err);
+      }
+    }
     return user;
   }
 
@@ -3571,6 +3589,7 @@ export class DatabaseStorage implements IStorage {
     const passwordHash = await bcrypt.hash(randomPassword, 12);
 
     const user = await db.transaction(async (tx) => {
+      const primaryRole = await resolvePrimaryRoleName(tx, userData.roleIds);
       const [user] = await tx.insert(users).values({
         id: userId,
         email: userData.email.trim().toLowerCase(),
@@ -3584,7 +3603,7 @@ export class DatabaseStorage implements IStorage {
         status: userData.status || 'active',
         emailVerified: userData.emailVerified || false,
         phoneVerified: userData.phoneVerified || false,
-        role: 'reader',
+        role: primaryRole,
         isProfileComplete: true,
         mustChangePassword: true, // Require password change on first login
       }).returning();
@@ -3667,13 +3686,7 @@ export class DatabaseStorage implements IStorage {
         );
       }
 
-      const newRoles = await tx
-        .select({
-          id: roles.id,
-          name: roles.name,
-        })
-        .from(roles)
-        .where(inArray(roles.id, roleIds));
+      const newRoles = await syncLegacyRoleFromRoleIds(tx, userId, roleIds);
 
       await tx.insert(activityLogs).values({
         id: nanoid(),
@@ -3723,17 +3736,9 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getUserPermissions(userId: string): Promise<string[]> {
-    const results = await db
-      .select({
-        code: permissions.code,
-      })
-      .from(userRoles)
-      .innerJoin(rolePermissions, eq(userRoles.roleId, rolePermissions.roleId))
-      .innerJoin(permissions, eq(rolePermissions.permissionId, permissions.id))
-      .where(eq(userRoles.userId, userId))
-      .groupBy(permissions.code);
-
-    return results.map(r => r.code);
+    // Legacy callers must respect the same personal overrides as RBAC middleware.
+    const { getUserPermissions } = await import("./rbac");
+    return getUserPermissions(userId);
   }
 
   async logActivity(activity: {
@@ -4124,6 +4129,7 @@ export class DatabaseStorage implements IStorage {
       displayOrder: row.display_order,
       isBreaking: row.is_breaking,
       isFeatured: row.is_featured,
+      isReading: row.is_reading ?? false,
       isEditorPick: row.is_editor_pick,
       isDeepDive: row.is_deep_dive,
       readingTime: row.reading_time,
@@ -4334,7 +4340,7 @@ export class DatabaseStorage implements IStorage {
     } as unknown as ArticleWithDetails;
   }
 
-  async createArticle(article: InsertArticle): Promise<Article> {
+  async createArticle(article: InsertArticle, executor?: Pick<typeof db, "insert">): Promise<Article> {
     // Auto-generate short englishSlug if not provided
     const articleWithSlug = {
       ...article,
@@ -4391,18 +4397,33 @@ export class DatabaseStorage implements IStorage {
     // "ذكاء اصطناعي" badge on the hero image.
     await this.applyAiImageFlagFromMedia(articleWithSlug);
 
-    const [created] = await db.insert(articles).values([articleWithSlug as any]).returning();
+    // وقت إنشاء المسودة على الخادم، ولا يُقبل من جسم العميل.
+    delete (articleWithSlug as any).draftCreatedAt;
+    delete (articleWithSlug as any).correctedAt;
+    (articleWithSlug as any).draftCreatedAt = new Date();
+
+    const [created] = await (executor ?? db).insert(articles).values([articleWithSlug as any]).returning();
     return created;
   }
 
   async updateArticle(id: string, articleData: Partial<InsertArticle>): Promise<Article> {
     const updateData: any = { ...articleData, updatedAt: new Date() };
+    delete updateData.draftCreatedAt;
+    delete updateData.correctedAt;
     if (updateData.imageFocalPoint === null || updateData.imageFocalPoint === undefined) {
       delete updateData.imageFocalPoint;
     }
-    // Same sync as createArticle — pick up the AI flag from the
-    // matching media_files row whenever the cover image changes.
-    await this.applyAiImageFlagFromMedia(updateData);
+
+    // Derive the public update timestamp atomically from the persisted row.
+    // JSONB merges at UPDATE time, so another writer cannot lose metadata keys.
+    const hasImageProvenance = await this.applyAiImageFlagFromMedia(updateData);
+    if (!hasImageProvenance && (typeof updateData.imageUrl === "string" || updateData.imageUrl === null)) {
+      const reset = resetChangedImageProvenance(updateData.imageUrl);
+      if (updateData.aiImageModel === undefined) updateData.aiImageModel = reset.aiImageModel;
+      if (updateData.aiImagePrompt === undefined) updateData.aiImagePrompt = reset.aiImagePrompt;
+    }
+    const editorialMetadata = buildEditorialMetadataUpdate(updateData);
+    if (editorialMetadata) updateData.seoMetadata = editorialMetadata;
     const [updated] = await db
       .update(articles)
       .set(updateData)
@@ -4411,36 +4432,23 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
 
-  /// Mutates `data` in-place: when `data.imageUrl` matches a
-  /// media_files row whose `is_ai_generated` is true and the caller
-  /// hasn't already set `isAiGeneratedImage`, copy the AI metadata
-  /// (model + prompt) onto the article. No-op when the URL doesn't
-  /// resolve to a known media row or when the caller already provided
-  /// an explicit value.
-  private async applyAiImageFlagFromMedia(data: any): Promise<void> {
-    if (data?.isAiGeneratedImage === true) return; // caller already set it
+  /// Refresh provenance even when AI is already enabled: replacing an AI
+  /// image must not retain the model/prompt of the previous image.
+  private async applyAiImageFlagFromMedia(data: any): Promise<boolean> {
     const url = data?.imageUrl;
-    if (typeof url !== 'string' || url.length === 0) return;
+    if (typeof url !== 'string' || url.length === 0) return false;
     try {
-      const [media] = await db
-        .select({
-          isAi: mediaFiles.isAiGenerated,
-          model: mediaFiles.aiGenerationModel,
-          prompt: mediaFiles.aiGenerationPrompt,
-        })
-        .from(mediaFiles)
-        .where(eq(mediaFiles.url, url))
-        .limit(1);
-      if (media?.isAi) {
-        data.isAiGeneratedImage = true;
-        if (!data.aiImageModel && media.model) data.aiImageModel = media.model;
-        if (!data.aiImagePrompt && media.prompt) data.aiImagePrompt = media.prompt;
+      const provenance = await resolveArticleImageProvenance(url);
+      if (provenance) {
+        Object.assign(data, provenance);
+        return true;
       }
     } catch (err) {
       // Best-effort — never block the actual write because of a sync
       // lookup failure. The article saves with the original payload.
       console.warn('[storage] applyAiImageFlagFromMedia failed:', err);
     }
+    return false;
   }
 
   async deleteArticle(id: string): Promise<void> {
@@ -4600,26 +4608,12 @@ export class DatabaseStorage implements IStorage {
     })) as unknown as ArticleWithDetails[];
   }
 
-  async getArticlesMetrics(): Promise<{ published: number; scheduled: number; draft: number; archived: number }> {
-    // استعلام واحد بدل 4 COUNT متتالية + كاش قصير (كان يُسجَّل ~2.5s في APM)
-    return withCache("admin:articles:metrics", CACHE_TTL.SHORT, async () => {
-      const now = new Date();
-      const [row] = await db
-        .select({
-          published: sql<number>`count(*) filter (where ${articles.status} = 'published')`,
-          draft: sql<number>`count(*) filter (where ${articles.status} = 'draft')`,
-          archived: sql<number>`count(*) filter (where ${articles.status} = 'archived')`,
-          scheduled: sql<number>`count(*) filter (where ${articles.status} = 'scheduled' and ${articles.scheduledAt} >= ${now})`,
-        })
-        .from(articles);
-
-      return {
-        published: Number(row?.published ?? 0),
-        scheduled: Number(row?.scheduled ?? 0),
-        draft: Number(row?.draft ?? 0),
-        archived: Number(row?.archived ?? 0),
-      };
-    });
+  async getArticlesMetrics(): Promise<{ published: number; scheduled: number; draft: number; archived: number; readyToPublish: number }> {
+    // كل عدّ مستقل يدفع شرط status إلى فهرسه. صيغة FILTER الواحدة كانت تمسح
+    // صف المقال كاملًا (~199k blocks في قياس الإنتاج) كلما انتهى الكاش.
+    // المفتاح يبدأ بـ articles: كي تمسحه بوابة إبطال المقالات بعد أي كتابة.
+    // v4 يضيف readyToPublish حتى لا تُقدَّم لقطة v3 بلا العداد الجديد.
+    return withSWR("articles:admin:metrics:v4", CACHE_TTL.SHORT, CACHE_TTL.MEDIUM, getAdminArticleMetrics);
   }
 
   async archiveArticle(id: string, userId: string): Promise<Article> {
@@ -4801,10 +4795,12 @@ export class DatabaseStorage implements IStorage {
     
     await db
       .update(table)
+      // No updatedAt bump: it is the open editor's save version, and the editor
+      // applies these AI results to its own state, so bumping it here made the
+      // next save fail with a false ARTICLE_VERSION_CONFLICT.
       .set({
         seo,
         seoMetadata: metadata,
-        updatedAt: new Date(),
       })
       .where(eq(table.id, articleId));
   }
@@ -6459,6 +6455,10 @@ export class DatabaseStorage implements IStorage {
           a.ai_summary,
           a.ai_generated,
           a.is_featured,
+          a.is_reading,
+          a.is_video_template,
+          a.video_url,
+          a.video_thumbnail_url,
           a.display_order,
           a.views,
           a.seo,
@@ -6565,6 +6565,10 @@ export class DatabaseStorage implements IStorage {
       aiSummary: row.ai_summary,
       aiGenerated: row.ai_generated,
       isFeatured: row.is_featured,
+      isReading: row.is_reading ?? false,
+      isVideoTemplate: row.is_video_template ?? false,
+      videoUrl: row.video_url ?? null,
+      videoThumbnailUrl: row.video_thumbnail_url ?? null,
       displayOrder: row.display_order || 0,
       views: row.views,
       seo: row.seo,
@@ -6713,6 +6717,10 @@ export class DatabaseStorage implements IStorage {
           a.ai_summary,
           a.ai_generated,
           a.is_featured,
+          a.is_reading,
+          a.is_video_template,
+          a.video_url,
+          a.video_thumbnail_url,
           a.display_order,
           a.views,
           a.seo,
@@ -6887,6 +6895,10 @@ export class DatabaseStorage implements IStorage {
       aiSummary: row.ai_summary,
       aiGenerated: row.ai_generated,
       isFeatured: row.is_featured,
+      isReading: row.is_reading ?? false,
+      isVideoTemplate: row.is_video_template ?? false,
+      videoUrl: row.video_url ?? null,
+      videoThumbnailUrl: row.video_thumbnail_url ?? null,
       displayOrder: row.display_order || 0,
       views: row.views,
       seo: row.seo,
@@ -7029,7 +7041,7 @@ export class DatabaseStorage implements IStorage {
         a.image_url, a.thumbnail_url, a.infographic_banner_url, a.image_focal_point,
         a.category_id, a.author_id, a.reporter_id, a.article_type, a.news_type,
         a.status, a.hide_from_homepage, a.ai_summary, a.ai_generated,
-        a.is_featured, a.display_order, a.views, a.seo, a.credibility_score,
+        a.is_featured, a.is_reading, a.is_video_template, a.video_url, a.video_thumbnail_url, a.display_order, a.views, a.seo, a.credibility_score,
         a.source, a.source_url, a.is_ai_generated_image, a.is_ai_generated_thumbnail,
         a.is_publisher_content, a.is_publisher_news, a.publisher_id, a.publisher_status,
         a.published_at, a.created_at, a.updated_at,
@@ -7114,6 +7126,10 @@ export class DatabaseStorage implements IStorage {
       aiSummary: row.ai_summary,
       aiGenerated: row.ai_generated,
       isFeatured: row.is_featured,
+      isReading: row.is_reading ?? false,
+      isVideoTemplate: row.is_video_template ?? false,
+      videoUrl: row.video_url ?? null,
+      videoThumbnailUrl: row.video_thumbnail_url ?? null,
       displayOrder: row.display_order,
       views: row.views,
       seo: row.seo,
@@ -9010,17 +9026,34 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getUserInterests(userId: string): Promise<InterestWithWeight[]> {
+    // userInterests.categoryId FK → categories (the real catalog; all write
+    // paths store category ids). This previously joined the orphaned `interests`
+    // table, whose ids never match category ids, so it returned EMPTY rows and
+    // /api/user/interests + /api/user/profile/complete served nothing (F-07).
+    // Map category columns onto the Interest shape the callers expect.
     const results = await db
       .select({
-        interest: interests,
+        id: categories.id,
+        nameAr: categories.nameAr,
+        nameEn: categories.nameEn,
+        slug: categories.slug,
+        icon: categories.icon,
+        description: categories.description,
+        createdAt: categories.createdAt,
         weight: userInterests.weight,
       })
       .from(userInterests)
-      .innerJoin(interests, eq(userInterests.categoryId, interests.id))
+      .innerJoin(categories, eq(userInterests.categoryId, categories.id))
       .where(eq(userInterests.userId, userId));
 
     return results.map((r) => ({
-      ...r.interest,
+      id: r.id,
+      nameAr: r.nameAr,
+      nameEn: r.nameEn,
+      slug: r.slug,
+      icon: r.icon ?? null,
+      description: r.description ?? null,
+      createdAt: r.createdAt,
       weight: r.weight,
     }));
   }
@@ -10575,7 +10608,7 @@ export class DatabaseStorage implements IStorage {
     return results.map((r) => r.topic);
   }
 
-  async getLatestPublishedTopics(limit: number = 3): Promise<Array<Topic & { angle: { id: string; name: string; slug: string; icon?: string | null; colorHex?: string | null } }>> {
+  async getLatestPublishedTopics(limit: number = 3): Promise<Array<Topic & { angle: { id: string; name: string; slug: string; icon?: string | null; colorHex?: string | null }; writer: { name: string; avatar: string | null } | null }>> {
     const results = await db
       .select({
         topic: topics,
@@ -10586,20 +10619,35 @@ export class DatabaseStorage implements IStorage {
           icon: angles.iconKey,
           colorHex: angles.colorHex,
         },
+        // كاتب الزاوية — نفس أسبقية getAngleWriter: بيانات المنسوب ثم حساب المستخدم
+        writerFirstName: users.firstName,
+        writerLastName: users.lastName,
+        writerProfileImage: users.profileImageUrl,
+        writerStaffName: staff.nameAr,
+        writerStaffImage: staff.profileImage,
       })
       .from(topics)
       .innerJoin(angles, eq(topics.angleId, angles.id))
+      .leftJoin(users, eq(angles.managerUserId, users.id))
+      .leftJoin(staff, eq(staff.userId, users.id))
       .where(and(
         eq(topics.status, 'published'),
         eq(angles.isActive, true)
       ))
       .orderBy(desc(topics.publishedAt))
       .limit(limit);
-    
-    return results.map((r) => ({
-      ...r.topic,
-      angle: r.angle,
-    }));
+
+    return results.map((r) => {
+      const writerName = (r.writerStaffName
+        || [r.writerFirstName, r.writerLastName].filter(Boolean).join(" ").trim()) || null;
+      return {
+        ...r.topic,
+        angle: r.angle,
+        writer: writerName
+          ? { name: writerName, avatar: r.writerStaffImage || r.writerProfileImage || null }
+          : null,
+      };
+    });
   }
 
   // Angle Submissions operations - طلبات كتابة الزوايا
@@ -11076,83 +11124,105 @@ export class DatabaseStorage implements IStorage {
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - days);
 
-    // Active users count (users who had any activity during the period)
-    const activeUsersResult = await db
-      .select({ userId: readingHistory.userId })
-      .from(readingHistory)
-      .where(gte(readingHistory.readAt, startDate))
-      .union(
-        db.select({ userId: comments.userId })
-          .from(comments)
-          .where(gte(comments.createdAt, startDate))
-      )
-      .union(
-        db.select({ userId: reactions.userId })
-          .from(reactions)
-          .where(gte(reactions.createdAt, startDate))
-      )
-      .union(
-        db.select({ userId: bookmarks.userId })
-          .from(bookmarks)
-          .where(gte(bookmarks.createdAt, startDate))
-      )
-      .union(
-        db.select({ userId: behaviorLogs.userId })
-          .from(behaviorLogs)
-          .where(gte(behaviorLogs.createdAt, startDate))
-      );
+    const [
+      activeUsersResult,
+      readingStats,
+      [likesCount],
+      [commentsCount],
+      [bookmarksCount],
+      topCategories,
+      activeHours,
+      returningUsers,
+    ] = await Promise.all([
+      // Active users count (users who had any activity during the period)
+      db
+        .select({ userId: readingHistory.userId })
+        .from(readingHistory)
+        .where(gte(readingHistory.readAt, startDate))
+        .union(
+          db.select({ userId: comments.userId })
+            .from(comments)
+            .where(gte(comments.createdAt, startDate))
+        )
+        .union(
+          db.select({ userId: reactions.userId })
+            .from(reactions)
+            .where(gte(reactions.createdAt, startDate))
+        )
+        .union(
+          db.select({ userId: bookmarks.userId })
+            .from(bookmarks)
+            .where(gte(bookmarks.createdAt, startDate))
+        )
+        .union(
+          db.select({ userId: behaviorLogs.userId })
+            .from(behaviorLogs)
+            .where(gte(behaviorLogs.createdAt, startDate))
+        ),
+
+      // Reading time average from readingHistory
+      db
+        .select({
+          avgDuration: sql<number>`avg(${readingHistory.readDuration})`,
+          totalReads: sql<number>`count(*)`,
+        })
+        .from(readingHistory)
+        .where(gte(readingHistory.readAt, startDate)),
+
+      // Interaction counts
+      db
+        .select({ count: sql<number>`count(*)` })
+        .from(reactions)
+        .where(gte(reactions.createdAt, startDate)),
+
+      db
+        .select({ count: sql<number>`count(*)` })
+        .from(comments)
+        .where(gte(comments.createdAt, startDate)),
+
+      db
+        .select({ count: sql<number>`count(*)` })
+        .from(bookmarks)
+        .where(gte(bookmarks.createdAt, startDate)),
+
+      // Top categories from user interactions
+      db
+        .select({
+          categoryId: articles.categoryId,
+          categoryName: sql<string>`COALESCE(${categories.nameAr}, 'غير مصنف')`,
+          count: sql<number>`count(*)`,
+        })
+        .from(readingHistory)
+        .innerJoin(articles, eq(readingHistory.articleId, articles.id))
+        .leftJoin(categories, eq(articles.categoryId, categories.id))
+        .where(gte(readingHistory.readAt, startDate))
+        .groupBy(articles.categoryId, sql`COALESCE(${categories.nameAr}, 'غير مصنف')`)
+        .orderBy(desc(sql`count(*)`))
+        .limit(5),
+
+      // Active hours analysis from behaviorLogs
+      db
+        .select({
+          hour: sql<number>`extract(hour from ${behaviorLogs.createdAt})`,
+          count: sql<number>`count(*)`,
+        })
+        .from(behaviorLogs)
+        .where(gte(behaviorLogs.createdAt, startDate))
+        .groupBy(sql`extract(hour from ${behaviorLogs.createdAt})`),
+
+      // Return time analysis (users who came back on >1 distinct day)
+      db
+        .select({
+          userId: readingHistory.userId,
+          visitDays: sql<number>`count(distinct date(${readingHistory.readAt}))`,
+        })
+        .from(readingHistory)
+        .where(gte(readingHistory.readAt, startDate))
+        .groupBy(readingHistory.userId)
+        .having(sql`count(distinct date(${readingHistory.readAt})) > 1`),
+    ]);
 
     const totalUsers = new Set(activeUsersResult.map(r => r.userId)).size;
-
-    // Reading time average from readingHistory
-    const readingStats = await db
-      .select({
-        avgDuration: sql<number>`avg(${readingHistory.readDuration})`,
-        totalReads: sql<number>`count(*)`,
-      })
-      .from(readingHistory)
-      .where(gte(readingHistory.readAt, startDate));
-
-    // Interaction counts
-    const [likesCount] = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(reactions)
-      .where(gte(reactions.createdAt, startDate));
-
-    const [commentsCount] = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(comments)
-      .where(gte(comments.createdAt, startDate));
-
-    const [bookmarksCount] = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(bookmarks)
-      .where(gte(bookmarks.createdAt, startDate));
-
-    // Top categories from user interactions
-    const topCategories = await db
-      .select({
-        categoryId: articles.categoryId,
-        categoryName: sql<string>`COALESCE(${categories.nameAr}, 'غير مصنف')`,
-        count: sql<number>`count(*)`,
-      })
-      .from(readingHistory)
-      .innerJoin(articles, eq(readingHistory.articleId, articles.id))
-      .leftJoin(categories, eq(articles.categoryId, categories.id))
-      .where(gte(readingHistory.readAt, startDate))
-      .groupBy(articles.categoryId, sql`COALESCE(${categories.nameAr}, 'غير مصنف')`)
-      .orderBy(desc(sql`count(*)`))
-      .limit(5);
-
-    // Active hours analysis from behaviorLogs
-    const activeHours = await db
-      .select({
-        hour: sql<number>`extract(hour from ${behaviorLogs.createdAt})`,
-        count: sql<number>`count(*)`,
-      })
-      .from(behaviorLogs)
-      .where(gte(behaviorLogs.createdAt, startDate))
-      .groupBy(sql`extract(hour from ${behaviorLogs.createdAt})`);
 
     // Group by time periods
     const hourDistribution = { morning: 0, noon: 0, evening: 0, night: 0 };
@@ -11171,17 +11241,6 @@ export class DatabaseStorage implements IStorage {
       desktop: 30,
       tablet: 5,
     };
-
-    // Return time analysis (users who came back within 7 days)
-    const returningUsers = await db
-      .select({
-        userId: readingHistory.userId,
-        visitDays: sql<number>`count(distinct date(${readingHistory.readAt}))`,
-      })
-      .from(readingHistory)
-      .where(gte(readingHistory.readAt, startDate))
-      .groupBy(readingHistory.userId)
-      .having(sql`count(distinct date(${readingHistory.readAt})) > 1`);
 
     const returnRate = totalUsers > 0 
       ? Math.round((returningUsers.length / Number(totalUsers)) * 100) 
@@ -11844,6 +11903,13 @@ export class DatabaseStorage implements IStorage {
           id: articles.id,
           title: articles.title,
           slug: articles.slug,
+          englishSlug: articles.englishSlug,
+          excerpt: articles.excerpt,
+          imageUrl: articles.imageUrl,
+          thumbnailUrl: articles.thumbnailUrl,
+          imageFocalPoint: articles.imageFocalPoint,
+          isAiGeneratedImage: articles.isAiGeneratedImage,
+          updatedAt: articles.updatedAt,
           publishedAt: articles.publishedAt,
           newsType: articles.newsType,
           views: articles.views,
@@ -11930,6 +11996,13 @@ export class DatabaseStorage implements IStorage {
       id: a.id,
       title: a.title,
       slug: a.slug,
+      englishSlug: a.englishSlug,
+      excerpt: a.excerpt,
+      imageUrl: a.imageUrl,
+      thumbnailUrl: a.thumbnailUrl,
+      imageFocalPoint: a.imageFocalPoint,
+      isAiGeneratedImage: a.isAiGeneratedImage,
+      updatedAt: a.updatedAt,
       publishedAt: a.publishedAt,
       category: a.categoryId
         ? {
@@ -12017,11 +12090,230 @@ export class DatabaseStorage implements IStorage {
     return profile;
   }
 
+  private async enrichActivityLogsWithEntityInfo<
+    T extends {
+      entityType: string;
+      entityId: string;
+      oldValue: Record<string, any> | null;
+      newValue: Record<string, any> | null;
+    }
+  >(
+    items: T[]
+  ): Promise<
+    Array<
+      T & {
+        entityInfo: {
+          title: string | null;
+          subtitle?: string | null;
+          url?: string | null;
+          status?: string | null;
+        } | null;
+      }
+    >
+  > {
+    if (!items.length) return [];
+
+    const articleIds = new Set<string>();
+    const articleSlugs = new Set<string>();
+    const categoryIds = new Set<string>();
+
+    for (const item of items) {
+      const type = (item.entityType || "").toLowerCase();
+      if (
+        (type === "article" || type === "publisher_article") &&
+        item.entityId &&
+        !item.entityId.includes(",") &&
+        !item.entityId.startsWith("draft-")
+      ) {
+        articleIds.add(item.entityId);
+      } else if (type === "short_link") {
+        const orig =
+          typeof item.newValue?.originalUrl === "string"
+            ? item.newValue.originalUrl
+            : null;
+        if (orig) {
+          const match = orig.match(/\/article\/([^/?#\s]+)/i);
+          if (match?.[1]) {
+            try {
+              articleSlugs.add(decodeURIComponent(match[1]));
+            } catch {
+              articleSlugs.add(match[1]);
+            }
+          }
+        }
+      } else if (type === "category" && item.entityId && !item.entityId.includes(",")) {
+        categoryIds.add(item.entityId);
+      }
+    }
+
+    const articleById = new Map<
+      string,
+      { id: string; title: string; slug: string; englishSlug: string | null; status: string }
+    >();
+    const articleBySlug = new Map<
+      string,
+      { id: string; title: string; slug: string; englishSlug: string | null; status: string }
+    >();
+    const categoryById = new Map<string, { id: string; nameAr: string; slug: string }>();
+
+    try {
+      const articleConditions: any[] = [];
+      if (articleIds.size > 0) {
+        articleConditions.push(inArray(articles.id, Array.from(articleIds)));
+      }
+      if (articleSlugs.size > 0) {
+        const slugsArr = Array.from(articleSlugs);
+        articleConditions.push(inArray(articles.slug, slugsArr));
+        articleConditions.push(inArray(articles.englishSlug, slugsArr));
+      }
+      if (articleConditions.length > 0) {
+        const rows = await db
+          .select({
+            id: articles.id,
+            title: articles.title,
+            slug: articles.slug,
+            englishSlug: articles.englishSlug,
+            status: articles.status,
+          })
+          .from(articles)
+          .where(or(...articleConditions))
+          .limit(100);
+        for (const r of rows) {
+          articleById.set(r.id, r);
+          if (r.slug) articleBySlug.set(r.slug, r);
+          if (r.englishSlug) articleBySlug.set(r.englishSlug, r);
+        }
+      }
+    } catch (err) {
+      console.warn("[ActivityLogs] Failed to batch-resolve articles:", err);
+    }
+
+    try {
+      if (categoryIds.size > 0) {
+        const cats = await db
+          .select({
+            id: categories.id,
+            nameAr: categories.nameAr,
+            slug: categories.slug,
+          })
+          .from(categories)
+          .where(inArray(categories.id, Array.from(categoryIds)))
+          .limit(50);
+        for (const c of cats) {
+          categoryById.set(c.id, c);
+        }
+      }
+    } catch (err) {
+      console.warn("[ActivityLogs] Failed to batch-resolve categories:", err);
+    }
+
+    return items.map((item) => {
+      const type = (item.entityType || "").toLowerCase();
+      const nv = item.newValue || {};
+      const ov = item.oldValue || {};
+
+      if (type === "article" || type === "en_article" || type === "ur_article" || type === "publisher_article") {
+        const resolved = articleById.get(item.entityId);
+        const title =
+          resolved?.title ||
+          (typeof nv.title === "string" && nv.title.trim() ? nv.title : null) ||
+          (typeof ov.title === "string" && ov.title.trim() ? ov.title : null);
+        const slug =
+          resolved?.englishSlug ||
+          resolved?.slug ||
+          (typeof nv.englishSlug === "string" ? nv.englishSlug : null) ||
+          (typeof nv.slug === "string" ? nv.slug : null) ||
+          (typeof ov.englishSlug === "string" ? ov.englishSlug : null) ||
+          (typeof ov.slug === "string" ? ov.slug : null);
+        const status =
+          resolved?.status ||
+          (typeof nv.status === "string" ? nv.status : null) ||
+          (typeof ov.status === "string" ? ov.status : null);
+
+        let subtitle: string | null = null;
+        if (typeof nv.primary === "string") {
+          const suggested = Array.isArray(nv.suggested) && nv.suggested.length > 0
+            ? ` · مقترحات: ${nv.suggested.join("، ")}`
+            : "";
+          subtitle = `التصنيف الذكي: ${nv.primary}${suggested}`;
+        } else if (typeof nv.metaTitle === "string") {
+          subtitle = `عنوان SEO: ${nv.metaTitle}`;
+        } else if (typeof nv.count === "number") {
+          subtitle = `عدد المقالات المتأثرة: ${nv.count}`;
+        }
+
+        return {
+          ...item,
+          entityInfo:
+            title || subtitle || slug
+              ? {
+                  title,
+                  subtitle,
+                  url: slug ? `/article/${slug}` : null,
+                  status,
+                }
+              : null,
+        };
+      }
+
+      if (type === "short_link") {
+        const shortCode = typeof nv.shortCode === "string" ? nv.shortCode : null;
+        const originalUrl = typeof nv.originalUrl === "string" ? nv.originalUrl : null;
+        let linkedArticle: { title: string; slug: string; englishSlug: string | null; status: string } | undefined;
+        if (originalUrl) {
+          const match = originalUrl.match(/\/article\/([^/?#\s]+)/i);
+          if (match?.[1]) {
+            try {
+              linkedArticle = articleBySlug.get(decodeURIComponent(match[1])) || articleBySlug.get(match[1]);
+            } catch {
+              linkedArticle = articleBySlug.get(match[1]);
+            }
+          }
+        }
+        return {
+          ...item,
+          entityInfo: {
+            title: linkedArticle?.title || (shortCode ? `رابط مختصر: sabq.org/s/${shortCode}` : originalUrl),
+            subtitle: shortCode ? `sabq.org/s/${shortCode}` : originalUrl,
+            url: originalUrl || (shortCode ? `/s/${shortCode}` : null),
+            status: linkedArticle?.status || null,
+          },
+        };
+      }
+
+      if (type === "category") {
+        const cat = categoryById.get(item.entityId);
+        const title =
+          cat?.nameAr ||
+          (typeof nv.nameAr === "string" ? nv.nameAr : null) ||
+          (typeof ov.nameAr === "string" ? ov.nameAr : null) ||
+          (typeof nv.name === "string" ? nv.name : null);
+        return {
+          ...item,
+          entityInfo: title ? { title, subtitle: cat?.slug || null, url: cat?.slug ? `/category/${cat.slug}` : null } : null,
+        };
+      }
+
+      const genericTitle =
+        (typeof nv.title === "string" ? nv.title : null) ||
+        (typeof ov.title === "string" ? ov.title : null) ||
+        (typeof nv.nameAr === "string" ? nv.nameAr : null) ||
+        (typeof nv.name === "string" ? nv.name : null) ||
+        (typeof nv.email === "string" ? nv.email : null);
+
+      return {
+        ...item,
+        entityInfo: genericTitle ? { title: genericTitle } : null,
+      };
+    });
+  }
+
   // Activity Logs operations
   async getActivityLogs(filters?: {
     userId?: string;
     action?: string;
     entityType?: string;
+    actorType?: string;
     dateFrom?: Date;
     dateTo?: Date;
     searchQuery?: string;
@@ -12045,6 +12337,12 @@ export class DatabaseStorage implements IStorage {
         lastName: string | null;
         profileImageUrl: string | null;
       } | null;
+      entityInfo?: {
+        title: string | null;
+        subtitle?: string | null;
+        url?: string | null;
+        status?: string | null;
+      } | null;
     }>;
     total: number;
     page: number;
@@ -12062,12 +12360,143 @@ export class DatabaseStorage implements IStorage {
       conditions.push(eq(activityLogs.userId, filters.userId));
     }
 
+    if (filters?.actorType === "human") {
+      conditions.push(
+        sql`${activityLogs.userId} IS NOT NULL AND lower(${activityLogs.action}) NOT IN ('auto_categorize_article', 'generate_seo_metadata', 'analyze_sentiment', 'batch_analyze_sentiment', 'calendar_ai_draft_generated')`
+      );
+    } else if (filters?.actorType === "system") {
+      conditions.push(sql`${activityLogs.userId} IS NULL`);
+    } else if (filters?.actorType === "ai") {
+      conditions.push(
+        sql`(lower(${activityLogs.action}) IN ('auto_categorize_article', 'generate_seo_metadata', 'analyze_sentiment', 'batch_analyze_sentiment', 'calendar_ai_draft_generated', 'analyze', 'generate') OR lower(${activityLogs.entityType}) = 'ifox_ai')`
+      );
+    }
+
     if (filters?.action) {
-      conditions.push(eq(activityLogs.action, filters.action));
+      const act = filters.action.toLowerCase();
+      const actionGroups: Record<string, string[]> = {
+        create: [
+          "create",
+          "created",
+          "created_opinion",
+          "article_created_from_calendar",
+          "create_smart_block",
+          "create_en_smart_block",
+          "calendar_event_created",
+          "calendar_assignment_created",
+          "calendar_reminder_created",
+          "smart_entity_created",
+          "smart_term_created",
+          "entity_type_created",
+          "survey_created",
+          "storycreated",
+          "experimentcreated",
+          "variantcreated",
+        ],
+        update: [
+          "update",
+          "updated",
+          "updated_opinion",
+          "update_bulk",
+          "update_smart_block",
+          "update_en_smart_block",
+          "quad_categories_settings_update",
+          "en_quad_categories_settings_update",
+          "ur_quad_categories_settings_update",
+          "calendar_event_updated",
+          "calendar_assignment_updated",
+          "calendar_assignment_completed",
+          "smart_entity_updated",
+          "update_analysis_status",
+          "storyupdated",
+          "experimentupdated",
+          "variantupdated",
+          "articles_reordered",
+          "reordered",
+          "toggle_breaking",
+          "toggle_featured",
+          "toggle_status",
+          "modify",
+          "update_settings",
+        ],
+        publish: [
+          "publish",
+          "published",
+          "articlepublished",
+          "published_opinion",
+          "approve_publish",
+          "bot_social_publish",
+        ],
+        delete: [
+          "delete",
+          "deleted",
+          "deleted_opinion",
+          "permanent_delete",
+          "deleted_permanently",
+          "bulk_delete",
+          "bulk_deleted_permanently",
+          "delete_smart_block",
+          "delete_en_smart_block",
+          "calendar_event_deleted",
+          "calendar_reminder_deleted",
+          "smart_entity_deleted",
+          "storydeleted",
+          "experimentdeleted",
+          "variantdeleted",
+        ],
+        archive: ["archive", "archived", "bulk_archive", "bulk_archived"],
+        approve: ["approve", "approved_opinion", "approve_publish"],
+        reject: ["reject", "rejected_opinion"],
+        schedule: ["schedule", "scheduled_opinion", "bot_social_schedule"],
+        ai: [
+          "auto_categorize_article",
+          "generate_seo_metadata",
+          "analyze_sentiment",
+          "batch_analyze_sentiment",
+          "calendar_ai_draft_generated",
+          "analyze",
+          "generate",
+        ],
+      };
+
+      if (actionGroups[act]) {
+        conditions.push(inArray(sql`lower(${activityLogs.action})`, actionGroups[act]));
+      } else {
+        conditions.push(ilike(activityLogs.action, filters.action));
+      }
     }
 
     if (filters?.entityType) {
-      conditions.push(eq(activityLogs.entityType, filters.entityType));
+      const ent = filters.entityType.toLowerCase();
+      const entityGroups: Record<string, string[]> = {
+        article: ["article", "en_article", "ur_article", "publisher_article"],
+        settings: [
+          "settings",
+          "system_setting",
+          "quad_categories_settings",
+          "en_quad_categories_settings",
+          "ur_quad_categories_settings",
+          "ifox_settings",
+        ],
+        smart_block: ["smart_block", "en_smart_block", "ur_smart_block"],
+        ifox: [
+          "ifox_article",
+          "ifox_articles",
+          "ifox_category",
+          "ifox_category_settings",
+          "ifox_media",
+          "ifox_schedule",
+          "ifox_settings",
+          "ifox_ai",
+          "ifox_analytics",
+        ],
+      };
+
+      if (entityGroups[ent]) {
+        conditions.push(inArray(sql`lower(${activityLogs.entityType})`, entityGroups[ent]));
+      } else {
+        conditions.push(ilike(activityLogs.entityType, filters.entityType));
+      }
     }
 
     if (filters?.dateFrom) {
@@ -12079,22 +12508,30 @@ export class DatabaseStorage implements IStorage {
     }
 
     if (filters?.searchQuery) {
+      const q = `%${filters.searchQuery}%`;
       conditions.push(
         or(
-          ilike(activityLogs.action, `%${filters.searchQuery}%`),
-          ilike(activityLogs.entityType, `%${filters.searchQuery}%`),
-          ilike(activityLogs.entityId, `%${filters.searchQuery}%`)
+          ilike(activityLogs.action, q),
+          ilike(activityLogs.entityType, q),
+          ilike(activityLogs.entityId, q),
+          ilike(users.firstName, q),
+          ilike(users.lastName, q),
+          ilike(users.email, q),
+          sql`COALESCE(${activityLogs.newValue}->>'title', ${activityLogs.oldValue}->>'title', ${activityLogs.newValue}->>'shortCode', ${activityLogs.newValue}->>'originalUrl', ${activityLogs.newValue}->>'primary', '') ILIKE ${q}`
         )
       );
     }
 
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
-    // Get total count
-    const [countResult] = await db
+    // Get total count (join users when searchQuery is present so user name/email search works)
+    const countQuery = db
       .select({ count: sql<number>`count(*)::int` })
-      .from(activityLogs)
-      .where(whereClause);
+      .from(activityLogs);
+
+    const [countResult] = filters?.searchQuery
+      ? await countQuery.leftJoin(users, eq(activityLogs.userId, users.id)).where(whereClause)
+      : await countQuery.where(whereClause);
 
     const total = countResult?.count || 0;
     const totalPages = Math.ceil(total / limit);
@@ -12123,27 +12560,32 @@ export class DatabaseStorage implements IStorage {
       .limit(limit)
       .offset(offset);
 
-    return {
-      logs: logs.map((log) => ({
-        id: log.id,
-        userId: log.userId,
-        action: log.action,
-        entityType: log.entityType,
-        entityId: log.entityId,
-        oldValue: log.oldValue,
-        newValue: log.newValue,
-        metadata: log.metadata,
-        createdAt: log.createdAt,
-        user: log.userId
+    const mappedLogs = logs.map((log) => ({
+      id: log.id,
+      userId: log.userId,
+      action: log.action,
+      entityType: log.entityType,
+      entityId: log.entityId,
+      oldValue: log.oldValue,
+      newValue: log.newValue,
+      metadata: log.metadata,
+      createdAt: log.createdAt,
+      user:
+        log.userId && (log.userEmail || log.userName || log.userLastName)
           ? {
               id: log.userId,
-              email: log.userEmail || '',
+              email: log.userEmail || "",
               firstName: log.userName,
               lastName: log.userLastName,
               profileImageUrl: log.userProfileImage,
             }
           : null,
-      })),
+    }));
+
+    const enrichedLogs = await this.enrichActivityLogsWithEntityInfo(mappedLogs);
+
+    return {
+      logs: enrichedLogs,
       total,
       page,
       limit,
@@ -12167,6 +12609,12 @@ export class DatabaseStorage implements IStorage {
       firstName: string | null;
       lastName: string | null;
       profileImageUrl: string | null;
+    } | null;
+    entityInfo?: {
+      title: string | null;
+      subtitle?: string | null;
+      url?: string | null;
+      status?: string | null;
     } | null;
   } | undefined> {
     const [log] = await db
@@ -12194,7 +12642,7 @@ export class DatabaseStorage implements IStorage {
       return undefined;
     }
 
-    return {
+    const mapped = {
       id: log.id,
       userId: log.userId,
       action: log.action,
@@ -12204,16 +12652,20 @@ export class DatabaseStorage implements IStorage {
       newValue: log.newValue,
       metadata: log.metadata,
       createdAt: log.createdAt,
-      user: log.userId
-        ? {
-            id: log.userId,
-            email: log.userEmail || '',
-            firstName: log.userName,
-            lastName: log.userLastName,
-            profileImageUrl: log.userProfileImage,
-          }
-        : null,
+      user:
+        log.userId && (log.userEmail || log.userName || log.userLastName)
+          ? {
+              id: log.userId,
+              email: log.userEmail || "",
+              firstName: log.userName,
+              lastName: log.userLastName,
+              profileImageUrl: log.userProfileImage,
+            }
+          : null,
     };
+
+    const [enriched] = await this.enrichActivityLogsWithEntityInfo([mapped]);
+    return enriched;
   }
 
   async getActivityLogsAnalytics(days = 30): Promise<{
@@ -12255,9 +12707,9 @@ export class DatabaseStorage implements IStorage {
         totalCount: sql<number>`count(*) FILTER (WHERE ${activityLogs.createdAt} >= ${periodStart})::int`,
         previousCount: sql<number>`count(*) FILTER (WHERE ${activityLogs.createdAt} >= ${previousPeriodStart} AND ${activityLogs.createdAt} < ${periodStart})::int`,
         activeUsers: sql<number>`count(DISTINCT ${activityLogs.userId}) FILTER (WHERE ${activityLogs.createdAt} >= ${periodStart} AND ${activityLogs.userId} IS NOT NULL)::int`,
-        affectedEntities: sql<number>`count(DISTINCT (${activityLogs.entityType}, ${activityLogs.entityId})) FILTER (WHERE ${activityLogs.createdAt} >= ${periodStart})::int`,
-        sensitiveActions: sql<number>`count(*) FILTER (WHERE ${activityLogs.createdAt} >= ${periodStart} AND lower(${activityLogs.action}) IN ('delete', 'ban', 'reject', 'assign_role', 'remove_role', 'update_role_permissions', 'reset_password'))::int`,
-        automatedActions: sql<number>`count(*) FILTER (WHERE ${activityLogs.createdAt} >= ${periodStart} AND ${activityLogs.userId} IS NULL)::int`,
+        affectedEntities: sql<number>`count(DISTINCT (lower(${activityLogs.entityType}), ${activityLogs.entityId})) FILTER (WHERE ${activityLogs.createdAt} >= ${periodStart})::int`,
+        sensitiveActions: sql<number>`count(*) FILTER (WHERE ${activityLogs.createdAt} >= ${periodStart} AND lower(${activityLogs.action}) IN ('delete', 'deleted', 'deleted_opinion', 'permanent_delete', 'deleted_permanently', 'bulk_delete', 'bulk_deleted_permanently', 'ban', 'reject', 'rejected_opinion', 'assign_role', 'remove_role', 'update_role_permissions', 'reset_password', 'disable_2fa', 'bot_publisher_token_revoked'))::int`,
+        automatedActions: sql<number>`count(*) FILTER (WHERE ${activityLogs.createdAt} >= ${periodStart} AND (${activityLogs.userId} IS NULL OR lower(${activityLogs.action}) IN ('auto_categorize_article', 'generate_seo_metadata', 'analyze_sentiment', 'batch_analyze_sentiment')))::int`,
         lastActivityAt: sql<Date | null>`max(${activityLogs.createdAt}) FILTER (WHERE ${activityLogs.createdAt} >= ${periodStart})`,
       })
       .from(activityLogs);
@@ -12298,14 +12750,23 @@ export class DatabaseStorage implements IStorage {
       profileImageUrl: user.profileImageUrl,
     }));
 
+    const normalizedActionSql = sql<string>`CASE
+      WHEN lower(${activityLogs.action}) IN ('create', 'created') THEN 'create'
+      WHEN lower(${activityLogs.action}) IN ('update', 'updated') THEN 'update'
+      WHEN lower(${activityLogs.action}) IN ('publish', 'published', 'articlepublished') THEN 'publish'
+      WHEN lower(${activityLogs.action}) IN ('delete', 'deleted') THEN 'delete'
+      WHEN lower(${activityLogs.action}) IN ('archive', 'archived') THEN 'archive'
+      ELSE lower(${activityLogs.action})
+    END`;
+
     const topActionsQuery = await db
       .select({
-        action: activityLogs.action,
+        action: normalizedActionSql,
         count: sql<number>`count(*)::int`,
       })
       .from(activityLogs)
       .where(gte(activityLogs.createdAt, periodStart))
-      .groupBy(activityLogs.action)
+      .groupBy(normalizedActionSql)
       .orderBy(desc(sql`count(*)`))
       .limit(6);
 
@@ -12314,14 +12775,16 @@ export class DatabaseStorage implements IStorage {
       count: item.count,
     }));
 
+    const normalizedEntitySql = sql<string>`lower(${activityLogs.entityType})`;
+
     const topEntitiesQuery = await db
       .select({
-        entityType: activityLogs.entityType,
+        entityType: normalizedEntitySql,
         count: sql<number>`count(*)::int`,
       })
       .from(activityLogs)
       .where(gte(activityLogs.createdAt, periodStart))
-      .groupBy(activityLogs.entityType)
+      .groupBy(normalizedEntitySql)
       .orderBy(desc(sql`count(*)`))
       .limit(6);
 
@@ -17184,6 +17647,8 @@ export class DatabaseStorage implements IStorage {
         and(
           eq(publisherCredits.publisherId, publisherId),
           eq(publisherCredits.isActive, true),
+          // باقة التجديد المفعلة مسبقاً لا تُعد نشطة قبل بدايتها
+          lte(publisherCredits.startDate, now),
           // الباقة المفتوحة صالحة دائماً بغض النظر عن الرصيد المتبقي
           or(
             eq(publisherCredits.isUnlimited, true),
@@ -17541,36 +18006,7 @@ export class DatabaseStorage implements IStorage {
         throw new Error('المقال غير موجود أو تمت الموافقة عليه مسبقاً');
       }
 
-      // Step 2: Lock and get active credit package (within transaction)
-      // Using SELECT FOR UPDATE to prevent concurrent credit deductions
-      const [activeCredit] = await tx
-        .select()
-        .from(publisherCredits)
-        .where(
-          and(
-            eq(publisherCredits.publisherId, publisherId),
-            eq(publisherCredits.isActive, true),
-            or(
-              isNull(publisherCredits.expiryDate),
-              gte(publisherCredits.expiryDate, new Date())
-            )
-          )
-        )
-        .orderBy(desc(publisherCredits.createdAt))
-        .for('update')  // Row-level lock - prevents concurrent credit updates
-        .limit(1);
-
-      if (!activeCredit) {
-        throw new Error('لا يوجد رصيد نشط متاح للناشر');
-      }
-
-      // Re-validate credit balance inside the locked transaction
-      // (الباقة المفتوحة لا تُقيَّد برصيد)
-      if (!activeCredit.isUnlimited && activeCredit.remainingCredits < 1) {
-        throw new Error('رصيد الناشر غير كافٍ');
-      }
-
-      // Step 3: Update article to published (within transaction)
+      // Step 2: Update article to published (within transaction)
       const [publishedArticle] = await tx
         .update(articles)
         .set({
@@ -17581,36 +18017,19 @@ export class DatabaseStorage implements IStorage {
         .where(eq(articles.id, articleId))
         .returning();
 
-      // Step 4: Deduct credit (within transaction)
-      // الباقة المفتوحة: نُحصي الاستخدام للتقارير دون إنقاص الرصيد
-      const creditsBefore = activeCredit.remainingCredits;
-      const creditsAfter = activeCredit.isUnlimited ? creditsBefore : creditsBefore - 1;
-
-      await tx
-        .update(publisherCredits)
-        .set({
-          usedCredits: activeCredit.usedCredits + 1,
-          remainingCredits: creditsAfter,
-          updatedAt: new Date(),
-        })
-        .where(eq(publisherCredits.id, activeCredit.id));
-
-      // Step 5: Create credit log (within transaction)
-      await tx
-        .insert(publisherCreditLogs)
-        .values({
-          publisherId,
-          creditPackageId: activeCredit.id,
-          articleId,
-          actionType: 'credit_used',
-          creditsBefore,
-          creditsChanged: activeCredit.isUnlimited ? 0 : -1,
-          creditsAfter,
-          performedBy,
-          notes: activeCredit.isUnlimited
-            ? `نشر خبر ضمن باقة مفتوحة: ${article.title}`
-            : `تم خصم رصيد مقابل نشر خبر: ${article.title}`,
-        });
+      // Step 3: Charge the package through the single shared rule
+      // (publisherCreditService) — same package selection as every other
+      // publish path, at most once per article. No usable package rolls
+      // the whole approval back.
+      const charge = await chargePublishInTx(tx, {
+        publisherId,
+        articleId,
+        performedBy,
+        note: article.title,
+      });
+      if (charge === 'no_credits') {
+        throw new Error('لا يوجد رصيد نشط متاح للناشر');
+      }
 
       // If we reach here, all operations succeeded
       // Transaction will commit automatically
@@ -20446,6 +20865,12 @@ export class DatabaseStorage implements IStorage {
     const applicantEmail = application.email.toLowerCase().trim();
     const [existingUser] = await db.select().from(users).where(sql`lower(${users.email}) = ${applicantEmail}`);
 
+    // الترخيص المرفق في الطلب يُعتمد مع القبول وينتقل إلى الحساب — وإلا دخل
+    // الكاتب لوحته «بلا ترخيص» وطُلب منه رفع الملف نفسه ومراجعة ثانية.
+    // يُفحص قبل ربط الجوال حتى لا يغيّر طلبٌ مرفوض (ترخيص منتهٍ) أي حساب.
+    const { mediaLicenseFromApplication } = await import("./services/mediaLicenseService");
+    const licenseFromApplication = mediaLicenseFromApplication(application);
+
     const { claimPhoneForStaffAccount, normalizePhone } = await import("./services/phoneAuth");
     const phoneCheck = await claimPhoneForStaffAccount(application.phone, existingUser?.id ?? null);
     if (!phoneCheck.ok) {
@@ -20489,6 +20914,7 @@ export class DatabaseStorage implements IStorage {
           phoneNumber: normalizedPhone || existingUser.phoneNumber,
           phoneVerified: Boolean(normalizedPhone) || existingUser.phoneVerified,
           isProfileComplete: true,
+          ...(licenseFromApplication ?? {}),
         })
         .where(eq(users.id, existingUser.id))
         .returning();
@@ -20524,6 +20950,7 @@ export class DatabaseStorage implements IStorage {
         bio: application.bio,
         isProfileComplete: true,
         mustChangePassword: true,
+        ...(licenseFromApplication ?? {}),
       }).returning();
       finalUser = newUser;
       

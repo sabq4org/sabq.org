@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -52,7 +53,6 @@ import {
   FileText,
   Upload,
   Filter,
-  CheckCircle2,
   XCircle,
   AlertTriangle,
   Loader2,
@@ -60,10 +60,10 @@ import {
   ListChecks,
   Power,
   PowerOff,
+  RefreshCw,
+  RotateCcw,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { format } from "date-fns";
-import { ar } from "date-fns/locale";
 
 interface SuspiciousWord {
   id: string;
@@ -170,7 +170,7 @@ export default function SuspiciousWordsManagement() {
   const [bulkMatchType, setBulkMatchType] = useState("exact");
   const [bulkAction, setBulkAction] = useState("review");
 
-  const { data: wordsData, isLoading } = useQuery<SuspiciousWordsResponse>({
+  const { data: wordsData, isLoading, refetch: refetchWords } = useQuery<SuspiciousWordsResponse>({
     queryKey: ["/api/admin/suspicious-words", page, searchQuery, categoryFilter, severityFilter, activeFilter],
     queryFn: async () => {
       const params = new URLSearchParams({
@@ -187,13 +187,15 @@ export default function SuspiciousWordsManagement() {
     },
   });
 
-  const words = Array.isArray(wordsData?.words) ? wordsData!.words : [];
+  const words = Array.isArray(wordsData?.words) ? wordsData.words : [];
   const totalPages = wordsData?.totalPages ?? 1;
   const total = wordsData?.total ?? 0;
 
-  const { data: stats } = useQuery<SuspiciousWordsStats>({
+  const { data: stats, refetch: refetchStats } = useQuery<SuspiciousWordsStats>({
     queryKey: ["/api/admin/suspicious-words/stats"],
   });
+
+  const topFlagged = Array.isArray(stats?.topFlagged) ? stats.topFlagged : [];
 
   const addMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
@@ -301,6 +303,26 @@ export default function SuspiciousWordsManagement() {
     });
   };
 
+  const handleRefresh = () => {
+    void refetchWords();
+    void refetchStats();
+    toast({ title: "تم التحديث", description: "تم تحديث قائمة الكلمات والإحصائيات" });
+  };
+
+  const hasActiveFilters =
+    searchQuery.trim() !== "" ||
+    categoryFilter !== "all" ||
+    severityFilter !== "all" ||
+    activeFilter !== "all";
+
+  const handleResetFilters = () => {
+    setSearchQuery("");
+    setCategoryFilter("all");
+    setSeverityFilter("all");
+    setActiveFilter("all");
+    setPage(1);
+  };
+
   const handleEdit = (word: SuspiciousWord) => {
     setSelectedWord(word);
     setFormData({
@@ -320,18 +342,18 @@ export default function SuspiciousWordsManagement() {
   };
 
   const handleBulkAdd = () => {
-    const words = bulkText
+    const parsedWords = bulkText
       .split("\n")
       .map((w) => w.trim())
       .filter((w) => w.length >= 2);
     
-    if (words.length === 0) {
+    if (parsedWords.length === 0) {
       toast({ title: "خطأ", description: "يرجى إدخال كلمات صالحة", variant: "destructive" });
       return;
     }
 
     bulkAddMutation.mutate({
-      words,
+      words: parsedWords,
       category: bulkCategory,
       severity: bulkSeverity,
       matchType: bulkMatchType,
@@ -339,17 +361,18 @@ export default function SuspiciousWordsManagement() {
     });
   };
 
-  const getActionBadge = (action: string) => {
+  const getActionBadge = (action: string, isMobile = false) => {
+    const suffix = isMobile ? "-mobile" : "";
     if (action === "reject") {
       return (
-        <Badge className="bg-red-600 hover:bg-red-700 gap-1" data-testid="badge-action-reject">
+        <Badge className="bg-red-600 hover:bg-red-700 gap-1" data-testid={`badge-action-reject${suffix}`}>
           <XCircle className="h-3 w-3" />
           رفض تلقائي
         </Badge>
       );
     }
     return (
-      <Badge variant="outline" className="text-amber-700 border-amber-500 gap-1" data-testid="badge-action-review">
+      <Badge variant="outline" className="text-amber-700 border-amber-500 dark:text-amber-400 gap-1" data-testid={`badge-action-review${suffix}`}>
         <AlertTriangle className="h-3 w-3" />
         مراجعة
       </Badge>
@@ -369,10 +392,10 @@ export default function SuspiciousWordsManagement() {
     const sev = SEVERITIES.find((s) => s.value === severity);
     return (
       <Badge variant="outline" className={`border-current ${
-        severity === "critical" ? "text-red-600 border-red-600" :
-        severity === "high" ? "text-orange-600 border-orange-600" :
-        severity === "medium" ? "text-yellow-600 border-yellow-600" :
-        "text-green-600 border-green-600"
+        severity === "critical" ? "text-red-600 border-red-600 dark:text-red-400" :
+        severity === "high" ? "text-orange-600 border-orange-600 dark:text-orange-400" :
+        severity === "medium" ? "text-yellow-600 border-yellow-600 dark:text-yellow-400" :
+        "text-green-600 border-green-600 dark:text-green-400"
       }`}>
         {sev?.label || severity}
       </Badge>
@@ -386,79 +409,137 @@ export default function SuspiciousWordsManagement() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6 p-6" dir="rtl">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h1 className="text-2xl font-bold flex items-center gap-2">
-              <ShieldAlert className="h-6 w-6 text-orange-500" />
-              إدارة الكلمات المشبوهة
-            </h1>
-            <p className="text-muted-foreground mt-1">
-              إدارة قائمة الكلمات التي تُشير إلى تعليقات مشبوهة
-            </p>
-          </div>
-          <div className="flex gap-2 flex-wrap">
-            <Button onClick={() => setBulkDialogOpen(true)} variant="outline" data-testid="button-bulk-add">
-              <Upload className="h-4 w-4 ml-2" />
-              إضافة جماعية
-            </Button>
-            <Button onClick={() => setAddDialogOpen(true)} data-testid="button-add-word">
-              <Plus className="h-4 w-4 ml-2" />
-              إضافة كلمة
-            </Button>
-          </div>
+      <div className="mx-auto w-full max-w-[1600px] space-y-6 px-4 pb-10 sm:px-6" dir="rtl">
+        <DashboardPageHeader
+          icon={ShieldAlert}
+          titleTestId="text-page-title"
+          title={
+            <span className="flex flex-wrap items-center gap-2">
+              <span>إدارة الكلمات المشبوهة</span>
+              <Badge
+                variant="secondary"
+                className="gap-1 border-primary/20 bg-primary/10 px-2.5 py-0.5 text-xs font-medium tabular-nums text-primary"
+                data-testid="badge-total-words"
+              >
+                {stats?.total ?? total} كلمة
+              </Badge>
+            </span>
+          }
+          description="إدارة قائمة الكلمات المحظورة والمشبوهة وتحديد إجراءات المراجعة أو الرفض التلقائي للتعليقات"
+          actions={
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                onClick={handleRefresh}
+                variant="outline"
+                size="icon"
+                className="h-9 w-9 shrink-0"
+                title="تحديث البيانات"
+                data-testid="button-refresh-words"
+              >
+                <RefreshCw className="h-4 w-4" />
+              </Button>
+              <Button onClick={() => setBulkDialogOpen(true)} variant="outline" size="sm" data-testid="button-bulk-add">
+                <Upload className="h-4 w-4 ml-2" />
+                إضافة جماعية
+              </Button>
+              <Button onClick={() => setAddDialogOpen(true)} size="sm" data-testid="button-add-word">
+                <Plus className="h-4 w-4 ml-2" />
+                إضافة كلمة
+              </Button>
+            </div>
+          }
+        />
+
+        {/* 4-Card KPI Summary Strip */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+          <Card className="rounded-xl border-border/60 bg-card shadow-none" data-testid="stat-total">
+            <CardContent className="p-4 sm:p-5">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-xs font-medium text-muted-foreground">إجمالي الكلمات</p>
+                  <div className="mt-1.5 text-2xl font-bold tabular-nums text-foreground">
+                    {stats?.total ?? "—"}
+                  </div>
+                </div>
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                  <ListChecks className="h-5 w-5" />
+                </div>
+              </div>
+              <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
+                <span>ضمن القاموس الرقابي</span>
+                <span className="inline-flex items-center gap-1 tabular-nums" data-testid="stat-inactive">
+                  <PowerOff className="h-3 w-3" />
+                  {stats?.inactive ?? "—"} معطّل
+                </span>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="rounded-xl border-border/60 bg-card shadow-none" data-testid="stat-active">
+            <CardContent className="p-4 sm:p-5">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-xs font-medium text-muted-foreground">الكلمات المفعّلة</p>
+                  <div className="mt-1.5 text-2xl font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
+                    {stats?.active ?? "—"}
+                  </div>
+                </div>
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                  <Power className="h-5 w-5" />
+                </div>
+              </div>
+              <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
+                <span>نشطة في الفلترة التلقائية</span>
+                {stats?.total ? (
+                  <span className="font-medium tabular-nums text-emerald-600 dark:text-emerald-400">
+                    {Math.round(((stats.active || 0) / stats.total) * 100)}%
+                  </span>
+                ) : null}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="rounded-xl border-border/60 bg-card shadow-none" data-testid="stat-critical">
+            <CardContent className="p-4 sm:p-5">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-xs font-medium text-muted-foreground">الكلمات الحرجة</p>
+                  <div className="mt-1.5 text-2xl font-bold tabular-nums text-red-600 dark:text-red-400">
+                    {stats?.critical ?? "—"}
+                  </div>
+                </div>
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-500/10 text-red-600 dark:text-red-400">
+                  <AlertTriangle className="h-5 w-5" />
+                </div>
+              </div>
+              <div className="mt-3 text-xs text-muted-foreground">
+                أعلى درجات الحساسية والخطورة
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="rounded-xl border-border/60 bg-card shadow-none" data-testid="stat-flags">
+            <CardContent className="p-4 sm:p-5">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-xs font-medium text-muted-foreground">مرات الإبلاغ</p>
+                  <div className="mt-1.5 text-2xl font-bold tabular-nums text-orange-600 dark:text-orange-400">
+                    {stats?.totalFlags ?? "—"}
+                  </div>
+                </div>
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-orange-500/10 text-orange-600 dark:text-orange-400">
+                  <Flame className="h-5 w-5" />
+                </div>
+              </div>
+              <div className="mt-3 text-xs text-muted-foreground">
+                إجمالي مرات الرصد في التعليقات
+              </div>
+            </CardContent>
+          </Card>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-          <Card data-testid="stat-total">
-            <CardContent className="p-4 flex items-center gap-3">
-              <ListChecks className="h-5 w-5 text-muted-foreground" />
-              <div>
-                <div className="text-xs text-muted-foreground">الإجمالي</div>
-                <div className="text-xl font-bold">{stats?.total ?? "—"}</div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card data-testid="stat-active">
-            <CardContent className="p-4 flex items-center gap-3">
-              <Power className="h-5 w-5 text-emerald-600" />
-              <div>
-                <div className="text-xs text-muted-foreground">مفعّل</div>
-                <div className="text-xl font-bold text-emerald-600">{stats?.active ?? "—"}</div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card data-testid="stat-inactive">
-            <CardContent className="p-4 flex items-center gap-3">
-              <PowerOff className="h-5 w-5 text-muted-foreground" />
-              <div>
-                <div className="text-xs text-muted-foreground">معطّل</div>
-                <div className="text-xl font-bold">{stats?.inactive ?? "—"}</div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card data-testid="stat-critical">
-            <CardContent className="p-4 flex items-center gap-3">
-              <AlertTriangle className="h-5 w-5 text-red-600" />
-              <div>
-                <div className="text-xs text-muted-foreground">حرج</div>
-                <div className="text-xl font-bold text-red-600">{stats?.critical ?? "—"}</div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card data-testid="stat-flags">
-            <CardContent className="p-4 flex items-center gap-3">
-              <Flame className="h-5 w-5 text-orange-500" />
-              <div>
-                <div className="text-xs text-muted-foreground">مرات الإبلاغ</div>
-                <div className="text-xl font-bold">{stats?.totalFlags ?? "—"}</div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {stats?.topFlagged && stats.topFlagged.length > 0 && (
-          <Card>
+        {topFlagged.length > 0 && (
+          <Card className="rounded-xl border-border/60 bg-card shadow-none">
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
                 <Flame className="h-4 w-4 text-orange-500" />
@@ -468,16 +549,16 @@ export default function SuspiciousWordsManagement() {
             </CardHeader>
             <CardContent>
               <div className="flex gap-2 flex-wrap" dir="rtl">
-                {stats.topFlagged.map((w) => (
+                {topFlagged.map((w) => (
                   <Badge
                     key={w.id}
                     variant="outline"
-                    className="text-sm py-1.5 px-3 gap-2"
+                    className="text-sm py-1.5 px-3 gap-2 rounded-lg border-border/60"
                     data-testid={`top-flagged-${w.id}`}
                   >
                     <span className="font-medium">{w.word}</span>
                     <span className="text-muted-foreground">·</span>
-                    <span className="text-orange-600 font-semibold">{w.flagCount}</span>
+                    <span className="text-orange-600 dark:text-orange-400 font-semibold tabular-nums">{w.flagCount}</span>
                   </Badge>
                 ))}
               </div>
@@ -485,15 +566,92 @@ export default function SuspiciousWordsManagement() {
           </Card>
         )}
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Filter className="h-5 w-5" />
-              البحث والتصفية
-            </CardTitle>
+        {/* Search & Quick Filter Toolbar */}
+        <Card className="rounded-xl border-border/60 bg-card shadow-none">
+          <CardHeader className="pb-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Filter className="h-4 w-4 text-primary" />
+                البحث والتصفية السريعة
+              </CardTitle>
+              {hasActiveFilters && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleResetFilters}
+                  className="h-8 gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+                  data-testid="button-reset-filters"
+                >
+                  <RotateCcw className="h-3.5 w-3.5" />
+                  إعادة تعيين الفلاتر
+                </Button>
+              )}
+            </div>
           </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <CardContent className="space-y-4">
+            {/* Quick status filter pills with count badges */}
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant={activeFilter === "all" ? "default" : "outline"}
+                className="h-8 rounded-xl gap-1.5 text-xs"
+                onClick={() => { setActiveFilter("all"); setPage(1); }}
+                data-testid="pill-filter-all"
+              >
+                <span>الكل</span>
+                <Badge variant="secondary" className="px-1.5 py-0 text-[11px] tabular-nums">
+                  {stats?.total ?? total}
+                </Badge>
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={activeFilter === "true" ? "default" : "outline"}
+                className="h-8 rounded-xl gap-1.5 text-xs"
+                onClick={() => { setActiveFilter("true"); setPage(1); }}
+                data-testid="pill-filter-active"
+              >
+                <Power className="h-3.5 w-3.5 text-emerald-500" />
+                <span>مفعّل</span>
+                <Badge variant="secondary" className="px-1.5 py-0 text-[11px] tabular-nums">
+                  {stats?.active ?? 0}
+                </Badge>
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={activeFilter === "false" ? "default" : "outline"}
+                className="h-8 rounded-xl gap-1.5 text-xs"
+                onClick={() => { setActiveFilter("false"); setPage(1); }}
+                data-testid="pill-filter-inactive"
+              >
+                <PowerOff className="h-3.5 w-3.5 text-muted-foreground" />
+                <span>معطّل</span>
+                <Badge variant="secondary" className="px-1.5 py-0 text-[11px] tabular-nums">
+                  {stats?.inactive ?? 0}
+                </Badge>
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={severityFilter === "critical" ? "destructive" : "outline"}
+                className="h-8 rounded-xl gap-1.5 text-xs"
+                onClick={() => {
+                  setSeverityFilter(severityFilter === "critical" ? "all" : "critical");
+                  setPage(1);
+                }}
+                data-testid="pill-filter-critical"
+              >
+                <AlertTriangle className="h-3.5 w-3.5 text-red-500" />
+                <span>حرج فقط</span>
+                <Badge variant="secondary" className="px-1.5 py-0 text-[11px] tabular-nums">
+                  {stats?.critical ?? 0}
+                </Badge>
+              </Button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
               <div className="relative">
                 <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
@@ -503,12 +661,12 @@ export default function SuspiciousWordsManagement() {
                     setSearchQuery(e.target.value);
                     setPage(1);
                   }}
-                  className="pr-10"
+                  className="pr-10 rounded-xl border-border/60"
                   data-testid="input-search"
                 />
               </div>
               <Select value={categoryFilter} onValueChange={(v) => { setCategoryFilter(v); setPage(1); }}>
-                <SelectTrigger data-testid="select-category-filter">
+                <SelectTrigger className="rounded-xl border-border/60" data-testid="select-category-filter">
                   <SelectValue placeholder="التصنيف" />
                 </SelectTrigger>
                 <SelectContent>
@@ -519,7 +677,7 @@ export default function SuspiciousWordsManagement() {
                 </SelectContent>
               </Select>
               <Select value={severityFilter} onValueChange={(v) => { setSeverityFilter(v); setPage(1); }}>
-                <SelectTrigger data-testid="select-severity-filter">
+                <SelectTrigger className="rounded-xl border-border/60" data-testid="select-severity-filter">
                   <SelectValue placeholder="الشدة" />
                 </SelectTrigger>
                 <SelectContent>
@@ -530,7 +688,7 @@ export default function SuspiciousWordsManagement() {
                 </SelectContent>
               </Select>
               <Select value={activeFilter} onValueChange={(v) => { setActiveFilter(v); setPage(1); }}>
-                <SelectTrigger data-testid="select-active-filter">
+                <SelectTrigger className="rounded-xl border-border/60" data-testid="select-active-filter">
                   <SelectValue placeholder="الحالة" />
                 </SelectTrigger>
                 <SelectContent>
@@ -543,14 +701,15 @@ export default function SuspiciousWordsManagement() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center justify-between">
+        {/* Words Table (Desktop) + Stacked Cards (Mobile) */}
+        <Card className="rounded-xl border-border/60 bg-card shadow-none">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center justify-between text-base sm:text-lg">
               <span>قائمة الكلمات</span>
               {wordsData && (
-                <span className="text-sm font-normal text-muted-foreground">
+                <Badge variant="outline" className="font-normal tabular-nums text-muted-foreground">
                   {total} كلمة
-                </span>
+                </Badge>
               )}
             </CardTitle>
           </CardHeader>
@@ -558,7 +717,7 @@ export default function SuspiciousWordsManagement() {
             {isLoading ? (
               <div className="space-y-3">
                 {[1, 2, 3, 4, 5].map((i) => (
-                  <Skeleton key={i} className="h-12 w-full" />
+                  <Skeleton key={i} className="h-14 w-full rounded-xl" />
                 ))}
               </div>
             ) : words.length === 0 ? (
@@ -568,7 +727,8 @@ export default function SuspiciousWordsManagement() {
               </div>
             ) : (
               <>
-                <div className="overflow-x-auto">
+                {/* Desktop Table View */}
+                <div className="hidden md:block overflow-x-auto">
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -590,7 +750,7 @@ export default function SuspiciousWordsManagement() {
                           <TableCell>{getCategoryBadge(word.category)}</TableCell>
                           <TableCell>{getSeverityBadge(word.severity)}</TableCell>
                           <TableCell>{getMatchTypeBadge(word.matchType)}</TableCell>
-                          <TableCell>{getActionBadge(word.action)}</TableCell>
+                          <TableCell>{getActionBadge(word.action, false)}</TableCell>
                           <TableCell>
                             <Switch
                               checked={word.isActive}
@@ -601,13 +761,13 @@ export default function SuspiciousWordsManagement() {
                             />
                           </TableCell>
                           <TableCell>
-                            <Badge variant="outline">{word.flagCount}</Badge>
+                            <Badge variant="outline" className="tabular-nums">{word.flagCount}</Badge>
                           </TableCell>
                           <TableCell className="max-w-[200px] truncate" title={word.notes}>
                             {word.notes || "-"}
                           </TableCell>
                           <TableCell>
-                            <div className="flex gap-2">
+                            <div className="flex gap-1.5">
                               <Button
                                 size="icon"
                                 variant="ghost"
@@ -633,6 +793,75 @@ export default function SuspiciousWordsManagement() {
                   </Table>
                 </div>
 
+                {/* Mobile Stacked Cards View */}
+                <div className="space-y-3 md:hidden">
+                  {words.map((word) => (
+                    <div
+                      key={word.id}
+                      className="rounded-xl border border-border/60 bg-card p-4 space-y-3"
+                      data-testid={`row-word-${word.id}-mobile`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0 space-y-1">
+                          <div className="font-bold text-base text-foreground break-words">
+                            {word.word}
+                          </div>
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            {getCategoryBadge(word.category)}
+                            {getSeverityBadge(word.severity)}
+                            {getMatchTypeBadge(word.matchType)}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <Switch
+                            checked={word.isActive}
+                            onCheckedChange={(checked) =>
+                              toggleActiveMutation.mutate({ id: word.id, isActive: checked })
+                            }
+                            data-testid={`switch-active-${word.id}-mobile`}
+                          />
+                        </div>
+                      </div>
+
+                      {word.notes ? (
+                        <p className="text-xs text-muted-foreground line-clamp-2 bg-muted/40 rounded-lg px-2.5 py-1.5">
+                          {word.notes}
+                        </p>
+                      ) : null}
+
+                      <div className="flex items-center justify-between gap-2 pt-2 border-t border-border/50">
+                        <div className="flex flex-wrap items-center gap-2">
+                          {getActionBadge(word.action, true)}
+                          <Badge variant="outline" className="gap-1 tabular-nums text-xs">
+                            <Flame className="h-3 w-3 text-orange-500" />
+                            {word.flagCount} إبلاغ
+                          </Badge>
+                        </div>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-8 w-8"
+                            onClick={() => handleEdit(word)}
+                            data-testid={`button-edit-${word.id}-mobile`}
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-8 w-8 text-destructive hover:text-destructive"
+                            onClick={() => handleDelete(word)}
+                            data-testid={`button-delete-${word.id}-mobile`}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
                 {totalPages > 1 && (
                   <div className="flex items-center justify-center gap-2 mt-4">
                     <Button
@@ -643,7 +872,7 @@ export default function SuspiciousWordsManagement() {
                     >
                       السابق
                     </Button>
-                    <span className="text-sm text-muted-foreground">
+                    <span className="text-sm text-muted-foreground tabular-nums">
                       صفحة {page} من {totalPages}
                     </span>
                     <Button

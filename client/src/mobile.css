@@ -14,9 +14,11 @@ body {
   padding-right: var(--safe-area-inset-right);
 }
 
-/* Touch targets - minimum 44x44px for iOS */
+/* Touch targets - minimum 44x44px for iOS.
+   .no-min-touch-size opts out (same escape hatch as index.css) for controls
+   whose 44px tap zone is provided by a padded wrapper instead. */
 @media (pointer: coarse) {
-  button, a {
+  button:not(.no-min-touch-size), a:not(.no-min-touch-size) {
     min-height: 44px;
     min-width: 44px;
   }

@@ -22,7 +22,7 @@ import type { SpCompetition, SpLiveItem } from "@/pages/SportsHub";
 // البطولات غير السعودية التي يحقّ لها تصدّر الشريط — مطابقة لقائمة
 // SPOTLIGHT_MARQUEE_SLUGS في غلاف /sports حتى لا يتصدّر دوري ثانوي الرئيسية.
 const MARQUEE_SLUGS = new Set([
-  "world-cup", "club-world-cup", "afc-champions-league", "asian-cup",
+  "world-cup", "club-world-cup", "intercontinental-cup", "afc-champions-league", "asian-cup",
   "champions-league", "europa-league",
   "premier-league", "la-liga", "serie-a", "bundesliga", "ligue-1",
   "gulf-cup", "gulf-club-champions",

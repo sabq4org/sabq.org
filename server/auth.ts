@@ -3,7 +3,7 @@ import { Strategy as LocalStrategy } from "passport-local";
 import { Strategy as GoogleStrategy } from "passport-google-oauth20";
 import AppleStrategy from "passport-apple";
 import session from "express-session";
-import type { Express, RequestHandler } from "express";
+import type { Express, Request, RequestHandler } from "express";
 import connectPg from "connect-pg-simple";
 import bcrypt from "bcrypt";
 import { storage } from "./storage";
@@ -15,17 +15,20 @@ import appleSignin from "apple-signin-auth";
 import { memoryCache, CACHE_TTL } from "./memoryCache";
 import { getRedisSessionAdapter } from "./redis";
 import { RedisStore } from "connect-redis";
+import { PgSessionRevocations } from "./sessionRevocations";
 import {
   SESSION_DEGRADED_HEADER,
   SessionFailoverStore,
   sessionIdFromCookieHeader,
 } from "./sessionFailoverStore";
+import { stagingSessionCookieName } from "./utils/stagingRuntime";
 
 /**
  * مرجع لمخزن الجلسات الثنائي حين يكون Redis مفعّلًا. يحتاجه الوسيط أدناه
  * ليعرف هل تعذّرت قراءة جلسة هذا الطلب فيَسِم الرد بالترويسة.
  */
 let activeFailoverStore: SessionFailoverStore | null = null;
+const sessionRevocations = new PgSessionRevocations(getSessionFallbackPool);
 
 export function getSession() {
   const sessionTtl = 7 * 24 * 60 * 60 * 1000; // 1 week
@@ -39,11 +42,11 @@ export function getSession() {
   const pgStore = new pgStoreFactory({
     pool: sessionPool,
     createTableIfMissing: false,
-    ttl: sessionTtl,
+    ttl: Math.floor(sessionTtl / 1000), // connect-pg-simple expects seconds.
     tableName: "sessions",
   });
 
-  let store: session.Store = pgStore;
+  let store: session.Store;
   const redis = getRedisSessionAdapter();
   if (redis) {
     // Redis أساسي + Postgres احتياطي: عند انقطاع Upstash / Static IP
@@ -53,11 +56,13 @@ export function getSession() {
       prefix: "sess:",
       ttl: Math.floor(sessionTtl / 1000),
     });
-    const failoverStore = new SessionFailoverStore(redisStore, pgStore);
+    const failoverStore = new SessionFailoverStore(redisStore, pgStore, sessionRevocations);
     activeFailoverStore = failoverStore;
     store = failoverStore;
     console.log("[Session] Redis primary + isolated PostgreSQL failover (commandTimeout 2.5s)");
   } else {
+    activeFailoverStore = new SessionFailoverStore(null, pgStore, sessionRevocations);
+    store = activeFailoverStore;
     console.log("[Session] Using isolated PostgreSQL store (add REDIS_URL for Redis primary + failover)");
   }
 
@@ -81,6 +86,7 @@ export function getSession() {
     store,
     resave: false,
     saveUninitialized: false,
+    name: stagingSessionCookieName(),
     rolling: true,
     cookie: {
       httpOnly: true,
@@ -128,7 +134,7 @@ function needsSession(req: { method: string; path: string; headers: Record<strin
   if (req.method !== 'GET' && req.method !== 'HEAD' && req.method !== 'OPTIONS') {
     return true;
   }
-  const hasCookie = !!(req.headers.cookie && req.headers.cookie.includes('connect.sid'));
+  const hasCookie = !!(req.headers.cookie && req.headers.cookie.includes(`${stagingSessionCookieName()}=`));
   if (hasCookie) return true;
   for (const prefix of SESSION_REQUIRED_PREFIXES) {
     if (req.path.startsWith(prefix)) return true;
@@ -220,7 +226,8 @@ export async function setupAuth(app: Express) {
 
           if (authDebug) console.log("🔑 LocalStrategy: Password valid? true");
 
-          // Check if user can login (not banned or deleted)
+          // Block hard-negative account states (banned/deleted/suspended/locked;
+          // "pending"/unverified stays allowed) — see canUserLogin in schema.
           if (!canUserLogin(user)) {
             const statusMessage = getUserStatusMessage(user);
             console.log("❌ LocalStrategy: User cannot login:", statusMessage);
@@ -267,13 +274,17 @@ export async function setupAuth(app: Express) {
               return done(null, false, { message: "لم نتمكن من الحصول على البريد الإلكتروني من Google" });
             }
 
-            // Check if user exists with this Google ID or email
+            // Check if user exists with this Google ID or email.
+            // المطابقة بـlower(email) لا بالعمود حرفيًا: حسابات قديمة مخزّنة
+            // بأحرف كبيرة لا يجدها الشرط الحرفي، فيُحاوَل الإدراج ويصطدم
+            // بقيد users_email_lower_unique — وصاحب الحساب لا يستطيع الدخول
+            // بـGoogle إطلاقًا (حادثة NODE-EXPRESS-G في Sentry).
             const [existingUser] = await db
               .select()
               .from(users)
               .where(or(
                 eq(users.googleId, googleId),
-                eq(users.email, email.toLowerCase())
+                sql`lower(${users.email}) = ${email.toLowerCase()}`
               ))
               .limit(1);
 
@@ -299,8 +310,10 @@ export async function setupAuth(app: Express) {
               return done(null, {
                 id: existingUser.id,
                 email: existingUser.email,
+                isNewUser: false,
                 isProfileComplete: existingUser.isProfileComplete ?? true, // ✅ Pass profile status
-                twoFactorEnabled: false, // OAuth users don't need 2FA
+                // الحساب القائم يحتفظ ببوابة 2FA؛ الـcallback يحوّله لشاشة الرمز قبل أي جلسة.
+                twoFactorEnabled: !!existingUser.twoFactorEnabled,
                 twoFactorMethod: 'authenticator'
               });
             }
@@ -330,6 +343,7 @@ export async function setupAuth(app: Express) {
             return done(null, {
               id: newUserId,
               email: email.toLowerCase(),
+              isNewUser: true,
               isProfileComplete: false, // ✅ New users need to complete onboarding
               twoFactorEnabled: false,
               twoFactorMethod: 'authenticator'
@@ -411,13 +425,15 @@ export async function setupAuth(app: Express) {
               }
             }
 
-            // Check if user exists with this Apple ID or email
+            // Check if user exists with this Apple ID or email.
+            // lower(email) كما في استراتيجية Google أعلاه — الشرط الحرفي يفوّت
+            // الحسابات المخزّنة بأحرف كبيرة فينفجر الإدراج بقيد الفرادة.
             const [existingUser] = await db
               .select()
               .from(users)
               .where(or(
                 eq(users.appleId, appleId),
-                eq(users.email, email.toLowerCase())
+                sql`lower(${users.email}) = ${email.toLowerCase()}`
               ))
               .limit(1);
 
@@ -451,8 +467,10 @@ export async function setupAuth(app: Express) {
               return done(null, {
                 id: existingUser.id,
                 email: existingUser.email,
+                isNewUser: false,
                 isProfileComplete: existingUser.isProfileComplete ?? true, // ✅ Pass profile status
-                twoFactorEnabled: false, // OAuth users don't need 2FA
+                // الحساب القائم يحتفظ ببوابة 2FA؛ الـcallback يحوّله لشاشة الرمز قبل أي جلسة.
+                twoFactorEnabled: !!existingUser.twoFactorEnabled,
                 twoFactorMethod: 'authenticator'
               });
             }
@@ -478,6 +496,7 @@ export async function setupAuth(app: Express) {
             return done(null, {
               id: newUserId,
               email: email.toLowerCase(),
+              isNewUser: true,
               isProfileComplete: false, // ✅ New users need to complete onboarding
               twoFactorEnabled: false,
               twoFactorMethod: 'authenticator'
@@ -495,9 +514,13 @@ export async function setupAuth(app: Express) {
     console.log("⚠️  Apple OAuth not configured (APPLE_CLIENT_ID, APPLE_TEAM_ID, APPLE_KEY_ID, or APPLE_PRIVATE_KEY missing)");
   }
 
-  passport.serializeUser((user: any, done) => {
-    console.log('🔹 SerializeUser:', user.id);
-    done(null, user.id);
+  passport.serializeUser(async (req: Request, user: any, done: (err: unknown, id?: string) => void) => {
+    try {
+      req.session.webAuthGeneration = await sessionRevocations.generationForUser(user.id);
+      done(null, user.id);
+    } catch (error) {
+      done(error);
+    }
   });
 
   passport.deserializeUser(async (id: string, done) => {
@@ -530,6 +553,9 @@ export async function setupAuth(app: Express) {
       const serializedUser = {
         id: user.id,
         email: user.email,
+        // Ownership checks need the database verification state on both the
+        // initial request and cached sessions; signing in alone is not proof.
+        emailVerified: user.emailVerified === true,
         role: user.role,
         firstName: user.firstName ?? null,
         lastName: user.lastName ?? null,
@@ -574,6 +600,13 @@ export async function invalidateAllUserSessions(
   userId: string,
   opts?: { exceptWebSid?: string; exceptMobileTokenHash?: string },
 ): Promise<void> {
+  // Must succeed before acknowledging revocation; cleanup below is best-effort only.
+  let revocationError: unknown;
+  try {
+    await sessionRevocations.revokeUser(userId, opts?.exceptWebSid);
+  } catch (error) {
+    revocationError = error; // Still attempt independent mobile/cache/store cleanup.
+  }
   invalidateUserSessionCache(userId);
 
   // Mobile bearer tokens (keep the caller's own token on a self-service change).
@@ -685,6 +718,7 @@ export async function invalidateAllUserSessions(
   } catch (e) {
     console.error("[Session] Redis session purge failed:", e);
   }
+  if (revocationError) throw revocationError;
 }
 
 // Bounded activity update cache to prevent memory leaks

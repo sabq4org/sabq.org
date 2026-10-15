@@ -78,17 +78,37 @@ function SquadSection({ squad }: { squad: KcSquadPlayer[] }) {
                   <Link
                     key={p.id}
                     href={p.id > 0 ? `/kings-cup/player/${p.id}` : "#"}
-                    className="flex items-center gap-3 rounded-xl border border-border bg-card p-3 text-right hover-elevate active-elevate-2"
+                    className="flex items-center gap-3 rounded-xl border border-border bg-card p-3 text-right hover-elevate active-elevate-2 relative"
                   >
-                    {p.photo ? (
-                      <img src={p.photo} alt={p.name} className="h-10 w-10 rounded-full object-cover bg-muted shrink-0" loading="lazy" />
-                    ) : (
-                      <span className="h-10 w-10 rounded-full bg-muted shrink-0" />
-                    )}
-                    <div className="min-w-0">
-                      <p className="text-sm font-bold truncate">{p.name}</p>
-                      <p className="text-[11px] text-muted-foreground">
-                        {p.position}
+                    <div className="relative shrink-0">
+                      {p.photo ? (
+                        <img src={p.photo} alt={p.name} className="h-10 w-10 rounded-full object-cover bg-muted shrink-0" loading="lazy" />
+                      ) : (
+                        <span className="h-10 w-10 rounded-full bg-muted shrink-0 block" />
+                      )}
+                      {p.captain && (
+                        <span
+                          className="absolute -top-1 -right-1 bg-amber-500 text-slate-950 font-black text-[9px] w-4 h-4 rounded-full flex items-center justify-center shadow-xs ring-1 ring-background"
+                          title="قائد الفريق"
+                        >
+                          C
+                        </span>
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 truncate">
+                        {p.nationality?.flag && (
+                          <img
+                            src={p.nationality.flag}
+                            alt={p.nationality.name || ""}
+                            className="w-4 h-2.5 rounded-xs object-cover shrink-0"
+                            loading="lazy"
+                          />
+                        )}
+                        <p className="text-sm font-bold truncate">{p.name}</p>
+                      </div>
+                      <p className="text-[11px] text-muted-foreground truncate">
+                        {p.detailedPosition || p.position}
                         {p.number != null ? ` · ${p.number}` : ""}
                         {p.age != null ? ` · ${p.age} سنة` : ""}
                       </p>

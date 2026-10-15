@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction, RequestHandler } from "express";
 import crypto from "crypto";
+import { stagingCsrfCookieName } from "./utils/stagingRuntime";
 
 declare module "express-session" {
   interface SessionData {
@@ -8,7 +9,7 @@ declare module "express-session" {
 }
 
 const CSRF_HEADER = "x-csrf-token";
-const CSRF_COOKIE = "csrf-token";
+const CSRF_COOKIE = stagingCsrfCookieName();
 
 export function generateCsrfToken(): string {
   return crypto.randomBytes(32).toString("hex");
@@ -65,9 +66,6 @@ const EXEMPT_PATHS = [
   "/api/auth/google/callback",
   "/api/auth/apple",
   "/api/auth/apple/callback",
-  "/api/forgot-password",
-  "/api/reset-password",
-  "/api/verify-email",
   "/api/csrf-token",
   // 2FA login-flow endpoints — user is mid-login (pending2FAUserId in session),
   // not yet authenticated, so no CSRF token is available yet. These are
@@ -77,7 +75,9 @@ const EXEMPT_PATHS = [
   "/api/2fa/send-sms",
   "/api/oauth/token",  // RFC 6749 §5.2 token endpoint — uses client auth, not CSRF
   "/api/webhooks/",
-  "/api/whatsapp/",
+  // Twilio webhooks only — the dashboard admin routes under /api/whatsapp/* stay protected.
+  "/api/whatsapp/webhook",
+  "/api/whatsapp/status-callback",
   "/api/twilio/",
   "/api/email-agent/webhook",  // SendGrid inbound parse webhook
   "/api/correspondent-applications",  // Public reporter registration form
@@ -90,7 +90,6 @@ const EXEMPT_PATHS = [
   // Only the anonymous, header-less telemetry routes (view / reading-time,
   // sent via raw fetch or navigator.sendBeacon which cannot attach the
   // x-csrf-token header) are exempted, via EXEMPT_REGEX below.
-  "/api/native-ads/",  // Native ads tracking (impressions/clicks) for anonymous users
   "/api/store/auth/",  // Store customer authentication (login, register, etc.)
   "/api/store/cart",  // Store cart operations
   "/api/analytics/visitors/ping",  // Visitor heartbeat for anonymous users
@@ -101,10 +100,6 @@ const EXEMPT_PATHS = [
   // (UI: «تعذر توليد المحضر» / 0 مقاطع). Prefix covers future /api/internal/*.
   "/api/internal/",
   "/api/angle-submissions",  // Public angle submission form (Muqtarab)
-  // Muqtarab public topic view counter (anonymous, idempotent-ish increment).
-  // Only public /topics/:id/view lives here; authenticated writer routes are
-  // under /api/muqtarab/my-angle/* and remain CSRF-protected.
-  "/api/muqtarab/topics/",
   "/api/admin/moderator/disconnect",  // sendBeacon on tab close can't send headers
   "/api/editor-presence/",  // Live editor presence heartbeat/leave (session-auth gated, sendBeacon on unload)
   // Behavior telemetry — fire-and-forget analytics sent via sendBeacon
@@ -151,26 +146,50 @@ const EXEMPT_REGEX = [
   /^\/api\/articles\/[^/]+\/reading-time$/,  // Reading-time telemetry (sendBeacon)
   /^\/api\/en\/articles\/[^/]+\/view$/,      // English article view counter (raw fetch)
   /^\/api\/ur\/articles\/[^/]+\/view$/,      // Urdu article view counter (raw fetch)
+  // Native ads: anonymous tracking beacons and the public self-serve advertiser
+  // flow only. A "/api/native-ads/" prefix also exempted the editor CRUD
+  // (POST /api/native-ads/ with a trailing slash), letting a cross-site form
+  // create an active ad as a signed-in editor.
+  /^\/api\/native-ads\/[^/]+\/(impression|click)$/,
+  /^\/api\/native-ads\/(submit|upload)$/,
+  /^\/api\/native-ads\/my-ads\/[^/]+\/budget$/,
+  // Muqtarab public topic view counter only; the signed-in topic comment POST
+  // under the same /topics/:id/ prefix stays protected.
+  /^\/api\/muqtarab\/topics\/[^/]+\/view$/,
 ];
 
-function isExemptPath(path: string, originalUrl: string): boolean {
+export function isCsrfExemptRequest(
+  method: string,
+  path: string,
+  originalUrl: string,
+): boolean {
+  const originalPath = originalUrl.split("?", 1)[0];
+
+  // CSP reports are anonymous browser telemetry. Exempt only this exact POST;
+  // sibling paths and other methods remain CSRF-protected.
+  if (method === "POST" &&
+      (path === "/api/security/csp-report" || path === "/security/csp-report" ||
+       originalPath === "/api/security/csp-report")) {
+    return true;
+  }
+
   // Check both req.path and req.originalUrl since middleware mounting affects req.path
   if (EXEMPT_PATHS.some(exempt =>
     path === exempt || path.startsWith(exempt) ||
-    originalUrl === exempt || originalUrl.startsWith(exempt)
+    originalPath === exempt || originalPath.startsWith(exempt)
   )) {
     return true;
   }
 
   // Dev-only test endpoints — never exempt in production (S-08).
   if (process.env.NODE_ENV !== "production" &&
-      (path.startsWith("/api/test/") || originalUrl.startsWith("/api/test/"))) {
+      (path.startsWith("/api/test/") || originalPath.startsWith("/api/test/"))) {
     return true;
   }
 
   // req.path carries no query string, so the $-anchored regexes match it
   // reliably even when originalUrl has a ?query suffix.
-  return EXEMPT_REGEX.some(re => re.test(path) || re.test(originalUrl));
+  return EXEMPT_REGEX.some(re => re.test(path) || re.test(originalPath));
 }
 
 export const validateCsrfToken: RequestHandler = (req, res, next) => {
@@ -178,7 +197,13 @@ export const validateCsrfToken: RequestHandler = (req, res, next) => {
     return next();
   }
 
-  if (isExemptPath(req.path, req.originalUrl)) {
+  // Exact machine-to-machine endpoint; its Tap signature replaces cookie CSRF.
+  // originalUrl retains /api when this middleware is mounted under that prefix.
+  if (req.method === "POST" && /^\/api\/media-store\/webhook\/?$/i.test(req.originalUrl.split("?")[0])) {
+    return next();
+  }
+
+  if (isCsrfExemptRequest(req.method, req.path, req.originalUrl)) {
     return next();
   }
 

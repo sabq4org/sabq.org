@@ -1,5 +1,6 @@
 package com.sabq.smart.feature.article
 
+import com.sabq.smart.data.readerErrorMessage
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -21,7 +22,13 @@ sealed interface ArticleDetailUiState {
     data class Loaded(
         val article: Article,
         val related: List<Article> = emptyList(),
+        /** «مقالات قد تهمك»: رأي من تصنيف الخبر (يختفي للرأي أو بلا تصنيف). */
+        val relatedOpinions: List<Article> = emptyList(),
+        /** صفة المراسل من `/api/reporters/{slug}` — تُستبدل بها `authorRole`. */
+        val reporterTitle: String? = null,
         val mediaAssets: List<MediaAsset> = emptyList(),
+        /** المحتوى المعروض من بطاقة القائمة والنص الكامل ما زال يُجلب. */
+        val hydrating: Boolean = false,
     ) : ArticleDetailUiState
 }
 
@@ -48,17 +55,32 @@ class ArticleDetailViewModel @Inject constructor(
             return
         }
         viewModelScope.launch {
-            _state.value = ArticleDetailUiState.Loading
+            // فتح فوري من بطاقة القائمة إن توفرت — الشاشة الفارغة كانت أسوأ
+            // مسار إحساسًا بالبطء (تدقيق الأداء 2026-08-02).
+            val seed = com.sabq.smart.data.ArticleHandoff.take(slug)
+            _state.value = if (seed != null) {
+                ArticleDetailUiState.Loaded(article = seed, hydrating = true)
+            } else {
+                ArticleDetailUiState.Loading
+            }
             runCatching { repo.getArticleBySlug(slug) }
                 .onSuccess { article ->
                     _state.value = ArticleDetailUiState.Loaded(article = article)
                     loadRelated()
+                    loadRelatedOpinions(article)
+                    loadReporterTitle(article)
                     loadMediaAssets(article.id)
                 }
                 .onFailure { e ->
-                    _state.value = ArticleDetailUiState.Error(
-                        e.localizedMessage ?: "تعذّر تحميل المقال",
-                    )
+                    val current = _state.value
+                    if (current is ArticleDetailUiState.Loaded) {
+                        // البذرة معروضة — نبقيها بدل استبدالها بشاشة خطأ.
+                        _state.value = current.copy(hydrating = false)
+                    } else {
+                        _state.value = ArticleDetailUiState.Error(
+                            readerErrorMessage(e, "تعذّر تحميل المقال"),
+                        )
+                    }
                 }
         }
     }
@@ -73,6 +95,35 @@ class ArticleDetailViewModel @Inject constructor(
                 }
                 .onFailure { e ->
                     android.util.Log.e("ArticleDetailVM", "Failed to load related articles", e)
+                }
+        }
+    }
+
+    private fun loadReporterTitle(article: Article) {
+        val slug = article.authorSlug ?: return
+        viewModelScope.launch {
+            runCatching { repo.getReporterTitle(slug) }
+                .onSuccess { title ->
+                    if (title != null) _state.update { c ->
+                        if (c is ArticleDetailUiState.Loaded) c.copy(reporterTitle = title) else c
+                    }
+                }
+                .onFailure { e -> android.util.Log.e("ArticleDetailVM", "Failed to load reporter title", e) }
+        }
+    }
+
+    private fun loadRelatedOpinions(article: Article) {
+        val categoryId = article.categoryId ?: return
+        if (article.isOpinion) return
+        viewModelScope.launch {
+            runCatching { repo.getRelatedOpinions(categoryId, excludeId = article.id) }
+                .onSuccess { opinions ->
+                    _state.update { c ->
+                        if (c is ArticleDetailUiState.Loaded) c.copy(relatedOpinions = opinions) else c
+                    }
+                }
+                .onFailure { e ->
+                    android.util.Log.e("ArticleDetailVM", "Failed to load related opinions", e)
                 }
         }
     }

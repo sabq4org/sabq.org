@@ -20,6 +20,13 @@
 
 لوحة التحكم: `/dashboard/systems-catalog` · CLI: `node scripts/systems-inventory.mjs`
 
+## docs/ai-governance/ — حوكمة الذكاء الاصطناعي (اعتماد سدايا)
+- `README.md` — دليل الحزمة والأدوار والإصدار
+- `ai-usage-policy.md` — سياسة استخدام الذكاء الاصطناعي
+- `model-cards.md` — بطاقات تعريف الأنظمة الذكية
+- `human-oversight-procedures.md` — إجراءات الإشراف البشري والتصعيد
+- `risk-register.md` — سجل المخاطر
+
 ## docs/security/ — الأمن
 - `SECURITY_AUDIT_REPORT.md` — تقرير تدقيق أمني سابق
 - `SECURITY_LINK_INJECTION_AUDIT_AR.md` — تدقيق حقن الروابط

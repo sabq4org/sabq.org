@@ -36,7 +36,12 @@ data class PredContestMeta(
     val away: PredTeamMeta? = null,
     val round: String? = null,
     val venue: String? = null,
+    /** ركلات الترجيح إن حُسمت المباراة بها (نقل الويب #1439). */
+    val penalties: PredPenaltiesMeta? = null,
 )
+
+@Serializable
+data class PredPenaltiesMeta(val home: Int? = null, val away: Int? = null)
 
 /** حمولة توقّع نتيجة مباراة — اختيارية الحقول لتمرير حمولات الأنواع الأخرى. */
 @Serializable
@@ -46,7 +51,20 @@ data class PredScorePayload(val predHome: Int? = null, val predAway: Int? = null
 data class PredMyEntry(val id: String = "", val payload: PredScorePayload? = null)
 
 @Serializable
-data class PredScoreResult(val finalHome: Int? = null, val finalAway: Int? = null)
+data class PredScoreResult(
+    val finalHome: Int? = null,
+    val finalAway: Int? = null,
+    val penalties: PredPenaltiesMeta? = null,
+) {
+    companion object {
+        /** «(الضيف–المضيف ر.ت)» تحت النتيجة النهائية — نفس ترتيب iOS/الويب. */
+        fun penaltiesLabel(pen: PredPenaltiesMeta?): String? {
+            val ph = pen?.home ?: return null
+            val pa = pen.away ?: return null
+            return "($pa–$ph ر.ت)"
+        }
+    }
+}
 
 @Serializable
 data class PredContest(
@@ -145,10 +163,12 @@ data class PredEntrySaveResponse(val entry: PredEntrySaved = PredEntrySaved())
 @Serializable
 data class PredLedgerItem(
     val id: String = "",
+    val contestId: String? = null,
     val points: Int = 0,
     val reasonCode: String = "",
     val reasonLabelAr: String = "",
     val createdAt: String = "",
+    val breakdown: PredAwardBreakdown? = null,
 )
 
 @Serializable

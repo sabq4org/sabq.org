@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, gte, sql } from "drizzle-orm";
 import { db } from "../db";
-import { CACHE_TTL, memoryCache } from "../memoryCache";
+import { CACHE_TTL, withSWR } from "../memoryCache";
 import {
   articles,
   categories,
@@ -45,10 +45,15 @@ export interface DashboardPulseStats {
 }
 
 export async function getDashboardPulseStats(): Promise<DashboardPulseStats> {
-  const cacheKey = "admin:dashboard:pulse";
-  const cached = memoryCache.get<DashboardPulseStats>(cacheKey);
-  if (cached) return cached;
+  return withSWR(
+    "admin:dashboard:pulse",
+    CACHE_TTL.SHORT,
+    CACHE_TTL.SHORT,
+    computeDashboardPulseStats,
+  );
+}
 
+async function computeDashboardPulseStats(): Promise<DashboardPulseStats> {
   const now = new Date();
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const yesterdayStart = new Date(todayStart.getTime() - 24 * 60 * 60 * 1000);
@@ -178,6 +183,5 @@ export async function getDashboardPulseStats(): Promise<DashboardPulseStats> {
     generatedAt: now.toISOString(),
   };
 
-  memoryCache.set(cacheKey, result, CACHE_TTL.SHORT);
   return result;
 }

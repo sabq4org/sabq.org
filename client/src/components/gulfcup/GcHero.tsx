@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import { motion } from "framer-motion";
-import { CalendarDays, Crown, MapPin, Sparkles, Trophy, Users } from "lucide-react";
+import { CalendarDays, Crown, MapPin, Sparkles, Trophy, Users, UsersRound } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 // الشعار الرسمي (SVG متجهي). نصّه أخضر داكن — يُعرض فوق لوح أبيض كروشن.
@@ -130,7 +130,9 @@ export function GcHero({ overview, onJump, titleHolder }: GcHeroProps) {
             خليجي <span className="text-sky-300">27</span>
           </h1>
           <p className="max-w-xl text-sm text-sky-100/70 sm:text-base">
-            كأس الخليج العربي السابع والعشرون — تغطية حية لحظة بلحظة بتوقيت الرياض
+            {overview?.started
+              ? "كأس الخليج العربي السابع والعشرون — تغطية حية لحظة بلحظة بتوقيت الرياض"
+              : "كأس الخليج العربي السابع والعشرون — تغطية بتوقيت الرياض استعدادًا لانطلاق البطولة"}
           </p>
 
           {(!!overview?.teamsCount || !!overview?.venues?.length || !!dateRange) && (
@@ -197,6 +199,15 @@ export function GcHero({ overview, onJump, titleHolder }: GcHeroProps) {
             <Button className="rounded-full bg-white px-6 font-bold text-sky-950 hover:bg-sky-50">
               <Sparkles className="h-4 w-4 text-sky-500" />
               توقّع واربح
+            </Button>
+          </Link>
+          <Link href="/gulf-cup/majlis">
+            <Button
+              variant="outline"
+              className="rounded-full border-white/20 bg-white/5 px-6 font-bold text-sky-100 hover:bg-white/10"
+            >
+              <UsersRound className="h-4 w-4" />
+              ابدأ مجلسًا
             </Button>
           </Link>
           <Button

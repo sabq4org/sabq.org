@@ -4,10 +4,54 @@ import { db } from "./db";
 import { users, roles, permissions, rolePermissions, userRoles, userPermissionOverrides } from "@shared/schema";
 import { eq, and, inArray } from "drizzle-orm";
 import { memoryCache, CACHE_TTL } from "./memoryCache";
-import { SUPERUSER_ROLE_NAMES, resolveEffectivePermissions, ROLE_NAMES, canAssignRole } from "@shared/rbac-constants";
+import { SUPERUSER_ROLE_NAMES, resolveEffectivePermissions, denyPermissionsForRoles, ROLE_NAMES, canAssignRole } from "@shared/rbac-constants";
+import { mergeRoleSignals } from "@shared/effectiveRoles";
 
 // Type definitions
 export type PermissionCode = string; // e.g., "articles.create"
+
+async function loadEffectivePermData(
+  userId: string,
+): Promise<{ isSuperuser: boolean; permissions: string[] }> {
+  const cacheKey = `rbac:${userId}`;
+  let permData = memoryCache.get<{ isSuperuser: boolean; permissions: string[] }>(cacheKey);
+
+  if (!permData) {
+    // Check superuser status — single source of truth in shared constants.
+    const [user] = await db
+      .select({ role: users.role })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+
+    let isSuperuser = user ? (SUPERUSER_ROLE_NAMES as readonly string[]).includes(user.role) : false;
+    let rbacRoleNames: string[] = [];
+
+    if (!isSuperuser) {
+      const rbacRoles = await db
+        .select({ roleName: roles.name })
+        .from(userRoles)
+        .innerJoin(roles, eq(userRoles.roleId, roles.id))
+        .where(eq(userRoles.userId, userId));
+      rbacRoleNames = rbacRoles.map(r => r.roleName);
+      isSuperuser = rbacRoles.some(r => (SUPERUSER_ROLE_NAMES as readonly string[]).includes(r.roleName));
+    }
+
+    if (isSuperuser) {
+      permData = { isSuperuser, permissions: [] };
+    } else {
+      const allRoles = rbacRoleNames.length > 0 ? rbacRoleNames : [user?.role || "reader"];
+      const permissionData = await getUserPermissionData(userId);
+      permData = {
+        isSuperuser,
+        permissions: resolveEffectivePermissions(allRoles, permissionData.permissions, permissionData.deniedPermissionCodes),
+      };
+    }
+    memoryCache.set(cacheKey, permData, 5 * 60 * 1000); // 5 min cache
+  }
+
+  return permData;
+}
 
 // Check if a user has a specific permission using cached permissions
 // Supports user-level permission overrides for fine-grained control
@@ -16,48 +60,28 @@ export async function userHasPermission(
   permissionCode: PermissionCode
 ): Promise<boolean> {
   try {
-    const cacheKey = `rbac:${userId}`;
-    let permData = memoryCache.get<{ isSuperuser: boolean; permissions: string[] }>(cacheKey);
-
-    if (!permData) {
-      // Check superuser status — single source of truth in shared constants.
-      const [user] = await db
-        .select({ role: users.role })
-        .from(users)
-        .where(eq(users.id, userId))
-        .limit(1);
-
-      let isSuperuser = user ? (SUPERUSER_ROLE_NAMES as readonly string[]).includes(user.role) : false;
-      let rbacRoleNames: string[] = [];
-
-      if (!isSuperuser) {
-        const rbacRoles = await db
-          .select({ roleName: roles.name })
-          .from(userRoles)
-          .innerJoin(roles, eq(userRoles.roleId, roles.id))
-          .where(eq(userRoles.userId, userId));
-        rbacRoleNames = rbacRoles.map(r => r.roleName);
-        isSuperuser = rbacRoles.some(r => (SUPERUSER_ROLE_NAMES as readonly string[]).includes(r.roleName));
-      }
-
-      if (isSuperuser) {
-        permData = { isSuperuser, permissions: [] };
-      } else {
-        const allRoles = rbacRoleNames.length > 0 ? rbacRoleNames : [user?.role || "reader"];
-        const dbPerms = await getUserPermissions(userId);
-        permData = {
-          isSuperuser,
-          permissions: resolveEffectivePermissions(allRoles, dbPerms),
-        };
-      }
-      memoryCache.set(cacheKey, permData, 5 * 60 * 1000); // 5 min cache
-    }
-
+    const permData = await loadEffectivePermData(userId);
     if (permData.isSuperuser) return true;
     return permData.permissions.includes(permissionCode);
   } catch (error) {
     console.error("Error checking permission:", error);
     return false;
+  }
+}
+
+// الصلاحيات «الفعلية» = DB ∪ خريطة ROLE_PERMISSIONS_MAP — نفس المجموعة التي تحكم
+// بوابات requireAnyPermission وما تراه الواجهة عبر /api/auth/user. الفحوص الداخلية
+// في المسارات كانت تقرأ getUserPermissions (DB فقط) فتتعارض مع البوابة عندما تختلف
+// المجموعتان؛ استخدم هذه الدالة للفحوص الداخلية. الحساب الإداري يُعاد كـ["*"]،
+// فافحص includes("*") قبل أي includes(code).
+export async function getEffectiveUserPermissions(userId: string): Promise<string[]> {
+  try {
+    const permData = await loadEffectivePermData(userId);
+    if (permData.isSuperuser) return ["*"];
+    return permData.permissions;
+  } catch (error) {
+    console.error("Error getting effective permissions:", error);
+    return [];
   }
 }
 
@@ -72,22 +96,23 @@ export async function userHasPermission(
 // userHasPermission() which already short-circuits superusers.
 /** All role names for a user (RBAC user_roles, falling back to users.role). */
 export async function getUserRoleNames(userId: string): Promise<string[]> {
-  const rbacRoles = await db
-    .select({ roleName: roles.name })
-    .from(userRoles)
-    .innerJoin(roles, eq(userRoles.roleId, roles.id))
-    .where(eq(userRoles.userId, userId));
+  const [rbacRoles, [user]] = await Promise.all([
+    db
+      .select({ roleName: roles.name })
+      .from(userRoles)
+      .innerJoin(roles, eq(userRoles.roleId, roles.id))
+      .where(eq(userRoles.userId, userId)),
+    db
+      .select({ role: users.role })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1),
+  ]);
 
-  const names = rbacRoles.map((r) => r.roleName);
-  if (names.length > 0) return names;
-
-  const [user] = await db
-    .select({ role: users.role })
-    .from(users)
-    .where(eq(users.id, userId))
-    .limit(1);
-
-  return user?.role ? [user.role] : [];
+  return mergeRoleSignals(
+    rbacRoles.map((r) => r.roleName),
+    user?.role,
+  );
 }
 
 export async function userHasAnyRole(
@@ -152,60 +177,77 @@ export async function roleIdsAssignmentError(
   return null;
 }
 
+/** Strict read: callers merging further grants must not treat a failed deny lookup as empty. */
+export async function getUserPermissionData(userId: string): Promise<{
+  permissions: string[];
+  deniedPermissionCodes: string[];
+}> {
+  // Superuser check — matches userHasPermission's logic.
+  const [user] = await db
+    .select({ role: users.role })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+
+  let isSuperuser = user ? (SUPERUSER_ROLE_NAMES as readonly string[]).includes(user.role) : false;
+  let rbacRoleNames: string[] = [];
+
+  if (!isSuperuser) {
+    const rbacRoles = await db
+      .select({ roleName: roles.name })
+      .from(userRoles)
+      .innerJoin(roles, eq(userRoles.roleId, roles.id))
+      .where(eq(userRoles.userId, userId));
+    rbacRoleNames = rbacRoles.map((r) => r.roleName);
+    isSuperuser = rbacRoles.some(r => (SUPERUSER_ROLE_NAMES as readonly string[]).includes(r.roleName));
+  }
+
+  if (isSuperuser) {
+    const allPerms = await db.select({ code: permissions.code }).from(permissions);
+    return { permissions: allPerms.map(p => p.code), deniedPermissionCodes: [] };
+  }
+
+  const roleNames = Array.from(
+    new Set([...(user?.role ? [user.role] : []), ...rbacRoleNames]),
+  );
+
+  // Get role-based permissions
+  const result = await db
+    .select({ permissionCode: permissions.code })
+    .from(userRoles)
+    .innerJoin(rolePermissions, eq(userRoles.roleId, rolePermissions.roleId))
+    .innerJoin(permissions, eq(rolePermissions.permissionId, permissions.id))
+    .where(eq(userRoles.userId, userId));
+
+  const rolePermissionCodes = new Set(result.map(r => r.permissionCode));
+
+  // Get user-level overrides
+  const overrides = await db
+    .select({
+      permissionCode: userPermissionOverrides.permissionCode,
+      effect: userPermissionOverrides.effect
+    })
+    .from(userPermissionOverrides)
+    .where(eq(userPermissionOverrides.userId, userId));
+
+  // Apply overrides
+  for (const override of overrides) {
+    if (override.effect === 'allow') {
+      rolePermissionCodes.add(override.permissionCode);
+    } else if (override.effect === 'deny') {
+      rolePermissionCodes.delete(override.permissionCode);
+    }
+  }
+
+  return {
+    permissions: denyPermissionsForRoles(roleNames, Array.from(rolePermissionCodes)),
+    deniedPermissionCodes: overrides.filter(o => o.effect === "deny").map(o => o.permissionCode),
+  };
+}
+
 export async function getUserPermissions(userId: string): Promise<string[]> {
   try {
-    // Superuser check — matches userHasPermission's logic.
-    const [user] = await db
-      .select({ role: users.role })
-      .from(users)
-      .where(eq(users.id, userId))
-      .limit(1);
-
-    let isSuperuser = user ? (SUPERUSER_ROLE_NAMES as readonly string[]).includes(user.role) : false;
-
-    if (!isSuperuser) {
-      const rbacRoles = await db
-        .select({ roleName: roles.name })
-        .from(userRoles)
-        .innerJoin(roles, eq(userRoles.roleId, roles.id))
-        .where(eq(userRoles.userId, userId));
-      isSuperuser = rbacRoles.some(r => (SUPERUSER_ROLE_NAMES as readonly string[]).includes(r.roleName));
-    }
-
-    if (isSuperuser) {
-      const allPerms = await db.select({ code: permissions.code }).from(permissions);
-      return allPerms.map(p => p.code);
-    }
-
-    // Get role-based permissions
-    const result = await db
-      .select({ permissionCode: permissions.code })
-      .from(userRoles)
-      .innerJoin(rolePermissions, eq(userRoles.roleId, rolePermissions.roleId))
-      .innerJoin(permissions, eq(rolePermissions.permissionId, permissions.id))
-      .where(eq(userRoles.userId, userId));
-
-    const rolePermissionCodes = new Set(result.map(r => r.permissionCode));
-
-    // Get user-level overrides
-    const overrides = await db
-      .select({
-        permissionCode: userPermissionOverrides.permissionCode,
-        effect: userPermissionOverrides.effect
-      })
-      .from(userPermissionOverrides)
-      .where(eq(userPermissionOverrides.userId, userId));
-
-    // Apply overrides
-    for (const override of overrides) {
-      if (override.effect === 'allow') {
-        rolePermissionCodes.add(override.permissionCode);
-      } else if (override.effect === 'deny') {
-        rolePermissionCodes.delete(override.permissionCode);
-      }
-    }
-
-    return Array.from(rolePermissionCodes);
+    return (await getUserPermissionData(userId)).permissions;
   } catch (error) {
     console.error("Error getting user permissions:", error);
     return [];
@@ -413,6 +455,33 @@ export function requireRole(...roleNames: string[]) {
   };
 }
 
+// مفاتيح لا تُحفظ في سجل النشاط أبدًا. مسارات إدارة المستخدمين تمرر صف users
+// كاملاً كـoldValue، فكان هاش كلمة المرور وسر 2FA ورموز الاحتياط تُحفظ
+// وتُعرض لكل من يملك system.view_audit.
+const ACTIVITY_LOG_REDACTED_KEYS = new Set([
+  "password",
+  "passwordHash",
+  "password_hash",
+  "twoFactorSecret",
+  "two_factor_secret",
+  "twoFactorBackupCodes",
+  "two_factor_backup_codes",
+]);
+
+export function redactActivityValue<T>(value: T, depth = 0): T {
+  if (value === null || value === undefined || depth > 5) return value;
+  if (Array.isArray(value)) {
+    return value.map((item) => redactActivityValue(item, depth + 1)) as T;
+  }
+  if (typeof value !== "object" || value instanceof Date) return value;
+  const out: Record<string, unknown> = {};
+  for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
+    if (ACTIVITY_LOG_REDACTED_KEYS.has(key)) continue;
+    out[key] = redactActivityValue(item, depth + 1);
+  }
+  return out as T;
+}
+
 // Helper: Log activity to activity_logs table
 export async function logActivity(params: {
   userId: string;
@@ -445,9 +514,9 @@ export async function logActivity(params: {
       action: params.action,
       entityType: params.entityType,
       entityId: params.entityId,
-      oldValue: params.oldValue || null,
-      newValue: params.newValue || null,
-      metadata: params.metadata || null,
+      oldValue: redactActivityValue(params.oldValue) || null,
+      newValue: redactActivityValue(params.newValue) || null,
+      metadata: redactActivityValue(params.metadata) || null,
     });
   } catch (error) {
     console.error("Error logging activity:", error);

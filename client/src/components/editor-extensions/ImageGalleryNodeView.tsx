@@ -31,7 +31,7 @@ import { Input } from '@/components/ui/input';
 import { Progress } from '@/components/ui/progress';
 import { GripVertical, Trash2, Pencil, Images, Plus, Upload, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { apiUrl, getCsrfToken } from '@/lib/queryClient';
+import { uploadNewsImage, newsImageUploadLabel, type NewsImageUploadProgress } from '@/lib/newsImageUpload';
 
 interface GalleryImage {
   src: string;
@@ -138,6 +138,7 @@ export function ImageGalleryNodeView({ node, updateAttributes, selected, editor,
   const [draftImages, setDraftImages] = useState<DraftImage[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadStatus, setUploadStatus] = useState<NewsImageUploadProgress>({ phase: "preparing", percent: 0 });
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   const uploadPurpose = editor.extensionManager.extensions.find(
@@ -219,25 +220,10 @@ export function ImageGalleryNodeView({ node, updateAttributes, selected, editor,
         formData.append('file', file);
         if (uploadPurpose) formData.append('entityType', `${uploadPurpose}-gallery`);
         
-        const csrfToken = getCsrfToken();
-        const headers: HeadersInit = {};
-        if (csrfToken) {
-          headers['x-csrf-token'] = csrfToken;
-        }
-        
-        const response = await fetch(apiUrl('/api/media/upload'), {
-          method: 'POST',
-          headers,
-          body: formData,
-          credentials: 'include',
+        const data = await uploadNewsImage<{ url: string }>(formData, (status) => {
+          setUploadStatus(status);
+          setUploadProgress(Math.floor((i + status.percent / 100) / totalFiles * 100));
         });
-        
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-          throw new Error(errorData.message || 'فشل رفع الصورة');
-        }
-        
-        const data = await response.json();
         const imageUrl = data.url;
         
         if (imageUrl) {
@@ -432,7 +418,7 @@ export function ImageGalleryNodeView({ node, updateAttributes, selected, editor,
                 {isUploading ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    جاري الرفع... {uploadProgress}%
+                    {newsImageUploadLabel(uploadStatus)}
                   </>
                 ) : (
                   <>

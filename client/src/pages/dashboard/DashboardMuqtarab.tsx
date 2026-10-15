@@ -52,6 +52,12 @@ import {
   Waves,
   HelpCircle,
   Wand2,
+  LayoutGrid,
+  List,
+  ArrowUpLeft,
+  Clock,
+  CheckCircle2,
+  Hash,
   type LucideIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -238,7 +244,7 @@ function IconPicker({ value, onChange, colorHex = "#3b82f6" }: IconPickerProps) 
               type="button"
               onClick={() => onChange(item.key)}
               className={`
-                p-2 rounded-md border transition-all hover-elevate
+                no-min-touch-size p-2 rounded-md border transition-all hover-elevate
                 ${isSelected 
                   ? "border-primary bg-primary/10" 
                   : "border-transparent hover:border-muted-foreground/20"
@@ -440,6 +446,11 @@ export default function DashboardMuqtarab() {
   const [editingAngle, setEditingAngle] = useState<Angle | null>(null);
   const [deletingAngle, setDeletingAngle] = useState<Angle | null>(null);
 
+  // State for search, filtering, and view mode
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive" | "pending">("all");
+  const [viewMode, setViewMode] = useState<"grid" | "table">("grid");
+
   // Form - MUST be before early returns
   const form = useForm<AngleFormValues>({
     resolver: zodResolver(angleFormSchema),
@@ -490,6 +501,36 @@ export default function DashboardMuqtarab() {
     (sum, s) => sum + (s?.pending_review || 0),
     0,
   );
+  const totalTopicsCount = Object.values(anglesStats).reduce(
+    (sum, s) => sum + (s?.total || 0),
+    0,
+  );
+  const totalPublishedCount = Object.values(anglesStats).reduce(
+    (sum, s) => sum + (s?.published || 0),
+    0,
+  );
+  const activeAnglesCount = angles.filter((a) => a.isActive).length;
+  const inactiveAnglesCount = angles.length - activeAnglesCount;
+
+  // Filtered angles based on search and status filter
+  const filteredAngles = angles.filter((angle) => {
+    const q = searchQuery.trim().toLowerCase();
+    const matchesSearch =
+      !q ||
+      angle.nameAr.toLowerCase().includes(q) ||
+      (angle.nameEn && angle.nameEn.toLowerCase().includes(q)) ||
+      angle.slug.toLowerCase().includes(q) ||
+      (angle.shortDesc && angle.shortDesc.toLowerCase().includes(q));
+
+    if (!matchesSearch) return false;
+
+    if (statusFilter === "active") return angle.isActive;
+    if (statusFilter === "inactive") return !angle.isActive;
+    if (statusFilter === "pending") {
+      return (anglesStats[angle.id]?.pending_review || 0) > 0;
+    }
+    return true;
+  });
 
   // Create mutation
   const createMutation = useMutation({
@@ -663,65 +704,508 @@ export default function DashboardMuqtarab() {
   return (
     <DashboardLayout>
       <div className="mx-auto max-w-[1600px] space-y-6 pb-10" dir="rtl">
-        {/* Header */}
+        {/* Unified Editorial Header */}
         <DashboardPageHeader
           icon={Compass}
           title="إدارة مُقترب"
-          description="إدارة الزوايا التحليلية وموضوعاتها ومتابعة طلبات الكتّاب."
+          description="إدارة الزوايا التحليلية وموضوعاتها ومتابعة طلبات الكتّاب والمراجعات التحريرية."
           titleTestId="text-page-title"
           actions={
             <>
-            <Link href="/dashboard/muqtarab/submissions">
-              <Button variant="outline" data-testid="button-view-submissions">
-                <FileText className="h-4 w-4 ml-2" />
-                طلبات الزوايا
+              <Link href="/dashboard/muqtarab/submissions">
+                <Button variant="outline" className="gap-2" data-testid="button-view-submissions">
+                  <FileText className="h-4 w-4" />
+                  <span>طلبات الزوايا</span>
+                </Button>
+              </Link>
+              <Button
+                onClick={handleCreate}
+                disabled={!muqtarabSection}
+                className="gap-2 shadow-sm"
+                data-testid="button-create-angle"
+              >
+                <Plus className="h-4 w-4" />
+                <span>زاوية جديدة</span>
               </Button>
-            </Link>
-            <Button
-              onClick={handleCreate}
-              disabled={!muqtarabSection}
-              data-testid="button-create-angle"
-            >
-              <Plus className="h-4 w-4 ml-2" />
-              زاوية جديدة
-            </Button>
             </>
           }
         />
+
+        {/* Top KPI Summary Strip */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+          <Card className="border-border/60 shadow-none">
+            <CardContent className="p-4 sm:p-5 flex items-center justify-between gap-3">
+              <div className="space-y-1 min-w-0">
+                <p className="text-xs sm:text-sm font-medium text-muted-foreground truncate">
+                  إجمالي الزوايا
+                </p>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-2xl sm:text-3xl font-bold tracking-tight">
+                    {angles.length}
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    ({inactiveAnglesCount} غير نشطة)
+                  </span>
+                </div>
+              </div>
+              <div className="h-10 w-10 sm:h-11 sm:w-11 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                <Compass className="h-5 w-5" />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border-border/60 shadow-none">
+            <CardContent className="p-4 sm:p-5 flex items-center justify-between gap-3">
+              <div className="space-y-1 min-w-0">
+                <p className="text-xs sm:text-sm font-medium text-muted-foreground truncate">
+                  الزوايا النشطة
+                </p>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-2xl sm:text-3xl font-bold tracking-tight text-emerald-600 dark:text-emerald-400">
+                    {activeAnglesCount}
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    متاحة للقراء
+                  </span>
+                </div>
+              </div>
+              <div className="h-10 w-10 sm:h-11 sm:w-11 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+                <CheckCircle2 className="h-5 w-5" />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border-border/60 shadow-none">
+            <CardContent className="p-4 sm:p-5 flex items-center justify-between gap-3">
+              <div className="space-y-1 min-w-0">
+                <p className="text-xs sm:text-sm font-medium text-muted-foreground truncate">
+                  إجمالي المواضيع
+                </p>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-2xl sm:text-3xl font-bold tracking-tight">
+                    {totalTopicsCount}
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    ({totalPublishedCount} منشور)
+                  </span>
+                </div>
+              </div>
+              <div className="h-10 w-10 sm:h-11 sm:w-11 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
+                <BookOpenCheck className="h-5 w-5" />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card
+            className={`border-border/60 shadow-none transition-colors ${
+              totalPendingReview > 0
+                ? "border-amber-500/40 bg-amber-500/[0.04]"
+                : ""
+            }`}
+          >
+            <CardContent className="p-4 sm:p-5 flex items-center justify-between gap-3">
+              <div className="space-y-1 min-w-0">
+                <p className="text-xs sm:text-sm font-medium text-muted-foreground truncate">
+                  بانتظار المراجعة
+                </p>
+                <div className="flex items-baseline gap-2">
+                  <span
+                    className={`text-2xl sm:text-3xl font-bold tracking-tight ${
+                      totalPendingReview > 0
+                        ? "text-amber-600 dark:text-amber-400"
+                        : ""
+                    }`}
+                  >
+                    {totalPendingReview}
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    موضوع للتحرير
+                  </span>
+                </div>
+              </div>
+              <div
+                className={`h-10 w-10 sm:h-11 sm:w-11 rounded-xl flex items-center justify-center shrink-0 ${
+                  totalPendingReview > 0
+                    ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
+                    : "bg-muted text-muted-foreground"
+                }`}
+              >
+                <Clock className="h-5 w-5" />
+              </div>
+            </CardContent>
+          </Card>
+        </div>
 
         {/* تنبيه: مواضيع بانتظار المراجعة */}
         {totalPendingReview > 0 && (
           <Link href="/dashboard/muqtarab/review">
             <div
-              className="flex items-center justify-between gap-3 rounded-lg border bg-card px-4 py-3 cursor-pointer transition-colors hover:bg-muted/50"
+              className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-500/30 bg-amber-500/[0.06] px-4 py-3.5 cursor-pointer transition-all hover:bg-amber-500/[0.1] hover:border-amber-500/50"
               data-testid="banner-pending-review"
             >
-              <div className="flex items-center gap-2 text-foreground">
-                <FileText className="h-5 w-5" />
-                <span className="font-medium">
-                  {totalPendingReview} موضوع بانتظار المراجعة من الكتّاب
-                </span>
+              <div className="flex items-center gap-3 text-foreground">
+                <div className="h-9 w-9 rounded-lg bg-amber-500/15 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
+                  <FileText className="h-4 w-4" />
+                </div>
+                <div>
+                  <span className="font-semibold text-sm sm:text-base">
+                    يوجد {totalPendingReview} موضوع بانتظار المراجعة التحريرية من الكتّاب
+                  </span>
+                  <p className="text-xs text-muted-foreground">
+                    اضغط للانتقال إلى طابور المراجعة واعتماد المواضيع أو طلب التعديل
+                  </p>
+                </div>
               </div>
-              <span className="text-sm font-medium text-primary">
-                مراجعة الآن ←
+              <span className="inline-flex items-center gap-1 text-sm font-semibold text-amber-700 dark:text-amber-300">
+                مراجعة الآن
+                <ArrowUpLeft className="h-4 w-4" />
               </span>
             </div>
           </Link>
         )}
 
-        {/* Angles Table */}
-        <Card data-testid="card-angles-table">
-          <CardHeader>
-            <CardTitle>الزوايا ({angles.length})</CardTitle>
+        {/* Angles Section (Cards & Table View) */}
+        <Card className="border-border/60 shadow-none" data-testid="card-angles-table">
+          <CardHeader className="pb-4 border-b border-border/50 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <CardTitle className="text-lg sm:text-xl">
+                  الزوايا التحليلية ({filteredAngles.length}
+                  {filteredAngles.length !== angles.length ? ` من ${angles.length}` : ""})
+                </CardTitle>
+              </div>
+
+              {/* View Mode Switcher */}
+              <div className="flex items-center gap-2 self-start sm:self-auto">
+                <div className="inline-flex items-center rounded-lg border border-border/60 bg-muted/40 p-1">
+                  <button
+                    type="button"
+                    onClick={() => setViewMode("grid")}
+                    className={`no-min-touch-size inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-all ${
+                      viewMode === "grid"
+                        ? "bg-background text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    <LayoutGrid className="h-3.5 w-3.5" />
+                    <span>بطاقات</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setViewMode("table")}
+                    className={`no-min-touch-size inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-all ${
+                      viewMode === "table"
+                        ? "bg-background text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    <List className="h-3.5 w-3.5" />
+                    <span>جدول</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Filter & Search Bar */}
+            <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+              <div className="relative flex-1 max-w-md">
+                <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                <Input
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="ابحث باسم الزاوية، المعرّف، أو الوصف..."
+                  className="pr-9 h-9 text-sm"
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery("")}
+                    className="no-min-touch-size absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    title="مسح البحث"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
+
+              <div className="flex flex-wrap items-center gap-1.5">
+                {[
+                  { key: "all", label: "الكل", count: angles.length },
+                  { key: "active", label: "نشط", count: activeAnglesCount },
+                  { key: "inactive", label: "غير نشط", count: inactiveAnglesCount },
+                  ...(totalPendingReview > 0
+                    ? [
+                        {
+                          key: "pending",
+                          label: "بانتظار مراجعة",
+                          count: Object.values(anglesStats).filter((s) => (s?.pending_review || 0) > 0).length,
+                        },
+                      ]
+                    : []),
+                ].map((tab) => {
+                  const isActiveTab = statusFilter === tab.key;
+                  return (
+                    <button
+                      key={tab.key}
+                      type="button"
+                      onClick={() => setStatusFilter(tab.key as any)}
+                      className={`no-min-touch-size inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium transition-colors ${
+                        isActiveTab
+                          ? "border-primary bg-primary/10 text-primary"
+                          : "border-border/60 bg-background text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                      }`}
+                    >
+                      <span>{tab.label}</span>
+                      <span
+                        className={`rounded-full px-1.5 py-0.5 text-[11px] ${
+                          isActiveTab
+                            ? "bg-primary/20 text-primary"
+                            : "bg-muted text-muted-foreground"
+                        }`}
+                      >
+                        {tab.count}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           </CardHeader>
-          <CardContent>
+
+          <CardContent className="pt-5">
             {isLoading ? (
-              <div className="flex justify-center py-8" data-testid="loader-angles">
+              <div className="flex justify-center py-12" data-testid="loader-angles">
                 <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
               </div>
             ) : angles.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground" data-testid="text-no-angles">
+              <div className="text-center py-12 text-muted-foreground" data-testid="text-no-angles">
                 لا توجد زوايا. ابدأ بإنشاء زاوية جديدة.
+              </div>
+            ) : filteredAngles.length === 0 ? (
+              <div className="text-center py-12 space-y-3">
+                <p className="text-muted-foreground text-sm">
+                  لا توجد زوايا مطابقة لمعايير البحث أو التصفية الحالية.
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setSearchQuery("");
+                    setStatusFilter("all");
+                  }}
+                >
+                  إعادة ضبط الفلاتر
+                </Button>
+              </div>
+            ) : viewMode === "grid" ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-5">
+                {filteredAngles.map((angle) => {
+                  const IconComponent = getIconComponent(angle.iconKey);
+                  const s = anglesStats[angle.id];
+                  const total = s?.total || 0;
+                  const pending = s?.pending_review || 0;
+                  const published = s?.published || 0;
+                  const draft = s?.draft || 0;
+
+                  return (
+                    <div
+                      key={angle.id}
+                      data-testid={`row-angle-${angle.id}`}
+                      className="group relative flex flex-col rounded-xl border border-border/70 bg-card overflow-hidden transition-all hover:border-border hover:shadow-md"
+                    >
+                      {/* Top Color Accent Bar */}
+                      <div
+                        className="h-1.5 w-full shrink-0"
+                        style={{ backgroundColor: angle.colorHex }}
+                      />
+
+                      {/* Cover Banner / Subtle Accent Header */}
+                      <div
+                        className="relative h-28 w-full overflow-hidden border-b border-border/40"
+                        style={{
+                          background: angle.coverImageUrl
+                            ? undefined
+                            : `linear-gradient(135deg, ${angle.colorHex}24 0%, ${angle.colorHex}08 100%)`,
+                        }}
+                      >
+                        {angle.coverImageUrl ? (
+                          <>
+                            <img
+                              src={angle.coverImageUrl}
+                              alt={angle.nameAr}
+                              className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                            />
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/65 via-black/25 to-transparent" />
+                          </>
+                        ) : (
+                          <IconComponent
+                            className="absolute -left-3 -bottom-3 h-24 w-24 opacity-[0.08] pointer-events-none"
+                            style={{ color: angle.colorHex }}
+                          />
+                        )}
+
+                        {/* Top Row inside Banner: Status Badge & Sort Order */}
+                        <div className="absolute top-3 inset-x-3 flex items-center justify-between gap-2">
+                          <Badge
+                            variant={angle.isActive ? "default" : "secondary"}
+                            className={
+                              angle.isActive
+                                ? "bg-emerald-600 hover:bg-emerald-600 text-white border-0 shadow-sm"
+                                : "bg-background/90 backdrop-blur-sm"
+                            }
+                            data-testid={`badge-status-${angle.id}`}
+                          >
+                            {angle.isActive ? "نشط" : "غير نشط"}
+                          </Badge>
+
+                          <span
+                            className="inline-flex items-center gap-1 rounded-md bg-background/85 backdrop-blur-sm border border-border/50 px-2 py-0.5 text-xs font-medium text-muted-foreground"
+                            title="ترتيب العرض"
+                          >
+                            <Hash className="h-3 w-3" />
+                            <span data-testid={`text-sort-order-${angle.id}`}>
+                              {angle.sortOrder}
+                            </span>
+                          </span>
+                        </div>
+
+                        {/* Icon Badge anchored at bottom-right of cover */}
+                        <div className="absolute bottom-3 right-4 flex items-center gap-3">
+                          <div
+                            className="w-11 h-11 rounded-xl flex items-center justify-center shadow-md ring-2 ring-background shrink-0"
+                            style={{ backgroundColor: angle.colorHex }}
+                            data-testid={`icon-preview-${angle.id}`}
+                          >
+                            <IconComponent className="h-5 w-5 text-white" />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Card Body */}
+                      <div className="flex-1 p-4 flex flex-col justify-between space-y-4">
+                        <div className="space-y-2">
+                          <div className="flex items-start justify-between gap-2">
+                            <div
+                              className="min-w-0"
+                              data-testid={`text-angle-name-${angle.id}`}
+                            >
+                              <Link href={`/dashboard/muqtarab/angles/${angle.id}/topics`}>
+                                <h3 className="font-bold text-base sm:text-lg text-foreground hover:text-primary transition-colors truncate cursor-pointer">
+                                  {angle.nameAr}
+                                </h3>
+                              </Link>
+                              {angle.nameEn && (
+                                <p className="text-xs text-muted-foreground truncate">
+                                  {angle.nameEn}
+                                </p>
+                              )}
+                            </div>
+
+                            <code
+                              dir="ltr"
+                              className="text-xs bg-muted/70 text-muted-foreground px-2 py-0.5 rounded font-mono shrink-0"
+                              data-testid={`text-angle-slug-${angle.id}`}
+                            >
+                              {angle.slug}
+                            </code>
+                          </div>
+
+                          {angle.shortDesc ? (
+                            <p className="text-xs sm:text-sm text-muted-foreground line-clamp-2 leading-relaxed">
+                              {angle.shortDesc}
+                            </p>
+                          ) : (
+                            <p className="text-xs text-muted-foreground/60 italic">
+                              لا يوجد وصف مختصر لهذه الزاوية
+                            </p>
+                          )}
+                        </div>
+
+                        {/* Topics & Review Status Strip */}
+                        <div
+                          className="rounded-lg bg-muted/40 border border-border/50 p-2.5 flex flex-wrap items-center justify-between gap-2"
+                          data-testid={`text-topics-${angle.id}`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <Link href={`/dashboard/muqtarab/angles/${angle.id}/topics`}>
+                              <span className="text-xs sm:text-sm font-semibold text-foreground hover:text-primary hover:underline cursor-pointer">
+                                {total} موضوع
+                              </span>
+                            </Link>
+                            <span className="text-xs text-muted-foreground">
+                              ({published} منشور · {draft} مسودة)
+                            </span>
+                          </div>
+
+                          {pending > 0 && (
+                            <Badge
+                              variant="secondary"
+                              className="bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30 text-xs"
+                              data-testid={`badge-pending-${angle.id}`}
+                            >
+                              {pending} بانتظار المراجعة
+                            </Badge>
+                          )}
+                        </div>
+
+                        {/* Card Footer Actions */}
+                        <div className="pt-2 border-t border-border/50 flex items-center justify-between gap-2">
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            className="gap-1.5 h-8 text-xs font-medium"
+                            asChild
+                            data-testid={`button-topics-${angle.id}`}
+                          >
+                            <Link href={`/dashboard/muqtarab/angles/${angle.id}/topics`}>
+                              <FileText className="h-3.5 w-3.5" />
+                              <span>إدارة المواضيع</span>
+                            </Link>
+                          </Button>
+
+                          <div className="flex items-center gap-1">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="no-min-touch-size h-8 w-8 p-0"
+                              onClick={() => handleToggleActive(angle)}
+                              disabled={toggleActiveMutation.isPending}
+                              title={angle.isActive ? "إخفاء الزاوية" : "تفعيل الزاوية"}
+                              data-testid={`button-toggle-active-${angle.id}`}
+                            >
+                              {angle.isActive ? (
+                                <EyeOff className="h-4 w-4 text-muted-foreground" />
+                              ) : (
+                                <Eye className="h-4 w-4 text-emerald-600" />
+                              )}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="no-min-touch-size h-8 w-8 p-0"
+                              onClick={() => handleEdit(angle)}
+                              title="تعديل الزاوية"
+                              data-testid={`button-edit-${angle.id}`}
+                            >
+                              <Edit className="h-4 w-4 text-muted-foreground" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="no-min-touch-size h-8 w-8 p-0 hover:text-destructive"
+                              onClick={() => setDeletingAngle(angle)}
+                              title="حذف الزاوية"
+                              data-testid={`button-delete-${angle.id}`}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             ) : (
               <div className="overflow-x-auto">
@@ -738,14 +1222,14 @@ export default function DashboardMuqtarab() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {angles.map((angle) => {
+                    {filteredAngles.map((angle) => {
                       const IconComponent = getIconComponent(angle.iconKey);
                       return (
                         <TableRow key={angle.id} data-testid={`row-angle-${angle.id}`}>
                           <TableCell>
                             <div className="flex items-center gap-2">
                               <div
-                                className="w-10 h-10 rounded-md flex items-center justify-center"
+                                className="w-10 h-10 rounded-lg flex items-center justify-center shadow-sm"
                                 style={{ backgroundColor: angle.colorHex }}
                                 data-testid={`icon-preview-${angle.id}`}
                               >
@@ -763,7 +1247,7 @@ export default function DashboardMuqtarab() {
                           </TableCell>
                           <TableCell>
                             <code
-                              className="text-sm bg-muted px-2 py-1 rounded"
+                              className="text-sm bg-muted px-2 py-1 rounded font-mono"
                               data-testid={`text-angle-slug-${angle.id}`}
                             >
                               {angle.slug}

@@ -1,10 +1,10 @@
 import SwiftUI
+// Search analytics is emitted only after the API returns successfully.
 
 struct SearchView: View {
     @Environment(ArticlesStore.self) private var articlesStore
     @Environment(BookmarksStore.self) private var bookmarksStore
     @State private var searchText = ""
-    @FocusState private var isSearchFocused: Bool
     
     // لا قيم افتراضية وهمية: كانت «نيوم، رؤية 2030…» تظهر للمستخدم الجديد
     // بعنوان «عمليات بحث سابقة» وهو لم يبحث قط — القسم يختفي حتى أول بحث فعلي.
@@ -15,6 +15,7 @@ struct SearchView: View {
     @State private var suggestions: [String] = []
     @State private var apiResults: [Article] = []
     @State private var isSearching = false
+    @State private var searchFailed = false
     @State private var searchTotal = 0
     @State private var submittedQuery = ""
     @State private var searchTask: Task<Void, Never>?
@@ -34,18 +35,11 @@ struct SearchView: View {
 
     var body: some View {
         ScrollView(showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 20) {
-                CompactScreenHeader(
-                    title: "البحث",
-                    subtitle: "ابحث في آلاف الأخبار المحلية والعالمية"
-                )
-
-                SabqSearchBar(
-                    text: $searchText,
-                    placeholder: "ابحث عن خبر أو موضوع...",
-                    onSubmit: { performSearch() },
-                    focusState: $isSearchFocused
-                )
+            VStack(alignment: .leading, spacing: SabqLayout.space24) {
+                Text("ابحث في آلاف الأخبار المحلية والعالمية")
+                    .font(SabqType.body)
+                    .foregroundStyle(SabqTheme.secondaryInk)
+                    .fixedSize(horizontal: false, vertical: true)
 
                 if searchText.isEmpty {
                     if !suggestions.isEmpty {
@@ -61,14 +55,20 @@ struct SearchView: View {
                     searchResultsSection
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 18)
-            .padding(.bottom, 40)
+            .padding(.horizontal, SabqLayout.pageInset)
+            .padding(.top, SabqLayout.space16)
+            .padding(.bottom, SabqLayout.space32)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .background(SabqTheme.background)
         .sabqRTL()
         .sabqScreen("Search")
+        .navigationTitle("البحث")
+        .navigationBarTitleDisplayMode(.inline)
+        .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always),
+                    prompt: "ابحث عن خبر أو موضوع…")
+        .onSubmit(of: .search) { performSearch() }
+        .scrollDismissesKeyboard(.interactively)
         .task {
             trendingKeywords = await NewsService.fetchTrending()
             if trendingKeywords.isEmpty {
@@ -84,9 +84,11 @@ struct SearchView: View {
                 apiResults = []
                 submittedQuery = ""
                 searchTotal = 0
+                searchFailed = false
                 isSearching = false
                 return
             }
+            searchFailed = false
             searchTask = Task {
                 try? await Task.sleep(nanoseconds: 300_000_000)
                 guard !Task.isCancelled else { return }
@@ -118,16 +120,31 @@ struct SearchView: View {
         searchTask?.cancel()
         searchRequestTask?.cancel()
         searchRequestID += 1
+        searchFailed = false
         let requestID = searchRequestID
 
         searchRequestTask = Task {
-            let result = await NewsService.search(query: query)
-            guard !Task.isCancelled else { return }
-            await MainActor.run {
-                guard requestID == searchRequestID, submittedQuery == query else { return }
-                apiResults = result.articles
-                searchTotal = result.total
-                isSearching = false
+            do {
+                let result = try await NewsService.searchResult(query: query)
+                guard !Task.isCancelled else { return }
+                await MainActor.run {
+                    guard requestID == searchRequestID, submittedQuery == query else { return }
+                    apiResults = result.articles
+                    searchTotal = result.total
+                    searchFailed = false
+                    isSearching = false
+                    SabqAnalytics.searchSucceeded(query: query)
+                }
+            } catch {
+                guard !Task.isCancelled else { return }
+                await MainActor.run {
+                    guard requestID == searchRequestID, submittedQuery == query else { return }
+                    let cached = articlesStore.search(query: query)
+                    apiResults = cached
+                    searchTotal = cached.count
+                    searchFailed = true
+                    isSearching = false
+                }
             }
         }
     }
@@ -145,7 +162,7 @@ struct SearchView: View {
     // MARK: - Suggestions (autocomplete)
 
     private var suggestionsSection: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: SabqLayout.space4) {
             ForEach(suggestions.prefix(5), id: \.self) { suggestion in
                 Button {
                     searchText = suggestion
@@ -166,8 +183,9 @@ struct SearchView: View {
                             .font(SabqFonts.app(size: 12, weight: .medium))
                             .foregroundStyle(SabqTheme.tertiaryInk)
                     }
-                    .padding(.vertical, 10)
-                    .padding(.horizontal, 14)
+                    .padding(.vertical, SabqLayout.space8)
+                    .padding(.horizontal, SabqLayout.space12)
+                    .frame(minHeight: SabqLayout.touchTarget)
                 }
                 .buttonStyle(.plain)
             }
@@ -184,12 +202,12 @@ struct SearchView: View {
     private var trendingSection: some View {
         Group {
             if !trendingKeywords.isEmpty {
-                SurfaceCard(accent: SabqTheme.coral) {
+                SurfaceCard(accent: SabqTheme.brandBlue) {
                     SectionHeader(
                         title: "الأكثر بحثاً",
                         subtitle: "المواضيع الرائجة الآن",
                         icon: "chart.line.uptrend.xyaxis",
-                        tint: SabqTheme.coral
+                        tint: SabqTheme.brandBlue
                     )
 
                     ForEach(Array(trendingKeywords.prefix(5).enumerated()), id: \.offset) { index, keyword in
@@ -200,7 +218,7 @@ struct SearchView: View {
                             HStack(spacing: 12) {
                                 Text("\(index + 1)")
                                     .font(SabqFonts.app(size: 16, weight: .bold))
-                                    .foregroundStyle(index < 3 ? SabqTheme.coral : SabqTheme.tertiaryInk)
+                                    .foregroundStyle(index < 3 ? SabqTheme.brandBlue : SabqTheme.tertiaryInk)
                                     .monospacedDigit()
                                     .frame(width: 24)
 
@@ -214,7 +232,8 @@ struct SearchView: View {
                                     .font(SabqFonts.app(size: 12, weight: .medium))
                                     .foregroundStyle(SabqTheme.tertiaryInk)
                             }
-                            .padding(.vertical, 4)
+                            .padding(.vertical, SabqLayout.space8)
+                            .frame(minHeight: SabqLayout.touchTarget)
                         }
                         .buttonStyle(.plain)
                     }
@@ -230,7 +249,7 @@ struct SearchView: View {
             if !recentSearches.isEmpty {
                 SurfaceCard {
                     SectionHeader(
-                        title: "عمليات بحث سابقة",
+                        title: "عمليات البحث الأخيرة",
                         subtitle: "اضغط للبحث مجدداً",
                         icon: "clock.arrow.circlepath",
                         tint: SabqTheme.secondaryInk
@@ -256,7 +275,8 @@ struct SearchView: View {
                                     .font(SabqFonts.app(size: 13, weight: .medium))
                                     .foregroundStyle(SabqTheme.tertiaryInk)
                             }
-                            .padding(.vertical, 6)
+                            .padding(.vertical, SabqLayout.space8)
+                            .frame(minHeight: SabqLayout.touchTarget)
                         }
                         .buttonStyle(.plain)
                     }
@@ -289,8 +309,9 @@ struct SearchView: View {
                                 .font(SabqFonts.app(size: 12, weight: .medium))
                         }
                         .foregroundStyle(SabqTheme.primaryStart)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 8)
+                        .padding(.horizontal, SabqLayout.space12)
+                        .padding(.vertical, SabqLayout.space8)
+                        .frame(minHeight: SabqLayout.touchTarget)
                         .background(
                             Capsule(style: .continuous)
                                 .fill(SabqTheme.primaryEnd.opacity(0.08))
@@ -305,10 +326,10 @@ struct SearchView: View {
     // MARK: - Search Results
 
     private var searchResultsSection: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: SabqLayout.space16) {
             HStack {
                 Text("نتائج البحث")
-                    .font(SabqFonts.app(size: 17, weight: .bold))
+                    .font(SabqType.sectionTitle)
                     .foregroundStyle(SabqTheme.ink)
 
                 Spacer(minLength: 0)
@@ -318,12 +339,21 @@ struct SearchView: View {
                         .tint(SabqTheme.primaryEnd)
                 } else {
                     Text("\(searchTotal > 0 ? searchTotal : displayResults.count) نتيجة")
-                        .font(SabqFonts.app(size: 12, weight: .medium))
+                        .font(SabqType.caption)
                         .foregroundStyle(SabqTheme.tertiaryInk)
                 }
             }
 
-            if displayResults.isEmpty && !isSearching {
+            if isSearching && displayResults.isEmpty {
+                ProgressView()
+                    .frame(maxWidth: .infinity, minHeight: SabqLayout.controlHeight)
+                    .accessibilityLabel("جارٍ البحث")
+            } else if searchFailed && displayResults.isEmpty {
+                ErrorStateView(
+                    message: "تعذّر الاتصال للبحث. تحقق من اتصالك ثم أعد المحاولة.",
+                    retryAction: performSearch
+                )
+            } else if displayResults.isEmpty && !isSearching {
                 EmptyStateView(
                     icon: "magnifyingglass",
                     tint: SabqTheme.secondaryInk,
@@ -331,11 +361,15 @@ struct SearchView: View {
                     subtitle: "جرّب البحث بكلمات مختلفة"
                 )
             } else {
-                SurfaceCard {
+                if searchFailed {
+                    Text("تُعرض نتائج محفوظة من الجهاز")
+                        .font(SabqType.caption)
+                        .foregroundStyle(SabqTheme.secondaryInk)
+                }
+                SurfaceCard(lazy: true, cornerRadius: 22, spacing: 0) {
                     ForEach(Array(displayResults.enumerated()), id: \.element.id) { index, article in
                         if index > 0 {
-                            Divider()
-                                .foregroundStyle(SabqTheme.outline)
+                            SidebarRowDivider()
                         }
 
                         NavigationLink(value: article) {

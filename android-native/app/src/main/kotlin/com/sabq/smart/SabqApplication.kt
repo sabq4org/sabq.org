@@ -22,8 +22,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
-import okhttp3.OkHttpClient
 import java.io.IOException
+import okhttp3.OkHttpClient
 
 /**
  * Implements [ImageLoaderFactory] so Coil's global `ImageLoader.get()`
@@ -35,25 +35,17 @@ import java.io.IOException
 @HiltAndroidApp
 class SabqApplication : Application(), ImageLoaderFactory {
 
-    @Inject lateinit var okHttpClient: OkHttpClient
     @Inject lateinit var deviceRegistrationManager: DeviceRegistrationManager
     @Inject lateinit var loyaltyEventQueue: LoyaltyEventQueue
     @Inject lateinit var authRepository: AuthRepository
     @Inject lateinit var authTokenStore: AuthTokenStore
+    @Inject lateinit var okHttpClient: OkHttpClient
 
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override fun onCreate() {
         super.onCreate()
         installCrashGuard()
-
-        // GA4 Measurement Protocol — Sabq Android App (MP) stream in the
-        // Sabq GA3 - GA4 property (shared with web + iOS). Initialised
-        // before any feature code so the first events from app boot get
-        // captured. Auto-tracks user_id changes from AuthRepository.
-        // Cheap (stores refs + launches a collector), so it stays on the
-        // synchronous path to catch the earliest boot events.
-        SabqAnalytics.start(this, okHttpClient, authRepository, applicationScope)
 
         // Loyalty event queue — restore pending events from disk + start
         // the 30s flush loop. Fire-and-forget caller sites
@@ -74,6 +66,7 @@ class SabqApplication : Application(), ImageLoaderFactory {
         applicationScope.launch {
             runCatching { authTokenStore.prime() }
             initialiseFirebase()
+            SabqAnalytics.start(this@SabqApplication, authRepository, applicationScope)
             SabqMessagingService.ensureChannel(this@SabqApplication)
             deviceRegistrationManager.start(applicationScope)
         }

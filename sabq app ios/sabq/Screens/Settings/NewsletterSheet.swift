@@ -76,14 +76,14 @@ struct NewsletterSheet: View {
                 .padding(.top, 24)
                 .padding(.bottom, 60)
             }
+            .sabqNavigationEdge()
             .background(SabqTheme.background)
             .sabqRTL()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button { dismiss() } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(SabqFonts.app(size: 22))
-                            .foregroundStyle(SabqTheme.tertiaryInk)
+                        Label("إغلاق", systemImage: "xmark")
+                            .labelStyle(.iconOnly)
                     }
                 }
             }
@@ -201,7 +201,7 @@ struct NewsletterSheet: View {
     // MARK: - Feature grid (the AI value proposition)
 
     private var featureGrid: some View {
-        LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
+        LazyVGrid(columns: SabqGrid.adaptive(spacing: 10), spacing: 10) {
             featureCard(
                 icon: "brain.head.profile",
                 tint: SabqTheme.primaryEnd,

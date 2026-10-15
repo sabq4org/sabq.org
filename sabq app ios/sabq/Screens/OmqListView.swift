@@ -9,7 +9,6 @@ struct OmqDetailRoute: Hashable {
 
 // List view for the OMQ deep-analysis surface. Source: GET /api/omq.
 struct OmqListView: View {
-    @Environment(\.dismiss) private var dismiss
     @State private var analyses: [APIDeepAnalysis] = []
     @State private var isLoading = true
     @State private var errorMessage: String?
@@ -56,42 +55,13 @@ struct OmqListView: View {
         }
         .background(SabqTheme.background)
         .sabqRTL()
+        .navigationTitle("عُمق")
         .navigationBarTitleDisplayMode(.inline)
-        .navigationBarBackButtonHidden(true)
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button { dismiss() } label: {
-                    Image(systemName: "chevron.right")
-                        .font(SabqFonts.app(size: 16, weight: .semibold))
-                        .foregroundStyle(SabqTheme.ink)
-                }
-            }
-        }
         .task { await load() }
     }
 
     private var header: some View {
-        HStack(alignment: .top, spacing: 14) {
-            ZStack {
-                Circle()
-                    .fill(SabqTheme.sky.opacity(0.14))
-                    .frame(width: 56, height: 56)
-                Image(systemName: "brain.head.profile")
-                    .font(SabqFonts.app(size: 26, weight: .light))
-                    .foregroundStyle(SabqTheme.sky)
-                    .symbolRenderingMode(.hierarchical)
-            }
-            VStack(alignment: .leading, spacing: 4) {
-                Text("تحليلات عميقة")
-                    .font(SabqFonts.app(size: 20, weight: .heavy))
-                    .foregroundStyle(SabqTheme.ink)
-                Text("تحليلات أسبوعية لأهم القضايا بمزيج من نماذج الذكاء الاصطناعي")
-                    .font(SabqFonts.app(size: 12, weight: .medium))
-                    .foregroundStyle(SabqTheme.tertiaryInk)
-                    .lineLimit(2)
-            }
-            Spacer(minLength: 0)
-        }
+        SabqPageIntro("تحليلات أسبوعية لأهم القضايا بمزيج من نماذج الذكاء الاصطناعي")
     }
 
     private func analysisCard(_ a: APIDeepAnalysis) -> some View {
@@ -173,7 +143,6 @@ struct OmqDetailView: View {
     let id: String
     let initialTitle: String
 
-    @Environment(\.dismiss) private var dismiss
     @State private var analysis: APIDeepAnalysis?
     @State private var isLoading = true
     @State private var errorMessage: String?
@@ -206,17 +175,8 @@ struct OmqDetailView: View {
         }
         .background(SabqTheme.background)
         .sabqRTL()
+        .navigationTitle("تحليل عُمق")
         .navigationBarTitleDisplayMode(.inline)
-        .navigationBarBackButtonHidden(true)
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button { dismiss() } label: {
-                    Image(systemName: "chevron.right")
-                        .font(SabqFonts.app(size: 16, weight: .semibold))
-                        .foregroundStyle(SabqTheme.ink)
-                }
-            }
-        }
         .task { await load() }
     }
 

@@ -86,8 +86,7 @@ struct HomeLiteView: View {
                 }
                 .buttonStyle(.plain)
 
-                Divider()
-                    .background(SabqTheme.outline.opacity(0.4))
+                SidebarRowDivider()
             }
 
             if articlesStore.hasMore {

@@ -222,7 +222,12 @@ class AuthRepository @Inject constructor(
 
     /** تثبيت الجلسة بعد دخول بريد/جوال/OTP — نفس مسار OAuth بعد إصدار التوكن. */
     private suspend fun finishCredentialLogin(response: ApiLoginResponse): User {
-        val token = response.token
+        if (response.requires2FA == true) {
+            val challenge = response.challengeToken?.takeIf { it.isNotBlank() }
+                ?: throw AuthException("تعذّر بدء التحقق بخطوتين")
+            throw TwoFactorRequiredException(challenge)
+        }
+        val token = response.token?.takeIf { it.isNotBlank() }
             ?: throw AuthException(response.message ?: "لم يصدر السيرفر رمز دخول")
         tokenStore.set(token)
         // Seed `_user` from the login response so the UI has *something*
@@ -311,7 +316,12 @@ class AuthRepository @Inject constructor(
         response: com.sabq.smart.data.api.ApiLoginResponse,
         providerLabel: String,
     ): User {
-        val token = response.token
+        if (response.requires2FA == true) {
+            val challenge = response.challengeToken?.takeIf { it.isNotBlank() }
+                ?: throw AuthException("تعذّر بدء التحقق بخطوتين")
+            throw TwoFactorRequiredException(challenge)
+        }
+        val token = response.token?.takeIf { it.isNotBlank() }
             ?: throw AuthException(response.message ?: "لم يصدر السيرفر رمز دخول من $providerLabel")
         tokenStore.set(token)
         // See login(): the OAuth login envelope also omits `interests`,
@@ -335,7 +345,9 @@ class AuthRepository @Inject constructor(
                 ),
             )
         } catch (e: HttpException) {
-            throw AuthException(extractErrorMessage(e) ?: "تعذّر إنشاء الحساب")
+            // نحفظ رمز الحالة كي تُصاغ رسالة التسجيل بحسبه (نقل #1530)؛ رسالة
+            // الخادم (مثل «البريد مستخدم») تبقى كما هي عندما تكون مقصودة للقارئ.
+            throw AuthHttpException(e.code(), extractErrorMessage(e) ?: "")
         }
         // Mirrors iOS `AuthStore.register` branching in AuthStore.swift:158-185.
         // Auto-activated mobile signups return a token + user → instant
@@ -406,6 +418,9 @@ class AuthRepository @Inject constructor(
 }
 
 open class AuthException(message: String) : Exception(message)
+
+/** استثناء مصادقة يحمل رمز حالة HTTP — لرسائل التسجيل بحسب الحالة. */
+class AuthHttpException(val statusCode: Int, message: String) : AuthException(message)
 
 /**
  * Outcome of a successful [AuthRepository.register] call. Mirrors iOS

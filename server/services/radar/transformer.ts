@@ -15,6 +15,7 @@ import {
 import type { RadarItem, RadarSource } from "@shared/schema";
 import { approvedCategories, getSource, updateItem } from "./repo";
 import { parseDraftPayload } from "./parsing";
+import { assertRadarEnabled, isRadarDisabledError } from "./runtime";
 
 const TRANSFORMER_MODEL_CHAIN: AIModelConfig[] = [
   { provider: "anthropic", model: SABQ_PRIMARY_EDITOR_MODEL, maxTokens: 8000, temperature: 0.4, feature: "radar" },
@@ -70,6 +71,7 @@ ${categoriesBrief}
 
 /** يولّد المسودة التحريرية ويكتبها على المادة (status → ready). */
 export async function transformItem(item: RadarItem): Promise<RadarItem> {
+  await assertRadarEnabled();
   const [source, categoryList] = await Promise.all([
     getSource(item.sourceId),
     approvedCategories(),
@@ -78,7 +80,9 @@ export async function transformItem(item: RadarItem): Promise<RadarItem> {
   const prompt = buildTransformPrompt(item, source, categoryList);
 
   try {
+    await assertRadarEnabled();
     const response = await generateWithFallback(prompt, TRANSFORMER_MODEL_CHAIN);
+    await assertRadarEnabled();
     const draft = parseDraftPayload(response.content);
     if (draft.categorySlug && !validSlugs.has(draft.categorySlug)) {
       draft.categorySlug = item.suggestedCategorySlug ?? source?.categorySlug ?? undefined;
@@ -94,6 +98,7 @@ export async function transformItem(item: RadarItem): Promise<RadarItem> {
     if (!updated) throw new Error("[Radar Transformer] item vanished while updating");
     return updated;
   } catch (error) {
+    if (isRadarDisabledError(error)) throw error;
     const message = error instanceof Error ? error.message : String(error);
     await updateItem(item.id, { error: `transform: ${message}`.substring(0, 500) });
     throw error;

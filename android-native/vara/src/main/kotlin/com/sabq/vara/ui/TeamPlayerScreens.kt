@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -292,7 +293,12 @@ fun PlayerScreen(nav: NavHostController, vm: VaraViewModel, playerId: Int) {
 
 private data class TpVenue(val name: String, val city: String, val capacity: Int?)
 private data class TpCoach(val name: String, val photo: String, val nationality: String, val age: Int?)
-private data class TpSquadPlayer(val id: Int, val name: String, val number: Int?, val position: String, val positionEn: String, val age: Int?, val photo: String)
+private data class TpPlayerNationality(val name: String?, val flag: String?, val code: String?)
+private data class TpSquadPlayer(
+    val id: Int, val name: String, val number: Int?, val position: String, val positionEn: String,
+    val age: Int?, val photo: String, val captain: Boolean? = null,
+    val nationality: TpPlayerNationality? = null, val detailedPosition: String? = null,
+)
 private data class TpScorer(val rank: Int, val id: Int, val name: String, val photo: String, val goals: Int, val assists: Int, val matches: Int)
 private data class TpInjury(val player: String, val reason: String?, val until: String?)
 private data class TpTransferItem(val player: String, val team: String, val teamLogo: String, val type: String)
@@ -415,6 +421,14 @@ private fun tpParseTeamStats(o: JsonObject): TpTeamStats? {
 
 private fun tpParseSquadPlayer(e: JsonElement): TpSquadPlayer? {
     val o = e as? JsonObject ?: return null
+    val natObj = o.obj("nationality")
+    val nat = if (natObj != null) {
+        TpPlayerNationality(
+            name = natObj.string("name"),
+            flag = natObj.string("flag"),
+            code = natObj.string("code"),
+        )
+    } else null
     return TpSquadPlayer(
         id = o.int("id") ?: return null,
         name = o.string("name") ?: return null,
@@ -423,6 +437,9 @@ private fun tpParseSquadPlayer(e: JsonElement): TpSquadPlayer? {
         positionEn = o.string("positionEn") ?: "",
         age = o.int("age"),
         photo = o.string("photo") ?: "",
+        captain = o.bool("captain"),
+        nationality = nat,
+        detailedPosition = o.string("detailedPosition"),
     )
 }
 
@@ -989,10 +1006,33 @@ private fun TpScorersSection(scorers: List<TpScorer>, openPlayer: (Int) -> Unit)
 private fun TpSquadRow(pl: TpSquadPlayer, open: () -> Unit) {
     val c = LocalVaraColors.current
     TpTile(onClick = open) {
-        TpPhotoCircle(pl.photo, 36)
+        Box(contentAlignment = Alignment.TopEnd) {
+            TpPhotoCircle(pl.photo, 36)
+            if (pl.captain == true) {
+                Box(
+                    modifier = Modifier.offset(x = 2.dp, y = (-2).dp).size(14.dp).clip(CircleShape).background(Color(0xFFF2C94C)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text("C", color = Color.Black, fontSize = 8.sp, fontWeight = FontWeight.Black)
+                }
+            }
+        }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-            Text(pl.name, color = c.text, fontSize = 14.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            pl.age?.let { Text("${latinNumber(it)} سنة", color = c.textDim, fontSize = 10.sp) }
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                pl.nationality?.flag?.let { flagUrl ->
+                    AsyncImage(
+                        model = flagUrl, contentDescription = null, contentScale = ContentScale.Crop,
+                        modifier = Modifier.size(width = 14.dp, height = 10.dp).clip(RoundedCornerShape(1.5.dp)),
+                    )
+                }
+                Text(pl.name, color = c.text, fontSize = 14.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                if (!pl.detailedPosition.isNullOrEmpty() && pl.detailedPosition != pl.position) {
+                    Text(pl.detailedPosition, color = c.textDim, fontSize = 10.sp)
+                }
+                pl.age?.let { Text("${latinNumber(it)} سنة", color = c.textDim, fontSize = 10.sp) }
+            }
         }
         ForceLtr { Text(pl.number?.let(::latinNumber) ?: "—", color = c.textDim, fontSize = 15.sp, fontWeight = FontWeight.Bold) }
         Icon(Icons.Default.ChevronLeft, null, tint = c.textFaint.copy(.6f), modifier = Modifier.size(14.dp))

@@ -28,6 +28,7 @@ import {
   rejectCorrespondentApplication,
 } from "../services/correspondentApplicationService";
 import { mediaLicenseExpiryRejection } from "../services/mediaLicenseService";
+import { parsePage, parseLimit } from "../utils/pagination";
 
 const router = Router();
 
@@ -239,8 +240,8 @@ router.get(
       const { status, page = "1", limit = "10" } = req.query;
       const result = await listCorrespondentApplications(
         status as string,
-        parseInt(page as string),
-        parseInt(limit as string),
+        parsePage(page),
+        parseLimit(limit, 10, 200),
       );
       res.json(result);
     } catch (error: unknown) {

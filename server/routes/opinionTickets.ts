@@ -3,15 +3,16 @@
  * جدول واحد `opinion_tickets` — لا نموذج منفصل للمراسل.
  *
  *   GET    /api/opinion-tickets                       list tickets (contributor: own; admin: all)
- *   POST   /api/opinion-tickets                       contributor creates new ticket
+ *   POST   /api/opinion-tickets                       contributor inbound OR admin outbound (writerId)
  *   GET    /api/opinion-tickets/unread-count
+ *   GET    /api/opinion-tickets/writers/list           admin — كل المنسوبين المساهمين
  *   GET    /api/opinion-tickets/:id
  *   POST   /api/opinion-tickets/:id/messages
  *   PATCH  /api/opinion-tickets/:id/status            admin only
  *
  * Access:
  *   - Contributors (opinion_author, angle_writer, reporter): own tickets only.
- *   - Admins (SUPERUSER_ROLE_NAMES, or editor): all tickets.
+ *   - Admins (SUPERUSER_ROLE_NAMES, or editor): all tickets + إرسال رسالة صادرة لزميل.
  */
 
 import { Router, type Request, type Response, type NextFunction } from "express";
@@ -29,6 +30,8 @@ import {
   opinionTicketStatuses,
 } from "@shared/schema";
 import { SUPERUSER_ROLE_NAMES } from "@shared/rbac-constants";
+import { countUnansweredTickets, shouldNotifyDeskOfTicketMessage } from "../services/opinionTicketNotice";
+import { notifyDeskOfWriterInquiry } from "../services/opinionTicketNotifications";
 
 const router = Router();
 
@@ -172,11 +175,37 @@ router.get("/api/opinion-tickets", requireAuth, async (req: any, res: Response) 
 
     const kinds = await authorKindsForUserIds(rows.map((r) => r.writerId));
 
+    // اتجاه التذكرة = مرسل أول رسالة: admin → صادرة منا، writer → واردة من المساهم.
+    const initiatorByTicket = new Map<string, "admin" | "writer">();
+    if (rows.length > 0) {
+      const firstMsgs = await db
+        .select({
+          ticketId: opinionTicketMessages.ticketId,
+          senderRole: opinionTicketMessages.senderRole,
+          createdAt: opinionTicketMessages.createdAt,
+        })
+        .from(opinionTicketMessages)
+        .where(
+          inArray(
+            opinionTicketMessages.ticketId,
+            rows.map((r) => r.id),
+          ),
+        )
+        .orderBy(asc(opinionTicketMessages.createdAt));
+      for (const m of firstMsgs) {
+        if (initiatorByTicket.has(m.ticketId)) continue;
+        if (m.senderRole === "admin" || m.senderRole === "writer") {
+          initiatorByTicket.set(m.ticketId, m.senderRole);
+        }
+      }
+    }
+
     const tickets = rows
       .map((row) => {
         const lastRead = admin ? row.lastReadByAdminAt : row.lastReadByWriterAt;
         const hasUnread = !lastRead || (row.lastMessageAt && row.lastMessageAt > lastRead);
         const authorKind = kinds.get(row.writerId) ?? "other";
+        const initiator = initiatorByTicket.get(row.id) ?? "writer";
         return {
           id: row.id,
           writerId: row.writerId,
@@ -185,6 +214,8 @@ router.get("/api/opinion-tickets", requireAuth, async (req: any, res: Response) 
           authorKind,
           title: row.title,
           status: row.status,
+          /** واردة من المساهم | صادرة من الإدارة */
+          direction: initiator === "admin" ? ("outbound" as const) : ("inbound" as const),
           lastMessageAt: row.lastMessageAt,
           createdAt: row.createdAt,
           updatedAt: row.updatedAt,
@@ -218,6 +249,7 @@ router.get("/api/opinion-tickets/unread-count", requireAuth, async (req: any, re
     const rows = await db
       .select({
         id: opinionTickets.id,
+        status: opinionTickets.status,
         lastMessageAt: opinionTickets.lastMessageAt,
         lastReadByWriterAt: opinionTickets.lastReadByWriterAt,
         lastReadByAdminAt: opinionTickets.lastReadByAdminAt,
@@ -230,7 +262,10 @@ router.get("/api/opinion-tickets/unread-count", requireAuth, async (req: any, re
       return !lastRead || (r.lastMessageAt && r.lastMessageAt > lastRead);
     });
 
-    return res.json({ unreadCount: unread.length });
+    return res.json({
+      unreadCount: unread.length,
+      unansweredCount: countUnansweredTickets(rows),
+    });
   } catch (err) {
     console.error("[opinion-tickets] unread-count error", err);
     return res.status(500).json({ message: "Internal server error" });
@@ -239,13 +274,14 @@ router.get("/api/opinion-tickets/unread-count", requireAuth, async (req: any, re
 
 /**
  * POST /api/opinion-tickets
- * Writers create a new ticket with title + initial message body.
+ * - مساهم: تذكرة واردة (writerId = نفسه).
+ * - أدمن: تذكرة صادرة باختيار `writerId` (مراسل / كاتب رأي / زاوية).
  */
 router.post("/api/opinion-tickets", requireAuth, async (req: any, res: Response) => {
   try {
-    const { isContributor } = await getViewerRoles(req);
-    if (!isContributor) {
-      return res.status(403).json({ message: "هذه الميزة متاحة للمراسلين وكتّاب الرأي والزوايا فقط" });
+    const { isAdmin: admin, isContributor } = await getViewerRoles(req);
+    if (!admin && !isContributor) {
+      return res.status(403).json({ message: "هذه الميزة متاحة للمراسلين وكتّاب الرأي والزوايا وإدارة التحرير فقط" });
     }
     const parsed = insertOpinionTicketSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -253,24 +289,66 @@ router.post("/api/opinion-tickets", requireAuth, async (req: any, res: Response)
     }
 
     const now = new Date();
+    let targetWriterId = req.user.id as string;
+    let senderRole: "writer" | "admin" = "writer";
+    let status: "open" | "answered" = "open";
+    let lastReadByWriterAt: Date | null = now;
+    let lastReadByAdminAt: Date | null = null;
+
+    if (admin && parsed.data.writerId) {
+      const kinds = await authorKindsForUserIds([parsed.data.writerId]);
+      const kind = kinds.get(parsed.data.writerId) ?? "other";
+      if (kind === "other") {
+        return res.status(400).json({
+          message: "اختر زميلاً من منسوبي سبق: مراسل أو كاتب رأي أو كاتب زاوية",
+        });
+      }
+      targetWriterId = parsed.data.writerId;
+      senderRole = "admin";
+      // صادرة من الإدارة: تُحسب مجابة حتى يرد المساهم، وغير مقروءة لديه.
+      status = "answered";
+      lastReadByWriterAt = null;
+      lastReadByAdminAt = now;
+    } else if (admin && !isContributor) {
+      return res.status(400).json({ message: "اختر الزميل المستلم للرسالة" });
+    } else if (!isContributor) {
+      return res.status(403).json({ message: "Forbidden" });
+    }
+
     const [ticket] = await db
       .insert(opinionTickets)
       .values({
-        writerId: req.user.id,
+        writerId: targetWriterId,
         title: parsed.data.title,
-        status: "open",
+        status,
         lastMessageAt: now,
-        // writer has just sent the first message, so consider it read by them
-        lastReadByWriterAt: now,
+        lastReadByWriterAt,
+        lastReadByAdminAt,
       })
       .returning();
 
     await db.insert(opinionTicketMessages).values({
       ticketId: ticket.id,
       senderId: req.user.id,
-      senderRole: "writer",
+      senderRole,
       message: parsed.data.message,
     });
+
+    if (shouldNotifyDeskOfTicketMessage(senderRole)) {
+      const writerName = [req.user.firstName, req.user.lastName].filter(Boolean).join(" ").trim() || null;
+      try {
+        await notifyDeskOfWriterInquiry({
+          kind: "new_ticket",
+          ticketId: ticket.id,
+          title: parsed.data.title,
+          writerName,
+          message: parsed.data.message,
+          senderId: req.user.id,
+        });
+      } catch (notifyErr) {
+        console.error("[opinion-tickets] notify failed", notifyErr);
+      }
+    }
 
     return res.status(201).json({ ticket });
   } catch (err) {
@@ -281,7 +359,8 @@ router.post("/api/opinion-tickets", requireAuth, async (req: any, res: Response)
 
 /**
  * GET /api/opinion-tickets/writers/list
- * Admin only — قبل :id حتى لا يُلتقط المسار كمعرّف تذكرة.
+ * Admin only — كل المنسوبين المساهمين (مراسل / كاتب رأي / زاوية)، لا من لديهم تذاكر فقط.
+ * اختياري: ?q= للبحث بالاسم أو البريد. قبل :id حتى لا يُلتقط كمعرّف تذكرة.
  */
 router.get("/api/opinion-tickets/writers/list", requireAuth, async (req: any, res: Response) => {
   try {
@@ -289,27 +368,58 @@ router.get("/api/opinion-tickets/writers/list", requireAuth, async (req: any, re
     if (!admin) {
       return res.status(403).json({ message: "Forbidden" });
     }
-    const rows = await db
-      .selectDistinct({
+
+    const contributorRoles = [...CONTRIBUTOR_ROLE_NAMES];
+    const byLegacy = await db
+      .select({
         id: users.id,
         firstName: users.firstName,
         lastName: users.lastName,
         email: users.email,
       })
-      .from(opinionTickets)
-      .leftJoin(users, eq(users.id, opinionTickets.writerId));
+      .from(users)
+      .where(and(inArray(users.role, contributorRoles), eq(users.status, "active")));
 
-    const ids = rows.map((r) => r.id).filter((id): id is string => !!id);
+    const byRbac = await db
+      .select({
+        id: users.id,
+        firstName: users.firstName,
+        lastName: users.lastName,
+        email: users.email,
+      })
+      .from(users)
+      .innerJoin(userRoles, eq(userRoles.userId, users.id))
+      .innerJoin(roles, eq(roles.id, userRoles.roleId))
+      .where(and(inArray(roles.name, contributorRoles), eq(users.status, "active")));
+
+    const byId = new Map<string, { id: string; firstName: string | null; lastName: string | null; email: string | null }>();
+    for (const row of [...byLegacy, ...byRbac]) {
+      if (row.id) byId.set(row.id, row);
+    }
+
+    const ids = [...byId.keys()];
     const kinds = await authorKindsForUserIds(ids);
+    const q = typeof req.query.q === "string" ? req.query.q.trim().toLowerCase() : "";
 
-    const writers = rows
-      .filter((r) => r.id != null)
-      .map((r) => ({
-        id: r.id as string,
+    let writers = ids.map((id) => {
+      const r = byId.get(id)!;
+      return {
+        id,
         name: fullName(r.firstName, r.lastName),
         email: r.email,
-        authorKind: kinds.get(r.id as string) ?? "other",
-      }));
+        authorKind: kinds.get(id) ?? ("other" as TicketAuthorKind),
+      };
+    });
+
+    writers = writers.filter((w) => w.authorKind !== "other");
+    if (q) {
+      writers = writers.filter((w) => {
+        const hay = `${w.name ?? ""} ${w.email ?? ""}`.toLowerCase();
+        return hay.includes(q);
+      });
+    }
+    writers.sort((a, b) => (a.name ?? a.email ?? "").localeCompare(b.name ?? b.email ?? "", "ar"));
+
     return res.json({ writers });
   } catch (err) {
     console.error("[opinion-tickets] writers error", err);
@@ -492,6 +602,22 @@ router.post("/api/opinion-tickets/:id/messages", requireAuth, async (req: any, r
       if (ticket.status === "answered") updates.status = "open";
     }
     await db.update(opinionTickets).set(updates).where(eq(opinionTickets.id, ticket.id));
+
+    if (shouldNotifyDeskOfTicketMessage(senderRole)) {
+      const writerName = [req.user.firstName, req.user.lastName].filter(Boolean).join(" ").trim() || null;
+      try {
+        await notifyDeskOfWriterInquiry({
+          kind: "writer_message",
+          ticketId: ticket.id,
+          title: ticket.title,
+          writerName,
+          message: parsed.data.message,
+          senderId: req.user.id,
+        });
+      } catch (notifyErr) {
+        console.error("[opinion-tickets] notify failed", notifyErr);
+      }
+    }
 
     return res.status(201).json({ message: msg });
   } catch (err) {

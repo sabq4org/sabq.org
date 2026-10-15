@@ -11,6 +11,8 @@ import { and, inArray } from "drizzle-orm";
 import jwt from "jsonwebtoken";
 import https from "https";
 import http2 from "http2";
+import { createPushBroadcastPacer } from "./pushBroadcastPacer";
+import { stagingOutboundError } from "../utils/stagingRuntime";
 
 // APNs Configuration
 const APNS_HOST_PRODUCTION = "api.push.apple.com";
@@ -88,7 +90,7 @@ function formatPrivateKey(privateKey: string): string {
     const match = key.match(/-----BEGIN [^-]+-----\s*([\s\S]+?)\s*-----END [^-]+-----/);
     if (match) {
       const body = match[1].replace(/\s+/g, "");
-      return `-----BEGIN PRIVATE KEY-----\n${body}\n-----END PRIVATE KEY-----`;
+      return `-----BEGIN PRIVATE KEY-----\n${body}\n-----END PRIVATE KEY-----`; // gitleaks:allow — قالب ترويسة PEM لا مفتاح
     }
     return key;
   }
@@ -96,7 +98,7 @@ function formatPrivateKey(privateKey: string): string {
   // لا ترويسة → جسم Base64 عارٍ. أزل كل فراغ ولفّه بترويسة PEM صحيحة.
   const body = key.replace(/\s+/g, "");
   if (!body) return key;
-  return `-----BEGIN PRIVATE KEY-----\n${body}\n-----END PRIVATE KEY-----`;
+  return `-----BEGIN PRIVATE KEY-----\n${body}\n-----END PRIVATE KEY-----`; // gitleaks:allow — قالب ترويسة PEM لا مفتاح
 }
 
 /**
@@ -375,6 +377,8 @@ export async function sendPushNotification(
     topic?: string;
   } = {}
 ): Promise<ApnsResponse> {
+  const stagingError = stagingOutboundError("apns");
+  if (stagingError) return { success: false, reason: stagingError.message };
   // اختر المفتاح حسب تطبيق الجهاز (topic = bundleId)؛ الرياضة قد تستخدم مفتاحًا منفصلًا.
   const credentials = getApnsCredentials(options.topic);
 
@@ -498,6 +502,8 @@ export async function sendLiveActivityStart(
   pushToStartToken: string,
   options: LiveActivityStartOptions,
 ): Promise<ApnsResponse> {
+  const stagingError = stagingOutboundError("apns-live-activity");
+  if (stagingError) return { success: false, reason: stagingError.message };
   const credentials = getApnsCredentials(options.bundleId);
   if (!credentials) return { success: false, reason: "APNs not configured" };
 
@@ -575,6 +581,8 @@ export async function sendLiveActivityUpdate(
   activityPushToken: string,
   options: LiveActivityUpdateOptions,
 ): Promise<ApnsResponse> {
+  const stagingError = stagingOutboundError("apns-live-activity-update");
+  if (stagingError) return { success: false, reason: stagingError.message };
   // اختر المفتاح حسب bundle التطبيق المُصدِر للنشاط (الرياضة قد تستخدم مفتاحًا منفصلًا).
   const credentials = getApnsCredentials(options.bundleId);
   if (!credentials) {
@@ -641,6 +649,8 @@ export async function sendBatchPushNotifications(
   payload: ApnsPayload,
   campaignId?: string
 ): Promise<{ success: number; failed: number; errors: string[] }> {
+  const stagingError = stagingOutboundError("apns-batch");
+  if (stagingError) return { success: 0, failed: deviceTokens.length, errors: [stagingError.message] };
   const results = { success: 0, failed: 0, errors: [] as string[] };
   
   // Log tokens being sent to for debugging
@@ -656,6 +666,10 @@ export async function sendBatchPushNotifications(
   for (let i = 0; i < deviceTokens.length; i += batchSize) {
     batches.push(deviceTokens.slice(i, i + batchSize));
   }
+
+  // Keep the pacing scheduler alive across batch boundaries. Resetting the
+  // clock for every batch would recreate the burst at each boundary.
+  const pacer = createPushBroadcastPacer<string, ApnsResponse>();
 
   for (const batch of batches) {
     // Pre-resolve device rows for the whole batch in ONE query instead of one
@@ -678,21 +692,23 @@ export async function sendBatchPushNotifications(
       }
     }
 
-    // Network sends still run concurrently across the batch — send throughput
-    // is unchanged. Only the DB writes are pulled out of the per-token path and
-    // flushed in bulk below.
-    const sendResults = await Promise.all(
-      batch.map(async (token) => {
-        const response = await sendPushNotification(token, payload);
-        // Only log failures: per-token success lines were emitted for every
-        // device in a broadcast (thousands), flooding Railway logs and hitting
-        // its log rate limit. Failures stay logged so error tracking is intact.
-        if (!response.success) {
-          console.log(`[APNs] Token ${token.substring(0, 16)}... failed: ${response.reason}`);
-        }
-        return { token, response };
-      })
-    );
+    // Network sends retain the established 100-way batch concurrency by
+    // default. Optional pacing, when explicitly configured, still happens
+    // outside DB reads/writes so no pool connection is held while waiting.
+    const pacedResults = await pacer.run(batch, (token) => sendPushNotification(token, payload));
+    const sendResults = pacedResults.map(({ item: token, value, error }) => {
+      const response = value || {
+        success: false,
+        reason: error instanceof Error ? error.message : "APNs transport exception",
+      };
+      // Only log failures: per-token success lines were emitted for every
+      // device in a broadcast (thousands), flooding Railway logs and hitting
+      // its log rate limit. Failures stay logged so error tracking is intact.
+      if (!response.success) {
+        console.log(`[APNs] Token ${token.substring(0, 16)}... failed: ${response.reason}`);
+      }
+      return { token, response };
+    });
 
     // Record events for the whole batch in a single INSERT instead of one row
     // per token. Same rows, same eventType, same apnsId/error fields as before.
@@ -754,10 +770,6 @@ export async function sendBatchPushNotifications(
       }
     }
 
-    // Small delay between batches to avoid rate limiting
-    if (batches.indexOf(batch) < batches.length - 1) {
-      await new Promise(resolve => setTimeout(resolve, 100));
-    }
   }
 
   return results;
@@ -826,6 +838,7 @@ export function createCustomNotificationPayload(
     sound?: string;
     campaignId?: string;
     articleId?: string;
+    articleSlug?: string;
     type?: string;
     category?: string;
     priority?: "passive" | "active" | "time-sensitive" | "critical";
@@ -848,6 +861,7 @@ export function createCustomNotificationPayload(
     imageUrl: options.imageUrl,
     campaignId: options.campaignId,
     articleId: options.articleId,
+    articleSlug: options.articleSlug,
     type: options.type || "custom",
   };
 }

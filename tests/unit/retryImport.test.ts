@@ -40,6 +40,15 @@ afterEach(() => {
 });
 
 describe("isChunkErrorMessage", () => {
+  it("يتعرّف صيغة Firefox «error loading dynamically imported module»", async () => {
+    const { isChunkErrorMessage } = await import("@/lib/retryImport");
+    expect(
+      isChunkErrorMessage(
+        "error loading dynamically imported module: https://cdn.sabq.org/assets/Dashboard-6FoR7-6s.js",
+      ),
+    ).toBe(true);
+  });
+
   it("matches the WebKit bracket-form poison (no dot in the message)", async () => {
     const { isChunkErrorMessage } = await import("@/lib/retryImport");
     // Minified lazyNamed evaluating a swallowed (undefined) module namespace —
@@ -86,6 +95,24 @@ describe("retryImport", () => {
       // First attempt: Vite preload resolved `undefined` because some listener
       // called preventDefault() on vite:preloadError. Second attempt succeeds.
       return calls === 1 ? (undefined as unknown as typeof mod) : mod;
+    };
+    await expect(retryImport(importFn, 2, 1)).resolves.toBe(mod);
+    expect(calls).toBe(2);
+  });
+
+  it("normalizes an undefined preload rejection before reading its message", async () => {
+    const { retryImport } = await import("@/lib/retryImport");
+    const mod = { default: () => null };
+    let calls = 0;
+    const importFn = async () => {
+      calls += 1;
+      if (calls === 1) {
+        // Firefox/Vite can reject the preload promise without an Error object.
+        // This exact shape caused JAVASCRIPT-REACT-3A when retryImport read
+        // `error.message` from undefined instead of entering recovery.
+        throw undefined;
+      }
+      return mod;
     };
     await expect(retryImport(importFn, 2, 1)).resolves.toBe(mod);
     expect(calls).toBe(2);

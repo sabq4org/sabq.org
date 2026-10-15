@@ -563,16 +563,18 @@ export async function notifyReporterArticleScheduled(articleId: string, schedule
       return;
     }
 
-    // Format scheduled date/time for Arabic display
-    const scheduledDateStr = scheduledAt.toLocaleDateString('ar-SA-u-ca-gregory', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
+    // Gregorian + Latin digits, Riyadh wall-clock (server is UTC)
+    const scheduledDateStr = scheduledAt.toLocaleDateString("ar-SA-u-ca-gregory-nu-latn", {
+      timeZone: "Asia/Riyadh",
+      weekday: "long",
+      year: "numeric",
+      month: "long",
+      day: "numeric",
     });
-    const scheduledTimeStr = scheduledAt.toLocaleTimeString('ar-SA', {
-      hour: '2-digit',
-      minute: '2-digit',
+    const scheduledTimeStr = scheduledAt.toLocaleTimeString("ar-SA-u-ca-gregory-nu-latn", {
+      timeZone: "Asia/Riyadh",
+      hour: "2-digit",
+      minute: "2-digit",
     });
 
     console.log(`📅 [REPORTER SCHEDULE NOTIFY] Sending schedule notification to reporter: ${reporter.firstName} ${reporter.lastName}`);
@@ -668,16 +670,18 @@ export async function notifyOpinionAuthorArticleScheduled(articleId: string, sch
       return;
     }
 
-    // Format scheduled date/time for Arabic display
-    const scheduledDateStr = scheduledAt.toLocaleDateString('ar-SA-u-ca-gregory', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
+    // Gregorian + Latin digits, Riyadh wall-clock (server is UTC)
+    const scheduledDateStr = scheduledAt.toLocaleDateString("ar-SA-u-ca-gregory-nu-latn", {
+      timeZone: "Asia/Riyadh",
+      weekday: "long",
+      year: "numeric",
+      month: "long",
+      day: "numeric",
     });
-    const scheduledTimeStr = scheduledAt.toLocaleTimeString('ar-SA', {
-      hour: '2-digit',
-      minute: '2-digit',
+    const scheduledTimeStr = scheduledAt.toLocaleTimeString("ar-SA-u-ca-gregory-nu-latn", {
+      timeZone: "Asia/Riyadh",
+      hour: "2-digit",
+      minute: "2-digit",
     });
 
     console.log(`📅 [OPINION AUTHOR SCHEDULE NOTIFY] Sending schedule notification to author: ${author.firstName} ${author.lastName}`);

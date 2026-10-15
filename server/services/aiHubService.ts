@@ -548,43 +548,32 @@ export async function listAudit(limit: number) {
 // ── Budgets ──
 
 export async function listBudgets() {
-  const monthStart = monthStartString();
-  const [budgets, todayByProvider, monthByProvider, [todayTotal]] = await Promise.all([
+  const monthStart = new Date().toISOString().slice(0, 7) + "-01";
+  const today = new Date();
+  today.setUTCHours(0, 0, 0, 0);
+  const [budgets, historical, current] = await Promise.all([
     db.select().from(aiBudgets).orderBy(aiBudgets.scope, aiBudgets.scopeKey),
-    db
-      .select({
-        provider: aiUsageLogs.provider,
-        costUsd: sql<number>`coalesce(sum(${aiUsageLogs.estimatedCostUsd}), 0)::float8`,
-      })
-      .from(aiUsageLogs)
-      .where(gte(aiUsageLogs.createdAt, startOfToday()))
-      .groupBy(aiUsageLogs.provider),
-    db
-      .select({
-        provider: aiUsageDaily.provider,
-        costUsd: sql<number>`coalesce(sum(${aiUsageDaily.estimatedCostUsd}), 0)::float8`,
-      })
-      .from(aiUsageDaily)
-      .where(gte(aiUsageDaily.date, monthStart))
-      .groupBy(aiUsageDaily.provider),
-    db
-      .select({ costUsd: sql<number>`coalesce(sum(${aiUsageLogs.estimatedCostUsd}), 0)::float8` })
-      .from(aiUsageLogs)
-      .where(gte(aiUsageLogs.createdAt, startOfToday())),
+    db.select({ provider: aiUsageDaily.provider, featureKey: aiUsageDaily.featureKey,
+      costUsd: sql<number>`coalesce(sum(${aiUsageDaily.estimatedCostUsd}), 0)::float8` })
+      .from(aiUsageDaily).where(and(gte(aiUsageDaily.date, monthStart),
+        sql`${aiUsageDaily.date} < ${today.toISOString().slice(0, 10)}`))
+      .groupBy(aiUsageDaily.provider, aiUsageDaily.featureKey),
+    db.select({ provider: aiUsageLogs.provider, featureKey: aiUsageLogs.featureKey,
+      costUsd: sql<number>`coalesce(sum(${aiUsageLogs.estimatedCostUsd}), 0)::float8` })
+      .from(aiUsageLogs).where(gte(aiUsageLogs.createdAt, today))
+      .groupBy(aiUsageLogs.provider, aiUsageLogs.featureKey),
   ]);
-
-  const spendByProvider = new Map<string, number>();
-  for (const row of monthByProvider) spendByProvider.set(row.provider, row.costUsd);
-  for (const row of todayByProvider) {
-    spendByProvider.set(row.provider, (spendByProvider.get(row.provider) ?? 0) + row.costUsd);
+  const providerSpend = new Map<string, number>();
+  const featureSpend = new Map<string, number>();
+  let total = 0;
+  for (const row of [...historical, ...current]) {
+    const cost = Number(row.costUsd);
+    total += cost;
+    providerSpend.set(row.provider, (providerSpend.get(row.provider) ?? 0) + cost);
+    featureSpend.set(row.featureKey, (featureSpend.get(row.featureKey) ?? 0) + cost);
   }
-  const globalSpend = Array.from(spendByProvider.values()).reduce((a, b) => a + b, 0) || (todayTotal?.costUsd ?? 0);
-
-  return budgets.map((b) => ({
-    ...b,
-    spentThisMonthUsd:
-      b.scope === "global" ? globalSpend : b.scope === "provider" ? spendByProvider.get(b.scopeKey) ?? 0 : 0,
-  }));
+  return budgets.map(b => ({ ...b, spentThisMonthUsd: b.scope === "global" ? total
+    : (b.scope === "provider" ? providerSpend : featureSpend).get(b.scopeKey) ?? 0 }));
 }
 
 export interface BudgetInput {

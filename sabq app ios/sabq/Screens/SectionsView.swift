@@ -5,18 +5,12 @@ struct SectionsView: View {
     @Environment(BookmarksStore.self) private var bookmarksStore
     @State private var trendingTags: [String] = []
 
-    private let columns = [
-        GridItem(.flexible(), spacing: 14),
-        GridItem(.flexible(), spacing: 14)
-    ]
+    private let columns = SabqGrid.adaptive(spacing: 14)
 
     var body: some View {
         ScrollView(showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 20) {
-                CompactScreenHeader(
-                    title: "الأقسام",
-                    subtitle: "تصفح الأخبار حسب التصنيف"
-                )
+            VStack(alignment: .leading, spacing: SabqLayout.space24) {
+                SabqPageIntro("تصفح الأخبار حسب التصنيف")
 
                 LazyVGrid(columns: columns, spacing: 14) {
                     ForEach(Array(ArticleCategory.allCases.enumerated()), id: \.element.id) { index, category in
@@ -30,15 +24,18 @@ struct SectionsView: View {
 
                 trendingTagsSection
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 18)
-            .padding(.bottom, 40)
+            .padding(.horizontal, SabqLayout.pageInset)
+            .padding(.top, SabqLayout.space16)
+            .padding(.bottom, SabqLayout.space32)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .navigationTitle("الأقسام")
+        .navigationBarTitleDisplayMode(.inline)
         .background(SabqTheme.background)
         .sabqRTL()
         .navigationDestination(for: ArticleCategory.self) { category in
             CategoryArticlesView(category: category)
+                .duoContentInsets()
         }
         .task {
             let fetchedKeywords = await NewsService.fetchTrending()
@@ -91,6 +88,8 @@ struct CategoryArticlesView: View {
     let category: ArticleCategory
     @Environment(ArticlesStore.self) private var articlesStore
     @Environment(BookmarksStore.self) private var bookmarksStore
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var categoryArticles: [Article] = []
     @State private var isLoading = true
     @State private var hasMore = false
@@ -98,7 +97,7 @@ struct CategoryArticlesView: View {
 
     var body: some View {
         ScrollView(showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 20) {
+            VStack(alignment: .leading, spacing: SabqLayout.space24) {
                 heroSection
 
                 if isLoading && categoryArticles.isEmpty {
@@ -122,18 +121,18 @@ struct CategoryArticlesView: View {
                         subtitle: "لم نجد أخباراً في هذا القسم حالياً"
                     )
                 } else {
-                    SurfaceCard {
+                    SurfaceCard(lazy: true, cornerRadius: 22, spacing: 0) {
                         ForEach(Array(categoryArticles.enumerated()), id: \.element.id) { index, article in
                             if index > 0 {
-                                Divider()
-                                    .foregroundStyle(SabqTheme.outline)
+                                SidebarRowDivider()
                             }
 
                             NavigationLink(value: article) {
                                 CompactArticleRow(
                                     article: article,
                                     onBookmark: { bookmarksStore.toggle(article.id, article: article) },
-                                    isBookmarked: bookmarksStore.isBookmarked(article.id)
+                                    isBookmarked: bookmarksStore.isBookmarked(article.id),
+                                    showsCategory: false
                                 )
                             }
                             .buttonStyle(.plain)
@@ -160,9 +159,9 @@ struct CategoryArticlesView: View {
                     }
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 18)
-            .padding(.bottom, 40)
+            .padding(.horizontal, SabqLayout.pageInset)
+            .padding(.top, SabqLayout.space16)
+            .padding(.bottom, SabqLayout.space32)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .background(SabqTheme.background)
@@ -171,6 +170,7 @@ struct CategoryArticlesView: View {
         .navigationBarTitleDisplayMode(.inline)
         .navigationDestination(for: Article.self) { article in
             ArticleDetailView(article: article)
+                .duoContentInsets()
         }
         .task { await loadArticles() }
     }
@@ -201,24 +201,73 @@ struct CategoryArticlesView: View {
         isLoading = false
     }
 
+    /// رأس تصنيف هادئ يحتفظ بالعنوان والعداد والوصف عند المساحة المناسبة.
+    /// لا يعتمد على breadcrumb أو لون دلالي؛ العنوان وحده يعرّف الوجهة.
     private var heroSection: some View {
-        HStack(alignment: .top, spacing: 16) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text(category.title)
-                    .font(SabqFonts.app(size: 26, weight: .bold))
-                    .foregroundStyle(SabqTheme.ink)
-
-                Text(category.subtitle)
-                    .font(SabqFonts.app(size: 15, weight: .regular))
-                    .foregroundStyle(SabqTheme.secondaryInk)
-                    .lineSpacing(4)
-
-                StatusChip(title: "\(categoryArticles.count) خبر", tint: category.tint)
+        VStack(alignment: .leading, spacing: SabqLayout.space12) {
+            Group {
+                if dynamicTypeSize.isAccessibilitySize {
+                    VStack(alignment: .leading, spacing: SabqLayout.space12) {
+                        categoryIdentityIcon
+                        categoryIdentityText
+                    }
+                } else {
+                    HStack(alignment: .center, spacing: SabqLayout.space12) {
+                        categoryIdentityIcon
+                        categoryIdentityText
+                    }
+                }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-            SquareIconBadge(systemImage: category.icon, tint: category.tint)
         }
+        .padding(.horizontal, SabqLayout.cardInset)
+        .padding(.vertical, SabqLayout.space16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(SabqTheme.publicSurface)
+        .clipShape(RoundedRectangle(cornerRadius: SabqTheme.blockRadius, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: SabqTheme.blockRadius, style: .continuous).stroke(SabqTheme.outline, lineWidth: 1))
+    }
+
+    private var categoryIdentityIcon: some View {
+        Image(systemName: category.icon)
+            .font(SabqFonts.app(size: 17, weight: .semibold))
+            .foregroundStyle(SabqTheme.secondaryInk)
+            .frame(width: SabqLayout.touchTarget, height: SabqLayout.touchTarget)
+            .background(RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous).fill(SabqTheme.softFill))
+            .accessibilityHidden(true)
+    }
+
+    private var categoryIdentityText: some View {
+        VStack(alignment: .leading, spacing: SabqLayout.space4) {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: SabqLayout.space8) {
+                    categoryTitle
+                    categoryCount
+                }
+            } else {
+                HStack(spacing: SabqLayout.space8) {
+                    categoryTitle
+                    categoryCount
+                }
+            }
+            if horizontalSizeClass == .regular {
+                Text(category.subtitle)
+                    .font(SabqType.body)
+                    .foregroundStyle(SabqTheme.secondaryInk)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var categoryTitle: some View {
+        Text(category.title)
+            .font(SabqType.pageTitle)
+            .foregroundStyle(SabqTheme.ink)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private var categoryCount: some View {
+        StatusChip(title: "\(categoryArticles.count) خبر", tint: SabqTheme.secondaryInk)
+            .frame(minHeight: SabqLayout.touchTarget, alignment: .leading)
     }
 }
 

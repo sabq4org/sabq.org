@@ -41,9 +41,8 @@ export function prefetchCategoryPage(): void {
  * cache by the time the section scrolls in — only the data fetch remains.
  *
  * The specifiers MUST match the lazy() wrappers in Home.tsx so Vite dedupes
- * them onto the same chunk. Desktop-only sections (the heavy Leaflet map plus
- * the Trending Topics / Trending Keywords panels) are gated behind
- * `includeDesktopOnly` because they aren't rendered on mobile at all.
+ * them onto the same chunk. The desktop-only Leaflet map is gated behind
+ * `includeDesktopOnly` because it isn't rendered on mobile.
  */
 export function prefetchHomeSections({ includeDesktopOnly = true }: { includeDesktopOnly?: boolean } = {}): void {
   prefetchOnce("home-smart-summary", () => import("@/components/SmartSummaryBlock"));
@@ -54,8 +53,6 @@ export function prefetchHomeSections({ includeDesktopOnly = true }: { includeDes
   prefetchOnce("home-opinion", () => import("@/components/OpinionArticlesBlock"));
   prefetchOnce("home-continue-reading", () => import("@/components/ContinueReadingWidget"));
   if (includeDesktopOnly) {
-    prefetchOnce("home-trending-topics", () => import("@/components/TrendingTopics"));
-    prefetchOnce("home-trending-keywords", () => import("@/components/TrendingKeywords"));
     prefetchOnce("home-news-map", () => import("@/components/NewsMap"));
   }
 }

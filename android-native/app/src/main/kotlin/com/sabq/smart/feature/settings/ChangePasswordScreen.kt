@@ -46,7 +46,7 @@ fun ChangePasswordScreen(
     var confirm by remember { mutableStateOf("") }
 
     val mismatched = fresh.isNotEmpty() && confirm.isNotEmpty() && fresh != confirm
-    val valid = current.isNotEmpty() && fresh.length >= 6 && fresh == confirm
+    val valid = current.isNotEmpty() && fresh.length >= 8 && fresh == confirm
 
     LaunchedEffect(state.success) {
         if (state.success) {
@@ -103,7 +103,7 @@ fun ChangePasswordScreen(
                     label = "كلمة المرور الجديدة",
                     value = fresh,
                     onValueChange = { fresh = it },
-                    placeholder = "6 أحرف على الأقل",
+                    placeholder = "8 أحرف على الأقل",
                     isSecure = true,
                 )
                 SheetField(

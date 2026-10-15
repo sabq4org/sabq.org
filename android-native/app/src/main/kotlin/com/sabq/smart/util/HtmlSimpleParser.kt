@@ -8,11 +8,60 @@ sealed interface BlockNode {
     data class Paragraph(val runs: List<InlineRun>) : BlockNode
     data class ListBlock(val ordered: Boolean, val items: List<List<InlineRun>>) : BlockNode
     data class Blockquote(val runs: List<InlineRun>) : BlockNode
-    data class Image(val url: String, val alt: String?, val caption: String?) : BlockNode
+    /** صورة من المحرر مع عرضها ومحاذاتها (`data-width`/`data-align`/`data-caption`) — نقل الويب #1512. */
+    data class Image(
+        val url: String,
+        val alt: String?,
+        val caption: String?,
+        val layout: ImageLayout = ImageLayout.Full,
+    ) : BlockNode
     data class ImageGallery(val images: List<GalleryImage>) : BlockNode
     data class TwitterEmbed(val tweetUrl: String) : BlockNode
     data class VideoEmbed(val provider: VideoProvider, val embedUrl: String, val sourceUrl: String?) : BlockNode
+    data class WhatsAppCta(val phone: String, val phrase: String, val url: String) : BlockNode
+    /** جدول من المحرر (`<table class="sabq-table">`): header صف الرؤوس <th> إن وُجد، rows البقية. */
+    data class Table(
+        val header: List<List<InlineRun>>?,
+        val rows: List<List<List<InlineRun>>>,
+        val cardStyle: Boolean,
+    ) : BlockNode
     object Divider : BlockNode
+}
+
+enum class ImageAlign { Center, Right, Left }
+
+/**
+ * عرض الصورة كنسبة من عمود القراءة ومحاذاتها — يطابق `ImageLayout` في iOS:
+ * `%` نسبة مباشرة، `px` تُنسب إلى عرض العمود الاسمي في الويب (760)، وقيمة
+ * ≥ 98٪ تعني العرض الكامل، وأقل من 20٪ تُرفع إلى 20٪.
+ */
+data class ImageLayout(
+    val widthFraction: Float? = null,
+    val align: ImageAlign = ImageAlign.Center,
+) {
+    companion object {
+        val Full = ImageLayout()
+        const val NOMINAL_COLUMN_WIDTH = 760f
+
+        fun parse(width: String?, align: String?): ImageLayout {
+            var fraction: Float? = null
+            val raw = width?.trim()?.lowercase()
+            if (!raw.isNullOrEmpty()) {
+                fraction = when {
+                    raw.endsWith("%") -> raw.dropLast(1).toFloatOrNull()?.let { it / 100f }
+                    raw.endsWith("px") -> raw.dropLast(2).toFloatOrNull()?.let { it / NOMINAL_COLUMN_WIDTH }
+                    else -> raw.toFloatOrNull()?.let { if (it <= 1f) it else it / NOMINAL_COLUMN_WIDTH }
+                }
+                fraction = fraction?.let { if (it >= 0.98f) null else maxOf(0.2f, it) }
+            }
+            val parsedAlign = when (align?.trim()?.lowercase()) {
+                "right" -> ImageAlign.Right
+                "left" -> ImageAlign.Left
+                else -> ImageAlign.Center
+            }
+            return ImageLayout(widthFraction = fraction, align = parsedAlign)
+        }
+    }
 }
 
 data class InlineRun(
@@ -197,7 +246,12 @@ object HtmlSimpleParser {
             scanner.consumeTag()
             val src = tag.attr("src")
             if (src != null) {
-                return BlockNode.Image(url = src, alt = tag.attr("alt"), caption = null)
+                return BlockNode.Image(
+                    url = src,
+                    alt = tag.attr("alt"),
+                    caption = tag.attr("data-caption")?.takeIf { it.isNotEmpty() },
+                    layout = ImageLayout.parse(tag.attr("data-width"), tag.attr("data-align")),
+                )
             }
             return null
         }
@@ -207,6 +261,7 @@ object HtmlSimpleParser {
             val isGallery = tag.attr("data-image-gallery") != null || tag.classes.contains("photo-album")
             val isVideo = tag.attr("data-video-embed") != null || tag.classes.contains("video-embed") || tag.classes.contains("youtube-embed")
             val isTweet = tag.attr("data-twitter-embed") != null || tag.classes.contains("tweet-embed") || (tag.classes.contains("social-embed") && tag.attr("data-embed-type") == "twitter")
+            val isWhatsApp = tag.attr("data-whatsapp-cta") != null || tag.classes.contains("whatsapp-cta-card")
 
             if (isGallery) {
                 return parseImageGallery(scanner, tag)
@@ -216,6 +271,9 @@ object HtmlSimpleParser {
             }
             if (isTweet) {
                 return parseTwitterEmbed(scanner, tag)
+            }
+            if (isWhatsApp) {
+                return parseWhatsAppCta(scanner, tag)
             }
             // Generic div: render children as paragraph.
             val inner = scanner.consumeContainer()
@@ -243,6 +301,10 @@ object HtmlSimpleParser {
 
         if (tag.name == "ul" || tag.name == "ol") {
             return parseList(scanner, ordered = tag.name == "ol")
+        }
+
+        if (tag.name == "table") {
+            return parseTable(scanner, tag)
         }
 
         if (tag.name == "p") {
@@ -275,6 +337,44 @@ object HtmlSimpleParser {
             }
         }
         return BlockNode.ListBlock(ordered, items)
+    }
+
+    // كان الجدول يسقط إلى «وسم مجهول» فتتناثر خلاياه كفقرات مستقلة.
+    // الصف الأول رأسٌ إذا كانت كل خلاياه <th>؛ colgroup/thead/tbody تُتجاوز.
+    private fun parseTable(scanner: HTMLScanner, tag: HTMLTag): BlockNode? {
+        val inner = scanner.consumeContainer()
+        val cardStyle = tag.classes.contains("sabq-table--card")
+        var header: List<List<InlineRun>>? = null
+        val rows = mutableListOf<List<List<InlineRun>>>()
+        val s = HTMLScanner(inner)
+        while (!s.isAtEnd()) {
+            s.skipWhitespace()
+            val t = s.peekTag()
+            if (t == null) { s.advance(1); continue }
+            if (t.name != "tr" || t.isClosing) { s.consumeTag(); continue }
+            val rowHtml = s.consumeContainer()
+            val cells = mutableListOf<List<InlineRun>>()
+            var allHeader = true
+            val c = HTMLScanner(rowHtml)
+            while (!c.isAtEnd()) {
+                c.skipWhitespace()
+                val ct = c.peekTag()
+                if (ct == null) { c.advance(1); continue }
+                if ((ct.name != "td" && ct.name != "th") || ct.isClosing) { c.consumeTag(); continue }
+                if (ct.name == "td") allHeader = false
+                // فقرات متعددة داخل الخلية → أسطر
+                val cellHtml = c.consumeContainer().replace("</p><p", "<br><p")
+                cells.add(parseInlineRuns(cellHtml))
+            }
+            if (cells.isEmpty()) continue
+            if (allHeader && header == null && rows.isEmpty()) {
+                header = cells
+            } else {
+                rows.add(cells)
+            }
+        }
+        if (header == null && rows.isEmpty()) return null
+        return BlockNode.Table(header = header, rows = rows, cardStyle = cardStyle)
     }
 
     private fun parseImageGallery(scanner: HTMLScanner, tag: HTMLTag): BlockNode {
@@ -355,6 +455,26 @@ object HtmlSimpleParser {
         return if (url != null) BlockNode.TwitterEmbed(url) else BlockNode.Blockquote(parseInlineRuns(inner))
     }
 
+    private fun parseWhatsAppCta(scanner: HTMLScanner, tag: HTMLTag): BlockNode {
+        val inner = scanner.consumeContainer()
+        val phone = (tag.attr("data-phone") ?: "").filter { it.isDigit() }
+        val phraseAttr = tag.attr("data-phrase")?.trim().orEmpty()
+        val phraseFromText = stripTags(inner).trim()
+        val phrase = when {
+            phraseAttr.isNotEmpty() -> phraseAttr
+            phraseFromText.isNotEmpty() -> phraseFromText
+            else -> "تواصل عبر واتساب"
+        }
+        val href = Regex("""href="(https?://wa\.me/[^"]+)"""", RegexOption.IGNORE_CASE)
+            .find(inner)?.groupValues?.get(1)
+            ?: phone.takeIf { it.isNotEmpty() }?.let { "https://wa.me/$it" }
+        return if (href != null) {
+            BlockNode.WhatsAppCta(phone = phone, phrase = phrase, url = href)
+        } else {
+            BlockNode.Divider
+        }
+    }
+
     private fun extractTweetURL(html: String): String? {
         val pattern = """href="(https?://(?:twitter\.com|x\.com)/[^"]+/status/[0-9]+[^"]*)""""
         val regex = Regex(pattern, RegexOption.IGNORE_CASE)
@@ -365,12 +485,24 @@ object HtmlSimpleParser {
     private fun tryExtractInlineImage(inner: String): BlockNode? {
         val trimmed = inner.trim()
         if (!trimmed.lowercase().startsWith("<img")) return null
-        val pattern = """<img[^>]*src="([^"]+)"[^>]*(?:alt="([^"]*)")?"""
-        val regex = Regex(pattern, RegexOption.IGNORE_CASE)
-        val match = regex.find(trimmed) ?: return null
-        val src = match.groupValues[1]
-        val alt = match.groupValues.getOrNull(2)?.takeIf { it.isNotEmpty() }
-        return BlockNode.Image(url = src, alt = alt, caption = null)
+        // السمات بأي ترتيب (كان النمط القديم يشترط alt بعد src فيفقده).
+        val src = inlineAttr("src", trimmed) ?: return null
+        val alt = inlineAttr("alt", trimmed)?.takeIf { it.isNotEmpty() }
+        return BlockNode.Image(
+            url = src,
+            alt = alt,
+            caption = inlineAttr("data-caption", trimmed)?.takeIf { it.isNotEmpty() },
+            layout = ImageLayout.parse(inlineAttr("data-width", trimmed), inlineAttr("data-align", trimmed)),
+        )
+    }
+
+    /** قيمة سمة داخل وسم خام (`<img … data-width="50%">`) للمسار الذي لا يملك HTMLTag. */
+    private fun inlineAttr(name: String, html: String): String? {
+        for (q in listOf("\"", "'")) {
+            val m = Regex("\\b$name\\s*=\\s*$q([^$q]*)$q", RegexOption.IGNORE_CASE).find(html)
+            if (m != null) return m.groupValues[1]
+        }
+        return null
     }
 
     data class MarkFrame(
