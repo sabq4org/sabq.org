@@ -1133,6 +1133,8 @@ export default function ArticleEditor() {
       metaTitle,
       metaDescription,
       keywords,
+      reporterId,
+      opinionAuthorId,
       expectedUpdatedAt: articleUpdatedAt,
     },
     onDraftCreated: (articleId) => {

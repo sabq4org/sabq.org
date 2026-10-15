@@ -7884,8 +7884,8 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       console.log(`🔍 [CREATE ARTICLE] Article created with status: ${newArticle.status}`);
       console.log(`🔍 [CREATE ARTICLE] Article ID: ${newArticle.id}, Title: ${newArticle.title}`);
       
-      // Send notification to editors when a reporter submits a draft
-      if (newArticle.status === 'draft' && newArticle.reporterId) {
+      // Send notification to editors when a reporter submits a draft (not for editor autosave: work in progress).
+      if (newArticle.status === 'draft' && newArticle.reporterId && req.body?.autosave !== true) {
         setImmediate(async () => {
           try {
             // Get reporter name

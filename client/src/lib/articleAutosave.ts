@@ -33,6 +33,9 @@ export type DraftAutosaveFields = {
   metaTitle?: string;
   metaDescription?: string;
   keywords?: string[];
+  /** الإسناد الظاهر: يُرسل عند إنشاء المسودة حتى لا يضيع «صحيفة سبق» أو المراسل المختار بعد الانتقال لصفحة التعديل. */
+  reporterId?: string | null;
+  opinionAuthorId?: string | null;
   expectedUpdatedAt?: string | null;
 };
 
@@ -137,10 +140,19 @@ export function buildNewDraftCreateBody(
     status: "draft",
     publishType: "instant",
     seo: seoBlock(fields, title),
+    // يميّز الحفظ التلقائي عن الإرسال حتى لا يُنبَّه المحررون بمسودة قيد الكتابة.
+    autosave: true,
   };
   if (fields.categoryId) body.categoryId = fields.categoryId;
   const imageUrl = usableImageUrl(fields.imageUrl);
   if (imageUrl) body.imageUrl = imageUrl;
+  // المحرر يعيد تحميل الحقول من الخادم بعد الإنشاء؛ بلا الإسناد يُفرَّغ المراسل
+  // ويقع النشر على ترخيص المستخدم نفسه.
+  if (body.articleType === "opinion") {
+    if (fields.opinionAuthorId) body.opinionAuthorId = fields.opinionAuthorId;
+  } else if (fields.reporterId) {
+    body.reporterId = fields.reporterId;
+  }
   return body;
 }
 
