@@ -183,8 +183,8 @@ export default function ReporterMyArticlesPage() {
       });
       invalidateContributorAnalytics(queryClient);
       toast({
-        title: "تم الإرسال",
-        description: "عاد الخبر إلى مسودات فريق التحرير للمراجعة",
+        title: "تم إرسال الخبر لهيئة التحرير",
+        description: "وصل الخبر إلى هيئة التحرير، وهو الآن بانتظار المراجعة والنشر",
       });
     },
     onError: (error: any) => {

@@ -4,7 +4,7 @@ import { db } from "./db";
 import { users, roles, permissions, rolePermissions, userRoles, userPermissionOverrides } from "@shared/schema";
 import { eq, and, inArray } from "drizzle-orm";
 import { memoryCache, CACHE_TTL } from "./memoryCache";
-import { SUPERUSER_ROLE_NAMES, resolveEffectivePermissions, ROLE_NAMES, canAssignRole } from "@shared/rbac-constants";
+import { SUPERUSER_ROLE_NAMES, resolveEffectivePermissions, denyPermissionsForRoles, ROLE_NAMES, canAssignRole } from "@shared/rbac-constants";
 import { mergeRoleSignals } from "@shared/effectiveRoles";
 
 // Type definitions
@@ -190,6 +190,7 @@ export async function getUserPermissionData(userId: string): Promise<{
     .limit(1);
 
   let isSuperuser = user ? (SUPERUSER_ROLE_NAMES as readonly string[]).includes(user.role) : false;
+  let rbacRoleNames: string[] = [];
 
   if (!isSuperuser) {
     const rbacRoles = await db
@@ -197,6 +198,7 @@ export async function getUserPermissionData(userId: string): Promise<{
       .from(userRoles)
       .innerJoin(roles, eq(userRoles.roleId, roles.id))
       .where(eq(userRoles.userId, userId));
+    rbacRoleNames = rbacRoles.map((r) => r.roleName);
     isSuperuser = rbacRoles.some(r => (SUPERUSER_ROLE_NAMES as readonly string[]).includes(r.roleName));
   }
 
@@ -204,6 +206,10 @@ export async function getUserPermissionData(userId: string): Promise<{
     const allPerms = await db.select({ code: permissions.code }).from(permissions);
     return { permissions: allPerms.map(p => p.code), deniedPermissionCodes: [] };
   }
+
+  const roleNames = Array.from(
+    new Set([...(user?.role ? [user.role] : []), ...rbacRoleNames]),
+  );
 
   // Get role-based permissions
   const result = await db
@@ -234,7 +240,7 @@ export async function getUserPermissionData(userId: string): Promise<{
   }
 
   return {
-    permissions: Array.from(rolePermissionCodes),
+    permissions: denyPermissionsForRoles(roleNames, Array.from(rolePermissionCodes)),
     deniedPermissionCodes: overrides.filter(o => o.effect === "deny").map(o => o.permissionCode),
   };
 }

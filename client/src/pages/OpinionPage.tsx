@@ -55,12 +55,12 @@ type OpinionArticle = OpinionCardArticle & {
 type SortMode = "latest" | "trending" | "views" | "saved";
 type ViewMode = "grid" | "digest";
 
-const SAVED_OPINIONS_STORAGE_KEY = "sabq-saved-opinions-v1";
+const SAVED_OPINIONS_STORE_NAME = "sabq-saved-opinions-v1";
 
 function loadSavedOpinions(): OpinionArticle[] {
   if (typeof window === "undefined") return [];
   try {
-    const raw = window.localStorage.getItem(SAVED_OPINIONS_STORAGE_KEY);
+    const raw = window.localStorage.getItem(SAVED_OPINIONS_STORE_NAME);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? parsed : [];
@@ -115,7 +115,7 @@ export default function OpinionPage() {
             ...prev,
           ].slice(0, 50);
       try {
-        window.localStorage.setItem(SAVED_OPINIONS_STORAGE_KEY, JSON.stringify(next));
+        window.localStorage.setItem(SAVED_OPINIONS_STORE_NAME, JSON.stringify(next));
       } catch {
         // ignore storage quota errors
       }
