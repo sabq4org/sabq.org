@@ -14,6 +14,7 @@ import {
   type SeriesRecord,
 } from "@shared/mawaeed/model";
 import { presentMawaeed, type MawaeedView } from "@shared/mawaeed/present";
+import { STALE_WRITE_MESSAGE, confirmBlockedReason, isStaleWrite } from "@shared/mawaeed/dashboard";
 import { mawaeedSitemapEntries } from "@shared/servicePages/catalog";
 import { confirmOccurrenceSchema, emptyToNull, type OccurrenceWrite } from "@shared/mawaeed/validate";
 import { db } from "../db";
@@ -107,6 +108,7 @@ function mapOccurrence(row: OccurrenceRow): OccurrenceRecord {
     hijriLabel: row.hijriLabel,
     publicNote: row.publicNote,
     ruleNote: row.ruleNote,
+    updatedAt: stamp(row.updatedAt),
   };
 }
 
@@ -184,10 +186,26 @@ function applyWrite(seriesId: string, id: string, write: OccurrenceWrite, previo
   };
 }
 
-async function persist(actorUserId: string, before: OccurrenceRecord | null, after: OccurrenceRecord, action: "create" | "update" | "confirm"): Promise<void> {
+async function persist(
+  actorUserId: string,
+  before: OccurrenceRecord | null,
+  after: OccurrenceRecord,
+  action: "create" | "update" | "confirm",
+  expectedUpdatedAt?: string | null,
+): Promise<void> {
   const plan = planOccurrenceWrite(before, after);
   const now = new Date();
   await db.transaction(async (tx) => {
+    if (before && expectedUpdatedAt) {
+      // فحص النسخة داخل المعاملة مع قفل الصف: طلبان بالختم نفسه لا يمرّان معاً.
+      const [current] = await tx
+        .select({ updatedAt: mawaeedOccurrences.updatedAt })
+        .from(mawaeedOccurrences)
+        .where(eq(mawaeedOccurrences.id, after.id))
+        .for("update");
+      if (!current) throw new MawaeedError(404, "الموعد غير موجود");
+      if (isStaleWrite(expectedUpdatedAt, stamp(current.updatedAt))) throw new MawaeedError(409, STALE_WRITE_MESSAGE);
+    }
     if (!before) {
       await tx.insert(mawaeedOccurrences).values({
         id: after.id,
@@ -254,8 +272,10 @@ export async function updateOccurrence(actorUserId: string, id: string, write: O
   const [series] = await db.select({ id: mawaeedSeries.id }).from(mawaeedSeries).where(eq(mawaeedSeries.id, write.seriesId)).limit(1);
   if (!series) throw new MawaeedError(404, "القسم غير موجود");
   const before = mapOccurrence(existingRow);
+  // فحص مبكر رخيص؛ الفحص الملزم يتكرر داخل معاملة persist مع قفل الصف.
+  if (isStaleWrite(write.expectedUpdatedAt, before.updatedAt)) throw new MawaeedError(409, STALE_WRITE_MESSAGE);
   const after = applyWrite(write.seriesId, id, write, before);
-  await persist(actorUserId, before, after, "update");
+  await persist(actorUserId, before, after, "update", write.expectedUpdatedAt);
   return after;
 }
 
@@ -264,6 +284,9 @@ export async function confirmOccurrence(actorUserId: string, id: string, body: u
   const [existingRow] = await db.select().from(mawaeedOccurrences).where(eq(mawaeedOccurrences.id, id)).limit(1);
   if (!existingRow) throw new MawaeedError(404, "الموعد غير موجود");
   const before = mapOccurrence(existingRow);
+  // «تأكيد» يرفع درجة التأكد وينشر؛ لا يُعيد موعداً ملغى أو مستبدلاً إلى الجدول بضغطة واحدة.
+  const blocked = confirmBlockedReason(before);
+  if (blocked) throw new MawaeedError(409, blocked);
   const after: OccurrenceRecord = {
     ...before,
     certainty: "confirmed",

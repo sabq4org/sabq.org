@@ -161,6 +161,18 @@ describe("mawaeed API", () => {
       body: JSON.stringify({ ...writeBody, certainty: "unverified", published: true }),
     });
     expect(response.status).toBe(400);
+    // الأخطاء بشكل {حقل: [رسائل]} بأسماء عربية حتى يعرضها المحرر
+    const payload = (await response.json()) as { message: string; errors: Record<string, string[]> };
+    expect(payload.errors["النشر"]).toContain("لا يُنشر موعد بانتظار التحقق");
+  });
+
+  it("rejects a malformed expectedUpdatedAt stamp", async () => {
+    const response = await fetch(`${base}/api/mawaeed/admin/occurrences/occ-1`, {
+      method: "PUT",
+      headers: editor,
+      body: JSON.stringify({ ...writeBody, expectedUpdatedAt: "yesterday" }),
+    });
+    expect(response.status).toBe(400);
   });
 
   it("lists sitemap lastmod from the service", async () => {

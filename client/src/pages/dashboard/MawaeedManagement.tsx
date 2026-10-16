@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
@@ -61,6 +61,7 @@ type OccurrenceRow = {
   hijriLabel: string | null;
   publicNote: string | null;
   ruleNote: string | null;
+  updatedAt?: string;
 };
 type ChangeRow = {
   id: string;
@@ -87,6 +88,8 @@ type FormState = {
   hijriLabel: string;
   publicNote: string;
   ruleNote: string;
+  /** ختم الصف كما فُتح؛ يُرسل مع التعديل حتى يرفض الخادم الكتابة فوق تعديل زميل (409). */
+  expectedUpdatedAt: string | null;
 };
 
 const EMPTY: FormState = {
@@ -104,7 +107,28 @@ const EMPTY: FormState = {
   hijriLabel: "",
   publicNote: "",
   ruleNote: "",
+  expectedUpdatedAt: null,
 };
+
+function formFromRow(row: OccurrenceRow): FormState {
+  return {
+    id: row.id,
+    seriesId: row.seriesId,
+    titleAr: row.titleAr,
+    startsOn: row.startsOn,
+    endsOn: row.endsOn || "",
+    sourceUrl: row.sourceUrl,
+    sourceTitle: row.sourceTitle,
+    certainty: row.certainty,
+    status: row.status,
+    published: row.published,
+    regionGroup: row.regionGroup,
+    hijriLabel: row.hijriLabel || "",
+    publicNote: row.publicNote || "",
+    ruleNote: row.ruleNote || "",
+    expectedUpdatedAt: row.updatedAt ?? null,
+  };
+}
 
 /* ------------------------------------------------------------------ *
  * التسميات والرموز
@@ -382,7 +406,20 @@ export default function MawaeedManagement() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
-  const [today] = useState(() => riyadhDateISO(new Date()));
+  // «اليوم» يتجدد بعد منتصف ليل الرياض حتى لا تبقى صفحة مفتوحة من أمس تصنّف المواعيد على يوم قديم.
+  const [today, setToday] = useState(() => riyadhDateISO(new Date()));
+  useEffect(() => {
+    const tick = () => setToday((prev) => {
+      const next = riyadhDateISO(new Date());
+      return next === prev ? prev : next;
+    });
+    const id = window.setInterval(tick, 60_000);
+    document.addEventListener("visibilitychange", tick);
+    return () => {
+      window.clearInterval(id);
+      document.removeEventListener("visibilitychange", tick);
+    };
+  }, []);
   const [form, setForm] = useState<FormState>(EMPTY);
   const [editorOpen, setEditorOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -479,6 +516,7 @@ export default function MawaeedManagement() {
         hijriLabel: body.hijriLabel || null,
         publicNote: body.publicNote || null,
         ruleNote: body.ruleNote || null,
+        ...(body.id && body.expectedUpdatedAt ? { expectedUpdatedAt: body.expectedUpdatedAt } : {}),
       };
       if (body.id) {
         return apiRequest(`/api/mawaeed/admin/occurrences/${body.id}`, {
@@ -516,11 +554,11 @@ export default function MawaeedManagement() {
       toast({ title: "أصبح الموعد مؤكداً", description: "ظهر للزوار على صفحة /mawaeed." });
       await queryClient.invalidateQueries({ queryKey: ["/api/mawaeed/admin"] });
     },
-    onError: () => {
+    onError: (error: unknown) => {
       toast({
         variant: "destructive",
         title: "تعذّر التأكيد",
-        description: "التأكيد يحتاج رابط مصدر رسمي واسم جهة.",
+        description: error instanceof Error && error.message ? error.message : "التأكيد يحتاج رابط مصدر رسمي واسم جهة.",
       });
     },
   });
@@ -533,23 +571,14 @@ export default function MawaeedManagement() {
   }
 
   function openEdit(row: OccurrenceRow) {
-    setForm({
-      id: row.id,
-      seriesId: row.seriesId,
-      titleAr: row.titleAr,
-      startsOn: row.startsOn,
-      endsOn: row.endsOn || "",
-      sourceUrl: row.sourceUrl,
-      sourceTitle: row.sourceTitle,
-      certainty: row.certainty,
-      status: row.status,
-      published: row.published,
-      regionGroup: row.regionGroup,
-      hijriLabel: row.hijriLabel || "",
-      publicNote: row.publicNote || "",
-      ruleNote: row.ruleNote || "",
-    });
+    setForm(formFromRow(row));
     setEditorOpen(true);
+  }
+
+  /** في التعديل: إرجاع الحقول إلى قيم الصف المحفوظة (لا إلى نموذج فارغ يُنشئ صفاً جديداً عند الحفظ). */
+  function resetForm() {
+    const original = form.id ? occurrences.find((row) => row.id === form.id) : null;
+    setForm(original ? formFromRow(original) : { ...EMPTY, seriesId: form.seriesId });
   }
 
   const formValid = Boolean(
@@ -618,7 +647,7 @@ export default function MawaeedManagement() {
               {countdown.text}
             </span>
             <div className="flex items-center gap-1">
-              {row.certainty !== "confirmed" ? (
+              {row.certainty !== "confirmed" && row.status === "scheduled" ? (
                 <Button
                   type="button"
                   size="sm"
@@ -1198,11 +1227,9 @@ export default function MawaeedManagement() {
             <Button type="button" variant="ghost" onClick={() => setEditorOpen(false)}>
               إلغاء
             </Button>
-            {form.id ? (
-              <Button type="button" variant="outline" onClick={() => setForm(EMPTY)}>
-                تفريغ الحقول
-              </Button>
-            ) : null}
+            <Button type="button" variant="outline" onClick={resetForm}>
+              {form.id ? "استرجاع القيم المحفوظة" : "تفريغ الحقول"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
