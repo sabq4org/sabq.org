@@ -145,13 +145,18 @@ describe("share image and sitemap", () => {
     expect(rtlRuns("14 جمادى الأولى 1448هـ")).toEqual(["14", " ", "جمادى", " ", "الأولى", " ", "1448", "هـ"]);
   });
 
-  it("lists only the /mawaeed root, never the redirected legacy sections", async () => {
+  it("lists the /mawaeed root then the published service pages, never the redirected legacy sections", async () => {
     const { mawaeedSitemapEntries } = await import("@shared/servicePages/catalog");
     const entries = mawaeedSitemapEntries([
       { slug: "salaries", published: true, contentUpdatedAt: "2026-10-01T00:00:00.000Z" },
       { slug: "pensions", published: true, contentUpdatedAt: "2026-10-05T00:00:00.000Z" },
       { slug: "draft", published: false, contentUpdatedAt: "2026-10-09T00:00:00.000Z" },
     ]);
-    expect(entries).toEqual([{ loc: "https://sabq.org/mawaeed", lastmod: "2026-10-05T00:00:00.000Z" }]);
+    expect(entries).toEqual([
+      { loc: "https://sabq.org/mawaeed", lastmod: "2026-10-05T00:00:00.000Z" },
+      { loc: "https://sabq.org/services/government-salaries-date", lastmod: "2026-10-01T00:00:00.000Z" },
+      { loc: "https://sabq.org/services/pensions-date", lastmod: "2026-10-05T00:00:00.000Z" },
+    ]);
+    expect(entries.some((entry) => entry.loc.includes("/mawaeed/"))).toBe(false);
   });
 });
