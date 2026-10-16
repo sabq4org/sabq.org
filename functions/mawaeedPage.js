@@ -953,7 +953,11 @@ const SERVICE_REDIRECTS = {
 export async function serveMawaeedPage({ request, url, env, waitUntil, signProxyRequest }) {
   const slug = mawaeedSlugFromPath(url.pathname);
   if (slug && SERVICE_REDIRECTS[slug]) {
-    return Response.redirect(`${url.origin}${SERVICE_REDIRECTS[slug]}`, 301);
+    // المنطقة تعيش في الاستعلام؛ إسقاطها يعيد قارئ مكة إلى تواريخ الرياض.
+    const picked = url.searchParams.get("region");
+    const region = slug === "school-calendar-1448" && picked ? normalizeRegion(picked) : "riyadh";
+    const query = region === "riyadh" ? "" : `?region=${region}`;
+    return Response.redirect(`${url.origin}${SERVICE_REDIRECTS[slug]}${query}`, 301);
   }
   const indexableHost = url.hostname === "sabq.org";
   const commit = env.CF_PAGES_COMMIT_SHA || env.CF_PAGES_BUILD_ID || "";

@@ -1156,6 +1156,7 @@
         "tests/unit/mawaeedApi.test.ts",
         "tests/unit/mawaeedEdge.test.ts",
         "tests/unit/servicePages.test.ts",
+        "tests/unit/servicePagesApi.test.ts",
         "tests/unit/servicePageEdge.test.ts",
         "docs/systems/mawaeed/**"
       ],

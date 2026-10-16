@@ -6,7 +6,8 @@
 import type { FaqItem } from "../mawaeed/content";
 import { METHODOLOGY } from "../mawaeed/content";
 import type { MawaeedCard, MawaeedView } from "../mawaeed/present";
-import { SERVICE_PAGES, servicePageById, type ServicePageSpec, type ServicePageTone } from "./catalog";
+import { regionMeta, type RegionId } from "../mawaeed/model";
+import { SERVICE_PAGES, regionSuffix, servicePageById, servicePageUsesRegion, type ServicePageSpec, type ServicePageTone } from "./catalog";
 import { servicePageFaq } from "./copy";
 
 const SITE = "https://sabq.org";
@@ -42,6 +43,8 @@ export type ServicePageLink = { href: string; label: string };
 
 export type ServicePageModel = {
   id: string;
+  /** المنطقة التعليمية المعروضة. «riyadh» لكل الصفحات غير المناطقية. */
+  region: RegionId;
   path: string;
   title: string;
   description: string;
@@ -77,8 +80,11 @@ export function presentServicePage(id: string, view: MawaeedView): ServicePageMo
   const links = relatedLinks(spec);
   const canonical = `${SITE}${spec.path}`;
   const isSchool = spec.tone === "school";
+  const region: RegionId = servicePageUsesRegion(spec.id) ? view.region : "riyadh";
+  const suffix = regionSuffix(region);
   return {
     id: spec.id,
+    region,
     path: spec.path,
     title: spec.title,
     description,
@@ -88,7 +94,7 @@ export function presentServicePage(id: string, view: MawaeedView): ServicePageMo
     dateModifiedLabel: view.dateModifiedLabel,
     leadPrefix: next
       ? isSchool
-        ? "موعد الإجازة المدرسية القادمة هو"
+        ? `موعد الإجازة المدرسية القادمة في ${regionMeta(region).label} هو`
         : "موعد الصرف القادم هو"
       : isSchool
         ? "لا توجد إجازة قادمة معلنة حاليًا."
@@ -102,8 +108,8 @@ export function presentServicePage(id: string, view: MawaeedView): ServicePageMo
     relatedQuery: spec.relatedQuery,
     relatedSource: spec.relatedSource,
     tone: spec.tone,
-    calendarHref: rows.some((row) => !row.isPast) ? `/api/service-pages/${spec.id}/calendar.ics` : null,
-    ogImage: `${SITE}/api/service-pages/${spec.id}/og.png`,
+    calendarHref: rows.some((row) => !row.isPast) ? `/api/service-pages/${spec.id}/calendar.ics${suffix}` : null,
+    ogImage: `${SITE}/api/service-pages/${spec.id}/og.png${suffix}`,
     jsonLd: buildJsonLd({ spec, canonical, description, dateModified: view.dateModified, faq }),
   };
 }

@@ -5,14 +5,14 @@
 
 import { buildFaq, METHODOLOGY, type FaqItem } from "./content";
 import { daysPhrase, formatGregorian, formatHijri, formatRiyadhDayLabel, riyadhDateISO } from "./dates";
-import { serviceLinkForSeries } from "../servicePages/catalog";
+import { regionSuffix, serviceLinkForSeries } from "../servicePages/catalog";
+import { visionNote } from "./notes";
 import {
   EXPECTED_HINT,
   HOME_COPY,
   SERIES_CATALOG,
   catalogBySlug,
   certaintyLabel,
-  extendedHolidayNote,
   isPublicOccurrence,
   normalizeRegion,
   occurrenceVisibleInRegion,
@@ -20,7 +20,6 @@ import {
   regionMeta,
   schoolBucket,
   todayWord,
-  visionNote,
   type OccurrenceRecord,
   type RegionId,
   type SeriesKind,
@@ -146,7 +145,7 @@ export function presentMawaeed(input: {
       { id: "taif", label: "الطائف" },
     ],
     page,
-    nav: nav(pageSlug),
+    nav: nav(pageSlug, region),
     series: blocks,
     sections,
     faq,
@@ -181,7 +180,7 @@ function buildBlock(series: SeriesRecord, rows: OccurrenceRecord[], region: Regi
     slug: series.slug,
     title: series.titleAr,
     kind: series.kind,
-    href: serviceLinkForSeries(series.slug)?.path ?? `/mawaeed/${series.slug}`,
+    href: seriesHref(series.slug, series.kind, region),
     summary: series.summaryAr,
     previous,
     next,
@@ -200,8 +199,6 @@ function toCard(series: SeriesRecord, row: OccurrenceRecord, today: string): Maw
   const isToday = calendarDays === 0;
   const todayLabel = todayWord(series.kind);
   const countdownText = isPast ? pastWord(series.kind) : daysPhrase(calendarDays, todayLabel);
-  const extra = extendedHolidayNote(row.publicNote || row.ruleNote);
-  const note = [row.publicNote, extra && row.publicNote !== extra ? extra : null].filter(Boolean).join(" ");
   return {
     id: row.id,
     seriesSlug: series.slug,
@@ -223,8 +220,8 @@ function toCard(series: SeriesRecord, row: OccurrenceRecord, today: string): Maw
     expectedHint: row.certainty === "expected" ? EXPECTED_HINT : null,
     sourceUrl: row.sourceUrl,
     sourceTitle: row.sourceTitle,
-    publicNote: note || null,
-    visionNote: visionNote(row.titleAr, row.ruleNote),
+    publicNote: row.publicNote || null,
+    visionNote: visionNote(series.kind, row.titleAr, row.startsOn),
     regionGroup: row.regionGroup,
   };
 }
@@ -282,9 +279,15 @@ function schoolSections(cards: MawaeedCard[]): MawaeedSection[] {
   return groups.filter((section) => section.cards.length > 0);
 }
 
-function nav(current: string): MawaeedView["nav"] {
+/** رابط القسم. التقويم الدراسي يحمل المنطقة المختارة حتى لا تعود صفحة الخدمة إلى الرياض. */
+function seriesHref(slug: string, kind: SeriesKind, region: RegionId): string {
+  const path = serviceLinkForSeries(slug)?.path ?? `/mawaeed/${slug}`;
+  return kind === "school_holiday" ? `${path}${regionSuffix(region)}` : path;
+}
+
+function nav(current: string, region: RegionId): MawaeedView["nav"] {
   const items = [{ href: "/mawaeed", label: "مواعيدك", slug: "" }, ...SERIES_CATALOG.map((item) => ({
-    href: serviceLinkForSeries(item.slug)?.path ?? `/mawaeed/${item.slug}`,
+    href: seriesHref(item.slug, item.kind, region),
     label: item.titleAr,
     slug: item.slug,
   }))];

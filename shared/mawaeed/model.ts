@@ -211,21 +211,6 @@ export function schoolBucket(title: string, regionGroup: RegionGroup): "extra" |
   return "official";
 }
 
-export function visionNote(title: string, note: string | null): string | null {
-  const blob = `${title} ${note || ""}`;
-  if (/عيد الفطر|عيد الأضحى|رمضان/.test(blob)) {
-    return "موعد العيد يثبت بالرؤية، وقد تقدّم الجهة الصرف أو تؤخره عن هذا اليوم.";
-  }
-  return null;
-}
-
-export function extendedHolidayNote(note: string | null): string | null {
-  if (!note || !note.includes("مطول")) return null;
-  const idx = note.indexOf("تصنع");
-  if (idx >= 0) return note.slice(idx).replace(/\s+/g, " ").trim();
-  return "تصنع عطلة مطوّلة مع نهاية الأسبوع.";
-}
-
 const PUBLIC_FIELDS = [
   "titleAr",
   "startsOn",
@@ -242,6 +227,7 @@ const PUBLIC_FIELDS = [
 
 export type PublicSnapshot = Record<(typeof PUBLIC_FIELDS)[number], string | boolean | null>;
 
+/** حقول العرض العام فقط: تحرّك ختم التحديث. لا تضم الملاحظة الداخلية. */
 export function publicSnapshot(row: OccurrenceRecord | null): PublicSnapshot | null {
   if (!row) return null;
   return {
@@ -259,19 +245,25 @@ export function publicSnapshot(row: OccurrenceRecord | null): PublicSnapshot | n
   };
 }
 
+export type AuditSnapshot = PublicSnapshot & { seriesId: string; ruleNote: string | null };
+
+/** لقطة سجل التغيير: الحقول العامة مع القسم والملاحظة الداخلية، حتى يُحفظ فرقها. */
+export function auditSnapshot(row: OccurrenceRecord | null): AuditSnapshot | null {
+  if (!row) return null;
+  return { ...publicSnapshot(row)!, seriesId: row.seriesId, ruleNote: row.ruleNote };
+}
+
 export function planOccurrenceWrite(before: OccurrenceRecord | null, after: OccurrenceRecord): {
   action: "create" | "update";
   publicChanged: boolean;
-  before: PublicSnapshot | null;
-  after: PublicSnapshot;
+  before: AuditSnapshot | null;
+  after: AuditSnapshot;
 } {
-  const beforePublic = publicSnapshot(before);
-  const afterPublic = publicSnapshot(after)!;
-  const publicChanged = JSON.stringify(beforePublic) !== JSON.stringify(afterPublic);
+  const publicChanged = JSON.stringify(publicSnapshot(before)) !== JSON.stringify(publicSnapshot(after));
   return {
     action: before ? "update" : "create",
     publicChanged,
-    before: beforePublic,
-    after: afterPublic,
+    before: auditSnapshot(before),
+    after: auditSnapshot(after)!,
   };
 }

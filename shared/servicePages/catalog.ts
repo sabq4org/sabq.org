@@ -4,6 +4,8 @@
  * لإضافة صفحة لاحقًا (إجازة، أسعار وقود) أضف مدخلًا هنا ومصدرًا يملأ ServicePageModel.
  */
 
+import { normalizeRegion, type RegionId } from "../mawaeed/model";
+
 export type MawaeedServiceSource = {
   type: "mawaeed";
   seriesSlug: string;
@@ -118,6 +120,21 @@ export const HIDDEN_SERVICE_ROBOTS = "noindex, nofollow";
 export function serviceLinkForSeries(seriesSlug: string): Pick<ServicePageSpec, "path" | "navLabel"> | null {
   const page = SERVICE_PAGES.find((item) => item.source.type === "mawaeed" && item.source.seriesSlug === seriesSlug);
   return page ? { path: page.path, navLabel: page.navLabel } : null;
+}
+
+/** الصفحات التي تختلف مواعيدها حسب المنطقة التعليمية. */
+export function servicePageUsesRegion(id: string): boolean {
+  return servicePageById(id)?.tone === "school";
+}
+
+/** منطقة الطلب لصفحة الخدمة. الصفحات غير المناطقية تبقى على الافتراضي. */
+export function serviceRegion(id: string, raw: string | null | undefined): RegionId {
+  return servicePageUsesRegion(id) ? normalizeRegion(raw) : "riyadh";
+}
+
+/** لاحقة الاستعلام: الرياض افتراضية فلا تُكتب، حتى يبقى الرابط الأساسي واحداً. */
+export function regionSuffix(region: RegionId): string {
+  return region === "riyadh" ? "" : `?region=${region}`;
 }
 
 /** لا تُدرج الصفحات المخفية في أي خريطة موقع. */

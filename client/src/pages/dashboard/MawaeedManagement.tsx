@@ -219,6 +219,8 @@ const FIELD_LABELS: Record<string, string> = {
   regionGroup: "النطاق",
   hijriLabel: "التاريخ الهجري",
   publicNote: "ملاحظة القارئ",
+  ruleNote: "الملاحظة الداخلية",
+  seriesId: "القسم",
 };
 
 const ACTION_LABELS: Record<string, string> = {
@@ -227,8 +229,9 @@ const ACTION_LABELS: Record<string, string> = {
   confirm: "أكّد موعداً",
 };
 
-function formatFieldValue(field: string, value: unknown): string {
+function formatFieldValue(field: string, value: unknown, seriesTitle?: (id: string) => string): string {
   if (value === null || value === undefined || value === "") return "—";
+  if (field === "seriesId" && seriesTitle) return seriesTitle(String(value)) || String(value);
   if (field === "certainty") return CERTAINTY_LABELS[value as Certainty] ?? String(value);
   if (field === "status") return STATUS_LABELS[value as OccurrenceStatus] ?? String(value);
   if (field === "regionGroup") return REGION_LABELS[value as RegionGroup] ?? String(value);
@@ -238,7 +241,7 @@ function formatFieldValue(field: string, value: unknown): string {
 
 type DiffRow = { field: string; label: string; from: string; to: string };
 
-function changeDiffs(change: ChangeRow): DiffRow[] {
+function changeDiffs(change: ChangeRow, seriesTitle?: (id: string) => string): DiffRow[] {
   const before = (change.before ?? {}) as Record<string, unknown>;
   const after = (change.after ?? {}) as Record<string, unknown>;
   const isCreate = !change.before;
@@ -246,14 +249,16 @@ function changeDiffs(change: ChangeRow): DiffRow[] {
     .filter((field) => {
       const a = before[field] ?? null;
       const b = after[field] ?? null;
-      if (isCreate) return b !== null && b !== "" && field !== "published" && field !== "status";
+      if (isCreate) return b !== null && b !== "" && field !== "published" && field !== "status" && field !== "seriesId";
+      // السجلات القديمة لا تحمل القسم ولا الملاحظة الداخلية: غيابها ليس تغييراً.
+      if (!(field in before) || !(field in after)) return false;
       return JSON.stringify(a) !== JSON.stringify(b);
     })
     .map((field) => ({
       field,
       label: FIELD_LABELS[field],
-      from: formatFieldValue(field, before[field]),
-      to: formatFieldValue(field, after[field]),
+      from: formatFieldValue(field, before[field], seriesTitle),
+      to: formatFieldValue(field, after[field], seriesTitle),
     }));
 }
 
@@ -894,7 +899,7 @@ export default function MawaeedManagement() {
               ) : (
                 <ol className="max-h-[70vh] divide-y divide-border/60 overflow-y-auto">
                   {changes.map((change) => {
-                    const diffs = changeDiffs(change);
+                    const diffs = changeDiffs(change, (id) => seriesById.get(id)?.titleAr ?? "");
                     const headline = (change.after?.titleAr as string | undefined) ?? "موعد";
                     return (
                       <li key={change.id} className="min-w-0 px-4 py-3">

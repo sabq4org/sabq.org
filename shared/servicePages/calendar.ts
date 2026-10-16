@@ -5,10 +5,14 @@
 
 import type { ServicePageModel } from "./present";
 
-export function buildServiceCalendar(model: Pick<ServicePageModel, "id" | "h1" | "canonical" | "dateModified" | "rows">): string | null {
+export function buildServiceCalendar(
+  model: Pick<ServicePageModel, "id" | "h1" | "canonical" | "dateModified" | "rows"> & Partial<Pick<ServicePageModel, "region">>,
+): string | null {
   const events = model.rows.filter((row) => !row.isPast);
   if (events.length === 0) return null;
   const stamp = icsStamp(model.dateModified);
+  // معرّف مستقل لكل منطقة حتى لا يستبدل تقويمُ مكة أحداثَ تقويم الرياض عند استيراد الاثنين.
+  const uidScope = model.region && model.region !== "riyadh" ? `${model.id}-${model.region}` : model.id;
   const lines = [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
@@ -21,7 +25,7 @@ export function buildServiceCalendar(model: Pick<ServicePageModel, "id" | "h1" |
     const start = row.startsOn.replace(/-/g, "");
     lines.push(
       "BEGIN:VEVENT",
-      `UID:${model.id}-${row.startsOn}@sabq.org`,
+      `UID:${uidScope}-${row.startsOn}@sabq.org`,
       `DTSTAMP:${stamp}`,
       `DTSTART;VALUE=DATE:${start}`,
       `DTEND;VALUE=DATE:${nextDate(row.startsOn)}`,

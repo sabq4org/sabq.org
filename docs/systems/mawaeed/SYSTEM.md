@@ -29,10 +29,12 @@
 - `view.jsonLd` (WebPage + ItemList + FAQPage + Event) المبني في `shared/mawaeed/present.ts` **يُصدَّر** في `<script type="application/ld+json">` عبر `safeJson`. كان يُبنى ولا يُصدَّر قبل 2026-09-28؛ لا تُعِد حذفه.
 - الخطوط: نفس رابط Google Fonts الذي يحمّله موقع سبق (`FONTS_HREF`) لإعادة استخدام كاش المتصفح — Tajawal 700 للعناوين، IBM Plex Sans Arabic 400/700 للنص والأرقام. لا CSP يمنع `fonts.gstatic.com`.
 - الوضع الداكن مدعوم عبر `prefers-color-scheme` بمتغيرات CSS في `:root`؛ ألوان السلاسل في `KIND_CLASS` عبر متغير `--kind`.
-- `dateModified` و`article:modified_time` من `content_updated_at` لآخر تغيير عام، لا من ساعة الطلب. تعديل الملاحظة الداخلية `rule_note` يُسجَّل في `mawaeed_changes` دون تحريك الختم.
+- `dateModified` و`article:modified_time` من `content_updated_at` لآخر تغيير عام، لا من ساعة الطلب. تعديل الملاحظة الداخلية `rule_note` يُسجَّل في `mawaeed_changes` بنصّه قبل وبعد (لقطة التدقيق `auditSnapshot` تضم `rule_note` و`series_id` فوق الحقول العامة) دون تحريك الختم؛ الختم يتبع `publicSnapshot` وحدها.
+- **`rule_note` داخلية بالكامل:** لا يُشتق منها أي نص أو شارة عامة. ملاحظة القارئ هي `public_note` كما كتبها المحرر، وجملة «تصنع عطلة مطوّلة…» تُكتب فيها لا في الداخلية. ملاحظة الرؤية («موعد العيد يثبت بالرؤية…») من `shared/mawaeed/notes.ts`: من العنوان (عيد الفطر/الأضحى/رمضان)، أو لمواعيد الصرف حين يقع التاريخ بين 1 رمضان و5 شوال أو بين 25 ذي القعدة و15 ذي الحجة. الإجازة المدرسية لا تأخذها من التاريخ.
 - صف «يحتاج تحقق» يُزرع `published=false` و`certainty=unverified` ولا يظهر للجمهور. «محسوب» مع ثقة «مؤكد» يظهر بشارة «متوقع».
 - بعد مرور اليوم المدني في الرياض: الرواتب وحساب المواطن والضمان والتقاعد تعرض «صُرفت»، والإجازة المدرسية تعرض «انتهت». يوم الموعد نفسه: «تُصرف اليوم» أو «تبدأ اليوم». العدّاد الحي أيام/ساعات في المتصفح؛ بلا جافاسكربت يبقى «بعد X يوماً» المحسوب على الخادم.
 - المنطقة الافتراضية الرياض. مكة والمدينة وجدة والطائف مجموعة «غربية». الاختيار في `?region=` وفي `localStorage` بمفتاح `mawaeed-region`. الـ canonical بلا الاستعلام. مفتاح كاش الحافة يضم المنطقة حتى لا تختلط نسخة مكة بنسخة الرياض.
+- المنطقة تنتقل إلى صفحة المدارس: رابط التقويم الدراسي في `/mawaeed` (القسم والشريط) يحمل `?region=` لغير الرياض، والتحويل `301` من `/mawaeed/school-calendar-1448` يحفظها. `GET /api/service-pages/school-calendar-date` و`calendar.ics` و`og.png` تقبل `?region=`، و`calendarHref`/`ogImage` في النموذج تحملها، و`model.region` يقول ما عُرض. صفحة SPA تقرأ الاستعلام ثم مفتاح `mawaeed-region` نفسه، وتعرض شريط «المنطقة التعليمية» (`RegionPicker` في `ServiceDatePage.tsx`) يبدّل `?region=` ويحفظ الاختيار، وجملة الإجابة تسمّي المنطقة («… القادمة في مكة المكرمة هو»). بقية صفحات الخدمة تتجاهل المنطقة (`servicePageUsesRegion`). `UID` في ملف التقويم يضم المنطقة لغير الرياض. الزاحف عبر web-next يرى الرياض.
 - إجازة 25 أكتوبر 2026 الإضافية للغرب مسودة؛ زيارة مكة ترى إجازة الخريف التالية إلى أن يؤكدها محرر.
 - فشل الـ API يعيد 503 مع `noindex` و`no-store` ولا يسقط إلى قشرة SPA.
 - كاش الحافة 60 ثانية. مفاتيح Workers لا تُمسح بمسح Cloudflare العادي. العدّاد قد يتأخر حتى دقيقة ثم يصححه السكربت.
@@ -51,7 +53,7 @@
 ## صحة وتشغيل
 - `GET /api/mawaeed` و`GET /api/mawaeed/:slug` بكاش `public, max-age=30, s-maxage=60`.
 - التحرير: `GET/POST/PUT /api/mawaeed/admin/...` بصلاحية `mawaeed.edit`. الأدمن يمر عبر اختصار المسؤول في `userHasPermission`.
-- الاختبارات: `tests/unit/mawaeedDates.test.ts`, `mawaeedPage.test.ts`, `mawaeedApi.test.ts`, `mawaeedEdge.test.ts`, `servicePages.test.ts`, `servicePageEdge.test.ts`.
+- الاختبارات: `tests/unit/mawaeedDates.test.ts`, `mawaeedPage.test.ts`, `mawaeedApi.test.ts`, `mawaeedEdge.test.ts`, `servicePages.test.ts`, `servicePagesApi.test.ts`, `servicePageEdge.test.ts`.
 - لا مفاتيح ذكاء اصطناعي.
 
 ## عند التعديل

@@ -112,6 +112,24 @@ describe("mawaeed edge branch", () => {
     expect(next).not.toHaveBeenCalled();
   });
 
+  it("keeps the picked region when a legacy school link redirects", async () => {
+    const redirect = async (path: string) => onRequest({
+      request: new Request(`https://sabq.org${path}`),
+      env: { CF_PAGES_COMMIT_SHA: "abc" },
+      next: vi.fn(async () => new Response("spa-shell")),
+      waitUntil: vi.fn(),
+    });
+    const makkah = await redirect("/mawaeed/school-calendar-1448?region=makkah");
+    expect(makkah.status).toBe(301);
+    expect(makkah.headers.get("Location")).toBe("https://sabq.org/services/school-calendar-date?region=makkah");
+    const riyadh = await redirect("/mawaeed/school-calendar-1448?region=riyadh");
+    expect(riyadh.headers.get("Location")).toBe("https://sabq.org/services/school-calendar-date");
+    const junk = await redirect("/mawaeed/school-calendar-1448?region=mars");
+    expect(junk.headers.get("Location")).toBe("https://sabq.org/services/school-calendar-date");
+    const salaries = await redirect("/mawaeed/salaries?region=makkah");
+    expect(salaries.headers.get("Location")).toBe("https://sabq.org/services/government-salaries-date");
+  });
+
   it("leaves article requests on the existing path", async () => {
     fetcher.mockResolvedValue(Response.json(view()));
     const next = vi.fn(async () => new Response("<html><body>article-shell</body></html>", {
