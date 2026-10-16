@@ -25329,18 +25329,14 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         .where(and(...baseConditions))
         .$dynamic();
 
-      if (authorId) {
-        query = query.where(eq(articles.authorId, authorId as string));
-      }
-
+      // Filters join baseConditions: a second .where() REPLACES the first in
+      // Drizzle, which dropped status=published and leaked drafts/scheduled
+      // pieces into «مقالات أخرى بقلم الكاتب» (2026-10-16).
+      if (authorId) baseConditions.push(eq(articles.authorId, authorId as string));
       if (search) {
-        query = query.where(
-          or(
-            ilike(articles.title, `%${search}%`),
-            ilike(articles.excerpt, `%${search}%`)
-          )
-        );
+        baseConditions.push(or(ilike(articles.title, `%${search}%`), ilike(articles.excerpt, `%${search}%`))!);
       }
+      query = query.where(and(...baseConditions));
 
       // `sort=trending` — weighted engagement score across all
       // platforms (web + iOS). The 3h floor + 7d ceiling still

@@ -198,6 +198,7 @@
 ## حجب المواد غير المنشورة عن القراءة العامة — 2026-10-16
 - `server/routes/unpublishedArticleGuard.ts` يُركَّب أولاً في `registerSplitRoutes` ويسبق كل GET تحت `/api/articles/:key`، `/api/opinion/:key`، `/api/en/articles/:key`، `/api/ur/articles/:key`، `/api/ur/article/:key` بما فيها الفروع (التعليقات، `ai-bullets`، `summary-audio`...). إن وُجد الصف وحالته ليست `published` (مسودة، مجدول، مؤرشف، قيد المراجعة) يرد 404 بـ`no-store`، إلا للكاتب/المراسل/المُرسِل صاحب المقال، أو دور تحريري، أو صلاحية `*`/`articles.edit_any`/`articles.publish`/`articles.schedule`/`opinion.review`/`opinion.edit_any` (`shared/articleVisibility.ts`)، ويُرسل لهم `private, no-store`.
 - السبب: `getArticleBySlug` و`/api/en|ur/articles/:slug` لا تفلتر الحالة، فكانت المسودة تُقرأ كاملة بالرابط مع `noindex` فقط. البحث بالحالة في `articleVisibilityService.ts` مكيّش لكل نسخة: 60 ثانية للمنشور و10 ثوانٍ لغيره، فالمجدول يظهر خلال ثوانٍ من نشره. خطأ قاعدة البيانات يمرّر الطلب (لا يُسقط صفحات الأخبار).
+- قائمة «مقالات أخرى بقلم الكاتب» (`GET /api/opinion?authorId=`) كانت تعرض المسودة والمجدول عنوانًا ومشاهدات: استدعاء `.where()` ثانٍ في Drizzle **يستبدل** الأول فيسقط شرط `published`. الفلاتر الآن تُضاف إلى مصفوفة شروط واحدة. لا تبنِ استعلامًا بـ`.where()` متتالية.
 - `/api/v1/articles/:id` للجوال يفلتر `published` أصلاً، و`seo-bundle` في web-next يرد 404 لغير المنشور؛ لذلك ليسا تحت الحارس.
 
 ## تحمّل موجة قراءة العاجل — 2026-09-19
