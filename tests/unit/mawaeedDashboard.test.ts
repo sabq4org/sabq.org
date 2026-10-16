@@ -31,4 +31,10 @@ describe("mawaeed dashboard buckets", () => {
     expect(dashboardBucket({ ...base, startsOn: today }, today)).toBe("attention");
     expect(overdueDays({ ...base, startsOn: today }, today)).toBeNull();
   });
+
+  it("archives a cancelled or superseded range once it has started", () => {
+    const range = { ...base, startsOn: "2026-10-14", endsOn: "2026-10-18" };
+    expect(dashboardBucket({ ...range, status: "cancelled" }, today)).toBe("past");
+    expect(dashboardBucket({ ...range, status: "superseded" }, today)).toBe("past");
+  });
 });

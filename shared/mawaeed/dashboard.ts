@@ -32,6 +32,8 @@ export function overdueDays(row: BucketRow, today: string): number | null {
 
 /** المتأخر يبقى في «تحتاج إجراء» حتى يُحسم، ولا يدخل «المنتهية». */
 export function dashboardBucket(row: BucketRow, today: string): DashboardBucket {
+  // الملغى والمستبدل محسومان: بعد أن يبدأ موعدهما لا يبقيان في «تحتاج إجراء» ولو امتد مداهما.
+  if (row.status !== "scheduled" && row.startsOn < today) return "past";
   if (lastDay(row) >= today) return isPublicOccurrence(row) ? "upcoming" : "attention";
   return overdueDays(row, today) !== null ? "attention" : "past";
 }

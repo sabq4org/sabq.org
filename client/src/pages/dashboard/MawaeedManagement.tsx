@@ -178,8 +178,15 @@ function statusChips(row: OccurrenceRow): { label: string; tone: Tone }[] {
  * حسابات التواريخ
  * ------------------------------------------------------------------ */
 
-function countdownLabel(startsOn: string, today: string, endsOn: string | null = null): { text: string; past: boolean } {
-  if (startsOn < today && endsOn && endsOn >= today) return { text: "جارٍ الآن", past: false };
+function countdownLabel(
+  startsOn: string,
+  today: string,
+  range: { endsOn: string | null; status: string } | null = null,
+): { text: string; past: boolean } {
+  // «جارٍ الآن» للمجدول فقط؛ الملغى والمستبدل يبقيان «قبل X» كما كانا.
+  if (range?.status === "scheduled" && startsOn < today && range.endsOn && range.endsOn >= today) {
+    return { text: "جارٍ الآن", past: false };
+  }
   const days = diffIsoDays(today, startsOn);
   if (days === 0) return { text: "اليوم", past: false };
   if (days > 0) return { text: daysPhrase(days, "اليوم"), past: false };
@@ -547,7 +554,7 @@ export default function MawaeedManagement() {
   function renderRow(row: OccurrenceRow) {
     const gregorian = formatGregorian(row.startsOn);
     const hijri = formatHijri(row.startsOn, row.hijriLabel);
-    const countdown = countdownLabel(row.startsOn, today, row.endsOn);
+    const countdown = countdownLabel(row.startsOn, today, row);
     const late = overdueDays(row, today);
     const kind = kindOf(row.seriesId);
     const note = row.publicNote || row.ruleNote;
@@ -731,7 +738,7 @@ export default function MawaeedManagement() {
             <MetricCard
               icon={Hourglass}
               label="الموعد القادم"
-              value={stats.next ? countdownLabel(stats.next.startsOn, today, stats.next.endsOn).text : "—"}
+              value={stats.next ? countdownLabel(stats.next.startsOn, today, stats.next).text : "—"}
               helper={
                 stats.next ? (
                   <>
