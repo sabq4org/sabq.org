@@ -1022,6 +1022,7 @@
         "client/src/components/CategoryArchivePage.tsx",
         "tests/unit/edgeApiSurge.test.ts",
         "server/utils/spaTopLevelRoutes.ts",
+        "server/utils/spaRouteMatcher.ts",
         "tests/unit/spaTopLevelRoutes.test.ts",
         "tests/unit/edgeSoftNotFound.test.ts",
         "tests/unit/categoryCardPreload.test.ts",
@@ -1032,7 +1033,7 @@
       "owners": [
         "platform"
       ],
-      "lastReviewed": "2026-10-13"
+      "lastReviewed": "2026-10-16"
     },
     {
       "id": "comments",
@@ -1120,7 +1121,7 @@
       "nameEn": "Mawaeed",
       "status": "active",
       "category": "content",
-      "summary": "صفحة عامة لمواعيد الرواتب وحساب المواطن والضمان والتقاعد والتقويم الدراسي، مع لوحة تحرير وسجل تغيير.",
+      "summary": "مواعيد الرواتب وحساب المواطن والضمان والتقاعد والإجازات، وصفحات خدمة مخفية تُفتح بالرابط المباشر وتقرأ السجل نفسه.",
       "docPath": "docs/systems/mawaeed/SYSTEM.md",
       "relatedDocs": [
         "docs/systems/seo-ssr/SYSTEM.md",
@@ -1128,9 +1129,16 @@
       ],
       "pathGlobs": [
         "shared/mawaeed/**",
+        "shared/servicePages/**",
         "server/services/mawaeedService.ts",
+        "server/services/servicePageOgImage.ts",
+        "server/services/servicePageEdgeMeta.ts",
         "server/routes/mawaeed.ts",
+        "server/routes/servicePages.ts",
         "functions/mawaeedPage.js",
+        "client/src/pages/ServiceDatePage.tsx",
+        "web-next/app/services/**",
+        "web-next/components/ServiceDateView.tsx",
         "client/src/pages/dashboard/MawaeedManagement.tsx",
         "scripts/seed-mawaeed.ts",
         "migrations/20260927_mawaeed.sql",
@@ -1143,6 +1151,8 @@
         "tests/unit/mawaeedPage.test.ts",
         "tests/unit/mawaeedApi.test.ts",
         "tests/unit/mawaeedEdge.test.ts",
+        "tests/unit/servicePages.test.ts",
+        "tests/unit/servicePageEdge.test.ts",
         "docs/systems/mawaeed/**"
       ],
       "aiFeatureKeys": [],
@@ -1150,7 +1160,7 @@
       "owners": [
         "editorial"
       ],
-      "lastReviewed": "2026-09-27"
+      "lastReviewed": "2026-10-16"
     },
     {
       "id": "systems-catalog",

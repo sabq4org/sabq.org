@@ -42,6 +42,15 @@ const nextConfig = {
             : []),
         ],
       },
+      {
+        // Hidden service pages: direct URL only. Listed after the catch-all so
+        // these headers replace the public cache policy on the same path.
+        source: "/services/:id",
+        headers: [
+          { key: "Cache-Control", value: "private, no-store" },
+          { key: "X-Robots-Tag", value: "noindex, nofollow" },
+        ],
+      },
     ];
   },
 };

@@ -150,6 +150,8 @@ describe("mawaeed API", () => {
     expect(paths).toContain("/mawaeed");
     expect(paths).toContain("/mawaeed/salaries?region=makkah");
     expect(paths).toContain("/sitemap-mawaeed.xml");
+    expect(paths).toContain("/services/citizen-account-date");
+    expect(paths).toContain("/services/government-salaries-date");
   });
 
   it("rejects a published row that is still unverified", async () => {

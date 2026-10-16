@@ -1,20 +1,21 @@
 # مواعيدك (`mawaeed`)
 
-> آخر مراجعة: 2026-09-28 | المالك: التحرير (البيانات) / المنصة (الصفحة والحافة)
+> آخر مراجعة: 2026-10-16 | المالك: التحرير (البيانات) / المنصة (الصفحة والحافة)
 
 ## الغرض
 صفحة عامة على `/mawaeed` تعرض مواعيد الخدمات العامة القادمة في السعودية: الرواتب، حساب المواطن، الضمان الاجتماعي، التقاعد، وإجازات التقويم الدراسي 1448. الصفحة HTML خفيف من حافة Pages، والبيانات من JSON على الـ API.
 
 ## الحدود (In / Out of scope)
-- داخل النطاق: السلاسل والمواعيد وسجل التغيير، صلاحية `mawaeed.edit`، لوحة `/dashboard/mawaeed`، الصفحة العامة وأقسامها، خريطة `sitemap-mawaeed.xml`.
-- خارج النطاق: ملف `.ics`، صور المشاركة وواتساب، واجهة سجل التغيير للجمهور، وربط الأخبار بالوسوم. التقويم التحريري (`calendar`) ليس مصدر هذه الصفحة.
+- داخل النطاق: السلاسل والمواعيد وسجل التغيير، صلاحية `mawaeed.edit`، لوحة `/dashboard/mawaeed`، الصفحة العامة وأقسامها، خريطة `sitemap-mawaeed.xml`، وصفحات الخدمة الدائمة التي تقرأ هذا السجل (`/services/citizen-account-date` و`/services/government-salaries-date`).
+- خارج نطاق صفحة `/mawaeed` نفسها: ملف `.ics` قائم، وصور مشاركة وواتساب خاصة بها، وواجهة سجل التغيير للجمهور، وربط الأخبار بالوسوم. التقويم التحريري (`calendar`) ليس مصدر هذه الصفحة.
+- صفحات الخدمة تولّد `.ics` وصورة مشاركة من المواعيد المنشورة فقط، دون تخزين. `/mawaeed` تبقى بلا ملف تقويم قائم.
 
 ## نقاط الدخول
 | الطبقة | المسار |
 |--------|--------|
-| Backend | `server/services/mawaeedService.ts`, `server/routes/mawaeed.ts` |
-| Web | `functions/mawaeedPage.js`, `functions/_middleware.js`, `client/src/pages/dashboard/MawaeedManagement.tsx` |
-| Shared | `shared/mawaeed/*` |
+| Backend | `server/services/mawaeedService.ts`, `server/routes/mawaeed.ts`, `server/routes/servicePages.ts`, `server/services/servicePageOgImage.ts`, `server/services/servicePageEdgeMeta.ts` |
+| Web | `functions/mawaeedPage.js`, `functions/_middleware.js`, `client/src/pages/ServiceDatePage.tsx`, `web-next/app/services/[id]/page.tsx`, `client/src/pages/dashboard/MawaeedManagement.tsx` |
+| Shared | `shared/mawaeed/*`, `shared/servicePages/*` |
 | Schema | `mawaeed_series`, `mawaeed_occurrences`, `mawaeed_changes` في `shared/schema.ts` و`migrations/20260927_mawaeed.sql` |
 | Seed | `scripts/seed-mawaeed.ts`, `migrations/20260927_mawaeed_seed.sql`, `data/mawaeed/2026-09-27-mawaeed-dates.csv` |
 
@@ -40,14 +41,20 @@
 - ملف الهجرة مؤرخ `20260927_mawaeed.sql` ويمكن إعادة تسميته إن تعارض مع هجرة أخرى. الجداول جديدة فقط.
 - حساب التشغيل `sabq_runtime` لا يرث صلاحية الجداول التي ينشئها `neondb_owner`. `migrations/20260927_mawaeed_runtime_grants.sql` يمنح `SELECT, INSERT, UPDATE, DELETE` على الجداول الثلاثة داخل `DO` يفحص `pg_roles`، فيُتخطى حيث لا يوجد الدور. يُشغَّل بمالك الجداول ولا يُنفَّذ مع نشر الكود. غيابه يعيد `42501 permission denied for table mawaeed_series` و500. الخطأ يُسجَّل في الطرفية ويُرسل إلى Sentry مع رمز Postgres.
 - لا تُضاف حقائق هوية عن سبق (سنة التأسيس وغيرها) إلى الصفحة أو المخطط. `FAQPage` للقراءة الآلية بعد توقف نتائج الأسئلة الغنية في 7 مايو 2026.
+- صفحات الخدمة (`shared/servicePages`) قالب واحد. صفحتا حساب المواطن ورواتب موظفي الدولة تقرآن سلسلة مواعيدك المنشورة عبر `presentMawaeed` ولا تخزّنان تاريخًا. المحسوب يبقى «متوقع»، والشارة بجانب العنوان لا داخل جملة الموعد. جملة إزاحة الجمعة/السبت تُنسخ من ملخص السلسلة أو سؤالها القائم، ولا تُؤلَّف قاعدة جديدة. أي صياغة مختلفة للأسئلة تبقى في `shared/servicePages/copy.ts` ولا تغيّر نص `/mawaeed`.
+- الإطلاق مخفي حتى يكتمل التصميم: الرابط المباشر يعمل، والميتا و`X-Robots-Tag` هما `noindex, nofollow`. الصفحتان خارج كل خرائط الموقع، وخارج قوائم التنقل، وخارج كتل الروابط ذات الصلة كوجهة، وبلا رابط من `/mawaeed` أو `llms.txt`. `serviceLinkForSeries` يعيد `null` و`servicePageSitemapEntries` يعيد مصفوفة فارغة. كاش HTML `private, no-store`.
+- زر «أضف إلى التقويم» يبني `GET /api/service-pages/:id/calendar.ics` من الصفوف القادمة غير الماضية فقط (`VALUE=DATE`، نهاية اليوم التالي المدني، و`DTSTAMP` من `dateModified`). لا صفوف قادمة يعني بلا زر و404 على المسار. صورة المشاركة `GET /api/service-pages/:id/og.png` تعرض شعار سبق والعنوان والتاريخ الهجري والميلادي والشارة على أرضية بيضاء بلون العلامة `#087dbb`، بلا عدّاد يومي؛ الفشل يحوّل إلى `/branding/sabq-og-image.png`.
+- القارئ يرى الصفحة داخل `Header` و`Footer` وصفحة المقال (`article-detail`). الزاحف، حين يكون `SSR_ROUTES=on`، يأخذ الصفحة من `web-next` كما يأخذ المقال. عند تعذّر SSR تُحقن الميتا والمتن في قشرة SPA عبر `buildServicePageEdgeMeta` مع `noindex, nofollow`. لا وثيقة HTML مستقلة بألوان خارج لوحة سبق.
+- أخبار ذات صلة تظهر على الصفحة نفسها فقط: حساب المواطن من `GET /api/keyword/حساب المواطن` (يحمل `englishSlug`)، والرواتب من `GET /api/search` لأن كلمة «رواتب موظفي الدولة» على مسار الكلمة المفتاحية لا تطابق أخبار الرواتب. الرابط يُقبل فقط إذا كان الـ slug لاتينيًا، وبحد أربعة، وفشل الجلب يحذف القسم ولا يُسقط الصفحة. صفحات الخدمة لا تُدرج في هذه القائمة ولا في «صفحات ذات صلة». فرز الروابط في `web-next/lib/servicePage.ts` نسخة من `shared/servicePages/related.ts` لأن صورة Docker تُبنى من مجلد `web-next` وحده.
+- هذا القالب يستبدل الصفحة المنفردة في PR #1882 (`functions/citizenAccountDatePage.js`). لا تُدمَج النسختان معًا. `functions/servicePage.js` غير مستخدم.
 
 ## صحة وتشغيل
 - `GET /api/mawaeed` و`GET /api/mawaeed/:slug` بكاش `public, max-age=30, s-maxage=60`.
 - التحرير: `GET/POST/PUT /api/mawaeed/admin/...` بصلاحية `mawaeed.edit`. الأدمن يمر عبر اختصار المسؤول في `userHasPermission`.
-- الاختبارات: `tests/unit/mawaeedDates.test.ts`, `mawaeedPage.test.ts`, `mawaeedApi.test.ts`, `mawaeedEdge.test.ts`.
+- الاختبارات: `tests/unit/mawaeedDates.test.ts`, `mawaeedPage.test.ts`, `mawaeedApi.test.ts`, `mawaeedEdge.test.ts`, `servicePages.test.ts`, `servicePageEdge.test.ts`.
 - لا مفاتيح ذكاء اصطناعي.
 
 ## عند التعديل
-- لا تضف مسار `/mawaeed` إلى `spaTopLevelRoutes`؛ الصفحة ليست SPA.
+- لا تضف مسار `/mawaeed` إلى `spaTopLevelRoutes`؛ صفحته HTML من الحافة. `/services` مسار SPA، ومقطعه الأول موجود في `spaTopLevelRoutes` و`VALID_PREFIXES` حتى لا يُعلن 404. لا تُضف الصفحتين إلى خريطة أو قائمة أو رابط من صفحة قائمة قبل رفع الإخفاء.
 - لا تستورد `db` من ملف المسار.
 - إن تغيّر العقد أو الكاش أو الصلاحية: حدّث هذا الملف و`lastReviewed` في السجل.

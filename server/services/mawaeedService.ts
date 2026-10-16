@@ -14,6 +14,7 @@ import {
   type SeriesRecord,
 } from "@shared/mawaeed/model";
 import { presentMawaeed, type MawaeedView } from "@shared/mawaeed/present";
+import { servicePageSitemapEntries } from "@shared/servicePages/catalog";
 import { confirmOccurrenceSchema, emptyToNull, type OccurrenceWrite } from "@shared/mawaeed/validate";
 import { db } from "../db";
 
@@ -166,6 +167,7 @@ export async function listSitemapEntries(): Promise<{ loc: string; lastmod: stri
   return [
     { loc: "https://sabq.org/mawaeed", lastmod: latest },
     ...series.map((item) => ({ loc: `https://sabq.org/mawaeed/${item.slug}`, lastmod: item.contentUpdatedAt })),
+    ...servicePageSitemapEntries(series),
   ];
 }
 

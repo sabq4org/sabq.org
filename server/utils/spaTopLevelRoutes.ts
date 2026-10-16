@@ -20,7 +20,7 @@ export const SPA_TOP_LEVEL_SEGMENTS: ReadonlySet<string> = new Set([
   "plus-preview", "politics", "predictions", "preferences", "privacy",
   "profile", "prompt-studio", "recommendation-settings", "register",
   "reporter", "reset-password", "roshn", "rsl", "rss", "sabq-ai", "saudi",
-  "saudia", "set-password", "settings", "shorts", "society", "sponsored",
+  "saudia", "set-password", "settings", "services", "shorts", "society", "sponsored",
   "sport", "sports", "sports10", "sports2", "sports22", "sports3", "sports4",
   "sports5", "sports55", "stations", "super-cup", "survey", "tech",
   "technology", "term", "terms", "tourism", "ur", "verify", "verify-email",

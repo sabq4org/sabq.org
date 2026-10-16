@@ -1,6 +1,6 @@
 # SEO و SSR (`seo-ssr`)
 
-> آخر مراجعة: 2026-10-13 (حجب زواحف التدريب في robots.txt) | المالك: platform
+> آخر مراجعة: 2026-10-16 (صفحات خدمة مخفية) | المالك: platform
 
 ## الغرض
 ميتادات للدوالش، إعادة توجيه السلاق، وSSR للمحتوى العام عبر `web-next`.
@@ -118,6 +118,7 @@
 ## مواعيدك — HTML مبكر — 2026-09-27
 
 - `GET/HEAD /mawaeed` و`/mawaeed/:slug` يخرجان من `functions/_middleware.js` قبل البروكسي وقبل قشرة SPA، عبر `functions/mawaeedPage.js`. البشر والزواحف يرون الوثيقة نفسها. المسار ليس في `spaTopLevelRoutes`.
+- `GET/HEAD /services/:id` يتبع المقال في العرض: القارئ يأخذ قشرة SPA (`client/src/pages/ServiceDatePage.tsx`). الزاحف، مع `SSR_ROUTES=on`، يأخذ `web-next/app/services/[id]` ويُقبل الرد فقط إذا احتوى `h1` وJSON-LD. عند سقوط SSR تُحقن الميتا من `buildServicePageEdgeMeta`. الإطلاق مخفي: `robots` و`X-Robots-Tag` هما `noindex, nofollow`، وكاش HTML `private, no-store`. المعرّف غير المعروف يعيد 404 مع noindex,nofollow. الصفحتان ليستا في خرائط الموقع ولا في التنقل ولا في روابط `/mawaeed`. التفاصيل في [`docs/systems/mawaeed/SYSTEM.md`](../mawaeed/SYSTEM.md).
 - المصدر `GET /api/mawaeed` على Railway. الفشل 503 مع `noindex` و`no-store` ولا سقوط إلى القشرة. `dateModified` يأتي من JSON (`content_updated_at`) لا من ساعة الطلب.
 - كاش المتصفح `private, no-cache`. `CDN-Cache-Control: public, max-age=60`. مفتاح Workers يضم المنطقة ووسم النشر حتى لا تختلط نسخة الرياض بمكة. المسح العادي لا يفرغ مفاتيح Workers المخصصة.
 
