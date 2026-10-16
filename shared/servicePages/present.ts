@@ -6,7 +6,7 @@
 import type { FaqItem } from "../mawaeed/content";
 import { METHODOLOGY } from "../mawaeed/content";
 import type { MawaeedCard, MawaeedView } from "../mawaeed/present";
-import type { RegionId } from "../mawaeed/model";
+import { regionMeta, type RegionId } from "../mawaeed/model";
 import { SERVICE_PAGES, regionSuffix, servicePageById, servicePageUsesRegion, type ServicePageSpec, type ServicePageTone } from "./catalog";
 import { servicePageFaq } from "./copy";
 
@@ -94,7 +94,7 @@ export function presentServicePage(id: string, view: MawaeedView): ServicePageMo
     dateModifiedLabel: view.dateModifiedLabel,
     leadPrefix: next
       ? isSchool
-        ? "موعد الإجازة المدرسية القادمة هو"
+        ? `موعد الإجازة المدرسية القادمة في ${regionMeta(region).label} هو`
         : "موعد الصرف القادم هو"
       : isSchool
         ? "لا توجد إجازة قادمة معلنة حاليًا."

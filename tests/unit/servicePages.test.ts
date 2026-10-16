@@ -222,7 +222,7 @@ describe("other mawaeed service pages", () => {
       row({ id: "hol-next", seriesId: "s-school", titleAr: "إجازة الخريف", startsOn: "2026-11-20", certainty: "confirmed" }),
     ]);
     expect(schoolModel.tone).toBe("school");
-    expect(schoolModel.leadPrefix).toContain("موعد الإجازة المدرسية القادمة هو");
+    expect(schoolModel.leadPrefix).toContain("موعد الإجازة المدرسية القادمة في الرياض هو");
     expect(schoolModel.rows.find((item) => item.isPast)?.pastLabel).toBe("انتهت");
     expect(renderServiceSemanticHtml(schoolModel)).toContain("انتهت");
   });

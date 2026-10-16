@@ -11,7 +11,7 @@ import {
   Newspaper,
   Share2,
 } from "lucide-react";
-import { Link, useParams, useSearch } from "wouter";
+import { Link, useLocation, useParams, useSearch } from "wouter";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { Button } from "@/components/ui/button";
@@ -19,7 +19,7 @@ import { useCanonical } from "@/hooks/useCanonical";
 import { apiUrl } from "@/lib/queryClient";
 import "@/styles/article-detail.css";
 import { HIDDEN_SERVICE_ROBOTS, servicePageUsesRegion } from "@shared/servicePages/catalog";
-import { normalizeRegion, type RegionId } from "@shared/mawaeed/model";
+import { REGIONS, normalizeRegion, type RegionId } from "@shared/mawaeed/model";
 import type { ServicePageModel } from "@shared/servicePages/present";
 import {
   relatedArticlesFromKeyword,
@@ -219,6 +219,7 @@ function ServiceDateBody({
               ) : null}
               <h1 className="article-detail-title !mt-0 min-w-0">{model.h1}</h1>
             </div>
+            {model.tone === "school" ? <RegionPicker current={model.region} /> : null}
             <Answer model={model} countdown={live.text} />
             <div className="article-detail-byline">
               {model.next?.sourceUrl ? (
@@ -426,6 +427,39 @@ function ServiceDateBody({
         </aside>
       </div>
     </>
+  );
+}
+
+/** شريط المنطقة التعليمية في صفحة المدارس: يغيّر ?region= ويحفظ الاختيار كما تفعل /mawaeed. */
+function RegionPicker({ current }: { current: RegionId }) {
+  const [location, navigate] = useLocation();
+  return (
+    <div className="service-region">
+      <p className="service-region-label">
+        المنطقة التعليمية
+        <span>الإجازات الرسمية موحّدة، والإضافية حسب المنطقة</span>
+      </p>
+      <div className="service-region-segs" role="group" aria-label="المنطقة التعليمية">
+        {REGIONS.map((region) => (
+          <button
+            key={region.id}
+            type="button"
+            className="service-region-seg"
+            aria-pressed={region.id === current}
+            onClick={() => {
+              try {
+                window.localStorage.setItem(REGION_PREF_ID, region.id);
+              } catch {
+                /* التخزين قد يكون محجوباً؛ الاستعلام يكفي */
+              }
+              navigate(`${location}?region=${region.id}`, { replace: true });
+            }}
+          >
+            {region.label}
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }
 
