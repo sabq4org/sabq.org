@@ -5,6 +5,7 @@
 
 import { buildFaq, METHODOLOGY, type FaqItem } from "./content";
 import { daysPhrase, formatGregorian, formatHijri, formatRiyadhDayLabel, riyadhDateISO } from "./dates";
+import { serviceLinkForSeries } from "../servicePages/catalog";
 import {
   EXPECTED_HINT,
   HOME_COPY,
@@ -180,7 +181,7 @@ function buildBlock(series: SeriesRecord, rows: OccurrenceRecord[], region: Regi
     slug: series.slug,
     title: series.titleAr,
     kind: series.kind,
-    href: `/mawaeed/${series.slug}`,
+    href: serviceLinkForSeries(series.slug)?.path ?? `/mawaeed/${series.slug}`,
     summary: series.summaryAr,
     previous,
     next,
@@ -283,7 +284,7 @@ function schoolSections(cards: MawaeedCard[]): MawaeedSection[] {
 
 function nav(current: string): MawaeedView["nav"] {
   const items = [{ href: "/mawaeed", label: "مواعيدك", slug: "" }, ...SERIES_CATALOG.map((item) => ({
-    href: `/mawaeed/${item.slug}`,
+    href: serviceLinkForSeries(item.slug)?.path ?? `/mawaeed/${item.slug}`,
     label: item.titleAr,
     slug: item.slug,
   }))];

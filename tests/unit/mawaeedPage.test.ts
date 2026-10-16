@@ -71,10 +71,64 @@ describe("mawaeed HTML", () => {
     expect(html).toContain("27 يناير 2027");
     expect(html).toContain("data-countdown");
     expect(html).toContain("متوقع");
-    expect(html).not.toContain("/services/");
+    expect(html).toContain("/services/government-salaries-date");
+    expect(html).toContain("/services/citizen-account-date");
+    expect(html).toContain("/services/school-calendar-date");
+    expect(html).toContain("/services/social-security-date");
+    expect(html).toContain("/services/pensions-date");
     expect(html).toContain("محسوب من الجدول المعتاد");
     expect(html).not.toContain("مسودة لا تظهر");
     expect(html).not.toContain("foundingDate");
     expect(html).toContain('dir="rtl"');
+    expect(html).toContain('class="skip-link"');
+  });
+
+  it("separates past occurrences into a dedicated section after upcoming ones", () => {
+    const presented = presentMawaeed({
+      pageSlug: "salaries",
+      now: new Date("2026-10-16T12:00:00+03:00"),
+      series: [series],
+      occurrences: [
+        {
+          id: "past-1",
+          seriesId: "s1",
+          titleAr: "رواتب سبتمبر 2026",
+          startsOn: "2026-09-27",
+          endsOn: null,
+          sourceUrl: "https://www.mof.gov.sa/financial_reports",
+          sourceTitle: "وزارة المالية",
+          certainty: "confirmed",
+          status: "scheduled",
+          published: true,
+          regionGroup: "all",
+          hijriLabel: null,
+          publicNote: null,
+          ruleNote: null,
+        },
+        ...rows,
+        {
+          id: "next-2",
+          seriesId: "s1",
+          titleAr: "رواتب مارس 2027",
+          startsOn: "2027-03-28",
+          endsOn: null,
+          sourceUrl: "https://www.mof.gov.sa/financial_reports",
+          sourceTitle: "وزارة المالية",
+          certainty: "expected",
+          status: "scheduled",
+          published: true,
+          regionGroup: "all",
+          hijriLabel: null,
+          publicNote: null,
+          ruleNote: null,
+        },
+      ],
+    });
+    if (presented.notFound) throw new Error("expected salaries view");
+    const html = renderMawaeedHtml(presented.view);
+    expect(html).toContain("المواعيد القادمة");
+    expect(html).toContain("مواعيد سابقة");
+    expect(html.indexOf("المواعيد القادمة")).toBeLessThan(html.indexOf("مواعيد سابقة"));
   });
 });
+

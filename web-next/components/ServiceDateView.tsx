@@ -98,14 +98,16 @@ export function ServiceDateView({
             <section>
               <h2 className="text-2xl font-bold">خط المواعيد</h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                المواعيد من السجل المنشور. ما مضى يظهر «صُرفت»، وما لم تعلنه الجهة بعد يبقى «متوقعًا».
+                {model.tone === "school"
+                  ? "المواعيد من السجل المنشور. ما مضى يظهر «انتهت»، وما لم تعلنه الجهة بعد يبقى «متوقعًا»."
+                  : "المواعيد من السجل المنشور. ما مضى يظهر «صُرفت»، وما لم تعلنه الجهة بعد يبقى «متوقعًا»."}
               </p>
               <ol className="mt-4 divide-y divide-border overflow-hidden rounded-2xl border border-border bg-muted/30">
                 {model.rows.map((row) => {
                   const rowCertainty = row.certaintyLabel === "متوقع" ? "expected" : "confirmed";
                   return (
                     <li
-                      key={row.startsOn}
+                      key={`${row.startsOn}-${row.title}`}
                       className={`flex flex-wrap items-center justify-between gap-3 px-5 py-4 ${row.isNext ? "bg-primary/5" : ""} ${row.isPast ? "opacity-75" : ""}`}
                     >
                       <div className="min-w-0 flex-1">
@@ -128,7 +130,7 @@ export function ServiceDateView({
                           <span className="text-xs font-bold tabular-nums text-muted-foreground">{row.countdownText}</span>
                         ) : null}
                         <span className={badgeClasses(rowCertainty, row.isPast)}>
-                          {row.isPast ? row.pastLabel || "صُرفت" : row.certaintyLabel}
+                          {row.isPast ? row.pastLabel || (model.tone === "school" ? "انتهت" : "صُرفت") : row.certaintyLabel}
                         </span>
                       </div>
                     </li>
