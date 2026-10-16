@@ -57,6 +57,57 @@ function safeJson(value) {
 
 const SCHOOL_SERVICE_PATH = "/services/school-calendar-date";
 
+/* هيدر سبق وفوتره: نسخة ثابتة من web-next/components/SiteHeader.tsx وSiteFooter.tsx. عدّلهما معًا. */
+const SITE_SECTIONS = [
+  { name: "الأخبار", href: "/news" },
+  { name: "التصنيفات", href: "/categories" },
+  { name: "مقالات", href: "/opinion" },
+  { name: "مُقترب", href: "/muqtarab" },
+  { name: "لحظة بلحظة", href: "/moment-by-moment" },
+];
+const SITE_APPS = [
+  { label: "App Store", href: "https://apps.apple.com/us/app/%D8%B3%D8%A8%D9%82/id521017976?l=ar", bg: "#000000" },
+  { label: "Google Play", href: "https://play.google.com/store/apps/details?id=com.sabqorg.sabq&hl=ar", bg: "#01875f" },
+  { label: "AppGallery", href: "https://appgallery.huawei.com/app/C105897661", bg: "#c7112d" },
+];
+const SITE_INFO_LINKS = [
+  { label: "النشرة البريدية", href: "/newsletter" },
+  { label: "من نحن", href: "/about" },
+  { label: "سياسة الخصوصية", href: "/ar/privacy" },
+  { label: "شروط الاستخدام", href: "/ar/terms" },
+  { label: "تواصل معنا", href: "/contact" },
+];
+const SITE_SOCIAL = [
+  { label: "إكس", href: "https://x.com/sabqorg", path: "M18.244 2.25h3.308l-7.227 8.26 8.502 11.24h-6.66l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" },
+  { label: "فيسبوك", href: "https://www.facebook.com/sabq.org", path: "M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" },
+  { label: "إنستغرام", href: "https://www.instagram.com/sabqorg", path: "M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zM12 16a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.881 1.44 1.44 0 000-2.881z" },
+  { label: "يوتيوب", href: "https://youtube.com/@sabqorg", path: "M23.498 6.186a3.016 3.016 0 00-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 00.502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 002.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 002.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" },
+  { label: "واتساب", href: "https://whatsapp.com/channel/0029VaCUMDGEAKWA2soRAl02", path: "M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51l-.57-.01c-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.71.306 1.263.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" },
+];
+
+function siteFooterHtml() {
+  const year = new Date().getFullYear();
+  return `<footer class="site-footer" id="footer">
+  <div class="wrap">
+    <div class="foot-cols">
+      <div class="foot-brand">
+        <a href="/" aria-label="الصفحة الرئيسية"><img src="/branding/sabq-logo.png" alt="سبق" width="751" height="681" loading="lazy" decoding="async"></a>
+        <p>منصة إخبارية سعودية ذكية</p>
+        <div class="apps">${SITE_APPS.map((app) => `<a href="${app.href}" target="_blank" rel="noopener noreferrer" style="background:${app.bg}">${app.label}</a>`).join("")}</div>
+      </div>
+      <div class="foot-links">
+        <h2>معلومات</h2>
+        <ul>${SITE_INFO_LINKS.map((link) => `<li><a href="${link.href}">${link.label}</a></li>`).join("")}</ul>
+      </div>
+    </div>
+    <div class="foot-bottom">
+      <p>© ${year} سبق الذكية — صُنعت بكل <span class="heart">♥</span> في السعودية</p>
+      <div class="social">${SITE_SOCIAL.map((item) => `<a href="${item.href}" target="_blank" rel="noopener noreferrer" aria-label="${item.label}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="${item.path}"/></svg></a>`).join("")}</div>
+    </div>
+  </div>
+</footer>`;
+}
+
 function regionHref(pathname, id) {
   return `${pathname}?region=${id}`;
 }
@@ -546,14 +597,24 @@ ${jsonLd}
     position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; border:0;
   }
 
-  /* شريط علوي مضغوط يلتصق بالأعلى */
-  .topbar {
+  /* هيدر سبق: نفس هيدر الموقع (web-next/components/SiteHeader.tsx) */
+  .site-header {
     position:sticky; top:0; z-index:20;
     padding-inline:env(safe-area-inset-left) env(safe-area-inset-right);
-    background:color-mix(in srgb, var(--surface) 88%, transparent);
+    background:color-mix(in srgb, var(--surface) 92%, transparent);
     -webkit-backdrop-filter:saturate(1.6) blur(14px); backdrop-filter:saturate(1.6) blur(14px);
     border-bottom:1px solid var(--line);
   }
+  .site-header-row { display:flex; align-items:center; justify-content:space-between; gap:16px; min-height:64px; }
+  .site-logo { display:flex; align-items:center; flex:none; }
+  .site-logo img { height:44px; width:auto; display:block; }
+  .site-nav { display:none; flex:1; align-items:center; justify-content:center; gap:24px; }
+  .site-nav a { white-space:nowrap; font-size:.9rem; font-weight:500; color:var(--ink); }
+  .site-nav a:hover { text-decoration:none; color:var(--accent); }
+  .site-header-spacer { display:none; width:48px; flex:none; }
+
+  /* مسار الصفحة تحت الهيدر */
+  .topbar { border-bottom:1px solid var(--line); background:var(--surface); }
   .topbar .wrap { display:flex; align-items:center; justify-content:space-between; gap:10px; min-height:54px; }
   .top-crumbs { display:flex; align-items:center; gap:8px; min-width:0; overflow:hidden; }
   .brand { font-weight:700; font-size:1.22rem; color:var(--ink); letter-spacing:-.01em; flex:none; }
@@ -696,6 +757,9 @@ ${jsonLd}
 
   /* بطاقات المواعيد: شريط لوني + نص + مربع «باقي» */
   .board, .list { display:grid; gap:10px; }
+  /* بطاقات اللوحة بارتفاع واحد في كل صف، و«التفاصيل والمصدر» في أسفلها */
+  .board > .item { display:flex; flex-direction:column; }
+  .board > .item > .item-main { flex:1; }
   .list { list-style:none; margin:0; padding:0; }
   .item {
     background:var(--surface); border:1px solid var(--line); border-radius:var(--radius);
@@ -780,8 +844,29 @@ ${jsonLd}
   .qa[open] > summary::after { transform:rotate(-90deg); color:var(--accent); }
   .qa p { color:var(--muted); font-size:.9rem; line-height:1.8; margin:0; padding:0 16px 15px; }
 
-  footer { padding:26px 0 calc(40px + env(safe-area-inset-bottom)); color:var(--muted); font-size:.82rem; margin-top:28px; border-top:1px solid var(--line); }
-  footer p { margin:0; }
+  .page-note { color:var(--muted); font-size:.82rem; margin-top:28px; margin-bottom:0; }
+
+  /* فوتر سبق: نفس فوتر الموقع (web-next/components/SiteFooter.tsx) */
+  .site-footer { margin-top:32px; border-top:1px solid var(--line); background:var(--surface-2); padding-bottom:env(safe-area-inset-bottom); }
+  .site-footer .wrap { display:flex; flex-direction:column; gap:28px; padding:30px 0 24px; }
+  .foot-cols { display:flex; flex-direction:column; gap:28px; }
+  .foot-brand { display:flex; flex-direction:column; align-items:center; gap:10px; text-align:center; }
+  .foot-brand img { height:40px; width:auto; display:block; }
+  .foot-brand p { margin:0; color:var(--muted); font-size:.86rem; }
+  .apps { display:flex; flex-wrap:wrap; justify-content:center; gap:8px; }
+  .apps a { display:inline-flex; align-items:center; height:32px; padding:0 12px; border-radius:8px; color:#fff; font-size:.76rem; font-weight:500; }
+  .apps a:hover { text-decoration:none; opacity:.9; }
+  .foot-links h2 { margin:0 0 10px; font-size:.86rem; font-weight:500; color:var(--ink); }
+  .foot-links ul { list-style:none; margin:0; padding:0; display:flex; flex-wrap:wrap; gap:6px 16px; }
+  .foot-links a { color:var(--muted); font-size:.86rem; }
+  .foot-links a:hover { color:var(--ink); text-decoration:none; }
+  .foot-bottom { display:flex; flex-direction:column; align-items:center; gap:14px; padding-top:20px; border-top:1px solid var(--line); }
+  .foot-bottom p { margin:0; color:var(--muted); font-size:.76rem; }
+  .foot-bottom .heart { color:#16a34a; }
+  .social { display:flex; align-items:center; gap:12px; }
+  .social a { color:var(--muted); display:inline-flex; }
+  .social a:hover { color:var(--ink); }
+  .social svg { width:16px; height:16px; fill:currentColor; }
 
   :focus-visible { outline:2px solid var(--accent); outline-offset:2px; border-radius:6px; }
   @media (prefers-reduced-motion: reduce) {
@@ -818,13 +903,25 @@ ${jsonLd}
     .seg { padding:6px 14px; }
     .hero { padding:24px 26px 20px; }
     .clock { max-width:440px; }
-    .board { grid-template-columns:1fr 1fr; align-items:start; }
+    .board { grid-template-columns:1fr 1fr; align-items:stretch; }
+    .site-nav, .site-header-spacer { display:flex; }
+    .foot-cols { flex-direction:row; justify-content:space-between; }
+    .foot-brand { align-items:flex-start; text-align:start; }
+    .apps { justify-content:flex-start; }
+    .foot-bottom { flex-direction:row; justify-content:space-between; }
   }
 </style>
 </head>
 <body>
 <a class="skip-link" href="#main-content">تخطَّ إلى المحتوى</a>
-<header class="topbar">
+<header class="site-header" role="banner">
+  <div class="wrap site-header-row">
+    <a class="site-logo" href="/" aria-label="الصفحة الرئيسية"><img src="/branding/sabq-logo.png" alt="سبق - SABQ" width="751" height="681" loading="eager" decoding="async"></a>
+    <nav class="site-nav" aria-label="القائمة الرئيسية">${SITE_SECTIONS.map((item) => `<a href="${item.href}">${item.name}</a>`).join("")}</nav>
+    <span class="site-header-spacer" aria-hidden="true"></span>
+  </div>
+</header>
+<div class="topbar">
   <div class="wrap">
     <div class="top-crumbs">
       <a class="brand" href="/">سبق</a>
@@ -834,7 +931,7 @@ ${jsonLd}
     </div>
     <a class="top-home" href="${home ? "/" : "/mawaeed"}">${home ? "الرئيسية ‹" : "كل المواعيد ‹"}</a>
   </div>
-</header>
+</div>
 <main id="main-content" class="wrap" tabindex="-1">
 <div class="intro">
 <h1>${esc(view.page.h1)}</h1>
@@ -845,7 +942,8 @@ ${navHtml(view)}
 ${regionHtml(view)}
 ${bodyMain}
 </main>
-<footer class="wrap"><p>الأوقات بتوقيت السعودية. التاريخ الهجري بتقويم أم القرى.</p></footer>
+<p class="wrap page-note">الأوقات بتوقيت السعودية. التاريخ الهجري بتقويم أم القرى.</p>
+${siteFooterHtml()}
 <script>
 (function () {
   var activeChip = document.querySelector(".chip.is-current");
