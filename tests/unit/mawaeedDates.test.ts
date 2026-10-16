@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { daysPhrase, formatHijri, hijriParts, liveCountdown, riyadhDateISO } from "@shared/mawaeed/dates";
+import { dayUnitWord, daysPhrase, formatHijri, hijriParts, hoursPhrase, liveCountdown, riyadhDateISO } from "@shared/mawaeed/dates";
 import {
   classifySeed,
   occurrenceVisibleInRegion,
@@ -48,6 +48,9 @@ describe("mawaeed dates", () => {
     expect(formatHijri("2026-10-25")).toContain("جمادى");
     expect(formatHijri("2026-10-25")).toContain("14");
     expect(formatHijri("2026-10-25", "14 جمادى الأولى 1448هـ")).toBe("14 جمادى الأولى 1448هـ");
+    // الشهران الأخيران مجروران بعد اليوم: «ذي القعدة» و«ذي الحجة» لا «ذو»
+    expect(formatHijri("2027-04-20")).toContain("ذي القعدة");
+    expect(formatHijri("2027-05-10")).toContain("ذي الحجة");
   });
 
   it("uses Riyadh civil dates across midnight UTC", () => {
@@ -60,6 +63,15 @@ describe("mawaeed dates", () => {
     expect(daysPhrase(2, "تُصرف اليوم")).toBe("بعد يومين");
     expect(daysPhrase(4, "تُصرف اليوم")).toBe("بعد 4 أيام");
     expect(daysPhrase(28, "تُصرف اليوم")).toBe("بعد 28 يوماً");
+    // تمييز المئات يتبع ما بعد المئة: 100 يوم، 103 أيام، 115 يوماً
+    expect(daysPhrase(100, "اليوم")).toBe("بعد 100 يوم");
+    expect(daysPhrase(103, "اليوم")).toBe("بعد 103 أيام");
+    expect(daysPhrase(115, "اليوم")).toBe("بعد 115 يوماً");
+    expect(dayUnitWord(210)).toBe("أيام");
+    // ساعتان بعد الواو مجرورة: «وساعتين»
+    expect(hoursPhrase(2)).toBe("وساعتين");
+    expect(hoursPhrase(1)).toBe("وساعة");
+    expect(hoursPhrase(5)).toBe("و5 ساعات");
   });
 
   it("counts live hours until Riyadh midnight of the start day", () => {
@@ -215,6 +227,10 @@ describe("mawaeed presentation", () => {
     expect(vision("ramadan")).toContain("بالرؤية");
     expect(vision("rajab")).toBeNull();
     expect(vision("eid")).toContain("بالرؤية");
+    // إجازة مدرسية: لا «صرف» في الملاحظة
+    expect(vision("eid")).not.toContain("الصرف");
+    expect(vision("eid")).toContain("الإجازة");
+    expect(vision("ramadan")).toContain("الصرف");
     expect(vision("founding")).toBeNull();
   });
 
