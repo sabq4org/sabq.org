@@ -1,6 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { ChevronRight, ExternalLink } from "lucide-react";
+import {
+  ChevronRight,
+  ExternalLink,
+  GraduationCap,
+  HeartHandshake,
+  Home,
+  Landmark,
+  ShieldCheck,
+} from "lucide-react";
 import { Link, useLocation, useSearch } from "wouter";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
@@ -8,9 +16,17 @@ import { useCanonical } from "@/hooks/useCanonical";
 import { apiUrl } from "@/lib/queryClient";
 import "@/styles/article-detail.css";
 import "@/styles/mawaeed-page.css";
-import { liveCountdown, riyadhDateISO } from "@shared/mawaeed/dates";
-import { boardBlocks, heroFollowsRegion, nearestCard, schoolBlock, schoolRows } from "@shared/mawaeed/home";
-import { normalizeRegion, type RegionId } from "@shared/mawaeed/model";
+import { dayUnitWord, liveCountdown, riyadhDateISO, riyadhMidnightMs } from "@shared/mawaeed/dates";
+import {
+  financialBlocks,
+  heroFollowsRegion,
+  nearestCard,
+  pulseBlocks,
+  schoolBlock,
+  schoolRows,
+  shortSeriesTitle,
+} from "@shared/mawaeed/home";
+import { normalizeRegion, type MawaeedKind, type RegionId } from "@shared/mawaeed/model";
 import type { MawaeedCard, MawaeedSeriesBlock, MawaeedView } from "@shared/mawaeed/present";
 
 /** المفتاح نفسه الذي تقرؤه صفحة التقويم الدراسي، حتى تتبع اختيار القارئ هنا. */
@@ -58,14 +74,66 @@ function countdownText(card: MawaeedCard, nowMs: number): string {
   return liveCountdown(new Date(nowMs), card.startsOn, card.todayLabel).liveText;
 }
 
-/** رقم البطل ووحدته: أيام متبقية، أو ساعات في اليوم الأخير، أو كلمة الحالة. */
-function heroCount(card: MawaeedCard, nowMs: number): { n: string | null; unit: string } {
-  if (card.isPast) return { n: null, unit: card.pastLabel || "انتهى" };
-  if (card.isOngoing) return { n: null, unit: card.countdownText };
+/** تفاصيل العدّاد للبطل (أيام / ساعات / دقائق) أو نص الحالة عند حلول الموعد. */
+function heroClockParts(
+  card: MawaeedCard,
+  nowMs: number,
+): { days: number; hours: number; minutes: number; word: string | null } {
+  if (card.isPast) return { days: 0, hours: 0, minutes: 0, word: card.pastLabel || "انتهى" };
+  if (card.isOngoing) return { days: 0, hours: 0, minutes: 0, word: card.countdownText };
   const live = liveCountdown(new Date(nowMs), card.startsOn, card.todayLabel);
-  if (live.calendarDays <= 0) return { n: null, unit: card.todayLabel || "اليوم" };
-  if (live.days <= 0) return { n: String(Math.max(1, live.hours)), unit: live.hours === 1 ? "ساعة متبقية" : "ساعات متبقية" };
-  return { n: String(live.days), unit: live.days === 1 ? "يوم متبقٍ" : live.days === 2 ? "يومان متبقيان" : live.days <= 10 ? "أيام متبقية" : "يومًا متبقيًا" };
+  if (live.calendarDays <= 0) {
+    return { days: 0, hours: 0, minutes: 0, word: card.todayLabel || "اليوم" };
+  }
+  const ms = Math.max(0, riyadhMidnightMs(card.startsOn) - nowMs);
+  const totalMinutes = Math.floor(ms / 60_000);
+  return {
+    days: Math.floor(totalMinutes / 1440),
+    hours: Math.floor(totalMinutes / 60) % 24,
+    minutes: totalMinutes % 60,
+    word: null,
+  };
+}
+
+/** رقم موجز لبطاقة النبض السريعة في أعلى الصفحة. */
+function pulseCount(card: MawaeedCard | null, nowMs: number): { num: string | null; unit: string } {
+  if (!card) return { num: null, unit: "قريباً" };
+  if (card.isPast) return { num: null, unit: card.pastLabel || "انتهى" };
+  if (card.isOngoing) return { num: null, unit: card.countdownText };
+  const live = liveCountdown(new Date(nowMs), card.startsOn, card.todayLabel);
+  if (live.calendarDays <= 0) return { num: null, unit: card.todayLabel || "اليوم" };
+  if (live.days <= 0) {
+    const hrs = Math.max(1, live.hours);
+    return { num: String(hrs), unit: hrs === 1 ? "ساعة متبقية" : hrs <= 10 ? "ساعات متبقية" : "ساعة متبقية" };
+  }
+  const unit =
+    live.days === 1
+      ? "يوم متبقٍّ"
+      : live.days === 2
+        ? "يومان متبقيان"
+        : `${dayUnitWord(live.days)} ${live.days <= 10 ? "متبقية" : "متبقياً"}`;
+  return { num: String(live.days), unit };
+}
+
+/** تاريخ مختصر بدون اسم الأسبوع لبطاقات الشريط العلوي (مثل: 27 أكتوبر 2026). */
+function compactGregorian(label: string): string {
+  const parts = label.trim().split(/\s+/);
+  return parts.length >= 4 ? parts.slice(1).join(" ") : label;
+}
+
+function KindIcon({ kind }: { kind: MawaeedKind }) {
+  switch (kind) {
+    case "school_holiday":
+      return <GraduationCap aria-hidden="true" className="mw-kind-icon" />;
+    case "salary":
+      return <Landmark aria-hidden="true" className="mw-kind-icon" />;
+    case "pension":
+      return <ShieldCheck aria-hidden="true" className="mw-kind-icon" />;
+    case "social_security":
+      return <HeartHandshake aria-hidden="true" className="mw-kind-icon" />;
+    case "citizen_account":
+      return <Home aria-hidden="true" className="mw-kind-icon" />;
+  }
 }
 
 function badgeClass(card: MawaeedCard): string {
@@ -119,7 +187,7 @@ export default function MawaeedPage() {
   return (
     <div className="article-detail public-page min-h-screen bg-background relative z-10" dir="rtl">
       <Header user={user || undefined} />
-      <main className="article-detail-main mawaeed-home container mx-auto px-4 sm:px-6 lg:px-8 py-8 max-w-7xl">
+      <main className="article-detail-main mawaeed-home container mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 max-w-7xl">
         {viewQuery.isLoading ? (
           <p className="public-meta">جارٍ تحميل المواعيد…</p>
         ) : !view ? (
@@ -154,11 +222,26 @@ function MawaeedBody({
   switching: boolean;
   onPickRegion: (region: RegionId) => void;
 }) {
-  const hero = nearestCard(view.series);
-  const heroBlock = hero ? view.series.find((block) => block.slug === hero.seriesSlug) ?? null : null;
+  const nearest = nearestCard(view.series);
+  const pulse = pulseBlocks(view.series);
+  const financial = financialBlocks(view.series);
   const school = schoolBlock(view.series);
-  const rows = schoolRows(school);
-  const board = boardBlocks(view.series, hero);
+  const rows = schoolRows(school, 5);
+  const [selectedSlug, setSelectedSlug] = useState<string | null>(null);
+
+  const activeBlock = useMemo(() => {
+    if (selectedSlug) {
+      const found = view.series.find((b) => b.slug === selectedSlug && b.next);
+      if (found) return found;
+    }
+    if (nearest) {
+      return view.series.find((b) => b.slug === nearest.seriesSlug) ?? null;
+    }
+    return pulse[0] ?? null;
+  }, [selectedSlug, view.series, nearest, pulse]);
+
+  const activeCard = activeBlock?.next ?? nearest;
+  const isNearestActive = Boolean(activeCard && nearest && activeCard.id === nearest.id);
   const regionLabel = view.regions.find((item) => item.id === view.region)?.label ?? "";
   const jsonLd = JSON.stringify(view.jsonLd).replace(/</g, "\\u003c");
 
@@ -171,89 +254,176 @@ function MawaeedBody({
         <span aria-current="page">مواعيدك</span>
       </nav>
 
-      <header className="mw-head">
-        <h1 className="mw-title">{view.page.h1}</h1>
-        <p className="mw-lede">{view.page.description}</p>
-        <p className="mw-updated">
-          <span className="mw-updated-dot" aria-hidden="true" />
-          آخر تحديث للبيانات: <time dateTime={view.dateModified}>{view.dateModifiedLabel}</time> بتوقيت السعودية
-        </p>
+      {/* قشرة رأس الصفحة + شريط نبض المواعيد الخمسة فوق الطيّ */}
+      <header className="mw-top-shell">
+        <div className="mw-head-row">
+          <div className="mw-head">
+            <h1 className="mw-title">{view.page.h1}</h1>
+            <p className="mw-lede">{view.page.description}</p>
+          </div>
+          <p className="mw-updated">
+            <span className="mw-updated-dot" aria-hidden="true" />
+            آخر تحديث: <time dateTime={view.dateModified}>{view.dateModifiedLabel}</time> بتوقيت السعودية
+          </p>
+        </div>
+
+        {pulse.length > 0 ? (
+          <div className="mw-pulse-wrap" role="region" aria-label="نظرة سريعة على جميع المواعيد">
+            <div className="mw-pulse-head">
+              <span className="mw-pulse-label">جميع المواعيد في نظرة واحدة — اضغط لعرض التفاصيل</span>
+              <span className="mw-pulse-hint">مرتبة حسب الأقرب</span>
+            </div>
+            <div className="mw-pulse-grid">
+              {pulse.map((block) => {
+                const card = block.next;
+                const count = pulseCount(card, nowMs);
+                const isSelected = activeBlock?.slug === block.slug;
+                const isEarliest = Boolean(card && nearest && card.id === nearest.id);
+                return (
+                  <button
+                    key={block.slug}
+                    type="button"
+                    className={`mw-pulse-card${isSelected ? " is-active" : ""}`}
+                    data-kind={block.kind}
+                    aria-pressed={isSelected}
+                    onClick={() => setSelectedSlug(block.slug)}
+                  >
+                    <span className="mw-pulse-top">
+                      <span className="mw-pulse-series">
+                        <KindIcon kind={block.kind} />
+                        <span>{shortSeriesTitle(block)}</span>
+                      </span>
+                      {isEarliest ? (
+                        <span className="mw-pulse-nearest">الأقرب</span>
+                      ) : card ? (
+                        <span className={badgeClass(card)}>{badgeText(card)}</span>
+                      ) : null}
+                    </span>
+
+                    <span className="mw-pulse-count">
+                      {count.num ? <strong className="mw-pulse-num">{count.num}</strong> : null}
+                      <span className="mw-pulse-unit">{count.unit}</span>
+                    </span>
+
+                    <span className="mw-pulse-foot">
+                      <span className="mw-pulse-date">
+                        {card ? compactGregorian(card.gregorianLabel) : "لا موعد معلن"}
+                      </span>
+                      <span className="mw-pulse-arrow" aria-hidden="true">›</span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
       </header>
 
-      {hero ? (
+      {/* بطاقة التركيز التفصيلية (البطل) تتبع الموعد المختار من الشريط العلوي */}
+      {activeCard ? (
         <Hero
-          card={hero}
-          href={heroBlock?.href ?? null}
+          card={activeCard}
+          href={activeBlock?.href ?? null}
           nowMs={nowMs}
-          regionLabel={heroFollowsRegion(hero) ? regionLabel : null}
+          isNearest={isNearestActive}
+          regionLabel={heroFollowsRegion(activeCard) ? regionLabel : null}
         />
       ) : null}
 
-      {school ? (
-        <section className={`mw-school${switching ? " is-switching" : ""}`} aria-labelledby="mw-school-title">
-          <div className="mw-school-head">
-            <h2 id="mw-school-title">{school.title}</h2>
-            <p>الإجازات الرسمية موحّدة، والإضافية حسب المنطقة التعليمية</p>
-          </div>
-          <div className="mw-tabs-row">
-            <span className="mw-tabs-label">المنطقة</span>
-            <div className="mw-tabs" role="group" aria-label="اختر المنطقة التعليمية">
-              {view.regions.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  className="mw-tab"
-                  aria-pressed={item.id === region}
-                  onClick={() => onPickRegion(item.id)}
-                >
-                  {item.label}
-                </button>
+      {/* تخطيط العمودين المتوازن: مواعيد الصرف والرواتب يميناً + التقويم الدراسي المدمج يساراً */}
+      <div className="mw-columns">
+        {financial.length > 0 ? (
+          <section className="mw-fin-col" aria-labelledby="mw-board-title">
+            <div className="mw-section-head">
+              <div>
+                <h2 id="mw-board-title">مواعيد الرواتب والدعم الشهري</h2>
+                <p>مواعيد الإيداع القادمة حسب الجداول الرسمية للجهات</p>
+              </div>
+              <span className="mw-section-sub">مرتبة من الأقرب إلى الأبعد</span>
+            </div>
+            <div className="mw-grid">
+              {financial.map((block) => (
+                <BoardCard
+                  key={block.slug}
+                  block={block}
+                  nowMs={nowMs}
+                  isSelected={activeBlock?.slug === block.slug}
+                  onSelect={() => setSelectedSlug(block.slug)}
+                />
               ))}
             </div>
-          </div>
-          {rows.length ? (
-            <ul className="mw-rows" key={view.region} aria-busy={switching}>
-              {rows.map((card, index) => (
-                <li key={card.id} className={index === 0 ? "is-first" : undefined}>
-                  <span className="mw-row-title">
-                    {index === 0 ? <span className="mw-row-tag">الأقرب</span> : null}
-                    {card.title}
-                  </span>
-                  <strong className="mw-row-count">{countdownText(card, nowMs)}</strong>
-                  <span className="mw-row-date">
-                    <time dateTime={card.startsOn}>{card.gregorianLabel}</time>
-                    {" · "}{card.hijriLabel}
-                    {card.endLabel ? ` · حتى ${card.endLabel}` : ""}
-                    {card.certainty === "expected" ? " · متوقع" : ""}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="mw-empty">{school.answerLine}</p>
-          )}
-          <div className="mw-school-foot">
-            <span>
-              المصدر: {rows[0]?.sourceTitle || "وزارة التعليم والإدارات التعليمية"}
-            </span>
-            <a href={school.href}>كل إجازات العام ›</a>
-          </div>
-        </section>
-      ) : null}
+          </section>
+        ) : null}
 
-      {board.length ? (
-        <section aria-labelledby="mw-board-title">
-          <div className="mw-board-head">
-            <h2 id="mw-board-title">باقي المواعيد</h2>
-            <span>مرتبة من الأقرب إلى الأبعد</span>
-          </div>
-          <div className="mw-grid">
-            {board.map((block) => (
-              <BoardCard key={block.slug} block={block} nowMs={nowMs} />
-            ))}
-          </div>
-        </section>
-      ) : null}
+        {school ? (
+          <section
+            className={`mw-school${switching ? " is-switching" : ""}`}
+            data-kind="school_holiday"
+            aria-labelledby="mw-school-title"
+          >
+            <div className="mw-school-head">
+              <div className="mw-school-title-wrap">
+                <span className="mw-school-icon" aria-hidden="true">
+                  <GraduationCap />
+                </span>
+                <div>
+                  <h2 id="mw-school-title">{school.title}</h2>
+                  <p>الإجازات الرسمية موحّدة، والإضافية حسب المنطقة التعليمية</p>
+                </div>
+              </div>
+              <a className="mw-school-top-link" href={school.href}>صفحة التقويم ›</a>
+            </div>
+            <div className="mw-tabs-row">
+              <span className="mw-tabs-label">المنطقة:</span>
+              <div className="mw-tabs" role="group" aria-label="اختر المنطقة التعليمية">
+                {view.regions.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className="mw-tab"
+                    aria-pressed={item.id === region}
+                    onClick={() => {
+                      onPickRegion(item.id);
+                      setSelectedSlug(school.slug);
+                    }}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {rows.length ? (
+              <ul className="mw-rows" key={view.region} aria-busy={switching}>
+                {rows.map((card, index) => (
+                  <li key={card.id} className={index === 0 ? "is-first" : undefined}>
+                    <div className="mw-row-main">
+                      <span className="mw-row-title">
+                        {index === 0 ? <span className="mw-row-tag">الأقرب</span> : null}
+                        {card.title}
+                      </span>
+                      <span className="mw-row-date">
+                        <time dateTime={card.startsOn}>{card.gregorianLabel}</time>
+                        {" · "}{card.hijriLabel}
+                        {card.endLabel ? ` · حتى ${card.endLabel}` : ""}
+                        {card.certainty === "expected" ? " · متوقع" : ""}
+                      </span>
+                    </div>
+                    <strong className="mw-row-count">{countdownText(card, nowMs)}</strong>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="mw-empty">{school.answerLine}</p>
+            )}
+            <div className="mw-school-foot">
+              <span>
+                المصدر: {rows[0]?.sourceTitle || "وزارة التعليم والإدارات التعليمية"}
+              </span>
+              <a href={school.href}>كل إجازات العام ›</a>
+            </div>
+          </section>
+        ) : null}
+      </div>
 
       {view.methodology ? <p className="mw-method">{view.methodology}</p> : null}
     </>
@@ -264,78 +434,127 @@ function Hero({
   card,
   href,
   nowMs,
+  isNearest,
   regionLabel,
 }: {
   card: MawaeedCard;
   href: string | null;
   nowMs: number;
+  isNearest: boolean;
   regionLabel: string | null;
 }) {
-  const count = heroCount(card, nowMs);
+  const clock = heroClockParts(card, nowMs);
   const series = card.seriesTitle.trim();
-  // كثير من عناوين المواعيد تبدأ باسم السلسلة نفسها؛ لا نكرّره في السطر العلوي.
   const showSeries = Boolean(series) && !card.title.startsWith(series);
+  const kickerPrefix = isNearest ? "الموعد الأقرب" : "الموعد المختار";
   return (
     <section className="mw-hero" aria-labelledby="mw-hero-title" data-kind={card.kind}>
       <div className="mw-hero-body">
-        <p className="mw-kicker">الموعد الأقرب{showSeries ? ` · ${series}` : ""}</p>
+        <div className="mw-hero-badges">
+          <span className="mw-kicker">
+            <KindIcon kind={card.kind} />
+            <span>{kickerPrefix}{showSeries ? ` · ${series}` : ""}</span>
+          </span>
+          <span className={badgeClass(card)}>{badgeText(card)}</span>
+        </div>
         <h2 id="mw-hero-title">{card.title}</h2>
         <p className="mw-hero-dates">
           <b><time dateTime={card.startsOn}>{card.gregorianLabel}</time></b>
-          {" · "}{card.hijriLabel}{" "}
-          <span className={badgeClass(card)}>{badgeText(card)}</span>
+          <span className="mw-dot-sep" aria-hidden="true">·</span>
+          <span>{card.hijriLabel}</span>
         </p>
         {card.endLabel ? <p className="mw-hero-note">حتى {card.endLabel}</p> : null}
         {card.expectedHint ? <p className="mw-hero-note">{card.expectedHint}</p> : null}
         {card.publicNote ? <p className="mw-hero-note">{card.publicNote}</p> : null}
         {regionLabel ? (
-          <p className="mw-region-chip"><i aria-hidden="true" />في {regionLabel} · تتبع المنطقة المختارة أدناه</p>
+          <p className="mw-region-chip"><i aria-hidden="true" />في {regionLabel} · تتبع المنطقة المختارة في التقويم الدراسي</p>
         ) : null}
-        <p className="mw-hero-source">
-          <span>المصدر:</span>{" "}
-          <a href={card.sourceUrl} rel="noopener noreferrer" target="_blank">
-            {card.sourceTitle} <ExternalLink aria-hidden="true" />
-          </a>
-        </p>
-        {href ? <a className="mw-cta" href={href}>كل مواعيد {series || "القسم"} ›</a> : null}
+        <div className="mw-hero-foot">
+          <p className="mw-hero-source">
+            <span>المصدر:</span>{" "}
+            <a href={card.sourceUrl} rel="noopener noreferrer" target="_blank">
+              {card.sourceTitle} <ExternalLink aria-hidden="true" />
+            </a>
+          </p>
+          {href ? <a className="mw-cta" href={href}>صفحة {series || "القسم"} الكاملة ›</a> : null}
+        </div>
       </div>
-      <div className="mw-count" aria-live="polite">
-        {count.n ? <span className="mw-count-n">{count.n}</span> : null}
-        <span className="mw-count-u">{count.unit}</span>
+
+      <div className="mw-clock-box" aria-live="polite">
+        <span className="mw-clock-label">الوقت المتبقي</span>
+        {clock.word ? (
+          <strong className="mw-clock-word">{clock.word}</strong>
+        ) : (
+          <div className="mw-clock-grid">
+            <div className="mw-clock-cell">
+              <strong className="mw-clock-num">{clock.days}</strong>
+              <span className="mw-clock-unit">{dayUnitWord(clock.days)}</span>
+            </div>
+            <div className="mw-clock-cell">
+              <strong className="mw-clock-num">{clock.hours}</strong>
+              <span className="mw-clock-unit">{clock.hours >= 3 && clock.hours <= 10 ? "ساعات" : "ساعة"}</span>
+            </div>
+            <div className="mw-clock-cell">
+              <strong className="mw-clock-num">{clock.minutes}</strong>
+              <span className="mw-clock-unit">دقيقة</span>
+            </div>
+          </div>
+        )}
       </div>
     </section>
   );
 }
 
-function BoardCard({ block, nowMs }: { block: MawaeedSeriesBlock; nowMs: number }) {
+function BoardCard({
+  block,
+  nowMs,
+  isSelected,
+  onSelect,
+}: {
+  block: MawaeedSeriesBlock;
+  nowMs: number;
+  isSelected: boolean;
+  onSelect: () => void;
+}) {
   const next = block.next;
   return (
-    <article className="mw-card">
-      <div className="mw-card-series">
-        <span>{block.title}</span>
-        {next ? <span className={badgeClass(next)}>{badgeText(next)}</span> : null}
-      </div>
-      {next ? (
-        <>
-          <h3>{next.title}</h3>
-          <p className="mw-card-date">
-            <time dateTime={next.startsOn}>{next.gregorianLabel}</time>
-            {" · "}{next.hijriLabel}
-          </p>
-          <div className="mw-card-foot">
-            <strong className="mw-card-count">{countdownText(next, nowMs)}</strong>
-            <a href={block.href}>كل مواعيد القسم ›</a>
-          </div>
-        </>
-      ) : (
-        <>
+    <article
+      className={`mw-card${isSelected ? " is-selected" : ""}`}
+      data-kind={block.kind}
+      onClick={onSelect}
+    >
+      <div className="mw-card-top">
+        <div className="mw-card-series">
+          <span className="mw-card-kicker">
+            <KindIcon kind={block.kind} />
+            <span>{block.title}</span>
+          </span>
+          {next ? <span className={badgeClass(next)}>{badgeText(next)}</span> : null}
+        </div>
+        {next ? (
+          <>
+            <h3>{next.title}</h3>
+            <p className="mw-card-date">
+              <strong><time dateTime={next.startsOn}>{next.gregorianLabel}</time></strong>
+              {" · "}{next.hijriLabel}
+            </p>
+          </>
+        ) : (
           <p className="mw-card-date">{block.answerLine}</p>
-          <div className="mw-card-foot">
-            <span />
-            <a href={block.href}>صفحة القسم ›</a>
-          </div>
-        </>
-      )}
+        )}
+      </div>
+
+      <div className="mw-card-foot">
+        {next ? (
+          <strong className="mw-card-count">{countdownText(next, nowMs)}</strong>
+        ) : (
+          <span />
+        )}
+        <a href={block.href} onClick={(e) => e.stopPropagation()}>
+          كل المواعيد ›
+        </a>
+      </div>
     </article>
   );
 }
+

@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { boardBlocks, heroFollowsRegion, nearestCard, schoolBlock, schoolRows } from "@shared/mawaeed/home";
+import {
+  boardBlocks,
+  financialBlocks,
+  heroFollowsRegion,
+  nearestCard,
+  pulseBlocks,
+  schoolBlock,
+  schoolRows,
+  shortSeriesTitle,
+} from "@shared/mawaeed/home";
 import type { MawaeedCard, MawaeedSeriesBlock } from "@shared/mawaeed/present";
 
 function card(over: Partial<MawaeedCard> & Pick<MawaeedCard, "id" | "seriesSlug" | "kind" | "startsOn">): MawaeedCard {
@@ -67,6 +76,30 @@ describe("mawaeed home view", () => {
     expect(schoolRows(null)).toEqual([]);
   });
 
+  it("pulseBlocks orders all series by nearest upcoming date, placing empty last", () => {
+    expect(pulseBlocks([pension, citizen, salary, school]).map((b) => b.slug)).toEqual([
+      "school-calendar-1448",
+      "salaries",
+      "citizen",
+      "pension",
+    ]);
+  });
+
+  it("financialBlocks returns all non-school series ordered by nearest upcoming date", () => {
+    expect(financialBlocks([pension, citizen, salary, school]).map((b) => b.slug)).toEqual([
+      "salaries",
+      "citizen",
+      "pension",
+    ]);
+  });
+
+  it("shortSeriesTitle maps each kind to a concise label", () => {
+    expect(shortSeriesTitle(school)).toBe("الإجازة القادمة");
+    expect(shortSeriesTitle(salary)).toBe("رواتب الدولة");
+    expect(shortSeriesTitle(citizen)).toBe("حساب المواطن");
+    expect(shortSeriesTitle(pension)).toBe("معاشات التقاعد");
+  });
+
   it("board leaves out the school series and the hero's series, nearest first, empty last", () => {
     const hero = nearestCard([salary, school, citizen, pension]);
     expect(boardBlocks([pension, citizen, salary, school], hero).map((b) => b.slug)).toEqual(["salaries", "citizen", "pension"]);
@@ -80,3 +113,4 @@ describe("mawaeed home view", () => {
     expect(heroFollowsRegion(null)).toBe(false);
   });
 });
+
