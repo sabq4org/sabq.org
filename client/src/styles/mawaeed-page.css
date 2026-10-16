@@ -10,18 +10,18 @@
   --mw-ok-soft: #e4f5ec;
   --mw-warn: #8a5a00;
   --mw-warn-soft: #fff2cf;
-  /* ألوان النص للخدمات الخمس: كلها فوق 4.5:1 على الأبيض. */
+  /* ألوان النص للخدمات الخمس: كلها فوق 4.5:1 على الأبيض، وبعيدة عن أخضر «مؤكد» وكهرماني «متوقع». */
   --mw-t-school: #086b9e;
-  --mw-t-salary: #0f766e;
-  --mw-t-citizen: #9a5b00;
-  --mw-t-social: #6d28d9;
-  --mw-t-pension: #1d4ed8;
+  --mw-t-salary: #4338ca;
+  --mw-t-citizen: #be123c;
+  --mw-t-social: #a21caf;
+  --mw-t-pension: #0e7490;
   /* درجات أفتح للخلفيات فقط، حتى لا تبهت الأسطح إلى الرمادي. */
   --mw-f-school: #0a8fd6;
-  --mw-f-salary: #14b8a6;
-  --mw-f-citizen: #f59e0b;
-  --mw-f-social: #8b5cf6;
-  --mw-f-pension: #3b82f6;
+  --mw-f-salary: #6366f1;
+  --mw-f-citizen: #f43f5e;
+  --mw-f-social: #d946ef;
+  --mw-f-pension: #06b6d4;
   color: var(--mw-ink);
 }
 .dark .mawaeed-home {
@@ -36,10 +36,10 @@
   --mw-warn: #e8bd6a;
   --mw-warn-soft: #3a2f14;
   --mw-t-school: #78c9f0;
-  --mw-t-salary: #5fd4c3;
-  --mw-t-citizen: #f0c06a;
-  --mw-t-social: #c4b5fd;
-  --mw-t-pension: #93b4fb;
+  --mw-t-salary: #a5b4fc;
+  --mw-t-citizen: #fda4af;
+  --mw-t-social: #f0abfc;
+  --mw-t-pension: #67e8f9;
 }
 .mawaeed-home [data-kind="school_holiday"] { --mw-tone: var(--mw-t-school); --mw-fill: var(--mw-f-school); }
 .mawaeed-home [data-kind="salary"] { --mw-tone: var(--mw-t-salary); --mw-fill: var(--mw-f-salary); }
