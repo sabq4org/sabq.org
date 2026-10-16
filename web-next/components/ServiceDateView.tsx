@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
 import type { ServicePageModel } from "@shared/servicePages/present";
@@ -20,7 +21,7 @@ export function ServiceDateView({
       <SiteHeader />
       <main id="main-content" role="main" lang="ar" dir="rtl" className="mx-auto max-w-3xl px-4 py-6">
         <nav aria-label="مسار التنقل" className="mb-6 flex flex-wrap gap-2 text-sm text-muted-foreground">
-          <a href="/">الرئيسية</a>
+          <Link href="/">الرئيسية</Link>
           <span aria-hidden="true">/</span>
           <a href="/mawaeed">مواعيدك</a>
           <span aria-hidden="true">/</span>
