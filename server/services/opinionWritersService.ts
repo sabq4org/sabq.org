@@ -510,7 +510,15 @@ export async function getNextSlotForWriter(
  */
 export async function getNextSlotsForWriters(
   writerIds: string[],
-  options?: { excludeArticleId?: string | null },
+  options?: {
+    excludeArticleId?: string | null;
+    /**
+     * false للقوائم: مسودات الكاتب قيد المراجعة/المعتمدة لا تدخل الأرضية لأن
+     * attachWriterWeeklySlots يوزّعها هي نفسها على الموعد ثم الأسابيع التالية.
+     * إدخالها كان يجعل المسودة تحجز موعدها بنفسها فتُعرض بعد أسبوع (2026-10-16).
+     */
+    includeInFlightDrafts?: boolean;
+  },
 ): Promise<Record<string, { weekday: number; publishTime: string; nextSlot: string }>> {
   const unique = [...new Set(writerIds.filter((id) => typeof id === "string" && id.length > 0))];
   if (unique.length === 0) return {};
@@ -526,6 +534,7 @@ export async function getNextSlotsForWriters(
 
   const scheduledWriterIds = schedules.map((row) => row.writerId);
   const excludeArticleId = options?.excludeArticleId?.trim();
+  const includeInFlightDrafts = options?.includeInFlightDrafts !== false;
   const floorWhere = [
     eq(articles.articleType, "opinion"),
     inArray(articles.authorId, scheduledWriterIds),
@@ -540,6 +549,7 @@ export async function getNextSlotsForWriters(
         max(coalesce(${articles.scheduledAt}, ${articles.updatedAt})) filter (
           where ${articles.status} not in ('published', 'archived')
             and (${articles.reviewStatus} in ('pending_review', 'approved'))
+            and ${includeInFlightDrafts ? sql`true` : sql`false`}
         )
       )`,
     })

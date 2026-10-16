@@ -8,8 +8,10 @@
 import { describe, expect, it } from "vitest";
 import {
   decideStatusDemotion,
+  keepScheduledDate,
   resolveArticleEditFlags,
   statusAfterSubmitForReview,
+  submitForReviewScheduleFields,
 } from "../../server/services/publishGateRules";
 
 function demote(over: Partial<Parameters<typeof decideStatusDemotion>[0]> = {}) {
@@ -83,6 +85,41 @@ describe("statusAfterSubmitForReview", () => {
   it("غير الحية تعود مسودة كما كان", () => {
     expect(statusAfterSubmitForReview("draft")).toBe("draft");
     expect(statusAfterSubmitForReview("archived")).toBe("draft");
+  });
+});
+
+describe("submitForReviewScheduleFields", () => {
+  it("المجدولة تبقى مجدولة بموعدها — لا حالة scheduled بلا موعد", () => {
+    expect(submitForReviewScheduleFields("scheduled")).toEqual({ status: "scheduled" });
+  });
+  it("غيرها يعود فوريّاً بلا موعد كما كان", () => {
+    expect(submitForReviewScheduleFields("draft")).toEqual({ status: "draft", publishType: "instant", scheduledAt: null });
+    expect(submitForReviewScheduleFields("published")).toEqual({ status: "published", publishType: "instant", scheduledAt: null });
+  });
+});
+
+describe("keepScheduledDate", () => {
+  const scheduled = { status: "scheduled", scheduledAt: new Date("2026-10-16T11:30:00Z") };
+  it("حفظ يرسل scheduledAt: null لمادة مجدولة يُبقي موعدها", () => {
+    const update: Record<string, unknown> = { title: "x", status: "scheduled", publishType: "instant", scheduledAt: null };
+    expect(keepScheduledDate(update, scheduled)).toEqual({ ok: true });
+    expect(update).toEqual({ title: "x", status: "scheduled" });
+  });
+  it("الحفظ بلا حالة (كاتب الرأي يرسل null دائماً) يُبقي الموعد أيضاً", () => {
+    const update: Record<string, unknown> = { scheduledAt: null };
+    expect(keepScheduledDate(update, scheduled)).toEqual({ ok: true });
+    expect("scheduledAt" in update).toBe(false);
+  });
+  it("موعد جديد يمر، والهبوط إلى مسودة يمسح الموعد", () => {
+    const moved: Record<string, unknown> = { scheduledAt: new Date("2026-10-23T11:30:00Z") };
+    expect(keepScheduledDate(moved, scheduled)).toEqual({ ok: true });
+    expect(moved.scheduledAt).toBeInstanceOf(Date);
+    const demoted: Record<string, unknown> = { status: "draft", scheduledAt: null };
+    expect(keepScheduledDate(demoted, scheduled)).toEqual({ ok: true });
+    expect(demoted.scheduledAt).toBeNull();
+  });
+  it("جدولة بلا أي موعد تُرفض", () => {
+    expect(keepScheduledDate({ status: "scheduled", scheduledAt: null }, { status: "draft", scheduledAt: null }).ok).toBe(false);
   });
 });
 

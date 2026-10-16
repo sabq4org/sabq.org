@@ -10,7 +10,7 @@ export async function enrichMobileAdminSchedules<T extends {
   const needsWriterSlot = (row: T) => row.articleType === "opinion"
     && (row.status === "draft" || row.status === "scheduled") && Boolean(row.authorId);
   const writerIds = [...new Set(rows.filter(needsWriterSlot).map(row => row.authorId!))];
-  const slots = writerIds.length ? await getNextSlotsForWriters(writerIds) : {};
+  const slots = writerIds.length ? await getNextSlotsForWriters(writerIds, { includeInFlightDrafts: false }) : {};
   // Drafts of the same writer get sequential weeks. A scheduled row keeps the
   // base suggestion for rescheduling and does not consume a draft slot.
   const withDraftSlots = attachWriterWeeklySlots(rows, slots);
