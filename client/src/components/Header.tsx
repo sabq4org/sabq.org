@@ -1,4 +1,4 @@
-import { Menu, User, LogOut, Newspaper, Brain, Sparkles, ExternalLink, Zap, Home, Clock, BookOpen, Boxes, ChevronLeft, FolderOpen, Search, Mail } from "lucide-react";
+import { Menu, User, LogOut, Newspaper, Brain, Sparkles, ExternalLink, Zap, Home, Clock, BookOpen, Boxes, ChevronLeft, FolderOpen, Search, Mail, CalendarClock } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "./ThemeToggle";
@@ -130,6 +130,7 @@ export function Header({ user, onMenuClick, sticky = true }: HeaderProps) {
     { name: "مقالات", href: "/opinion" },
     { name: "مُقترب", href: "/muqtarab" },
     { name: "لحظة بلحظة", href: "/moment-by-moment" },
+    { name: "مواعيدك", href: "/mawaeed" },
     { name: "عقل سبق", href: "/sabq-ai", icon: Brain },
   ];
 
@@ -423,6 +424,16 @@ export function Header({ user, onMenuClick, sticky = true }: HeaderProps) {
                   >
                     <Clock className="h-5 w-5 text-red-500" aria-hidden="true" />
                     لحظة بلحظة
+                  </span>
+                </Link>
+                <Link href="/mawaeed">
+                  <span
+                    className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium hover-elevate active-elevate-2 cursor-pointer"
+                    onClick={() => setMobileMenuOpen(false)}
+                    data-testid="link-mobile-mawaeed"
+                  >
+                    <CalendarClock className="h-5 w-5 text-primary" aria-hidden="true" />
+                    مواعيدك
                   </span>
                 </Link>
                 <Link href="/opinion">
