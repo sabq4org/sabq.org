@@ -974,6 +974,8 @@ export async function serveMawaeedPage({ request, url, env, waitUntil, signProxy
   keyUrl.searchParams.set("region", normalizeRegion(url.searchParams.get("region")));
   keyUrl.searchParams.set("__b", commit || "dev");
   keyUrl.searchParams.set("__v", "mawaeed");
+  // يوم الرياض في المفتاح: نسخة مخزّنة قبل منتصف الليل لا تُقدَّم بعده، فإعادة التحميل عند تغيّر اليوم تجلب الجديد.
+  keyUrl.searchParams.set("__d", new Date(Date.now() + 3 * 3600_000).toISOString().slice(0, 10));
   const cacheKey = new Request(keyUrl.toString(), { method: "GET" });
 
   if (cacheable && typeof caches !== "undefined") {

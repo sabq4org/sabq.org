@@ -97,12 +97,10 @@ function useLiveCountdown(startsOn: string | undefined, todayLabel: string, init
   );
   useEffect(() => {
     setText(initial);
-    if (!startsOn) {
-      setParts(null);
-      return;
-    }
+    if (!startsOn) setParts(null);
     const loadedDay = riyadhDay(Date.now());
     let notified = false;
+    // المراقبة تعمل حتى بلا عدّاد (الموعد الجاري)، حتى يتحول إلى «انتهت» بعد آخر يوم.
     const tick = () => {
       const now = Date.now();
       // بعد منتصف ليل الرياض يتغيّر الموعد القادم أو حالته: نعيد الجلب مرة بدل البقاء على «اليوم».
@@ -110,6 +108,7 @@ function useLiveCountdown(startsOn: string | undefined, todayLabel: string, init
         notified = true;
         onDayChange?.();
       }
+      if (!startsOn) return;
       const left = remaining(startsOn, now);
       setParts(left);
       setText(left ? phrase(left.days, left.hours) : todayLabel);

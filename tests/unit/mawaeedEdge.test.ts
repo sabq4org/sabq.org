@@ -81,6 +81,31 @@ describe("mawaeed edge branch", () => {
     expect(response.headers.get("CDN-Cache-Control")).toBe("public, max-age=60");
   });
 
+  it("keys the edge cache by Riyadh day so a midnight reload never gets yesterday's page", async () => {
+    vi.useFakeTimers();
+    try {
+      const keys: string[] = [];
+      for (const now of ["2026-10-16T20:59:30Z", "2026-10-16T21:00:30Z"]) {
+        vi.setSystemTime(new Date(now));
+        put.mockClear();
+        fetcher.mockResolvedValue(Response.json(view()));
+        const waits: Promise<unknown>[] = [];
+        await onRequest({
+          request: new Request("https://sabq.org/mawaeed", { headers: { "User-Agent": "Mozilla/5.0" } }),
+          env: { CF_PAGES_COMMIT_SHA: "abc" },
+          next: vi.fn(),
+          waitUntil: vi.fn((promise: Promise<unknown>) => { waits.push(promise); return promise; }),
+        });
+        await Promise.all(waits);
+        keys.push((put.mock.calls[0]?.[0] as Request).url);
+      }
+      expect(keys[0]).toContain("__d=2026-10-16");
+      expect(keys[1]).toContain("__d=2026-10-17");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("returns 503 noindex when the API fails, without the SPA shell", async () => {
     fetcher.mockRejectedValue(new Error("origin down"));
     const next = vi.fn(async () => new Response("spa-shell"));
