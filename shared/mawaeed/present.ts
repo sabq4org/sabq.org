@@ -257,8 +257,7 @@ function daysBetween(fromIso: string, toIso: string): number {
 }
 
 function scopePhrase(region: RegionId, card: MawaeedCard): string {
-  if (card.regionGroup === "riyadh_most") return " في القصيم";
-  if (card.regionGroup === "western") return ` في ${regionMeta(region).label}`;
+  if (card.regionGroup !== "all") return ` في ${regionMeta(region).label}`;
   return "";
 }
 
@@ -368,11 +367,9 @@ function buildJsonLd(
 }
 
 function eventNode(card: MawaeedCard, region: RegionId): Record<string, unknown> {
-  const place = card.regionGroup === "western"
-    ? regionMeta(region).label
-    : card.regionGroup === "riyadh_most"
-      ? "القصيم"
-      : "المملكة العربية السعودية";
+  const place = card.regionGroup === "all"
+    ? "المملكة العربية السعودية"
+    : regionMeta(region).label;
   return {
     "@type": "Event",
     name: card.title,

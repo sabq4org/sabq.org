@@ -130,7 +130,14 @@ describe("mawaeed presentation", () => {
     expect(JSON.stringify(page.view.jsonLd)).not.toContain("eventAttendanceMode");
   });
 
-  it("filters school extras by region and hides unverified drafts", () => {
+  it("filters school extras by region and hides unverified western drafts", () => {
+    const riyadh = presentMawaeed({
+      pageSlug: "school-calendar-1448",
+      region: "riyadh",
+      now: NOW,
+      series: [school],
+      occurrences,
+    });
     const qassim = presentMawaeed({
       pageSlug: "school-calendar-1448",
       region: "qassim",
@@ -145,9 +152,11 @@ describe("mawaeed presentation", () => {
       series: [school],
       occurrences,
     });
-    if (qassim.notFound || makkah.notFound) throw new Error("expected school page");
+    if (riyadh.notFound || qassim.notFound || makkah.notFound) throw new Error("expected school page");
+    const riyadhTitles = riyadh.view.series[0].upcoming.map((card) => card.title);
     const qassimTitles = qassim.view.series[0].upcoming.map((card) => card.title);
     const makkahTitles = makkah.view.series[0].upcoming.map((card) => card.title);
+    expect(riyadhTitles).toContain("إجازة إضافية للرياض");
     expect(qassimTitles).toContain("إجازة إضافية للرياض");
     expect(qassimTitles).not.toContain("إجازة إضافية للغرب");
     expect(makkahTitles).not.toContain("إجازة إضافية للرياض");
@@ -155,10 +164,11 @@ describe("mawaeed presentation", () => {
     expect(makkah.view.series[0].next?.title).toBe("إجازة الخريف");
     expect(occurrenceVisibleInRegion("western", "jeddah")).toBe(true);
     expect(occurrenceVisibleInRegion("riyadh_most", "qassim")).toBe(true);
-    expect(occurrenceVisibleInRegion("riyadh_most", "riyadh")).toBe(false);
+    expect(occurrenceVisibleInRegion("riyadh_most", "riyadh")).toBe(true);
+    expect(occurrenceVisibleInRegion("western", "riyadh")).toBe(false);
   });
 
-  it("exposes all education administrations and scopes legacy extras to Qassim", () => {
+  it("exposes all education administrations and scopes four extras to the 12 non-western administrations", () => {
     expect(REGIONS.map((region) => region.label)).toEqual([
       "الرياض", "الشرقية", "مكة المكرمة", "المدينة المنورة", "القصيم", "عسير", "تبوك", "حائل",
       "الحدود الشمالية", "جازان", "نجران", "الباحة", "الجوف", "الأحساء", "جدة", "الطائف",
@@ -167,10 +177,44 @@ describe("mawaeed presentation", () => {
       const page = presentMawaeed({ pageSlug: "school-calendar-1448", region: region.id, now: NOW, series: [school], occurrences });
       if (page.notFound) throw new Error(`expected school page for ${region.id}`);
       const titles = page.view.series[0].upcoming.map((card) => card.title);
-      if (region.id === "qassim") expect(titles).toContain("إجازة إضافية للرياض");
+      if (region.group === "riyadh_most") expect(titles).toContain("إجازة إضافية للرياض");
       else expect(titles).not.toContain("إجازة إضافية للرياض");
       expect(titles).not.toContain("إجازة إضافية للغرب");
     }
+    expect(REGIONS.filter((region) => region.group === "riyadh_most")).toHaveLength(12);
+    expect(REGIONS.filter((region) => region.group === "western")).toHaveLength(4);
+  });
+
+  it("keeps the confirmed 25 October date visible to all 16 administrations while later extras stay non-western", () => {
+    const localRows = [
+      row({ id: "oct-west", seriesId: "s-school", titleAr: "إجازة 25 أكتوبر للغرب", startsOn: "2026-10-25", regionGroup: "western" }),
+      row({ id: "oct-non-west", seriesId: "s-school", titleAr: "إجازة 25 أكتوبر لبقية الإدارات", startsOn: "2026-10-25", regionGroup: "riyadh_most" }),
+      row({ id: "nov-non-west", seriesId: "s-school", titleAr: "إجازة 29 نوفمبر لبقية الإدارات", startsOn: "2026-11-29", regionGroup: "riyadh_most" }),
+      row({ id: "autumn", seriesId: "s-school", titleAr: "إجازة الخريف", startsOn: "2026-11-20" }),
+    ];
+    for (const region of REGIONS) {
+      const page = presentMawaeed({ pageSlug: "school-calendar-1448", region: region.id, now: NOW, series: [school], occurrences: localRows });
+      if (page.notFound) throw new Error(`expected school page for ${region.id}`);
+      const titles = page.view.series[0].upcoming.map((card) => card.title);
+      expect(titles).toContain(region.group === "western" ? "إجازة 25 أكتوبر للغرب" : "إجازة 25 أكتوبر لبقية الإدارات");
+      if (region.group === "riyadh_most") expect(titles).toContain("إجازة 29 نوفمبر لبقية الإدارات");
+      else expect(titles).not.toContain("إجازة 29 نوفمبر لبقية الإدارات");
+    }
+  });
+
+  it("names the selected administration for regional events and Saudi Arabia for national events", () => {
+    const regionalPage = presentMawaeed({ pageSlug: "school-calendar-1448", region: "riyadh", now: NOW, series: [school], occurrences: [
+      row({ id: "extra", seriesId: "s-school", titleAr: "إجازة إضافية", startsOn: "2026-10-25", regionGroup: "riyadh_most" }),
+    ] });
+    const nationalPage = presentMawaeed({ pageSlug: "school-calendar-1448", region: "riyadh", now: NOW, series: [school], occurrences: [
+      row({ id: "autumn", seriesId: "s-school", titleAr: "إجازة الخريف", startsOn: "2026-11-20" }),
+    ] });
+    if (regionalPage.notFound || nationalPage.notFound) throw new Error("expected school page");
+    const regionalJson = JSON.stringify(regionalPage.view.jsonLd);
+    const nationalJson = JSON.stringify(nationalPage.view.jsonLd);
+    expect(regionalJson).toContain('"name":"الرياض"');
+    expect(nationalJson).toContain('"name":"المملكة العربية السعودية"');
+    expect(regionalJson).not.toContain("القصيم");
   });
 
   it("uses انتهت for a passed school holiday", () => {

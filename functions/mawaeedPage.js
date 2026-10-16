@@ -441,7 +441,7 @@ function regionHtml(view) {
 }
 
 function westernNote(view) {
-  if (view.page.slug !== "school-calendar-1448" || view.region === "qassim") return "";
+  if (view.page.slug !== "school-calendar-1448") return "";
   const hasExtra = (view.sections || []).some((section) => section.id === "extra" && section.cards.length > 0);
   if (hasExtra) return "";
   return `<p class="callout">المعروض هو التقويم الدراسي العام. لم تُعتمد في الخدمة إجازات إضافية خاصة بهذه المنطقة بعد.</p>`;
