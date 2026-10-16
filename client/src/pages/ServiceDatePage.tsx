@@ -18,7 +18,7 @@ import { Button } from "@/components/ui/button";
 import { useCanonical } from "@/hooks/useCanonical";
 import { apiUrl } from "@/lib/queryClient";
 import "@/styles/article-detail.css";
-import { HIDDEN_SERVICE_ROBOTS, servicePageUsesRegion } from "@shared/servicePages/catalog";
+import { HIDDEN_SERVICE_ROBOTS, regionSuffix, servicePageUsesRegion } from "@shared/servicePages/catalog";
 import { REGIONS, normalizeRegion, type RegionId } from "@shared/mawaeed/model";
 import type { ServicePageModel } from "@shared/servicePages/present";
 import {
@@ -297,12 +297,12 @@ function ServiceDateBody({
                     </a>
                   </Button>
                 )}
-                <ShareButton title={model.title} />
+                <ShareButton title={model.title} url={`${model.canonical}${regionSuffix(model.region)}`} />
               </div>
             </section>
           ) : (
             <div className="article-detail-toolbar-row">
-              <ShareButton title={model.title} />
+              <ShareButton title={model.title} url={`${model.canonical}${regionSuffix(model.region)}`} />
             </div>
           )}
 
@@ -487,14 +487,14 @@ function Answer({ model, countdown }: { model: ServicePageModel; countdown: stri
   );
 }
 
-function ShareButton({ title }: { title: string }) {
+/** يشارك رابط المنطقة المعروضة، حتى لو جاءت من الاختيار المحفوظ لا من الرابط. */
+function ShareButton({ title, url }: { title: string; url: string }) {
   const [copied, setCopied] = useState(false);
   return (
     <Button
       type="button"
       variant="outline"
       onClick={() => {
-        const url = window.location.href.split("#")[0];
         if (navigator.share) {
           navigator.share({ title, url }).catch(() => {});
           return;
