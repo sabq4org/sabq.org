@@ -154,6 +154,79 @@ describe("mawaeed presentation", () => {
     expect(page.view.series[0].previous?.pastLabel).toBe("انتهت");
   });
 
+  it("keeps the internal note out of everything the public sees", () => {
+    const school = series({ id: "s-school", slug: "school-calendar-1448", kind: "school_holiday" });
+    const secret = "مسودة داخلية: رابط التغريدة يُستكمل. تصنع عطلة مطولة من الجمعة 23 إلى الأحد 25 أكتوبر — لا تُنشر";
+    const page = presentMawaeed({
+      pageSlug: "school-calendar-1448",
+      now: NOW,
+      series: [school],
+      occurrences: [
+        row({ id: "x", seriesId: "s-school", titleAr: "الإجازة الإضافية الأولى", startsOn: "2026-10-25", regionGroup: "riyadh_most", ruleNote: secret }),
+        row({ id: "y", seriesId: "s-school", titleAr: "إجازة الخريف", startsOn: "2026-11-20", ruleNote: "عيد الفطر رمضان مطول تصنع" }),
+      ],
+    });
+    if (page.notFound) throw new Error("expected school page");
+    const text = JSON.stringify(page.view);
+    expect(text).not.toContain("تصنع");
+    expect(text).not.toContain("لا تُنشر");
+    expect(text).not.toContain("مسودة داخلية");
+    expect(page.view.series[0].upcoming.every((card) => card.publicNote === null && card.visionNote === null)).toBe(true);
+  });
+
+  it("shows the reader note only from the public note field", () => {
+    const school = series({ id: "s-school", slug: "school-calendar-1448", kind: "school_holiday" });
+    const page = presentMawaeed({
+      pageSlug: "school-calendar-1448",
+      now: NOW,
+      series: [school],
+      occurrences: [row({
+        id: "x",
+        seriesId: "s-school",
+        titleAr: "الإجازة الإضافية الأولى",
+        startsOn: "2026-10-25",
+        publicNote: "تصنع عطلة مطوّلة من الجمعة 23 إلى الأحد 25 أكتوبر.",
+        ruleNote: "داخلي",
+      })],
+    });
+    if (page.notFound) throw new Error("expected school page");
+    expect(page.view.series[0].next?.publicNote).toBe("تصنع عطلة مطوّلة من الجمعة 23 إلى الأحد 25 أكتوبر.");
+  });
+
+  it("derives the Eid sighting note from the title or the Hijri date, never the internal note", () => {
+    const citizen = series({ id: "s-citizen", slug: "citizen-account", kind: "citizen_account" });
+    const school = series({ id: "s-school", slug: "school-calendar-1448", kind: "school_holiday", sortOrder: 2 });
+    const page = presentMawaeed({
+      now: NOW,
+      series: [citizen, school],
+      occurrences: [
+        // 3 رمضان 1448
+        row({ id: "ramadan", seriesId: "s-citizen", titleAr: "الدفعة 111", startsOn: "2027-02-10" }),
+        // 29 رجب، والملاحظة الداخلية تذكر العيد
+        row({ id: "rajab", seriesId: "s-citizen", titleAr: "الدفعة 110", startsOn: "2027-01-10", ruleNote: "قبل عيد الفطر" }),
+        row({ id: "eid", seriesId: "s-school", titleAr: "إجازة عيد الفطر", startsOn: "2027-02-26" }),
+        // يوم التأسيس في رمضان: إجازة ثابتة، لا ملاحظة رؤية
+        row({ id: "founding", seriesId: "s-school", titleAr: "إجازة يوم التأسيس", startsOn: "2027-02-19" }),
+      ],
+    });
+    if (page.notFound) throw new Error("expected home page");
+    const cards = page.view.series.flatMap((block) => block.upcoming);
+    const vision = (id: string) => cards.find((card) => card.id === id)?.visionNote ?? null;
+    expect(vision("ramadan")).toContain("بالرؤية");
+    expect(vision("rajab")).toBeNull();
+    expect(vision("eid")).toContain("بالرؤية");
+    expect(vision("founding")).toBeNull();
+  });
+
+  it("records the internal note and section in the audit snapshot without moving the public stamp", () => {
+    const before = row({ id: "a", seriesId: "s-salary", titleAr: "رواتب", startsOn: "2026-10-27", ruleNote: "قديم" });
+    const plan = planOccurrenceWrite(before, { ...before, ruleNote: "جديد" });
+    expect(plan.publicChanged).toBe(false);
+    expect(plan.before?.ruleNote).toBe("قديم");
+    expect(plan.after.ruleNote).toBe("جديد");
+    expect(plan.after.seriesId).toBe("s-salary");
+  });
+
   it("logs a public change only when a public field moves", () => {
     const before = row({ id: "a", seriesId: "s-salary", titleAr: "رواتب", startsOn: "2026-10-27", ruleNote: "داخلي" });
     const noteOnly = { ...before, ruleNote: "ملاحظة داخلية جديدة" };

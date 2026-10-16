@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { EXPECTED_HINT, SERIES_CATALOG, type OccurrenceRecord, type SeriesRecord } from "@shared/mawaeed/model";
 import { presentMawaeed } from "@shared/mawaeed/present";
 import { buildServiceCalendar } from "@shared/servicePages/calendar";
-import { HIDDEN_SERVICE_ROBOTS, serviceLinkForSeries, servicePageIdFromPath, servicePageSitemapEntries } from "@shared/servicePages/catalog";
+import { HIDDEN_SERVICE_ROBOTS, serviceLinkForSeries, serviceRegion, servicePageIdFromPath, servicePageSitemapEntries } from "@shared/servicePages/catalog";
 import { presentServicePage } from "@shared/servicePages/present";
 import { relatedArticlesFromKeyword, relatedArticlesFromSearch } from "@shared/servicePages/related";
 import {
@@ -272,3 +272,63 @@ describe("service page extras", () => {
     expect(HIDDEN_SERVICE_ROBOTS).toBe("noindex, nofollow");
   });
 });
+
+describe("school service page region", () => {
+  const school = series({ id: "s-school", slug: "school-calendar-1448", kind: "school_holiday", titleAr: "التقويم الدراسي 1448" });
+  const occurrences: OccurrenceRecord[] = [
+    row({ id: "extra-riyadh", seriesId: "s-school", titleAr: "الإجازة الإضافية الأولى (الرياض)", startsOn: "2026-10-25", regionGroup: "riyadh_most" }),
+    row({ id: "autumn", seriesId: "s-school", titleAr: "إجازة الخريف", startsOn: "2026-11-20" }),
+    row({ id: "extra-west", seriesId: "s-school", titleAr: "الإجازة الإضافية (مكة)", startsOn: "2026-12-06", regionGroup: "western" }),
+  ];
+
+  function schoolPage(region: string | null) {
+    const presented = presentMawaeed({ pageSlug: school.slug, region, now: NOW, series: [school], occurrences });
+    if (presented.notFound) throw new Error("expected mawaeed view");
+    const model = presentServicePage("school-calendar-date", presented.view);
+    if (!model) throw new Error("expected service page");
+    return model;
+  }
+
+  it.each([
+    ["riyadh", "2026-10-25", ""],
+    ["makkah", "2026-11-20", "?region=makkah"],
+    ["madinah", "2026-11-20", "?region=madinah"],
+    ["jeddah", "2026-11-20", "?region=jeddah"],
+    ["taif", "2026-11-20", "?region=taif"],
+  ])("shows %s dates and carries the region to the calendar and share image", (region, nextDate, suffix) => {
+    const model = schoolPage(region);
+    expect(model.region).toBe(region);
+    expect(model.next?.startsOn).toBe(nextDate);
+    expect(model.calendarHref).toBe(`/api/service-pages/school-calendar-date/calendar.ics${suffix}`);
+    expect(model.ogImage).toBe(`https://sabq.org/api/service-pages/school-calendar-date/og.png${suffix}`);
+    expect(model.canonical).toBe("https://sabq.org/services/school-calendar-date");
+    const ics = buildServiceCalendar(model) ?? "";
+    if (region === "riyadh") {
+      expect(ics).toContain("DTSTART;VALUE=DATE:20261025");
+      expect(ics).not.toContain("DTSTART;VALUE=DATE:20261206");
+      expect(ics).toContain("UID:school-calendar-date-2026-10-25@sabq.org");
+    } else {
+      expect(ics).not.toContain("DTSTART;VALUE=DATE:20261025");
+      expect(ics).toContain("DTSTART;VALUE=DATE:20261206");
+      expect(ics).toContain(`UID:school-calendar-date-${region}-2026-11-20@sabq.org`);
+    }
+  });
+
+  it("links from /mawaeed to the school page with the picked region", () => {
+    const presented = presentMawaeed({ region: "makkah", now: NOW, series: [school], occurrences });
+    if (presented.notFound) throw new Error("expected mawaeed view");
+    expect(presented.view.series[0].href).toBe("/services/school-calendar-date?region=makkah");
+    expect(presented.view.nav.find((item) => item.label === "التقويم الدراسي 1448")?.href)
+      .toBe("/services/school-calendar-date?region=makkah");
+    const riyadh = presentMawaeed({ region: "riyadh", now: NOW, series: [school], occurrences });
+    if (riyadh.notFound) throw new Error("expected mawaeed view");
+    expect(riyadh.view.series[0].href).toBe("/services/school-calendar-date");
+  });
+
+  it("ignores the region on pages that do not vary by region", () => {
+    expect(serviceRegion("government-salaries-date", "makkah")).toBe("riyadh");
+    expect(serviceRegion("school-calendar-date", "MAKKAH")).toBe("makkah");
+    expect(serviceRegion("school-calendar-date", "mars")).toBe("riyadh");
+  });
+});
+

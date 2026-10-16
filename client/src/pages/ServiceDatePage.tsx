@@ -11,20 +11,40 @@ import {
   Newspaper,
   Share2,
 } from "lucide-react";
-import { Link, useParams } from "wouter";
+import { Link, useParams, useSearch } from "wouter";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { Button } from "@/components/ui/button";
 import { useCanonical } from "@/hooks/useCanonical";
 import { apiUrl } from "@/lib/queryClient";
 import "@/styles/article-detail.css";
-import { HIDDEN_SERVICE_ROBOTS } from "@shared/servicePages/catalog";
+import { HIDDEN_SERVICE_ROBOTS, servicePageUsesRegion } from "@shared/servicePages/catalog";
+import { normalizeRegion, type RegionId } from "@shared/mawaeed/model";
 import type { ServicePageModel } from "@shared/servicePages/present";
 import {
   relatedArticlesFromKeyword,
   relatedArticlesFromSearch,
   type RelatedArticleLink,
 } from "@shared/servicePages/related";
+
+/** المفتاح نفسه الذي تكتبه صفحة /mawaeed، حتى تتبع صفحة المدارس اختيار القارئ. */
+const REGION_PREF_ID = "mawaeed-region";
+
+/** منطقة صفحة المدارس: من الرابط أولاً ثم من آخر اختيار محفوظ. الرياض افتراضية. */
+function readRegion(id: string | undefined, search: string): RegionId {
+  if (!id || !servicePageUsesRegion(id)) return "riyadh";
+  const fromUrl = new URLSearchParams(search).get("region");
+  try {
+    if (fromUrl) {
+      const region = normalizeRegion(fromUrl);
+      window.localStorage.setItem(REGION_PREF_ID, region);
+      return region;
+    }
+    return normalizeRegion(window.localStorage.getItem(REGION_PREF_ID));
+  } catch {
+    return normalizeRegion(fromUrl);
+  }
+}
 
 function riyadhStartMs(iso: string): number {
   const bits = iso.split("-").map(Number);
@@ -96,8 +116,10 @@ export default function ServiceDatePage() {
     queryKey: ["/api/auth/user"],
     retry: false,
   });
+  const search = useSearch();
+  const region = useMemo(() => readRegion(id, search), [id, search]);
   const pageQuery = useQuery<ServicePageModel>({
-    queryKey: ["/api/service-pages", id],
+    queryKey: ["/api/service-pages", id, { region: region === "riyadh" ? undefined : region }],
     enabled: Boolean(id),
     retry: false,
   });
