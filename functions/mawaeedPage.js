@@ -55,6 +55,8 @@ function safeJson(value) {
   return JSON.stringify(value).replace(/</g, "\\u003c");
 }
 
+const SCHOOL_SERVICE_PATH = "/services/school-calendar-date";
+
 function regionHref(pathname, id) {
   return `${pathname}?region=${id}`;
 }
@@ -372,7 +374,11 @@ function navHtml(view) {
 function regionHtml(view) {
   const show = !view.page.slug || view.page.slug === "school-calendar-1448";
   if (!show || view.regions.length === 0) return "";
-  const path = view.page.canonical.replace("https://sabq.org", "") || "/mawaeed";
+  // في الصفحة العامة لا تغيّر المدينة غير الإجازات المدرسية، وبطاقة «الموعد الأقرب» تبقى لأقرب موعد
+  // (رواتب غالباً)، فيبدو الضغط على مكة كأنه فتح الرواتب. لذلك تفتح المدينة التقويم الدراسي مباشرة.
+  const path = view.page.slug
+    ? view.page.canonical.replace("https://sabq.org", "")
+    : SCHOOL_SERVICE_PATH;
   const links = view.regions
     .map(
       (region) =>
@@ -951,7 +957,7 @@ function failureHtml() {
 }
 
 const SERVICE_REDIRECTS = {
-  "school-calendar-1448": "/services/school-calendar-date",
+  "school-calendar-1448": SCHOOL_SERVICE_PATH,
   "citizen-account": "/services/citizen-account-date",
   salaries: "/services/government-salaries-date",
   "social-security": "/services/social-security-date",

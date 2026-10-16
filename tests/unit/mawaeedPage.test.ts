@@ -130,5 +130,18 @@ describe("mawaeed HTML", () => {
     expect(html).toContain("مواعيد سابقة");
     expect(html.indexOf("المواعيد القادمة")).toBeLessThan(html.indexOf("مواعيد سابقة"));
   });
-});
 
+  it("sends a city picked on the overview to that city's school calendar", () => {
+    const presented = presentMawaeed({
+      pageSlug: "",
+      now: new Date("2026-09-27T12:00:00+03:00"),
+      series: [series],
+      occurrences: rows,
+    });
+    if (presented.notFound) throw new Error("expected overview");
+    const html = renderMawaeedHtml(presented.view);
+    expect(html).toContain('href="/services/school-calendar-date?region=makkah"');
+    expect(html).toContain('href="/services/school-calendar-date?region=riyadh"');
+    expect(html).not.toContain('href="/mawaeed?region=');
+  });
+});
