@@ -19,6 +19,7 @@ import { useCanonical } from "@/hooks/useCanonical";
 import { apiUrl } from "@/lib/queryClient";
 import "@/styles/article-detail.css";
 import { HIDDEN_SERVICE_ROBOTS, regionSuffix, servicePageUsesRegion } from "@shared/servicePages/catalog";
+import { dayUnitWord } from "@shared/mawaeed/dates";
 import { REGIONS, normalizeRegion, type RegionId } from "@shared/mawaeed/model";
 import type { ServicePageModel } from "@shared/servicePages/present";
 import {
@@ -56,14 +57,13 @@ function riyadhStartMs(iso: string): number {
 function daysText(n: number): string {
   if (n === 1) return "يوم واحد";
   if (n === 2) return "يومين";
-  if (n <= 10) return `${n} أيام`;
-  return `${n} يوماً`;
+  return `${n} ${dayUnitWord(n)}`;
 }
 
 function hoursText(n: number): string {
   if (n <= 0) return "";
   if (n === 1) return "وساعة";
-  if (n === 2) return "وساعتان";
+  if (n === 2) return "وساعتين";
   if (n <= 10) return `و${n} ساعات`;
   return `و${n} ساعة`;
 }
@@ -278,9 +278,6 @@ function ServiceDateBody({
                   <Calendar aria-hidden="true" />
                   <span>الموعد القادم · {model.next.title}</span>
                 </p>
-                <span className={statusBadgeClass(model.next.certainty)}>
-                  {model.next.certaintyLabel}
-                </span>
               </div>
               <div className="service-date-grid">
                 <div className="service-date-cell">
@@ -515,7 +512,7 @@ function Answer({ model, countdown }: { model: ServicePageModel; countdown: stri
         {model.leadPrefix}{" "}
         <time dateTime={next.startsOn}>{next.gregorianLabel}</time>
         {" "}الموافق {next.hijriLabel}،{" "}
-        <strong data-countdown data-date={next.startsOn} data-today={next.todayLabel}>{countdown || next.countdownText}</strong>.
+        <strong data-countdown data-date={next.startsOn} data-today={next.todayLabel}>{countdown || next.countdownText}</strong>
       </p>
       {hint || model.shiftRule ? (
         <div className="service-rule-notes">

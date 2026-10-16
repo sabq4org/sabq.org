@@ -37,18 +37,28 @@ export function riyadhMidnightMs(iso: string): number {
   return Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]), -3, 0, 0, 0);
 }
 
+/**
+ * تمييز العدد للأيام: 3–10 جمع (أيام)، 11–99 مفرد منصوب (يوماً)، ومع المئات يُنظر إلى ما بعد المئة
+ * (100 يوم، 103 أيام، 115 يوماً). واحد واثنان يُكتبان بالكلمة في daysPhrase.
+ */
+export function dayUnitWord(n: number): string {
+  const rest = Math.abs(Math.trunc(n)) % 100;
+  if (rest === 0) return "يوم";
+  if (rest >= 3 && rest <= 10) return "أيام";
+  return "يوماً";
+}
+
 export function daysPhrase(calendarDays: number, todayLabel: string): string {
   if (calendarDays <= 0) return todayLabel;
   if (calendarDays === 1) return "بعد يوم واحد";
   if (calendarDays === 2) return "بعد يومين";
-  if (calendarDays <= 10) return `بعد ${calendarDays} أيام`;
-  return `بعد ${calendarDays} يوماً`;
+  return `بعد ${calendarDays} ${dayUnitWord(calendarDays)}`;
 }
 
 export function hoursPhrase(hours: number): string {
   if (hours <= 0) return "";
   if (hours === 1) return "وساعة";
-  if (hours === 2) return "وساعتان";
+  if (hours === 2) return "وساعتين";
   if (hours <= 10) return `و${hours} ساعات`;
   return `و${hours} ساعة`;
 }
@@ -98,8 +108,8 @@ const HIJRI_MONTHS: Record<number, string> = {
   8: "شعبان",
   9: "رمضان",
   10: "شوال",
-  11: "ذو القعدة",
-  12: "ذو الحجة",
+  11: "ذي القعدة",
+  12: "ذي الحجة",
 };
 
 export type HijriParts = { year: number; month: number; day: number };

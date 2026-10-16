@@ -100,6 +100,8 @@ describe("salary service page", () => {
     expect(model.shiftRule).toContain("الخميس الذي قبله");
     expect(model.shiftRule).toContain("الأحد الذي بعده");
     expect(model.explanation.join(" ")).toContain("يوم 27 من كل شهر ميلادي");
+    // قاعدة الإزاحة تظهر مرة واحدة (shiftRule) ولا تتكرر في الشرح
+    expect(model.explanation.join(" ")).not.toContain("الخميس الذي قبله");
     expect(model.description).not.toContain(EXPECTED_HINT);
     expect(model.rows.filter((item) => !item.isPast).map((item) => item.startsOn)).toEqual(["2026-10-27", "2026-11-26"]);
     expect(model.rows.find((item) => item.isPast)?.pastLabel).toBe("صُرفت");
