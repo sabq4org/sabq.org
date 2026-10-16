@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { dayUnitWord, daysPhrase, formatHijri, hijriParts, hoursPhrase, liveCountdown, riyadhDateISO } from "@shared/mawaeed/dates";
 import {
   classifySeed,
+  REGIONS,
   occurrenceVisibleInRegion,
   planOccurrenceWrite,
   type OccurrenceRecord,
@@ -130,9 +131,9 @@ describe("mawaeed presentation", () => {
   });
 
   it("filters school extras by region and hides unverified drafts", () => {
-    const riyadh = presentMawaeed({
+    const qassim = presentMawaeed({
       pageSlug: "school-calendar-1448",
-      region: "riyadh",
+      region: "qassim",
       now: NOW,
       series: [school],
       occurrences,
@@ -144,16 +145,32 @@ describe("mawaeed presentation", () => {
       series: [school],
       occurrences,
     });
-    if (riyadh.notFound || makkah.notFound) throw new Error("expected school page");
-    const riyadhTitles = riyadh.view.series[0].upcoming.map((card) => card.title);
+    if (qassim.notFound || makkah.notFound) throw new Error("expected school page");
+    const qassimTitles = qassim.view.series[0].upcoming.map((card) => card.title);
     const makkahTitles = makkah.view.series[0].upcoming.map((card) => card.title);
-    expect(riyadhTitles).toContain("إجازة إضافية للرياض");
-    expect(riyadhTitles).not.toContain("إجازة إضافية للغرب");
+    expect(qassimTitles).toContain("إجازة إضافية للرياض");
+    expect(qassimTitles).not.toContain("إجازة إضافية للغرب");
     expect(makkahTitles).not.toContain("إجازة إضافية للرياض");
     expect(makkahTitles).not.toContain("إجازة إضافية للغرب");
     expect(makkah.view.series[0].next?.title).toBe("إجازة الخريف");
     expect(occurrenceVisibleInRegion("western", "jeddah")).toBe(true);
-    expect(occurrenceVisibleInRegion("riyadh_most", "taif")).toBe(false);
+    expect(occurrenceVisibleInRegion("riyadh_most", "qassim")).toBe(true);
+    expect(occurrenceVisibleInRegion("riyadh_most", "riyadh")).toBe(false);
+  });
+
+  it("exposes all education administrations and scopes legacy extras to Qassim", () => {
+    expect(REGIONS.map((region) => region.label)).toEqual([
+      "الرياض", "الشرقية", "مكة المكرمة", "المدينة المنورة", "القصيم", "عسير", "تبوك", "حائل",
+      "الحدود الشمالية", "جازان", "نجران", "الباحة", "الجوف", "الأحساء", "جدة", "الطائف",
+    ]);
+    for (const region of REGIONS) {
+      const page = presentMawaeed({ pageSlug: "school-calendar-1448", region: region.id, now: NOW, series: [school], occurrences });
+      if (page.notFound) throw new Error(`expected school page for ${region.id}`);
+      const titles = page.view.series[0].upcoming.map((card) => card.title);
+      if (region.id === "qassim") expect(titles).toContain("إجازة إضافية للرياض");
+      else expect(titles).not.toContain("إجازة إضافية للرياض");
+      expect(titles).not.toContain("إجازة إضافية للغرب");
+    }
   });
 
   it("uses انتهت for a passed school holiday", () => {

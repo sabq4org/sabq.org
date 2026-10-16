@@ -48,7 +48,7 @@ function row(id: string, titleAr: string, startsOn: string, regionGroup: Occurre
 }
 
 const occurrences = [
-  row("riyadh", "الإجازة الإضافية (الرياض)", "2026-10-25", "riyadh_most"),
+  row("qassim", "الإجازة الإضافية (القصيم)", "2026-10-25", "riyadh_most"),
   row("autumn", "إجازة الخريف", "2026-11-20", "all"),
 ];
 
@@ -97,8 +97,15 @@ describe("service pages API region", () => {
   it("defaults to Riyadh without a region and for pages that do not vary by region", async () => {
     const json = await (await fetch(`${base}/api/service-pages/school-calendar-date`)).json();
     expect(json.region).toBe("riyadh");
-    expect(json.next.startsOn).toBe("2026-10-25");
+    expect(json.next.startsOn).toBe("2026-11-20");
     await fetch(`${base}/api/service-pages/school-calendar-date?region=../../etc`);
     expect(mocks.getPublicPage).toHaveBeenLastCalledWith("school-calendar-1448", "riyadh");
+  });
+
+  it("serves legacy extra dates only for the Qassim region", async () => {
+    const json = await (await fetch(`${base}/api/service-pages/school-calendar-date?region=qassim`)).json();
+    expect(mocks.getPublicPage).toHaveBeenCalledWith("school-calendar-1448", "qassim");
+    expect(json.region).toBe("qassim");
+    expect(json.next.startsOn).toBe("2026-10-25");
   });
 });

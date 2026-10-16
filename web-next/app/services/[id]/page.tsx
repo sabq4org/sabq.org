@@ -6,6 +6,7 @@ import {
   RELATED_FETCH_LIMIT,
   relatedArticlesFromKeyword,
   relatedArticlesFromSearch,
+  serviceModelPath,
   type RelatedArticleLink,
   type ServicePageModel,
 } from "@/lib/servicePage";
@@ -13,8 +14,8 @@ import {
 export const revalidate = 60;
 export const dynamicParams = true;
 
-async function loadModel(id: string): Promise<ServicePageModel | null> {
-  const res = await serverApiFetch(`/api/service-pages/${encodeURIComponent(id)}`, { next: { revalidate: 60 } });
+async function loadModel(id: string, region?: string): Promise<ServicePageModel | null> {
+  const res = await serverApiFetch(serviceModelPath(id, region), { next: { revalidate: 60 } });
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(`service page ${res.status}`);
   return res.json() as Promise<ServicePageModel>;
@@ -40,11 +41,16 @@ async function loadRelated(model: ServicePageModel): Promise<RelatedArticleLink[
 
 export async function generateMetadata({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }): Promise<Metadata> {
   const { id } = await params;
-  const model = await loadModel(id);
+  const query = await searchParams;
+  const rawRegion = query.region;
+  const region = Array.isArray(rawRegion) ? rawRegion[0] : rawRegion;
+  const model = await loadModel(id, region);
   if (!model) return { title: "غير موجود", robots: { index: false, follow: false } };
   return {
     title: { absolute: model.title },
@@ -65,11 +71,16 @@ export async function generateMetadata({
 
 export default async function ServiceDatePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { id } = await params;
-  const model = await loadModel(id);
+  const query = await searchParams;
+  const rawRegion = query.region;
+  const region = Array.isArray(rawRegion) ? rawRegion[0] : rawRegion;
+  const model = await loadModel(id, region);
   if (!model) notFound();
   const related = await loadRelated(model);
   return <ServiceDateView model={model} related={related} />;

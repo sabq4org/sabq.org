@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import {
   ChevronRight,
-  ExternalLink,
   GraduationCap,
   HeartHandshake,
   Home,
@@ -16,9 +15,10 @@ import { useCanonical } from "@/hooks/useCanonical";
 import { apiUrl } from "@/lib/queryClient";
 import "@/styles/article-detail.css";
 import "@/styles/mawaeed-page.css";
+import { compactOccurrenceTitle } from "@shared/mawaeed/display";
 import { dayUnitWord, liveCountdown, riyadhDateISO, riyadhMidnightMs } from "@shared/mawaeed/dates";
 import {
-  financialBlocks,
+  boardBlocks,
   heroFollowsRegion,
   nearestCard,
   pulseBlocks,
@@ -95,30 +95,11 @@ function heroClockParts(
   };
 }
 
-/** رقم موجز لبطاقة النبض السريعة في أعلى الصفحة. */
-function pulseCount(card: MawaeedCard | null, nowMs: number): { num: string | null; unit: string } {
-  if (!card) return { num: null, unit: "قريباً" };
-  if (card.isPast) return { num: null, unit: card.pastLabel || "انتهى" };
-  if (card.isOngoing) return { num: null, unit: card.countdownText };
-  const live = liveCountdown(new Date(nowMs), card.startsOn, card.todayLabel);
-  if (live.calendarDays <= 0) return { num: null, unit: card.todayLabel || "اليوم" };
-  if (live.days <= 0) {
-    const hrs = Math.max(1, live.hours);
-    return { num: String(hrs), unit: hrs === 1 ? "ساعة متبقية" : hrs <= 10 ? "ساعات متبقية" : "ساعة متبقية" };
-  }
-  const unit =
-    live.days === 1
-      ? "يوم متبقٍّ"
-      : live.days === 2
-        ? "يومان متبقيان"
-        : `${dayUnitWord(live.days)} ${live.days <= 10 ? "متبقية" : "متبقياً"}`;
-  return { num: String(live.days), unit };
-}
-
-/** تاريخ مختصر بدون اسم الأسبوع لبطاقات الشريط العلوي (مثل: 27 أكتوبر 2026). */
-function compactGregorian(label: string): string {
-  const parts = label.trim().split(/\s+/);
-  return parts.length >= 4 ? parts.slice(1).join(" ") : label;
+/** يبقى اسم الخدمة واضحاً حتى لو كتب المحرر عنواناً لا يبدأ به. */
+function overviewTitle(card: MawaeedCard): string {
+  const title = compactOccurrenceTitle(card.title, card.startsOn);
+  const normalize = (value: string) => value.replace(/[\u064B-\u065F\u0670\u0640]/g, "").trim();
+  return normalize(title).startsWith(normalize(card.seriesTitle)) ? title : `${card.seriesTitle} — ${title}`;
 }
 
 function KindIcon({ kind }: { kind: SeriesKind }) {
@@ -224,9 +205,7 @@ function MawaeedBody({
 }) {
   const nearest = nearestCard(view.series);
   const pulse = pulseBlocks(view.series);
-  const financial = financialBlocks(view.series);
   const school = schoolBlock(view.series);
-  const rows = schoolRows(school, 5);
   const [selectedSlug, setSelectedSlug] = useState<string | null>(null);
 
   const activeBlock = useMemo(() => {
@@ -241,6 +220,8 @@ function MawaeedBody({
   }, [selectedSlug, view.series, nearest, pulse]);
 
   const activeCard = activeBlock?.next ?? nearest;
+  const financial = boardBlocks(view.series, activeCard);
+  const rows = schoolRows(school).filter((card) => card.id !== activeCard?.id).slice(0, 5);
   const isNearestActive = Boolean(activeCard && nearest && activeCard.id === nearest.id);
   const regionLabel = view.regions.find((item) => item.id === view.region)?.label ?? "";
   const jsonLd = JSON.stringify(view.jsonLd).replace(/</g, "\\u003c");
@@ -254,12 +235,12 @@ function MawaeedBody({
         <span aria-current="page">مواعيدك</span>
       </nav>
 
-      {/* قشرة رأس الصفحة + شريط نبض المواعيد الخمسة فوق الطيّ */}
+      {/* رأس الصفحة واختيار الخدمة، دون إعادة التواريخ المعروضة أدناه */}
       <header className="mw-top-shell">
         <div className="mw-head-row">
           <div className="mw-head">
             <h1 className="mw-title">{view.page.h1}</h1>
-            <p className="mw-lede">{view.page.description}</p>
+            <p className="mw-lede">{view.page.description.replace(" ورابط المصدر الرسمي", "")}</p>
           </div>
           <p className="mw-updated">
             <span className="mw-updated-dot" aria-hidden="true" />
@@ -268,17 +249,14 @@ function MawaeedBody({
         </div>
 
         {pulse.length > 0 ? (
-          <div className="mw-pulse-wrap" role="region" aria-label="نظرة سريعة على جميع المواعيد">
+          <div className="mw-pulse-wrap" role="region" aria-label="اختيار الخدمة">
             <div className="mw-pulse-head">
-              <span className="mw-pulse-label">جميع المواعيد في نظرة واحدة — اضغط لعرض التفاصيل</span>
-              <span className="mw-pulse-hint">مرتبة حسب الأقرب</span>
+              <span className="mw-pulse-label">اختر الخدمة</span>
             </div>
             <div className="mw-pulse-grid">
               {pulse.map((block) => {
-                const card = block.next;
-                const count = pulseCount(card, nowMs);
                 const isSelected = activeBlock?.slug === block.slug;
-                const isEarliest = Boolean(card && nearest && card.id === nearest.id);
+                const isEarliest = Boolean(block.next && nearest && block.next.id === nearest.id);
                 return (
                   <button
                     key={block.slug}
@@ -286,6 +264,7 @@ function MawaeedBody({
                     className={`mw-pulse-card${isSelected ? " is-active" : ""}`}
                     data-kind={block.kind}
                     aria-pressed={isSelected}
+                    disabled={!block.next}
                     onClick={() => setSelectedSlug(block.slug)}
                   >
                     <span className="mw-pulse-top">
@@ -293,23 +272,7 @@ function MawaeedBody({
                         <KindIcon kind={block.kind} />
                         <span>{shortSeriesTitle(block)}</span>
                       </span>
-                      {isEarliest ? (
-                        <span className="mw-pulse-nearest">الأقرب</span>
-                      ) : card ? (
-                        <span className={badgeClass(card)}>{badgeText(card)}</span>
-                      ) : null}
-                    </span>
-
-                    <span className="mw-pulse-count">
-                      {count.num ? <strong className="mw-pulse-num">{count.num}</strong> : null}
-                      <span className="mw-pulse-unit">{count.unit}</span>
-                    </span>
-
-                    <span className="mw-pulse-foot">
-                      <span className="mw-pulse-date">
-                        {card ? compactGregorian(card.gregorianLabel) : "لا موعد معلن"}
-                      </span>
-                      <span className="mw-pulse-arrow" aria-hidden="true">›</span>
+                      {!block.next ? <span className="mw-pulse-nearest">لا موعد معلن</span> : isEarliest ? <span className="mw-pulse-nearest">الأقرب</span> : null}
                     </span>
                   </button>
                 );
@@ -336,10 +299,9 @@ function MawaeedBody({
           <section className="mw-fin-col" aria-labelledby="mw-board-title">
             <div className="mw-section-head">
               <div>
-                <h2 id="mw-board-title">مواعيد الرواتب والدعم الشهري</h2>
-                <p>مواعيد الإيداع القادمة حسب الجداول الرسمية للجهات</p>
+                <h2 id="mw-board-title">مواعيد الصرف الأخرى</h2>
+                <p>الرواتب والدعم الشهري، مرتبة حسب الأقرب</p>
               </div>
-              <span className="mw-section-sub">مرتبة من الأقرب إلى الأبعد</span>
             </div>
             <div className="mw-grid">
               {financial.map((block) => (
@@ -347,8 +309,6 @@ function MawaeedBody({
                   key={block.slug}
                   block={block}
                   nowMs={nowMs}
-                  isSelected={activeBlock?.slug === block.slug}
-                  onSelect={() => setSelectedSlug(block.slug)}
                 />
               ))}
             </div>
@@ -371,35 +331,31 @@ function MawaeedBody({
                   <p>الإجازات الرسمية موحّدة، والإضافية حسب المنطقة التعليمية</p>
                 </div>
               </div>
-              <a className="mw-school-top-link" href={school.href}>صفحة التقويم ›</a>
             </div>
             <div className="mw-tabs-row">
-              <span className="mw-tabs-label">المنطقة:</span>
-              <div className="mw-tabs" role="group" aria-label="اختر المنطقة التعليمية">
-                {view.regions.map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    className="mw-tab"
-                    aria-pressed={item.id === region}
-                    onClick={() => {
-                      onPickRegion(item.id);
-                      setSelectedSlug(school.slug);
-                    }}
-                  >
-                    {item.label}
-                  </button>
-                ))}
-              </div>
+              <label className="mw-tabs-label" htmlFor="mw-region">إدارة التعليم</label>
+              <select
+                id="mw-region"
+                className="mw-region-select"
+                value={region}
+                onChange={(event) => {
+                  onPickRegion(normalizeRegion(event.target.value));
+                  setSelectedSlug(school.slug);
+                }}
+              >
+                {view.regions.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
+              </select>
             </div>
+            {!school.upcoming.some((card) => !card.isPast && card.regionGroup !== "all") ? (
+              <p className="mw-region-notice">المعروض هو التقويم الدراسي العام. لم تُعتمد في الخدمة إجازات إضافية خاصة بهذه المنطقة بعد.</p>
+            ) : null}
             {rows.length ? (
               <ul className="mw-rows" key={view.region} aria-busy={switching}>
-                {rows.map((card, index) => (
-                  <li key={card.id} className={index === 0 ? "is-first" : undefined}>
+                {rows.map((card) => (
+                  <li key={card.id}>
                     <div className="mw-row-main">
                       <span className="mw-row-title">
-                        {index === 0 ? <span className="mw-row-tag">الأقرب</span> : null}
-                        {card.title}
+                        {compactOccurrenceTitle(card.title, card.startsOn)}
                       </span>
                       <span className="mw-row-date">
                         <time dateTime={card.startsOn}>{card.gregorianLabel}</time>
@@ -413,12 +369,9 @@ function MawaeedBody({
                 ))}
               </ul>
             ) : (
-              <p className="mw-empty">{school.answerLine}</p>
+              <p className="mw-empty">{activeCard?.kind === "school_holiday" ? "لا توجد إجازات لاحقة منشورة حاليًا." : school.answerLine}</p>
             )}
             <div className="mw-school-foot">
-              <span>
-                المصدر: {rows[0]?.sourceTitle || "وزارة التعليم والإدارات التعليمية"}
-              </span>
               <a href={school.href}>كل إجازات العام ›</a>
             </div>
           </section>
@@ -430,7 +383,7 @@ function MawaeedBody({
           <div className="mw-method-head">
             <h2 id="mw-method-title" className="mw-method-title">
               <ShieldCheck aria-hidden="true" />
-              <span>منهجية التحقق من المواعيد ودلالة الشارات</span>
+              <span>عن المواعيد</span>
             </h2>
             <div className="mw-method-legend" aria-label="دلالة شارات الحالة">
               <span className="mw-method-legend-item">
@@ -443,7 +396,7 @@ function MawaeedBody({
               </span>
             </div>
           </div>
-          <p className="mw-method">{view.methodology}</p>
+          <p className="mw-method">جميع الأوقات بتوقيت السعودية. تُعرض التواريخ بالميلادي والهجري وفق تقويم أم القرى، ويتحدّث العدّاد تلقائيًا.</p>
         </section>
       ) : null}
     </>
@@ -464,8 +417,6 @@ function Hero({
   regionLabel: string | null;
 }) {
   const clock = heroClockParts(card, nowMs);
-  const series = card.seriesTitle.trim();
-  const showSeries = Boolean(series) && !card.title.startsWith(series);
   const kickerPrefix = isNearest ? "الموعد الأقرب" : "الموعد المختار";
   return (
     <section className="mw-hero" aria-labelledby="mw-hero-title" data-kind={card.kind}>
@@ -473,11 +424,11 @@ function Hero({
         <div className="mw-hero-badges">
           <span className="mw-kicker">
             <KindIcon kind={card.kind} />
-            <span>{kickerPrefix}{showSeries ? ` · ${series}` : ""}</span>
+            <span>{kickerPrefix}</span>
           </span>
           <span className={badgeClass(card)}>{badgeText(card)}</span>
         </div>
-        <h2 id="mw-hero-title">{card.title}</h2>
+        <h2 id="mw-hero-title">{card.kind === "school_holiday" ? compactOccurrenceTitle(card.title, card.startsOn) : overviewTitle(card)}</h2>
         <p className="mw-hero-dates">
           <b><time dateTime={card.startsOn}>{card.gregorianLabel}</time></b>
           <span className="mw-dot-sep" aria-hidden="true">·</span>
@@ -490,13 +441,7 @@ function Hero({
           <p className="mw-region-chip"><i aria-hidden="true" />في {regionLabel} · تتبع المنطقة المختارة في التقويم الدراسي</p>
         ) : null}
         <div className="mw-hero-foot">
-          <p className="mw-hero-source">
-            <span>المصدر:</span>{" "}
-            <a href={card.sourceUrl} rel="noopener noreferrer" target="_blank">
-              {card.sourceTitle} <ExternalLink aria-hidden="true" />
-            </a>
-          </p>
-          {href ? <a className="mw-cta" href={href}>صفحة {series || "القسم"} الكاملة ›</a> : null}
+          {href ? <a className="mw-cta" href={href}>كل مواعيد الخدمة ›</a> : null}
         </div>
       </div>
 
@@ -528,30 +473,23 @@ function Hero({
 function BoardCard({
   block,
   nowMs,
-  isSelected,
-  onSelect,
 }: {
   block: MawaeedSeriesBlock;
   nowMs: number;
-  isSelected: boolean;
-  onSelect: () => void;
 }) {
   const next = block.next;
   return (
-    <article className={`mw-card${isSelected ? " is-selected" : ""}`} data-kind={block.kind}>
+    <article className="mw-card" data-kind={block.kind}>
       <div className="mw-card-top">
         <div className="mw-card-series">
-          <span className="mw-card-kicker">
-            <KindIcon kind={block.kind} />
-            <span>{block.title}</span>
-          </span>
+          <h3 className="mw-card-title">
+            <a className="mw-card-select" href={block.href}>
+              <KindIcon kind={block.kind} />
+              <span>{next ? overviewTitle(next) : block.title}</span>
+            </a>
+          </h3>
           {next ? <span className={badgeClass(next)}>{badgeText(next)}</span> : null}
         </div>
-        <h3 className="mw-card-title">
-          <button type="button" className="mw-card-select" aria-pressed={isSelected} onClick={onSelect}>
-            {next?.title ?? block.title}
-          </button>
-        </h3>
         {next ? (
           <p className="mw-card-date">
             <strong><time dateTime={next.startsOn}>{next.gregorianLabel}</time></strong>
@@ -562,7 +500,6 @@ function BoardCard({
 
       <div className="mw-card-foot">
         {next ? <strong className="mw-card-count">{countdownText(next, nowMs)}</strong> : <span />}
-        <a href={block.href}>كل المواعيد ›</a>
       </div>
     </article>
   );

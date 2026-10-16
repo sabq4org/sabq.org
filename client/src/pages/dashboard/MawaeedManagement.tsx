@@ -148,7 +148,7 @@ const STATUS_LABELS: Record<OccurrenceStatus, string> = {
 
 const REGION_LABELS: Record<RegionGroup, string> = {
   all: "كل المناطق",
-  riyadh_most: "الرياض ومعظم المناطق",
+  riyadh_most: "القصيم (إجازات إضافية موثقة)",
   western: "مكة والمدينة وجدة والطائف",
 };
 
@@ -1146,7 +1146,7 @@ export default function MawaeedManagement() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">كل المناطق</SelectItem>
-                    <SelectItem value="riyadh_most">الرياض ومعظم المناطق</SelectItem>
+                    <SelectItem value="riyadh_most">القصيم (إجازات إضافية موثقة)</SelectItem>
                     <SelectItem value="western">مكة والمدينة وجدة والطائف</SelectItem>
                   </SelectContent>
                 </Select>
