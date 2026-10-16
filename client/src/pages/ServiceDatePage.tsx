@@ -89,12 +89,21 @@ export default function ServiceDatePage() {
   useCanonical(model?.canonical ?? null);
   useEffect(() => {
     let meta = document.head.querySelector('meta[name="robots"]');
+    const created = !meta;
+    const prevContent = meta?.getAttribute("content") ?? null;
     if (!meta) {
       meta = document.createElement("meta");
       meta.setAttribute("name", "robots");
       document.head.appendChild(meta);
     }
     meta.setAttribute("content", HIDDEN_SERVICE_ROBOTS);
+    return () => {
+      if (created) {
+        meta?.remove();
+      } else if (meta && prevContent !== null) {
+        meta.setAttribute("content", prevContent);
+      }
+    };
   }, []);
   useEffect(() => {
     if (model?.title) document.title = model.title;
@@ -131,7 +140,7 @@ export default function ServiceDatePage() {
           <article className="article-detail-content">
             <h1 className="article-detail-title">الصفحة غير موجودة</h1>
             <p className="article-detail-subtitle">لا توجد صفحة خدمة بهذا العنوان.</p>
-            <p><Link href="/mawaeed">العودة إلى مواعيدك</Link></p>
+            <p><a href="/mawaeed">العودة إلى مواعيدك</a></p>
           </article>
         ) : (
           <ServiceDateBody model={model} related={related} />
@@ -157,7 +166,7 @@ function ServiceDateBody({
       <nav aria-label="مسار التنقل" className="article-breadcrumbs">
         <Link href="/">الرئيسية</Link>
         <ChevronRight aria-hidden="true" />
-        <Link href="/mawaeed">مواعيدك</Link>
+        <a href="/mawaeed">مواعيدك</a>
         <ChevronRight aria-hidden="true" />
         <span aria-current="page">{model.h1}</span>
       </nav>
@@ -199,7 +208,7 @@ function ServiceDateBody({
           <div className="article-detail-toolbar-row">
             {model.calendarHref && (
               <Button asChild>
-                <a href={model.calendarHref}>أضف المواعيد القادمة إلى التقويم</a>
+                <a href={apiUrl(model.calendarHref)}>أضف المواعيد القادمة إلى التقويم</a>
               </Button>
             )}
             <ShareButton title={model.title} />
@@ -254,7 +263,13 @@ function ServiceDateBody({
             <h2 className="public-section-title">صفحات ذات صلة</h2>
             <ul className="mt-3 space-y-3">
               {model.links.map((item) => (
-                <li key={item.href}><Link href={item.href}>{item.label}</Link></li>
+                <li key={item.href}>
+                  {item.href === "/mawaeed" || item.href.startsWith("/mawaeed/") ? (
+                    <a href={item.href}>{item.label}</a>
+                  ) : (
+                    <Link href={item.href}>{item.label}</Link>
+                  )}
+                </li>
               ))}
             </ul>
           </nav>
