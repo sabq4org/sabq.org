@@ -157,3 +157,37 @@ export function decidePublish(input: {
 
   return null;
 }
+
+/**
+ * حقول «إرسال للمراجعة»: المجدولة تبقى مجدولة **بموعدها** — مسح الموعد مع
+ * إبقاء الحالة `scheduled` كان يترك المادة عالقة لا يلتقطها الناشر أبداً
+ * (2026-10-16). ما عداها يعود فوريّاً بلا موعد كما كان.
+ */
+export function submitForReviewScheduleFields(currentStatus: string):
+  | { status: string }
+  | { status: string; publishType: "instant"; scheduledAt: null } {
+  const status = statusAfterSubmitForReview(currentStatus);
+  return status === "scheduled" ? { status } : { status, publishType: "instant", scheduledAt: null };
+}
+
+/**
+ * حفظ مادة حالتها (بعد الحفظ) `scheduled` بلا موعد يتركها عالقة. الحفظ الذي
+ * يرسل `scheduledAt: null` (محرر كاتب الرأي يرسله دائماً، أو إطفاء مفتاح
+ * الجدولة) يُبقي الموعد المحفوظ؛ وإن لم يوجد موعد أصلاً يُرفض الحفظ.
+ * تعدّل `update` في مكانها.
+ */
+export function keepScheduledDate(
+  update: { status?: unknown; scheduledAt?: unknown; publishType?: unknown },
+  existing: { status: string; scheduledAt: Date | string | null },
+): { ok: true } | { ok: false; message: string } {
+  const nextStatus = typeof update.status === "string" ? update.status : existing.status;
+  if (nextStatus !== "scheduled") return { ok: true };
+  const hasNewDate = "scheduledAt" in update && Boolean(update.scheduledAt);
+  if (hasNewDate) return { ok: true };
+  if (existing.scheduledAt) {
+    delete update.scheduledAt;
+    delete update.publishType;
+    return { ok: true };
+  }
+  return { ok: false, message: "حدّد تاريخ ووقت النشر قبل حفظ الجدولة" };
+}

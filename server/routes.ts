@@ -34,7 +34,7 @@ import {
 import { AR_SITEMAP_BUCKETS, archiveSitemapBucketCondition, isCanonicalArchiveArticle } from "./services/archiveSeo";
 import { apiListingNoindex } from "./utils/apiListingRobots";
 import { buildRobotsTxt } from "./utils/robotsTxt";
-import { decideStatusDemotion, resolveArticleEditFlags, statusAfterSubmitForReview } from "./services/publishGateRules";
+import { decideStatusDemotion, keepScheduledDate, resolveArticleEditFlags, submitForReviewScheduleFields } from "./services/publishGateRules";
 import { authorizeArticleWrite, authorizeArticleWriteByMediaAsset } from "./services/articleAccessService";
 import { extractPgError, isUniqueViolation } from "./utils/pgError";
 import { isLockedOut, recordFailure, clearFailures } from "./services/authAttemptGuard";
@@ -47,7 +47,7 @@ import { bufferArticleViewIncrement, initArticleViewCounters, getLiveArticleView
 import { getArticleReadingOverrides, resolveReadingMetrics } from "./services/adminToolsService";
 import { evaluatePressIdNumberChange } from "./services/pressCardNumberService";
 import { getNextSlotsForWriters } from "./services/opinionWritersService";
-import { attachWriterWeeklySlots, collectOpinionDraftWriterIds } from "./services/writerWeeklySlot";
+import { attachWriterWeeklySlots, collectOpinionDraftIds, collectOpinionDraftWriterIds } from "./services/writerWeeklySlot";
 import {
   getEnArticleAnalyticsDetail,
   searchEnArticlesForAnalytics,
@@ -7402,7 +7402,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       }));
 
       const writerIds = collectOpinionDraftWriterIds(formattedArticles);
-      const slotsByWriter = await getNextSlotsForWriters(writerIds);
+      const slotsByWriter = await getNextSlotsForWriters(writerIds, { distributedDraftIds: collectOpinionDraftIds(formattedArticles) });
       const articlesWithSlots = attachWriterWeeklySlots(formattedArticles, slotsByWriter);
       // إشارات التوزيع (إشعار/X) للمنشور فقط — فشلها لا يُسقط القائمة
       const signalsById = status === "published"
@@ -8270,12 +8270,11 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         } else if (existingArticle.reviewStatus !== "pending_review") {
           const pipeGate = await assertOpinionAuthorPipelineOpen(existingArticle.authorId, existingArticle.articleType, articleId);
           if (!pipeGate.ok) return res.status(pipeGate.status).json({ message: pipeGate.message, code: pipeGate.code });
-          Object.assign(updateData, opinionResubmitReviewPatch());
-          updateData.status = statusAfterSubmitForReview(existingArticle.status);
-          updateData.publishType = "instant";
-          updateData.scheduledAt = null;
+          Object.assign(updateData, opinionResubmitReviewPatch(), submitForReviewScheduleFields(existingArticle.status));
         }
       }
+      const scheduleGuard = keepScheduledDate(updateData, existingArticle);
+      if (!scheduleGuard.ok) return res.status(400).json({ message: scheduleGuard.message, code: "SCHEDULE_DATE_REQUIRED" });
 
       // Handle opinionAuthorId for opinion articles - update authorId
       if (req.body.opinionAuthorId) {
@@ -12426,9 +12425,7 @@ Respond in valid JSON format only:
         .update(articles)
         .set({
           ...opinionResubmitReviewPatch(),
-          status: statusAfterSubmitForReview(existingArticle.status),
-          publishType: "instant",
-          scheduledAt: null,
+          ...submitForReviewScheduleFields(existingArticle.status),
           updatedAt: new Date(),
         })
         .where(eq(articles.id, articleId))
@@ -25917,9 +25914,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         .update(articles)
         .set({
           ...opinionResubmitReviewPatch(),
-          status: statusAfterSubmitForReview(existingArticle.status),
-          publishType: "instant",
-          scheduledAt: null,
+          ...submitForReviewScheduleFields(existingArticle.status),
           updatedAt: new Date(),
         })
         .where(eq(articles.id, articleId))

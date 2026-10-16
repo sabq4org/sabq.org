@@ -483,7 +483,8 @@ export default function OpinionManagement() {
   const { data: nextSlotData } = useQuery<{
     suggestion: { weekday: number; publishTime: string; nextSlot: string } | null;
   }>({
-    queryKey: [`/api/opinion-writers/${publishingArticle?.author?.id}/next-slot`],
+    // excludeArticleId: المقال المعتمد نفسه لا يحجز الموعد فيُقترح بعد أسبوع.
+    queryKey: [`/api/opinion-writers/${publishingArticle?.author?.id}/next-slot`, { excludeArticleId: publishingArticle?.id || "" }],
     enabled: !!publishingArticle?.author?.id,
     staleTime: 60 * 1000,
   });

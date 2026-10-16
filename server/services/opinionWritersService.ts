@@ -1,7 +1,7 @@
 // خدمة إدارة كتّاب الرأي: قائمة الكتّاب بإحصائياتهم، اليوم الأسبوعي المخصص،
 // وحساب موعد النشر القادم بتوقيت الرياض.
 // Per ADR-001 all Drizzle access lives here; the route module is HTTP-only.
-import { and, asc, desc, eq, exists, gte, inArray, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, exists, gte, inArray, notInArray, or, sql } from "drizzle-orm";
 import { db } from "../db";
 import {
   articles,
@@ -510,7 +510,16 @@ export async function getNextSlotForWriter(
  */
 export async function getNextSlotsForWriters(
   writerIds: string[],
-  options?: { excludeArticleId?: string | null },
+  options?: {
+    excludeArticleId?: string | null;
+    /**
+     * للقوائم: مسودات الرد الحالي التي يوزّعها attachWriterWeeklySlots بنفسها
+     * على الموعد ثم الأسابيع التالية. تُستثنى من الأرضية حتى لا تحجز المسودة
+     * موعدها بنفسها فتُعرض بعد أسبوع (2026-10-16). المسودات الجارية خارج الرد
+     * (صفحة أخرى أو فلتر) تبقى تحجز مواعيدها.
+     */
+    distributedDraftIds?: string[];
+  },
 ): Promise<Record<string, { weekday: number; publishTime: string; nextSlot: string }>> {
   const unique = [...new Set(writerIds.filter((id) => typeof id === "string" && id.length > 0))];
   if (unique.length === 0) return {};
@@ -526,6 +535,7 @@ export async function getNextSlotsForWriters(
 
   const scheduledWriterIds = schedules.map((row) => row.writerId);
   const excludeArticleId = options?.excludeArticleId?.trim();
+  const distributedDraftIds = (options?.distributedDraftIds ?? []).filter(Boolean);
   const floorWhere = [
     eq(articles.articleType, "opinion"),
     inArray(articles.authorId, scheduledWriterIds),
@@ -540,6 +550,7 @@ export async function getNextSlotsForWriters(
         max(coalesce(${articles.scheduledAt}, ${articles.updatedAt})) filter (
           where ${articles.status} not in ('published', 'archived')
             and (${articles.reviewStatus} in ('pending_review', 'approved'))
+            ${distributedDraftIds.length ? sql`and ${notInArray(articles.id, distributedDraftIds)}` : sql``}
         )
       )`,
     })

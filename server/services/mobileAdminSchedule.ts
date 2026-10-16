@@ -1,8 +1,9 @@
 import { getNextSlotsForWriters } from "./opinionWritersService";
-import { attachWriterWeeklySlots, type WriterWeeklySlot } from "./writerWeeklySlot";
+import { attachWriterWeeklySlots, collectOpinionDraftIds, type WriterWeeklySlot } from "./writerWeeklySlot";
 
 /** Use the web's batch calculation, including its published/scheduled floor. */
 export async function enrichMobileAdminSchedules<T extends {
+  id?: string;
   status: string;
   articleType?: string | null;
   authorId?: string | null;
@@ -10,7 +11,7 @@ export async function enrichMobileAdminSchedules<T extends {
   const needsWriterSlot = (row: T) => row.articleType === "opinion"
     && (row.status === "draft" || row.status === "scheduled") && Boolean(row.authorId);
   const writerIds = [...new Set(rows.filter(needsWriterSlot).map(row => row.authorId!))];
-  const slots = writerIds.length ? await getNextSlotsForWriters(writerIds) : {};
+  const slots = writerIds.length ? await getNextSlotsForWriters(writerIds, { distributedDraftIds: collectOpinionDraftIds(rows) }) : {};
   // Drafts of the same writer get sequential weeks. A scheduled row keeps the
   // base suggestion for rescheduling and does not consume a draft slot.
   const withDraftSlots = attachWriterWeeklySlots(rows, slots);
