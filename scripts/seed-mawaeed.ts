@@ -17,7 +17,16 @@ import { Pool } from "pg";
 import { and, eq, isNotNull } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { mawaeedChanges, mawaeedOccurrences, mawaeedSeries } from "../shared/schema";
-import { SERIES_CATALOG, SEEDED_CONTENT_UPDATED_AT, publicSnapshot } from "../shared/mawaeed/model";
+import {
+  SERIES_CATALOG,
+  SEEDED_CONTENT_UPDATED_AT,
+  auditSnapshot,
+  planOccurrenceWrite,
+  type Certainty,
+  type OccurrenceRecord,
+  type OccurrenceStatus,
+  type RegionGroup,
+} from "../shared/mawaeed/model";
 import { parseSeedCsv } from "../shared/mawaeed/seed";
 
 const CSV_PATH = path.resolve(process.cwd(), "data/mawaeed/2026-09-27-mawaeed-dates.csv");
@@ -30,6 +39,32 @@ function assertSafeDatabase(url: string) {
     console.error("رفض التشغيل على قاعدة تبدو إنتاجية أو Neon. أعد المحاولة مع --i-understand إن كان ذلك مقصودًا.");
     process.exit(1);
   }
+}
+
+type OccurrenceRow = typeof mawaeedOccurrences.$inferSelect;
+
+function day(value: string | Date | null): string | null {
+  if (!value) return null;
+  return value instanceof Date ? value.toISOString().slice(0, 10) : String(value).slice(0, 10);
+}
+
+function recordOf(row: OccurrenceRow): OccurrenceRecord {
+  return {
+    id: row.id,
+    seriesId: row.seriesId,
+    titleAr: row.titleAr,
+    startsOn: day(row.startsOn) || "",
+    endsOn: day(row.endsOn),
+    sourceUrl: row.sourceUrl,
+    sourceTitle: row.sourceTitle,
+    certainty: row.certainty as Certainty,
+    status: row.status as OccurrenceStatus,
+    published: row.published,
+    regionGroup: row.regionGroup as RegionGroup,
+    hijriLabel: row.hijriLabel,
+    publicNote: row.publicNote,
+    ruleNote: row.ruleNote,
+  };
 }
 
 async function main() {
@@ -47,6 +82,7 @@ async function main() {
   let inserted = 0;
   let updated = 0;
   let skipped = 0;
+  let unchanged = 0;
 
   try {
     for (const copy of SERIES_CATALOG) {
@@ -93,7 +129,7 @@ async function main() {
           occurrenceId: created.id,
           action: "seed",
           beforeJson: null,
-          afterJson: publicSnapshot({
+          afterJson: auditSnapshot({
             id: created.id,
             seriesId: parent,
             titleAr: values.titleAr,
@@ -121,10 +157,45 @@ async function main() {
         skipped += 1;
         continue;
       }
-      await db.update(mawaeedOccurrences).set({ ...values, updatedAt: new Date() }).where(eq(mawaeedOccurrences.id, existing.id));
+      const before = recordOf(existing);
+      const after: OccurrenceRecord = {
+        ...before,
+        seriesId: values.seriesId,
+        titleAr: values.titleAr,
+        startsOn: values.startsOn,
+        sourceUrl: values.sourceUrl,
+        sourceTitle: values.sourceTitle,
+        certainty: values.certainty,
+        status: values.status,
+        published: values.published,
+        regionGroup: values.regionGroup,
+        hijriLabel: values.hijriLabel,
+        publicNote: values.publicNote,
+        ruleNote: values.ruleNote,
+      };
+      const plan = planOccurrenceWrite(before, after);
+      if (JSON.stringify(plan.before) === JSON.stringify(plan.after) && existing.sortOrder === values.sortOrder) {
+        unchanged += 1;
+        continue;
+      }
+      // كل تعديل بالبذرة يُسجَّل بفرقه، ويحرّك ختم القسم إن تغيّر ما يراه القارئ.
+      const now = new Date();
+      await db.transaction(async (tx) => {
+        await tx.update(mawaeedOccurrences).set({ ...values, updatedAt: now }).where(eq(mawaeedOccurrences.id, existing.id));
+        await tx.insert(mawaeedChanges).values({
+          seriesId: parent,
+          occurrenceId: existing.id,
+          action: "seed",
+          beforeJson: plan.before,
+          afterJson: plan.after,
+        });
+        for (const id of plan.stampSeriesIds) {
+          await tx.update(mawaeedSeries).set({ contentUpdatedAt: now, updatedAt: now }).where(eq(mawaeedSeries.id, id));
+        }
+      });
       updated += 1;
     }
-    console.log(`مواعيدك: أُضيف ${inserted}، حُدّث ${updated}، تُرك ${skipped} بعد تعديل محرر. الصفوف ${rows.length}.`);
+    console.log(`مواعيدك: أُضيف ${inserted}، حُدّث ${updated}، بلا تغيير ${unchanged}، تُرك ${skipped} بعد تعديل محرر. الصفوف ${rows.length}.`);
   } finally {
     await pool.end();
   }

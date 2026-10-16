@@ -52,5 +52,5 @@ function answerHtml(model: ServicePageModel): string {
     ? `<p>${esc(next.expectedHint.replace(/^متوقع:\s*/, ""))}</p>`
     : "";
   const rule = model.shiftRule ? `<p>${esc(model.shiftRule)}</p>` : "";
-  return `<p id="answer">${esc(model.leadPrefix)} <time datetime="${esc(next.startsOn)}">${esc(next.gregorianLabel)}</time> الموافق ${esc(next.hijriLabel)}، <strong data-countdown data-date="${esc(next.startsOn)}" data-today="${esc(next.todayLabel)}">${esc(next.countdownText)}</strong>.</p>${hint}${rule}`;
+  return `<p id="answer">${esc(model.leadPrefix)} <time datetime="${esc(next.startsOn)}">${esc(next.gregorianLabel)}</time> الموافق ${esc(next.hijriLabel)}، ${next.isOngoing ? `<strong>${esc(next.countdownText)}</strong>` : `<strong data-countdown data-date="${esc(next.startsOn)}" data-today="${esc(next.todayLabel)}">${esc(next.countdownText)}</strong>`}.</p>${hint}${rule}`;
 }

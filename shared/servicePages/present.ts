@@ -25,6 +25,8 @@ export type ServicePageNext = {
   sourceUrl: string;
   sourceTitle: string;
   isToday: boolean;
+  isOngoing: boolean;
+  endsOn: string | null;
 };
 
 export type ServicePageRow = {
@@ -35,6 +37,9 @@ export type ServicePageRow = {
   countdownText: string;
   certaintyLabel: string;
   isPast: boolean;
+  isOngoing: boolean;
+  /** اليوم الأخير الشامل حين يمتد الموعد أكثر من يوم. */
+  endsOn: string | null;
   isNext: boolean;
   pastLabel: string | null;
 };
@@ -92,7 +97,11 @@ export function presentServicePage(id: string, view: MawaeedView): ServicePageMo
     canonical,
     dateModified: view.dateModified,
     dateModifiedLabel: view.dateModifiedLabel,
-    leadPrefix: next
+    leadPrefix: next?.isOngoing
+      ? isSchool
+        ? `الإجازة المدرسية الجارية في ${regionMeta(region).label} بدأت`
+        : "الصرف الجاري بدأ"
+      : next
       ? isSchool
         ? `موعد الإجازة المدرسية القادمة في ${regionMeta(region).label} هو`
         : "موعد الصرف القادم هو"
@@ -128,6 +137,8 @@ function toNext(card: MawaeedCard): ServicePageNext {
     sourceUrl: card.sourceUrl,
     sourceTitle: card.sourceTitle,
     isToday: card.isToday,
+    isOngoing: card.isOngoing,
+    endsOn: card.endLabel ? card.endsOn : null,
   };
 }
 
@@ -140,6 +151,8 @@ function toRow(card: MawaeedCard, nextStartsOn: string | null): ServicePageRow {
     countdownText: card.countdownText,
     certaintyLabel: card.certaintyLabel,
     isPast: card.isPast,
+    isOngoing: card.isOngoing,
+    endsOn: card.endLabel ? card.endsOn : null,
     isNext: nextStartsOn === card.startsOn && !card.isPast,
     pastLabel: card.pastLabel,
   };

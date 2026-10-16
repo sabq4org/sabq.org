@@ -1,7 +1,19 @@
 import { z } from "zod";
 import { CERTAINTIES, OCCURRENCE_STATUSES, REGION_GROUPS } from "./model";
 
-const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "التاريخ بصيغة YYYY-MM-DD");
+/** تاريخ مدني حقيقي: 2027-02-31 يُرفض هنا بخطأ إدخال 400 بدل أن تُسقطه قاعدة البيانات بـ500. */
+export function isRealIsoDate(value: string): boolean {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return false;
+  const [year, month, day] = [Number(match[1]), Number(match[2]), Number(match[3])];
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+}
+
+const isoDate = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "التاريخ بصيغة YYYY-MM-DD")
+  .refine(isRealIsoDate, "التاريخ غير موجود في التقويم");
 const optionalDate = z.union([isoDate, z.literal(""), z.null()]).optional();
 const httpUrl = z.string().trim().max(2000).url("رابط المصدر غير صالح").refine(
   (value) => /^https?:\/\//i.test(value),

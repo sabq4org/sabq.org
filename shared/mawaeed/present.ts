@@ -12,10 +12,12 @@ import {
   HOME_COPY,
   SERIES_CATALOG,
   catalogBySlug,
+  displayTitle,
   certaintyLabel,
   isPublicOccurrence,
   normalizeRegion,
   occurrenceVisibleInRegion,
+  ongoingWord,
   pastWord,
   regionMeta,
   schoolBucket,
@@ -41,6 +43,10 @@ export type MawaeedCard = {
   todayLabel: string;
   isPast: boolean;
   isToday: boolean;
+  /** بدأ ولم ينتهِ بعد: موعد متعدد الأيام بين يومه الأول ويومه الأخير. */
+  isOngoing: boolean;
+  /** اليوم الأخير شاملًا بالميلادي، فقط حين يمتد الموعد أكثر من يوم. */
+  endLabel: string | null;
   pastLabel: string | null;
   certainty: "confirmed" | "expected";
   certaintyLabel: string;
@@ -195,16 +201,24 @@ function toCard(series: SeriesRecord, row: OccurrenceRecord, today: string): Maw
   const gregorian = formatGregorian(row.startsOn);
   const hijriLabel = formatHijri(row.startsOn, row.hijriLabel);
   const calendarDays = daysBetween(today, row.startsOn);
-  const isPast = calendarDays < 0;
+  // endsOn يوم شامل: الإجازة 20–28 نوفمبر قائمة حتى نهاية 28 نوفمبر.
+  const lastDay = row.endsOn && row.endsOn > row.startsOn ? row.endsOn : row.startsOn;
+  const isPast = daysBetween(today, lastDay) < 0;
   const isToday = calendarDays === 0;
+  const isOngoing = calendarDays < 0 && !isPast;
+  const endLabel = lastDay !== row.startsOn ? dayMonth(lastDay) : null;
   const todayLabel = todayWord(series.kind);
-  const countdownText = isPast ? pastWord(series.kind) : daysPhrase(calendarDays, todayLabel);
+  const countdownText = isPast
+    ? pastWord(series.kind)
+    : isOngoing
+      ? `${ongoingWord(series.kind)} حتى ${endLabel}`
+      : daysPhrase(calendarDays, todayLabel);
   return {
     id: row.id,
     seriesSlug: series.slug,
     seriesTitle: series.titleAr,
     kind: series.kind,
-    title: row.titleAr,
+    title: displayTitle(row.titleAr),
     startsOn: row.startsOn,
     endsOn: row.endsOn,
     dateLine: `${gregorian.label} (${hijriLabel})`,
@@ -214,6 +228,8 @@ function toCard(series: SeriesRecord, row: OccurrenceRecord, today: string): Maw
     todayLabel,
     isPast,
     isToday,
+    isOngoing,
+    endLabel,
     pastLabel: isPast ? pastWord(series.kind) : null,
     certainty: row.certainty === "expected" ? "expected" : "confirmed",
     certaintyLabel: certaintyLabel(row.certainty === "expected" ? "expected" : "confirmed"),
@@ -224,6 +240,11 @@ function toCard(series: SeriesRecord, row: OccurrenceRecord, today: string): Maw
     visionNote: visionNote(series.kind, row.titleAr, row.startsOn),
     regionGroup: row.regionGroup,
   };
+}
+
+function dayMonth(iso: string): string {
+  const parts = formatGregorian(iso);
+  return `${parts.day} ${parts.month}`;
 }
 
 function daysBetween(fromIso: string, toIso: string): number {

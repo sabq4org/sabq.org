@@ -155,6 +155,10 @@ export function pastWord(kind: SeriesKind): string {
   return kind === "school_holiday" ? "انتهت" : "صُرفت";
 }
 
+export function ongoingWord(kind: SeriesKind): string {
+  return kind === "school_holiday" ? "جارية" : "مستمر";
+}
+
 export function todayWord(kind: SeriesKind): string {
   return kind === "school_holiday" ? "تبدأ اليوم" : "تُصرف اليوم";
 }
@@ -256,14 +260,24 @@ export function auditSnapshot(row: OccurrenceRecord | null): AuditSnapshot | nul
 export function planOccurrenceWrite(before: OccurrenceRecord | null, after: OccurrenceRecord): {
   action: "create" | "update";
   publicChanged: boolean;
+  /** الأقسام التي تغيّر محتواها العام فيُحرَّك ختمها: عند النقل القديم والجديد معًا. */
+  stampSeriesIds: string[];
   before: AuditSnapshot | null;
   after: AuditSnapshot;
 } {
-  const publicChanged = JSON.stringify(publicSnapshot(before)) !== JSON.stringify(publicSnapshot(after));
+  const moved = Boolean(before && before.seriesId !== after.seriesId);
+  const publicChanged = moved || JSON.stringify(publicSnapshot(before)) !== JSON.stringify(publicSnapshot(after));
+  const stampSeriesIds = !publicChanged ? [] : moved ? [before!.seriesId, after.seriesId] : [after.seriesId];
   return {
     action: before ? "update" : "create",
     publicChanged,
+    stampSeriesIds,
     before: auditSnapshot(before),
     after: auditSnapshot(after)!,
   };
+}
+
+/** يزيل الكلمات الزمنية الملصقة بالعنوان المخزّن («(اليوم)») لأنها تبقى بعد مرور اليوم. */
+export function displayTitle(title: string): string {
+  return title.replace(/\s*\((?:اليوم|غدًا|غداً|غدا)\)\s*$/u, "").trim() || title;
 }

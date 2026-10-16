@@ -3,10 +3,12 @@
  * الأيام كلها مدنية (VALUE=DATE) بلا إزاحة توقيت.
  */
 
-import type { ServicePageModel } from "./present";
+import type { ServicePageModel, ServicePageRow } from "./present";
+
+type CalendarRow = Pick<ServicePageRow, "title" | "startsOn" | "hijriLabel" | "certaintyLabel" | "isPast"> & { endsOn?: string | null };
 
 export function buildServiceCalendar(
-  model: Pick<ServicePageModel, "id" | "h1" | "canonical" | "dateModified" | "rows"> & Partial<Pick<ServicePageModel, "region">>,
+  model: Pick<ServicePageModel, "id" | "h1" | "canonical" | "dateModified"> & { rows: CalendarRow[] } & Partial<Pick<ServicePageModel, "region">>,
 ): string | null {
   const events = model.rows.filter((row) => !row.isPast);
   if (events.length === 0) return null;
@@ -28,7 +30,8 @@ export function buildServiceCalendar(
       `UID:${uidScope}-${row.startsOn}@sabq.org`,
       `DTSTAMP:${stamp}`,
       `DTSTART;VALUE=DATE:${start}`,
-      `DTEND;VALUE=DATE:${nextDate(row.startsOn)}`,
+      // DTEND حصري في RFC 5545: اليوم التالي لآخر يوم شامل.
+      `DTEND;VALUE=DATE:${nextDate(row.endsOn ?? row.startsOn)}`,
       fold(`SUMMARY:${icsText(`${model.h1} — ${row.title}`)}`),
       fold(`DESCRIPTION:${icsText(`${row.certaintyLabel}. ${row.hijriLabel}. ${model.canonical}`)}`),
       fold(`URL:${model.canonical}`),
