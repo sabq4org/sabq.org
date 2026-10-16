@@ -64,11 +64,11 @@ function view() {
 }
 
 describe("mawaeed edge branch", () => {
-  it("renders the public page from the API JSON and does not call the SPA", async () => {
+  it("renders the public page from the API JSON for crawlers and does not call the SPA", async () => {
     fetcher.mockResolvedValue(Response.json(view()));
     const next = vi.fn(async () => new Response("spa-shell", { headers: { "Content-Type": "text/html" } }));
     const response = await onRequest({
-      request: new Request("https://sabq.org/mawaeed", { headers: { "User-Agent": "Mozilla/5.0" } }),
+      request: new Request("https://sabq.org/mawaeed", { headers: { "User-Agent": "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)" } }),
       env: { CF_PAGES_COMMIT_SHA: "abc" },
       next,
       waitUntil: vi.fn((promise: Promise<unknown>) => promise),
@@ -91,7 +91,7 @@ describe("mawaeed edge branch", () => {
         fetcher.mockResolvedValue(Response.json(view()));
         const waits: Promise<unknown>[] = [];
         await onRequest({
-          request: new Request("https://sabq.org/mawaeed", { headers: { "User-Agent": "Mozilla/5.0" } }),
+          request: new Request("https://sabq.org/mawaeed", { headers: { "User-Agent": "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)" } }),
           env: { CF_PAGES_COMMIT_SHA: "abc" },
           next: vi.fn(),
           waitUntil: vi.fn((promise: Promise<unknown>) => { waits.push(promise); return promise; }),
@@ -110,7 +110,7 @@ describe("mawaeed edge branch", () => {
     fetcher.mockRejectedValue(new Error("origin down"));
     const next = vi.fn(async () => new Response("spa-shell"));
     const response = await onRequest({
-      request: new Request("https://sabq.org/mawaeed"),
+      request: new Request("https://sabq.org/mawaeed", { headers: { "User-Agent": "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)" } }),
       env: { CF_PAGES_COMMIT_SHA: "abc" },
       next,
       waitUntil: vi.fn(),
@@ -122,6 +122,29 @@ describe("mawaeed edge branch", () => {
     expect(html).toContain("تعذر تحميل المواعيد");
     expect(html).not.toContain("spa-shell");
     expect(next).not.toHaveBeenCalled();
+  });
+
+  it("hands visitors the site app shell (real header, in-place region tabs) instead of the edge page", async () => {
+    fetcher.mockResolvedValue(new Response("<html><body>spa-shell</body></html>", {
+      headers: { "Content-Type": "text/html; charset=utf-8" },
+    }));
+    const next = vi.fn(async () => new Response("<html><body>spa-shell</body></html>", {
+      headers: { "Content-Type": "text/html; charset=utf-8" },
+    }));
+    const response = await onRequest({
+      request: new Request("https://sabq.org/mawaeed?region=makkah", {
+        headers: { "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Safari/604.1" },
+      }),
+      env: { CF_PAGES_COMMIT_SHA: "abc" },
+      next,
+      waitUntil: vi.fn(),
+    });
+    const html = await response.text();
+    expect(response.status).toBe(200);
+    expect(html).toContain("spa-shell");
+    expect(html).not.toContain("data-countdown");
+    // لم تُطلب /api/mawaeed من الحافة: الصفحة داخل التطبيق تجلبها بنفسها.
+    expect(fetcher.mock.calls.some(([input]) => String(input instanceof Request ? input.url : input).includes("/api/mawaeed"))).toBe(false);
   });
 
   it("redirects legacy /mawaeed/:slug URLs to their new /services/* pages", async () => {

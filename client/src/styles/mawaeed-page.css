@@ -1,0 +1,118 @@
+/* صفحة /mawaeed داخل تطبيق الموقع. ترث ألوان .article-detail (الهيدر والفوتر من الموقع نفسه). */
+.mawaeed-home {
+  --mw-ok: #0d6b4d;
+  --mw-ok-soft: #e4f5ec;
+  --mw-warn: #8a5a00;
+  --mw-warn-soft: #fff2cf;
+  --mw-brand-ink: #0a5f8e;
+  --mw-brand-soft: #e7f3fa;
+  color: var(--article-ink);
+}
+.dark .mawaeed-home {
+  --mw-ok: #6fd3aa;
+  --mw-ok-soft: #10322a;
+  --mw-warn: #e8bd6a;
+  --mw-warn-soft: #3a2f14;
+  --mw-brand-ink: #7cc8f5;
+  --mw-brand-soft: #122a3b;
+}
+
+.mw-head { display: grid; gap: 10px; max-width: 76ch; }
+.mw-title { margin: 0; font-size: clamp(26px, 3vw, 38px); line-height: 1.35; font-weight: 800; text-wrap: pretty; }
+.mw-lede { margin: 0; color: var(--article-muted); font-size: 17px; line-height: 1.8; }
+.mw-updated { margin: 0; display: inline-flex; align-items: center; gap: 8px; color: var(--article-muted); font-size: 13px; }
+.mw-updated-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--mw-ok); box-shadow: 0 0 0 3px var(--mw-ok-soft); }
+
+.mw-badge { display: inline-flex; align-items: center; border-radius: 999px; padding: 2px 10px; font-size: 12px; font-weight: 700; vertical-align: middle; }
+.mw-badge.is-confirmed { background: var(--mw-ok-soft); color: var(--mw-ok); }
+.mw-badge.is-expected { background: var(--mw-warn-soft); color: var(--mw-warn); }
+.mw-badge.is-past { background: var(--article-surface); color: var(--article-muted); }
+
+/* البطل: الموعد الأقرب */
+.mw-hero {
+  margin-top: 28px;
+  border: 1px solid var(--article-rule);
+  border-radius: 16px;
+  background: linear-gradient(135deg, var(--mw-brand-soft), var(--background, #fff) 60%);
+  padding: 24px 26px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 20px 32px;
+  align-items: center;
+}
+.mw-hero-body { min-width: 0; }
+.mw-kicker { margin: 0; font-size: 13px; font-weight: 700; color: var(--mw-brand-ink); letter-spacing: 0.02em; }
+.mw-hero h2 { margin: 6px 0 0; font-size: 24px; line-height: 1.4; font-weight: 800; }
+.mw-hero-dates { margin: 10px 0 0; color: var(--article-muted); font-size: 15px; }
+.mw-hero-dates b { color: var(--article-ink); font-weight: 600; }
+.mw-hero-note { margin: 8px 0 0; color: var(--article-muted); font-size: 14px; }
+.mw-region-chip { display: flex; width: max-content; max-width: 100%; align-items: center; gap: 6px; margin: 10px 0 0; font-size: 13px; color: var(--article-muted); }
+.mw-region-chip i { width: 8px; height: 8px; border-radius: 50%; background: var(--article-brand); display: inline-block; flex: none; }
+.mw-hero-source { margin: 10px 0 0; font-size: 13px; color: var(--article-muted); }
+.mw-hero-source a { color: var(--article-ink); font-weight: 600; display: inline-flex; align-items: center; gap: 4px; }
+.mw-hero-source a:hover { text-decoration: underline; }
+.mw-hero-source svg { width: 13px; height: 13px; }
+.mw-cta { display: inline-flex; align-items: center; gap: 6px; margin-top: 14px; color: var(--mw-brand-ink); font-weight: 600; font-size: 14px; }
+.mw-cta:hover { text-decoration: underline; }
+.mw-count { text-align: center; border: 1px solid var(--article-rule); background: var(--background, #fff); border-radius: 14px; padding: 14px 26px; min-width: 150px; }
+.mw-count-n { display: block; font-size: 44px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; color: var(--mw-brand-ink); }
+.mw-count-u { display: block; margin-top: 6px; font-size: 14px; color: var(--article-muted); }
+.mw-count-n + .mw-count-u { margin-top: 6px; }
+.mw-count > .mw-count-u:only-child { font-size: 16px; font-weight: 700; color: var(--mw-brand-ink); }
+
+/* بطاقة التقويم الدراسي والتبويبات */
+.mw-school { margin-top: 36px; border: 1px solid var(--article-rule); border-radius: 16px; overflow: hidden; }
+.mw-school-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; padding: 16px 22px; background: var(--article-surface); border-bottom: 1px solid var(--article-rule); }
+.mw-school-head h2 { margin: 0; font-size: 18px; font-weight: 800; }
+.mw-school-head p { margin: 0; color: var(--article-muted); font-size: 13px; }
+.mw-tabs-row { display: flex; align-items: center; gap: 8px 14px; padding: 14px 22px; border-bottom: 1px solid var(--article-rule); }
+.mw-tabs-label { font-size: 13px; font-weight: 700; white-space: nowrap; }
+.mw-tabs { display: flex; gap: 6px; min-width: 0; max-width: 100%; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
+.mw-tab { flex: none; white-space: nowrap; border: 1px solid var(--article-rule); background: transparent; color: var(--article-ink); border-radius: 999px; padding: 5px 14px; font: inherit; font-size: 13px; cursor: pointer; transition: background-color 0.15s, color 0.15s; }
+.mw-tab:hover { background: var(--article-surface); }
+.mw-tab[aria-pressed="true"] { background: var(--mw-brand-ink); border-color: var(--mw-brand-ink); color: #fff; font-weight: 700; }
+.mw-tab:focus-visible { outline: 2px solid var(--article-brand); outline-offset: 2px; }
+.mw-rows { margin: 0; padding: 0; list-style: none; animation: mw-fade 0.25s ease; }
+.mw-school.is-switching .mw-rows { opacity: 0.6; }
+.mw-rows li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 20px; align-items: center; padding: 14px 22px; border-bottom: 1px solid var(--article-rule); }
+.mw-rows li:last-child { border-bottom: 0; }
+.mw-row-title { font-weight: 600; }
+.mw-row-tag { display: inline-block; margin-inline-end: 8px; font-size: 11px; font-weight: 700; color: var(--mw-brand-ink); background: var(--mw-brand-soft); border-radius: 999px; padding: 1px 8px; vertical-align: middle; }
+.mw-row-date { color: var(--article-muted); font-size: 14px; }
+.mw-row-count { font-weight: 700; color: var(--mw-brand-ink); font-variant-numeric: tabular-nums; white-space: nowrap; justify-self: end; grid-row: span 2; }
+.mw-empty { margin: 0; padding: 16px 22px; color: var(--article-muted); }
+.mw-school-foot { padding: 12px 22px; background: var(--article-surface); display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; font-size: 13px; color: var(--article-muted); }
+.mw-school-foot a { color: var(--mw-brand-ink); font-weight: 600; }
+.mw-school-foot a:hover { text-decoration: underline; }
+@keyframes mw-fade { from { opacity: 0.35; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .mw-rows { animation: none; } }
+
+/* باقي المواعيد */
+.mw-board-head { margin: 36px 0 14px; display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.mw-board-head h2 { margin: 0; font-size: 20px; font-weight: 800; }
+.mw-board-head span { color: var(--article-muted); font-size: 13px; }
+.mw-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.mw-card { border: 1px solid var(--article-rule); border-radius: 14px; padding: 18px 20px; display: grid; gap: 8px; align-content: start; min-width: 0; }
+.mw-card-series { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 13px; color: var(--article-muted); }
+.mw-card h3 { margin: 0; font-size: 17px; line-height: 1.5; font-weight: 700; }
+.mw-card-date { color: var(--article-muted); font-size: 14px; margin: 0; }
+.mw-card-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 6px; }
+.mw-card-count { font-weight: 800; color: var(--mw-brand-ink); font-variant-numeric: tabular-nums; }
+.mw-card-foot a { color: var(--mw-brand-ink); font-size: 13px; font-weight: 600; }
+.mw-card-foot a:hover { text-decoration: underline; }
+
+.mw-method { margin: 36px 0 0; border-top: 1px solid var(--article-rule); padding-top: 18px; color: var(--article-muted); font-size: 14px; max-width: 80ch; line-height: 1.8; }
+
+@media (max-width: 700px) {
+  .mw-title { font-size: 26px; }
+  .mw-lede { font-size: 15px; }
+  .mw-hero { grid-template-columns: 1fr; padding: 20px 18px; gap: 14px; }
+  .mw-count { display: flex; align-items: baseline; justify-content: center; gap: 10px; padding: 12px; }
+  .mw-count-n { font-size: 34px; }
+  .mw-count-u, .mw-count-n + .mw-count-u { margin: 0; }
+  .mw-school-head, .mw-tabs-row, .mw-rows li, .mw-school-foot, .mw-empty { padding-inline: 16px; }
+  /* على الجوال تلتف التبويبات في سطرين حتى تظهر المدن الخمس كلها بلا تمرير خفي. */
+  .mw-tabs-row { flex-wrap: wrap; }
+  .mw-tabs { flex-wrap: wrap; overflow: visible; }
+  .mw-grid { grid-template-columns: 1fr; }
+}

@@ -1076,10 +1076,14 @@ async function handleRequest(context) {
     return Response.redirect(`${url.origin}${path.replace(/\/+$/, "")}${url.search}`, 301);
   }
 
-  // مواعيدك: HTML خفيف للبشر والزواحف معًا، من JSON العام. لا يسقط إلى قشرة SPA.
+  // مواعيدك: الزوار يأخذون صفحة التطبيق (هيدر الموقع وفوتره، والتبويبات في مكانها)،
+  // والزواحف النسخة المولَّدة على الحافة من JSON العام (محتوى مكافئ بلا جافاسكربت).
+  // الروابط القديمة /mawaeed/:slug تُحوَّل 301 للجميع من الدالة نفسها.
+  const mawaeedSlug = mawaeedSlugFromPath(path);
   if (
     (request.method === "GET" || request.method === "HEAD") &&
-    mawaeedSlugFromPath(path) !== null
+    mawaeedSlug !== null &&
+    (mawaeedSlug !== "" || isCrawler(request.headers.get("user-agent") || ""))
   ) {
     return serveMawaeedPage({
       request,

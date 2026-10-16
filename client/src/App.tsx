@@ -149,6 +149,7 @@ const VoiceCommandsHelp = lazy(() => retryImport(() => import("@/components/Voic
 const Home = lazy(() => retryImport(() => import("@/pages/Home")));
 const ArticleDetail = lazy(() => retryImport(() => import("@/pages/ArticleDetail")));
 const ServiceDatePage = lazy(() => retryImport(() => import("@/pages/ServiceDatePage")));
+const MawaeedPage = lazy(() => retryImport(() => import("@/pages/MawaeedPage")));
 const ArticlePassport = lazy(() => retryImport(() => import("@/pages/ArticlePassport")));
 const EnglishArticlePassport = lazy(() => retryImport(() => import("@/pages/en/EnglishArticlePassport")));
 const UrduArticlePassport = lazy(() => retryImport(() => import("@/pages/ur/UrduArticlePassport")));
@@ -696,6 +697,7 @@ function Router() {
         <Route path="/article/:slug/passport">{() => <LazyRoute component={ArticlePassport} />}</Route>
         <Route path="/article/:slug">{() => <LazyRoute component={ArticleDetail} />}</Route>
         <Route path="/services/:id">{() => <LazyRoute component={ServiceDatePage} />}</Route>
+        <Route path="/mawaeed">{() => <LazyRoute component={MawaeedPage} />}</Route>
 
         {/* Focus Mode (Task #80) */}
         <Route path="/focus/weekly">
