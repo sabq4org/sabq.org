@@ -60,5 +60,6 @@ Disallow: /
 
 Sitemap: https://sabq.org/sitemap.xml
 Sitemap: https://sabq.org/sitemap-news.xml
+Sitemap: https://sabq.org/sitemap-mawaeed.xml
 `;
 }

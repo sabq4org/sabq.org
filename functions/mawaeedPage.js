@@ -72,6 +72,7 @@ const SITE_APPS = [
 ];
 const SITE_INFO_LINKS = [
   { label: "النشرة البريدية", href: "/newsletter" },
+  { label: "مواعيدك: الرواتب والإجازات", href: "/mawaeed" },
   { label: "من نحن", href: "/about" },
   { label: "سياسة الخصوصية", href: "/ar/privacy" },
   { label: "شروط الاستخدام", href: "/ar/terms" },
