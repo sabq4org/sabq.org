@@ -288,7 +288,7 @@ function heroHtml(card, { nowMs, href }) {
           ? `<a class="hero-src" href="${esc(card.sourceUrl)}" target="_blank" rel="noopener noreferrer">المصدر: ${esc(card.sourceTitle)} ↗</a>`
           : "<span />"
       }
-      ${href ? `<a class="hero-cta" href="${esc(href)}"><span>كل مواعيد القسم</span><span aria-hidden="true">‹</span></a>` : ""}
+      ${href ? `<a class="hero-cta" href="${esc(href)}"><span>كل مواعيد القسم</span><span aria-hidden="true">›</span></a>` : ""}
     </div>
   </section>`;
 }
@@ -299,6 +299,7 @@ function heroHtml(card, { nowMs, href }) {
 function seriesRow(block, nowMs) {
   const next = block.next;
   const badge = next ? badgeFor(next) : null;
+  const dup = Boolean(next) && normalizeArabic(next.title).startsWith(normalizeArabic(block.title));
   const details = [
     `<p class="answer">${esc(block.answerLine)}</p>`,
     followHtml(block),
@@ -313,14 +314,14 @@ function seriesRow(block, nowMs) {
       <span class="item-bar" aria-hidden="true"></span>
       <div class="item-text">
         <div class="item-head">
-          <h2 class="item-series">${esc(block.title)}</h2>
+          <h2 class="item-series">${esc(dup ? next.title : block.title)}</h2>
           ${badge ? `<span class="${badge.cls}">${esc(badge.text)}</span>` : ""}
         </div>
         ${
           next
-            ? `<p class="item-title item-title-strong">${esc(next.title)}</p>
+            ? `${dup ? "" : `<p class="item-title item-title-strong">${esc(next.title)}</p>`}
                ${dateStackHtml(next)}
-               <p class="item-meta"><span class="item-link-hint">عرض جدول المواعيد <span aria-hidden="true">‹</span></span></p>`
+               <p class="item-meta"><span class="item-link-hint">عرض جدول المواعيد <span aria-hidden="true">›</span></span></p>`
             : `<p class="item-title item-empty">لا موعد قادم معلن بعد</p>`
         }
       </div>
@@ -487,7 +488,7 @@ export function renderMawaeedHtml(view, options = {}) {
   const hero = nearestCard(view);
   const heroBlock = hero ? (view.series || []).find((block) => block.slug === hero.seriesSlug) : null;
   const heroHref = home && heroBlock ? heroBlock.href : null;
-  const series = sortedSeries(view.series);
+  const series = sortedSeries(view.series).filter((block) => !hero || block.slug !== hero.seriesSlug);
   const currentNav = (view.nav || []).find((item) => item.current && item.href !== "/mawaeed");
 
   const bodyMain = home
@@ -495,7 +496,7 @@ export function renderMawaeedHtml(view, options = {}) {
        ${
          series.length
            ? `<section class="board-wrap" aria-labelledby="board-title">
-                <div class="section-head"><h2 class="group-title" id="board-title">كل المواعيد</h2><span class="section-sub">مرتبة من الأقرب إلى الأبعد</span></div>
+                <div class="section-head"><h2 class="group-title" id="board-title">باقي المواعيد</h2><span class="section-sub">مرتبة من الأقرب إلى الأبعد</span></div>
                 <div class="board">${series.map((block) => seriesRow(block, nowMs)).join("")}</div>
               </section>`
            : ""
@@ -770,8 +771,9 @@ ${jsonLd}
   a.item-main:hover { text-decoration:none; background:var(--surface-2); }
   .item-bar { align-self:stretch; width:4px; border-radius:4px; background:var(--kind); flex:none; }
   .item-text { flex:1; min-width:0; }
-  .item-head { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:6px 8px; margin-bottom:3px; }
-  .item-series { font-weight:700; font-size:1.02rem; line-height:1.4; margin:0; color:var(--ink); }
+  .item-head { display:flex; align-items:flex-start; justify-content:space-between; gap:6px 8px; margin-bottom:3px; }
+  .item-series { flex:1; min-width:0; font-weight:700; font-size:1.02rem; line-height:1.4; margin:0; color:var(--ink); }
+  .item-head > .badge, .item-head > [class^="badge"] { flex:none; margin-top:2px; }
   .item-title { margin:0; font-size:.9rem; color:var(--muted); line-height:1.45; }
   .item-title-strong { color:var(--ink); font-weight:700; font-size:.96rem; }
   .item-empty { font-style:normal; }
@@ -790,7 +792,7 @@ ${jsonLd}
     border:1px solid color-mix(in srgb, var(--kind) 22%, transparent);
     color:var(--kind); padding:6px 4px;
   }
-  .tile-pre { font-size:.68rem; font-weight:700; opacity:.85; line-height:1.2; }
+  .tile-pre { font-size:.7rem; font-weight:700; line-height:1.2; }
   .tile-num { font-weight:700; font-size:1.7rem; line-height:1.1; letter-spacing:-.02em; }
   .tile-unit { font-size:.74rem; font-weight:700; line-height:1.3; }
   .tile-word { font-size:.82rem; font-weight:700; padding:0 4px; line-height:1.35; }
@@ -840,7 +842,7 @@ ${jsonLd}
     display:flex; align-items:center; justify-content:space-between; gap:12px;
   }
   .qa > summary::-webkit-details-marker { display:none; }
-  .qa > summary::after { content:"‹"; font-size:1.15rem; color:var(--muted); transition:transform .15s; flex:none; }
+  .qa > summary::after { content:"›"; font-size:1.15rem; color:var(--muted); transition:transform .15s; flex:none; }
   .qa[open] > summary::after { transform:rotate(-90deg); color:var(--accent); }
   .qa p { color:var(--muted); font-size:.9rem; line-height:1.8; margin:0; padding:0 16px 15px; }
 
@@ -886,7 +888,9 @@ ${jsonLd}
     .wrap { width:calc(100% - 22px); }
     .chips { margin-inline:-11px; scroll-padding-inline:11px; }
     .chips-track { padding-inline:11px; }
-    .segmented { grid-template-columns:repeat(3, minmax(0, 1fr)); }
+    .segmented { display:flex; overflow-x:auto; scrollbar-width:none; -webkit-overflow-scrolling:touch; }
+    .segmented::-webkit-scrollbar { display:none; }
+    .seg { flex:none; padding:6px 12px; }
     .hero { padding:16px 14px 14px; border-radius:20px; }
     .item-main { padding:12px; gap:10px; }
     .tile { width:72px; min-height:72px; border-radius:14px; }
@@ -924,12 +928,12 @@ ${jsonLd}
 <div class="topbar">
   <div class="wrap">
     <div class="top-crumbs">
-      <a class="brand" href="/">سبق</a>
-      <span class="crumb-sep" aria-hidden="true">‹</span>
-      <a class="top-title" href="/mawaeed">مواعيدك</a>
-      ${currentNav ? `<span class="crumb-sep" aria-hidden="true">‹</span><span class="top-sub">${esc(currentNav.label)}</span>` : ""}
+      <a class="top-title" href="/">الرئيسية</a>
+      <span class="crumb-sep" aria-hidden="true">›</span>
+      ${home ? `<span class="top-title" aria-current="page">مواعيدك</span>` : `<a class="top-title" href="/mawaeed">مواعيدك</a>`}
+      ${currentNav ? `<span class="crumb-sep" aria-hidden="true">›</span><span class="top-sub">${esc(currentNav.label)}</span>` : ""}
     </div>
-    <a class="top-home" href="${home ? "/" : "/mawaeed"}">${home ? "الرئيسية ‹" : "كل المواعيد ‹"}</a>
+    ${home ? "" : `<a class="top-home" href="/mawaeed">كل المواعيد ›</a>`}
   </div>
 </div>
 <main id="main-content" class="wrap" tabindex="-1">

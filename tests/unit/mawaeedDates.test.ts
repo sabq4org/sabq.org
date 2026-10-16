@@ -101,7 +101,8 @@ describe("mawaeed presentation", () => {
     if (later.notFound) throw new Error("expected salaries page");
     expect(later.view.series[0].previous?.pastLabel).toBe("صُرفت");
     expect(later.view.series[0].next?.startsOn).toBe("2026-10-27");
-    expect(later.view.series[0].next?.countdownText).toBe("بعد 29 يوماً");
+    // 28 يوماً و15 ساعة حتى منتصف ليل 27 أكتوبر: الأيام كالعدّاد الحي (24 ساعة) لا فرق التقويم (29)
+    expect(later.view.series[0].next?.countdownText).toBe("بعد 28 يوماً");
   });
 
   it("keeps dateModified on the data stamp", () => {
