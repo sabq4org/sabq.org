@@ -7,6 +7,8 @@ import { hijriParts } from "./dates";
 import type { SeriesKind } from "./model";
 
 export const VISION_NOTE = "موعد العيد يثبت بالرؤية، وقد تقدّم الجهة الصرف أو تؤخره عن هذا اليوم.";
+/** الإجازة المدرسية لا «صرف» فيها: الملاحظة تتكلم عن بداية الإجازة. */
+export const SCHOOL_VISION_NOTE = "موعد العيد يثبت بالرؤية، وقد تتقدّم بداية الإجازة أو تتأخر عن هذا اليوم.";
 
 /** رمضان حتى 5 شوال، و25 ذي القعدة حتى 15 ذي الحجة: نافذة العيدين التي قد يُقدَّم فيها الصرف. */
 function inEidWindow(startsOn: string): boolean {
@@ -19,7 +21,7 @@ function inEidWindow(startsOn: string): boolean {
 }
 
 export function visionNote(kind: SeriesKind, title: string, startsOn: string): string | null {
-  if (/عيد الفطر|عيد الأضحى|رمضان/.test(title)) return VISION_NOTE;
+  if (/عيد الفطر|عيد الأضحى|رمضان/.test(title)) return kind === "school_holiday" ? SCHOOL_VISION_NOTE : VISION_NOTE;
   if (kind !== "school_holiday" && /^\d{4}-\d{2}-\d{2}$/.test(startsOn) && inEidWindow(startsOn)) return VISION_NOTE;
   return null;
 }

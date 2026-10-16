@@ -83,6 +83,25 @@ describe("mawaeed HTML", () => {
     expect(html).toContain('class="skip-link"');
   });
 
+  it("shows the nearest date once (hero) and the other sections on the board with forward chevrons", () => {
+    const presented = presentMawaeed({
+      now: new Date("2026-09-27T12:00:00+03:00"),
+      series: [series],
+      occurrences: rows,
+    });
+    if (presented.notFound) throw new Error("expected view");
+    const html = renderMawaeedHtml(presented.view);
+    // السلسلة الوحيدة هي سلسلة البطل، فلا لوحة تكررها
+    expect(html).toContain('class="hero');
+    expect(html).not.toContain("باقي المواعيد");
+    expect(html).not.toContain('id="salaries"');
+    // مسار تنقل واحد بلا تكرار «سبق»، والأسهم «›» (تنعكس في RTL فتشير إلى الأمام)
+    expect(html).toContain("الرئيسية");
+    expect(html).not.toContain('class="brand"');
+    expect(html).not.toContain("‹");
+    expect(html).toContain("كل مواعيد القسم</span><span aria-hidden=\"true\">›</span>");
+  });
+
   it("separates past occurrences into a dedicated section after upcoming ones", () => {
     const presented = presentMawaeed({
       pageSlug: "salaries",

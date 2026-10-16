@@ -100,6 +100,8 @@ describe("salary service page", () => {
     expect(model.shiftRule).toContain("الخميس الذي قبله");
     expect(model.shiftRule).toContain("الأحد الذي بعده");
     expect(model.explanation.join(" ")).toContain("يوم 27 من كل شهر ميلادي");
+    // قاعدة الإزاحة تظهر مرة واحدة (shiftRule) ولا تتكرر في الشرح
+    expect(model.explanation.join(" ")).not.toContain("الخميس الذي قبله");
     expect(model.description).not.toContain(EXPECTED_HINT);
     expect(model.rows.filter((item) => !item.isPast).map((item) => item.startsOn)).toEqual(["2026-10-27", "2026-11-26"]);
     expect(model.rows.find((item) => item.isPast)?.pastLabel).toBe("صُرفت");
@@ -241,6 +243,10 @@ describe("service page extras", () => {
     };
     const keyword = { articles: search.results };
     expect(relatedArticlesFromSearch(search)).toEqual([{ title: "خبر", href: "/article/real-slug", publishedAt: null }]);
+    // الرابط نفسه بعنوانين مختلفين = خبر واحد
+    const sameSlug = { results: [{ title: "عنوان أول", slug: "one" }, { title: "عنوان ثانٍ", slug: "one" }] };
+    expect(relatedArticlesFromSearch(sameSlug)).toHaveLength(1);
+    expect(nextRelatedFromSearch(sameSlug)).toHaveLength(1);
     expect(nextRelatedFromSearch(search)).toEqual(relatedArticlesFromSearch(search));
     expect(nextRelatedFromKeyword(keyword)).toEqual(relatedArticlesFromKeyword(keyword));
   });
@@ -280,6 +286,8 @@ describe("service page extras", () => {
     expect(ics).not.toContain("DTSTART;VALUE=DATE:20260927");
     expect(ics).toContain("متوقع");
     expect(ics).not.toContain("مسودة");
+    // UID على معرّف الصف لا تاريخه: تعديل التاريخ يحدّث الحدث نفسه عند القارئ
+    expect(ics).toContain("UID:government-salaries-date-next@sabq.org");
   });
 
   it("links Mawaeed series to their service pages and lists them once in the sitemap", () => {
@@ -335,11 +343,11 @@ describe("school service page region", () => {
     if (region === "riyadh") {
       expect(ics).toContain("DTSTART;VALUE=DATE:20261025");
       expect(ics).not.toContain("DTSTART;VALUE=DATE:20261206");
-      expect(ics).toContain("UID:school-calendar-date-2026-10-25@sabq.org");
+      expect(ics).toContain("UID:school-calendar-date-extra-riyadh@sabq.org");
     } else {
       expect(ics).not.toContain("DTSTART;VALUE=DATE:20261025");
       expect(ics).toContain("DTSTART;VALUE=DATE:20261206");
-      expect(ics).toContain(`UID:school-calendar-date-${region}-2026-11-20@sabq.org`);
+      expect(ics).toContain(`UID:school-calendar-date-${region}-autumn@sabq.org`);
     }
   });
 

@@ -5,7 +5,7 @@
 
 import type { ServicePageModel, ServicePageRow } from "./present";
 
-type CalendarRow = Pick<ServicePageRow, "title" | "startsOn" | "hijriLabel" | "certaintyLabel" | "isPast"> & { endsOn?: string | null };
+type CalendarRow = Pick<ServicePageRow, "title" | "startsOn" | "hijriLabel" | "certaintyLabel" | "isPast"> & { id?: string; endsOn?: string | null };
 
 export function buildServiceCalendar(
   model: Pick<ServicePageModel, "id" | "h1" | "canonical" | "dateModified"> & { rows: CalendarRow[] } & Partial<Pick<ServicePageModel, "region">>,
@@ -27,7 +27,8 @@ export function buildServiceCalendar(
     const start = row.startsOn.replace(/-/g, "");
     lines.push(
       "BEGIN:VEVENT",
-      `UID:${uidScope}-${row.startsOn}@sabq.org`,
+      // UID على معرّف الصف: تغيير التاريخ يحدّث الحدث نفسه في تقويم القارئ بدل أن يضيف حدثاً ويترك القديم.
+      `UID:${uidScope}-${row.id || row.startsOn}@sabq.org`,
       `DTSTAMP:${stamp}`,
       `DTSTART;VALUE=DATE:${start}`,
       // DTEND حصري في RFC 5545: اليوم التالي لآخر يوم شامل.
