@@ -7,6 +7,8 @@ export type RelatedArticleLink = { title: string; href: string; publishedAt: str
 /** الخبر الأقدم من هذا يأخذ وسم «من الأرشيف» حتى لا يُفهم أنه يخص الموعد الحالي. */
 export const RELATED_ARCHIVE_DAYS = 45;
 const RELATED_LIMIT = 4;
+/** نطلب أكثر من أربعة لأن البحث يرتب بالصلة لا بالتاريخ، ثم نأخذ الأحدث بعد إزالة التكرار. */
+export const RELATED_FETCH_LIMIT = 12;
 
 function publishedMs(value: string | null): number {
   if (!value) return Number.NEGATIVE_INFINITY;
@@ -42,9 +44,11 @@ function collectArticles(rows: unknown[]): RelatedArticleLink[] {
     const slug = asciiSlug(record);
     const title = String(record?.title || "").trim();
     if (!title || !slug) continue;
+    // التكرار بالعنوان أو بالرابط: البحث يعيد أحياناً الخبر نفسه مرتين بعنوانين متقاربين.
     const key = title.replace(/\s+/g, " ");
-    if (seen.has(key)) continue;
+    if (seen.has(key) || seen.has(`/${slug}`)) continue;
     seen.add(key);
+    seen.add(`/${slug}`);
     const publishedAt = typeof record?.publishedAt === "string" && record.publishedAt ? record.publishedAt : null;
     links.push({ title, href: `/article/${slug}`, publishedAt });
   }

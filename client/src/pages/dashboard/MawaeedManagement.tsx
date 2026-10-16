@@ -224,15 +224,15 @@ function relativeTime(iso: string): string {
   if (minutes < 1) return "الآن";
   if (minutes === 1) return "قبل دقيقة";
   if (minutes === 2) return "قبل دقيقتين";
-  if (minutes < 60) return `قبل ${minutes} دقيقة`;
+  if (minutes < 60) return `قبل ${minutes} ${minutes <= 10 ? "دقائق" : "دقيقة"}`;
   const hours = Math.round(minutes / 60);
   if (hours === 1) return "قبل ساعة";
   if (hours === 2) return "قبل ساعتين";
-  if (hours < 24) return `قبل ${hours} ساعة`;
+  if (hours < 24) return `قبل ${hours} ${hours <= 10 ? "ساعات" : "ساعة"}`;
   const days = Math.round(hours / 24);
   if (days === 1) return "قبل يوم";
   if (days === 2) return "قبل يومين";
-  if (days < 30) return `قبل ${days} يوماً`;
+  if (days < 30) return `قبل ${days} ${days <= 10 ? "أيام" : "يوماً"}`;
   return formatGregorian(riyadhDateISO(new Date(iso))).label;
 }
 
@@ -260,7 +260,14 @@ const ACTION_LABELS: Record<string, string> = {
   create: "أضاف موعداً",
   update: "حدّث موعداً",
   confirm: "أكّد موعداً",
+  seed: "أعاد بذر المواعيد",
 };
+
+function moreFieldsLabel(count: number): string {
+  if (count === 1) return "+حقل آخر";
+  if (count === 2) return "+حقلان آخران";
+  return `+${count} حقول أخرى`;
+}
 
 function formatFieldValue(field: string, value: unknown, seriesTitle?: (id: string) => string): string {
   if (value === null || value === undefined || value === "") return "—";
@@ -1002,7 +1009,7 @@ export default function MawaeedManagement() {
                               </li>
                             ))}
                             {diffs.length > 4 ? (
-                              <li className="text-[11px] text-muted-foreground">+{diffs.length - 4} حقول أخرى</li>
+                              <li className="text-[11px] text-muted-foreground">{moreFieldsLabel(diffs.length - 4)}</li>
                             ) : null}
                           </ul>
                         ) : null}
@@ -1191,7 +1198,7 @@ export default function MawaeedManagement() {
                   id="mw-hijri"
                   value={form.hijriLabel}
                   onChange={(event) => setForm((prev) => ({ ...prev, hijriLabel: event.target.value }))}
-                  placeholder="مثال: 12 ذو الحجة 1448هـ"
+                  placeholder="مثال: 12 ذي الحجة 1448هـ"
                 />
               </Field>
               <Field id="mw-public-note" label="ملاحظة للقارئ">

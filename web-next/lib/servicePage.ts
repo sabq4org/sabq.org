@@ -97,9 +97,11 @@ function collectArticles(rows: unknown[]): RelatedArticleLink[] {
     const slug = asciiSlug(record);
     const title = String(record?.title || "").trim();
     if (!title || !slug) continue;
+    // التكرار بالعنوان أو بالرابط، مثل shared/servicePages/related.ts.
     const key = title.replace(/\s+/g, " ");
-    if (seen.has(key)) continue;
+    if (seen.has(key) || seen.has(`/${slug}`)) continue;
     seen.add(key);
+    seen.add(`/${slug}`);
     const publishedAt = typeof record?.publishedAt === "string" && record.publishedAt ? record.publishedAt : null;
     links.push({ title, href: `/article/${slug}`, publishedAt });
   }
