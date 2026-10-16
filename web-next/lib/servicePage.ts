@@ -20,8 +20,11 @@ export type ServicePageModel = {
   calendarHref: string | null;
   relatedQuery: string | null;
   relatedSource: "keyword" | "search";
+  tone?: "citizen" | "salary";
   jsonLd: Record<string, unknown>;
   next: {
+    title?: string;
+    certainty?: "confirmed" | "expected";
     certaintyLabel: string;
     startsOn: string;
     gregorianLabel: string;
@@ -37,6 +40,7 @@ export type ServicePageModel = {
     title: string;
     gregorianLabel: string;
     hijriLabel: string;
+    countdownText?: string;
     isPast: boolean;
     pastLabel: string | null;
     certaintyLabel: string;
