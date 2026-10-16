@@ -244,6 +244,7 @@ describe("service page extras", () => {
     // الرابط نفسه بعنوانين مختلفين = خبر واحد
     const sameSlug = { results: [{ title: "عنوان أول", slug: "one" }, { title: "عنوان ثانٍ", slug: "one" }] };
     expect(relatedArticlesFromSearch(sameSlug)).toHaveLength(1);
+    expect(nextRelatedFromSearch(sameSlug)).toHaveLength(1);
     expect(nextRelatedFromSearch(search)).toEqual(relatedArticlesFromSearch(search));
     expect(nextRelatedFromKeyword(keyword)).toEqual(relatedArticlesFromKeyword(keyword));
   });
