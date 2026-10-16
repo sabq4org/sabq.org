@@ -2,12 +2,12 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { ServiceDateView } from "@/components/ServiceDateView";
 import { serverApiFetch } from "@/lib/apiUrl";
-import type { ServicePageModel } from "@shared/servicePages/present";
 import {
   relatedArticlesFromKeyword,
   relatedArticlesFromSearch,
   type RelatedArticleLink,
-} from "@shared/servicePages/related";
+  type ServicePageModel,
+} from "@/lib/servicePage";
 
 export const revalidate = 60;
 export const dynamicParams = true;

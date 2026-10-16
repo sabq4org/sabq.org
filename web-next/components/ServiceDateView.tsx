@@ -1,8 +1,7 @@
 import Link from "next/link";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
-import type { ServicePageModel } from "@shared/servicePages/present";
-import type { RelatedArticleLink } from "@shared/servicePages/related";
+import type { RelatedArticleLink, ServicePageModel } from "@/lib/servicePage";
 
 /**
  * نسخة الزاحف من صفحة الخدمة. نفس رأس صفحة المقال وذيلها في web-next،

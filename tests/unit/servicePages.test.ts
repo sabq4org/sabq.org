@@ -4,7 +4,11 @@ import { presentMawaeed } from "@shared/mawaeed/present";
 import { buildServiceCalendar } from "@shared/servicePages/calendar";
 import { HIDDEN_SERVICE_ROBOTS, serviceLinkForSeries, servicePageIdFromPath, servicePageSitemapEntries } from "@shared/servicePages/catalog";
 import { presentServicePage } from "@shared/servicePages/present";
-import { relatedArticlesFromSearch } from "@shared/servicePages/related";
+import { relatedArticlesFromKeyword, relatedArticlesFromSearch } from "@shared/servicePages/related";
+import {
+  relatedArticlesFromKeyword as nextRelatedFromKeyword,
+  relatedArticlesFromSearch as nextRelatedFromSearch,
+} from "../../web-next/lib/servicePage";
 import { renderServiceSemanticHtml } from "@shared/servicePages/semanticHtml";
 
 const NOW = new Date("2026-10-15T12:00:00+03:00");
@@ -198,14 +202,18 @@ describe("citizen account service page", () => {
 
 describe("service page extras", () => {
   it("keeps related article links on the public article path", () => {
-    expect(relatedArticlesFromSearch({
+    const search = {
       results: [
         { title: "خبر", englishSlug: "real-slug", slug: "arabic" },
         { title: "خبر", slug: "duplicate-title" },
         { title: "سيئ", slug: "../secret" },
         { title: "", slug: "missing-title" },
       ],
-    })).toEqual([{ title: "خبر", href: "/article/real-slug" }]);
+    };
+    const keyword = { articles: search.results };
+    expect(relatedArticlesFromSearch(search)).toEqual([{ title: "خبر", href: "/article/real-slug" }]);
+    expect(nextRelatedFromSearch(search)).toEqual(relatedArticlesFromSearch(search));
+    expect(nextRelatedFromKeyword(keyword)).toEqual(relatedArticlesFromKeyword(keyword));
   });
 
   it("builds an all-day calendar from upcoming rows only", () => {
