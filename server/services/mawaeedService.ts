@@ -238,10 +238,12 @@ async function persist(actorUserId: string, before: OccurrenceRecord | null, aft
       beforeJson: plan.before,
       afterJson: plan.after,
     });
-    await tx.update(mawaeedSeries).set({
-      updatedAt: now,
-      ...(plan.publicChanged ? { contentUpdatedAt: now } : {}),
-    }).where(eq(mawaeedSeries.id, after.seriesId));
+    for (const seriesId of new Set([after.seriesId, ...plan.stampSeriesIds])) {
+      await tx.update(mawaeedSeries).set({
+        updatedAt: now,
+        ...(plan.stampSeriesIds.includes(seriesId) ? { contentUpdatedAt: now } : {}),
+      }).where(eq(mawaeedSeries.id, seriesId));
+    }
   });
 }
 

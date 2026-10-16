@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Calendar,
@@ -67,8 +67,9 @@ function hoursText(n: number): string {
   return `و${n} ساعة`;
 }
 
-function phrase(days: number, hours: number, todayLabel: string): string {
-  if (days <= 0 && hours <= 0) return todayLabel;
+/** يُستدعى فقط والوقت المتبقي موجب، فالدقائق الأخيرة قبل منتصف الليل ليست «اليوم». */
+function phrase(days: number, hours: number): string {
+  if (days <= 0 && hours <= 0) return "بعد أقل من ساعة";
   if (days <= 0) return `بعد ${hoursText(hours).replace(/^و/, "")}`;
   if (hours <= 0) return `بعد ${daysText(days)}`;
   return `بعد ${daysText(days)} ${hoursText(hours)}`;
@@ -85,22 +86,38 @@ function remaining(iso: string, nowMs: number): { days: number; hours: number; m
   };
 }
 
-function useLiveCountdown(startsOn: string | undefined, todayLabel: string, initial: string) {
+function riyadhDay(nowMs: number): string {
+  return new Date(nowMs + 3 * 3_600_000).toISOString().slice(0, 10);
+}
+
+function useLiveCountdown(startsOn: string | undefined, todayLabel: string, initial: string, onDayChange?: () => void) {
   const [text, setText] = useState(initial);
   const [parts, setParts] = useState<{ days: number; hours: number; minutes: number } | null>(() =>
     startsOn ? remaining(startsOn, Date.now()) : null,
   );
   useEffect(() => {
-    if (!startsOn) return;
+    setText(initial);
+    if (!startsOn) {
+      setParts(null);
+      return;
+    }
+    const loadedDay = riyadhDay(Date.now());
+    let notified = false;
     const tick = () => {
-      const left = remaining(startsOn, Date.now());
+      const now = Date.now();
+      // بعد منتصف ليل الرياض يتغيّر الموعد القادم أو حالته: نعيد الجلب مرة بدل البقاء على «اليوم».
+      if (!notified && riyadhDay(now) !== loadedDay) {
+        notified = true;
+        onDayChange?.();
+      }
+      const left = remaining(startsOn, now);
       setParts(left);
-      setText(left ? phrase(left.days, left.hours, todayLabel) : todayLabel);
+      setText(left ? phrase(left.days, left.hours) : todayLabel);
     };
     tick();
     const id = window.setInterval(tick, 30000);
     return () => window.clearInterval(id);
-  }, [startsOn, todayLabel]);
+  }, [startsOn, todayLabel, initial, onDayChange]);
   return { text, parts };
 }
 
@@ -124,6 +141,10 @@ export default function ServiceDatePage() {
     retry: false,
   });
   const model = pageQuery.data;
+  const { refetch } = pageQuery;
+  const refetchPage = useCallback(() => {
+    void refetch();
+  }, [refetch]);
   useCanonical(model?.canonical ?? null);
   useEffect(() => {
     let meta = document.head.querySelector('meta[name="robots"]');
@@ -181,7 +202,7 @@ export default function ServiceDatePage() {
             <p><a href="/mawaeed">العودة إلى مواعيدك</a></p>
           </article>
         ) : (
-          <ServiceDateBody model={model} related={related} />
+          <ServiceDateBody model={model} related={related} onDayChange={refetchPage} />
         )}
       </main>
       <Footer />
@@ -192,11 +213,19 @@ export default function ServiceDatePage() {
 function ServiceDateBody({
   model,
   related,
+  onDayChange,
 }: {
   model: ServicePageModel;
   related: RelatedArticleLink[];
+  onDayChange: () => void;
 }) {
-  const live = useLiveCountdown(model.next?.startsOn, model.next?.todayLabel || "اليوم", model.next?.countdownText || "");
+  // الموعد الجاري لا عدّاد له: نصه «جارية حتى …» من الخادم.
+  const live = useLiveCountdown(
+    model.next && !model.next.isOngoing ? model.next.startsOn : undefined,
+    model.next?.todayLabel || "اليوم",
+    model.next?.countdownText || "",
+    onDayChange,
+  );
   const jsonLd = JSON.stringify(model.jsonLd).replace(/</g, "\\u003c");
   return (
     <>

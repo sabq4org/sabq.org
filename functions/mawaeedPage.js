@@ -100,6 +100,7 @@ function tileHtml(card, nowMs) {
   if (card.isPast) {
     return `<div class="tile tile-past"><span class="tile-word">${esc(card.pastLabel || "انتهى")}</span></div>`;
   }
+  if (card.isOngoing) return `<div class="tile tile-today"><span class="tile-word">${esc(card.countdownText)}</span></div>`;
   const left = remainingParts(card.startsOn, nowMs);
   let num = "";
   let unit = "";
@@ -125,6 +126,7 @@ function tileHtml(card, nowMs) {
 /** ساعة البطل: أيام | ساعات | دقائق (نمط «Expanded Format»). */
 function clockHtml(card, nowMs) {
   if (card.isPast) return `<p class="clock-word">${esc(card.pastLabel || "انتهى")}</p>`;
+  if (card.isOngoing) return `<p class="clock-word">${esc(card.countdownText)}</p>`;
   const left = remainingParts(card.startsOn, nowMs);
   if (!left) return `<p class="clock-word">${esc(card.todayLabel || "اليوم")}</p>`;
   const cell = (part, value, label) =>
@@ -148,6 +150,8 @@ function badgeFor(card) {
 /** العدّاد النصي: عنصر يحمّل data-countdown ليحدّثه السكربت في المتصفح. */
 function countdownHtml(card, className) {
   if (card.isPast) return `<span class="${className} ${className}-past">${esc(card.pastLabel || "")}</span>`;
+  // الموعد الجاري بلا عدّاد حي: «جارية حتى …» من الخادم.
+  if (card.isOngoing) return `<strong class="${className}">${esc(card.countdownText)}</strong>`;
   return `<strong class="${className}" data-countdown data-date="${esc(card.startsOn)}" data-today="${esc(card.todayLabel)}">${esc(card.countdownText)}</strong>`;
 }
 
@@ -305,7 +309,7 @@ function seriesDetail(block) {
 function occurrenceRow(card, nowMs) {
   const badge = badgeFor(card);
   const end =
-    card.endsOn && card.endsOn !== card.startsOn ? `<p class="item-end">حتى ${esc(card.endsOn)}</p>` : "";
+    card.endLabel ? `<p class="item-end">حتى ${esc(card.endLabel)}</p>` : "";
   const details = [
     card.expectedHint ? `<p class="note">${esc(card.expectedHint)}</p>` : "",
     noteLines(card),
@@ -855,8 +859,8 @@ ${bodyMain}
     if (n <= 10) return "و" + n + " ساعات";
     return "و" + n + " ساعة";
   }
-  function phrase(days, hours, todayLabel) {
-    if (days <= 0 && hours <= 0) return todayLabel;
+  function phrase(days, hours) {
+    if (days <= 0 && hours <= 0) return "بعد أقل من ساعة";
     if (days <= 0) return "بعد " + hoursText(hours).replace(/^و/, "");
     if (hours <= 0) return "بعد " + daysText(days);
     return "بعد " + daysText(days) + " " + hoursText(hours);
@@ -873,11 +877,15 @@ ${bodyMain}
     return { days: Math.floor(mins / 1440), hours: Math.floor(mins / 60) % 24, minutes: mins % 60 };
   }
   function each(sel, fn) { var n = document.querySelectorAll(sel); for (var i = 0; i < n.length; i++) fn(n[i]); }
+  function riyadhDay() { return new Date(Date.now() + 10800000).toISOString().slice(0, 10); }
+  var loadedDay = riyadhDay(), reloading = false;
   function tick() {
+    // بعد منتصف ليل الرياض تتغيّر المواعيد القادمة وحالاتها: نعيد التحميل مرة بدل البقاء على «اليوم».
+    if (!reloading && riyadhDay() !== loadedDay) { reloading = true; location.reload(); return; }
     each("[data-countdown]", function (el) {
       var r = left(el.getAttribute("data-date")); if (!r) return;
       var today = el.getAttribute("data-today") || "اليوم";
-      el.textContent = r.done ? today : phrase(r.days, r.hours, today);
+      el.textContent = r.done ? today : phrase(r.days, r.hours);
     });
     each("[data-clock]", function (el) {
       var r = left(el.getAttribute("data-date")); if (!r) return;
