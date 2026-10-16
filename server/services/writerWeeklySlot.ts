@@ -25,6 +25,11 @@ export function collectOpinionDraftWriterIds(articles: SlotCandidate[]): string[
   ];
 }
 
+/** المسودات التي يوزّعها attachWriterWeeklySlots في هذا الرد — تُستثنى من أرضية الموعد. */
+export function collectOpinionDraftIds(articles: Array<SlotCandidate & { id?: string | null }>): string[] {
+  return articles.filter(isOpinionWriterDraft).map((article) => article.id).filter((id): id is string => Boolean(id));
+}
+
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
 type DistributableDraft = SlotCandidate & {

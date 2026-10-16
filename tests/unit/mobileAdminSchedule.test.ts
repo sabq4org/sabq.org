@@ -28,7 +28,7 @@ describe("mobile admin opinion schedule enrichment", () => {
     ]);
 
     expect(getNextSlotsForWriters).toHaveBeenCalledOnce();
-    expect(getNextSlotsForWriters).toHaveBeenCalledWith(["w1", "w3"], { includeInFlightDrafts: false });
+    expect(getNextSlotsForWriters).toHaveBeenCalledWith(["w1", "w3"], { distributedDraftIds: ["a1", "a2"] });
     expect(rows[0]).toMatchObject({ scheduledAt: saved, writerWeeklySlot: slot });
     expect(rows[1].writerWeeklySlot).toMatchObject({
       weekday: slot.weekday,

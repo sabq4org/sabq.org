@@ -47,7 +47,7 @@ import { bufferArticleViewIncrement, initArticleViewCounters, getLiveArticleView
 import { getArticleReadingOverrides, resolveReadingMetrics } from "./services/adminToolsService";
 import { evaluatePressIdNumberChange } from "./services/pressCardNumberService";
 import { getNextSlotsForWriters } from "./services/opinionWritersService";
-import { attachWriterWeeklySlots, collectOpinionDraftWriterIds } from "./services/writerWeeklySlot";
+import { attachWriterWeeklySlots, collectOpinionDraftIds, collectOpinionDraftWriterIds } from "./services/writerWeeklySlot";
 import {
   getEnArticleAnalyticsDetail,
   searchEnArticlesForAnalytics,
@@ -7402,7 +7402,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       }));
 
       const writerIds = collectOpinionDraftWriterIds(formattedArticles);
-      const slotsByWriter = await getNextSlotsForWriters(writerIds, { includeInFlightDrafts: false });
+      const slotsByWriter = await getNextSlotsForWriters(writerIds, { distributedDraftIds: collectOpinionDraftIds(formattedArticles) });
       const articlesWithSlots = attachWriterWeeklySlots(formattedArticles, slotsByWriter);
       // إشارات التوزيع (إشعار/X) للمنشور فقط — فشلها لا يُسقط القائمة
       const signalsById = status === "published"
