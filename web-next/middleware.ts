@@ -6,6 +6,14 @@ const NOINDEX_HEADERS = {
   "X-Robots-Tag": "noindex, nofollow, noarchive",
 };
 
+function withHiddenServiceRobots(request: NextRequest, response: NextResponse) {
+  if (/^\/services\/[a-z0-9-]+$/.test(request.nextUrl.pathname)) {
+    response.headers.set("X-Robots-Tag", "noindex, nofollow");
+    response.headers.set("Cache-Control", "private, no-store");
+  }
+  return response;
+}
+
 export function middleware(request: NextRequest) {
   // Railway needs an unauthenticated health endpoint to determine readiness.
   if (request.nextUrl.pathname === "/health") {
@@ -16,12 +24,12 @@ export function middleware(request: NextRequest) {
   if (!accessToken) {
     // Production does not define the staging token, so its behavior is
     // unchanged and no authentication layer is added.
-    return NextResponse.next();
+    return withHiddenServiceRobots(request, NextResponse.next());
   }
 
   const expected = `Basic ${btoa(`sabq:${accessToken}`)}`;
   if (request.headers.get("authorization") === expected) {
-    return NextResponse.next();
+    return withHiddenServiceRobots(request, NextResponse.next());
   }
 
   return new NextResponse("Railway staging access is restricted.", {

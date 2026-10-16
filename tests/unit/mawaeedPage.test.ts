@@ -71,6 +71,7 @@ describe("mawaeed HTML", () => {
     expect(html).toContain("27 يناير 2027");
     expect(html).toContain("data-countdown");
     expect(html).toContain("متوقع");
+    expect(html).not.toContain("/services/");
     expect(html).toContain("محسوب من الجدول المعتاد");
     expect(html).not.toContain("مسودة لا تظهر");
     expect(html).not.toContain("foundingDate");

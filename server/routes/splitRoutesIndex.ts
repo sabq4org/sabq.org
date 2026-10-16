@@ -109,6 +109,7 @@ import deepseekLabRouter from "./deepseekLab";
 import editorialImagesRouter from "./editorialImages";
 import videoResolverRouter from "./videoResolver";
 import mawaeedRouter from "./mawaeed";
+import servicePagesRouter from "./servicePages";
 
 /**
  * Registers all route modules that were split out of the monolithic server/routes.ts.
@@ -235,4 +236,5 @@ export function registerSplitRoutes(app: Express) {
   // معالج استخراج ومعاينة روابط الفيديو (YouTube, Dailymotion, X/Twitter)
   app.use(videoResolverRouter);
   app.use(mawaeedRouter);
+  app.use(servicePagesRouter);
 }

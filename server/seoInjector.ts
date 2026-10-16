@@ -18,6 +18,7 @@ import path from "path";
 import { withCache, CACHE_TTL } from "./memoryCache";
 import { VALID_PREFIXES } from "./utils/spaRouteMatcher";
 import { isNoindexPath } from "./utils/noindexPaths";
+import { HIDDEN_SERVICE_ROBOTS } from "@shared/servicePages/catalog";
 import { buildNewsArticleSchemaExtras, getArticleSchemaType } from "./utils/newsArticleSchema";
 import { getPublicEditorialModifiedAt } from "./utils/editorialDates";
 import {
@@ -1581,7 +1582,9 @@ async function resolveSeoData(route: { type: string; slug?: string; angleSlug?: 
         ogLocale: isEn ? 'en_US' : isUr ? 'ur_PK' : 'ar_SA',
         ogSiteName: isEn ? 'Sabq News' : isUr ? 'سبق نیوز' : 'صحيفة سبق الإلكترونية',
         twitterSite: '@sabq',
-        robots: isSectionRoot ? 'index, follow, max-image-preview:large' : 'noindex, follow',
+        robots: /^\/services\/[a-z0-9-]+$/.test(pathname)
+          ? HIDDEN_SERVICE_ROBOTS
+          : isSectionRoot ? 'index, follow, max-image-preview:large' : 'noindex, follow',
       };
     }
     case 'static-page': {
@@ -1719,7 +1722,9 @@ export async function seoInjectorMiddleware(req: Request, res: Response, next: N
           : 'public, max-age=60, s-maxage=300, stale-while-revalidate=600',
       };
 
-      if (seoData.publishedTime) {
+      if ((seoData.robots || '').toLowerCase().includes('nofollow')) {
+        headers['X-Robots-Tag'] = HIDDEN_SERVICE_ROBOTS;
+      } else if (seoData.publishedTime) {
         const pubAge = Date.now() - new Date(seoData.publishedTime).getTime();
         if (pubAge > 365 * 24 * 60 * 60 * 1000) {
           headers['X-Robots-Tag'] = 'max-snippet:-1, noarchive';
@@ -1735,7 +1740,9 @@ export async function seoInjectorMiddleware(req: Request, res: Response, next: N
         res.setHeader('Cache-Control', 'public, max-age=60, s-maxage=300, stale-while-revalidate=600');
       }
 
-      if (seoData.publishedTime) {
+      if ((seoData.robots || '').toLowerCase().includes('nofollow')) {
+        res.set('X-Robots-Tag', HIDDEN_SERVICE_ROBOTS);
+      } else if (seoData.publishedTime) {
         const pubAge = Date.now() - new Date(seoData.publishedTime).getTime();
         if (pubAge > 365 * 24 * 60 * 60 * 1000) {
           res.set('X-Robots-Tag', 'max-snippet:-1, noarchive');

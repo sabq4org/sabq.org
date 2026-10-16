@@ -66,6 +66,7 @@ import { paginationOrReject } from "../utils/pagination";
 import { LEGACY_ARTICLE_PREFIXES, resolveLegacyArticlePath, resolveArchiveCanonical } from "../services/archiveSeo";
 
 import { getAuthorPageByName } from "../services/authorProfileService";
+import { buildServicePageEdgeMeta } from "../services/servicePageEdgeMeta";
 import { isKnownSpaTopLevelPath } from "../utils/spaTopLevelRoutes";
 import { AI_POLICY_ALLOWED, AI_POLICY_FORBIDDEN, AI_POLICY_INTRO } from "@shared/aiPolicyContent";
 import { archivePage, archiveHref, normalizeSeoPath, SEO_ARCHIVE_PAGE_SIZE } from "../utils/seoArchive";
@@ -1419,6 +1420,10 @@ async function buildCategoryLandingPreload(category: { id: string; slug: string;
 }
 
 const ROUTE_HANDLERS: RouteHandler[] = [
+  {
+    pattern: /^\/services\/([a-z0-9-]+)$/,
+    handle: async (match) => buildServicePageEdgeMeta(match[1]),
+  },
   {
     pattern: /^\/about$/,
     handle: async () => arabicHubMeta(
