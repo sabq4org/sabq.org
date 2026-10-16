@@ -26,7 +26,7 @@ import {
   schoolRows,
   shortSeriesTitle,
 } from "@shared/mawaeed/home";
-import { normalizeRegion, type MawaeedKind, type RegionId } from "@shared/mawaeed/model";
+import { normalizeRegion, type RegionId, type SeriesKind } from "@shared/mawaeed/model";
 import type { MawaeedCard, MawaeedSeriesBlock, MawaeedView } from "@shared/mawaeed/present";
 
 /** المفتاح نفسه الذي تقرؤه صفحة التقويم الدراسي، حتى تتبع اختيار القارئ هنا. */
@@ -121,7 +121,7 @@ function compactGregorian(label: string): string {
   return parts.length >= 4 ? parts.slice(1).join(" ") : label;
 }
 
-function KindIcon({ kind }: { kind: MawaeedKind }) {
+function KindIcon({ kind }: { kind: SeriesKind }) {
   switch (kind) {
     case "school_holiday":
       return <GraduationCap aria-hidden="true" className="mw-kind-icon" />;
