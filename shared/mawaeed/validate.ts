@@ -34,6 +34,8 @@ export const occurrenceWriteSchema = z.object({
   hijriLabel: z.union([z.string().trim().max(80), z.literal(""), z.null()]).optional(),
   publicNote: z.union([z.string().trim().max(500), z.literal(""), z.null()]).optional(),
   ruleNote: z.union([z.string().trim().max(4000), z.literal(""), z.null()]).optional(),
+  /** ختم updatedAt الذي رآه المحرر؛ اختلافه عن الصف الحالي يعيد 409 بدل الكتابة فوق تعديل زميل. */
+  expectedUpdatedAt: z.union([z.string().datetime({ offset: true }), z.null()]).optional(),
 }).superRefine((value, ctx) => {
   if (value.endsOn && value.endsOn < value.startsOn) {
     ctx.addIssue({ code: "custom", path: ["endsOn"], message: "تاريخ النهاية قبل البداية" });

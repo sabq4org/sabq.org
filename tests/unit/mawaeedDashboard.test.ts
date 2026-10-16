@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dashboardBucket, overdueDays, overdueLabel } from "@shared/mawaeed/dashboard";
+import { confirmBlockedReason, dashboardBucket, isStaleWrite, overdueDays, overdueLabel } from "@shared/mawaeed/dashboard";
 
 const base = { startsOn: "2026-10-10", endsOn: null, status: "scheduled", certainty: "unverified", published: true };
 const today = "2026-10-16";
@@ -36,5 +36,21 @@ describe("mawaeed dashboard buckets", () => {
     const range = { ...base, startsOn: "2026-10-14", endsOn: "2026-10-18" };
     expect(dashboardBucket({ ...range, status: "cancelled" }, today)).toBe("past");
     expect(dashboardBucket({ ...range, status: "superseded" }, today)).toBe("past");
+  });
+
+  it("blocks the one-click confirm on cancelled and superseded rows only", () => {
+    expect(confirmBlockedReason({ status: "scheduled" })).toBeNull();
+    expect(confirmBlockedReason({ status: "cancelled" })).toContain("ملغى");
+    expect(confirmBlockedReason({ status: "superseded" })).toContain("مستبدل");
+  });
+
+  it("flags a stale write only when both stamps exist and differ", () => {
+    const current = "2026-10-16T10:00:00.000Z";
+    expect(isStaleWrite(current, current)).toBe(false);
+    expect(isStaleWrite("2026-10-16T10:00:00+00:00", current)).toBe(false);
+    expect(isStaleWrite("2026-10-16T09:59:00.000Z", current)).toBe(true);
+    expect(isStaleWrite(null, current)).toBe(false);
+    expect(isStaleWrite(undefined, current)).toBe(false);
+    expect(isStaleWrite("garbage", current)).toBe(false);
   });
 });

@@ -63,6 +63,8 @@ export type OccurrenceRecord = {
   hijriLabel: string | null;
   publicNote: string | null;
   ruleNote: string | null;
+  /** ختم آخر تعديل كما يعيده الخادم؛ ترسله اللوحة في expectedUpdatedAt حتى لا يُكتب فوق تعديل زميل. */
+  updatedAt?: string;
 };
 
 export type SeriesCopy = {

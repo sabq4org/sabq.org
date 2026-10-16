@@ -17,6 +17,7 @@ import {
   updateOccurrence,
 } from "../services/mawaeedService";
 import { occurrenceWriteSchema } from "@shared/mawaeed/validate";
+import { OCCURRENCE_FIELD_LABELS } from "@shared/mawaeed/dashboard";
 import { SERIES_CATALOG } from "@shared/mawaeed/model";
 import { SERVICE_PAGES } from "@shared/servicePages/catalog";
 
@@ -40,7 +41,14 @@ function reportUnexpected(error: unknown) {
 
 function sendError(res: Response, error: unknown) {
   if (error instanceof ZodError) {
-    return res.status(400).json({ message: "بيانات غير صالحة", errors: error.issues.map((issue) => issue.message) });
+    // {field: [messages]} بأسماء عربية: هذا الشكل هو ما يعرضه apiRequest في اللوحة؛ القائمة المسطحة كانت تُهمَل.
+    const fieldErrors: Record<string, string[]> = {};
+    for (const issue of error.issues) {
+      const key = String(issue.path[0] ?? "");
+      const label = OCCURRENCE_FIELD_LABELS[key] ?? key ?? "الإدخال";
+      (fieldErrors[label] ||= []).push(issue.message);
+    }
+    return res.status(400).json({ message: "بيانات غير صالحة", errors: fieldErrors });
   }
   if (error instanceof MawaeedError) {
     return res.status(error.status).json({ message: error.message });

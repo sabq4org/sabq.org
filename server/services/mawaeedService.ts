@@ -14,6 +14,7 @@ import {
   type SeriesRecord,
 } from "@shared/mawaeed/model";
 import { presentMawaeed, type MawaeedView } from "@shared/mawaeed/present";
+import { STALE_WRITE_MESSAGE, confirmBlockedReason, isStaleWrite } from "@shared/mawaeed/dashboard";
 import { mawaeedSitemapEntries } from "@shared/servicePages/catalog";
 import { confirmOccurrenceSchema, emptyToNull, type OccurrenceWrite } from "@shared/mawaeed/validate";
 import { db } from "../db";
@@ -107,6 +108,7 @@ function mapOccurrence(row: OccurrenceRow): OccurrenceRecord {
     hijriLabel: row.hijriLabel,
     publicNote: row.publicNote,
     ruleNote: row.ruleNote,
+    updatedAt: stamp(row.updatedAt),
   };
 }
 
@@ -254,6 +256,7 @@ export async function updateOccurrence(actorUserId: string, id: string, write: O
   const [series] = await db.select({ id: mawaeedSeries.id }).from(mawaeedSeries).where(eq(mawaeedSeries.id, write.seriesId)).limit(1);
   if (!series) throw new MawaeedError(404, "القسم غير موجود");
   const before = mapOccurrence(existingRow);
+  if (isStaleWrite(write.expectedUpdatedAt, before.updatedAt)) throw new MawaeedError(409, STALE_WRITE_MESSAGE);
   const after = applyWrite(write.seriesId, id, write, before);
   await persist(actorUserId, before, after, "update");
   return after;
@@ -264,6 +267,9 @@ export async function confirmOccurrence(actorUserId: string, id: string, body: u
   const [existingRow] = await db.select().from(mawaeedOccurrences).where(eq(mawaeedOccurrences.id, id)).limit(1);
   if (!existingRow) throw new MawaeedError(404, "الموعد غير موجود");
   const before = mapOccurrence(existingRow);
+  // «تأكيد» يرفع درجة التأكد وينشر؛ لا يُعيد موعداً ملغى أو مستبدلاً إلى الجدول بضغطة واحدة.
+  const blocked = confirmBlockedReason(before);
+  if (blocked) throw new MawaeedError(409, blocked);
   const after: OccurrenceRecord = {
     ...before,
     certainty: "confirmed",

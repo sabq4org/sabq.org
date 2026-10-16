@@ -12,6 +12,42 @@ type BucketRow = {
 
 export type DashboardBucket = "attention" | "upcoming" | "past";
 
+/** زر «تأكيد» لا يُعيد نشر موعد ملغى أو مستبدل؛ يُعاد إلى «مجدول» من التعديل أولاً. */
+export function confirmBlockedReason(row: Pick<BucketRow, "status">): string | null {
+  if (row.status === "cancelled") return "الموعد ملغى. أعده إلى «مجدول» من التعديل قبل تأكيده.";
+  if (row.status === "superseded") return "الموعد مستبدل بآخر. أعده إلى «مجدول» من التعديل قبل تأكيده.";
+  return null;
+}
+
+/** تعارض كتابة: الصف تغيّر منذ فتحه المحرر. ختم فارغ من العميل = لا فحص (عملاء أقدم). */
+export function isStaleWrite(expectedUpdatedAt: string | null | undefined, currentUpdatedAt: string | null | undefined): boolean {
+  if (!expectedUpdatedAt || !currentUpdatedAt) return false;
+  const expected = Date.parse(expectedUpdatedAt);
+  const current = Date.parse(currentUpdatedAt);
+  if (!Number.isFinite(expected) || !Number.isFinite(current)) return false;
+  return expected !== current;
+}
+
+export const STALE_WRITE_MESSAGE = "عدّل زميل هذا الموعد بعد أن فتحته. أعد تحميل الصفحة ثم كرّر تعديلك.";
+
+/** أسماء الحقول للمحرر عند رفض الإدخال (400). */
+export const OCCURRENCE_FIELD_LABELS: Record<string, string> = {
+  seriesId: "القسم",
+  titleAr: "العنوان",
+  startsOn: "تاريخ البداية",
+  endsOn: "تاريخ النهاية",
+  sourceUrl: "رابط المصدر",
+  sourceTitle: "اسم المصدر",
+  certainty: "درجة التأكد",
+  status: "الحالة",
+  published: "النشر",
+  regionGroup: "المنطقة",
+  hijriLabel: "التاريخ الهجري",
+  publicNote: "ملاحظة القارئ",
+  ruleNote: "الملاحظة الداخلية",
+  expectedUpdatedAt: "ختم التعديل",
+};
+
 function lastDay(row: BucketRow): string {
   return row.endsOn && row.endsOn > row.startsOn ? row.endsOn : row.startsOn;
 }
