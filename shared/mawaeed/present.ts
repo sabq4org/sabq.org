@@ -4,7 +4,7 @@
  */
 
 import { buildFaq, METHODOLOGY, type FaqItem } from "./content";
-import { daysPhrase, formatGregorian, formatHijri, formatRiyadhDayLabel, riyadhDateISO } from "./dates";
+import { daysPhrase, formatGregorian, formatHijri, formatRiyadhDayLabel, liveCountdown, riyadhDateISO } from "./dates";
 import { regionSuffix, serviceLinkForSeries } from "../servicePages/catalog";
 import { visionNote } from "./notes";
 import {
@@ -114,7 +114,7 @@ export function presentMawaeed(input: {
     return { notFound: true };
   }
   const visibleSeries = pageSlug ? publishedSeries.filter((item) => item.slug === pageSlug) : publishedSeries;
-  const blocks = visibleSeries.map((item) => buildBlock(item, input.occurrences, region, today));
+  const blocks = visibleSeries.map((item) => buildBlock(item, input.occurrences, region, input.now));
   const dateModified = maxModified(pageSlug ? visibleSeries : publishedSeries);
   const dateModifiedLabel = formatRiyadhDayLabel(dateModified);
   const copy = pageSlug ? catalogBySlug(pageSlug) : null;
@@ -171,12 +171,13 @@ function toFaq(card: MawaeedCard) {
   };
 }
 
-function buildBlock(series: SeriesRecord, rows: OccurrenceRecord[], region: RegionId, today: string): MawaeedSeriesBlock {
+function buildBlock(series: SeriesRecord, rows: OccurrenceRecord[], region: RegionId, now: Date): MawaeedSeriesBlock {
+  const today = riyadhDateISO(now);
   const cards = rows
     .filter((row) => row.seriesId === series.id && isPublicOccurrence(row) && occurrenceVisibleInRegion(row.regionGroup, region))
     .slice()
     .sort((a, b) => a.startsOn.localeCompare(b.startsOn) || a.titleAr.localeCompare(b.titleAr, "ar"))
-    .map((row) => toCard(series, row, today));
+    .map((row) => toCard(series, row, now));
   const upcoming = cards.filter((card) => !card.isPast);
   const past = cards.filter((card) => card.isPast);
   const next = upcoming[0] ?? null;
@@ -197,7 +198,8 @@ function buildBlock(series: SeriesRecord, rows: OccurrenceRecord[], region: Regi
   };
 }
 
-function toCard(series: SeriesRecord, row: OccurrenceRecord, today: string): MawaeedCard {
+function toCard(series: SeriesRecord, row: OccurrenceRecord, now: Date): MawaeedCard {
+  const today = riyadhDateISO(now);
   const gregorian = formatGregorian(row.startsOn);
   const hijriLabel = formatHijri(row.startsOn, row.hijriLabel);
   const calendarDays = daysBetween(today, row.startsOn);
@@ -208,11 +210,15 @@ function toCard(series: SeriesRecord, row: OccurrenceRecord, today: string): Maw
   const isOngoing = calendarDays < 0 && !isPast;
   const endLabel = lastDay !== row.startsOn ? dayMonth(lastDay) : null;
   const todayLabel = todayWord(series.kind);
+  // النص الثابت يحسب الأيام كالعدّاد الحي (24 ساعة لليوم) حتى لا يقول «بعد 9 أيام» والساعة تعرض 8 أيام و8 ساعات.
+  // اليوم والغد يبقيان على فرق التقويم («تُصرف اليوم»، «بعد يوم واحد»).
   const countdownText = isPast
     ? pastWord(series.kind)
     : isOngoing
       ? `${ongoingWord(series.kind)} حتى ${endLabel}`
-      : daysPhrase(calendarDays, todayLabel);
+      : calendarDays <= 1
+        ? daysPhrase(calendarDays, todayLabel)
+        : daysPhrase(Math.max(1, liveCountdown(now, row.startsOn, todayLabel).days), todayLabel);
   return {
     id: row.id,
     seriesSlug: series.slug,
