@@ -400,7 +400,11 @@
         "server/services/botPersonalScheduleService.ts",
         "client/src/lib/editAndGenerateStream.ts",
         "tests/unit/editAndGenerateStream.test.ts",
-        "tests/unit/openaiUsageAttribution.test.ts"
+        "tests/unit/openaiUsageAttribution.test.ts",
+        "shared/articleVisibility.ts",
+        "server/services/articleVisibilityService.ts",
+        "server/routes/unpublishedArticleGuard.ts",
+        "tests/unit/unpublishedArticleGuard.test.ts"
       ],
       "aiFeatureKeys": [
         "content-tools",
@@ -452,7 +456,7 @@
       "owners": [
         "editorial"
       ],
-      "lastReviewed": "2026-10-15"
+      "lastReviewed": "2026-10-16"
     },
     {
       "id": "ifox",

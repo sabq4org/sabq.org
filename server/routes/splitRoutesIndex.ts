@@ -3,6 +3,7 @@ import { aiHubRouter } from "./aiHub";
 import { editAndGenerateStreamRouter } from "./editAndGenerateStream";
 import { integrationsStatusRouter } from "./integrationsStatus";
 import systemSettingsRouter from "./systemSettings";
+import unpublishedArticleGuardRouter from "./unpublishedArticleGuard";
 import audioBulletinRouter from "./audioBulletin";
 import userDashboardThemeRouter from "./userDashboardTheme";
 import adminActivityLogsRouter from "./adminActivityLogs";
@@ -118,6 +119,8 @@ import servicePagesRouter from "./servicePages";
  */
 export function registerSplitRoutes(app: Express) {
   // Must run after setupAuth (caller guarantees that).
+  // First: hides drafts/scheduled articles from the public article handlers in routes.ts.
+  app.use(unpublishedArticleGuardRouter);
   app.use(systemSettingsRouter);
   app.use(audioBulletinRouter);
   app.use(userDashboardThemeRouter);
