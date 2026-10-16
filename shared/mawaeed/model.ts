@@ -24,22 +24,22 @@ export const REGION_GROUPS = ["all", "riyadh_most", "western"] as const;
 export type RegionGroup = (typeof REGION_GROUPS)[number];
 
 export const REGIONS = [
-  // riyadh_most is a legacy occurrence key. Its source is Qassim; keep it
-  // attached only to Qassim until each administration publishes its own date.
-  { id: "riyadh", label: "الرياض", group: null },
-  { id: "sharqia", label: "الشرقية", group: null },
+  // Legacy key for the four-extra-day calendar outside the western administrations.
+  // Evidence and dates: docs/systems/mawaeed/SYSTEM.md.
+  { id: "riyadh", label: "الرياض", group: "riyadh_most" },
+  { id: "sharqia", label: "الشرقية", group: "riyadh_most" },
   { id: "makkah", label: "مكة المكرمة", group: "western" },
   { id: "madinah", label: "المدينة المنورة", group: "western" },
   { id: "qassim", label: "القصيم", group: "riyadh_most" },
-  { id: "asir", label: "عسير", group: null },
-  { id: "tabuk", label: "تبوك", group: null },
-  { id: "hail", label: "حائل", group: null },
-  { id: "north", label: "الحدود الشمالية", group: null },
-  { id: "jazan", label: "جازان", group: null },
-  { id: "najran", label: "نجران", group: null },
-  { id: "baha", label: "الباحة", group: null },
-  { id: "jawf", label: "الجوف", group: null },
-  { id: "ahsaa", label: "الأحساء", group: null },
+  { id: "asir", label: "عسير", group: "riyadh_most" },
+  { id: "tabuk", label: "تبوك", group: "riyadh_most" },
+  { id: "hail", label: "حائل", group: "riyadh_most" },
+  { id: "north", label: "الحدود الشمالية", group: "riyadh_most" },
+  { id: "jazan", label: "جازان", group: "riyadh_most" },
+  { id: "najran", label: "نجران", group: "riyadh_most" },
+  { id: "baha", label: "الباحة", group: "riyadh_most" },
+  { id: "jawf", label: "الجوف", group: "riyadh_most" },
+  { id: "ahsaa", label: "الأحساء", group: "riyadh_most" },
   { id: "jeddah", label: "جدة", group: "western" },
   { id: "taif", label: "الطائف", group: "western" },
 ] as const;

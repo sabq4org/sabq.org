@@ -51,6 +51,18 @@ const rows: OccurrenceRecord[] = [
 ];
 
 describe("mawaeed HTML", () => {
+  it("shows the missing-extra notice for any region when no local dates are published", () => {
+    const presented = presentMawaeed({
+      pageSlug: "school-calendar-1448",
+      region: "qassim",
+      now: new Date("2026-10-16T12:00:00+03:00"),
+      series: [{ ...series, slug: "school-calendar-1448", kind: "school_holiday" }],
+      occurrences: [],
+    });
+    if (presented.notFound) throw new Error("expected school page");
+    expect(renderMawaeedHtml(presented.view)).toContain("لم تُعتمد في الخدمة إجازات إضافية خاصة بهذه المنطقة بعد");
+  });
+
   it("recognises only the public page paths", () => {
     expect(mawaeedSlugFromPath("/mawaeed")).toBe("");
     expect(mawaeedSlugFromPath("/mawaeed/salaries")).toBe("salaries");

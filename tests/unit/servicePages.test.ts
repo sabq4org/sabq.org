@@ -323,9 +323,10 @@ describe("service page extras", () => {
 describe("school service page region", () => {
   const school = series({ id: "s-school", slug: "school-calendar-1448", kind: "school_holiday", titleAr: "التقويم الدراسي 1448" });
   const occurrences: OccurrenceRecord[] = [
-    row({ id: "extra-riyadh", seriesId: "s-school", titleAr: "الإجازة الإضافية الأولى (الرياض)", startsOn: "2026-10-25", regionGroup: "riyadh_most" }),
+    row({ id: "extra-riyadh", seriesId: "s-school", titleAr: "الإجازة الإضافية الأولى (الإدارات غير الغربية)", startsOn: "2026-10-25", regionGroup: "riyadh_most" }),
+    row({ id: "extra-riyadh-later", seriesId: "s-school", titleAr: "الإجازة الإضافية الثانية (الإدارات غير الغربية)", startsOn: "2026-11-29", regionGroup: "riyadh_most" }),
     row({ id: "autumn", seriesId: "s-school", titleAr: "إجازة الخريف", startsOn: "2026-11-20" }),
-    row({ id: "extra-west", seriesId: "s-school", titleAr: "الإجازة الإضافية (مكة)", startsOn: "2026-12-06", regionGroup: "western" }),
+    row({ id: "extra-west", seriesId: "s-school", titleAr: "الإجازة الإضافية (الغرب)", startsOn: "2026-10-25", regionGroup: "western" }),
   ];
 
   function schoolPage(region: string | null) {
@@ -337,11 +338,12 @@ describe("school service page region", () => {
   }
 
   it.each([
+    ["riyadh", "2026-10-25", ""],
     ["qassim", "2026-10-25", "?region=qassim"],
-    ["makkah", "2026-11-20", "?region=makkah"],
-    ["madinah", "2026-11-20", "?region=madinah"],
-    ["jeddah", "2026-11-20", "?region=jeddah"],
-    ["taif", "2026-11-20", "?region=taif"],
+    ["makkah", "2026-10-25", "?region=makkah"],
+    ["madinah", "2026-10-25", "?region=madinah"],
+    ["jeddah", "2026-10-25", "?region=jeddah"],
+    ["taif", "2026-10-25", "?region=taif"],
   ])("shows %s dates and carries the region to the calendar and share image", (region, nextDate, suffix) => {
     const model = schoolPage(region);
     expect(model.region).toBe(region);
@@ -350,14 +352,14 @@ describe("school service page region", () => {
     expect(model.ogImage).toBe(`https://sabq.org/api/service-pages/school-calendar-date/og.png${suffix}`);
     expect(model.canonical).toBe("https://sabq.org/services/school-calendar-date");
     const ics = buildServiceCalendar(model) ?? "";
-    if (region === "qassim") {
+    if (region === "riyadh" || region === "qassim") {
       expect(ics).toContain("DTSTART;VALUE=DATE:20261025");
-      expect(ics).not.toContain("DTSTART;VALUE=DATE:20261206");
-      expect(ics).toContain("UID:school-calendar-date-qassim-extra-riyadh@sabq.org");
+      const uidPrefix = region === "riyadh" ? "school-calendar-date" : `school-calendar-date-${region}`;
+      expect(ics).toContain(`UID:${uidPrefix}-extra-riyadh@sabq.org`);
     } else {
-      expect(ics).not.toContain("DTSTART;VALUE=DATE:20261025");
-      expect(ics).toContain("DTSTART;VALUE=DATE:20261206");
-      expect(ics).toContain(`UID:school-calendar-date-${region}-autumn@sabq.org`);
+      expect(ics).toContain("DTSTART;VALUE=DATE:20261025");
+      expect(ics).not.toContain("DTSTART;VALUE=DATE:20261129");
+      expect(ics).toContain(`UID:school-calendar-date-${region}-extra-west@sabq.org`);
     }
   });
 
@@ -379,7 +381,11 @@ describe("school service page region", () => {
   });
 
   it("exposes the full region selector and warns when a region has no extra dates", () => {
-    const model = schoolPage("asir");
+    const noExtras = [occurrences[2]];
+    const presented = presentMawaeed({ pageSlug: school.slug, region: "asir", now: NOW, series: [school], occurrences: noExtras });
+    if (presented.notFound) throw new Error("expected mawaeed view");
+    const model = presentServicePage("school-calendar-date", presented.view);
+    if (!model) throw new Error("expected service page");
     expect(model.regions).toHaveLength(16);
     expect(model.region).toBe("asir");
     expect(model.regionNotice).toBe("المعروض هو التقويم الدراسي العام. لم تُعتمد في الخدمة إجازات إضافية خاصة بهذه المنطقة بعد.");

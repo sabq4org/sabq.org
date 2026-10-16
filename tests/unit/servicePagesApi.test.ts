@@ -48,7 +48,7 @@ function row(id: string, titleAr: string, startsOn: string, regionGroup: Occurre
 }
 
 const occurrences = [
-  row("qassim", "الإجازة الإضافية (القصيم)", "2026-10-25", "riyadh_most"),
+  row("non-western", "الإجازة الإضافية (الإدارات غير الغربية)", "2026-10-25", "riyadh_most"),
   row("autumn", "إجازة الخريف", "2026-11-20", "all"),
 ];
 
@@ -97,15 +97,19 @@ describe("service pages API region", () => {
   it("defaults to Riyadh without a region and for pages that do not vary by region", async () => {
     const json = await (await fetch(`${base}/api/service-pages/school-calendar-date`)).json();
     expect(json.region).toBe("riyadh");
-    expect(json.next.startsOn).toBe("2026-11-20");
+    expect(json.next.startsOn).toBe("2026-10-25");
     await fetch(`${base}/api/service-pages/school-calendar-date?region=../../etc`);
     expect(mocks.getPublicPage).toHaveBeenLastCalledWith("school-calendar-1448", "riyadh");
   });
 
-  it("serves legacy extra dates only for the Qassim region", async () => {
-    const json = await (await fetch(`${base}/api/service-pages/school-calendar-date?region=qassim`)).json();
-    expect(mocks.getPublicPage).toHaveBeenCalledWith("school-calendar-1448", "qassim");
-    expect(json.region).toBe("qassim");
-    expect(json.next.startsOn).toBe("2026-10-25");
+  it("serves the four-extra-day calendar for Riyadh and the other non-western regions", async () => {
+    const nonWestern = ["riyadh", "sharqia", "qassim", "asir", "tabuk", "hail", "north", "jazan", "najran", "baha", "jawf", "ahsaa"];
+    for (const region of nonWestern) {
+      const suffix = region === "riyadh" ? "" : `?region=${region}`;
+      const json = await (await fetch(`${base}/api/service-pages/school-calendar-date${suffix}`)).json();
+      expect(mocks.getPublicPage).toHaveBeenLastCalledWith("school-calendar-1448", region);
+      expect(json.region).toBe(region);
+      expect(json.next.startsOn).toBe("2026-10-25");
+    }
   });
 });
