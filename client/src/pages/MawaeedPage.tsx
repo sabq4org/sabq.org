@@ -425,7 +425,27 @@ function MawaeedBody({
         ) : null}
       </div>
 
-      {view.methodology ? <p className="mw-method">{view.methodology}</p> : null}
+      {view.methodology ? (
+        <section className="mw-method-box" aria-labelledby="mw-method-title">
+          <div className="mw-method-head">
+            <h2 id="mw-method-title" className="mw-method-title">
+              <ShieldCheck aria-hidden="true" />
+              <span>منهجية التحقق من المواعيد ودلالة الشارات</span>
+            </h2>
+            <div className="mw-method-legend" aria-label="دلالة شارات الحالة">
+              <span className="mw-method-legend-item">
+                <span className="mw-badge is-confirmed">مؤكد</span>
+                <span>إعلان رسمي من الجهة</span>
+              </span>
+              <span className="mw-method-legend-item">
+                <span className="mw-badge is-expected">متوقع</span>
+                <span>محسوب من الجدول المعتاد</span>
+              </span>
+            </div>
+          </div>
+          <p className="mw-method">{view.methodology}</p>
+        </section>
+      ) : null}
     </>
   );
 }
