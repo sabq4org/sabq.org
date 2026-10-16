@@ -1,6 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronRight } from "lucide-react";
+import {
+  Calendar,
+  CalendarPlus,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  Clock,
+  ExternalLink,
+  Newspaper,
+  Share2,
+} from "lucide-react";
 import { Link, useParams } from "wouter";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
@@ -72,6 +82,12 @@ function useLiveCountdown(startsOn: string | undefined, todayLabel: string, init
     return () => window.clearInterval(id);
   }, [startsOn, todayLabel]);
   return { text, parts };
+}
+
+function statusBadgeClass(certainty: "confirmed" | "expected" | undefined, isPast?: boolean): string {
+  if (isPast) return "service-status-badge is-past";
+  if (certainty === "expected") return "service-status-badge is-expected";
+  return "service-status-badge is-confirmed";
 }
 
 export default function ServiceDatePage() {
@@ -170,19 +186,31 @@ function ServiceDateBody({
         <ChevronRight aria-hidden="true" />
         <span aria-current="page">{model.h1}</span>
       </nav>
-      <div className="article-detail-layout">
+      <div className="article-detail-layout service-date-page" data-tone={model.tone}>
         <article className="article-detail-content min-w-0">
           <header className="article-detail-header">
-            <div className="flex items-center gap-3">
-              {model.next ? <span className="article-category-label shrink-0">{model.next.certaintyLabel}</span> : null}
+            <div className="flex flex-wrap items-center gap-3">
+              {model.next ? (
+                <span className={statusBadgeClass(model.next.certainty)}>
+                  {model.next.certaintyLabel}
+                </span>
+              ) : null}
               <h1 className="article-detail-title !mt-0 min-w-0">{model.h1}</h1>
             </div>
             <Answer model={model} countdown={live.text} />
             <div className="article-detail-byline">
               {model.next?.sourceUrl ? (
-                <p className="public-meta">
-                  المصدر:{" "}
-                  <a href={model.next.sourceUrl} rel="noopener noreferrer">{model.next.sourceTitle}</a>
+                <p className="public-meta inline-flex items-center gap-1.5">
+                  <span>المصدر:</span>
+                  <a
+                    href={model.next.sourceUrl}
+                    rel="noopener noreferrer"
+                    target="_blank"
+                    className="inline-flex items-center gap-1 font-semibold hover:underline"
+                  >
+                    <span>{model.next.sourceTitle}</span>
+                    <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+                  </a>
                 </p>
               ) : <span />}
               <p className="article-detail-metadata">
@@ -190,84 +218,178 @@ function ServiceDateBody({
               </p>
             </div>
           </header>
-          {model.next && (
-            <div className="article-detail-summary">
-              <p className="public-meta">ميلادي</p>
-              <p><time dateTime={model.next.startsOn}>{model.next.gregorianLabel}</time></p>
-              <p className="public-meta">هجري</p>
-              <p>{model.next.hijriLabel}</p>
-              {live.parts && (
-                <p className="article-detail-metadata" aria-hidden="true">
-                  <span><b className="tabular-nums">{live.parts.days}</b> يوم</span>
-                  <span><b className="tabular-nums">{live.parts.hours}</b> ساعة</span>
-                  <span><b className="tabular-nums">{live.parts.minutes}</b> دقيقة</span>
+
+          {model.next ? (
+            <section className="service-next-panel" aria-label="بطاقة الموعد القادم">
+              <div className="service-next-header">
+                <p className="service-next-kicker">
+                  <Calendar aria-hidden="true" />
+                  <span>الموعد القادم · {model.next.title}</span>
                 </p>
+                <span className={statusBadgeClass(model.next.certainty)}>
+                  {model.next.certaintyLabel}
+                </span>
+              </div>
+              <div className="service-date-grid">
+                <div className="service-date-cell">
+                  <p className="service-date-label">التاريخ الميلادي</p>
+                  <p className="service-date-value">
+                    <time dateTime={model.next.startsOn}>{model.next.gregorianLabel}</time>
+                  </p>
+                </div>
+                <div className="service-date-cell">
+                  <p className="service-date-label">التاريخ الهجري (أم القرى)</p>
+                  <p className="service-date-value">{model.next.hijriLabel}</p>
+                </div>
+              </div>
+              {live.parts && (
+                <div className="service-countdown-bar" aria-hidden="true">
+                  <p className="service-countdown-label">الوقت المتبقي على الصرف (بتوقيت الرياض)</p>
+                  <div className="service-countdown-grid">
+                    <div className="service-countdown-cell">
+                      <b className="service-countdown-num">{live.parts.days}</b>
+                      <span className="service-countdown-unit">يوم</span>
+                    </div>
+                    <div className="service-countdown-cell">
+                      <b className="service-countdown-num">{live.parts.hours}</b>
+                      <span className="service-countdown-unit">ساعة</span>
+                    </div>
+                    <div className="service-countdown-cell">
+                      <b className="service-countdown-num">{live.parts.minutes}</b>
+                      <span className="service-countdown-unit">دقيقة</span>
+                    </div>
+                  </div>
+                </div>
               )}
+              <div className="service-actions-bar">
+                {model.calendarHref && (
+                  <Button asChild>
+                    <a href={apiUrl(model.calendarHref)}>
+                      <CalendarPlus className="ml-2 h-4 w-4" aria-hidden="true" />
+                      أضف المواعيد القادمة إلى التقويم
+                    </a>
+                  </Button>
+                )}
+                <ShareButton title={model.title} />
+              </div>
+            </section>
+          ) : (
+            <div className="article-detail-toolbar-row">
+              <ShareButton title={model.title} />
             </div>
           )}
-          <div className="article-detail-toolbar-row">
-            {model.calendarHref && (
-              <Button asChild>
-                <a href={apiUrl(model.calendarHref)}>أضف المواعيد القادمة إلى التقويم</a>
-              </Button>
-            )}
-            <ShareButton title={model.title} />
-          </div>
+
           <section>
             <h2 className="public-section-title">خط المواعيد</h2>
-            <p className="public-meta">المواعيد من السجل المنشور. ما مضى يظهر «صُرفت»، وما لم تعلنه الجهة بعد يبقى «متوقعًا».</p>
+            <p className="public-meta mt-1">
+              المواعيد من السجل المنشور. ما مضى يظهر «صُرفت»، وما لم تعلنه الجهة بعد يبقى «متوقعًا».
+            </p>
             {model.rows.length === 0 ? (
-              <p>لا توجد مواعيد منشورة في السجل.</p>
+              <p className="mt-4">لا توجد مواعيد منشورة في السجل.</p>
             ) : (
-              <ol className="mt-4 divide-y divide-border">
-                {model.rows.map((row) => (
-                  <li key={row.startsOn} className="py-4">
-                    {row.isNext && <p className="public-meta">الموعد القادم</p>}
-                    <h3 className="public-card-title">{row.title}</h3>
-                    <p><time dateTime={row.startsOn}>{row.gregorianLabel}</time></p>
-                    <p className="public-meta">{row.hijriLabel}</p>
-                    <p className="public-meta">{row.isPast ? row.pastLabel || "صُرفت" : row.certaintyLabel}</p>
-                  </li>
-                ))}
+              <ol className="service-timeline">
+                {model.rows.map((row) => {
+                  const rowCertainty = row.certaintyLabel === "متوقع" ? "expected" : "confirmed";
+                  return (
+                    <li
+                      key={row.startsOn}
+                      className={`service-timeline-row${row.isNext ? " is-next" : ""}${row.isPast ? " is-past" : ""}`}
+                    >
+                      <div className="service-timeline-main">
+                        <div className="service-timeline-head">
+                          <h3 className="service-timeline-title">{row.title}</h3>
+                          {row.isNext && <span className="service-next-pill">الموعد القادم</span>}
+                        </div>
+                        <p className="service-timeline-dates">
+                          <time dateTime={row.startsOn}>{row.gregorianLabel}</time>
+                          <span aria-hidden="true">·</span>
+                          <span className="service-timeline-hijri">{row.hijriLabel}</span>
+                        </p>
+                      </div>
+                      <div className="service-timeline-meta">
+                        {!row.isPast && row.countdownText ? (
+                          <span className="service-timeline-countdown">{row.countdownText}</span>
+                        ) : null}
+                        <span className={statusBadgeClass(rowCertainty, row.isPast)}>
+                          {row.isPast ? row.pastLabel || "صُرفت" : row.certaintyLabel}
+                        </span>
+                      </div>
+                    </li>
+                  );
+                })}
               </ol>
             )}
           </section>
-          <section className="article-prose">
-            <h2>كيف يُحدَّد الموعد</h2>
-            {model.explanation.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}
+
+          <section>
+            <h2 className="public-section-title">كيف يُحدَّد الموعد</h2>
+            <div className="service-explanation-box">
+              {model.explanation.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}
+            </div>
           </section>
+
           {model.faq.length > 0 && (
-            <section className="article-prose">
-              <h2>أسئلة شائعة</h2>
-              {model.faq.map((item) => (
-                <div key={item.question}>
-                  <h3>{item.question}</h3>
-                  <p>{item.answer}</p>
-                </div>
-              ))}
+            <section>
+              <h2 className="public-section-title">أسئلة شائعة</h2>
+              <div className="service-faq-list">
+                {model.faq.map((item, idx) => (
+                  <details key={item.question} className="service-faq-item" open={idx === 0}>
+                    <summary className="service-faq-summary">{item.question}</summary>
+                    <div className="service-faq-answer">
+                      <p>{item.answer}</p>
+                    </div>
+                  </details>
+                ))}
+              </div>
             </section>
           )}
         </article>
+
         <aside className="article-detail-sidebar min-w-0">
           {related.length > 0 && (
-            <section>
-              <h2 className="public-section-title">من أخبار سبق</h2>
-              <ul className="mt-3 space-y-3">
+            <section className="article-sidebar-module">
+              <div className="article-sidebar-heading">
+                <h2>
+                  <span className="article-sidebar-heading-icon" aria-hidden="true">
+                    <Newspaper />
+                  </span>
+                  من أخبار سبق
+                </h2>
+              </div>
+              <ul className="service-sidebar-list">
                 {related.map((item) => (
-                  <li key={item.href}><Link href={item.href}>{item.title}</Link></li>
+                  <li key={item.href}>
+                    <Link href={item.href} className="service-sidebar-link">
+                      <span>{item.title}</span>
+                      <ChevronLeft aria-hidden="true" />
+                    </Link>
+                  </li>
                 ))}
               </ul>
             </section>
           )}
-          <nav className="mt-8" aria-label="صفحات ذات صلة">
-            <h2 className="public-section-title">صفحات ذات صلة</h2>
-            <ul className="mt-3 space-y-3">
+          <nav className="article-sidebar-module" aria-label="صفحات ذات صلة">
+            <div className="article-sidebar-heading">
+              <h2>
+                <span className="article-sidebar-heading-icon" aria-hidden="true">
+                  <Clock />
+                </span>
+                صفحات ذات صلة
+              </h2>
+            </div>
+            <ul className="service-sidebar-list">
               {model.links.map((item) => (
                 <li key={item.href}>
                   {item.href === "/mawaeed" || item.href.startsWith("/mawaeed/") ? (
-                    <a href={item.href}>{item.label}</a>
+                    <a href={item.href} className="service-sidebar-link">
+                      <span>{item.label}</span>
+                      <ChevronLeft aria-hidden="true" />
+                    </a>
                   ) : (
-                    <Link href={item.href}>{item.label}</Link>
+                    <Link href={item.href} className="service-sidebar-link">
+                      <span>{item.label}</span>
+                      <ChevronLeft aria-hidden="true" />
+                    </Link>
                   )}
                 </li>
               ))}
@@ -281,26 +403,30 @@ function ServiceDateBody({
 
 function Answer({ model, countdown }: { model: ServicePageModel; countdown: string }) {
   if (!model.next) {
-    return <p className="article-detail-subtitle" id="answer">{model.leadPrefix}</p>;
+    return <p className="service-answer-lead" id="answer">{model.leadPrefix}</p>;
   }
   const next = model.next;
   const hint = next.expectedHint?.replace(/^متوقع:\s*/, "");
   return (
     <>
-      <p className="article-detail-subtitle" id="answer">
+      <p className="service-answer-lead" id="answer">
         {model.leadPrefix}{" "}
         <time dateTime={next.startsOn}>{next.gregorianLabel}</time>
         {" "}الموافق {next.hijriLabel}،{" "}
         <strong data-countdown data-date={next.startsOn} data-today={next.todayLabel}>{countdown || next.countdownText}</strong>.
       </p>
-      {hint ? <p className="article-detail-subtitle">{hint}</p> : null}
-      {model.shiftRule ? <p className="article-detail-subtitle">{model.shiftRule}</p> : null}
+      {hint || model.shiftRule ? (
+        <div className="service-rule-notes">
+          {hint ? <p>{hint}</p> : null}
+          {model.shiftRule ? <p>{model.shiftRule}</p> : null}
+        </div>
+      ) : null}
     </>
   );
 }
 
 function ShareButton({ title }: { title: string }) {
-  const [label, setLabel] = useState("شارك الموعد");
+  const [copied, setCopied] = useState(false);
   return (
     <Button
       type="button"
@@ -311,10 +437,18 @@ function ShareButton({ title }: { title: string }) {
           navigator.share({ title, url }).catch(() => {});
           return;
         }
-        navigator.clipboard?.writeText(url).then(() => setLabel("تم نسخ الرابط")).catch(() => {});
+        navigator.clipboard?.writeText(url).then(() => {
+          setCopied(true);
+          window.setTimeout(() => setCopied(false), 2500);
+        }).catch(() => {});
       }}
     >
-      {label}
+      {copied ? (
+        <Check className="ml-2 h-4 w-4" aria-hidden="true" />
+      ) : (
+        <Share2 className="ml-2 h-4 w-4" aria-hidden="true" />
+      )}
+      {copied ? "تم نسخ الرابط" : "شارك الموعد"}
     </Button>
   );
 }
