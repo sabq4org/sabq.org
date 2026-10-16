@@ -85,7 +85,7 @@ describe("mawaeed edge branch", () => {
     fetcher.mockRejectedValue(new Error("origin down"));
     const next = vi.fn(async () => new Response("spa-shell"));
     const response = await onRequest({
-      request: new Request("https://sabq.org/mawaeed/salaries"),
+      request: new Request("https://sabq.org/mawaeed"),
       env: { CF_PAGES_COMMIT_SHA: "abc" },
       next,
       waitUntil: vi.fn(),
@@ -96,6 +96,19 @@ describe("mawaeed edge branch", () => {
     expect(response.headers.get("Cache-Control")).toMatch(/no-store/);
     expect(html).toContain("تعذر تحميل المواعيد");
     expect(html).not.toContain("spa-shell");
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  it("redirects legacy /mawaeed/:slug URLs to their new /services/* pages", async () => {
+    const next = vi.fn(async () => new Response("spa-shell"));
+    const response = await onRequest({
+      request: new Request("https://sabq.org/mawaeed/salaries"),
+      env: { CF_PAGES_COMMIT_SHA: "abc" },
+      next,
+      waitUntil: vi.fn(),
+    });
+    expect(response.status).toBe(301);
+    expect(response.headers.get("Location")).toBe("https://sabq.org/services/government-salaries-date");
     expect(next).not.toHaveBeenCalled();
   });
 

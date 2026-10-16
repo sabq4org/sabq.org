@@ -20,7 +20,7 @@ export type ServicePageModel = {
   calendarHref: string | null;
   relatedQuery: string | null;
   relatedSource: "keyword" | "search";
-  tone?: "citizen" | "salary";
+  tone?: "citizen" | "salary" | "school" | "social" | "pension";
   jsonLd: Record<string, unknown>;
   next: {
     title?: string;

@@ -252,7 +252,7 @@
   line-height: 2.15;
 }
 
-/* Service Date Pages (/services/citizen-account-date, /services/government-salaries-date) */
+/* Service Date Pages (/services/*) */
 .article-detail .service-date-page {
   --service-ok: #0d6b4d;
   --service-ok-soft: #e4f5ec;
@@ -267,7 +267,13 @@
   --service-warn-soft: #3a2f14;
 }
 .article-detail .service-date-page[data-tone="salary"] { --service-accent: var(--service-ok); }
-.article-detail .service-date-page[data-tone="citizen"] { --service-accent: var(--article-brand); }
+.article-detail .service-date-page[data-tone="citizen"] { --service-accent: #9a5b00; }
+.article-detail .service-date-page[data-tone="school"] { --service-accent: var(--article-brand); }
+.article-detail .service-date-page[data-tone="social"] { --service-accent: #5b21b6; }
+.article-detail .service-date-page[data-tone="pension"] { --service-accent: #b45309; }
+.dark .article-detail .service-date-page[data-tone="citizen"] { --service-accent: #e8bd6a; }
+.dark .article-detail .service-date-page[data-tone="social"] { --service-accent: #b79cf5; }
+.dark .article-detail .service-date-page[data-tone="pension"] { --service-accent: #f0a868; }
 
 .service-status-badge {
   display: inline-flex;

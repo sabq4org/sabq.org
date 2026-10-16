@@ -61,6 +61,9 @@ describe("service page paths", () => {
   it("accepts one clean segment under /services", () => {
     expect(servicePageIdFromPath("/services/citizen-account-date")).toBe("citizen-account-date");
     expect(servicePageIdFromPath("/services/government-salaries-date")).toBe("government-salaries-date");
+    expect(servicePageIdFromPath("/services/school-calendar-date")).toBe("school-calendar-date");
+    expect(servicePageIdFromPath("/services/social-security-date")).toBe("social-security-date");
+    expect(servicePageIdFromPath("/services/pensions-date")).toBe("pensions-date");
     expect(servicePageIdFromPath("/services")).toBeNull();
     expect(servicePageIdFromPath("/services/citizen-account-date/extra")).toBeNull();
     expect(servicePageIdFromPath("/mawaeed/salaries")).toBeNull();
@@ -103,8 +106,10 @@ describe("salary service page", () => {
     expect(model.calendarHref).toBe("/api/service-pages/government-salaries-date/calendar.ics");
     expect(model.faq.length).toBeGreaterThanOrEqual(5);
     expect(model.faq.length).toBeLessThanOrEqual(8);
-    expect(model.links.map((item) => item.href).some((href) => href.startsWith("/services/"))).toBe(false);
-    expect(model.links.map((item) => item.href)).toContain("/mawaeed/salaries");
+    expect(model.links.map((item) => item.href)).toContain("/mawaeed");
+    expect(model.links.map((item) => item.href)).toContain("/services/citizen-account-date");
+    expect(model.links.map((item) => item.href)).not.toContain("/mawaeed/salaries");
+    expect(model.links.map((item) => item.href)).not.toContain("/services/government-salaries-date");
   });
 
   it("prints only stored dates and FAQPage plus WebPage plus breadcrumbs", () => {
@@ -181,7 +186,8 @@ describe("citizen account service page", () => {
     expect(html).toContain("محسوب من الجدول المعتاد للجهة إلى أن يصدر الإعلان الرسمي.");
     expect(html).not.toContain("الحالة:");
     expect(html).toContain("خبر عن الدفعة");
-    expect(html).not.toContain("/services/government-salaries-date");
+    expect(html).toContain("/services/government-salaries-date");
+    expect(html).not.toContain("/mawaeed/citizen-account");
     expect(html).toContain('datetime="2026-11-10"');
     expect(model.faq.filter((item) => item.question.trim()).length).toBeGreaterThanOrEqual(5);
   });
@@ -199,6 +205,26 @@ describe("citizen account service page", () => {
     expect(html).toContain("2026-09-10");
     expect(html).toContain("صُرفت");
     expect(html).not.toContain("calendar.ics");
+  });
+});
+
+describe("other mawaeed service pages", () => {
+  it("builds school calendar, social security, and pensions service pages", () => {
+    const school = series({
+      id: "s-school",
+      slug: "school-calendar-1448",
+      kind: "school_holiday",
+      titleAr: "التقويم الدراسي 1448",
+      sortOrder: 1,
+    });
+    const { model: schoolModel } = page("school-calendar-date", school, [
+      row({ id: "hol-past", seriesId: "s-school", titleAr: "إجازة سابقة", startsOn: "2026-09-10", certainty: "confirmed" }),
+      row({ id: "hol-next", seriesId: "s-school", titleAr: "إجازة الخريف", startsOn: "2026-11-20", certainty: "confirmed" }),
+    ]);
+    expect(schoolModel.tone).toBe("school");
+    expect(schoolModel.leadPrefix).toContain("موعد الإجازة المدرسية القادمة هو");
+    expect(schoolModel.rows.find((item) => item.isPast)?.pastLabel).toBe("انتهت");
+    expect(renderServiceSemanticHtml(schoolModel)).toContain("انتهت");
   });
 });
 
@@ -232,14 +258,17 @@ describe("service page extras", () => {
     expect(ics).not.toContain("مسودة");
   });
 
-  it("keeps hidden service pages out of the sitemap and off Mawaeed links", () => {
+  it("links Mawaeed series to their new service pages while keeping hidden pages out of the sitemap", () => {
     expect(servicePageSitemapEntries([
       { slug: "salaries", contentUpdatedAt: "2026-10-01T00:00:00.000Z" },
       { slug: "citizen-account", contentUpdatedAt: "2026-10-01T00:00:00.000Z" },
       { slug: "school-calendar-1448", contentUpdatedAt: "2026-10-01T00:00:00.000Z" },
     ])).toEqual([]);
-    expect(serviceLinkForSeries("salaries")).toBeNull();
-    expect(serviceLinkForSeries("citizen-account")).toBeNull();
+    expect(serviceLinkForSeries("salaries")?.path).toBe("/services/government-salaries-date");
+    expect(serviceLinkForSeries("citizen-account")?.path).toBe("/services/citizen-account-date");
+    expect(serviceLinkForSeries("school-calendar-1448")?.path).toBe("/services/school-calendar-date");
+    expect(serviceLinkForSeries("social-security")?.path).toBe("/services/social-security-date");
+    expect(serviceLinkForSeries("pensions")?.path).toBe("/services/pensions-date");
     expect(HIDDEN_SERVICE_ROBOTS).toBe("noindex, nofollow");
   });
 });

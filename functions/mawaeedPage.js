@@ -942,8 +942,19 @@ function failureHtml() {
   );
 }
 
+const SERVICE_REDIRECTS = {
+  "school-calendar-1448": "/services/school-calendar-date",
+  "citizen-account": "/services/citizen-account-date",
+  salaries: "/services/government-salaries-date",
+  "social-security": "/services/social-security-date",
+  pensions: "/services/pensions-date",
+};
+
 export async function serveMawaeedPage({ request, url, env, waitUntil, signProxyRequest }) {
   const slug = mawaeedSlugFromPath(url.pathname);
+  if (slug && SERVICE_REDIRECTS[slug]) {
+    return Response.redirect(`${url.origin}${SERVICE_REDIRECTS[slug]}`, 301);
+  }
   const indexableHost = url.hostname === "sabq.org";
   const commit = env.CF_PAGES_COMMIT_SHA || env.CF_PAGES_BUILD_ID || "";
   const cacheable = indexableHost && Boolean(commit) && request.method === "GET";

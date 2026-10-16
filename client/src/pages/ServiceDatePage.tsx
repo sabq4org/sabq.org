@@ -244,7 +244,11 @@ function ServiceDateBody({
               </div>
               {live.parts && (
                 <div className="service-countdown-bar" aria-hidden="true">
-                  <p className="service-countdown-label">الوقت المتبقي على الصرف (بتوقيت الرياض)</p>
+                  <p className="service-countdown-label">
+                    {model.tone === "school"
+                      ? "الوقت المتبقي على الإجازة (بتوقيت الرياض)"
+                      : "الوقت المتبقي على الصرف (بتوقيت الرياض)"}
+                  </p>
                   <div className="service-countdown-grid">
                     <div className="service-countdown-cell">
                       <b className="service-countdown-num">{live.parts.days}</b>
@@ -282,7 +286,9 @@ function ServiceDateBody({
           <section>
             <h2 className="public-section-title">خط المواعيد</h2>
             <p className="public-meta mt-1">
-              المواعيد من السجل المنشور. ما مضى يظهر «صُرفت»، وما لم تعلنه الجهة بعد يبقى «متوقعًا».
+              {model.tone === "school"
+                ? "المواعيد من السجل المنشور. ما مضى يظهر «انتهت»، وما لم تعلنه الجهة بعد يبقى «متوقعًا»."
+                : "المواعيد من السجل المنشور. ما مضى يظهر «صُرفت»، وما لم تعلنه الجهة بعد يبقى «متوقعًا»."}
             </p>
             {model.rows.length === 0 ? (
               <p className="mt-4">لا توجد مواعيد منشورة في السجل.</p>
@@ -292,7 +298,7 @@ function ServiceDateBody({
                   const rowCertainty = row.certaintyLabel === "متوقع" ? "expected" : "confirmed";
                   return (
                     <li
-                      key={row.startsOn}
+                      key={`${row.startsOn}-${row.title}`}
                       className={`service-timeline-row${row.isNext ? " is-next" : ""}${row.isPast ? " is-past" : ""}`}
                     >
                       <div className="service-timeline-main">
@@ -311,7 +317,7 @@ function ServiceDateBody({
                           <span className="service-timeline-countdown">{row.countdownText}</span>
                         ) : null}
                         <span className={statusBadgeClass(rowCertainty, row.isPast)}>
-                          {row.isPast ? row.pastLabel || "صُرفت" : row.certaintyLabel}
+                          {row.isPast ? row.pastLabel || (model.tone === "school" ? "انتهت" : "صُرفت") : row.certaintyLabel}
                         </span>
                       </div>
                     </li>

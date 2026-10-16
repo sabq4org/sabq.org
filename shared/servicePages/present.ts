@@ -6,7 +6,7 @@
 import type { FaqItem } from "../mawaeed/content";
 import { METHODOLOGY } from "../mawaeed/content";
 import type { MawaeedCard, MawaeedView } from "../mawaeed/present";
-import { servicePageById, type ServicePageSpec } from "./catalog";
+import { SERVICE_PAGES, servicePageById, type ServicePageSpec, type ServicePageTone } from "./catalog";
 import { servicePageFaq } from "./copy";
 
 const SITE = "https://sabq.org";
@@ -58,7 +58,7 @@ export type ServicePageModel = {
   links: ServicePageLink[];
   relatedQuery: string | null;
   relatedSource: "keyword" | "search";
-  tone: "citizen" | "salary";
+  tone: ServicePageTone;
   calendarHref: string | null;
   ogImage: string;
   jsonLd: Record<string, unknown>;
@@ -74,8 +74,9 @@ export function presentServicePage(id: string, view: MawaeedView): ServicePageMo
   const faq = servicePageFaq(view.faq).filter((item) => item.question.trim() && item.answer.trim());
   const shiftRule = polishShiftRule(shiftRuleText(block.summary, faq));
   const description = metaDescription(next, shiftRule, spec);
-  const links = relatedLinks(spec, block.href);
+  const links = relatedLinks(spec);
   const canonical = `${SITE}${spec.path}`;
+  const isSchool = spec.tone === "school";
   return {
     id: spec.id,
     path: spec.path,
@@ -85,7 +86,13 @@ export function presentServicePage(id: string, view: MawaeedView): ServicePageMo
     canonical,
     dateModified: view.dateModified,
     dateModifiedLabel: view.dateModifiedLabel,
-    leadPrefix: next ? "موعد الصرف القادم هو" : "لا يوجد موعد قادم معلن حاليًا.",
+    leadPrefix: next
+      ? isSchool
+        ? "موعد الإجازة المدرسية القادمة هو"
+        : "موعد الصرف القادم هو"
+      : isSchool
+        ? "لا توجد إجازة قادمة معلنة حاليًا."
+        : "لا يوجد موعد قادم معلن حاليًا.",
     shiftRule,
     explanation: explanationParagraphs(serviceSummary(block.summary)),
     next,
@@ -171,7 +178,8 @@ function metaDescription(next: ServicePageNext | null, _shiftRule: string | null
   const status = next.certainty === "expected"
     ? "الموعد محسوب من الجدول المعتاد إلى أن يصدر الإعلان الرسمي."
     : "الموعد مؤكد.";
-  const text = `موعد الصرف القادم ${next.gregorianLabel} الموافق ${next.hijriLabel}، ${next.countdownText}. ${status}`;
+  const prefix = spec.tone === "school" ? "موعد الإجازة القادمة" : "موعد الصرف القادم";
+  const text = `${prefix} ${next.gregorianLabel} الموافق ${next.hijriLabel}، ${next.countdownText}. ${status}`;
   return clip(text, 180);
 }
 
@@ -182,10 +190,13 @@ function clip(text: string, max: number): string {
   return `${(space > 80 ? cut.slice(0, space) : cut).trim()}…`;
 }
 
-function relatedLinks(spec: ServicePageSpec, seriesHref: string): ServicePageLink[] {
+function relatedLinks(spec: ServicePageSpec): ServicePageLink[] {
   return [
-    { href: seriesHref, label: spec.sourceLabel },
     { href: "/mawaeed", label: "كل مواعيدك" },
+    ...SERVICE_PAGES.filter((page) => page.id !== spec.id).map((page) => ({
+      href: page.path,
+      label: page.navLabel,
+    })),
   ];
 }
 

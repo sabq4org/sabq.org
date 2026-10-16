@@ -9,6 +9,8 @@ export type MawaeedServiceSource = {
   seriesSlug: string;
 };
 
+export type ServicePageTone = "citizen" | "salary" | "school" | "social" | "pension";
+
 export type ServicePageSpec = {
   id: string;
   path: string;
@@ -22,10 +24,24 @@ export type ServicePageSpec = {
   /** استعلام قائم. keyword لمطابقة الوسم، وsearch حين يكون الوسم غير دقيق. */
   relatedQuery: string | null;
   relatedSource: "keyword" | "search";
-  tone: "citizen" | "salary";
+  tone: ServicePageTone;
 };
 
 export const SERVICE_PAGES: ServicePageSpec[] = [
+  {
+    id: "school-calendar-date",
+    path: "/services/school-calendar-date",
+    h1: "التقويم الدراسي 1448: موعد الإجازة القادمة",
+    title: "التقويم الدراسي 1448: موعد أقرب إجازة وكم باقي عليها | سبق",
+    fallbackDescription:
+      "مواعيد إجازات العام الدراسي 1448-1449هـ حسب وزارة التعليم من السجل المنشور في مواعيدك، بالتاريخين الهجري والميلادي.",
+    source: { type: "mawaeed", seriesSlug: "school-calendar-1448" },
+    navLabel: "التقويم الدراسي 1448",
+    sourceLabel: "التقويم الدراسي 1448 في مواعيدك",
+    relatedQuery: "التقويم الدراسي",
+    relatedSource: "search",
+    tone: "school",
+  },
   {
     id: "citizen-account-date",
     path: "/services/citizen-account-date",
@@ -54,6 +70,34 @@ export const SERVICE_PAGES: ServicePageSpec[] = [
     relatedSource: "search",
     tone: "salary",
   },
+  {
+    id: "social-security-date",
+    path: "/services/social-security-date",
+    h1: "موعد صرف الضمان الاجتماعي المطوّر",
+    title: "موعد صرف الضمان الاجتماعي المطوّر: الدفعة القادمة وكم باقي | سبق",
+    fallbackDescription:
+      "موعد صرف معاش الضمان الاجتماعي المطوّر وإعلان الأهلية حسب وزارة الموارد البشرية بالتاريخين الهجري والميلادي.",
+    source: { type: "mawaeed", seriesSlug: "social-security" },
+    navLabel: "موعد صرف الضمان الاجتماعي المطوّر",
+    sourceLabel: "الضمان الاجتماعي المطوّر في مواعيدك",
+    relatedQuery: "الضمان الاجتماعي",
+    relatedSource: "search",
+    tone: "social",
+  },
+  {
+    id: "pensions-date",
+    path: "/services/pensions-date",
+    h1: "موعد صرف معاشات التقاعد والتأمينات",
+    title: "موعد صرف رواتب المتقاعدين (التأمينات الاجتماعية) وكم باقي | سبق",
+    fallbackDescription:
+      "مواعيد صرف معاشات التقاعد المدني والعسكري والتأمينات الاجتماعية حسب المؤسسة العامة للتأمينات الاجتماعية بالتاريخين الهجري والميلادي.",
+    source: { type: "mawaeed", seriesSlug: "pensions" },
+    navLabel: "موعد صرف معاشات التقاعد",
+    sourceLabel: "معاشات التقاعد في مواعيدك",
+    relatedQuery: "التأمينات الاجتماعية",
+    relatedSource: "search",
+    tone: "pension",
+  },
 ];
 
 export function servicePageIdFromPath(path: string): string | null {
@@ -65,15 +109,15 @@ export function servicePageById(id: string): ServicePageSpec | undefined {
   return SERVICE_PAGES.find((page) => page.id === id);
 }
 
-/** الإطلاق مخفي: الرابط المباشر فقط، بلا فهرسة ولا متابعة روابط. */
+/** الإطلاق مخفي عن الفهرسة حتى إشعار آخر: بلا فهرسة ولا متابعة روابط من محركات البحث. */
 export const HIDDEN_SERVICE_ROBOTS = "noindex, nofollow";
 
 /**
- * لا تُعرض صفحات الخدمة من مواعيدك أو القوائم بينما هي مخفية.
- * أعد البحث عن الصفحة هنا عندما تُفتح للجمهور.
+ * يعيد رابط صفحة الخدمة المقابلة لسلسلة مواعيدك لتوجيه الروابط إليها مباشرة.
  */
-export function serviceLinkForSeries(_seriesSlug: string): Pick<ServicePageSpec, "path" | "navLabel"> | null {
-  return null;
+export function serviceLinkForSeries(seriesSlug: string): Pick<ServicePageSpec, "path" | "navLabel"> | null {
+  const page = SERVICE_PAGES.find((item) => item.source.type === "mawaeed" && item.source.seriesSlug === seriesSlug);
+  return page ? { path: page.path, navLabel: page.navLabel } : null;
 }
 
 /** لا تُدرج الصفحات المخفية في أي خريطة موقع. */
@@ -82,3 +126,4 @@ export function servicePageSitemapEntries(
 ): { loc: string; lastmod: string }[] {
   return [];
 }
+
