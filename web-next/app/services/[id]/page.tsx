@@ -49,7 +49,7 @@ export async function generateMetadata({
     title: { absolute: model.title },
     description: model.description,
     alternates: { canonical: model.canonical },
-    robots: { index: false, follow: false },
+    robots: { index: true, follow: true, "max-image-preview": "large" },
     openGraph: {
       type: "website",
       title: model.title,

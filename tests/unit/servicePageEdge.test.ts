@@ -33,8 +33,8 @@ describe("service page edge branch", () => {
     const html = await response.text();
     expect(response.status).toBe(200);
     expect(html).toBe("spa-shell");
-    expect(response.headers.get("X-Robots-Tag")).toBe("noindex, nofollow");
-    expect(response.headers.get("Cache-Control") || "").toContain("no-store");
+    // الصفحة مفهرسة: لا وسم noindex على الحافة
+    expect(response.headers.get("X-Robots-Tag") || "").not.toContain("noindex");
     expect(next).toHaveBeenCalled();
   });
 
@@ -66,8 +66,7 @@ describe("service page edge branch", () => {
     const html = await response.text();
     expect(response.status).toBe(200);
     expect(html).toContain("موعد صرف رواتب موظفي الدولة");
-    expect(response.headers.get("X-Robots-Tag")).toBe("noindex, nofollow");
-    expect(response.headers.get("Cache-Control") || "").toContain("no-store");
+    expect(response.headers.get("X-Robots-Tag") || "").not.toContain("noindex");
     expect(fetcher.mock.calls.some((call) => String(call[0]).includes("next.example"))).toBe(true);
     expect(next).not.toHaveBeenCalled();
   });

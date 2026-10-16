@@ -18,7 +18,7 @@ import path from "path";
 import { withCache, CACHE_TTL } from "./memoryCache";
 import { VALID_PREFIXES } from "./utils/spaRouteMatcher";
 import { isNoindexPath } from "./utils/noindexPaths";
-import { HIDDEN_SERVICE_ROBOTS } from "@shared/servicePages/catalog";
+import { SERVICE_PAGE_ROBOTS } from "@shared/servicePages/catalog";
 import { buildNewsArticleSchemaExtras, getArticleSchemaType } from "./utils/newsArticleSchema";
 import { getPublicEditorialModifiedAt } from "./utils/editorialDates";
 import {
@@ -1583,7 +1583,7 @@ async function resolveSeoData(route: { type: string; slug?: string; angleSlug?: 
         ogSiteName: isEn ? 'Sabq News' : isUr ? 'سبق نیوز' : 'صحيفة سبق الإلكترونية',
         twitterSite: '@sabq',
         robots: /^\/services\/[a-z0-9-]+$/.test(pathname)
-          ? HIDDEN_SERVICE_ROBOTS
+          ? SERVICE_PAGE_ROBOTS
           : isSectionRoot ? 'index, follow, max-image-preview:large' : 'noindex, follow',
       };
     }
@@ -1723,7 +1723,7 @@ export async function seoInjectorMiddleware(req: Request, res: Response, next: N
       };
 
       if ((seoData.robots || '').toLowerCase().includes('nofollow')) {
-        headers['X-Robots-Tag'] = HIDDEN_SERVICE_ROBOTS;
+        headers['X-Robots-Tag'] = 'noindex, nofollow';
       } else if (seoData.publishedTime) {
         const pubAge = Date.now() - new Date(seoData.publishedTime).getTime();
         if (pubAge > 365 * 24 * 60 * 60 * 1000) {
@@ -1741,7 +1741,7 @@ export async function seoInjectorMiddleware(req: Request, res: Response, next: N
       }
 
       if ((seoData.robots || '').toLowerCase().includes('nofollow')) {
-        res.set('X-Robots-Tag', HIDDEN_SERVICE_ROBOTS);
+        res.set('X-Robots-Tag', 'noindex, nofollow');
       } else if (seoData.publishedTime) {
         const pubAge = Date.now() - new Date(seoData.publishedTime).getTime();
         if (pubAge > 365 * 24 * 60 * 60 * 1000) {

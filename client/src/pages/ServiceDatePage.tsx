@@ -18,7 +18,7 @@ import { Button } from "@/components/ui/button";
 import { useCanonical } from "@/hooks/useCanonical";
 import { apiUrl } from "@/lib/queryClient";
 import "@/styles/article-detail.css";
-import { HIDDEN_SERVICE_ROBOTS, regionSuffix, servicePageUsesRegion } from "@shared/servicePages/catalog";
+import { regionSuffix, servicePageUsesRegion } from "@shared/servicePages/catalog";
 import { REGIONS, normalizeRegion, type RegionId } from "@shared/mawaeed/model";
 import type { ServicePageModel } from "@shared/servicePages/present";
 import {
@@ -146,24 +146,6 @@ export default function ServiceDatePage() {
     void refetch();
   }, [refetch]);
   useCanonical(model?.canonical ?? null);
-  useEffect(() => {
-    let meta = document.head.querySelector('meta[name="robots"]');
-    const created = !meta;
-    const prevContent = meta?.getAttribute("content") ?? null;
-    if (!meta) {
-      meta = document.createElement("meta");
-      meta.setAttribute("name", "robots");
-      document.head.appendChild(meta);
-    }
-    meta.setAttribute("content", HIDDEN_SERVICE_ROBOTS);
-    return () => {
-      if (created) {
-        meta?.remove();
-      } else if (meta && prevContent !== null) {
-        meta.setAttribute("content", prevContent);
-      }
-    };
-  }, []);
   useEffect(() => {
     if (model?.title) document.title = model.title;
   }, [model?.title]);
