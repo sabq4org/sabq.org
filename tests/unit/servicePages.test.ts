@@ -4,8 +4,9 @@ import { presentMawaeed } from "@shared/mawaeed/present";
 import { buildServiceCalendar } from "@shared/servicePages/calendar";
 import { HIDDEN_SERVICE_ROBOTS, serviceLinkForSeries, serviceRegion, servicePageIdFromPath, servicePageSitemapEntries } from "@shared/servicePages/catalog";
 import { presentServicePage } from "@shared/servicePages/present";
-import { relatedArticlesFromKeyword, relatedArticlesFromSearch } from "@shared/servicePages/related";
+import { relatedArticleMeta, relatedArticlesFromKeyword, relatedArticlesFromSearch } from "@shared/servicePages/related";
 import {
+  relatedArticleMeta as nextRelatedMeta,
   relatedArticlesFromKeyword as nextRelatedFromKeyword,
   relatedArticlesFromSearch as nextRelatedFromSearch,
 } from "../../web-next/lib/servicePage";
@@ -239,9 +240,32 @@ describe("service page extras", () => {
       ],
     };
     const keyword = { articles: search.results };
-    expect(relatedArticlesFromSearch(search)).toEqual([{ title: "خبر", href: "/article/real-slug" }]);
+    expect(relatedArticlesFromSearch(search)).toEqual([{ title: "خبر", href: "/article/real-slug", publishedAt: null }]);
     expect(nextRelatedFromSearch(search)).toEqual(relatedArticlesFromSearch(search));
     expect(nextRelatedFromKeyword(keyword)).toEqual(relatedArticlesFromKeyword(keyword));
+  });
+
+  it("dates related articles, newest first, and marks the archive after 45 days", () => {
+    const search = {
+      results: [
+        { title: "قديم جدا", slug: "oldest", publishedAt: "2025-06-23T09:00:00.000Z" },
+        { title: "حديث", slug: "recent", publishedAt: "2026-10-01T09:00:00.000Z" },
+        { title: "بلا تاريخ", slug: "undated" },
+        { title: "قديم", slug: "old", publishedAt: "2025-10-30T09:00:00.000Z" },
+        { title: "خامس", slug: "fifth", publishedAt: "2024-01-01T09:00:00.000Z" },
+      ],
+    };
+    const links = relatedArticlesFromSearch(search);
+    expect(links.map((link) => link.href)).toEqual(["/article/recent", "/article/old", "/article/oldest", "/article/fifth"]);
+    expect(nextRelatedFromSearch(search)).toEqual(links);
+
+    const now = new Date("2026-10-16T12:00:00+03:00");
+    expect(relatedArticleMeta(links[0], now)).toEqual({ dateLabel: "الخميس 1 أكتوبر 2026", archived: false });
+    expect(relatedArticleMeta(links[1], now)).toEqual({ dateLabel: "الخميس 30 أكتوبر 2025", archived: true });
+    expect(relatedArticleMeta({ title: "x", href: "/article/x", publishedAt: null }, now)).toEqual({ dateLabel: null, archived: false });
+    for (const link of [...links, { title: "x", href: "/article/x", publishedAt: "not a date" }]) {
+      expect(nextRelatedMeta(link, now)).toEqual(relatedArticleMeta(link, now));
+    }
   });
 
   it("builds an all-day calendar from upcoming rows only", () => {

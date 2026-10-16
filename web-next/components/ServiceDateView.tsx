@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
-import type { RelatedArticleLink, ServicePageModel } from "@/lib/servicePage";
+import { relatedArticleMeta, type RelatedArticleLink, type ServicePageModel } from "@/lib/servicePage";
 
 function badgeClasses(certainty: "confirmed" | "expected" | undefined, isPast?: boolean): string {
   if (isPast) {
@@ -169,11 +169,29 @@ export function ServiceDateView({
               <section className="rounded-2xl border border-border bg-muted/30 p-5">
                 <h2 className="border-b border-border pb-3 text-lg font-bold">من أخبار سبق</h2>
                 <ul className="mt-3 divide-y divide-border">
-                  {related.map((item) => (
-                    <li key={item.href} className="py-2.5 first:pt-0 last:pb-0">
-                      <a href={item.href} className="font-semibold text-foreground hover:text-primary">{item.title}</a>
-                    </li>
-                  ))}
+                  {related.map((item) => {
+                    const meta = relatedArticleMeta(item, new Date());
+                    return (
+                      <li key={item.href} className="py-2.5 first:pt-0 last:pb-0">
+                        <a
+                          href={item.href}
+                          className={`font-semibold hover:text-primary ${meta.archived ? "text-muted-foreground" : "text-foreground"}`}
+                        >
+                          {item.title}
+                        </a>
+                        {meta.dateLabel ? (
+                          <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-muted-foreground tabular-nums">
+                            <time dateTime={item.publishedAt ?? undefined}>{meta.dateLabel}</time>
+                            {meta.archived ? (
+                              <span className="rounded-md bg-amber-100 px-2 font-bold text-amber-800 dark:bg-amber-950 dark:text-amber-300">
+                                من الأرشيف
+                              </span>
+                            ) : null}
+                          </div>
+                        ) : null}
+                      </li>
+                    );
+                  })}
                 </ul>
               </section>
             )}
