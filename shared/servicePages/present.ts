@@ -30,6 +30,8 @@ export type ServicePageNext = {
 };
 
 export type ServicePageRow = {
+  /** معرّف الصف في قاعدة البيانات؛ يثبّت UID في ملف التقويم حين يتغيّر التاريخ. */
+  id?: string;
   title: string;
   startsOn: string;
   gregorianLabel: string;
@@ -144,6 +146,7 @@ function toNext(card: MawaeedCard): ServicePageNext {
 
 function toRow(card: MawaeedCard, nextStartsOn: string | null): ServicePageRow {
   return {
+    id: card.id,
     title: card.title,
     startsOn: card.startsOn,
     gregorianLabel: card.gregorianLabel,
@@ -198,7 +201,10 @@ function metaDescription(next: ServicePageNext | null, _shiftRule: string | null
   const status = next.certainty === "expected"
     ? "الموعد محسوب من الجدول المعتاد إلى أن يصدر الإعلان الرسمي."
     : "الموعد مؤكد.";
-  const prefix = spec.tone === "school" ? "موعد الإجازة القادمة" : "موعد الصرف القادم";
+  // الموعد الجاري (إجازة بدأت ولم تنتهِ) لا يوصف بـ«القادم».
+  const prefix = next.isOngoing
+    ? spec.tone === "school" ? "الإجازة الجارية بدأت" : "الصرف الجاري بدأ"
+    : spec.tone === "school" ? "موعد الإجازة القادمة" : "موعد الصرف القادم";
   const text = `${prefix} ${next.gregorianLabel} الموافق ${next.hijriLabel}، ${next.countdownText}. ${status}`;
   return clip(text, 180);
 }

@@ -243,6 +243,10 @@ describe("service page extras", () => {
     };
     const keyword = { articles: search.results };
     expect(relatedArticlesFromSearch(search)).toEqual([{ title: "خبر", href: "/article/real-slug", publishedAt: null }]);
+    // الرابط نفسه بعنوانين مختلفين = خبر واحد
+    const sameSlug = { results: [{ title: "عنوان أول", slug: "one" }, { title: "عنوان ثانٍ", slug: "one" }] };
+    expect(relatedArticlesFromSearch(sameSlug)).toHaveLength(1);
+    expect(nextRelatedFromSearch(sameSlug)).toHaveLength(1);
     expect(nextRelatedFromSearch(search)).toEqual(relatedArticlesFromSearch(search));
     expect(nextRelatedFromKeyword(keyword)).toEqual(relatedArticlesFromKeyword(keyword));
   });
@@ -282,6 +286,8 @@ describe("service page extras", () => {
     expect(ics).not.toContain("DTSTART;VALUE=DATE:20260927");
     expect(ics).toContain("متوقع");
     expect(ics).not.toContain("مسودة");
+    // UID على معرّف الصف لا تاريخه: تعديل التاريخ يحدّث الحدث نفسه عند القارئ
+    expect(ics).toContain("UID:government-salaries-date-next@sabq.org");
   });
 
   it("links Mawaeed series to their new service pages while keeping hidden pages out of the sitemap", () => {
@@ -332,11 +338,11 @@ describe("school service page region", () => {
     if (region === "riyadh") {
       expect(ics).toContain("DTSTART;VALUE=DATE:20261025");
       expect(ics).not.toContain("DTSTART;VALUE=DATE:20261206");
-      expect(ics).toContain("UID:school-calendar-date-2026-10-25@sabq.org");
+      expect(ics).toContain("UID:school-calendar-date-extra-riyadh@sabq.org");
     } else {
       expect(ics).not.toContain("DTSTART;VALUE=DATE:20261025");
       expect(ics).toContain("DTSTART;VALUE=DATE:20261206");
-      expect(ics).toContain(`UID:school-calendar-date-${region}-2026-11-20@sabq.org`);
+      expect(ics).toContain(`UID:school-calendar-date-${region}-autumn@sabq.org`);
     }
   });
 
