@@ -1,3 +1,6 @@
+import { REGIONS } from "../shared/mawaeed/model.ts";
+import { compactOccurrenceTitle, stripDisplayedSourceSentence } from "../shared/mawaeed/display.ts";
+
 /**
  * صفحة «مواعيدك» على حافة Pages: HTML من نموذج JSON الجاهز.
  * العدّاد الثابت يُحسب في الـ API. سكربت صغير يعيد الأيام والساعات بتوقيت الرياض.
@@ -6,15 +9,13 @@
  * بساعة أيام/ساعات/دقائق، ثم بطاقات أقسام بمربع «باقي N يوم» مرتبة من الأقرب، ثم منهجية وأسئلة.
  */
 
-const REGIONS = ["riyadh", "makkah", "madinah", "jeddah", "taif"];
-
-/** تطبيع للعربية: إزالة التشكيل والتطويل وتوحيد المسافات — لمقارنة العناوين فقط. */
-function normalizeArabic(text) {
-  return String(text == null ? "" : text)
-    .replace(/[\u064B-\u065F\u0670\u0640\u06D6-\u06ED]/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
+function overviewTitle(card) {
+  const title = compactOccurrenceTitle(card.title, card.startsOn);
+  if (card.kind === "school_holiday") return title;
+  const normalize = (value) => String(value || "").replace(/[\u064B-\u065F\u0670\u0640]/g, "").trim();
+  return normalize(title).startsWith(normalize(card.seriesTitle)) ? title : `${card.seriesTitle} — ${title}`;
 }
+
 
 /**
  * لون كل سلسلة. --kind للنصوص والنقاط (يتبدّل مع الوضع الداكن)،
@@ -40,7 +41,7 @@ export function mawaeedSlugFromPath(path) {
 
 function normalizeRegion(raw) {
   const id = String(raw || "").trim().toLowerCase();
-  return REGIONS.includes(id) ? id : "riyadh";
+  return REGIONS.some((region) => region.id === id) ? id : "riyadh";
 }
 
 function esc(value) {
@@ -202,7 +203,7 @@ function clockHtml(card, nowMs) {
   if (!left) return `<p class="clock-word">${esc(card.todayLabel || "اليوم")}</p>`;
   const cell = (part, value, label) =>
     `<div class="clock-cell"><b data-part="${part}">${value}</b><span>${label}</span></div>`;
-  return `<div class="clock" data-clock data-date="${esc(card.startsOn)}" aria-hidden="true">
+  return `<div class="clock" data-clock data-date="${esc(card.startsOn)}" aria-label="الوقت المتبقي">
       ${cell("d", left.days, "أيام")}
       ${cell("h", left.hours, "ساعات")}
       ${cell("m", left.minutes, "دقائق")}
@@ -216,14 +217,6 @@ function badgeFor(card) {
   if (card.isPast) return { cls: "badge badge-neutral", text: card.pastLabel || "انتهى" };
   if (card.certainty === "expected") return { cls: "badge badge-warn", text: card.certaintyLabel };
   return { cls: "badge badge-ok", text: card.certaintyLabel };
-}
-
-/** العدّاد النصي: عنصر يحمّل data-countdown ليحدّثه السكربت في المتصفح. */
-function countdownHtml(card, className) {
-  if (card.isPast) return `<span class="${className} ${className}-past">${esc(card.pastLabel || "")}</span>`;
-  // الموعد الجاري بلا عدّاد حي: «جارية حتى …» من الخادم.
-  if (card.isOngoing) return `<strong class="${className}">${esc(card.countdownText)}</strong>`;
-  return `<strong class="${className}" data-countdown data-date="${esc(card.startsOn)}" data-today="${esc(card.todayLabel)}">${esc(card.countdownText)}</strong>`;
 }
 
 /** تاريخ مكدّس لبطاقات القوائم: الميلادي بخط عريض والهجري تحته. */
@@ -242,14 +235,9 @@ function noteLines(card) {
     .join("");
 }
 
-function sourceHtml(card) {
-  if (!card || !card.sourceUrl) return "";
-  return `<p class="src"><span class="src-label">المصدر</span><a href="${esc(card.sourceUrl)}" rel="noopener noreferrer">${esc(card.sourceTitle)}</a></p>`;
-}
-
 function prevHtml(block) {
   if (!block.previous) return "";
-  return `<p class="prev">السابق: ${esc(block.previous.title)} — ${esc(block.previous.gregorianLabel)} · ${esc(
+  return `<p class="prev">السابق: ${esc(compactOccurrenceTitle(block.previous.title, block.previous.startsOn))} — ${esc(block.previous.gregorianLabel)} · ${esc(
     block.previous.pastLabel || "",
   )}</p>`;
 }
@@ -280,9 +268,6 @@ function nearestCard(view) {
 function heroHtml(card, { nowMs, href }) {
   if (!card) return "";
   const badge = badgeFor(card);
-  // كثير من عناوين المواعيد تبدأ باسم السلسلة نفسها (وقد تختلف حركة واحدة)؛ لا نكرّره.
-  const series = String(card.seriesTitle || "").trim();
-  const showEyebrow = Boolean(series) && !normalizeArabic(card.title).startsWith(normalizeArabic(series));
   const hint = card.expectedHint ? `<p class="hero-note">${esc(card.expectedHint)}</p>` : "";
   const notes = [card.publicNote, card.visionNote]
     .filter(Boolean)
@@ -290,22 +275,16 @@ function heroHtml(card, { nowMs, href }) {
     .join("");
   return `<section class="hero ${kindClass(card.kind)}" aria-labelledby="hero-title">
     <div class="hero-top">
-      <p class="hero-kicker"><span class="hero-dot" aria-hidden="true"></span><span>الموعد الأقرب${showEyebrow ? ` · ${esc(series)}` : ""}</span></p>
+      <p class="hero-kicker"><span class="hero-dot" aria-hidden="true"></span><span>الموعد الأقرب</span></p>
       <span class="${badge.cls} badge-on-hero">${esc(badge.text)}</span>
     </div>
-    <h2 class="hero-title" id="hero-title">${esc(card.title)}</h2>
+    <h2 class="hero-title" id="hero-title">${esc(overviewTitle(card))}</h2>
     ${clockHtml(card, nowMs)}
     <div class="hero-meta-bar">
-      <p class="hero-phrase">${countdownHtml(card, "hero-count")}</p>
       ${dateLineHtml(card, "hero-date")}
     </div>
     ${hint || notes ? `<div class="hero-notes">${hint}${notes}</div>` : ""}
     <div class="hero-foot">
-      ${
-        card.sourceUrl
-          ? `<a class="hero-src" href="${esc(card.sourceUrl)}" target="_blank" rel="noopener noreferrer">المصدر: ${esc(card.sourceTitle)} ↗</a>`
-          : "<span />"
-      }
       ${href ? `<a class="hero-cta" href="${esc(href)}"><span>كل مواعيد القسم</span><span aria-hidden="true">›</span></a>` : ""}
     </div>
   </section>`;
@@ -317,14 +296,11 @@ function heroHtml(card, { nowMs, href }) {
 function seriesRow(block, nowMs) {
   const next = block.next;
   const badge = next ? badgeFor(next) : null;
-  const dup = Boolean(next) && normalizeArabic(next.title).startsWith(normalizeArabic(block.title));
   const details = [
-    `<p class="answer">${esc(block.answerLine)}</p>`,
     followHtml(block),
     `<p class="summary">${esc(block.summary)}</p>`,
     next && next.expectedHint ? `<p class="note">${esc(next.expectedHint)}</p>` : "",
     next ? noteLines(next) : "",
-    sourceHtml(next),
     prevHtml(block),
   ].join("");
   return `<article class="item ${kindClass(block.kind)}" id="${esc(block.slug)}">
@@ -332,20 +308,19 @@ function seriesRow(block, nowMs) {
       <span class="item-bar" aria-hidden="true"></span>
       <div class="item-text">
         <div class="item-head">
-          <h2 class="item-series">${esc(dup ? next.title : block.title)}</h2>
+          <h2 class="item-series">${esc(next ? overviewTitle(next) : block.title)}</h2>
           ${badge ? `<span class="${badge.cls}">${esc(badge.text)}</span>` : ""}
         </div>
         ${
           next
-            ? `${dup ? "" : `<p class="item-title item-title-strong">${esc(next.title)}</p>`}
-               ${dateStackHtml(next)}
+            ? `${dateStackHtml(next)}
                <p class="item-meta"><span class="item-link-hint">عرض جدول المواعيد <span aria-hidden="true">›</span></span></p>`
             : `<p class="item-title item-empty">لا موعد قادم معلن بعد</p>`
         }
       </div>
       ${next ? tileHtml(next, nowMs) : ""}
     </a>
-    <details class="more"><summary><span>التفاصيل والمصدر</span></summary><div class="more-body">${details}</div></details>
+    <details class="more"><summary><span>التفاصيل</span></summary><div class="more-body">${details}</div></details>
   </article>`;
 }
 
@@ -385,14 +360,13 @@ function occurrenceRow(card, nowMs) {
   const details = [
     card.expectedHint ? `<p class="note">${esc(card.expectedHint)}</p>` : "",
     noteLines(card),
-    sourceHtml(card),
   ].join("");
   return `<li class="item ${kindClass(card.kind)}${card.isPast ? " is-past" : ""}">
     <div class="item-main">
       <span class="item-bar" aria-hidden="true"></span>
       <div class="item-text">
         <div class="item-head">
-          <p class="item-title item-title-strong">${esc(card.title)}</p>
+          <p class="item-title item-title-strong">${esc(compactOccurrenceTitle(card.title, card.startsOn))}</p>
           <span class="${badge.cls}">${esc(badge.text)}</span>
         </div>
         ${dateStackHtml(card)}
@@ -400,7 +374,7 @@ function occurrenceRow(card, nowMs) {
       </div>
       ${tileHtml(card, nowMs)}
     </div>
-    ${details ? `<details class="more"><summary><span>المصدر والملاحظات</span></summary><div class="more-body">${details}</div></details>` : ""}
+    ${details ? `<details class="more"><summary><span>الملاحظات</span></summary><div class="more-body">${details}</div></details>` : ""}
   </li>`;
 }
 
@@ -467,18 +441,18 @@ function regionHtml(view) {
 }
 
 function westernNote(view) {
-  if (view.page.slug !== "school-calendar-1448" || view.region === "riyadh") return "";
+  if (view.page.slug !== "school-calendar-1448" || view.region === "qassim") return "";
   const hasExtra = (view.sections || []).some((section) => section.id === "extra" && section.cards.length > 0);
   if (hasExtra) return "";
-  return `<p class="callout">إجازات مكة المكرمة والمدينة المنورة وجدة والطائف الإضافية لا تُعرض حتى يؤكدها محرر ويربطها بمصدر الإدارة. الظاهر الآن هو تقويم الوزارة المشترك.</p>`;
+  return `<p class="callout">المعروض هو التقويم الدراسي العام. لم تُعتمد في الخدمة إجازات إضافية خاصة بهذه المنطقة بعد.</p>`;
 }
 
 function faqHtml(faq) {
   if (!faq || faq.length === 0) return "";
   const items = faq
     .map(
-      (item, idx) =>
-        `<details class="qa"${idx === 0 ? " open" : ""}><summary><span>${esc(item.question)}</span></summary><p>${esc(item.answer)}</p></details>`,
+      (item) =>
+        `<details class="qa"><summary><span>${esc(item.question)}</span></summary><p>${esc(stripDisplayedSourceSentence(item.answer))}</p></details>`,
     )
     .join("");
   return `<section class="faq"><h2 class="group-title">أسئلة شائعة</h2><div class="inset">${items}</div></section>`;
@@ -487,8 +461,8 @@ function faqHtml(faq) {
 function methodHtml(text) {
   if (!text) return "";
   return `<section class="method">
-    <h2 class="group-title">كيف نحسب المواعيد ومن أين نأخذها؟</h2>
-    <div class="panel"><p>${esc(text)}</p>
+    <h2 class="group-title">عن المواعيد</h2>
+    <div class="panel"><p>جميع الأوقات بتوقيت السعودية. تُعرض التواريخ بالميلادي والهجري وفق تقويم أم القرى، ويتحدّث العدّاد تلقائيًا.</p>
       <div class="legend">
         <span class="legend-item"><span class="badge badge-ok">مؤكد</span> من إعلان رسمي منشور</span>
         <span class="legend-item"><span class="badge badge-warn">متوقع</span> من الجدول المعتاد للجهة حتى يصدر الإعلان</span>
@@ -500,7 +474,7 @@ function methodHtml(text) {
 export function renderMawaeedHtml(view, options = {}) {
   const nowMs = Number.isFinite(options.nowMs) ? options.nowMs : Date.now();
   const title = esc(view.page.title);
-  const description = esc(view.page.description);
+  const description = esc(view.page.description.replace(" ورابط المصدر الرسمي", ""));
   const canonical = esc(view.page.canonical);
   const home = !view.page.slug;
   const hero = nearestCard(view);
@@ -551,7 +525,7 @@ export function renderMawaeedHtml(view, options = {}) {
 ${jsonLd}
 <script>
 (function () {
-  var allowed = { riyadh: 1, makkah: 1, madinah: 1, jeddah: 1, taif: 1 };
+  var allowed = ${safeJson(Object.fromEntries(REGIONS.map(({ id }) => [id, 1])))};
   var params = new URLSearchParams(location.search);
   var picked = params.get("region");
   try {
@@ -776,7 +750,7 @@ ${jsonLd}
 
   /* بطاقات المواعيد: شريط لوني + نص + مربع «باقي» */
   .board, .list { display:grid; gap:10px; }
-  /* بطاقات اللوحة بارتفاع واحد في كل صف، و«التفاصيل والمصدر» في أسفلها */
+  /* بطاقات اللوحة بارتفاع واحد في كل صف، و«التفاصيل» في أسفلها */
   .board > .item { display:flex; flex-direction:column; }
   .board > .item > .item-main { flex:1; }
   .list { list-style:none; margin:0; padding:0; }

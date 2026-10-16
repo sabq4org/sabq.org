@@ -54,7 +54,6 @@
 .mawaeed-home .mw-pulse-wrap { margin-top: 0; padding: 17px 0 0; }
 .mawaeed-home .mw-pulse-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 5px 12px; margin-bottom: 8px; }
 .mawaeed-home .mw-pulse-label { color: var(--mw-ink); font-size: .82rem; font-weight: 800; }
-.mawaeed-home .mw-pulse-hint { color: var(--mw-muted); font-size: .76rem; }
 .mawaeed-home .mw-pulse-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); border-block: 1px solid var(--mw-rule); }
 .mawaeed-home .mw-pulse-card { position: relative; display: flex; min-width: 0; flex-direction: column; justify-content: space-between; gap: 8px; padding: 13px 15px 14px; color: var(--mw-ink); text-align: start; font: inherit; background: transparent; border: 0; border-inline-start: 1px solid var(--mw-rule); cursor: pointer; transition: background-color .16s ease; }
 .mawaeed-home .mw-pulse-card:first-child { border-inline-start: 0; }
@@ -62,17 +61,11 @@
 .mawaeed-home .mw-pulse-card:hover { background: color-mix(in srgb, var(--mw-blue-soft) 55%, transparent); }
 .mawaeed-home .mw-pulse-card.is-active { background: var(--mw-blue-soft); }
 .mawaeed-home .mw-pulse-card.is-active::after { background: var(--mw-blue); }
-.mawaeed-home .mw-pulse-top, .mawaeed-home .mw-pulse-foot { display: flex; align-items: center; justify-content: space-between; gap: 7px; width: 100%; }
+.mawaeed-home .mw-pulse-top { display: flex; align-items: center; justify-content: space-between; gap: 7px; width: 100%; }
 .mawaeed-home .mw-pulse-series { display: inline-flex; align-items: center; min-width: 0; gap: 6px; color: var(--mw-ink); font-size: .81rem; font-weight: 800; }
 .mawaeed-home .mw-kind-icon { width: 15px; height: 15px; flex: none; color: var(--mw-tone, var(--mw-blue)); }
 .mawaeed-home .mw-pulse-series > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mawaeed-home .mw-pulse-nearest { color: var(--mw-blue-text); font-size: .7rem; font-weight: 800; white-space: nowrap; }
-.mawaeed-home .mw-pulse-count { display: flex; align-items: baseline; gap: 5px; min-height: 1.8rem; }
-.mawaeed-home .mw-pulse-num { color: var(--mw-tone, var(--mw-blue-text)); font-size: 1.45rem; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
-.mawaeed-home .mw-pulse-unit { color: var(--mw-muted); font-size: .73rem; font-weight: 700; line-height: 1.35; }
-.mawaeed-home .mw-pulse-foot { padding-top: 8px; border-top: 1px solid color-mix(in srgb, var(--mw-rule) 70%, transparent); }
-.mawaeed-home .mw-pulse-date { overflow: hidden; color: var(--mw-muted); font-size: .73rem; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }
-.mawaeed-home .mw-pulse-arrow { color: var(--mw-tone, var(--mw-blue-text)); font-size: 1rem; font-weight: 800; line-height: 1; }
 
 /* البطل هو السطح الملون الوحيد: عدّاد مفتوح مع فواصل، بلا خلايا داخلية. */
 .mawaeed-home .mw-hero { display: grid; grid-template-columns: minmax(0, 1fr) minmax(245px, 315px); align-items: center; gap: 28px; margin-top: 24px; padding: 24px 26px; background: var(--mw-blue-soft); border-inline-start: 4px solid var(--mw-tone, var(--mw-blue)); }
@@ -107,23 +100,18 @@
 .mawaeed-home .mw-section-head { display: flex; align-items: end; justify-content: space-between; gap: 12px; margin-bottom: 5px; padding-bottom: 12px; border-bottom: 1px solid var(--mw-rule); }
 .mawaeed-home .mw-section-head h2 { margin: 0; color: var(--mw-ink); font-size: 1.1rem; font-weight: 800; line-height: 1.4; }
 .mawaeed-home .mw-section-head p { margin: 3px 0 0; color: var(--mw-muted); font-size: .77rem; }
-.mawaeed-home .mw-section-sub { color: var(--mw-muted); font-size: .72rem; font-weight: 600; white-space: nowrap; }
 .mawaeed-home .mw-grid { display: grid; grid-template-columns: 1fr; }
 .mawaeed-home .mw-card { min-width: 0; border-bottom: 1px solid var(--mw-rule); }
 .mawaeed-home .mw-card:last-child { border-bottom: 0; }
-.mawaeed-home .mw-card-select { display: block; width: 100%; min-height: 44px; padding: 4px 0; color: var(--mw-ink); text-align: start; font: inherit; background: transparent; border: 0; cursor: pointer; }
+.mawaeed-home .mw-card-select { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 44px; padding: 4px 0; color: var(--mw-ink); text-align: start; font: inherit; background: transparent; border: 0; cursor: pointer; }
 .mawaeed-home .mw-card-select:hover { background: color-mix(in srgb, var(--mw-blue-soft) 48%, transparent); }
-.mawaeed-home .mw-card.is-selected .mw-card-select { background: var(--mw-blue-soft); }
 .mawaeed-home .mw-card-top { display: grid; gap: 4px; padding: 13px 3px 7px; }
 .mawaeed-home .mw-card-series { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.mawaeed-home .mw-card-kicker { display: inline-flex; align-items: center; gap: 6px; min-width: 0; color: var(--mw-tone, var(--mw-blue-text)); font-size: .8rem; font-weight: 800; }
-.mawaeed-home .mw-card-kicker > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mawaeed-home .mw-card-title { display: block; margin: 0; color: var(--mw-ink); font-size: .95rem; line-height: 1.45; font-weight: 800; }
 .mawaeed-home .mw-card-date { display: block; margin: 0; color: var(--mw-muted); font-size: .78rem; line-height: 1.5; font-variant-numeric: tabular-nums; }
 .mawaeed-home .mw-card-date strong { color: var(--mw-ink); }
 .mawaeed-home .mw-card-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 0 3px 13px; }
 .mawaeed-home .mw-card-count { color: var(--mw-tone, var(--mw-blue-text)); font-size: .78rem; font-weight: 800; font-variant-numeric: tabular-nums; }
-.mawaeed-home .mw-card-foot a { color: var(--mw-blue-text); font-size: .78rem; font-weight: 800; white-space: nowrap; }
 
 /* التقويم الدراسي: جدول عادي وتبويبات بخط سفلي، بلا إطار يلف المحتوى. */
 .mawaeed-home .mw-school { min-width: 0; }
@@ -133,7 +121,6 @@
 .mawaeed-home .mw-school-icon svg { width: 19px; height: 19px; }
 .mawaeed-home .mw-school-head h2 { margin: 0; color: var(--mw-ink); font-size: 1.05rem; font-weight: 800; line-height: 1.35; }
 .mawaeed-home .mw-school-head p { margin: 3px 0 0; color: var(--mw-muted); font-size: .76rem; }
-.mawaeed-home .mw-school-top-link { color: var(--mw-blue-text); font-size: .78rem; font-weight: 800; white-space: nowrap; }
 .mawaeed-home .mw-tabs-row { display: flex; flex-wrap: wrap; align-items: center; gap: 5px 12px; padding: 13px 0 8px; }
 .mawaeed-home .mw-tabs-label { color: var(--mw-muted); font-size: .75rem; font-weight: 800; }
 .mawaeed-home .mw-tabs { display: flex; flex-wrap: wrap; gap: 12px; min-width: 0; }
@@ -143,10 +130,8 @@
 .mawaeed-home .mw-rows { margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--mw-rule); animation: mw-fade .2s ease; }
 .mawaeed-home .mw-school.is-switching .mw-rows { opacity: .6; }
 .mawaeed-home .mw-rows li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 3px; border-bottom: 1px solid var(--mw-rule); }
-.mawaeed-home .mw-rows li.is-first { background: var(--mw-blue-soft); }
 .mawaeed-home .mw-row-main { display: grid; min-width: 0; gap: 3px; }
 .mawaeed-home .mw-row-title { color: var(--mw-ink); font-size: .84rem; font-weight: 700; line-height: 1.4; }
-.mawaeed-home .mw-row-tag { margin-inline-end: 6px; color: var(--mw-blue-text); font-size: .7rem; font-weight: 800; }
 .mawaeed-home .mw-row-date { color: var(--mw-muted); font-size: .72rem; line-height: 1.5; white-space: normal; font-variant-numeric: tabular-nums; }
 .mawaeed-home .mw-row-count { flex: none; color: var(--mw-blue-text); font-size: .75rem; font-weight: 800; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .mawaeed-home .mw-empty { margin: 0; padding: 15px 3px; color: var(--mw-muted); font-size: .84rem; }
@@ -177,14 +162,11 @@
 @media (max-width: 700px) {
   .mawaeed-home .mw-head-row { align-items: start; flex-direction: column; gap: 9px; padding-bottom: 16px; }
   .mawaeed-home .mw-updated { margin: 0; }
-  .mawaeed-home .mw-pulse-grid { grid-template-columns: 1fr; }
+  .mawaeed-home .mw-pulse-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .mawaeed-home .mw-pulse-card, .mawaeed-home .mw-pulse-card:first-child { border-inline-start: 0; border-bottom: 1px solid var(--mw-rule); }
   .mawaeed-home .mw-pulse-card:last-child { border-bottom: 0; }
-  .mawaeed-home .mw-pulse-card { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 4px 13px; padding: 10px 12px; }
+  .mawaeed-home .mw-pulse-card { display: grid; grid-template-columns: 1fr; align-items: center; gap: 4px; padding: 10px 12px; }
   .mawaeed-home .mw-pulse-top { grid-column: 1 / -1; }
-  .mawaeed-home .mw-pulse-count { grid-column: 1; min-height: 1.5rem; }
-  .mawaeed-home .mw-pulse-foot { grid-column: 2; grid-row: 2; justify-content: end; width: auto; padding: 0; border-top: 0; }
-  .mawaeed-home .mw-pulse-date { max-width: 11rem; }
   .mawaeed-home .mw-hero { grid-template-columns: 1fr; gap: 18px; margin-top: 20px; padding: 19px 17px; }
   .mawaeed-home .mw-clock-box { text-align: start; }
   .mawaeed-home .mw-clock-label { margin-bottom: 7px; }
@@ -192,18 +174,23 @@
   .mawaeed-home .mw-clock-cell { padding-inline: 9px; text-align: center; }
   .mawaeed-home .mw-clock-num { font-size: 1.75rem; }
   .mawaeed-home .mw-section-head { align-items: start; flex-direction: column; gap: 3px; }
-  .mawaeed-home .mw-section-sub { white-space: normal; }
   .mawaeed-home .mw-school-head { align-items: start; }
-  .mawaeed-home .mw-school-top-link { margin-inline-start: 36px; }
 }
 @media (max-width: 380px) {
   .mawaeed-home .mw-title { font-size: 1.4rem; }
   .mawaeed-home .mw-lede { font-size: .88rem; }
   .mawaeed-home .mw-pulse-card { padding-inline: 8px; }
-  .mawaeed-home .mw-pulse-date { max-width: 8rem; }
   .mawaeed-home .mw-hero { padding-inline: 13px; }
   .mawaeed-home .mw-card-select { padding-inline: 0; }
   .mawaeed-home .mw-rows li { gap: 8px; padding-inline: 0; }
   .mawaeed-home .mw-row-date { font-size: .68rem; }
   .mawaeed-home .mw-row-count { font-size: .7rem; }
 }
+
+.mawaeed-home .mw-pulse-series > span:last-child { overflow: visible; white-space: normal; }
+.mawaeed-home .mw-pulse-top { flex-wrap: wrap; }
+
+.mawaeed-home .mw-pulse-card:disabled { cursor: default; color: var(--mw-muted); opacity: .65; }
+
+.mawaeed-home .mw-region-select { min-height: 44px; width: min(100%, 260px); padding: 8px 12px; font: inherit; font-size: .85rem; color: var(--mw-ink); background: var(--background); border: 1px solid var(--mw-rule); border-radius: 6px; }
+.mawaeed-home .mw-region-notice { margin: 0 0 12px; color: var(--mw-muted); font-size: .78rem; line-height: 1.7; }

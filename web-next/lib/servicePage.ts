@@ -11,6 +11,14 @@ export const RELATED_ARCHIVE_DAYS = 45;
 export const RELATED_FETCH_LIMIT = 12;
 const RELATED_LIMIT = 4;
 
+/** يبني مسار نموذج الخدمة؛ المنطقة تخص صفحة التقويم الدراسي فقط. */
+export function serviceModelPath(id: string, region?: string): string {
+  const query = id === "school-calendar-date" && region
+    ? `?region=${encodeURIComponent(region)}`
+    : "";
+  return `/api/service-pages/${encodeURIComponent(id)}${query}`;
+}
+
 function publishedMs(value: string | null): number {
   if (!value) return Number.NEGATIVE_INFINITY;
   const ms = new Date(value).getTime();
@@ -40,6 +48,9 @@ export function relatedArticleMeta(link: RelatedArticleLink, now: Date): { dateL
 }
 
 export type ServicePageModel = {
+  region: string;
+  regions: { id: string; label: string }[];
+  regionNotice: string | null;
   title: string;
   description: string;
   canonical: string;

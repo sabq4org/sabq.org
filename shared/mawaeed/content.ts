@@ -18,6 +18,7 @@ export type FaqSeries = {
   next: FaqCard | null;
   following: FaqCard | null;
   upcoming: FaqCard[];
+  regionLabel: string;
 };
 
 export const METHODOLOGY = [
@@ -56,15 +57,16 @@ function schoolFaq(series: FaqSeries, updatedLabel: string): FaqItem[] {
     : "لا توجد إجازة قادمة معلنة حاليًا.";
   const extras = series.upcoming.filter((card) => card.title.includes("إضافية") && !card.isPast);
   const extraAnswer = extras.length
-    ? `الإجازات الإضافية المعلنة للرياض والقصيم ومعظم المناطق: ${extras.map((card) => card.dateLine).join("، ")}. كل إدارة تعليم تعلن إجازات منطقتها. مواعيد مكة المكرمة والمدينة المنورة وجدة والطائف لا تُعرض هنا إلا بعد تأكيدها من مصدر الإدارة.`
-    : "لم تُنشر بعد إجازات إضافية مؤكدة لهذه المنطقة.";
+    ? `الإجازات الإضافية المؤكدة في ${series.regionLabel}: ${extras.map((card) => card.dateLine).join("، ")}.`
+    : `لا توجد إجازات إضافية مؤكدة منشورة لـ${series.regionLabel}؛ المعروض هو التقويم العام لوزارة التعليم.`;
   return [
     { question: "متى أقرب إجازة للمدارس؟ وكم باقي؟", answer: nearest, inSchema: true },
     { question: "ما مواعيد الإجازات الإضافية للعام الدراسي 1448؟", answer: extraAnswer, inSchema: true },
     {
       question: "ما الإجازات المطوّلة في العام الدراسي 1448؟",
-      answer:
-        "في الرياض والقصيم ومعظم المناطق، إجازة 25 أكتوبر 2026 تمد العطلة من الجمعة 23 إلى الأحد 25 أكتوبر. إجازة 29 نوفمبر تلي إجازة الخريف مباشرة، وإجازة 7 يناير تسبق إجازة منتصف العام بيوم. إجازة 11 أبريل تمد العطلة من الجمعة 9 إلى الأحد 11 أبريل.",
+      answer: extras.length
+        ? `في ${series.regionLabel}: ${extras.map((card) => `${card.title} في ${card.dateLine}`).join("، ")}.`
+        : `لا توجد إجازات إضافية مؤكدة منشورة لـ${series.regionLabel}؛ يعرض هذا القسم التقويم العام فقط.`,
       inSchema: true,
     },
     {
@@ -95,7 +97,7 @@ function schoolFaq(series: FaqSeries, updatedLabel: string): FaqItem[] {
     {
       question: "هل تقويم مكة والمدينة وجدة والطائف مختلف؟",
       answer:
-        "الوزارة تمنح إدارات تعليم مكة المكرمة والمدينة المنورة والطائف وجدة صلاحيات تراعي مواسم الحج والعمرة. يمكن اختيار المنطقة أعلى الصفحة. مواعيدها الإضافية تُستكمل من المصدر الرسمي لكل إدارة، ولا نعرض تاريخًا لم يُؤكد.",
+        "تمنح الوزارة بعض إدارات التعليم صلاحيات تقويم تراعي احتياجات المنطقة. يمكن اختيار الإدارة أعلى الصفحة، ولا نعرض موعدًا إضافيًا قبل تأكيده من مصدرها الرسمي.",
       inSchema: false,
     },
   ];

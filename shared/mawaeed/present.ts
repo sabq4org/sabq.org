@@ -3,6 +3,7 @@
  * dateModified من contentUpdatedAt، لا من ساعة الطلب.
  */
 
+import { compactOccurrenceTitle } from "./display";
 import { buildFaq, METHODOLOGY, type FaqItem } from "./content";
 import { daysPhrase, formatGregorian, formatHijri, formatRiyadhDayLabel, liveCountdown, riyadhDateISO } from "./dates";
 import { regionSuffix, serviceLinkForSeries } from "../servicePages/catalog";
@@ -10,6 +11,7 @@ import { visionNote } from "./notes";
 import {
   EXPECTED_HINT,
   HOME_COPY,
+  REGIONS,
   SERIES_CATALOG,
   catalogBySlug,
   displayTitle,
@@ -133,6 +135,7 @@ export function presentMawaeed(input: {
           next: focus.next ? toFaq(focus.next) : null,
           following: focus.following ? toFaq(focus.following) : null,
           upcoming: focus.upcoming.map(toFaq),
+          regionLabel: regionMeta(region).label,
         }
       : null, dateModifiedLabel)
     : [];
@@ -143,13 +146,7 @@ export function presentMawaeed(input: {
     dateModified,
     dateModifiedLabel,
     region,
-    regions: [
-      { id: "riyadh", label: "الرياض" },
-      { id: "makkah", label: "مكة المكرمة" },
-      { id: "madinah", label: "المدينة المنورة" },
-      { id: "jeddah", label: "جدة" },
-      { id: "taif", label: "الطائف" },
-    ],
+    regions: REGIONS.map(({ id, label }) => ({ id, label })),
     page,
     nav: nav(pageSlug, region),
     series: blocks,
@@ -163,7 +160,7 @@ export function presentMawaeed(input: {
 
 function toFaq(card: MawaeedCard) {
   return {
-    title: card.title,
+    title: compactOccurrenceTitle(card.title, card.startsOn),
     dateLine: card.dateLine,
     countdownText: card.countdownText,
     sourceTitle: card.sourceTitle,
@@ -260,7 +257,7 @@ function daysBetween(fromIso: string, toIso: string): number {
 }
 
 function scopePhrase(region: RegionId, card: MawaeedCard): string {
-  if (card.regionGroup === "riyadh_most") return " في الرياض والقصيم ومعظم المناطق";
+  if (card.regionGroup === "riyadh_most") return " في القصيم";
   if (card.regionGroup === "western") return ` في ${regionMeta(region).label}`;
   return "";
 }
@@ -374,7 +371,7 @@ function eventNode(card: MawaeedCard, region: RegionId): Record<string, unknown>
   const place = card.regionGroup === "western"
     ? regionMeta(region).label
     : card.regionGroup === "riyadh_most"
-      ? "الرياض ومعظم مناطق المملكة العربية السعودية"
+      ? "القصيم"
       : "المملكة العربية السعودية";
   return {
     "@type": "Event",

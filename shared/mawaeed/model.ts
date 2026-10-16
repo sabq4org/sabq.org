@@ -24,9 +24,22 @@ export const REGION_GROUPS = ["all", "riyadh_most", "western"] as const;
 export type RegionGroup = (typeof REGION_GROUPS)[number];
 
 export const REGIONS = [
-  { id: "riyadh", label: "الرياض", group: "riyadh_most" },
+  // riyadh_most is a legacy occurrence key. Its source is Qassim; keep it
+  // attached only to Qassim until each administration publishes its own date.
+  { id: "riyadh", label: "الرياض", group: null },
+  { id: "sharqia", label: "الشرقية", group: null },
   { id: "makkah", label: "مكة المكرمة", group: "western" },
   { id: "madinah", label: "المدينة المنورة", group: "western" },
+  { id: "qassim", label: "القصيم", group: "riyadh_most" },
+  { id: "asir", label: "عسير", group: null },
+  { id: "tabuk", label: "تبوك", group: null },
+  { id: "hail", label: "حائل", group: null },
+  { id: "north", label: "الحدود الشمالية", group: null },
+  { id: "jazan", label: "جازان", group: null },
+  { id: "najran", label: "نجران", group: null },
+  { id: "baha", label: "الباحة", group: null },
+  { id: "jawf", label: "الجوف", group: null },
+  { id: "ahsaa", label: "الأحساء", group: null },
   { id: "jeddah", label: "جدة", group: "western" },
   { id: "taif", label: "الطائف", group: "western" },
 ] as const;
@@ -82,7 +95,7 @@ export const HOME_COPY = {
   slug: "",
   seoTitle: "مواعيدك: كم باقي على الإجازة والراتب وحساب المواطن؟ | سبق",
   seoDescription:
-    "عدّاد محدَّث لأقرب إجازة مدرسية وموعد الرواتب وإيداع حساب المواطن والضمان المطوّر ومعاشات التقاعد، بالتاريخين الهجري والميلادي ورابط المصدر الرسمي.",
+    "عدّاد محدَّث لأقرب إجازة مدرسية وموعد الرواتب وإيداع حساب المواطن والضمان المطوّر ومعاشات التقاعد، بالتاريخين الهجري والميلادي.",
   h1: "مواعيدك: أقرب موعد يهمّك… وكم باقي عليه",
 };
 
@@ -193,6 +206,8 @@ export function isPublicOccurrence(row: Pick<OccurrenceRecord, "published" | "st
 export function regionGroupForSeed(section: string, name: string): RegionGroup {
   if (section !== "school-calendar-1448") return "all";
   if (name.includes("مكة") || name.includes("الطائف") || name.includes("جدة")) return "western";
+  // Legacy seed rows use this key for the Qassim source; do not infer Riyadh
+  // or the rest of the country from the title until local sources are linked.
   if (name.includes("إضافية")) return "riyadh_most";
   return "all";
 }
@@ -279,7 +294,10 @@ export function planOccurrenceWrite(before: OccurrenceRecord | null, after: Occu
   };
 }
 
-/** يزيل الكلمات الزمنية الملصقة بالعنوان المخزّن («(اليوم)») لأنها تبقى بعد مرور اليوم. */
+/** يزيل اللواحق الزمنية القديمة ولواحق النطاق الموروثة من صفوف الإجازات؛ تبقى بيانات المصدر الأصلية كما هي. */
 export function displayTitle(title: string): string {
-  return title.replace(/\s*\((?:اليوم|غدًا|غداً|غدا)\)\s*$/u, "").trim() || title;
+  return title
+    .replace(/\s*\((?:اليوم|غدًا|غداً|غدا)\)\s*$/u, "")
+    .replace(/\s*\((?:القصيم والرياض ومعظم المناطق|مكة المكرمة والمدينة المنورة وجدة والطائف)\)\s*$/u, "")
+    .trim() || title;
 }

@@ -9,6 +9,7 @@ import {
   relatedArticleMeta as nextRelatedMeta,
   relatedArticlesFromKeyword as nextRelatedFromKeyword,
   relatedArticlesFromSearch as nextRelatedFromSearch,
+  serviceModelPath,
 } from "../../web-next/lib/servicePage";
 import { renderServiceSemanticHtml } from "@shared/servicePages/semanticHtml";
 
@@ -68,6 +69,15 @@ describe("service page paths", () => {
     expect(servicePageIdFromPath("/services")).toBeNull();
     expect(servicePageIdFromPath("/services/citizen-account-date/extra")).toBeNull();
     expect(servicePageIdFromPath("/mawaeed/salaries")).toBeNull();
+  });
+
+  it("passes region only to the real school service API route", () => {
+    expect(serviceModelPath("school-calendar-date", "makkah"))
+      .toBe("/api/service-pages/school-calendar-date?region=makkah");
+    expect(serviceModelPath("school-calendar-date", "riyadh & east"))
+      .toBe("/api/service-pages/school-calendar-date?region=riyadh%20%26%20east");
+    expect(serviceModelPath("government-salaries-date", "makkah"))
+      .toBe("/api/service-pages/government-salaries-date");
   });
 });
 
@@ -327,7 +337,7 @@ describe("school service page region", () => {
   }
 
   it.each([
-    ["riyadh", "2026-10-25", ""],
+    ["qassim", "2026-10-25", "?region=qassim"],
     ["makkah", "2026-11-20", "?region=makkah"],
     ["madinah", "2026-11-20", "?region=madinah"],
     ["jeddah", "2026-11-20", "?region=jeddah"],
@@ -340,10 +350,10 @@ describe("school service page region", () => {
     expect(model.ogImage).toBe(`https://sabq.org/api/service-pages/school-calendar-date/og.png${suffix}`);
     expect(model.canonical).toBe("https://sabq.org/services/school-calendar-date");
     const ics = buildServiceCalendar(model) ?? "";
-    if (region === "riyadh") {
+    if (region === "qassim") {
       expect(ics).toContain("DTSTART;VALUE=DATE:20261025");
       expect(ics).not.toContain("DTSTART;VALUE=DATE:20261206");
-      expect(ics).toContain("UID:school-calendar-date-extra-riyadh@sabq.org");
+      expect(ics).toContain("UID:school-calendar-date-qassim-extra-riyadh@sabq.org");
     } else {
       expect(ics).not.toContain("DTSTART;VALUE=DATE:20261025");
       expect(ics).toContain("DTSTART;VALUE=DATE:20261206");
@@ -366,6 +376,14 @@ describe("school service page region", () => {
     expect(serviceRegion("government-salaries-date", "makkah")).toBe("riyadh");
     expect(serviceRegion("school-calendar-date", "MAKKAH")).toBe("makkah");
     expect(serviceRegion("school-calendar-date", "mars")).toBe("riyadh");
+  });
+
+  it("exposes the full region selector and warns when a region has no extra dates", () => {
+    const model = schoolPage("asir");
+    expect(model.regions).toHaveLength(16);
+    expect(model.region).toBe("asir");
+    expect(model.regionNotice).toBe("المعروض هو التقويم الدراسي العام. لم تُعتمد في الخدمة إجازات إضافية خاصة بهذه المنطقة بعد.");
+    expect(model.canonical).toBe("https://sabq.org/services/school-calendar-date");
   });
 });
 

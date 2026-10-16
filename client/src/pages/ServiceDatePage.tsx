@@ -7,7 +7,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock,
-  ExternalLink,
   Newspaper,
   Share2,
 } from "lucide-react";
@@ -20,7 +19,8 @@ import { apiUrl } from "@/lib/queryClient";
 import "@/styles/article-detail.css";
 import { regionSuffix, servicePageUsesRegion } from "@shared/servicePages/catalog";
 import { dayUnitWord } from "@shared/mawaeed/dates";
-import { REGIONS, normalizeRegion, type RegionId } from "@shared/mawaeed/model";
+import { compactServiceOccurrenceTitle, stripDisplayedSourceSentence } from "@shared/mawaeed/display";
+import { normalizeRegion, type RegionId } from "@shared/mawaeed/model";
 import type { ServicePageModel } from "@shared/servicePages/present";
 import {
   RELATED_FETCH_LIMIT,
@@ -232,6 +232,9 @@ function ServiceDateBody({
     onDayChange,
   );
   const jsonLd = JSON.stringify(model.jsonLd).replace(/</g, "\\u003c");
+  const laterRows = model.rows.filter((row) => !row.isNext);
+  const nextTitle = model.next ? compactServiceOccurrenceTitle(model.next.title, model.next.startsOn, model.tone) : "";
+  const nextHeading = model.tone === "school" ? "الإجازة القادمة" : "الصرف القادم";
   return (
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd }} />
@@ -239,37 +242,17 @@ function ServiceDateBody({
         <Link href="/">الرئيسية</Link>
         <ChevronRight aria-hidden="true" />
         <a href="/mawaeed">مواعيدك</a>
-        <ChevronRight aria-hidden="true" />
-        <span aria-current="page">{model.h1}</span>
       </nav>
       <div className="article-detail-layout service-date-page" data-tone={model.tone}>
         <article className="article-detail-content min-w-0">
           <header className="article-detail-header">
             <div className="flex flex-wrap items-center gap-3">
-              {model.next ? (
-                <span className={statusBadgeClass(model.next.certainty)}>
-                  {model.next.certaintyLabel}
-                </span>
-              ) : null}
               <h1 className="article-detail-title !mt-0 min-w-0">{model.h1}</h1>
             </div>
-            {model.tone === "school" ? <RegionPicker current={model.region} /> : null}
-            <Answer model={model} countdown={live.text} />
+            {model.tone === "school" ? (
+              <RegionPicker current={model.region} regions={model.regions} notice={model.regionNotice} />
+            ) : null}
             <div className="article-detail-byline">
-              {model.next?.sourceUrl ? (
-                <p className="public-meta inline-flex items-center gap-1.5">
-                  <span>المصدر:</span>
-                  <a
-                    href={model.next.sourceUrl}
-                    rel="noopener noreferrer"
-                    target="_blank"
-                    className="inline-flex items-center gap-1 font-semibold hover:underline"
-                  >
-                    <span>{model.next.sourceTitle}</span>
-                    <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
-                  </a>
-                </p>
-              ) : <span />}
               <p className="article-detail-metadata">
                 آخر تحديث: <time dateTime={model.dateModified}>{model.dateModifiedLabel}</time>
               </p>
@@ -281,8 +264,9 @@ function ServiceDateBody({
               <div className="service-next-header">
                 <p className="service-next-kicker">
                   <Calendar aria-hidden="true" />
-                  <span>الموعد القادم · {model.next.title}</span>
+                  <span>{model.tone === "school" && nextTitle ? nextTitle : `${nextHeading}${nextTitle ? ` · ${nextTitle}` : ""}`}</span>
                 </p>
+                <span className={statusBadgeClass(model.next.certainty)}>{model.next.certaintyLabel}</span>
               </div>
               <div className="service-date-grid">
                 <div className="service-date-cell">
@@ -337,28 +321,28 @@ function ServiceDateBody({
             </div>
           )}
 
-          <section>
-            <h2 className="public-section-title">خط المواعيد</h2>
+          <Answer model={model} />
+
+          {laterRows.length > 0 && <section>
+            <h2 className="public-section-title">بقية المواعيد</h2>
             <p className="public-meta mt-1">
               {model.tone === "school"
                 ? "المواعيد من السجل المنشور. ما مضى يظهر «انتهت»، وما لم تعلنه الجهة بعد يبقى «متوقعًا»."
                 : "المواعيد من السجل المنشور. ما مضى يظهر «صُرفت»، وما لم تعلنه الجهة بعد يبقى «متوقعًا»."}
             </p>
-            {model.rows.length === 0 ? (
-              <p className="mt-4">لا توجد مواعيد منشورة في السجل.</p>
-            ) : (
-              <ol className="service-timeline">
-                {model.rows.map((row) => {
+            <ol className="service-timeline">
+              {laterRows.map((row) => {
                   const rowCertainty = row.certaintyLabel === "متوقع" ? "expected" : "confirmed";
+                  const rowTitle = compactServiceOccurrenceTitle(row.title, row.startsOn, model.tone);
+                  const showRowTitle = rowTitle && !(model.tone === "pension" && rowTitle === nextTitle);
                   return (
                     <li
                       key={`${row.startsOn}-${row.title}`}
-                      className={`service-timeline-row${row.isNext ? " is-next" : ""}${row.isPast ? " is-past" : ""}`}
+                      className={`service-timeline-row${row.isPast ? " is-past" : ""}`}
                     >
                       <div className="service-timeline-main">
                         <div className="service-timeline-head">
-                          <h3 className="service-timeline-title">{row.title}</h3>
-                          {row.isNext && <span className="service-next-pill">الموعد القادم</span>}
+                          {showRowTitle ? <h3 className="service-timeline-title">{rowTitle}</h3> : null}
                         </div>
                         <p className="service-timeline-dates">
                           <time dateTime={row.startsOn}>{row.gregorianLabel}</time>
@@ -376,10 +360,9 @@ function ServiceDateBody({
                       </div>
                     </li>
                   );
-                })}
-              </ol>
-            )}
-          </section>
+              })}
+            </ol>
+          </section>}
 
           <section>
             <h2 className="public-section-title">كيف يُحدَّد الموعد</h2>
@@ -392,11 +375,11 @@ function ServiceDateBody({
             <section>
               <h2 className="public-section-title">أسئلة شائعة</h2>
               <div className="service-faq-list">
-                {model.faq.map((item, idx) => (
-                  <details key={item.question} className="service-faq-item" open={idx === 0}>
+                {model.faq.map((item) => (
+                  <details key={item.question} className="service-faq-item">
                     <summary className="service-faq-summary">{item.question}</summary>
                     <div className="service-faq-answer">
-                      <p>{item.answer}</p>
+                      <p>{stripDisplayedSourceSentence(item.answer)}</p>
                     </div>
                   </details>
                 ))}
@@ -473,60 +456,54 @@ function ServiceDateBody({
 }
 
 /** شريط المنطقة التعليمية في صفحة المدارس: يغيّر ?region= ويحفظ الاختيار كما تفعل /mawaeed. */
-function RegionPicker({ current }: { current: RegionId }) {
+function RegionPicker({
+  current,
+  regions,
+  notice,
+}: {
+  current: RegionId;
+  regions: { id: RegionId; label: string }[];
+  notice: string | null;
+}) {
   const [location, navigate] = useLocation();
   return (
     <div className="service-region">
-      <p className="service-region-label">
-        المنطقة التعليمية
+      <label className="service-region-label" htmlFor="service-region-select">
+        إدارة التعليم
         <span>الإجازات الرسمية موحّدة، والإضافية حسب المنطقة</span>
-      </p>
-      <div className="service-region-segs" role="group" aria-label="المنطقة التعليمية">
-        {REGIONS.map((region) => (
-          <button
-            key={region.id}
-            type="button"
-            className="service-region-seg"
-            aria-pressed={region.id === current}
-            onClick={() => {
-              try {
-                window.localStorage.setItem(REGION_PREF_ID, region.id);
-              } catch {
-                /* التخزين قد يكون محجوباً؛ الاستعلام يكفي */
-              }
-              navigate(`${location}?region=${region.id}`, { replace: true });
-            }}
-          >
-            {region.label}
-          </button>
-        ))}
-      </div>
+      </label>
+      <select
+        id="service-region-select"
+        className="service-region-select"
+        value={current}
+        onChange={(event) => {
+          const region = normalizeRegion(event.currentTarget.value);
+          try {
+            window.localStorage.setItem(REGION_PREF_ID, region);
+          } catch {
+            /* التخزين قد يكون محجوباً؛ الاستعلام يكفي */
+          }
+          navigate(`${location}?region=${region}`, { replace: true });
+        }}
+      >
+        {regions.map((region) => <option key={region.id} value={region.id}>{region.label}</option>)}
+      </select>
+      {notice ? <p className="service-region-notice">{notice}</p> : null}
     </div>
   );
 }
 
-function Answer({ model, countdown }: { model: ServicePageModel; countdown: string }) {
+function Answer({ model }: { model: ServicePageModel }) {
   if (!model.next) {
     return <p className="service-answer-lead" id="answer">{model.leadPrefix}</p>;
   }
   const next = model.next;
   const hint = next.expectedHint?.replace(/^متوقع:\s*/, "");
-  return (
-    <>
-      <p className="service-answer-lead" id="answer">
-        {model.leadPrefix}{" "}
-        <time dateTime={next.startsOn}>{next.gregorianLabel}</time>
-        {" "}الموافق {next.hijriLabel}،{" "}
-        <strong data-countdown data-date={next.startsOn} data-today={next.todayLabel}>{countdown || next.countdownText}</strong>
-      </p>
-      {hint || model.shiftRule ? (
-        <div className="service-rule-notes">
-          {hint ? <p>{hint}</p> : null}
-          {model.shiftRule ? <p>{model.shiftRule}</p> : null}
-        </div>
-      ) : null}
-    </>
-  );
+  if (!hint && !model.shiftRule) return null;
+  return <div className="service-rule-notes" id="answer">
+    {hint ? <p>{hint}</p> : null}
+    {model.shiftRule ? <p>{model.shiftRule}</p> : null}
+  </div>;
 }
 
 /** يشارك رابط المنطقة المعروضة، حتى لو جاءت من الاختيار المحفوظ لا من الرابط. */

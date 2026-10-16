@@ -52,6 +52,8 @@ export type ServicePageModel = {
   id: string;
   /** المنطقة التعليمية المعروضة. «riyadh» لكل الصفحات غير المناطقية. */
   region: RegionId;
+  regions: { id: RegionId; label: string }[];
+  regionNotice: string | null;
   path: string;
   title: string;
   description: string;
@@ -88,10 +90,15 @@ export function presentServicePage(id: string, view: MawaeedView): ServicePageMo
   const canonical = `${SITE}${spec.path}`;
   const isSchool = spec.tone === "school";
   const region: RegionId = servicePageUsesRegion(spec.id) ? view.region : "riyadh";
+  const regionNotice = isSchool && !block.upcoming.some((card) => !card.isPast && card.regionGroup !== "all")
+    ? "المعروض هو التقويم الدراسي العام. لم تُعتمد في الخدمة إجازات إضافية خاصة بهذه المنطقة بعد."
+    : null;
   const suffix = regionSuffix(region);
   return {
     id: spec.id,
     region,
+    regions: view.regions,
+    regionNotice,
     path: spec.path,
     title: spec.title,
     description,
