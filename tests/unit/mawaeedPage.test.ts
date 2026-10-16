@@ -144,4 +144,20 @@ describe("mawaeed HTML", () => {
     expect(html).toContain('href="/services/school-calendar-date?region=riyadh"');
     expect(html).not.toContain('href="/mawaeed?region=');
   });
+
+  it("wraps the page in the Sabq site header and footer", () => {
+    const presented = presentMawaeed({
+      now: new Date("2026-09-27T12:00:00+03:00"),
+      series: [series],
+      occurrences: rows,
+    });
+    if (presented.notFound) throw new Error("expected view");
+    const html = renderMawaeedHtml(presented.view);
+    expect(html).toContain('<header class="site-header" role="banner">');
+    expect(html).toContain('src="/branding/sabq-logo.png"');
+    expect(html).toContain('href="/news"');
+    expect(html).toContain('<footer class="site-footer" id="footer">');
+    expect(html).toContain('href="/ar/privacy"');
+    expect(html).toContain("صُنعت بكل");
+  });
 });
