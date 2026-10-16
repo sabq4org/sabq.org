@@ -32,9 +32,10 @@ export function ServiceDateView({
       <main id="main-content" role="main" lang="ar" dir="rtl" className="mx-auto max-w-5xl px-4 py-8">
         <nav aria-label="مسار التنقل" className="mb-6 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
           <Link href="/" className="hover:text-primary">الرئيسية</Link>
-          <span aria-hidden="true">‹</span>
+          {/* «›» ينعكس في RTL فيُرسم متجهاً يساراً (إلى الأمام)؛ «‹» كان يشير إلى الخلف. */}
+          <span aria-hidden="true">›</span>
           <a href="/mawaeed" className="hover:text-primary">مواعيدك</a>
-          <span aria-hidden="true">‹</span>
+          <span aria-hidden="true">›</span>
           <span aria-current="page" className="text-foreground">{model.h1}</span>
         </nav>
         <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">

@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { ServiceDateView } from "@/components/ServiceDateView";
 import { serverApiFetch } from "@/lib/apiUrl";
 import {
+  RELATED_FETCH_LIMIT,
   relatedArticlesFromKeyword,
   relatedArticlesFromSearch,
   type RelatedArticleLink,
@@ -25,7 +26,7 @@ async function loadRelated(model: ServicePageModel): Promise<RelatedArticleLink[
   try {
     const path = model.relatedSource === "keyword"
       ? `/api/keyword/${encodeURIComponent(query)}`
-      : `/api/search?q=${encodeURIComponent(query)}&limit=6`;
+      : `/api/search?q=${encodeURIComponent(query)}&limit=${RELATED_FETCH_LIMIT}`;
     const res = await serverApiFetch(path, { next: { revalidate: 60 } });
     if (!res.ok) return [];
     const payload = await res.json();

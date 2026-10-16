@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import {
   Calendar,
   CalendarPlus,
@@ -22,6 +22,7 @@ import { HIDDEN_SERVICE_ROBOTS, regionSuffix, servicePageUsesRegion } from "@sha
 import { REGIONS, normalizeRegion, type RegionId } from "@shared/mawaeed/model";
 import type { ServicePageModel } from "@shared/servicePages/present";
 import {
+  RELATED_FETCH_LIMIT,
   relatedArticlesFromKeyword,
   relatedArticleMeta,
   relatedArticlesFromSearch,
@@ -99,14 +100,15 @@ function useLiveCountdown(startsOn: string | undefined, todayLabel: string, init
   useEffect(() => {
     setText(initial);
     if (!startsOn) setParts(null);
-    const loadedDay = riyadhDay(Date.now());
-    let notified = false;
+    let loadedDay = riyadhDay(Date.now());
     // المراقبة تعمل حتى بلا عدّاد (الموعد الجاري)، حتى يتحول إلى «انتهت» بعد آخر يوم.
     const tick = () => {
       const now = Date.now();
-      // بعد منتصف ليل الرياض يتغيّر الموعد القادم أو حالته: نعيد الجلب مرة بدل البقاء على «اليوم».
-      if (!notified && riyadhDay(now) !== loadedDay) {
-        notified = true;
+      // بعد منتصف ليل الرياض يتغيّر الموعد القادم أو حالته: نعيد الجلب مرة لكل يوم جديد
+      // (لا مرة واحدة فقط: تبويب مفتوح أياماً كان يتوقف عن التحديث بعد أول منتصف ليل).
+      const today = riyadhDay(now);
+      if (today !== loadedDay) {
+        loadedDay = today;
         onDayChange?.();
       }
       if (!startsOn) return;
@@ -135,12 +137,22 @@ export default function ServiceDatePage() {
   });
   const search = useSearch();
   const region = useMemo(() => readRegion(id, search), [id, search]);
-  const pageQuery = useQuery<ServicePageModel>({
+  const pageUrl = `/api/service-pages/${encodeURIComponent(id || "")}${region === "riyadh" ? "" : `?region=${region}`}`;
+  const pageQuery = useQuery<ServicePageModel | null>({
     queryKey: ["/api/service-pages", id, { region: region === "riyadh" ? undefined : region }],
     enabled: Boolean(id),
-    retry: false,
+    // 404 = لا صفحة بهذا العنوان (null). أي فشل آخر خطأ مؤقت يُعاد طلبه ويُعرض بزر «أعد المحاولة» لا كـ«غير موجودة».
+    queryFn: async () => {
+      const res = await fetch(apiUrl(pageUrl), { credentials: "include" });
+      if (res.status === 404) return null;
+      if (!res.ok) throw new Error(`تعذر تحميل الموعد (${res.status})`);
+      return (await res.json()) as ServicePageModel;
+    },
+    retry: 2,
+    // عند تبديل المنطقة تبقى الصفحة السابقة معروضة حتى تصل الجديدة بدل أن يُفرَّغ المحتوى.
+    placeholderData: keepPreviousData,
   });
-  const model = pageQuery.data;
+  const model = pageQuery.data ?? undefined;
   const { refetch } = pageQuery;
   const refetchPage = useCallback(() => {
     void refetch();
@@ -176,7 +188,7 @@ export default function ServiceDatePage() {
       if (!model?.relatedQuery) return null;
       const endpoint = model.relatedSource === "keyword"
         ? `/api/keyword/${encodeURIComponent(model.relatedQuery)}`
-        : `/api/search?q=${encodeURIComponent(model.relatedQuery)}&limit=6`;
+        : `/api/search?q=${encodeURIComponent(model.relatedQuery)}&limit=${RELATED_FETCH_LIMIT}`;
       const res = await fetch(apiUrl(endpoint), { credentials: "include" });
       if (!res.ok) return null;
       return res.json();
@@ -195,6 +207,17 @@ export default function ServiceDatePage() {
       <main className="article-detail-main container mx-auto px-4 sm:px-6 lg:px-8 py-8 max-w-7xl">
         {pageQuery.isLoading ? (
           <p className="public-meta">جارٍ تحميل الموعد…</p>
+        ) : pageQuery.isError && !model ? (
+          <article className="article-detail-content">
+            <h1 className="article-detail-title">تعذر تحميل الموعد</h1>
+            <p className="article-detail-subtitle">الخدمة لم تستجب الآن. الصفحة موجودة، فأعد المحاولة بعد لحظات.</p>
+            <p>
+              <button type="button" className="service-retry" onClick={() => void refetch()} disabled={pageQuery.isFetching}>
+                {pageQuery.isFetching ? "جارٍ إعادة المحاولة…" : "أعد المحاولة"}
+              </button>
+              {" "}<a href="/mawaeed">أو العودة إلى مواعيدك</a>
+            </p>
+          </article>
         ) : !model ? (
           <article className="article-detail-content">
             <h1 className="article-detail-title">الصفحة غير موجودة</h1>
