@@ -154,7 +154,7 @@ describe("citizen account service page", () => {
   });
 
   it("labels a computed date متوقع and reuses the existing weekend note", () => {
-    const { model } = page("citizen-account-date", citizen, [
+    const { view, model } = page("citizen-account-date", citizen, [
       row({
         id: "batch",
         seriesId: "s-citizen",
@@ -172,6 +172,8 @@ describe("citizen account service page", () => {
     expect(model.shiftRule).toContain("الخميس 9");
     expect(model.shiftRule).toContain("الأحد 11");
     expect(model.shiftRule).not.toContain("لم نجد قاعدة");
+    expect(view.faq.some((item) => item.answer.includes("لم نجد قاعدة"))).toBe(true);
+    expect(model.faq.some((item) => item.answer.includes("لم نجد قاعدة"))).toBe(false);
     const html = renderServiceSemanticHtml(model, [
       { title: "خبر عن الدفعة", href: "/article/citizen-deposit" },
     ]);

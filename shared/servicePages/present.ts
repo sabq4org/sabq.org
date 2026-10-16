@@ -7,6 +7,7 @@ import type { FaqItem } from "../mawaeed/content";
 import { METHODOLOGY } from "../mawaeed/content";
 import type { MawaeedCard, MawaeedView } from "../mawaeed/present";
 import { servicePageById, type ServicePageSpec } from "./catalog";
+import { servicePageFaq } from "./copy";
 
 const SITE = "https://sabq.org";
 
@@ -70,11 +71,11 @@ export function presentServicePage(id: string, view: MawaeedView): ServicePageMo
   if (!block) return null;
   const next = block.next ? toNext(block.next) : null;
   const rows = block.upcoming.map((card) => toRow(card, next?.startsOn ?? null));
-  const shiftRule = polishShiftRule(shiftRuleText(block.summary, view.faq));
+  const faq = servicePageFaq(view.faq).filter((item) => item.question.trim() && item.answer.trim());
+  const shiftRule = polishShiftRule(shiftRuleText(block.summary, faq));
   const description = metaDescription(next, shiftRule, spec);
   const links = relatedLinks(spec, block.href);
   const canonical = `${SITE}${spec.path}`;
-  const faq = view.faq.filter((item) => item.question.trim() && item.answer.trim());
   return {
     id: spec.id,
     path: spec.path,
