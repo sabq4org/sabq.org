@@ -56,7 +56,6 @@
 
 import { createPublicApiBurstCache, newPublicApiCacheKey, newPublicApiPolicy } from "../cloudflare-worker/public-api-burst-cache.js";
 import { mawaeedSlugFromPath, serveMawaeedPage } from "./mawaeedPage.js";
-import { servicePageIdFromPath, serveServicePage } from "./servicePage.js";
 
 export { newPublicApiCacheKey, newPublicApiPolicy };
 
@@ -244,14 +243,15 @@ function isStaticAsset(p) {
 
 // Content surfaces rendered server-side by the Next.js app (web-next). Only the
 // routes that web-next actually implements — Arabic/en/ur articles, Arabic
-// category, and the homepage. en/ur category + secondary routes stay on the SPA
-// until migrated (Phase 4). Trailing slashes are already 301'd away above, and
-// query strings live in url.search (not in `p`).
+// category, service date pages, and the homepage. en/ur category + secondary
+// routes stay on the SPA until migrated (Phase 4). Trailing slashes are already
+// 301'd away above, and query strings live in url.search (not in `p`).
 function isSsrPath(p) {
   if (p === "/") return true;
   return (
     /^\/article\/[^/]+$/.test(p) ||
     /^\/category\/[^/]+$/.test(p) ||
+    /^\/services\/[a-z0-9-]+$/.test(p) ||
     /^\/en\/article\/[^/]+$/.test(p) ||
     /^\/ur\/article\/[^/]+$/.test(p)
   );
@@ -431,7 +431,7 @@ function hasUsableSsrHtml(path, text) {
   // Next embeds route templates in script tags. Do not count those hidden
   // strings as visible article/category headings.
   const visible = text.replace(/<script[\s\S]*?<\/script>/gi, "").replace(/<style[\s\S]*?<\/style>/gi, "");
-  if (/^\/article\/|^\/en\/article\/|^\/ur\/article\//.test(path)) {
+  if (/^\/article\/|^\/en\/article\/|^\/ur\/article\//.test(path) || /^\/services\/[a-z0-9-]+$/.test(path)) {
     return /<h1(?:\s|>)/i.test(visible) && /application\/ld\+json/i.test(text);
   }
   if (/^\/category\//.test(path)) {
@@ -1136,20 +1136,6 @@ async function handleRequest(context) {
     mawaeedSlugFromPath(path) !== null
   ) {
     return serveMawaeedPage({
-      request,
-      url,
-      env,
-      waitUntil: (promise) => context.waitUntil(promise),
-      signProxyRequest,
-    });
-  }
-
-  // صفحات الخدمة الدائمة: نفس الوثيقة للبشر والزواحف، والتواريخ من مواعيدك.
-  if (
-    (request.method === "GET" || request.method === "HEAD") &&
-    servicePageIdFromPath(path) !== null
-  ) {
-    return serveServicePage({
       request,
       url,
       env,

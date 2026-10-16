@@ -678,7 +678,7 @@
       "owners": [
         "platform"
       ],
-      "lastReviewed": "2026-10-15"
+      "lastReviewed": "2026-10-16"
     },
     {
       "id": "mawaeed",
@@ -699,7 +699,10 @@
         "server/routes/mawaeed.ts",
         "server/routes/servicePages.ts",
         "functions/mawaeedPage.js",
-        "functions/servicePage.js",
+        "client/src/pages/ServiceDatePage.tsx",
+        "web-next/app/services/**",
+        "web-next/components/ServiceDateView.tsx",
+        "server/services/servicePageEdgeMeta.ts",
         "client/src/pages/dashboard/MawaeedManagement.tsx",
         "scripts/seed-mawaeed.ts",
         "tests/unit/mawaeed*.test.ts",
@@ -713,7 +716,7 @@
         "editorial",
         "platform"
       ],
-      "lastReviewed": "2026-10-15"
+      "lastReviewed": "2026-10-16"
     },
     {
       "id": "comments",

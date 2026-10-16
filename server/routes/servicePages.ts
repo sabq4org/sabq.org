@@ -29,7 +29,6 @@ router.get("/api/service-pages/:id/og.png", async (req, res) => {
       gregorianLabel: model.next?.gregorianLabel ?? null,
       hijriLabel: model.next?.hijriLabel ?? null,
       certaintyLabel: model.next?.certaintyLabel ?? null,
-      tone: model.tone,
       path: model.path,
     });
     res.setHeader("Content-Type", "image/png");
