@@ -76,5 +76,55 @@ describe("mawaeed HTML", () => {
     expect(html).not.toContain("مسودة لا تظهر");
     expect(html).not.toContain("foundingDate");
     expect(html).toContain('dir="rtl"');
+    expect(html).toContain('class="skip-link"');
+  });
+
+  it("separates past occurrences into a dedicated section after upcoming ones", () => {
+    const presented = presentMawaeed({
+      pageSlug: "salaries",
+      now: new Date("2026-10-16T12:00:00+03:00"),
+      series: [series],
+      occurrences: [
+        {
+          id: "past-1",
+          seriesId: "s1",
+          titleAr: "رواتب سبتمبر 2026",
+          startsOn: "2026-09-27",
+          endsOn: null,
+          sourceUrl: "https://www.mof.gov.sa/financial_reports",
+          sourceTitle: "وزارة المالية",
+          certainty: "confirmed",
+          status: "scheduled",
+          published: true,
+          regionGroup: "all",
+          hijriLabel: null,
+          publicNote: null,
+          ruleNote: null,
+        },
+        ...rows,
+        {
+          id: "next-2",
+          seriesId: "s1",
+          titleAr: "رواتب مارس 2027",
+          startsOn: "2027-03-28",
+          endsOn: null,
+          sourceUrl: "https://www.mof.gov.sa/financial_reports",
+          sourceTitle: "وزارة المالية",
+          certainty: "expected",
+          status: "scheduled",
+          published: true,
+          regionGroup: "all",
+          hijriLabel: null,
+          publicNote: null,
+          ruleNote: null,
+        },
+      ],
+    });
+    if (presented.notFound) throw new Error("expected salaries view");
+    const html = renderMawaeedHtml(presented.view);
+    expect(html).toContain("المواعيد القادمة");
+    expect(html).toContain("مواعيد سابقة");
+    expect(html.indexOf("المواعيد القادمة")).toBeLessThan(html.indexOf("مواعيد سابقة"));
   });
 });
+
