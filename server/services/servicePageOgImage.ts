@@ -64,11 +64,11 @@ export async function renderServiceOgPng(input: ServiceOgInput): Promise<Buffer>
   const dateSize = fit(ctx, date, 980, 42, 28);
   ctx.font = `${dateSize}px "${fontFamily}"`;
   ctx.fillStyle = BRAND;
-  ctx.fillText(date, W / 2, 410);
+  drawRtlLine(ctx, date, W / 2, 410);
 
   ctx.fillStyle = MUTED;
   ctx.font = `32px "${fontFamily}"`;
-  if (input.hijriLabel) ctx.fillText(input.hijriLabel, W / 2, 468);
+  if (input.hijriLabel) drawRtlLine(ctx, input.hijriLabel, W / 2, 468);
   if (input.certaintyLabel) ctx.fillText(input.certaintyLabel, W / 2, 520);
 
   ctx.font = `26px "${fontFamily}"`;
@@ -93,6 +93,38 @@ async function drawLogo(ctx: SKRSContext2D) {
   } catch (error) {
     console.warn("[service-og] logo", error);
   }
+}
+
+/**
+ * يرسم سطراً عربياً فيه أرقام بترتيب بصري صريح: الكلمات والمقاطع من اليمين إلى اليسار.
+ * محرك Canvas لا يطبّق خوارزمية الاتجاه الثنائي على السطر كاملاً، فيضع «14» في طرف
+ * «14 جمادى الأولى 1448هـ» الآخر. كل مقطع (أرقام أو حروف) يُرسم وحده فيبقى تشكيله سليماً.
+ */
+export function rtlRuns(text: string): string[] {
+  const runs: string[] = [];
+  const words = text.trim().split(/\s+/).filter(Boolean);
+  words.forEach((word, index) => {
+    if (index > 0) runs.push(" ");
+    runs.push(...(word.match(/[0-9٠-٩]+|[^0-9٠-٩]+/g) ?? [word]));
+  });
+  return runs;
+}
+
+function drawRtlLine(ctx: SKRSContext2D, text: string, centerX: number, y: number) {
+  const runs = rtlRuns(text);
+  const widths = runs.map((run) => ctx.measureText(run).width);
+  const total = widths.reduce((sum, width) => sum + width, 0);
+  const savedAlign = ctx.textAlign;
+  const savedDirection = ctx.direction;
+  ctx.textAlign = "left";
+  ctx.direction = "ltr";
+  let right = centerX + total / 2;
+  runs.forEach((run, index) => {
+    right -= widths[index];
+    if (run !== " ") ctx.fillText(run, right, y);
+  });
+  ctx.textAlign = savedAlign;
+  ctx.direction = savedDirection;
 }
 
 function fit(ctx: SKRSContext2D, text: string, maxWidth: number, start: number, min: number): number {

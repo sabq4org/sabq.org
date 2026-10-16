@@ -137,6 +137,19 @@ export function regionSuffix(region: RegionId): string {
   return region === "riyadh" ? "" : `?region=${region}`;
 }
 
+/**
+ * خريطة sitemap-mawaeed.xml: الجذر وحده. المسارات القديمة /mawaeed/:slug تُحوَّل 301 إلى
+ * صفحات /services/* الموسومة noindex، فلا تُدرج ما دام حجبها مقصوداً.
+ */
+export function mawaeedSitemapEntries(
+  series: { slug: string; published: boolean; contentUpdatedAt: string }[],
+): { loc: string; lastmod: string }[] {
+  const published = series.filter((item) => item.published);
+  if (published.length === 0) return [];
+  const latest = published.map((item) => item.contentUpdatedAt).sort().at(-1)!;
+  return [{ loc: "https://sabq.org/mawaeed", lastmod: latest }, ...servicePageSitemapEntries(published)];
+}
+
 /** لا تُدرج الصفحات المخفية في أي خريطة موقع. */
 export function servicePageSitemapEntries(
   _series: { slug: string; contentUpdatedAt: string }[],

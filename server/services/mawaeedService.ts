@@ -14,7 +14,7 @@ import {
   type SeriesRecord,
 } from "@shared/mawaeed/model";
 import { presentMawaeed, type MawaeedView } from "@shared/mawaeed/present";
-import { servicePageSitemapEntries } from "@shared/servicePages/catalog";
+import { mawaeedSitemapEntries } from "@shared/servicePages/catalog";
 import { confirmOccurrenceSchema, emptyToNull, type OccurrenceWrite } from "@shared/mawaeed/validate";
 import { db } from "../db";
 
@@ -161,14 +161,7 @@ export async function getAdminBundle(): Promise<AdminBundle> {
 }
 
 export async function listSitemapEntries(): Promise<{ loc: string; lastmod: string }[]> {
-  const series = (await loadSeries()).filter((item) => item.published);
-  if (series.length === 0) return [];
-  const latest = series.map((item) => item.contentUpdatedAt).sort().at(-1)!;
-  return [
-    { loc: "https://sabq.org/mawaeed", lastmod: latest },
-    ...series.map((item) => ({ loc: `https://sabq.org/mawaeed/${item.slug}`, lastmod: item.contentUpdatedAt })),
-    ...servicePageSitemapEntries(series),
-  ];
+  return mawaeedSitemapEntries(await loadSeries());
 }
 
 function applyWrite(seriesId: string, id: string, write: OccurrenceWrite, previous: OccurrenceRecord | null): OccurrenceRecord {
