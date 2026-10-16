@@ -40,13 +40,16 @@ export function renderServiceSemanticHtml(
   const news = related.map((item) => `<li><a href="${esc(item.href)}">${esc(item.title)}</a></li>`).join("");
   const links = (model.links || []).map((item) => `<li><a href="${esc(item.href)}">${esc(item.label)}</a></li>`).join("");
   const jsonLd = model.jsonLd ? `<script type="application/ld+json">${safeJson(model.jsonLd)}</script>` : "";
-  return `<article dir="rtl"><h1>${esc(model.h1)}</h1>${answer}${calendar}<h2>خط المواعيد</h2><ol>${rows}</ol><h2>كيف يُحدَّد الموعد</h2>${explanation}${news ? `<h2>من أخبار سبق</h2><ul>${news}</ul>` : ""}${faq ? `<h2>أسئلة شائعة</h2>${faq}` : ""}<ul>${links}</ul><p><time datetime="${esc(model.dateModified)}">${esc(model.dateModifiedLabel)}</time></p>${jsonLd}</article>`;
+  const badge = model.next ? `<p>${esc(model.next.certaintyLabel)}</p>` : "";
+  return `<article dir="rtl"><h1>${esc(model.h1)}</h1>${badge}${answer}${calendar}<h2>خط المواعيد</h2><p>المواعيد من السجل المنشور. ما مضى يظهر «صُرفت»، وما لم تعلنه الجهة بعد يبقى «متوقعًا».</p><ol>${rows}</ol><h2>كيف يُحدَّد الموعد</h2>${explanation}${news ? `<h2>من أخبار سبق</h2><ul>${news}</ul>` : ""}${faq ? `<h2>أسئلة شائعة</h2>${faq}` : ""}<ul>${links}</ul><p><time datetime="${esc(model.dateModified)}">${esc(model.dateModifiedLabel)}</time></p>${jsonLd}</article>`;
 }
 
 function answerHtml(model: ServicePageModel): string {
-  const rule = model.shiftRule ? ` ${esc(model.shiftRule)}` : "";
-  if (!model.next) return `<p id="answer">${esc(model.leadPrefix)}${rule}</p>`;
+  if (!model.next) return `<p id="answer">${esc(model.leadPrefix)}</p>`;
   const next = model.next;
-  const hint = next.expectedHint ? ` ${esc(next.expectedHint)}` : "";
-  return `<p id="answer">${esc(model.leadPrefix)} <time datetime="${esc(next.startsOn)}">${esc(next.gregorianLabel)}</time> الموافق ${esc(next.hijriLabel)}، <strong data-countdown data-date="${esc(next.startsOn)}" data-today="${esc(next.todayLabel)}">${esc(next.countdownText)}</strong>. الحالة: ${esc(next.certaintyLabel)}.${hint}${rule}</p>`;
+  const hint = next.expectedHint
+    ? `<p>${esc(next.expectedHint.replace(/^متوقع:\s*/, ""))}</p>`
+    : "";
+  const rule = model.shiftRule ? `<p>${esc(model.shiftRule)}</p>` : "";
+  return `<p id="answer">${esc(model.leadPrefix)} <time datetime="${esc(next.startsOn)}">${esc(next.gregorianLabel)}</time> الموافق ${esc(next.hijriLabel)}، <strong data-countdown data-date="${esc(next.startsOn)}" data-today="${esc(next.todayLabel)}">${esc(next.countdownText)}</strong>.</p>${hint}${rule}`;
 }

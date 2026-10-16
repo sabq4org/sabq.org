@@ -70,7 +70,7 @@ export function presentServicePage(id: string, view: MawaeedView): ServicePageMo
   if (!block) return null;
   const next = block.next ? toNext(block.next) : null;
   const rows = block.upcoming.map((card) => toRow(card, next?.startsOn ?? null));
-  const shiftRule = shiftRuleText(block.summary, view.faq);
+  const shiftRule = polishShiftRule(shiftRuleText(block.summary, view.faq));
   const description = metaDescription(next, shiftRule, spec);
   const links = relatedLinks(spec, block.href);
   const canonical = `${SITE}${spec.path}`;
@@ -84,9 +84,9 @@ export function presentServicePage(id: string, view: MawaeedView): ServicePageMo
     canonical,
     dateModified: view.dateModified,
     dateModifiedLabel: view.dateModifiedLabel,
-    leadPrefix: next ? "موعد الصرف القادم:" : `${block.title}: لا يوجد موعد قادم معلن حاليًا.`,
+    leadPrefix: next ? "موعد الصرف القادم هو" : "لا يوجد موعد قادم معلن حاليًا.",
     shiftRule,
-    explanation: explanationParagraphs(block.summary),
+    explanation: explanationParagraphs(serviceSummary(block.summary)),
     next,
     rows,
     faq,
@@ -131,6 +131,22 @@ function toRow(card: MawaeedCard, nextStartsOn: string | null): ServicePageRow {
   };
 }
 
+const SALARY_SHIFT = "حسب وزارة المالية، إذا وافق يوم 27 الجمعة يُصرف الخميس الذي قبله، وإذا وافق السبت يُصرف الأحد الذي بعده.";
+
+/** يعيد صياغة الجملة القائمة للقارئ، بلا قاعدة جديدة. */
+function polishShiftRule(rule: string | null): string | null {
+  if (!rule) return null;
+  if (/الخميس قبله/.test(rule) && /الأحد بعده/.test(rule)) return SALARY_SHIFT;
+  return rule;
+}
+
+function serviceSummary(summary: string): string {
+  return summary.replace(
+    /موعد صرف رواتب موظفي الدولة المدنيين والعسكريين حسب جدول وزارة المالية: يوم 27 ميلادي، وإن وافق الجمعة فالخميس قبله، وإن وافق السبت فالأحد بعده\./,
+    `تصرف وزارة المالية رواتب موظفي الدولة المدنيين والعسكريين يوم 27 من كل شهر ميلادي. ${SALARY_SHIFT}`,
+  );
+}
+
 /** جملة الإزاحة الموجودة أصلًا في ملخص السلسلة أو سؤالها، بلا صياغة قاعدة جديدة. */
 export function shiftRuleText(summary: string, faq: FaqItem[]): string | null {
   const fromSummary = summary
@@ -149,11 +165,12 @@ function explanationParagraphs(summary: string): string[] {
   return paragraphs;
 }
 
-function metaDescription(next: ServicePageNext | null, shiftRule: string | null, spec: ServicePageSpec): string {
+function metaDescription(next: ServicePageNext | null, _shiftRule: string | null, spec: ServicePageSpec): string {
   if (!next) return spec.fallbackDescription;
-  const status = next.certainty === "expected" ? "متوقع" : "مؤكد";
-  const rule = shiftRule ? ` ${shiftRule}` : "";
-  const text = `موعد الصرف القادم ${next.gregorianLabel} الموافق ${next.hijriLabel}، ${next.countdownText}. الحالة: ${status}.${rule}`;
+  const status = next.certainty === "expected"
+    ? "الموعد محسوب من الجدول المعتاد إلى أن يصدر الإعلان الرسمي."
+    : "الموعد مؤكد.";
+  const text = `موعد الصرف القادم ${next.gregorianLabel} الموافق ${next.hijriLabel}، ${next.countdownText}. ${status}`;
   return clip(text, 180);
 }
 

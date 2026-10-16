@@ -28,7 +28,12 @@ export function ServiceDateView({
           <span aria-current="page">{model.h1}</span>
         </nav>
         <article>
-          <h1 className="text-2xl font-bold leading-tight md:text-4xl">{model.h1}</h1>
+          <div className="flex items-center gap-3">
+            {model.next ? (
+              <span className="shrink-0 rounded-md bg-muted px-2.5 py-1 text-sm font-semibold text-primary">{model.next.certaintyLabel}</span>
+            ) : null}
+            <h1 className="min-w-0 text-2xl font-bold leading-tight md:text-4xl">{model.h1}</h1>
+          </div>
           <Answer model={model} />
           <p className="mt-3 text-sm text-muted-foreground">
             آخر تحديث: <time dateTime={model.dateModified}>{model.dateModifiedLabel}</time>
@@ -51,7 +56,7 @@ export function ServiceDateView({
           )}
           <section className="mt-10">
             <h2 className="text-2xl font-bold">خط المواعيد</h2>
-            <p className="mt-2 text-sm text-muted-foreground">من السجل المنشور فقط. ما مضى يظهر «صُرفت»، وما حُسب قبل إعلان الجهة يظهر «متوقع».</p>
+            <p className="mt-2 text-sm text-muted-foreground">المواعيد من السجل المنشور. ما مضى يظهر «صُرفت»، وما لم تعلنه الجهة بعد يبقى «متوقعًا».</p>
             <ol className="mt-4 divide-y divide-border">
               {model.rows.map((row) => (
                 <li key={row.startsOn} className="py-4">
@@ -106,18 +111,19 @@ export function ServiceDateView({
 }
 
 function Answer({ model }: { model: ServicePageModel }) {
-  const rule = model.shiftRule ? ` ${model.shiftRule}` : "";
-  if (!model.next) return <p className="mt-4 text-lg leading-8">{model.leadPrefix}{rule}</p>;
+  if (!model.next) return <p className="mt-4 text-lg leading-8" id="answer">{model.leadPrefix}</p>;
   const next = model.next;
+  const hint = next.expectedHint?.replace(/^متوقع:\s*/, "");
   return (
-    <p className="mt-4 text-lg leading-8" id="answer">
-      {model.leadPrefix}{" "}
-      <time dateTime={next.startsOn}>{next.gregorianLabel}</time>
-      {" "}الموافق {next.hijriLabel}،{" "}
-      <strong>{next.countdownText}</strong>
-      . الحالة: {next.certaintyLabel}.
-      {next.expectedHint ? ` ${next.expectedHint}` : ""}
-      {rule}
-    </p>
+    <>
+      <p className="mt-4 text-lg leading-8" id="answer">
+        {model.leadPrefix}{" "}
+        <time dateTime={next.startsOn}>{next.gregorianLabel}</time>
+        {" "}الموافق {next.hijriLabel}،{" "}
+        <strong>{next.countdownText}</strong>.
+      </p>
+      {hint ? <p className="mt-3 text-lg leading-8">{hint}</p> : null}
+      {model.shiftRule ? <p className="mt-3 text-lg leading-8">{model.shiftRule}</p> : null}
+    </>
   );
 }

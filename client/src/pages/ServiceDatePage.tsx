@@ -154,7 +154,10 @@ function ServiceDateBody({
       <div className="article-detail-layout">
         <article className="article-detail-content min-w-0">
           <header className="article-detail-header">
-            <h1 className="article-detail-title">{model.h1}</h1>
+            <div className="flex items-center gap-3">
+              {model.next ? <span className="article-category-label shrink-0">{model.next.certaintyLabel}</span> : null}
+              <h1 className="article-detail-title !mt-0 min-w-0">{model.h1}</h1>
+            </div>
             <Answer model={model} countdown={live.text} />
             <div className="article-detail-byline">
               {model.next?.sourceUrl ? (
@@ -193,7 +196,7 @@ function ServiceDateBody({
           </div>
           <section>
             <h2 className="public-section-title">خط المواعيد</h2>
-            <p className="public-meta">من السجل المنشور فقط. ما مضى يظهر «صُرفت»، وما حُسب قبل إعلان الجهة يظهر «متوقع».</p>
+            <p className="public-meta">المواعيد من السجل المنشور. ما مضى يظهر «صُرفت»، وما لم تعلنه الجهة بعد يبقى «متوقعًا».</p>
             {model.rows.length === 0 ? (
               <p>لا توجد مواعيد منشورة في السجل.</p>
             ) : (
@@ -252,21 +255,22 @@ function ServiceDateBody({
 }
 
 function Answer({ model, countdown }: { model: ServicePageModel; countdown: string }) {
-  const rule = model.shiftRule ? ` ${model.shiftRule}` : null;
   if (!model.next) {
-    return <p className="article-detail-subtitle" id="answer">{model.leadPrefix}{rule}</p>;
+    return <p className="article-detail-subtitle" id="answer">{model.leadPrefix}</p>;
   }
   const next = model.next;
+  const hint = next.expectedHint?.replace(/^متوقع:\s*/, "");
   return (
-    <p className="article-detail-subtitle" id="answer">
-      {model.leadPrefix}{" "}
-      <time dateTime={next.startsOn}>{next.gregorianLabel}</time>
-      {" "}الموافق {next.hijriLabel}،{" "}
-      <strong data-countdown data-date={next.startsOn} data-today={next.todayLabel}>{countdown || next.countdownText}</strong>
-      . الحالة: <span className="article-category-label">{next.certaintyLabel}</span>.
-      {next.expectedHint ? ` ${next.expectedHint}` : ""}
-      {rule}
-    </p>
+    <>
+      <p className="article-detail-subtitle" id="answer">
+        {model.leadPrefix}{" "}
+        <time dateTime={next.startsOn}>{next.gregorianLabel}</time>
+        {" "}الموافق {next.hijriLabel}،{" "}
+        <strong data-countdown data-date={next.startsOn} data-today={next.todayLabel}>{countdown || next.countdownText}</strong>.
+      </p>
+      {hint ? <p className="article-detail-subtitle">{hint}</p> : null}
+      {model.shiftRule ? <p className="article-detail-subtitle">{model.shiftRule}</p> : null}
+    </>
   );
 }
 

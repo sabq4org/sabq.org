@@ -89,8 +89,9 @@ describe("salary service page", () => {
     expect(model.next?.hijriLabel).toBe(next?.hijriLabel);
     expect(model.next?.countdownText).toBe(next?.countdownText);
     expect(model.next?.certainty).toBe("confirmed");
-    expect(model.shiftRule).toContain("الخميس قبله");
-    expect(model.shiftRule).toContain("الأحد بعده");
+    expect(model.shiftRule).toContain("الخميس الذي قبله");
+    expect(model.shiftRule).toContain("الأحد الذي بعده");
+    expect(model.explanation.join(" ")).toContain("يوم 27 من كل شهر ميلادي");
     expect(model.description).not.toContain(EXPECTED_HINT);
     expect(model.rows.filter((item) => !item.isPast).map((item) => item.startsOn)).toEqual(["2026-10-27", "2026-11-26"]);
     expect(model.rows.find((item) => item.isPast)?.pastLabel).toBe("صُرفت");
@@ -109,7 +110,7 @@ describe("salary service page", () => {
     expect(html).toContain("موعد صرف رواتب موظفي الدولة");
     expect(model.canonical).toBe("https://sabq.org/services/government-salaries-date");
     expect(html).toContain("data-countdown");
-    expect(html).toContain("الحالة:");
+    expect(html).not.toContain("الحالة:");
     expect(html).toContain("مؤكد");
     expect(html).toContain("صُرفت");
     expect(html).toContain("/calendar.ics");
@@ -163,12 +164,16 @@ describe("citizen account service page", () => {
     expect(model.h1).toBe("موعد صرف حساب المواطن");
     expect(model.next?.certaintyLabel).toBe("متوقع");
     expect(model.next?.expectedHint).toBe(EXPECTED_HINT);
-    expect(model.shiftRule).toContain("لم نجد قاعدة منشورة");
+    expect(model.shiftRule).toContain("الجدول المعتاد");
+    expect(model.shiftRule).toContain("الخميس 9");
+    expect(model.shiftRule).toContain("الأحد 11");
+    expect(model.shiftRule).not.toContain("لم نجد قاعدة");
     const html = renderServiceSemanticHtml(model, [
       { title: "خبر عن الدفعة", href: "/article/citizen-deposit" },
     ]);
     expect(html).toContain("متوقع");
-    expect(html).toContain(EXPECTED_HINT);
+    expect(html).toContain("محسوب من الجدول المعتاد للجهة إلى أن يصدر الإعلان الرسمي.");
+    expect(html).not.toContain("الحالة:");
     expect(html).toContain("خبر عن الدفعة");
     expect(html).toContain("/services/government-salaries-date");
     expect(html).toContain('datetime="2026-11-10"');
