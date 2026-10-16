@@ -65,6 +65,7 @@ const SITE_SECTIONS = [
   { name: "مقالات", href: "/opinion" },
   { name: "مُقترب", href: "/muqtarab" },
   { name: "لحظة بلحظة", href: "/moment-by-moment" },
+  { name: "مواعيدك", href: "/mawaeed" },
 ];
 const SITE_APPS = [
   { label: "App Store", href: "https://apps.apple.com/us/app/%D8%B3%D8%A8%D9%82/id521017976?l=ar", bg: "#000000" },
