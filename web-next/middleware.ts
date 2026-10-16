@@ -24,7 +24,7 @@ export function middleware(request: NextRequest) {
   if (!accessToken) {
     // Production does not define the staging token, so its behavior is
     // unchanged and no authentication layer is added.
-    return withHiddenServiceRobots(request, NextResponse.next());
+    return NextResponse.next();
   }
 
   const expected = `Basic ${btoa(`sabq:${accessToken}`)}`;

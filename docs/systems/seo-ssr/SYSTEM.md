@@ -124,3 +124,5 @@
 
 
 - **اكتشاف مواعيدك (2026-10-16):** الفوتر في SPA وSSR ونسخة الحافة يربط `/mawaeed` بنص «مواعيدك: الرواتب والإجازات». يعلن `robots.txt` خريطة `sitemap-mawaeed.xml` مباشرة، إضافة إلى ارتباطها بفهرس الخرائط. لا تغيير على قواعد زواحف التدريب أو حظر API.
+
+- **ترويسات صفحات الخدمات (2026-10-16):** أُزيل حظر `/services/:id` القديم من Middleware وإعدادات headers في Next؛ ميتا `index, follow` وحدها لا تتغلب على `X-Robots-Tag: noindex`. تظل بيئة staging محمية وغير قابلة للفهرسة. اختبار `tests/web-next/serviceMiddlewareRobots.test.ts` يتحقق من مساري إعدادات headers وMiddleware.
