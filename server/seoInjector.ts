@@ -18,7 +18,7 @@ import path from "path";
 import { withCache, CACHE_TTL } from "./memoryCache";
 import { VALID_PREFIXES } from "./utils/spaRouteMatcher";
 import { isNoindexPath } from "./utils/noindexPaths";
-import { HIDDEN_SERVICE_ROBOTS } from "@shared/servicePages/catalog";
+import { SERVICE_PAGE_ROBOTS, servicePageById } from "@shared/servicePages/catalog";
 import { buildNewsArticleSchemaExtras, getArticleSchemaType } from "./utils/newsArticleSchema";
 import { getPublicEditorialModifiedAt } from "./utils/editorialDates";
 import {
@@ -1565,11 +1565,20 @@ async function resolveSeoData(route: { type: string; slug?: string; angleSlug?: 
         segments.length === 1 &&
         INDEXABLE_SECTION_PREFIXES.has(segments[0].toLowerCase());
       const sectionMeta = isSectionRoot ? INDEXABLE_SECTION_PREFIXES.get(segments[0].toLowerCase())! : null;
+      // صفحة خدمة معروفة في الكتالوج فقط تُفهرس من القشرة؛ أي /services/* آخر يبقى noindex.
+      const servicePage =
+        route.type === 'spa-fallback' && segments.length === 2 && segments[0] === 'services'
+          ? servicePageById(segments[1]) ?? null
+          : null;
       return {
-        title: sectionMeta
+        title: servicePage
+          ? servicePage.title
+          : sectionMeta
           ? sectionMeta.title
           : isEn ? 'Sabq News' : isUr ? 'سبق نیوز' : 'صحيفة سبق الإلكترونية',
-        description: sectionMeta
+        description: servicePage
+          ? servicePage.fallbackDescription
+          : sectionMeta
           ? sectionMeta.desc
           : isEn
             ? 'Sabq News — Saudi Arabia\'s premier news platform.'
@@ -1582,8 +1591,8 @@ async function resolveSeoData(route: { type: string; slug?: string; angleSlug?: 
         ogLocale: isEn ? 'en_US' : isUr ? 'ur_PK' : 'ar_SA',
         ogSiteName: isEn ? 'Sabq News' : isUr ? 'سبق نیوز' : 'صحيفة سبق الإلكترونية',
         twitterSite: '@sabq',
-        robots: /^\/services\/[a-z0-9-]+$/.test(pathname)
-          ? HIDDEN_SERVICE_ROBOTS
+        robots: servicePage
+          ? SERVICE_PAGE_ROBOTS
           : isSectionRoot ? 'index, follow, max-image-preview:large' : 'noindex, follow',
       };
     }
@@ -1723,7 +1732,7 @@ export async function seoInjectorMiddleware(req: Request, res: Response, next: N
       };
 
       if ((seoData.robots || '').toLowerCase().includes('nofollow')) {
-        headers['X-Robots-Tag'] = HIDDEN_SERVICE_ROBOTS;
+        headers['X-Robots-Tag'] = 'noindex, nofollow';
       } else if (seoData.publishedTime) {
         const pubAge = Date.now() - new Date(seoData.publishedTime).getTime();
         if (pubAge > 365 * 24 * 60 * 60 * 1000) {
@@ -1741,7 +1750,7 @@ export async function seoInjectorMiddleware(req: Request, res: Response, next: N
       }
 
       if ((seoData.robots || '').toLowerCase().includes('nofollow')) {
-        res.set('X-Robots-Tag', HIDDEN_SERVICE_ROBOTS);
+        res.set('X-Robots-Tag', 'noindex, nofollow');
       } else if (seoData.publishedTime) {
         const pubAge = Date.now() - new Date(seoData.publishedTime).getTime();
         if (pubAge > 365 * 24 * 60 * 60 * 1000) {

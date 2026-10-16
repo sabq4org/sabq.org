@@ -195,13 +195,14 @@ function isStaticAsset(p) {
 // followed. They are not in the shared noindex prefix list: that list skips
 // SEO injection and SSR. These routes still SSR for crawlers, with
 // noindex,nofollow and a private response.
-export function isHiddenServicePath(p) {
+// Service date pages (/services/*-date): indexable since 2026-10-16, SSR for crawlers.
+export function isServiceDatePath(p) {
   return /^\/services\/[a-z0-9-]+$/.test(p);
 }
 
 // Content surfaces rendered server-side by the Next.js app (web-next). Only the
 // routes that web-next actually implements — Arabic/en/ur articles, Arabic
-// category, hidden service date pages, and the homepage. en/ur category +
+// category, service date pages, and the homepage. en/ur category +
 // secondary routes stay on the SPA until migrated (Phase 4). Trailing slashes
 // are already 301'd away above, and query strings live in url.search (not in `p`).
 function isSsrPath(p) {
@@ -209,7 +210,7 @@ function isSsrPath(p) {
   return (
     /^\/article\/[^/]+$/.test(p) ||
     /^\/category\/[^/]+$/.test(p) ||
-    isHiddenServicePath(p) ||
+    isServiceDatePath(p) ||
     /^\/en\/article\/[^/]+$/.test(p) ||
     /^\/ur\/article\/[^/]+$/.test(p)
   );
@@ -389,7 +390,7 @@ function hasUsableSsrHtml(path, text) {
   // Next embeds route templates in script tags. Do not count those hidden
   // strings as visible article/category headings.
   const visible = text.replace(/<script[\s\S]*?<\/script>/gi, "").replace(/<style[\s\S]*?<\/style>/gi, "");
-  if (/^\/article\/|^\/en\/article\/|^\/ur\/article\//.test(path) || isHiddenServicePath(path)) {
+  if (/^\/article\/|^\/en\/article\/|^\/ur\/article\//.test(path) || isServiceDatePath(path)) {
     return /<h1(?:\s|>)/i.test(visible) && /application\/ld\+json/i.test(text);
   }
   if (/^\/category\//.test(path)) {
@@ -1017,15 +1018,9 @@ async function handleRequest(context) {
   // additionally get X-Robots-Tag: noindex and are FORCED to no-store so a
   // duplicate host can never poison the edge with a cacheable copy.
   const finalizeHtml = (res, { cacheable = false } = {}) => {
-    const hiddenService = isHiddenServicePath(path);
     // A noindex page (private route) must never be edge-cached as indexable.
-    const useCache = cacheable && !noindexHost && !pathIsNoindex && !hiddenService;
+    const useCache = cacheable && !noindexHost && !pathIsNoindex;
     const out = applyHtmlHeaders(res, useCache ? HTML_EDGE_CACHE_HEADERS : HTML_NO_STORE_HEADERS);
-    if (hiddenService && isHtml(out)) {
-      const headers = new Headers(out.headers);
-      headers.set("X-Robots-Tag", "noindex, nofollow");
-      return new Response(out.body, { status: out.status, statusText: out.statusText, headers });
-    }
     // Stamp X-Robots-Tag: noindex on duplicate hosts AND on the canonical host's
     // private routes (login/register/profile/dashboard/search/…). This is the
     // signal that lets Googlebot drop the now-crawlable (un-robots-blocked)
@@ -1039,12 +1034,10 @@ async function handleRequest(context) {
   // Wraps finalizeHtml + the Cache API write. On a cacheable 200 HTML response
   // it tags `x-edge-cache: MISS` and stores a clone for subsequent hits.
   const deliverHtml = (res, { cacheable = false } = {}) => {
-    const hiddenService = isHiddenServicePath(path);
-    const out = finalizeHtml(res, { cacheable: cacheable && !hiddenService });
+    const out = finalizeHtml(res, { cacheable });
     if (
       !edgeHtmlCacheEnabled ||
       !cacheable ||
-      hiddenService ||
       noindexHost ||
       !cacheKey ||
       !isHtml(out) ||
@@ -1289,7 +1282,7 @@ async function handleRequest(context) {
   // Edge HIT — serve the already-injected shell straight from the edge cache,
   // skipping the origin shell+meta fetch entirely (the TTFB win). Safe because
   // only fully-injected, redirect-free 200s are ever stored, keyed by deploy.
-  if (edgeHtmlCacheEnabled && htmlCacheable && cacheKey && !isHiddenServicePath(path)) {
+  if (edgeHtmlCacheEnabled && htmlCacheable && cacheKey) {
     const hit = await caches.default.match(cacheKey);
     if (hit) {
       if (wantsSsr) {

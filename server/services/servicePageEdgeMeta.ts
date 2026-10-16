@@ -3,7 +3,7 @@
  * العنوان والوصف والصورة والمخطط، ومتن مخفي يُستبدل عند إقلاع الواجهة.
  */
 import { getPublicPage } from "./mawaeedService";
-import { HIDDEN_SERVICE_ROBOTS, servicePageById } from "@shared/servicePages/catalog";
+import { SERVICE_PAGE_ROBOTS, servicePageById } from "@shared/servicePages/catalog";
 import { presentServicePage } from "@shared/servicePages/present";
 import { renderServiceSemanticHtml } from "@shared/servicePages/semanticHtml";
 
@@ -20,7 +20,7 @@ export async function buildServicePageEdgeMeta(id: string): Promise<Record<strin
       title: "الصفحة غير موجودة | سبق",
       description: "",
       canonical: "",
-      robots: HIDDEN_SERVICE_ROBOTS,
+      robots: "noindex, nofollow",
       status: 404,
     };
   }
@@ -31,7 +31,7 @@ export async function buildServicePageEdgeMeta(id: string): Promise<Record<strin
     imageWidth: 1200,
     imageHeight: 630,
     canonical: model.canonical,
-    robots: HIDDEN_SERVICE_ROBOTS,
+    robots: SERVICE_PAGE_ROBOTS,
     type: "website",
     locale: "ar_SA",
     siteName: "سبق",

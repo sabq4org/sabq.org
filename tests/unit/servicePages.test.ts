@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { EXPECTED_HINT, SERIES_CATALOG, type OccurrenceRecord, type SeriesRecord } from "@shared/mawaeed/model";
 import { presentMawaeed } from "@shared/mawaeed/present";
 import { buildServiceCalendar } from "@shared/servicePages/calendar";
-import { HIDDEN_SERVICE_ROBOTS, serviceLinkForSeries, serviceRegion, servicePageIdFromPath, servicePageSitemapEntries } from "@shared/servicePages/catalog";
+import { SERVICE_PAGE_ROBOTS, serviceLinkForSeries, serviceRegion, servicePageIdFromPath, servicePageSitemapEntries } from "@shared/servicePages/catalog";
 import { presentServicePage } from "@shared/servicePages/present";
 import { relatedArticleMeta, relatedArticlesFromKeyword, relatedArticlesFromSearch } from "@shared/servicePages/related";
 import {
@@ -290,18 +290,23 @@ describe("service page extras", () => {
     expect(ics).toContain("UID:government-salaries-date-next@sabq.org");
   });
 
-  it("links Mawaeed series to their new service pages while keeping hidden pages out of the sitemap", () => {
+  it("links Mawaeed series to their service pages and lists them once in the sitemap", () => {
     expect(servicePageSitemapEntries([
       { slug: "salaries", contentUpdatedAt: "2026-10-01T00:00:00.000Z" },
-      { slug: "citizen-account", contentUpdatedAt: "2026-10-01T00:00:00.000Z" },
-      { slug: "school-calendar-1448", contentUpdatedAt: "2026-10-01T00:00:00.000Z" },
-    ])).toEqual([]);
+      { slug: "citizen-account", contentUpdatedAt: "2026-10-02T00:00:00.000Z" },
+      { slug: "school-calendar-1448", contentUpdatedAt: "2026-10-03T00:00:00.000Z" },
+    ])).toEqual([
+      { loc: "https://sabq.org/services/school-calendar-date", lastmod: "2026-10-03T00:00:00.000Z" },
+      { loc: "https://sabq.org/services/citizen-account-date", lastmod: "2026-10-02T00:00:00.000Z" },
+      { loc: "https://sabq.org/services/government-salaries-date", lastmod: "2026-10-01T00:00:00.000Z" },
+    ]);
     expect(serviceLinkForSeries("salaries")?.path).toBe("/services/government-salaries-date");
     expect(serviceLinkForSeries("citizen-account")?.path).toBe("/services/citizen-account-date");
     expect(serviceLinkForSeries("school-calendar-1448")?.path).toBe("/services/school-calendar-date");
     expect(serviceLinkForSeries("social-security")?.path).toBe("/services/social-security-date");
     expect(serviceLinkForSeries("pensions")?.path).toBe("/services/pensions-date");
-    expect(HIDDEN_SERVICE_ROBOTS).toBe("noindex, nofollow");
+    expect(SERVICE_PAGE_ROBOTS).toContain("index, follow");
+    expect(SERVICE_PAGE_ROBOTS).not.toContain("noindex");
   });
 });
 

@@ -102,6 +102,8 @@ export const SERVICE_PAGES: ServicePageSpec[] = [
   },
 ];
 
+const SITE = "https://sabq.org";
+
 export function servicePageIdFromPath(path: string): string | null {
   const match = /^\/services\/([a-z0-9-]+)$/.exec(path);
   return match ? match[1] : null;
@@ -111,8 +113,8 @@ export function servicePageById(id: string): ServicePageSpec | undefined {
   return SERVICE_PAGES.find((page) => page.id === id);
 }
 
-/** الإطلاق مخفي عن الفهرسة حتى إشعار آخر: بلا فهرسة ولا متابعة روابط من محركات البحث. */
-export const HIDDEN_SERVICE_ROBOTS = "noindex, nofollow";
+/** صفحات /services/* مفهرسة منذ 2026-10-16 (كانت noindex, nofollow أثناء الإطلاق). */
+export const SERVICE_PAGE_ROBOTS = "index, follow, max-image-preview:large";
 
 /**
  * يعيد رابط صفحة الخدمة المقابلة لسلسلة مواعيدك لتوجيه الروابط إليها مباشرة.
@@ -138,8 +140,8 @@ export function regionSuffix(region: RegionId): string {
 }
 
 /**
- * خريطة sitemap-mawaeed.xml: الجذر وحده. المسارات القديمة /mawaeed/:slug تُحوَّل 301 إلى
- * صفحات /services/* الموسومة noindex، فلا تُدرج ما دام حجبها مقصوداً.
+ * خريطة sitemap-mawaeed.xml: الجذر /mawaeed ثم صفحات /services/* لكل سلسلة منشورة
+ * (المسارات القديمة /mawaeed/:slug محوَّلة 301 فلا تُدرج). صفحة المدارس تُدرج مرة واحدة بلا منطقة.
  */
 export function mawaeedSitemapEntries(
   series: { slug: string; published: boolean; contentUpdatedAt: string }[],
@@ -150,10 +152,15 @@ export function mawaeedSitemapEntries(
   return [{ loc: "https://sabq.org/mawaeed", lastmod: latest }, ...servicePageSitemapEntries(published)];
 }
 
-/** لا تُدرج الصفحات المخفية في أي خريطة موقع. */
+/** صفحة خدمة لكل سلسلة منشورة، بختم آخر تغيير عام في سلسلتها. */
 export function servicePageSitemapEntries(
-  _series: { slug: string; contentUpdatedAt: string }[],
+  series: { slug: string; contentUpdatedAt: string }[],
 ): { loc: string; lastmod: string }[] {
-  return [];
+  const stamps = new Map(series.map((item) => [item.slug, item.contentUpdatedAt]));
+  return SERVICE_PAGES.flatMap((page) => {
+    if (page.source.type !== "mawaeed") return [];
+    const lastmod = stamps.get(page.source.seriesSlug);
+    return lastmod ? [{ loc: `${SITE}${page.path}`, lastmod }] : [];
+  });
 }
 
