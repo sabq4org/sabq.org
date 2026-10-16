@@ -138,3 +138,20 @@ describe("stored titles with relative words", () => {
     expect(displayTitle("إجازة الخريف")).toBe("إجازة الخريف");
   });
 });
+
+describe("share image and sitemap", () => {
+  it("lays Hijri runs out right to left so the day number stays first", async () => {
+    const { rtlRuns } = await import("../../server/services/servicePageOgImage");
+    expect(rtlRuns("14 جمادى الأولى 1448هـ")).toEqual(["14", " ", "جمادى", " ", "الأولى", " ", "1448", "هـ"]);
+  });
+
+  it("lists only the /mawaeed root, never the redirected legacy sections", async () => {
+    const { mawaeedSitemapEntries } = await import("@shared/servicePages/catalog");
+    const entries = mawaeedSitemapEntries([
+      { slug: "salaries", published: true, contentUpdatedAt: "2026-10-01T00:00:00.000Z" },
+      { slug: "pensions", published: true, contentUpdatedAt: "2026-10-05T00:00:00.000Z" },
+      { slug: "draft", published: false, contentUpdatedAt: "2026-10-09T00:00:00.000Z" },
+    ]);
+    expect(entries).toEqual([{ loc: "https://sabq.org/mawaeed", lastmod: "2026-10-05T00:00:00.000Z" }]);
+  });
+});

@@ -23,6 +23,7 @@ import { REGIONS, normalizeRegion, type RegionId } from "@shared/mawaeed/model";
 import type { ServicePageModel } from "@shared/servicePages/present";
 import {
   relatedArticlesFromKeyword,
+  relatedArticleMeta,
   relatedArticlesFromSearch,
   type RelatedArticleLink,
 } from "@shared/servicePages/related";
@@ -414,14 +415,25 @@ function ServiceDateBody({
                 </h2>
               </div>
               <ul className="service-sidebar-list">
-                {related.map((item) => (
-                  <li key={item.href}>
-                    <Link href={item.href} className="service-sidebar-link">
-                      <span>{item.title}</span>
-                      <ChevronLeft aria-hidden="true" />
-                    </Link>
-                  </li>
-                ))}
+                {related.map((item) => {
+                  const meta = relatedArticleMeta(item, new Date());
+                  return (
+                    <li key={item.href} className={meta.archived ? "is-archived" : undefined}>
+                      <Link href={item.href} className="service-sidebar-link">
+                        <span className="service-sidebar-text">
+                          <span>{item.title}</span>
+                          {meta.dateLabel ? (
+                            <span className="service-sidebar-meta">
+                              <time dateTime={item.publishedAt ?? undefined}>{meta.dateLabel}</time>
+                              {meta.archived ? <span className="service-archive-tag">من الأرشيف</span> : null}
+                            </span>
+                          ) : null}
+                        </span>
+                        <ChevronLeft aria-hidden="true" />
+                      </Link>
+                    </li>
+                  );
+                })}
               </ul>
             </section>
           )}

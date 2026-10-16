@@ -126,7 +126,7 @@ export function formatHijri(isoDate: string, override?: string | null): string {
 
 export function formatGregorian(isoDate: string): { weekday: string; day: string; month: string; year: string; label: string } {
   const instant = new Date(`${isoDate}T12:00:00+03:00`);
-  const parts = new Intl.DateTimeFormat("ar-SA-u-nu-latn", {
+  const parts = new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-latn", {
     timeZone: MAWAEED_TIMEZONE,
     weekday: "long",
     day: "numeric",
