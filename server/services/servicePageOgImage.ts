@@ -1,13 +1,17 @@
 /**
- * بطاقة مشاركة 1200×630 لصفحة خدمة. النص من النموذج الجاهز، بلا تاريخ مخترع.
- * الخط العربي موجود أصلًا في server/fonts (نفس بطاقات الرياضة).
+ * بطاقة مشاركة 1200×630 بألوان سبق القائمة وشعارها.
+ * النص من النموذج الجاهز. بلا تدرج ولا لون خارج لوحة العلامة.
  */
-import { createCanvas, GlobalFonts, type SKRSContext2D } from "@napi-rs/canvas";
+import { createCanvas, GlobalFonts, loadImage, type SKRSContext2D } from "@napi-rs/canvas";
 import fs from "fs";
 import path from "path";
 
 const W = 1200;
 const H = 630;
+const INK = "#10202e";
+const BRAND = "#087dbb";
+const MUTED = "#647687";
+const PAPER = "#ffffff";
 
 let fontFamily = "sans-serif";
 let fontsReady = false;
@@ -34,7 +38,6 @@ export type ServiceOgInput = {
   gregorianLabel: string | null;
   hijriLabel: string | null;
   certaintyLabel: string | null;
-  tone: "citizen" | "salary";
   path: string;
 };
 
@@ -42,67 +45,54 @@ export async function renderServiceOgPng(input: ServiceOgInput): Promise<Buffer>
   registerFonts();
   const canvas = createCanvas(W, H);
   const ctx = canvas.getContext("2d");
-  const accent = input.tone === "salary" ? "#1f8a5b" : "#e2b340";
-
-  const bg = ctx.createLinearGradient(0, 0, W, H);
-  bg.addColorStop(0, "#071422");
-  bg.addColorStop(0.55, "#0a3554");
-  bg.addColorStop(1, "#087dbb");
-  ctx.fillStyle = bg;
+  ctx.fillStyle = PAPER;
   ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = BRAND;
+  ctx.fillRect(0, 0, W, 12);
 
-  ctx.fillStyle = accent;
-  ctx.fillRect(0, 0, W, 14);
-
-  ctx.fillStyle = "rgba(255,255,255,0.08)";
-  ctx.beginPath();
-  ctx.arc(1040, 120, 220, 0, Math.PI * 2);
-  ctx.fill();
+  await drawLogo(ctx);
 
   ctx.direction = "rtl";
-  ctx.textAlign = "right";
+  ctx.textAlign = "center";
   ctx.textBaseline = "alphabetic";
-  ctx.fillStyle = "rgba(255,255,255,0.78)";
-  ctx.font = `36px "${fontFamily}"`;
-  ctx.fillText("سبق", 1080, 110);
-
-  ctx.fillStyle = "#ffffff";
-  const titleSize = fit(ctx, input.h1, 920, 78, 48);
+  ctx.fillStyle = INK;
+  const titleSize = fit(ctx, input.h1, 980, 64, 40);
   ctx.font = `${titleSize}px "${fontFamily}"`;
-  ctx.fillText(input.h1, 1080, 230);
+  ctx.fillText(input.h1, W / 2, 340);
 
   const date = input.gregorianLabel || "لا يوجد موعد قادم معلن";
-  const dateSize = fit(ctx, date, 980, 54, 36);
+  const dateSize = fit(ctx, date, 980, 42, 28);
   ctx.font = `${dateSize}px "${fontFamily}"`;
-  ctx.fillStyle = "#f4fbff";
-  ctx.fillText(date, 1080, 340);
+  ctx.fillStyle = BRAND;
+  ctx.fillText(date, W / 2, 410);
 
-  if (input.hijriLabel) {
-    ctx.font = `40px "${fontFamily}"`;
-    ctx.fillStyle = "rgba(255,255,255,0.86)";
-    ctx.fillText(input.hijriLabel, 1080, 410);
-  }
+  ctx.fillStyle = MUTED;
+  ctx.font = `32px "${fontFamily}"`;
+  if (input.hijriLabel) ctx.fillText(input.hijriLabel, W / 2, 468);
+  if (input.certaintyLabel) ctx.fillText(input.certaintyLabel, W / 2, 520);
 
-  if (input.certaintyLabel) {
-    ctx.font = `34px "${fontFamily}"`;
-    const label = input.certaintyLabel;
-    const width = ctx.measureText(label).width + 48;
-    const x = 1080 - width;
-    roundRect(ctx, x, 450, width, 64, 32);
-    ctx.fillStyle = accent;
-    ctx.fill();
-    ctx.fillStyle = "#071422";
-    ctx.textAlign = "center";
-    ctx.fillText(label, x + width / 2, 494);
-  }
-
-  ctx.textAlign = "right";
-  ctx.direction = "ltr";
-  ctx.font = `28px "${fontFamily}"`;
-  ctx.fillStyle = "rgba(255,255,255,0.7)";
-  ctx.fillText(`sabq.org${input.path}`, 1080, 580);
-
+  ctx.font = `26px "${fontFamily}"`;
+  ctx.fillText(`sabq.org${input.path}`, W / 2, 585);
   return canvas.toBuffer("image/png");
+}
+
+async function drawLogo(ctx: SKRSContext2D) {
+  const file = path.resolve(process.cwd(), "public/branding/sabq-logo.png");
+  if (!fs.existsSync(file)) {
+    ctx.fillStyle = BRAND;
+    ctx.font = `48px "${fontFamily}"`;
+    ctx.textAlign = "center";
+    ctx.direction = "rtl";
+    ctx.fillText("سبق", W / 2, 160);
+    return;
+  }
+  try {
+    const logo = await loadImage(file);
+    const size = 140;
+    ctx.drawImage(logo, (W - size) / 2, 48, size, size);
+  } catch (error) {
+    console.warn("[service-og] logo", error);
+  }
 }
 
 function fit(ctx: SKRSContext2D, text: string, maxWidth: number, start: number, min: number): number {
@@ -113,14 +103,4 @@ function fit(ctx: SKRSContext2D, text: string, maxWidth: number, start: number, 
     size -= 2;
   }
   return size;
-}
-
-function roundRect(ctx: SKRSContext2D, x: number, y: number, w: number, h: number, r: number) {
-  ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.arcTo(x + w, y, x + w, y + h, r);
-  ctx.arcTo(x + w, y + h, x, y + h, r);
-  ctx.arcTo(x, y + h, x, y, r);
-  ctx.arcTo(x, y, x + w, y, r);
-  ctx.closePath();
 }

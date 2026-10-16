@@ -12,6 +12,7 @@ export function NewsletterConfirmation() {
     const params = new URLSearchParams(window.location.hash.replace(/^#/, ""));
     const resolved = params.get("confirm") || new URLSearchParams(window.location.search).get("confirm");
     if (!resolved) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- copy the token before the confirm param is stripped from the URL
     setToken(resolved);
     window.history.replaceState({}, document.title, "/newsletter");
   }, []);

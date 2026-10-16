@@ -2,10 +2,10 @@ import { describe, expect, it } from "vitest";
 import { EXPECTED_HINT, SERIES_CATALOG, type OccurrenceRecord, type SeriesRecord } from "@shared/mawaeed/model";
 import { presentMawaeed } from "@shared/mawaeed/present";
 import { buildServiceCalendar } from "@shared/servicePages/calendar";
-import { servicePageSitemapEntries } from "@shared/servicePages/catalog";
+import { servicePageIdFromPath, servicePageSitemapEntries } from "@shared/servicePages/catalog";
 import { presentServicePage } from "@shared/servicePages/present";
-// @ts-expect-error Pages function has no TypeScript declaration.
-import { relatedArticlesFromSearch, renderServicePageHtml, servicePageIdFromPath } from "../../functions/servicePage.js";
+import { relatedArticlesFromSearch } from "@shared/servicePages/related";
+import { renderServiceSemanticHtml } from "@shared/servicePages/semanticHtml";
 
 const NOW = new Date("2026-10-15T12:00:00+03:00");
 
@@ -89,8 +89,9 @@ describe("salary service page", () => {
     expect(model.next?.hijriLabel).toBe(next?.hijriLabel);
     expect(model.next?.countdownText).toBe(next?.countdownText);
     expect(model.next?.certainty).toBe("confirmed");
-    expect(model.shiftRule).toContain("الخميس قبله");
-    expect(model.shiftRule).toContain("الأحد بعده");
+    expect(model.shiftRule).toContain("الخميس الذي قبله");
+    expect(model.shiftRule).toContain("الأحد الذي بعده");
+    expect(model.explanation.join(" ")).toContain("يوم 27 من كل شهر ميلادي");
     expect(model.description).not.toContain(EXPECTED_HINT);
     expect(model.rows.filter((item) => !item.isPast).map((item) => item.startsOn)).toEqual(["2026-10-27", "2026-11-26"]);
     expect(model.rows.find((item) => item.isPast)?.pastLabel).toBe("صُرفت");
@@ -104,17 +105,18 @@ describe("salary service page", () => {
 
   it("prints only stored dates and FAQPage plus WebPage plus breadcrumbs", () => {
     const { model } = page("government-salaries-date", salary, occurrences);
-    const html = renderServicePageHtml(model);
+    const html = renderServiceSemanticHtml(model);
     expect(html).toContain('dir="rtl"');
     expect(html).toContain("موعد صرف رواتب موظفي الدولة");
-    expect(html).toContain('rel="canonical" href="https://sabq.org/services/government-salaries-date"');
+    expect(model.canonical).toBe("https://sabq.org/services/government-salaries-date");
     expect(html).toContain("data-countdown");
-    expect(html).toContain("data-clock");
-    expect(html).toContain("الحالة:");
+    expect(html).not.toContain("الحالة:");
     expect(html).toContain("مؤكد");
     expect(html).toContain("صُرفت");
     expect(html).toContain("/calendar.ics");
-    expect(html).toContain("/og.png");
+    expect(model.ogImage).toContain("/og.png");
+    expect(html).not.toContain("#e2b340");
+    expect(html).not.toContain("#071422");
     expect(html).not.toContain(EXPECTED_HINT);
     expect(html).not.toContain("مسودة لا تظهر");
     const dates = [...html.matchAll(/datetime="(\d{4}-\d{2}-\d{2})"/g)].map((match) => match[1]);
@@ -162,12 +164,16 @@ describe("citizen account service page", () => {
     expect(model.h1).toBe("موعد صرف حساب المواطن");
     expect(model.next?.certaintyLabel).toBe("متوقع");
     expect(model.next?.expectedHint).toBe(EXPECTED_HINT);
-    expect(model.shiftRule).toContain("لم نجد قاعدة منشورة");
-    const html = renderServicePageHtml(model, {
-      related: [{ title: "خبر عن الدفعة", href: "/article/citizen-deposit" }],
-    });
+    expect(model.shiftRule).toContain("الجدول المعتاد");
+    expect(model.shiftRule).toContain("الخميس 9");
+    expect(model.shiftRule).toContain("الأحد 11");
+    expect(model.shiftRule).not.toContain("لم نجد قاعدة");
+    const html = renderServiceSemanticHtml(model, [
+      { title: "خبر عن الدفعة", href: "/article/citizen-deposit" },
+    ]);
     expect(html).toContain("متوقع");
-    expect(html).toContain(EXPECTED_HINT);
+    expect(html).toContain("محسوب من الجدول المعتاد للجهة إلى أن يصدر الإعلان الرسمي.");
+    expect(html).not.toContain("الحالة:");
     expect(html).toContain("خبر عن الدفعة");
     expect(html).toContain("/services/government-salaries-date");
     expect(html).toContain('datetime="2026-11-10"');
@@ -183,7 +189,7 @@ describe("citizen account service page", () => {
     expect(model.rows.map((item) => item.startsOn)).toEqual(["2026-09-10"]);
     expect(model.rows[0].pastLabel).toBe("صُرفت");
     expect(model.leadPrefix).toContain("لا يوجد موعد قادم");
-    const html = renderServicePageHtml(model);
+    const html = renderServiceSemanticHtml(model);
     expect(html).toContain("2026-09-10");
     expect(html).toContain("صُرفت");
     expect(html).not.toContain("calendar.ics");

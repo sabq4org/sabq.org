@@ -56,6 +56,11 @@ export const SERVICE_PAGES: ServicePageSpec[] = [
   },
 ];
 
+export function servicePageIdFromPath(path: string): string | null {
+  const match = /^\/services\/([a-z0-9-]+)$/.exec(path);
+  return match ? match[1] : null;
+}
+
 export function servicePageById(id: string): ServicePageSpec | undefined {
   return SERVICE_PAGES.find((page) => page.id === id);
 }
