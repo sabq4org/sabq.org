@@ -56,6 +56,7 @@ export function Footer() {
 
   const infoLinks = [
     { label: "النشرة البريدية", href: "/newsletter" },
+    { label: "مواعيدك: الرواتب والإجازات", href: "/mawaeed" },
     { label: "من نحن", href: "/about" },
     { label: "سياسة الخصوصية", href: "/ar/privacy" },
     { label: "شروط الاستخدام", href: "/ar/terms" },

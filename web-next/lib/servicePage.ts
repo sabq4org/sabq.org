@@ -7,6 +7,8 @@
 export type RelatedArticleLink = { title: string; href: string; publishedAt: string | null };
 
 export const RELATED_ARCHIVE_DAYS = 45;
+/** نطلب أكثر من أربعة لأن البحث يرتب بالصلة لا بالتاريخ، ثم نأخذ الأحدث بعد إزالة التكرار. */
+export const RELATED_FETCH_LIMIT = 12;
 const RELATED_LIMIT = 4;
 
 function publishedMs(value: string | null): number {

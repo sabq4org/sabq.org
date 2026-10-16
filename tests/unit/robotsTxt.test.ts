@@ -19,6 +19,7 @@ describe("robots.txt", () => {
     expect(lines).toContain("Allow: /api/rss/");
     expect(lines).toContain("Sitemap: https://sabq.org/sitemap.xml");
     expect(lines).toContain("Sitemap: https://sabq.org/sitemap-news.xml");
+    expect(lines).toContain("Sitemap: https://sabq.org/sitemap-mawaeed.xml");
   });
 
   // يحاكي اختيار المجموعة وفق RFC 9309: مجموعة باسم البوت إن وُجدت وإلا "*".

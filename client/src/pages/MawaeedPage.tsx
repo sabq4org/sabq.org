@@ -538,11 +538,7 @@ function BoardCard({
 }) {
   const next = block.next;
   return (
-    <article
-      className={`mw-card${isSelected ? " is-selected" : ""}`}
-      data-kind={block.kind}
-      onClick={onSelect}
-    >
+    <article className={`mw-card${isSelected ? " is-selected" : ""}`} data-kind={block.kind}>
       <div className="mw-card-top">
         <div className="mw-card-series">
           <span className="mw-card-kicker">
@@ -551,28 +547,22 @@ function BoardCard({
           </span>
           {next ? <span className={badgeClass(next)}>{badgeText(next)}</span> : null}
         </div>
+        <h3 className="mw-card-title">
+          <button type="button" className="mw-card-select" aria-pressed={isSelected} onClick={onSelect}>
+            {next?.title ?? block.title}
+          </button>
+        </h3>
         {next ? (
-          <>
-            <h3>{next.title}</h3>
-            <p className="mw-card-date">
-              <strong><time dateTime={next.startsOn}>{next.gregorianLabel}</time></strong>
-              {" · "}{next.hijriLabel}
-            </p>
-          </>
-        ) : (
-          <p className="mw-card-date">{block.answerLine}</p>
-        )}
+          <p className="mw-card-date">
+            <strong><time dateTime={next.startsOn}>{next.gregorianLabel}</time></strong>
+            {" · "}{next.hijriLabel}
+          </p>
+        ) : <p className="mw-card-date">{block.answerLine}</p>}
       </div>
 
       <div className="mw-card-foot">
-        {next ? (
-          <strong className="mw-card-count">{countdownText(next, nowMs)}</strong>
-        ) : (
-          <span />
-        )}
-        <a href={block.href} onClick={(e) => e.stopPropagation()}>
-          كل المواعيد ›
-        </a>
+        {next ? <strong className="mw-card-count">{countdownText(next, nowMs)}</strong> : <span />}
+        <a href={block.href}>كل المواعيد ›</a>
       </div>
     </article>
   );

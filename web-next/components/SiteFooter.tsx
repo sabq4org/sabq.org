@@ -14,6 +14,7 @@ const HUAWEI_URL = "https://appgallery.huawei.com/app/C105897661";
 
 const INFO_LINKS = [
   { label: "النشرة البريدية", href: "/newsletter" },
+  { label: "مواعيدك: الرواتب والإجازات", href: "/mawaeed" },
   { label: "من نحن", href: "/about" },
   { label: "سياسة الخصوصية", href: "/ar/privacy" },
   { label: "شروط الاستخدام", href: "/ar/terms" },
