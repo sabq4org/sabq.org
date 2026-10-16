@@ -269,7 +269,7 @@ function MawaeedBody({
                   >
                     <span className="mw-pulse-top">
                       <span className="mw-pulse-series">
-                        <KindIcon kind={block.kind} />
+                        <span className="mw-kind-chip"><KindIcon kind={block.kind} /></span>
                         <span>{shortSeriesTitle(block)}</span>
                       </span>
                       {!block.next ? <span className="mw-pulse-nearest">لا موعد معلن</span> : isEarliest ? <span className="mw-pulse-nearest">الأقرب</span> : null}
@@ -285,6 +285,7 @@ function MawaeedBody({
       {/* بطاقة التركيز التفصيلية (البطل) تتبع الموعد المختار من الشريط العلوي */}
       {activeCard ? (
         <Hero
+          key={activeCard.id}
           card={activeCard}
           href={activeBlock?.href ?? null}
           nowMs={nowMs}
@@ -420,6 +421,7 @@ function Hero({
   const kickerPrefix = isNearest ? "الموعد الأقرب" : "الموعد المختار";
   return (
     <section className="mw-hero" aria-labelledby="mw-hero-title" data-kind={card.kind}>
+      <span className="mw-hero-mark" aria-hidden="true"><KindIcon kind={card.kind} /></span>
       <div className="mw-hero-body">
         <div className="mw-hero-badges">
           <span className="mw-kicker">
@@ -446,7 +448,10 @@ function Hero({
       </div>
 
       <div className="mw-clock-box" aria-live="polite">
-        <span className="mw-clock-label">الوقت المتبقي</span>
+        <span className="mw-clock-label">
+          {clock.word ? null : <i className="mw-live-dot" aria-hidden="true" />}
+          الوقت المتبقي
+        </span>
         {clock.word ? (
           <strong className="mw-clock-word">{clock.word}</strong>
         ) : (
@@ -484,7 +489,7 @@ function BoardCard({
         <div className="mw-card-series">
           <h3 className="mw-card-title">
             <a className="mw-card-select" href={block.href}>
-              <KindIcon kind={block.kind} />
+              <span className="mw-kind-chip"><KindIcon kind={block.kind} /></span>
               <span>{next ? overviewTitle(next) : block.title}</span>
             </a>
           </h3>
