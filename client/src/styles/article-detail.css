@@ -270,11 +270,23 @@
   --service-warn: #e8bd6a;
   --service-warn-soft: #3a2f14;
 }
-.article-detail .service-date-page[data-tone="salary"],
-.article-detail .service-date-page[data-tone="citizen"],
-.article-detail .service-date-page[data-tone="school"],
-.article-detail .service-date-page[data-tone="social"],
-.article-detail .service-date-page[data-tone="pension"] { --service-accent: var(--article-brand); }
+/* نفس لوحة /mawaeed: --service-accent للنص (فوق 4.5:1)، و--service-fill للخلفيات والزخارف فقط.
+   الأخضر والكهرماني محجوزان لشارتي «مؤكد/متوقع». */
+.article-detail .service-date-page { --service-fill: #0a8fd6; }
+.article-detail .service-date-page[data-tone="school"] { --service-accent: #086b9e; --service-fill: #0a8fd6; }
+.article-detail .service-date-page[data-tone="salary"] { --service-accent: #4338ca; --service-fill: #6366f1; }
+.article-detail .service-date-page[data-tone="citizen"] { --service-accent: #be123c; --service-fill: #f43f5e; }
+.article-detail .service-date-page[data-tone="social"] { --service-accent: #a21caf; --service-fill: #d946ef; }
+.article-detail .service-date-page[data-tone="pension"] { --service-accent: #0e7490; --service-fill: #06b6d4; }
+.dark .article-detail .service-date-page[data-tone="school"] { --service-accent: #78c9f0; }
+.dark .article-detail .service-date-page[data-tone="salary"] { --service-accent: #a5b4fc; }
+.dark .article-detail .service-date-page[data-tone="citizen"] { --service-accent: #fda4af; }
+.dark .article-detail .service-date-page[data-tone="social"] { --service-accent: #f0abfc; }
+.dark .article-detail .service-date-page[data-tone="pension"] { --service-accent: #67e8f9; }
+.article-detail .service-date-page {
+  --service-soft: color-mix(in srgb, var(--service-fill) 12%, transparent);
+  --service-faint: color-mix(in srgb, var(--service-fill) 5%, transparent);
+}
 
 .service-region {
   display: flex;
@@ -637,6 +649,73 @@
 .service-archive-tag { font-size: 12px; font-weight: 700; color: var(--service-archive-ink); background: var(--service-archive-bg); border-radius: 6px; padding: 0 8px; }
 .service-sidebar-list li.is-archived .service-sidebar-link { color: var(--article-muted); }
 .service-sidebar-list li.is-archived .service-sidebar-link:hover { color: var(--article-brand); }
+
+/* لمسات لون الخدمة: بطاقة متدرجة بعلامة مائية، وعدّاد حي، وخط زمني بنقاط. */
+.service-date-page .service-region-select { background: var(--service-faint); border-color: color-mix(in srgb, var(--service-fill) 30%, var(--article-rule)); }
+.service-date-page .service-region-select option { color: initial; background: initial; }
+
+.service-date-page .service-next-panel {
+  position: relative; isolation: isolate;
+  border-radius: 16px; border-start-start-radius: 2px; border-end-start-radius: 2px;
+  background:
+    radial-gradient(90% 130% at 0% 100%, color-mix(in srgb, var(--service-fill) 15%, transparent), transparent 65%),
+    linear-gradient(to left, color-mix(in srgb, var(--service-fill) 12%, transparent), var(--service-faint));
+  animation: service-rise .35s ease both;
+}
+.service-next-mark { position: absolute; z-index: -1; inset-inline-end: 18px; top: 50%; color: var(--service-fill); opacity: .09; transform: translateY(-50%) rotate(-8deg); pointer-events: none; }
+.service-next-mark svg { width: 170px; height: 170px; stroke-width: 1.4; }
+.service-date-page .service-next-header,
+.service-date-page .service-date-grid,
+.service-date-page .service-countdown-bar { border-color: color-mix(in srgb, var(--service-fill) 18%, var(--article-rule)); }
+.service-date-page .service-date-cell + .service-date-cell { border-color: color-mix(in srgb, var(--service-fill) 18%, var(--article-rule)); }
+.service-tone-chip { display: inline-flex; width: 30px; height: 30px; flex: none; align-items: center; justify-content: center; border-radius: 50%; background: var(--service-accent); }
+.service-date-page .service-next-kicker .service-tone-chip svg { width: 16px; height: 16px; color: #fff; }
+.dark .article-detail .service-next-kicker .service-tone-chip svg { color: #0b1620; }
+.service-date-page .service-countdown-label { display: flex; align-items: center; gap: 8px; }
+.service-live-dot { position: relative; width: 8px; height: 8px; flex: none; border-radius: 50%; background: var(--service-accent); }
+.service-live-dot::after { position: absolute; inset: 0; content: ""; border-radius: 50%; background: var(--service-accent); animation: service-ping 1.8s ease-out infinite; }
+.service-date-page .service-countdown-grid {
+  gap: 0; padding: 12px 6px; max-width: 460px;
+  background: color-mix(in srgb, hsl(var(--background)) 70%, transparent);
+  border: 1px solid color-mix(in srgb, var(--service-fill) 25%, transparent); border-radius: 12px;
+  box-shadow: 0 10px 30px -18px color-mix(in srgb, var(--service-fill) 60%, transparent);
+}
+.service-date-page .service-countdown-cell + .service-countdown-cell { border-color: color-mix(in srgb, var(--service-fill) 22%, transparent); }
+.service-date-page .service-countdown-num { font-size: clamp(28px, 3.4vw, 38px); letter-spacing: -.02em; }
+.service-actions-bar .service-cta { background: var(--service-accent); border-color: var(--service-accent); color: #fff; border-radius: 999px; }
+.service-actions-bar .service-cta:hover { background: var(--service-accent); filter: brightness(1.08); }
+.dark .article-detail .service-actions-bar .service-cta { color: #0b1620; }
+.service-date-page .service-actions-bar > button { border-radius: 999px; }
+
+.service-date-page .service-rule-notes { padding: 12px 16px; background: var(--service-faint); border-radius: 10px; border-start-start-radius: 0; border-end-start-radius: 0; }
+.service-date-page .public-section-title { position: relative; padding-inline-start: 12px; }
+.service-date-page .public-section-title::before { position: absolute; inset-inline-start: 0; top: .25em; bottom: .25em; width: 4px; content: ""; border-radius: 4px; background: var(--service-fill); }
+
+.service-date-page .service-timeline { position: relative; border-block: 0; overflow: visible; }
+.service-date-page .service-timeline::before { position: absolute; inset-inline-start: 7px; top: 28px; bottom: 28px; width: 2px; content: ""; border-radius: 2px; background: linear-gradient(to bottom, var(--service-fill), color-mix(in srgb, var(--service-fill) 15%, transparent)); }
+.service-date-page .service-timeline-row { position: relative; padding-inline: 32px 4px; }
+.service-date-page .service-timeline-row::before { position: absolute; inset-inline-start: 1px; top: 50%; width: 14px; height: 14px; box-sizing: border-box; content: ""; border-radius: 50%; background: hsl(var(--background)); border: 2px solid var(--service-accent); transform: translateY(-50%); }
+.service-date-page .service-timeline-row:first-child::before { background: var(--service-accent); box-shadow: 0 0 0 4px var(--service-soft); }
+.service-date-page .service-timeline-row.is-past::before { border-color: var(--article-muted); background: hsl(var(--background)); box-shadow: none; }
+.service-date-page .service-timeline-countdown { padding: 2px 10px; color: var(--service-accent); background: var(--service-soft); border-radius: 999px; font-size: 13px; }
+
+.service-date-page .service-explanation-box { background: var(--service-faint); border-color: color-mix(in srgb, var(--service-fill) 16%, var(--article-rule)); }
+.service-date-page .service-faq-list { border-color: color-mix(in srgb, var(--service-fill) 16%, var(--article-rule)); }
+.service-date-page .service-faq-item[open] { background: var(--service-faint); }
+.service-date-page .service-faq-item[open] > .service-faq-summary { color: var(--service-accent); }
+.service-date-page .article-sidebar-heading-icon { color: var(--service-accent); background: var(--service-soft); }
+.service-date-page .service-sidebar-link:hover { color: var(--service-accent); }
+
+@keyframes service-rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes service-ping { 0% { opacity: .6; transform: scale(1); } 80%, 100% { opacity: 0; transform: scale(2.6); } }
+@media (prefers-reduced-motion: reduce) {
+  .service-date-page .service-next-panel, .service-live-dot::after { animation: none; }
+}
+@media (max-width: 639px) {
+  .service-next-mark { top: 8px; inset-inline-end: -18px; transform: rotate(-8deg); opacity: .08; }
+  .service-next-mark svg { width: 120px; height: 120px; }
+  .service-date-page .service-timeline-row { padding-inline: 30px 0; }
+}
 
 @media (max-width: 639px) {
   .service-date-grid { grid-template-columns: 1fr; }

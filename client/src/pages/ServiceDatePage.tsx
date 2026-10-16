@@ -7,8 +7,13 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock,
+  GraduationCap,
+  HeartHandshake,
+  Home,
+  Landmark,
   Newspaper,
   Share2,
+  ShieldCheck,
 } from "lucide-react";
 import { Link, useLocation, useParams, useSearch } from "wouter";
 import { Header } from "@/components/Header";
@@ -261,9 +266,10 @@ function ServiceDateBody({
 
           {model.next ? (
             <section className="service-next-panel" aria-label="بطاقة الموعد القادم">
+              <span className="service-next-mark" aria-hidden="true"><ToneIcon tone={model.tone} /></span>
               <div className="service-next-header">
                 <p className="service-next-kicker">
-                  <Calendar aria-hidden="true" />
+                  <span className="service-tone-chip"><ToneIcon tone={model.tone} /></span>
                   <span>{model.tone === "school" && nextTitle ? nextTitle : `${nextHeading}${nextTitle ? ` · ${nextTitle}` : ""}`}</span>
                 </p>
                 <span className={statusBadgeClass(model.next.certainty)}>{model.next.certaintyLabel}</span>
@@ -283,6 +289,7 @@ function ServiceDateBody({
               {live.parts && (
                 <div className="service-countdown-bar" aria-hidden="true">
                   <p className="service-countdown-label">
+                    <i className="service-live-dot" />
                     {model.tone === "school"
                       ? "الوقت المتبقي على الإجازة (بتوقيت الرياض)"
                       : "الوقت المتبقي على الصرف (بتوقيت الرياض)"}
@@ -305,7 +312,7 @@ function ServiceDateBody({
               )}
               <div className="service-actions-bar">
                 {model.calendarHref && (
-                  <Button asChild>
+                  <Button asChild className="service-cta">
                     <a href={apiUrl(model.calendarHref)}>
                       <CalendarPlus className="ml-2 h-4 w-4" aria-hidden="true" />
                       أضف المواعيد القادمة إلى التقويم
@@ -491,6 +498,23 @@ function RegionPicker({
       {notice ? <p className="service-region-notice">{notice}</p> : null}
     </div>
   );
+}
+
+function ToneIcon({ tone, className }: { tone: ServicePageModel["tone"]; className?: string }) {
+  switch (tone) {
+    case "school":
+      return <GraduationCap aria-hidden="true" className={className} />;
+    case "salary":
+      return <Landmark aria-hidden="true" className={className} />;
+    case "pension":
+      return <ShieldCheck aria-hidden="true" className={className} />;
+    case "social":
+      return <HeartHandshake aria-hidden="true" className={className} />;
+    case "citizen":
+      return <Home aria-hidden="true" className={className} />;
+    default:
+      return <Calendar aria-hidden="true" className={className} />;
+  }
 }
 
 function Answer({ model }: { model: ServicePageModel }) {
