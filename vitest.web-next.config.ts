@@ -6,7 +6,10 @@ import path from "node:path";
 export default defineConfig({
   test: {
     environment: "node",
-    include: ["tests/web-next/articleViewSeoRender.test.ts"],
+    include: [
+      "tests/web-next/articleViewSeoRender.test.ts",
+      "tests/web-next/serviceMiddlewareRobots.test.ts",
+    ],
   },
   resolve: {
     alias: {

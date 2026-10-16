@@ -191,10 +191,6 @@ function isStaticAsset(p) {
   return false;
 }
 
-// Hidden service pages stay directly reachable, but must not be indexed or
-// followed. They are not in the shared noindex prefix list: that list skips
-// SEO injection and SSR. These routes still SSR for crawlers, with
-// noindex,nofollow and a private response.
 // Service date pages (/services/*-date): indexable since 2026-10-16, SSR for crawlers.
 export function isServiceDatePath(p) {
   return /^\/services\/[a-z0-9-]+$/.test(p);
