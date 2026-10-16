@@ -35,6 +35,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
 import { daysPhrase, diffIsoDays, formatGregorian, formatHijri, riyadhDateISO } from "@shared/mawaeed/dates";
+import { dashboardBucket, overdueDays, overdueLabel } from "@shared/mawaeed/dashboard";
 
 /* ------------------------------------------------------------------ *
  * الأنواع
@@ -177,7 +178,15 @@ function statusChips(row: OccurrenceRow): { label: string; tone: Tone }[] {
  * حسابات التواريخ
  * ------------------------------------------------------------------ */
 
-function countdownLabel(startsOn: string, today: string): { text: string; past: boolean } {
+function countdownLabel(
+  startsOn: string,
+  today: string,
+  range: { endsOn: string | null; status: string } | null = null,
+): { text: string; past: boolean } {
+  // «جارٍ الآن» للمجدول فقط؛ الملغى والمستبدل يبقيان «قبل X» كما كانا.
+  if (range?.status === "scheduled" && startsOn < today && range.endsOn && range.endsOn >= today) {
+    return { text: "جارٍ الآن", past: false };
+  }
   const days = diffIsoDays(today, startsOn);
   if (days === 0) return { text: "اليوم", past: false };
   if (days > 0) return { text: daysPhrase(days, "اليوم"), past: false };
@@ -395,14 +404,14 @@ export default function MawaeedManagement() {
   const buckets = useMemo(() => {
     const kindOf = (seriesId: string) => KIND_META[seriesById.get(seriesId)?.kind ?? ""] ?? FALLBACK_KIND;
     const titleOf = (seriesId: string) => seriesById.get(seriesId)?.titleAr ?? "";
-    const bucketOf = (row: OccurrenceRow): "attention" | "upcoming" | "past" => {
-      const isPublic = row.published && row.status === "scheduled" && row.certainty !== "unverified";
-      if (row.startsOn >= today) return isPublic ? "upcoming" : "attention";
-      return "past";
-    };
+    const bucketOf = (row: OccurrenceRow) => dashboardBucket(row, today);
 
     const counts = { all: occurrences.length, attention: 0, upcoming: 0, past: 0 };
-    for (const row of occurrences) counts[bucketOf(row)] += 1;
+    let overdue = 0;
+    for (const row of occurrences) {
+      counts[bucketOf(row)] += 1;
+      if (overdueDays(row, today) !== null) overdue += 1;
+    }
 
     const needle = query.trim().toLocaleLowerCase("ar");
     const filtered = occurrences.filter((row) => {
@@ -437,7 +446,7 @@ export default function MawaeedManagement() {
       grouped,
       filtered,
       counts,
-      stats: { confirmed, expected, attention: counts.attention, next },
+      stats: { confirmed, expected, attention: counts.attention, overdue, next },
       kindOf,
       titleOf,
     };
@@ -545,7 +554,8 @@ export default function MawaeedManagement() {
   function renderRow(row: OccurrenceRow) {
     const gregorian = formatGregorian(row.startsOn);
     const hijri = formatHijri(row.startsOn, row.hijriLabel);
-    const countdown = countdownLabel(row.startsOn, today);
+    const countdown = countdownLabel(row.startsOn, today, row);
+    const late = overdueDays(row, today);
     const kind = kindOf(row.seriesId);
     const note = row.publicNote || row.ruleNote;
 
@@ -573,6 +583,7 @@ export default function MawaeedManagement() {
                 <span aria-hidden className={cn("h-1.5 w-1.5 rounded-full", kind.dot)} />
                 {titleOf(row.seriesId)}
               </span>
+              {late !== null ? <Chip tone="danger">{overdueLabel(late)}</Chip> : null}
               {statusChips(row).map((chip) => (
                 <Chip key={chip.label} tone={chip.tone}>
                   {chip.label}
@@ -630,6 +641,31 @@ export default function MawaeedManagement() {
     );
   }
 
+  /** المتأخرة أولاً (الأقدم أولاً)، ثم القادمة غير الظاهرة (الأقرب أولاً). */
+  function renderAttention(rows: OccurrenceRow[]) {
+    const late = rows.filter((row) => overdueDays(row, today) !== null);
+    if (late.length === 0) {
+      return <ul className="divide-y divide-border/60 border-t border-border/60">{rows.map(renderRow)}</ul>;
+    }
+    const pending = rows.filter((row) => overdueDays(row, today) === null);
+    const group = (title: string, hint: string, items: OccurrenceRow[]) =>
+      items.length > 0 ? (
+        <div className="border-t border-border/60">
+          <p className="flex items-baseline gap-2 px-4 pb-1 pt-3 text-[12px] font-semibold text-foreground">
+            {title}
+            <span className="text-[11px] font-normal text-muted-foreground">{hint}</span>
+          </p>
+          <ul className="divide-y divide-border/60">{items.map(renderRow)}</ul>
+        </div>
+      ) : null;
+    return (
+      <>
+        {group("متأخرة", "مرّ تاريخها ولم تُحسم بعد، الأقدم أولاً", late)}
+        {group("قادمة غير ظاهرة", "الأقرب أولاً", pending)}
+      </>
+    );
+  }
+
   function renderSection(
     key: "attention" | "upcoming" | "past",
     title: string,
@@ -650,7 +686,11 @@ export default function MawaeedManagement() {
         />
         {open ? (
           rows.length > 0 ? (
-            <ul className="divide-y divide-border/60 border-t border-border/60">{rows.map(renderRow)}</ul>
+            key === "attention" ? (
+              renderAttention(rows)
+            ) : (
+              <ul className="divide-y divide-border/60 border-t border-border/60">{rows.map(renderRow)}</ul>
+            )
           ) : (
             <p className="border-t border-border/60 px-4 py-6 text-center text-[13px] text-muted-foreground">
               {emptyLabel || "لا شيء هنا."}
@@ -698,7 +738,7 @@ export default function MawaeedManagement() {
             <MetricCard
               icon={Hourglass}
               label="الموعد القادم"
-              value={stats.next ? countdownLabel(stats.next.startsOn, today).text : "—"}
+              value={stats.next ? countdownLabel(stats.next.startsOn, today, stats.next).text : "—"}
               helper={
                 stats.next ? (
                   <>
@@ -728,7 +768,7 @@ export default function MawaeedManagement() {
               label="تحتاج إجراء"
               value={String(stats.attention)}
               tone="warn"
-              helper="قادمة وغير ظاهرة للجمهور"
+              helper={stats.overdue > 0 ? `منها ${stats.overdue} متأخر` : "قادمة وغير ظاهرة للجمهور"}
             />
           </div>
         )}
