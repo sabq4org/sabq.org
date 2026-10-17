@@ -193,4 +193,16 @@ Project Board "Sabq Roadmap": `Backlog → Spec → Backend → iOS → Android 
 
 ---
 
+## Cursor Cloud specific instructions
+
+بيئة وكلاء Cursor تجهّز الويب وواجهة الـ API المحلية. بناء iOS وAndroid و`meetings-agent` خارج هذه البيئة.
+
+- Node المطابق لـ CI هو 24.20.0 في `/usr/local/bin`. nvm على الصورة يقدّم Node 22، لذلك `PATH` يجب أن يبدأ بـ `/usr/local/bin`.
+- Postgres 16 مع pgvector وRedis يعملان بـ `docker compose`. لا systemd هنا؛ `dockerd` يُشغَّل في سكربت الإقلاع بتخزين `fuse-overlayfs` و`iptables-legacy`.
+- على volume جديد، نفّذ `CREATE EXTENSION` لـ `vector` و`pg_trgm` قبل `npm run db:push:local`. بدون `pg_trgm` يفشل الدفع لأن فهارس `gin_trgm_ops` في المخطط.
+- `.env.local` محلي فقط: `DB_DRIVER=pg` و`DATABASE_URL` على localhost، ومن دون `NEON_DATABASE_URL`. مفاتيح الذكاء الاصطناعي في الإقلاع قيم وهمية حتى يكتمل تسجيل المسارات؛ الاستدعاء الفعلي يحتاج مفتاحًا حقيقيًا.
+- `npm run dev` يستمع على المنفذ 5000 وعمال الخلفية مطفأة. تبعيات `web-next` مثبتة، وتشغيله المنفصل: `API_ORIGIN=http://127.0.0.1:5000 npm run dev` من داخل `web-next` على المنفذ 3001.
+
+---
+
 *آخر تحديث: 2026-10-15 | المسؤول: فريق سبق التقني*
