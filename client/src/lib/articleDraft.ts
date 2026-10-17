@@ -1,5 +1,9 @@
 /** Compare the draft with the SAME defaults/normalizations used to load the form. */
-export function draftDiffersFromArticle(draft: Record<string, unknown>, article: Record<string, any>): boolean {
+export function draftDiffersFromArticle(
+  draft: Record<string, unknown>,
+  article: Record<string, any>,
+  ignoredKeys: readonly string[] = [],
+): boolean {
   const image = (value: unknown) => typeof value === "string" && (/^https?:\/\/.+/.test(value) || value.startsWith("/")) ? value : "";
   let scheduledAt = "";
   if (article.scheduledAt && article.status !== "published") {
@@ -21,6 +25,6 @@ export function draftDiffersFromArticle(draft: Record<string, unknown>, article:
     metaDescription: article.seo?.metaDescription?.substring(0, 160) || "",
   };
   for (const key of ["isFeatured", "isReading", "hideFromHomepage", "isVideoTemplate"]) stored[key] = Boolean(article[key]);
-  return Object.keys(draft).some(key => key !== "savedAt" &&
+  return Object.keys(draft).some(key => key !== "savedAt" && !ignoredKeys.includes(key) &&
     JSON.stringify(draft[key] ?? "") !== JSON.stringify(stored[key] ?? ""));
 }
