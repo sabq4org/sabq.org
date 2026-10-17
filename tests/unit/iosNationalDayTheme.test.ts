@@ -94,10 +94,11 @@ describe("عقد المفتاح بين الطبقات", () => {
     // الثيم مفعّلًا بعد الإطفاء — لذلك نثبّته هنا.
     expect(swift).toContain('activeDefaultsKey = "sabqNationalDayThemeActive"');
     const theme = readFileSync(
-      resolve("sabq app ios/sabq/Components/SabqComponents.swift"),
+      resolve("sabq app ios/sabq/Components/SabqDesignSystem.swift"),
       "utf8",
     );
-    expect(theme).toContain("if NationalDayTheme.isActive");
+    expect(theme).toContain("NationalDayTheme.isActive ? NationalDayTheme.accent");
+    expect(theme).toContain("NationalDayTheme.isActive ? NationalDayTheme.canvas");
   });
 
   it("اسم الأيقونة البديلة متطابق في Swift وإعداد البناء وكتالوج الأصول", () => {
