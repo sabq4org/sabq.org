@@ -639,6 +639,40 @@ nonisolated struct APIStory: Decodable, Identifiable {
 
 // MARK: - Comment
 
+/// إشعار شخصي في صندوق القارئ (/v1/inbox) — نفس مركز الإشعارات في الويب.
+nonisolated struct APIInboxItem: Decodable, Identifiable, Hashable {
+    let id: String
+    let type: String
+    let title: String
+    let body: String
+    let deeplink: String?
+    var read: Bool
+    let imageUrl: String?
+    let createdAt: String
+}
+
+nonisolated struct APIInboxPage: Decodable {
+    let items: [APIInboxItem]
+    let unread: Int
+    let hasMore: Bool
+}
+
+/// ما يقرؤه خادم الإرسال فعلًا من تفضيلات القارئ (/v1/inbox/preferences).
+nonisolated struct APIReaderNotificationPrefs: Codable, Equatable {
+    var dailyDigest: Bool
+    var becauseYouLiked: Bool
+    var similarToSaved: Bool
+    var withinReads: Bool
+    var trendingForYou: Bool
+    var quietHoursStart: String
+    var quietHoursEnd: String
+
+    static let defaults = APIReaderNotificationPrefs(
+        dailyDigest: false, becauseYouLiked: true, similarToSaved: true,
+        withinReads: true, trendingForYou: true, quietHoursStart: "22:00", quietHoursEnd: "08:00"
+    )
+}
+
 /// كلمة يتابعها القارئ في حسابه (/v1/keywords/followed) — نفس قائمة «كلماتي» في الويب.
 nonisolated struct APIFollowedKeyword: Decodable, Hashable {
     let tagId: String

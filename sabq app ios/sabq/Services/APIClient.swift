@@ -454,6 +454,37 @@ actor APIClient {
         return try await deleteRequest(APICommentLikeResult.self, path: "/comments/\(id)/like")
     }
 
+    // MARK: - Reader inbox (صندوق الإشعارات)
+
+    func fetchInbox(offset: Int = 0, limit: Int = 30) async throws -> APIInboxPage {
+        try await get(APIInboxPage.self, path: "/inbox", query: ["limit": String(limit), "offset": String(offset)])
+    }
+
+    func fetchInboxUnreadCount() async throws -> Int {
+        struct Count: Decodable { let unread: Int }
+        return try await get(Count.self, path: "/inbox/unread-count").unread
+    }
+
+    func markInboxRead(id: String) async throws {
+        try await postRaw(path: "/inbox/\(id)/read")
+    }
+
+    func markInboxAllRead() async throws {
+        try await postRaw(path: "/inbox/read-all")
+    }
+
+    func deleteInboxItem(id: String) async throws {
+        _ = try await deleteRequest(APIKeywordFollowResult.self, path: "/inbox/\(id)")
+    }
+
+    func fetchReaderNotificationPrefs() async throws -> APIReaderNotificationPrefs {
+        try await get(APIReaderNotificationPrefs.self, path: "/inbox/preferences")
+    }
+
+    func updateReaderNotificationPrefs(_ prefs: APIReaderNotificationPrefs) async throws -> APIReaderNotificationPrefs {
+        try await patch(APIReaderNotificationPrefs.self, path: "/inbox/preferences", body: prefs)
+    }
+
     // MARK: - Followed keywords (كلماتي)
 
     func fetchFollowedKeywords() async throws -> [APIFollowedKeyword] {

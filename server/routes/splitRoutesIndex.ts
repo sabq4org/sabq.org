@@ -79,6 +79,7 @@ import predictionsCoreRouter from "./predictionsCore";
 import predictionsMobileRouter from "./predictionsMobile";
 import commentReactionsMobileRouter from "./commentReactionsMobile";
 import keywordFollowingMobileRouter from "./keywordFollowingMobile";
+import readerInboxMobileRouter from "./readerInboxMobile";
 import gcMajlisRouter from "./gcMajlis";
 import gcFantasyRouter from "./gcFantasy";
 import rslPredictionsRouter from "./rslPredictions";
@@ -202,6 +203,7 @@ export function registerSplitRoutes(app: Express) {
   app.use(commentReactionsRouter);
   app.use(commentReactionsMobileRouter);
   app.use(keywordFollowingMobileRouter);
+  app.use(readerInboxMobileRouter);
   app.use(topicCommentsRouter);
   app.use(commentAppealsRouter);
   app.use(topicSummaryAudioRouter);

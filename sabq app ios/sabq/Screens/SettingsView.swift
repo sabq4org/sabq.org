@@ -813,6 +813,17 @@ struct SettingsView: View {
     /// تنبيهات المباريات تصل من فارا وحده؛ الصف يوجّه إليه.
     private var matchAlertsSection: some View {
         SettingsSection {
+            NavigationLink(value: ReaderNotificationSettingsRoute()) {
+                settingsRow(
+                    title: "إعدادات الإشعارات",
+                    subtitle: "الملخص اليومي والتوصيات وأوقات الهدوء",
+                    icon: "bell.badge"
+                )
+            }
+            .buttonStyle(.plain)
+
+            SettingsRowDivider()
+
             NavigationLink(destination: WCMatchEventNotificationsView()) {
                 settingsRow(
                     title: "تنبيهات المباريات",

@@ -362,6 +362,14 @@ private struct SabqDestinations: ViewModifier {
                 MawaeedView()
                     .duoContentInsets()
             }
+            .navigationDestination(for: ReaderInboxRoute.self) { _ in
+                ReaderInboxView()
+                    .duoContentInsets()
+            }
+            .navigationDestination(for: ReaderNotificationSettingsRoute.self) { _ in
+                ReaderNotificationSettingsView()
+                    .duoContentInsets()
+            }
             .navigationDestination(for: MyKeywordsRoute.self) { _ in
                 MyKeywordsView()
                     .duoContentInsets()

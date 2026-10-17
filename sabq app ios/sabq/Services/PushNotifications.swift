@@ -58,9 +58,15 @@ final class NotificationsStore {
     /// (v1 has no separate count route). Safely no-ops when the user isn't
     /// signed in (the call returns 401 and we silently swallow it).
     func refreshUnreadCount() async {
-        guard let count = try? await APIClient.shared.fetchUnreadCount() else { return }
-        unreadCount = count
+        async let editorial = try? APIClient.shared.fetchUnreadCount()
+        async let reader = try? APIClient.shared.fetchInboxUnreadCount()
+        if let count = await editorial { unreadCount = count }
+        if let count = await reader { readerUnread = count }
     }
+
+    /// غير المقروء في صندوق القارئ (/v1/inbox). نقطة الجرس = هذا + التحريري.
+    var readerUnread: Int = 0
+    var totalUnread: Int { unreadCount + readerUnread }
 
     func setDeviceToken(_ token: String) {
         deviceToken = token
@@ -204,6 +210,10 @@ final class NotificationsStore {
             let parts = url.pathComponents.filter { $0 != "/" }
             if parts.count >= 2, parts[0] == "article", isValidSlug(parts[1]) {
                 return .article(slug: parts[1])
+            }
+            // روابط صندوق القارئ النسبية (/v1/inbox) قد تشير لمقال رأي
+            if parts.count >= 2, parts[0] == "opinion", isValidSlug(parts[1]) {
+                return .opinion(slug: parts[1])
             }
             return nil
         }

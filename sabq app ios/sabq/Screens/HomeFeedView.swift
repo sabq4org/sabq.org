@@ -563,19 +563,16 @@ struct HomeFeedView: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel("لحظة بلحظة — التغطية المباشرة")
 
-                // Editorial notifications bell — fast access to the user's
-                // own notifications (article scheduled/published/rejected/
-                // needs_revision/archived). Red dot when unread > 0. Visible
-                // only when signed in; readers without editorial roles still
-                // see it but its history is naturally empty.
+                // جرس الإشعارات — صندوق القارئ (/v1/inbox)، وفي أعلاه للكتّاب
+                // صفّ «إشعاراتي التحريرية». النقطة الحمراء = غير المقروء في الاثنين.
                 if authStore.isLoggedIn {
-                    NavigationLink(value: EditorialNotificationsRoute()) {
+                    NavigationLink(value: ReaderInboxRoute()) {
                         headerIcon("bell")
                             .overlay(alignment: .topTrailing) {
                                 // Red unread dot — driven by NotificationsStore's
                                 // `unreadCount` which the EditorialNotificationsView
                                 // updates on every fetch.
-                                if notificationsStore.unreadCount > 0 {
+                                if notificationsStore.totalUnread > 0 {
                                     Circle()
                                         .fill(SabqTheme.breaking)
                                         .frame(width: 10, height: 10)
@@ -588,7 +585,7 @@ struct HomeFeedView: View {
                             }
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel(notificationsStore.unreadCount > 0
+                    .accessibilityLabel(notificationsStore.totalUnread > 0
                         ? "الإشعارات — لديك إشعارات غير مقروءة"
                         : "الإشعارات")
                 }

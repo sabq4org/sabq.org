@@ -95,6 +95,9 @@ struct ContentView: View {
             // writer's queue.
             if loggedIn {
                 Task { await revisionsStore.refresh() }
+                // الدخول يكتمل غالبًا بعد تحميل الرئيسية ونداء .active، فلا
+                // يُطلب عدّاد الجرس قبله وتبقى النقطة مطفأة حتى السحب للتحديث.
+                Task { await notificationsStore.refreshUnreadCount() }
                 bookmarksStore.syncFromServer()
                 followedKeywords.syncFromServer()
             } else {
