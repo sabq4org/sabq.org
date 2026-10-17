@@ -49,6 +49,17 @@ nonisolated struct RsFixture: Decodable, Identifiable, Hashable {
 
     var started: Bool { status.live || status.finished }
     var kickoff: Date? { SabqFormatters.parseISO8601(date) }
+
+    /// مؤجلة/ملغاة/موقوفة/محسومة إداريًا — لا موعد لعب فعلي لها.
+    var unplayable: Bool { ["PST", "CANC", "ABD", "SUSP", "AWD", "WO"].contains(status.code) }
+
+    /// قادمة فعلًا: لم تبدأ، وليست مؤجلة، ولم يمضِ على موعدها أكثر من ثلاث
+    /// ساعات (مهلة تأخّر المزوّد في قلبها إلى «مباشر»). مرآة isUpcomingFixture
+    /// في server/routes/rslPredictions.ts.
+    func isUpcoming(now: Date = Date()) -> Bool {
+        if started || unplayable { return false }
+        return TimeInterval(timestamp) > now.timeIntervalSince1970 - 3 * 3_600
+    }
 }
 
 // MARK: حالة الموسم (hero → outlook)

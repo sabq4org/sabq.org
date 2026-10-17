@@ -53,11 +53,34 @@ final class RoshnHomeStore {
         return h.nextMatch?.status.live ?? false
     }
 
+    /// المباراة القادمة فعلًا. لا يُوثق بـ nextMatch وحده: الخادم كان يعيد مباراة
+    /// مؤجلة (PST) مضى موعدها، فتُظهر البطاقة «تنطلق بعد 00:00:00» بعد انتهاء
+    /// الجولة (2026-10-17) — والنسخ المثبّتة تبقى على الخادم القديم.
+    var upcomingFixture: RsFixture? {
+        guard let h = hero else { return nil }
+        if let f = h.nextMatch, f.isUpcoming() { return f }
+        return h.today.filter { $0.isUpcoming() }.min { $0.timestamp < $1.timestamp }
+    }
+
+    /// يوم الجولة صالح للعرض فقط إن كان فيه لعب جارٍ أو انطلاقة لم تفت مهلتها.
+    var activeMatchday: RsMatchday? {
+        guard let h = hero, h.inSeason, let md = h.matchday, md.count >= 3 else { return nil }
+        if md.liveCount > 0 { return md }
+        guard let ts = md.nextKickoffTs,
+              TimeInterval(ts) > Date().timeIntervalSince1970 - 3 * 3_600 else { return nil }
+        return md
+    }
+
+    /// نتائج اليوم بعد انتهاء مبارياته — حالة البطاقة حين لا لعب ولا موعد قادم.
+    var todayResults: [RsFixture] {
+        hero?.today.filter { $0.status.finished } ?? []
+    }
+
     /// أقرب انطلاقة قادمة — من يوم الجولة أو المباراة القادمة أو انطلاقة الموسم.
     var nextKickoffTimestamp: Int? {
         guard let h = hero else { return nil }
-        if let ts = h.matchday?.nextKickoffTs { return ts }
-        if let f = h.nextMatch, !f.status.live, !f.status.finished { return f.timestamp }
+        if let ts = activeMatchday?.nextKickoffTs { return ts }
+        if let f = upcomingFixture { return f.timestamp }
         if h.preSeason { return h.outlook.firstKickoffTs }
         return nil
     }
@@ -68,32 +91,31 @@ final class RoshnHomeStore {
 // بطاقة بهوية «أخضر الملعب» (2026-08-02): زمردي صلب بنص أبيض — نفس لون ترويسة
 // المركز (RoshnTheme.accentFill، آمن التباين منذ 2026-10-17) — بثلاثة عناصر فقط: شعار الدوري، سطرا الهوية، وشارة حالة واحدة
 // (عدّاد/نتيجة حية/بطل). قرار المالك بعد البطاقة البيضاء المزدحمة.
-// أربع حالات: عدّاد انطلاق الموسم / يوم الجولة / المباراة القادمة أو الحية /
-// بطاقة البطل. تختفي كليًا عند إطفاء البلوك من لوحة التحكم (blockHidden).
+// خمس حالات: عدّاد انطلاق الموسم / يوم الجولة / المباراة القادمة أو الحية /
+// نتائج اليوم (أو مدخل المركز) حين لا لعب ولا موعد / بطاقة البطل. لا عدّاد
+// صفري أبدًا. تختفي كليًا عند إطفاء البلوك من لوحة التحكم (blockHidden).
 
 struct RoshnHomeStrip: View {
     private let store = RoshnHomeStore.shared
-
-    private var matchdayMode: Bool {
-        guard let h = store.hero, h.inSeason, let md = h.matchday else { return false }
-        return md.count >= 3
-    }
 
     private var offSeasonChampion: RsChampion? {
         guard let h = store.hero, h.outlook.phase == "off-season" else { return nil }
         return h.outlook.champion ?? h.lastSeason?.champion
     }
 
-    /// مباراة البطاقة: الحية أولًا ثم القادمة ثم افتتاحية الموسم.
+    /// مباراة البطاقة: الحية أولًا ثم القادمة فعلًا ثم افتتاحية الموسم.
     private var cardFixture: RsFixture? {
         guard let h = store.hero else { return nil }
-        return h.live.first ?? h.nextMatch ?? h.outlook.openers.first
+        if let live = h.live.first(where: { $0.status.live }) ?? h.nextMatch.flatMap({ $0.status.live ? $0 : nil }) {
+            return live
+        }
+        return store.upcomingFixture ?? h.outlook.openers.first(where: { !$0.started })
     }
 
     private var hidden: Bool {
         guard let h = store.hero else { return true }
         if h.blockHidden { return true }
-        return offSeasonChampion == nil && cardFixture == nil && !matchdayMode
+        return offSeasonChampion == nil && cardFixture == nil && store.activeMatchday == nil && !h.inSeason
     }
 
     var body: some View {
@@ -106,10 +128,12 @@ struct RoshnHomeStrip: View {
                         championCard(champion)
                     } else if h.preSeason, !h.inSeason, let opener = cardFixture, !opener.started {
                         preSeasonCard(h, opener: opener)
-                    } else if matchdayMode, let md = h.matchday {
+                    } else if let md = store.activeMatchday {
                         matchdayCard(md)
                     } else if let f = cardFixture {
                         matchCard(f)
+                    } else {
+                        resultsCard(store.todayResults)
                     }
                 }
                 .buttonStyle(.plain)
@@ -180,6 +204,22 @@ struct RoshnHomeStrip: View {
                 }
             } else if let ts = md.nextKickoffTs {
                 countdownChip(prefix: "تنطلق بعد", timestamp: ts)
+            }
+        }
+    }
+
+    /// لا لعب ولا موعد قادم معروف: نتائج اليوم إن وُجدت، وإلا مدخل هادئ للمركز.
+    private func resultsCard(_ results: [RsFixture]) -> some View {
+        let n = results.count
+        let round = results.first.map(\.round).flatMap { r in
+            results.allSatisfy { $0.round == r } && !r.isEmpty ? r : nil
+        }
+        let subtitle = n == 0
+            ? "المباريات والترتيب والنتائج"
+            : "\(round ?? "مباريات اليوم") · انتهت \(n == 1 ? "مباراة" : n == 2 ? "مباراتان" : "\(n) مباريات")"
+        return banner(subtitle: subtitle) {
+            if n > 0 {
+                chip { Text("النتائج").lineLimit(1).fixedSize() }
             }
         }
     }
@@ -273,12 +313,20 @@ struct RoshnHomeStrip: View {
             }
     }
 
+    /// عدّاد تنازلي؛ إذا حلّ الموعد قبل أن يقلب المزوّد الحالة إلى «مباشر»
+    /// يظهر «حان الموعد» (نص الويب نفسه) بدل 00:00:00.
     private func countdownChip(prefix: String, timestamp: Int) -> some View {
-        TimelineView(.periodic(from: .now, by: 1)) { _ in
+        TimelineView(.periodic(from: .now, by: 1)) { context in
             chip {
-                Text("\(prefix) \(WCFormat.countdown(to: timestamp))")
-                    .monospacedDigit()
-                    .lineLimit(1).fixedSize()
+                Group {
+                    if TimeInterval(timestamp) <= context.date.timeIntervalSince1970 {
+                        Text("حان الموعد")
+                    } else {
+                        Text("\(prefix) \(WCFormat.countdown(to: timestamp))")
+                            .monospacedDigit()
+                    }
+                }
+                .lineLimit(1).fixedSize()
             }
         }
     }
