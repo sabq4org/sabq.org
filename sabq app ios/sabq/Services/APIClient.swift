@@ -440,13 +440,23 @@ actor APIClient {
         ).items
     }
 
+    /// معرّفات التعليقات التي أعجب بها القارئ في هذا المقال (خبرًا كان أو رأيًا).
+    /// `GET /api/v1/articles/:slug/comments/my-likes` — يتطلب جلسة.
+    func fetchMyCommentLikes(slug: String) async throws -> [String] {
+        try await get([String].self, path: "/articles/\(slug)/comments/my-likes", ignoreCache: true)
+    }
+
+    /// `POST|DELETE /api/v1/comments/:id/like` — يعيد العدد الجديد بعد إعادة العدّ في الخادم.
+    func setCommentLike(id: String, liked: Bool) async throws -> APICommentLikeResult {
+        if liked {
+            return try await post(APICommentLikeResult.self, path: "/comments/\(id)/like")
+        }
+        return try await deleteRequest(APICommentLikeResult.self, path: "/comments/\(id)/like")
+    }
+
     // ملاحظة: /articles/:slug/summary-audio يعيد بايتات MP3 خامًا لا JSON —
     // fetchAudioSummary القديمة كانت تفشل فكًّا دائمًا وتشغّل توليدًا صوتيًا
     // عبثًا مع كل فتح مقال، فحُذفت. التشغيل يتم بتمرير الرابط لـ AVPlayer مباشرة.
-
-    func fetchAIInsights(slug: String) async throws -> [String: String] {
-        try await get([String: String].self, path: "/articles/\(slug)/ai-insights")
-    }
 
     // MARK: - Sections (Categories)
 
@@ -933,9 +943,13 @@ actor APIClient {
         ])
     }
 
-    func deleteAccount(password: String) async throws {
+    /// `password` يُرسل فقط للحسابات التي لها كلمة مرور؛ الخادم يقبل حذف حسابات
+    /// Apple والجوال بالجلسة وحدها (`DELETE /members/account`)، ويرد 400 إن كان
+    /// للحساب كلمة مرور ولم تُرسل.
+    func deleteAccount(password: String?) async throws {
         await ensureCSRF()
-        try await deleteRaw(path: "/members/account", body: ["password": password])
+        let body: [String: String] = password.map { ["password": $0] } ?? [:]
+        try await deleteRaw(path: "/members/account", body: body)
         markLoggedOut()
     }
 
@@ -945,17 +959,17 @@ actor APIClient {
         try await get(WrappedArray<APINotification>.self, path: "/notifications").items
     }
 
+    /// عدد غير المقروء من الإشعارات التحريرية. لا يوجد في v1 مسار عدّ مستقل
+    /// (`/notifications/unread-count` كان يرد 404 فلا تتحدث نقطة الجرس عند الفتح)،
+    /// و`GET /notifications` يرسل `unread` محسوبًا على الصفحة نفسها التي تعرضها الشاشة.
     func fetchUnreadCount() async throws -> Int {
-        let result = try await get([String: Int].self, path: "/notifications/unread-count")
-        return result["count"] ?? result["unread_count"] ?? 0
+        struct UnreadOnly: Decodable { let unread: Int? }
+        let result = try await get(UnreadOnly.self, path: "/notifications", query: ["limit": "100"])
+        return result.unread ?? 0
     }
 
     func markNotificationRead(id: String) async throws {
         try await postRaw(path: "/notifications/\(id)/read")
-    }
-
-    func markAllNotificationsRead() async throws {
-        try await postRaw(path: "/notifications/mark-all-read")
     }
 
     // MARK: - Push token + editorial notifications
@@ -1363,28 +1377,7 @@ actor APIClient {
         }
     }
 
-    // MARK: - Keyword Following
-
-    func followKeyword(tagId: Int) async throws {
-        try await postRaw(path: "/keywords/follow", body: ["tag_id": tagId])
-    }
-
-    func unfollowKeyword(tagId: Int) async throws {
-        try await deleteRaw(path: "/keywords/follow/\(tagId)")
-    }
-
-    func fetchFollowedKeywords() async throws -> [APITag] {
-        try await get(WrappedArray<APITag>.self, path: "/keywords/followed").items
-    }
-
     // MARK: - Today's AI Insights (SmartSummaryBlock on web)
-
-    /// `/api/ai/insights/today` returns a flexible key/value map (greeting,
-    /// phrase, counts, top category, etc). We decode it loosely so the home
-    /// Greeting Block can gracefully use whichever keys come back.
-    func fetchTodayInsights() async throws -> [String: String] {
-        try await get([String: String].self, path: "/ai/insights/today", apiRoot: publicAPIBaseURL)
-    }
 
     /// Personal knowledge-journey insights — typed shape used by the
     /// home-feed PersonalJourneyBlock to render metric tiles + interests

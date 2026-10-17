@@ -7,6 +7,9 @@ struct OpinionDetailView: View {
 
     @State private var fullOpinion: OpinionArticle?
     @State private var moreOpinions: [OpinionArticle] = []
+    /// تعليقات مقال الرأي — نفس قسم الخبر ونفس المسار (`/api/v1/articles/:slug/comments`
+    /// يقبل slug الرأي). كانت الشاشة بلا تعليقات بينما يعرضها الويب أسفل المقال.
+    @State private var commentsStore: CommentsStore?
     /// آخر مقالات الرأي كما جُلبت (قبل اقتطاع «المزيد») — منها «للكاتب نفسه»
     /// في سياق العمود على Duo.
     @State private var recentOpinions: [OpinionArticle] = []
@@ -118,6 +121,11 @@ struct OpinionDetailView: View {
                                 .padding(.top, SabqLayout.space16)
                         }
 
+                        if !isFocusMode, let store = commentsStore {
+                            ArticleCommentsSection(store: store)
+                                .padding(.top, SabqLayout.space24)
+                        }
+
                         if !isFocusMode, !moreOpinions.isEmpty {
                             moreOpinionsSection
                                 .padding(.top, SabqLayout.space24)
@@ -213,6 +221,11 @@ struct OpinionDetailView: View {
         }
         .task {
             await loadOpinion()
+            if commentsStore == nil, let slug = displayOpinion.slug, !slug.isEmpty {
+                let store = CommentsStore(slug: slug)
+                commentsStore = store
+                Task { await store.load() }
+            }
             await refreshLikeStatus()
         }
         .onDisappear {

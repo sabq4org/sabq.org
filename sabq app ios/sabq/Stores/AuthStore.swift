@@ -492,7 +492,11 @@ final class AuthStore {
     }
 
     @MainActor
-    func deleteAccount(password: String) async {
+    /// يصير `true` حين يرد الخادم بأن للحساب كلمة مرور لم تُرسل (400)، فتعود
+    /// ورقة الحذف إلى حقل كلمة المرور بدل رسالة خطأ عامة.
+    private(set) var deleteRequiresPassword = false
+
+    func deleteAccount(password: String?) async {
         isLoading = true
         errorMessage = nil
         successMessage = nil
@@ -510,7 +514,12 @@ final class AuthStore {
             NotificationsStore.shared.unreadCount = 0
             successMessage = "تم حذف الحساب بنجاح"
         } catch {
-            errorMessage = error.localizedDescription
+            if password == nil, case APIError.serverError(400) = error {
+                deleteRequiresPassword = true
+                errorMessage = "حسابك محمي بكلمة مرور. أدخلها لإتمام الحذف."
+            } else {
+                errorMessage = error.localizedDescription
+            }
             if let token = NotificationsStore.shared.deviceToken {
                 await NotificationsStore.shared.registerWithBackend(token: token)
             }
@@ -592,6 +601,12 @@ final class AuthStore {
         successMessage = nil
         errorSource = .social
         isLoading = false
+    }
+
+    /// يعيد قراءة `/members/profile` — تستدعيه ورقة حذف الحساب كي تعرف
+    /// `hasPassword` يقينًا بدل التخمين من بيانات الدخول.
+    func refreshProfile() async {
+        await fetchFullProfile()
     }
 
     private func fetchFullProfile() async {

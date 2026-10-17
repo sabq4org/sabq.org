@@ -80,6 +80,9 @@ nonisolated enum ArticleHtmlParser {
             let isVideo = tag.attr("data-video-embed") != nil || tag.classes.contains("video-embed") || tag.classes.contains("youtube-embed")
             let isTweet = tag.attr("data-twitter-embed") != nil || tag.classes.contains("tweet-embed") || (tag.classes.contains("social-embed") && tag.attr("data-embed-type") == "twitter")
             let isWhatsApp = tag.attr("data-whatsapp-cta") != nil || tag.classes.contains("whatsapp-cta-card")
+            if tag.classes.contains("qa-block") {
+                return parseQaBlock(scanner: &scanner)
+            }
 
             if isGallery {
                 return parseImageGallery(scanner: &scanner, tag: tag)
@@ -138,6 +141,66 @@ nonisolated enum ArticleHtmlParser {
     }
 
     // MARK: - Block parsers
+
+    /// «س/ج» (QaBlock.ts في محرر الويب، classes فقط):
+    /// `<div class="qa-block"><div class="qa-q"><span class="qa-mark">س</span>
+    /// <div class="qa-q-text">…</div></div><div class="qa-a"><p>…</p></div></div>`
+    /// كان يسقط إلى فرع «div عام» فيندمج الحرف والسؤال والجواب في فقرة واحدة.
+    private static func parseQaBlock(scanner: inout HTMLScanner) -> ArticleBlock? {
+        let inner = scanner.consumeContainer()
+        var question: [InlineRun] = []
+        var answer: [[InlineRun]] = []
+        var s = HTMLScanner(input: inner)
+        while !s.isAtEnd {
+            s.skipWhitespace()
+            guard let t = s.peekTag() else { s.advance(1); continue }
+            if !t.isClosing, t.name == "div", t.classes.contains("qa-q") {
+                question = parseInlineRuns(qaQuestionText(s.consumeContainer()))
+            } else if !t.isClosing, t.name == "div", t.classes.contains("qa-a") {
+                answer = qaAnswerParagraphs(s.consumeContainer())
+            } else {
+                s.consumeTag()
+            }
+        }
+        if runsAreEmpty(question) && answer.isEmpty { return nil }
+        return .qa(question: question, answer: answer)
+    }
+
+    private static func qaQuestionText(_ html: String) -> String {
+        var s = HTMLScanner(input: html)
+        while !s.isAtEnd {
+            s.skipWhitespace()
+            guard let t = s.peekTag() else { s.advance(1); continue }
+            if !t.isClosing, t.name == "div", t.classes.contains("qa-q-text") {
+                return s.consumeContainer()
+            }
+            s.consumeTag()
+        }
+        // بلا غلاف النص: نحذف علامة «س» ونأخذ الباقي.
+        return html.replacingOccurrences(of: #"<span[^>]*qa-mark[^>]*>.*?</span>"#, with: "", options: .regularExpression)
+    }
+
+    private static func qaAnswerParagraphs(_ html: String) -> [[InlineRun]] {
+        var out: [[InlineRun]] = []
+        var sawParagraph = false
+        var s = HTMLScanner(input: html)
+        while !s.isAtEnd {
+            s.skipWhitespace()
+            guard let t = s.peekTag() else { s.advance(1); continue }
+            if !t.isClosing, t.name == "p" {
+                sawParagraph = true
+                let runs = parseInlineRuns(s.consumeContainer())
+                if !runsAreEmpty(runs) { out.append(runs) }
+            } else {
+                s.consumeTag()
+            }
+        }
+        if !sawParagraph {
+            let runs = parseInlineRuns(html)
+            if !runsAreEmpty(runs) { out.append(runs) }
+        }
+        return out
+    }
 
     private static func parseList(scanner: inout HTMLScanner, ordered: Bool) -> ArticleBlock {
         let inner = scanner.consumeContainer()

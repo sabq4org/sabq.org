@@ -966,11 +966,11 @@ struct SettingsView: View {
 
             SettingsRowDivider()
 
-            NavigationLink(destination: AITeamView()) {
+            NavigationLink(value: SabqAIRoute()) {
                 settingsRow(
-                    title: "فريق سبق الذكي",
-                    subtitle: "زملاؤنا الرقميون بأسمائهم وأدوارهم — تحت إشراف بشري",
-                    icon: "person.3"
+                    title: "عقل سبق",
+                    subtitle: "منظومة الذكاء في سبق وفريقها الرقمي — والقرار للمحرر",
+                    icon: "brain"
                 )
             }
             .buttonStyle(.plain)

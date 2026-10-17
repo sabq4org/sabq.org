@@ -27,6 +27,8 @@ nonisolated enum ArticleBlock {
     /// جدول من المحرر (`<table class="sabq-table">`). header: صف الرؤوس
     /// (<th>) إن وُجد؛ rows: بقية الصفوف؛ cardStyle: مظهر «بطاقة» للعمودين.
     case table(header: [[InlineRun]]?, rows: [[[InlineRun]]], cardStyle: Bool)
+    /// بلوك «س/ج» للحوارات (`<div class="qa-block">`): السؤال وفقرات الجواب.
+    case qa(question: [InlineRun], answer: [[InlineRun]])
     case divider
 }
 

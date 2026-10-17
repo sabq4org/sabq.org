@@ -36,6 +36,65 @@ final class CommentsStore {
     /// submission should attach to. `nil` means a top-level comment.
     var replyingTo: APIComment?
 
+    /// ترتيب القائمة كما في الويب: «الأحدث» أو «الأكثر إعجابًا».
+    enum SortOrder: String, CaseIterable, Identifiable {
+        case newest = "الأحدث"
+        case mostLiked = "الأكثر إعجابًا"
+        var id: String { rawValue }
+    }
+    var sortOrder: SortOrder = .newest
+
+    /// ما أعجب به القارئ (من `my-likes`)، والأعداد بعد إعجابه أو إلغائه.
+    /// القائمة نفسها محايدة ومخزّنة 15ث في الخادم، فنركّب هذا فوقها محليًا.
+    private(set) var likedIds: Set<String> = []
+    private var likeOverrides: [String: Int] = [:]
+    private var likesInFlight: Set<String> = []
+
+    var sortedComments: [APIComment] {
+        switch sortOrder {
+        case .newest:
+            return comments.sorted { $0.createdAt > $1.createdAt }
+        case .mostLiked:
+            return comments.sorted {
+                let a = likes(for: $0), b = likes(for: $1)
+                return a == b ? $0.createdAt > $1.createdAt : a > b
+            }
+        }
+    }
+
+    func likes(for comment: APIComment) -> Int {
+        likeOverrides[comment.id] ?? comment.likesCount ?? 0
+    }
+
+    func isLiked(_ comment: APIComment) -> Bool { likedIds.contains(comment.id) }
+
+    /// يجلب إعجابات القارئ؛ يُستدعى للمسجّل فقط، وفشله صامت.
+    func loadMyLikes() async {
+        guard let ids = try? await APIClient.shared.fetchMyCommentLikes(slug: slug) else { return }
+        likedIds = Set(ids)
+    }
+
+    /// إعجاب متفائل: يتغيّر الزر والعدد فورًا ثم يُعتمد عدد الخادم، ويُرجع عند الفشل.
+    func toggleLike(_ comment: APIComment) async throws {
+        guard !likesInFlight.contains(comment.id) else { return }
+        likesInFlight.insert(comment.id)
+        defer { likesInFlight.remove(comment.id) }
+
+        let wasLiked = likedIds.contains(comment.id)
+        let previous = likes(for: comment)
+        if wasLiked { likedIds.remove(comment.id) } else { likedIds.insert(comment.id) }
+        likeOverrides[comment.id] = max(0, previous + (wasLiked ? -1 : 1))
+        do {
+            let result = try await APIClient.shared.setCommentLike(id: comment.id, liked: !wasLiked)
+            likeOverrides[comment.id] = result.likesCount
+            if result.liked { likedIds.insert(comment.id) } else { likedIds.remove(comment.id) }
+        } catch {
+            if wasLiked { likedIds.insert(comment.id) } else { likedIds.remove(comment.id) }
+            likeOverrides[comment.id] = previous
+            throw error
+        }
+    }
+
     private let slug: String
 
     /// Max length is wider than the backend hard limit on purpose: we want a

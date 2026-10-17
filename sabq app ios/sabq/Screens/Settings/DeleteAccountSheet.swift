@@ -18,6 +18,26 @@ struct DeleteAccountSheet: View {
 
     private let confirmWord = "حذف"
 
+    /// «حذف» أو «delete»: مراجع أبل وغيره قد لا تكون لديه لوحة عربية، وتعذّر
+    /// كتابة كلمة التأكيد يعني تعذّر الحذف (بند 5.1.1(v)).
+    private var isConfirmed: Bool {
+        let typed = confirmText.trimmingCharacters(in: .whitespacesAndNewlines)
+        return typed == confirmWord || typed.lowercased() == "delete"
+    }
+
+    /// حسابات Apple والجوال بلا كلمة مرور، والخادم يقبل حذفها بالجلسة وحدها
+    /// (بند أبل 5.1.1(v)). كان الزر معطّلًا حتى تُكتب كلمة مرور لا يملكها المستخدم.
+    /// المصدر `hasPassword` من الملف الشخصي؛ وإن غاب فنحكم بمزوّد الدخول، ويصحّح
+    /// الخادم أي تخمين خاطئ بـ400 فنعود إلى الحقل.
+    private var requiresPassword: Bool {
+        if authStore.deleteRequiresPassword { return true }
+        if let hasPassword = authStore.currentUser?.hasPassword { return hasPassword }
+        let provider = authStore.currentUser?.authProvider?.lowercased()
+        return provider == nil || provider == "local" || provider == "email"
+    }
+
+    private var passwordStep: Bool { requiresPassword && !showConfirmation }
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -50,8 +70,13 @@ struct DeleteAccountSheet: View {
                             .fill(SabqTheme.surfaceMuted)
                     )
 
-                    if !showConfirmation {
+                    if passwordStep {
                         VStack(alignment: .leading, spacing: SabqLayout.space8) {
+                            if authStore.deleteRequiresPassword, let error = authStore.errorMessage {
+                                Text(error)
+                                    .sabqText(SabqType.meta)
+                                    .foregroundStyle(SabqTheme.danger)
+                            }
                             Text("كلمة المرور")
                                 .sabqText(SabqType.metaEmphasis)
                                 .foregroundStyle(SabqTheme.textPrimary)
@@ -77,17 +102,19 @@ struct DeleteAccountSheet: View {
                         .disabled(password.isEmpty)
                     } else {
                         VStack(alignment: .leading, spacing: SabqLayout.space8) {
-                            Text("اكتب \"\(confirmWord)\" للتأكيد")
+                            Text("اكتب \"\(confirmWord)\" أو DELETE للتأكيد")
                                 .sabqText(SabqType.metaEmphasis)
                                 .foregroundStyle(SabqTheme.textPrimary)
 
                             TextField(confirmWord, text: $confirmText)
+                                .textInputAutocapitalization(.never)
+                                .autocorrectionDisabled()
                                 .sabqText(SabqType.excerpt)
                                 .foregroundStyle(SabqTheme.textPrimary)
                                 .modifier(SabqInputSurface())
                         }
 
-                        if let error = authStore.errorMessage {
+                        if let error = authStore.errorMessage, !authStore.deleteRequiresPassword {
                             HStack(spacing: SabqLayout.space8) {
                                 Image(systemName: "exclamationmark.triangle.fill")
                                     .font(SabqType.meta.font)
@@ -106,7 +133,12 @@ struct DeleteAccountSheet: View {
 
                         Button {
                             Task {
-                                await authStore.deleteAccount(password: password)
+                                await authStore.deleteAccount(password: requiresPassword ? password : nil)
+                                if authStore.deleteRequiresPassword {
+                                    // الخادم أكّد أن للحساب كلمة مرور: نعود إلى حقلها.
+                                    withAnimation { showConfirmation = false }
+                                    return
+                                }
                                 if authStore.isLoggedIn == false && authStore.errorMessage == nil {
                                     // Account is gone on the server — make sure
                                     // no shred of the user's data lingers on
@@ -130,19 +162,19 @@ struct DeleteAccountSheet: View {
                                 Text("حذف الحساب نهائياً")
                                     .sabqText(SabqType.button)
                             }
-                            .foregroundStyle(confirmText == confirmWord ? SabqTheme.danger : SabqTheme.disabledInk)
+                            .foregroundStyle(isConfirmed ? SabqTheme.danger : SabqTheme.disabledInk)
                             .frame(maxWidth: .infinity, minHeight: SabqLayout.controlHeight)
                             .background(
                                 RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
-                                    .fill(confirmText == confirmWord ? SabqTheme.surface : SabqTheme.disabledFill)
+                                    .fill(isConfirmed ? SabqTheme.surface : SabqTheme.disabledFill)
                             )
                             .overlay(
                                 RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
-                                    .stroke(confirmText == confirmWord ? SabqTheme.danger : Color.clear, lineWidth: 1)
+                                    .stroke(isConfirmed ? SabqTheme.danger : Color.clear, lineWidth: 1)
                             )
                         }
                         .buttonStyle(.plain)
-                        .disabled(confirmText != confirmWord || authStore.isLoading)
+                        .disabled(!isConfirmed || authStore.isLoading)
                     }
                 }
                 .padding(.horizontal, SabqLayout.pageMargin)
@@ -159,6 +191,7 @@ struct DeleteAccountSheet: View {
                     }
                 }
             }
+            .task { await authStore.refreshProfile() }
             .onDisappear { authStore.clearMessages() }
         }
     }

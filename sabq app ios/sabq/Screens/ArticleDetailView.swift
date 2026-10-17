@@ -46,7 +46,6 @@ struct ArticleDetailView: View {
 
     @State private var showReaderControls = false
     @State private var isFocusMode = false
-    @State private var aiInsights: [String: String] = [:]
 
     @State private var relatedArticles: [Article] = []
     /// مقالات رأي من تصنيف الخبر — بلوك «مقالات قد تهمك» (نقل الويب #1609/#1624).
@@ -61,8 +60,6 @@ struct ArticleDetailView: View {
     /// the article slug is available — `nil` for articles that have no slug
     /// (extremely rare; we hide the section in that case).
     @State private var commentsStore: CommentsStore?
-    @State private var showLoginForCommentSheet = false
-    @State private var commentFeedback: CommentFeedback?
     /// Collapsed (3-line) vs. expanded display state for the smart summary
     /// card. Local — resets to collapsed whenever the user opens a new
     /// article (`@State` is owned by the view instance).
@@ -213,7 +210,13 @@ struct ArticleDetailView: View {
 
                             articleTitle
                                 .animatedAppear(index: 1)
-                                .padding(.bottom, SabqLayout.space16)
+                                .padding(.bottom, displayArticle.subtitle == nil ? SabqLayout.space16 : SabqLayout.space8)
+
+                            if let subtitle = displayArticle.subtitle {
+                                articleSubtitle(subtitle)
+                                    .animatedAppear(index: 1)
+                                    .padding(.bottom, SabqLayout.space16)
+                            }
 
                             articleMeta
                                 .animatedAppear(index: 2)
@@ -235,6 +238,11 @@ struct ArticleDetailView: View {
 
                         articleBody
                             .analyticsReadingBody()
+
+                        if let lines = displayArticle.updateLines, !lines.isEmpty {
+                            updateLinesList(lines)
+                        }
+
                         mediaAssetsGallery
 
                         // Weekly-photos pack — only renders when the
@@ -271,7 +279,7 @@ struct ArticleDetailView: View {
                         }
 
                         if !isFocusMode, let store = commentsStore {
-                            commentsSection(store: store)
+                            ArticleCommentsSection(store: store)
                                 .padding(.top, 24)
                         }
                     }
@@ -592,17 +600,15 @@ struct ArticleDetailView: View {
             }
 
             async let detail = Self.detailBundle(slug: slug, cached: cached)
-            // Best-effort: returns sentiment + credibility hints when ai
-            // processing has run for this article. Failures are silent.
-            async let insights: [String: String]? = try? await APIClient.shared.fetchAIInsights(slug: slug)
             // Drive the comments store load in parallel — it manages its own
             // state, so we don't await its return value.
             if let store {
                 Task { await store.load() }
             }
 
-            let (bundle, ins) = await (detail, insights)
-            if let ins { aiInsights = ins }
+            // كان يُجلب معها `/articles/:slug/ai-insights` لشارة «إيجابي/سلبي»، والخادم
+            // يرد أرقام قراءة لا نصوصًا فيفشل الفك دائمًا — طلب ضائع مع كل خبر، فحُذف.
+            let bundle = await detail
 
             if let bundle {
                 fullArticle = bundle.article
@@ -711,7 +717,12 @@ struct ArticleDetailView: View {
         FlowLayout(spacing: 8) {
             // Category is context, not severity. Uses the exact same soft
             // capsule style as the hero and compact rows on the home screen.
-            DetailLabelPill(title: article.categoryTitle, tint: SabqTheme.primary)
+            // من `displayArticle` لا `article`: الخبر المفتوح من إشعار أو رابط عميق
+            // يبدأ بهيكل `Article.placeholder` قسمه الثابت «محليات» وبلا «عاجل».
+            // والهيكل عنوانه فارغ، فلا تُرسم الشارة قبل وصول الحمولة الحقيقية.
+            if !displayArticle.title.isEmpty {
+                DetailLabelPill(title: displayArticle.categoryTitle, tint: SabqTheme.primary)
+            }
 
             // شارة «قراءة» التحريرية — تطابق شارة صفحة الخبر في الويب (#1420).
             // من `displayArticle` كي تظهر بعد وصول حمولة التفاصيل حتى لو دخل
@@ -721,7 +732,7 @@ struct ArticleDetailView: View {
             }
 
             // Breaking pill (only when applicable)
-            if article.isBreaking {
+            if displayArticle.isBreaking {
                 HStack(spacing: 4) {
                     PulsingDot(color: SabqTheme.breaking)
                         .scaleEffect(0.55)
@@ -738,37 +749,10 @@ struct ArticleDetailView: View {
                 )
             }
 
-            sentimentPill
-
             // Passport "موثوق" pill — opens the same sheet as the action bar.
             if let slug = article.slug {
                 PassportInlineBadge(slug: slug)
             }
-        }
-    }
-
-    /// Renders a small sentiment pill when aiInsights returns one. Accepts
-    /// either localized Arabic labels or the canonical English keys.
-    @ViewBuilder
-    private var sentimentPill: some View {
-        if let raw = aiInsights["sentiment"]?.lowercased(),
-           let mapped = sentimentMapping(for: raw) {
-            DetailLabelPill(title: mapped.label, tint: mapped.tint, icon: mapped.icon)
-        }
-    }
-
-    private func sentimentMapping(for raw: String) -> (label: String, icon: String, tint: Color)? {
-        switch raw {
-        case "positive", "ايجابي", "إيجابي":
-            return ("إيجابي", "face.smiling", SabqTheme.success)
-        case "neutral", "محايد":
-            return ("محايد", "minus.circle", SabqTheme.textSecondary)
-        case "negative", "سلبي":
-            return ("سلبي", "exclamationmark.triangle.fill", SabqTheme.danger)
-        case "mixed", "مختلط":
-            return ("مختلط", "circle.lefthalf.fill", SabqTheme.warning)
-        default:
-            return nil
         }
     }
 
@@ -1068,6 +1052,43 @@ struct ArticleDetailView: View {
             lineSpacing: SabqType.articleTitle.lineSpacing,
             textStyle: SabqType.articleTitle.uiTextStyle
         )
+    }
+
+    /// العنوان الفرعي (`article-detail-subtitle` في الويب): أصغر من العنوان وبلون ثانوي.
+    private func articleSubtitle(_ text: String) -> some View {
+        SabqRTLText(
+            text,
+            uiFont: SabqType.leadTitle.uiFont(adding: CGFloat(fontSize) - SabqType.articleBody.size - 3),
+            color: SabqTheme.textSecondary,
+            lineLimit: 0,
+            lineSpacing: 2,
+            textStyle: SabqType.leadTitle.uiTextStyle
+        )
+    }
+
+    /// سطور التحديث والتصحيح تحت النص كما في الويب: قائمة صغيرة بخط فاصل أعلاها.
+    private func updateLinesList(_ lines: [APIUpdateLine]) -> some View {
+        VStack(alignment: .leading, spacing: SabqLayout.space8) {
+            ForEach(lines, id: \.id) { line in
+                HStack(alignment: .firstTextBaseline, spacing: SabqLayout.space8) {
+                    Image(systemName: "arrow.triangle.2.circlepath")
+                        .font(SabqType.tag.font)
+                        .foregroundStyle(SabqTheme.textTertiary)
+                        .accessibilityHidden(true)
+                    Text(line.text)
+                        .sabqText(SabqType.meta)
+                        .foregroundStyle(SabqTheme.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.top, SabqLayout.space16)
+        .overlay(alignment: .top) {
+            Rectangle().fill(SabqTheme.separator).frame(height: 1)
+        }
+        .padding(.top, SabqLayout.space8)
+        .accessibilityElement(children: .combine)
     }
 
     // MARK: - Body
@@ -1494,260 +1515,7 @@ struct ArticleDetailView: View {
         }
     }
 
-    // MARK: - Comments
-
-    @ViewBuilder
-    private func commentsSection(store: CommentsStore) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HomeSectionHeader(title: "التعليقات", context: commentsSubtitle(for: store))
-
-            if let feedback = commentFeedback {
-                commentFeedbackBanner(feedback)
-                    .transition(.move(edge: .top).combined(with: .opacity))
-            }
-
-            if authStore.isLoggedIn {
-                CommentComposer(
-                    store: store,
-                    onSubmit: { outcome in
-                        withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) {
-                            commentFeedback = .init(outcome: outcome)
-                        }
-                        scheduleFeedbackDismissal()
-                    },
-                    onAuthRequired: { showLoginForCommentSheet = true },
-                    onError: { message in
-                        withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) {
-                            commentFeedback = .init(message: message, isError: true)
-                        }
-                        scheduleFeedbackDismissal()
-                    }
-                )
-            } else {
-                signInPromptCard
-            }
-
-            commentsList(store: store)
-        }
-        .padding(.horizontal, 16)
-        .padding(.top, 16)
-        .padding(.bottom, 6)
-        .sabqBlockSurface(SabqTheme.publicSurface)
-        .sheet(isPresented: $showLoginForCommentSheet) {
-            LoginSheet()
-        }
-    }
-
-    private func commentsSubtitle(for store: CommentsStore) -> String {
-        switch store.loadState {
-        case .idle, .loading: return "يتم التحميل…"
-        case .failed: return "تعذر التحميل"
-        case .loaded:
-            let total = store.comments.reduce(0) { $0 + 1 + $1.replies.count }
-            return total == 0 ? "كن أول من يعلّق" : "\(total) تعليق"
-        }
-    }
-
-    @ViewBuilder
-    private func commentsList(store: CommentsStore) -> some View {
-        if store.comments.isEmpty {
-            switch store.loadState {
-            case .idle, .loading:
-                commentSkeletonList
-            case .failed(let message):
-                commentErrorState(message: message, store: store)
-            case .loaded:
-                commentEmptyState
-            }
-        } else {
-            LazyVStack(alignment: .leading, spacing: 6) {
-                ForEach(store.comments) { comment in
-                    if comment.id != store.comments.first?.id {
-                        SidebarRowDivider()
-                    }
-                    CommentRow(comment: comment) { tapped in
-                        store.replyingTo = tapped
-                    }
-                }
-            }
-        }
-    }
-
-    /// دعوة الدخول سطر واحد بزر مستطيل (نموذج صفحة الخبر المعتمد 2026-10-09).
-    private var signInPromptCard: some View {
-        let layout = dynamicTypeSize.isAccessibilitySize
-            ? AnyLayout(VStackLayout(alignment: .leading, spacing: SabqLayout.space12))
-            : AnyLayout(HStackLayout(spacing: SabqLayout.space12))
-        return layout {
-            Text("سجّل دخولك لإضافة تعليق")
-                .font(SabqType.meta.font)
-                .foregroundStyle(SabqTheme.textSecondary)
-                .fixedSize(horizontal: false, vertical: true)
-            Spacer(minLength: 8)
-            Button {
-                SabqHaptics.light()
-                showLoginForCommentSheet = true
-            } label: {
-                Text("تسجيل الدخول")
-                    .font(SabqType.metaEmphasis.font)
-                    .foregroundStyle(SabqTheme.onAction)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 7)
-                    .frame(minHeight: SabqLayout.touchTarget)
-                    .background(
-                        RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous).fill(SabqTheme.actionFill)
-                    )
-            }
-            .buttonStyle(.plain)
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-        .sabqBlockSurface()
-    }
-
-    private var commentEmptyState: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "bubble.left")
-                .font(SabqType.meta.font)
-                .foregroundStyle(SabqTheme.textTertiary)
-            Text("لا توجد تعليقات بعد")
-                .font(SabqType.meta.font)
-                .foregroundStyle(SabqTheme.textSecondary)
-            Spacer(minLength: 0)
-        }
-        .padding(.vertical, 10)
-    }
-
-    private var commentSkeletonList: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            ForEach(0..<3, id: \.self) { _ in
-                HStack(alignment: .top, spacing: 10) {
-                    Circle()
-                        .fill(SabqTheme.surfaceMuted)
-                        .frame(width: 32, height: 32)
-                    VStack(alignment: .leading, spacing: 6) {
-                        RoundedRectangle(cornerRadius: SabqRadius.small)
-                            .fill(SabqTheme.surfaceMuted)
-                            .frame(width: 110, height: 12)
-                        RoundedRectangle(cornerRadius: SabqRadius.small)
-                            .fill(SabqTheme.surfaceMuted)
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 10)
-                        RoundedRectangle(cornerRadius: SabqRadius.small)
-                            .fill(SabqTheme.surfaceMuted)
-                            .frame(width: 220, height: 10)
-                    }
-                }
-            }
-        }
-        .redacted(reason: .placeholder)
-    }
-
-    private func commentErrorState(message: String, store: CommentsStore) -> some View {
-        VStack(spacing: 8) {
-            Image(systemName: "wifi.exclamationmark")
-                .font(SabqType.sectionHeading.font)
-                .foregroundStyle(SabqTheme.textTertiary)
-            Text(message)
-                .font(SabqType.meta.font)
-                .foregroundStyle(SabqTheme.textSecondary)
-                .multilineTextAlignment(.center)
-            Button {
-                Task { await store.load() }
-            } label: {
-                Text("إعادة المحاولة")
-                    .font(SabqType.tag.font)
-                    .foregroundStyle(SabqTheme.primary)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 6)
-                    .background(
-                        Capsule().fill(SabqTheme.surfaceMuted)
-                    )
-            }
-            .buttonStyle(.plain)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 18)
-    }
-
-    private func commentFeedbackBanner(_ feedback: CommentFeedback) -> some View {
-        HStack(alignment: .top, spacing: 10) {
-            Image(systemName: feedback.icon)
-                .font(SabqType.metaEmphasis.font)
-                .foregroundStyle(feedback.tint)
-            Text(feedback.message)
-                .font(SabqType.tag.font)
-                .foregroundStyle(SabqTheme.textPrimary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            Button {
-                withAnimation { commentFeedback = nil }
-            } label: {
-                Image(systemName: "xmark")
-                    .font(SabqType.tag.font)
-                    .foregroundStyle(SabqTheme.textTertiary)
-            }
-            .buttonStyle(.plain)
-        }
-        .padding(12)
-        .background(
-            RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
-                .fill(feedback.tint.opacity(0.12))
-        )
-    }
-
-    private func scheduleFeedbackDismissal() {
-        Task {
-            try? await Task.sleep(nanoseconds: 4_500_000_000)
-            await MainActor.run {
-                withAnimation(.easeOut(duration: 0.25)) {
-                    commentFeedback = nil
-                }
-            }
-        }
-    }
 }
-
-/// One-shot toast/banner state for the comments section. Lives on the view
-/// (not on the store) so it can be cleared by user interaction independently
-/// from the underlying submission state.
-struct CommentFeedback: Equatable {
-    let message: String
-    let icon: String
-    let tint: Color
-    let isError: Bool
-
-    init(message: String, icon: String = "info.circle.fill", tint: Color = SabqTheme.teal, isError: Bool = false) {
-        self.message = message
-        self.icon = icon
-        self.tint = tint
-        self.isError = isError
-    }
-
-    init(outcome: CommentsStore.SubmitOutcome) {
-        switch outcome {
-        case .published:
-            self.init(
-                message: "تم نشر تعليقك",
-                icon: "checkmark.circle.fill",
-                tint: SabqTheme.teal
-            )
-        case .awaitingReview:
-            self.init(
-                message: "SABQ AI يراجع تعليقك الآن — يظهر فور الاعتماد",
-                icon: "sparkles",
-                tint: SabqTheme.primaryEnd
-            )
-        case .rejected:
-            self.init(
-                message: "لم يستوفِ التعليق سياسة النشر",
-                icon: "xmark.octagon.fill",
-                tint: .red,
-                isError: true
-            )
-        }
-    }
-}
-
 // MARK: - Reading Progress Style
 
 struct ReadingProgressStyle: ProgressViewStyle {

@@ -505,6 +505,10 @@ struct Article: Identifiable, Equatable, Hashable {
     var mediaAssets: [APIMediaAsset]? = nil
     /// زر واتساب في نهاية المقال (من حقل whatsappCta). الإدراج داخل النص عبر HTML.
     var whatsappCta: APIWhatsAppCta? = nil
+    /// العنوان الفرعي تحت العنوان (كما في `ArticleDetail.tsx`).
+    var subtitle: String? = nil
+    /// سطور التحديث والتصحيح المنشورة أسفل النص.
+    var updateLines: [APIUpdateLine]? = nil
 
     /// اسم القسم المعروض للقارئ: القسم الثابت إن طابق، وإلا اسم الخادم، وإلا «أخبار».
     var categoryTitle: String { categoryLabel ?? category.title }
@@ -654,7 +658,9 @@ struct Article: Identifiable, Equatable, Hashable {
             articleType: api.articleType,
             weeklyPhotos: api.weeklyPhotos,
             mediaAssets: api.mediaAssets,
-            whatsappCta: api.whatsappCta
+            whatsappCta: api.whatsappCta,
+            subtitle: api.subtitle.flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0 },
+            updateLines: api.updateLines
         )
     }
 

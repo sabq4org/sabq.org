@@ -77,6 +77,21 @@ nonisolated struct APIWeeklyPhoto: Decodable, Identifiable, Hashable {
     }
 }
 
+/// سطر تحديث أو تصحيح منشور أسفل نص الخبر (`updateLines` في `/api/articles/:slug`،
+/// خلف مفتاح publish_first في الخادم). الويب يعرضها قائمة صغيرة تحت المتن.
+nonisolated struct APIUpdateLine: Decodable, Hashable, Sendable {
+    let id: String
+    let text: String
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: FlexKey.self)
+        id = (try? c.decode(String.self, forKey: FlexKey("id")))
+            ?? (try? c.decode(Int.self, forKey: FlexKey("id"))).map(String.init)
+            ?? UUID().uuidString
+        text = (try? c.decode(String.self, forKey: FlexKey("text"))) ?? ""
+    }
+}
+
 nonisolated struct APIWhatsAppCta: Decodable, Hashable, Sendable {
     let enabled: Bool?
     let phone: String?
@@ -169,6 +184,7 @@ nonisolated struct APIArticle: Decodable {
     let mediaAssets: [APIMediaAsset]?
     /// زر واتساب تحريري (نهاية المقال). الإدراج داخل النص يأتي عبر HTML.
     let whatsappCta: APIWhatsAppCta?
+    let updateLines: [APIUpdateLine]?
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: FlexKey.self)
@@ -337,6 +353,8 @@ nonisolated struct APIArticle: Decodable {
         }
 
         mediaAssets = try? c.decode([APIMediaAsset].self, forKey: FlexKey("mediaAssets"))
+        updateLines = (try? c.decode([APIUpdateLine].self, forKey: FlexKey("updateLines")))?
+            .filter { !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
         whatsappCta = (try? c.decode(APIWhatsAppCta.self, forKey: FlexKey("whatsappCta")))
             ?? (try? c.decode(APIWhatsAppCta.self, forKey: FlexKey("whatsapp_cta")))
     }
@@ -620,6 +638,11 @@ nonisolated struct APIStory: Decodable, Identifiable {
 }
 
 // MARK: - Comment
+
+nonisolated struct APICommentLikeResult: Decodable {
+    let likesCount: Int
+    let liked: Bool
+}
 
 nonisolated struct APIComment: Decodable, Identifiable, Hashable {
     let id: String
@@ -1147,6 +1170,10 @@ nonisolated struct APIUser: Decodable, Identifiable {
     let verificationBadge: String?
     let hasPressCard: Bool?
     let authProvider: String?
+    /// هل للحساب كلمة مرور؟ يرسلها `/api/v1/members/profile` (`hasPassword`) دون
+    /// الهاش نفسه. حسابات Apple والجوال بلا كلمة مرور، فلا يُطلب منها إدخالها عند الحذف.
+    /// `nil` حين تأتي بيانات المستخدم من مسار لا يرسلها (استجابة الدخول مثلًا).
+    let hasPassword: Bool?
     let createdAt: String?
     /// User-selected interest categories returned by `/api/v1/members/profile`
     /// (see `mobileApiRoutes.ts` — joins userInterests + categories). Drives
@@ -1374,6 +1401,8 @@ nonisolated struct APIUser: Decodable, Identifiable {
             ?? (try? c.decode(Bool.self, forKey: FlexKey("has_press_card")))
         authProvider = (try? c.decode(String.self, forKey: FlexKey("authProvider")))
             ?? (try? c.decode(String.self, forKey: FlexKey("auth_provider")))
+        hasPassword = (try? c.decode(Bool.self, forKey: FlexKey("hasPassword")))
+            ?? (try? c.decode(Bool.self, forKey: FlexKey("has_password")))
         createdAt = (try? c.decode(String.self, forKey: FlexKey("createdAt")))
             ?? (try? c.decode(String.self, forKey: FlexKey("created_at")))
         interests = (try? c.decode([APIUserInterest].self, forKey: FlexKey("interests"))) ?? []
