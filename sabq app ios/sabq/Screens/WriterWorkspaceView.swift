@@ -350,6 +350,32 @@ final class WriterWorkspaceViewModel: ObservableObject {
             tracking.filter { $0.status == "published" }.count
         )
     }
+
+    /// يتحقق مما إذا كان للكاتب مقال في المسودات أو قيد المراجعة أو مجدول ولم يُنشر بعد.
+    var blockingUnpublishedArticle: (title: String, stage: String, scheduledAt: String?)? {
+        if let active = schedule?.activeArticle {
+            return (active.title, active.stage, active.scheduledAt)
+        }
+        let tracking = workspace?.tracking ?? []
+        if let scheduled = tracking.first(where: { $0.status == "scheduled" }) {
+            return (scheduled.title, "scheduled", scheduled.scheduledAt)
+        }
+        if let activeDraft = tracking.first(where: {
+            $0.status == "draft" && $0.reviewStatus != "rejected"
+        }) {
+            return (activeDraft.title, activeDraft.reviewStatus ?? "draft", activeDraft.scheduledAt)
+        }
+        if let deskItem = (workspace?.desk ?? []).first(where: {
+            ($0.status == "draft" || $0.status == "scheduled") && $0.reviewStatus != "rejected"
+        }) {
+            return (deskItem.title, deskItem.status == "scheduled" ? "scheduled" : (deskItem.reviewStatus ?? "draft"), nil)
+        }
+        return nil
+    }
+
+    var canCreateNewArticle: Bool {
+        !isLoading && blockingUnpublishedArticle == nil
+    }
 }
 
 // MARK: - Container
@@ -366,6 +392,7 @@ struct WriterWorkspaceView: View {
     @StateObject private var vm = WriterWorkspaceViewModel()
     @State private var tab: WorkspaceTab = .today
     @State private var showReviewSheet = false
+    @State private var showNewOpinionSheet = false
 
     /// مساحة العمل الكاملة لكاتب الرأي فقط؛ غيره (مراسل/إداري) يرى الأداء كما كان
     private var isOpinionWriter: Bool { authStore.currentUser?.isWriter == true }
@@ -374,6 +401,7 @@ struct WriterWorkspaceView: View {
         Group {
             if isOpinionWriter {
                 VStack(spacing: 0) {
+                    writerHeaderBar
                     segmentBar
                     Divider().overlay(SabqTheme.separator)
                     switch tab {
@@ -389,15 +417,109 @@ struct WriterWorkspaceView: View {
         }
         .background(SabqTheme.background)
         .sabqRTL()
-        .navigationTitle(isOpinionWriter ? "لوحة الكاتب" : "لوحة الأداء")
-        .navigationBarTitleDisplayMode(.large)
+        .navigationTitle(isOpinionWriter ? "" : "لوحة الأداء")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(SabqTheme.background, for: .navigationBar)
         .task {
             guard isOpinionWriter else { return }
             await vm.load()
         }
         .sheet(isPresented: $showReviewSheet) { reviewSheet }
+        .sheet(isPresented: $showNewOpinionSheet, onDismiss: {
+            Task { await vm.load() }
+        }) {
+            ArticleSubmissionView(kind: .opinion)
+        }
         .onChange(of: vm.reviewResult != nil) { _, hasResult in
             if hasResult { showReviewSheet = true }
+        }
+    }
+
+    // MARK: شريط الترويسة وزر إضافة مقال
+
+    private var writerHeaderBar: some View {
+        VStack(alignment: .leading, spacing: SabqLayout.space8) {
+            HStack(alignment: .center, spacing: SabqLayout.space12) {
+                Text("لوحة الكاتب")
+                    .sabqText(SabqType.leadTitle)
+                    .foregroundStyle(SabqTheme.textPrimary)
+
+                Spacer(minLength: 0)
+
+                Button {
+                    guard vm.canCreateNewArticle else { return }
+                    showNewOpinionSheet = true
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: vm.canCreateNewArticle ? "square.and.pencil" : "lock.fill")
+                            .font(.system(size: 13, weight: .semibold))
+                        Text("إضافة مقال")
+                            .sabqText(SabqType.metaEmphasis)
+                    }
+                    .foregroundStyle(vm.canCreateNewArticle ? SabqTheme.onAction : SabqTheme.disabledInk)
+                    .padding(.horizontal, SabqLayout.space12)
+                    .frame(minHeight: 38)
+                    .background(
+                        Capsule(style: .continuous)
+                            .fill(vm.canCreateNewArticle ? SabqTheme.actionFill : SabqTheme.disabledFill)
+                    )
+                    .contentShape(Capsule(style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .disabled(!vm.canCreateNewArticle)
+            }
+            .environment(\.layoutDirection, .rightToLeft)
+
+            if let blocking = vm.blockingUnpublishedArticle {
+                HStack(alignment: .center, spacing: SabqLayout.space8) {
+                    Image(systemName: blocking.stage == "scheduled" ? "calendar.badge.clock" : "clock.fill")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(SabqTheme.warning)
+                    Text(blockingBannerText(blocking))
+                        .sabqText(SabqType.tag)
+                        .foregroundStyle(SabqTheme.textSecondary)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                    Spacer(minLength: 0)
+                    if tab != .articles {
+                        Button {
+                            withAnimation(.snappy(duration: 0.2)) { tab = .articles }
+                        } label: {
+                            Text("مقالاتي ‹")
+                                .sabqText(SabqType.tag)
+                                .foregroundStyle(SabqTheme.primary)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, SabqLayout.space12)
+                .padding(.vertical, 8)
+                .background(
+                    RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
+                        .fill(SabqTheme.warning.opacity(0.08))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
+                        .strokeBorder(SabqTheme.warning.opacity(0.22), lineWidth: 0.75)
+                )
+                .environment(\.layoutDirection, .rightToLeft)
+            }
+        }
+        .padding(.horizontal, SabqLayout.pageMargin)
+        .padding(.top, SabqLayout.space8)
+        .padding(.bottom, SabqLayout.space4)
+    }
+
+    private func blockingBannerText(_ blocking: (title: String, stage: String, scheduledAt: String?)) -> String {
+        switch blocking.stage {
+        case "scheduled":
+            return "لا يمكن إضافة مقال جديد حالياً؛ لديك مقال مجدول للنشر («\(blocking.title)»)."
+        case "pending_review", "approved":
+            return "لا يمكن إضافة مقال جديد حالياً؛ مقالك «\(blocking.title)» قيد المراجعة والجدولة."
+        case "needs_changes":
+            return "لا يمكن إضافة مقال جديد حالياً؛ مقالك «\(blocking.title)» بانتظار تعديلك."
+        default:
+            return "لا يمكن إضافة مقال جديد حالياً؛ لديك مسودة لم تُنشر بعد («\(blocking.title)»)."
         }
     }
 

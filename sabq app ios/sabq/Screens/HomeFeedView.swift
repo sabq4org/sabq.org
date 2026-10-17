@@ -79,6 +79,9 @@ struct HomeFeedView: View {
     /// Drives the modal push to "حسابي / نقاطي" when the user taps the
     /// LoyaltyStripView inside the personal-journey block.
     @State private var showLoyaltyAccount = false
+    /// Controls whether the "رحلتك المعرفية" card is expanded to show
+    /// health, loyalty, reading metrics, and interests.
+    @State private var isJourneyExpanded = false
     /// Cached loyalty summary so the journey-block metric row can show
     /// the user's lifetime points. The neighbouring LoyaltyStripView
     /// fetches the same payload on its own; both share Apple's HTTP
@@ -1016,43 +1019,71 @@ struct HomeFeedView: View {
     private var personalJourneyBlock: some View {
         VStack(alignment: .leading, spacing: 12) {
             journeyHeader
-            KnowledgeJourneyHealthCard()
-            LoyaltyStripView(onTap: { showLoyaltyAccount = true })
-            journeyMetrics
-            journeyInterests
+            if isJourneyExpanded {
+                KnowledgeJourneyHealthCard()
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+                LoyaltyStripView(onTap: { showLoyaltyAccount = true })
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+                journeyMetrics
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+                journeyInterests
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
         .sabqBlockSurface()
     }
 
+    private func toggleJourney() {
+        SabqHaptics.light()
+        withAnimation(reduceMotion ? nil : .snappy(duration: 0.28)) {
+            isJourneyExpanded.toggle()
+        }
+    }
+
     // MARK: Journey sub-views
 
     private var journeyHeader: some View {
-        HStack(spacing: 12) {
-            ZStack {
-                Circle()
-                    .fill(SabqTheme.surface)
-                    .frame(width: 40, height: 40)
-                Image(systemName: "sparkles")
-                    .font(SabqType.label)
-                    .foregroundStyle(SabqTheme.primary)
-            }
+        Button(action: toggleJourney) {
+            HStack(spacing: 12) {
+                ZStack {
+                    Circle()
+                        .fill(SabqTheme.surface)
+                        .frame(width: 40, height: 40)
+                    Image(systemName: "sparkles")
+                        .font(SabqType.label)
+                        .foregroundStyle(SabqTheme.primary)
+                }
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(journeyGreeting)
-                    .font(SabqType.label)
-                    .foregroundStyle(SabqTheme.textPrimary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.85)
-                Text("رحلتك المعرفية باختصار")
-                    .font(SabqType.meta.font)
-                    .foregroundStyle(SabqTheme.textSecondary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.9)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(journeyGreeting)
+                        .font(SabqType.label)
+                        .foregroundStyle(SabqTheme.textPrimary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
+                    Text("رحلتك المعرفية باختصار")
+                        .font(SabqType.meta.font)
+                        .foregroundStyle(SabqTheme.textSecondary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.9)
+                }
+
+                Spacer(minLength: 0)
+
+                Image(systemName: "chevron.down")
+                    .font(SabqType.metaEmphasis.font)
+                    .foregroundStyle(SabqTheme.primary)
+                    .rotationEffect(.degrees(isJourneyExpanded ? 180 : 0))
+                    .frame(width: SabqLayout.touchTarget, height: SabqLayout.touchTarget)
+                    .contentShape(Rectangle())
+                    .padding(.vertical, -8)
+                    .padding(.trailing, -8)
             }
-            Spacer(minLength: 0)
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
+        .accessibilityLabel(isJourneyExpanded ? "إخفاء رحلتك المعرفية" : "عرض البطاقة كاملة")
     }
 
     /// Backend greeting wins (includes the user's name); falls back to a

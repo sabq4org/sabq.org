@@ -546,6 +546,19 @@ struct Article: Identifiable, Equatable, Hashable {
         SabqFormatters.relativeArabic.localizedString(for: publishDate, relativeTo: Date())
     }
 
+    /// نافذة الخبر «الجديد» منذ نشره (10 دقائق): خلالها تظهر شارة «جديد» بدل الوقت،
+    /// وبعد انقضائها يظهر الوقت الفعلي للنشر تلقائياً.
+    static let freshPublishWindow: TimeInterval = 10 * 60
+
+    func isFreshlyPublished(relativeTo now: Date = Date()) -> Bool {
+        let age = now.timeIntervalSince(publishDate)
+        return age >= -60 && age <= Self.freshPublishWindow
+    }
+
+    var isFreshlyPublished: Bool {
+        isFreshlyPublished(relativeTo: Date())
+    }
+
     /// Minimal Article shell used by deep-link navigation when only the
     /// slug is known. `ArticleDetailView`'s loader replaces the
     /// placeholder fields with real values once the slug-based fetch

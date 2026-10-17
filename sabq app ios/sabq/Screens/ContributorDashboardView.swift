@@ -235,16 +235,33 @@ nonisolated struct WriterScheduleBannerModel: Decodable {
     }
 }
 
+nonisolated struct WriterActivePipelineArticleModel: Decodable {
+    let id: String
+    let title: String
+    let stage: String
+    let scheduledAt: String?
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: FlexKey.self)
+        id = (try? c.decode(String.self, forKey: FlexKey("id"))) ?? UUID().uuidString
+        title = (try? c.decode(String.self, forKey: FlexKey("title"))) ?? ""
+        stage = (try? c.decode(String.self, forKey: FlexKey("stage"))) ?? "pending_review"
+        scheduledAt = try? c.decode(String.self, forKey: FlexKey("scheduledAt"))
+    }
+}
+
 nonisolated struct WriterScheduleResponse: Decodable {
     let banner: WriterScheduleBannerModel?
     let canChoose: Bool
     let dayLoads: [Int]
+    let activeArticle: WriterActivePipelineArticleModel?
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: FlexKey.self)
         banner = try? c.decode(WriterScheduleBannerModel.self, forKey: FlexKey("banner"))
         canChoose = (try? c.decode(Bool.self, forKey: FlexKey("canChoose"))) ?? false
         dayLoads = (try? c.decode([Int].self, forKey: FlexKey("dayLoads"))) ?? []
+        activeArticle = try? c.decode(WriterActivePipelineArticleModel.self, forKey: FlexKey("activeArticle"))
     }
 }
 

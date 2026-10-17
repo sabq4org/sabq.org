@@ -429,23 +429,31 @@ struct HomeSidebarNewsRow: View {
                     textStyle: SabqType.rowTitle.uiTextStyle
                 )
 
-                HStack(spacing: SabqLayout.space4) {
+                HStack(alignment: .center, spacing: 6) {
                     if article.isBreaking {
                         Text("عاجل")
-                            .font(SabqType.metaEmphasis.font)
+                            .font(SabqType.tag.font)
                             .foregroundStyle(SabqTheme.breaking)
-                        Text("·").foregroundStyle(SabqTheme.textTertiary)
-                    } else if isNew {
-                        Text("جديد")
-                            .font(SabqType.metaEmphasis.font)
-                            .foregroundStyle(SabqTheme.primary)
-                        Text("·").foregroundStyle(SabqTheme.textTertiary)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 2.5)
+                            .background(Capsule(style: .continuous).fill(SabqTheme.breaking.opacity(0.08)))
                     }
                     Text(article.categoryTitle)
-                        .font(SabqType.metaEmphasis.font)
+                        .font(SabqType.tag.font)
                         .foregroundStyle(SabqTheme.primary)
-                    Text("·")
-                    Text(Self.relativeTime(article.publishDate))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 2.5)
+                        .background(Capsule(style: .continuous).fill(SabqTheme.primary.opacity(0.07)))
+                    if isNew || article.isFreshlyPublished {
+                        Text("جديد")
+                            .font(SabqType.tag.font)
+                            .foregroundStyle(SabqTheme.success)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 2.5)
+                            .background(Capsule(style: .continuous).fill(SabqTheme.success.opacity(0.08)))
+                    } else {
+                        Text(Self.relativeTime(article.publishDate))
+                    }
                 }
                 .font(SabqType.meta.font)
                 .foregroundStyle(SabqTheme.textTertiary)
