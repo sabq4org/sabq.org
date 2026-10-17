@@ -80,7 +80,7 @@ struct EditorialDesignSystemTests {
 
     @Test func typeScaleKeepsTheTwelvePointFloorAndBoldOnlyForLargeTitles() {
         let roles = [SabqType.articleTitle, SabqType.leadTitle, SabqType.sectionHeading, SabqType.rowTitle,
-                     SabqType.articleBody, SabqType.excerpt, SabqType.meta, SabqType.tag, SabqType.button]
+                     SabqType.articleBody, SabqType.excerpt, SabqType.meta, SabqType.metaEmphasis, SabqType.tag, SabqType.button]
         for role in roles {
             #expect(role.size >= 12)
             #expect(role.size.truncatingRemainder(dividingBy: 1) == 0)

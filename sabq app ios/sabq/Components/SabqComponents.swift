@@ -434,6 +434,7 @@ struct CachedAsyncImage<Placeholder: View>: View {
     @ViewBuilder let placeholder: () -> Placeholder
 
     @State private var image: UIImage?
+    @State private var failed = false
 
     init(
         url: URL?,
@@ -456,6 +457,7 @@ struct CachedAsyncImage<Placeholder: View>: View {
                     .transition(.opacity.animation(.easeOut(duration: 0.25)))
             } else {
                 placeholder()
+                    .environment(\.sabqImageLoadFailed, failed || url == nil)
             }
         }
         .task(id: url) {
@@ -465,6 +467,7 @@ struct CachedAsyncImage<Placeholder: View>: View {
 
     @MainActor
     private func loadImage(for requestedURL: URL?) async {
+        failed = false
         guard let requestedURL else {
             image = nil
             return
@@ -511,7 +514,57 @@ struct CachedAsyncImage<Placeholder: View>: View {
             }
         } else {
             image = nil
+            failed = true
         }
+    }
+}
+
+// MARK: - Image Placeholder
+
+extension EnvironmentValues {
+    /// يضبطه محمّلا الصور حين يفشل التحميل نهائيًا أو لا يوجد رابط.
+    @Entry var sabqImageLoadFailed = false
+}
+
+/// خانة الصورة الموحّدة: تعبئة هادئة بوميض خفيف أثناء التحميل، وشعار سبق
+/// باهت عند غياب الصورة أو فشلها.
+struct SabqImagePlaceholder: View {
+    @Environment(\.sabqImageLoadFailed) private var failed
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var sweep = false
+
+    var body: some View {
+        SabqTheme.surfaceMuted
+            .overlay {
+                if failed {
+                    GeometryReader { proxy in
+                        Image("SabqLogo")
+                            .renderingMode(.template)
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .foregroundStyle(SabqTheme.textTertiary.opacity(0.22))
+                            .frame(height: min(40, proxy.size.height * 0.32))
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
+                } else if !reduceMotion {
+                    GeometryReader { proxy in
+                        LinearGradient(
+                            colors: [.clear, SabqTheme.surfaceStrong.opacity(0.9), .clear],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                        .frame(width: proxy.size.width * 0.6)
+                        .offset(x: sweep ? proxy.size.width : -proxy.size.width * 0.6)
+                    }
+                    .clipped()
+                    .onAppear {
+                        withAnimation(.linear(duration: 1.4).repeatForever(autoreverses: false)) {
+                            sweep = true
+                        }
+                    }
+                }
+            }
+            .accessibilityHidden(true)
     }
 }
 
@@ -546,6 +599,7 @@ struct FocalCachedAsyncImage<Placeholder: View>: View {
     // الإدراج إعادةَ حساب إزاحة التركيز أثناء استقرار التخطيط عند التحميل
     // (كان ذلك يُحدث «انزلاق الصورة + فراغ جانبي» لحظيًا، أوضحه عرض Pro Max).
     @State private var shown = false
+    @State private var failed = false
 
     init(
         url: URL?,
@@ -575,6 +629,7 @@ struct FocalCachedAsyncImage<Placeholder: View>: View {
                     .opacity(shown ? 1 : 0)
                 } else {
                     placeholder()
+                        .environment(\.sabqImageLoadFailed, failed || url == nil)
                         .frame(width: proxy.size.width, height: proxy.size.height)
                 }
             }
@@ -650,6 +705,7 @@ struct FocalCachedAsyncImage<Placeholder: View>: View {
 
     @MainActor
     private func loadImage(for requestedURL: URL?) async {
+        failed = false
         guard let requestedURL else {
             image = nil
             shown = false
@@ -699,6 +755,7 @@ struct FocalCachedAsyncImage<Placeholder: View>: View {
         } else {
             image = nil
             shown = false
+            failed = true
         }
     }
 }
@@ -1394,12 +1451,8 @@ struct FeaturedArticleCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Hero must always span the card width. Using aspectRatio(.fit)
-            // as the *outer* size rule let TabView's fixed height compress
-            // the image horizontally on wide phones (Pro / Pro Max) while
-            // the text block below kept the card full-width — white side
-            // gutters. Width-driven height + fixedSize(vertical) refuses
-            // that squeeze; carousel height tracks the same math.
+            // Width-driven 16:9 frame; fixedSize stops a parent from squeezing
+            // the image narrower than the text column.
             Color.clear
                 .frame(maxWidth: .infinity)
                 .aspectRatio(16.0 / 9.0, contentMode: .fit)
@@ -1408,108 +1461,69 @@ struct FeaturedArticleCard: View {
                     Group {
                         if let urlString = article.imageURL, let url = URL(string: urlString) {
                             FocalCachedAsyncImage(url: url, focalPoint: article.imageFocalPoint, fitsMismatchedAspect: true) {
-                                articleImagePlaceholder
-                                    .overlay {
-                                        ProgressView()
-                                            .tint(SabqTheme.primaryEnd)
-                                    }
+                                SabqImagePlaceholder()
                             }
                         } else {
-                            articleImagePlaceholder
+                            SabqImagePlaceholder()
+                                .environment(\.sabqImageLoadFailed, true)
                         }
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
-                .clipped()
-                .clipShape(
-                    UnevenRoundedRectangle(
-                        topLeadingRadius: SabqTheme.blockRadius,
-                        bottomLeadingRadius: 0,
-                        bottomTrailingRadius: 0,
-                        topTrailingRadius: SabqTheme.blockRadius,
-                        style: .continuous
-                    )
-                )
+                .clipShape(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
                 .aiImageBadgeOverlay(
                     isVisible: article.isAiGeneratedImage,
                     model: article.aiImageModel,
                     inset: 10
                 )
+                .padding(.bottom, SabqLayout.space12)
 
-            // (Category badge + author chip removed from the carousel
-            // image overlay per user direction 2026-05-15 — carousel
-            // card leads with hero photo + title alone.)
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Text(article.categoryTitle)
+                    .font(SabqType.metaEmphasis.font)
+                    .foregroundStyle(SabqTheme.primary)
+                Text("·")
+                    .foregroundStyle(SabqTheme.textTertiary)
+                Text(heroWhen)
+                    .foregroundStyle(SabqTheme.textTertiary)
+                    .monospacedDigit()
+            }
+            .font(SabqType.meta.font)
+            .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+            .padding(.bottom, SabqLayout.space8)
 
-            VStack(alignment: .leading, spacing: 12) {
-                // التصنيف بلونه ووقت النشر فوق العنوان، بدل التاريخ الكامل في
-                // الأسفل البعيد عن قارئ يتصفح اليوم نفسه (نموذج 2026-10-09).
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text(article.categoryTitle)
-                        .font(SabqFonts.app(size: 12, weight: .semibold))
-                        .foregroundStyle(SabqTheme.primaryEnd)
-                    Text("·")
-                        .font(SabqFonts.app(size: 12, weight: .regular))
-                        .foregroundStyle(SabqTheme.tertiaryInk)
-                    Text(heroWhen)
-                        .font(SabqFonts.app(size: 12, weight: .regular))
-                        .foregroundStyle(SabqTheme.tertiaryInk)
-                        .monospacedDigit()
-                }
-                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+            SabqRTLText(
+                article.title,
+                uiFont: SabqType.leadTitle.uiFont,
+                color: SabqTheme.textPrimary,
+                lineLimit: dynamicTypeSize.isAccessibilitySize ? 0 : 3,
+                lineSpacing: SabqType.leadTitle.lineSpacing,
+                textStyle: SabqType.leadTitle.uiTextStyle
+            )
+            .padding(.bottom, SabqLayout.space8)
 
-                // `fixedSize(horizontal: false, vertical: true)` is what
-                // forces the Text to respect the parent's width instead
-                // of taking its intrinsic single-line width. Without it
-                // the long Arabic title bled past the card edge, clipping
-                // the start of every line (looked like "أبو" was missing
-                // from "أبوظبي").
-                SabqRTLText(
-                    article.title,
-                    uiFont: SabqFonts.uiApp(size: 19, weight: .semibold),
-                    color: SabqTheme.ink,
-                    lineLimit: dynamicTypeSize.isAccessibilitySize ? 0 : 3,
-                    lineSpacing: 4
-                )
-
+            if !article.excerpt.isEmpty {
                 SabqRTLText(
                     article.excerpt,
-                    uiFont: SabqFonts.uiApp(size: 14, weight: .regular),
-                    color: SabqTheme.secondaryInk,
+                    uiFont: SabqType.excerpt.uiFont,
+                    color: SabqTheme.textSecondary,
                     lineLimit: dynamicTypeSize.isAccessibilitySize ? 0 : 2,
-                    lineSpacing: 3
+                    lineSpacing: SabqType.excerpt.lineSpacing,
+                    textStyle: SabqType.excerpt.uiTextStyle
                 )
-
-                let metadataLayout = dynamicTypeSize.isAccessibilitySize
-                    ? AnyLayout(VStackLayout(alignment: .leading, spacing: 12))
-                    : AnyLayout(HStackLayout(spacing: 12))
-                metadataLayout {
-                    Text(article.readingTime)
-                        .font(SabqFonts.app(size: 12, weight: .regular))
-                        .monospacedDigit()
-                        .foregroundStyle(SabqTheme.tertiaryInk)
-
-                    Spacer(minLength: 0)
-
-                    Button {
-                        SabqHaptics.light()
-                        onBookmark()
-                    } label: {
-                        Image(systemName: isBookmarked ? "bookmark.fill" : "bookmark")
-                            .font(SabqFonts.app(size: 15, weight: .medium))
-                            .foregroundStyle(isBookmarked ? SabqTheme.primaryEnd : SabqTheme.tertiaryInk)
-                            .scaleEffect(isBookmarked ? 1.15 : 1)
-                            .animation(.spring(response: 0.3, dampingFraction: 0.5), value: isBookmarked)
-                    }
-                    .buttonStyle(.plain)
-                    .frame(minWidth: 44, minHeight: 44)
-                    .accessibilityLabel(isBookmarked ? "إزالة من المحفوظات" : "حفظ الخبر")
-                }
             }
-            .padding(SabqLayout.cardInset)
-            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .frame(maxWidth: .infinity)
-        .sabqBlockSurface()
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+        .contextMenu {
+            Button(action: onBookmark) {
+                Label(
+                    isBookmarked ? "إزالة من المحفوظات" : "حفظ المقال",
+                    systemImage: isBookmarked ? "bookmark.slash" : "bookmark"
+                )
+            }
+        }
+        .accessibilityAction(named: isBookmarked ? "إزالة من المحفوظات" : "حفظ الخبر", onBookmark)
     }
 
     /// «قبل 40 دقيقة» لخبر اليوم، و«أمس 4:35 م» لخبر الأمس، والتاريخ لما قبله.
@@ -1521,29 +1535,6 @@ struct FeaturedArticleCard: View {
         if cal.isDateInYesterday(date) { return "أمس \(clock)" }
         return article.dateFormatted
     }
-
-    private var articleImagePlaceholder: some View {
-        UnevenRoundedRectangle(
-            topLeadingRadius: SabqTheme.blockRadius,
-            bottomLeadingRadius: 0,
-            bottomTrailingRadius: 0,
-            topTrailingRadius: SabqTheme.blockRadius,
-            style: .continuous
-        )
-        .fill(
-            LinearGradient(
-                colors: [article.category.tint.opacity(0.15), article.category.tint.opacity(0.05)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        )
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .overlay {
-            Image(systemName: article.category.icon)
-                .font(SabqFonts.app(size: 80, weight: .ultraLight))
-                .foregroundStyle(article.category.tint.opacity(0.15))
-        }
-    }
 }
 
 // MARK: - Compact Article Row
@@ -1552,21 +1543,18 @@ struct FeaturedArticleCard: View {
 /// these values here lets custom row consumers adopt the same visual rhythm
 /// without changing the global surface-card treatment.
 enum NewsRowStyle {
-    /// 16:9 مقاس صور الأخبار الغالب — 118×66 يحافظ على 16:9 كاملة دون قص الشعارات
-    /// ويتطابق بارتفاعه (66pt) مع عنوان من سطرين + سطر البيانات أسفله.
-    static let thumbnailWidth: CGFloat = 118
-    static let thumbnailHeight: CGFloat = 66
-    static let thumbnailRadius: CGFloat = 10
-    static let thumbnailStrokeWidth: CGFloat = 0.5
-    static let thumbnailGap: CGFloat = 14
-    static let textStackSpacing: CGFloat = 6
-    static let titleSize: CGFloat = 15
-    /// عنوان الصف المضغوط في القوائم: مقاس مريح للعين مع هامش أسطر متوازن.
-    static let compactTitleSize: CGFloat = 15.5
+    /// مصغّرة 16:9 بعرض 112 على طرف السطر، وزوايا 8.
+    static let thumbnailWidth: CGFloat = 112
+    static let thumbnailHeight: CGFloat = 63
+    static let thumbnailRadius: CGFloat = SabqRadius.small
+    static let thumbnailGap: CGFloat = SabqLayout.space12
+    static let textStackSpacing: CGFloat = SabqLayout.space8
+    static let titleSize: CGFloat = SabqType.rowTitle.size
+    static let compactTitleSize: CGFloat = SabqType.rowTitle.size
     static let compactTitleLines = 3
-    static let titleLineSpacing: CGFloat = 3.5
-    static let metadataSize: CGFloat = 12
-    static let metadataLineSpacing: CGFloat = 3
+    static let titleLineSpacing: CGFloat = SabqType.rowTitle.lineSpacing
+    static let metadataSize: CGFloat = SabqType.meta.size
+    static let metadataLineSpacing: CGFloat = 2
 }
 
 struct CompactArticleRow: View {
@@ -1601,23 +1589,24 @@ struct CompactArticleRow: View {
     // MARK: - Classic (thumbnail on the side)
 
     private var classicLayout: some View {
-        HStack(alignment: .center, spacing: NewsRowStyle.thumbnailGap) {
-            compactThumbnail
-
+        HStack(alignment: .top, spacing: NewsRowStyle.thumbnailGap) {
             VStack(alignment: .leading, spacing: NewsRowStyle.textStackSpacing) {
                 SabqRTLText(
                     article.title,
-                    uiFont: SabqFonts.uiSubhead(size: NewsRowStyle.compactTitleSize),
-                    color: SabqTheme.ink,
+                    uiFont: SabqType.rowTitle.uiFont,
+                    color: SabqTheme.textPrimary,
                     lineLimit: dynamicTypeSize.isAccessibilitySize ? 0 : NewsRowStyle.compactTitleLines,
-                    lineSpacing: NewsRowStyle.titleLineSpacing
+                    lineSpacing: NewsRowStyle.titleLineSpacing,
+                    textStyle: SabqType.rowTitle.uiTextStyle
                 )
 
                 metadataRow
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+
+            compactThumbnail
         }
-        .padding(.vertical, 14)
+        .padding(.vertical, SabqLayout.rowPadding)
         .contentShape(Rectangle())
     }
 
@@ -1629,36 +1618,33 @@ struct CompactArticleRow: View {
 
             SabqRTLText(
                 article.title,
-                uiFont: SabqFonts.uiApp(size: 17, weight: .regular),
-                color: SabqTheme.ink,
+                uiFont: SabqType.rowTitle.uiFont,
+                color: SabqTheme.textPrimary,
                 lineLimit: dynamicTypeSize.isAccessibilitySize ? 0 : 3,
-                lineSpacing: NewsRowStyle.titleLineSpacing
+                lineSpacing: NewsRowStyle.titleLineSpacing,
+                textStyle: SabqType.rowTitle.uiTextStyle
             )
 
             metadataRow
         }
-        .padding(.vertical, 10)
+        .padding(.vertical, SabqLayout.rowPadding)
         .contentShape(Rectangle())
     }
 
-    /// The compact row follows the sidebar row's fixed 118×66 (16:9) thumbnail while
-    /// retaining focal-point cropping and the AI provenance badge.
+    /// مصغّرة 112×63 مع نقطة التركيز وشارة الصورة المولّدة.
     private var compactThumbnail: some View {
         Group {
             if let urlString = article.imageURL, let url = URL(string: urlString) {
                 FocalCachedAsyncImage(url: url, focalPoint: article.imageFocalPoint, maxPixelSize: 360, fitsMismatchedAspect: true) {
-                    thumbnailPlaceholder(size: NewsRowStyle.thumbnailWidth)
+                    SabqImagePlaceholder()
                 }
             } else {
-                thumbnailPlaceholder(size: NewsRowStyle.thumbnailWidth)
+                SabqImagePlaceholder()
+                    .environment(\.sabqImageLoadFailed, true)
             }
         }
         .frame(width: NewsRowStyle.thumbnailWidth, height: NewsRowStyle.thumbnailHeight)
         .clipShape(RoundedRectangle(cornerRadius: NewsRowStyle.thumbnailRadius, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: NewsRowStyle.thumbnailRadius, style: .continuous)
-                .stroke(SabqTheme.outline.opacity(0.55), lineWidth: NewsRowStyle.thumbnailStrokeWidth)
-        )
         .aiImageBadgeOverlay(
             isVisible: article.isAiGeneratedImage,
             model: article.aiImageModel,
@@ -1676,32 +1662,20 @@ struct CompactArticleRow: View {
                 Group {
                     if let urlString = article.imageURL, let url = URL(string: urlString) {
                         FocalCachedAsyncImage(url: url, focalPoint: article.imageFocalPoint) {
-                            heroPlaceholder
+                            SabqImagePlaceholder()
                         }
                     } else {
-                        heroPlaceholder
+                        SabqImagePlaceholder()
+                            .environment(\.sabqImageLoadFailed, true)
                     }
                 }
             )
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
             .aiImageBadgeOverlay(
                 isVisible: article.isAiGeneratedImage,
                 model: article.aiImageModel,
                 inset: 10
             )
-    }
-
-    private var heroPlaceholder: some View {
-        LinearGradient(
-            colors: [article.category.tint.opacity(0.14), article.category.tint.opacity(0.04)],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
-        .overlay {
-            Image(systemName: article.category.icon)
-                .font(SabqFonts.app(size: 40, weight: .light))
-                .foregroundStyle(article.category.tint.opacity(0.5))
-        }
     }
 
     // MARK: - Shared sub-views
@@ -1737,9 +1711,9 @@ struct CompactArticleRow: View {
                 relativeDateLabel
             }
         }
-        .font(SabqFonts.app(size: NewsRowStyle.metadataSize, weight: .regular))
+        .font(SabqType.meta.font)
         .lineSpacing(NewsRowStyle.metadataLineSpacing)
-        .foregroundStyle(SabqTheme.secondaryInk)
+        .foregroundStyle(SabqTheme.textTertiary)
         .fixedSize(horizontal: false, vertical: true)
     }
 
@@ -1750,15 +1724,15 @@ struct CompactArticleRow: View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
             if isNew {
                 Text("جديد")
-                    .font(SabqFonts.app(size: NewsRowStyle.metadataSize, weight: .semibold))
-                    .foregroundStyle(SabqTheme.leaf)
+                    .font(SabqType.metaEmphasis.font)
+                    .foregroundStyle(SabqTheme.success)
                     .fixedSize(horizontal: true, vertical: false)
                 metadataSeparator
             }
             if showsCategory {
                 Text(article.categoryTitle)
-                    .font(SabqFonts.app(size: NewsRowStyle.metadataSize, weight: .semibold))
-                    .foregroundStyle(SabqTheme.brandBlue)
+                    .font(SabqType.metaEmphasis.font)
+                    .foregroundStyle(SabqTheme.primary)
                     .lineLimit(1)
                     .fixedSize(horizontal: true, vertical: false)
                 metadataSeparator
@@ -1768,31 +1742,14 @@ struct CompactArticleRow: View {
 
     private var metadataSeparator: some View {
         Text("·")
-            .font(SabqFonts.app(size: NewsRowStyle.metadataSize, weight: .regular))
-            .foregroundStyle(SabqTheme.tertiaryInk)
+            .font(SabqType.meta.font)
+            .foregroundStyle(SabqTheme.textTertiary)
     }
 
     private var relativeDateLabel: some View {
         Text(article.relativeDate)
             .fixedSize(horizontal: false, vertical: true)
             .foregroundStyle(SabqTheme.tertiaryInk)
-    }
-
-    private func thumbnailPlaceholder(size: CGFloat) -> some View {
-        RoundedRectangle(cornerRadius: NewsRowStyle.thumbnailRadius, style: .continuous)
-            .fill(
-                LinearGradient(
-                    colors: [article.category.tint.opacity(0.12), article.category.tint.opacity(0.04)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            )
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .overlay {
-                Image(systemName: article.category.icon)
-                    .font(SabqFonts.app(size: 22, weight: .light))
-                    .foregroundStyle(article.category.tint.opacity(0.55))
-            }
     }
 }
 
@@ -2135,12 +2092,20 @@ struct SabqAdaptivePickerStyle: ViewModifier {
 // MARK: - سطح بطاقات الرئيسية
 
 extension View {
-    /// سطح بطاقات الرئيسية: بلا ظل، زوايا 12، وحد رمادي فاتح بنقطة واحدة
-    /// (طلب المالك 2026-10-09).
-    func sabqBlockSurface(_ fill: Color = SabqTheme.surface) -> some View {
+    /// البلوكات الخاصة على الصفحة البيضاء: تعبئة هادئة بزوايا 12، بلا حد ولا ظل.
+    func sabqBlockSurface(_ fill: Color = SabqTheme.surfaceMuted) -> some View {
         let shape = RoundedRectangle(cornerRadius: SabqTheme.blockRadius, style: .continuous)
         return background(shape.fill(fill))
             .clipShape(shape)
-            .overlay(shape.strokeBorder(SabqTheme.outline, lineWidth: 1))
+    }
+}
+
+/// شريط رمادي بعرض الشاشة يفصل أقسام الصفحة البيضاء؛ يلغي هامش الصفحة الأفقي.
+struct SabqSectionBand: View {
+    var body: some View {
+        SabqTheme.surfaceMuted
+            .frame(height: SabqLayout.space8)
+            .padding(.horizontal, -SabqLayout.pageMargin)
+            .accessibilityHidden(true)
     }
 }

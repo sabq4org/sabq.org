@@ -23,7 +23,7 @@ struct SettingsView: View {
     @Environment(ArticleRevisionsStore.self) private var revisionsStore
     @Environment(FollowedKeywordsStore.self) private var followedKeywords
     @AppStorage("appAppearance") private var appearanceRaw: String = AppAppearance.system.rawValue
-    @AppStorage("articleFontSize") private var textSize: Double = 17
+    @AppStorage("articleFontSize") private var textSize: Double = Double(SabqType.articleBody.size)
     @AppStorage("homeCardStyle") private var cardStyleRaw: String = "classic"
     @AppStorage("sabq.analytics.consent") private var analyticsConsent = false
     @State private var showLogin = false

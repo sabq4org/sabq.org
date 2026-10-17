@@ -154,8 +154,12 @@ nonisolated struct SabqTextRole: Sendable {
     }
 
     /// Base size for `SabqRTLText`, which scales it with `uiTextStyle`.
-    var uiFont: UIFont {
-        UIFont(name: postScriptName(boldText: false), size: size) ?? .systemFont(ofSize: size, weight: uiWeight)
+    var uiFont: UIFont { uiFont(adding: 0) }
+
+    /// يتبع إعداد «حجم الخط» في صفحة الخبر: يزيد أو ينقص بقدر ما غيّره القارئ.
+    func uiFont(adding delta: CGFloat) -> UIFont {
+        let pointSize = max(12, size + delta)
+        return UIFont(name: postScriptName(boldText: false), size: pointSize) ?? .systemFont(ofSize: pointSize, weight: uiWeight)
     }
 
     var uiTextStyle: UIFont.TextStyle {
@@ -201,6 +205,8 @@ nonisolated enum SabqType {
     static let articleBody = SabqTextRole(size: 18, weight: .regular, style: .body, lineSpacing: 5)
     static let excerpt = SabqTextRole(size: 15, weight: .regular, style: .subheadline, lineSpacing: 1)
     static let meta = SabqTextRole(size: 13, weight: .regular, style: .footnote, lineSpacing: 0)
+    /// اسم القسم داخل سطر البيانات.
+    static let metaEmphasis = SabqTextRole(size: 13, weight: .semibold, style: .footnote, lineSpacing: 0)
     static let tag = SabqTextRole(size: 12, weight: .semibold, style: .caption, lineSpacing: 0)
     static let button = SabqTextRole(size: 16, weight: .semibold, style: .callout, lineSpacing: 0)
 

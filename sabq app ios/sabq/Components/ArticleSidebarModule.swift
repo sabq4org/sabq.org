@@ -93,8 +93,8 @@ struct ArticleSidebarModule<Content: View, Action: View>: View {
 struct SidebarRowDivider: View {
     var body: some View {
         Rectangle()
-            .fill(SabqTheme.outline.opacity(0.55))
-            .frame(height: 0.5)
+            .fill(SabqTheme.separator)
+            .frame(height: 1)
     }
 }
 
@@ -183,10 +183,6 @@ struct SidebarArticleRow: View {
         }
         .frame(width: NewsRowStyle.thumbnailWidth, height: NewsRowStyle.thumbnailHeight)
         .clipShape(RoundedRectangle(cornerRadius: NewsRowStyle.thumbnailRadius, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: NewsRowStyle.thumbnailRadius, style: .continuous)
-                .stroke(SabqTheme.outline.opacity(0.55), lineWidth: NewsRowStyle.thumbnailStrokeWidth)
-        )
     }
 
     private var placeholder: some View {
