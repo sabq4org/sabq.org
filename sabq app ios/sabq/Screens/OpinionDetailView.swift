@@ -39,8 +39,8 @@ struct OpinionDetailView: View {
     private var audioKey: String { "opinion:\(displayOpinion.slug ?? displayOpinion.id)" }
     private var isPlayingAudio: Bool { SabqAudioPlayer.shared.isPlaying(key: audioKey) }
 
-    @AppStorage("articleFontSize") private var fontSize: Double = 17
-    @AppStorage("articleLineSpacing") private var lineSpacing: Double = 6
+    @AppStorage("articleFontSize") private var fontSize: Double = Double(SabqType.articleBody.size)
+    @AppStorage("articleLineSpacing") private var lineSpacing: Double = Double(SabqType.articleBody.lineSpacing)
     @AppStorage("articleUseReaderFont") private var useReaderFont: Bool = false
 
     private var displayOpinion: OpinionArticle { fullOpinion ?? opinion }

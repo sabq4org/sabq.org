@@ -11,7 +11,6 @@ import UIKit
 @Suite(.serialized)
 struct EditorialDesignSystemTests {
     private let defaults = UserDefaults.standard
-    private let accentKey = "appAccent"
 
     @Test func increasedContrastStrengthensSecondaryTextInBothModes() {
         for style in [UIUserInterfaceStyle.light, .dark] {
@@ -28,60 +27,76 @@ struct EditorialDesignSystemTests {
         }
     }
 
-    @Test func everyAccentKeepsPrimaryAndSemanticTextReadableInBothModes() throws {
-        try withTheme(accent: .blue, seasonal: false) {
-            for accent in AppAccent.allCases {
-                defaults.set(accent.rawValue, forKey: accentKey)
-
-                for style in [UIUserInterfaceStyle.light, .dark] {
-                    #expect(
-                        contrast(SabqTheme.primaryEnd, against: SabqTheme.surface, style: style) >= 4.5,
-                        "primaryEnd \(accent.rawValue) must be readable on surface in \(styleName(style))"
-                    )
-                    #expect(
-                        contrast(SabqTheme.primaryEnd, against: SabqTheme.background, style: style) >= 4.5,
-                        "primaryEnd \(accent.rawValue) must be readable on background in \(styleName(style))"
-                    )
-                    #expect(
-                        contrast(SabqTheme.ink, against: SabqTheme.surface, style: style) >= 4.5,
-                        "ink must be readable on surface in \(styleName(style))"
-                    )
-                    #expect(
-                        contrast(SabqTheme.ink, against: SabqTheme.background, style: style) >= 4.5,
-                        "ink must be readable on background in \(styleName(style))"
-                    )
-                    #expect(
-                        contrast(SabqTheme.secondaryInk, against: SabqTheme.surface, style: style) >= 4.5,
-                        "secondaryInk must be readable on surface in \(styleName(style))"
-                    )
-                    #expect(
-                        contrast(SabqTheme.secondaryInk, against: SabqTheme.background, style: style) >= 4.5,
-                        "secondaryInk must be readable on background in \(styleName(style))"
-                    )
-                    #expect(
-                        contrast(SabqTheme.tertiaryInk, against: SabqTheme.surface, style: style) >= 4.5,
-                        "tertiaryInk must be readable on surface in \(styleName(style))"
-                    )
-                    #expect(
-                        contrast(SabqTheme.tertiaryInk, against: SabqTheme.background, style: style) >= 4.5,
-                        "tertiaryInk must be readable on background in \(styleName(style))"
-                    )
+    @Test func primaryAndTextRolesAreReadableOnEverySurfaceInBothModes() {
+        withSeason(false) {
+            let foregrounds: [(String, Color)] = [
+                ("primary", SabqTheme.primary), ("textPrimary", SabqTheme.textPrimary),
+                ("textSecondary", SabqTheme.textSecondary), ("textTertiary", SabqTheme.textTertiary),
+                ("breaking", SabqTheme.breaking),
+            ]
+            let surfaces: [(String, Color)] = [
+                ("background", SabqTheme.background), ("surface", SabqTheme.surface),
+                ("surfaceMuted", SabqTheme.surfaceMuted),
+            ]
+            for style in [UIUserInterfaceStyle.light, .dark] {
+                for (name, color) in foregrounds {
+                    for (surfaceName, surface) in surfaces {
+                        #expect(
+                            contrast(color, against: surface, style: style) >= 4.5,
+                            "\(name) must be readable on \(surfaceName) in \(styleName(style))"
+                        )
+                    }
                 }
             }
         }
     }
 
-    @Test func everyAccentActionFillSupportsWhiteActionLabelsInBothModes() throws {
-        try withTheme(accent: .blue, seasonal: false) {
-            for accent in AppAccent.allCases {
-                defaults.set(accent.rawValue, forKey: accentKey)
-                for style in [UIUserInterfaceStyle.light, .dark] {
-                    #expect(
-                        contrast(SabqTheme.onAction, against: SabqTheme.actionFill, style: style) >= 4.5,
-                        "onAction must be readable on actionFill for \(accent.rawValue) in \(styleName(style))"
-                    )
+    @Test func actionFillSupportsWhiteActionLabelsInBothModes() {
+        withSeason(false) {
+            for style in [UIUserInterfaceStyle.light, .dark] {
+                #expect(
+                    contrast(SabqTheme.onAction, against: SabqTheme.actionFill, style: style) >= 4.5,
+                    "onAction must be readable on actionFill in \(styleName(style))"
+                )
+            }
+        }
+    }
+
+    @Test func legacyColourNamesResolveToTheSemanticRoles() {
+        withSeason(false) {
+            let pairs: [(Color, Color)] = [
+                (SabqTheme.ink, SabqTheme.textPrimary), (SabqTheme.secondaryInk, SabqTheme.textSecondary),
+                (SabqTheme.tertiaryInk, SabqTheme.textTertiary), (SabqTheme.primaryEnd, SabqTheme.primary),
+                (SabqTheme.brandBlue, SabqTheme.primary), (SabqTheme.paleFill, SabqTheme.surfaceMuted),
+                (SabqTheme.publicSurface, SabqTheme.surfaceMuted),
+            ]
+            for style in [UIUserInterfaceStyle.light, .dark] {
+                for (legacy, role) in pairs {
+                    #expect(colorDistance(resolved(legacy, style: style), resolved(role, style: style)) < 0.001)
                 }
             }
+        }
+    }
+
+    @Test func typeScaleKeepsTheTwelvePointFloorAndBoldOnlyForLargeTitles() {
+        let roles = [SabqType.articleTitle, SabqType.leadTitle, SabqType.sectionHeading, SabqType.rowTitle,
+                     SabqType.articleBody, SabqType.excerpt, SabqType.meta, SabqType.metaEmphasis, SabqType.tag, SabqType.button]
+        for role in roles {
+            #expect(role.size >= 12)
+            #expect(role.size.truncatingRemainder(dividingBy: 1) == 0)
+            if role.weight == .bold { #expect(role.size >= 20) }
+        }
+        #expect(SabqType.articleTitle.size > SabqType.leadTitle.size)
+        #expect(SabqType.leadTitle.size > SabqType.sectionHeading.size)
+        #expect(SabqType.sectionHeading.size > SabqType.rowTitle.size)
+    }
+
+    @Test func radiiAndSpacingStayOnTheSystemGrid() {
+        let radii = [SabqTheme.cardRadius, SabqTheme.blockRadius, SabqTheme.tileRadius,
+                     SabqTheme.buttonRadius, SabqTheme.chipRadius]
+        #expect(Set(radii).isSubset(of: [SabqRadius.small, SabqRadius.medium]))
+        for value in [SabqLayout.pageMargin, SabqLayout.sectionGap, SabqLayout.rowPadding, SabqLayout.cardInset] {
+            #expect(value.truncatingRemainder(dividingBy: 4) == 0)
         }
     }
 
@@ -94,8 +109,8 @@ struct EditorialDesignSystemTests {
         }
     }
 
-    @Test func seasonalOverrideIsReadableAndRestoresTheSelectedAccent() throws {
-        try withTheme(accent: .purple, seasonal: false) {
+    @Test func seasonalOverrideIsReadableAndRestoresTheBrandPrimary() {
+        withSeason(false) {
             let beforeLight = resolved(SabqTheme.primaryEnd, style: .light)
             let beforeDark = resolved(SabqTheme.primaryEnd, style: .dark)
 
@@ -138,15 +153,10 @@ struct EditorialDesignSystemTests {
         _ = SabqType.caption
     }
 
-    private func withTheme<T>(accent: AppAccent, seasonal: Bool, _ body: () throws -> T) rethrows -> T {
-        let previousAccent = defaults.object(forKey: accentKey)
+    private func withSeason<T>(_ seasonal: Bool, _ body: () throws -> T) rethrows -> T {
         let previousSeason = defaults.object(forKey: NationalDayTheme.activeDefaultsKey)
-        defaults.set(accent.rawValue, forKey: accentKey)
         defaults.set(seasonal, forKey: NationalDayTheme.activeDefaultsKey)
-        defer {
-            restore(previousAccent, forKey: accentKey)
-            restore(previousSeason, forKey: NationalDayTheme.activeDefaultsKey)
-        }
+        defer { restore(previousSeason, forKey: NationalDayTheme.activeDefaultsKey) }
         return try body()
     }
 

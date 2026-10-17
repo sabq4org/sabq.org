@@ -19,8 +19,8 @@ struct HomeSectionHeader<Link: View>: View {
             : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: SabqLayout.space12))
         return layout {
             Text(title)
-                .font(SabqType.sectionTitle)
-                .foregroundStyle(SabqTheme.ink)
+                .font(SabqType.sectionHeading.font)
+                .foregroundStyle(SabqTheme.textPrimary)
                 .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
                 .accessibilityAddTraits(.isHeader)
 
@@ -32,8 +32,8 @@ struct HomeSectionHeader<Link: View>: View {
                             .frame(width: 7, height: 7)
                     }
                     Text(context)
-                        .font(SabqFonts.app(size: 12, weight: .medium))
-                        .foregroundStyle(SabqTheme.tertiaryInk)
+                        .font(SabqType.meta.font)
+                        .foregroundStyle(SabqTheme.textTertiary)
                         .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
                 }
             }
@@ -58,22 +58,21 @@ struct HomeSectionLinkLabel: View {
     var body: some View {
         HStack(spacing: 2) {
             Text(title)
-                .font(SabqFonts.app(size: 14, weight: .semibold))
+                .font(SabqType.tag.font)
             Image(systemName: "chevron.left")
-                .font(SabqFonts.app(size: 11, weight: .semibold))
+                .font(SabqType.tag.font)
         }
-        .foregroundStyle(SabqTheme.primaryEnd)
+        .foregroundStyle(SabqTheme.primary)
         .fixedSize(horizontal: false, vertical: true)
         .frame(minHeight: SabqLayout.touchTarget)
     }
 }
 
-/// حاوية الأقسام المنتقاة (مُقترب، الأكثر تداولًا، الرأي): الرأس الموحّد ثم
-/// الصفوف بفواصل شعرية داخل بطاقة واحدة.
+/// حاوية الأقسام المنتقاة (مُقترب، الأكثر تداولًا، الرأي، آخر الأخبار): الرأس
+/// الموحّد ثم الصفوف بفواصل رفيعة مباشرة على الصفحة، بلا صندوق.
 struct HomeSectionCard<Link: View, Content: View>: View {
     let title: String
     var context: String? = nil
-    var fill: Color = SabqTheme.surface
     var lazy: Bool = false
     @ViewBuilder var link: () -> Link
     @ViewBuilder var content: () -> Content
@@ -81,7 +80,7 @@ struct HomeSectionCard<Link: View, Content: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HomeSectionHeader(title: title, context: context, link: link)
-                .padding(.bottom, 8)
+                .padding(.bottom, SabqLayout.space4)
             if lazy {
                 LazyVStack(alignment: .leading, spacing: 0) {
                     content()
@@ -92,11 +91,7 @@ struct HomeSectionCard<Link: View, Content: View>: View {
                 }
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.top, 16)
-        .padding(.bottom, 6)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .sabqBlockSurface(fill)
         .accessibilityElement(children: .contain)
     }
 }
@@ -328,7 +323,7 @@ struct OpinionWriterRow: View {
 struct OpinionRowDivider: View {
     var body: some View {
         Rectangle()
-            .fill(SabqTheme.primaryEnd.opacity(0.18))
-            .frame(height: 0.5)
+            .fill(SabqTheme.separator)
+            .frame(height: 1)
     }
 }

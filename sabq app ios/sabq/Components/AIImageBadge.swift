@@ -6,8 +6,6 @@ struct AIImageBadge: View {
     let model: String?
     private let sizeScale: CGFloat
 
-    /// Drives re-render when the user picks a new accent in Settings.
-    @AppStorage("appAccent") private var accentRaw: String = AppAccent.blue.rawValue
     @Environment(\.colorScheme) private var colorScheme
 
     init(model: String? = nil, sizeScale: CGFloat = 1) {
@@ -40,11 +38,9 @@ struct AIImageBadge: View {
         .accessibilityLabel("مولدة بالذكاء الاصطناعي")
     }
 
-    /// Same token as the web `bg-primary/90` — follows accent picker + dark mode.
+    /// White label on the action fill keeps 4.5:1 in both modes.
     private var badgeFill: Color {
-        let accent = AppAccent(rawValue: accentRaw) ?? .blue
-        let base = colorScheme == .dark ? accent.darkColor : accent.color
-        return base.opacity(0.95)
+        SabqTheme.actionFill.opacity(0.95)
     }
 }
 

@@ -393,52 +393,6 @@ enum ArticleCategory: String, CaseIterable, Identifiable {
     }
 }
 
-// MARK: - App Accent
-
-enum AppAccent: String, CaseIterable, Identifiable {
-    case blue
-    case teal
-    case purple
-    case rose
-    case orange
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .blue:   "أزرق"
-        case .teal:   "فيروزي"
-        case .purple: "بنفسجي"
-        case .rose:   "وردي"
-        case .orange: "برتقالي"
-        }
-    }
-
-    var color: Color {
-        switch self {
-        case .blue:   Color(red: 0.043, green: 0.416, blue: 0.647)
-        case .teal:   Color(red: 0.027, green: 0.427, blue: 0.357)
-        case .purple: Color(red: 0.420, green: 0.251, blue: 0.690)
-        case .rose:   Color(red: 0.690, green: 0.204, blue: 0.341)
-        case .orange: Color(red: 0.627, green: 0.318, blue: 0.051)
-        }
-    }
-
-    var darkColor: Color {
-        switch self {
-        case .blue:   Color(red: 0.45, green: 0.80, blue: 0.96)
-        case .teal:   Color(red: 0.25, green: 0.78, blue: 0.65)
-        case .purple: Color(red: 0.68, green: 0.50, blue: 0.95)
-        case .rose:   Color(red: 0.95, green: 0.48, blue: 0.58)
-        case .orange: Color(red: 1.0, green: 0.65, blue: 0.30)
-        }
-    }
-
-    static var current: AppAccent {
-        AppAccent(rawValue: UserDefaults.standard.string(forKey: "appAccent") ?? "blue") ?? .blue
-    }
-}
-
 // MARK: - Image Focal Point
 
 /// Editorial focal point for an image, expressed as percentages from the
