@@ -74,6 +74,8 @@ struct ArticleContentView: View {
             whatsappCtaCard(phrase: phrase, url: url)
         case .table(let header, let rows, let cardStyle):
             tableView(header: header, rows: rows, cardStyle: cardStyle)
+        case .qa(let question, let answer):
+            qaBlock(question: question, answer: answer)
         case .divider:
             SidebarRowDivider()
         }
@@ -167,6 +169,37 @@ struct ArticleContentView: View {
             .lineSpacing(CGFloat(lineSpacing))
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.top, SabqLayout.space8)
+    }
+
+    /// «س/ج» كما في الويب على الجوال: دائرة «س» بلون الهوية، السؤال عريضًا بلون
+    /// الهوية، ثم فقرات الجواب بلا إزاحة.
+    private func qaBlock(question: [InlineRun], answer: [[InlineRun]]) -> some View {
+        VStack(alignment: .leading, spacing: SabqLayout.space12) {
+            if !question.isEmpty {
+                HStack(alignment: .top, spacing: SabqLayout.space12) {
+                    Text("س")
+                        .font(SabqFonts.app(size: 14, weight: .bold))
+                        .foregroundStyle(SabqTheme.onAction)
+                        .frame(width: 32, height: 32)
+                        .background(Circle().fill(SabqTheme.actionFill))
+                        .padding(.top, 4)
+                        .accessibilityLabel("سؤال")
+                    JustifiedAttributedText(
+                        runs: question,
+                        baseSize: CGFloat(fontSize) * 1.05,
+                        baseWeight: .bold,
+                        useSerifReader: false,
+                        textColor: UIColor(SabqTheme.primary),
+                        lineSpacing: CGFloat(lineSpacing) + 3
+                    )
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+            ForEach(Array(answer.enumerated()), id: \.offset) { _, runs in
+                paragraph(runs)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func paragraph(_ runs: [InlineRun]) -> some View {

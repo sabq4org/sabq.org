@@ -440,6 +440,20 @@ actor APIClient {
         ).items
     }
 
+    /// معرّفات التعليقات التي أعجب بها القارئ في هذا المقال (خبرًا كان أو رأيًا).
+    /// `GET /api/v1/articles/:slug/comments/my-likes` — يتطلب جلسة.
+    func fetchMyCommentLikes(slug: String) async throws -> [String] {
+        try await get([String].self, path: "/articles/\(slug)/comments/my-likes", ignoreCache: true)
+    }
+
+    /// `POST|DELETE /api/v1/comments/:id/like` — يعيد العدد الجديد بعد إعادة العدّ في الخادم.
+    func setCommentLike(id: String, liked: Bool) async throws -> APICommentLikeResult {
+        if liked {
+            return try await post(APICommentLikeResult.self, path: "/comments/\(id)/like")
+        }
+        return try await deleteRequest(APICommentLikeResult.self, path: "/comments/\(id)/like")
+    }
+
     // ملاحظة: /articles/:slug/summary-audio يعيد بايتات MP3 خامًا لا JSON —
     // fetchAudioSummary القديمة كانت تفشل فكًّا دائمًا وتشغّل توليدًا صوتيًا
     // عبثًا مع كل فتح مقال، فحُذفت. التشغيل يتم بتمرير الرابط لـ AVPlayer مباشرة.

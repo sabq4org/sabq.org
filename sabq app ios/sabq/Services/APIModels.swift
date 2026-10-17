@@ -77,6 +77,21 @@ nonisolated struct APIWeeklyPhoto: Decodable, Identifiable, Hashable {
     }
 }
 
+/// سطر تحديث أو تصحيح منشور أسفل نص الخبر (`updateLines` في `/api/articles/:slug`،
+/// خلف مفتاح publish_first في الخادم). الويب يعرضها قائمة صغيرة تحت المتن.
+nonisolated struct APIUpdateLine: Decodable, Hashable, Sendable {
+    let id: String
+    let text: String
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: FlexKey.self)
+        id = (try? c.decode(String.self, forKey: FlexKey("id")))
+            ?? (try? c.decode(Int.self, forKey: FlexKey("id"))).map(String.init)
+            ?? UUID().uuidString
+        text = (try? c.decode(String.self, forKey: FlexKey("text"))) ?? ""
+    }
+}
+
 nonisolated struct APIWhatsAppCta: Decodable, Hashable, Sendable {
     let enabled: Bool?
     let phone: String?
@@ -169,6 +184,7 @@ nonisolated struct APIArticle: Decodable {
     let mediaAssets: [APIMediaAsset]?
     /// زر واتساب تحريري (نهاية المقال). الإدراج داخل النص يأتي عبر HTML.
     let whatsappCta: APIWhatsAppCta?
+    let updateLines: [APIUpdateLine]?
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: FlexKey.self)
@@ -337,6 +353,8 @@ nonisolated struct APIArticle: Decodable {
         }
 
         mediaAssets = try? c.decode([APIMediaAsset].self, forKey: FlexKey("mediaAssets"))
+        updateLines = (try? c.decode([APIUpdateLine].self, forKey: FlexKey("updateLines")))?
+            .filter { !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
         whatsappCta = (try? c.decode(APIWhatsAppCta.self, forKey: FlexKey("whatsappCta")))
             ?? (try? c.decode(APIWhatsAppCta.self, forKey: FlexKey("whatsapp_cta")))
     }
@@ -620,6 +638,11 @@ nonisolated struct APIStory: Decodable, Identifiable {
 }
 
 // MARK: - Comment
+
+nonisolated struct APICommentLikeResult: Decodable {
+    let likesCount: Int
+    let liked: Bool
+}
 
 nonisolated struct APIComment: Decodable, Identifiable, Hashable {
     let id: String

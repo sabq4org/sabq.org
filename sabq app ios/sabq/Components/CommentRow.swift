@@ -17,11 +17,22 @@ struct CommentRow: View {
     let comment: APIComment
     let depth: Int
     var onReply: ((APIComment) -> Void)? = nil
+    /// حالة الإعجاب لكل تعليق (معجب؟، العدد) — من `CommentsStore` كي تشمل الردود.
+    var likeState: ((APIComment) -> (liked: Bool, count: Int))? = nil
+    var onLike: ((APIComment) -> Void)? = nil
 
-    init(comment: APIComment, depth: Int = 0, onReply: ((APIComment) -> Void)? = nil) {
+    init(
+        comment: APIComment,
+        depth: Int = 0,
+        onReply: ((APIComment) -> Void)? = nil,
+        likeState: ((APIComment) -> (liked: Bool, count: Int))? = nil,
+        onLike: ((APIComment) -> Void)? = nil
+    ) {
         self.comment = comment
         self.depth = depth
         self.onReply = onReply
+        self.likeState = likeState
+        self.onLike = onLike
     }
 
     var body: some View {
@@ -50,7 +61,7 @@ struct CommentRow: View {
     private var repliesStack: some View {
         VStack(alignment: .leading, spacing: 14) {
             ForEach(comment.replies) { reply in
-                CommentRow(comment: reply, depth: depth + 1)
+                CommentRow(comment: reply, depth: depth + 1, likeState: likeState, onLike: onLike)
                     .background(
                         GeometryReader { geo in
                             Color.clear.preference(
@@ -145,6 +156,10 @@ struct CommentRow: View {
                 .buttonStyle(.plain)
             }
 
+            if let likeState, let onLike, comment.status?.lowercased() != "pending" {
+                likeButton(state: likeState(comment), action: { onLike(comment) })
+            }
+
             if let pending = comment.status?.lowercased(), pending == "pending" {
                 HStack(spacing: SabqLayout.space4) {
                     Image(systemName: "sparkles")
@@ -163,6 +178,31 @@ struct CommentRow: View {
             Spacer(minLength: 0)
         }
         .padding(.leading, 42)
+    }
+
+    /// «إعجاب (N)» كما في الويب، بقلب ممتلئ حين يكون القارئ معجبًا.
+    private func likeButton(state: (liked: Bool, count: Int), action: @escaping () -> Void) -> some View {
+        Button {
+            SabqHaptics.light()
+            action()
+        } label: {
+            HStack(spacing: SabqLayout.space4) {
+                Image(systemName: state.liked ? "heart.fill" : "heart")
+                    .font(SabqType.tag.font)
+                    .contentTransition(.symbolEffect(.replace))
+                if state.count > 0 {
+                    Text(verbatim: "\(state.count)")
+                        .font(SabqType.metaEmphasis.font)
+                        .monospacedDigit()
+                        .contentTransition(.numericText())
+                }
+            }
+            .foregroundStyle(state.liked ? SabqTheme.danger : SabqTheme.textSecondary)
+            .frame(minWidth: SabqLayout.touchTarget, minHeight: SabqLayout.touchTarget, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(state.liked ? "إلغاء الإعجاب، \(state.count) إعجاب" : "إعجاب، \(state.count) إعجاب")
     }
 
     // MARK: - Relative-time formatter
