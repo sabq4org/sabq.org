@@ -185,7 +185,9 @@ nonisolated struct APIAudioBulletin: Decodable, Sendable, Identifiable, Equatabl
     let title: String
     let publishedAt: String
     let audioUrl: String
-    let durationSec: Int
+    /// ثوانٍ بكسر عشري (200.8 مثلًا): كانت Int فيفشل فك الاستجابة كلها
+    /// ولا يظهر شريط النشرة أبدًا في التطبيق (المحاكي 2026-10-18).
+    let durationSec: Double
     let chapters: [APIAudioBulletinChapter]
 
     /// الفصل النشط عند ثانية التشغيل الحالية.

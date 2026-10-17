@@ -1176,7 +1176,7 @@ struct HomeFeedView: View {
         let isCurrent = audioPlayer.currentKey == key
         let isPlaying = audioPlayer.isPlaying(key: key)
         let elapsed = isCurrent ? audioPlayer.currentTime : 0
-        let total = max(1, Double(bulletin.durationSec))
+        let total = max(1, bulletin.durationSec)
         let duration = (isCurrent && audioPlayer.currentDuration > 0) ? audioPlayer.currentDuration : total
         let progress = min(1.0, max(0.0, elapsed / duration))
         let activeSubtitle: String = {
@@ -1185,7 +1185,7 @@ struct HomeFeedView: View {
             }
             return bulletin.title
         }()
-        let minutes = max(1, Int(round(Double(bulletin.durationSec) / 60.0)))
+        let minutes = max(1, Int((bulletin.durationSec / 60.0).rounded()))
         let durationLabel: String = {
             if isPlaying || elapsed > 0 {
                 return "\(formatBulletinClock(elapsed)) / \(formatBulletinClock(duration))"
@@ -1244,19 +1244,12 @@ struct HomeFeedView: View {
                 }
 
                 if isCurrent {
-                    GeometryReader { geo in
-                        ZStack(alignment: .leading) {
-                            Capsule(style: .continuous)
-                                .fill(SabqTheme.primary.opacity(0.18))
-                                .frame(height: 3)
-                            Capsule(style: .continuous)
-                                .fill(SabqTheme.primary)
-                                .frame(width: max(4, geo.size.width * progress), height: 3)
-                        }
-                    }
-                    .frame(height: 3)
+                    // ترددات تتحرك أثناء الاستماع وتسكن عند الإيقاف، وتبيّن التقدم
+                    BulletinWaveform(progress: progress, isPlaying: isPlaying)
+                        .transition(.opacity)
                 }
             }
+            .animation(.easeOut(duration: 0.25), value: isCurrent)
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
             .sabqSkyCardSurface()
