@@ -59,9 +59,16 @@ export function useArticleServerAutosave(args: ServerAutosaveArgs) {
         });
         if (!result?.id) throw new Error("missing draft id");
         lastPayloadRef.current = signature;
+        // Move the browser copy onto the new article (it may hold fields the create body
+        // does not send) and drop "-new", which would otherwise prompt on every new article.
         if (current.localDraftKey) {
-          const raw = localStorage.getItem(current.localDraftKey);
-          if (raw) localStorage.setItem(stableLocalDraftKey(current.userId, result.id), raw);
+          try {
+            const raw = localStorage.getItem(current.localDraftKey);
+            if (raw) localStorage.setItem(stableLocalDraftKey(current.userId, result.id), raw);
+            localStorage.removeItem(current.localDraftKey);
+          } catch {
+            // storage unavailable: nothing to move
+          }
         }
         current.onActivity("saved");
         current.onServerSaved(typeof result.updatedAt === "string" ? result.updatedAt : undefined);

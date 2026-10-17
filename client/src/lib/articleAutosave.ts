@@ -163,6 +163,38 @@ export function draftIsStillRestorable(savedAt: unknown): boolean {
   return Number.isFinite(time);
 }
 
+/** Fields every server autosave (create and PATCH) writes; see buildDraftAutosavePatch. */
+export const SERVER_AUTOSAVED_DRAFT_FIELDS = [
+  "title",
+  "content",
+  "excerpt",
+  "slug",
+  "categoryId",
+  "articleType",
+  "imageUrl",
+  "subtitle",
+  "metaTitle",
+  "metaDescription",
+  "keywords",
+] as const;
+
+export function browserDraftIsNewerThanServer(savedAt: unknown, serverUpdatedAt: unknown): boolean {
+  const server = serverUpdatedAt ? new Date(String(serverUpdatedAt)).getTime() : NaN;
+  if (!Number.isFinite(server)) return true;
+  const saved = savedAt ? new Date(String(savedAt)).getTime() : NaN;
+  if (!Number.isFinite(saved)) return true;
+  return saved > server;
+}
+
+/**
+ * Keys to skip when comparing the browser copy with the server row. A copy older than
+ * the server's updatedAt already reached the server for the autosaved fields, so only
+ * browser-only fields (album, video, schedule, flags…) can still hold unsaved work.
+ */
+export function draftCompareIgnoredKeys(savedAt: unknown, serverUpdatedAt: unknown): readonly string[] {
+  return browserDraftIsNewerThanServer(savedAt, serverUpdatedAt) ? [] : SERVER_AUTOSAVED_DRAFT_FIELDS;
+}
+
 export function readMigratedLocalDraft(
   store: DraftStore,
   input: { userId: string; articleId?: string | null; legacyDraftId?: string | null },
