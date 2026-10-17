@@ -947,6 +947,19 @@ struct SettingsView: View {
                 )
             }
             .buttonStyle(.plain)
+
+            SettingsRowDivider()
+
+            NavigationLink(value: MyKeywordsRoute()) {
+                settingsRow(
+                    title: "كلماتي",
+                    subtitle: followedKeywords.followed.isEmpty
+                        ? "تابع الكلمات المفتاحية لتصلك أخبارها"
+                        : "تتابع \(followedKeywords.followed.count.formatted()) كلمة",
+                    icon: "number"
+                )
+            }
+            .buttonStyle(.plain)
         }
     }
 

@@ -454,6 +454,25 @@ actor APIClient {
         return try await deleteRequest(APICommentLikeResult.self, path: "/comments/\(id)/like")
     }
 
+    // MARK: - Followed keywords (كلماتي)
+
+    func fetchFollowedKeywords() async throws -> [APIFollowedKeyword] {
+        try await get(APIFollowedKeywords.self, path: "/keywords/followed").keywords
+    }
+
+    /// يدمج ما تابعه القارئ على الجهاز في حسابه ويرجّع القائمة كاملة.
+    func syncFollowedKeywords(_ local: [String]) async throws -> [APIFollowedKeyword] {
+        try await post(APIFollowedKeywords.self, path: "/keywords/sync", body: ["keywords": local]).keywords
+    }
+
+    func setKeywordFollow(_ keyword: String, followed: Bool) async throws {
+        _ = try await post(
+            APIKeywordFollowResult.self,
+            path: followed ? "/keywords/follow" : "/keywords/unfollow",
+            body: ["keyword": keyword]
+        )
+    }
+
     // ملاحظة: /articles/:slug/summary-audio يعيد بايتات MP3 خامًا لا JSON —
     // fetchAudioSummary القديمة كانت تفشل فكًّا دائمًا وتشغّل توليدًا صوتيًا
     // عبثًا مع كل فتح مقال، فحُذفت. التشغيل يتم بتمرير الرابط لـ AVPlayer مباشرة.

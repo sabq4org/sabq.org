@@ -86,6 +86,7 @@ struct ContentView: View {
                 Task { await notificationsStore.refreshUnreadCount() }
                 Task { await revisionsStore.refresh() }
                 bookmarksStore.syncFromServer()
+                followedKeywords.syncFromServer()
             }
         }
         .onChange(of: authStore.isLoggedIn) { _, loggedIn in
@@ -95,6 +96,7 @@ struct ContentView: View {
             if loggedIn {
                 Task { await revisionsStore.refresh() }
                 bookmarksStore.syncFromServer()
+                followedKeywords.syncFromServer()
             } else {
                 navigation.reset()
                 revisionsStore.clear()
@@ -103,6 +105,7 @@ struct ContentView: View {
                 // تعود بالمزامنة عند الدخول القادم.
                 bookmarksStore.clear()
                 likesStore.clear()
+                followedKeywords.clear()
                 UserDefaults.standard.removeObject(forKey: "sabq_recent_searches")
             }
         }

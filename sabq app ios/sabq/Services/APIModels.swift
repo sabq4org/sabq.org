@@ -639,6 +639,21 @@ nonisolated struct APIStory: Decodable, Identifiable {
 
 // MARK: - Comment
 
+/// كلمة يتابعها القارئ في حسابه (/v1/keywords/followed) — نفس قائمة «كلماتي» في الويب.
+nonisolated struct APIFollowedKeyword: Decodable, Hashable {
+    let tagId: String
+    let name: String
+    let articleCount: Int
+}
+
+nonisolated struct APIFollowedKeywords: Decodable {
+    let keywords: [APIFollowedKeyword]
+}
+
+nonisolated struct APIKeywordFollowResult: Decodable {
+    let success: Bool
+}
+
 nonisolated struct APICommentLikeResult: Decodable {
     let likesCount: Int
     let liked: Bool

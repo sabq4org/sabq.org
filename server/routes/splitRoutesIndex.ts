@@ -78,6 +78,7 @@ import wcPredictionsRouter from "./wcPredictions";
 import predictionsCoreRouter from "./predictionsCore";
 import predictionsMobileRouter from "./predictionsMobile";
 import commentReactionsMobileRouter from "./commentReactionsMobile";
+import keywordFollowingMobileRouter from "./keywordFollowingMobile";
 import gcMajlisRouter from "./gcMajlis";
 import gcFantasyRouter from "./gcFantasy";
 import rslPredictionsRouter from "./rslPredictions";
@@ -200,6 +201,7 @@ export function registerSplitRoutes(app: Express) {
   registerSportsNamesRoutes(app);
   app.use(commentReactionsRouter);
   app.use(commentReactionsMobileRouter);
+  app.use(keywordFollowingMobileRouter);
   app.use(topicCommentsRouter);
   app.use(commentAppealsRouter);
   app.use(topicSummaryAudioRouter);
