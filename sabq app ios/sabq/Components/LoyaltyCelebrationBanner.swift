@@ -38,15 +38,15 @@ struct LoyaltyCelebrationBanner: View {
             HStack(alignment: .top, spacing: SabqLayout.space12) {
                 Image(systemName: iconName(for: mode))
                     .font(SabqFonts.app(size: 18, weight: .semibold))
-                    .foregroundStyle(SabqTheme.primary)
+                    .foregroundStyle(tier.color)
                     .frame(width: 40, height: 40)
-                    .background(SabqTheme.surface, in: RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous))
+                    .background(tier.color.opacity(0.14), in: RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous))
                     .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: SabqLayout.space4) {
                     Text(copy.eyebrow)
                         .font(SabqType.tag.font)
-                        .foregroundStyle(SabqTheme.primary)
+                        .foregroundStyle(tier.color)
                     Text(copy.title)
                         .sabqText(SabqType.rowTitle)
                         .foregroundStyle(SabqTheme.textPrimary)

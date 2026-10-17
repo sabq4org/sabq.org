@@ -46,13 +46,14 @@ struct LoyaltyAccountView: View {
 
     @ViewBuilder
     private var quickActions: some View {
+        let currentTierColor = loader.summary?.resolvedTier.color ?? SabqTheme.primary
         HStack(spacing: SabqLayout.space12) {
             NavigationLink(destination: LoyaltyRewardsView()) {
                 quickActionCard(
                     title: "متجر المكافآت",
                     subtitle: "استبدل نقاطك بمكافآت",
                     icon: "gift.fill",
-                    tint: SabqTheme.primary
+                    tint: currentTierColor
                 )
             }
             .buttonStyle(.plain)
@@ -62,7 +63,7 @@ struct LoyaltyAccountView: View {
                     title: "سجل نقاطي",
                     subtitle: "تتبَّع نشاطك ونقاطك",
                     icon: "clock.arrow.circlepath",
-                    tint: SabqTheme.primary
+                    tint: currentTierColor
                 )
             }
             .buttonStyle(.plain)
@@ -76,7 +77,7 @@ struct LoyaltyAccountView: View {
                     .font(SabqFonts.app(size: 16, weight: .semibold))
                     .foregroundStyle(tint)
                     .frame(width: 36, height: 36)
-                    .background(SabqTheme.skyTint, in: RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous))
+                    .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous))
                     .accessibilityHidden(true)
                 Spacer(minLength: 0)
                 Image(systemName: "chevron.backward")
@@ -221,14 +222,14 @@ struct LoyaltyAccountView: View {
             // ── Timeline column: top connector ─ node ─ bottom connector
             VStack(spacing: 0) {
                 Rectangle()
-                    .fill(reached ? tier.color : SabqTheme.separator)
+                    .fill(reached ? tier.color : tier.color.opacity(0.25))
                     .frame(width: 2, height: 12)
                     .opacity(isFirst ? 0 : 1)
 
                 node(for: tier, isCurrent: isCurrent, reached: reached)
 
                 Rectangle()
-                    .fill(nextReached ? tier.color : SabqTheme.separator)
+                    .fill(nextReached ? tier.color : tier.color.opacity(0.25))
                     .frame(width: 2)
                     .frame(maxHeight: .infinity)
                     .opacity(isLast ? 0 : 1)
@@ -241,14 +242,14 @@ struct LoyaltyAccountView: View {
                     HStack(spacing: SabqLayout.space8) {
                         Text(tier.nameAr)
                             .font(SabqType.rowTitle.font)
-                            .foregroundStyle(reached ? SabqTheme.textPrimary : SabqTheme.textSecondary)
+                            .foregroundStyle(tier.color)
                         if isCurrent {
                             Text("مستواك الآن")
                                 .font(SabqType.tag.font)
                                 .foregroundStyle(SabqTheme.onAction)
                                 .padding(.horizontal, SabqLayout.space8)
                                 .padding(.vertical, 3)
-                                .background(Capsule(style: .continuous).fill(SabqTheme.actionFill))
+                                .background(Capsule(style: .continuous).fill(tier.color))
                         }
                     }
                     Text(tier.minLifetimePoints == 0 ? "نقطة البداية" : "يبدأ من \(pointsFormatted) نقطة")
@@ -261,12 +262,12 @@ struct LoyaltyAccountView: View {
                 Text("\(pointsFormatted)")
                     .font(SabqType.tag.font)
                     .monospacedDigit()
-                    .foregroundStyle(reached ? tier.color : SabqTheme.textTertiary)
+                    .foregroundStyle(tier.color)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 3)
                     .background(
                         Capsule(style: .continuous)
-                            .fill(reached ? tier.color.opacity(0.12) : SabqTheme.surfaceMuted)
+                            .fill(tier.color.opacity(0.12))
                     )
                     .environment(\.layoutDirection, .leftToRight)
             }
