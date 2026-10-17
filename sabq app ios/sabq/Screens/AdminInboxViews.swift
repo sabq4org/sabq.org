@@ -102,7 +102,7 @@ private struct AdminInboxReplyEditor: View {
     var minHeight: CGFloat = 130
 
     var body: some View {
-        ZStack(alignment: .topTrailing) {
+        ZStack(alignment: .topLeading) {
             TextEditor(text: $text)
                 .font(SabqType.excerpt.font)
                 .foregroundStyle(SabqTheme.textPrimary)
@@ -114,6 +114,7 @@ private struct AdminInboxReplyEditor: View {
                 Text(placeholder)
                     .font(SabqType.excerpt.font)
                     .foregroundStyle(SabqTheme.textTertiary)
+                    .multilineTextAlignment(.leading)
                     .padding(.horizontal, SabqLayout.space12)
                     .padding(.vertical, SabqLayout.space16)
                     .allowsHitTesting(false)

@@ -59,24 +59,24 @@ struct AdminStatGridCard: View {
 
 // MARK: Status badge
 
-/// Small radius-8 tag that colour-codes an item's editorial state.
+/// Compact borderless capsule that colour-codes an item's editorial state.
 struct AdminStatusBadge: View {
     let status: AdminArticleStatus
 
     var body: some View {
         HStack(spacing: SabqLayout.space4) {
             Image(systemName: status.icon)
-                .font(SabqFonts.app(size: 12, weight: .semibold))
+                .font(SabqFonts.app(size: 11, weight: .semibold))
                 .accessibilityHidden(true)
             Text(status.badgeLabel)
                 .sabqText(SabqType.tag)
         }
         .foregroundStyle(status.tint)
-        .padding(.horizontal, SabqLayout.space8)
-        .padding(.vertical, SabqLayout.space4)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 3)
         .background(
-            RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
-                .fill(SabqTheme.surfaceMuted)
+            Capsule(style: .continuous)
+                .fill(status.tint.opacity(0.12))
         )
     }
 }
@@ -129,9 +129,14 @@ struct AdminNewsRow: View {
             HStack(alignment: .center, spacing: SabqLayout.space8) {
                 AdminStatusBadge(status: item.status)
                 Spacer(minLength: 0)
-                Text("\(rowTimestampLabel): \(SabqFormatters.riyadhDateTime.string(from: rowTimestampDate))")
-                    .sabqText(SabqType.meta)
-                    .foregroundStyle(SabqTheme.textTertiary)
+                HStack(spacing: 4) {
+                    Text("\(rowTimestampLabel):")
+                        .sabqText(SabqType.meta)
+                        .foregroundStyle(SabqTheme.textTertiary)
+                    Text(SabqFormatters.riyadhDateTime.string(from: rowTimestampDate))
+                        .sabqText(SabqType.meta)
+                        .foregroundStyle(SabqTheme.textTertiary)
+                }
             }
 
             Text(item.title)
@@ -224,7 +229,7 @@ struct AdminNewsRow: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
-                .fill(SabqTheme.surfaceMuted)
+                .fill(SabqTheme.warning.opacity(0.10))
         )
     }
 
@@ -252,7 +257,7 @@ struct AdminNewsRow: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
-                .fill(SabqTheme.surfaceMuted)
+                .fill(schedule.isOverdue ? SabqTheme.danger.opacity(0.10) : SabqTheme.skyTint)
         )
     }
 
@@ -307,10 +312,10 @@ struct AdminNewsRow: View {
         }
         .foregroundStyle(tint)
         .padding(.horizontal, SabqLayout.space12)
-        .frame(minHeight: SabqLayout.touchTarget)
+        .frame(minHeight: 38)
         .background(
             RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
-                .fill(SabqTheme.surfaceMuted)
+                .fill(tint == SabqTheme.primary ? SabqTheme.skyTint : tint.opacity(0.12))
         )
     }
 }

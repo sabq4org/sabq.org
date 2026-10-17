@@ -190,10 +190,13 @@ struct AdminDashboardView: View {
             .padding(.top, SabqLayout.space8)
             .padding(.bottom, 112)
         }
+        .sabqNavigationEdge()
+        .sabqAutoHideTabBar()
         .background(SabqTheme.background)
         .sabqRTL()
         .navigationTitle("لوحة التحكم")
         .navigationBarTitleDisplayMode(.large)
+        .toolbarBackground(SabqTheme.background, for: .navigationBar)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button { showNewArticleChoice = true } label: {

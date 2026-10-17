@@ -396,9 +396,8 @@ struct OpinionDetailView: View {
     /// as the article labelsRow so future additions (sentiment, breaking, etc.)
     /// drop in cleanly.
     private var labelsRow: some View {
-        // نص ملوّن بلا كبسولة كوسم القسم في صفحة الخبر.
         FlowLayout(spacing: 14) {
-            DetailLabelPill(title: "مقال رأي", tint: SabqTheme.primary, icon: "text.quote")
+            DetailLabelPill(title: "مقال رأي", tint: SabqTheme.primary, icon: "text.quote", fill: SabqTheme.skyTint)
         }
     }
 

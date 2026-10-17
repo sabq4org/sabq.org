@@ -48,12 +48,9 @@ struct SettingsView: View {
     var body: some View {
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 0) {
-                SabqPageIntro("إعدادات التطبيق وعن سبق")
-                    .padding(.bottom, SabqLayout.space16)
-
                 profileSection
-                if authStore.isLoggedIn {
-                    accountShortcutsGrid
+                if authStore.isLoggedIn, let user = authStore.currentUser {
+                    editorialAndAdminSection(for: user)
                 }
                 SabqSectionBand()
                 displaySection
@@ -77,14 +74,16 @@ struct SettingsView: View {
                 appInfoSection
             }
             .padding(.horizontal, SabqLayout.pageMargin)
-            .padding(.top, SabqLayout.space16)
-            .padding(.bottom, SabqLayout.space40)
+            .padding(.top, SabqLayout.space12)
+            .padding(.bottom, 108)
             .frame(maxWidth: SabqLayout.readingWidth, alignment: .leading)
             .frame(maxWidth: .infinity)
         }
         .sabqNavigationEdge()
+        .sabqAutoHideTabBar()
         .navigationTitle("حسابي")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(SabqTheme.background, for: .navigationBar)
         .background(SabqTheme.background)
         .sabqRTL()
         .sabqScreen("More")
@@ -173,26 +172,73 @@ struct SettingsView: View {
 
     // MARK: - Profile / Auth
 
-    /// Quiet surfaceMuted header block for the identity, followed by the
-    /// account rows on the white page.
+    /// Identity card + quick member cards (Loyalty & Press Card).
     private var profileSection: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        VStack(alignment: .leading, spacing: SabqLayout.space12) {
             profileHeaderBlock
 
-            if authStore.isLoggedIn, let user = authStore.currentUser {
-                VStack(alignment: .leading, spacing: 0) {
-                    // Role-gated submission rows. Visible only when the
-                    // signed-in user has writer / reporter / admin-like
-                    // roles. Writers see opinion submission, reporters see
-                    // news submission, admin-likes see both.
-                    submissionCards(for: user)
-
-                    accountActionsSection
-                }
-                .padding(.top, SabqLayout.space8)
+            if authStore.isLoggedIn {
+                memberQuickCards
             }
         }
-        .padding(.bottom, SabqLayout.space16)
+        .padding(.bottom, SabqLayout.space12)
+    }
+
+    private var memberQuickCards: some View {
+        HStack(spacing: 10) {
+            NavigationLink(value: LoyaltyAccountRoute()) {
+                memberQuickCard(
+                    title: "نقاطي والمكافآت",
+                    subtitle: "تابع مستواك واستبدل نقاطك",
+                    icon: "trophy.fill",
+                    tint: SabqTheme.primary
+                )
+            }
+            .buttonStyle(.plain)
+
+            NavigationLink(value: PressCardRoute()) {
+                memberQuickCard(
+                    title: "بطاقتي الصحفية",
+                    subtitle: "أضف بطاقتك إلى Apple Wallet",
+                    icon: "checkmark.seal.fill",
+                    tint: SabqTheme.primary
+                )
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    private func memberQuickCard(title: String, subtitle: String, icon: String, tint: Color) -> some View {
+        VStack(alignment: .leading, spacing: SabqLayout.space8) {
+            HStack {
+                Image(systemName: icon)
+                    .font(SabqFonts.app(size: 15, weight: .semibold))
+                    .foregroundStyle(tint)
+                    .frame(width: 34, height: 34)
+                    .background(SabqTheme.skyTint, in: RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous))
+                    .accessibilityHidden(true)
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.backward")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(SabqTheme.textTertiary)
+                    .accessibilityHidden(true)
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .sabqText(SabqType.rowTitle)
+                    .foregroundStyle(SabqTheme.textPrimary)
+                    .lineLimit(1)
+                Text(subtitle)
+                    .sabqText(SabqType.meta)
+                    .foregroundStyle(SabqTheme.textSecondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+            }
+        }
+        .padding(SabqLayout.space12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .sabqBlockSurface()
+        .contentShape(Rectangle())
     }
 
     private var profileHeaderBlock: some View {
@@ -314,18 +360,42 @@ struct SettingsView: View {
                     )
                 }
 
-                Button { showEditProfile = true } label: {
-                    HStack(spacing: SabqLayout.space8) {
-                        Image(systemName: "pencil")
-                            .font(SabqType.button.font)
-                        Text("تعديل الملف الشخصي")
-                            .sabqText(SabqType.button)
+                HStack(spacing: SabqLayout.space8) {
+                    Button { showEditProfile = true } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "pencil")
+                                .font(.system(size: 13, weight: .semibold))
+                            Text("تعديل الملف الشخصي")
+                                .sabqText(SabqType.metaEmphasis)
+                        }
+                        .foregroundStyle(SabqTheme.primary)
+                        .frame(maxWidth: .infinity, minHeight: 38)
+                        .background(
+                            RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
+                                .fill(SabqTheme.skyTint)
+                        )
+                        .contentShape(Rectangle())
                     }
-                    .foregroundStyle(SabqTheme.primary)
-                    .frame(minHeight: SabqLayout.touchTarget)
-                    .contentShape(Rectangle())
+                    .buttonStyle(.plain)
+
+                    Button { showChangePassword = true } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "lock.rotation")
+                                .font(.system(size: 13, weight: .semibold))
+                            Text("كلمة المرور")
+                                .sabqText(SabqType.metaEmphasis)
+                        }
+                        .foregroundStyle(SabqTheme.textSecondary)
+                        .padding(.horizontal, SabqLayout.space12)
+                        .frame(minHeight: 38)
+                        .background(
+                            RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
+                                .fill(SabqTheme.surfaceMuted)
+                        )
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
             } else {
                 guestIdentity
                 .onTapGesture { showLogin = true }
@@ -348,10 +418,7 @@ struct SettingsView: View {
         }
         .padding(SabqLayout.space16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
-                .fill(SabqTheme.surfaceMuted)
-        )
+        .sabqBlockSurface()
     }
 
     /// Primary (filled) or secondary (outlined) button label used by the
@@ -441,8 +508,8 @@ struct SettingsView: View {
 
     @ViewBuilder
     private func profileDetails(user: APIUser) -> some View {
-        VStack(alignment: .leading, spacing: SabqLayout.space4) {
-            HStack(spacing: SabqLayout.space4) {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
                 Text(user.displayName)
                     .sabqText(SabqType.sectionHeading)
                     .foregroundStyle(SabqTheme.textPrimary)
@@ -453,20 +520,27 @@ struct SettingsView: View {
                         .foregroundStyle(SabqTheme.success)
                         .accessibilityLabel("حساب موثّق")
                 }
-            }
 
-            HStack(spacing: SabqLayout.space4) {
-                Image(systemName: "person")
-                    .font(SabqType.meta.font)
-                    .foregroundStyle(SabqTheme.textSecondary)
-                Text(user.localizedRole)
-                    .sabqText(SabqType.metaEmphasis)
-                    .foregroundStyle(SabqTheme.textSecondary)
-            }
-            .contentShape(Rectangle())
-            .onLongPressGesture(minimumDuration: 0.6) {
-                roleDebugMessage = user.roleDebugSummary
-                showRoleDebug = true
+                Spacer(minLength: 0)
+
+                HStack(spacing: 4) {
+                    Image(systemName: "person.fill")
+                        .font(.system(size: 10, weight: .semibold))
+                    Text(user.localizedRole)
+                        .sabqText(SabqType.tag)
+                }
+                .foregroundStyle(SabqTheme.primary)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(SabqTheme.skyTint)
+                )
+                .contentShape(Rectangle())
+                .onLongPressGesture(minimumDuration: 0.6) {
+                    roleDebugMessage = user.roleDebugSummary
+                    showRoleDebug = true
+                }
             }
 
             if let email = user.email, !email.isEmpty {
@@ -503,49 +577,67 @@ struct SettingsView: View {
             }
     }
 
-    // MARK: - Submission rows (writers + reporters)
+    // MARK: - Editorial & Admin Section
 
-    /// Renders the "send to editorial" entry-point rows under the profile
-    /// block. Visibility is role-gated:
-    /// - Writers (opinion_author / columnist / article_author / writer /
-    ///   author): "إرسال مقالة للنشر"
-    /// - Reporters (reporter / correspondent / journalist): "إرسال خبر"
-    /// - Admin / editor roles see both — they may submit either kind.
-    /// Regular readers see nothing.
     @ViewBuilder
-    private func submissionCards(for user: APIUser) -> some View {
+    private func editorialAndAdminSection(for user: APIUser) -> some View {
         let writerVisible = user.isWriter || user.isAdminLike
         let reporterVisible = user.isReporter || user.isAdminLike
+        let hasEditorialOrAdmin = writerVisible || reporterVisible || user.isPlatformAdmin
 
-        if writerVisible || reporterVisible {
-            VStack(spacing: 0) {
-                if writerVisible {
-                    submissionCard(
-                        title: "إرسال مقالة للنشر",
-                        subtitle: "اكتب رأيك أو مقالتك وسنراجعها للنشر",
-                        icon: "square.and.pencil",
-                        tint: SabqTheme.textSecondary
-                    ) {
-                        submissionKind = .opinion
+        if hasEditorialOrAdmin {
+            SabqSectionBand()
+            SettingsSection(title: "الأدوات التحريرية والإدارة", subtitle: "إدارة المحتوى والمراسلات التحريرية") {
+                if user.isPlatformAdmin {
+                    NavigationLink(value: AdminDashboardRoute()) {
+                        submissionCardContent(
+                            title: "لوحة التحكم",
+                            subtitle: "إدارة الأخبار والمؤشّرات",
+                            icon: "shield.lefthalf.filled",
+                            tint: SabqTheme.primary
+                        )
                     }
+                    .buttonStyle(.plain)
                     SettingsRowDivider()
                 }
+
+                if writerVisible || reporterVisible {
+                    NavigationLink(value: ContributorDashboardRoute()) {
+                        submissionCardContent(
+                            title: "لوحة الكاتب",
+                            subtitle: "مساحتك من الفكرة إلى النشر — أفكار، مقالات، أداء",
+                            icon: "doc.richtext",
+                            tint: SabqTheme.primary
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    SettingsRowDivider()
+                }
+
                 if reporterVisible {
                     submissionCard(
                         title: "إرسال خبر",
                         subtitle: "أرسل خبرك مع الصور — يصل لغرفة الأخبار",
                         icon: "newspaper",
-                        tint: SabqTheme.textSecondary
+                        tint: SabqTheme.primary
                     ) {
                         submissionKind = .news
                     }
                     SettingsRowDivider()
                 }
 
-                // Revision queue — surfaces only when the editor sent
-                // articles back for changes. Tapping opens the list of
-                // pending revisions, each of which leads to the
-                // ArticleRevisionView form.
+                if writerVisible {
+                    submissionCard(
+                        title: "إرسال مقالة للنشر",
+                        subtitle: "اكتب رأيك أو مقالتك وسنراجعها للنشر",
+                        icon: "square.and.pencil",
+                        tint: SabqTheme.primary
+                    ) {
+                        submissionKind = .opinion
+                    }
+                    SettingsRowDivider()
+                }
+
                 if revisionsStore.count > 0 {
                     NavigationLink(value: ArticleRevisionsRoute()) {
                         submissionCardContent(
@@ -560,23 +652,32 @@ struct SettingsView: View {
                     SettingsRowDivider()
                 }
 
-                // Editorial notification center for writers/reporters/admins
-                // — shows scheduled / published / rejected / needs_revision
-                // events on their submissions. Uses the value-based form
-                // so this push is recorded in ContentView's
-                // `navigationPath` — without that, the floating tab bar
-                // couldn't pop the screen (selectedTab changed but the
-                // pushed view stayed on the stack).
-                NavigationLink(value: EditorialNotificationsRoute()) {
-                    submissionCardContent(
-                        title: "إشعاراتي التحريرية",
-                        subtitle: "متابعة جدولة ونشر ومراجعة محتواك",
-                        icon: "bell.badge",
-                        tint: SabqTheme.textSecondary
-                    )
+                if writerVisible || reporterVisible {
+                    NavigationLink(value: EditorialNotificationsRoute()) {
+                        submissionCardContent(
+                            title: "إشعاراتي التحريرية",
+                            subtitle: "متابعة جدولة ونشر ومراجعة محتواك",
+                            icon: "bell.badge",
+                            tint: SabqTheme.primary
+                        )
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
-                SettingsRowDivider()
+
+                if user.isPlatformAdmin {
+                    if writerVisible || reporterVisible {
+                        SettingsRowDivider()
+                    }
+                    NavigationLink(value: SabqPlusRoute()) {
+                        submissionCardContent(
+                            title: "سبق بلس (معاينة)",
+                            subtitle: "محاكاة الاستبدال عبر ولاء ون",
+                            icon: "plus.diamond",
+                            tint: SabqTheme.primary
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
             }
         }
     }
@@ -592,10 +693,10 @@ struct SettingsView: View {
         tint: Color,
         badgeCount: Int? = nil
     ) -> some View {
-        HStack(alignment: .top, spacing: SabqLayout.space12) {
+        HStack(alignment: .center, spacing: SabqLayout.space12) {
             SettingsRowIcon(systemImage: icon, tint: tint)
 
-            VStack(alignment: .leading, spacing: SabqLayout.space4) {
+            VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: SabqLayout.space8) {
                     Text(title)
                         .sabqText(SabqType.rowTitle)
@@ -635,24 +736,6 @@ struct SettingsView: View {
     ) -> some View {
         Button(action: action) {
             submissionCardContent(title: title, subtitle: subtitle, icon: icon, tint: tint)
-        }
-        .buttonStyle(.plain)
-    }
-
-    @ViewBuilder
-    private var accountActionsSection: some View {
-        Button { showChangePassword = true } label: {
-            HStack(spacing: SabqLayout.space12) {
-                SettingsRowIcon(systemImage: "lock.rotation", tint: SabqTheme.textSecondary)
-                Text("تغيير كلمة المرور")
-                    .sabqText(SabqType.rowTitle)
-                    .foregroundStyle(SabqTheme.textPrimary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                SettingsChevron()
-            }
-            .padding(.vertical, SabqLayout.space12)
-            .frame(minHeight: SabqLayout.touchTarget)
-            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }
@@ -731,72 +814,6 @@ struct SettingsView: View {
         case (false, false):
             return ""
         }
-    }
-
-    // MARK: - Account shortcuts
-
-    /// Dashboard / loyalty / press-card entries as plain rows with
-    /// separators under the profile rows.
-    private var accountShortcutsGrid: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            if let user = authStore.currentUser, user.isPlatformAdmin {
-                NavigationLink(value: AdminDashboardRoute()) {
-                    accountShortcutTile(
-                        title: "لوحة التحكم",
-                        subtitle: "إدارة الأخبار والمؤشّرات",
-                        icon: "shield.lefthalf.filled"
-                    )
-                }
-                .buttonStyle(.plain)
-                SettingsRowDivider()
-                NavigationLink(value: SabqPlusRoute()) {
-                    accountShortcutTile(
-                        title: "سبق بلس (معاينة)",
-                        subtitle: "محاكاة الاستبدال عبر ولاء ون",
-                        icon: "plus.diamond"
-                    )
-                }
-                .buttonStyle(.plain)
-                SettingsRowDivider()
-            }
-            if let user = authStore.currentUser, user.isWriter || user.isReporter || user.isAdminLike {
-                NavigationLink(value: ContributorDashboardRoute()) {
-                    accountShortcutTile(
-                        title: "لوحة الكاتب",
-                        subtitle: "مساحتك من الفكرة إلى النشر — أفكار، مقالات، أداء",
-                        icon: "square.and.pencil"
-                    )
-                }
-                .buttonStyle(.plain)
-                SettingsRowDivider()
-            }
-            NavigationLink(value: LoyaltyAccountRoute()) {
-                accountShortcutTile(
-                    title: "نقاطي والمكافآت",
-                    subtitle: "تابع مستواك واستبدل نقاطك",
-                    icon: "trophy"
-                )
-            }
-            .buttonStyle(.plain)
-            SettingsRowDivider()
-            NavigationLink(value: PressCardRoute()) {
-                accountShortcutTile(
-                    title: "بطاقتي الصحفية",
-                    subtitle: "أضف بطاقتك إلى Apple Wallet",
-                    icon: "checkmark.seal"
-                )
-            }
-            .buttonStyle(.plain)
-        }
-        .padding(.bottom, SabqLayout.space16)
-    }
-
-    private func accountShortcutTile(
-        title: String,
-        subtitle: String,
-        icon: String
-    ) -> some View {
-        settingsRow(title: title, subtitle: subtitle, icon: icon)
     }
 
     // MARK: - Display
@@ -887,11 +904,21 @@ struct SettingsView: View {
             SettingsRowDivider()
 
             VStack(alignment: .leading, spacing: SabqLayout.space12) {
-                settingLabel(title: "حجم الخط", subtitle: "حجم النص: \(Int(textSize))")
+                HStack(alignment: .center) {
+                    settingLabel(title: "حجم الخط", subtitle: "تحكّم بحجم النص داخل المقالات")
+                    Spacer(minLength: 0)
+                    Text("\(Int(textSize)) نقطة")
+                        .sabqText(SabqType.tag)
+                        .monospacedDigit()
+                        .foregroundStyle(SabqTheme.primary)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(Capsule(style: .continuous).fill(SabqTheme.skyTint))
+                }
 
                 HStack(spacing: SabqLayout.space12) {
                     Text("أ")
-                        .font(SabqFonts.app(size: 12))
+                        .font(SabqFonts.app(size: 13, weight: .medium))
                         .foregroundStyle(SabqTheme.textTertiary)
 
                     Slider(value: $textSize, in: 14...24, step: 1)
@@ -900,14 +927,17 @@ struct SettingsView: View {
                         .tint(SabqTheme.primary)
 
                     Text("أ")
-                        .font(SabqFonts.app(size: 22, weight: .heavy))
+                        .font(SabqFonts.app(size: 22, weight: .bold))
                         .foregroundStyle(SabqTheme.textPrimary)
                 }
 
-                Text("معاينة حجم الخط في المقالات")
+                Text("معاينة حجم الخط في المقالات الإخبارية لتجربة قراءة مريحة وواضحة.")
                     .font(SabqFonts.app(size: CGFloat(textSize), weight: .regular))
-                    .foregroundStyle(SabqTheme.textSecondary)
+                    .foregroundStyle(SabqTheme.textPrimary)
                     .lineSpacing(5)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(SabqLayout.space12)
+                    .sabqBlockSurface()
             }
             .padding(.vertical, SabqLayout.space12)
         }
@@ -1053,7 +1083,7 @@ struct SettingsView: View {
                     settingsRowContent(title: title, subtitle: subtitle, icon: icon)
                 }
             } else {
-                HStack(alignment: .top, spacing: SabqLayout.space12) {
+                HStack(alignment: .center, spacing: SabqLayout.space12) {
                     settingsRowContent(title: title, subtitle: subtitle, icon: icon)
                 }
             }
@@ -1065,9 +1095,9 @@ struct SettingsView: View {
 
     @ViewBuilder
     private func settingsRowContent(title: String, subtitle: String, icon: String) -> some View {
-        SettingsRowIcon(systemImage: icon, tint: SabqTheme.textSecondary)
+        SettingsRowIcon(systemImage: icon, tint: SabqTheme.primary)
 
-        VStack(alignment: .leading, spacing: SabqLayout.space4) {
+        VStack(alignment: .leading, spacing: 3) {
             Text(title)
                 .sabqText(SabqType.rowTitle)
                 .foregroundStyle(SabqTheme.textPrimary)
@@ -1133,16 +1163,20 @@ private struct SettingsRowDivider: View {
     }
 }
 
-/// Plain leading SF Symbol for a settings row — no backdrop.
+/// Rounded-square icon badge for a settings row.
 private struct SettingsRowIcon: View {
     let systemImage: String
     let tint: Color
 
     var body: some View {
         Image(systemName: systemImage)
-            .font(SabqFonts.app(size: 18))
+            .font(SabqFonts.app(size: 15, weight: .semibold))
             .foregroundStyle(tint)
-            .frame(width: 24, height: 24)
+            .frame(width: 34, height: 34)
+            .background(
+                RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
+                    .fill(tint == SabqTheme.primary ? SabqTheme.skyTint : tint.opacity(0.12))
+            )
             .accessibilityHidden(true)
     }
 }
