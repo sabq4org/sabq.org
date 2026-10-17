@@ -1056,13 +1056,15 @@ struct ArticleDetailView: View {
 
     /// العنوان الفرعي (`article-detail-subtitle` في الويب): أصغر من العنوان وبلون ثانوي.
     private func articleSubtitle(_ text: String) -> some View {
+        // وزن عادي وحجم أصغر من العنوان (17 عند حجم الخط الافتراضي) حتى لا ينافسه،
+        // ويتبع إعداد «حجم الخط» في صفحة الخبر.
         SabqRTLText(
             text,
-            uiFont: SabqType.leadTitle.uiFont(adding: CGFloat(fontSize) - SabqType.articleBody.size - 3),
+            uiFont: SabqType.articleBody.uiFont(adding: CGFloat(fontSize) - SabqType.articleBody.size - 1),
             color: SabqTheme.textSecondary,
             lineLimit: 0,
-            lineSpacing: 2,
-            textStyle: SabqType.leadTitle.uiTextStyle
+            lineSpacing: 3,
+            textStyle: .subheadline
         )
     }
 
