@@ -3,6 +3,7 @@ import {
   AUTOSAVE_INTERVAL_MS,
   SERVER_AUTOSAVE_FORBIDDEN_KEYS,
   autosavePayloadSignature,
+  browserDraftIsNewerThanServer,
   buildDraftAutosavePatch,
   buildNewDraftCreateBody,
   canServerAutosaveExistingDraft,
@@ -68,6 +69,15 @@ describe("article draft autosave", () => {
     });
     expect(kept.migrated).toBe(false);
     expect(kept.raw).toContain("أحدث");
+  });
+
+  it("offers the browser copy only when it is newer than the server version", () => {
+    const server = "2026-10-17T12:03:23.000Z";
+    expect(browserDraftIsNewerThanServer("2026-10-17T12:03:20.000Z", server)).toBe(false);
+    expect(browserDraftIsNewerThanServer(server, server)).toBe(false);
+    expect(browserDraftIsNewerThanServer("2026-10-17T12:04:00.000Z", server)).toBe(true);
+    expect(browserDraftIsNewerThanServer("2026-10-17T12:03:20.000Z", null)).toBe(true);
+    expect(browserDraftIsNewerThanServer(undefined, server)).toBe(true);
   });
 
   it("treats a day-old draft as still restorable", () => {

@@ -11,7 +11,6 @@ import {
   buildNewDraftCreateBody,
   canServerAutosaveExistingDraft,
   hasMeaningfulDraftContent,
-  stableLocalDraftKey,
   type DraftAutosaveFields,
 } from "@/lib/articleAutosave";
 
@@ -59,9 +58,13 @@ export function useArticleServerAutosave(args: ServerAutosaveArgs) {
         });
         if (!result?.id) throw new Error("missing draft id");
         lastPayloadRef.current = signature;
+        // The server now holds this draft; a leftover "-new" copy would prompt on every new article.
         if (current.localDraftKey) {
-          const raw = localStorage.getItem(current.localDraftKey);
-          if (raw) localStorage.setItem(stableLocalDraftKey(current.userId, result.id), raw);
+          try {
+            localStorage.removeItem(current.localDraftKey);
+          } catch {
+            // storage unavailable: nothing to clear
+          }
         }
         current.onActivity("saved");
         current.onServerSaved(typeof result.updatedAt === "string" ? result.updatedAt : undefined);

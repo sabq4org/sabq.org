@@ -1,5 +1,6 @@
 import { draftDiffersFromArticle } from "@/lib/articleDraft";
 import {
+  browserDraftIsNewerThanServer,
   draftIsStillRestorable,
   readMigratedLocalDraft,
   stableLocalDraftKey,
@@ -1073,7 +1074,11 @@ export default function ArticleEditor() {
           setRecoveredDraft(draft);
           setShowDraftRecoveryDialog(true);
         }
-      } else if (article && draftDiffersFromArticle(draft, article)) {
+      } else if (
+        article &&
+        browserDraftIsNewerThanServer(draft.savedAt, (article as any).updatedAt) &&
+        draftDiffersFromArticle(draft, article)
+      ) {
         setRecoveredDraft(draft);
         setShowDraftRecoveryDialog(true);
       }

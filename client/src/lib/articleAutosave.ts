@@ -163,6 +163,19 @@ export function draftIsStillRestorable(savedAt: unknown): boolean {
   return Number.isFinite(time);
 }
 
+/**
+ * The browser copy is offered only while it is newer than the server version.
+ * Server autosave (and the auto-create of a new draft) leaves the browser copy in
+ * place, so without this check every reopen prompts for content the server already has.
+ */
+export function browserDraftIsNewerThanServer(savedAt: unknown, serverUpdatedAt: unknown): boolean {
+  const server = serverUpdatedAt ? new Date(String(serverUpdatedAt)).getTime() : NaN;
+  if (!Number.isFinite(server)) return true;
+  const saved = savedAt ? new Date(String(savedAt)).getTime() : NaN;
+  if (!Number.isFinite(saved)) return true;
+  return saved > server;
+}
+
 export function readMigratedLocalDraft(
   store: DraftStore,
   input: { userId: string; articleId?: string | null; legacyDraftId?: string | null },
