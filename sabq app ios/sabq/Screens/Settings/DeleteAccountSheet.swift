@@ -18,6 +18,13 @@ struct DeleteAccountSheet: View {
 
     private let confirmWord = "حذف"
 
+    /// «حذف» أو «delete»: مراجع أبل وغيره قد لا تكون لديه لوحة عربية، وتعذّر
+    /// كتابة كلمة التأكيد يعني تعذّر الحذف (بند 5.1.1(v)).
+    private var isConfirmed: Bool {
+        let typed = confirmText.trimmingCharacters(in: .whitespacesAndNewlines)
+        return typed == confirmWord || typed.lowercased() == "delete"
+    }
+
     /// حسابات Apple والجوال بلا كلمة مرور، والخادم يقبل حذفها بالجلسة وحدها
     /// (بند أبل 5.1.1(v)). كان الزر معطّلًا حتى تُكتب كلمة مرور لا يملكها المستخدم.
     /// المصدر `hasPassword` من الملف الشخصي؛ وإن غاب فنحكم بمزوّد الدخول، ويصحّح
@@ -95,11 +102,13 @@ struct DeleteAccountSheet: View {
                         .disabled(password.isEmpty)
                     } else {
                         VStack(alignment: .leading, spacing: SabqLayout.space8) {
-                            Text("اكتب \"\(confirmWord)\" للتأكيد")
+                            Text("اكتب \"\(confirmWord)\" أو DELETE للتأكيد")
                                 .sabqText(SabqType.metaEmphasis)
                                 .foregroundStyle(SabqTheme.textPrimary)
 
                             TextField(confirmWord, text: $confirmText)
+                                .textInputAutocapitalization(.never)
+                                .autocorrectionDisabled()
                                 .sabqText(SabqType.excerpt)
                                 .foregroundStyle(SabqTheme.textPrimary)
                                 .modifier(SabqInputSurface())
@@ -153,19 +162,19 @@ struct DeleteAccountSheet: View {
                                 Text("حذف الحساب نهائياً")
                                     .sabqText(SabqType.button)
                             }
-                            .foregroundStyle(confirmText == confirmWord ? SabqTheme.danger : SabqTheme.disabledInk)
+                            .foregroundStyle(isConfirmed ? SabqTheme.danger : SabqTheme.disabledInk)
                             .frame(maxWidth: .infinity, minHeight: SabqLayout.controlHeight)
                             .background(
                                 RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
-                                    .fill(confirmText == confirmWord ? SabqTheme.surface : SabqTheme.disabledFill)
+                                    .fill(isConfirmed ? SabqTheme.surface : SabqTheme.disabledFill)
                             )
                             .overlay(
                                 RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
-                                    .stroke(confirmText == confirmWord ? SabqTheme.danger : Color.clear, lineWidth: 1)
+                                    .stroke(isConfirmed ? SabqTheme.danger : Color.clear, lineWidth: 1)
                             )
                         }
                         .buttonStyle(.plain)
-                        .disabled(confirmText != confirmWord || authStore.isLoading)
+                        .disabled(!isConfirmed || authStore.isLoading)
                     }
                 }
                 .padding(.horizontal, SabqLayout.pageMargin)
@@ -182,6 +191,7 @@ struct DeleteAccountSheet: View {
                     }
                 }
             }
+            .task { await authStore.refreshProfile() }
             .onDisappear { authStore.clearMessages() }
         }
     }

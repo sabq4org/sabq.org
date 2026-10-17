@@ -603,6 +603,12 @@ final class AuthStore {
         isLoading = false
     }
 
+    /// يعيد قراءة `/members/profile` — تستدعيه ورقة حذف الحساب كي تعرف
+    /// `hasPassword` يقينًا بدل التخمين من بيانات الدخول.
+    func refreshProfile() async {
+        await fetchFullProfile()
+    }
+
     private func fetchFullProfile() async {
         do {
             let user = try await APIClient.shared.fetchCurrentUser()
