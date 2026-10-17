@@ -30,7 +30,7 @@ struct ExploreView: View {
     private let resultsAnchor = "explore-results-top"
 
     private var columns: [GridItem] {
-        [GridItem(.adaptive(minimum: dynamicTypeSize.isAccessibilitySize ? 280 : 155), spacing: 14)]
+        [GridItem(.adaptive(minimum: dynamicTypeSize.isAccessibilitySize ? 280 : 155), spacing: SabqLayout.space12)]
     }
 
     private var trimmedSearchText: String {
@@ -51,8 +51,8 @@ struct ExploreView: View {
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: SabqLayout.space24) {
                     Text("تصفّح الأقسام والمواضيع الأكثر تأثيراً")
-                        .font(SabqType.body)
-                        .foregroundStyle(SabqTheme.secondaryInk)
+                        .sabqText(SabqType.excerpt)
+                        .foregroundStyle(SabqTheme.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
 
                     if trimmedSearchText.isEmpty {
@@ -61,9 +61,9 @@ struct ExploreView: View {
                         searchContent
                     }
                 }
-                .padding(.horizontal, SabqLayout.pageInset)
+                .padding(.horizontal, SabqLayout.pageMargin)
                 .padding(.top, SabqLayout.space16)
-                .padding(.bottom, SabqLayout.space24)
+                .padding(.bottom, SabqLayout.space32)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .id(resultsAnchor)
             }
@@ -102,21 +102,20 @@ struct ExploreView: View {
     private var idleContent: some View {
         sectionsGridSection
 
-
         if !recentSearches.isEmpty {
+            SabqSectionBand()
             recentSearchesSection
-
         }
     }
 
     private var sectionsGridSection: some View {
         VStack(alignment: .leading, spacing: SabqLayout.space12) {
-            sectionTitle(icon: "square.grid.2x2.fill", title: "التصنيفات", tint: SabqTheme.primaryEnd)
+            DiscoverySectionHeading(title: "التصنيفات")
 
             LazyVGrid(columns: columns, spacing: SabqLayout.space12) {
                 ForEach(Array(ArticleCategory.allCases.enumerated()), id: \.element.id) { _, category in
                     NavigationLink(value: category) {
-                        CategoryTile(category: category)
+                        DiscoveryCategoryTile(category: category)
                     }
                     .buttonStyle(.plain)
                 }
@@ -126,37 +125,25 @@ struct ExploreView: View {
 
     private var recentSearchesSection: some View {
         VStack(alignment: .leading, spacing: SabqLayout.space12) {
-            HStack {
-                sectionTitle(icon: "clock.arrow.circlepath", title: "عمليات البحث الأخيرة", tint: SabqTheme.secondaryInk)
-                Spacer(minLength: 0)
+            HStack(alignment: .firstTextBaseline) {
+                DiscoverySectionHeading(title: "عمليات البحث الأخيرة")
+                Spacer(minLength: SabqLayout.space8)
                 Button("مسح السجل") {
                     recentSearches.removeAll()
                     UserDefaults.standard.set([String](), forKey: "sabq_recent_searches")
                 }
-                .font(SabqType.caption)
-                .foregroundStyle(SabqTheme.tertiaryInk)
+                .font(SabqType.meta.font)
+                .foregroundStyle(SabqTheme.primary)
+                .frame(minHeight: SabqLayout.touchTarget)
             }
 
-            FlowLayout(spacing: 8) {
+            FlowLayout(spacing: SabqLayout.space8) {
                 ForEach(recentSearches.prefix(10), id: \.self) { recent in
                     Button {
                         searchText = recent
                         performSearch(query: recent)
                     } label: {
-                        HStack(spacing: 5) {
-                            Image(systemName: "magnifyingglass")
-                                .font(SabqFonts.app(size: 10, weight: .regular))
-                            Text(recent)
-                                .font(SabqFonts.app(size: 12, weight: .medium))
-                        }
-                        .foregroundStyle(SabqTheme.secondaryInk)
-                        .padding(.horizontal, SabqLayout.space12)
-                        .padding(.vertical, SabqLayout.space8)
-                        .frame(minHeight: SabqLayout.touchTarget)
-                        .background(
-                            Capsule(style: .continuous)
-                                .fill(SabqTheme.softFill)
-                        )
+                        DiscoveryChip(title: recent, icon: "magnifyingglass")
                     }
                     .buttonStyle(.plain)
                 }
@@ -169,13 +156,9 @@ struct ExploreView: View {
     @ViewBuilder
     private var searchContent: some View {
         if isSearching && displayResults.isEmpty {
-            VStack(spacing: SabqLayout.space16) {
-                SkeletonBox(height: 90, radius: SabqTheme.tileRadius)
-                SkeletonBox(height: 90, radius: SabqTheme.tileRadius)
-                SkeletonBox(height: 90, radius: SabqTheme.tileRadius)
-            }
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel("جارٍ البحث")
+            DiscoveryListSkeleton(count: 3)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("جارٍ البحث")
 
         } else if searchFailed && displayResults.isEmpty {
             ErrorStateView(
@@ -192,17 +175,20 @@ struct ExploreView: View {
             )
 
         } else {
-            VStack(alignment: .leading, spacing: 14) {
-                if searchFailed {
-                    Text("تُعرض نتائج محفوظة من الجهاز")
-                        .font(SabqType.caption)
-                        .foregroundStyle(SabqTheme.secondaryInk)
+            VStack(alignment: .leading, spacing: 0) {
+                VStack(alignment: .leading, spacing: SabqLayout.space4) {
+                    if searchFailed {
+                        Text("تُعرض نتائج محفوظة من الجهاز")
+                            .font(SabqType.meta.font)
+                            .foregroundStyle(SabqTheme.textSecondary)
+                    }
+                    Text("\(displayResults.count) نتيجة")
+                        .font(SabqType.meta.font)
+                        .foregroundStyle(SabqTheme.textTertiary)
                 }
-                Text("\(displayResults.count) نتيجة")
-                    .font(SabqType.caption)
-                    .foregroundStyle(SabqTheme.tertiaryInk)
 
                 ForEach(Array(displayResults.enumerated()), id: \.element.id) { index, article in
+                    if index > 0 { SidebarRowDivider() }
                     NavigationLink(value: article) {
                         CompactArticleRow(
                             article: article,
@@ -221,18 +207,6 @@ struct ExploreView: View {
     }
 
     // MARK: - Helpers
-
-    private func sectionTitle(icon: String, title: String, tint: Color) -> some View {
-        HStack(spacing: 6) {
-            Image(systemName: icon)
-                .font(SabqFonts.app(size: 11, weight: .regular))
-                .foregroundStyle(tint)
-            Text(title)
-                .font(SabqType.sectionTitle)
-                .foregroundStyle(SabqTheme.ink)
-            Spacer(minLength: 0)
-        }
-    }
 
     private func scheduleSearch(for query: String) {
         searchTask?.cancel()
@@ -284,6 +258,132 @@ struct ExploreView: View {
             submittedQuery = query
             searchFailed = true
             isSearching = false
+        }
+    }
+}
+
+// MARK: - Discovery building blocks
+//
+// قطع مشتركة لشاشات الاستكشاف (استكشف، الأقسام، البحث، الرائج، المحفوظات…)
+// على نموذج الرئيسية المعتمد: أقسام بلا صناديق، عنوان 20، وبلاطات هادئة.
+
+/// رأس قسم بلا أيقونة ولا صندوق: عنوان 20 وسطر سياق اختياري.
+struct DiscoverySectionHeading: View {
+    let title: String
+    var subtitle: String? = nil
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: SabqLayout.space4) {
+            Text(title)
+                .font(SabqType.sectionHeading.font)
+                .foregroundStyle(SabqTheme.textPrimary)
+                .accessibilityAddTraits(.isHeader)
+            if let subtitle {
+                Text(subtitle)
+                    .font(SabqType.meta.font)
+                    .foregroundStyle(SabqTheme.textTertiary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// بلاطة تصنيف هادئة: تعبئة surfaceMuted بزوايا 12، بلا حد ولا ظل ولا لون تصنيف.
+struct DiscoveryCategoryTile: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    let category: ArticleCategory
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: SabqLayout.space12) {
+            Image(systemName: category.icon)
+                .font(SabqType.sectionHeading.font)
+                .foregroundStyle(SabqTheme.primary)
+                .frame(height: SabqLayout.space24, alignment: .leading)
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: SabqLayout.space4) {
+                Text(category.title)
+                    .sabqText(SabqType.rowTitle)
+                    .foregroundStyle(SabqTheme.textPrimary)
+
+                Group {
+                    if dynamicTypeSize.isAccessibilitySize {
+                        Text(category.subtitle)
+                    } else {
+                        Text(category.subtitle).lineLimit(2, reservesSpace: true)
+                    }
+                }
+                .font(SabqType.meta.font)
+                .foregroundStyle(SabqTheme.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .multilineTextAlignment(.leading)
+            }
+        }
+        .padding(SabqLayout.space16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                .fill(SabqTheme.surfaceMuted)
+        )
+        .contentShape(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
+    }
+}
+
+/// شريحة هادئة (كلمة مفتاحية، بحث سابق): كبسولة surfaceMuted بنص أساسي،
+/// ومساحة لمس 44 نقطة.
+struct DiscoveryChip: View {
+    let title: String
+    var icon: String? = nil
+
+    var body: some View {
+        HStack(spacing: SabqLayout.space4) {
+            if let icon {
+                Image(systemName: icon)
+                    .font(SabqType.tag.font)
+                    .foregroundStyle(SabqTheme.textSecondary)
+                    .accessibilityHidden(true)
+            }
+            Text(title)
+                .font(SabqType.tag.font)
+                .foregroundStyle(SabqTheme.textPrimary)
+        }
+        .padding(.horizontal, SabqLayout.space12)
+        .padding(.vertical, SabqLayout.space8)
+        .frame(minHeight: 36)
+        .background(Capsule(style: .continuous).fill(SabqTheme.surfaceMuted))
+        .frame(minHeight: SabqLayout.touchTarget)
+        .contentShape(Rectangle())
+    }
+}
+
+/// هيكل تحميل بمقاس `CompactArticleRow`: سطرا عنوان وسطر بيانات ومصغّرة 112×63.
+struct DiscoveryRowSkeleton: View {
+    var body: some View {
+        HStack(alignment: .top, spacing: SabqLayout.space12) {
+            VStack(alignment: .leading, spacing: SabqLayout.space8) {
+                SkeletonBox(height: 16, radius: SabqRadius.small)
+                SkeletonBox(width: 180, height: 16, radius: SabqRadius.small)
+                SkeletonBox(width: 110, height: 12, radius: SabqRadius.small)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            SkeletonBox(width: 112, height: 63, radius: SabqRadius.small)
+        }
+        .padding(.vertical, SabqLayout.rowPadding)
+        .accessibilityHidden(true)
+    }
+}
+
+/// قائمة هياكل تحميل مفصولة بخطوط رفيعة، كما تظهر القائمة بعد التحميل.
+struct DiscoveryListSkeleton: View {
+    var count: Int = 5
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ForEach(0..<count, id: \.self) { index in
+                if index > 0 { SidebarRowDivider() }
+                DiscoveryRowSkeleton()
+            }
         }
     }
 }

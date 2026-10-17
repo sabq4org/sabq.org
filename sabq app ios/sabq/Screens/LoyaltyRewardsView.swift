@@ -17,7 +17,7 @@ struct LoyaltyRewardsView: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 18) {
+            VStack(spacing: SabqLayout.space16) {
                 balanceCard
                 if let success = successMessage {
                     successBanner(success)
@@ -26,23 +26,27 @@ struct LoyaltyRewardsView: View {
                     errorBanner(err)
                 }
                 if isLoading && rewards.isEmpty {
-                    ProgressView().padding(.top, 40)
+                    ProgressView().padding(.top, SabqLayout.space40)
                 } else if let loadError {
                     Text(loadError)
-                        .font(SabqFonts.app(size: 14))
-                        .foregroundStyle(SabqTheme.coral)
-                        .padding()
+                        .sabqText(SabqType.excerpt)
+                        .foregroundStyle(SabqTheme.danger)
+                        .multilineTextAlignment(.center)
+                        .padding(SabqLayout.space16)
                 } else if rewards.isEmpty {
                     emptyState
                 } else {
-                    LazyVStack(spacing: 12) {
-                        ForEach(rewards) { reward in
+                    LazyVStack(spacing: 0) {
+                        ForEach(Array(rewards.enumerated()), id: \.element.id) { index, reward in
+                            if index > 0 {
+                                Rectangle().fill(SabqTheme.separator).frame(height: 1)
+                            }
                             rewardCard(reward)
                         }
                     }
                 }
             }
-            .padding(16)
+            .padding(SabqLayout.pageMargin)
         }
         .background(SabqTheme.background.ignoresSafeArea())
         .navigationTitle("متجر المكافآت")
@@ -63,87 +67,70 @@ struct LoyaltyRewardsView: View {
     // MARK: Balance hero
 
     private var balanceCard: some View {
-        VStack(spacing: 6) {
-            HStack(spacing: 8) {
+        VStack(spacing: SabqLayout.space4) {
+            HStack(spacing: SabqLayout.space8) {
                 Image(systemName: "sparkles")
-                    .font(SabqFonts.app(size: 14))
+                    .font(SabqType.meta.font)
+                    .accessibilityHidden(true)
                 Text("رصيدك من النقاط")
-                    .font(SabqFonts.app(size: 13, weight: .semibold))
+                    .font(SabqType.metaEmphasis.font)
             }
-            .foregroundStyle(.white.opacity(0.85))
+            .foregroundStyle(SabqTheme.textSecondary)
             Text("\(balance)")
-                .font(SabqFonts.app(size: 42, weight: .black))
-                .foregroundStyle(.white)
+                .font(SabqFonts.headline(size: 40))
+                .foregroundStyle(SabqTheme.textPrimary)
+                .environment(\.layoutDirection, .leftToRight)
             Text("نقطة")
-                .font(SabqFonts.app(size: 13, weight: .medium))
-                .foregroundStyle(.white.opacity(0.7))
+                .font(SabqType.meta.font)
+                .foregroundStyle(SabqTheme.textSecondary)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 22)
-        .background(
-            LinearGradient(
-                colors: [SabqTheme.primaryEnd, SabqTheme.primaryStart],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            ),
-            in: RoundedRectangle(cornerRadius: 20, style: .continuous)
-        )
-        .shadow(color: SabqTheme.primaryEnd.opacity(0.30), radius: 18, x: 0, y: 8)
+        .padding(.vertical, SabqLayout.space24)
+        .background(SabqTheme.surfaceMuted, in: RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
+        .accessibilityElement(children: .combine)
     }
 
     // MARK: Reward card
 
     private func rewardCard(_ reward: LoyaltyReward) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .top, spacing: 12) {
-                if let urlStr = reward.imageUrl, let url = URL(string: urlStr) {
-                    CachedAsyncImage(url: url, contentMode: .fill) {
-                        rewardPlaceholder
-                    }
-                    .frame(width: 80, height: 80)
-                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                } else {
-                    rewardPlaceholder
-                        .frame(width: 80, height: 80)
-                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                }
-
-                VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: SabqLayout.space12) {
+            HStack(alignment: .top, spacing: SabqLayout.space12) {
+                VStack(alignment: .leading, spacing: SabqLayout.space4) {
                     if let partner = reward.partnerName, !partner.isEmpty {
                         Text(partner.uppercased())
-                            .font(SabqFonts.app(size: 10, weight: .heavy))
-                            .foregroundStyle(SabqTheme.tertiaryInk)
+                            .font(SabqType.tag.font)
+                            .foregroundStyle(SabqTheme.textTertiary)
                     }
                     Text(reward.nameAr)
-                        .font(SabqFonts.app(size: 15, weight: .bold))
-                        .foregroundStyle(SabqTheme.ink)
+                        .sabqText(SabqType.rowTitle)
+                        .foregroundStyle(SabqTheme.textPrimary)
                         .lineLimit(2)
                     if let desc = reward.description, !desc.isEmpty {
                         Text(desc)
-                            .font(SabqFonts.app(size: 12))
-                            .foregroundStyle(SabqTheme.secondaryInk)
+                            .sabqText(SabqType.meta)
+                            .foregroundStyle(SabqTheme.textSecondary)
                             .lineLimit(2)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
+
+                CachedAsyncImage(url: reward.imageUrl.flatMap(URL.init(string:)), contentMode: .fill) {
+                    SabqImagePlaceholder()
+                }
+                .frame(width: 80, height: 80)
+                .clipShape(RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous))
+                .accessibilityHidden(true)
             }
 
-            HStack(spacing: 8) {
-                HStack(spacing: 4) {
-                    Image(systemName: "sparkles").font(SabqFonts.app(size: 11, weight: .heavy))
-                    Text("\(reward.pointsCost) نقطة")
-                        .font(SabqFonts.app(size: 13, weight: .heavy))
-                }
-                .foregroundStyle(SabqTheme.primaryEnd)
-                .padding(.horizontal, 10).padding(.vertical, 5)
-                .background(SabqTheme.primaryEnd.opacity(0.10), in: Capsule())
+            HStack(spacing: SabqLayout.space8) {
+                Text("\(reward.pointsCost) نقطة")
+                    .font(SabqType.metaEmphasis.font)
+                    .foregroundStyle(SabqTheme.primary)
 
                 if let stock = reward.remainingStock, stock < 20 {
                     Text("متبقي \(stock)")
-                        .font(SabqFonts.app(size: 11, weight: .semibold))
-                        .foregroundStyle(SabqTheme.coral)
-                        .padding(.horizontal, 8).padding(.vertical, 4)
-                        .background(SabqTheme.coral.opacity(0.10), in: Capsule())
+                        .font(SabqType.tag.font)
+                        .foregroundStyle(SabqTheme.danger)
                 }
 
                 Spacer(minLength: 0)
@@ -151,35 +138,29 @@ struct LoyaltyRewardsView: View {
                 redeemButton(reward)
             }
         }
-        .padding(14)
-        .background(SabqTheme.surface, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(SabqTheme.outline.opacity(0.4), lineWidth: 0.5)
-        )
+        .padding(.vertical, SabqLayout.space16)
     }
 
     private func redeemButton(_ reward: LoyaltyReward) -> some View {
         Button {
             confirming = reward
         } label: {
-            HStack(spacing: 6) {
+            HStack(spacing: SabqLayout.space8) {
                 if redeeming == reward.id {
-                    ProgressView().tint(.white).controlSize(.mini)
+                    ProgressView().tint(SabqTheme.onAction).controlSize(.mini)
                 } else {
                     Image(systemName: reward.canRedeem ? "gift.fill" : "lock.fill")
-                        .font(SabqFonts.app(size: 11, weight: .heavy))
+                        .font(SabqType.tag.font)
                 }
                 Text(buttonLabel(for: reward))
-                    .font(SabqFonts.app(size: 13, weight: .bold))
+                    .font(SabqType.button.font)
             }
-            .foregroundStyle(.white)
-            .padding(.horizontal, 14).padding(.vertical, 8)
+            .foregroundStyle(reward.canRedeem ? SabqTheme.onAction : SabqTheme.disabledInk)
+            .padding(.horizontal, SabqLayout.space16)
+            .frame(minHeight: SabqLayout.touchTarget)
             .background(
-                reward.canRedeem
-                    ? SabqTheme.brandGradient
-                    : LinearGradient(colors: [SabqTheme.tertiaryInk, SabqTheme.secondaryInk], startPoint: .topLeading, endPoint: .bottomTrailing),
-                in: Capsule()
+                reward.canRedeem ? SabqTheme.actionFill : SabqTheme.disabledFill,
+                in: RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
             )
         }
         .buttonStyle(.plain)
@@ -193,76 +174,63 @@ struct LoyaltyRewardsView: View {
         return "تحتاج \(r.pointsShort)+"
     }
 
-    private var rewardPlaceholder: some View {
-        LinearGradient(
-            colors: [SabqTheme.primaryEnd.opacity(0.20), SabqTheme.primaryStart.opacity(0.05)],
-            startPoint: .topLeading, endPoint: .bottomTrailing
-        )
-        .overlay {
-            Image(systemName: "gift.fill")
-                .font(SabqFonts.app(size: 26, weight: .light))
-                .foregroundStyle(SabqTheme.primaryEnd.opacity(0.5))
-        }
-    }
-
     private var emptyState: some View {
-        VStack(spacing: 14) {
-            ZStack {
-                Circle()
-                    .fill(SabqTheme.primaryEnd.opacity(0.10))
-                    .frame(width: 96, height: 96)
-                Image(systemName: "gift.fill")
-                    .font(SabqFonts.app(size: 38, weight: .light))
-                    .foregroundStyle(SabqTheme.primaryEnd)
-            }
-            HStack(spacing: 6) {
+        VStack(spacing: SabqLayout.space12) {
+            Image(systemName: "gift")
+                .font(SabqFonts.app(size: 26, weight: .regular))
+                .foregroundStyle(SabqTheme.textSecondary)
+                .frame(width: 56, height: 56)
+                .background(SabqTheme.surfaceMuted, in: RoundedRectangle(cornerRadius: SabqRadius.medium))
+                .accessibilityHidden(true)
+            HStack(spacing: SabqLayout.space4) {
                 Image(systemName: "sparkles")
-                    .font(SabqFonts.app(size: 10, weight: .heavy))
+                    .font(SabqType.tag.font)
                 Text("قريباً")
-                    .font(SabqFonts.app(size: 11, weight: .black))
+                    .font(SabqType.tag.font)
             }
-            .foregroundStyle(.white)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 5)
-            .background(SabqTheme.primaryEnd, in: Capsule())
+            .foregroundStyle(SabqTheme.onAction)
+            .padding(.horizontal, SabqLayout.space12)
+            .padding(.vertical, SabqLayout.space4)
+            .background(SabqTheme.actionFill, in: Capsule())
             Text("سيتم إتاحة المكافآت قريباً")
-                .font(SabqFonts.app(size: 17, weight: .bold))
-                .foregroundStyle(SabqTheme.ink)
+                .sabqText(SabqType.rowTitle)
+                .foregroundStyle(SabqTheme.textPrimary)
             Text("نقاطك محفوظة ✨ نعمل على إطلاق متجر المكافآت قريباً — تابع تفاعلك واستمر في كسب النقاط.")
-                .font(SabqFonts.app(size: 13))
-                .foregroundStyle(SabqTheme.secondaryInk)
+                .sabqText(SabqType.excerpt)
+                .foregroundStyle(SabqTheme.textSecondary)
                 .multilineTextAlignment(.center)
-                .lineSpacing(4)
-                .padding(.horizontal, 24)
+                .padding(.horizontal, SabqLayout.space24)
         }
-        .padding(.vertical, 36)
+        .padding(.vertical, SabqLayout.space32)
         .frame(maxWidth: .infinity)
     }
 
     private func successBanner(_ message: String) -> some View {
-        HStack(spacing: 8) {
+        HStack(spacing: SabqLayout.space8) {
             Image(systemName: "checkmark.circle.fill")
-                .font(SabqFonts.app(size: 14))
+                .font(SabqType.excerpt.font)
+                .accessibilityHidden(true)
             Text(message)
-                .font(SabqFonts.app(size: 13, weight: .medium))
+                .sabqText(SabqType.meta)
         }
-        .foregroundStyle(SabqTheme.leaf)
-        .padding(12)
+        .foregroundStyle(SabqTheme.success)
+        .padding(SabqLayout.space12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(SabqTheme.leaf.opacity(0.10), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .background(SabqTheme.surfaceMuted, in: RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
     }
 
     private func errorBanner(_ message: String) -> some View {
-        HStack(spacing: 8) {
+        HStack(spacing: SabqLayout.space8) {
             Image(systemName: "exclamationmark.triangle.fill")
-                .font(SabqFonts.app(size: 14))
+                .font(SabqType.excerpt.font)
+                .accessibilityHidden(true)
             Text(message)
-                .font(SabqFonts.app(size: 13, weight: .medium))
+                .sabqText(SabqType.meta)
         }
-        .foregroundStyle(SabqTheme.coral)
-        .padding(12)
+        .foregroundStyle(SabqTheme.danger)
+        .padding(SabqLayout.space12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(SabqTheme.coral.opacity(0.08), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .background(SabqTheme.surfaceMuted, in: RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
     }
 
     // MARK: Networking

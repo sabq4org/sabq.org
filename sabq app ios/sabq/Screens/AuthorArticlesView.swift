@@ -4,7 +4,7 @@ import SwiftUI
 // `/api/v1/authors/by-name` (avatar, role, bio, lifetime stats, top
 // categories, recent articles) and lays it out as:
 //
-//   1. Hero card with gradient — avatar + name + role pill + bio.
+//   1. Unboxed header — avatar + name + role tag + bio.
 //   2. Stats strip — articles count / total reads / time on sabq.
 //   3. Top-categories chip row — the 3 areas the author writes in most.
 //   4. Articles list — the latest 30 publications, classic compact rows.
@@ -35,7 +35,7 @@ struct AuthorArticlesView: View {
 
     var body: some View {
         ScrollView(showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: SabqLayout.space24) {
                 heroCard
 
                 if !isLoading || page != nil {
@@ -46,11 +46,13 @@ struct AuthorArticlesView: View {
                     topCategoriesRow(cats)
                 }
 
+                SabqSectionBand()
+
                 articlesSection
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 18)
-            .padding(.bottom, 60)
+            .padding(.horizontal, SabqLayout.pageMargin)
+            .padding(.top, SabqLayout.space16)
+            .padding(.bottom, SabqLayout.space40)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .background(SabqTheme.background)
@@ -67,64 +69,30 @@ struct AuthorArticlesView: View {
     // MARK: - Hero
 
     private var heroCard: some View {
-        VStack(spacing: 14) {
+        VStack(spacing: SabqLayout.space12) {
             avatar
 
-            VStack(spacing: 8) {
+            VStack(spacing: SabqLayout.space8) {
                 Text(page?.author.name ?? authorName)
-                    .font(SabqFonts.app(size: 22, weight: .heavy))
-                    .foregroundStyle(SabqTheme.ink)
+                    .sabqText(SabqType.leadTitle)
+                    .foregroundStyle(SabqTheme.textPrimary)
                     .multilineTextAlignment(.center)
 
                 if let role = page?.author.role, !role.isEmpty {
-                    Text(role)
-                        .font(SabqFonts.app(size: 10, weight: .regular))
-                        .tracking(0.4)
-                        .foregroundStyle(SabqTheme.primaryEnd)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 5)
-                        .background(
-                            Capsule(style: .continuous)
-                                .fill(SabqTheme.primaryEnd.opacity(0.10))
-                        )
-                        .overlay(
-                            Capsule(style: .continuous)
-                                .stroke(SabqTheme.primaryEnd.opacity(0.20), lineWidth: 0.5)
-                        )
+                    StatusChip(title: role, tint: SabqTheme.primary)
                 }
             }
 
             if let bio = page?.author.bio, !bio.isEmpty {
                 Text(bio)
-                    .font(SabqFonts.app(size: 13, weight: .medium))
-                    .foregroundStyle(SabqTheme.secondaryInk)
+                    .sabqText(SabqType.excerpt)
+                    .foregroundStyle(SabqTheme.textSecondary)
                     .multilineTextAlignment(.center)
-                    .lineSpacing(4)
                     .lineLimit(4)
-                    .padding(.horizontal, 8)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .padding(20)
         .frame(maxWidth: .infinity)
-        .background(
-            RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            SabqTheme.primaryEnd.opacity(0.10),
-                            SabqTheme.surface,
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .shadow(color: SabqTheme.shadow, radius: 12, x: 0, y: 4)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
-                .stroke(SabqTheme.primaryEnd.opacity(0.16), lineWidth: 0.6)
-        )
     }
 
     private var avatar: some View {
@@ -135,10 +103,6 @@ struct AuthorArticlesView: View {
         }
         .frame(width: 88, height: 88)
         .clipShape(Circle())
-        .overlay(
-            Circle().stroke(SabqTheme.primaryEnd.opacity(0.25), lineWidth: 2)
-        )
-        .shadow(color: SabqTheme.primaryEnd.opacity(0.18), radius: 10, y: 4)
         // Re-load when the profile payload arrives (page starts nil).
         .id(avatarURL?.absoluteString ?? "author-avatar-\(authorName)")
     }
@@ -146,74 +110,61 @@ struct AuthorArticlesView: View {
     private var avatarInitial: some View {
         ZStack {
             Circle()
-                .fill(
-                    LinearGradient(
-                        colors: [SabqTheme.primaryEnd.opacity(0.22), SabqTheme.primaryEnd.opacity(0.10)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
+                .fill(SabqTheme.surfaceMuted)
                 .frame(width: 88, height: 88)
             Text(String((page?.author.name ?? authorName).prefix(1)))
-                .font(SabqFonts.app(size: 36, weight: .heavy))
-                .foregroundStyle(SabqTheme.primaryEnd)
+                .font(SabqType.articleTitle.font)
+                .foregroundStyle(SabqTheme.textSecondary)
         }
     }
 
     // MARK: - Stats
 
     private var statsStrip: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: SabqLayout.space8) {
             statTile(
                 value: SabqFormatters.compactViewCount(page?.stats.articleCount ?? articles.count),
                 label: "مقال",
                 icon: "doc.text.fill",
-                tint: SabqTheme.primaryEnd
+                tint: SabqTheme.primary
             )
             statTile(
                 value: SabqFormatters.compactViewCount(page?.stats.totalViews ?? 0),
                 label: "قراءة",
                 icon: "eye.fill",
-                tint: SabqTheme.teal
+                tint: SabqTheme.primary
             )
             statTile(
                 value: timeOnSabq(),
                 label: "مع سبق",
                 icon: "calendar",
-                tint: SabqTheme.gold
+                tint: SabqTheme.primary
             )
         }
     }
 
     private func statTile(value: String, label: String, icon: String, tint: Color) -> some View {
-        VStack(spacing: 6) {
-            HStack(spacing: 4) {
-                Image(systemName: icon)
-                    .font(SabqFonts.app(size: 10, weight: .regular))
-                Text(label)
-                    .font(SabqFonts.app(size: 10, weight: .regular))
-                    .tracking(0.2)
-            }
-            .foregroundStyle(tint)
-
+        VStack(spacing: SabqLayout.space4) {
             Text(value)
-                .font(SabqFonts.app(size: 19, weight: .heavy))
-                .foregroundStyle(SabqTheme.ink)
+                .font(SabqType.sectionHeading.font)
+                .foregroundStyle(SabqTheme.textPrimary)
                 .monospacedDigit()
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
+
+            HStack(spacing: SabqLayout.space4) {
+                Image(systemName: icon)
+                    .foregroundStyle(tint)
+                    .accessibilityHidden(true)
+                Text(label)
+                    .foregroundStyle(SabqTheme.textSecondary)
+            }
+            .font(SabqType.meta.font)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 12)
-        .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(SabqTheme.surface)
-                .shadow(color: SabqTheme.shadow, radius: 6, x: 0, y: 2)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(tint.opacity(0.18), lineWidth: 0.5)
-        )
+        .padding(.vertical, SabqLayout.space12)
+        .sabqBlockSurface()
+        .accessibilityElement(children: .combine)
     }
 
     /// Years/months since the author's earliest publish. Falls back to
@@ -240,78 +191,56 @@ struct AuthorArticlesView: View {
     // MARK: - Categories
 
     private func topCategoriesRow(_ cats: [APIAuthorCategory]) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 6) {
-                Image(systemName: "tag.fill")
-                    .font(SabqFonts.app(size: 11, weight: .regular))
-                    .foregroundStyle(SabqTheme.primaryEnd)
-                Text("التصنيفات الأبرز")
-                    .font(SabqFonts.app(size: 12, weight: .medium))
-                    .foregroundStyle(SabqTheme.ink)
-            }
+        VStack(alignment: .leading, spacing: SabqLayout.space12) {
+            DiscoverySectionHeading(title: "التصنيفات الأبرز")
 
-            HStack(spacing: 8) {
+            FlowLayout(spacing: SabqLayout.space8) {
                 ForEach(cats, id: \.id) { cat in
                     categoryChip(cat)
                 }
-                Spacer(minLength: 0)
             }
         }
     }
 
+    /// ألوان التصنيفات لا تلوّن النص ولا الخلفية؛ شريحة هادئة موحّدة.
     private func categoryChip(_ cat: APIAuthorCategory) -> some View {
-        let tint = Self.colorFromHex(cat.color) ?? SabqTheme.primaryEnd
-        return HStack(spacing: 6) {
+        HStack(spacing: SabqLayout.space4) {
             Image(systemName: cat.icon ?? "circle.fill")
-                .font(SabqFonts.app(size: 10, weight: .regular))
+                .foregroundStyle(SabqTheme.textSecondary)
+                .accessibilityHidden(true)
             Text(cat.nameAr)
-                .font(SabqFonts.app(size: 10, weight: .regular))
+                .foregroundStyle(SabqTheme.textPrimary)
             Text("\(cat.count)")
-                .font(SabqFonts.app(size: 10, weight: .regular))
+                .foregroundStyle(SabqTheme.textSecondary)
                 .monospacedDigit()
-                .padding(.horizontal, 6)
-                .padding(.vertical, 1)
-                .background(Capsule().fill(tint.opacity(0.18)))
         }
-        .foregroundStyle(tint)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 7)
-        .background(
-            Capsule(style: .continuous)
-                .fill(tint.opacity(0.08))
-        )
-        .overlay(
-            Capsule(style: .continuous)
-                .stroke(tint.opacity(0.22), lineWidth: 0.5)
-        )
+        .font(SabqType.tag.font)
+        .padding(.horizontal, SabqLayout.space12)
+        .frame(minHeight: 36)
+        .background(Capsule(style: .continuous).fill(SabqTheme.surfaceMuted))
+        .accessibilityElement(children: .combine)
     }
 
     // MARK: - Articles
 
     private var articlesSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 6) {
-                Image(systemName: "newspaper.fill")
-                    .font(SabqFonts.app(size: 11, weight: .regular))
-                    .foregroundStyle(SabqTheme.primaryEnd)
+        VStack(alignment: .leading, spacing: SabqLayout.space4) {
+            HStack(alignment: .firstTextBaseline, spacing: SabqLayout.space8) {
                 Text("أحدث المنشورات")
-                    .font(SabqFonts.app(size: 14, weight: .bold))
-                    .foregroundStyle(SabqTheme.ink)
+                    .font(SabqType.sectionHeading.font)
+                    .foregroundStyle(SabqTheme.textPrimary)
+                    .accessibilityAddTraits(.isHeader)
                 Spacer(minLength: 0)
                 if !articles.isEmpty {
                     Text("\(articles.count)")
-                        .font(SabqFonts.app(size: 10, weight: .regular))
-                        .foregroundStyle(SabqTheme.tertiaryInk)
+                        .font(SabqType.meta.font)
+                        .foregroundStyle(SabqTheme.textTertiary)
                         .monospacedDigit()
                 }
             }
 
             if isLoading && articles.isEmpty {
-                VStack(spacing: 10) {
-                    ForEach(0..<3, id: \.self) { _ in
-                        SkeletonBox(height: 92, radius: SabqTheme.chipRadius)
-                    }
-                }
+                DiscoveryListSkeleton(count: 3)
             } else if articles.isEmpty {
                 EmptyStateView(
                     icon: "person.crop.circle.badge.questionmark",
@@ -320,8 +249,9 @@ struct AuthorArticlesView: View {
                     subtitle: "لم نجد أي محتوى منشور لهذا الكاتب حالياً."
                 )
             } else {
-                SurfaceCard(lazy: true, cornerRadius: 22, spacing: 0) {
-                    ForEach(articles) { article in
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    ForEach(Array(articles.enumerated()), id: \.element.id) { index, article in
+                        if index > 0 { SidebarRowDivider() }
                         NavigationLink(value: article) {
                             CompactArticleRow(
                                 article: article,
@@ -330,7 +260,6 @@ struct AuthorArticlesView: View {
                             )
                         }
                         .buttonStyle(.plain)
-                        .padding(.vertical, 4)
                     }
                 }
             }
@@ -349,19 +278,5 @@ struct AuthorArticlesView: View {
             // the screen useful when the endpoint is unreachable.
             page = nil
         }
-    }
-
-    /// Hex string "#aabbcc" or "aabbcc" → Color, or nil if it doesn't parse.
-    /// Backend stores category colors as hex; SwiftUI doesn't have a native
-    /// initializer for that.
-    static func colorFromHex(_ hex: String?) -> Color? {
-        guard var s = hex?.trimmingCharacters(in: .whitespaces) else { return nil }
-        if s.hasPrefix("#") { s.removeFirst() }
-        guard s.count == 6, let n = UInt32(s, radix: 16) else { return nil }
-        return Color(
-            red: Double((n >> 16) & 0xff) / 255,
-            green: Double((n >> 8) & 0xff) / 255,
-            blue: Double(n & 0xff) / 255
-        )
     }
 }

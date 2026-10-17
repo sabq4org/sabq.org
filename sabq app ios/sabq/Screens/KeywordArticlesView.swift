@@ -10,17 +10,14 @@ struct KeywordArticlesView: View {
 
     var body: some View {
         ScrollView(showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 20) {
-                heroSection
-                followToggle
+            VStack(alignment: .leading, spacing: SabqLayout.space24) {
+                VStack(alignment: .leading, spacing: SabqLayout.space16) {
+                    heroSection
+                    followToggle
+                }
 
                 if isLoading && items.isEmpty {
-                    VStack {
-                        ProgressView()
-                            .tint(SabqTheme.primaryEnd)
-                            .padding(.top, 40)
-                    }
-                    .frame(maxWidth: .infinity)
+                    DiscoveryListSkeleton()
                 } else if items.isEmpty, let loadError {
                     // كان الفشل يُبتلع إلى «لا توجد مواد» حتى بلا إنترنت (نقل أندرويد #1573).
                     ErrorStateView(message: loadError) {
@@ -34,7 +31,7 @@ struct KeywordArticlesView: View {
                         subtitle: "لم نجد أخبارًا أو مقالات رأي تحمل هذا الوسم حاليًا"
                     )
                 } else {
-                    SurfaceCard(lazy: true, cornerRadius: 22, spacing: 0) {
+                    LazyVStack(alignment: .leading, spacing: 0) {
                         ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
                             if index > 0 {
                                 SidebarRowDivider()
@@ -61,9 +58,9 @@ struct KeywordArticlesView: View {
                     }
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 18)
-            .padding(.bottom, 40)
+            .padding(.horizontal, SabqLayout.pageMargin)
+            .padding(.top, SabqLayout.space16)
+            .padding(.bottom, SabqLayout.space40)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .background(SabqTheme.background)
@@ -111,34 +108,42 @@ struct KeywordArticlesView: View {
     }
 
     private var heroSection: some View {
-        HStack(alignment: .top, spacing: 16) {
-            VStack(alignment: .leading, spacing: 8) {
+        HStack(alignment: .top, spacing: SabqLayout.space12) {
+            VStack(alignment: .leading, spacing: SabqLayout.space8) {
                 Text(keyword)
-                    .font(SabqFonts.app(size: 26, weight: .bold))
-                    .foregroundStyle(SabqTheme.ink)
+                    .sabqText(SabqType.articleTitle)
+                    .foregroundStyle(SabqTheme.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
 
                 Text("أخبار ومقالات رأي تحمل هذا الوسم")
-                    .font(SabqFonts.app(size: 15, weight: .regular))
-                    .foregroundStyle(SabqTheme.secondaryInk)
-                    .lineSpacing(4)
+                    .sabqText(SabqType.excerpt)
+                    .foregroundStyle(SabqTheme.textSecondary)
 
                 if !items.isEmpty {
-                    HStack(spacing: 8) {
-                        StatusChip(title: "\(items.count) مادة", tint: SabqTheme.primaryEnd)
+                    HStack(spacing: SabqLayout.space8) {
+                        StatusChip(title: "\(items.count) مادة", tint: SabqTheme.primary)
 
                         if articlesCount > 0 {
-                            StatusChip(title: "\(articlesCount) خبر", tint: SabqTheme.sky)
+                            StatusChip(title: "\(articlesCount) خبر", tint: SabqTheme.textSecondary)
                         }
 
                         if opinionsCount > 0 {
-                            StatusChip(title: "\(opinionsCount) رأي", tint: SabqTheme.gold)
+                            StatusChip(title: "\(opinionsCount) رأي", tint: SabqTheme.textSecondary)
                         }
                     }
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            SquareIconBadge(systemImage: "tag.fill", tint: SabqTheme.primaryEnd)
+            Image(systemName: "tag")
+                .font(SabqType.rowTitle.font)
+                .foregroundStyle(SabqTheme.primary)
+                .frame(width: SabqLayout.touchTarget, height: SabqLayout.touchTarget)
+                .background(
+                    RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
+                        .fill(SabqTheme.surfaceMuted)
+                )
+                .accessibilityHidden(true)
         }
     }
 
@@ -150,23 +155,21 @@ struct KeywordArticlesView: View {
                 followedKeywords.toggle(keyword)
             }
         } label: {
-            HStack(spacing: 7) {
-                Image(systemName: isFollowing ? "checkmark.circle.fill" : "plus.circle")
-                    .font(SabqFonts.app(size: 14, weight: .semibold))
+            HStack(spacing: SabqLayout.space8) {
+                Image(systemName: isFollowing ? "checkmark" : "plus")
+                    .font(SabqType.metaEmphasis.font)
                 Text(isFollowing ? "متابع" : "متابعة الوسم")
-                    .font(SabqFonts.app(size: 12, weight: .medium))
+                    .font(SabqType.metaEmphasis.font)
             }
-            .foregroundStyle(isFollowing ? .white : SabqTheme.primaryEnd)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 9)
+            .foregroundStyle(isFollowing ? SabqTheme.onAction : SabqTheme.textPrimary)
+            .padding(.horizontal, SabqLayout.space16)
+            .frame(minHeight: 36)
             .background(
                 Capsule(style: .continuous)
-                    .fill(isFollowing ? SabqTheme.primaryEnd : SabqTheme.primaryEnd.opacity(0.12))
+                    .fill(isFollowing ? SabqTheme.actionFill : SabqTheme.surfaceMuted)
             )
-            .overlay(
-                Capsule(style: .continuous)
-                    .stroke(SabqTheme.primaryEnd.opacity(isFollowing ? 0 : 0.30), lineWidth: 0.5)
-            )
+            .frame(minHeight: SabqLayout.touchTarget)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -196,70 +199,78 @@ private enum KeywordContentItem: Hashable, Identifiable {
     }
 }
 
+/// صف مقال رأي بمقاس `CompactArticleRow`: العنوان، ثم «مقال رأي · الكاتب»
+/// ووقت القراءة والتاريخ، ومصغّرة 112×63 في نهاية السطر.
 private struct CompactOpinionKeywordRow: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let opinion: OpinionArticle
 
     var body: some View {
-        HStack(alignment: .top, spacing: 14) {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 8) {
-                    StatusChip(title: "مقال رأي", tint: SabqTheme.gold)
-                    StatusChip(title: opinion.authorName, tint: SabqTheme.secondaryInk)
-                }
-
+        HStack(alignment: .top, spacing: NewsRowStyle.thumbnailGap) {
+            VStack(alignment: .leading, spacing: NewsRowStyle.textStackSpacing) {
                 SabqRTLText(
                     opinion.title,
-                    uiFont: SabqFonts.uiApp(size: NewsRowStyle.titleSize, weight: .regular),
-                    color: SabqTheme.ink,
-                    lineLimit: dynamicTypeSize.isAccessibilitySize ? 0 : 2,
-                    lineSpacing: NewsRowStyle.titleLineSpacing
+                    uiFont: SabqType.rowTitle.uiFont,
+                    color: SabqTheme.textPrimary,
+                    lineLimit: dynamicTypeSize.isAccessibilitySize ? 0 : NewsRowStyle.compactTitleLines,
+                    lineSpacing: NewsRowStyle.titleLineSpacing,
+                    textStyle: SabqType.rowTitle.uiTextStyle
                 )
 
-                HStack(spacing: 12) {
-                    HStack(spacing: 4) {
-                        Text(opinion.readingTime)
-                            .font(SabqFonts.app(size: 10, weight: .regular))
-                            .monospacedDigit()
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: SabqLayout.space4) {
+                        kindAndAuthor
+                        Text("·").foregroundStyle(SabqTheme.textTertiary)
+                        timing
                     }
-                    .foregroundStyle(SabqTheme.tertiaryInk)
-
-                    Text(opinion.dateFormatted)
-                        .font(SabqFonts.app(size: 10, weight: .regular))
-                        .foregroundStyle(SabqTheme.tertiaryInk)
-
-                    Spacer(minLength: 0)
+                    VStack(alignment: .leading, spacing: SabqLayout.space4) {
+                        kindAndAuthor
+                        timing
+                    }
                 }
+                .font(SabqType.meta.font)
+                .lineLimit(1)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            if let urlString = opinion.imageURL, let url = URL(string: urlString) {
-                FocalCachedAsyncImage(url: url, focalPoint: opinion.imageFocalPoint) {
-                    thumbnailPlaceholder
-                }
-                .frame(width: 80, height: 80)
-                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-            } else {
-                thumbnailPlaceholder
-            }
+            thumbnail
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, SabqLayout.rowPadding)
+        .contentShape(Rectangle())
     }
 
-    private var thumbnailPlaceholder: some View {
-        RoundedRectangle(cornerRadius: 16, style: .continuous)
-            .fill(
-                LinearGradient(
-                    colors: [SabqTheme.gold.opacity(0.14), SabqTheme.primaryEnd.opacity(0.05)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            )
-            .frame(width: 80, height: 80)
-            .overlay {
-                Image(systemName: "text.quote")
-                    .font(SabqFonts.app(size: 28, weight: .light))
-                    .foregroundStyle(SabqTheme.gold.opacity(0.7))
+    private var kindAndAuthor: some View {
+        HStack(spacing: SabqLayout.space4) {
+            Text("مقال رأي")
+                .font(SabqType.metaEmphasis.font)
+                .foregroundStyle(SabqTheme.primary)
+            Text("·").foregroundStyle(SabqTheme.textTertiary)
+            Text(opinion.authorName)
+                .foregroundStyle(SabqTheme.textSecondary)
+        }
+    }
+
+    private var timing: some View {
+        HStack(spacing: SabqLayout.space8) {
+            Text(opinion.readingTime)
+                .monospacedDigit()
+            Text(opinion.dateFormatted)
+        }
+        .foregroundStyle(SabqTheme.textTertiary)
+    }
+
+    private var thumbnail: some View {
+        Group {
+            if let urlString = opinion.imageURL, let url = URL(string: urlString) {
+                FocalCachedAsyncImage(url: url, focalPoint: opinion.imageFocalPoint, maxPixelSize: 360, fitsMismatchedAspect: true) {
+                    SabqImagePlaceholder()
+                }
+            } else {
+                SabqImagePlaceholder()
+                    .environment(\.sabqImageLoadFailed, true)
             }
+        }
+        .frame(width: NewsRowStyle.thumbnailWidth, height: NewsRowStyle.thumbnailHeight)
+        .clipShape(RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous))
     }
 }

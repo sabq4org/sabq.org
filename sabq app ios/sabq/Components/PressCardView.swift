@@ -16,29 +16,15 @@ struct PressCardView: View {
     let profileImageUrl: String?
 
     // Matches the actual .pkpass template after the 2026-05-19 redesign:
-    // white card, Sabq sky-blue accent (rgb 28,164,240 — the web primary,
-    // also the iOS AccentColor source), deep navy text. The preview is
-    // the user's mental anchor for "what am I about to drop into Wallet",
-    // so keeping these in lock-step matters more than visual variety.
-    private var accent: Color {
-        Color(red: 0.11, green: 0.64, blue: 0.94)
-    }
-
-    private var inkPrimary: Color {
-        Color(red: 0.10, green: 0.13, blue: 0.21)
-    }
-
-    private var inkSecondary: Color {
-        Color(red: 0.34, green: 0.39, blue: 0.50)
-    }
-
-    private var inkMuted: Color {
-        Color(red: 0.55, green: 0.59, blue: 0.66)
-    }
-
-    private var cardBackground: Color {
-        Color(red: 1.0, green: 1.0, blue: 1.0)
-    }
+    // white card, Sabq sky-blue accent stripe, deep navy text. The card is
+    // always rendered in light appearance (see `.environment(\.colorScheme,
+    // .light)` below) so the preview matches the printed pass in both
+    // modes, while the text uses the contrast-safe Sabq roles.
+    private var accent: Color { SabqTheme.brandSky }
+    private var inkPrimary: Color { SabqTheme.textPrimary }
+    private var inkSecondary: Color { SabqTheme.textSecondary }
+    private var inkMuted: Color { SabqTheme.textTertiary }
+    private var cardBackground: Color { SabqTheme.surface }
 
     private var validUntilLabel: String? {
         guard let validUntil else { return nil }
@@ -60,55 +46,42 @@ struct PressCardView: View {
                 VStack(spacing: 0) {
                     Rectangle()
                         .fill(accent)
-                        .frame(height: 3)
+                        .frame(height: SabqLayout.space4)
                     Spacer()
                 }
 
-                // Very soft accent halo in the top-right corner so the
-                // card has some depth on white without leaning into a
-                // colored background.
-                RadialGradient(
-                    colors: [accent.opacity(0.10), .clear],
-                    center: .topTrailing,
-                    startRadius: 5,
-                    endRadius: geo.size.width * 0.55
-                )
-
                 VStack(alignment: .leading, spacing: 0) {
-                    HStack(alignment: .top, spacing: 10) {
-                        VStack(alignment: .leading, spacing: 4) {
+                    HStack(alignment: .top, spacing: SabqLayout.space8) {
+                        VStack(alignment: .leading, spacing: SabqLayout.space4) {
                             Text("سبق · بطاقة صحفية")
-                                .font(SabqFonts.app(size: 10, weight: .medium))
-                                .tracking(2)
+                                .sabqText(SabqType.meta)
                                 .foregroundStyle(inkMuted)
                             Text(roleAr)
-                                .font(SabqFonts.app(size: 18, weight: .heavy))
-                                .foregroundStyle(accent)
+                                .sabqText(SabqType.sectionHeading)
+                                .foregroundStyle(SabqTheme.primary)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.8)
                         }
                         Spacer(minLength: 0)
                         Image(systemName: "checkmark.seal.fill")
                             .font(SabqFonts.app(size: 22, weight: .semibold))
-                            .foregroundStyle(accent)
+                            .foregroundStyle(SabqTheme.primary)
+                            .accessibilityHidden(true)
                     }
 
                     Spacer(minLength: 0)
 
-                    HStack(spacing: 14) {
+                    HStack(spacing: SabqLayout.space12) {
                         avatarView
                             .frame(width: 64, height: 64)
-                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                    .stroke(accent.opacity(0.30), lineWidth: 1)
-                            )
+                            .clipShape(RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous))
 
-                        VStack(alignment: .leading, spacing: 3) {
+                        VStack(alignment: .leading, spacing: SabqLayout.space4) {
                             Text("الاسم")
-                                .font(SabqFonts.app(size: 9, weight: .medium))
-                                .tracking(1.5)
+                                .sabqText(SabqType.tag)
                                 .foregroundStyle(inkMuted)
                             Text(userName)
-                                .font(SabqFonts.app(size: 16, weight: .bold))
+                                .sabqText(SabqType.rowTitle)
                                 .foregroundStyle(inkPrimary)
                                 .lineLimit(1)
                                 .minimumScaleFactor(0.75)
@@ -120,13 +93,13 @@ struct PressCardView: View {
                             // the duplicate here when they match.
                             if let jobTitle, !jobTitle.isEmpty, jobTitle != roleAr {
                                 Text(jobTitle)
-                                    .font(SabqFonts.app(size: 11, weight: .medium))
+                                    .sabqText(SabqType.meta)
                                     .foregroundStyle(inkSecondary)
                                     .lineLimit(1)
                             }
                             if let department, !department.isEmpty {
                                 Text(department)
-                                    .font(SabqFonts.app(size: 10, weight: .regular))
+                                    .sabqText(SabqType.meta)
                                     .foregroundStyle(inkMuted)
                                     .lineLimit(1)
                             }
@@ -135,38 +108,40 @@ struct PressCardView: View {
 
                     Spacer(minLength: 0)
 
-                    HStack(alignment: .bottom, spacing: 12) {
+                    HStack(alignment: .bottom, spacing: SabqLayout.space12) {
                         if let pressIdNumber, !pressIdNumber.isEmpty {
-                            VStack(alignment: .leading, spacing: 2) {
+                            VStack(alignment: .leading, spacing: 0) {
                                 Text("رقم البطاقة")
-                                    .font(SabqFonts.app(size: 9, weight: .medium))
-                                    .tracking(1.5)
+                                    .sabqText(SabqType.tag)
                                     .foregroundStyle(inkMuted)
                                 Text(pressIdNumber)
-                                    .font(SabqFonts.app(size: 12, weight: .semibold))
-                                    .tracking(2)
+                                    .sabqText(SabqType.metaEmphasis)
+                                    .tracking(1)
+                                    .monospacedDigit()
                                     .foregroundStyle(inkPrimary)
+                                    .environment(\.layoutDirection, .leftToRight)
                             }
                         }
                         Spacer(minLength: 0)
                         if let validUntilLabel {
                             Text(validUntilLabel)
-                                .font(SabqFonts.app(size: 10, weight: .medium))
+                                .sabqText(SabqType.meta)
                                 .foregroundStyle(inkSecondary)
                         }
                     }
                 }
-                .padding(16)
+                .padding(SabqLayout.space16)
+                .padding(.top, SabqLayout.space4)
             }
         }
         .aspectRatio(1.586, contentMode: .fit)
-        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .stroke(Color.black.opacity(0.06), lineWidth: 0.5)
+            RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                .stroke(SabqTheme.outline, lineWidth: 1)
         )
-        .shadow(color: Color.black.opacity(0.08), radius: 14, x: 0, y: 6)
         .environment(\.layoutDirection, .rightToLeft)
+        .environment(\.colorScheme, .light)
     }
 
     @ViewBuilder
@@ -189,10 +164,10 @@ struct PressCardView: View {
 
     private var fallbackAvatar: some View {
         ZStack {
-            accent.opacity(0.08)
+            SabqTheme.surfaceMuted
             Image(systemName: "person.fill")
                 .font(SabqFonts.app(size: 24, weight: .semibold))
-                .foregroundStyle(accent.opacity(0.55))
+                .foregroundStyle(SabqTheme.textTertiary)
         }
     }
 }

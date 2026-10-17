@@ -22,7 +22,7 @@ struct HomeLiteView: View {
 
     var body: some View {
         ScrollView(showsIndicators: false) {
-            LazyVStack(alignment: .leading, spacing: 14) {
+            LazyVStack(alignment: .leading, spacing: SabqLayout.space12) {
                 header
 
                 if articlesStore.allArticles.isEmpty {
@@ -31,9 +31,9 @@ struct HomeLiteView: View {
                     list
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 12)
-            .padding(.bottom, 32)
+            .padding(.horizontal, SabqLayout.pageMargin)
+            .padding(.top, SabqLayout.space12)
+            .padding(.bottom, SabqLayout.space32)
         }
         .background(SabqTheme.background.ignoresSafeArea())
         .refreshable {
@@ -52,28 +52,28 @@ struct HomeLiteView: View {
     // MARK: - Sub-views
 
     private var header: some View {
-        HStack(alignment: .center, spacing: 10) {
-            Image(systemName: "bolt.fill")
-                .font(SabqFonts.app(size: 14, weight: .bold))
-                .foregroundStyle(SabqTheme.primaryEnd)
-                .padding(6)
-                .background(
-                    Circle().fill(SabqTheme.primaryEnd.opacity(0.12))
-                )
-            VStack(alignment: .leading, spacing: 2) {
-                Text("سبق Lite")
-                    .font(SabqFonts.app(size: 17, weight: .bold))
-                    .foregroundStyle(SabqTheme.ink)
+        HStack(alignment: .center, spacing: SabqLayout.space12) {
+            VStack(alignment: .leading, spacing: SabqLayout.space4) {
+                HStack(spacing: SabqLayout.space8) {
+                    Image(systemName: "bolt.fill")
+                        .font(SabqType.tag.font)
+                        .foregroundStyle(SabqTheme.primary)
+                        .accessibilityHidden(true)
+                    Text("سبق Lite")
+                        .font(SabqType.leadTitle.font)
+                        .foregroundStyle(SabqTheme.textPrimary)
+                        .accessibilityAddTraits(.isHeader)
+                }
                 Text("عرض الأخبار فقط — أسرع وأخف")
-                    .font(SabqFonts.app(size: 11, weight: .medium))
-                    .foregroundStyle(SabqTheme.tertiaryInk)
+                    .font(SabqType.meta.font)
+                    .foregroundStyle(SabqTheme.textTertiary)
             }
             Spacer(minLength: 0)
         }
     }
 
     private var list: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 0) {
             ForEach(articlesStore.allArticles) { article in
                 NavigationLink(value: article) {
                     CompactArticleRow(
@@ -95,29 +95,34 @@ struct HomeLiteView: View {
                 } label: {
                     HStack {
                         if articlesStore.isLoading {
-                            ProgressView().tint(SabqTheme.primaryEnd)
+                            ProgressView().tint(SabqTheme.primary)
                         } else {
                             Text("تحميل المزيد")
-                                .font(SabqFonts.app(size: 14, weight: .semibold))
-                                .foregroundStyle(SabqTheme.primaryEnd)
+                                .font(SabqType.button.font)
+                                .foregroundStyle(SabqTheme.primary)
                         }
                     }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
+                    .frame(maxWidth: .infinity, minHeight: SabqLayout.controlHeight)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                            .stroke(SabqTheme.outline, lineWidth: 1)
+                    )
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .padding(.top, SabqLayout.space16)
             }
         }
     }
 
     private var emptyState: some View {
-        VStack(spacing: 12) {
-            ProgressView().tint(SabqTheme.primaryEnd)
+        VStack(spacing: SabqLayout.space12) {
+            ProgressView().tint(SabqTheme.primary)
             Text("يتم تحميل الأخبار…")
-                .font(SabqFonts.app(size: 13, weight: .medium))
-                .foregroundStyle(SabqTheme.secondaryInk)
+                .font(SabqType.meta.font)
+                .foregroundStyle(SabqTheme.textSecondary)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 40)
+        .padding(.vertical, SabqLayout.space40)
     }
 }

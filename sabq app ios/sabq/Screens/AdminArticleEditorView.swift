@@ -520,6 +520,7 @@ struct AdminArticleEditorView: View {
         Group {
             if vm.isLoading {
                 ProgressView()
+                    .tint(SabqTheme.primary)
                     .frame(maxWidth: .infinity, minHeight: 320)
             } else if !vm.loaded {
                 errorState
@@ -587,20 +588,28 @@ struct AdminArticleEditorView: View {
 
     private var form: some View {
         ScrollView(showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: SabqLayout.space24) {
                 if vm.isOpinion { opinionPill }
                 basicSection
+                sectionDivider
                 aiToolsSection
+                sectionDivider
                 contentSection
+                sectionDivider
                 summarySection
+                sectionDivider
                 categorySection
+                sectionDivider
                 bylineSection
+                sectionDivider
                 imageSection
+                sectionDivider
                 seoSection
+                sectionDivider
                 publishSection
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 14)
+            .padding(.horizontal, SabqLayout.pageMargin)
+            .padding(.top, SabqLayout.space16)
             .padding(.bottom, 80)
         }
         .scrollDismissesKeyboard(.immediately)
@@ -609,25 +618,25 @@ struct AdminArticleEditorView: View {
     // MARK: Sections
 
     private var opinionPill: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "text.quote").font(SabqFonts.app(size: 12, weight: .bold))
-            Text("مقال رأي").font(SabqFonts.app(size: 13, weight: .heavy))
+        HStack(spacing: SabqLayout.space4) {
+            Image(systemName: "text.quote").font(SabqFonts.app(size: 12, weight: .semibold))
+            Text("مقال رأي").sabqText(SabqType.tag)
         }
-        .foregroundStyle(SabqTheme.primaryEnd)
-        .padding(.horizontal, 12).padding(.vertical, 7)
-        .background(Capsule().fill(SabqTheme.primaryEnd.opacity(0.12)))
+        .foregroundStyle(SabqTheme.primary)
+        .padding(.horizontal, SabqLayout.space8).padding(.vertical, SabqLayout.space4)
+        .background(RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous).fill(SabqTheme.surfaceMuted))
     }
 
     private var basicSection: some View {
         sectionCard("الأساسي", icon: "textformat") {
             field("العنوان") {
                 TextField("عنوان الخبر", text: $vm.title, axis: .vertical)
-                    .font(SabqFonts.app(size: 16, weight: .bold))
+                    .font(SabqType.rowTitle.font)
             }
             if !vm.isOpinion {
                 field("العنوان الفرعي") {
                     TextField("اختياري", text: $vm.subtitle, axis: .vertical)
-                        .font(SabqFonts.app(size: 14))
+                        .font(SabqType.excerpt.font)
                 }
             }
         }
@@ -665,8 +674,8 @@ struct AdminArticleEditorView: View {
                 showProofSheet = true
             }
             Text("اكتب المحتوى أولاً لتفعيل التوليد")
-                .font(SabqFonts.app(size: 11, weight: .medium))
-                .foregroundStyle(SabqTheme.tertiaryInk)
+                .sabqText(SabqType.meta)
+                .foregroundStyle(SabqTheme.textTertiary)
                 .opacity(vm.liveHTMLLength < 100 ? 1 : 0)
         }
     }
@@ -679,7 +688,7 @@ struct AdminArticleEditorView: View {
         }
         .buttonStyle(.plain)
         .disabled(loading || vm.liveHTMLLength < minLength)
-        .opacity(vm.liveHTMLLength < minLength ? 0.5 : 1)
+        .opacity(vm.liveHTMLLength < minLength ? 0.55 : 1)
     }
 
     private var contentSection: some View {
@@ -687,10 +696,11 @@ struct AdminArticleEditorView: View {
             SabqEditorToolbar(controller: htmlController) { showLinkPrompt = true }
             SabqHTMLEditor(initialHTML: vm.contentHTML, controller: htmlController, onChange: { vm.liveHTMLLength = $0.count })
                 .frame(height: 340)
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .background(SabqTheme.surface)
+                .clipShape(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .stroke(SabqTheme.outline.opacity(0.6), lineWidth: 0.5)
+                    RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                        .stroke(SabqTheme.outline, lineWidth: 1)
                 )
         }
         .alert("إضافة رابط", isPresented: $showLinkPrompt) {
@@ -717,16 +727,14 @@ struct AdminArticleEditorView: View {
             } label: {
                 HStack {
                     Text(vm.categoryName ?? "اختر تصنيفاً")
-                        .font(SabqFonts.app(size: 15, weight: .semibold))
-                        .foregroundStyle(vm.categoryName == nil ? SabqTheme.secondaryInk : SabqTheme.ink)
+                        .font(SabqType.excerpt.font)
+                        .foregroundStyle(vm.categoryName == nil ? SabqTheme.textSecondary : SabqTheme.textPrimary)
                     Spacer()
                     Image(systemName: "chevron.up.chevron.down")
-                        .font(SabqFonts.app(size: 12, weight: .bold))
-                        .foregroundStyle(SabqTheme.secondaryInk)
+                        .font(SabqFonts.app(size: 12, weight: .semibold))
+                        .foregroundStyle(SabqTheme.textSecondary)
                 }
-                .padding(12)
-                .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(SabqTheme.surface))
-                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(SabqTheme.outline.opacity(0.6), lineWidth: 0.5))
+                .modifier(SabqInputSurface())
             }
         }
     }
@@ -739,16 +747,14 @@ struct AdminArticleEditorView: View {
                 HStack {
                     let name = vm.isOpinion ? vm.authorName : vm.reporterName
                     Text(name ?? (vm.isOpinion ? "اختر الكاتب" : "اختر المراسل"))
-                        .font(SabqFonts.app(size: 15, weight: .semibold))
-                        .foregroundStyle(((vm.isOpinion ? vm.authorName : vm.reporterName) == nil) ? SabqTheme.secondaryInk : SabqTheme.ink)
+                        .font(SabqType.excerpt.font)
+                        .foregroundStyle(((vm.isOpinion ? vm.authorName : vm.reporterName) == nil) ? SabqTheme.textSecondary : SabqTheme.textPrimary)
                     Spacer()
                     Image(systemName: "chevron.up.chevron.down")
-                        .font(SabqFonts.app(size: 12, weight: .bold))
-                        .foregroundStyle(SabqTheme.secondaryInk)
+                        .font(SabqFonts.app(size: 12, weight: .semibold))
+                        .foregroundStyle(SabqTheme.textSecondary)
                 }
-                .padding(12)
-                .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(SabqTheme.surface))
-                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(SabqTheme.outline.opacity(0.6), lineWidth: 0.5))
+                .modifier(SabqInputSurface())
             }
             .buttonStyle(.plain)
         }
@@ -757,13 +763,15 @@ struct AdminArticleEditorView: View {
     private var imageSection: some View {
         sectionCard("الصورة البارزة", icon: "photo") {
             if !vm.imageUrl.isEmpty, let url = URL(string: vm.imageUrl) {
-                CachedAsyncImage(url: url, contentMode: .fill) {
-                    Rectangle().fill(SabqTheme.outline.opacity(0.3))
-                }
-                .frame(height: 180)
-                .frame(maxWidth: .infinity)
-                .clipped()
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                Color.clear
+                    .frame(maxWidth: .infinity)
+                    .aspectRatio(16.0 / 9.0, contentMode: .fit)
+                    .overlay {
+                        CachedAsyncImage(url: url, contentMode: .fill) {
+                            SabqImagePlaceholder()
+                        }
+                    }
+                    .clipShape(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
             }
             Button {
                 Task {
@@ -778,19 +786,19 @@ struct AdminArticleEditorView: View {
             .disabled(vm.isGeneratingImage)
             if vm.isGeneratingImage {
                 Text("يُرجى الانتظار وعدم إغلاق الشاشة حتى تكتمل الصورة")
-                    .font(SabqFonts.app(size: 11, weight: .medium))
-                    .foregroundStyle(SabqTheme.tertiaryInk)
+                    .sabqText(SabqType.meta)
+                    .foregroundStyle(SabqTheme.textTertiary)
             }
             let uploading = vm.isUploadingImage
             PhotosPicker(selection: $imagePickerItem, matching: .images) {
                 toolLabel(uploading ? "جارٍ الرفع…" : "رفع صورة",
-                          systemImage: "arrow.up.circle.fill",
+                          systemImage: "arrow.up.circle",
                           loading: uploading)
             }
             .disabled(uploading)
             field("رابط الصورة") {
                 TextField("https://", text: $vm.imageUrl, axis: .vertical)
-                    .font(SabqFonts.app(size: 13))
+                    .font(SabqType.meta.font)
                     .textInputAutocapitalization(.never)
             }
         }
@@ -822,11 +830,11 @@ struct AdminArticleEditorView: View {
             .disabled(vm.isGeneratingSEO)
             field("عنوان Meta") {
                 TextField("≤ 70 حرفاً", text: $vm.seoTitle, axis: .vertical)
-                    .font(SabqFonts.app(size: 14))
+                    .font(SabqType.excerpt.font)
             }
             field("وصف Meta") {
                 TextField("≤ 160 حرفاً", text: $vm.seoDescription, axis: .vertical)
-                    .font(SabqFonts.app(size: 14))
+                    .font(SabqType.excerpt.font)
                     .lineLimit(2...4)
             }
             keywordsField
@@ -834,36 +842,45 @@ struct AdminArticleEditorView: View {
     }
 
     private var keywordsField: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: SabqLayout.space8) {
             fieldLabel("الكلمات المفتاحية")
             if !vm.keywords.isEmpty {
                 FlowChips(items: vm.keywords) { kw in
-                    HStack(spacing: 5) {
-                        Text(kw).font(SabqFonts.app(size: 12, weight: .semibold))
+                    HStack(spacing: SabqLayout.space4) {
+                        Text(kw).sabqText(SabqType.tag)
                         Button { vm.removeKeyword(kw) } label: {
-                            Image(systemName: "xmark.circle.fill").font(SabqFonts.app(size: 12))
+                            Image(systemName: "xmark")
+                                .font(SabqFonts.app(size: 12, weight: .semibold))
+                                .frame(width: 24, height: 24)
+                                .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
                     }
-                    .foregroundStyle(SabqTheme.sky)
-                    .padding(.horizontal, 10).padding(.vertical, 6)
-                    .background(Capsule().fill(SabqTheme.sky.opacity(0.12)))
+                    .foregroundStyle(SabqTheme.textPrimary)
+                    .padding(.leading, SabqLayout.space8).padding(.trailing, SabqLayout.space4).padding(.vertical, SabqLayout.space4)
+                    .background(RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous).fill(SabqTheme.surfaceMuted))
                 }
             }
-            HStack(spacing: 8) {
+            HStack(spacing: SabqLayout.space8) {
                 TextField("أضف كلمة", text: $newKeyword)
-                    .font(SabqFonts.app(size: 14))
+                    .font(SabqType.excerpt.font)
+                    .foregroundStyle(SabqTheme.textPrimary)
                     .onSubmit { vm.addKeyword(newKeyword); newKeyword = "" }
                 Button {
                     vm.addKeyword(newKeyword); newKeyword = ""
                 } label: {
-                    Image(systemName: "plus.circle.fill").font(SabqFonts.app(size: 20)).foregroundStyle(SabqTheme.sky)
+                    Image(systemName: "plus")
+                        .font(SabqFonts.app(size: 16, weight: .semibold))
+                        .foregroundStyle(SabqTheme.primary)
+                        .frame(width: SabqLayout.touchTarget, height: SabqLayout.touchTarget)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
             }
-            .padding(12)
-            .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(SabqTheme.surface))
-            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(SabqTheme.outline.opacity(0.6), lineWidth: 0.5))
+            .padding(.leading, SabqLayout.space16)
+            .frame(minHeight: SabqLayout.controlHeight)
+            .background(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous).fill(SabqTheme.surface))
+            .overlay(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous).stroke(SabqTheme.outline, lineWidth: 1))
         }
     }
 
@@ -883,7 +900,7 @@ struct AdminArticleEditorView: View {
             .disabled(vm.isSummarizing)
             field("الموجز") {
                 TextField("ملخّص ذكي للخبر", text: $vm.aiSummary, axis: .vertical)
-                    .font(SabqFonts.app(size: 14))
+                    .font(SabqType.excerpt.font)
                     .lineLimit(2...5)
             }
         }
@@ -918,7 +935,7 @@ struct AdminArticleEditorView: View {
                 ProgressView()
             } else {
                 Text(vm.isPublishNowAction ? "نشر الآن" : (vm.status == .scheduled ? "تأكيد الجدولة" : "حفظ"))
-                    .font(SabqFonts.app(size: 16, weight: .bold))
+                    .font(SabqType.button.font)
             }
         }
         .disabled(vm.isSaving || vm.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -934,19 +951,21 @@ struct AdminArticleEditorView: View {
     }
 
     private var errorState: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SabqLayout.space16) {
             Image(systemName: "exclamationmark.triangle")
                 .font(SabqFonts.app(size: 40, weight: .light))
-                .foregroundStyle(SabqTheme.secondaryInk.opacity(0.4))
+                .foregroundStyle(SabqTheme.textTertiary)
+                .accessibilityHidden(true)
             Text(vm.error ?? "تعذّر تحميل الخبر")
-                .font(SabqFonts.app(size: 14, weight: .medium))
-                .foregroundStyle(SabqTheme.secondaryInk)
+                .sabqText(SabqType.excerpt)
+                .foregroundStyle(SabqTheme.textSecondary)
             Button { Task { await vm.load() } } label: {
                 Text("إعادة المحاولة")
-                    .font(SabqFonts.app(size: 14, weight: .semibold))
-                    .foregroundStyle(SabqTheme.sky)
-                    .padding(.horizontal, 20).padding(.vertical, 8)
-                    .background(Capsule().fill(SabqTheme.sky.opacity(0.12)))
+                    .sabqText(SabqType.button)
+                    .foregroundStyle(SabqTheme.onAction)
+                    .padding(.horizontal, SabqLayout.space24)
+                    .frame(minHeight: SabqLayout.controlHeight)
+                    .background(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous).fill(SabqTheme.actionFill))
             }
             .buttonStyle(.plain)
         }
@@ -955,39 +974,47 @@ struct AdminArticleEditorView: View {
 
     // MARK: Building blocks
 
+    private var sectionDivider: some View {
+        Divider().overlay(SabqTheme.separator)
+    }
+
+    /// Unboxed form section: a plain icon + heading, then its fields on the page.
     @ViewBuilder
     private func sectionCard<Content: View>(_ title: String, icon: String, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(spacing: 8) {
-                Image(systemName: icon).font(SabqFonts.app(size: 14, weight: .bold)).foregroundStyle(SabqTheme.sky)
-                Text(title).font(SabqFonts.app(size: 15, weight: .heavy)).foregroundStyle(SabqTheme.ink)
+        VStack(alignment: .leading, spacing: SabqLayout.space12) {
+            HStack(spacing: SabqLayout.space8) {
+                Image(systemName: icon)
+                    .font(SabqFonts.app(size: 16, weight: .semibold))
+                    .foregroundStyle(SabqTheme.primary)
+                    .accessibilityHidden(true)
+                Text(title)
+                    .sabqText(SabqType.sectionHeading)
+                    .foregroundStyle(SabqTheme.textPrimary)
+                    .accessibilityAddTraits(.isHeader)
             }
             content()
         }
-        .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous).fill(SabqTheme.surface))
-        .overlay(RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous).stroke(SabqTheme.outline.opacity(0.5), lineWidth: 0.5))
     }
 
     private func fieldLabel(_ text: String) -> some View {
-        Text(text).font(SabqFonts.app(size: 13, weight: .heavy)).foregroundStyle(SabqTheme.ink)
+        Text(text).sabqText(SabqType.metaEmphasis).foregroundStyle(SabqTheme.textPrimary)
     }
 
-    /// Pill label for an AI/upload action button (with optional spinner).
+    /// Secondary action button for an AI/upload tool (with optional spinner).
     nonisolated private func toolLabel(_ title: String, systemImage: String, loading: Bool) -> some View {
-        HStack(spacing: 7) {
+        HStack(spacing: SabqLayout.space8) {
             if loading {
                 ProgressView().controlSize(.small)
             } else {
-                Image(systemName: systemImage).font(SabqFonts.app(size: 13, weight: .bold))
+                Image(systemName: systemImage).font(SabqFonts.app(size: 14, weight: .semibold))
             }
-            Text(title).font(SabqFonts.app(size: 13, weight: .bold))
+            Text(title).font(SabqType.metaEmphasis.font)
         }
-        .foregroundStyle(SabqTheme.sky)
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 11)
-        .background(RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous).fill(SabqTheme.sky.opacity(0.10)))
+        .foregroundStyle(SabqTheme.primary)
+        .frame(maxWidth: .infinity, minHeight: SabqLayout.controlHeight)
+        .overlay(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous).stroke(SabqTheme.outline, lineWidth: 1))
+        .contentShape(Rectangle())
     }
 
     /// Strip HTML tags to plain text for the AI tools.
@@ -1031,17 +1058,12 @@ struct AdminArticleEditorView: View {
 
     @ViewBuilder
     private func field<Content: View>(_ label: String, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 7) {
+        VStack(alignment: .leading, spacing: SabqLayout.space8) {
             fieldLabel(label)
             content()
-                .foregroundStyle(SabqTheme.ink)
-                .padding(.horizontal, 13)
-                .padding(.vertical, 12)
+                .foregroundStyle(SabqTheme.textPrimary)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                // Inputs use the page background (distinct from the white card)
-                // for a clear, high-contrast boundary.
-                .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(SabqTheme.background))
-                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(SabqTheme.outline, lineWidth: 1))
+                .modifier(SabqInputSurface())
         }
     }
 }
@@ -1055,7 +1077,7 @@ struct SabqEditorToolbar: View {
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 6) {
+            HStack(spacing: SabqLayout.space4) {
                 button("bold", "bold") { controller.exec("bold") }
                 button("italic", "italic") { controller.exec("italic") }
                 button("underline", "underline") { controller.exec("underline") }
@@ -1069,26 +1091,27 @@ struct SabqEditorToolbar: View {
                 button("quote", "text.quote") { controller.formatBlock("BLOCKQUOTE") }
                 button("link", "link", action: onLink)
             }
-            .padding(4)
+            .padding(SabqLayout.space4)
         }
+        .background(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous).fill(SabqTheme.surfaceMuted))
     }
 
     private var divider: some View {
-        Rectangle().fill(SabqTheme.outline.opacity(0.6)).frame(width: 1, height: 22)
+        Rectangle().fill(SabqTheme.outline).frame(width: 1, height: 24)
     }
 
     private func button(_ id: String, _ systemImage: String?, label: String? = nil, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Group {
                 if let systemImage {
-                    Image(systemName: systemImage).font(SabqFonts.app(size: 15, weight: .bold))
+                    Image(systemName: systemImage).font(SabqFonts.app(size: 15, weight: .semibold))
                 } else if let label {
-                    Text(label).font(SabqFonts.app(size: 14, weight: .heavy))
+                    Text(label).sabqText(SabqType.metaEmphasis)
                 }
             }
-            .foregroundStyle(SabqTheme.ink)
-            .frame(width: 38, height: 34)
-            .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(SabqTheme.background.opacity(0.6)))
+            .foregroundStyle(SabqTheme.textPrimary)
+            .frame(width: SabqLayout.touchTarget, height: SabqLayout.touchTarget)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }
@@ -1153,45 +1176,48 @@ struct AdminProofIssuesSheet: View {
         NavigationStack {
             Group {
                 if issues.isEmpty {
-                    VStack(spacing: 12) {
-                        Image(systemName: "checkmark.seal.fill")
-                            .font(SabqFonts.app(size: 42, weight: .light))
-                            .foregroundStyle(SabqTheme.teal)
+                    VStack(spacing: SabqLayout.space12) {
+                        Image(systemName: "checkmark.seal")
+                            .font(SabqFonts.app(size: 40, weight: .light))
+                            .foregroundStyle(SabqTheme.success)
+                            .accessibilityHidden(true)
                         Text("لا توجد أخطاء إملائية")
-                            .font(SabqFonts.app(size: 15, weight: .bold))
-                            .foregroundStyle(SabqTheme.ink)
+                            .sabqText(SabqType.rowTitle)
+                            .foregroundStyle(SabqTheme.textPrimary)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     ScrollView {
-                        VStack(spacing: 10) {
+                        VStack(spacing: 0) {
                             ForEach(issues) { issue in
-                                VStack(alignment: .leading, spacing: 6) {
-                                    HStack(spacing: 8) {
+                                if issue.id != issues.first?.id {
+                                    Divider().overlay(SabqTheme.separator)
+                                }
+                                VStack(alignment: .leading, spacing: SabqLayout.space4) {
+                                    HStack(spacing: SabqLayout.space8) {
                                         Text(issue.original)
+                                            .font(SabqType.excerpt.font)
                                             .strikethrough()
-                                            .foregroundStyle(SabqTheme.coral)
+                                            .foregroundStyle(SabqTheme.danger)
                                         Image(systemName: "arrow.left")
-                                            .font(SabqFonts.app(size: 11, weight: .bold))
-                                            .foregroundStyle(SabqTheme.secondaryInk)
+                                            .font(SabqFonts.app(size: 12, weight: .semibold))
+                                            .foregroundStyle(SabqTheme.textSecondary)
                                         Text(issue.suggestion)
-                                            .fontWeight(.bold)
-                                            .foregroundStyle(SabqTheme.teal)
+                                            .font(SabqType.rowTitle.font)
+                                            .foregroundStyle(SabqTheme.success)
                                     }
-                                    .font(SabqFonts.app(size: 14))
                                     if let ex = issue.explanation, !ex.isEmpty {
                                         Text(ex)
-                                            .font(SabqFonts.app(size: 12))
-                                            .foregroundStyle(SabqTheme.secondaryInk)
+                                            .sabqText(SabqType.meta)
+                                            .foregroundStyle(SabqTheme.textSecondary)
                                     }
                                 }
-                                .padding(12)
+                                .padding(.vertical, SabqLayout.space12)
                                 .frame(maxWidth: .infinity, alignment: .leading)
-                                .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(SabqTheme.surface))
-                                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(SabqTheme.outline.opacity(0.5), lineWidth: 0.5))
                             }
                         }
-                        .padding(16)
+                        .padding(.horizontal, SabqLayout.pageMargin)
+                        .padding(.vertical, SabqLayout.space8)
                     }
                 }
             }
@@ -1228,50 +1254,52 @@ struct AdminUserPickerSheet: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                HStack(spacing: 8) {
-                    Image(systemName: "magnifyingglass").foregroundStyle(SabqTheme.secondaryInk)
+                HStack(spacing: SabqLayout.space8) {
+                    Image(systemName: "magnifyingglass").foregroundStyle(SabqTheme.textSecondary)
                     TextField("بحث بالاسم", text: $query)
-                        .font(SabqFonts.app(size: 15))
+                        .font(SabqType.excerpt.font)
+                        .foregroundStyle(SabqTheme.textPrimary)
                         .onSubmit { Task { await reload() } }
                 }
-                .padding(12)
-                .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(SabqTheme.surface))
-                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(SabqTheme.outline.opacity(0.6), lineWidth: 0.5))
-                .padding(16)
+                .modifier(SabqInputSurface())
+                .padding(SabqLayout.pageMargin)
 
                 if isLoading {
-                    ProgressView().frame(maxWidth: .infinity, minHeight: 200)
+                    ProgressView().tint(SabqTheme.primary).frame(maxWidth: .infinity, minHeight: 200)
                 } else if users.isEmpty {
                     Text("لا توجد نتائج")
-                        .font(SabqFonts.app(size: 14, weight: .medium))
-                        .foregroundStyle(SabqTheme.secondaryInk)
+                        .sabqText(SabqType.excerpt)
+                        .foregroundStyle(SabqTheme.textSecondary)
                         .frame(maxWidth: .infinity, minHeight: 200)
                 } else {
                     ScrollView {
-                        VStack(spacing: 8) {
+                        VStack(spacing: 0) {
                             ForEach(users) { user in
+                                if user.id != users.first?.id {
+                                    Divider().overlay(SabqTheme.separator)
+                                }
                                 Button { onPick(user); dismiss() } label: {
-                                    HStack(spacing: 10) {
-                                        Image(systemName: "person.circle.fill")
-                                            .font(SabqFonts.app(size: 26)).foregroundStyle(SabqTheme.secondaryInk)
-                                        VStack(alignment: .leading, spacing: 2) {
-                                            Text(user.name).font(SabqFonts.app(size: 15, weight: .semibold)).foregroundStyle(SabqTheme.ink)
+                                    HStack(spacing: SabqLayout.space12) {
+                                        Image(systemName: "person.circle")
+                                            .font(SabqFonts.app(size: 26, weight: .light)).foregroundStyle(SabqTheme.textSecondary)
+                                            .accessibilityHidden(true)
+                                        VStack(alignment: .leading, spacing: SabqLayout.space4) {
+                                            Text(user.name).sabqText(SabqType.rowTitle).foregroundStyle(SabqTheme.textPrimary)
                                             if let e = user.email, !e.isEmpty {
-                                                Text(e).font(SabqFonts.app(size: 12)).foregroundStyle(SabqTheme.secondaryInk)
+                                                Text(e).sabqText(SabqType.meta).foregroundStyle(SabqTheme.textSecondary)
                                             }
                                         }
                                         Spacer(minLength: 0)
                                     }
-                                    .padding(12)
+                                    .padding(.vertical, SabqLayout.space12)
                                     .frame(maxWidth: .infinity, alignment: .leading)
-                                    .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(SabqTheme.surface))
-                                    .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(SabqTheme.outline.opacity(0.5), lineWidth: 0.5))
+                                    .contentShape(Rectangle())
                                 }
                                 .buttonStyle(.plain)
                             }
                         }
-                        .padding(.horizontal, 16)
-                        .padding(.bottom, 24)
+                        .padding(.horizontal, SabqLayout.pageMargin)
+                        .padding(.bottom, SabqLayout.space24)
                     }
                 }
             }
@@ -1296,25 +1324,26 @@ struct AdminPublishingOptions: View {
     @ObservedObject var vm: AdminEditorViewModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: SabqLayout.space16) {
+            VStack(alignment: .leading, spacing: SabqLayout.space8) {
                 fieldLabel("الحالة")
                 AdminSegmentedControl(selected: vm.status) { vm.setStatus($0) }
             }
             if vm.status == .scheduled {
                 Text("الجدولة تعني نشر المادة تلقائيًا في الموعد المختار. اختر موعدًا مستقبليًا واحفظ لتأكيدها.")
-                    .font(SabqFonts.app(size: 12, weight: .medium))
-                    .foregroundStyle(SabqTheme.secondaryInk)
+                    .sabqText(SabqType.meta)
+                    .foregroundStyle(SabqTheme.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
                 DatePicker("موعد النشر", selection: vm.scheduleDateBinding)
-                    .font(SabqFonts.app(size: 14))
+                    .font(SabqType.excerpt.font)
+                    .tint(SabqTheme.primary)
                     .environment(\.locale, Locale(identifier: "ar"))
                     .environment(\.calendar, Calendar(identifier: .gregorian))
                     .environment(\.timeZone, TimeZone(identifier: "Asia/Riyadh")!)
                 if let overdue = vm.overdueSavedSchedule {
                     Text("الموعد المحفوظ السابق فات: \(SabqFormatters.riyadhWeekdayDate.string(from: overdue)) · \(SabqFormatters.riyadhTime.string(from: overdue)). تم اختيار الموعد القادم حسب جدول الكاتب ويمكنك تعديله.")
-                        .font(SabqFonts.app(size: 11, weight: .medium))
-                        .foregroundStyle(SabqTheme.coral)
+                        .sabqText(SabqType.meta)
+                        .foregroundStyle(SabqTheme.danger)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 if let nextSlot = vm.writerWeeklySlot?.nextSlot, nextSlot > Date(),
@@ -1326,26 +1355,29 @@ struct AdminPublishingOptions: View {
                             "استخدام الموعد القادم للكاتب",
                             systemImage: "calendar.badge.clock"
                         )
-                        .font(SabqFonts.app(size: 12, weight: .bold))
+                        .font(SabqType.metaEmphasis.font)
+                        .foregroundStyle(SabqTheme.primary)
+                        .padding(.horizontal, SabqLayout.space12)
+                        .frame(minHeight: SabqLayout.touchTarget)
+                        .overlay(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous).stroke(SabqTheme.outline, lineWidth: 1))
                     }
-                    .buttonStyle(.bordered)
-                    .tint(SabqTheme.primaryEnd)
+                    .buttonStyle(.plain)
                 }
                 if !vm.scheduleWasExplicitlySelected {
                     Text("لم يُعتمد الموعد بعد — غيّر التاريخ أو الوقت صراحةً قبل الحفظ.")
-                        .font(SabqFonts.app(size: 12, weight: .semibold))
-                        .foregroundStyle(SabqTheme.gold)
+                        .sabqText(SabqType.metaEmphasis)
+                        .foregroundStyle(SabqTheme.warning)
                 } else if let schedule = vm.schedulePresentation, schedule.isOverdue {
                     Text("هذا الموعد محفوظ لكنه فات. اختر موعدًا مستقبليًا لإعادة الجدولة.")
-                        .font(SabqFonts.app(size: 12, weight: .semibold))
-                        .foregroundStyle(SabqTheme.coral)
+                        .sabqText(SabqType.metaEmphasis)
+                        .foregroundStyle(SabqTheme.danger)
                 }
             }
             if let schedule = vm.schedulePresentation {
                 editorScheduleCue(schedule)
             }
             if !vm.isOpinion {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: SabqLayout.space8) {
                     fieldLabel("نوع الخبر")
                     Picker("", selection: $vm.newsType) {
                         Text("عادي").tag("regular")
@@ -1354,45 +1386,57 @@ struct AdminPublishingOptions: View {
                     .pickerStyle(.segmented)
                 }
             }
-            Toggle("خبر مميّز", isOn: $vm.isFeatured)
-                .font(SabqFonts.app(size: 14, weight: .semibold)).tint(SabqTheme.gold)
-            Toggle("قراءة من سبق", isOn: $vm.isReading)
-                .font(SabqFonts.app(size: 14, weight: .semibold)).tint(SabqTheme.teal)
-            Toggle("إخفاء من الصفحة الرئيسية", isOn: $vm.hideFromHomepage)
-                .font(SabqFonts.app(size: 14, weight: .semibold)).tint(SabqTheme.coral)
+            VStack(spacing: 0) {
+                Toggle("خبر مميّز", isOn: $vm.isFeatured)
+                    .frame(minHeight: SabqLayout.controlHeight)
+                Divider().overlay(SabqTheme.separator)
+                Toggle("قراءة من سبق", isOn: $vm.isReading)
+                    .frame(minHeight: SabqLayout.controlHeight)
+                Divider().overlay(SabqTheme.separator)
+                Toggle("إخفاء من الصفحة الرئيسية", isOn: $vm.hideFromHomepage)
+                    .frame(minHeight: SabqLayout.controlHeight)
+            }
+            .font(SabqType.excerpt.font)
+            .foregroundStyle(SabqTheme.textPrimary)
+            .tint(SabqTheme.actionFill)
         }
     }
 
     private func fieldLabel(_ text: String) -> some View {
-        Text(text).font(SabqFonts.app(size: 13, weight: .heavy)).foregroundStyle(SabqTheme.ink)
+        Text(text).sabqText(SabqType.metaEmphasis).foregroundStyle(SabqTheme.textPrimary)
     }
 
     private func editorScheduleCue(_ schedule: AdminSchedulePresentation) -> some View {
-        let tint: Color = schedule.isOverdue
-            ? SabqTheme.coral
-            : (schedule.source == .writerSuggestion ? SabqTheme.primaryEnd : SabqTheme.sky)
-        return HStack(spacing: 8) {
-            Image(systemName: schedule.isOverdue ? "exclamationmark.triangle.fill" : "clock.fill")
-                .font(SabqFonts.app(size: 13, weight: .bold))
-            VStack(alignment: .leading, spacing: 3) {
+        let tint: Color = schedule.isOverdue ? SabqTheme.danger : SabqTheme.primary
+        return HStack(alignment: .center, spacing: SabqLayout.space8) {
+            Image(systemName: schedule.isOverdue ? "exclamationmark.triangle" : "clock")
+                .font(SabqFonts.app(size: 14, weight: .semibold))
+                .foregroundStyle(tint)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: SabqLayout.space4) {
                 Text(schedule.title)
-                    .font(SabqFonts.app(size: 12, weight: .heavy))
+                    .sabqText(SabqType.metaEmphasis)
+                    .foregroundStyle(tint)
                 Text(schedule.fullLabel ?? schedule.detail)
-                    .font(SabqFonts.app(size: 11, weight: .medium))
+                    .sabqText(SabqType.meta)
+                    .foregroundStyle(SabqTheme.textSecondary)
             }
             Spacer(minLength: 0)
             if schedule.source == .saved {
-                Button("مسح") { vm.clearSchedule() }
-                    .font(SabqFonts.app(size: 11, weight: .bold))
-                    .buttonStyle(.bordered)
-                    .tint(tint)
+                Button { vm.clearSchedule() } label: {
+                    Text("مسح")
+                        .sabqText(SabqType.metaEmphasis)
+                        .foregroundStyle(SabqTheme.danger)
+                        .frame(minWidth: SabqLayout.touchTarget, minHeight: SabqLayout.touchTarget)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
             }
         }
-        .foregroundStyle(tint)
-        .padding(10)
+        .padding(.leading, SabqLayout.space12)
+        .padding(.vertical, SabqLayout.space4)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(tint.opacity(0.12)))
-        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(tint.opacity(0.35), lineWidth: 0.5))
+        .background(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous).fill(SabqTheme.surfaceMuted))
     }
 
 }

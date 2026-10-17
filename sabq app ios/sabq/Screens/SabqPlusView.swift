@@ -39,7 +39,7 @@ struct SabqPlusView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
+            VStack(alignment: .leading, spacing: SabqLayout.sectionGap) {
                 previewNote
                 memberCard
                 earnSection
@@ -47,13 +47,12 @@ struct SabqPlusView: View {
                 historySection
                 termsSection
                 Text("نموذج محاكاة داخلي لتجربة «سبق بلس × ولاء ون» — أسماء الشركاء تجريبية والخصم من رصيدك فعلي")
-                    .font(SabqFonts.app(size: 12, weight: .medium))
-                    .foregroundStyle(SabqTheme.secondaryInk)
+                    .sabqText(SabqType.meta)
+                    .foregroundStyle(SabqTheme.textSecondary)
                     .frame(maxWidth: .infinity)
                     .multilineTextAlignment(.center)
-                    .padding(.top, 12)
             }
-            .padding(16)
+            .padding(SabqLayout.pageMargin)
         }
         .background(SabqTheme.background.ignoresSafeArea())
         .navigationTitle("سبق بلس")
@@ -110,57 +109,60 @@ struct SabqPlusView: View {
 
     private var previewNote: some View {
         Text("⚠ معاينة داخلية — تظهر لمسؤول النظام فقط ولا تمثل إطلاقاً رسمياً")
-            .font(SabqFonts.app(size: 12, weight: .bold))
-            .foregroundStyle(Color(red: 0.42, green: 0.31, blue: 0))
+            .font(SabqType.metaEmphasis.font)
+            .foregroundStyle(SabqTheme.warning)
+            .multilineTextAlignment(.center)
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 8)
-            .padding(.horizontal, 12)
-            .background(Color(red: 1, green: 0.93, blue: 0.72), in: RoundedRectangle(cornerRadius: 10))
+            .padding(.vertical, SabqLayout.space8)
+            .padding(.horizontal, SabqLayout.space12)
+            .background(SabqTheme.surfaceMuted, in: RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
     }
 
     // MARK: - بطاقة العضوية (v2 — كحلي سبق المعتمد)
 
-    private let cardNavyTop = Color(red: 0.063, green: 0.137, blue: 0.227)
-    private let cardNavyMid = Color(red: 0.043, green: 0.086, blue: 0.141)
-    private let cardNavyEnd = Color(red: 0.090, green: 0.161, blue: 0.290)
-    private let sabqBlue = Color(red: 0.090, green: 0.576, blue: 0.910)
-    private let ambPurple = Color(red: 0.486, green: 0.227, blue: 0.929)
+    /// لون الهوية الوحيد للبطاقة: كحلي سبق مسطح، بلا تدرج ولا توهج.
+    private let cardNavy = Color(red: 0.063, green: 0.137, blue: 0.227)
+    /// لون ولاء ون المسطح لبطاقة القسيمة؛ داكن بما يكفي لنص أبيض.
+    private let walaDeep = Color(red: 0.373, green: 0.310, blue: 0.820)
+    private let onCardSecondary = SabqTheme.onAction.opacity(0.78)
 
     private var memberCard: some View {
         VStack(alignment: .leading, spacing: 0) {
             let name = authStore.currentUser?.displayName ?? "مسؤول النظام"
             Text(name)
-                .font(SabqFonts.app(size: 20, weight: .heavy))
-                .foregroundStyle(.white)
+                .sabqText(SabqType.sectionHeading)
+                .foregroundStyle(SabqTheme.onAction)
             Text("مسؤول النظام · حساب التجربة")
-                .font(SabqFonts.app(size: 12, weight: .medium))
-                .foregroundStyle(Color(red: 0.616, green: 0.714, blue: 0.800))
-                .padding(.bottom, 18)
+                .font(SabqType.meta.font)
+                .foregroundStyle(onCardSecondary)
+                .padding(.bottom, SabqLayout.space16)
 
             if let summary = loader.summary {
-                HStack(alignment: .firstTextBaseline, spacing: 10) {
+                HStack(alignment: .firstTextBaseline, spacing: SabqLayout.space8) {
                     Text(String(format: "%.2f", summary.sarValue))
-                        .font(SabqFonts.app(size: 44, weight: .heavy))
-                        .foregroundStyle(.white)
+                        .font(SabqFonts.headline(size: 40))
+                        .foregroundStyle(SabqTheme.onAction)
                         .monospacedDigit()
+                        .minimumScaleFactor(0.7)
+                        .lineLimit(1)
                     Text("ر.س")
-                        .font(SabqFonts.app(size: 18, weight: .bold))
-                        .foregroundStyle(Color(red: 0.561, green: 0.722, blue: 0.847))
+                        .font(SabqType.rowTitle.font)
+                        .foregroundStyle(onCardSecondary)
                     Text("\(formatPoints(summary.totalPoints)) نقطة")
-                        .font(SabqFonts.app(size: 13, weight: .semibold))
-                        .foregroundStyle(Color(red: 0.659, green: 0.761, blue: 0.847))
+                        .font(SabqType.metaEmphasis.font)
+                        .foregroundStyle(onCardSecondary)
                         .monospacedDigit()
                 }
                 Text("كل \(summary.pointsPerSar) نقطة = 1 ريال سعودي · الاستبدال عبر شركاء ولاء ون")
-                    .font(SabqFonts.app(size: 11, weight: .medium))
-                    .foregroundStyle(Color(red: 0.498, green: 0.631, blue: 0.737))
-                    .padding(.top, 4)
+                    .font(SabqType.tag.font)
+                    .foregroundStyle(onCardSecondary)
+                    .padding(.top, SabqLayout.space4)
 
                 tierJourney(summary)
-                    .padding(.top, 16)
+                    .padding(.top, SabqLayout.space16)
 
                 statsPanel(summary)
-                    .padding(.top, 14)
+                    .padding(.top, SabqLayout.space12)
 
                 Group {
                     if let next = summary.nextTier {
@@ -169,70 +171,46 @@ struct SabqPlusView: View {
                         Text("وصلت لأعلى فئة — يُحتسب مضاعف السفير على كل مكافآت التوقعات")
                     }
                 }
-                .font(SabqFonts.app(size: 11.5, weight: .semibold))
-                .foregroundStyle(Color(red: 0.788, green: 0.722, blue: 0.961))
-                .padding(.vertical, 8)
-                .padding(.horizontal, 12)
-                .background(ambPurple.opacity(0.16), in: RoundedRectangle(cornerRadius: 10))
-                .padding(.top, 14)
+                .font(SabqType.tag.font)
+                .foregroundStyle(SabqTheme.onAction)
+                .padding(.vertical, SabqLayout.space8)
+                .padding(.horizontal, SabqLayout.space12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(SabqTheme.onAction.opacity(0.10), in: RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous))
+                .padding(.top, SabqLayout.space12)
             } else if loader.isLoading {
                 ProgressView()
-                    .tint(.white)
+                    .tint(SabqTheme.onAction)
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 40)
+                    .padding(.vertical, SabqLayout.space40)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(22)
-        .background(
-            ZStack {
-                LinearGradient(
-                    colors: [cardNavyTop, cardNavyMid, cardNavyEnd],
-                    startPoint: .topLeading, endPoint: .bottomTrailing
-                )
-                RadialGradient(
-                    colors: [sabqBlue.opacity(0.32), .clear],
-                    center: .init(x: 0.1, y: 1.15), startRadius: 10, endRadius: 280
-                )
-                RadialGradient(
-                    colors: [ambPurple.opacity(0.30), .clear],
-                    center: .init(x: 0.92, y: -0.1), startRadius: 10, endRadius: 240
-                )
-                Text("+")
-                    .font(.system(size: 200, weight: .black))
-                    .foregroundStyle(sabqBlue.opacity(0.09))
-                    .offset(x: -110, y: 70)
-            }
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 22))
-        .overlay(
-            RoundedRectangle(cornerRadius: 22)
-                .stroke(Color(red: 0.549, green: 0.706, blue: 0.863).opacity(0.14), lineWidth: 1)
-        )
+        .padding(SabqLayout.space24)
+        .background(cardNavy, in: RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
     }
 
     private func tierJourney(_ summary: PlusSummary) -> some View {
-        HStack(spacing: 7) {
+        HStack(spacing: SabqLayout.space8) {
             Text(summary.tier.nameAr)
-                .font(SabqFonts.app(size: 12.5, weight: .heavy))
-                .foregroundStyle(Color(red: 0.851, green: 0.780, blue: 1))
-                .padding(.vertical, 5)
-                .padding(.horizontal, 12)
-                .background(ambPurple.opacity(0.22), in: Capsule())
-                .overlay(Capsule().stroke(Color(red: 0.655, green: 0.478, blue: 0.980).opacity(0.55), lineWidth: 1))
+                .font(SabqType.tag.font)
+                .foregroundStyle(SabqTheme.onAction)
+                .padding(.vertical, SabqLayout.space4)
+                .padding(.horizontal, SabqLayout.space12)
+                .background(SabqTheme.onAction.opacity(0.16), in: Capsule())
             ForEach(LoyaltyTiers.all) { tier in
                 Circle()
-                    .fill(tier.level <= summary.tier.level ? tier.color : Color.white.opacity(0.14))
+                    .fill(tier.level <= summary.tier.level ? tier.color : SabqTheme.onAction.opacity(0.2))
                     .frame(
-                        width: tier.level == summary.tier.level ? 12 : 9,
-                        height: tier.level == summary.tier.level ? 12 : 9
+                        width: tier.level == summary.tier.level ? 12 : 8,
+                        height: tier.level == summary.tier.level ? 12 : 8
                     )
-                    .shadow(color: tier.level == summary.tier.level ? tier.color : .clear, radius: 5)
             }
             Text(summary.tier.level >= 5 ? "5/5" : "\(summary.tier.level)/5")
-                .font(SabqFonts.app(size: 10.5, weight: .semibold))
-                .foregroundStyle(Color(red: 0.616, green: 0.714, blue: 0.800))
+                .font(SabqType.tag.font)
+                .foregroundStyle(onCardSecondary)
                 .monospacedDigit()
+                .environment(\.layoutDirection, .leftToRight)
         }
     }
 
@@ -242,37 +220,39 @@ struct SabqPlusView: View {
             statRow("نقاط هذا الشهر", "+\(formatPoints(summary.monthPoints))")
             statRow("مضاعف التوقعات", "×\(summary.predictionMultiplier.clean)")
         }
-        .padding(.vertical, 6)
-        .padding(.horizontal, 14)
-        .background(Color.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 14))
-        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.white.opacity(0.09), lineWidth: 1))
+        .padding(.vertical, SabqLayout.space4)
+        .padding(.horizontal, SabqLayout.space16)
+        .background(SabqTheme.onAction.opacity(0.08), in: RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
     }
 
     private func statRow(_ label: String, _ value: String, divider: Bool = true) -> some View {
         VStack(spacing: 0) {
-            if divider { Divider().overlay(Color.white.opacity(0.08)) }
+            if divider {
+                Rectangle().fill(SabqTheme.onAction.opacity(0.12)).frame(height: 1)
+            }
             HStack {
                 Text(label)
-                    .font(SabqFonts.app(size: 12, weight: .medium))
-                    .foregroundStyle(Color(red: 0.616, green: 0.714, blue: 0.800))
+                    .font(SabqType.meta.font)
+                    .foregroundStyle(onCardSecondary)
                 Spacer()
                 Text(value)
-                    .font(SabqFonts.app(size: 14, weight: .bold))
-                    .foregroundStyle(.white)
+                    .font(SabqType.button.font)
+                    .foregroundStyle(SabqTheme.onAction)
                     .monospacedDigit()
+                    .environment(\.layoutDirection, .leftToRight)
             }
-            .padding(.vertical, 8)
+            .padding(.vertical, SabqLayout.space8)
         }
     }
 
     // MARK: - كيف تكسب
 
     private var earnSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: SabqLayout.space12) {
             sectionTitle("كيف تكسب النقاط")
             Text("تُمنح النقاط تلقائياً أثناء استخدامك سبق — لا حاجة لأي خطوة إضافية.")
-                .font(SabqFonts.app(size: 13, weight: .medium))
-                .foregroundStyle(SabqTheme.secondaryInk)
+                .sabqText(SabqType.excerpt)
+                .foregroundStyle(SabqTheme.textSecondary)
             let earns: [(String, String, String)] = [
                 ("book", "قراءة مقال", "+2"),
                 ("book.closed", "قراءة عميقة", "+3"),
@@ -280,57 +260,58 @@ struct SabqPlusView: View {
                 ("arrow.turn.down.left", "دخول يومي", "+5 × السلسلة"),
                 ("trophy", "فوز توقّع رياضي", "حسب البركة"),
             ]
-            LazyVGrid(columns: SabqGrid.adaptive(spacing: 8), spacing: 8) {
+            LazyVGrid(columns: SabqGrid.adaptive(spacing: SabqLayout.space8), spacing: SabqLayout.space8) {
                 ForEach(earns, id: \.1) { icon, label, value in
-                    HStack(spacing: 8) {
+                    HStack(spacing: SabqLayout.space8) {
                         Image(systemName: icon)
-                            .font(.system(size: 15))
-                            .foregroundStyle(sabqBlue)
-                        VStack(alignment: .leading, spacing: 1) {
+                            .font(SabqType.excerpt.font)
+                            .foregroundStyle(SabqTheme.primary)
+                            .accessibilityHidden(true)
+                        VStack(alignment: .leading, spacing: 2) {
                             Text(label)
-                                .font(SabqFonts.app(size: 12, weight: .semibold))
-                                .foregroundStyle(SabqTheme.ink)
+                                .font(SabqType.metaEmphasis.font)
+                                .foregroundStyle(SabqTheme.textPrimary)
                             Text(value)
-                                .font(SabqFonts.app(size: 12, weight: .heavy))
-                                .foregroundStyle(sabqBlue)
+                                .font(SabqType.tag.font)
+                                .foregroundStyle(SabqTheme.primary)
                         }
                         Spacer(minLength: 0)
                     }
-                    .padding(10)
-                    .background(SabqTheme.surface, in: RoundedRectangle(cornerRadius: 12))
+                    .padding(SabqLayout.space12)
+                    .background(SabqTheme.surfaceMuted, in: RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
+                    .accessibilityElement(children: .combine)
                 }
             }
             Text("القيم الحالية للإنتاج — جدول الاكتساب الجديد (المكافئ للريال) قيد الاعتماد.")
-                .font(SabqFonts.app(size: 11, weight: .medium))
-                .foregroundStyle(SabqTheme.secondaryInk)
+                .font(SabqType.meta.font)
+                .foregroundStyle(SabqTheme.textSecondary)
         }
     }
 
     // MARK: - الكتالوج
 
-    private let walaPurple = Color(red: 0.482, green: 0.424, blue: 0.878)
-    private let walaDeep = Color(red: 0.373, green: 0.310, blue: 0.820)
-    private let walaYellow = Color(red: 1, green: 0.788, blue: 0.200)
-
     private var catalogSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 8) {
+        VStack(alignment: .leading, spacing: SabqLayout.space12) {
+            HStack(spacing: SabqLayout.space8) {
                 sectionTitle("استبدل نقاطك")
                 Text("W بالتعاون مع ولاء ون")
-                    .font(SabqFonts.app(size: 11, weight: .heavy))
-                    .foregroundStyle(walaPurple)
-                    .padding(.vertical, 4)
-                    .padding(.horizontal, 10)
-                    .background(walaPurple.opacity(0.12), in: Capsule())
+                    .font(SabqType.tag.font)
+                    .foregroundStyle(SabqTheme.textSecondary)
+                    .padding(.vertical, SabqLayout.space4)
+                    .padding(.horizontal, SabqLayout.space8)
+                    .background(SabqTheme.surfaceMuted, in: RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous))
             }
             Text("بعد تأكيد الاستبدال تصدر قسيمتك فوراً برمز QR ويمكن إضافتها إلى Apple Wallet. أسماء الشركاء تجريبية للمحاكاة.")
-                .font(SabqFonts.app(size: 13, weight: .medium))
-                .foregroundStyle(SabqTheme.secondaryInk)
+                .sabqText(SabqType.excerpt)
+                .foregroundStyle(SabqTheme.textSecondary)
 
             // صفوف بعرض كامل لا شبكة: عمودان بالعربية على عرض الجوال
             // يشوّهان المحاذاة (ارتفاعات متفاوتة بحسب التفاف نص العرض).
-            VStack(spacing: 10) {
-                ForEach(loader.catalog?.rewards ?? []) { reward in
+            VStack(spacing: 0) {
+                ForEach(Array((loader.catalog?.rewards ?? []).enumerated()), id: \.element.id) { index, reward in
+                    if index > 0 {
+                        Rectangle().fill(SabqTheme.separator).frame(height: 1)
+                    }
                     rewardCard(reward)
                 }
             }
@@ -340,87 +321,68 @@ struct SabqPlusView: View {
     private func rewardCard(_ reward: PlusReward) -> some View {
         let balance = loader.catalog?.balance ?? 0
         let affordable = balance >= reward.pointsCost
-        let brand = Color(plusHex: reward.brandColor)
-        return HStack(alignment: .center, spacing: 12) {
-            partnerBadge(category: reward.category, brand: brand, size: 48, iconSize: 21)
+        return HStack(alignment: .center, spacing: SabqLayout.space12) {
+            partnerBadge(category: reward.category, size: 44, iconSize: 18)
 
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: SabqLayout.space4) {
                 Text(reward.partnerName)
-                    .font(SabqFonts.app(size: 14.5, weight: .heavy))
-                    .foregroundStyle(SabqTheme.ink)
+                    .font(SabqType.rowTitle.font)
+                    .foregroundStyle(SabqTheme.textPrimary)
                     .lineLimit(1)
                 Text(reward.offer)
-                    .font(SabqFonts.app(size: 12, weight: .medium))
-                    .foregroundStyle(SabqTheme.secondaryInk)
+                    .sabqText(SabqType.meta)
+                    .foregroundStyle(SabqTheme.textSecondary)
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
                 Text(reward.category + " · ولاء ون")
-                    .font(SabqFonts.app(size: 10, weight: .semibold))
-                    .foregroundStyle(brand)
+                    .font(SabqType.tag.font)
+                    .foregroundStyle(SabqTheme.textTertiary)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            VStack(alignment: .center, spacing: 6) {
+            VStack(alignment: .center, spacing: SabqLayout.space8) {
                 VStack(spacing: 0) {
                     Text("\(formatPoints(reward.pointsCost))")
-                        .font(SabqFonts.app(size: 14, weight: .heavy))
-                        .foregroundStyle(SabqTheme.ink)
+                        .font(SabqType.button.font)
+                        .foregroundStyle(SabqTheme.textPrimary)
                         .monospacedDigit()
                     Text("نقطة ≈ \(reward.sarValue.clean) ر.س")
-                        .font(SabqFonts.app(size: 9.5, weight: .semibold))
-                        .foregroundStyle(SabqTheme.secondaryInk)
+                        .font(SabqType.tag.font)
+                        .foregroundStyle(SabqTheme.textSecondary)
                         .monospacedDigit()
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
                 }
                 Button {
                     agreedToTerms = false
                     confirmReward = reward
                 } label: {
                     Text(affordable ? "استبدل" : "لا يكفي")
-                        .font(SabqFonts.app(size: 12, weight: .heavy))
-                        .foregroundStyle(.white)
-                        .padding(.vertical, 7)
-                        .padding(.horizontal, 14)
+                        .font(SabqType.metaEmphasis.font)
+                        .foregroundStyle(affordable ? SabqTheme.onAction : SabqTheme.disabledInk)
+                        .frame(maxWidth: .infinity, minHeight: SabqLayout.touchTarget)
                         .background(
-                            affordable
-                                ? AnyShapeStyle(LinearGradient(colors: [walaPurple, walaDeep], startPoint: .top, endPoint: .bottom))
-                                : AnyShapeStyle(SabqTheme.outline),
-                            in: Capsule()
+                            affordable ? SabqTheme.actionFill : SabqTheme.disabledFill,
+                            in: RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
                         )
                 }
+                .buttonStyle(.plain)
                 .disabled(!affordable || isRedeeming)
             }
-            .frame(width: 92)
+            .frame(width: 96)
         }
-        .padding(.vertical, 13)
-        .padding(.horizontal, 14)
-        .background(SabqTheme.surface, in: RoundedRectangle(cornerRadius: 16))
-        .overlay(
-            RoundedRectangle(cornerRadius: 16)
-                .stroke(SabqTheme.outline.opacity(0.5), lineWidth: 1)
-        )
-        .shadow(color: Color.black.opacity(0.04), radius: 6, y: 2)
+        .padding(.vertical, SabqLayout.space16)
     }
 
-    /// «شعار» الشريك: أيقونة الفئة داخل مربع متدرج بلون العلامة —
-    /// الشركاء تجريبيون فلا شعارات حقيقية، والأيقونة التعبيرية أرقى
-    /// بصرياً من حرف مفرد. عند تكامل ولاء ون تُستبدل بصور الكتالوج.
-    private func partnerBadge(category: String, brand: Color, size: CGFloat, iconSize: CGFloat) -> some View {
+    /// «شعار» الشريك: أيقونة الفئة في مربع هادئ — الشركاء تجريبيون فلا
+    /// شعارات حقيقية. عند تكامل ولاء ون تُستبدل بصور الكتالوج.
+    private func partnerBadge(category: String, size: CGFloat, iconSize: CGFloat) -> some View {
         Image(systemName: categoryIcon(for: category))
-            .font(.system(size: iconSize, weight: .semibold))
-            .foregroundStyle(.white)
+            .font(.system(size: iconSize, weight: .regular))
+            .foregroundStyle(SabqTheme.textSecondary)
             .frame(width: size, height: size)
-            .background(
-                LinearGradient(
-                    colors: [brand.opacity(0.85), brand],
-                    startPoint: .topLeading, endPoint: .bottomTrailing
-                ),
-                in: RoundedRectangle(cornerRadius: size * 0.28)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: size * 0.28)
-                    .stroke(Color.white.opacity(0.25), lineWidth: 0.8)
-            )
-            .shadow(color: brand.opacity(0.35), radius: 5, y: 2)
+            .background(SabqTheme.surfaceMuted, in: RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous))
+            .accessibilityHidden(true)
     }
 
     private func categoryIcon(for category: String) -> String {
@@ -440,13 +402,14 @@ struct SabqPlusView: View {
     // MARK: - نافذة التأكيد
 
     private func redeemConfirmSheet(_ reward: PlusReward) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: SabqLayout.space16) {
             Text("تأكيد الاستبدال")
-                .font(SabqFonts.app(size: 18, weight: .heavy))
-                .foregroundStyle(SabqTheme.ink)
+                .sabqText(SabqType.leadTitle)
+                .foregroundStyle(SabqTheme.textPrimary)
+                .accessibilityAddTraits(.isHeader)
             Text("\(reward.partnerName) — \(reward.offer)")
-                .font(SabqFonts.app(size: 13, weight: .medium))
-                .foregroundStyle(SabqTheme.secondaryInk)
+                .sabqText(SabqType.excerpt)
+                .foregroundStyle(SabqTheme.textSecondary)
 
             VStack(spacing: 0) {
                 confirmRow("قيمة القسيمة", reward.valueLabel)
@@ -456,59 +419,61 @@ struct SabqPlusView: View {
             }
 
             Text("⚠ بعد التأكيد تسري شروط وأحكام ولاء ون ولا يمكن التراجع أو استرداد النقاط.")
-                .font(SabqFonts.app(size: 12, weight: .semibold))
-                .foregroundStyle(SabqTheme.ink)
-                .padding(10)
+                .sabqText(SabqType.meta)
+                .foregroundStyle(SabqTheme.textPrimary)
+                .padding(SabqLayout.space12)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(walaPurple.opacity(0.10), in: RoundedRectangle(cornerRadius: 10))
+                .background(SabqTheme.surfaceMuted, in: RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
 
             Toggle(isOn: $agreedToTerms) {
                 Text("أوافق على شروط استخدام سبق بلس وشروط وأحكام ولاء ون")
-                    .font(SabqFonts.app(size: 12.5, weight: .medium))
-                    .foregroundStyle(SabqTheme.ink)
+                    .sabqText(SabqType.meta)
+                    .foregroundStyle(SabqTheme.textPrimary)
             }
-            .tint(walaPurple)
+            .tint(SabqTheme.actionFill)
 
             Button {
                 Task { await redeem(reward) }
             } label: {
-                HStack {
-                    if isRedeeming { ProgressView().tint(.white) }
+                HStack(spacing: SabqLayout.space8) {
+                    if isRedeeming { ProgressView().tint(SabqTheme.onAction) }
                     Text(isRedeeming ? "جارٍ الاستبدال…" : "تأكيد الاستبدال")
-                        .font(SabqFonts.app(size: 15, weight: .heavy))
+                        .font(SabqType.button.font)
                 }
-                .foregroundStyle(.white)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 13)
-                .background(agreedToTerms ? walaPurple : SabqTheme.outline, in: RoundedRectangle(cornerRadius: 12))
+                .foregroundStyle(agreedToTerms ? SabqTheme.onAction : SabqTheme.disabledInk)
+                .frame(maxWidth: .infinity, minHeight: SabqLayout.controlHeight)
+                .background(agreedToTerms ? SabqTheme.actionFill : SabqTheme.disabledFill,
+                            in: RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
             }
+            .buttonStyle(.plain)
             .disabled(!agreedToTerms || isRedeeming)
 
             Button("إلغاء") { confirmReward = nil }
-                .font(SabqFonts.app(size: 14, weight: .semibold))
-                .foregroundStyle(SabqTheme.secondaryInk)
-                .frame(maxWidth: .infinity)
+                .font(SabqType.button.font)
+                .foregroundStyle(SabqTheme.primary)
+                .frame(maxWidth: .infinity, minHeight: SabqLayout.touchTarget)
 
             Spacer(minLength: 0)
         }
-        .padding(20)
+        .padding(SabqLayout.space24)
         .background(SabqTheme.background.ignoresSafeArea())
     }
 
     private func confirmRow(_ label: String, _ value: String) -> some View {
-        HStack {
+        HStack(spacing: SabqLayout.space12) {
             Text(label)
-                .font(SabqFonts.app(size: 12.5, weight: .medium))
-                .foregroundStyle(SabqTheme.secondaryInk)
+                .font(SabqType.meta.font)
+                .foregroundStyle(SabqTheme.textSecondary)
             Spacer()
             Text(value)
-                .font(SabqFonts.app(size: 12.5, weight: .bold))
-                .foregroundStyle(SabqTheme.ink)
+                .font(SabqType.metaEmphasis.font)
+                .foregroundStyle(SabqTheme.textPrimary)
                 .monospacedDigit()
+                .multilineTextAlignment(.trailing)
         }
-        .padding(.vertical, 8)
+        .padding(.vertical, SabqLayout.space12)
         .overlay(alignment: .bottom) {
-            Divider().opacity(0.5)
+            Rectangle().fill(SabqTheme.separator).frame(height: 1)
         }
     }
 
@@ -516,16 +481,19 @@ struct SabqPlusView: View {
 
     private func celebrationScreen(_ voucher: PlusVoucher) -> some View {
         ScrollView {
-            VStack(spacing: 16) {
-                Text("🎉")
-                    .font(.system(size: 52))
-                    .padding(.top, 30)
+            VStack(spacing: SabqLayout.space16) {
+                Image(systemName: "checkmark.seal")
+                    .font(SabqFonts.app(size: 40, weight: .regular))
+                    .foregroundStyle(SabqTheme.success)
+                    .padding(.top, SabqLayout.space32)
+                    .accessibilityHidden(true)
                 Text("مبروك! تم الاستبدال")
-                    .font(SabqFonts.app(size: 22, weight: .heavy))
-                    .foregroundStyle(SabqTheme.ink)
+                    .sabqText(SabqType.leadTitle)
+                    .foregroundStyle(SabqTheme.textPrimary)
+                    .accessibilityAddTraits(.isHeader)
                 Text("قسيمتك من \(voucher.partnerName) جاهزة — أبرِزها عند الشريك أو أضفها لمحفظتك")
-                    .font(SabqFonts.app(size: 13, weight: .medium))
-                    .foregroundStyle(SabqTheme.secondaryInk)
+                    .sabqText(SabqType.excerpt)
+                    .foregroundStyle(SabqTheme.textSecondary)
                     .multilineTextAlignment(.center)
 
                 voucherPassCard(voucher)
@@ -533,36 +501,38 @@ struct SabqPlusView: View {
                 Button {
                     Task { await addToWallet(redemptionId: voucher.redemptionId) }
                 } label: {
-                    HStack(spacing: 8) {
+                    HStack(spacing: SabqLayout.space8) {
                         if walletBusyId == voucher.redemptionId {
-                            ProgressView().tint(.white)
+                            ProgressView().tint(SabqTheme.onAction)
                         } else {
                             Image(systemName: "wallet.pass.fill")
                         }
                         Text("أضفها إلى Apple Wallet")
-                            .font(SabqFonts.app(size: 14.5, weight: .bold))
+                            .font(SabqType.button.font)
                     }
-                    .foregroundStyle(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 13)
-                    .background(Color.black, in: RoundedRectangle(cornerRadius: 12))
+                    .foregroundStyle(SabqTheme.onAction)
+                    .frame(maxWidth: .infinity, minHeight: SabqLayout.controlHeight)
+                    // زر Apple Wallet أسود بحسب إرشادات Apple لعلامة المحفظة.
+                    .background(Color.black, in: RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
                 }
+                .buttonStyle(.plain)
                 .disabled(walletBusyId != nil)
 
                 Text("خُصمت \(formatPoints(voucher.pointsSpent)) نقطة · رصيدك الجديد \(formatPoints(loader.catalog?.balance ?? 0)) نقطة")
-                    .font(SabqFonts.app(size: 11.5, weight: .medium))
-                    .foregroundStyle(SabqTheme.secondaryInk)
+                    .font(SabqType.meta.font)
+                    .foregroundStyle(SabqTheme.textSecondary)
                     .monospacedDigit()
+                    .multilineTextAlignment(.center)
 
                 Button("تم") { celebrationVoucher = nil }
-                    .font(SabqFonts.app(size: 15, weight: .bold))
-                    .foregroundStyle(SabqTheme.ink)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-                    .background(SabqTheme.surface, in: RoundedRectangle(cornerRadius: 12))
-                    .padding(.bottom, 24)
+                    .font(SabqType.button.font)
+                    .foregroundStyle(SabqTheme.primary)
+                    .frame(maxWidth: .infinity, minHeight: SabqLayout.controlHeight)
+                    .overlay(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                        .stroke(SabqTheme.outline, lineWidth: 1))
+                    .padding(.bottom, SabqLayout.space24)
             }
-            .padding(20)
+            .padding(SabqLayout.space24)
         }
         .background(SabqTheme.background.ignoresSafeArea())
         .environment(\.layoutDirection, .rightToLeft)
@@ -580,63 +550,57 @@ struct SabqPlusView: View {
     }
 
     private func voucherPassCard(_ voucher: PlusVoucher) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 10) {
-                partnerBadge(
-                    category: voucher.category ?? "",
-                    brand: Color(plusHex: voucher.brandColor),
-                    size: 40, iconSize: 17
-                )
+        VStack(alignment: .leading, spacing: SabqLayout.space8) {
+            HStack(spacing: SabqLayout.space12) {
+                Image(systemName: categoryIcon(for: voucher.category ?? ""))
+                    .font(.system(size: 17, weight: .regular))
+                    .foregroundStyle(SabqTheme.onAction)
+                    .frame(width: 40, height: 40)
+                    .background(SabqTheme.onAction.opacity(0.16), in: RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous))
+                    .accessibilityHidden(true)
                 Text(voucher.partnerName)
-                    .font(SabqFonts.app(size: 17, weight: .heavy))
-                    .foregroundStyle(.white)
+                    .font(SabqType.rowTitle.font)
+                    .foregroundStyle(SabqTheme.onAction)
             }
             Text("\(voucher.offer) · \(voucher.valueLabel)")
-                .font(SabqFonts.app(size: 12, weight: .medium))
-                .foregroundStyle(Color(red: 0.894, green: 0.871, blue: 1))
+                .font(SabqType.meta.font)
+                .foregroundStyle(SabqTheme.onAction.opacity(0.85))
 
-            VStack(spacing: 6) {
+            VStack(spacing: SabqLayout.space8) {
                 if let qr = generateQR(from: voucher.code) {
                     Image(uiImage: qr)
                         .interpolation(.none)
                         .resizable()
                         .frame(width: 140, height: 140)
+                        .accessibilityLabel("رمز QR")
                 }
                 Text(voucher.code)
-                    .font(.system(size: 13, weight: .heavy, design: .monospaced))
+                    .font(.system(.footnote, design: .monospaced).weight(.semibold))
                     .kerning(2)
-                    .foregroundStyle(Color(red: 0.102, green: 0.071, blue: 0.200))
+                    .foregroundStyle(Color.black)
                     .environment(\.layoutDirection, .leftToRight)
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 14)
-            .background(Color.white, in: RoundedRectangle(cornerRadius: 12))
+            .padding(.vertical, SabqLayout.space16)
+            // الرمز يحتاج خلفية بيضاء ثابتة ليُقرأ في الوضعين.
+            .background(Color.white, in: RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
 
             HStack {
                 Text("صالحة حتى \(formatDate(voucher.expiresAt))")
                 Spacer()
                 Text("سبق بلس × ولاء ون")
             }
-            .font(SabqFonts.app(size: 10.5, weight: .medium))
-            .foregroundStyle(Color(red: 0.851, green: 0.824, blue: 0.980))
+            .font(SabqType.tag.font)
+            .foregroundStyle(SabqTheme.onAction.opacity(0.85))
         }
-        .padding(18)
-        .background(
-            ZStack(alignment: .topLeading) {
-                LinearGradient(colors: [walaDeep, walaPurple], startPoint: .topTrailing, endPoint: .bottomLeading)
-                Text("W")
-                    .font(.system(size: 110, weight: .black).italic())
-                    .foregroundStyle(walaYellow.opacity(0.18))
-                    .offset(x: -8, y: -26)
-            }
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 18))
+        .padding(SabqLayout.space16)
+        .background(walaDeep, in: RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
     }
 
     // MARK: - السجل
 
     private var historySection: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: SabqLayout.space12) {
             HStack {
                 sectionTitle("سجل استبدالاتي")
                 Spacer()
@@ -645,24 +609,28 @@ struct SabqPlusView: View {
                         cleanupWalletPasses()
                     } label: {
                         Label("تنظيف Wallet (\(installedSerials.count))", systemImage: "wallet.pass")
-                            .font(SabqFonts.app(size: 11.5, weight: .bold))
-                            .foregroundStyle(walaPurple)
-                            .padding(.vertical, 5)
-                            .padding(.horizontal, 10)
-                            .background(walaPurple.opacity(0.10), in: Capsule())
+                            .font(SabqType.metaEmphasis.font)
+                            .foregroundStyle(SabqTheme.primary)
+                            .frame(minHeight: SabqLayout.touchTarget)
                     }
+                    .buttonStyle(.plain)
                 }
             }
             if loader.redemptions.isEmpty {
                 Text("لا توجد استبدالات بعد — جرّب استبدال أول قسيمة ✨")
-                    .font(SabqFonts.app(size: 13, weight: .medium))
-                    .foregroundStyle(SabqTheme.secondaryInk)
+                    .sabqText(SabqType.excerpt)
+                    .foregroundStyle(SabqTheme.textSecondary)
+                    .multilineTextAlignment(.center)
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 22)
-                    .background(SabqTheme.surface, in: RoundedRectangle(cornerRadius: 14))
+                    .padding(.vertical, SabqLayout.space24)
+                    .padding(.horizontal, SabqLayout.space16)
+                    .background(SabqTheme.surfaceMuted, in: RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
             } else {
-                VStack(spacing: 8) {
-                    ForEach(loader.redemptions) { item in
+                VStack(spacing: 0) {
+                    ForEach(Array(loader.redemptions.enumerated()), id: \.element.id) { index, item in
+                        if index > 0 {
+                            Rectangle().fill(SabqTheme.separator).frame(height: 1)
+                        }
                         redemptionRow(item)
                     }
                 }
@@ -671,100 +639,112 @@ struct SabqPlusView: View {
     }
 
     private func redemptionRow(_ item: PlusRedemption) -> some View {
-        HStack(spacing: 10) {
-            partnerBadge(
-                category: item.category ?? "",
-                brand: Color(plusHex: item.brandColor ?? "#4A4A5A"),
-                size: 34, iconSize: 14
-            )
+        HStack(spacing: SabqLayout.space8) {
+            partnerBadge(category: item.category ?? "", size: 36, iconSize: 15)
             VStack(alignment: .leading, spacing: 2) {
                 Text(item.partnerName ?? "قسيمة")
-                    .font(SabqFonts.app(size: 13.5, weight: .bold))
-                    .foregroundStyle(SabqTheme.ink)
-                HStack(spacing: 6) {
+                    .font(SabqType.rowTitle.font)
+                    .foregroundStyle(SabqTheme.textPrimary)
+                HStack(spacing: SabqLayout.space8) {
                     if let code = item.code {
                         Text(code)
-                            .font(.system(size: 10.5, weight: .semibold, design: .monospaced))
+                            .font(.system(.caption, design: .monospaced))
                             .environment(\.layoutDirection, .leftToRight)
                     }
                     if let date = item.redeemedAt {
                         Text(formatDate(date))
-                            .font(SabqFonts.app(size: 10.5, weight: .medium))
+                            .font(SabqType.tag.font)
                     }
                 }
-                .foregroundStyle(SabqTheme.secondaryInk)
+                .foregroundStyle(SabqTheme.textSecondary)
             }
-            Spacer()
+            Spacer(minLength: 0)
             Text("−\(formatPoints(item.pointsSpent))")
-                .font(SabqFonts.app(size: 13, weight: .heavy))
-                .foregroundStyle(Color(red: 0.840, green: 0.271, blue: 0.271))
+                .font(SabqType.metaEmphasis.font)
+                .foregroundStyle(SabqTheme.danger)
                 .monospacedDigit()
+                .environment(\.layoutDirection, .leftToRight)
             if item.code != nil {
                 let installed = installedSerials.contains(walletSerial(for: item.id))
                 Button {
                     Task { await addToWallet(redemptionId: item.id) }
                 } label: {
-                    if walletBusyId == item.id {
-                        ProgressView().frame(width: 26, height: 26)
-                    } else {
-                        Image(systemName: installed ? "wallet.pass.fill" : "wallet.pass")
-                            .font(.system(size: 15))
-                            .foregroundStyle(installed ? Color(red: 0.09, green: 0.64, blue: 0.42) : walaPurple)
-                            .frame(width: 26, height: 26)
+                    Group {
+                        if walletBusyId == item.id {
+                            ProgressView()
+                        } else {
+                            Image(systemName: installed ? "wallet.pass.fill" : "wallet.pass")
+                                .font(SabqType.excerpt.font)
+                                .foregroundStyle(installed ? SabqTheme.success : SabqTheme.primary)
+                        }
                     }
+                    .frame(width: SabqLayout.touchTarget, height: SabqLayout.touchTarget)
+                    .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
                 .disabled(walletBusyId != nil)
+                .accessibilityLabel("Apple Wallet")
             }
             Button {
                 removalTarget = item
             } label: {
                 Image(systemName: "trash")
-                    .font(.system(size: 14))
-                    .foregroundStyle(SabqTheme.secondaryInk)
-                    .frame(width: 26, height: 26)
+                    .font(SabqType.excerpt.font)
+                    .foregroundStyle(SabqTheme.textSecondary)
+                    .frame(width: SabqLayout.touchTarget, height: SabqLayout.touchTarget)
+                    .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
             .disabled(isRemoving)
+            .accessibilityLabel("إزالة القسيمة")
         }
-        .padding(12)
-        .background(SabqTheme.surface, in: RoundedRectangle(cornerRadius: 14))
+        .padding(.vertical, SabqLayout.space8)
     }
 
     // MARK: - الشروط
 
     private var termsSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: SabqLayout.space8) {
             sectionTitle("الإرشادات وشروط الاستخدام")
             Text("ملخص توضيحي — الصياغة القانونية النهائية تُعتمد قبل الإطلاق الرسمي.")
-                .font(SabqFonts.app(size: 12.5, weight: .medium))
-                .foregroundStyle(SabqTheme.secondaryInk)
-            termItem("اكتساب النقاط وأسقفها",
-                     "تُمنح النقاط من قراءة المحتوى والتفاعل والدخول اليومي والتوقعات الرياضية وفق الجدول المعلن، وبأسقف يومية مضادة لإساءة الاستخدام.")
-            termItem("الاستبدال عبر ولاء ون",
-                     "عند تأكيد الاستبدال تُخصم النقاط فوراً وتصدر القسيمة. بعد التأكيد تسري شروط وأحكام ولاء ون ولا يمكن التراجع أو استرداد النقاط.")
-            termItem("صلاحية النقاط والقسائم",
-                     "نقاط سبق بلس لا تنتهي ما دام حسابك نشطاً. القسائم الصادرة عبر ولاء ون تنتهي بعد 12 شهراً من الإصدار ما لم يُذكر خلاف ذلك.")
-            termItem("حدود المسؤولية",
-                     "مسؤولية سبق تقتصر على صحة خصم النقاط وإصدار القسيمة. تأخر الشريك أو تغيير عروضه يخضع لشروط ولاء ون والشريك، وفي حال تعذر الإصدار تُعاد النقاط كاملة.")
-            termItem("الدعم والنزاعات",
-                     "لمشاكل النقاط: دعم سبق خلال 15 يوماً من العملية. لمشاكل استخدام القسيمة لدى الشريك: تُحال لدعم ولاء ون مع رقم المرجع.")
+                .sabqText(SabqType.meta)
+                .foregroundStyle(SabqTheme.textSecondary)
+            VStack(spacing: 0) {
+                termItem("اكتساب النقاط وأسقفها",
+                         "تُمنح النقاط من قراءة المحتوى والتفاعل والدخول اليومي والتوقعات الرياضية وفق الجدول المعلن، وبأسقف يومية مضادة لإساءة الاستخدام.")
+                termItem("الاستبدال عبر ولاء ون",
+                         "عند تأكيد الاستبدال تُخصم النقاط فوراً وتصدر القسيمة. بعد التأكيد تسري شروط وأحكام ولاء ون ولا يمكن التراجع أو استرداد النقاط.")
+                termItem("صلاحية النقاط والقسائم",
+                         "نقاط سبق بلس لا تنتهي ما دام حسابك نشطاً. القسائم الصادرة عبر ولاء ون تنتهي بعد 12 شهراً من الإصدار ما لم يُذكر خلاف ذلك.")
+                termItem("حدود المسؤولية",
+                         "مسؤولية سبق تقتصر على صحة خصم النقاط وإصدار القسيمة. تأخر الشريك أو تغيير عروضه يخضع لشروط ولاء ون والشريك، وفي حال تعذر الإصدار تُعاد النقاط كاملة.")
+                termItem("الدعم والنزاعات",
+                         "لمشاكل النقاط: دعم سبق خلال 15 يوماً من العملية. لمشاكل استخدام القسيمة لدى الشريك: تُحال لدعم ولاء ون مع رقم المرجع.",
+                         isLast: true)
+            }
         }
     }
 
-    private func termItem(_ title: String, _ body: String) -> some View {
-        DisclosureGroup {
-            Text(body)
-                .font(SabqFonts.app(size: 12.5, weight: .medium))
-                .foregroundStyle(SabqTheme.secondaryInk)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.top, 6)
-        } label: {
-            Text(title)
-                .font(SabqFonts.app(size: 13.5, weight: .bold))
-                .foregroundStyle(SabqTheme.ink)
+    private func termItem(_ title: String, _ body: String, isLast: Bool = false) -> some View {
+        VStack(spacing: 0) {
+            DisclosureGroup {
+                Text(body)
+                    .sabqText(SabqType.excerpt)
+                    .foregroundStyle(SabqTheme.textSecondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.top, SabqLayout.space8)
+            } label: {
+                Text(title)
+                    .font(SabqType.rowTitle.font)
+                    .foregroundStyle(SabqTheme.textPrimary)
+            }
+            .padding(.vertical, SabqLayout.space12)
+            .frame(minHeight: SabqLayout.touchTarget)
+            .tint(SabqTheme.textSecondary)
+            if !isLast {
+                Rectangle().fill(SabqTheme.separator).frame(height: 1)
+            }
         }
-        .padding(12)
-        .background(SabqTheme.surface, in: RoundedRectangle(cornerRadius: 12))
-        .tint(SabqTheme.secondaryInk)
     }
 
     // MARK: - الأفعال
@@ -865,8 +845,9 @@ struct SabqPlusView: View {
 
     private func sectionTitle(_ text: String) -> some View {
         Text(text)
-            .font(SabqFonts.app(size: 18, weight: .heavy))
-            .foregroundStyle(SabqTheme.ink)
+            .sabqText(SabqType.sectionHeading)
+            .foregroundStyle(SabqTheme.textPrimary)
+            .accessibilityAddTraits(.isHeader)
     }
 
     private func formatPoints(_ value: Int) -> String {

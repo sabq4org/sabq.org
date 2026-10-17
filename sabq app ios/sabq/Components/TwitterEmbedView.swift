@@ -35,44 +35,40 @@ struct TwitterEmbedView: View {
 
             // Fallback link in case the widgets script fails (CSP / network).
             Link(destination: tweetURL) {
-                HStack(spacing: 5) {
+                HStack(spacing: SabqLayout.space4) {
                     Image(systemName: "arrow.up.right.square")
-                        .font(SabqFonts.app(size: 11, weight: .semibold))
+                        .font(SabqType.tag.font)
                     Text("افتح التغريدة في X")
-                        .font(SabqFonts.app(size: 11, weight: .semibold))
+                        .font(SabqType.metaEmphasis.font)
                 }
-                .foregroundStyle(SabqTheme.primaryEnd)
+                .foregroundStyle(SabqTheme.primary)
+                .frame(minHeight: SabqLayout.touchTarget)
+                .contentShape(Rectangle())
             }
         }
     }
 
     private var placeholder: some View {
-        VStack(spacing: 10) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(Color.black)
-                    .frame(width: 44, height: 44)
-                Image(systemName: "xmark")
-                    .font(SabqFonts.app(size: 18, weight: .heavy))
-                    .foregroundStyle(.white)
-            }
+        VStack(spacing: SabqLayout.space12) {
+            Image(systemName: "xmark")
+                .font(SabqFonts.app(size: 18, weight: .semibold))
+                .foregroundStyle(SabqTheme.textPrimary)
+                .frame(width: SabqLayout.touchTarget, height: SabqLayout.touchTarget)
+                .background(
+                    RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
+                        .fill(SabqTheme.surface)
+                )
+                .accessibilityHidden(true)
             ProgressView()
                 .controlSize(.small)
-                .tint(SabqTheme.tertiaryInk)
+                .tint(SabqTheme.textTertiary)
             Text("تحميل التغريدة…")
-                .font(SabqFonts.app(size: 11, weight: .medium))
-                .foregroundStyle(SabqTheme.tertiaryInk)
+                .font(SabqType.meta.font)
+                .foregroundStyle(SabqTheme.textTertiary)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 30)
-        .background(
-            RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                .fill(SabqTheme.surface)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                .stroke(SabqTheme.outline.opacity(0.5), lineWidth: 0.5)
-        )
+        .padding(.vertical, SabqLayout.space32)
+        .sabqBlockSurface()
     }
 }
 

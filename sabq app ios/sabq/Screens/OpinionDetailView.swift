@@ -33,6 +33,7 @@ struct OpinionDetailView: View {
     @State private var isHeroLightboxPresented = false
     @State private var inlineLightboxURL: URL?
     @Environment(LikesStore.self) private var likesStore
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var likesCount: Int = 0
     @State private var isLikeBusy: Bool = false
     /// حالة الاستماع من المشغّل المشترك (Now Playing + شاشة القفل) — F03.
@@ -78,19 +79,28 @@ struct OpinionDetailView: View {
                             corner: .topLeading
                         )
 
-                    VStack(alignment: .leading, spacing: 18) {
-                        if !isFocusMode {
-                            labelsRow
+                    VStack(alignment: .leading, spacing: SabqLayout.space16) {
+                        // ترتيب صفحة الخبر المعتمد ومسافاته: الوسم ← العنوان ← 16 ←
+                        // الكاتب ← 16 ← فاصل ← 16 ← الموجز ← النص.
+                        VStack(alignment: .leading, spacing: 0) {
+                            if !isFocusMode {
+                                labelsRow
+                            }
+
+                            opinionTitle
+                                .padding(.bottom, SabqLayout.space16)
+
+                            opinionMeta
+
+                            SidebarRowDivider()
+                                .padding(.vertical, SabqLayout.space16)
+
+                            if !isFocusMode {
+                                smartSummaryCard
+                                    .padding(.bottom, SabqLayout.space8)
+                            }
                         }
 
-                        opinionTitle
-                        opinionMeta
-
-                        if !isFocusMode {
-                            smartSummaryCard
-                        }
-
-                        Divider().foregroundStyle(SabqTheme.outline.opacity(0.6))
                         opinionBody
                             .analyticsReadingBody()
 
@@ -101,24 +111,25 @@ struct OpinionDetailView: View {
                         // Explicit top-padding gives each its own
                         // breathing room.
                         actionBar
-                            .padding(.top, 16)
+                            .padding(.top, SabqLayout.space16)
 
                         if !isFocusMode, !displayTags.isEmpty {
                             tagsSection
-                                .padding(.top, 20)
+                                .padding(.top, SabqLayout.space16)
                         }
 
                         if !isFocusMode, !moreOpinions.isEmpty {
                             moreOpinionsSection
-                                .padding(.top, 24)
+                                .padding(.top, SabqLayout.space24)
                         }
                     }
-                    .frame(width: min(720, max(0, proxy.size.width - 40)), alignment: .leading)
-                    .padding(.horizontal, 20)
-                    .padding(.top, 24)
-                    .padding(.bottom, 60)
+                    .frame(width: max(0, min(proxy.size.width - (SabqLayout.pageMargin * 2), SabqLayout.readingWidth)), alignment: .leading)
+                    .padding(.horizontal, SabqLayout.pageMargin)
+                    .padding(.top, SabqLayout.space4)
+                    .padding(.bottom, SabqLayout.space40)
+                    .frame(maxWidth: .infinity)
                 }
-                .frame(width: proxy.size.width, alignment: .center)
+                .frame(width: proxy.size.width, alignment: .leading)
             }
             .sabqNavigationEdge()
             .sabqScrollProgressTracker { progress in
@@ -181,7 +192,7 @@ struct OpinionDetailView: View {
                     Image(systemName: bookmarksStore.isBookmarked(opinion.id) ? "bookmark.fill" : "bookmark")
                         .font(SabqFonts.app(size: 16, weight: .semibold))
                         .foregroundStyle(
-                            bookmarksStore.isBookmarked(opinion.id) ? SabqTheme.primaryEnd : SabqTheme.secondaryInk
+                            bookmarksStore.isBookmarked(opinion.id) ? SabqTheme.primary : SabqTheme.textSecondary
                         )
 
                 }
@@ -193,7 +204,7 @@ struct OpinionDetailView: View {
                 } label: {
                     Image(systemName: "square.and.arrow.up")
                         .font(SabqFonts.app(size: 16, weight: .semibold))
-                        .foregroundStyle(SabqTheme.secondaryInk)
+                        .foregroundStyle(SabqTheme.textSecondary)
 
                 }
                 .accessibilityLabel("مشاركة")
@@ -266,7 +277,7 @@ struct OpinionDetailView: View {
         } label: {
             Image(systemName: isLiked ? "heart.fill" : "heart")
                 .font(SabqFonts.app(size: 16, weight: .semibold))
-                .foregroundStyle(isLiked ? Color(red: 0.95, green: 0.30, blue: 0.36) : SabqTheme.secondaryInk)
+                .foregroundStyle(isLiked ? SabqTheme.danger : SabqTheme.textSecondary)
 
         }
         .disabled(isLikeBusy)
@@ -286,8 +297,8 @@ struct OpinionDetailView: View {
     /// إسناد المزوّد بعبارة الويب حرفيًا — يظهر عندما يكون المقطع عبر HUMAIN.
     private var summaryAudioAttribution: some View {
         Text("الصوت عبر HUMAIN")
-            .font(SabqFonts.app(size: 11, weight: .regular))
-            .foregroundStyle(SabqTheme.emerald)
+            .font(SabqType.meta.font)
+            .foregroundStyle(SabqTheme.success)
             .lineLimit(1)
             .accessibilityLabel("الصوت عبر هيومن")
     }
@@ -300,19 +311,18 @@ struct OpinionDetailView: View {
             SabqHaptics.light()
             toggleAudio()
         } label: {
-            HStack(spacing: 5) {
+            HStack(spacing: 6) {
                 Image(systemName: isPlayingAudio ? "pause.fill" : "play.fill")
-                    .font(SabqFonts.app(size: 10, weight: .regular))
+                    .font(SabqType.tag.font)
                 Text(isPlayingAudio ? "إيقاف" : "استماع")
-                    .font(SabqFonts.app(size: 10, weight: .regular))
+                    .font(SabqType.metaEmphasis.font)
             }
-            .foregroundStyle(.white)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(
-                Capsule(style: .continuous).fill(SabqTheme.primaryEnd)
-            )
-            .shadow(color: SabqTheme.primaryEnd.opacity(0.30), radius: 6, x: 0, y: 3)
+            .foregroundStyle(SabqTheme.onAction)
+            .padding(.horizontal, SabqLayout.space16)
+            .frame(minHeight: 36)
+            .background(Capsule(style: .continuous).fill(SabqTheme.actionFill))
+            .frame(minHeight: SabqLayout.touchTarget)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }
@@ -361,24 +371,17 @@ struct OpinionDetailView: View {
                 }
             } else {
                 heroPlaceholder
+                    .environment(\.sabqImageLoadFailed, true)
             }
         }
         .frame(maxWidth: .infinity)
     }
 
     private var heroPlaceholder: some View {
-        LinearGradient(
-            colors: [SabqTheme.primaryEnd.opacity(0.20), SabqTheme.primaryStart.opacity(0.05)],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
-        .frame(maxWidth: .infinity)
-        .frame(height: 220)
-        .overlay {
-            Image(systemName: "text.quote")
-                .font(SabqFonts.app(size: 100, weight: .ultraLight))
-                .foregroundStyle(SabqTheme.primaryEnd.opacity(0.18))
-        }
+        Color.clear
+            .aspectRatio(16.0 / 9.0, contentMode: .fit)
+            .frame(maxWidth: .infinity)
+            .overlay { SabqImagePlaceholder() }
     }
 
     // MARK: - Reading Progress Bar — see `ReadingProgressOverlay` at top
@@ -393,94 +396,71 @@ struct OpinionDetailView: View {
     /// as the article labelsRow so future additions (sentiment, breaking, etc.)
     /// drop in cleanly.
     private var labelsRow: some View {
-        FlowLayout(spacing: 8) {
-            HStack(spacing: 5) {
-                Image(systemName: "text.quote")
-                    .font(SabqFonts.app(size: 10, weight: .regular))
-                Text("مقال رأي")
-                    .font(SabqFonts.app(size: 10, weight: .regular))
-                    .tracking(0.5)
-            }
-            .foregroundStyle(SabqTheme.primaryEnd)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 5)
-            .background(
-                Capsule(style: .continuous).fill(SabqTheme.primaryEnd.opacity(0.10))
-            )
-            .overlay(
-                Capsule(style: .continuous).stroke(SabqTheme.primaryEnd.opacity(0.25), lineWidth: 0.5)
-            )
+        // نص ملوّن بلا كبسولة كوسم القسم في صفحة الخبر.
+        FlowLayout(spacing: 14) {
+            DetailLabelPill(title: "مقال رأي", tint: SabqTheme.primary, icon: "text.quote")
         }
     }
 
     // MARK: - Title
 
+    /// عنوان 26 عريض كعنوان الخبر، ويتبع إعداد «حجم الخط» بالقدر نفسه.
     private var opinionTitle: some View {
-        Text(displayOpinion.title)
-            .font(SabqFonts.headline(size: CGFloat(fontSize + 8)))
-            .foregroundStyle(SabqTheme.ink)
-            .multilineTextAlignment(.leading)
-            .lineSpacing(3)
-            .lineLimit(nil)
-            .fixedSize(horizontal: false, vertical: true)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 4)
+        SabqRTLText(
+            displayOpinion.title,
+            uiFont: SabqType.articleTitle.uiFont(adding: CGFloat(fontSize) - SabqType.articleBody.size),
+            color: SabqTheme.textPrimary,
+            lineLimit: 0,
+            lineSpacing: SabqType.articleTitle.lineSpacing,
+            textStyle: SabqType.articleTitle.uiTextStyle
+        )
     }
 
     // MARK: - Meta (gendered byline + reading time + date)
 
+    /// سطر الكاتب كما في صفحة الخبر: صورة 40، ثم الاسم وتحته التاريخ ومدة القراءة.
+    /// السطر كله رابط صفحة الكاتب.
     private var opinionMeta: some View {
-        HStack(spacing: 8) {
-            NavigationLink(value: AuthorRoute(name: displayOpinion.authorName)) {
-                // Split into icon + label + name as three separate views so
-                // the RTL HStack orders them correctly (icon first on the
-                // RIGHT, then "بقلم:", then the name). Stuffing the whole
-                // byline into one Text confuses the bidi engine at the
-                // colon boundary and flips the order visually.
-                HStack(spacing: 5) {
-                    Image(systemName: "applepencil")
-                        .font(SabqFonts.app(size: 11, weight: .regular))
-                        .foregroundStyle(SabqTheme.primaryEnd)
-                    // علامة RTL في أول النص كي تُرسم النقطتان بعد الكلمة لا قبلها
-                    // (القطعة وحدها تُقرأ LTR فتنقلب: «:الكاتب»).
-                    Text("\u{200F}\(displayOpinion.bylineLabel):")
-                        .font(SabqFonts.app(size: 11, weight: .regular))
-                        .foregroundStyle(SabqTheme.primaryEnd)
-                    Text(displayOpinion.authorName)
-                        .font(SabqFonts.app(size: 11, weight: .regular))
-                        .foregroundStyle(SabqTheme.primaryEnd)
-                        .lineLimit(1)
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: SabqLayout.space8))
+            : AnyLayout(HStackLayout(spacing: SabqLayout.space12))
+        return NavigationLink(value: AuthorRoute(name: displayOpinion.authorName)) {
+            layout {
+                OpinionAuthorAvatar(
+                    name: displayOpinion.authorName,
+                    imageURL: displayOpinion.authorImageURL,
+                    size: 40
+                )
+                .accessibilityHidden(true)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    // علامة RTL في أول النص كي تُرسم النقطتان بعد الكلمة لا قبلها.
+                    (Text("\u{200F}\(displayOpinion.bylineLabel): ")
+                        .foregroundStyle(SabqTheme.textSecondary)
+                     + Text(displayOpinion.authorName)
+                        .foregroundStyle(SabqTheme.textPrimary))
+                        .font(SabqType.label)
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
                         .truncationMode(.tail)
+
+                    // U+200F: التاريخ قد يبدأ برقم فينقلب ترتيب السطر بلا علامة اتجاه.
+                    Text("\u{200F}\(displayOpinion.dateFormatted) · \(displayOpinion.readingTime)")
+                        .font(SabqType.meta.font)
+                        .foregroundStyle(SabqTheme.textTertiary)
+                        .monospacedDigit()
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .buttonStyle(.plain)
-            .layoutPriority(2)
-
-            Text("·")
-                .font(SabqFonts.app(size: 11))
-                .foregroundStyle(SabqTheme.tertiaryInk.opacity(0.6))
-
-            Text(displayOpinion.readingTime)
-                .font(SabqFonts.app(size: 12, weight: .medium))
-                .foregroundStyle(SabqTheme.tertiaryInk)
-                .monospacedDigit()
-                .lineLimit(1)
-                .layoutPriority(1)
-
-            Text("·")
-                .font(SabqFonts.app(size: 11))
-                .foregroundStyle(SabqTheme.tertiaryInk.opacity(0.6))
-
-            Text(displayOpinion.dateFormatted)
-                .font(SabqFonts.app(size: 12, weight: .medium))
-                .foregroundStyle(SabqTheme.tertiaryInk)
-                .lineLimit(1)
-                .minimumScaleFactor(0.85)
-                .layoutPriority(3)
-
-            Spacer(minLength: 0)
+            .frame(minHeight: SabqLayout.touchTarget)
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(displayOpinion.bylineLabel) \(displayOpinion.authorName)، \(displayOpinion.dateFormatted)، \(displayOpinion.readingTime)")
+        .accessibilityAddTraits(.isLink)
     }
 
     // MARK: - Smart Summary Card
@@ -498,14 +478,15 @@ struct OpinionDetailView: View {
         if body.isEmpty {
             EmptyView()
         } else {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 8) {
-                    Image(systemName: "sparkles")
-                        .font(SabqFonts.app(size: 11, weight: .regular))
-                        .foregroundStyle(SabqTheme.primaryEnd)
-                    Text("الموجز الذكي")
-                        .font(SabqFonts.app(size: 12, weight: .medium))
-                        .foregroundStyle(SabqTheme.ink)
+            VStack(alignment: .leading, spacing: SabqLayout.space8) {
+                HStack(spacing: SabqLayout.space8) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "sparkles")
+                            .font(SabqType.tag.font)
+                        Text("الموجز الذكي")
+                            .font(SabqType.label)
+                    }
+                    .foregroundStyle(SabqTheme.primary)
                     Spacer(minLength: 0)
                     if canListen {
                         if SabqAudioPlayer.shared.provider(for: audioKey) == "humain" {
@@ -516,10 +497,9 @@ struct OpinionDetailView: View {
                 }
 
                 Text(body)
-                    .font(SabqFonts.app(size: 14, weight: .medium))
-                    .foregroundStyle(SabqTheme.secondaryInk)
+                    .sabqText(SabqType.excerpt)
+                    .foregroundStyle(SabqTheme.textSecondary)
                     .multilineTextAlignment(.leading)
-                    .lineSpacing(4)
                     .lineLimit(isSummaryExpanded ? nil : 3)
                     .fixedSize(horizontal: false, vertical: true)
 
@@ -532,29 +512,19 @@ struct OpinionDetailView: View {
                     } label: {
                         HStack(spacing: 4) {
                             Text(isSummaryExpanded ? "طيّ" : "عرض المزيد")
-                                .font(SabqFonts.app(size: 11, weight: .regular))
+                                .font(SabqType.metaEmphasis.font)
                             Image(systemName: isSummaryExpanded ? "chevron.up" : "chevron.down")
-                                .font(SabqFonts.app(size: 10, weight: .regular))
+                                .font(SabqType.tag.font)
                         }
-                        .foregroundStyle(SabqTheme.primaryEnd)
+                        .foregroundStyle(SabqTheme.primary)
+                        .frame(minHeight: SabqLayout.touchTarget)
                     }
                     .buttonStyle(.plain)
                 }
             }
-            .padding(16)
+            .padding(SabqLayout.cardInset)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                    .fill(.ultraThinMaterial)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                            .fill(SabqTheme.primaryEnd.opacity(0.04))
-                    )
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                    .stroke(SabqTheme.primaryEnd.opacity(0.18), lineWidth: 0.5)
-            )
+            .sabqBlockSurface()
         }
     }
 
@@ -566,7 +536,7 @@ struct OpinionDetailView: View {
             if body.isEmpty {
                 EmptyStateView(
                     icon: "doc.text.magnifyingglass",
-                    tint: SabqTheme.secondaryInk,
+                    tint: SabqTheme.textSecondary,
                     title: "لا يتوفر نص المقال بعد",
                     subtitle: "سنُظهر محتوى المقال الكامل فور وصوله من الخدمة"
                 )
@@ -643,19 +613,8 @@ struct OpinionDetailView: View {
             }
             .buttonStyle(.plain)
         }
-        .padding(.vertical, 8)
-        .background(
-            RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                .fill(.ultraThinMaterial)
-                .overlay(
-                    RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                        .fill(SabqTheme.paleFill.opacity(0.4))
-                )
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                .stroke(SabqTheme.outline.opacity(0.4), lineWidth: 0.5)
-        )
+        .padding(.vertical, SabqLayout.space4)
+        .sabqBlockSurface()
         .sheet(isPresented: $showReaderControls) {
             ReaderControlsSheet(
                 fontSize: $fontSize,
@@ -670,11 +629,13 @@ struct OpinionDetailView: View {
             Image(systemName: icon)
                 .font(SabqFonts.app(size: 16, weight: .semibold))
             Text(label)
-                .font(SabqFonts.app(size: 10, weight: .regular))
+                .font(SabqType.tag.font)
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
         }
-        .foregroundStyle(isActive ? SabqTheme.primaryEnd : SabqTheme.secondaryInk)
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 10)
+        .foregroundStyle(isActive ? SabqTheme.primary : SabqTheme.textSecondary)
+        .frame(maxWidth: .infinity, minHeight: SabqLayout.touchTarget)
+        .padding(.vertical, SabqLayout.space4)
     }
 
     // MARK: - Focus background (warmer cream tone in focus mode)
@@ -692,23 +653,25 @@ struct OpinionDetailView: View {
     // MARK: - Tags
 
     private var tagsSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: SabqLayout.space12) {
             Text("الوسوم")
-                .font(SabqFonts.app(size: 14, weight: .bold))
-                .foregroundStyle(SabqTheme.secondaryInk)
+                .sabqText(SabqType.sectionHeading)
+                .foregroundStyle(SabqTheme.textPrimary)
 
-            FlowLayout(spacing: 8) {
+            FlowLayout(spacing: SabqLayout.space8) {
                 ForEach(displayTags, id: \.self) { tag in
                     NavigationLink(value: KeywordRoute(keyword: tag)) {
                         Text(tag)
-                            .font(SabqFonts.app(size: 12, weight: .medium))
-                            .foregroundStyle(SabqTheme.primaryStart)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 7)
+                            .font(SabqType.tag.font)
+                            .foregroundStyle(SabqTheme.textPrimary)
+                            .padding(.horizontal, SabqLayout.space12)
+                            .frame(minHeight: 32)
                             .background(
-                                Capsule(style: .continuous)
-                                    .fill(SabqTheme.primaryEnd.opacity(0.08))
+                                RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
+                                    .fill(SabqTheme.surfaceMuted)
                             )
+                            .frame(minHeight: SabqLayout.touchTarget)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                 }
@@ -737,7 +700,7 @@ struct OpinionDetailView: View {
                         bylineAvatarURL: opinion.authorImageURL,
                         date: opinion.relativeDate,
                         placeholderIcon: "text.quote",
-                        placeholderTint: SabqTheme.primaryEnd
+                        placeholderTint: SabqTheme.textTertiary
                     )
                 }
                 .buttonStyle(.plain)

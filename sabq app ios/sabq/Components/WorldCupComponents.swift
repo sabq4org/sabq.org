@@ -27,14 +27,14 @@ struct WCRemoteImage: View {
 struct WCTeamLogo: View {
     let team: WCTeam
     var size: CGFloat = 40
-    var ring: Color = Color.white.opacity(0.15)
+    var ring: Color = SabqTheme.separator
 
     var body: some View {
         WCRemoteImage(url: team.logo)
             .padding(size * 0.14)
             .frame(width: size, height: size)
             .background(Circle().fill(.white))
-            .overlay(Circle().stroke(ring, lineWidth: 2))
+            .overlay(Circle().stroke(ring, lineWidth: 1))
     }
 }
 
@@ -45,26 +45,27 @@ struct WCStatusPill: View {
 
     var body: some View {
         if fixture.status.live {
-            HStack(spacing: 4) {
-                Circle().fill(.white).frame(width: 5, height: 5)
+            // نص أحمر ونقطة على سطح هادئ: الأبيض على الأحمر يسقط تباينه في الليلي
+            HStack(spacing: SabqLayout.space4) {
+                Circle().fill(SabqTheme.breaking).frame(width: 6, height: 6)
                 Text(elapsedText)
             }
-            .font(SabqFonts.app(size: 11, weight: .medium))
-            .foregroundStyle(.white)
-            .padding(.horizontal, 8).padding(.vertical, 3)
-            .background(Capsule().fill(WCTheme.liveRed))
+            .sabqText(SabqType.tag)
+            .foregroundStyle(SabqTheme.breaking)
+            .padding(.horizontal, SabqLayout.space8).padding(.vertical, SabqLayout.space4)
+            .background(Capsule().fill(SabqTheme.surfaceMuted))
         } else if fixture.status.finished {
             Text(fixture.status.label)
-                .font(SabqFonts.app(size: 11, weight: .regular))
-                .foregroundStyle(WCTheme.liveRed)
-                .padding(.horizontal, 8).padding(.vertical, 3)
-                .background(Capsule().fill(WCTheme.liveRed.opacity(onDark ? 0.20 : 0.12)))
+                .sabqText(SabqType.tag)
+                .foregroundStyle(SabqTheme.textSecondary)
+                .padding(.horizontal, SabqLayout.space8).padding(.vertical, SabqLayout.space4)
+                .background(Capsule().fill(SabqTheme.surfaceMuted))
         } else {
             Text(WCFormat.time(fixture))
-                .font(SabqFonts.app(size: 11, weight: .medium))
+                .sabqText(SabqType.tag)
                 .foregroundStyle(WCTheme.emeraldDeep)
-                .padding(.horizontal, 8).padding(.vertical, 3)
-                .background(Capsule().fill(WCTheme.emerald.opacity(0.16)))
+                .padding(.horizontal, SabqLayout.space8).padding(.vertical, SabqLayout.space4)
+                .background(Capsule().fill(SabqTheme.surfaceMuted))
         }
     }
 
@@ -92,13 +93,13 @@ struct WCCountdownChips: View {
             let total = max(0, Double(timestamp) - Date().timeIntervalSince1970)
             if total <= 0 {
                 // الموعد حان والمزود لم يرفع إشارة «حية» بعد — لا أصفار مجمدة
-                HStack(spacing: 6) {
+                HStack(spacing: SabqLayout.space8) {
                     Circle()
-                        .fill(WCTheme.emerald)
+                        .fill(WCTheme.emeraldDeep)
                         .frame(width: 8, height: 8)
                     Text("حان موعد الانطلاق — التغطية الحية تبدأ خلال لحظات")
                         .font(SabqFonts.app(size: 12, weight: .medium))
-                        .foregroundStyle(WCTheme.onDark)
+                        .foregroundStyle(SabqTheme.textPrimary)
                 }
             } else {
                 let days = Int(total) / 86_400
@@ -117,17 +118,17 @@ struct WCCountdownChips: View {
     }
 
     private func chip(_ value: Int, _ label: String) -> some View {
-        VStack(spacing: 1) {
+        VStack(spacing: 0) {
             Text("\(value)")
                 .font(SabqFonts.app(size: 18, weight: .semibold))
-                .foregroundStyle(WCTheme.onDark)
+                .foregroundStyle(SabqTheme.textPrimary)
             Text(label)
-                .font(SabqFonts.app(size: 10))
+                .font(SabqFonts.app(size: 12))
                 .foregroundStyle(WCTheme.emeraldDeep)
         }
         .frame(minWidth: 52)
-        .padding(.vertical, 6)
-        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(WCTheme.chipFill))
+        .padding(.vertical, SabqLayout.space8)
+        .background(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous).fill(SabqTheme.surfaceMuted))
     }
 }
 
@@ -141,21 +142,21 @@ struct WCProbabilityBar: View {
         let h = Int(Double(prediction.home) / Double(total) * 100)
         let d = Int(Double(prediction.draw) / Double(total) * 100)
         let a = Int(Double(prediction.away) / Double(total) * 100)
-        VStack(spacing: 6) {
+        VStack(spacing: SabqLayout.space8) {
             HStack {
                 Text("فوز \(fixture.home.name) \(h)%")
                 Spacer()
-                Text("تعادل \(d)%").foregroundStyle(WCTheme.onDarkDim)
+                Text("تعادل \(d)%").foregroundStyle(SabqTheme.textSecondary)
                 Spacer()
                 Text("فوز \(fixture.away.name) \(a)%")
             }
-            .font(SabqFonts.app(size: 11, weight: .regular))
+            .font(SabqFonts.app(size: 12, weight: .regular))
             .foregroundStyle(WCTheme.emeraldDeep)
 
             GeometryReader { geo in
                 HStack(spacing: 0) {
                     Rectangle().fill(WCTheme.royal).frame(width: geo.size.width * CGFloat(h) / 100)
-                    Rectangle().fill(WCTheme.onDarkDim.opacity(0.5)).frame(width: geo.size.width * CGFloat(d) / 100)
+                    Rectangle().fill(SabqTheme.textSecondary.opacity(0.5)).frame(width: geo.size.width * CGFloat(d) / 100)
                     Rectangle().fill(WCTheme.sky)
                 }
             }
@@ -163,8 +164,8 @@ struct WCProbabilityBar: View {
             .clipShape(Capsule())
 
             Text("توقعات خوارزمية للاستئناس من مزود البيانات")
-                .font(SabqFonts.app(size: 10))
-                .foregroundStyle(WCTheme.onDarkDim)
+                .font(SabqFonts.app(size: 12))
+                .foregroundStyle(SabqTheme.textSecondary)
         }
     }
 }
@@ -208,19 +209,19 @@ struct WCSectionHeader: View {
     var tint: Color = WCTheme.emeraldDeep
 
     var body: some View {
-        HStack(spacing: 12) {
+        // عنوان قسم بلا صندوق: أيقونة بلون الهوية بلا خلفية، ثم العنوان والوصف.
+        HStack(alignment: .firstTextBaseline, spacing: SabqLayout.space8) {
             Image(systemName: icon)
-                .font(SabqFonts.app(size: 20, weight: .semibold))
+                .font(SabqFonts.app(size: 18, weight: .semibold))
                 .foregroundStyle(tint)
-                .frame(width: 40, height: 40)
-                .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(tint.opacity(0.12)))
-            VStack(alignment: .leading, spacing: 2) {
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: SabqLayout.space4) {
                 Text(title)
-                    .font(SabqFonts.headline(size: 21))
-                    .foregroundStyle(WCTheme.onDark)
+                    .sabqText(SabqType.sectionHeading)
+                    .foregroundStyle(SabqTheme.textPrimary)
                 Text(subtitle)
-                    .font(SabqFonts.app(size: 12))
-                    .foregroundStyle(WCTheme.onDarkDim)
+                    .sabqText(SabqType.meta)
+                    .foregroundStyle(SabqTheme.textSecondary)
             }
             Spacer(minLength: 0)
         }
@@ -234,20 +235,21 @@ struct WCEmptyState: View {
     let subtitle: String
 
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: SabqLayout.space8) {
             Image(systemName: icon)
-                .font(SabqFonts.app(size: 30))
-                .foregroundStyle(WCTheme.emeraldDeep)
+                .font(SabqFonts.app(size: 28))
+                .foregroundStyle(SabqTheme.textTertiary)
+                .accessibilityHidden(true)
             Text(title)
-                .font(SabqFonts.subhead(size: 15))
-                .foregroundStyle(WCTheme.onDark)
+                .sabqText(SabqType.rowTitle)
+                .foregroundStyle(SabqTheme.textPrimary)
             Text(subtitle)
-                .font(SabqFonts.app(size: 12))
-                .foregroundStyle(WCTheme.onDarkDim)
+                .sabqText(SabqType.meta)
+                .foregroundStyle(SabqTheme.textSecondary)
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 28)
+        .padding(.vertical, SabqLayout.space32)
     }
 }
 
@@ -257,5 +259,22 @@ struct WCLoading: View {
     var body: some View {
         HStack { Spacer(); ProgressView().tint(WCTheme.emeraldDeep); Spacer() }
             .padding(.vertical, 32)
+    }
+}
+
+// MARK: - أسطح النموذج المعتمد
+
+extension View {
+    /// بلوك هادئ (معلومة/لوحة خاصة): تعبئة surfaceMuted بلا حدّ ولا ظل، زاوية 12.
+    func wcQuietBlock() -> some View {
+        background(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+            .fill(SabqTheme.surfaceMuted))
+    }
+}
+
+/// خط فاصل رفيع بين صفوف قائمة غير مؤطّرة.
+struct WCRowSeparator: View {
+    var body: some View {
+        Rectangle().fill(SabqTheme.separator).frame(height: 1)
     }
 }

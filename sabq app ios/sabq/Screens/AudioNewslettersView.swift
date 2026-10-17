@@ -16,19 +16,19 @@ struct AudioNewslettersView: View {
 
     var body: some View {
         ScrollView(showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: SabqLayout.space16) {
                 header
 
                 if isLoading {
-                    VStack(spacing: 12) {
-                        SkeletonBox(height: 100, radius: SabqTheme.tileRadius)
-                        SkeletonBox(height: 100, radius: SabqTheme.tileRadius)
-                        SkeletonBox(height: 100, radius: SabqTheme.tileRadius)
+                    VStack(spacing: SabqLayout.space16) {
+                        SkeletonBox(height: 64, radius: SabqRadius.small)
+                        SkeletonBox(height: 64, radius: SabqRadius.small)
+                        SkeletonBox(height: 64, radius: SabqRadius.small)
                     }
                 } else if let errorMessage {
                     EmptyStateView(
                         icon: "speaker.slash",
-                        tint: SabqTheme.coral,
+                        tint: SabqTheme.danger,
                         title: "تعذّر التحميل",
                         subtitle: errorMessage,
                         action: { Task { await load() } },
@@ -37,19 +37,23 @@ struct AudioNewslettersView: View {
                 } else if newsletters.isEmpty {
                     EmptyStateView(
                         icon: "waveform",
-                        tint: SabqTheme.tertiaryInk,
+                        tint: SabqTheme.textTertiary,
                         title: "لا توجد نشرات صوتية",
                         subtitle: "النشرات الصوتية ستظهر هنا فور توفّرها."
                     )
                 } else {
-                    ForEach(newsletters) { newsletter in
-                        newsletterRow(newsletter)
+                    // صفوف بفواصل رفيعة على الصفحة، بلا بطاقات.
+                    VStack(alignment: .leading, spacing: 0) {
+                        ForEach(Array(newsletters.enumerated()), id: \.element.id) { index, newsletter in
+                            if index > 0 { SidebarRowDivider() }
+                            newsletterRow(newsletter)
+                        }
                     }
                 }
             }
-            .padding(.horizontal, 18)
-            .padding(.top, 18)
-            .padding(.bottom, 60)
+            .padding(.horizontal, SabqLayout.pageMargin)
+            .padding(.top, SabqLayout.space16)
+            .padding(.bottom, SabqLayout.space40)
         }
         .background(SabqTheme.background)
         .sabqRTL()
@@ -65,41 +69,41 @@ struct AudioNewslettersView: View {
 
     private func newsletterRow(_ n: APIAudioNewsletter) -> some View {
         let active = SabqAudioPlayer.shared.isPlaying(key: audioKey(n))
-        return HStack(alignment: .top, spacing: 14) {
+        return HStack(alignment: .top, spacing: SabqLayout.space12) {
             cover(n)
 
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: SabqLayout.space4) {
                 Text(n.title)
-                    .font(SabqFonts.app(size: 14, weight: .bold))
-                    .foregroundStyle(SabqTheme.ink)
+                    .sabqText(SabqType.rowTitle)
+                    .foregroundStyle(SabqTheme.textPrimary)
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
 
                 if let desc = n.description, !desc.isEmpty {
                     Text(desc)
-                        .font(SabqFonts.app(size: 11))
-                        .foregroundStyle(SabqTheme.secondaryInk)
+                        .font(SabqType.meta.font)
+                        .foregroundStyle(SabqTheme.textSecondary)
                         .lineLimit(2)
                 }
 
-                HStack(spacing: 8) {
+                HStack(spacing: SabqLayout.space12) {
                     if let d = n.duration {
-                        HStack(spacing: 3) {
-                            Image(systemName: "clock").font(SabqFonts.app(size: 9))
+                        HStack(spacing: SabqLayout.space4) {
+                            Image(systemName: "clock").font(SabqType.tag.font)
                             Text(formatDuration(d))
-                                .font(SabqFonts.app(size: 10, weight: .regular))
+                                .font(SabqType.meta.font)
                                 .monospacedDigit()
                         }
-                        .foregroundStyle(SabqTheme.tertiaryInk)
+                        .foregroundStyle(SabqTheme.textTertiary)
                     }
                     if let listens = n.totalListens, listens > 0 {
-                        HStack(spacing: 3) {
-                            Image(systemName: "headphones").font(SabqFonts.app(size: 9))
+                        HStack(spacing: SabqLayout.space4) {
+                            Image(systemName: "headphones").font(SabqType.tag.font)
                             Text("\(listens)")
-                                .font(SabqFonts.app(size: 10, weight: .regular))
+                                .font(SabqType.meta.font)
                                 .monospacedDigit()
                         }
-                        .foregroundStyle(SabqTheme.tertiaryInk)
+                        .foregroundStyle(SabqTheme.textTertiary)
                     }
                 }
             }
@@ -109,58 +113,34 @@ struct AudioNewslettersView: View {
             Button {
                 togglePlayback(n)
             } label: {
-                ZStack {
-                    Circle()
-                        .fill(active ? SabqTheme.coral : SabqTheme.primaryEnd.opacity(0.14))
-                        .frame(width: 44, height: 44)
-                    Image(systemName: active ? "pause.fill" : "play.fill")
-                        .font(SabqFonts.app(size: 17, weight: .heavy))
-                        .foregroundStyle(active ? .white : SabqTheme.primaryEnd)
-                        .offset(x: active ? 0 : 1)
-                }
+                Image(systemName: active ? "pause.fill" : "play.fill")
+                    .font(SabqFonts.app(size: 17, weight: .semibold))
+                    .foregroundStyle(active ? SabqTheme.onAction : SabqTheme.primary)
+                    .frame(width: SabqLayout.touchTarget, height: SabqLayout.touchTarget)
+                    .background(Circle().fill(active ? SabqTheme.actionFill : SabqTheme.surfaceMuted))
             }
             .buttonStyle(.plain)
             .disabled(n.audioUrl == nil)
             .opacity(n.audioUrl == nil ? 0.4 : 1)
+            .accessibilityLabel(active ? "إيقاف" : "تشغيل")
         }
-        .padding(14)
+        .padding(.vertical, SabqLayout.rowPadding)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                .fill(SabqTheme.surface)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                .stroke(active ? SabqTheme.coral.opacity(0.3) : SabqTheme.outline.opacity(0.4),
-                        lineWidth: active ? 1 : 0.5)
-        )
     }
 
     @ViewBuilder
     private func cover(_ n: APIAudioNewsletter) -> some View {
         if let urlString = n.coverImageUrl, let url = URL(string: urlString) {
             CachedAsyncImage(url: url, contentMode: .fill) {
-                coverPlaceholder
+                SabqImagePlaceholder()
             }
-            .frame(width: 60, height: 60)
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .frame(width: 64, height: 64)
+            .clipShape(RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous))
         } else {
-            coverPlaceholder
-                .frame(width: 60, height: 60)
-                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-        }
-    }
-
-    private var coverPlaceholder: some View {
-        ZStack {
-            LinearGradient(
-                colors: [SabqTheme.coral.opacity(0.30), SabqTheme.primaryEnd.opacity(0.18)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            Image(systemName: "waveform")
-                .font(SabqFonts.app(size: 22, weight: .light))
-                .foregroundStyle(.white.opacity(0.7))
+            SabqImagePlaceholder()
+                .environment(\.sabqImageLoadFailed, true)
+                .frame(width: 64, height: 64)
+                .clipShape(RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous))
         }
     }
 

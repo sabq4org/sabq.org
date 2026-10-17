@@ -24,8 +24,6 @@ struct LoyaltyCelebrationBanner: View {
     let onTap: () -> Void
     let onDismiss: () -> Void
 
-    @State private var sparkleOffset: CGFloat = 0
-
     private var copy: (eyebrow: String, title: String, body: String) {
         switch mode {
         case .tierUp:
@@ -37,77 +35,49 @@ struct LoyaltyCelebrationBanner: View {
 
     var body: some View {
         Button(action: onTap) {
-            HStack(alignment: .top, spacing: 14) {
-                ZStack {
-                    Circle()
-                        .fill(tier.color.opacity(0.18))
-                        .frame(width: 48, height: 48)
-                    Image(systemName: iconName(for: mode))
-                        .font(SabqFonts.app(size: 22, weight: .bold))
-                        .foregroundStyle(tier.color)
-                }
-                .overlay(alignment: .topTrailing) {
-                    Image(systemName: "sparkle")
-                        .font(SabqFonts.app(size: 9, weight: .black))
-                        .foregroundStyle(tier.color)
-                        .opacity(0.7)
-                        .offset(x: 4, y: -2 + sparkleOffset)
-                }
+            HStack(alignment: .top, spacing: SabqLayout.space12) {
+                Image(systemName: iconName(for: mode))
+                    .font(SabqFonts.app(size: 18, weight: .semibold))
+                    .foregroundStyle(SabqTheme.primary)
+                    .frame(width: 40, height: 40)
+                    .background(SabqTheme.surface, in: RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous))
+                    .accessibilityHidden(true)
 
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: SabqLayout.space4) {
                     Text(copy.eyebrow)
-                        .font(SabqFonts.app(size: 10, weight: .heavy))
-                        .tracking(1.5)
-                        .foregroundStyle(tier.color)
+                        .font(SabqType.tag.font)
+                        .foregroundStyle(SabqTheme.primary)
                     Text(copy.title)
-                        .font(SabqFonts.app(size: 15, weight: .heavy))
-                        .foregroundStyle(SabqTheme.ink)
+                        .sabqText(SabqType.rowTitle)
+                        .foregroundStyle(SabqTheme.textPrimary)
                         .multilineTextAlignment(.leading)
                     Text(copy.body)
-                        .font(SabqFonts.app(size: 12, weight: .medium))
-                        .foregroundStyle(SabqTheme.secondaryInk)
+                        .sabqText(SabqType.meta)
+                        .foregroundStyle(SabqTheme.textSecondary)
                         .multilineTextAlignment(.leading)
-                        .lineSpacing(2)
                 }
 
                 Spacer(minLength: 0)
 
                 Button(action: onDismiss) {
                     Image(systemName: "xmark")
-                        .font(SabqFonts.app(size: 11, weight: .bold))
-                        .foregroundStyle(SabqTheme.tertiaryInk)
-                        .frame(width: 26, height: 26)
-                        .background(Circle().fill(SabqTheme.tertiaryInk.opacity(0.10)))
+                        .font(SabqType.metaEmphasis.font)
+                        .foregroundStyle(SabqTheme.textTertiary)
+                        .frame(width: SabqLayout.touchTarget, height: SabqLayout.touchTarget)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .padding(.top, -SabqLayout.space12)
+                .padding(.trailing, -SabqLayout.space12)
             }
-            .padding(14)
+            .padding(SabqLayout.space16)
             .background(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(.background)
+                RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                    .fill(SabqTheme.surfaceMuted)
             )
-            .overlay(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .stroke(tier.color.opacity(0.30), lineWidth: 1)
-            )
-            .background(
-                // Subtle tier-tinted glow behind the card. Stays
-                // tasteful — no bright fill, no gradient that fights
-                // the existing home-feed palette.
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(tier.color.opacity(0.06))
-                    .blur(radius: 8)
-                    .padding(-2)
-            )
-            .clipped()
         }
         .buttonStyle(.plain)
         .transition(.move(edge: .top).combined(with: .opacity))
-        .onAppear {
-            withAnimation(.easeInOut(duration: 1.6).repeatForever(autoreverses: true)) {
-                sparkleOffset = 3
-            }
-        }
     }
 
     private func iconName(for mode: Mode) -> String {

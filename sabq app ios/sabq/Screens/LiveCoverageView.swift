@@ -10,7 +10,7 @@ struct LiveCoverageView: View {
 
     var body: some View {
         ScrollView(showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 20) {
+            VStack(alignment: .leading, spacing: SabqLayout.space16) {
                 headerSection
 
                 if isLoading {
@@ -20,7 +20,7 @@ struct LiveCoverageView: View {
                     // السحب للتحديث ليس مسارًا مكتشفًا لصفحة فارغة.
                     EmptyStateView(
                         icon: "wifi.exclamationmark",
-                        tint: SabqTheme.coral,
+                        tint: SabqTheme.danger,
                         title: "تعذر تحميل التغطية",
                         subtitle: "تحقق من اتصالك بالإنترنت ثم أعد المحاولة",
                         action: {
@@ -29,12 +29,12 @@ struct LiveCoverageView: View {
                         },
                         actionTitle: "إعادة المحاولة"
                     )
-                    .padding(.top, 60)
+                    .padding(.top, SabqLayout.space40)
                 } else if let data = liveData {
                     if !data.isLive {
                         EmptyStateView(
                             icon: "antenna.radiowaves.left.and.right.slash",
-                            tint: SabqTheme.tertiaryInk,
+                            tint: SabqTheme.textTertiary,
                             title: "لا يوجد بث حي حالياً",
                             subtitle: "تابعنا لاحقاً للتغطيات المباشرة"
                         )
@@ -47,9 +47,9 @@ struct LiveCoverageView: View {
                     }
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 18)
-            .padding(.bottom, 40)
+            .padding(.horizontal, SabqLayout.pageMargin)
+            .padding(.top, SabqLayout.space16)
+            .padding(.bottom, SabqLayout.space40)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .refreshable { await loadData() }
@@ -75,30 +75,31 @@ struct LiveCoverageView: View {
     // MARK: - Header
 
     private var headerSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 10) {
+        VStack(alignment: .leading, spacing: SabqLayout.space8) {
+            HStack(spacing: SabqLayout.space8) {
                 livePulse
                 Text(liveData?.titleAr ?? "لحظة بلحظة")
-                    .font(SabqFonts.app(size: 20, weight: .bold))
-                    .foregroundStyle(SabqTheme.ink)
+                    .font(SabqType.leadTitle.font)
+                    .foregroundStyle(SabqTheme.textPrimary)
+                    .accessibilityAddTraits(.isHeader)
             }
 
             if liveData?.isLive == true {
-                HStack(spacing: 8) {
+                HStack(spacing: SabqLayout.space8) {
                     Circle()
-                        .fill(SabqTheme.coral)
+                        .fill(SabqTheme.breaking)
                         .frame(width: 8, height: 8)
 
                     Text("مباشر")
-                        .font(SabqFonts.app(size: 12, weight: .medium))
-                        .foregroundStyle(SabqTheme.coral)
+                        .font(SabqType.metaEmphasis.font)
+                        .foregroundStyle(SabqTheme.breaking)
 
                     if let lastUpdated = liveData?.stats?.lastUpdated {
                         Text("·")
-                            .foregroundStyle(SabqTheme.tertiaryInk)
+                            .foregroundStyle(SabqTheme.textTertiary)
                         Text("آخر تحديث: \(formatRelativeTime(lastUpdated))")
-                            .font(SabqFonts.app(size: 12, weight: .medium))
-                            .foregroundStyle(SabqTheme.tertiaryInk)
+                            .font(SabqType.meta.font)
+                            .foregroundStyle(SabqTheme.textTertiary)
                     }
                 }
             }
@@ -106,22 +107,17 @@ struct LiveCoverageView: View {
     }
 
     private var livePulse: some View {
-        ZStack {
-            Circle()
-                .fill(SabqTheme.coral.opacity(0.2))
-                .frame(width: 32, height: 32)
-
-            Image(systemName: "antenna.radiowaves.left.and.right")
-                .font(SabqFonts.app(size: 16, weight: .semibold))
-                .foregroundStyle(SabqTheme.coral)
-        }
+        Image(systemName: "antenna.radiowaves.left.and.right")
+            .font(SabqFonts.app(size: 18, weight: .semibold))
+            .foregroundStyle(SabqTheme.breaking)
+            .accessibilityHidden(true)
     }
 
     // MARK: - Country Filter
 
     private func countryFilter(_ countries: [APILiveCountry]) -> some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
+            HStack(spacing: SabqLayout.space8) {
                 filterPill(label: "الكل", count: liveData?.total ?? 0, isSelected: selectedCountry == nil) {
                     withAnimation(.spring(response: 0.3)) { selectedCountry = nil }
                 }
@@ -144,26 +140,25 @@ struct LiveCoverageView: View {
 
     private func filterPill(label: String, count: Int, isSelected: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            HStack(spacing: 6) {
+            HStack(spacing: SabqLayout.space8) {
                 Text(label)
-                    .font(SabqFonts.app(size: 13, weight: isSelected ? .bold : .medium))
+                    .font(SabqType.metaEmphasis.font)
 
                 Text("\(count)")
-                    .font(SabqFonts.app(size: 10, weight: .regular))
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(
-                        Capsule().fill(isSelected ? Color.white.opacity(0.25) : SabqTheme.outline)
-                    )
+                    .font(SabqType.tag.font)
+                    .monospacedDigit()
             }
-            .foregroundStyle(isSelected ? .white : SabqTheme.ink)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 9)
+            .foregroundStyle(isSelected ? SabqTheme.onAction : SabqTheme.textPrimary)
+            .padding(.horizontal, SabqLayout.space16)
+            .frame(minHeight: 36)
             .background(
-                Capsule().fill(isSelected ? SabqTheme.primaryEnd : SabqTheme.paleFill)
+                Capsule().fill(isSelected ? SabqTheme.actionFill : SabqTheme.surfaceMuted)
             )
+            .frame(minHeight: SabqLayout.touchTarget)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
     // MARK: - Timeline
@@ -192,164 +187,134 @@ struct LiveCoverageView: View {
     }
 
     private func dateHeader(_ dateString: String) -> some View {
-        HStack {
+        HStack(spacing: SabqLayout.space8) {
             Rectangle()
-                .fill(SabqTheme.outline)
-                .frame(height: 0.5)
+                .fill(SabqTheme.separator)
+                .frame(height: 1)
             Text(formatDateHeader(dateString))
-                .font(SabqFonts.app(size: 12, weight: .medium))
-                .foregroundStyle(SabqTheme.tertiaryInk)
+                .font(SabqType.metaEmphasis.font)
+                .foregroundStyle(SabqTheme.textSecondary)
                 .fixedSize()
             Rectangle()
-                .fill(SabqTheme.outline)
-                .frame(height: 0.5)
+                .fill(SabqTheme.separator)
+                .frame(height: 1)
         }
-        .padding(.vertical, 12)
+        .padding(.vertical, SabqLayout.space12)
     }
 
     private func eventCard(_ event: APILiveEvent) -> some View {
-        HStack(alignment: .top, spacing: 12) {
+        // حدث على الصفحة مباشرة بلا بطاقة: نقطة وخط زمني، ثم المحتوى.
+        HStack(alignment: .top, spacing: SabqLayout.space12) {
             VStack(spacing: 0) {
                 Circle()
-                    .fill(event.priority == "urgent" ? SabqTheme.coral : severityColor(event.severity))
-                    .frame(width: 12, height: 12)
-                    .overlay {
-                        if event.priority == "urgent" {
-                            Image(systemName: "bolt.fill")
-                                .font(SabqFonts.app(size: 6, weight: .bold))
-                                .foregroundStyle(.white)
-                        }
-                    }
+                    .fill(event.priority == "urgent" ? SabqTheme.breaking : severityColor(event.severity))
+                    .frame(width: 10, height: 10)
+                    .padding(.top, SabqLayout.space4)
 
                 Rectangle()
-                    .fill(SabqTheme.outline)
-                    .frame(width: 1.5)
+                    .fill(SabqTheme.separator)
+                    .frame(width: 2)
                     .frame(minHeight: 40)
             }
 
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: SabqLayout.space8) {
+                FlowLayout(spacing: SabqLayout.space8) {
                     Text(formatEventTime(event.publishedAt))
-                        .font(SabqFonts.app(size: 10, weight: .regular))
-                        .foregroundStyle(SabqTheme.tertiaryInk)
+                        .font(SabqType.meta.font)
+                        .monospacedDigit()
+                        .foregroundStyle(SabqTheme.textTertiary)
 
                     if event.priority == "urgent" {
                         Text("عاجل")
-                            .font(SabqFonts.app(size: 10, weight: .regular))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(Capsule().fill(SabqTheme.coral))
+                            .font(SabqType.tag.font)
+                            .foregroundStyle(SabqTheme.breaking)
                     }
 
-                    Text(event.eventTypeLabelAr)
-                        .font(SabqFonts.app(size: 10, weight: .regular))
-                        .foregroundStyle(severityColor(event.severity))
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(
-                            Capsule().fill(severityColor(event.severity).opacity(0.12))
-                        )
+                    StatusChip(title: event.eventTypeLabelAr, tint: severityColor(event.severity))
 
                     if event.isUpdate {
-                        Text("تحديث")
-                            .font(SabqFonts.app(size: 10, weight: .regular))
-                            .foregroundStyle(SabqTheme.primaryEnd)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(
-                                Capsule().fill(SabqTheme.primaryEnd.opacity(0.1))
-                            )
+                        StatusChip(title: "تحديث", tint: SabqTheme.primary)
                     }
                 }
 
-                HStack(spacing: 6) {
+                HStack(spacing: SabqLayout.space4) {
                     Text(countryFlag(event.country))
-                        .font(SabqFonts.app(size: 14))
+                        .font(SabqType.meta.font)
                     Text(event.countryNameAr)
-                        .font(SabqFonts.app(size: 11, weight: .regular))
-                        .foregroundStyle(SabqTheme.secondaryInk)
+                        .font(SabqType.meta.font)
+                        .foregroundStyle(SabqTheme.textSecondary)
                 }
 
                 Text(event.content)
-                    .font(SabqFonts.app(size: 15, weight: .regular))
-                    .foregroundStyle(SabqTheme.ink)
-                    .lineSpacing(5)
+                    .sabqText(SabqType.excerpt)
+                    .foregroundStyle(SabqTheme.textPrimary)
                     .lineLimit(nil)
                     .frame(maxWidth: .infinity, alignment: .leading)
 
                 if let source = event.sourceName, !source.isEmpty {
-                    HStack(spacing: 4) {
+                    HStack(spacing: SabqLayout.space4) {
                         Image(systemName: "quote.opening")
-                            .font(SabqFonts.app(size: 9))
+                            .font(SabqType.tag.font)
                         Text(source)
-                            .font(SabqFonts.app(size: 10, weight: .regular))
+                            .font(SabqType.meta.font)
                     }
-                    .foregroundStyle(SabqTheme.tertiaryInk)
+                    .foregroundStyle(SabqTheme.textTertiary)
                 }
 
                 if event.isPinned {
-                    HStack(spacing: 4) {
+                    HStack(spacing: SabqLayout.space4) {
                         Image(systemName: "pin.fill")
-                            .font(SabqFonts.app(size: 10))
+                            .font(SabqType.tag.font)
                         Text("مثبت")
-                            .font(SabqFonts.app(size: 10, weight: .regular))
+                            .font(SabqType.tag.font)
                     }
-                    .foregroundStyle(SabqTheme.primaryEnd)
+                    .foregroundStyle(SabqTheme.primary)
                 }
 
                 Button {
                     shareEvent(event)
                 } label: {
-                    HStack(spacing: 4) {
+                    HStack(spacing: SabqLayout.space4) {
                         Image(systemName: "square.and.arrow.up")
-                            .font(SabqFonts.app(size: 12))
+                            .font(SabqType.meta.font)
                         Text("شارك")
-                            .font(SabqFonts.app(size: 12, weight: .medium))
+                            .font(SabqType.metaEmphasis.font)
                     }
-                    .foregroundStyle(SabqTheme.secondaryInk)
+                    .foregroundStyle(SabqTheme.primary)
+                    .frame(minHeight: SabqLayout.touchTarget)
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(14)
-            .background(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(event.priority == "urgent" ? SabqTheme.coral.opacity(0.04) : SabqTheme.paleFill)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .stroke(event.priority == "urgent" ? SabqTheme.coral.opacity(0.2) : Color.clear, lineWidth: 1)
-            )
+            .padding(.bottom, SabqLayout.space12)
         }
-        .padding(.bottom, 4)
     }
 
     // MARK: - Loading
 
     private var loadingSection: some View {
-        VStack(spacing: 20) {
+        VStack(spacing: SabqLayout.space16) {
             ProgressView()
-                .tint(SabqTheme.primaryEnd)
-                .scaleEffect(1.2)
+                .tint(SabqTheme.primary)
             Text("جاري تحميل البث الحي...")
-                .font(SabqFonts.app(size: 14, weight: .medium))
-                .foregroundStyle(SabqTheme.secondaryInk)
+                .font(SabqType.meta.font)
+                .foregroundStyle(SabqTheme.textSecondary)
         }
         .frame(maxWidth: .infinity)
-        .padding(.top, 60)
+        .padding(.top, SabqLayout.space40)
     }
 
     // MARK: - Helpers
 
     private func severityColor(_ severity: String) -> Color {
         switch severity {
-        case "success":  return Color(red: 0.13, green: 0.77, blue: 0.37)
-        case "info":     return Color(red: 0.23, green: 0.51, blue: 0.96)
-        case "warning":  return Color(red: 0.92, green: 0.70, blue: 0.03)
-        case "danger":   return Color(red: 0.98, green: 0.45, blue: 0.09)
-        case "critical": return Color(red: 0.86, green: 0.15, blue: 0.15)
-        default:         return SabqTheme.tertiaryInk
+        case "success":  return SabqTheme.success
+        case "info":     return SabqTheme.primary
+        case "warning":  return SabqTheme.warning
+        case "danger":   return SabqTheme.danger
+        case "critical": return SabqTheme.danger
+        default:         return SabqTheme.textTertiary
         }
     }
 

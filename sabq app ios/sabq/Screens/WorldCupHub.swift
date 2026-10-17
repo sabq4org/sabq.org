@@ -26,13 +26,13 @@ struct WCFactsSection: View {
     }
 
     private func content(_ f: WCCompetitionFacts) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: SabqLayout.space16) {
             WCSectionHeader(icon: "rosette", title: "حقائق البطولة",
-                            subtitle: "أرقام وذاكرة كأس العالم", tint: WCTheme.gold)
-                .padding(.horizontal, 16)
+                            subtitle: "أرقام وذاكرة كأس العالم", tint: SabqTheme.warning)
+                .padding(.horizontal, SabqLayout.pageMargin)
 
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 12) {
+                HStack(spacing: SabqLayout.space12) {
                     if let champ = f.defendingChampion {
                         factCard(icon: "crown.fill",
                                  caption: "حامل اللقب",
@@ -55,37 +55,37 @@ struct WCFactsSection: View {
                                  detail: "مونديال 2026")
                     }
                 }
-                .padding(.horizontal, 16)
+                .padding(.horizontal, SabqLayout.pageMargin)
             }
         }
     }
 
     private func factCard(icon: String, caption: String, logo: String?, title: String, detail: String?) -> some View {
-        HStack(spacing: 8) {
+        HStack(spacing: SabqLayout.space12) {
             if let logo, !logo.isEmpty {
-                WCRemoteImage(url: logo).padding(3).frame(width: 30, height: 30)
+                WCRemoteImage(url: logo).padding(4).frame(width: 32, height: 32)
                     .background(Circle().fill(.white))
-                    .overlay(Circle().stroke(WCTheme.gold.opacity(0.35), lineWidth: 1))
+                    .overlay(Circle().stroke(SabqTheme.separator, lineWidth: 1))
             } else {
                 Image(systemName: icon)
-                    .font(.system(size: 13, weight: .medium)).foregroundStyle(WCTheme.gold)
-                    .frame(width: 30, height: 30)
-                    .background(Circle().fill(WCTheme.gold.opacity(0.14)))
+                    .font(SabqFonts.app(size: 15)).foregroundStyle(SabqTheme.warning)
+                    .frame(width: 32, height: 32)
+                    .background(RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous).fill(SabqTheme.surface))
+                    .accessibilityHidden(true)
             }
-            VStack(alignment: .leading, spacing: 1) {
-                Text(caption).font(SabqFonts.app(size: 9, weight: .medium)).foregroundStyle(WCTheme.gold)
+            VStack(alignment: .leading, spacing: 0) {
+                Text(caption).sabqText(SabqType.tag).foregroundStyle(SabqTheme.warning)
                 Text(title)
-                    .font(SabqFonts.app(size: 11, weight: .medium)).foregroundStyle(WCTheme.onDark)
-                    .lineLimit(1).minimumScaleFactor(0.7)
+                    .font(SabqFonts.app(size: 15, weight: .semibold)).foregroundStyle(SabqTheme.textPrimary)
+                    .lineLimit(1).minimumScaleFactor(0.8)
                 if let detail {
-                    Text(detail).font(SabqFonts.app(size: 9)).foregroundStyle(WCTheme.onDarkDim).lineLimit(1)
+                    Text(detail).font(SabqFonts.app(size: 12)).foregroundStyle(SabqTheme.textSecondary).lineLimit(1)
                 }
             }
         }
-        .padding(.horizontal, 10).padding(.vertical, 7)
-        .frame(width: 168, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 13, style: .continuous).fill(WCTheme.card))
-        .overlay(RoundedRectangle(cornerRadius: 13, style: .continuous).stroke(WCTheme.gold.opacity(0.20), lineWidth: 0.5))
+        .padding(.horizontal, SabqLayout.space12).padding(.vertical, SabqLayout.space12)
+        .frame(width: 192, alignment: .leading)
+        .wcQuietBlock()
     }
 }
 
@@ -159,35 +159,37 @@ struct WCKnockoutSection: View {
     }
 
     private var content: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: SabqLayout.space16) {
             WCSectionHeader(icon: "trophy", title: "الأدوار الإقصائية",
                             subtitle: "طريق اللقب من دور الـ32 حتى النهائي")
-                .padding(.horizontal, 16)
+                .padding(.horizontal, SabqLayout.pageMargin)
 
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
+                HStack(spacing: SabqLayout.space8) {
                     ForEach(playableRounds) { round in
                         let active = round.roundEn == selectedEn
                         Button { withAnimation(.easeOut(duration: 0.2)) { userRound = round.roundEn } } label: {
                             Text(round.round)
-                                .font(SabqFonts.app(size: 12, weight: .medium))
-                                .foregroundStyle(active ? .white : WCTheme.onDarkDim)
-                                .padding(.horizontal, 13).padding(.vertical, 7)
-                                .background(Capsule().fill(active ? WCTheme.emeraldDeep : WCTheme.chipFill))
+                                .font(SabqFonts.app(size: 15, weight: .semibold))
+                                .foregroundStyle(active ? SabqTheme.onAction : SabqTheme.textPrimary)
+                                .padding(.horizontal, SabqLayout.space16)
+                                .frame(minHeight: SabqLayout.touchTarget)
+                                .background(Capsule().fill(active ? WCTheme.royal : SabqTheme.surfaceMuted))
                         }
                         .buttonStyle(.plain)
                     }
                 }
-                .padding(.horizontal, 16)
+                .padding(.horizontal, SabqLayout.pageMargin)
             }
 
             if let round = selectedRound {
-                LazyVStack(spacing: 12) {
+                LazyVStack(spacing: 0) {
                     ForEach(round.matches) { f in
+                        WCRowSeparator()
                         WCMatchCard(fixture: f) { onOpenMatch(f.id) }
                     }
                 }
-                .padding(.horizontal, 16)
+                .padding(.horizontal, SabqLayout.pageMargin)
             }
         }
     }
@@ -198,24 +200,25 @@ struct WCKnockoutSection: View {
         if !qualifiedGroups.isEmpty {
             WCQualifiedSoFar(qualifiedGroups: qualifiedGroups) { selectedTeam = $0 }
         } else {
-            VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: SabqLayout.space16) {
                 WCSectionHeader(icon: "trophy", title: "الأدوار الإقصائية",
                                 subtitle: "تبدأ بعد اكتمال دور المجموعات")
-                    .padding(.horizontal, 16)
+                    .padding(.horizontal, SabqLayout.pageMargin)
 
-                VStack(spacing: 10) {
+                VStack(spacing: 0) {
                     ForEach(["دور الـ32", "دور الـ16", "دور الـ8", "دور الـ4", "النهائي"], id: \.self) { label in
+                        WCRowSeparator()
                         HStack {
-                            Image(systemName: "flag.checkered").font(.system(size: 12)).foregroundStyle(WCTheme.gold)
-                            Text(label).font(SabqFonts.app(size: 14, weight: .semibold)).foregroundStyle(WCTheme.onDark)
+                            Image(systemName: "flag.checkered").font(SabqFonts.app(size: 12)).foregroundStyle(SabqTheme.warning)
+                                .accessibilityHidden(true)
+                            Text(label).sabqText(SabqType.rowTitle).foregroundStyle(SabqTheme.textPrimary)
                             Spacer()
-                            Text("يُحدَّد لاحقًا").font(SabqFonts.app(size: 11)).foregroundStyle(WCTheme.onDarkDim)
+                            Text("يُحدَّد لاحقًا").sabqText(SabqType.meta).foregroundStyle(SabqTheme.textSecondary)
                         }
-                        .padding(.horizontal, 14).padding(.vertical, 11)
-                        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(WCTheme.card))
+                        .padding(.vertical, SabqLayout.space12)
                     }
                 }
-                .padding(.horizontal, 16)
+                .padding(.horizontal, SabqLayout.pageMargin)
             }
         }
     }
@@ -237,53 +240,49 @@ struct WCQualifiedSoFar: View {
 
     private let rounds = ["دور الـ32", "دور الـ16", "دور الـ8", "دور الـ4", "النهائي"]
     private var total: Int { qualifiedGroups.reduce(0) { $0 + $1.qualifiers.count } }
-    private let columns = SabqGrid.adaptive(spacing: 10)
+    private let columns = SabqGrid.adaptive(spacing: SabqLayout.space12)
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            header.padding(.horizontal, 16)
+        VStack(alignment: .leading, spacing: SabqLayout.space16) {
+            header.padding(.horizontal, SabqLayout.pageMargin)
 
-            LazyVGrid(columns: columns, spacing: 10) {
+            LazyVGrid(columns: columns, spacing: SabqLayout.space12) {
                 ForEach(qualifiedGroups) { item in
                     groupCard(item)
                 }
             }
-            .padding(.horizontal, 16)
+            .padding(.horizontal, SabqLayout.pageMargin)
 
             Text("تُحدَّد المواجهات وأفضل 8 من أصحاب المركز الثالث بعد اكتمال دور المجموعات (28 يونيو 2026).")
-                .font(SabqFonts.app(size: 11))
-                .foregroundStyle(WCTheme.onDarkDim)
+                .sabqText(SabqType.meta)
+                .foregroundStyle(SabqTheme.textSecondary)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: .infinity)
-                .padding(.horizontal, 16)
-                .padding(.top, 2)
+                .padding(.horizontal, SabqLayout.pageMargin)
         }
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 6) {
-                Image(systemName: "trophy.fill").font(SabqFonts.app(size: 12, weight: .medium))
-                Text("المتأهّلون حتى الآن").font(SabqFonts.app(size: 14, weight: .semibold))
+        VStack(alignment: .leading, spacing: SabqLayout.space12) {
+            HStack(spacing: SabqLayout.space8) {
+                Image(systemName: "trophy.fill").font(SabqFonts.app(size: 18)).accessibilityHidden(true)
+                Text("المتأهّلون حتى الآن").sabqText(SabqType.sectionHeading).foregroundStyle(SabqTheme.textPrimary)
                 Text("\(total)")
-                    .font(SabqFonts.app(size: 11, weight: .medium))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 7).padding(.vertical, 2)
-                    .background(Capsule().fill(WCTheme.emeraldDeep))
+                    .sabqText(SabqType.tag)
+                    .foregroundStyle(SabqTheme.onAction)
+                    .padding(.horizontal, SabqLayout.space8).padding(.vertical, 2)
+                    .background(Capsule().fill(WCTheme.royal))
             }
             .foregroundStyle(WCTheme.emeraldDeep)
-            .padding(.horizontal, 12).padding(.vertical, 7)
-            .background(Capsule().fill(WCTheme.emerald.opacity(0.12)))
 
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 6) {
+                HStack(spacing: SabqLayout.space8) {
                     ForEach(rounds, id: \.self) { r in
                         Text(r)
-                            .font(SabqFonts.app(size: 11, weight: .regular))
-                            .foregroundStyle(WCTheme.onDarkDim)
-                            .padding(.horizontal, 10).padding(.vertical, 4)
-                            .background(Capsule().fill(WCTheme.chipFill))
-                            .overlay(Capsule().stroke(WCTheme.cardStroke.opacity(0.4), lineWidth: 1))
+                            .sabqText(SabqType.tag)
+                            .foregroundStyle(SabqTheme.textSecondary)
+                            .padding(.horizontal, SabqLayout.space8).padding(.vertical, SabqLayout.space4)
+                            .background(Capsule().fill(SabqTheme.surfaceMuted))
                     }
                 }
             }
@@ -294,45 +293,44 @@ struct WCQualifiedSoFar: View {
         VStack(spacing: 0) {
             HStack {
                 Text(item.group.group)
-                    .font(SabqFonts.app(size: 11, weight: .medium))
+                    .font(SabqFonts.app(size: 15, weight: .semibold))
                     .foregroundStyle(WCTheme.emeraldDeep)
                 Spacer()
                 Text("متأهّل")
-                    .font(SabqFonts.app(size: 9, weight: .regular))
-                    .foregroundStyle(WCTheme.onDarkDim)
+                    .font(SabqFonts.app(size: 12))
+                    .foregroundStyle(SabqTheme.textSecondary)
             }
-            .padding(.horizontal, 12).padding(.vertical, 8)
-            .background(WCTheme.chipFill)
+            .padding(.horizontal, SabqLayout.space12).padding(.vertical, SabqLayout.space8)
 
             ForEach(Array(item.qualifiers.enumerated()), id: \.element.id) { index, row in
-                if index > 0 { Divider().overlay(WCTheme.cardStroke.opacity(0.4)) }
+                if index > 0 { WCRowSeparator().padding(.horizontal, SabqLayout.space12) }
                 Button { onSelectTeam(row.team) } label: { qualifierRow(row) }
                     .buttonStyle(.plain)
             }
         }
-        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(WCTheme.card))
-        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(WCTheme.cardStroke.opacity(0.5), lineWidth: 0.5))
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .wcQuietBlock()
     }
 
     private func qualifierRow(_ row: WCStandingRow) -> some View {
-        HStack(spacing: 8) {
+        HStack(spacing: SabqLayout.space8) {
             Text("\(row.rank)")
-                .font(SabqFonts.app(size: 10, weight: .medium))
+                .font(SabqFonts.app(size: 12))
                 .foregroundStyle(WCTheme.emeraldDeep)
-                .frame(width: 20, height: 20)
-                .background(Circle().fill(WCTheme.emerald.opacity(0.15)))
-            WCTeamLogo(team: row.team, size: 24, ring: WCTheme.cardStroke)
+                .frame(width: 24, height: 24)
+                .background(Circle().fill(SabqTheme.surface))
+            WCTeamLogo(team: row.team, size: 24, ring: SabqTheme.separator)
             Text(row.team.name)
-                .font(SabqFonts.app(size: 12, weight: .medium))
-                .foregroundStyle(WCTheme.onDark)
+                .font(SabqFonts.app(size: 13))
+                .foregroundStyle(SabqTheme.textPrimary)
                 .lineLimit(1)
             Spacer(minLength: 4)
             Image(systemName: "checkmark.circle.fill")
-                .font(SabqFonts.app(size: 14))
-                .foregroundStyle(WCTheme.emerald)
+                .font(SabqFonts.app(size: 15))
+                .foregroundStyle(WCTheme.emeraldDeep)
         }
-        .padding(.horizontal, 12).padding(.vertical, 9)
+        .padding(.horizontal, SabqLayout.space12).padding(.vertical, SabqLayout.space8)
+        .frame(minHeight: SabqLayout.touchTarget)
+        .contentShape(Rectangle())
     }
 }
 
@@ -360,98 +358,70 @@ struct WCNewsSection: View {
     }
 
     private var content: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: SabqLayout.space8) {
             WCSectionHeader(icon: "newspaper.fill", title: "أخبار المونديال",
                             subtitle: "آخر مستجدّات كأس العالم 2026")
-                .padding(.horizontal, 16)
+                .padding(.horizontal, SabqLayout.pageMargin)
 
-            LazyVStack(spacing: 12) {
-                ForEach(news) { item in
+            // قائمة أخبار بنمط CompactArticleRow: عنوان ثم سطر بيانات، ومصغّرة في نهاية السطر
+            LazyVStack(spacing: 0) {
+                ForEach(Array(news.enumerated()), id: \.element.id) { index, item in
+                    if index > 0 { WCRowSeparator() }
                     NavigationLink(value: ArticleSlugRoute(slug: item.slug)) {
                         newsCard(item)
                     }
                     .buttonStyle(.plain)
                 }
             }
-            .padding(.horizontal, 16)
+            .padding(.horizontal, SabqLayout.pageMargin)
         }
     }
 
     private func newsCard(_ item: WCNewsItem) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            visual(item)
-                .frame(height: 168)
-                .frame(maxWidth: .infinity)
-                .clipped()
-                .clipShape(UnevenRoundedRectangle(topLeadingRadius: 18, bottomLeadingRadius: 0,
-                                                  bottomTrailingRadius: 0, topTrailingRadius: 18,
-                                                  style: .continuous))
-
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 6) {
-                    Text(kindLabel(item.kind))
-                        .font(SabqFonts.app(size: 10, weight: .medium)).foregroundStyle(WCTheme.emeraldDeep)
-                        .padding(.horizontal, 8).padding(.vertical, 3)
-                        .background(Capsule().fill(WCTheme.emerald.opacity(0.14)))
-                    Spacer()
-                    if let d = item.publishedDate {
-                        Text(Self.relativeTime(d))
-                            .font(SabqFonts.app(size: 11)).foregroundStyle(WCTheme.onDarkDim)
-                    }
-                }
+        HStack(alignment: .top, spacing: SabqLayout.space12) {
+            VStack(alignment: .leading, spacing: SabqLayout.space8) {
                 Text(item.title)
-                    .font(SabqFonts.app(size: 16, weight: .semibold)).foregroundStyle(WCTheme.onDark)
-                    .lineLimit(2).multilineTextAlignment(.leading)
+                    .sabqText(SabqType.rowTitle).foregroundStyle(SabqTheme.textPrimary)
+                    .lineLimit(3).multilineTextAlignment(.leading)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 if let excerpt = item.excerpt, !excerpt.isEmpty {
                     Text(excerpt)
-                        .font(SabqFonts.app(size: 13)).foregroundStyle(WCTheme.onDarkDim)
+                        .sabqText(SabqType.meta).foregroundStyle(SabqTheme.textSecondary)
                         .lineLimit(2).multilineTextAlignment(.leading)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
+                HStack(spacing: SabqLayout.space4) {
+                    Text(kindLabel(item.kind))
+                        .sabqText(SabqType.metaEmphasis).foregroundStyle(WCTheme.emeraldDeep)
+                    if let d = item.publishedDate {
+                        Text("·").sabqText(SabqType.meta).foregroundStyle(SabqTheme.textTertiary)
+                        Text(Self.relativeTime(d))
+                            .sabqText(SabqType.meta).foregroundStyle(SabqTheme.textSecondary)
+                    }
+                }
             }
-            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            visual(item)
+                .frame(width: 112, height: 63)
+                .clipShape(RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous))
         }
-        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(WCTheme.card))
-        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(WCTheme.cardStroke.opacity(0.5), lineWidth: 0.5))
+        .padding(.vertical, SabqLayout.rowPadding)
+        .contentShape(Rectangle())
     }
 
     @ViewBuilder private func visual(_ item: WCNewsItem) -> some View {
         if let urlString = item.imageUrl, !urlString.isEmpty, let url = URL(string: urlString) {
             FocalCachedAsyncImage(
                 url: url,
-                focalPoint: ImageFocalPoint(rawX: item.imageFocalPoint?.x, rawY: item.imageFocalPoint?.y)
+                focalPoint: ImageFocalPoint(rawX: item.imageFocalPoint?.x, rawY: item.imageFocalPoint?.y),
+                maxPixelSize: 260
             ) {
-                matchupVisual(item)
+                SabqImagePlaceholder()
             }
         } else {
-            matchupVisual(item)
+            SabqImagePlaceholder()
         }
-    }
-
-    // بديل بصري بشعارَي المنتخبين على تدرّج الملعب عند غياب الصورة.
-    private func matchupVisual(_ item: WCNewsItem) -> some View {
-        ZStack {
-            LinearGradient(colors: [WCTheme.heroTop, WCTheme.heroBottom],
-                           startPoint: .topTrailing, endPoint: .bottomLeading)
-            if let home = item.home, let away = item.away {
-                HStack(spacing: 22) {
-                    logoBubble(home.logo)
-                    Text("VS").font(SabqFonts.app(size: 16, weight: .semibold)).foregroundStyle(WCTheme.gold)
-                        .environment(\.layoutDirection, .leftToRight)
-                    logoBubble(away.logo)
-                }
-            } else {
-                Image(systemName: "trophy.fill").font(.system(size: 40)).foregroundStyle(WCTheme.gold.opacity(0.85))
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    private func logoBubble(_ url: String) -> some View {
-        WCRemoteImage(url: url).padding(8).frame(width: 56, height: 56)
-            .background(Circle().fill(.white))
-            .overlay(Circle().stroke(.white.opacity(0.4), lineWidth: 1.5))
     }
 
     private func kindLabel(_ kind: String) -> String {

@@ -42,7 +42,7 @@ struct NewsletterSheet: View {
     var body: some View {
         NavigationStack {
             ScrollView(showsIndicators: false) {
-                VStack(spacing: 22) {
+                VStack(spacing: SabqLayout.space24) {
                     switch screenState {
                     case .form, .subscribing:
                         pitchHero
@@ -57,7 +57,7 @@ struct NewsletterSheet: View {
                     case .alreadyMember:
                         infoHero(
                             icon: "checkmark.seal.fill",
-                            tint: SabqTheme.leaf,
+                            tint: SabqTheme.success,
                             title: "أنت مشترك بالفعل 👋",
                             message: "هذا البريد مسجّل في نشرتنا الذكية. تقدر تلغي الاشتراك متى ما تبي بدون أي التزام."
                         )
@@ -72,9 +72,9 @@ struct NewsletterSheet: View {
                         )
                     }
                 }
-                .padding(.horizontal, 20)
-                .padding(.top, 24)
-                .padding(.bottom, 60)
+                .padding(.horizontal, SabqLayout.pageMargin)
+                .padding(.top, SabqLayout.space24)
+                .padding(.bottom, SabqLayout.space40)
             }
             .sabqNavigationEdge()
             .background(SabqTheme.background)
@@ -94,75 +94,74 @@ struct NewsletterSheet: View {
     // MARK: - Hero variants
 
     private var pitchHero: some View {
-        VStack(spacing: 14) {
+        VStack(spacing: SabqLayout.space12) {
             // Animated envelope with subtle pulse
             ZStack {
                 Circle()
-                    .fill(SabqTheme.primaryEnd.opacity(0.08))
+                    .fill(SabqTheme.surfaceMuted)
                     .frame(width: 110, height: 110)
                 Image(systemName: "sparkles")
-                    .font(SabqFonts.app(size: 16, weight: .semibold))
-                    .foregroundStyle(SabqTheme.primaryEnd)
+                    .sabqText(SabqType.button)
+                    .foregroundStyle(SabqTheme.primary)
                     .offset(x: 38, y: -34)
                 Image(systemName: "envelope.open.fill")
                     .font(SabqFonts.app(size: 52, weight: .regular))
-                    .foregroundStyle(SabqTheme.primaryEnd)
+                    .foregroundStyle(SabqTheme.primary)
             }
 
-            HStack(spacing: 5) {
+            HStack(spacing: SabqLayout.space4) {
                 Image(systemName: "sparkles")
-                    .font(SabqFonts.app(size: 10, weight: .heavy))
+                    .sabqText(SabqType.tag)
                 Text("SABQ AI")
-                    .font(SabqFonts.app(size: 11, weight: .heavy))
+                    .sabqText(SabqType.tag)
                     .tracking(0.8)
             }
-            .foregroundStyle(SabqTheme.primaryEnd)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 5)
-            .background(Capsule().fill(SabqTheme.primaryEnd.opacity(0.10)))
-            .overlay(Capsule().stroke(SabqTheme.primaryEnd.opacity(0.25), lineWidth: 0.5))
+            .foregroundStyle(SabqTheme.primary)
+            .padding(.horizontal, SabqLayout.space8)
+            .padding(.vertical, SabqLayout.space4)
+            .background(Capsule().fill(SabqTheme.surfaceMuted))
 
             Text("النشرة الذكية")
-                .font(SabqFonts.headline(size: 24))
-                .foregroundStyle(SabqTheme.ink)
+                .sabqText(SabqType.leadTitle)
+                .foregroundStyle(SabqTheme.textPrimary)
 
             Text("أخبار مختارة بعناية، يصيغها الذكاء الاصطناعي لذوقك تحديداً.")
-                .font(SabqFonts.app(size: 14, weight: .medium))
-                .foregroundStyle(SabqTheme.secondaryInk)
+                .sabqText(SabqType.excerpt)
+                .foregroundStyle(SabqTheme.textSecondary)
                 .multilineTextAlignment(.center)
                 .lineSpacing(4)
-                .padding(.horizontal, 12)
+                .padding(.horizontal, SabqLayout.space12)
         }
         .frame(maxWidth: .infinity)
-        .padding(.top, 16)
+        .padding(.top, SabqLayout.space16)
     }
 
     private func successHero(title: String, message: String) -> some View {
-        VStack(spacing: 14) {
+        VStack(spacing: SabqLayout.space12) {
             ZStack {
                 Circle()
-                    .fill(SabqTheme.leaf.opacity(0.10))
+                    .fill(SabqTheme.surfaceMuted)
                     .frame(width: 110, height: 110)
                 Image(systemName: "checkmark.circle.fill")
                     .font(SabqFonts.app(size: 56, weight: .regular))
-                    .foregroundStyle(SabqTheme.leaf)
+                    .foregroundStyle(SabqTheme.success)
                     .scaleEffect(celebrationScale)
             }
 
             Text(title)
-                .font(SabqFonts.app(size: 22, weight: .bold))
-                .foregroundStyle(SabqTheme.ink)
+                .sabqText(SabqType.leadTitle)
+                .foregroundStyle(SabqTheme.textPrimary)
                 .multilineTextAlignment(.center)
 
             Text(message)
-                .font(SabqFonts.app(size: 14, weight: .medium))
-                .foregroundStyle(SabqTheme.secondaryInk)
+                .sabqText(SabqType.excerpt)
+                .foregroundStyle(SabqTheme.textSecondary)
                 .multilineTextAlignment(.center)
                 .lineSpacing(4)
-                .padding(.horizontal, 12)
+                .padding(.horizontal, SabqLayout.space12)
         }
         .frame(maxWidth: .infinity)
-        .padding(.top, 16)
+        .padding(.top, SabqLayout.space16)
         .onAppear {
             withAnimation(.spring(response: 0.45, dampingFraction: 0.7)) {
                 celebrationScale = 1.0
@@ -173,10 +172,10 @@ struct NewsletterSheet: View {
     }
 
     private func infoHero(icon: String, tint: Color, title: String, message: String) -> some View {
-        VStack(spacing: 14) {
+        VStack(spacing: SabqLayout.space12) {
             ZStack {
                 Circle()
-                    .fill(tint.opacity(0.10))
+                    .fill(SabqTheme.surfaceMuted)
                     .frame(width: 110, height: 110)
                 Image(systemName: icon)
                     .font(SabqFonts.app(size: 50, weight: .regular))
@@ -184,45 +183,45 @@ struct NewsletterSheet: View {
             }
 
             Text(title)
-                .font(SabqFonts.app(size: 22, weight: .bold))
-                .foregroundStyle(SabqTheme.ink)
+                .sabqText(SabqType.leadTitle)
+                .foregroundStyle(SabqTheme.textPrimary)
 
             Text(message)
-                .font(SabqFonts.app(size: 14, weight: .medium))
-                .foregroundStyle(SabqTheme.secondaryInk)
+                .sabqText(SabqType.excerpt)
+                .foregroundStyle(SabqTheme.textSecondary)
                 .multilineTextAlignment(.center)
                 .lineSpacing(4)
-                .padding(.horizontal, 12)
+                .padding(.horizontal, SabqLayout.space12)
         }
         .frame(maxWidth: .infinity)
-        .padding(.top, 16)
+        .padding(.top, SabqLayout.space16)
     }
 
     // MARK: - Feature grid (the AI value proposition)
 
     private var featureGrid: some View {
-        LazyVGrid(columns: SabqGrid.adaptive(spacing: 10), spacing: 10) {
+        LazyVGrid(columns: SabqGrid.adaptive(spacing: SabqLayout.space12), spacing: SabqLayout.space12) {
             featureCard(
                 icon: "brain.head.profile",
-                tint: SabqTheme.primaryEnd,
+                tint: SabqTheme.primary,
                 title: "اختيار ذكي",
                 desc: "SABQ AI يحلل المحتوى ويختار لك الأهم"
             )
             featureCard(
                 icon: "person.crop.circle.badge.checkmark",
-                tint: SabqTheme.teal,
+                tint: SabqTheme.primary,
                 title: "مخصصة لك",
                 desc: "ملخصات تناسب اهتماماتك وتطورها مع تفاعلك"
             )
             featureCard(
                 icon: "clock.badge.checkmark.fill",
-                tint: SabqTheme.sky,
+                tint: SabqTheme.primary,
                 title: "توقيت ذكي",
                 desc: "تصل في الوقت الذي يناسب يومك"
             )
             featureCard(
                 icon: "hand.thumbsup.fill",
-                tint: SabqTheme.leaf,
+                tint: SabqTheme.primary,
                 title: "إلغاء بنقرة",
                 desc: "تحكم كامل، بدون رسائل مزعجة"
             )
@@ -230,95 +229,80 @@ struct NewsletterSheet: View {
     }
 
     private func featureCard(icon: String, tint: Color, title: String, desc: String) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 6) {
+        VStack(alignment: .leading, spacing: SabqLayout.space8) {
+            HStack(spacing: SabqLayout.space8) {
                 Image(systemName: icon)
-                    .font(SabqFonts.app(size: 16, weight: .semibold))
+                    .sabqText(SabqType.button)
                     .foregroundStyle(tint)
                 Text(title)
-                    .font(SabqFonts.app(size: 13, weight: .bold))
-                    .foregroundStyle(SabqTheme.ink)
+                    .sabqText(SabqType.metaEmphasis)
+                    .foregroundStyle(SabqTheme.textPrimary)
                 Spacer(minLength: 0)
             }
             Text(desc)
-                .font(SabqFonts.app(size: 11, weight: .medium))
-                .foregroundStyle(SabqTheme.secondaryInk)
-                .lineSpacing(3)
+                .sabqText(SabqType.meta)
+                .foregroundStyle(SabqTheme.textSecondary)
                 .multilineTextAlignment(.leading)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(12)
+        .padding(SabqLayout.space12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous)
-                .fill(tint.opacity(0.05))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous)
-                .stroke(tint.opacity(0.20), lineWidth: 0.5)
+            RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                .fill(SabqTheme.surfaceMuted)
         )
     }
 
     // MARK: - Form card
 
     private var formCard: some View {
-        SurfaceCard(accent: SabqTheme.primaryEnd) {
-            VStack(alignment: .leading, spacing: 14) {
+        SurfaceCard(accent: SabqTheme.primary) {
+            VStack(alignment: .leading, spacing: SabqLayout.space12) {
                 Text("ابدأ الاشتراك")
-                    .font(SabqFonts.app(size: 16, weight: .bold))
-                    .foregroundStyle(SabqTheme.ink)
+                    .sabqText(SabqType.rowTitle)
+                    .foregroundStyle(SabqTheme.textPrimary)
 
                 Text("اشتراك مجاني · بدون رسائل ترويجية · إلغاء فوري")
-                    .font(SabqFonts.app(size: 12, weight: .medium))
-                    .foregroundStyle(SabqTheme.tertiaryInk)
+                    .sabqText(SabqType.meta)
+                    .foregroundStyle(SabqTheme.textSecondary)
 
                 if let errorMessage {
                     errorBanner(errorMessage)
                 }
 
                 TextField("البريد الإلكتروني", text: $email)
-                    .font(SabqFonts.app(size: 15, weight: .medium))
-                    .foregroundStyle(SabqTheme.ink)
+                    .sabqText(SabqType.excerpt)
+                    .foregroundStyle(SabqTheme.textPrimary)
                     .keyboardType(.emailAddress)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 14)
-                    .background(
-                        RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous)
-                            .fill(SabqTheme.paleFill)
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous)
-                            .stroke(SabqTheme.outline, lineWidth: 0.5)
-                    )
+                    .modifier(SabqInputSurface())
 
                 Button {
                     Task { await subscribe() }
                 } label: {
-                    HStack(spacing: 8) {
+                    HStack(spacing: SabqLayout.space8) {
                         if screenState == .subscribing {
-                            ProgressView().tint(.white)
+                            ProgressView().tint(SabqTheme.onAction)
                         } else {
                             Image(systemName: "sparkles")
                                 .font(SabqFonts.app(size: 14, weight: .heavy))
                         }
                         Text(screenState == .subscribing ? "جاري الاشتراك..." : "اشترك في النشرة")
-                            .font(SabqFonts.app(size: 16, weight: .bold))
+                            .sabqText(SabqType.button)
                     }
-                    .foregroundStyle(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 15)
-                    .background(SabqTheme.brandGradient, in: RoundedRectangle(cornerRadius: SabqTheme.buttonRadius, style: .continuous))
-                    .opacity((isEmailValid && screenState != .subscribing) ? 1.0 : 0.55)
+                    .foregroundStyle(isEmailValid ? SabqTheme.onAction : SabqTheme.disabledInk)
+                    .frame(maxWidth: .infinity, minHeight: SabqLayout.controlHeight)
+                    .background(isEmailValid ? SabqTheme.actionFill : SabqTheme.disabledFill,
+                                in: RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
                 }
                 .buttonStyle(.plain)
                 .disabled(!isEmailValid || screenState == .subscribing)
 
                 Text("نحترم خصوصيتك. مزيد من التفاصيل في سياسة الخصوصية.")
-                    .font(SabqFonts.app(size: 11, weight: .regular))
-                    .foregroundStyle(SabqTheme.tertiaryInk)
+                    .sabqText(SabqType.meta)
+                    .foregroundStyle(SabqTheme.textTertiary)
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: .infinity)
             }
@@ -329,30 +313,30 @@ struct NewsletterSheet: View {
 
     private var manageCard: some View {
         SurfaceCard {
-            VStack(alignment: .leading, spacing: 14) {
-                HStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: SabqLayout.space12) {
+                HStack(spacing: SabqLayout.space8) {
                     Image(systemName: "envelope.badge.fill")
-                        .font(SabqFonts.app(size: 16, weight: .semibold))
-                        .foregroundStyle(SabqTheme.primaryEnd)
+                        .sabqText(SabqType.button)
+                        .foregroundStyle(SabqTheme.primary)
                     Text("إدارة الاشتراك")
-                        .font(SabqFonts.app(size: 15, weight: .bold))
-                        .foregroundStyle(SabqTheme.ink)
+                        .sabqText(SabqType.rowTitle)
+                        .foregroundStyle(SabqTheme.textPrimary)
                 }
 
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: SabqLayout.space8) {
                     Text("البريد المشترك")
-                        .font(SabqFonts.app(size: 12, weight: .semibold))
-                        .foregroundStyle(SabqTheme.tertiaryInk)
+                        .sabqText(SabqType.meta)
+                        .foregroundStyle(SabqTheme.textSecondary)
                     Text(trimmedEmail)
-                        .font(SabqFonts.app(size: 14, weight: .semibold))
-                        .foregroundStyle(SabqTheme.ink)
+                        .sabqText(SabqType.metaEmphasis)
+                        .foregroundStyle(SabqTheme.textPrimary)
                         .environment(\.layoutDirection, .leftToRight)
                 }
-                .padding(14)
+                .padding(SabqLayout.space12)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(
-                    RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous)
-                        .fill(SabqTheme.paleFill.opacity(0.6))
+                    RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                        .fill(SabqTheme.surface)
                 )
 
                 if let errorMessage {
@@ -362,34 +346,33 @@ struct NewsletterSheet: View {
                 Button {
                     Task { await unsubscribe() }
                 } label: {
-                    HStack(spacing: 8) {
+                    HStack(spacing: SabqLayout.space8) {
                         if screenState == .unsubscribing {
-                            ProgressView().tint(SabqTheme.coral)
+                            ProgressView().tint(SabqTheme.danger)
                         } else {
                             Image(systemName: "xmark.circle.fill")
                                 .font(SabqFonts.app(size: 14, weight: .heavy))
                         }
                         Text("إلغاء الاشتراك")
-                            .font(SabqFonts.app(size: 15, weight: .bold))
+                            .sabqText(SabqType.rowTitle)
                     }
-                    .foregroundStyle(SabqTheme.coral)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 13)
+                    .foregroundStyle(SabqTheme.danger)
+                    .frame(maxWidth: .infinity, minHeight: SabqLayout.controlHeight)
                     .background(
-                        RoundedRectangle(cornerRadius: SabqTheme.buttonRadius, style: .continuous)
-                            .fill(SabqTheme.coral.opacity(0.08))
+                        RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                            .fill(SabqTheme.surface)
                     )
                     .overlay(
-                        RoundedRectangle(cornerRadius: SabqTheme.buttonRadius, style: .continuous)
-                            .stroke(SabqTheme.coral.opacity(0.30), lineWidth: 0.5)
+                        RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                            .stroke(SabqTheme.outline, lineWidth: 1)
                     )
                 }
                 .buttonStyle(.plain)
                 .disabled(screenState == .unsubscribing)
 
                 Text("سيتم إيقاف جميع الرسائل فوراً. تقدر تشترك مرة ثانية في أي وقت.")
-                    .font(SabqFonts.app(size: 11, weight: .regular))
-                    .foregroundStyle(SabqTheme.tertiaryInk)
+                    .sabqText(SabqType.meta)
+                    .foregroundStyle(SabqTheme.textTertiary)
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: .infinity)
             }
@@ -463,19 +446,19 @@ struct NewsletterSheet: View {
     }
 
     private func errorBanner(_ text: String) -> some View {
-        HStack(spacing: 8) {
+        HStack(spacing: SabqLayout.space8) {
             Image(systemName: "exclamationmark.triangle.fill")
-                .font(SabqFonts.app(size: 14))
+                .sabqText(SabqType.excerpt)
             Text(text)
-                .font(SabqFonts.app(size: 13, weight: .medium))
+                .sabqText(SabqType.meta)
         }
-        .foregroundStyle(SabqTheme.coral)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
+        .foregroundStyle(SabqTheme.danger)
+        .padding(.horizontal, SabqLayout.space12)
+        .padding(.vertical, SabqLayout.space8)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(SabqTheme.coral.opacity(0.08))
+            RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                .fill(SabqTheme.surfaceMuted)
         )
     }
 }

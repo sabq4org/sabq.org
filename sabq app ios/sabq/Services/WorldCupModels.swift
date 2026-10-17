@@ -1204,26 +1204,17 @@ nonisolated enum WCTheme {
 
     /// خلفية القسم — أخضر خفيف جدًا في الفاتح، وأخضر داكن في الليلي.
     /// لا كتلة داكنة خلف الهيرو؛ المحتوى يجلس مباشرة على هذه الخلفية الخفيفة.
-    static var sectionBackground: LinearGradient {
-        LinearGradient(
-            colors: [
-                dyn((0.91, 0.97, 0.93, 1), (0.03, 0.12, 0.08, 1)),
-                dyn((0.94, 0.98, 0.95, 1), (0.04, 0.16, 0.11, 1)),
-                dyn((0.91, 0.97, 0.93, 1), (0.03, 0.12, 0.08, 1)),
-            ],
-            startPoint: .top, endPoint: .bottom
-        )
-    }
+    /// صفحة البطولة مسطّحة كبقية التطبيق (النموذج المعتمد #1913).
+    static var sectionBackground: Color { SabqTheme.background }
 }
 
 extension View {
     /// سطح بطاقة مرتفع: أبيض في الفاتح مع حدّ وظلّ خفيف — يفصل المحتوى
     /// بوضوح عن خلفية القسم الخضراء بدل التدرّجات الخضراء المتقاربة.
-    func wcElevatedCard(cornerRadius: CGFloat = 14) -> some View {
+    func wcElevatedCard(cornerRadius: CGFloat = SabqRadius.medium) -> some View {
+        // بلوك هادئ بلا حد ولا ظل (النموذج المعتمد #1913).
         self
-            .background(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous).fill(WCTheme.card))
-            .overlay(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous).stroke(WCTheme.cardStroke, lineWidth: 1))
-            .shadow(color: WCTheme.cardShadow, radius: 6, y: 2)
+            .background(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous).fill(SabqTheme.surfaceMuted))
     }
 }
 

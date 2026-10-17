@@ -11,64 +11,58 @@ struct WCMatchEventNotificationsView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: SabqLayout.space24) {
                 introCard
 
-                SurfaceCard {
-                    VStack(spacing: 4) {
-                        toggleRow(
-                            icon: "sportscourt.fill",
-                            tint: SabqTheme.sky,
-                            title: "انطلاق المباراة",
-                            subtitle: "إشعار عند صافرة بداية مباراة فريقك",
-                            isOn: $prefs.kickoff
-                        )
-                        Divider()
-                        toggleRow(
-                            icon: "soccerball",
-                            tint: SabqTheme.leaf,
-                            title: "الأهداف",
-                            subtitle: "كل هدف فور تسجيله (يشمل ركلات الجزاء)",
-                            isOn: $prefs.goals
-                        )
-                        Divider()
-                        toggleRow(
-                            icon: "rectangle.portrait.fill",
-                            tint: .orange,
-                            title: "البطاقات",
-                            subtitle: "البطاقات الصفراء والحمراء",
-                            isOn: $prefs.cards
-                        )
-                        Divider()
-                        toggleRow(
-                            icon: "tv.fill",
-                            tint: .indigo,
-                            title: "حالات الفار (VAR)",
-                            subtitle: "إلغاء هدف، احتساب ركلة جزاء، أو تسلل بعد المراجعة",
-                            isOn: $prefs.varReview
-                        )
-                        Divider()
-                        toggleRow(
-                            icon: "flag.checkered",
-                            tint: SabqTheme.coral,
-                            title: "نهاية المباراة",
-                            subtitle: "النتيجة النهائية عند صافرة النهاية",
-                            isOn: $prefs.fulltime
-                        )
-                    }
+                // قائمة غير مؤطّرة: صفوف تفصلها خطوط رفيعة
+                VStack(spacing: 0) {
+                    toggleRow(
+                        icon: "sportscourt.fill",
+                        title: "انطلاق المباراة",
+                        subtitle: "إشعار عند صافرة بداية مباراة فريقك",
+                        isOn: $prefs.kickoff
+                    )
+                    WCRowSeparator()
+                    toggleRow(
+                        icon: "soccerball",
+                        title: "الأهداف",
+                        subtitle: "كل هدف فور تسجيله (يشمل ركلات الجزاء)",
+                        isOn: $prefs.goals
+                    )
+                    WCRowSeparator()
+                    toggleRow(
+                        icon: "rectangle.portrait.fill",
+                        title: "البطاقات",
+                        subtitle: "البطاقات الصفراء والحمراء",
+                        isOn: $prefs.cards
+                    )
+                    WCRowSeparator()
+                    toggleRow(
+                        icon: "tv.fill",
+                        title: "حالات الفار (VAR)",
+                        subtitle: "إلغاء هدف، احتساب ركلة جزاء، أو تسلل بعد المراجعة",
+                        isOn: $prefs.varReview
+                    )
+                    WCRowSeparator()
+                    toggleRow(
+                        icon: "flag.checkered",
+                        title: "نهاية المباراة",
+                        subtitle: "النتيجة النهائية عند صافرة النهاية",
+                        isOn: $prefs.fulltime
+                    )
                 }
 
                 if saving {
-                    HStack(spacing: 6) {
+                    HStack(spacing: SabqLayout.space8) {
                         ProgressView().controlSize(.small)
                         Text("جاري الحفظ...")
-                            .font(SabqFonts.app(size: 11, weight: .medium))
-                            .foregroundStyle(SabqTheme.tertiaryInk)
+                            .sabqText(SabqType.meta)
+                            .foregroundStyle(SabqTheme.textTertiary)
                     }
                 }
             }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 20)
+            .padding(.horizontal, SabqLayout.pageMargin)
+            .padding(.vertical, SabqLayout.space24)
         }
         .background(SabqTheme.background)
         .sabqRTL()
@@ -86,50 +80,51 @@ struct WCMatchEventNotificationsView: View {
         }
     }
 
+    /// بلوك معلومة هادئ: surfaceMuted بلا حدّ، زاوية 12.
     private var introCard: some View {
-        SurfaceCard(accent: SabqTheme.primaryEnd) {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 8) {
-                    Image(systemName: "bell.badge")
-                        .font(SabqFonts.app(size: 18, weight: .semibold))
-                        .foregroundStyle(SabqTheme.primaryEnd)
-                    Text("تنبيهات أحداث المباريات")
-                        .font(SabqFonts.app(size: 16, weight: .semibold))
-                        .foregroundStyle(SabqTheme.ink)
-                }
-                Text("تصلك هذه التنبيهات عن الفِرق التي تتابعها فقط. اختر الأنواع التي تهمّك — تطبَّق على كل مبارياتها (المونديال وغيره).")
-                    .font(SabqFonts.app(size: 12, weight: .medium))
-                    .foregroundStyle(SabqTheme.secondaryInk)
-                    .lineSpacing(3)
+        VStack(alignment: .leading, spacing: SabqLayout.space8) {
+            HStack(spacing: SabqLayout.space8) {
+                Image(systemName: "bell.badge")
+                    .font(SabqFonts.app(size: 18, weight: .semibold))
+                    .foregroundStyle(SabqTheme.primary)
+                    .accessibilityHidden(true)
+                Text("تنبيهات أحداث المباريات")
+                    .sabqText(SabqType.rowTitle)
+                    .foregroundStyle(SabqTheme.textPrimary)
             }
+            Text("تصلك هذه التنبيهات عن الفِرق التي تتابعها فقط. اختر الأنواع التي تهمّك — تطبَّق على كل مبارياتها (المونديال وغيره).")
+                .sabqText(SabqType.excerpt)
+                .foregroundStyle(SabqTheme.textSecondary)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(SabqLayout.space16)
+        .wcQuietBlock()
     }
 
-    private func toggleRow(icon: String, tint: Color, title: String, subtitle: String, isOn: Binding<Bool>) -> some View {
-        HStack(spacing: 12) {
-            ZStack {
-                Circle()
-                    .fill(tint.opacity(0.14))
-                    .frame(width: 36, height: 36)
-                Image(systemName: icon)
-                    .font(SabqFonts.app(size: 15, weight: .semibold))
-                    .foregroundStyle(tint)
-            }
-            VStack(alignment: .leading, spacing: 2) {
+    private func toggleRow(icon: String, title: String, subtitle: String, isOn: Binding<Bool>) -> some View {
+        HStack(spacing: SabqLayout.space12) {
+            // أيقونة بادئة في مربع هادئ صغير (بلا ألوان زخرفية)
+            Image(systemName: icon)
+                .font(SabqFonts.app(size: 15, weight: .semibold))
+                .foregroundStyle(SabqTheme.textSecondary)
+                .frame(width: 36, height: 36)
+                .background(RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous).fill(SabqTheme.surfaceMuted))
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: SabqLayout.space4) {
                 Text(title)
-                    .font(SabqFonts.app(size: 14, weight: .semibold))
-                    .foregroundStyle(SabqTheme.ink)
+                    .sabqText(SabqType.rowTitle)
+                    .foregroundStyle(SabqTheme.textPrimary)
                 Text(subtitle)
-                    .font(SabqFonts.app(size: 11, weight: .medium))
-                    .foregroundStyle(SabqTheme.secondaryInk)
+                    .sabqText(SabqType.meta)
+                    .foregroundStyle(SabqTheme.textSecondary)
                     .lineLimit(2)
             }
             Spacer(minLength: 0)
-            Toggle("", isOn: isOn)
+            Toggle(title, isOn: isOn)
                 .labelsHidden()
-                .tint(tint)
+                .tint(SabqTheme.primary)
         }
-        .padding(.vertical, 8)
+        .padding(.vertical, SabqLayout.space12)
     }
 
     private func save(_ newPrefs: SportsAlertPreferences) async {

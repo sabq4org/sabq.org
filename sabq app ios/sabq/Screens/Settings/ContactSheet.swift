@@ -78,88 +78,68 @@ struct ContactSheet: View {
         NavigationStack {
             ScrollViewReader { proxy in
                 ScrollView {
-                    // Outer column: page header → contact-method cards →
-                    // (visual gap) → form card. The form lives inside its
-                    // own SurfaceCard with a separate SectionHeader so it
-                    // reads as a distinct "send a message" surface, clearly
-                    // separated from the quick-channel cards above.
-                    VStack(alignment: .leading, spacing: 24) {
-                        SectionHeader(
-                            title: "تواصل معنا",
-                            subtitle: "اختر طريقة التواصل الأنسب لك",
-                            icon: "envelope.fill",
-                            tint: SabqTheme.teal
-                        )
+                    // Outer column: page header → contact-method blocks →
+                    // grey section band → the unboxed "send a message" form.
+                    VStack(alignment: .leading, spacing: SabqLayout.space24) {
+                        sheetHeading(title: "تواصل معنا", subtitle: "اختر طريقة التواصل الأنسب لك")
 
-                        // Two contact-method cards at the top — matches the
+                        // Two contact-method blocks at the top — matches the
                         // web /contact page. Tapping opens WhatsApp / Mail.
                         contactMethodCards
 
-                        // Extra breathing room above the form so the cards
-                        // feel like their own row, not a header for the form.
-                        Color.clear.frame(height: 8)
+                        SabqSectionBand()
 
                         if isSent {
-                            SurfaceCard(accent: SabqTheme.leaf) {
-                                EmptyStateView(
-                                    icon: "checkmark.circle.fill",
-                                    tint: SabqTheme.leaf,
-                                    title: "تم استلام رسالتك",
-                                    subtitle: "شكراً لتواصلك معنا، سيتم الرد عليك قريباً"
-                                )
-                            }
+                            EmptyStateView(
+                                icon: "checkmark.circle.fill",
+                                tint: SabqTheme.success,
+                                title: "تم استلام رسالتك",
+                                subtitle: "شكراً لتواصلك معنا، سيتم الرد عليك قريباً"
+                            )
                         } else {
-                            SurfaceCard(accent: SabqTheme.primaryEnd) {
-                                VStack(alignment: .leading, spacing: 16) {
-                                    SectionHeader(
-                                        title: "أرسل رسالة",
-                                        subtitle: "املأ النموذج وسنرد عليك في أقرب وقت",
-                                        icon: "square.and.pencil",
-                                        tint: SabqTheme.primaryEnd
-                                    )
-
-                                    if let errorMessage {
-                                        errorBanner(errorMessage)
-                                            .id(Field.errorBanner)
-                                    }
-
-                                    labeledField(
-                                        label: "الاسم الكامل",
-                                        placeholder: "أدخل اسمك الكامل",
-                                        text: $name,
-                                        field: .name
-                                    )
-                                    .id(Field.name)
-
-                                    labeledField(
-                                        label: "رقم الهاتف",
-                                        placeholder: "+966500000000",
-                                        text: $phone,
-                                        keyboard: .phonePad,
-                                        disableAutocap: true,
-                                        field: .phone
-                                    )
-                                    .id(Field.phone)
-
-                                    labeledField(
-                                        label: "البريد الإلكتروني",
-                                        placeholder: "example@email.com",
-                                        text: $email,
-                                        keyboard: .emailAddress,
-                                        disableAutocap: true,
-                                        field: .email
-                                    )
-                                    .id(Field.email)
-
-                                    subjectPicker
-                                        .id(Field.subject)
-
-                                    messageEditor
-                                        .id(Field.message)
-
-                                    sendButton
-                                        .padding(.top, 4)
+                            VStack(alignment: .leading, spacing: SabqLayout.space16) {
+                                sheetHeading(title: "أرسل رسالة", subtitle: "املأ النموذج وسنرد عليك في أقرب وقت")
+                                if let errorMessage {
+                                    errorBanner(errorMessage)
+                                        .id(Field.errorBanner)
                                 }
+
+                                labeledField(
+                                    label: "الاسم الكامل",
+                                    placeholder: "أدخل اسمك الكامل",
+                                    text: $name,
+                                    field: .name
+                                )
+                                .id(Field.name)
+
+                                labeledField(
+                                    label: "رقم الهاتف",
+                                    placeholder: "+966500000000",
+                                    text: $phone,
+                                    keyboard: .phonePad,
+                                    disableAutocap: true,
+                                    field: .phone
+                                )
+                                .id(Field.phone)
+
+                                labeledField(
+                                    label: "البريد الإلكتروني",
+                                    placeholder: "example@email.com",
+                                    text: $email,
+                                    keyboard: .emailAddress,
+                                    disableAutocap: true,
+                                    field: .email
+                                )
+                                .id(Field.email)
+
+                                subjectPicker
+                                    .id(Field.subject)
+
+                                messageEditor
+                                    .id(Field.message)
+
+                                sendButton
+                                    .padding(.top, SabqLayout.space4)
                             }
 
                             // Trailing spacer so the message editor's bottom
@@ -168,7 +148,8 @@ struct ContactSheet: View {
                             Color.clear.frame(height: 80)
                         }
                     }
-                    .padding(20)
+                    .padding(.horizontal, SabqLayout.pageMargin)
+                    .padding(.vertical, SabqLayout.space24)
                 }
                 .scrollDismissesKeyboard(.interactively)
                 .onChange(of: focusedField) { _, newField in
@@ -200,76 +181,93 @@ struct ContactSheet: View {
                 ToolbarItemGroup(placement: .keyboard) {
                     Spacer()
                     Button("تم") { focusedField = nil }
-                        .font(SabqFonts.app(size: 15, weight: .semibold))
-                        .foregroundStyle(SabqTheme.primaryEnd)
+                        .font(SabqType.button.font)
+                        .foregroundStyle(SabqTheme.primary)
                 }
             }
             .onAppear { prefillFromUser() }
         }
     }
 
-    // MARK: - Contact-method cards (WhatsApp + Email — matches the web)
+    // MARK: - Contact-method blocks (WhatsApp + Email — matches the web)
+
+    private func sheetHeading(title: String, subtitle: String) -> some View {
+        VStack(alignment: .leading, spacing: SabqLayout.space4) {
+            Text(title)
+                .sabqText(SabqType.sectionHeading)
+                .foregroundStyle(SabqTheme.textPrimary)
+                .accessibilityAddTraits(.isHeader)
+            Text(subtitle)
+                .sabqText(SabqType.meta)
+                .foregroundStyle(SabqTheme.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
 
     private var contactMethodCards: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: SabqLayout.space12) {
             Link(destination: whatsAppURL) {
                 contactMethodCard(
-                    icon: "message.fill",
+                    icon: "message",
                     title: "واتساب",
-                    value: whatsAppNumber,
-                    tint: Color(red: 0.16, green: 0.74, blue: 0.42)
+                    value: whatsAppNumber
                 )
             }
             .buttonStyle(.plain)
 
             Link(destination: emailURL) {
                 contactMethodCard(
-                    icon: "envelope.fill",
+                    icon: "envelope",
                     title: "البريد الإلكتروني",
-                    value: supportEmail,
-                    tint: SabqTheme.primaryEnd
+                    value: supportEmail
                 )
             }
             .buttonStyle(.plain)
         }
     }
 
-    private func contactMethodCard(icon: String, title: String, value: String, tint: Color) -> some View {
-        VStack(spacing: 10) {
-            Circle()
-                .fill(tint)
-                .frame(width: 44, height: 44)
-                .overlay {
-                    Image(systemName: icon)
-                        .font(SabqFonts.app(size: 18, weight: .semibold))
-                        .foregroundStyle(.white)
-                }
+    private func contactMethodCard(icon: String, title: String, value: String) -> some View {
+        VStack(spacing: SabqLayout.space8) {
+            Image(systemName: icon)
+                .font(SabqFonts.app(size: 22))
+                .foregroundStyle(SabqTheme.primary)
+                .frame(height: 28)
+                .accessibilityHidden(true)
 
             Text(title)
-                .font(SabqFonts.app(size: 14, weight: .bold))
-                .foregroundStyle(SabqTheme.ink)
+                .sabqText(SabqType.rowTitle)
+                .foregroundStyle(SabqTheme.textPrimary)
 
             Text(value)
-                .font(SabqFonts.app(size: 12, weight: .semibold))
-                .foregroundStyle(tint)
+                .sabqText(SabqType.meta)
+                .foregroundStyle(SabqTheme.textSecondary)
                 .environment(\.layoutDirection, .leftToRight)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 16)
-        .padding(.horizontal, 12)
+        .padding(.vertical, SabqLayout.space16)
+        .padding(.horizontal, SabqLayout.space12)
         .background(
-            RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                .fill(tint.opacity(0.06))
+            RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                .fill(SabqTheme.surfaceMuted)
         )
-        .overlay(
-            RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                .stroke(tint.opacity(0.20), lineWidth: 0.5)
-        )
+        .contentShape(Rectangle())
     }
 
     // MARK: - Field helpers
+
+    private func fieldLabel(_ text: String) -> some View {
+        Text(text)
+            .sabqText(SabqType.metaEmphasis)
+            .foregroundStyle(SabqTheme.textPrimary)
+    }
+
+    private func focusRing(_ isFocused: Bool) -> some View {
+        RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+            .stroke(isFocused ? SabqTheme.primary : Color.clear, lineWidth: 1)
+    }
 
     private func labeledField(
         label: String,
@@ -279,101 +277,73 @@ struct ContactSheet: View {
         disableAutocap: Bool = false,
         field: Field
     ) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(label)
-                .font(SabqFonts.app(size: 14, weight: .semibold))
-                .foregroundStyle(SabqTheme.ink)
+        VStack(alignment: .leading, spacing: SabqLayout.space8) {
+            fieldLabel(label)
 
             TextField(placeholder, text: text)
-                .font(SabqFonts.app(size: 15, weight: .medium))
-                .foregroundStyle(SabqTheme.ink)
+                .sabqText(SabqType.excerpt)
+                .foregroundStyle(SabqTheme.textPrimary)
                 .keyboardType(keyboard)
                 .textInputAutocapitalization(disableAutocap ? .never : .sentences)
                 .autocorrectionDisabled(disableAutocap)
                 .focused($focusedField, equals: field)
                 .submitLabel(.next)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 14)
-                .background(
-                    RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous)
-                        .fill(SabqTheme.paleFill)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous)
-                        .stroke(
-                            focusedField == field ? SabqTheme.primaryEnd.opacity(0.4) : SabqTheme.outline,
-                            lineWidth: focusedField == field ? 1 : 0.5
-                        )
-                )
+                .modifier(SabqInputSurface())
+                .overlay(focusRing(focusedField == field))
         }
     }
 
     private var subjectPicker: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("موضوع الرسالة")
-                .font(SabqFonts.app(size: 14, weight: .semibold))
-                .foregroundStyle(SabqTheme.ink)
+        VStack(alignment: .leading, spacing: SabqLayout.space8) {
+            fieldLabel("موضوع الرسالة")
 
             Menu {
                 ForEach(Self.subjectOptions, id: \.self) { option in
                     Button(option) { subject = option }
                 }
             } label: {
-                HStack(spacing: 10) {
+                HStack(spacing: SabqLayout.space8) {
                     Text(subject.isEmpty ? "اختر موضوع الرسالة" : subject)
-                        .font(SabqFonts.app(size: 15, weight: .medium))
-                        .foregroundStyle(subject.isEmpty ? SabqTheme.tertiaryInk : SabqTheme.ink)
+                        .sabqText(SabqType.excerpt)
+                        .foregroundStyle(subject.isEmpty ? SabqTheme.textTertiary : SabqTheme.textPrimary)
                     Spacer(minLength: 0)
                     Image(systemName: "chevron.down")
-                        .font(SabqFonts.app(size: 12, weight: .semibold))
-                        .foregroundStyle(SabqTheme.tertiaryInk)
+                        .font(SabqType.tag.font)
+                        .foregroundStyle(SabqTheme.textTertiary)
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 14)
-                .background(
-                    RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous)
-                        .fill(SabqTheme.paleFill)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous)
-                        .stroke(SabqTheme.outline, lineWidth: 0.5)
-                )
+                .modifier(SabqInputSurface())
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
         }
     }
 
     private var messageEditor: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("الرسالة")
-                .font(SabqFonts.app(size: 14, weight: .semibold))
-                .foregroundStyle(SabqTheme.ink)
+        VStack(alignment: .leading, spacing: SabqLayout.space8) {
+            fieldLabel("الرسالة")
 
             TextEditor(text: $message)
-                .font(SabqFonts.app(size: 15, weight: .regular))
-                .foregroundStyle(SabqTheme.ink)
+                .sabqText(SabqType.excerpt)
+                .foregroundStyle(SabqTheme.textPrimary)
                 .focused($focusedField, equals: .message)
                 .frame(minHeight: 140)
                 .scrollContentBackground(.hidden)
-                .padding(12)
+                .padding(SabqLayout.space12)
                 .background(
-                    RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous)
-                        .fill(SabqTheme.paleFill)
+                    RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                        .fill(SabqTheme.surface)
                 )
                 .overlay(
-                    RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous)
-                        .stroke(
-                            focusedField == .message ? SabqTheme.primaryEnd.opacity(0.4) : SabqTheme.outline,
-                            lineWidth: focusedField == .message ? 1 : 0.5
-                        )
+                    RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                        .stroke(focusedField == .message ? SabqTheme.primary : SabqTheme.outline, lineWidth: 1)
                 )
                 .overlay(alignment: .topLeading) {
                     if message.isEmpty {
                         Text("اكتب رسالتك هنا...")
-                            .font(SabqFonts.app(size: 15, weight: .regular))
-                            .foregroundStyle(SabqTheme.tertiaryInk)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 20)
+                            .sabqText(SabqType.excerpt)
+                            .foregroundStyle(SabqTheme.textTertiary)
+                            .padding(.horizontal, SabqLayout.space16)
+                            .padding(.vertical, SabqLayout.space24)
                             .allowsHitTesting(false)
                     }
                 }
@@ -384,20 +354,20 @@ struct ContactSheet: View {
         Button {
             Task { await send() }
         } label: {
-            HStack(spacing: 8) {
-                if isSending { ProgressView().tint(.white) }
+            HStack(spacing: SabqLayout.space8) {
+                if isSending { ProgressView().tint(SabqTheme.onAction) }
                 Text("إرسال الرسالة")
-                    .font(SabqFonts.app(size: 16, weight: .bold))
+                    .sabqText(SabqType.button)
             }
-            .foregroundStyle(.white)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 15)
-            .background(SabqTheme.brandGradient, in: RoundedRectangle(cornerRadius: SabqTheme.buttonRadius, style: .continuous))
-            .opacity(isFormValid ? 1.0 : 0.55)
+            .foregroundStyle(isFormValid ? SabqTheme.onAction : SabqTheme.disabledInk)
+            .frame(maxWidth: .infinity, minHeight: SabqLayout.controlHeight)
+            .background(isFormValid ? SabqTheme.actionFill : SabqTheme.disabledFill,
+                        in: RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
         }
         .buttonStyle(.plain)
         .disabled(!isFormValid || isSending)
     }
+
 
     // MARK: - Behaviour
 
@@ -439,19 +409,19 @@ struct ContactSheet: View {
     }
 
     private func errorBanner(_ text: String) -> some View {
-        HStack(spacing: 8) {
+        HStack(spacing: SabqLayout.space8) {
             Image(systemName: "exclamationmark.triangle.fill")
-                .font(SabqFonts.app(size: 14))
+                .font(SabqType.meta.font)
             Text(text)
-                .font(SabqFonts.app(size: 13, weight: .medium))
+                .sabqText(SabqType.meta)
         }
-        .foregroundStyle(SabqTheme.coral)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
+        .foregroundStyle(SabqTheme.danger)
+        .padding(.horizontal, SabqLayout.space12)
+        .padding(.vertical, SabqLayout.space12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(SabqTheme.coral.opacity(0.08))
+            RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                .fill(SabqTheme.surfaceMuted)
         )
     }
 }

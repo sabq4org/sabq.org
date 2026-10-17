@@ -178,7 +178,7 @@ struct AdminDashboardView: View {
 
     var body: some View {
         ScrollView(showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 22) {
+            VStack(alignment: .leading, spacing: SabqLayout.space24) {
                 metricsSection
                 inboxSection
                 AdminSegmentedControl(selected: vm.selectedStatus) { status in
@@ -186,9 +186,9 @@ struct AdminDashboardView: View {
                 }
                 listSection
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 8)
-            .padding(.bottom, 110)
+            .padding(.horizontal, SabqLayout.pageMargin)
+            .padding(.top, SabqLayout.space8)
+            .padding(.bottom, 112)
         }
         .background(SabqTheme.background)
         .sabqRTL()
@@ -197,8 +197,8 @@ struct AdminDashboardView: View {
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button { showNewArticleChoice = true } label: {
-                    Image(systemName: "plus.circle.fill")
-                        .font(SabqFonts.app(size: 18, weight: .semibold))
+                    Image(systemName: "plus")
+                        .font(SabqFonts.app(size: 17, weight: .semibold))
                 }
             }
         }
@@ -253,19 +253,20 @@ struct AdminDashboardView: View {
     /// editorial session. Both destinations remain protected server-side by
     /// the mobile platform-admin Bearer check.
     private var inboxSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: SabqLayout.space12) {
             Text("صندوق الإدارة")
-                .font(SabqFonts.app(size: 16, weight: .semibold))
-                .foregroundStyle(SabqTheme.ink)
+                .sabqText(SabqType.sectionHeading)
+                .foregroundStyle(SabqTheme.textPrimary)
+                .accessibilityAddTraits(.isHeader)
 
-            let columns = SabqGrid.adaptive(spacing: 10)
-            LazyVGrid(columns: columns, spacing: 10) {
+            let columns = SabqGrid.adaptive(spacing: SabqLayout.space8)
+            LazyVGrid(columns: columns, spacing: SabqLayout.space8) {
                 NavigationLink(value: AdminContactMessagesRoute()) {
                     adminShortcut(
                         title: "رسائل التواصل",
                         subtitle: "عرض الرسائل الواردة والرد عليها",
                         icon: "envelope",
-                        tint: AdminInboxPalette.success
+                        tint: SabqTheme.success
                     )
                 }
                 .buttonStyle(.plain)
@@ -275,7 +276,7 @@ struct AdminDashboardView: View {
                         title: "استفسارات كتّاب الرأي",
                         subtitle: "متابعة المحادثات مع الكتّاب",
                         icon: "text.bubble",
-                        tint: AdminInboxPalette.warning
+                        tint: SabqTheme.warning
                     )
                 }
                 .buttonStyle(.plain)
@@ -284,38 +285,35 @@ struct AdminDashboardView: View {
     }
 
     private func adminShortcut(title: String, subtitle: String, icon: String, tint: Color) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(tint.opacity(0.12))
-                    .frame(width: 36, height: 36)
-                Image(systemName: icon)
-                    .font(SabqFonts.app(size: 16, weight: .semibold))
-                    .foregroundStyle(tint)
-            }
-            VStack(alignment: .leading, spacing: 3) {
+        VStack(alignment: .leading, spacing: SabqLayout.space8) {
+            Image(systemName: icon)
+                .font(SabqFonts.app(size: 16, weight: .semibold))
+                .foregroundStyle(tint)
+                .frame(width: 32, height: 32)
+                .background(
+                    RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
+                        .fill(SabqTheme.background)
+                )
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: SabqLayout.space4) {
                 Text(title)
-                    .font(SabqFonts.app(size: 14, weight: .heavy))
-                    .foregroundStyle(SabqTheme.ink)
+                    .sabqText(SabqType.rowTitle)
+                    .foregroundStyle(SabqTheme.textPrimary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.85)
                 Text(subtitle)
-                    .font(SabqFonts.app(size: 11, weight: .medium))
-                    .foregroundStyle(SabqTheme.secondaryInk)
+                    .sabqText(SabqType.meta)
+                    .foregroundStyle(SabqTheme.textSecondary)
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 0)
         }
-        .padding(12)
-        .frame(maxWidth: .infinity, minHeight: 118, alignment: .topLeading)
+        .padding(SabqLayout.space12)
+        .frame(maxWidth: .infinity, minHeight: 116, alignment: .topLeading)
         .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(SabqTheme.surface)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(SabqTheme.outline, lineWidth: 0.5)
+            RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                .fill(SabqTheme.surfaceMuted)
         )
     }
 
@@ -323,27 +321,28 @@ struct AdminDashboardView: View {
 
     @ViewBuilder
     private var metricsSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SabqLayout.space12) {
             Text("نظرة عامة")
-                .font(SabqFonts.app(size: 18, weight: .heavy))
-                .foregroundStyle(SabqTheme.ink)
+                .sabqText(SabqType.sectionHeading)
+                .foregroundStyle(SabqTheme.textPrimary)
+                .accessibilityAddTraits(.isHeader)
 
-            let columns = SabqGrid.adaptive(spacing: 10)
+            let columns = SabqGrid.adaptive(spacing: SabqLayout.space8)
             if let counts = vm.counts {
-                LazyVGrid(columns: columns, spacing: 10) {
+                LazyVGrid(columns: columns, spacing: SabqLayout.space8) {
                     AdminStatGridCard(
                         card: AdminStatCard(key: "draft", title: "المسودات", value: "\(counts.draft)",
-                                            breakdown: "اضغط للعرض", icon: "doc.text", tint: SabqTheme.gold)
+                                            breakdown: "اضغط للعرض", icon: "doc.text", tint: SabqTheme.warning)
                     ) { Task { await vm.select(.draft) } }
                     AdminStatGridCard(
                         card: AdminStatCard(key: "scheduled", title: "المجدولة", value: "\(counts.scheduled)",
-                                            breakdown: "اضغط للعرض", icon: "clock.fill", tint: SabqTheme.sky)
+                                            breakdown: "اضغط للعرض", icon: "clock", tint: SabqTheme.primary)
                     ) { Task { await vm.select(.scheduled) } }
                 }
             } else if vm.isStatsLoading {
-                LazyVGrid(columns: columns, spacing: 10) {
+                LazyVGrid(columns: columns, spacing: SabqLayout.space8) {
                     ForEach(0..<2, id: \.self) { _ in
-                        SkeletonBox(height: 78, radius: SabqTheme.tileRadius)
+                        SkeletonBox(height: 80, radius: SabqRadius.medium)
                     }
                 }
             }
@@ -357,14 +356,20 @@ struct AdminDashboardView: View {
         if let error = vm.error, vm.items.isEmpty {
             errorState(error)
         } else if vm.isLoading && vm.items.isEmpty {
-            VStack(spacing: 12) {
-                ForEach(0..<4, id: \.self) { _ in AdminNewsRowSkeleton() }
+            VStack(spacing: 0) {
+                ForEach(0..<4, id: \.self) { index in
+                    if index > 0 { Divider().overlay(SabqTheme.separator) }
+                    AdminNewsRowSkeleton()
+                }
             }
         } else if vm.items.isEmpty {
             emptyState
         } else {
-            LazyVStack(spacing: 12) {
+            LazyVStack(spacing: 0) {
                 ForEach(vm.items) { item in
+                    if item.id != vm.items.first?.id {
+                        Divider().overlay(SabqTheme.separator)
+                    }
                     AdminNewsRow(
                         item: item,
                         isPublishing: vm.publishingIds.contains(item.id),
@@ -389,54 +394,58 @@ struct AdminDashboardView: View {
                 if vm.isLoadingMore {
                     ProgressView().controlSize(.small)
                 } else {
-                    Image(systemName: "arrow.down.circle")
-                        .font(SabqFonts.app(size: 15, weight: .bold))
+                    Image(systemName: "arrow.down")
+                        .font(SabqFonts.app(size: 15, weight: .semibold))
                 }
                 Text(vm.isLoadingMore ? "جارٍ الجلب…" : "جلب المزيد")
-                    .font(SabqFonts.app(size: 14, weight: .bold))
+                    .sabqText(SabqType.button)
             }
-            .foregroundStyle(SabqTheme.sky)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 13)
-            .background(
-                RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous)
-                    .fill(SabqTheme.sky.opacity(0.10))
+            .foregroundStyle(SabqTheme.primary)
+            .frame(maxWidth: .infinity, minHeight: SabqLayout.controlHeight)
+            .overlay(
+                RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                    .stroke(SabqTheme.outline, lineWidth: 1)
             )
         }
         .buttonStyle(.plain)
         .disabled(vm.isLoadingMore)
-        .padding(.top, 4)
+        .padding(.top, SabqLayout.space8)
     }
 
     // MARK: Empty / error states
 
     private var emptyState: some View {
-        VStack(spacing: 14) {
+        VStack(spacing: SabqLayout.space12) {
             Image(systemName: "tray")
                 .font(SabqFonts.app(size: 40, weight: .light))
-                .foregroundStyle(SabqTheme.secondaryInk.opacity(0.4))
+                .foregroundStyle(SabqTheme.textTertiary)
+                .accessibilityHidden(true)
             Text("لا توجد أخبار في \(vm.selectedStatus.label)")
-                .font(SabqFonts.app(size: 14, weight: .medium))
-                .foregroundStyle(SabqTheme.secondaryInk)
+                .sabqText(SabqType.excerpt)
+                .foregroundStyle(SabqTheme.textSecondary)
         }
         .frame(maxWidth: .infinity, minHeight: 240)
     }
 
     private func errorState(_ message: String) -> some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SabqLayout.space16) {
             Image(systemName: "exclamationmark.triangle")
                 .font(SabqFonts.app(size: 40, weight: .light))
-                .foregroundStyle(SabqTheme.secondaryInk.opacity(0.4))
+                .foregroundStyle(SabqTheme.textTertiary)
+                .accessibilityHidden(true)
             Text(message)
-                .font(SabqFonts.app(size: 14, weight: .medium))
-                .foregroundStyle(SabqTheme.secondaryInk)
+                .sabqText(SabqType.excerpt)
+                .foregroundStyle(SabqTheme.textSecondary)
             Button { Task { await vm.load() } } label: {
                 Text("إعادة المحاولة")
-                    .font(SabqFonts.app(size: 14, weight: .semibold))
-                    .foregroundStyle(SabqTheme.sky)
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 8)
-                    .background(Capsule().fill(SabqTheme.sky.opacity(0.12)))
+                    .sabqText(SabqType.button)
+                    .foregroundStyle(SabqTheme.onAction)
+                    .padding(.horizontal, SabqLayout.space24)
+                    .frame(minHeight: SabqLayout.controlHeight)
+                    .background(
+                        RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                            .fill(SabqTheme.actionFill)
+                    )
             }
             .buttonStyle(.plain)
         }

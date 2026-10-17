@@ -70,12 +70,12 @@ struct CommentRow: View {
             avatar
             VStack(alignment: .leading, spacing: 2) {
                 Text(comment.userName ?? "مستخدم")
-                    .font(SabqFonts.app(size: 13, weight: .medium))
-                    .foregroundStyle(SabqTheme.ink)
+                    .font(SabqType.metaEmphasis.font)
+                    .foregroundStyle(SabqTheme.textPrimary)
 
                 Text(Self.relativeTime(comment.createdAt))
-                    .font(SabqFonts.app(size: 11, weight: .regular))
-                    .foregroundStyle(SabqTheme.tertiaryInk)
+                    .font(SabqType.meta.font)
+                    .foregroundStyle(SabqTheme.textTertiary)
             }
             Spacer(minLength: 0)
         }
@@ -105,20 +105,19 @@ struct CommentRow: View {
 
     private var initialsCircle: some View {
         Circle()
-            .fill(SabqTheme.primaryEnd.opacity(0.15))
+            .fill(SabqTheme.surfaceMuted)
             .frame(width: 32, height: 32)
             .overlay {
                 Text(String((comment.userName ?? "م").prefix(1)))
-                    .font(SabqFonts.app(size: 12, weight: .medium))
-                    .foregroundStyle(SabqTheme.primaryEnd)
+                    .font(SabqType.tag.font)
+                    .foregroundStyle(SabqTheme.textSecondary)
             }
     }
 
     private var bodyText: some View {
         Text(comment.body)
-            .font(SabqFonts.app(size: 14.5, weight: .regular))
-            .foregroundStyle(SabqTheme.secondaryInk)
-            .lineSpacing(4)
+            .sabqText(SabqType.excerpt)
+            .foregroundStyle(SabqTheme.textPrimary)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.leading, 42)
     }
@@ -133,35 +132,32 @@ struct CommentRow: View {
                     SabqHaptics.light()
                     onReply(comment)
                 } label: {
-                    HStack(spacing: 4) {
+                    HStack(spacing: SabqLayout.space4) {
                         Image(systemName: "arrowshape.turn.up.left")
-                            .font(SabqFonts.app(size: 11, weight: .regular))
+                            .font(SabqType.tag.font)
                         Text("رد")
-                            .font(SabqFonts.app(size: 12, weight: .medium))
+                            .font(SabqType.metaEmphasis.font)
                     }
-                    .foregroundStyle(SabqTheme.primaryEnd)
+                    .foregroundStyle(SabqTheme.primary)
+                    .frame(minWidth: SabqLayout.touchTarget, minHeight: SabqLayout.touchTarget, alignment: .leading)
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
             }
 
             if let pending = comment.status?.lowercased(), pending == "pending" {
-                HStack(spacing: 4) {
+                HStack(spacing: SabqLayout.space4) {
                     Image(systemName: "sparkles")
-                        .font(SabqFonts.app(size: 9, weight: .medium))
+                        .foregroundStyle(SabqTheme.primary)
                     Text("SABQ AI يراجع")
-                        .font(SabqFonts.app(size: 10, weight: .medium))
+                        .foregroundStyle(SabqTheme.textSecondary)
                 }
-                .foregroundStyle(.white)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 3)
+                .font(SabqType.tag.font)
+                .padding(.horizontal, SabqLayout.space8)
+                .padding(.vertical, SabqLayout.space4)
                 .background(
-                    Capsule().fill(
-                        LinearGradient(
-                            colors: [SabqTheme.primaryEnd, SabqTheme.teal],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
+                    RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
+                        .fill(SabqTheme.surfaceMuted)
                 )
             }
             Spacer(minLength: 0)
@@ -237,7 +233,7 @@ private struct ThreadLineOverlay: View {
             let avatarEdgeX = isRTL ? size.width - avatarEdgeFromLeading : avatarEdgeFromLeading
             let dir: CGFloat = isRTL ? -1 : 1
 
-            let stroke = GraphicsContext.Shading.color(SabqTheme.outline.opacity(0.55))
+            let stroke = GraphicsContext.Shading.color(SabqTheme.separator)
 
             // Trunk: from the parent's avatar bottom down to where the LAST
             // reply's elbow starts curving. Intermediate elbows are drawn

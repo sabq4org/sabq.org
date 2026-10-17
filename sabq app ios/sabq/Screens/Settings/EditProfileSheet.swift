@@ -30,27 +30,27 @@ struct EditProfileSheet: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
+                VStack(alignment: .leading, spacing: SabqLayout.space24) {
                     avatarSection
 
                     if saved {
-                        HStack(spacing: 8) {
+                        HStack(spacing: SabqLayout.space8) {
                             Image(systemName: "checkmark.circle.fill")
                                 .font(SabqFonts.app(size: 16))
                             Text("تم حفظ التغييرات بنجاح")
-                                .font(SabqFonts.app(size: 14, weight: .semibold))
+                                .sabqText(SabqType.metaEmphasis)
                         }
-                        .foregroundStyle(SabqTheme.leaf)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 10)
+                        .foregroundStyle(SabqTheme.success)
+                        .padding(.horizontal, SabqLayout.space12)
+                        .padding(.vertical, SabqLayout.space12)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .background(
-                            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                .fill(SabqTheme.leaf.opacity(0.08))
+                            RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                                .fill(SabqTheme.surfaceMuted)
                         )
                     }
 
-                    VStack(spacing: 16) {
+                    VStack(spacing: SabqLayout.space16) {
                         if firstNameLocked {
                             readOnlyField(label: "الاسم الأول", value: firstName, icon: "person.fill")
                         } else {
@@ -62,13 +62,13 @@ struct EditProfileSheet: View {
                             editField(label: "اسم العائلة", placeholder: "أدخل اسم العائلة", text: $lastName)
                         }
                         if firstNameLocked || lastNameLocked {
-                            HStack(spacing: 6) {
+                            HStack(spacing: SabqLayout.space8) {
                                 Image(systemName: "info.circle.fill")
-                                    .font(SabqFonts.app(size: 11))
-                                    .foregroundStyle(SabqTheme.tertiaryInk)
+                                    .sabqText(SabqType.tag)
+                                    .foregroundStyle(SabqTheme.textTertiary)
                                 Text("لا يمكن تعديل الاسم بعد التسجيل لاعتبارات أمنية ومصداقية التعليقات")
-                                    .font(SabqFonts.app(size: 11, weight: .regular))
-                                    .foregroundStyle(SabqTheme.tertiaryInk)
+                                    .sabqText(SabqType.tag)
+                                    .foregroundStyle(SabqTheme.textTertiary)
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
                         }
@@ -82,31 +82,31 @@ struct EditProfileSheet: View {
                             readOnlyField(label: "رقم الجوال", value: phone, icon: "phone.fill")
                         }
 
-                        VStack(alignment: .leading, spacing: 8) {
+                        VStack(alignment: .leading, spacing: SabqLayout.space8) {
                             Text("نبذة عنك")
-                                .font(SabqFonts.app(size: 14, weight: .semibold))
-                                .foregroundStyle(SabqTheme.ink)
+                                .sabqText(SabqType.metaEmphasis)
+                                .foregroundStyle(SabqTheme.textPrimary)
 
                             TextEditor(text: $bio)
-                                .font(SabqFonts.app(size: 15, weight: .regular))
-                                .foregroundStyle(SabqTheme.ink)
+                                .sabqText(SabqType.excerpt)
+                                .foregroundStyle(SabqTheme.textPrimary)
                                 .frame(minHeight: 80)
-                                .padding(12)
+                                .padding(SabqLayout.space12)
                                 .background(
-                                    RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous)
-                                        .fill(SabqTheme.paleFill)
+                                    RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                                        .fill(SabqTheme.surface)
                                 )
                                 .overlay(
-                                    RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous)
-                                        .stroke(SabqTheme.outline, lineWidth: 0.5)
+                                    RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                                        .stroke(SabqTheme.outline, lineWidth: 1)
                                 )
                                 .overlay(alignment: .topLeading) {
                                     if bio.isEmpty {
                                         Text("اكتب نبذة مختصرة عنك...")
-                                            .font(SabqFonts.app(size: 15, weight: .regular))
-                                            .foregroundStyle(SabqTheme.tertiaryInk)
-                                            .padding(.horizontal, 16)
-                                            .padding(.vertical, 20)
+                                            .sabqText(SabqType.excerpt)
+                                            .foregroundStyle(SabqTheme.textTertiary)
+                                            .padding(.horizontal, SabqLayout.space16)
+                                            .padding(.vertical, SabqLayout.space24)
                                             .allowsHitTesting(false)
                                     }
                                 }
@@ -114,19 +114,19 @@ struct EditProfileSheet: View {
                     }
 
                     if let error = authStore.errorMessage {
-                        HStack(spacing: 8) {
+                        HStack(spacing: SabqLayout.space8) {
                             Image(systemName: "exclamationmark.triangle.fill")
-                                .font(SabqFonts.app(size: 14))
+                                .sabqText(SabqType.excerpt)
                             Text(error)
-                                .font(SabqFonts.app(size: 13, weight: .medium))
+                                .sabqText(SabqType.meta)
                         }
-                        .foregroundStyle(SabqTheme.coral)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 10)
+                        .foregroundStyle(SabqTheme.danger)
+                        .padding(.horizontal, SabqLayout.space12)
+                        .padding(.vertical, SabqLayout.space12)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .background(
-                            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                .fill(SabqTheme.coral.opacity(0.08))
+                            RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                                .fill(SabqTheme.surfaceMuted)
                         )
                     }
 
@@ -146,22 +146,22 @@ struct EditProfileSheet: View {
                             }
                         }
                     } label: {
-                        HStack(spacing: 10) {
+                        HStack(spacing: SabqLayout.space8) {
                             if authStore.isLoading {
-                                ProgressView().tint(.white)
+                                ProgressView().tint(SabqTheme.onAction)
                             }
                             Text("حفظ التغييرات")
-                                .font(SabqFonts.app(size: 16, weight: .bold))
+                                .sabqText(SabqType.button)
                         }
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 15)
-                        .background(SabqTheme.brandGradient, in: RoundedRectangle(cornerRadius: SabqTheme.buttonRadius, style: .continuous))
+                        .foregroundStyle(SabqTheme.onAction)
+                        .frame(maxWidth: .infinity, minHeight: SabqLayout.controlHeight)
+                        .background(SabqTheme.actionFill, in: RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
                     }
                     .buttonStyle(.plain)
                     .disabled(firstName.isEmpty || authStore.isLoading)
                 }
-                .padding(20)
+                .padding(.horizontal, SabqLayout.pageMargin)
+                .padding(.vertical, SabqLayout.space24)
             }
             .sabqNavigationEdge()
             .background(SabqTheme.background)
@@ -190,7 +190,7 @@ struct EditProfileSheet: View {
     }
 
     private var avatarSection: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SabqLayout.space16) {
             ZStack(alignment: .bottomTrailing) {
                 if let selectedImage {
                     Image(uiImage: selectedImage)
@@ -220,14 +220,13 @@ struct EditProfileSheet: View {
                     }
                 } label: {
                     Circle()
-                        .fill(SabqTheme.primaryEnd)
-                        .frame(width: 30, height: 30)
+                        .fill(SabqTheme.actionFill)
+                        .frame(width: 32, height: 32)
                         .overlay {
                             Image(systemName: "camera.fill")
-                                .font(SabqFonts.app(size: 13, weight: .semibold))
-                                .foregroundStyle(.white)
+                                .sabqText(SabqType.button)
+                                .foregroundStyle(SabqTheme.onAction)
                         }
-                        .shadow(color: .black.opacity(0.15), radius: 3, y: 1)
                 }
                 .buttonStyle(.plain)
                 .photosPicker(isPresented: $showAvatarPicker, selection: $selectedPhoto, matching: .images)
@@ -260,79 +259,79 @@ struct EditProfileSheet: View {
             }
 
             Text(authStore.currentUser?.displayName ?? "")
-                .font(SabqFonts.app(size: 17, weight: .bold))
-                .foregroundStyle(SabqTheme.ink)
+                .sabqText(SabqType.button)
+                .foregroundStyle(SabqTheme.textPrimary)
 
             if authStore.isLoading {
-                HStack(spacing: 8) {
+                HStack(spacing: SabqLayout.space8) {
                     ProgressView()
                         .controlSize(.small)
                     Text("جاري رفع الصورة...")
-                        .font(SabqFonts.app(size: 13, weight: .medium))
+                        .sabqText(SabqType.meta)
                 }
-                .foregroundStyle(SabqTheme.secondaryInk)
+                .foregroundStyle(SabqTheme.textSecondary)
             }
 
             if showUploadNotice {
-                HStack(spacing: 8) {
+                HStack(spacing: SabqLayout.space8) {
                     Image(systemName: "checkmark.circle.fill")
-                        .font(SabqFonts.app(size: 14))
+                        .sabqText(SabqType.excerpt)
                     Text("تم تحديث الصورة الشخصية بنجاح")
-                        .font(SabqFonts.app(size: 13, weight: .semibold))
+                        .sabqText(SabqType.metaEmphasis)
                 }
-                .foregroundStyle(SabqTheme.leaf)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
+                .foregroundStyle(SabqTheme.success)
+                .padding(.horizontal, SabqLayout.space12)
+                .padding(.vertical, SabqLayout.space8)
                 .frame(maxWidth: .infinity)
                 .background(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(SabqTheme.leaf.opacity(0.08))
+                    RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                        .fill(SabqTheme.surfaceMuted)
                 )
                 .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
         .frame(maxWidth: .infinity)
-        .padding(.top, 8)
+        .padding(.top, SabqLayout.space8)
     }
 
     private var avatarPlaceholder: some View {
         Circle()
-            .fill(SabqTheme.primaryEnd.opacity(0.12))
+            .fill(SabqTheme.surfaceMuted)
             .frame(width: 90, height: 90)
             .overlay {
                 Text(String((authStore.currentUser?.displayName ?? "م").prefix(1)))
                     .font(SabqFonts.app(size: 36, weight: .bold))
-                    .foregroundStyle(SabqTheme.primaryEnd)
+                    .foregroundStyle(SabqTheme.primary)
             }
     }
 
     private func editField(label: String, placeholder: String, text: Binding<String>) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: SabqLayout.space8) {
             Text(label)
-                .font(SabqFonts.app(size: 14, weight: .semibold))
-                .foregroundStyle(SabqTheme.ink)
+                .sabqText(SabqType.metaEmphasis)
+                .foregroundStyle(SabqTheme.textPrimary)
 
             TextField(placeholder, text: text)
-                .font(SabqFonts.app(size: 15, weight: .medium))
-                .foregroundStyle(SabqTheme.ink)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 14)
+                .sabqText(SabqType.excerpt)
+                .foregroundStyle(SabqTheme.textPrimary)
+                .padding(.horizontal, SabqLayout.space16)
+                .padding(.vertical, SabqLayout.space12)
                 .background(
-                    RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous)
-                        .fill(SabqTheme.paleFill)
+                    RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                        .fill(SabqTheme.surface)
                 )
                 .overlay(
-                    RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous)
-                        .stroke(SabqTheme.outline, lineWidth: 0.5)
+                    RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                        .stroke(SabqTheme.outline, lineWidth: 1)
                 )
         }
     }
 
     private var genderPicker: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: SabqLayout.space8) {
             Text("الجنس")
-                .font(SabqFonts.app(size: 14, weight: .semibold))
-                .foregroundStyle(SabqTheme.ink)
+                .sabqText(SabqType.metaEmphasis)
+                .foregroundStyle(SabqTheme.textPrimary)
 
             Picker("الجنس", selection: $gender) {
                 Text("غير محدد").tag("")
@@ -344,34 +343,30 @@ struct EditProfileSheet: View {
     }
 
     private func readOnlyField(label: String, value: String, icon: String) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: SabqLayout.space8) {
             Text(label)
-                .font(SabqFonts.app(size: 14, weight: .semibold))
-                .foregroundStyle(SabqTheme.ink)
+                .sabqText(SabqType.metaEmphasis)
+                .foregroundStyle(SabqTheme.textPrimary)
 
-            HStack(spacing: 10) {
+            HStack(spacing: SabqLayout.space8) {
                 Image(systemName: icon)
-                    .font(SabqFonts.app(size: 13, weight: .medium))
-                    .foregroundStyle(SabqTheme.tertiaryInk)
+                    .sabqText(SabqType.meta)
+                    .foregroundStyle(SabqTheme.textTertiary)
                 Text(value)
-                    .font(SabqFonts.app(size: 15, weight: .medium))
-                    .foregroundStyle(SabqTheme.secondaryInk)
+                    .sabqText(SabqType.excerpt)
+                    .foregroundStyle(SabqTheme.textSecondary)
                     .lineLimit(1)
                     .truncationMode(.middle)
                 Spacer(minLength: 0)
                 Image(systemName: "lock.fill")
-                    .font(SabqFonts.app(size: 11, weight: .semibold))
-                    .foregroundStyle(SabqTheme.tertiaryInk)
+                    .sabqText(SabqType.tag)
+                    .foregroundStyle(SabqTheme.textTertiary)
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 14)
+            .padding(.horizontal, SabqLayout.space16)
+            .padding(.vertical, SabqLayout.space12)
             .background(
-                RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous)
-                    .fill(SabqTheme.paleFill.opacity(0.6))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous)
-                    .stroke(SabqTheme.outline.opacity(0.5), lineWidth: 0.5)
+                RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                    .fill(SabqTheme.surfaceMuted)
             )
         }
     }

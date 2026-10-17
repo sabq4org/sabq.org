@@ -46,119 +46,91 @@ struct LoyaltyCardView: View {
     }
 
     var body: some View {
-        GeometryReader { geo in
-            ZStack(alignment: .topLeading) {
-                tier.gradient
-
-                // Diagonal pattern overlay (subtle texture)
-                Canvas { ctx, size in
-                    ctx.opacity = 0.07
-                    var path = Path()
-                    let spacing: CGFloat = 18
-                    var x: CGFloat = -size.height
-                    while x < size.width + size.height {
-                        path.move(to: CGPoint(x: x, y: 0))
-                        path.addLine(to: CGPoint(x: x + size.height, y: size.height))
-                        x += spacing
-                    }
-                    ctx.stroke(path, with: .color(.white), lineWidth: 1)
+        // بطاقة العضوية: لون هوية واحد مسطح (خلفية الأزرار، تكفي لنص أبيض في الوضعين)،
+        // بلا تدرج ولا توهج ولا ظل.
+        VStack(alignment: .leading, spacing: 0) {
+            // Top row
+            HStack(alignment: .top, spacing: SabqLayout.space12) {
+                VStack(alignment: .leading, spacing: SabqLayout.space4) {
+                    Text("سبق · LOYALTY")
+                        .font(SabqType.tag.font)
+                        .tracking(1.5)
+                        .foregroundStyle(SabqTheme.onAction.opacity(0.85))
+                    Text(tier.nameAr)
+                        .sabqText(SabqType.leadTitle)
+                        .foregroundStyle(SabqTheme.onAction)
+                    Text(tier.nameEn)
+                        .font(SabqType.meta.font)
+                        .foregroundStyle(SabqTheme.onAction.opacity(0.85))
                 }
+                Spacer(minLength: 0)
+                Image(systemName: "trophy.fill")
+                    .font(SabqFonts.app(size: 22, weight: .semibold))
+                    .foregroundStyle(SabqTheme.onAction)
+                    .accessibilityHidden(true)
+            }
 
-                // Soft radial highlight in the top-left corner
-                RadialGradient(
-                    colors: [Color.white.opacity(0.2), .clear],
-                    center: .topLeading,
-                    startRadius: 10,
-                    endRadius: geo.size.width * 0.7
-                )
+            Spacer(minLength: SabqLayout.space8)
 
-                VStack(alignment: .leading, spacing: 0) {
-                    // Top row
-                    HStack(alignment: .top, spacing: 12) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("سبق · LOYALTY")
-                                .font(SabqFonts.app(size: 10, weight: .medium))
-                                .tracking(2.5)
-                                .foregroundStyle(.white.opacity(0.7))
-                            Text(tier.nameAr)
-                                .font(SabqFonts.app(size: 22, weight: .heavy))
-                                .foregroundStyle(.white)
-                            Text(tier.nameEn)
-                                .font(SabqFonts.app(size: 11, weight: .medium))
-                                .foregroundStyle(.white.opacity(0.7))
-                        }
-                        Spacer(minLength: 0)
-                        ZStack {
-                            Circle()
-                                .fill(Color.white.opacity(0.18))
-                                .frame(width: 48, height: 48)
-                            Image(systemName: "trophy.fill")
-                                .font(SabqFonts.app(size: 22, weight: .semibold))
-                                .foregroundStyle(.white)
-                        }
-                    }
+            // Center: lifetime points
+            VStack(spacing: SabqLayout.space4) {
+                Text("Lifetime Points")
+                    .font(SabqType.tag.font)
+                    .tracking(1.5)
+                    .foregroundStyle(SabqTheme.onAction.opacity(0.85))
+                Text(lifetimePoints.formatted(.number.locale(Locale(identifier: "en_US"))))
+                    .font(SabqFonts.headline(size: 40))
+                    .foregroundStyle(SabqTheme.onAction)
+                    .minimumScaleFactor(0.6)
+                    .lineLimit(1)
+                    .environment(\.layoutDirection, .leftToRight)
+                HStack(spacing: SabqLayout.space4) {
+                    Image(systemName: "sparkles")
+                        .font(SabqType.tag.font)
+                        .accessibilityHidden(true)
+                    Text("المستوى \(tier.level) من 5")
+                        .font(SabqType.tag.font)
+                }
+                .foregroundStyle(SabqTheme.onAction.opacity(0.85))
+            }
+            .frame(maxWidth: .infinity)
 
-                    Spacer(minLength: 0)
+            Spacer(minLength: SabqLayout.space8)
 
-                    // Center: lifetime points
-                    VStack(spacing: 2) {
-                        Text("Lifetime Points")
-                            .font(SabqFonts.app(size: 10, weight: .medium))
-                            .tracking(2)
-                            .foregroundStyle(.white.opacity(0.7))
-                        Text(lifetimePoints.formatted(.number.locale(Locale(identifier: "en_US"))))
-                            .font(SabqFonts.app(size: 44, weight: .black))
-                            .foregroundStyle(.white)
-                            .minimumScaleFactor(0.6)
-                            .lineLimit(1)
-                        HStack(spacing: 4) {
-                            Image(systemName: "sparkles")
-                                .font(SabqFonts.app(size: 10))
-                            Text("المستوى \(tier.level) من 5")
-                                .font(SabqFonts.app(size: 10, weight: .medium))
-                        }
-                        .foregroundStyle(.white.opacity(0.65))
-                    }
-                    .frame(maxWidth: .infinity)
-
-                    Spacer(minLength: 0)
-
-                    // Bottom: holder + member ID
-                    HStack(alignment: .bottom, spacing: 12) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("حامل البطاقة")
-                                .font(SabqFonts.app(size: 10, weight: .medium))
-                                .tracking(1.5)
-                                .foregroundStyle(.white.opacity(0.6))
-                            Text(userName)
-                                .font(SabqFonts.app(size: 16, weight: .bold))
-                                .foregroundStyle(.white)
-                                .lineLimit(1)
-                            if let memberSinceLabel {
-                                Text(memberSinceLabel)
-                                    .font(SabqFonts.app(size: 10, weight: .medium))
-                                    .foregroundStyle(.white.opacity(0.6))
-                            }
-                        }
-                        Spacer(minLength: 0)
-                        VStack(alignment: .trailing, spacing: 2) {
-                            Text("رقم العضوية")
-                                .font(SabqFonts.app(size: 10, weight: .medium))
-                                .tracking(1.5)
-                                .foregroundStyle(.white.opacity(0.6))
-                            Text(memberIdShort)
-                                .font(SabqFonts.app(size: 12, weight: .semibold))
-                                .tracking(2)
-                                .foregroundStyle(.white)
-                        }
+            // Bottom: holder + member ID
+            HStack(alignment: .bottom, spacing: SabqLayout.space12) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("حامل البطاقة")
+                        .font(SabqType.tag.font)
+                        .foregroundStyle(SabqTheme.onAction.opacity(0.85))
+                    Text(userName)
+                        .font(SabqType.rowTitle.font)
+                        .foregroundStyle(SabqTheme.onAction)
+                        .lineLimit(1)
+                    if let memberSinceLabel {
+                        Text(memberSinceLabel)
+                            .font(SabqType.tag.font)
+                            .foregroundStyle(SabqTheme.onAction.opacity(0.85))
                     }
                 }
-                .padding(20)
+                Spacer(minLength: 0)
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text("رقم العضوية")
+                        .font(SabqType.tag.font)
+                        .foregroundStyle(SabqTheme.onAction.opacity(0.85))
+                    Text(memberIdShort)
+                        .font(SabqType.metaEmphasis.font)
+                        .tracking(1.5)
+                        .foregroundStyle(SabqTheme.onAction)
+                        .environment(\.layoutDirection, .leftToRight)
+                }
             }
         }
+        .padding(SabqLayout.space16)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(SabqTheme.actionFill)
         .aspectRatio(1.586, contentMode: .fit)
-        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .shadow(color: tier.color.opacity(0.35), radius: 16, x: 0, y: 8)
+        .clipShape(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
         .environment(\.layoutDirection, .rightToLeft)
     }
 }

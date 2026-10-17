@@ -8,8 +8,8 @@ import SwiftUI
 
 // MARK: Stat tile
 
-/// Compact KPI card for the 2-column "نظرة عامة" grid (icon + number + title +
-/// a small breakdown line). Smaller than the old horizontal strip cards.
+/// Compact KPI block for the 2-column "نظرة عامة" grid (icon + number + title +
+/// a small breakdown line). Quiet muted fill, no border or shadow.
 struct AdminStatGridCard: View {
     let card: AdminStatCard
     var onTap: (() -> Void)? = nil
@@ -21,29 +21,26 @@ struct AdminStatGridCard: View {
     }
 
     private var cardBody: some View {
-        HStack(alignment: .top, spacing: 10) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .fill(card.tint.opacity(0.14))
-                    .frame(width: 34, height: 34)
-                Image(systemName: card.icon)
-                    .font(SabqFonts.app(size: 15, weight: .semibold))
-                    .foregroundStyle(card.tint)
-            }
-            VStack(alignment: .leading, spacing: 2) {
+        HStack(alignment: .top, spacing: SabqLayout.space12) {
+            Image(systemName: card.icon)
+                .font(SabqFonts.app(size: 16, weight: .semibold))
+                .foregroundStyle(card.tint)
+                .frame(width: 24, height: 24)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: SabqLayout.space4) {
                 Text(card.value)
-                    .font(SabqFonts.app(size: 20, weight: .heavy))
-                    .foregroundStyle(SabqTheme.ink)
+                    .sabqText(SabqType.sectionHeading)
+                    .foregroundStyle(SabqTheme.textPrimary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.6)
                 Text(card.title)
-                    .font(SabqFonts.app(size: 12, weight: .semibold))
-                    .foregroundStyle(SabqTheme.secondaryInk)
+                    .sabqText(SabqType.metaEmphasis)
+                    .foregroundStyle(SabqTheme.textSecondary)
                     .lineLimit(1)
                 if let breakdown = card.breakdown {
                     Text(breakdown)
-                        .font(SabqFonts.app(size: 10, weight: .medium))
-                        .foregroundStyle(SabqTheme.tertiaryInk)
+                        .sabqText(SabqType.tag)
+                        .foregroundStyle(SabqTheme.textTertiary)
                         .lineLimit(2)
                         .multilineTextAlignment(.leading)
                         .fixedSize(horizontal: false, vertical: true)
@@ -51,71 +48,65 @@ struct AdminStatGridCard: View {
             }
             Spacer(minLength: 0)
         }
-        .padding(12)
-        .frame(maxWidth: .infinity, minHeight: 78, alignment: .topLeading)
+        .padding(SabqLayout.space12)
+        .frame(maxWidth: .infinity, minHeight: 80, alignment: .topLeading)
         .background(
-            RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                .fill(SabqTheme.surface)
-                .shadow(color: SabqTheme.shadow, radius: 10, x: 0, y: 4)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                .stroke(SabqTheme.outline.opacity(0.5), lineWidth: 0.5)
+            RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                .fill(SabqTheme.surfaceMuted)
         )
     }
 }
 
 // MARK: Status badge
 
-/// Small pill that colour-codes an item's editorial state.
+/// Small radius-8 tag that colour-codes an item's editorial state.
 struct AdminStatusBadge: View {
     let status: AdminArticleStatus
 
     var body: some View {
-        HStack(spacing: 5) {
+        HStack(spacing: SabqLayout.space4) {
             Image(systemName: status.icon)
-                .font(SabqFonts.app(size: 10, weight: .bold))
+                .font(SabqFonts.app(size: 12, weight: .semibold))
+                .accessibilityHidden(true)
             Text(status.badgeLabel)
-                .font(SabqFonts.app(size: 11, weight: .bold))
+                .sabqText(SabqType.tag)
         }
         .foregroundStyle(status.tint)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 5)
-        .background(Capsule().fill(status.tint.opacity(0.12)))
+        .padding(.horizontal, SabqLayout.space8)
+        .padding(.vertical, SabqLayout.space4)
+        .background(
+            RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
+                .fill(SabqTheme.surfaceMuted)
+        )
     }
 }
 
 // MARK: Segmented control
 
-/// Three-way pill switcher used both on the dashboard (section filter) and in
-/// the editor (status picker).
+/// Three-way capsule switcher used both on the dashboard (section filter) and
+/// in the editor (status picker).
 struct AdminSegmentedControl: View {
     let selected: AdminArticleStatus
     let onSelect: (AdminArticleStatus) -> Void
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: SabqLayout.space8) {
             ForEach(AdminArticleStatus.allCases) { status in
                 let isActive = status == selected
                 Button { onSelect(status) } label: {
                     Text(status.label)
-                        .font(SabqFonts.app(size: 13, weight: .bold))
-                        .foregroundStyle(isActive ? .white : SabqTheme.secondaryInk)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 10)
-                        .background {
-                            if isActive {
-                                Capsule().fill(SabqTheme.brandGradient)
-                            } else {
-                                Capsule()
-                                    .fill(SabqTheme.surface)
-                                    .overlay(
-                                        Capsule().stroke(SabqTheme.outline.opacity(0.6), lineWidth: 0.5)
-                                    )
-                            }
-                        }
+                        .sabqText(SabqType.metaEmphasis)
+                        .foregroundStyle(isActive ? SabqTheme.onAction : SabqTheme.textPrimary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                        .frame(maxWidth: .infinity, minHeight: SabqLayout.touchTarget)
+                        .background(
+                            Capsule(style: .continuous)
+                                .fill(isActive ? SabqTheme.actionFill : SabqTheme.surfaceMuted)
+                        )
                 }
                 .buttonStyle(.plain)
+                .accessibilityAddTraits(isActive ? [.isSelected] : [])
             }
         }
     }
@@ -123,7 +114,8 @@ struct AdminSegmentedControl: View {
 
 // MARK: News row
 
-/// One news item with its metadata and the Edit / Publish actions.
+/// One news item with its metadata and the Edit / Publish actions. Unboxed:
+/// the parent list separates rows with thin separators.
 struct AdminNewsRow: View {
     let item: AdminNewsItem
     let isPublishing: Bool
@@ -133,18 +125,18 @@ struct AdminNewsRow: View {
     var onPermanentDelete: () -> Void = {}
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .top, spacing: 10) {
+        VStack(alignment: .leading, spacing: SabqLayout.space8) {
+            HStack(alignment: .center, spacing: SabqLayout.space8) {
                 AdminStatusBadge(status: item.status)
                 Spacer(minLength: 0)
                 Text("\(rowTimestampLabel): \(SabqFormatters.riyadhDateTime.string(from: rowTimestampDate))")
-                    .font(SabqFonts.app(size: 11, weight: .medium))
-                    .foregroundStyle(SabqTheme.tertiaryInk)
+                    .sabqText(SabqType.meta)
+                    .foregroundStyle(SabqTheme.textTertiary)
             }
 
             Text(item.title)
-                .font(SabqFonts.app(size: 16, weight: .bold))
-                .foregroundStyle(SabqTheme.ink)
+                .sabqText(SabqType.rowTitle)
+                .foregroundStyle(SabqTheme.textPrimary)
                 .lineLimit(2)
                 .multilineTextAlignment(.leading)
 
@@ -158,41 +150,39 @@ struct AdminNewsRow: View {
 
             if !item.excerpt.isEmpty {
                 Text(item.excerpt)
-                    .font(SabqFonts.app(size: 13))
-                    .foregroundStyle(SabqTheme.secondaryInk)
+                    .sabqText(SabqType.meta)
+                    .foregroundStyle(SabqTheme.textSecondary)
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
             }
 
-            HStack(spacing: 14) {
-                metaLabel(icon: "person.fill", text: item.author)
-                metaLabel(icon: "eye.fill", text: SabqFormatters.compactViewCount(item.views))
+            HStack(spacing: SabqLayout.space16) {
+                metaLabel(icon: "person", text: item.author)
+                metaLabel(icon: "eye", text: SabqFormatters.compactViewCount(item.views))
             }
 
-            Divider().overlay(SabqTheme.outline.opacity(0.5))
-
-            HStack(spacing: 10) {
+            HStack(spacing: SabqLayout.space8) {
                 NavigationLink(value: AdminArticleEditorRoute(item: item)) {
-                    actionLabel(title: "تعديل", systemImage: "square.and.pencil", tint: SabqTheme.sky)
+                    actionLabel(title: "تعديل", systemImage: "square.and.pencil", tint: SabqTheme.primary)
                 }
                 .buttonStyle(.plain)
 
                 if item.status != .published && item.status != .archived {
                     Button(action: onPublish) {
                         if isPublishing {
-                            HStack(spacing: 7) {
+                            HStack(spacing: SabqLayout.space8) {
                                 ProgressView().controlSize(.small)
-                                Text("جارٍ النشر").font(SabqFonts.app(size: 13, weight: .semibold))
+                                Text("جارٍ النشر").sabqText(SabqType.metaEmphasis)
                             }
-                            .foregroundStyle(SabqTheme.teal)
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 10)
+                            .foregroundStyle(SabqTheme.success)
+                            .padding(.horizontal, SabqLayout.space12)
+                            .frame(minHeight: SabqLayout.touchTarget)
                             .background(
-                                RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous)
-                                    .fill(SabqTheme.teal.opacity(0.10))
+                                RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
+                                    .fill(SabqTheme.surfaceMuted)
                             )
                         } else {
-                            actionLabel(title: "نشر الآن", systemImage: "paperplane.fill", tint: SabqTheme.teal)
+                            actionLabel(title: "نشر الآن", systemImage: "paperplane", tint: SabqTheme.success)
                         }
                     }
                     .buttonStyle(.plain)
@@ -203,79 +193,66 @@ struct AdminNewsRow: View {
 
                 overflowMenu
             }
+            .padding(.top, SabqLayout.space4)
         }
-        .padding(16)
+        .padding(.vertical, SabqLayout.rowPadding)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
-                .fill(SabqTheme.surface)
-                .shadow(color: SabqTheme.shadow, radius: 12, x: 0, y: 5)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
-                .stroke(SabqTheme.outline.opacity(0.5), lineWidth: 0.5)
-        )
     }
 
-    /// Amber "awaiting author revision" banner — mirrors the web's
+    /// "Awaiting author revision" note — mirrors the web's
     /// EditorialDraftReviewCue, showing the editor's note inline.
     private var revisionCue: some View {
-        HStack(alignment: .top, spacing: 7) {
-            Image(systemName: "exclamationmark.bubble.fill")
-                .font(SabqFonts.app(size: 12, weight: .bold))
-            VStack(alignment: .leading, spacing: 2) {
+        HStack(alignment: .top, spacing: SabqLayout.space8) {
+            Image(systemName: "exclamationmark.bubble")
+                .font(SabqFonts.app(size: 13, weight: .semibold))
+                .foregroundStyle(SabqTheme.warning)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: SabqLayout.space4) {
                 Text("بانتظار تعديل الكاتب")
-                    .font(SabqFonts.app(size: 12, weight: .heavy))
+                    .sabqText(SabqType.metaEmphasis)
+                    .foregroundStyle(SabqTheme.warning)
                 if let notes = item.reviewNotes, !notes.isEmpty {
                     Text(notes)
-                        .font(SabqFonts.app(size: 12, weight: .regular))
+                        .sabqText(SabqType.meta)
+                        .foregroundStyle(SabqTheme.textPrimary)
                         .multilineTextAlignment(.leading)
                 }
             }
             Spacer(minLength: 0)
         }
-        .foregroundStyle(SabqTheme.gold)
-        .padding(10)
+        .padding(SabqLayout.space12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(SabqTheme.gold.opacity(0.12))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(SabqTheme.gold.opacity(0.35), lineWidth: 0.5)
+            RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                .fill(SabqTheme.surfaceMuted)
         )
     }
 
     /// Shows the actual saved schedule separately from the writer's suggested
     /// weekly slot. Only saved dates can be overdue.
     private func scheduleCue(_ schedule: AdminSchedulePresentation) -> some View {
-        let tint: Color = schedule.isOverdue
-            ? SabqTheme.coral
-            : (schedule.source == .writerSuggestion ? SabqTheme.primaryEnd : SabqTheme.sky)
-        return HStack(spacing: 7) {
-            Image(systemName: schedule.isOverdue ? "exclamationmark.triangle.fill" : "clock.fill")
-                .font(SabqFonts.app(size: 12, weight: .bold))
-            VStack(alignment: .leading, spacing: 2) {
+        let tint: Color = schedule.isOverdue ? SabqTheme.danger : SabqTheme.primary
+        return HStack(alignment: .top, spacing: SabqLayout.space8) {
+            Image(systemName: schedule.isOverdue ? "exclamationmark.triangle" : "clock")
+                .font(SabqFonts.app(size: 13, weight: .semibold))
+                .foregroundStyle(tint)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: SabqLayout.space4) {
                 Text(schedule.title)
-                    .font(SabqFonts.app(size: 12, weight: .heavy))
+                    .sabqText(SabqType.metaEmphasis)
+                    .foregroundStyle(tint)
                 Text(schedule.fullLabel ?? schedule.detail)
-                    .font(SabqFonts.app(size: 11, weight: .semibold))
-                    .foregroundStyle(tint.opacity(0.86))
+                    .sabqText(SabqType.meta)
+                    .foregroundStyle(SabqTheme.textSecondary)
             }
-                .multilineTextAlignment(.leading)
+            .multilineTextAlignment(.leading)
             Spacer(minLength: 0)
         }
-        .foregroundStyle(tint)
-        .padding(10)
+        .padding(SabqLayout.space12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(tint.opacity(0.12))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(tint.opacity(0.35), lineWidth: 0.5)
+            RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                .fill(SabqTheme.surfaceMuted)
         )
     }
 
@@ -296,19 +273,21 @@ struct AdminNewsRow: View {
             }
         } label: {
             Image(systemName: "ellipsis")
-                .font(SabqFonts.app(size: 16, weight: .bold))
-                .foregroundStyle(SabqTheme.secondaryInk)
-                .frame(width: 38, height: 38)
-                .background(Circle().fill(SabqTheme.background.opacity(0.6)))
+                .font(SabqFonts.app(size: 16, weight: .semibold))
+                .foregroundStyle(SabqTheme.textSecondary)
+                .frame(width: SabqLayout.touchTarget, height: SabqLayout.touchTarget)
+                .contentShape(Rectangle())
         }
     }
 
     private func metaLabel(icon: String, text: String) -> some View {
-        HStack(spacing: 5) {
-            Image(systemName: icon).font(SabqFonts.app(size: 10, weight: .semibold))
-            Text(text).font(SabqFonts.app(size: 12, weight: .medium))
+        HStack(spacing: SabqLayout.space4) {
+            Image(systemName: icon)
+                .font(SabqFonts.app(size: 12))
+                .accessibilityHidden(true)
+            Text(text).sabqText(SabqType.meta)
         }
-        .foregroundStyle(SabqTheme.secondaryInk)
+        .foregroundStyle(SabqTheme.textSecondary)
     }
 
     private var rowTimestampLabel: String {
@@ -320,28 +299,30 @@ struct AdminNewsRow: View {
     }
 
     private func actionLabel(title: String, systemImage: String, tint: Color) -> some View {
-        HStack(spacing: 7) {
-            Image(systemName: systemImage).font(SabqFonts.app(size: 13, weight: .bold))
-            Text(title).font(SabqFonts.app(size: 13, weight: .semibold))
+        HStack(spacing: SabqLayout.space8) {
+            Image(systemName: systemImage)
+                .font(SabqFonts.app(size: 13, weight: .semibold))
+                .accessibilityHidden(true)
+            Text(title).sabqText(SabqType.metaEmphasis)
         }
         .foregroundStyle(tint)
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
+        .padding(.horizontal, SabqLayout.space12)
+        .frame(minHeight: SabqLayout.touchTarget)
         .background(
-            RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous)
-                .fill(tint.opacity(0.10))
+            RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
+                .fill(SabqTheme.surfaceMuted)
         )
     }
 }
 
 // MARK: Skeleton
 
-/// Placeholder row shown while the (mocked) service is "loading".
+/// Placeholder row shown while the service is loading.
 struct AdminNewsRowSkeleton: View {
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SabqLayout.space12) {
             HStack {
-                SkeletonBox(width: 72, height: 22, radius: 11)
+                SkeletonBox(width: 72, height: 22, radius: SabqRadius.small)
                 Spacer()
                 SkeletonBox(width: 60, height: 12)
             }
@@ -349,16 +330,8 @@ struct AdminNewsRowSkeleton: View {
             SkeletonBox(width: 220, height: 14)
             SkeletonBox(width: 150, height: 12)
         }
-        .padding(16)
+        .padding(.vertical, SabqLayout.rowPadding)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
-                .fill(SabqTheme.surface)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
-                .stroke(SabqTheme.outline.opacity(0.5), lineWidth: 0.5)
-        )
     }
 }
 
@@ -420,9 +393,9 @@ enum AdminWorkflowAction: Identifiable {
 
     var tint: Color {
         switch self {
-        case .requestRevision: return SabqTheme.gold
-        case .archive:         return SabqTheme.coral
-        case .permanentDelete: return SabqTheme.coral
+        case .requestRevision: return SabqTheme.actionFill
+        case .archive:         return SabqTheme.danger
+        case .permanentDelete: return SabqTheme.danger
         }
     }
 }
@@ -439,31 +412,45 @@ struct AdminReasonSheet: View {
 
     private var trimmed: String { text.trimmingCharacters(in: .whitespacesAndNewlines) }
     private var isValid: Bool { trimmed.count >= 5 }
+    /// Destructive actions read as danger text on a quiet fill: a light danger
+    /// fill under white text fails contrast in dark mode.
+    private var isDestructive: Bool {
+        if case .requestRevision = action { return false }
+        return true
+    }
+    private var confirmInk: Color {
+        guard isValid else { return SabqTheme.disabledInk }
+        return isDestructive ? SabqTheme.danger : SabqTheme.onAction
+    }
+    private var confirmFill: Color {
+        guard isValid else { return SabqTheme.disabledFill }
+        return isDestructive ? SabqTheme.surfaceMuted : SabqTheme.actionFill
+    }
 
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: SabqLayout.space16) {
                     Text(action.explanation)
-                        .font(SabqFonts.app(size: 13, weight: .medium))
-                        .foregroundStyle(SabqTheme.secondaryInk)
+                        .sabqText(SabqType.excerpt)
+                        .foregroundStyle(SabqTheme.textSecondary)
                         .multilineTextAlignment(.leading)
 
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: SabqLayout.space8) {
                         Text(action.fieldLabel)
-                            .font(SabqFonts.app(size: 13, weight: .bold))
-                            .foregroundStyle(SabqTheme.secondaryInk)
+                            .sabqText(SabqType.metaEmphasis)
+                            .foregroundStyle(SabqTheme.textSecondary)
                         TextEditor(text: $text)
-                            .font(SabqFonts.app(size: 15))
-                            .foregroundStyle(SabqTheme.ink)
+                            .sabqText(SabqType.excerpt)
+                            .foregroundStyle(SabqTheme.textPrimary)
                             .frame(minHeight: 140)
                             .scrollContentBackground(.hidden)
-                            .padding(10)
-                            .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(SabqTheme.surface))
-                            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(SabqTheme.outline.opacity(0.6), lineWidth: 0.5))
+                            .padding(SabqLayout.space8)
+                            .background(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous).fill(SabqTheme.surface))
+                            .overlay(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous).stroke(SabqTheme.outline, lineWidth: 1))
                         Text("5 أحرف على الأقل")
-                            .font(SabqFonts.app(size: 11, weight: .medium))
-                            .foregroundStyle(!trimmed.isEmpty && !isValid ? SabqTheme.coral : SabqTheme.tertiaryInk)
+                            .sabqText(SabqType.tag)
+                            .foregroundStyle(!trimmed.isEmpty && !isValid ? SabqTheme.danger : SabqTheme.textTertiary)
                     }
 
                     Button {
@@ -472,20 +459,21 @@ struct AdminReasonSheet: View {
                             if await onSubmit(trimmed) { dismiss() } else { submitting = false }
                         }
                     } label: {
-                        HStack(spacing: 8) {
-                            if submitting { ProgressView().controlSize(.small) }
-                            Text(action.confirmTitle).font(SabqFonts.app(size: 16, weight: .bold))
+                        HStack(spacing: SabqLayout.space8) {
+                            if submitting { ProgressView().controlSize(.small).tint(confirmInk) }
+                            Text(action.confirmTitle).sabqText(SabqType.button)
                         }
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                        .background(RoundedRectangle(cornerRadius: SabqTheme.buttonRadius, style: .continuous).fill(action.tint))
-                        .opacity(isValid ? 1 : 0.5)
+                        .foregroundStyle(confirmInk)
+                        .frame(maxWidth: .infinity, minHeight: SabqLayout.controlHeight)
+                        .background(
+                            RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                                .fill(confirmFill)
+                        )
                     }
                     .buttonStyle(.plain)
                     .disabled(!isValid || submitting)
                 }
-                .padding(16)
+                .padding(SabqLayout.pageMargin)
             }
             .background(SabqTheme.background)
             .navigationTitle(action.title)

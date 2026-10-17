@@ -1,10 +1,9 @@
 import SwiftUI
 
-/// Local accent palette for the revisions surface — warm amber works
-/// better than `SabqTheme.coral` (which reads as "error" in this app)
-/// to communicate "needs your attention, not your panic".
+/// Accent for the revisions surface — the warning status role reads as
+/// "needs your attention, not your panic" and stays contrast-safe as text.
 enum RevisionPalette {
-    static let accent = Color(red: 0.95, green: 0.62, blue: 0.20)
+    static var accent: Color { SabqTheme.warning }
 }
 
 /// Lists articles the editorial team sent back to the writer for
@@ -17,23 +16,26 @@ struct ArticleRevisionsListView: View {
 
     var body: some View {
         ScrollView(showsIndicators: false) {
-            VStack(spacing: 16) {
+            VStack(spacing: SabqLayout.space16) {
                 header
 
                 if store.isLoading && store.items.isEmpty {
-                    VStack(spacing: 10) {
-                        ProgressView().tint(SabqTheme.primaryEnd)
+                    VStack(spacing: SabqLayout.space8) {
+                        ProgressView().tint(SabqTheme.primary)
                         Text("نجلب المقالات…")
-                            .font(SabqFonts.app(size: 13, weight: .medium))
-                            .foregroundStyle(SabqTheme.secondaryInk)
+                            .sabqText(SabqType.meta)
+                            .foregroundStyle(SabqTheme.textSecondary)
                     }
                     .frame(maxWidth: .infinity)
-                    .padding(.top, 40)
+                    .padding(.top, SabqLayout.space40)
                 } else if store.items.isEmpty {
                     emptyState
                 } else {
-                    LazyVStack(spacing: 12) {
+                    LazyVStack(spacing: 0) {
                         ForEach(store.items) { item in
+                            if item.id != store.items.first?.id {
+                                Divider().overlay(SabqTheme.separator)
+                            }
                             NavigationLink(value: DraftDeepLinkRoute(articleId: item.id)) {
                                 revisionCard(item)
                             }
@@ -42,9 +44,9 @@ struct ArticleRevisionsListView: View {
                     }
                 }
             }
-            .padding(.horizontal, 20)
-            .padding(.top, 18)
-            .padding(.bottom, 60)
+            .padding(.horizontal, SabqLayout.pageMargin)
+            .padding(.top, SabqLayout.space16)
+            .padding(.bottom, 64)
         }
         .background(SabqTheme.background)
         .sabqRTL()
@@ -52,8 +54,8 @@ struct ArticleRevisionsListView: View {
         .toolbar {
             ToolbarItem(placement: .principal) {
                 Text("مقالات تنتظر التعديل")
-                    .font(SabqFonts.app(size: 15, weight: .bold))
-                    .foregroundStyle(SabqTheme.ink)
+                    .sabqText(SabqType.rowTitle)
+                    .foregroundStyle(SabqTheme.textPrimary)
             }
         }
         .task { await store.refresh() }
@@ -63,133 +65,121 @@ struct ArticleRevisionsListView: View {
     // MARK: Header
 
     private var header: some View {
-        VStack(spacing: 10) {
-            ZStack {
-                Circle()
-                    .fill(RevisionPalette.accent.opacity(0.12))
-                    .frame(width: 80, height: 80)
-                Image(systemName: "pencil.and.list.clipboard")
-                    .font(SabqFonts.app(size: 34, weight: .regular))
-                    .foregroundStyle(RevisionPalette.accent)
-            }
+        VStack(alignment: .leading, spacing: SabqLayout.space4) {
             Text("ملاحظات هيئة التحرير")
-                .font(SabqFonts.headline(size: 20))
-                .foregroundStyle(SabqTheme.ink)
+                .sabqText(SabqType.sectionHeading)
+                .foregroundStyle(SabqTheme.textPrimary)
+                .accessibilityAddTraits(.isHeader)
             Text("اضغط أي مقال لقراءة الملاحظة وإعادة الإرسال")
-                .font(SabqFonts.app(size: 13, weight: .medium))
-                .foregroundStyle(SabqTheme.secondaryInk)
-                .multilineTextAlignment(.center)
+                .sabqText(SabqType.meta)
+                .foregroundStyle(SabqTheme.textSecondary)
+                .multilineTextAlignment(.leading)
         }
-        .frame(maxWidth: .infinity)
-        .padding(.top, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     // MARK: Empty state
 
     private var emptyState: some View {
-        VStack(spacing: 14) {
-            Image(systemName: "checkmark.seal.fill")
-                .font(SabqFonts.app(size: 48, weight: .regular))
-                .foregroundStyle(SabqTheme.leaf)
+        VStack(spacing: SabqLayout.space12) {
+            Image(systemName: "checkmark.seal")
+                .font(SabqFonts.app(size: 40, weight: .light))
+                .foregroundStyle(SabqTheme.success)
+                .accessibilityHidden(true)
             Text("لا توجد مقالات بانتظار التعديل")
-                .font(SabqFonts.app(size: 16, weight: .bold))
-                .foregroundStyle(SabqTheme.ink)
+                .sabqText(SabqType.rowTitle)
+                .foregroundStyle(SabqTheme.textPrimary)
             Text("ستظهر هنا أي مقالات يطلب فريق التحرير تعديلها.")
-                .font(SabqFonts.app(size: 13))
-                .foregroundStyle(SabqTheme.secondaryInk)
+                .sabqText(SabqType.meta)
+                .foregroundStyle(SabqTheme.textSecondary)
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 40)
-        .padding(.horizontal, 20)
+        .padding(.vertical, SabqLayout.space40)
+        .padding(.horizontal, SabqLayout.space16)
     }
 
-    // MARK: Card
+    // MARK: Row
 
     private func revisionCard(_ item: ArticleRevisionSummary) -> some View {
-        SurfaceCard(accent: RevisionPalette.accent) {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(alignment: .top, spacing: 12) {
-                    if let urlStr = item.imageURL, let url = URL(string: urlStr) {
-                        CachedAsyncImage(url: url, contentMode: .fill) {
-                            placeholderThumb
-                        }
-                        .frame(width: 84, height: 84)
-                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                    } else {
-                        placeholderThumb
-                            .frame(width: 84, height: 84)
-                            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        VStack(alignment: .leading, spacing: SabqLayout.space12) {
+            HStack(alignment: .top, spacing: SabqLayout.space12) {
+                VStack(alignment: .leading, spacing: SabqLayout.space4) {
+                    HStack(spacing: SabqLayout.space4) {
+                        Image(systemName: item.isOpinion ? "text.quote" : "newspaper")
+                            .font(SabqFonts.app(size: 12, weight: .semibold))
+                            .accessibilityHidden(true)
+                        Text(item.isOpinion ? "مقال رأي" : "خبر")
+                            .sabqText(SabqType.tag)
                     }
+                    .foregroundStyle(SabqTheme.primary)
+                    Text(item.title)
+                        .sabqText(SabqType.rowTitle)
+                        .foregroundStyle(SabqTheme.textPrimary)
+                        .lineLimit(3)
+                        .multilineTextAlignment(.leading)
 
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack(spacing: 6) {
-                            Image(systemName: item.isOpinion ? "text.quote" : "newspaper.fill")
-                                .font(SabqFonts.app(size: 11, weight: .bold))
-                                .foregroundStyle(RevisionPalette.accent)
-                            Text(item.isOpinion ? "مقال رأي" : "خبر")
-                                .font(SabqFonts.app(size: 11, weight: .heavy))
-                                .foregroundStyle(RevisionPalette.accent)
-                        }
-                        Text(item.title)
-                            .font(SabqFonts.app(size: 15, weight: .bold))
-                            .foregroundStyle(SabqTheme.ink)
-                            .lineLimit(3)
-                            .multilineTextAlignment(.leading)
-
-                        if let when = relativeDate(item.requestedAt) {
-                            Text(when)
-                                .font(SabqFonts.app(size: 11, weight: .medium))
-                                .foregroundStyle(SabqTheme.tertiaryInk)
-                        }
+                    if let when = relativeDate(item.requestedAt) {
+                        Text(when)
+                            .sabqText(SabqType.meta)
+                            .foregroundStyle(SabqTheme.textTertiary)
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
 
-                if !item.reviewNotes.isEmpty {
-                    HStack(alignment: .top, spacing: 8) {
-                        Image(systemName: "quote.opening")
-                            .font(SabqFonts.app(size: 12, weight: .bold))
-                            .foregroundStyle(RevisionPalette.accent)
-                            .padding(.top, 2)
-                        Text(item.reviewNotes)
-                            .font(SabqFonts.app(size: 13, weight: .medium))
-                            .foregroundStyle(SabqTheme.ink)
-                            .lineLimit(4)
-                            .multilineTextAlignment(.leading)
-                            .lineSpacing(3)
-                    }
-                    .padding(12)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .fill(RevisionPalette.accent.opacity(0.10))
-                    )
-                }
-
-                HStack(spacing: 6) {
-                    Text("افتح وعدّل")
-                        .font(SabqFonts.app(size: 14, weight: .bold))
-                    Image(systemName: "arrow.left")
-                        .font(SabqFonts.app(size: 12, weight: .heavy))
-                }
-                .foregroundStyle(SabqTheme.primaryEnd)
-                .frame(maxWidth: .infinity, alignment: .trailing)
+                thumbnail(item)
             }
+
+            if !item.reviewNotes.isEmpty {
+                HStack(alignment: .top, spacing: SabqLayout.space8) {
+                    Image(systemName: "quote.opening")
+                        .font(SabqFonts.app(size: 12, weight: .semibold))
+                        .foregroundStyle(RevisionPalette.accent)
+                        .padding(.top, 2)
+                        .accessibilityHidden(true)
+                    Text(item.reviewNotes)
+                        .sabqText(SabqType.meta)
+                        .foregroundStyle(SabqTheme.textPrimary)
+                        .lineLimit(4)
+                        .multilineTextAlignment(.leading)
+                        .lineSpacing(3)
+                }
+                .padding(SabqLayout.space12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(
+                    RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                        .fill(SabqTheme.surfaceMuted)
+                )
+            }
+
+            HStack(spacing: SabqLayout.space4) {
+                Text("افتح وعدّل")
+                    .sabqText(SabqType.metaEmphasis)
+                Image(systemName: "arrow.left")
+                    .font(SabqFonts.app(size: 12, weight: .semibold))
+                    .accessibilityHidden(true)
+            }
+            .foregroundStyle(SabqTheme.primary)
+            .frame(maxWidth: .infinity, alignment: .trailing)
         }
+        .padding(.vertical, SabqLayout.rowPadding)
+        .contentShape(Rectangle())
     }
 
-    private var placeholderThumb: some View {
-        LinearGradient(
-            colors: [RevisionPalette.accent.opacity(0.20), RevisionPalette.accent.opacity(0.05)],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
-        .overlay {
-            Image(systemName: "doc.text")
-                .font(SabqFonts.app(size: 22, weight: .ultraLight))
-                .foregroundStyle(RevisionPalette.accent.opacity(0.55))
+    @ViewBuilder
+    private func thumbnail(_ item: ArticleRevisionSummary) -> some View {
+        Group {
+            if let urlStr = item.imageURL, let url = URL(string: urlStr) {
+                CachedAsyncImage(url: url, contentMode: .fill) {
+                    SabqImagePlaceholder()
+                }
+            } else {
+                SabqImagePlaceholder()
+            }
         }
+        .frame(width: 112, height: 63)
+        .clipShape(RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous))
+        .accessibilityHidden(true)
     }
 
     private func relativeDate(_ iso: String?) -> String? {

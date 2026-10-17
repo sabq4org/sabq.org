@@ -2,10 +2,10 @@ import SwiftUI
 
 // MARK: - أدوات مشتركة لسطوح الاقتصاد
 
-/// ألوان الاتجاه (نظير emerald/red في الويب؛ ورسوم النشرة الشهرية #1a7f56 / #d24a26).
+/// ألوان الاتجاه: أدوار الحالة في نظام التصميم (نجاح للصعود، خطر للهبوط).
 nonisolated enum EconomyTone {
-    static let up = Color(red: 0.10, green: 0.50, blue: 0.34)
-    static let down = Color(red: 0.82, green: 0.29, blue: 0.15)
+    static let up = SabqTheme.success
+    static let down = SabqTheme.danger
 
     static func color(_ tone: String) -> Color? {
         switch tone {
@@ -16,26 +16,26 @@ nonisolated enum EconomyTone {
     }
 }
 
-/// شارة «جديد» الحمراء بنقطة نابضة (48 ساعة من إدخال التقرير).
+/// شارة «جديد» بنقطة نابضة (48 ساعة من إدخال التقرير).
 struct EconomyNewBadge: View {
     var label: String = "جديد"
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var pulse = false
 
     var body: some View {
-        HStack(spacing: 5) {
+        HStack(spacing: SabqLayout.space4) {
             Circle()
-                .fill(.white)
+                .fill(SabqTheme.onAction)
                 .frame(width: 6, height: 6)
                 .opacity(pulse ? 0.35 : 1)
                 .animation(reduceMotion ? nil : .easeInOut(duration: 1).repeatForever(autoreverses: true), value: pulse)
             Text(label)
-                .font(SabqFonts.app(size: 10, weight: .bold))
+                .font(SabqType.tag.font)
         }
-        .foregroundStyle(.white)
-        .padding(.horizontal, 8)
-        .padding(.vertical, 3)
-        .background(Capsule(style: .continuous).fill(Color(red: 0.94, green: 0.27, blue: 0.27)))
+        .foregroundStyle(SabqTheme.onAction)
+        .padding(.horizontal, SabqLayout.space8)
+        .padding(.vertical, 2)
+        .background(Capsule(style: .continuous).fill(SabqTheme.actionFill))
         .onAppear { pulse = true }
     }
 }
@@ -58,19 +58,16 @@ struct EconomyChangeChip: View {
         if value == nil && hideEmpty {
             EmptyView()
         } else {
-            let tint: Color = direction > 0 ? EconomyTone.up : (direction < 0 ? EconomyTone.down : SabqTheme.secondaryInk)
-            HStack(spacing: 3) {
+            let tint: Color = direction > 0 ? EconomyTone.up : (direction < 0 ? EconomyTone.down : SabqTheme.textSecondary)
+            HStack(spacing: 2) {
                 Text(value == nil ? "—" : (direction > 0 ? "▲" : (direction < 0 ? "▼" : "•")))
                 if value != nil {
                     Text(EconomyFormat.fmtPct(value, digits) + suffix)
                         .monospacedDigit()
                 }
             }
-            .font(SabqFonts.app(size: 11, weight: .semibold))
+            .font(SabqType.tag.font)
             .foregroundStyle(tint)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 3)
-            .background(Capsule(style: .continuous).fill(tint.opacity(0.10)))
             .environment(\.layoutDirection, .leftToRight)
         }
     }
@@ -79,7 +76,7 @@ struct EconomyChangeChip: View {
 /// خط شرارة صغير (88×30 في الويب) — الأقدم يمينًا تحت RTL.
 struct EconomySparkline: View {
     let values: [Double]
-    var tint: Color = SabqTheme.primaryEnd
+    var tint: Color = SabqTheme.primary
     var lineWidth: CGFloat = 2
 
     var body: some View {
@@ -153,44 +150,44 @@ struct EconomyHomeBlock: View {
     private func teaser(title: String, figure: String, caption: String,
                         badge: String?, cta: String) -> some View {
         NavigationLink(value: EconomyRoute()) {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: SabqLayout.space8) {
+                HStack(spacing: SabqLayout.space8) {
                     Text(title)
-                        .font(SabqFonts.editorial(.subheadline, size: 14, weight: .bold))
-                        .foregroundStyle(SabqTheme.ink)
+                        .font(SabqType.rowTitle.font)
+                        .foregroundStyle(SabqTheme.textPrimary)
                     Spacer(minLength: 0)
                     if let badge { EconomyNewBadge(label: badge) }
                 }
 
                 Text(figure)
-                    .font(SabqFonts.editorial(.largeTitle, size: 32, weight: .heavy))
+                    .font(SabqFonts.headline(size: 32))
                     .monospacedDigit()
-                    .foregroundStyle(SabqTheme.primaryEnd)
+                    .foregroundStyle(SabqTheme.primary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.65)
                     .accessibilityIdentifier("economy.home.figure")
 
                 Text(caption)
-                    .font(SabqFonts.editorial(.caption, size: 11, weight: .regular))
-                    .foregroundStyle(SabqTheme.secondaryInk)
+                    .sabqText(SabqType.meta)
+                    .foregroundStyle(SabqTheme.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
 
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                HStack(alignment: .firstTextBaseline, spacing: SabqLayout.space8) {
                     Text("المصدر: البنك المركزي السعودي")
-                        .font(SabqFonts.editorial(.caption2, size: 10, weight: .regular))
-                        .foregroundStyle(SabqTheme.secondaryInk)
+                        .font(SabqType.tag.font)
+                        .foregroundStyle(SabqTheme.textTertiary)
                     Spacer(minLength: 0)
-                    HStack(spacing: 4) {
+                    HStack(spacing: SabqLayout.space4) {
                         Text(cta)
-                            .font(SabqFonts.editorial(.caption, size: 11, weight: .bold))
-                        Image(systemName: "arrow.left")
-                            .font(.system(size: 10, weight: .semibold))
+                            .font(SabqType.tag.font)
+                        Image(systemName: "chevron.left")
+                            .font(SabqType.tag.font)
                     }
-                    .foregroundStyle(SabqTheme.primaryEnd)
+                    .foregroundStyle(SabqTheme.primary)
                     .fixedSize(horizontal: true, vertical: false)
                 }
             }
-            .padding(14)
+            .padding(SabqLayout.space16)
             .frame(maxWidth: .infinity, alignment: .leading)
             .sabqBlockSurface()
         }
@@ -222,14 +219,15 @@ struct EconomyWeeklyHomeCard: View {
         Array(weekly.topSectors.prefix(3))
     }
 
+    /// ألوان بيانات للحصص (لا نص عليها): الأزرق الأساسي ثم درجتان أهدأ.
     private static let sectorColors: [Color] = [
-        SabqTheme.brandBlue,
+        SabqTheme.primary,
         SabqTheme.brandSky,
         SabqTheme.brandSky.opacity(0.45),
     ]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: SabqLayout.space12) {
             header
             figureRow
             if isExpanded {
@@ -237,7 +235,7 @@ struct EconomyWeeklyHomeCard: View {
                     .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
-        .padding(16)
+        .padding(SabqLayout.space16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .sabqBlockSurface()
         .contentShape(RoundedRectangle(cornerRadius: SabqTheme.blockRadius, style: .continuous))
@@ -251,27 +249,29 @@ struct EconomyWeeklyHomeCard: View {
     }
 
     private var header: some View {
-        HStack(alignment: .center, spacing: 8) {
+        HStack(alignment: .center, spacing: SabqLayout.space8) {
             Text("أين أنفق السعوديون؟")
-                .font(SabqFonts.app(size: 17, weight: .bold))
-                .foregroundStyle(SabqTheme.ink)
+                .font(SabqType.rowTitle.font)
+                .foregroundStyle(SabqTheme.textPrimary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.85)
             if isFresh { EconomyNewBadge(label: "جديد") }
-            Spacer(minLength: 6)
+            Spacer(minLength: SabqLayout.space4)
             Text(weekly.weekLabelAr)
-                .font(SabqFonts.app(size: 11, weight: .regular))
-                .foregroundStyle(SabqTheme.tertiaryInk)
+                .font(SabqType.tag.font)
+                .foregroundStyle(SabqTheme.textTertiary)
                 .lineLimit(1)
             Button(action: toggle) {
                 Image(systemName: "chevron.down")
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(SabqTheme.primaryEnd)
+                    .font(SabqType.metaEmphasis.font)
+                    .foregroundStyle(SabqTheme.primary)
                     .rotationEffect(.degrees(isExpanded ? 180 : 0))
-                    .frame(width: 28, height: 28)
-                    .background(Circle().fill(SabqTheme.primaryEnd.opacity(0.12)))
+                    .frame(width: SabqLayout.touchTarget, height: SabqLayout.touchTarget)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .padding(.vertical, -SabqLayout.space12)
+            .padding(.trailing, -SabqLayout.space12)
             .accessibilityLabel(isExpanded ? "إخفاء توزيع الإنفاق" : "عرض أين صُرف الإنفاق")
         }
     }
@@ -280,29 +280,29 @@ struct EconomyWeeklyHomeCard: View {
         let parts = EconomyFormat.fmtSar(weekly.totalValue).split(separator: " ", maxSplits: 1).map(String.init)
         let number = parts.first ?? ""
         let unit = (parts.count > 1 ? parts[1] + " " : "") + "ريال"
-        return HStack(alignment: .bottom, spacing: 12) {
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(alignment: .firstTextBaseline, spacing: 5) {
+        return HStack(alignment: .bottom, spacing: SabqLayout.space12) {
+            VStack(alignment: .leading, spacing: SabqLayout.space8) {
+                HStack(alignment: .firstTextBaseline, spacing: SabqLayout.space4) {
                     Text(number)
-                        .font(SabqFonts.app(size: 34, weight: .bold))
+                        .font(SabqFonts.headline(size: 32))
                         .monospacedDigit()
-                        .foregroundStyle(SabqTheme.ink)
+                        .foregroundStyle(SabqTheme.textPrimary)
                         .accessibilityIdentifier("economy.home.figure")
                     Text(unit)
-                        .font(SabqFonts.app(size: 15, weight: .semibold))
-                        .foregroundStyle(SabqTheme.secondaryInk)
+                        .font(SabqType.excerpt.font)
+                        .foregroundStyle(SabqTheme.textSecondary)
                 }
                 changeBadge
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
             if series.count > 1 {
-                VStack(spacing: 4) {
+                VStack(spacing: SabqLayout.space4) {
                     weeksBars
                         .frame(width: 92, height: 54)
                     Text("آخر \(series.count) أسابيع")
-                        .font(SabqFonts.app(size: 10, weight: .regular))
-                        .foregroundStyle(SabqTheme.tertiaryInk)
+                        .font(SabqType.tag.font)
+                        .foregroundStyle(SabqTheme.textTertiary)
                 }
                 .accessibilityHidden(true)
             }
@@ -313,27 +313,25 @@ struct EconomyWeeklyHomeCard: View {
         let pct = weekly.totalChangePct
         let up = pct >= 0
         let tint = up ? EconomyTone.up : EconomyTone.down
-        return HStack(spacing: 4) {
+        return HStack(spacing: SabqLayout.space4) {
             Text("\(up ? "▲" : "▼") \(EconomyFormat.fmtPct(pct))")
-                .font(SabqFonts.app(size: 12.5, weight: .semibold))
+                .font(SabqType.metaEmphasis.font)
                 .foregroundStyle(tint)
                 .monospacedDigit()
+                .environment(\.layoutDirection, .leftToRight)
             Text("عن الأسبوع السابق")
-                .font(SabqFonts.app(size: 12, weight: .regular))
-                .foregroundStyle(SabqTheme.tertiaryInk)
+                .font(SabqType.meta.font)
+                .foregroundStyle(SabqTheme.textTertiary)
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 3)
-        .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(tint.opacity(0.10)))
     }
 
     /// الأقدم يمينًا تحت RTL (أول عنصر في HStack)، والأسبوع الحالي مُبرز.
     private var weeksBars: some View {
         let maxV = max(series.max() ?? 1, 1)
-        return HStack(alignment: .bottom, spacing: 6) {
+        return HStack(alignment: .bottom, spacing: SabqLayout.space4) {
             ForEach(Array(series.enumerated()), id: \.offset) { index, value in
-                RoundedRectangle(cornerRadius: 3, style: .continuous)
-                    .fill(index == series.count - 1 ? SabqTheme.brandBlue : SabqTheme.brandSky.opacity(0.22))
+                Rectangle()
+                    .fill(index == series.count - 1 ? SabqTheme.primary : SabqTheme.primary.opacity(0.25))
                     .frame(maxWidth: .infinity)
                     .frame(height: max(10, 54 * CGFloat(value / maxV)))
             }
@@ -343,12 +341,12 @@ struct EconomyWeeklyHomeCard: View {
     private var whereSection: some View {
         let shown = topSectors
         let rest = max(0, 100 - shown.reduce(0) { $0 + $1.share })
-        return VStack(alignment: .leading, spacing: 10) {
-            Rectangle().fill(SabqTheme.outline).frame(height: 1)
+        return VStack(alignment: .leading, spacing: SabqLayout.space12) {
+            Rectangle().fill(SabqTheme.separator).frame(height: 1)
 
             Text("أين؟")
-                .font(SabqFonts.app(size: 13, weight: .semibold))
-                .foregroundStyle(SabqTheme.secondaryInk)
+                .font(SabqType.metaEmphasis.font)
+                .foregroundStyle(SabqTheme.textSecondary)
 
             GeometryReader { geo in
                 let gaps = CGFloat(shown.count) * 2
@@ -362,25 +360,26 @@ struct EconomyWeeklyHomeCard: View {
                         .frame(width: usable * CGFloat(rest / 100))
                 }
             }
-            .frame(height: 10)
-            .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+            .frame(height: 8)
+            .clipShape(Capsule())
             .accessibilityHidden(true)
 
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: SabqLayout.space8) {
                 ForEach(Array(shown.enumerated()), id: \.element.id) { index, sector in
-                    HStack(spacing: 8) {
-                        RoundedRectangle(cornerRadius: 3, style: .continuous)
+                    HStack(spacing: SabqLayout.space8) {
+                        Circle()
                             .fill(Self.sectorColors[index % Self.sectorColors.count])
-                            .frame(width: 9, height: 9)
+                            .frame(width: 8, height: 8)
                         Text(sector.ar)
-                            .font(SabqFonts.app(size: 14, weight: .regular))
-                            .foregroundStyle(SabqTheme.ink)
+                            .font(SabqType.excerpt.font)
+                            .foregroundStyle(SabqTheme.textPrimary)
                             .lineLimit(1)
-                        Spacer(minLength: 8)
+                        Spacer(minLength: SabqLayout.space8)
                         Text(EconomyFormat.fmtPct(sector.share))
-                            .font(SabqFonts.app(size: 13, weight: .semibold))
+                            .font(SabqType.metaEmphasis.font)
                             .monospacedDigit()
-                            .foregroundStyle(SabqTheme.secondaryInk)
+                            .foregroundStyle(SabqTheme.textSecondary)
+                            .environment(\.layoutDirection, .leftToRight)
                     }
                     .accessibilityElement(children: .combine)
                 }
@@ -388,16 +387,15 @@ struct EconomyWeeklyHomeCard: View {
 
             HStack(alignment: .firstTextBaseline) {
                 Text("المصدر: البنك المركزي السعودي")
-                    .font(SabqFonts.app(size: 11, weight: .regular))
-                    .foregroundStyle(SabqTheme.tertiaryInk)
-                Spacer(minLength: 8)
+                    .font(SabqType.tag.font)
+                    .foregroundStyle(SabqTheme.textTertiary)
+                Spacer(minLength: SabqLayout.space8)
                 NavigationLink(value: EconomyRoute()) {
                     HomeSectionLinkLabel(title: "التفاصيل")
                 }
                 .buttonStyle(.plain)
                 .accessibilityHint("عرض تفاصيل الاقتصاد بالقطاعات والمدن")
             }
-            .padding(.top, 2)
         }
     }
 }
@@ -409,78 +407,70 @@ struct EconomyMonthlyCardView: View {
     var compact: Bool = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: SabqLayout.space8) {
             Text(card.cardTitle)
-                .font(SabqFonts.app(size: 11, weight: .medium))
-                .foregroundStyle(SabqTheme.secondaryInk)
+                .font(SabqType.tag.font)
+                .foregroundStyle(SabqTheme.textSecondary)
                 .lineLimit(1)
             Text(card.headline)
-                .font(SabqFonts.app(size: compact ? 13 : 15, weight: .bold))
-                .foregroundStyle(SabqTheme.ink)
+                .sabqText(compact ? SabqType.metaEmphasis : SabqType.rowTitle)
+                .foregroundStyle(SabqTheme.textPrimary)
                 .lineLimit(compact ? 3 : nil)
                 .fixedSize(horizontal: false, vertical: true)
             Text(card.figure)
-                .font(SabqFonts.app(size: compact ? 20 : 24, weight: .heavy))
-                .foregroundStyle(EconomyTone.color(card.tone) ?? SabqTheme.ink)
+                .font(SabqFonts.headline(size: compact ? 20 : 24))
+                .foregroundStyle(EconomyTone.color(card.tone) ?? SabqTheme.textPrimary)
                 .monospacedDigit()
                 .environment(\.layoutDirection, .leftToRight)
                 .frame(maxWidth: .infinity, alignment: .leading)
             Text(card.detailAr)
-                .font(SabqFonts.app(size: 12, weight: .regular))
-                .foregroundStyle(SabqTheme.secondaryInk)
+                .sabqText(SabqType.meta)
+                .foregroundStyle(SabqTheme.textSecondary)
                 .lineLimit(compact ? 2 : nil)
                 .fixedSize(horizontal: false, vertical: true)
             if !compact, card.series.count > 1 {
                 EconomyMiniArea(values: card.series.map(\.value), labels: card.series.map { EconomyFormat.fmtMonthShort($0.period) },
-                                tint: EconomyTone.color(card.tone) ?? SabqTheme.primaryEnd)
+                                tint: EconomyTone.color(card.tone) ?? SabqTheme.primary)
                     .frame(height: 96)
                 if let label = card.seriesLabelAr {
                     Text(label)
-                        .font(SabqFonts.app(size: 10, weight: .regular))
-                        .foregroundStyle(SabqTheme.tertiaryInk)
+                        .font(SabqType.tag.font)
+                        .foregroundStyle(SabqTheme.textTertiary)
                 }
             }
         }
-        .padding(12)
-        .padding(.top, 3)
+        .padding(SabqLayout.space12)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .economyAccentCard(tone: EconomyTone.color(card.tone) ?? SabqTheme.primaryEnd)
+        .economyAccentCard(tone: EconomyTone.color(card.tone) ?? SabqTheme.primary)
     }
 }
 
-/// بطاقة بيضاء بحد علوي ملوّن (3 نقاط) ينحني مع زوايا البطاقة — الشريط يُرسم
-/// كطبقة خلفية ثم تُقصّ الحاوية كلها بالشكل المستدير (ملاحظة المالك 2026-09-12).
+/// بلوك هادئ للبطاقات الاقتصادية: تعبئة رمادية خفيفة بزوايا 12 بلا حد ولا شريط
+/// ملوّن — لون الاتجاه يبقى في الرقم نفسه. `tone` محفوظ لتوافق النداءات.
 struct EconomyAccentCardModifier: ViewModifier {
     let tone: Color
-    var radius: CGFloat = 12
+    var radius: CGFloat = SabqRadius.medium
 
     func body(content: Content) -> some View {
         content
-            .background(
-                ZStack(alignment: .top) {
-                    SabqTheme.surface
-                    tone.frame(height: 3)
-                }
-            )
-            .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: radius, style: .continuous).stroke(SabqTheme.outline, lineWidth: 1))
+            .background(SabqTheme.surfaceMuted, in: RoundedRectangle(cornerRadius: radius, style: .continuous))
     }
 }
 
 extension View {
-    func economyAccentCard(tone: Color, radius: CGFloat = 12) -> some View {
+    func economyAccentCard(tone: Color, radius: CGFloat = SabqRadius.medium) -> some View {
         modifier(EconomyAccentCardModifier(tone: tone, radius: radius))
     }
 }
 
-/// مساحة صغيرة بخط وتعبئة متدرجة — الأقدم يمينًا، وعلامتا البداية والنهاية فقط.
+/// مساحة صغيرة بخط وتعبئة مسطحة خفيفة — الأقدم يمينًا، وعلامتا البداية والنهاية فقط.
 struct EconomyMiniArea: View {
     let values: [Double]
     var labels: [String] = []
-    var tint: Color = SabqTheme.primaryEnd
+    var tint: Color = SabqTheme.primary
 
     var body: some View {
-        VStack(spacing: 4) {
+        VStack(spacing: SabqLayout.space4) {
             GeometryReader { geo in
                 let pts = points(in: geo.size)
                 ZStack {
@@ -491,7 +481,7 @@ struct EconomyMiniArea: View {
                             p.addLine(to: CGPoint(x: pts[pts.count - 1].x, y: geo.size.height))
                             p.closeSubpath()
                         }
-                        .fill(LinearGradient(colors: [tint.opacity(0.25), tint.opacity(0.02)], startPoint: .top, endPoint: .bottom))
+                        .fill(tint.opacity(0.12))
                         Path { p in
                             p.move(to: pts[0])
                             for pt in pts.dropFirst() { p.addLine(to: pt) }
@@ -506,8 +496,8 @@ struct EconomyMiniArea: View {
                     Spacer(minLength: 0)
                     Text(labels.first ?? "")
                 }
-                .font(SabqFonts.app(size: 9, weight: .regular))
-                .foregroundStyle(SabqTheme.tertiaryInk)
+                .font(SabqType.tag.font)
+                .foregroundStyle(SabqTheme.textTertiary)
                 .environment(\.layoutDirection, .leftToRight)
             }
         }

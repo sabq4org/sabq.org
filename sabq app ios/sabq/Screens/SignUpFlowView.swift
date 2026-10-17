@@ -53,7 +53,7 @@ struct SignUpFlowView: View {
             } else {
                 ScrollViewReader { proxy in
                     ScrollView {
-                        LazyVStack(alignment: .leading, spacing: 14) {
+                        LazyVStack(alignment: .leading, spacing: SabqLayout.space12) {
                             ForEach(messages) { bubble in
                                 bubbleRow(bubble)
                                     .id(bubble.id)
@@ -61,16 +61,16 @@ struct SignUpFlowView: View {
 
                             if case .submitting = step {
                                 HStack {
-                                    ProgressView().tint(SabqTheme.primaryEnd)
+                                    ProgressView().tint(SabqTheme.primary)
                                     Text("ننشئ حسابك…")
-                                        .font(SabqFonts.app(size: 12, weight: .medium))
-                                        .foregroundStyle(SabqTheme.secondaryInk)
+                                        .sabqText(SabqType.tag)
+                                        .foregroundStyle(SabqTheme.textSecondary)
                                 }
-                                .padding(.vertical, 8)
+                                .padding(.vertical, SabqLayout.space8)
                             }
                         }
-                        .padding(.horizontal, 18)
-                        .padding(.vertical, 20)
+                        .padding(.horizontal, SabqLayout.space16)
+                        .padding(.vertical, SabqLayout.space24)
                     }
                     .onChange(of: messages.count) { _, _ in
                         if let last = messages.last {
@@ -113,64 +113,60 @@ struct SignUpFlowView: View {
 
     @ViewBuilder
     private var buildingProfile: some View {
-        VStack(alignment: .leading, spacing: 28) {
-            Spacer(minLength: 30)
+        VStack(alignment: .leading, spacing: SabqLayout.space32) {
+            Spacer(minLength: SabqLayout.space32)
 
             // Hero: animated SABQ AI orb
             HStack {
                 Spacer()
                 ZStack {
                     Circle()
-                        .fill(LinearGradient(
-                            colors: [SabqTheme.primaryStart, SabqTheme.primaryEnd],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ))
+                        .fill(SabqTheme.actionFill)
                         .frame(width: 96, height: 96)
                     Circle()
-                        .stroke(SabqTheme.primaryEnd.opacity(0.4), lineWidth: 3)
+                        .stroke(SabqTheme.primary.opacity(0.4), lineWidth: 3)
                         .frame(width: 124, height: 124)
                         .scaleEffect(buildProgress < Self.buildSteps.count ? 1.18 : 1.0)
                         .opacity(buildProgress < Self.buildSteps.count ? 0.0 : 0.6)
                         .animation(.easeInOut(duration: 1.2).repeatForever(autoreverses: false), value: buildProgress)
                     Image(systemName: buildProgress < Self.buildSteps.count ? "sparkles" : "checkmark")
                         .font(SabqFonts.app(size: 36, weight: .heavy))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(SabqTheme.onAction)
                 }
                 Spacer()
             }
 
             // Headline
-            VStack(alignment: .center, spacing: 6) {
+            VStack(alignment: .center, spacing: SabqLayout.space8) {
                 if buildProgress < Self.buildSteps.count {
                     Text("نُجهّز ملفّك الذكي…")
-                        .font(SabqFonts.app(size: 22, weight: .heavy))
-                        .foregroundStyle(SabqTheme.ink)
+                        .sabqText(SabqType.leadTitle)
+                        .foregroundStyle(SabqTheme.textPrimary)
                     Text("لحظات قليلة وتصبح سبق أقرب إليك")
-                        .font(SabqFonts.app(size: 13))
-                        .foregroundStyle(SabqTheme.secondaryInk)
+                        .sabqText(SabqType.meta)
+                        .foregroundStyle(SabqTheme.textSecondary)
                 } else {
                     Text("أهلاً \(name) 🎉")
-                        .font(SabqFonts.app(size: 26, weight: .heavy))
-                        .foregroundStyle(SabqTheme.ink)
+                        .sabqText(SabqType.articleTitle)
+                        .foregroundStyle(SabqTheme.textPrimary)
                     Text("ملفّك الذكي جاهز. كل خبر من الآن مرتّب لك أنت.")
-                        .font(SabqFonts.app(size: 13))
-                        .foregroundStyle(SabqTheme.secondaryInk)
+                        .sabqText(SabqType.meta)
+                        .foregroundStyle(SabqTheme.textSecondary)
                         .multilineTextAlignment(.center)
                 }
             }
             .frame(maxWidth: .infinity)
-            .padding(.horizontal, 24)
+            .padding(.horizontal, SabqLayout.space24)
 
             // Steps progressing one by one
-            VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: SabqLayout.space12) {
                 ForEach(Array(Self.buildSteps.enumerated()), id: \.offset) { idx, item in
-                    HStack(spacing: 12) {
+                    HStack(spacing: SabqLayout.space12) {
                         ZStack {
                             Circle()
                                 .fill(idx < buildProgress
                                       ? SabqTheme.actionFill
-                                      : SabqTheme.paleFill)
+                                      : SabqTheme.surfaceMuted)
                                 .frame(width: 28, height: 28)
                             if idx < buildProgress {
                                 Image(systemName: "checkmark")
@@ -178,38 +174,30 @@ struct SignUpFlowView: View {
                                     .foregroundStyle(SabqTheme.onAction)
                             } else if idx == buildProgress {
                                 ProgressView()
-                                    .tint(SabqTheme.primaryEnd)
+                                    .tint(SabqTheme.primary)
                                     .scaleEffect(0.7)
                             } else {
                                 Image(systemName: item.icon)
-                                    .font(SabqFonts.app(size: 12, weight: .semibold))
-                                    .foregroundStyle(SabqTheme.tertiaryInk)
+                                    .sabqText(SabqType.tag)
+                                    .foregroundStyle(SabqTheme.textTertiary)
                             }
                         }
                         Text(item.label)
-                            .font(SabqFonts.app(size: 14, weight: idx <= buildProgress ? .bold : .medium))
-                            .foregroundStyle(idx <= buildProgress ? SabqTheme.ink : SabqTheme.tertiaryInk)
+                            .font(SabqFonts.app(size: 15, weight: idx <= buildProgress ? .semibold : .regular))
+                            .foregroundStyle(idx <= buildProgress ? SabqTheme.textPrimary : SabqTheme.textTertiary)
                         Spacer(minLength: 0)
                     }
                     .opacity(idx <= buildProgress ? 1.0 : 0.55)
                 }
             }
-            .padding(20)
+            .padding(SabqLayout.space24)
             .background(
-                RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
-                    .fill(.ultraThinMaterial)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
-                            .fill(SabqTheme.primaryEnd.opacity(0.04))
-                    )
+                RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                    .fill(SabqTheme.surfaceMuted)
             )
-            .overlay(
-                RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
-                    .stroke(SabqTheme.primaryEnd.opacity(0.18), lineWidth: 0.5)
-            )
-            .padding(.horizontal, 18)
+            .padding(.horizontal, SabqLayout.space16)
 
-            Spacer(minLength: 16)
+            Spacer(minLength: SabqLayout.space16)
 
             // CTA appears only after all steps complete
             if buildProgress >= Self.buildSteps.count {
@@ -218,15 +206,14 @@ struct SignUpFlowView: View {
                     dismiss()
                 } label: {
                     Text("ابدأ التصفّح")
-                        .font(SabqFonts.app(size: 16, weight: .heavy))
+                        .sabqText(SabqType.button)
                         .foregroundStyle(SabqTheme.onAction)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 15)
-                        .background(SabqTheme.actionFill, in: RoundedRectangle(cornerRadius: SabqTheme.buttonRadius, style: .continuous))
+                        .frame(maxWidth: .infinity, minHeight: SabqLayout.controlHeight)
+                        .background(SabqTheme.actionFill, in: RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
                 }
                 .buttonStyle(.plain)
-                .padding(.horizontal, 18)
-                .padding(.bottom, 18)
+                .padding(.horizontal, SabqLayout.space16)
+                .padding(.bottom, SabqLayout.space16)
                 .transition(.opacity.combined(with: .move(edge: .bottom)))
             } else {
                 Color.clear.frame(height: 80)
@@ -252,46 +239,43 @@ struct SignUpFlowView: View {
     // MARK: - Header
 
     private var header: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: SabqLayout.space8) {
             ZStack {
                 Circle()
-                    .fill(LinearGradient(
-                        colors: [SabqTheme.primaryStart, SabqTheme.primaryEnd],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    ))
+                    .fill(SabqTheme.actionFill)
                     .frame(width: 36, height: 36)
                 Image(systemName: "sparkles")
                     .font(SabqFonts.app(size: 16, weight: .heavy))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(SabqTheme.onAction)
             }
-            VStack(alignment: .leading, spacing: 1) {
+            VStack(alignment: .leading, spacing: 0) {
                 Text("SABQ AI")
-                    .font(SabqFonts.app(size: 15, weight: .heavy))
-                    .foregroundStyle(SabqTheme.ink)
+                    .sabqText(SabqType.rowTitle)
+                    .foregroundStyle(SabqTheme.textPrimary)
                 Text("مرشدك إلى ملفّك")
-                    .font(SabqFonts.app(size: 11, weight: .medium))
-                    .foregroundStyle(SabqTheme.tertiaryInk)
+                    .sabqText(SabqType.meta)
+                    .foregroundStyle(SabqTheme.textSecondary)
             }
             Spacer(minLength: 0)
             Button {
                 dismiss()
             } label: {
                 Image(systemName: "xmark")
-                    .font(SabqFonts.app(size: 14, weight: .bold))
-                    .foregroundStyle(SabqTheme.secondaryInk)
-                    .padding(8)
-                    .background(Circle().fill(SabqTheme.paleFill))
+                    .font(SabqType.button.font)
+                    .foregroundStyle(SabqTheme.textSecondary)
+                    .frame(width: SabqLayout.touchTarget, height: SabqLayout.touchTarget)
+                    .contentShape(Rectangle())
             }
+            .accessibilityLabel("إغلاق")
             .buttonStyle(.plain)
         }
-        .padding(.horizontal, 18)
-        .padding(.vertical, 14)
-        .background(.ultraThinMaterial)
+        .padding(.horizontal, SabqLayout.space16)
+        .padding(.vertical, SabqLayout.space12)
+        .background(SabqTheme.background)
         .overlay(
             Rectangle()
-                .fill(SabqTheme.outline.opacity(0.4))
-                .frame(height: 0.5),
+                .fill(SabqTheme.separator)
+                .frame(height: 1),
             alignment: .bottom
         )
     }
@@ -300,14 +284,14 @@ struct SignUpFlowView: View {
 
     @ViewBuilder
     private func bubbleRow(_ bubble: Bubble) -> some View {
-        HStack(alignment: .top, spacing: 8) {
+        HStack(alignment: .top, spacing: SabqLayout.space8) {
             switch bubble.role {
             case .ai:
                 aiAvatar
                 aiBubble(bubble.text)
-                Spacer(minLength: 30)
+                Spacer(minLength: SabqLayout.space32)
             case .user:
-                Spacer(minLength: 30)
+                Spacer(minLength: SabqLayout.space32)
                 userBubble(bubble.text)
             }
         }
@@ -320,44 +304,40 @@ struct SignUpFlowView: View {
     private var aiAvatar: some View {
         ZStack {
             Circle()
-                .fill(LinearGradient(
-                    colors: [SabqTheme.primaryStart, SabqTheme.primaryEnd],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                ))
+                .fill(SabqTheme.actionFill)
                 .frame(width: 26, height: 26)
             Image(systemName: "sparkles")
-                .font(SabqFonts.app(size: 11, weight: .bold))
-                .foregroundStyle(.white)
+                .sabqText(SabqType.tag)
+                .foregroundStyle(SabqTheme.onAction)
         }
     }
 
     private func aiBubble(_ text: String) -> some View {
         Text(text)
-            .font(SabqFonts.app(size: 14, weight: .medium))
-            .foregroundStyle(SabqTheme.ink)
+            .sabqText(SabqType.excerpt)
+            .foregroundStyle(SabqTheme.textPrimary)
             .multilineTextAlignment(.leading)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 11)
+            .padding(.horizontal, SabqLayout.space12)
+            .padding(.vertical, SabqLayout.space12)
             .background(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
                     .fill(SabqTheme.surface)
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .stroke(SabqTheme.outline.opacity(0.4), lineWidth: 0.5)
+                RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                    .stroke(SabqTheme.outline, lineWidth: 1)
             )
     }
 
     private func userBubble(_ text: String) -> some View {
         Text(text)
-            .font(SabqFonts.app(size: 14, weight: .semibold))
+            .sabqText(SabqType.excerpt)
             .foregroundStyle(SabqTheme.onAction)
             .multilineTextAlignment(.leading)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 11)
+            .padding(.horizontal, SabqLayout.space12)
+            .padding(.vertical, SabqLayout.space12)
             .background(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
                     .fill(SabqTheme.actionFill)
             )
     }
@@ -379,7 +359,7 @@ struct SignUpFlowView: View {
     }
 
     private var textInputBar: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: SabqLayout.space8) {
             Group {
                 if step == .askPassword {
                     SecureField("اكتب كلمة المرور", text: $input)
@@ -390,16 +370,11 @@ struct SignUpFlowView: View {
                         .autocorrectionDisabled(step == .askEmail || step == .askPassword)
                 }
             }
-            .font(SabqFonts.app(size: 14, weight: .medium))
+            .sabqText(SabqType.excerpt)
             .focused($inputFocused)
             .submitLabel(.send)
             .onSubmit { Task { await handleSubmit() } }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
-            .background(
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .fill(SabqTheme.paleFill)
-            )
+            .modifier(SabqInputSurface())
 
             Button {
                 Task { await handleSubmit() }
@@ -407,7 +382,7 @@ struct SignUpFlowView: View {
                 Image(systemName: "paperplane.fill")
                     .font(SabqFonts.app(size: 15, weight: .heavy))
                     .foregroundStyle(canSubmit ? SabqTheme.onAction : SabqTheme.disabledInk)
-                    .frame(width: 40, height: 40)
+                    .frame(width: SabqLayout.touchTarget, height: SabqLayout.touchTarget)
                     .background(
                         Circle().fill(canSubmit ? SabqTheme.actionFill : SabqTheme.disabledFill)
                     )
@@ -416,55 +391,54 @@ struct SignUpFlowView: View {
             .buttonStyle(.plain)
             .disabled(!canSubmit)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .background(.ultraThinMaterial)
+        .padding(.horizontal, SabqLayout.space16)
+        .padding(.vertical, SabqLayout.space8)
+        .background(SabqTheme.background)
         .overlay(
             Rectangle()
-                .fill(SabqTheme.outline.opacity(0.4))
-                .frame(height: 0.5),
+                .fill(SabqTheme.separator)
+                .frame(height: 1),
             alignment: .top
         )
     }
 
     private var interestsPicker: some View {
-        VStack(spacing: 10) {
+        VStack(spacing: SabqLayout.space8) {
             ScrollView {
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 100), spacing: 8)], spacing: 8) {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 100), spacing: SabqLayout.space8)], spacing: SabqLayout.space8) {
                     ForEach(allCategories) { category in
                         interestChip(category: category)
                     }
                 }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
+                .padding(.horizontal, SabqLayout.space12)
+                .padding(.vertical, SabqLayout.space8)
             }
             .frame(maxHeight: 220)
 
             Button {
                 Task { await handleSubmit() }
             } label: {
-                HStack(spacing: 6) {
+                HStack(spacing: SabqLayout.space8) {
                     Text(selectedInterests.isEmpty
                         ? "تخطّي"
                         : "تأكيد \(selectedInterests.count) تصنيفاً")
-                        .font(SabqFonts.app(size: 14, weight: .heavy))
+                        .sabqText(SabqType.button)
                     Image(systemName: "checkmark.circle.fill")
-                        .font(SabqFonts.app(size: 14, weight: .bold))
+                        .sabqText(SabqType.metaEmphasis)
                 }
                 .foregroundStyle(SabqTheme.onAction)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 13)
-                .background(SabqTheme.actionFill, in: RoundedRectangle(cornerRadius: SabqTheme.buttonRadius, style: .continuous))
+                .frame(maxWidth: .infinity, minHeight: SabqLayout.controlHeight)
+                .background(SabqTheme.actionFill, in: RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
             }
             .buttonStyle(.plain)
-            .padding(.horizontal, 16)
-            .padding(.bottom, 12)
+            .padding(.horizontal, SabqLayout.space16)
+            .padding(.bottom, SabqLayout.space12)
         }
-        .background(.ultraThinMaterial)
+        .background(SabqTheme.background)
         .overlay(
             Rectangle()
-                .fill(SabqTheme.outline.opacity(0.4))
-                .frame(height: 0.5),
+                .fill(SabqTheme.separator)
+                .frame(height: 1),
             alignment: .top
         )
     }
@@ -477,23 +451,23 @@ struct SignUpFlowView: View {
             if isOn { selectedInterests.remove(id) } else { selectedInterests.insert(id) }
         } label: {
             Text(category.name.isEmpty ? (category.slug ?? "—") : category.name)
-                .font(SabqFonts.app(size: 12, weight: .semibold))
-                .foregroundStyle(isOn ? SabqTheme.onAction : SabqTheme.ink)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 7)
-                .frame(maxWidth: .infinity)
+                .sabqText(SabqType.tag)
+                .foregroundStyle(isOn ? SabqTheme.onAction : SabqTheme.textPrimary)
+                .padding(.horizontal, SabqLayout.space8)
+                .padding(.vertical, SabqLayout.space8)
+                .frame(maxWidth: .infinity, minHeight: SabqLayout.touchTarget)
                 .background(
-                    Capsule().fill(isOn ? SabqTheme.actionFill : SabqTheme.paleFill)
+                    Capsule().fill(isOn ? SabqTheme.actionFill : SabqTheme.surfaceMuted)
                 )
         }
         .buttonStyle(.plain)
     }
 
     private func errorRetry(_ msg: String) -> some View {
-        VStack(spacing: 10) {
+        VStack(spacing: SabqLayout.space8) {
             Text(msg)
-                .font(SabqFonts.app(size: 13, weight: .semibold))
-                .foregroundStyle(SabqTheme.coral)
+                .sabqText(SabqType.metaEmphasis)
+                .foregroundStyle(SabqTheme.danger)
                 .multilineTextAlignment(.center)
             Button {
                 // إعادة المحاولة تعيد الإرسال بالبيانات نفسها — لا تمسح المحادثة
@@ -503,11 +477,11 @@ struct SignUpFlowView: View {
                 Task { await submit() }
             } label: {
                 Text("إعادة المحاولة")
-                    .font(SabqFonts.app(size: 13, weight: .bold))
+                    .sabqText(SabqType.button)
                     .foregroundStyle(SabqTheme.onAction)
-                    .padding(.horizontal, 18)
-                    .padding(.vertical, 10)
-                    .background(Capsule().fill(SabqTheme.actionFill))
+                    .padding(.horizontal, SabqLayout.space24)
+                    .frame(minHeight: SabqLayout.controlHeight)
+                    .background(SabqTheme.actionFill, in: RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
             }
             .buttonStyle(.plain)
 
@@ -517,14 +491,15 @@ struct SignUpFlowView: View {
                 Task { await startConversation() }
             } label: {
                 Text("تعديل البيانات والبدء من جديد")
-                    .font(SabqFonts.app(size: 12, weight: .medium))
-                    .foregroundStyle(SabqTheme.secondaryInk)
+                    .sabqText(SabqType.meta)
+                    .foregroundStyle(SabqTheme.primary)
+                    .frame(minHeight: SabqLayout.touchTarget)
             }
             .buttonStyle(.plain)
         }
-        .padding(16)
+        .padding(SabqLayout.space16)
         .frame(maxWidth: .infinity)
-        .background(.ultraThinMaterial)
+        .background(SabqTheme.background)
     }
 
     // MARK: - State machine

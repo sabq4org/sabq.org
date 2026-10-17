@@ -26,76 +26,74 @@ struct LoyaltyStripView: View {
     private func content(summary: LoyaltySummary) -> some View {
         let progress = summary.progressToNext
         Button(action: onTap) {
-            HStack(spacing: 10) {
-                ZStack {
-                    Circle()
-                        .fill(progress.current.color.opacity(0.18))
-                        .frame(width: 28, height: 28)
-                    Image(systemName: "trophy.fill")
-                        .font(SabqFonts.app(size: 13, weight: .semibold))
-                        .foregroundStyle(progress.current.color)
-                }
+            HStack(spacing: SabqLayout.space12) {
+                Image(systemName: "trophy.fill")
+                    .font(SabqFonts.app(size: 15, weight: .semibold))
+                    .foregroundStyle(SabqTheme.primary)
+                    .frame(width: 32, height: 32)
+                    .background(SabqTheme.surfaceMuted, in: RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous))
+                    .accessibilityHidden(true)
 
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 8) {
+                VStack(alignment: .leading, spacing: SabqLayout.space4) {
+                    HStack(spacing: SabqLayout.space8) {
                         Text(progress.current.nameAr)
-                            .font(SabqFonts.app(size: 13, weight: .heavy))
-                            .foregroundStyle(progress.current.color)
+                            .font(SabqType.button.font)
+                            .foregroundStyle(SabqTheme.textPrimary)
                         if summary.weekPoints > 0 {
                             HStack(spacing: 2) {
                                 Text("+\(summary.weekPoints)")
-                                    .font(SabqFonts.app(size: 11, weight: .bold))
-                                    .foregroundStyle(Color.orange)
+                                    .font(SabqType.metaEmphasis.font)
+                                    .foregroundStyle(SabqTheme.warning)
                                 Text("هذا الأسبوع")
-                                    .font(SabqFonts.app(size: 10, weight: .medium))
-                                    .foregroundStyle(SabqTheme.secondaryInk)
+                                    .font(SabqType.tag.font)
+                                    .foregroundStyle(SabqTheme.textSecondary)
                             }
                         }
                         if summary.streakDays >= 3 {
                             HStack(spacing: 2) {
-                                Image(systemName: "flame.fill").font(SabqFonts.app(size: 9))
+                                Image(systemName: "flame.fill").font(SabqType.tag.font)
                                 Text("\(summary.streakDays)")
-                                    .font(SabqFonts.app(size: 11, weight: .bold))
+                                    .font(SabqType.metaEmphasis.font)
                             }
-                            .foregroundStyle(Color.orange)
+                            .foregroundStyle(SabqTheme.warning)
                         }
                     }
                     if let next = progress.next {
                         GeometryReader { geo in
                             ZStack(alignment: .topLeading) {
                                 Capsule()
-                                    .fill(SabqTheme.outline.opacity(0.25))
+                                    .fill(SabqTheme.surfaceStrong)
                                     .frame(height: 4)
                                 Capsule()
-                                    .fill(progress.current.color)
+                                    .fill(SabqTheme.primary)
                                     .frame(width: geo.size.width * progress.fraction, height: 4)
                             }
                         }
                         .frame(height: 4)
                         Text("\(progress.pointsToNext.formatted(.number.locale(Locale(identifier: "ar_SA")))) نقطة لـ \(next.nameAr)")
-                            .font(SabqFonts.app(size: 10, weight: .medium))
-                            .foregroundStyle(SabqTheme.secondaryInk)
+                            .font(SabqType.tag.font)
+                            .foregroundStyle(SabqTheme.textSecondary)
                     } else {
                         Text("وصلت إلى أعلى مستوى ✨")
-                            .font(SabqFonts.app(size: 10, weight: .medium))
-                            .foregroundStyle(SabqTheme.secondaryInk)
+                            .font(SabqType.tag.font)
+                            .foregroundStyle(SabqTheme.textSecondary)
                     }
                 }
                 Spacer(minLength: 0)
                 Image(systemName: "chevron.forward")
-                    .font(SabqFonts.app(size: 12, weight: .semibold))
-                    .foregroundStyle(SabqTheme.secondaryInk)
+                    .font(SabqType.metaEmphasis.font)
+                    .foregroundStyle(SabqTheme.textTertiary)
+                    .accessibilityHidden(true)
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
+            .padding(.horizontal, SabqLayout.space12)
+            .padding(.vertical, SabqLayout.space12)
+            .frame(minHeight: SabqLayout.touchTarget)
             .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(progress.current.color.opacity(0.08))
+                // يقع داخل بلوك «رحلتك المعرفية» الرمادي، فيأخذ سطح البطاقة.
+                RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                    .fill(SabqTheme.surface)
             )
-            .overlay(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(progress.current.color.opacity(0.25), lineWidth: 0.5)
-            )
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }

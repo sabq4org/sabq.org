@@ -619,35 +619,32 @@ struct HomeFeedView: View {
                 HStack(alignment: .top, spacing: 12) {
                     VStack(spacing: 2) {
                         HStack(spacing: 4) {
-                            PulsingDot(color: SabqTheme.coral)
+                            PulsingDot(color: SabqTheme.breaking)
                             Text("عاجل")
-                                .font(SabqFonts.app(size: 13, weight: .bold))
-                                .foregroundStyle(SabqTheme.coral)
+                                .font(SabqType.metaEmphasis.font)
+                                .foregroundStyle(SabqTheme.breaking)
                         }
                         Text("\(SabqFormatters.riyadhHourMinute.string(from: article.publishDate)) \(SabqFormatters.riyadhPeriod.string(from: article.publishDate))")
-                            .font(SabqFonts.app(size: 11, weight: .medium))
-                            .foregroundStyle(SabqTheme.tertiaryInk)
+                            .font(SabqType.tag.font)
+                            .foregroundStyle(SabqTheme.textTertiary)
                             .monospacedDigit()
                     }
                     .fixedSize()
 
                     SabqRTLText(
                         article.title,
-                        uiFont: SabqFonts.uiApp(size: 15, weight: .semibold),
-                        color: SabqTheme.ink,
+                        uiFont: SabqType.rowTitle.uiFont,
+                        color: SabqTheme.textPrimary,
                         lineLimit: dynamicTypeSize.isAccessibilitySize ? 0 : 3,
-                        lineSpacing: 3
+                        lineSpacing: SabqType.rowTitle.lineSpacing,
+                        textStyle: SabqType.rowTitle.uiTextStyle
                     )
                 }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 12)
+                .padding(.horizontal, SabqLayout.space16)
+                .padding(.vertical, SabqLayout.space12)
                 .background(
-                    RoundedRectangle(cornerRadius: SabqTheme.blockRadius, style: .continuous)
-                        .fill(SabqTheme.coral.opacity(0.07))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: SabqTheme.blockRadius, style: .continuous)
-                        .stroke(SabqTheme.coral.opacity(0.18), lineWidth: 1)
+                    RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                        .fill(SabqTheme.breaking.opacity(0.07))
                 )
             }
             .buttonStyle(.plain)
@@ -1220,44 +1217,41 @@ struct HomeFeedView: View {
                     sectionHeading(
                         title: "النشرات الصوتية",
                         icon: "waveform",
-                        tint: SabqTheme.coral
+                        tint: SabqTheme.primary
                     )
                     NavigationLink(value: AudioNewslettersRoute()) {
                         Text("الكل")
-                            .font(SabqFonts.app(size: 10, weight: .regular))
-                            .foregroundStyle(SabqTheme.coral)
+                            .font(SabqType.metaEmphasis.font)
+                            .foregroundStyle(SabqTheme.primary)
                     }
                 }
                 NavigationLink(value: AudioNewslettersRoute()) {
                     HStack(spacing: 14) {
                         ZStack {
-                            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                .fill(LinearGradient(
-                                    colors: [SabqTheme.coral.opacity(0.30), SabqTheme.primaryEnd.opacity(0.18)],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing))
+                            RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
+                                .fill(SabqTheme.surfaceMuted)
                             Image(systemName: "waveform")
-                                .font(SabqFonts.app(size: 20, weight: .light))
-                                .foregroundStyle(.white.opacity(0.8))
+                                .font(SabqFonts.app(size: 20, weight: .regular))
+                                .foregroundStyle(SabqTheme.primary)
                         }
                         .frame(width: 54, height: 54)
                         VStack(alignment: .leading, spacing: 4) {
                             Text(n.title)
-                                .font(SabqFonts.app(size: 14, weight: .heavy))
-                                .foregroundStyle(SabqTheme.ink)
+                                .font(SabqType.rowTitle.font)
+                                .foregroundStyle(SabqTheme.textPrimary)
                                 .lineLimit(2)
                                 .multilineTextAlignment(.leading)
                             if let d = n.duration {
                                 Text("\(d / 60) دقيقة استماع")
-                                    .font(SabqFonts.app(size: 10, weight: .regular))
-                                    .foregroundStyle(SabqTheme.tertiaryInk)
+                                    .font(SabqType.meta.font)
+                                    .foregroundStyle(SabqTheme.textTertiary)
                                     .monospacedDigit()
                             }
                         }
                         Spacer(minLength: 0)
                         Image(systemName: "play.circle.fill")
                             .font(SabqFonts.app(size: 28))
-                            .foregroundStyle(SabqTheme.coral)
+                            .foregroundStyle(SabqTheme.primary)
                     }
                     .padding(14)
                     .sabqBlockSurface()

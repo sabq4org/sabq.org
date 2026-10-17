@@ -25,12 +25,12 @@ struct CommentComposer: View {
     var onError: (String) -> Void = { _ in }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: SabqLayout.space8) {
             if let parent = store.replyingTo {
                 replyChip(parent: parent)
             }
 
-            HStack(alignment: .bottom, spacing: 10) {
+            HStack(alignment: .bottom, spacing: SabqLayout.space8) {
                 composerField
                 sendButton
             }
@@ -46,18 +46,14 @@ struct CommentComposer: View {
             axis: .vertical
         )
         .lineLimit(1...6)
-        .font(SabqFonts.app(size: 15, weight: .medium))
-        .foregroundStyle(SabqTheme.ink)
+        .font(SabqType.excerpt.font)
+        .foregroundStyle(SabqTheme.textPrimary)
         .focused($focused)
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
-        .background(
-            RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous)
-                .fill(SabqTheme.paleFill)
-        )
+        .modifier(SabqInputSurface())
+        // التركيز صريح: حد بلون الروابط فوق حد الحقل.
         .overlay(
-            RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous)
-                .stroke(SabqTheme.outline.opacity(focused ? 0.6 : 0.3), lineWidth: 0.5)
+            RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                .stroke(SabqTheme.primary, lineWidth: focused ? 1.5 : 0)
         )
     }
 
@@ -68,16 +64,17 @@ struct CommentComposer: View {
             if store.isSubmitting {
                 ProgressView()
                     .progressViewStyle(.circular)
-                    .frame(width: 32, height: 32)
+                    .frame(width: SabqLayout.controlHeight, height: SabqLayout.controlHeight)
             } else {
                 Image(systemName: "paperplane.fill")
                     .font(SabqFonts.app(size: 16, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .frame(width: 36, height: 36)
-                    .background(
-                        Circle().fill(isDisabled ? SabqTheme.tertiaryInk : SabqTheme.primaryEnd)
-                    )
+                    .foregroundStyle(isDisabled ? SabqTheme.disabledInk : SabqTheme.onAction)
                     .rotationEffect(.degrees(180))
+                    .frame(width: SabqLayout.controlHeight, height: SabqLayout.controlHeight)
+                    .background(
+                        RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                            .fill(isDisabled ? SabqTheme.disabledFill : SabqTheme.actionFill)
+                    )
             }
         }
         .buttonStyle(.plain)
@@ -86,41 +83,41 @@ struct CommentComposer: View {
     }
 
     private var counterRow: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: SabqLayout.space8) {
             Spacer(minLength: 0)
             Text("\(text.count) / \(CommentsStore.maxLength)")
-                .font(SabqFonts.app(size: 11, weight: .medium))
+                .font(SabqType.tag.font)
                 .foregroundStyle(counterColor)
                 .monospacedDigit()
         }
     }
 
     private func replyChip(parent: APIComment) -> some View {
-        HStack(spacing: 8) {
+        HStack(spacing: SabqLayout.space8) {
             Image(systemName: "arrowshape.turn.up.left.fill")
-                .font(SabqFonts.app(size: 11, weight: .semibold))
-                .foregroundStyle(SabqTheme.primaryEnd)
+                .font(SabqType.tag.font)
+                .foregroundStyle(SabqTheme.primary)
+                .accessibilityHidden(true)
             Text("ترد على \(parent.userName ?? "تعليق")")
-                .font(SabqFonts.app(size: 12, weight: .semibold))
-                .foregroundStyle(SabqTheme.secondaryInk)
+                .font(SabqType.metaEmphasis.font)
+                .foregroundStyle(SabqTheme.textSecondary)
                 .lineLimit(1)
-            Spacer(minLength: 4)
+            Spacer(minLength: SabqLayout.space4)
             Button {
                 store.replyingTo = nil
             } label: {
                 Image(systemName: "xmark")
-                    .font(SabqFonts.app(size: 11, weight: .bold))
-                    .foregroundStyle(SabqTheme.tertiaryInk)
-                    .padding(6)
-                    .background(Circle().fill(SabqTheme.paleFill))
+                    .font(SabqType.tag.font)
+                    .foregroundStyle(SabqTheme.textSecondary)
+                    .frame(width: SabqLayout.touchTarget, height: SabqLayout.touchTarget)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
+        .padding(.leading, SabqLayout.space12)
         .background(
-            RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous)
-                .fill(SabqTheme.primaryEnd.opacity(0.08))
+            RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
+                .fill(SabqTheme.surfaceMuted)
         )
     }
 
@@ -135,11 +132,11 @@ struct CommentComposer: View {
     }
 
     private var counterColor: Color {
-        if text.count > CommentsStore.maxLength { return .red }
+        if text.count > CommentsStore.maxLength { return SabqTheme.danger }
         if text.count > Int(Double(CommentsStore.maxLength) * 0.9) {
-            return .orange
+            return SabqTheme.warning
         }
-        return SabqTheme.tertiaryInk
+        return SabqTheme.textTertiary
     }
 
     private func submit() async {

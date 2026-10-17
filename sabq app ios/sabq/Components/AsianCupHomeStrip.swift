@@ -67,28 +67,30 @@ struct AsianCupHomeStrip: View {
     }
 
     private func card(overview ov: AcOverview) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
+        VStack(alignment: .leading, spacing: SabqLayout.space12) {
+            HStack(spacing: SabqLayout.space8) {
                 Image(systemName: "trophy.fill")
                     .foregroundStyle(AcTheme.gold)
+                    .accessibilityHidden(true)
                 Text("كأس آسيا 2027")
-                    .font(SabqFonts.app(size: 14, weight: .semibold))
+                    .sabqText(SabqType.rowTitle)
                     .foregroundStyle(.white)
                 Spacer()
                 Text("المزيد")
-                    .font(SabqFonts.app(size: 11, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.7))
+                    .font(SabqType.tag.font)
+                    .foregroundStyle(.white)
                 Image(systemName: "chevron.left")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.7))
+                    .font(SabqType.tag.font)
+                    .foregroundStyle(.white)
+                    .accessibilityHidden(true)
             }
 
             if let champ = ov.champion {
-                HStack(spacing: 10) {
-                    AcTeamLogo(team: champ.team, size: 36)
+                HStack(spacing: SabqLayout.space12) {
+                    AcTeamLogo(team: champ.team, size: 40, ring: .clear)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("بطل البطولة").font(SabqFonts.app(size: 10)).foregroundStyle(.white.opacity(0.7))
-                        Text(champ.team.name).font(SabqFonts.app(size: 16, weight: .bold)).foregroundStyle(.white)
+                        Text("بطل البطولة").font(SabqFonts.app(size: 12)).foregroundStyle(.white.opacity(0.9))
+                        Text(champ.team.name).sabqText(SabqType.rowTitle).foregroundStyle(.white)
                     }
                     Spacer()
                 }
@@ -96,44 +98,42 @@ struct AsianCupHomeStrip: View {
                 matchRow(fx)
             } else if let starts = ov.startsAt, let ts = SabqFormatters.parseISO8601(starts)?.timeIntervalSince1970 {
                 HStack {
-                    Text("الانطلاقة").font(SabqFonts.app(size: 12)).foregroundStyle(.white.opacity(0.75))
+                    Text("الانطلاقة").font(SabqType.meta.font).foregroundStyle(.white.opacity(0.9))
                     Spacer()
                     Text(AcFormat.countdown(to: Int(ts)))
-                        .font(SabqFonts.app(size: 18, weight: .bold).monospacedDigit())
+                        .font(SabqType.sectionHeading.font.monospacedDigit())
                         .foregroundStyle(AcTheme.gold)
                         .environment(\.layoutDirection, .leftToRight)
                 }
             } else {
                 Text(ov.host)
-                    .font(SabqFonts.app(size: 13))
-                    .foregroundStyle(.white.opacity(0.85))
+                    .font(SabqType.meta.font)
+                    .foregroundStyle(.white.opacity(0.9))
             }
         }
-        .padding(16)
-        .background(
-            LinearGradient(colors: [AcTheme.heroTop, AcTheme.heroBottom], startPoint: .topLeading, endPoint: .bottomTrailing)
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .padding(SabqLayout.space16)
+        .background(AcStyle.accentFill, in: RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
     }
 
     private func matchRow(_ fx: AcFixture) -> some View {
-        HStack(spacing: 10) {
-            AcTeamLogo(team: fx.home, size: 32)
-            VStack(spacing: 2) {
+        HStack(spacing: SabqLayout.space12) {
+            AcTeamLogo(team: fx.home, size: 36, ring: .clear)
+            VStack(spacing: SabqLayout.space4) {
                 if fx.started {
-                    Text("\(fx.goals.home ?? 0) – \(fx.goals.away ?? 0)")
-                        .font(SabqFonts.app(size: 20, weight: .bold).monospacedDigit())
+                    // الضيف أولًا داخل LTR ليقع هدف المضيف يمينًا تحت شعاره.
+                    Text("\(fx.goals.away ?? 0) – \(fx.goals.home ?? 0)")
+                        .font(SabqType.sectionHeading.font.monospacedDigit())
                         .foregroundStyle(.white)
                         .environment(\.layoutDirection, .leftToRight)
                 } else {
                     Text(AcFormat.time(fx))
-                        .font(SabqFonts.app(size: 16, weight: .semibold))
+                        .font(SabqType.sectionHeading.font)
                         .foregroundStyle(AcTheme.gold)
                 }
                 AcStatusPill(fixture: fx, onDark: true)
             }
             .frame(maxWidth: .infinity)
-            AcTeamLogo(team: fx.away, size: 32)
+            AcTeamLogo(team: fx.away, size: 36, ring: .clear)
         }
     }
 }

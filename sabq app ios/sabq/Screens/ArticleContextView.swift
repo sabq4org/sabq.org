@@ -14,7 +14,7 @@ struct ArticleContextView: View {
     @Environment(LiteModeManager.self) private var liteManager
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 22) {
+        VStack(alignment: .leading, spacing: SabqLayout.space24) {
             if context.isEmpty {
                 emptyState
             }
@@ -44,24 +44,23 @@ struct ArticleContextView: View {
     private var summarySection: some View {
         section(context.kind == .opinion ? "خلاصة المقال" : "الموجز الذكي",
                 note: "\(context.summaryPoints.count == 1 ? "نقطة واحدة" : context.summaryPoints.count == 2 ? "نقطتان" : "ثلاث نقاط")") {
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: SabqLayout.space12) {
                 ForEach(Array(context.summaryPoints.enumerated()), id: \.offset) { _, point in
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    HStack(alignment: .firstTextBaseline, spacing: SabqLayout.space8) {
                         Circle()
-                            .fill(SabqTheme.primaryEnd)
+                            .fill(SabqTheme.primary)
                             .frame(width: 5, height: 5)
                             .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 4 }
                         Text(point)
-                            .font(SabqFonts.app(size: 14, weight: .regular))
-                            .foregroundStyle(SabqTheme.ink)
-                            .lineSpacing(4)
+                            .sabqText(SabqType.excerpt)
+                            .foregroundStyle(SabqTheme.textPrimary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
             }
-            .padding(14)
+            .padding(SabqLayout.cardInset)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(card)
+            .sabqBlockSurface()
         }
     }
 
@@ -86,54 +85,50 @@ struct ArticleContextView: View {
     }
 
     private func timelineRow(_ item: ArticleContextTimelineItem, isLast: Bool) -> some View {
-        HStack(alignment: .top, spacing: 10) {
+        HStack(alignment: .top, spacing: SabqLayout.space12) {
             Text(Self.dayMonth.string(from: item.article.publishDate))
-                .font(SabqFonts.app(size: 11.5, weight: .medium))
-                .foregroundStyle(SabqTheme.secondaryInk)
+                .font(SabqType.meta.font)
+                .foregroundStyle(SabqTheme.textSecondary)
                 .frame(width: 64, alignment: .leading)
                 .padding(.top, 1)
 
             VStack(spacing: 0) {
                 Circle()
-                    .fill(item.isCurrent ? SabqTheme.primaryEnd : SabqTheme.outline)
+                    .fill(item.isCurrent ? SabqTheme.primary : SabqTheme.outline)
                     .frame(width: 10, height: 10)
-                    .overlay {
-                        if item.isCurrent {
-                            Circle().stroke(SabqTheme.primaryEnd.opacity(0.25), lineWidth: 4)
-                        }
-                    }
                     .padding(.top, 4)
                 if !isLast {
                     Rectangle()
-                        .fill(SabqTheme.outline)
+                        .fill(SabqTheme.separator)
                         .frame(width: 1.5)
                         .frame(maxHeight: .infinity)
                 }
             }
             .frame(width: 14)
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: SabqLayout.space4) {
                 Text(item.article.title)
-                    .font(SabqFonts.app(size: 13.5, weight: item.isCurrent ? .semibold : .regular))
-                    .foregroundStyle(SabqTheme.ink)
+                    .font(item.isCurrent ? SabqType.rowTitle.font : SabqType.excerpt.font)
+                    .foregroundStyle(SabqTheme.textPrimary)
                     .lineLimit(3)
                     .multilineTextAlignment(.leading)
                 if item.isCurrent {
                     Text("هذا الخبر")
-                        .font(SabqFonts.app(size: 11, weight: .medium))
-                        .foregroundStyle(SabqTheme.primaryEnd)
+                        .font(SabqType.tag.font)
+                        .foregroundStyle(SabqTheme.primary)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.bottom, isLast ? 0 : 14)
+            .padding(.bottom, isLast ? 0 : SabqLayout.space16)
         }
         .contentShape(Rectangle())
     }
 
     private var relatedSection: some View {
         section("أخبار مرتبطة", note: nil) {
-            VStack(spacing: 8) {
-                ForEach(context.related) { article in
+            VStack(spacing: 0) {
+                ForEach(Array(context.related.enumerated()), id: \.element.id) { index, article in
+                    if index > 0 { SidebarRowDivider() }
                     Button {
                         SabqHaptics.light()
                         onOpenArticle(article)
@@ -152,8 +147,9 @@ struct ArticleContextView: View {
 
     private var authorSection: some View {
         section("للكاتب نفسه", note: context.authorName) {
-            VStack(spacing: 8) {
-                ForEach(context.authorOpinions) { opinion in
+            VStack(spacing: 0) {
+                ForEach(Array(context.authorOpinions.enumerated()), id: \.element.id) { index, opinion in
+                    if index > 0 { SidebarRowDivider() }
                     Button {
                         SabqHaptics.light()
                         onOpenOpinion(opinion)
@@ -162,7 +158,7 @@ struct ArticleContextView: View {
                                    meta: HomeSidebarNewsRow.relativeTime(opinion.publishDate),
                                    imageURL: opinion.imageURL,
                                    focalPoint: opinion.imageFocalPoint,
-                                   tint: SabqTheme.primaryEnd)
+                                   tint: SabqTheme.primary)
                     }
                     .buttonStyle(.plain)
                 }
@@ -172,25 +168,23 @@ struct ArticleContextView: View {
 
     private var keywordsSection: some View {
         section("كلمات مفتاحية", note: nil) {
-            FlowLayout(spacing: 8) {
+            FlowLayout(spacing: SabqLayout.space8) {
                 ForEach(context.keywords, id: \.self) { keyword in
                     Button {
                         SabqHaptics.light()
                         onOpenKeyword(keyword)
                     } label: {
                         Text(keyword)
-                            .font(SabqFonts.app(size: 12.5, weight: .medium))
-                            .foregroundStyle(SabqTheme.secondaryInk)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 6)
+                            .font(SabqType.tag.font)
+                            .foregroundStyle(SabqTheme.textPrimary)
+                            .padding(.horizontal, SabqLayout.space12)
+                            .frame(minHeight: 32)
                             .background(
-                                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                    .fill(SabqTheme.surface)
+                                RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
+                                    .fill(SabqTheme.surfaceMuted)
                             )
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                    .stroke(SabqTheme.outline, lineWidth: 1)
-                            )
+                            .frame(minHeight: SabqLayout.touchTarget)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                 }
@@ -200,24 +194,24 @@ struct ArticleContextView: View {
 
     private var emptyState: some View {
         Text("لا سياق إضافيًا لهذا الخبر بعد.")
-            .font(SabqFonts.app(size: 13, weight: .regular))
-            .foregroundStyle(SabqTheme.secondaryInk)
+            .font(SabqType.meta.font)
+            .foregroundStyle(SabqTheme.textSecondary)
             .frame(maxWidth: .infinity, alignment: .center)
-            .padding(.vertical, 24)
+            .padding(.vertical, SabqLayout.space24)
     }
 
     // MARK: - Building blocks
 
     private func section<Content: View>(_ title: String, note: String?, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
+        VStack(alignment: .leading, spacing: SabqLayout.space12) {
+            HStack(alignment: .firstTextBaseline, spacing: SabqLayout.space8) {
                 Text(title)
-                    .font(SabqFonts.app(size: 15, weight: .bold))
-                    .foregroundStyle(SabqTheme.ink)
+                    .font(SabqType.sectionHeading.font)
+                    .foregroundStyle(SabqTheme.textPrimary)
                 if let note, !note.isEmpty {
                     Text(note)
-                        .font(SabqFonts.app(size: 11.5, weight: .regular))
-                        .foregroundStyle(SabqTheme.tertiaryInk)
+                        .font(SabqType.meta.font)
+                        .foregroundStyle(SabqTheme.textTertiary)
                         .lineLimit(1)
                 }
             }
@@ -227,42 +221,40 @@ struct ArticleContextView: View {
     }
 
     private func relatedRow(title: String, meta: String, imageURL: String?, focalPoint: ImageFocalPoint?, tint: Color) -> some View {
-        HStack(alignment: .center, spacing: 10) {
-            if !liteManager.isLiteActive {
-                Group {
-                    if let imageURL, let url = URL(string: imageURL) {
-                        FocalCachedAsyncImage(url: url, focalPoint: focalPoint, maxPixelSize: 200) {
-                            tint.opacity(0.10)
-                        }
-                    } else {
-                        tint.opacity(0.10)
-                    }
-                }
-                .frame(width: 60, height: 48)
-                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-            }
-            VStack(alignment: .leading, spacing: 4) {
+        // صف بلا بطاقة على الصفحة، والمصغّرة في طرف السطر كـ`CompactArticleRow`.
+        // `tint` لم يعد يلوّن الخانة: الخانة الموحّدة لكل الصور.
+        _ = tint
+        return HStack(alignment: .top, spacing: SabqLayout.space12) {
+            VStack(alignment: .leading, spacing: SabqLayout.space4) {
                 Text(title)
-                    .font(SabqFonts.app(size: 13.5, weight: .semibold))
-                    .foregroundStyle(SabqTheme.ink)
+                    .sabqText(SabqType.rowTitle)
+                    .foregroundStyle(SabqTheme.textPrimary)
                     .lineLimit(3)
                     .multilineTextAlignment(.leading)
                 Text(meta)
-                    .font(SabqFonts.app(size: 11, weight: .regular))
-                    .foregroundStyle(SabqTheme.secondaryInk)
+                    .font(SabqType.meta.font)
+                    .foregroundStyle(SabqTheme.textTertiary)
                     .lineLimit(1)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+            if !liteManager.isLiteActive {
+                Group {
+                    if let imageURL, let url = URL(string: imageURL) {
+                        FocalCachedAsyncImage(url: url, focalPoint: focalPoint, maxPixelSize: 240) {
+                            SabqImagePlaceholder()
+                        }
+                    } else {
+                        SabqImagePlaceholder()
+                            .environment(\.sabqImageLoadFailed, true)
+                    }
+                }
+                .frame(width: 80, height: 45)
+                .clipShape(RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous))
+            }
         }
-        .padding(10)
-        .background(card)
-        .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .padding(.vertical, SabqLayout.space12)
+        .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
-    }
-
-    private var card: some View {
-        RoundedRectangle(cornerRadius: 14, style: .continuous)
-            .fill(SabqTheme.surface)
     }
 
     private func timelineAccessibility(_ item: ArticleContextTimelineItem) -> String {
@@ -295,15 +287,15 @@ struct ArticleContextSheet: View {
             VStack(alignment: .leading, spacing: 16) {
                 HStack {
                     Text("سياق الخبر")
-                        .font(SabqFonts.app(size: 18, weight: .bold))
-                        .foregroundStyle(SabqTheme.ink)
+                        .font(SabqType.sectionHeading.font)
+                        .foregroundStyle(SabqTheme.textPrimary)
                     Spacer()
                     Button {
                         dismiss()
                     } label: {
                         Image(systemName: "xmark")
-                            .font(.system(size: 13, weight: .bold))
-                            .foregroundStyle(SabqTheme.secondaryInk)
+                            .font(SabqFonts.app(size: 16, weight: .semibold))
+                            .foregroundStyle(SabqTheme.textSecondary)
                             .frame(width: SabqLayout.touchTarget, height: SabqLayout.touchTarget)
                     }
                     .buttonStyle(.plain)
@@ -316,9 +308,9 @@ struct ArticleContextSheet: View {
                     onOpenKeyword: onOpenKeyword
                 )
             }
-            .padding(.horizontal, 18)
-            .padding(.top, 8)
-            .padding(.bottom, 24)
+            .padding(.horizontal, SabqLayout.pageMargin)
+            .padding(.top, SabqLayout.space8)
+            .padding(.bottom, SabqLayout.space24)
         }
         .background(SabqTheme.background)
         .presentationDetents([.medium, .large])

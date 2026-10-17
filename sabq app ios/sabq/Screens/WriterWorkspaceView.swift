@@ -375,7 +375,7 @@ struct WriterWorkspaceView: View {
             if isOpinionWriter {
                 VStack(spacing: 0) {
                     segmentBar
-                    Divider().opacity(0.25)
+                    Divider().overlay(SabqTheme.separator)
                     switch tab {
                     case .today: todaySegment
                     case .ideas: ideasSegment
@@ -406,45 +406,48 @@ struct WriterWorkspaceView: View {
     private var unreadCount: Int { vm.notifications?.unread ?? 0 }
 
     private var segmentBar: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: SabqLayout.space8) {
             ForEach(WorkspaceTab.allCases, id: \.self) { item in
+                let isActive = tab == item
                 Button {
                     withAnimation(.snappy(duration: 0.2)) { tab = item }
                 } label: {
-                    HStack(spacing: 4) {
+                    HStack(spacing: SabqLayout.space4) {
                         Text(item.rawValue)
-                            .font(SabqFonts.app(size: 13, weight: tab == item ? .bold : .semibold))
+                            .sabqText(SabqType.metaEmphasis)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
                         if item == .articles, unreadCount > 0 {
                             Text("\(min(unreadCount, 99))")
-                                .font(SabqFonts.app(size: 10, weight: .bold))
-                                .foregroundStyle(.white)
-                                .padding(.horizontal, 5)
-                                .padding(.vertical, 1.5)
-                                .background(Capsule().fill(SabqTheme.coral))
+                                .sabqText(SabqType.tag)
+                                .foregroundStyle(SabqTheme.background)
+                                .padding(.horizontal, SabqLayout.space4)
+                                .frame(minWidth: 18)
+                                .background(Capsule().fill(SabqTheme.danger))
                         }
                     }
-                    .foregroundStyle(tab == item ? .white : SabqTheme.secondaryInk)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 8)
-                    .frame(maxWidth: .infinity)
+                    .foregroundStyle(isActive ? SabqTheme.onAction : SabqTheme.textPrimary)
+                    .padding(.horizontal, SabqLayout.space8)
+                    .frame(maxWidth: .infinity, minHeight: SabqLayout.touchTarget)
                     .background(
-                        Capsule().fill(tab == item ? SabqTheme.sky : SabqTheme.paleFill)
+                        Capsule().fill(isActive ? SabqTheme.actionFill : SabqTheme.surfaceMuted)
                     )
                 }
                 .buttonStyle(.plain)
+                .accessibilityAddTraits(isActive ? [.isSelected] : [])
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
+        .padding(.horizontal, SabqLayout.pageMargin)
+        .padding(.vertical, SabqLayout.space8)
     }
 
     // MARK: - تبويب «اليوم»
 
     private var todaySegment: some View {
         ScrollView(showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: SabqLayout.sectionGap) {
                 if vm.isLoading {
-                    ProgressView().frame(maxWidth: .infinity, minHeight: 200)
+                    ProgressView().tint(SabqTheme.primary).frame(maxWidth: .infinity, minHeight: 200)
                 } else {
                     scheduleCard
                     if unreadCount > 0 { alertsCard }
@@ -455,9 +458,9 @@ struct WriterWorkspaceView: View {
                     calendarCard
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 8)
-            .padding(.bottom, 100)
+            .padding(.horizontal, SabqLayout.pageMargin)
+            .padding(.top, SabqLayout.space16)
+            .padding(.bottom, 104)
         }
         .refreshable { await vm.load() }
     }
@@ -480,32 +483,37 @@ struct WriterWorkspaceView: View {
     }
 
     private var alertsCard: some View {
-        workspaceCard(icon: "bell.badge.fill", tint: SabqTheme.coral, title: "تنبيهات تحريرية بانتظارك") {
-            VStack(alignment: .leading, spacing: 10) {
+        workspaceCard(icon: "bell.badge", tint: SabqTheme.danger, title: "تنبيهات تحريرية بانتظارك") {
+            VStack(alignment: .leading, spacing: 0) {
                 ForEach((vm.notifications?.items.filter { $0.readAt == nil }.prefix(2)) ?? []) { item in
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: SabqLayout.space4) {
                         Text(item.title)
-                            .font(SabqFonts.app(size: 13, weight: .bold))
-                            .foregroundStyle(SabqTheme.ink)
+                            .sabqText(SabqType.rowTitle)
+                            .foregroundStyle(SabqTheme.textPrimary)
                         Text(item.body)
-                            .font(SabqFonts.app(size: 12, weight: .medium))
-                            .foregroundStyle(SabqTheme.secondaryInk)
+                            .sabqText(SabqType.meta)
+                            .foregroundStyle(SabqTheme.textSecondary)
                             .lineLimit(2)
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, SabqLayout.space12)
+                    Divider().overlay(SabqTheme.separator)
                 }
                 HStack {
                     NavigationLink(value: EditorialNotificationsRoute()) {
                         Text("عرض كل التنبيهات (\(unreadCount))")
-                            .font(SabqFonts.app(size: 12, weight: .bold))
-                            .foregroundStyle(SabqTheme.sky)
+                            .sabqText(SabqType.metaEmphasis)
+                            .foregroundStyle(SabqTheme.primary)
+                            .frame(minHeight: SabqLayout.touchTarget)
                     }
                     Spacer()
                     Button {
                         Task { await vm.markAllNotificationsRead() }
                     } label: {
                         Text("تمت قراءتها")
-                            .font(SabqFonts.app(size: 12, weight: .semibold))
-                            .foregroundStyle(SabqTheme.secondaryInk)
+                            .sabqText(SabqType.metaEmphasis)
+                            .foregroundStyle(SabqTheme.textSecondary)
+                            .frame(minHeight: SabqLayout.touchTarget)
                     }
                     .buttonStyle(.plain)
                 }
@@ -514,9 +522,9 @@ struct WriterWorkspaceView: View {
     }
 
     private var monthlyBriefCard: some View {
-        workspaceCard(icon: "book.fill", tint: SabqTheme.teal, title: "موجزك هذا الشهر") {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 10) {
+        workspaceCard(icon: "book", tint: SabqTheme.teal, title: "موجزك هذا الشهر") {
+            VStack(alignment: .leading, spacing: SabqLayout.space8) {
+                HStack(spacing: SabqLayout.space8) {
                     metricTile(value: "\(vm.workspace?.monthlyBrief?.publishedCount ?? 0)", label: "مقال منشور")
                     metricTile(value: (vm.workspace?.monthlyBrief?.views ?? 0).formatted(), label: "قراءة")
                 }
@@ -528,29 +536,31 @@ struct WriterWorkspaceView: View {
     }
 
     private var deskCard: some View {
-        workspaceCard(icon: "pencil.and.outline", tint: SabqTheme.sky, title: "على مكتبك الآن") {
+        workspaceCard(icon: "pencil.and.outline", tint: SabqTheme.primary, title: "على مكتبك الآن") {
             if let desk = vm.workspace?.desk, !desk.isEmpty {
-                VStack(spacing: 8) {
+                VStack(spacing: 0) {
                     ForEach(desk) { item in
-                        HStack(alignment: .top, spacing: 10) {
+                        if item.id != desk.first?.id {
+                            Divider().overlay(SabqTheme.separator)
+                        }
+                        HStack(alignment: .top, spacing: SabqLayout.space12) {
                             Circle()
-                                .fill(item.reviewStatus == "needs_changes" ? SabqTheme.gold : SabqTheme.sky)
-                                .frame(width: 7, height: 7)
-                                .padding(.top, 5)
-                            VStack(alignment: .leading, spacing: 2) {
+                                .fill(item.reviewStatus == "needs_changes" ? SabqTheme.warning : SabqTheme.primary)
+                                .frame(width: 8, height: 8)
+                                .padding(.top, SabqLayout.space8)
+                            VStack(alignment: .leading, spacing: SabqLayout.space4) {
                                 Text(item.title)
-                                    .font(SabqFonts.app(size: 13, weight: .bold))
-                                    .foregroundStyle(SabqTheme.ink)
-                                    .lineLimit(1)
+                                    .sabqText(SabqType.rowTitle)
+                                    .foregroundStyle(SabqTheme.textPrimary)
+                                    .lineLimit(2)
                                 Text(item.nextAction)
-                                    .font(SabqFonts.app(size: 11, weight: .medium))
-                                    .foregroundStyle(SabqTheme.secondaryInk)
+                                    .sabqText(SabqType.meta)
+                                    .foregroundStyle(SabqTheme.textSecondary)
                             }
                             Spacer(minLength: 0)
                         }
-                        .padding(10)
+                        .padding(.vertical, SabqLayout.space12)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(SabqTheme.paleFill))
                     }
                 }
             } else {
@@ -560,25 +570,25 @@ struct WriterWorkspaceView: View {
     }
 
     private var readerPulseCard: some View {
-        workspaceCard(icon: "person.2.fill", tint: SabqTheme.leaf, title: "نبض قرائك") {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 10) {
+        workspaceCard(icon: "person.2", tint: SabqTheme.success, title: "نبض قرائك") {
+            VStack(alignment: .leading, spacing: SabqLayout.space8) {
+                HStack(spacing: SabqLayout.space8) {
                     metricTile(value: "\(vm.workspace?.readerPulse?.commentsCount ?? 0)", label: "تعليق حديث")
                     metricTile(value: "\(vm.workspace?.readerPulse?.positiveShare ?? 0)%", label: "نبض إيجابي")
                 }
                 if let highlight = vm.workspace?.readerPulse?.highlightedComment {
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: SabqLayout.space4) {
                         Text("«\(highlight.content)»")
-                            .font(SabqFonts.app(size: 12, weight: .medium))
-                            .foregroundStyle(SabqTheme.ink)
+                            .sabqText(SabqType.excerpt)
+                            .foregroundStyle(SabqTheme.textPrimary)
                             .lineLimit(3)
                         Text("حول: \(highlight.articleTitle)")
-                            .font(SabqFonts.app(size: 11, weight: .medium))
-                            .foregroundStyle(SabqTheme.tertiaryInk)
+                            .sabqText(SabqType.meta)
+                            .foregroundStyle(SabqTheme.textTertiary)
                     }
-                    .padding(10)
+                    .padding(SabqLayout.space12)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(SabqTheme.paleFill))
+                    .background(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous).fill(SabqTheme.surfaceMuted))
                 } else if let message = vm.workspace?.readerPulse?.message {
                     quoteText(message)
                 }
@@ -589,21 +599,23 @@ struct WriterWorkspaceView: View {
     @ViewBuilder
     private var followUpCard: some View {
         if let followUp = vm.workspace?.followUp {
-            workspaceCard(icon: "target", tint: SabqTheme.gold, title: "فرصة متابعة") {
-                VStack(alignment: .leading, spacing: 8) {
+            workspaceCard(icon: "target", tint: SabqTheme.warning, title: "فرصة متابعة") {
+                VStack(alignment: .leading, spacing: SabqLayout.space4) {
                     Text(followUp.title)
-                        .font(SabqFonts.app(size: 13, weight: .bold))
-                        .foregroundStyle(SabqTheme.ink)
+                        .sabqText(SabqType.rowTitle)
+                        .foregroundStyle(SabqTheme.textPrimary)
                     Text(followUp.prompt)
-                        .font(SabqFonts.app(size: 12, weight: .medium))
-                        .foregroundStyle(SabqTheme.secondaryInk)
+                        .sabqText(SabqType.meta)
+                        .foregroundStyle(SabqTheme.textSecondary)
                     Button {
                         vm.coachInput = followUp.prompt
                         withAnimation(.snappy(duration: 0.2)) { tab = .ideas }
                     } label: {
                         Text("طوّر المتابعة")
-                            .font(SabqFonts.app(size: 12, weight: .bold))
-                            .foregroundStyle(SabqTheme.sky)
+                            .sabqText(SabqType.metaEmphasis)
+                            .foregroundStyle(SabqTheme.primary)
+                            .frame(minHeight: SabqLayout.touchTarget)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                 }
@@ -614,22 +626,22 @@ struct WriterWorkspaceView: View {
     @ViewBuilder
     private var calendarCard: some View {
         if let calendar = vm.workspace?.calendar, !calendar.isEmpty {
-            workspaceCard(icon: "calendar", tint: SabqTheme.secondaryInk, title: "تقويم الإلهام") {
+            workspaceCard(icon: "calendar", tint: SabqTheme.textSecondary, title: "تقويم الإلهام") {
                 VStack(spacing: 0) {
                     ForEach(calendar) { item in
                         HStack {
                             Text(item.name)
-                                .font(SabqFonts.app(size: 12, weight: .semibold))
-                                .foregroundStyle(SabqTheme.ink)
+                                .sabqText(SabqType.metaEmphasis)
+                                .foregroundStyle(SabqTheme.textPrimary)
                                 .lineLimit(1)
                             Spacer()
                             Text(writerShortDate(item.date))
-                                .font(SabqFonts.app(size: 11, weight: .medium))
-                                .foregroundStyle(SabqTheme.tertiaryInk)
+                                .sabqText(SabqType.meta)
+                                .foregroundStyle(SabqTheme.textTertiary)
                         }
-                        .padding(.vertical, 8)
+                        .padding(.vertical, SabqLayout.space12)
                         if item.id != calendar.last?.id {
-                            Divider().opacity(0.3)
+                            Divider().overlay(SabqTheme.separator)
                         }
                     }
                 }
@@ -641,14 +653,14 @@ struct WriterWorkspaceView: View {
 
     private var ideasSegment: some View {
         ScrollView(showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: SabqLayout.sectionGap) {
                 coachCard
                 ideasListCard
                 styleProfileCard
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 8)
-            .padding(.bottom, 100)
+            .padding(.horizontal, SabqLayout.pageMargin)
+            .padding(.top, SabqLayout.space16)
+            .padding(.bottom, 104)
         }
         // سحب الإصبع نحو الأسفل يُنزل الكيبورد أثناء الكتابة في استوديو الفكرة
         .scrollDismissesKeyboard(.interactively)
@@ -657,43 +669,47 @@ struct WriterWorkspaceView: View {
     }
 
     private var coachCard: some View {
-        workspaceCard(icon: "brain.head.profile", tint: SabqTheme.sky, title: "استوديو الفكرة") {
-            VStack(alignment: .leading, spacing: 10) {
+        let canCoach = vm.coachInput.trimmingCharacters(in: .whitespacesAndNewlines).count >= 12
+        return workspaceCard(icon: "brain.head.profile", tint: SabqTheme.primary, title: "استوديو الفكرة") {
+            VStack(alignment: .leading, spacing: SabqLayout.space12) {
                 Text("اكتب بذرة الفكرة، وسنساعدك بالأسئلة والخريطة دون كتابة المقال بدلًا عنك.")
-                    .font(SabqFonts.app(size: 12, weight: .medium))
-                    .foregroundStyle(SabqTheme.secondaryInk)
+                    .sabqText(SabqType.meta)
+                    .foregroundStyle(SabqTheme.textSecondary)
                 TextEditor(text: $vm.coachInput)
-                    .font(SabqFonts.app(size: 13, weight: .medium))
-                    .frame(minHeight: 90)
-                    .padding(8)
+                    .font(SabqType.excerpt.font)
+                    .foregroundStyle(SabqTheme.textPrimary)
+                    .frame(minHeight: 96)
+                    .padding(SabqLayout.space8)
                     .scrollContentBackground(.hidden)
-                    .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(SabqTheme.paleFill))
+                    .background(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous).fill(SabqTheme.surface))
+                    .overlay(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous).stroke(SabqTheme.outline, lineWidth: 1))
                 if let coachError = vm.coachError {
                     Text(coachError)
-                        .font(SabqFonts.app(size: 11, weight: .semibold))
-                        .foregroundStyle(SabqTheme.coral)
+                        .sabqText(SabqType.meta)
+                        .foregroundStyle(SabqTheme.danger)
                 }
                 Button {
                     Task { await vm.coach() }
                 } label: {
-                    HStack(spacing: 6) {
+                    HStack(spacing: SabqLayout.space8) {
                         if vm.coachLoading {
-                            ProgressView().tint(.white)
+                            ProgressView().tint(SabqTheme.onAction)
                         } else {
                             Image(systemName: "wand.and.stars")
                         }
                         Text("تحدث مع فكرتك")
                     }
-                    .font(SabqFonts.app(size: 13, weight: .bold))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 9)
-                    .background(Capsule().fill(SabqTheme.sky.opacity(
-                        vm.coachInput.trimmingCharacters(in: .whitespacesAndNewlines).count >= 12 ? 1 : 0.4
-                    )))
+                    .font(SabqType.button.font)
+                    .foregroundStyle(canCoach || vm.coachLoading ? SabqTheme.onAction : SabqTheme.disabledInk)
+                    .padding(.horizontal, SabqLayout.space24)
+                    .frame(minHeight: SabqLayout.controlHeight)
+                    .background(
+                        RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                            .fill(canCoach || vm.coachLoading ? SabqTheme.actionFill : SabqTheme.disabledFill)
+                    )
                 }
                 .buttonStyle(.plain)
-                .disabled(vm.coachLoading || vm.coachInput.trimmingCharacters(in: .whitespacesAndNewlines).count < 12)
+                .disabled(vm.coachLoading || !canCoach)
                 if let result = vm.coachResult {
                     coachResultView(result)
                 }
@@ -702,7 +718,7 @@ struct WriterWorkspaceView: View {
     }
 
     private func coachResultView(_ result: WriterCoachResult) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: SabqLayout.space16) {
             if let reflection = result.reflection, !reflection.isEmpty {
                 quoteText(reflection)
             }
@@ -715,49 +731,53 @@ struct WriterWorkspaceView: View {
             bulletBlock(title: "مصادر تبحث عنها", items: result.sourcesToSeek, icon: "doc.text.magnifyingglass")
             bulletBlock(title: "احذر", items: result.cautions, icon: "exclamationmark.triangle")
         }
-        .padding(.top, 4)
+        .padding(.top, SabqLayout.space4)
     }
 
     private var ideasListCard: some View {
-        workspaceCard(icon: "lightbulb.fill", tint: SabqTheme.gold, title: "بوصلة الأفكار") {
-            VStack(alignment: .leading, spacing: 10) {
+        workspaceCard(icon: "lightbulb", tint: SabqTheme.warning, title: "بوصلة الأفكار") {
+            VStack(alignment: .leading, spacing: SabqLayout.space12) {
                 if !vm.ideasRequested {
                     Text("ثلاث فرص منتقاة لك بالذكاء الاصطناعي — تُولَّد عند طلبك فقط.")
-                        .font(SabqFonts.app(size: 12, weight: .medium))
-                        .foregroundStyle(SabqTheme.secondaryInk)
+                        .sabqText(SabqType.meta)
+                        .foregroundStyle(SabqTheme.textSecondary)
                     Button {
                         Task { await vm.requestIdeas() }
                     } label: {
-                        HStack(spacing: 6) {
+                        HStack(spacing: SabqLayout.space8) {
                             Image(systemName: "sparkles")
                             Text("اقترح 3 أفكار")
                         }
-                        .font(SabqFonts.app(size: 13, weight: .bold))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 9)
-                        .background(Capsule().fill(SabqTheme.gold))
+                        .font(SabqType.button.font)
+                        .foregroundStyle(SabqTheme.onAction)
+                        .padding(.horizontal, SabqLayout.space24)
+                        .frame(minHeight: SabqLayout.controlHeight)
+                        .background(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous).fill(SabqTheme.actionFill))
                     }
                     .buttonStyle(.plain)
                 } else if vm.ideasLoading {
-                    ProgressView().frame(maxWidth: .infinity, minHeight: 80)
+                    ProgressView().tint(SabqTheme.primary).frame(maxWidth: .infinity, minHeight: 80)
                 } else if vm.ideas.isEmpty {
                     emptyHint(icon: "lightbulb", text: "تعذر جلب الأفكار — جرّب مرة أخرى بعد قليل.")
                 } else {
-                    VStack(spacing: 10) {
+                    VStack(spacing: 0) {
                         ForEach(vm.ideas) { idea in
+                            if idea.id != vm.ideas.first?.id {
+                                Divider().overlay(SabqTheme.separator)
+                            }
                             ideaCard(idea)
                         }
                     }
                     Button {
                         Task { await vm.requestIdeas() }
                     } label: {
-                        HStack(spacing: 5) {
+                        HStack(spacing: SabqLayout.space4) {
                             Image(systemName: "arrow.clockwise")
                             Text("أفكار جديدة")
                         }
-                        .font(SabqFonts.app(size: 12, weight: .bold))
-                        .foregroundStyle(SabqTheme.sky)
+                        .font(SabqType.metaEmphasis.font)
+                        .foregroundStyle(SabqTheme.primary)
+                        .frame(minHeight: SabqLayout.touchTarget)
                     }
                     .buttonStyle(.plain)
                 }
@@ -766,38 +786,31 @@ struct WriterWorkspaceView: View {
     }
 
     private func ideaCard(_ idea: WriterIdeaModel) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Text(ideaKindLabel(idea.kind))
-                    .font(SabqFonts.app(size: 10, weight: .bold))
-                    .foregroundStyle(SabqTheme.sky)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 3)
-                    .background(Capsule().fill(SabqTheme.sky.opacity(0.10)))
-                Spacer()
-            }
+        VStack(alignment: .leading, spacing: SabqLayout.space4) {
+            StatusChip(title: ideaKindLabel(idea.kind), tint: SabqTheme.primary)
             Text(idea.title)
-                .font(SabqFonts.app(size: 13, weight: .bold))
-                .foregroundStyle(SabqTheme.ink)
+                .sabqText(SabqType.rowTitle)
+                .foregroundStyle(SabqTheme.textPrimary)
+                .padding(.top, SabqLayout.space4)
             Text(idea.angle)
-                .font(SabqFonts.app(size: 12, weight: .medium))
-                .foregroundStyle(SabqTheme.secondaryInk)
+                .sabqText(SabqType.meta)
+                .foregroundStyle(SabqTheme.textSecondary)
             Text(idea.whyNow)
-                .font(SabqFonts.app(size: 11, weight: .medium))
-                .foregroundStyle(SabqTheme.tertiaryInk)
+                .sabqText(SabqType.meta)
+                .foregroundStyle(SabqTheme.textTertiary)
             Button {
                 vm.coachInput = "\(idea.title)\n\nالزاوية: \(idea.angle)"
             } label: {
                 Text("ابدأ من هذه الفكرة")
-                    .font(SabqFonts.app(size: 12, weight: .bold))
-                    .foregroundStyle(SabqTheme.sky)
+                    .sabqText(SabqType.metaEmphasis)
+                    .foregroundStyle(SabqTheme.primary)
+                    .frame(minHeight: SabqLayout.touchTarget)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .padding(.top, 2)
         }
-        .padding(12)
+        .padding(.top, SabqLayout.space12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(SabqTheme.paleFill))
     }
 
     private func ideaKindLabel(_ kind: String) -> String {
@@ -811,10 +824,10 @@ struct WriterWorkspaceView: View {
     private var styleProfileCard: some View {
         workspaceCard(icon: "signature", tint: SabqTheme.teal, title: "بصمتك الأسلوبية") {
             if vm.styleLoading {
-                ProgressView().frame(maxWidth: .infinity, minHeight: 60)
+                ProgressView().tint(SabqTheme.primary).frame(maxWidth: .infinity, minHeight: 60)
             } else if let profile = vm.styleProfile {
                 if profile.ready {
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: SabqLayout.space16) {
                         if let signature = profile.signature, !signature.isEmpty {
                             quoteText(signature)
                         }
@@ -834,9 +847,9 @@ struct WriterWorkspaceView: View {
 
     private var articlesSegment: some View {
         ScrollView(showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: SabqLayout.space24) {
                 if vm.isLoading {
-                    ProgressView().frame(maxWidth: .infinity, minHeight: 200)
+                    ProgressView().tint(SabqTheme.primary).frame(maxWidth: .infinity, minHeight: 200)
                 } else {
                     trackingCountersRow
                     if unreadCount > 0 { alertsCard }
@@ -844,68 +857,68 @@ struct WriterWorkspaceView: View {
                     trackingList
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 8)
-            .padding(.bottom, 100)
+            .padding(.horizontal, SabqLayout.pageMargin)
+            .padding(.top, SabqLayout.space16)
+            .padding(.bottom, 104)
         }
         .refreshable { await vm.load() }
     }
 
     private var trackingCountersRow: some View {
         let counts = vm.trackingCounts
-        return VStack(spacing: 8) {
-            HStack(spacing: 8) {
-                trackingCounter(label: "تحت المراجعة", value: counts.pending, tint: SabqTheme.sky)
-                trackingCounter(label: "تحتاج إجراءك", value: counts.action, tint: SabqTheme.gold)
+        return VStack(spacing: SabqLayout.space8) {
+            HStack(spacing: SabqLayout.space8) {
+                trackingCounter(label: "تحت المراجعة", value: counts.pending, tint: SabqTheme.primary)
+                trackingCounter(label: "تحتاج إجراءك", value: counts.action, tint: SabqTheme.warning)
                 trackingCounter(label: "مجدولة", value: counts.scheduled, tint: SabqTheme.teal)
             }
-            HStack(spacing: 8) {
-                trackingCounter(label: "غير صالحة للنشر", value: counts.declined, tint: SabqTheme.coral)
-                trackingCounter(label: "منشورة", value: counts.published, tint: SabqTheme.leaf)
+            HStack(spacing: SabqLayout.space8) {
+                trackingCounter(label: "غير صالحة للنشر", value: counts.declined, tint: SabqTheme.danger)
+                trackingCounter(label: "منشورة", value: counts.published, tint: SabqTheme.success)
             }
         }
     }
 
     private func trackingCounter(label: String, value: Int, tint: Color) -> some View {
-        VStack(spacing: 3) {
+        VStack(spacing: SabqLayout.space4) {
             Text("\(value)")
-                .font(SabqFonts.app(size: 18, weight: .heavy))
+                .sabqText(SabqType.sectionHeading)
                 .foregroundStyle(tint)
                 .monospacedDigit()
             Text(label)
-                .font(SabqFonts.app(size: 10, weight: .semibold))
-                .foregroundStyle(SabqTheme.secondaryInk)
+                .sabqText(SabqType.tag)
+                .foregroundStyle(SabqTheme.textSecondary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 10)
-        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(SabqTheme.surface))
-        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(SabqTheme.outline.opacity(0.5), lineWidth: 0.5))
+        .padding(.vertical, SabqLayout.space12)
+        .background(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous).fill(SabqTheme.surfaceMuted))
+        .accessibilityElement(children: .combine)
     }
 
     private var needsChangesCallout: some View {
         NavigationLink(value: ArticleRevisionsRoute()) {
-            HStack(spacing: 10) {
+            HStack(spacing: SabqLayout.space12) {
                 Image(systemName: "pencil.and.list.clipboard")
                     .font(SabqFonts.app(size: 16, weight: .semibold))
-                    .foregroundStyle(SabqTheme.gold)
-                VStack(alignment: .leading, spacing: 2) {
+                    .foregroundStyle(SabqTheme.warning)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: SabqLayout.space4) {
                     Text("مقالات تحتاج لمستك (\(vm.trackingCounts.action))")
-                        .font(SabqFonts.app(size: 13, weight: .bold))
-                        .foregroundStyle(SabqTheme.ink)
+                        .sabqText(SabqType.rowTitle)
+                        .foregroundStyle(SabqTheme.textPrimary)
                     Text("ملاحظات التحرير جاهزة — اضغط للتعديل مباشرة.")
-                        .font(SabqFonts.app(size: 11, weight: .medium))
-                        .foregroundStyle(SabqTheme.secondaryInk)
+                        .sabqText(SabqType.meta)
+                        .foregroundStyle(SabqTheme.textSecondary)
                 }
                 Spacer()
                 Image(systemName: "chevron.left")
                     .font(SabqFonts.app(size: 12, weight: .semibold))
-                    .foregroundStyle(SabqTheme.tertiaryInk)
+                    .foregroundStyle(SabqTheme.textTertiary)
             }
-            .padding(12)
-            .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(SabqTheme.gold.opacity(0.10)))
-            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(SabqTheme.gold.opacity(0.35), lineWidth: 0.5))
+            .padding(SabqLayout.space16)
+            .background(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous).fill(SabqTheme.surfaceMuted))
         }
         .buttonStyle(.plain)
     }
@@ -916,8 +929,11 @@ struct WriterWorkspaceView: View {
         if tracking.isEmpty {
             emptyHint(icon: "square.and.pencil", text: "هنا تبدأ الحكاية — أرسل مقالك الأول من «إرسال مقال رأي».")
         } else {
-            VStack(spacing: 10) {
+            VStack(spacing: 0) {
                 ForEach(tracking) { article in
+                    if article.id != tracking.first?.id {
+                        Divider().overlay(SabqTheme.separator)
+                    }
                     trackingCard(article)
                 }
             }
@@ -926,37 +942,32 @@ struct WriterWorkspaceView: View {
 
     private func trackingCard(_ article: WriterTrackingArticle) -> some View {
         let info = trackingStatusInfo(article)
-        return VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .top) {
+        return VStack(alignment: .leading, spacing: SabqLayout.space8) {
+            HStack(alignment: .top, spacing: SabqLayout.space8) {
                 Text(article.title)
-                    .font(SabqFonts.app(size: 13, weight: .bold))
-                    .foregroundStyle(SabqTheme.ink)
+                    .sabqText(SabqType.rowTitle)
+                    .foregroundStyle(SabqTheme.textPrimary)
                     .lineLimit(2)
-                Spacer(minLength: 8)
-                Text(info.label)
-                    .font(SabqFonts.app(size: 10, weight: .bold))
-                    .foregroundStyle(info.tint)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 3)
-                    .background(Capsule().fill(info.tint.opacity(0.12)))
+                Spacer(minLength: SabqLayout.space8)
+                StatusChip(title: info.label, tint: info.tint)
             }
             if let date = trackingDateLine(article) {
                 Text(date)
-                    .font(SabqFonts.app(size: 11, weight: .medium))
-                    .foregroundStyle(SabqTheme.tertiaryInk)
+                    .sabqText(SabqType.meta)
+                    .foregroundStyle(SabqTheme.textTertiary)
             }
             if let notes = article.reviewNotes, !notes.isEmpty, article.reviewStatus == "needs_changes" || article.reviewStatus == "rejected" {
                 Text("ملاحظة التحرير: \(notes)")
-                    .font(SabqFonts.app(size: 11, weight: .medium))
-                    .foregroundStyle(SabqTheme.secondaryInk)
-                    .padding(8)
+                    .sabqText(SabqType.meta)
+                    .foregroundStyle(SabqTheme.textPrimary)
+                    .padding(SabqLayout.space12)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(SabqTheme.gold.opacity(0.08)))
+                    .background(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous).fill(SabqTheme.surfaceMuted))
             }
-            HStack(spacing: 14) {
+            HStack(spacing: SabqLayout.space16) {
                 if article.reviewStatus == "needs_changes" {
                     NavigationLink(value: ArticleRevisionsRoute()) {
-                        actionLabel(icon: "pencil", text: "عدّل حسب الملاحظات", tint: SabqTheme.gold)
+                        actionLabel(icon: "pencil", text: "عدّل حسب الملاحظات", tint: SabqTheme.primary)
                     }
                     .buttonStyle(.plain)
                 }
@@ -966,7 +977,7 @@ struct WriterWorkspaceView: View {
                     actionLabel(
                         icon: vm.reviewLoading && vm.reviewTitle == article.title ? "hourglass" : "brain.head.profile",
                         text: "قارئ سبق الأول",
-                        tint: SabqTheme.sky
+                        tint: SabqTheme.primary
                     )
                 }
                 .buttonStyle(.plain)
@@ -974,21 +985,19 @@ struct WriterWorkspaceView: View {
                 Spacer()
             }
         }
-        .padding(12)
+        .padding(.vertical, SabqLayout.rowPadding)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(SabqTheme.surface))
-        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(SabqTheme.outline.opacity(0.5), lineWidth: 0.5))
     }
 
     private func trackingStatusInfo(_ article: WriterTrackingArticle) -> (label: String, tint: Color) {
-        if article.reviewStatus == "needs_changes" { return ("تحتاج إجراءك", SabqTheme.gold) }
+        if article.reviewStatus == "needs_changes" { return ("تحتاج إجراءك", SabqTheme.warning) }
         if article.reviewStatus == "rejected" || article.status == "rejected" || article.status == "archived" {
-            return ("غير صالحة للنشر", SabqTheme.coral)
+            return ("غير صالحة للنشر", SabqTheme.danger)
         }
-        if article.status == "published" { return ("منشورة", SabqTheme.leaf) }
+        if article.status == "published" { return ("منشورة", SabqTheme.success) }
         if article.status == "scheduled" { return ("مجدولة", SabqTheme.teal) }
-        if article.reviewStatus == "pending_review" { return ("تحت المراجعة", SabqTheme.sky) }
-        return ("مسودة", SabqTheme.secondaryInk)
+        if article.reviewStatus == "pending_review" { return ("تحت المراجعة", SabqTheme.primary) }
+        return ("مسودة", SabqTheme.textSecondary)
     }
 
     private func trackingDateLine(_ article: WriterTrackingArticle) -> String? {
@@ -1008,62 +1017,69 @@ struct WriterWorkspaceView: View {
 
     private var reviewSheet: some View {
         ScrollView(showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 14) {
-                HStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: SabqLayout.space16) {
+                HStack(alignment: .top, spacing: SabqLayout.space12) {
                     Image(systemName: "brain.head.profile")
                         .font(SabqFonts.app(size: 20, weight: .semibold))
-                        .foregroundStyle(SabqTheme.sky)
-                    VStack(alignment: .leading, spacing: 2) {
+                        .foregroundStyle(SabqTheme.primary)
+                        .accessibilityHidden(true)
+                    VStack(alignment: .leading, spacing: SabqLayout.space4) {
                         Text("قارئ سبق الأول")
-                            .font(SabqFonts.app(size: 17, weight: .heavy))
-                            .foregroundStyle(SabqTheme.ink)
+                            .sabqText(SabqType.sectionHeading)
+                            .foregroundStyle(SabqTheme.textPrimary)
+                            .accessibilityAddTraits(.isHeader)
                         Text(vm.reviewTitle)
-                            .font(SabqFonts.app(size: 12, weight: .medium))
-                            .foregroundStyle(SabqTheme.secondaryInk)
+                            .sabqText(SabqType.meta)
+                            .foregroundStyle(SabqTheme.textSecondary)
                             .lineLimit(2)
                     }
                 }
                 if let result = vm.reviewResult {
                     if let score = result.overallScore {
-                        HStack(spacing: 8) {
+                        HStack(spacing: SabqLayout.space12) {
                             Text("\(score)")
-                                .font(SabqFonts.app(size: 28, weight: .heavy))
-                                .foregroundStyle(score >= 70 ? SabqTheme.leaf : score >= 50 ? SabqTheme.gold : SabqTheme.coral)
+                                .sabqText(SabqType.articleTitle)
+                                .foregroundStyle(scoreTint(score))
                                 .monospacedDigit()
                             Text("من 100 — الملاحظات اقتراحات اختيارية، وأنت صاحب النص النهائي.")
-                                .font(SabqFonts.app(size: 11, weight: .medium))
-                                .foregroundStyle(SabqTheme.secondaryInk)
+                                .sabqText(SabqType.meta)
+                                .foregroundStyle(SabqTheme.textSecondary)
                         }
                     }
                     if let summary = result.summary, !summary.isEmpty {
                         quoteText(summary)
                     }
-                    ForEach(result.checks) { check in
-                        HStack(alignment: .top, spacing: 8) {
-                            Text("\(check.score)")
-                                .font(SabqFonts.app(size: 13, weight: .heavy))
-                                .foregroundStyle(check.score >= 70 ? SabqTheme.leaf : check.score >= 50 ? SabqTheme.gold : SabqTheme.coral)
-                                .monospacedDigit()
-                                .frame(width: 30, alignment: .center)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(check.label)
-                                    .font(SabqFonts.app(size: 12, weight: .bold))
-                                    .foregroundStyle(SabqTheme.ink)
-                                Text(check.note)
-                                    .font(SabqFonts.app(size: 11, weight: .medium))
-                                    .foregroundStyle(SabqTheme.secondaryInk)
+                    VStack(spacing: 0) {
+                        ForEach(result.checks) { check in
+                            if check.id != result.checks.first?.id {
+                                Divider().overlay(SabqTheme.separator)
                             }
-                            Spacer(minLength: 0)
+                            HStack(alignment: .top, spacing: SabqLayout.space8) {
+                                Text("\(check.score)")
+                                    .sabqText(SabqType.rowTitle)
+                                    .foregroundStyle(scoreTint(check.score))
+                                    .monospacedDigit()
+                                    .frame(width: 32, alignment: .center)
+                                VStack(alignment: .leading, spacing: SabqLayout.space4) {
+                                    Text(check.label)
+                                        .sabqText(SabqType.metaEmphasis)
+                                        .foregroundStyle(SabqTheme.textPrimary)
+                                    Text(check.note)
+                                        .sabqText(SabqType.meta)
+                                        .foregroundStyle(SabqTheme.textSecondary)
+                                }
+                                Spacer(minLength: 0)
+                            }
+                            .padding(.vertical, SabqLayout.space12)
                         }
-                        .padding(10)
-                        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(SabqTheme.paleFill))
                     }
                     bulletBlock(title: "عناوين مقترحة", items: result.headlineSuggestions, icon: "textformat")
                     bulletBlock(title: "نقاط قوة", items: result.strengths, icon: "hand.thumbsup")
                     bulletBlock(title: "ادّعاءات تحتاج توثيقًا", items: result.sourceFlags + result.sensitiveClaims, icon: "exclamationmark.triangle")
                 }
             }
-            .padding(20)
+            .padding(SabqLayout.pageMargin)
+            .padding(.top, SabqLayout.space8)
         }
         .background(SabqTheme.background)
         .sabqRTL()
@@ -1071,69 +1087,75 @@ struct WriterWorkspaceView: View {
         .onDisappear { vm.reviewResult = nil }
     }
 
+    private func scoreTint(_ score: Int) -> Color {
+        score >= 70 ? SabqTheme.success : score >= 50 ? SabqTheme.warning : SabqTheme.danger
+    }
+
     // MARK: - لبنات مشتركة
 
+    /// قسم غير مؤطر: عنوان بأيقونة بسيطة ثم المحتوى مباشرة على الصفحة.
     private func workspaceCard(icon: String, tint: Color, title: String, @ViewBuilder content: () -> some View) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 8) {
+        VStack(alignment: .leading, spacing: SabqLayout.space12) {
+            HStack(spacing: SabqLayout.space8) {
                 Image(systemName: icon)
-                    .font(SabqFonts.app(size: 14, weight: .semibold))
+                    .font(SabqFonts.app(size: 16, weight: .semibold))
                     .foregroundStyle(tint)
+                    .accessibilityHidden(true)
                 Text(title)
-                    .font(SabqFonts.app(size: 14, weight: .heavy))
-                    .foregroundStyle(SabqTheme.ink)
+                    .sabqText(SabqType.sectionHeading)
+                    .foregroundStyle(SabqTheme.textPrimary)
+                    .accessibilityAddTraits(.isHeader)
                 Spacer()
             }
             content()
         }
-        .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(SabqTheme.surface))
-        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(SabqTheme.outline.opacity(0.5), lineWidth: 0.5))
     }
 
     private func metricTile(value: String, label: String) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: SabqLayout.space4) {
             Text(value)
-                .font(SabqFonts.app(size: 18, weight: .heavy))
-                .foregroundStyle(SabqTheme.ink)
+                .sabqText(SabqType.sectionHeading)
+                .foregroundStyle(SabqTheme.textPrimary)
                 .monospacedDigit()
             Text(label)
-                .font(SabqFonts.app(size: 11, weight: .medium))
-                .foregroundStyle(SabqTheme.secondaryInk)
+                .sabqText(SabqType.meta)
+                .foregroundStyle(SabqTheme.textSecondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(10)
-        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(SabqTheme.paleFill))
+        .padding(SabqLayout.space12)
+        .background(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous).fill(SabqTheme.surfaceMuted))
+        .accessibilityElement(children: .combine)
     }
 
     private func quoteText(_ text: String) -> some View {
         Text(text)
-            .font(SabqFonts.app(size: 12, weight: .medium))
-            .foregroundStyle(SabqTheme.secondaryInk)
-            .padding(10)
+            .sabqText(SabqType.excerpt)
+            .foregroundStyle(SabqTheme.textSecondary)
+            .padding(SabqLayout.space12)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(SabqTheme.paleFill))
+            .background(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous).fill(SabqTheme.surfaceMuted))
     }
 
     @ViewBuilder
     private func bulletBlock(title: String, items: [String], icon: String) -> some View {
         if !items.isEmpty {
-            VStack(alignment: .leading, spacing: 5) {
-                HStack(spacing: 5) {
+            VStack(alignment: .leading, spacing: SabqLayout.space8) {
+                HStack(spacing: SabqLayout.space8) {
                     Image(systemName: icon)
-                        .font(SabqFonts.app(size: 11, weight: .semibold))
-                        .foregroundStyle(SabqTheme.sky)
+                        .font(SabqFonts.app(size: 13, weight: .semibold))
+                        .foregroundStyle(SabqTheme.primary)
+                        .accessibilityHidden(true)
                     Text(title)
-                        .font(SabqFonts.app(size: 12, weight: .bold))
-                        .foregroundStyle(SabqTheme.ink)
+                        .sabqText(SabqType.metaEmphasis)
+                        .foregroundStyle(SabqTheme.textPrimary)
                 }
                 ForEach(items, id: \.self) { item in
-                    HStack(alignment: .top, spacing: 6) {
-                        Circle().fill(SabqTheme.tertiaryInk).frame(width: 4, height: 4).padding(.top, 6)
+                    HStack(alignment: .top, spacing: SabqLayout.space8) {
+                        Circle().fill(SabqTheme.textTertiary).frame(width: 4, height: 4).padding(.top, SabqLayout.space8)
                         Text(item)
-                            .font(SabqFonts.app(size: 12, weight: .medium))
-                            .foregroundStyle(SabqTheme.secondaryInk)
+                            .sabqText(SabqType.meta)
+                            .foregroundStyle(SabqTheme.textSecondary)
                     }
                 }
             }
@@ -1141,27 +1163,30 @@ struct WriterWorkspaceView: View {
     }
 
     private func actionLabel(icon: String, text: String, tint: Color) -> some View {
-        HStack(spacing: 5) {
+        HStack(spacing: SabqLayout.space4) {
             Image(systemName: icon)
-                .font(SabqFonts.app(size: 11, weight: .semibold))
+                .font(SabqFonts.app(size: 12, weight: .semibold))
             Text(text)
-                .font(SabqFonts.app(size: 12, weight: .bold))
+                .sabqText(SabqType.metaEmphasis)
         }
         .foregroundStyle(tint)
+        .frame(minHeight: SabqLayout.touchTarget)
+        .contentShape(Rectangle())
     }
 
     private func emptyHint(icon: String, text: String) -> some View {
-        VStack(spacing: 8) {
+        VStack(spacing: SabqLayout.space8) {
             Image(systemName: icon)
                 .font(SabqFonts.app(size: 22, weight: .light))
-                .foregroundStyle(SabqTheme.tertiaryInk)
+                .foregroundStyle(SabqTheme.textTertiary)
+                .accessibilityHidden(true)
             Text(text)
-                .font(SabqFonts.app(size: 12, weight: .medium))
-                .foregroundStyle(SabqTheme.secondaryInk)
+                .sabqText(SabqType.meta)
+                .foregroundStyle(SabqTheme.textSecondary)
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 20)
+        .padding(.vertical, SabqLayout.space24)
     }
 }
 

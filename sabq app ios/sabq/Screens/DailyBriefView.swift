@@ -23,16 +23,16 @@ struct DailyBriefView: View {
 
     var body: some View {
         ScrollView(showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: SabqLayout.space24) {
                 if authStore.isLoggedIn, let user = authStore.currentUser {
                     memberDashboard(user: user)
                 } else {
                     guestLanding
                 }
             }
-            .padding(.horizontal, 18)
-            .padding(.top, 18)
-            .padding(.bottom, 60)
+            .padding(.horizontal, SabqLayout.pageMargin)
+            .padding(.top, SabqLayout.space16)
+            .padding(.bottom, SabqLayout.space40)
         }
         .background(SabqTheme.background)
         .sabqRTL()
@@ -78,40 +78,33 @@ struct DailyBriefView: View {
         let bookmarks = bookmarksStore.bookmarkedIDs.count
         let interests = user.interests.count
         let days = Self.daysSinceJoined(user.createdAt)
-        return HStack(spacing: 10) {
-            statTile(value: "\(bookmarks)", label: "محفوظ", icon: "bookmark.fill", tint: SabqTheme.primaryEnd)
-            statTile(value: "\(interests)", label: "اهتماماتك", icon: "slider.horizontal.3", tint: SabqTheme.teal)
-            statTile(value: days != nil ? "\(days!)" : "—", label: "يوم معك", icon: "calendar", tint: SabqTheme.gold)
+        return HStack(spacing: SabqLayout.space8) {
+            statTile(value: "\(bookmarks)", label: "محفوظ", icon: "bookmark.fill")
+            statTile(value: "\(interests)", label: "اهتماماتك", icon: "slider.horizontal.3")
+            statTile(value: days != nil ? "\(days!)" : "—", label: "يوم معك", icon: "calendar")
         }
     }
 
-    private func statTile(value: String, label: String, icon: String, tint: Color) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Image(systemName: icon)
-                    .font(SabqFonts.app(size: 11, weight: .regular))
-                    .foregroundStyle(tint)
-                Spacer(minLength: 0)
-            }
+    /// مربع رقم هادئ: تعبئة `surfaceMuted` بلا حد ولا لون تصنيف.
+    private func statTile(value: String, label: String, icon: String) -> some View {
+        VStack(alignment: .leading, spacing: SabqLayout.space4) {
+            Image(systemName: icon)
+                .font(SabqType.tag.font)
+                .foregroundStyle(SabqTheme.primary)
+                .accessibilityHidden(true)
             Text(value)
-                .font(SabqFonts.app(size: 22, weight: .heavy))
-                .foregroundStyle(SabqTheme.ink)
+                .font(SabqType.leadTitle.font)
+                .foregroundStyle(SabqTheme.textPrimary)
                 .monospacedDigit()
             Text(label)
-                .font(SabqFonts.app(size: 10, weight: .regular))
-                .foregroundStyle(SabqTheme.ink.opacity(0.72))
+                .font(SabqType.meta.font)
+                .foregroundStyle(SabqTheme.textSecondary)
                 .lineLimit(1)
         }
-        .padding(12)
+        .padding(SabqLayout.space12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                .fill(SabqTheme.surface)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                .stroke(tint.opacity(0.28), lineWidth: 0.7)
-        )
+        .sabqBlockSurface()
+        .accessibilityElement(children: .combine)
     }
 
     /// Filter the homepage feed to the user's interest categories. Returns
@@ -128,18 +121,10 @@ struct DailyBriefView: View {
 
     private func suggestionsSection(user: APIUser) -> some View {
         let suggestions = suggestedArticles(for: user)
-        return VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 8) {
-                Image(systemName: "sparkles")
-                    .font(SabqFonts.app(size: 12, weight: .medium))
-                    .foregroundStyle(SabqTheme.coral)
-                Text("اقتراحات لك من اهتماماتك")
-                    .font(SabqFonts.app(size: 15, weight: .heavy))
-                    .foregroundStyle(SabqTheme.ink)
-                Spacer(minLength: 0)
-            }
+        return VStack(alignment: .leading, spacing: SabqLayout.space12) {
+            sectionTitle("اقتراحات لك من اهتماماتك")
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(alignment: .top, spacing: 12) {
+                HStack(alignment: .top, spacing: SabqLayout.space16) {
                     ForEach(suggestions) { article in
                         NavigationLink(value: article) {
                             suggestionCard(article: article)
@@ -147,39 +132,40 @@ struct DailyBriefView: View {
                         .buttonStyle(.plain)
                     }
                 }
-                .padding(.horizontal, 2)
             }
         }
     }
 
     private func suggestionCard(article: Article) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            if let urlString = article.imageURL, let url = URL(string: urlString) {
-                CachedAsyncImage(url: url, contentMode: .fill) {
-                    Rectangle().fill(article.category.tint.opacity(0.15))
+        VStack(alignment: .leading, spacing: SabqLayout.space8) {
+            Group {
+                if let urlString = article.imageURL, let url = URL(string: urlString) {
+                    CachedAsyncImage(url: url, contentMode: .fill) {
+                        SabqImagePlaceholder()
+                    }
+                } else {
+                    SabqImagePlaceholder()
+                        .environment(\.sabqImageLoadFailed, true)
                 }
-                .frame(width: 220, height: 124)
-                .clipShape(RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous))
-                .aiImageBadgeOverlay(
-                    isVisible: article.isAiGeneratedImage,
-                    model: article.aiImageModel,
-                    inset: 6,
-                    sizeScale: 0.75
-                )
-            } else {
-                RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                    .fill(article.category.tint.opacity(0.15))
-                    .frame(width: 220, height: 124)
             }
+            .frame(width: 220, height: 124)
+            .clipShape(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
+            .aiImageBadgeOverlay(
+                isVisible: article.isAiGeneratedImage,
+                model: article.aiImageModel,
+                inset: 6,
+                sizeScale: 0.75
+            )
             Text(article.categoryTitle)
-                .font(SabqFonts.app(size: 10, weight: .regular))
-                .foregroundStyle(SabqTheme.secondaryInk)
+                .font(SabqType.metaEmphasis.font)
+                .foregroundStyle(SabqTheme.primary)
             SabqRTLText(
                 article.title,
-                uiFont: SabqFonts.uiApp(size: 13.5, weight: .bold),
-                color: SabqTheme.ink,
+                uiFont: SabqType.rowTitle.uiFont,
+                color: SabqTheme.textPrimary,
                 lineLimit: 3,
-                lineSpacing: 2
+                lineSpacing: SabqType.rowTitle.lineSpacing,
+                textStyle: SabqType.rowTitle.uiTextStyle
             )
             .frame(width: 220, alignment: .leading)
         }
@@ -193,40 +179,45 @@ struct DailyBriefView: View {
     /// الاهتمامات". Pure client-side; never empty for a logged-in user.
     private func moodCard(user: APIUser) -> some View {
         let interestSlugs = Set(user.interests.compactMap { $0.slug?.lowercased() })
-        let (icon, label, subtitle, tint) = Self.inferMood(from: interestSlugs)
-        return HStack(alignment: .center, spacing: 14) {
-            ZStack {
-                Circle().fill(tint.opacity(0.14)).frame(width: 46, height: 46)
-                Image(systemName: icon)
-                    .font(SabqFonts.app(size: 20, weight: .semibold))
-                    .foregroundStyle(tint)
-                    .symbolRenderingMode(.hierarchical)
-            }
-            VStack(alignment: .leading, spacing: 3) {
+        let (icon, label, subtitle, _) = Self.inferMood(from: interestSlugs)
+        return HStack(alignment: .center, spacing: SabqLayout.space12) {
+            Image(systemName: icon)
+                .font(SabqFonts.app(size: 20, weight: .regular))
+                .foregroundStyle(SabqTheme.primary)
+                .frame(width: SabqLayout.touchTarget, height: SabqLayout.touchTarget)
+                .background(
+                    RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
+                        .fill(SabqTheme.surface)
+                )
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: SabqLayout.space4) {
                 Text("مزاجك القرائي اليوم")
-                    .font(SabqFonts.app(size: 11, weight: .regular))
-                    .foregroundStyle(SabqTheme.secondaryInk)
+                    .font(SabqType.meta.font)
+                    .foregroundStyle(SabqTheme.textSecondary)
                 Text(label)
-                    .font(SabqFonts.app(size: 15, weight: .heavy))
-                    .foregroundStyle(SabqTheme.ink)
+                    .font(SabqType.rowTitle.font)
+                    .foregroundStyle(SabqTheme.textPrimary)
                 Text(subtitle)
-                    .font(SabqFonts.app(size: 12))
-                    .foregroundStyle(SabqTheme.secondaryInk)
+                    .font(SabqType.meta.font)
+                    .foregroundStyle(SabqTheme.textSecondary)
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 0)
         }
-        .padding(14)
+        .padding(SabqLayout.cardInset)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                .fill(tint.opacity(0.09))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                .stroke(tint.opacity(0.32), lineWidth: 0.7)
-        )
+        .sabqBlockSurface()
+        .accessibilityElement(children: .combine)
+    }
+
+    /// عنوان قسم موحّد: 20 عريض بلا مربع أيقونة.
+    private func sectionTitle(_ title: String) -> some View {
+        Text(title)
+            .font(SabqType.sectionHeading.font)
+            .foregroundStyle(SabqTheme.textPrimary)
+            .accessibilityAddTraits(.isHeader)
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private static func inferMood(from slugs: Set<String>) -> (icon: String, label: String, subtitle: String, tint: Color) {
@@ -252,49 +243,33 @@ struct DailyBriefView: View {
     }
 
     private func memberHero(user: APIUser) -> some View {
-        HStack(alignment: .center, spacing: 14) {
+        HStack(alignment: .center, spacing: SabqLayout.space16) {
             avatar(user: user)
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: SabqLayout.space4) {
                 Text(user.displayName)
-                    .font(SabqFonts.app(size: 18, weight: .heavy))
-                    .foregroundStyle(SabqTheme.ink)
+                    .font(SabqType.leadTitle.font)
+                    .foregroundStyle(SabqTheme.textPrimary)
                     .lineLimit(1)
-                HStack(spacing: 6) {
+                HStack(spacing: SabqLayout.space4) {
                     Image(systemName: "sparkles")
-                        .font(SabqFonts.app(size: 10, weight: .regular))
-                        .foregroundStyle(SabqTheme.primaryEnd)
+                        .font(SabqType.tag.font)
+                        .foregroundStyle(SabqTheme.primary)
+                        .accessibilityHidden(true)
                     Text(user.localizedRole)
-                        .font(SabqFonts.app(size: 11, weight: .regular))
-                        .foregroundStyle(SabqTheme.ink.opacity(0.72))
+                        .font(SabqType.meta.font)
+                        .foregroundStyle(SabqTheme.textSecondary)
                         .lineLimit(1)
                 }
                 if let email = user.email, !email.isEmpty {
                     Text(email)
-                        .font(SabqFonts.app(size: 11, weight: .regular))
-                        .foregroundStyle(SabqTheme.secondaryInk)
+                        .font(SabqType.meta.font)
+                        .foregroundStyle(SabqTheme.textTertiary)
                         .lineLimit(1)
                 }
             }
             Spacer(minLength: 0)
         }
-        .padding(18)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
-                .fill(.ultraThinMaterial)
-                .overlay(
-                    RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
-                        .fill(LinearGradient(
-                            colors: [SabqTheme.primaryEnd.opacity(0.11), SabqTheme.sky.opacity(0.06)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ))
-                )
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
-                .stroke(SabqTheme.primaryEnd.opacity(0.28), lineWidth: 0.7)
-        )
     }
 
     private func avatar(user: APIUser) -> some View {
@@ -309,143 +284,125 @@ struct DailyBriefView: View {
                 avatarPlaceholder(user: user)
             }
         }
-        .overlay(Circle().stroke(SabqTheme.primaryEnd.opacity(0.45), lineWidth: 1.5))
     }
 
     private func avatarPlaceholder(user: APIUser) -> some View {
         Circle()
-            .fill(SabqTheme.primaryEnd.opacity(0.15))
+            .fill(SabqTheme.surfaceMuted)
             .frame(width: 64, height: 64)
             .overlay {
                 Text(String(user.displayName.prefix(1)))
-                    .font(SabqFonts.app(size: 22, weight: .heavy))
-                    .foregroundStyle(SabqTheme.primaryEnd)
+                    .font(SabqType.leadTitle.font)
+                    .foregroundStyle(SabqTheme.textSecondary)
             }
     }
 
     @ViewBuilder
     private func interestsCard(user: APIUser) -> some View {
         let interests = user.interests
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 8) {
-                Image(systemName: "slider.horizontal.3")
-                    .font(SabqFonts.app(size: 12, weight: .medium))
-                    .foregroundStyle(SabqTheme.primaryEnd)
-                Text("اهتماماتك")
-                    .font(SabqFonts.app(size: 15, weight: .heavy))
-                    .foregroundStyle(SabqTheme.ink)
-                Spacer(minLength: 0)
+        VStack(alignment: .leading, spacing: SabqLayout.space12) {
+            HStack(alignment: .firstTextBaseline, spacing: SabqLayout.space8) {
+                sectionTitle("اهتماماتك")
                 Button {
                     showInterestsPicker = true
                 } label: {
                     Text(interests.isEmpty ? "اختر اهتماماتك" : "تعديل")
-                        .font(SabqFonts.app(size: 10, weight: .regular))
-                        .foregroundStyle(SabqTheme.primaryEnd)
+                        .font(SabqType.metaEmphasis.font)
+                        .foregroundStyle(SabqTheme.primary)
+                        .frame(minHeight: SabqLayout.touchTarget)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .fixedSize()
             }
 
             if interests.isEmpty {
-                VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: SabqLayout.space12) {
                     Text("لم تختر بعد اهتماماتك. اختر بضع تصنيفات لنقترح عليك أهم الأخبار في كل زيارة.")
-                        .font(SabqFonts.app(size: 13, weight: .medium))
-                        .foregroundStyle(SabqTheme.secondaryInk)
-                        .lineSpacing(4)
+                        .sabqText(SabqType.excerpt)
+                        .foregroundStyle(SabqTheme.textSecondary)
 
                     Button {
                         showInterestsPicker = true
                     } label: {
-                        HStack(spacing: 6) {
+                        HStack(spacing: SabqLayout.space8) {
                             Image(systemName: "plus.circle.fill")
-                                .font(SabqFonts.app(size: 12, weight: .medium))
+                                .font(SabqType.tag.font)
                             Text("اختر اهتماماتك الآن")
-                                .font(SabqFonts.app(size: 12, weight: .medium))
+                                .font(SabqType.button.font)
                         }
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 10)
+                        .foregroundStyle(SabqTheme.onAction)
+                        .padding(.horizontal, SabqLayout.space24)
+                        .frame(minHeight: SabqLayout.controlHeight)
                         .background(
-                            Capsule().fill(SabqTheme.primaryEnd)
+                            RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                                .fill(SabqTheme.actionFill)
                         )
                     }
                     .buttonStyle(.plain)
                 }
             } else {
-                FlowLayout(spacing: 8) {
+                FlowLayout(spacing: SabqLayout.space8) {
                     ForEach(interests) { interest in
                         Text(interest.name ?? interest.slug ?? "—")
-                            .font(SabqFonts.app(size: 11, weight: .regular))
-                            .foregroundStyle(SabqTheme.ink.opacity(0.76))
-                            .padding(.horizontal, 11)
-                            .padding(.vertical, 7)
+                            .font(SabqType.tag.font)
+                            .foregroundStyle(SabqTheme.textPrimary)
+                            .padding(.horizontal, SabqLayout.space12)
+                            .frame(minHeight: 32)
                             .background(
-                                Capsule().fill(SabqTheme.primaryEnd.opacity(0.12))
-                            )
-                            .overlay(
-                                Capsule().stroke(SabqTheme.primaryEnd.opacity(0.20), lineWidth: 0.5)
+                                RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
+                                    .fill(SabqTheme.surfaceMuted)
                             )
                     }
                 }
 
                 Text("\(interests.count) تصنيف نختار لك منه أخباراً يومية")
-                    .font(SabqFonts.app(size: 10, weight: .regular))
-                    .foregroundStyle(SabqTheme.secondaryInk)
+                    .font(SabqType.meta.font)
+                    .foregroundStyle(SabqTheme.textSecondary)
             }
         }
-        .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                .fill(SabqTheme.surface)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                .stroke(SabqTheme.outline.opacity(0.65), lineWidth: 0.7)
-        )
     }
 
     private var valueGrid: some View {
-        let columns = SabqGrid.adaptive(spacing: 12)
-        return LazyVGrid(columns: columns, spacing: 12) {
-            featureTile(title: "موجز يومي", subtitle: "أهم ما يهمك في دقائق", icon: "doc.text.magnifyingglass", tint: SabqTheme.teal)
-            featureTile(title: "اقتراحات ذكية", subtitle: "توصيات من سبق AI", icon: "sparkles", tint: SabqTheme.coral)
-            featureTile(title: "محفوظاتك", subtitle: "اقرأها من أي جهاز", icon: "bookmark.fill", tint: SabqTheme.primaryEnd)
-            featureTile(title: "إحصاءات قراءتك", subtitle: "مقالاتك ووقتك", icon: "chart.bar.fill", tint: SabqTheme.gold)
+        let columns = SabqGrid.adaptive(spacing: SabqLayout.space12)
+        return LazyVGrid(columns: columns, spacing: SabqLayout.space12) {
+            featureTile(title: "موجز يومي", subtitle: "أهم ما يهمك في دقائق", icon: "doc.text.magnifyingglass")
+            featureTile(title: "اقتراحات ذكية", subtitle: "توصيات من سبق AI", icon: "sparkles")
+            featureTile(title: "محفوظاتك", subtitle: "اقرأها من أي جهاز", icon: "bookmark.fill")
+            featureTile(title: "إحصاءات قراءتك", subtitle: "مقالاتك ووقتك", icon: "chart.bar.fill")
         }
     }
 
-    private func featureTile(title: String, subtitle: String, icon: String, tint: Color) -> some View {
-        VStack(alignment: .leading, spacing: 9) {
-            ZStack {
-                Circle().fill(tint.opacity(0.18)).frame(width: 34, height: 34)
-                Image(systemName: icon)
-                    .font(SabqFonts.app(size: 14, weight: .semibold))
-                    .foregroundStyle(tint)
-            }
+    private func featureTile(title: String, subtitle: String, icon: String) -> some View {
+        VStack(alignment: .leading, spacing: SabqLayout.space8) {
+            Image(systemName: icon)
+                .font(SabqFonts.app(size: 16, weight: .semibold))
+                .foregroundStyle(SabqTheme.primary)
+                .frame(width: 36, height: 36)
+                .background(
+                    RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
+                        .fill(SabqTheme.surface)
+                )
+                .accessibilityHidden(true)
             Text(title)
-                .font(SabqFonts.app(size: 14, weight: .heavy))
-                .foregroundStyle(SabqTheme.ink)
+                .font(SabqType.rowTitle.font)
+                .foregroundStyle(SabqTheme.textPrimary)
             Text(subtitle)
-                .font(SabqFonts.app(size: 11))
-                .foregroundStyle(SabqTheme.ink.opacity(0.70))
+                .font(SabqType.meta.font)
+                .foregroundStyle(SabqTheme.textSecondary)
                 .lineLimit(2)
         }
-        .padding(14)
+        .padding(SabqLayout.cardInset)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                .fill(SabqTheme.surface)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                .stroke(tint.opacity(0.28), lineWidth: 0.7)
-        )
+        .sabqBlockSurface()
+        .accessibilityElement(children: .combine)
     }
 
     // MARK: - Guest landing
 
     private var guestLanding: some View {
-        VStack(alignment: .leading, spacing: 18) {
+        VStack(alignment: .leading, spacing: SabqLayout.space24) {
             guestHero
             valueGrid
             guestInterestsPreview
@@ -455,136 +412,97 @@ struct DailyBriefView: View {
     }
 
     private var guestHero: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            ZStack {
-                Circle()
-                    .fill(SabqTheme.primaryEnd.opacity(0.18))
-                    .frame(width: 74, height: 74)
-                Image(systemName: "sparkles.rectangle.stack.fill")
-                    .font(SabqFonts.app(size: 32, weight: .light))
-                    .foregroundStyle(SabqTheme.primaryEnd)
-                    .symbolRenderingMode(.hierarchical)
-            }
+        VStack(alignment: .leading, spacing: SabqLayout.space16) {
+            Image(systemName: "sparkles.rectangle.stack.fill")
+                .font(SabqFonts.app(size: 26, weight: .regular))
+                .foregroundStyle(SabqTheme.primary)
+                .symbolRenderingMode(.hierarchical)
+                .frame(width: 56, height: 56)
+                .background(
+                    RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                        .fill(SabqTheme.surfaceMuted)
+                )
+                .accessibilityHidden(true)
 
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: SabqLayout.space8) {
                 Text("موجزك في سبق")
-                    .font(SabqFonts.app(size: 26, weight: .heavy))
-                    .foregroundStyle(SabqTheme.ink)
+                    .font(SabqType.articleTitle.font)
+                    .foregroundStyle(SabqTheme.textPrimary)
+                    .accessibilityAddTraits(.isHeader)
                 Text("صفحة شخصية تبدأ من اهتماماتك: تختار ما يهمك، وسبق ترتّب لك موجزاً يومياً، توصيات، وإحصاءات قراءة واضحة.")
-                    .font(SabqFonts.app(size: 14))
-                    .foregroundStyle(SabqTheme.ink.opacity(0.72))
-                    .lineSpacing(5)
+                    .sabqText(SabqType.excerpt)
+                    .foregroundStyle(SabqTheme.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .padding(20)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
-                .fill(.ultraThinMaterial)
-                .overlay(
-                    RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
-                        .fill(LinearGradient(
-                            colors: [SabqTheme.primaryEnd.opacity(0.11), SabqTheme.sky.opacity(0.06)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ))
-                )
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
-                .stroke(SabqTheme.primaryEnd.opacity(0.28), lineWidth: 0.7)
-        )
     }
 
     private var guestInterestsPreview: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 7) {
-                Image(systemName: "person.text.rectangle.fill")
-                    .font(SabqFonts.app(size: 13))
-                    .foregroundStyle(SabqTheme.primaryEnd)
-                Text("ابدأ باختيار ما يهمك")
-                    .font(SabqFonts.app(size: 15, weight: .heavy))
-                    .foregroundStyle(SabqTheme.ink)
-            }
+        VStack(alignment: .leading, spacing: SabqLayout.space12) {
+            sectionTitle("ابدأ باختيار ما يهمك")
 
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 74), spacing: 8)], alignment: .leading, spacing: 8) {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 74), spacing: SabqLayout.space8)], alignment: .leading, spacing: SabqLayout.space8) {
                 ForEach(["محليات", "اقتصاد", "رياضة", "تقنية", "رأي", "لحظة بلحظة", "العالم", "صحة"], id: \.self) { item in
                     Text(item)
-                        .font(SabqFonts.app(size: 11, weight: .regular))
-                        .foregroundStyle(SabqTheme.ink.opacity(0.74))
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 7)
-                        .frame(maxWidth: .infinity)
+                        .font(SabqType.tag.font)
+                        .foregroundStyle(SabqTheme.textPrimary)
+                        .padding(.horizontal, SabqLayout.space8)
+                        .frame(maxWidth: .infinity, minHeight: 32)
                         .background(
-                            Capsule(style: .continuous)
-                                .fill(SabqTheme.primaryEnd.opacity(0.11))
-                        )
-                        .overlay(
-                            Capsule(style: .continuous)
-                                .stroke(SabqTheme.primaryEnd.opacity(0.18), lineWidth: 0.5)
+                            RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
+                                .fill(SabqTheme.surfaceMuted)
                         )
                 }
             }
         }
-        .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                .fill(SabqTheme.surface)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                .stroke(SabqTheme.outline.opacity(0.65), lineWidth: 0.7)
-        )
     }
 
     private var guestBenefits: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SabqLayout.space12) {
             Text("بعد التسجيل تحصل على")
-                .font(SabqFonts.app(size: 15, weight: .heavy))
-                .foregroundStyle(SabqTheme.ink)
+                .font(SabqType.rowTitle.font)
+                .foregroundStyle(SabqTheme.textPrimary)
+                .accessibilityAddTraits(.isHeader)
 
             benefitRow("موجز صباحي أو مسائي مبني على اهتماماتك", icon: "sun.max.fill")
             benefitRow("اقتراحات أخبار أدق كلما قرأت أكثر", icon: "wand.and.stars")
             benefitRow("حفظ المقالات والعودة لها من أي جهاز", icon: "bookmark.fill")
         }
-        .padding(16)
+        .padding(SabqLayout.cardInset)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                .fill(SabqTheme.primaryEnd.opacity(0.075))
-        )
+        .sabqBlockSurface()
     }
 
     private func benefitRow(_ text: String, icon: String) -> some View {
-        HStack(alignment: .top, spacing: 9) {
+        HStack(alignment: .firstTextBaseline, spacing: SabqLayout.space8) {
             Image(systemName: icon)
-                .font(SabqFonts.app(size: 11, weight: .regular))
-                .foregroundStyle(SabqTheme.primaryEnd)
-                .frame(width: 18)
+                .font(SabqType.tag.font)
+                .foregroundStyle(SabqTheme.primary)
+                .frame(width: 20)
+                .accessibilityHidden(true)
             Text(text)
-                .font(SabqFonts.app(size: 13, weight: .medium))
-                .foregroundStyle(SabqTheme.ink.opacity(0.72))
+                .sabqText(SabqType.excerpt)
+                .foregroundStyle(SabqTheme.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }
 
     private var guestActions: some View {
-        VStack(spacing: 10) {
+        VStack(spacing: SabqLayout.space8) {
             Button {
                 showSignUp = true
             } label: {
-                HStack(spacing: 6) {
+                HStack(spacing: SabqLayout.space8) {
                     Image(systemName: "sparkles")
-                        .font(SabqFonts.app(size: 12, weight: .medium))
+                        .font(SabqType.tag.font)
                     Text("ابدأ التسجيل مع SABQ AI")
-                        .font(SabqFonts.app(size: 16, weight: .heavy))
+                        .font(SabqType.button.font)
                 }
-                .foregroundStyle(.white)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 15)
-                .background(SabqTheme.brandGradient, in: RoundedRectangle(cornerRadius: SabqTheme.buttonRadius, style: .continuous))
+                .foregroundStyle(SabqTheme.onAction)
+                .frame(maxWidth: .infinity, minHeight: SabqLayout.controlHeight)
+                .background(SabqTheme.actionFill, in: RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
             }
             .buttonStyle(.plain)
 
@@ -592,10 +510,10 @@ struct DailyBriefView: View {
                 showLogin = true
             } label: {
                 Text("لديك حساب؟ تسجيل الدخول")
-                    .font(SabqFonts.app(size: 14, weight: .semibold))
-                    .foregroundStyle(SabqTheme.primaryEnd)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
+                    .font(SabqType.button.font)
+                    .foregroundStyle(SabqTheme.primary)
+                    .frame(maxWidth: .infinity, minHeight: SabqLayout.controlHeight)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
         }
@@ -668,7 +586,7 @@ struct InterestsPickerSheet: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("إلغاء") { dismiss() }
-                        .foregroundStyle(SabqTheme.secondaryInk)
+                        .foregroundStyle(SabqTheme.textSecondary)
                 }
             }
             .task {
@@ -696,42 +614,39 @@ struct InterestsPickerSheet: View {
     // MARK: - Sticky header (selection counter + bulk actions)
 
     private var stickyHeader: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: SabqLayout.space12) {
             HStack(alignment: .center) {
-                VStack(alignment: .leading, spacing: 3) {
+                VStack(alignment: .leading, spacing: SabqLayout.space4) {
                     Text("اختر ما يهمّك")
-                        .font(SabqFonts.app(size: 17, weight: .heavy))
-                        .foregroundStyle(SabqTheme.ink)
+                        .font(SabqType.sectionHeading.font)
+                        .foregroundStyle(SabqTheme.textPrimary)
                     Text("سبق ترتّب موجزك اليومي على هذه التصنيفات.")
-                        .font(SabqFonts.app(size: 12))
-                        .foregroundStyle(SabqTheme.secondaryInk)
+                        .font(SabqType.meta.font)
+                        .foregroundStyle(SabqTheme.textSecondary)
                 }
-                Spacer(minLength: 8)
+                Spacer(minLength: SabqLayout.space8)
                 Text("\(selection.count)")
-                    .font(SabqFonts.app(size: 17, weight: .heavy))
-                    .foregroundStyle(.white)
+                    .font(SabqType.button.font)
+                    .monospacedDigit()
+                    .foregroundStyle(SabqTheme.onAction)
                     .frame(minWidth: 40, minHeight: 32)
-                    .padding(.horizontal, 8)
-                    .background(
-                        Capsule().fill(LinearGradient(
-                            colors: [SabqTheme.primaryStart, SabqTheme.primaryEnd],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ))
-                    )
+                    .padding(.horizontal, SabqLayout.space8)
+                    .background(Capsule().fill(SabqTheme.actionFill))
             }
 
-            HStack(spacing: 8) {
+            HStack(spacing: SabqLayout.space8) {
                 Button {
                     SabqHaptics.light()
                     selection = Set(categories.map(\.id))
                 } label: {
                     Text("حدد الكل")
-                        .font(SabqFonts.app(size: 10, weight: .regular))
-                        .foregroundStyle(SabqTheme.primaryEnd)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 7)
-                        .background(Capsule().fill(SabqTheme.primaryEnd.opacity(0.10)))
+                        .font(SabqType.metaEmphasis.font)
+                        .foregroundStyle(SabqTheme.textPrimary)
+                        .padding(.horizontal, SabqLayout.space12)
+                        .frame(minHeight: 36)
+                        .background(Capsule().fill(SabqTheme.surfaceMuted))
+                        .frame(minHeight: SabqLayout.touchTarget)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
 
@@ -740,11 +655,13 @@ struct InterestsPickerSheet: View {
                     selection.removeAll()
                 } label: {
                     Text("امسح الكل")
-                        .font(SabqFonts.app(size: 10, weight: .regular))
-                        .foregroundStyle(SabqTheme.secondaryInk)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 7)
-                        .background(Capsule().fill(SabqTheme.paleFill))
+                        .font(SabqType.metaEmphasis.font)
+                        .foregroundStyle(SabqTheme.textPrimary)
+                        .padding(.horizontal, SabqLayout.space12)
+                        .frame(minHeight: 36)
+                        .background(Capsule().fill(SabqTheme.surfaceMuted))
+                        .frame(minHeight: SabqLayout.touchTarget)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .disabled(selection.isEmpty)
@@ -752,14 +669,14 @@ struct InterestsPickerSheet: View {
                 Spacer(minLength: 0)
             }
         }
-        .padding(.horizontal, 18)
-        .padding(.top, 16)
-        .padding(.bottom, 12)
-        .background(.ultraThinMaterial)
+        .padding(.horizontal, SabqLayout.pageMargin)
+        .padding(.top, SabqLayout.space16)
+        .padding(.bottom, SabqLayout.space8)
+        .background(SabqTheme.background)
         .overlay(
             Rectangle()
-                .fill(SabqTheme.outline.opacity(0.35))
-                .frame(height: 0.5),
+                .fill(SabqTheme.separator)
+                .frame(height: 1),
             alignment: .bottom
         )
     }
@@ -767,14 +684,14 @@ struct InterestsPickerSheet: View {
     // MARK: - Chip grid
 
     private var chipGrid: some View {
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: 130), spacing: 10)], alignment: .leading, spacing: 10) {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 130), spacing: SabqLayout.space8)], alignment: .leading, spacing: SabqLayout.space8) {
             ForEach(categories) { category in
                 interestChip(category: category)
             }
         }
-        .padding(.horizontal, 18)
-        .padding(.top, 16)
-        .padding(.bottom, 100)
+        .padding(.horizontal, SabqLayout.pageMargin)
+        .padding(.top, SabqLayout.space16)
+        .padding(.bottom, SabqLayout.space24)
     }
 
     private func interestChip(category: APICategory) -> some View {
@@ -786,61 +703,58 @@ struct InterestsPickerSheet: View {
                 if isOn { selection.remove(id) } else { selection.insert(id) }
             }
         } label: {
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 6) {
-                    Image(systemName: isOn ? "checkmark.circle.fill" : "circle")
-                        .font(SabqFonts.app(size: 14, weight: .heavy))
-                        .foregroundStyle(isOn ? Color.white : SabqTheme.tertiaryInk)
-                    Spacer(minLength: 0)
-                }
+            HStack(spacing: SabqLayout.space8) {
+                Image(systemName: isOn ? "checkmark.circle.fill" : "circle")
+                    .font(SabqFonts.app(size: 18, weight: .regular))
+                    .foregroundStyle(isOn ? SabqTheme.onAction : SabqTheme.textTertiary)
+                    .accessibilityHidden(true)
                 Text(category.name.isEmpty ? (category.slug ?? "—") : category.name)
-                    .font(SabqFonts.app(size: 14, weight: .heavy))
-                    .foregroundStyle(isOn ? .white : SabqTheme.ink)
+                    .font(SabqType.rowTitle.font)
+                    .foregroundStyle(isOn ? SabqTheme.onAction : SabqTheme.textPrimary)
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
+            .padding(.horizontal, SabqLayout.space12)
+            .padding(.vertical, SabqLayout.space12)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .frame(minHeight: 72)
+            .frame(minHeight: 56)
             .background(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(isOn ? SabqTheme.primaryEnd : SabqTheme.surface)
+                RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                    .fill(isOn ? SabqTheme.actionFill : SabqTheme.surfaceMuted)
             )
-            .overlay(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .stroke(isOn ? Color.clear : SabqTheme.outline.opacity(0.45), lineWidth: 0.8)
-            )
-            .shadow(color: isOn ? SabqTheme.primaryEnd.opacity(0.18) : .clear, radius: 6, y: 2)
         }
         .buttonStyle(.plain)
+        .accessibilityAddTraits(isOn ? .isSelected : [])
     }
 
     // MARK: - Skeleton + empty
 
     private var skeletonGrid: some View {
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: 130), spacing: 10)], alignment: .leading, spacing: 10) {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 130), spacing: SabqLayout.space8)], alignment: .leading, spacing: SabqLayout.space8) {
             ForEach(0..<10, id: \.self) { _ in
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(SabqTheme.paleFill)
-                    .frame(height: 72)
+                RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                    .fill(SabqTheme.surfaceMuted)
+                    .frame(height: 56)
             }
         }
-        .padding(.horizontal, 18)
-        .padding(.top, 16)
-        .padding(.bottom, 100)
+        .padding(.horizontal, SabqLayout.pageMargin)
+        .padding(.top, SabqLayout.space16)
+        .padding(.bottom, SabqLayout.space24)
         .redacted(reason: .placeholder)
     }
 
     private var emptyState: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: SabqLayout.space12) {
             Image(systemName: "square.grid.2x2.fill")
-                .font(SabqFonts.app(size: 32))
-                .foregroundStyle(SabqTheme.tertiaryInk)
+                .font(SabqFonts.app(size: 26))
+                .foregroundStyle(SabqTheme.textSecondary)
+                .frame(width: 56, height: 56)
+                .background(SabqTheme.surfaceMuted, in: RoundedRectangle(cornerRadius: SabqRadius.medium))
+                .accessibilityHidden(true)
             Text("لم نستطع تحميل التصنيفات")
-                .font(SabqFonts.app(size: 14, weight: .semibold))
-                .foregroundStyle(SabqTheme.secondaryInk)
+                .sabqText(SabqType.rowTitle)
+                .foregroundStyle(SabqTheme.textPrimary)
             Button {
                 Task {
                     isLoading = true
@@ -850,16 +764,19 @@ struct InterestsPickerSheet: View {
                 }
             } label: {
                 Text("إعادة المحاولة")
-                    .font(SabqFonts.app(size: 12, weight: .medium))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 18)
-                    .padding(.vertical, 9)
-                    .background(Capsule().fill(SabqTheme.primaryEnd))
+                    .font(SabqType.button.font)
+                    .foregroundStyle(SabqTheme.onAction)
+                    .padding(.horizontal, SabqLayout.space24)
+                    .frame(minHeight: SabqLayout.controlHeight)
+                    .background(
+                        RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                            .fill(SabqTheme.actionFill)
+                    )
             }
             .buttonStyle(.plain)
         }
         .frame(maxWidth: .infinity)
-        .padding(.top, 60)
+        .padding(.top, SabqLayout.space40)
     }
 
     // MARK: - Bottom save bar
@@ -869,36 +786,38 @@ struct InterestsPickerSheet: View {
             Button {
                 Task { await save() }
             } label: {
-                HStack(spacing: 8) {
+                HStack(spacing: SabqLayout.space8) {
                     if isSaving {
-                        ProgressView().tint(.white)
+                        ProgressView().tint(selection.isEmpty ? SabqTheme.textPrimary : SabqTheme.onAction)
                     }
                     Text(selection.isEmpty
                          ? "تخطّي الآن"
                          : "حفظ \(selection.count) تصنيف")
-                        .font(SabqFonts.app(size: 16, weight: .heavy))
+                        .font(SabqType.button.font)
                 }
-                .foregroundStyle(.white)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 15)
+                // «تخطّي» زر ثانوي بحد، و«حفظ» زر أساسي ممتلئ.
+                .foregroundStyle(selection.isEmpty ? SabqTheme.textPrimary : SabqTheme.onAction)
+                .frame(maxWidth: .infinity, minHeight: SabqLayout.controlHeight)
                 .background(
-                    selection.isEmpty
-                    ? AnyShapeStyle(SabqTheme.tertiaryInk)
-                    : AnyShapeStyle(SabqTheme.brandGradient),
-                    in: RoundedRectangle(cornerRadius: SabqTheme.buttonRadius, style: .continuous)
+                    RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                        .fill(selection.isEmpty ? SabqTheme.surface : SabqTheme.actionFill)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                        .stroke(selection.isEmpty ? SabqTheme.outline : Color.clear, lineWidth: 1)
                 )
             }
             .buttonStyle(.plain)
             .disabled(isSaving)
-            .padding(.horizontal, 18)
-            .padding(.top, 12)
-            .padding(.bottom, 16)
+            .padding(.horizontal, SabqLayout.pageMargin)
+            .padding(.top, SabqLayout.space12)
+            .padding(.bottom, SabqLayout.space16)
         }
-        .background(.ultraThinMaterial)
+        .background(SabqTheme.background)
         .overlay(
             Rectangle()
-                .fill(SabqTheme.outline.opacity(0.35))
-                .frame(height: 0.5),
+                .fill(SabqTheme.separator)
+                .frame(height: 1),
             alignment: .top
         )
     }

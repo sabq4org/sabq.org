@@ -32,16 +32,16 @@ struct ForgotPasswordSheet: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 22) {
+                VStack(spacing: SabqLayout.space24) {
                     Spacer().frame(height: 20)
 
                     Image(systemName: step == .done ? "checkmark.circle.fill" : "envelope.badge.shield.half.filled")
                         .font(SabqFonts.app(size: 48, weight: .light))
-                        .foregroundStyle(step == .done ? SabqTheme.leaf : SabqTheme.primaryEnd)
+                        .foregroundStyle(step == .done ? SabqTheme.success : SabqTheme.primary)
 
                     Text(step == .done ? "تم تغيير كلمة المرور" : "نسيت كلمة المرور؟")
-                        .font(SabqFonts.app(size: 22, weight: .bold))
-                        .foregroundStyle(SabqTheme.ink)
+                        .sabqText(SabqType.leadTitle)
+                        .foregroundStyle(SabqTheme.textPrimary)
 
                     switch step {
                     case .email: emailStep
@@ -49,7 +49,8 @@ struct ForgotPasswordSheet: View {
                     case .done:  doneStep
                     }
                 }
-                .padding(20)
+                .padding(.horizontal, SabqLayout.pageMargin)
+                .padding(.vertical, SabqLayout.space24)
             }
             .sabqNavigationEdge()
             .background(SabqTheme.background)
@@ -71,13 +72,13 @@ struct ForgotPasswordSheet: View {
     @ViewBuilder
     private var emailStep: some View {
         Text("أدخل بريدك الإلكتروني وسنرسل لك رمز التحقق لإعادة تعيين كلمة المرور")
-            .font(SabqFonts.app(size: 15, weight: .regular))
-            .foregroundStyle(SabqTheme.secondaryInk)
+            .sabqText(SabqType.excerpt)
+            .foregroundStyle(SabqTheme.textSecondary)
             .multilineTextAlignment(.center)
             .lineSpacing(5)
 
         textInput("البريد الإلكتروني", text: $email, keyboard: .emailAddress, capitalize: false)
-            .padding(.horizontal, 24)
+            .padding(.horizontal, SabqLayout.space24)
 
         inlineError
 
@@ -94,20 +95,20 @@ struct ForgotPasswordSheet: View {
         .buttonStyle(.plain)
         .disabled(!canSendEmail)
         .opacity(canSendEmail ? 1 : 0.5)
-        .padding(.horizontal, 24)
+        .padding(.horizontal, SabqLayout.space24)
     }
 
     // MARK: Step 2 — code + new password
 
     @ViewBuilder
     private var codeStep: some View {
-        VStack(spacing: 4) {
+        VStack(spacing: SabqLayout.space4) {
             Text("أدخل الرمز المرسَل إلى:")
-                .font(SabqFonts.app(size: 14, weight: .medium))
-                .foregroundStyle(SabqTheme.secondaryInk)
+                .sabqText(SabqType.excerpt)
+                .foregroundStyle(SabqTheme.textSecondary)
             Text(email)
-                .font(SabqFonts.app(size: 14, weight: .semibold))
-                .foregroundStyle(SabqTheme.ink)
+                .sabqText(SabqType.metaEmphasis)
+                .foregroundStyle(SabqTheme.textPrimary)
         }
 
         textInput(
@@ -121,7 +122,7 @@ struct ForgotPasswordSheet: View {
             // straight away.
             contentType: .oneTimeCode
         )
-        .padding(.horizontal, 24)
+        .padding(.horizontal, SabqLayout.space24)
         .onChange(of: code) { _, new in
             let digits = new.filter(\.isNumber)
             code = String(digits.prefix(6))
@@ -133,7 +134,7 @@ struct ForgotPasswordSheet: View {
             isSecure: true,
             contentType: .newPassword
         )
-        .padding(.horizontal, 24)
+        .padding(.horizontal, SabqLayout.space24)
 
         textInput(
             "تأكيد كلمة المرور",
@@ -141,12 +142,12 @@ struct ForgotPasswordSheet: View {
             isSecure: true,
             contentType: .newPassword
         )
-        .padding(.horizontal, 24)
+        .padding(.horizontal, SabqLayout.space24)
 
         if !confirmPassword.isEmpty && newPassword != confirmPassword {
             Text("كلمتا المرور غير متطابقتين")
-                .font(SabqFonts.app(size: 13, weight: .medium))
-                .foregroundStyle(SabqTheme.coral)
+                .sabqText(SabqType.meta)
+                .foregroundStyle(SabqTheme.danger)
         }
 
         inlineError
@@ -166,7 +167,7 @@ struct ForgotPasswordSheet: View {
         .buttonStyle(.plain)
         .disabled(!canSubmitReset)
         .opacity(canSubmitReset ? 1 : 0.5)
-        .padding(.horizontal, 24)
+        .padding(.horizontal, SabqLayout.space24)
 
         Button("إعادة إرسال الرمز") {
             Task {
@@ -174,9 +175,9 @@ struct ForgotPasswordSheet: View {
                 await authStore.forgotPassword(email: email)
             }
         }
-        .font(SabqFonts.app(size: 13, weight: .medium))
-        .foregroundStyle(SabqTheme.primaryEnd)
-        .padding(.top, 4)
+        .sabqText(SabqType.meta)
+        .foregroundStyle(SabqTheme.primary)
+        .padding(.top, SabqLayout.space4)
     }
 
     // MARK: Step 3 — done
@@ -184,11 +185,11 @@ struct ForgotPasswordSheet: View {
     @ViewBuilder
     private var doneStep: some View {
         Text(authStore.successMessage ?? "تم تغيير كلمة المرور بنجاح. يمكنك الآن تسجيل الدخول.")
-            .font(SabqFonts.app(size: 15, weight: .regular))
-            .foregroundStyle(SabqTheme.secondaryInk)
+            .sabqText(SabqType.excerpt)
+            .foregroundStyle(SabqTheme.textSecondary)
             .multilineTextAlignment(.center)
             .lineSpacing(5)
-            .padding(.horizontal, 24)
+            .padding(.horizontal, SabqLayout.space24)
 
         Button {
             dismiss()
@@ -196,7 +197,7 @@ struct ForgotPasswordSheet: View {
             primaryLabel(text: "حسناً")
         }
         .buttonStyle(.plain)
-        .padding(.horizontal, 24)
+        .padding(.horizontal, SabqLayout.space24)
     }
 
     // MARK: Shared bits
@@ -204,29 +205,28 @@ struct ForgotPasswordSheet: View {
     @ViewBuilder
     private var inlineError: some View {
         if let error = authStore.errorMessage {
-            HStack(spacing: 8) {
+            HStack(spacing: SabqLayout.space8) {
                 Image(systemName: "exclamationmark.triangle.fill")
-                    .font(SabqFonts.app(size: 14))
+                    .sabqText(SabqType.excerpt)
                 Text(error)
-                    .font(SabqFonts.app(size: 13, weight: .medium))
+                    .sabqText(SabqType.meta)
             }
-            .foregroundStyle(SabqTheme.coral)
-            .padding(.horizontal, 36)
+            .foregroundStyle(SabqTheme.danger)
+            .padding(.horizontal, SabqLayout.space40)
         }
     }
 
     private func primaryLabel(text: String) -> some View {
-        HStack(spacing: 10) {
+        HStack(spacing: SabqLayout.space8) {
             if authStore.isLoading {
-                ProgressView().tint(.white)
+                ProgressView().tint(SabqTheme.onAction)
             }
             Text(text)
-                .font(SabqFonts.app(size: 16, weight: .bold))
+                .sabqText(SabqType.button)
         }
-        .foregroundStyle(.white)
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 15)
-        .background(SabqTheme.brandGradient, in: RoundedRectangle(cornerRadius: SabqTheme.buttonRadius, style: .continuous))
+        .foregroundStyle(SabqTheme.onAction)
+        .frame(maxWidth: .infinity, minHeight: SabqLayout.controlHeight)
+        .background(SabqTheme.actionFill, in: RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
     }
 
     @ViewBuilder
@@ -251,16 +251,16 @@ struct ForgotPasswordSheet: View {
             }
         }
         .font(SabqFonts.app(size: 16, weight: .medium))
-        .foregroundStyle(SabqTheme.ink)
-        .padding(.horizontal, 16)
-        .padding(.vertical, 14)
+        .foregroundStyle(SabqTheme.textPrimary)
+        .padding(.horizontal, SabqLayout.space16)
+        .padding(.vertical, SabqLayout.space12)
         .background(
-            RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous)
-                .fill(SabqTheme.paleFill)
+            RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                .fill(SabqTheme.surface)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous)
-                .stroke(SabqTheme.outline, lineWidth: 0.5)
+            RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                .stroke(SabqTheme.outline, lineWidth: 1)
         )
     }
 }

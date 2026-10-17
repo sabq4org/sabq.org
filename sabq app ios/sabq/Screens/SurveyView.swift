@@ -135,19 +135,8 @@ struct SurveyView: View {
     @State private var startedAt: Date?
     @State private var advanceTask: Task<Void, Never>?
 
-    /// Fixed sabq sky-blue family from the approved design — deliberately
-    /// NOT the user-selectable accent so the survey looks the same for
-    /// every writer (it is Sabq speaking, not the user's theme).
-    private let headerGradient = LinearGradient(
-        colors: [
-            Color(red: 0.043, green: 0.282, blue: 0.435),
-            Color(red: 0.055, green: 0.427, blue: 0.690),
-            Color(red: 0.118, green: 0.616, blue: 0.945),
-        ],
-        startPoint: .topTrailing,
-        endPoint: .bottomLeading
-    )
-    private let accent = Color(red: 0.118, green: 0.616, blue: 0.945)
+    /// لون التمييز في الاستطلاع: دور «primary» في نظام التصميم.
+    private let accent = SabqTheme.primary
 
     private static let autoAdvanceTypes: Set<String> = ["single", "stars", "scale"]
 
@@ -162,9 +151,9 @@ struct SurveyView: View {
             case .closed:
                 statusCard(icon: "hourglass", title: "أُغلق هذا الاستطلاع", message: "شكرًا لاهتمامك — انتهت فترة المشاركة في هذا الاستطلاع.")
             case .intro:
-                if let payload { ScrollView { introCard(payload).padding(16) } }
+                if let payload { ScrollView { introCard(payload).padding(SabqLayout.pageMargin) } }
             case .questions:
-                if let payload { questionCard(payload).padding(16) }
+                if let payload { questionCard(payload).padding(.horizontal, SabqLayout.pageMargin) }
             case .done(let title, let message):
                 successCard(title: title, message: message)
             }
@@ -204,113 +193,96 @@ struct SurveyView: View {
 
     private func introCard(_ data: APISurveyPublic) -> some View {
         let firstName = firstName(of: data.recipient.name)
-        return VStack(spacing: 0) {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(spacing: 8) {
-                    Capsule().fill(SabqTheme.gold).frame(width: 22, height: 2.5)
-                    Text(data.survey.purpose.map { "استطلاع: \($0)" } ?? "استطلاع رأي من صحيفة سبق")
-                        .font(SabqFonts.app(size: 12, weight: .bold))
-                        .foregroundStyle(.white.opacity(0.9))
-                }
+        return VStack(alignment: .leading, spacing: SabqLayout.space24) {
+            VStack(alignment: .leading, spacing: SabqLayout.space12) {
+                Text(data.survey.purpose.map { "استطلاع: \($0)" } ?? "استطلاع رأي من صحيفة سبق")
+                    .font(SabqType.tag.font)
+                    .foregroundStyle(SabqTheme.primary)
                 Text((data.survey.welcomeTitle ?? "أهلًا بك يا {name}، رأيك يصنع الخطوة القادمة")
                     .replacingOccurrences(of: "{name}", with: firstName))
-                    .font(SabqFonts.app(size: 23, weight: .heavy))
-                    .foregroundStyle(.white)
-                    .lineSpacing(5)
+                    .sabqText(SabqType.articleTitle)
+                    .foregroundStyle(SabqTheme.textPrimary)
+                    .accessibilityAddTraits(.isHeader)
                 if let welcome = data.survey.welcomeMessage, !welcome.isEmpty {
                     Text(welcome)
-                        .font(SabqFonts.app(size: 14))
-                        .foregroundStyle(.white.opacity(0.88))
-                        .lineSpacing(4)
+                        .sabqText(SabqType.excerpt)
+                        .foregroundStyle(SabqTheme.textSecondary)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(24)
-            .background(headerGradient)
 
-            VStack(alignment: .leading, spacing: 18) {
-                HStack(spacing: 12) {
-                    ZStack {
-                        Circle().fill(accent.opacity(0.12))
-                        Text(String(firstName.prefix(1)))
-                            .font(SabqFonts.app(size: 20, weight: .heavy))
-                            .foregroundStyle(accent)
-                    }
-                    .frame(width: 52, height: 52)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(data.recipient.name)
-                            .font(SabqFonts.app(size: 16, weight: .heavy))
-                            .foregroundStyle(SabqTheme.ink)
-                        if let year = data.recipient.stats?.sinceYear {
-                            Text("معنا في سبق منذ \(String(year))")
-                                .font(SabqFonts.app(size: 13))
-                                .foregroundStyle(SabqTheme.secondaryInk)
-                        }
-                    }
+            Rectangle().fill(SabqTheme.separator).frame(height: 1)
+
+            HStack(spacing: SabqLayout.space12) {
+                ZStack {
+                    Circle().fill(SabqTheme.surfaceMuted)
+                    Text(String(firstName.prefix(1)))
+                        .font(SabqType.sectionHeading.font)
+                        .foregroundStyle(SabqTheme.primary)
                 }
-
-                if let stats = data.recipient.stats {
-                    HStack(spacing: 10) {
-                        statTile(value: formatCount(stats.publishedCount), label: "مادة منشورة")
-                        statTile(value: formatCount(stats.totalViews), label: "قراءة لموادك")
+                .frame(width: 48, height: 48)
+                .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(data.recipient.name)
+                        .font(SabqType.rowTitle.font)
+                        .foregroundStyle(SabqTheme.textPrimary)
+                    if let year = data.recipient.stats?.sinceYear {
+                        Text("معنا في سبق منذ \(String(year))")
+                            .font(SabqType.meta.font)
+                            .foregroundStyle(SabqTheme.textSecondary)
                     }
                 }
-
-                HStack(spacing: 10) {
-                    metaItem(icon: "list.bullet", text: "\(data.questions.count) أسئلة")
-                    metaItem(icon: "clock", text: "دقائق معدودة")
-                    metaItem(icon: "paperplane", text: "تصل لإدارة التحرير")
-                }
-
-                Button {
-                    startedAt = Date()
-                    withAnimation(.easeOut(duration: 0.3)) { stage = .questions }
-                } label: {
-                    Text("ابدأ الاستطلاع")
-                        .font(SabqFonts.app(size: 16, weight: .heavy))
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 15)
-                        .background(accent, in: RoundedRectangle(cornerRadius: SabqTheme.buttonRadius, style: .continuous))
-                }
-                .buttonStyle(.plain)
             }
-            .padding(24)
-            .background(SabqTheme.surface)
+
+            if let stats = data.recipient.stats {
+                HStack(spacing: SabqLayout.space12) {
+                    statTile(value: formatCount(stats.publishedCount), label: "مادة منشورة")
+                    statTile(value: formatCount(stats.totalViews), label: "قراءة لموادك")
+                }
+            }
+
+            FlowLayout(spacing: SabqLayout.space12) {
+                metaItem(icon: "list.bullet", text: "\(data.questions.count) أسئلة")
+                metaItem(icon: "clock", text: "دقائق معدودة")
+                metaItem(icon: "paperplane", text: "تصل لإدارة التحرير")
+            }
+
+            Button {
+                startedAt = Date()
+                withAnimation(.easeOut(duration: 0.3)) { stage = .questions }
+            } label: {
+                Text("ابدأ الاستطلاع")
+                    .font(SabqType.button.font)
+                    .foregroundStyle(SabqTheme.onAction)
+                    .frame(maxWidth: .infinity, minHeight: SabqLayout.controlHeight)
+                    .background(SabqTheme.actionFill, in: RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
+            }
+            .buttonStyle(.plain)
         }
-        .clipShape(RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
-                .stroke(SabqTheme.outline.opacity(0.5), lineWidth: 0.5)
-        )
-        .shadow(color: SabqTheme.deepShadow, radius: 18, y: 8)
     }
 
     private func statTile(value: String, label: String) -> some View {
-        VStack(spacing: 3) {
+        VStack(spacing: SabqLayout.space4) {
             Text(value)
-                .font(SabqFonts.app(size: 20, weight: .heavy))
-                .foregroundStyle(SabqTheme.gold)
+                .font(SabqType.leadTitle.font)
+                .foregroundStyle(SabqTheme.textPrimary)
                 .monospacedDigit()
             Text(label)
-                .font(SabqFonts.app(size: 12))
-                .foregroundStyle(SabqTheme.secondaryInk)
+                .font(SabqType.meta.font)
+                .foregroundStyle(SabqTheme.textSecondary)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 12)
-        .background(SabqTheme.paleFill, in: RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous)
-                .stroke(SabqTheme.outline.opacity(0.5), lineWidth: 0.5)
-        )
+        .padding(.vertical, SabqLayout.space12)
+        .background(SabqTheme.surfaceMuted, in: RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
+        .accessibilityElement(children: .combine)
     }
 
     private func metaItem(icon: String, text: String) -> some View {
-        HStack(spacing: 4) {
-            Image(systemName: icon).font(.system(size: 11))
-            Text(text).font(SabqFonts.app(size: 11.5))
+        HStack(spacing: SabqLayout.space4) {
+            Image(systemName: icon).font(SabqType.meta.font).accessibilityHidden(true)
+            Text(text).font(SabqType.meta.font)
         }
-        .foregroundStyle(SabqTheme.tertiaryInk)
+        .foregroundStyle(SabqTheme.textTertiary)
     }
 
     private func formatCount(_ value: Int) -> String {
@@ -328,54 +300,54 @@ struct SurveyView: View {
 
         return ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                HStack(spacing: 12) {
+                HStack(spacing: SabqLayout.space12) {
                     Text("السؤال \(currentIndex + 1) من \(data.questions.count)")
-                        .font(SabqFonts.app(size: 12, weight: .bold))
-                        .foregroundStyle(SabqTheme.secondaryInk)
+                        .font(SabqType.metaEmphasis.font)
+                        .foregroundStyle(SabqTheme.textSecondary)
                         .monospacedDigit()
                     GeometryReader { geo in
                         ZStack(alignment: .trailing) {
-                            Capsule().fill(SabqTheme.outline.opacity(0.6))
+                            Capsule().fill(SabqTheme.surfaceStrong)
                             Capsule().fill(accent)
                                 .frame(width: geo.size.width * CGFloat(currentIndex) / CGFloat(data.questions.count))
                         }
                     }
-                    .frame(height: 5)
+                    .frame(height: 4)
+                    .accessibilityHidden(true)
                 }
-                .padding(.bottom, 22)
+                .padding(.bottom, SabqLayout.space24)
 
                 Text(typeLabel(question.type))
-                    .font(SabqFonts.app(size: 11, weight: .heavy))
-                    .foregroundStyle(accent)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 4)
-                    .background(accent.opacity(0.10), in: Capsule())
-                    .padding(.bottom, 10)
+                    .font(SabqType.tag.font)
+                    .foregroundStyle(SabqTheme.textSecondary)
+                    .padding(.horizontal, SabqLayout.space8)
+                    .padding(.vertical, SabqLayout.space4)
+                    .background(SabqTheme.surfaceMuted, in: RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous))
+                    .padding(.bottom, SabqLayout.space12)
 
-                (Text(question.text) + Text(question.isRequired ? " *" : "").foregroundColor(SabqTheme.gold))
-                    .font(SabqFonts.app(size: 19, weight: .heavy))
-                    .foregroundStyle(SabqTheme.ink)
-                    .lineSpacing(5)
-                    .padding(.bottom, 4)
+                (Text(question.text) + Text(question.isRequired ? " *" : "").foregroundColor(SabqTheme.danger))
+                    .sabqText(SabqType.sectionHeading)
+                    .foregroundStyle(SabqTheme.textPrimary)
+                    .padding(.bottom, SabqLayout.space4)
 
                 if let hint = question.hint, !hint.isEmpty {
                     Text(hint)
-                        .font(SabqFonts.app(size: 13))
-                        .foregroundStyle(SabqTheme.secondaryInk)
+                        .sabqText(SabqType.meta)
+                        .foregroundStyle(SabqTheme.textSecondary)
                 } else if !question.isRequired {
                     Text("اختياري")
-                        .font(SabqFonts.app(size: 13))
-                        .foregroundStyle(SabqTheme.secondaryInk)
+                        .font(SabqType.meta.font)
+                        .foregroundStyle(SabqTheme.textSecondary)
                 }
 
                 answerControl(for: question)
-                    .padding(.top, 18)
+                    .padding(.top, SabqLayout.space16)
 
                 if let submitError {
                     Text(submitError)
-                        .font(SabqFonts.app(size: 13, weight: .bold))
-                        .foregroundStyle(SabqTheme.coral)
-                        .padding(.top, 12)
+                        .sabqText(SabqType.meta)
+                        .foregroundStyle(SabqTheme.danger)
+                        .padding(.top, SabqLayout.space12)
                 }
 
                 HStack {
@@ -385,49 +357,45 @@ struct SurveyView: View {
                             withAnimation(.easeOut(duration: 0.25)) { currentIndex -= 1 }
                         } label: {
                             Text("السابق")
-                                .font(SabqFonts.app(size: 14, weight: .bold))
-                                .foregroundStyle(SabqTheme.secondaryInk)
-                                .padding(.horizontal, 18)
-                                .padding(.vertical, 11)
+                                .font(SabqType.button.font)
+                                .foregroundStyle(SabqTheme.primary)
+                                .padding(.horizontal, SabqLayout.space16)
+                                .frame(minHeight: SabqLayout.controlHeight)
                                 .background(
-                                    RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous)
+                                    RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
                                         .stroke(SabqTheme.outline, lineWidth: 1)
                                 )
+                                .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
                     }
                     Spacer()
                     if autoAdvances {
                         Text("ينتقل تلقائيًا بعد اختيارك")
-                            .font(SabqFonts.app(size: 12))
-                            .foregroundStyle(SabqTheme.tertiaryInk)
+                            .font(SabqType.meta.font)
+                            .foregroundStyle(SabqTheme.textTertiary)
                     } else {
                         Button {
                             goNext(data)
                         } label: {
+                            let enabled = canProceed(question) && !submitting
                             Text(isLast ? (submitting ? "جارٍ الإرسال…" : "إرسال الاستطلاع") : "متابعة")
-                                .font(SabqFonts.app(size: 15, weight: .heavy))
-                                .foregroundStyle(.white)
-                                .padding(.horizontal, 26)
-                                .padding(.vertical, 12)
+                                .font(SabqType.button.font)
+                                .foregroundStyle(enabled ? SabqTheme.onAction : SabqTheme.disabledInk)
+                                .padding(.horizontal, SabqLayout.space24)
+                                .frame(minHeight: SabqLayout.controlHeight)
                                 .background(
-                                    accent.opacity(canProceed(question) && !submitting ? 1 : 0.45),
-                                    in: RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous)
+                                    enabled ? SabqTheme.actionFill : SabqTheme.disabledFill,
+                                    in: RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
                                 )
                         }
                         .buttonStyle(.plain)
                         .disabled(!canProceed(question) || submitting)
                     }
                 }
-                .padding(.top, 26)
+                .padding(.top, SabqLayout.space24)
             }
-            .padding(24)
-            .background(SabqTheme.surface, in: RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
-                    .stroke(SabqTheme.outline.opacity(0.5), lineWidth: 0.5)
-            )
-            .shadow(color: SabqTheme.shadow, radius: 14, y: 6)
+            .padding(.vertical, SabqLayout.space24)
             .id(question.id)
             .transition(.asymmetric(insertion: .move(edge: .leading).combined(with: .opacity), removal: .opacity))
         }
@@ -449,7 +417,7 @@ struct SurveyView: View {
     private func answerControl(for question: APISurveyPublic.Question) -> some View {
         switch question.type {
         case "single", "multi":
-            VStack(spacing: 10) {
+            VStack(spacing: SabqLayout.space8) {
                 ForEach(Array((question.options ?? []).enumerated()), id: \.offset) { index, option in
                     choiceRow(question: question, index: index, option: option)
                 }
@@ -487,70 +455,59 @@ struct SurveyView: View {
                 answers[question.id] = .numbers(values.sorted())
             }
         } label: {
-            HStack(spacing: 12) {
-                ZStack {
-                    if isSingle {
-                        Circle().stroke(selected ? accent : SabqTheme.outline, lineWidth: 2)
-                        if selected { Circle().fill(accent).frame(width: 10, height: 10) }
-                    } else {
-                        RoundedRectangle(cornerRadius: 5).stroke(selected ? accent : SabqTheme.outline, lineWidth: 2)
-                        if selected {
-                            RoundedRectangle(cornerRadius: 5).fill(accent)
-                            Image(systemName: "checkmark")
-                                .font(.system(size: 10, weight: .heavy))
-                                .foregroundStyle(.white)
-                        }
-                    }
-                }
-                .frame(width: 20, height: 20)
+            HStack(spacing: SabqLayout.space12) {
+                Image(systemName: isSingle
+                      ? (selected ? "largecircle.fill.circle" : "circle")
+                      : (selected ? "checkmark.square.fill" : "square"))
+                    .font(.system(size: 20, weight: .regular))
+                    .foregroundStyle(selected ? accent : SabqTheme.textTertiary)
+                    .frame(width: 24, height: 24)
+                    .accessibilityHidden(true)
                 Text(option)
-                    .font(SabqFonts.app(size: 15, weight: selected ? .bold : .regular))
-                    .foregroundStyle(SabqTheme.ink)
+                    .font(selected ? SabqFonts.app(size: 15, weight: .semibold) : SabqType.excerpt.font)
+                    .foregroundStyle(SabqTheme.textPrimary)
                     .multilineTextAlignment(.leading)
                 Spacer(minLength: 0)
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 13)
-            .background(
-                selected ? accent.opacity(0.08) : SabqTheme.paleFill,
-                in: RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous)
-            )
+            .padding(.horizontal, SabqLayout.space16)
+            .padding(.vertical, SabqLayout.space12)
+            .frame(minHeight: SabqLayout.controlHeight)
+            .background(SabqTheme.surface, in: RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous)
-                    .stroke(selected ? accent : SabqTheme.outline.opacity(0.6), lineWidth: selected ? 1.5 : 1)
+                RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                    .stroke(selected ? accent : SabqTheme.outline, lineWidth: selected ? 1.5 : 1)
             )
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 
     private func scaleControl(_ question: APISurveyPublic.Question) -> some View {
         let minValue = question.settings?.scaleMin ?? 0
         let maxValue = question.settings?.scaleMax ?? 10
         let selectedValue: Int? = { if case .number(let value)? = answers[question.id] { return value }; return nil }()
-        let columns = [GridItem(.adaptive(minimum: 44), spacing: 7)]
-        return VStack(alignment: .leading, spacing: 8) {
-            LazyVGrid(columns: columns, spacing: 7) {
+        let columns = [GridItem(.adaptive(minimum: 44), spacing: SabqLayout.space8)]
+        return VStack(alignment: .leading, spacing: SabqLayout.space8) {
+            LazyVGrid(columns: columns, spacing: SabqLayout.space8) {
                 ForEach(minValue...maxValue, id: \.self) { value in
                     Button {
                         answers[question.id] = .number(value)
                         scheduleAutoAdvance()
                     } label: {
                         Text(String(value))
-                            .font(SabqFonts.app(size: 15, weight: .heavy))
+                            .font(SabqType.button.font)
                             .monospacedDigit()
-                            .foregroundStyle(selectedValue == value ? .white : SabqTheme.ink)
+                            .foregroundStyle(selectedValue == value ? SabqTheme.onAction : SabqTheme.textPrimary)
                             .frame(maxWidth: .infinity)
-                            .frame(height: 44)
+                            .frame(height: SabqLayout.touchTarget)
                             .background(
-                                selectedValue == value ? accent : SabqTheme.paleFill,
-                                in: RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            )
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                    .stroke(selectedValue == value ? accent : SabqTheme.outline.opacity(0.6), lineWidth: 1)
+                                selectedValue == value ? SabqTheme.actionFill : SabqTheme.surfaceMuted,
+                                in: RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
                             )
                     }
                     .buttonStyle(.plain)
+                    .accessibilityAddTraits(selectedValue == value ? .isSelected : [])
                 }
             }
             HStack {
@@ -558,24 +515,28 @@ struct SurveyView: View {
                 Spacer()
                 if let maxLabel = question.settings?.maxLabel { Text(maxLabel) }
             }
-            .font(SabqFonts.app(size: 12))
-            .foregroundStyle(SabqTheme.tertiaryInk)
+            .font(SabqType.meta.font)
+            .foregroundStyle(SabqTheme.textTertiary)
         }
     }
 
     private func starsControl(_ question: APISurveyPublic.Question) -> some View {
         let selectedValue: Int = { if case .number(let value)? = answers[question.id] { return value }; return 0 }()
-        return HStack(spacing: 10) {
+        return HStack(spacing: SabqLayout.space8) {
             ForEach(1...5, id: \.self) { value in
                 Button {
                     answers[question.id] = .number(value)
                     scheduleAutoAdvance()
                 } label: {
                     Image(systemName: value <= selectedValue ? "star.fill" : "star")
-                        .font(.system(size: 30))
-                        .foregroundStyle(value <= selectedValue ? SabqTheme.gold : SabqTheme.outline)
+                        .font(.system(size: 28))
+                        .foregroundStyle(value <= selectedValue ? SabqTheme.warning : SabqTheme.textTertiary)
+                        .frame(width: SabqLayout.touchTarget, height: SabqLayout.touchTarget)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("\(value)")
+                .accessibilityAddTraits(value == selectedValue ? .isSelected : [])
             }
         }
     }
@@ -586,15 +547,10 @@ struct SurveyView: View {
             set: { answers[question.id] = .text($0) }
         )
         return TextField("اكتب إجابتك هنا…", text: binding, axis: .vertical)
-            .font(SabqFonts.app(size: 15))
-            .foregroundStyle(SabqTheme.ink)
+            .font(SabqType.excerpt.font)
+            .foregroundStyle(SabqTheme.textPrimary)
             .lineLimit(question.type == "long_text" ? 5...12 : 2...4)
-            .padding(14)
-            .background(SabqTheme.paleFill, in: RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous)
-                    .stroke(SabqTheme.outline.opacity(0.6), lineWidth: 1)
-            )
+            .modifier(SabqInputSurface())
     }
 
     private func canProceed(_ question: APISurveyPublic.Question) -> Bool {
@@ -650,71 +606,48 @@ struct SurveyView: View {
     // MARK: Terminal states
 
     private func statusCard(icon: String, title: String, message: String) -> some View {
-        VStack(spacing: 14) {
-            Image(systemName: icon)
-                .font(.system(size: 34))
-                .foregroundStyle(SabqTheme.tertiaryInk)
-            Text(title)
-                .font(SabqFonts.app(size: 19, weight: .heavy))
-                .foregroundStyle(SabqTheme.ink)
-            Text(message)
-                .font(SabqFonts.app(size: 14))
-                .foregroundStyle(SabqTheme.secondaryInk)
-                .multilineTextAlignment(.center)
-                .lineSpacing(4)
-        }
-        .padding(30)
-        .background(SabqTheme.surface, in: RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous))
-        .padding(24)
+        EmptyStateView(icon: icon, tint: SabqTheme.textSecondary, title: title, subtitle: message)
+            .padding(SabqLayout.space24)
     }
 
     private func successCard(title: String, message: String) -> some View {
-        VStack(spacing: 16) {
-            ZStack {
-                Circle().fill(SabqTheme.leaf.opacity(0.12))
-                Circle().stroke(SabqTheme.leaf, lineWidth: 2.5)
-                Image(systemName: "checkmark")
-                    .font(.system(size: 34, weight: .bold))
-                    .foregroundStyle(SabqTheme.leaf)
-            }
-            .frame(width: 88, height: 88)
-            .padding(.bottom, 6)
+        ScrollView {
+            VStack(spacing: SabqLayout.space16) {
+                Image(systemName: "checkmark.circle")
+                    .font(SabqFonts.app(size: 44, weight: .regular))
+                    .foregroundStyle(SabqTheme.success)
+                    .accessibilityHidden(true)
 
-            Text(title)
-                .font(SabqFonts.app(size: 21, weight: .heavy))
-                .foregroundStyle(SabqTheme.ink)
-                .multilineTextAlignment(.center)
-            Text(message)
-                .font(SabqFonts.app(size: 14))
-                .foregroundStyle(SabqTheme.secondaryInk)
-                .multilineTextAlignment(.center)
-                .lineSpacing(5)
+                Text(title)
+                    .sabqText(SabqType.leadTitle)
+                    .foregroundStyle(SabqTheme.textPrimary)
+                    .multilineTextAlignment(.center)
+                    .accessibilityAddTraits(.isHeader)
+                Text(message)
+                    .sabqText(SabqType.excerpt)
+                    .foregroundStyle(SabqTheme.textSecondary)
+                    .multilineTextAlignment(.center)
 
-            VStack(spacing: 2) {
-                Text("مع خالص التقدير،")
-                    .font(SabqFonts.app(size: 13))
-                    .foregroundStyle(SabqTheme.secondaryInk)
-                Text("إدارة التحرير — صحيفة سبق")
-                    .font(SabqFonts.app(size: 14, weight: .heavy))
-                    .foregroundStyle(SabqTheme.ink)
+                VStack(spacing: 2) {
+                    Text("مع خالص التقدير،")
+                        .font(SabqType.meta.font)
+                        .foregroundStyle(SabqTheme.textSecondary)
+                    Text("إدارة التحرير — صحيفة سبق")
+                        .font(SabqType.metaEmphasis.font)
+                        .foregroundStyle(SabqTheme.textPrimary)
+                }
+                .padding(.top, SabqLayout.space16)
+                .frame(maxWidth: .infinity)
+                .overlay(alignment: .top) {
+                    Rectangle()
+                        .fill(SabqTheme.separator)
+                        .frame(width: 220, height: 1)
+                }
             }
-            .padding(.top, 16)
-            .frame(maxWidth: .infinity)
-            .overlay(alignment: .top) {
-                Rectangle()
-                    .fill(SabqTheme.outline)
-                    .frame(width: 220, height: 1)
-            }
+            .padding(.horizontal, SabqLayout.space24)
+            .padding(.vertical, SabqLayout.space40)
         }
-        .padding(32)
-        .background(SabqTheme.surface, in: RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
-                .stroke(SabqTheme.outline.opacity(0.5), lineWidth: 0.5)
-        )
-        .shadow(color: SabqTheme.deepShadow, radius: 18, y: 8)
-        .padding(20)
-        .transition(.scale(scale: 0.95).combined(with: .opacity))
+        .transition(.opacity)
     }
 }
 
@@ -729,36 +662,32 @@ struct PendingSurveysCard: View {
     var body: some View {
         ForEach(invites) { invite in
             NavigationLink(value: SurveyDeepLinkRoute(token: invite.token)) {
-                HStack(spacing: 14) {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .fill(SabqTheme.sky.opacity(0.12))
-                        Image(systemName: "checklist")
-                            .font(.system(size: 18, weight: .semibold))
-                            .foregroundStyle(SabqTheme.sky)
-                    }
-                    .frame(width: 44, height: 44)
-                    VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: SabqLayout.space12) {
+                    Image(systemName: "checklist")
+                        .font(SabqFonts.app(size: 18, weight: .regular))
+                        .foregroundStyle(SabqTheme.primary)
+                        .frame(width: 40, height: 40)
+                        .background(SabqTheme.surface, in: RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous))
+                        .accessibilityHidden(true)
+                    VStack(alignment: .leading, spacing: SabqLayout.space4) {
                         Text("استطلاع بانتظارك: \(invite.title)")
-                            .font(SabqFonts.app(size: 15, weight: .heavy))
-                            .foregroundStyle(SabqTheme.ink)
+                            .font(SabqType.rowTitle.font)
+                            .foregroundStyle(SabqTheme.textPrimary)
                             .lineLimit(1)
                         Text(invite.purpose.map { "رأيك يساعدنا في \($0) — \(invite.questionsCount) أسئلة" } ?? "\(invite.questionsCount) أسئلة قصيرة، دقائق معدودة")
-                            .font(SabqFonts.app(size: 12.5))
-                            .foregroundStyle(SabqTheme.secondaryInk)
+                            .font(SabqType.meta.font)
+                            .foregroundStyle(SabqTheme.textSecondary)
                             .lineLimit(1)
                     }
                     Spacer()
                     Image(systemName: "chevron.left")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(SabqTheme.tertiaryInk)
+                        .font(SabqType.metaEmphasis.font)
+                        .foregroundStyle(SabqTheme.textTertiary)
+                        .accessibilityHidden(true)
                 }
-                .padding(16)
-                .background(SabqTheme.surface, in: RoundedRectangle(cornerRadius: SabqTheme.chipRadius + 4, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: SabqTheme.chipRadius + 4, style: .continuous)
-                        .stroke(SabqTheme.sky.opacity(0.35), lineWidth: 1)
-                )
+                .padding(SabqLayout.space16)
+                .background(SabqTheme.surfaceMuted, in: RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
         }
