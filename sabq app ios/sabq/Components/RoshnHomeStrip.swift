@@ -195,7 +195,11 @@ struct RoshnHomeStrip: View {
         }
     }
 
-    // MARK: هيكل البطاقة والعناصر
+    // MARK: البطاقة الموحّدة — بطاقة هادئة متناسقة مع الصحيفة
+    //
+    // تحديث 2026-10-17: استبدال الشريط الأخضر الصلب الكامل ببطاقة هادئة تتبع
+    // سطح الصحيفة (SabqTheme.surfaceMuted) مع شريط جانبي زمردي وشعار الدوري،
+    // لمنع التنافر اللوني في الرئيسية (قرار تصور سبق الهادئ).
 
     private func banner(subtitle: String, @ViewBuilder trailing: () -> some View) -> some View {
         HStack(spacing: SabqLayout.space12) {
@@ -204,17 +208,24 @@ struct RoshnHomeStrip: View {
                 .scaledToFit()
                 .padding(SabqLayout.space4)
                 .frame(width: 40, height: 40)
-                .background(RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous).fill(.white))
+                .background(
+                    RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
+                        .fill(SabqTheme.surface)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
+                        .strokeBorder(SabqTheme.outline.opacity(0.6), lineWidth: 0.75)
+                )
                 .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text("دوري روشن")
                     .sabqText(SabqType.rowTitle)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(SabqTheme.textPrimary)
                     .lineLimit(1)
                 Text(subtitle)
                     .sabqText(SabqType.meta)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(SabqTheme.textSecondary)
                     .lineLimit(1).minimumScaleFactor(0.85)
             }
 
@@ -224,28 +235,40 @@ struct RoshnHomeStrip: View {
 
             Image(systemName: "chevron.left")
                 .font(SabqType.metaEmphasis.font)
-                .foregroundStyle(.white)
+                .foregroundStyle(SabqTheme.textTertiary)
                 .accessibilityHidden(true)
         }
         .padding(.horizontal, SabqLayout.space16).padding(.vertical, SabqLayout.space12)
         .frame(minHeight: 64)
-        // زمردي الهوية الصلب بلا حد ولا ظل — بدرجة تحفظ تباين النص الأبيض.
-        .background(RoshnTheme.accentFill)
-        .clipShape(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
+        .sabqBlockSurface()
+        .overlay(alignment: .leading) {
+            UnevenRoundedRectangle(
+                topLeadingRadius: SabqRadius.medium,
+                bottomLeadingRadius: SabqRadius.medium,
+                bottomTrailingRadius: 0,
+                topTrailingRadius: 0,
+                style: .continuous
+            )
+            .fill(RoshnTheme.accentFill)
+            .frame(width: 4)
+            .accessibilityHidden(true)
+        }
         .contentShape(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
     }
 
-    /// شارة حالة: تعبئة مسطّحة، أو حدّ أبيض حين تكون فوق الزمردي مباشرة.
-    private func chip(background: Color? = nil, ink: Color = .white, @ViewBuilder content: () -> some View) -> some View {
-        content()
+    /// شارة حالة: تعبئة مسطّحة، أو شريحة هادئة بحدّ فوق البطاقة.
+    private func chip(background: Color? = nil, ink: Color? = nil, @ViewBuilder content: () -> some View) -> some View {
+        let resolvedInk = ink ?? (background != nil ? Color.white : SabqTheme.textPrimary)
+        return content()
             .sabqText(SabqType.tag)
-            .foregroundStyle(ink)
+            .foregroundStyle(resolvedInk)
             .padding(.horizontal, SabqLayout.space8).padding(.vertical, SabqLayout.space4)
             .background {
                 if let background {
                     Capsule().fill(background)
                 } else {
-                    Capsule().stroke(.white.opacity(0.6), lineWidth: 1)
+                    Capsule().fill(SabqTheme.surface)
+                        .overlay(Capsule().strokeBorder(SabqTheme.outline, lineWidth: 0.75))
                 }
             }
     }

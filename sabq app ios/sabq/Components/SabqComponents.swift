@@ -617,16 +617,10 @@ struct FocalCachedAsyncImage<Placeholder: View>: View {
 
     var body: some View {
         GeometryReader { proxy in
-            ZStack(alignment: .topLeading) {
+                ZStack(alignment: .topLeading) {
                 if let image {
-                    Group {
-                        if fitsMismatchedAspect && Self.isAspectMismatched(image.size, proxy.size) {
-                            letterboxedImage(image, in: proxy.size)
-                        } else {
-                            focalImage(image, in: proxy.size)
-                        }
-                    }
-                    .opacity(shown ? 1 : 0)
+                    focalImage(image, in: proxy.size)
+                        .opacity(shown ? 1 : 0)
                 } else {
                     placeholder()
                         .environment(\.sabqImageLoadFailed, failed || url == nil)
@@ -1398,21 +1392,28 @@ struct DetailLabelPill: View {
         HStack(spacing: 5) {
             if let icon {
                 Image(systemName: icon)
-                    .font(.system(size: 12, weight: .medium))
+                    .font(.system(size: 11, weight: .semibold))
                     // SF Symbols vary in bounding box — lock size so every pill
                     // matches the passport "موثَّق" chip height.
-                    .frame(width: 14, height: 14)
+                    .frame(width: 13, height: 13)
                     .accessibilityHidden(true)
             }
             Text(title)
-                .font(SabqFonts.app(size: 13, weight: .semibold))
+                .font(SabqType.tag.font)
                 .lineLimit(1)
         }
-        // نص ملوّن بلا كبسولة (نموذج صفحة الخبر المعتمد 2026-10-09).
         .foregroundStyle(tint)
-        .padding(.vertical, 2)
-        .frame(minHeight: SabqLayout.touchTarget)
-        .contentShape(Rectangle())
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .background(
+            Capsule(style: .continuous)
+                .fill(tint.opacity(0.11))
+        )
+        .overlay(
+            Capsule(style: .continuous)
+                .strokeBorder(tint.opacity(0.24), lineWidth: 0.75)
+        )
+        .contentShape(Capsule(style: .continuous))
     }
 }
 
@@ -1446,6 +1447,10 @@ struct FeaturedArticleCard: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
                 .clipShape(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                        .strokeBorder(SabqTheme.separator, lineWidth: 0.75)
+                )
                 .aiImageBadgeOverlay(
                     isVisible: article.isAiGeneratedImage,
                     model: article.aiImageModel,
@@ -1453,17 +1458,21 @@ struct FeaturedArticleCard: View {
                 )
                 .padding(.bottom, SabqLayout.space12)
 
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
+            HStack(alignment: .center, spacing: 8) {
                 Text(article.categoryTitle)
-                    .font(SabqType.metaEmphasis.font)
+                    .font(SabqType.tag.font)
                     .foregroundStyle(SabqTheme.primary)
-                Text("·")
-                    .foregroundStyle(SabqTheme.textTertiary)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(
+                        Capsule(style: .continuous)
+                            .fill(SabqTheme.skyTint)
+                    )
                 Text(heroWhen)
+                    .font(SabqType.meta.font)
                     .foregroundStyle(SabqTheme.textTertiary)
                     .monospacedDigit()
             }
-            .font(SabqType.meta.font)
             .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
             .padding(.bottom, SabqLayout.space8)
 
@@ -1518,9 +1527,9 @@ struct FeaturedArticleCard: View {
 /// these values here lets custom row consumers adopt the same visual rhythm
 /// without changing the global surface-card treatment.
 enum NewsRowStyle {
-    /// مصغّرة 16:9 بعرض 112 على طرف السطر، وزوايا 8.
-    static let thumbnailWidth: CGFloat = 112
-    static let thumbnailHeight: CGFloat = 63
+    /// مصغّرة 4:3 بعرض 104 وارتفاع 78 على طرف السطر لموازنة ارتفاع العنوان والبيانات، وزوايا 8.
+    static let thumbnailWidth: CGFloat = 104
+    static let thumbnailHeight: CGFloat = 78
     static let thumbnailRadius: CGFloat = SabqRadius.small
     static let thumbnailGap: CGFloat = SabqLayout.space12
     static let textStackSpacing: CGFloat = SabqLayout.space8
@@ -1620,6 +1629,10 @@ struct CompactArticleRow: View {
         }
         .frame(width: NewsRowStyle.thumbnailWidth, height: NewsRowStyle.thumbnailHeight)
         .clipShape(RoundedRectangle(cornerRadius: NewsRowStyle.thumbnailRadius, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: NewsRowStyle.thumbnailRadius, style: .continuous)
+                .strokeBorder(SabqTheme.separator, lineWidth: 0.75)
+        )
         .aiImageBadgeOverlay(
             isVisible: article.isAiGeneratedImage,
             model: article.aiImageModel,
@@ -1657,7 +1670,7 @@ struct CompactArticleRow: View {
 
     private var newPill: some View {
         Text("جديد")
-            .font(SabqFonts.app(size: 10, weight: .medium))
+            .font(SabqType.tag.font)
             .foregroundStyle(SabqTheme.leaf)
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
@@ -2071,20 +2084,29 @@ struct SabqAdaptivePickerStyle: ViewModifier {
 // MARK: - سطح بطاقات الرئيسية
 
 extension View {
-    /// البلوكات الخاصة على الصفحة البيضاء: تعبئة هادئة بزوايا 12، بلا حد ولا ظل.
+    /// البلوكات الخاصة على الصفحة البيضاء: تعبئة هادئة بزوايا 12 وحدود سماوية ناعمة.
     func sabqBlockSurface(_ fill: Color = SabqTheme.surfaceMuted) -> some View {
         let shape = RoundedRectangle(cornerRadius: SabqTheme.blockRadius, style: .continuous)
         return background(shape.fill(fill))
+            .overlay(shape.strokeBorder(SabqTheme.skyOutline.opacity(0.65), lineWidth: 0.75))
+            .clipShape(shape)
+    }
+
+    /// بطاقة تحريرية مميزة بخلفية سماوية سبق وإطار سماوي ناعم.
+    func sabqSkyCardSurface() -> some View {
+        let shape = RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
+        return background(shape.fill(SabqTheme.skyTint))
+            .overlay(shape.strokeBorder(SabqTheme.skyOutline, lineWidth: 1))
             .clipShape(shape)
     }
 }
 
-/// شريط رمادي بعرض الشاشة يفصل أقسام الصفحة البيضاء؛ يلغي هامش الصفحة الأفقي.
+/// فاصل رفيع ونظيف بين أقسام الصفحة بدل الشريط الرمادي العريض.
 struct SabqSectionBand: View {
     var body: some View {
-        SabqTheme.surfaceMuted
-            .frame(height: SabqLayout.space8)
-            .padding(.horizontal, -SabqLayout.pageMargin)
+        SabqTheme.separator
+            .frame(height: 1)
+            .padding(.vertical, SabqLayout.space4)
             .accessibilityHidden(true)
     }
 }

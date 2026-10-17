@@ -267,17 +267,24 @@ struct ExploreView: View {
 // قطع مشتركة لشاشات الاستكشاف (استكشف، الأقسام، البحث، الرائج، المحفوظات…)
 // على نموذج الرئيسية المعتمد: أقسام بلا صناديق، عنوان 20، وبلاطات هادئة.
 
-/// رأس قسم بلا أيقونة ولا صندوق: عنوان 20 وسطر سياق اختياري.
+/// رأس قسم بشريط عمودي بهوية سبق: عنوان 20 وسطر سياق اختياري.
 struct DiscoverySectionHeading: View {
     let title: String
     var subtitle: String? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: SabqLayout.space4) {
-            Text(title)
-                .font(SabqType.sectionHeading.font)
-                .foregroundStyle(SabqTheme.textPrimary)
-                .accessibilityAddTraits(.isHeader)
+            HStack(alignment: .center, spacing: 8) {
+                Capsule(style: .continuous)
+                    .fill(SabqTheme.primary)
+                    .frame(width: 4, height: 18)
+                    .accessibilityHidden(true)
+
+                Text(title)
+                    .font(SabqType.sectionHeading.font)
+                    .foregroundStyle(SabqTheme.textPrimary)
+                    .accessibilityAddTraits(.isHeader)
+            }
             if let subtitle {
                 Text(subtitle)
                     .font(SabqType.meta.font)
@@ -288,7 +295,7 @@ struct DiscoverySectionHeading: View {
     }
 }
 
-/// بلاطة تصنيف هادئة: تعبئة surfaceMuted بزوايا 12، بلا حد ولا ظل ولا لون تصنيف.
+/// بلاطة تصنيف هادئة: تعبئة سماوية هادئة بزوايا 12 وحدود سماوية ناعمة وأيقونة بهوية سبق.
 struct DiscoveryCategoryTile: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let category: ArticleCategory
@@ -296,9 +303,17 @@ struct DiscoveryCategoryTile: View {
     var body: some View {
         VStack(alignment: .leading, spacing: SabqLayout.space12) {
             Image(systemName: category.icon)
-                .font(SabqType.sectionHeading.font)
+                .font(.system(size: 18, weight: .semibold))
                 .foregroundStyle(SabqTheme.primary)
-                .frame(height: SabqLayout.space24, alignment: .leading)
+                .frame(width: 38, height: 38)
+                .background(
+                    RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
+                        .fill(SabqTheme.surface)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
+                        .strokeBorder(SabqTheme.skyOutline, lineWidth: 0.75)
+                )
                 .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: SabqLayout.space4) {
@@ -321,10 +336,7 @@ struct DiscoveryCategoryTile: View {
         }
         .padding(SabqLayout.space16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
-                .fill(SabqTheme.surfaceMuted)
-        )
+        .sabqBlockSurface()
         .contentShape(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
     }
 }

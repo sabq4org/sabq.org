@@ -208,6 +208,7 @@ struct ArticleDetailView: View {
                             if !isFocusMode {
                                 labelsRow
                                     .animatedAppear(index: 0)
+                                    .padding(.bottom, SabqLayout.space12)
                             }
 
                             articleTitle
@@ -276,7 +277,7 @@ struct ArticleDetailView: View {
                     }
                     .frame(width: max(0, min(proxy.size.width - (SabqLayout.pageMargin * 2), SabqLayout.readingWidth)), alignment: .leading)
                     .padding(.horizontal, SabqLayout.pageMargin)
-                    .padding(.top, SabqLayout.space4)
+                    .padding(.top, SabqLayout.space16)
                     .padding(.bottom, 40)
                     .frame(maxWidth: .infinity)
                 }
@@ -655,16 +656,9 @@ struct ArticleDetailView: View {
 
     // MARK: - Hero Image
 
-    // Hero is intentionally clean — no text/badges overlaid on the image.
-    // Category chip, breaking pill, and publication metadata now live
-    // below the hero between the title and excerpt (calm row,
-    // low-emphasis).
-    //
     // Natural aspect ratio: the image fills the width and the height
-    // follows the image's intrinsic w/h. No fixed-height crop — matches
-    // the live Capacitor Android (web-in-webview) experience the user
-    // actually reads. The focal point is honoured on CARDS only; in
-    // the detail view we show the editor's photo whole.
+    // follows the image's intrinsic w/h. No fixed-height crop — in the
+    // detail view we show the editor's photo whole as-is.
     private var heroImage: some View {
         Group {
             if let urlString = displayArticle.imageURL, let url = URL(string: urlString) {
@@ -714,7 +708,7 @@ struct ArticleDetailView: View {
     /// + sentiment (when AI insights returned one) + موثوق passport pill.
     /// FlowLayout wraps onto a second line on narrow screens.
     private var labelsRow: some View {
-        FlowLayout(spacing: 14) {
+        FlowLayout(spacing: 8) {
             // Category is context, not severity. Keep red reserved for the
             // explicit breaking state below so ordinary sections stay calm.
             DetailLabelPill(title: article.categoryTitle, tint: SabqTheme.primary)
@@ -729,14 +723,23 @@ struct ArticleDetailView: View {
             // Breaking pill (only when applicable)
             if article.isBreaking {
                 HStack(spacing: 5) {
-                    PulsingDot(color: SabqTheme.coral)
-                        .scaleEffect(0.6)
-                        .frame(width: 12, height: 12)
+                    PulsingDot(color: SabqTheme.breaking)
+                        .scaleEffect(0.58)
+                        .frame(width: 11, height: 11)
                     Text("عاجل")
-                        .font(SabqFonts.app(size: 13, weight: .semibold))
-                        .foregroundStyle(SabqTheme.danger)
+                        .font(SabqType.tag.font)
+                        .foregroundStyle(SabqTheme.breaking)
                 }
-                .padding(.vertical, 2)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(SabqTheme.breaking.opacity(0.11))
+                )
+                .overlay(
+                    Capsule(style: .continuous)
+                        .strokeBorder(SabqTheme.breaking.opacity(0.24), lineWidth: 0.75)
+                )
             }
 
             sentimentPill
@@ -754,27 +757,20 @@ struct ArticleDetailView: View {
     private var sentimentPill: some View {
         if let raw = aiInsights["sentiment"]?.lowercased(),
            let mapped = sentimentMapping(for: raw) {
-            HStack(spacing: 5) {
-                Image(systemName: mapped.icon)
-                    .font(SabqFonts.app(size: 11, weight: .regular))
-                Text(mapped.label)
-                    .font(SabqFonts.app(size: 13, weight: .semibold))
-            }
-            .foregroundStyle(mapped.tint)
-            .padding(.vertical, 2)
+            DetailLabelPill(title: mapped.label, tint: mapped.tint, icon: mapped.icon)
         }
     }
 
     private func sentimentMapping(for raw: String) -> (label: String, icon: String, tint: Color)? {
         switch raw {
         case "positive", "ايجابي", "إيجابي":
-            return ("إيجابي", "face.smiling", Color(red: 0.16, green: 0.68, blue: 0.40))
+            return ("إيجابي", "face.smiling", SabqTheme.success)
         case "neutral", "محايد":
-            return ("محايد", "minus.circle", SabqTheme.secondaryInk)
+            return ("محايد", "minus.circle", SabqTheme.textSecondary)
         case "negative", "سلبي":
             return ("سلبي", "exclamationmark.triangle.fill", SabqTheme.danger)
         case "mixed", "مختلط":
-            return ("مختلط", "circle.lefthalf.fill", Color(red: 0.62, green: 0.36, blue: 0.92))
+            return ("مختلط", "circle.lefthalf.fill", SabqTheme.warning)
         default:
             return nil
         }
@@ -872,7 +868,19 @@ struct ArticleDetailView: View {
             }
             .padding(SabqLayout.cardInset)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .sabqBlockSurface()
+            .sabqSkyCardSurface()
+            .overlay(alignment: .leading) {
+                UnevenRoundedRectangle(
+                    topLeadingRadius: SabqTheme.cardRadius,
+                    bottomLeadingRadius: SabqTheme.cardRadius,
+                    bottomTrailingRadius: 0,
+                    topTrailingRadius: 0,
+                    style: .continuous
+                )
+                .fill(SabqTheme.primary)
+                .frame(width: 4)
+                .accessibilityHidden(true)
+            }
         }
     }
 
@@ -889,8 +897,8 @@ struct ArticleDetailView: View {
     /// فقط عندما يكون مقطع هذا الخبر عبر HUMAIN (رأس `X-TTS-Provider`).
     private var summaryAudioAttribution: some View {
         Text("الصوت عبر HUMAIN")
-            .font(SabqFonts.app(size: 11, weight: .regular))
-            .foregroundStyle(SabqTheme.emerald)
+            .font(SabqType.tag.font)
+            .foregroundStyle(SabqTheme.success)
             .lineLimit(1)
             .accessibilityLabel("الصوت عبر هيومن")
     }
@@ -1167,17 +1175,17 @@ struct ArticleDetailView: View {
     private var weeklyPhotosHeader: some View {
         HStack(spacing: 12) {
             Image(systemName: "camera.fill")
-                .font(SabqFonts.app(size: 20, weight: .semibold))
-                .foregroundStyle(SabqTheme.primaryEnd)
+                .font(SabqType.sectionHeading.font)
+                .foregroundStyle(SabqTheme.primary)
                 .frame(width: 40, height: 40)
                 .background(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(SabqTheme.primaryEnd.opacity(0.10))
+                    RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                        .fill(SabqTheme.surfaceMuted)
                 )
 
             Text("صور الأسبوع")
-                .font(SabqFonts.app(size: 22, weight: .heavy))
-                .foregroundStyle(SabqTheme.ink)
+                .font(SabqType.sectionHeading.font)
+                .foregroundStyle(SabqTheme.textPrimary)
 
             LinearGradient(
                 colors: [.clear, SabqTheme.outline, .clear],
@@ -1197,12 +1205,11 @@ struct ArticleDetailView: View {
             // padding 10pt + rail width 2pt` puts the rail's centre.
             ZStack {
                 Circle()
-                    .fill(SabqTheme.primaryEnd)
+                    .fill(SabqTheme.primary)
                     .frame(width: 14, height: 14)
                     .overlay(
                         Circle().stroke(SabqTheme.background, lineWidth: 4)
                     )
-                    .shadow(color: SabqTheme.primaryEnd.opacity(0.4), radius: 4, y: 2)
             }
             .frame(width: 22, alignment: .top)
             .padding(.top, 16)
@@ -1235,18 +1242,17 @@ struct ArticleDetailView: View {
                             }
                         }
                     )
-                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .clipShape(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
                     .overlay(
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .stroke(SabqTheme.outline.opacity(0.30), lineWidth: 0.5)
+                        RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                            .stroke(SabqTheme.outline, lineWidth: 0.5)
                     )
-                    .shadow(color: SabqTheme.shadow, radius: 10, x: 0, y: 4)
 
                 // Rank pill in the top-leading corner (visual top-right
                 // in RTL — matches web's `top-3 right-3` placement).
                 Text("\(index + 1)")
-                    .font(SabqFonts.app(size: 12, weight: .medium))
-                    .foregroundStyle(.white)
+                    .font(SabqType.tag.font)
+                    .foregroundStyle(SabqTheme.onAction)
                     .monospacedDigit()
                     .padding(.horizontal, 11)
                     .padding(.vertical, 5)
@@ -1261,19 +1267,7 @@ struct ArticleDetailView: View {
     }
 
     private var weeklyPhotoPlaceholder: some View {
-        LinearGradient(
-            colors: [
-                SabqTheme.primaryEnd.opacity(0.10),
-                SabqTheme.coral.opacity(0.06),
-            ],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
-        .overlay {
-            Image(systemName: "photo")
-                .font(SabqFonts.app(size: 36, weight: .light))
-                .foregroundStyle(SabqTheme.primaryEnd.opacity(0.35))
-        }
+        SabqImagePlaceholder()
     }
 
     private func weeklyPhotoCaption(photo: APIWeeklyPhoto) -> some View {
@@ -1281,7 +1275,7 @@ struct ArticleDetailView: View {
             if !photo.caption.isEmpty {
                 Text(photo.caption)
                     .font(SabqFonts.app(size: CGFloat(fontSize), weight: .regular))
-                    .foregroundStyle(SabqTheme.ink.opacity(0.92))
+                    .foregroundStyle(SabqTheme.textPrimary)
                     .multilineTextAlignment(.leading)
                     .lineSpacing(CGFloat(lineSpacing))
                     .fixedSize(horizontal: false, vertical: true)
@@ -1289,32 +1283,20 @@ struct ArticleDetailView: View {
             }
 
             if !photo.credit.isEmpty {
-                Divider()
-                    .background(SabqTheme.outline.opacity(0.5))
+                SidebarRowDivider()
 
                 HStack(spacing: 8) {
                     Image(systemName: "camera.fill")
-                        .font(SabqFonts.app(size: 11, weight: .regular))
+                        .font(SabqType.tag.font)
                     Text(photo.credit)
-                        .font(SabqFonts.app(size: 11, weight: .regular))
+                        .font(SabqType.tag.font)
                 }
-                .foregroundStyle(SabqTheme.tertiaryInk)
+                .foregroundStyle(SabqTheme.textTertiary)
             }
         }
-        .padding(16)
+        .padding(SabqLayout.cardInset)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(.ultraThinMaterial)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .fill(SabqTheme.paleFill.opacity(0.40))
-                )
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(SabqTheme.outline.opacity(0.35), lineWidth: 0.5)
-        )
+        .sabqBlockSurface()
     }
 
     private var articleBody: some View {
@@ -1376,7 +1358,7 @@ struct ArticleDetailView: View {
                             weight: index == 0 ? .medium : .regular,
                             useSerifReader: useReaderFont,
                             lineSpacing: CGFloat(lineSpacing) + (index == 0 ? 4 : 3),
-                            textColor: UIColor(SabqTheme.ink.opacity(0.92))
+                            textColor: UIColor(SabqTheme.textPrimary)
                         )
                         .frame(maxWidth: .infinity, alignment: .leading)
                     }
@@ -1398,21 +1380,12 @@ struct ArticleDetailView: View {
                         Button {
                             inlineLightboxURL = url
                         } label: {
-                            // CachedAsyncImage (not the plain AsyncImage):
-                            // gives this gallery the same NSCache, ImageIO
-                            // downsample, dedicated 12-connection session,
-                            // retry, and CF width-bounded download that the
-                            // rest of the reader already has — the previous
-                            // AsyncImage re-downloaded full-res originals on
-                            // every appearance, so the attached/album images
-                            // were the slowest to show.
                             CachedAsyncImage(url: url, contentMode: .fit, maxPixelSize: 1600) {
-                                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                    .fill(SabqTheme.outline.opacity(0.15))
+                                SabqImagePlaceholder()
                                     .frame(height: 200)
                             }
                             .frame(maxWidth: .infinity)
-                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            .clipShape(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
                         }
                         .buttonStyle(.plain)
                     }
@@ -1463,8 +1436,8 @@ struct ArticleDetailView: View {
     private var tagsSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("الوسوم")
-                .font(SabqFonts.app(size: 15, weight: .bold))
-                .foregroundStyle(SabqTheme.ink)
+                .font(SabqType.sectionHeading.font)
+                .foregroundStyle(SabqTheme.textPrimary)
 
             FlowLayout(spacing: 8) {
                 ForEach(displayTags, id: \.self) { tag in
@@ -1623,8 +1596,8 @@ struct ArticleDetailView: View {
             : AnyLayout(HStackLayout(spacing: SabqLayout.space12))
         return layout {
             Text("سجّل دخولك لإضافة تعليق")
-                .font(SabqFonts.app(size: 14, weight: .medium))
-                .foregroundStyle(SabqTheme.secondaryInk)
+                .font(SabqType.meta.font)
+                .foregroundStyle(SabqTheme.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 8)
             Button {
@@ -1632,13 +1605,13 @@ struct ArticleDetailView: View {
                 showLoginForCommentSheet = true
             } label: {
                 Text("تسجيل الدخول")
-                    .font(SabqFonts.app(size: 13, weight: .semibold))
-                    .foregroundStyle(.white)
+                    .font(SabqType.metaEmphasis.font)
+                    .foregroundStyle(SabqTheme.onAction)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 7)
                     .frame(minHeight: SabqLayout.touchTarget)
                     .background(
-                        RoundedRectangle(cornerRadius: 8, style: .continuous).fill(SabqTheme.actionFill)
+                        RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous).fill(SabqTheme.actionFill)
                     )
             }
             .buttonStyle(.plain)
@@ -1651,11 +1624,11 @@ struct ArticleDetailView: View {
     private var commentEmptyState: some View {
         HStack(spacing: 8) {
             Image(systemName: "bubble.left")
-                .font(SabqFonts.app(size: 14, weight: .light))
-                .foregroundStyle(SabqTheme.tertiaryInk)
+                .font(SabqType.meta.font)
+                .foregroundStyle(SabqTheme.textTertiary)
             Text("لا توجد تعليقات بعد")
-                .font(SabqFonts.app(size: 13, weight: .medium))
-                .foregroundStyle(SabqTheme.secondaryInk)
+                .font(SabqType.meta.font)
+                .foregroundStyle(SabqTheme.textSecondary)
             Spacer(minLength: 0)
         }
         .padding(.vertical, 10)
@@ -1666,18 +1639,18 @@ struct ArticleDetailView: View {
             ForEach(0..<3, id: \.self) { _ in
                 HStack(alignment: .top, spacing: 10) {
                     Circle()
-                        .fill(SabqTheme.paleFill)
+                        .fill(SabqTheme.surfaceMuted)
                         .frame(width: 32, height: 32)
                     VStack(alignment: .leading, spacing: 6) {
-                        RoundedRectangle(cornerRadius: 4)
-                            .fill(SabqTheme.paleFill)
+                        RoundedRectangle(cornerRadius: SabqRadius.small)
+                            .fill(SabqTheme.surfaceMuted)
                             .frame(width: 110, height: 12)
-                        RoundedRectangle(cornerRadius: 4)
-                            .fill(SabqTheme.paleFill)
+                        RoundedRectangle(cornerRadius: SabqRadius.small)
+                            .fill(SabqTheme.surfaceMuted)
                             .frame(maxWidth: .infinity)
                             .frame(height: 10)
-                        RoundedRectangle(cornerRadius: 4)
-                            .fill(SabqTheme.paleFill)
+                        RoundedRectangle(cornerRadius: SabqRadius.small)
+                            .fill(SabqTheme.surfaceMuted)
                             .frame(width: 220, height: 10)
                     }
                 }
@@ -1689,22 +1662,22 @@ struct ArticleDetailView: View {
     private func commentErrorState(message: String, store: CommentsStore) -> some View {
         VStack(spacing: 8) {
             Image(systemName: "wifi.exclamationmark")
-                .font(SabqFonts.app(size: 22, weight: .light))
-                .foregroundStyle(SabqTheme.tertiaryInk)
+                .font(SabqType.sectionHeading.font)
+                .foregroundStyle(SabqTheme.textTertiary)
             Text(message)
-                .font(SabqFonts.app(size: 13, weight: .medium))
-                .foregroundStyle(SabqTheme.secondaryInk)
+                .font(SabqType.meta.font)
+                .foregroundStyle(SabqTheme.textSecondary)
                 .multilineTextAlignment(.center)
             Button {
                 Task { await store.load() }
             } label: {
                 Text("إعادة المحاولة")
-                    .font(SabqFonts.app(size: 12, weight: .medium))
-                    .foregroundStyle(SabqTheme.primaryEnd)
+                    .font(SabqType.tag.font)
+                    .foregroundStyle(SabqTheme.primary)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 6)
                     .background(
-                        Capsule().fill(SabqTheme.primaryEnd.opacity(0.12))
+                        Capsule().fill(SabqTheme.surfaceMuted)
                     )
             }
             .buttonStyle(.plain)
@@ -1716,24 +1689,24 @@ struct ArticleDetailView: View {
     private func commentFeedbackBanner(_ feedback: CommentFeedback) -> some View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: feedback.icon)
-                .font(SabqFonts.app(size: 14, weight: .bold))
+                .font(SabqType.metaEmphasis.font)
                 .foregroundStyle(feedback.tint)
             Text(feedback.message)
-                .font(SabqFonts.app(size: 12, weight: .medium))
-                .foregroundStyle(SabqTheme.ink)
+                .font(SabqType.tag.font)
+                .foregroundStyle(SabqTheme.textPrimary)
                 .frame(maxWidth: .infinity, alignment: .leading)
             Button {
                 withAnimation { commentFeedback = nil }
             } label: {
                 Image(systemName: "xmark")
-                    .font(SabqFonts.app(size: 10, weight: .regular))
-                    .foregroundStyle(SabqTheme.tertiaryInk)
+                    .font(SabqType.tag.font)
+                    .foregroundStyle(SabqTheme.textTertiary)
             }
             .buttonStyle(.plain)
         }
         .padding(12)
         .background(
-            RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous)
+            RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
                 .fill(feedback.tint.opacity(0.12))
         )
     }
@@ -1863,14 +1836,14 @@ struct ReaderControlsSheet: View {
                     Toggle(isOn: $useReaderFont) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("خط القراءة")
-                                .font(SabqFonts.app(size: 14, weight: .semibold))
-                                .foregroundStyle(SabqTheme.ink)
+                                .font(SabqType.label)
+                                .foregroundStyle(SabqTheme.textPrimary)
                             Text("خط متّسع لقراءة مريحة")
-                                .font(SabqFonts.app(size: 11))
-                                .foregroundStyle(SabqTheme.tertiaryInk)
+                                .font(SabqType.meta.font)
+                                .foregroundStyle(SabqTheme.textTertiary)
                         }
                     }
-                    .tint(SabqTheme.primaryEnd)
+                    .tint(SabqTheme.primary)
                 }
 
                 Spacer(minLength: 0)
@@ -1884,8 +1857,8 @@ struct ReaderControlsSheet: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("تم") { dismiss() }
-                        .font(SabqFonts.app(size: 14, weight: .semibold))
-                        .foregroundStyle(SabqTheme.primaryEnd)
+                        .font(SabqType.button.font)
+                        .foregroundStyle(SabqTheme.primary)
                 }
             }
         }
@@ -1898,16 +1871,16 @@ struct ReaderControlsSheet: View {
         Text("تظهر القراءة بهذا الحجم والتباعد. عدّل الإعدادات أدناه لتجد المريح لعينيك.")
             .font(SabqFonts.app(size: fontSize, weight: .regular))
             .lineSpacing(lineSpacing)
-            .foregroundStyle(SabqTheme.ink)
+            .foregroundStyle(SabqTheme.textPrimary)
             .padding(16)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
-                RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
+                RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
                     .fill(SabqTheme.surface)
             )
             .overlay(
-                RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                    .stroke(SabqTheme.outline.opacity(0.4), lineWidth: 0.5)
+                RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                    .stroke(SabqTheme.outline, lineWidth: 0.5)
             )
     }
 
@@ -1925,24 +1898,24 @@ struct ReaderControlsSheet: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text(title)
-                    .font(SabqFonts.app(size: 14, weight: .semibold))
-                    .foregroundStyle(SabqTheme.ink)
+                    .font(SabqType.label)
+                    .foregroundStyle(SabqTheme.textPrimary)
                 Spacer()
                 Text(valueText)
-                    .font(SabqFonts.app(size: 11, weight: .regular))
+                    .font(SabqType.tag.font)
                     .monospacedDigit()
-                    .foregroundStyle(SabqTheme.tertiaryInk)
+                    .foregroundStyle(SabqTheme.textTertiary)
             }
             HStack(spacing: 10) {
                 Text(leftLabel)
-                    .font(SabqFonts.app(size: leftSize, weight: .semibold))
-                    .foregroundStyle(SabqTheme.tertiaryInk)
+                    .font(SabqFonts.app(size: max(12, leftSize), weight: .semibold))
+                    .foregroundStyle(SabqTheme.textTertiary)
                     .frame(width: 18)
                 Slider(value: value, in: range, step: step)
-                    .tint(SabqTheme.primaryEnd)
+                    .tint(SabqTheme.primary)
                 Text(rightLabel)
-                    .font(SabqFonts.app(size: rightSize, weight: .semibold))
-                    .foregroundStyle(SabqTheme.tertiaryInk)
+                    .font(SabqFonts.app(size: max(12, rightSize), weight: .semibold))
+                    .foregroundStyle(SabqTheme.textTertiary)
                     .frame(width: 18)
             }
         }

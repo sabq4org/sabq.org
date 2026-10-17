@@ -153,6 +153,16 @@ struct EditorialDesignSystemTests {
         _ = SabqType.caption
     }
 
+    @Test func bundledIBMPlexSansArabicTrueTypeWeightsLoadReliably() {
+        SabqFonts.registerAll()
+        #expect(UIFont(name: SabqFonts.regular, size: 17) != nil)
+        #expect(UIFont(name: SabqFonts.medium, size: 16) != nil)
+        #expect(UIFont(name: SabqFonts.semibold, size: 16) != nil)
+        #expect(UIFont(name: SabqFonts.bold, size: 22) != nil)
+        #expect(SabqType.leadTitle.uiFont.fontName == SabqFonts.bold)
+        #expect(SabqType.rowTitle.uiFont.fontName == SabqFonts.medium)
+    }
+
     private func withSeason<T>(_ seasonal: Bool, _ body: () throws -> T) rethrows -> T {
         let previousSeason = defaults.object(forKey: NationalDayTheme.activeDefaultsKey)
         defaults.set(seasonal, forKey: NationalDayTheme.activeDefaultsKey)

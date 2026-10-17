@@ -34,26 +34,30 @@ nonisolated enum SabqTheme {
         NationalDayTheme.isActive ? NationalDayTheme.canvas : baseActionFill
     }
     static let onAction = Color.white
-    private static let basePrimary = adaptive(0x0A5F94, 0x66C7FF)
-    private static let baseActionFill = adaptive(0x0A5F94, 0x1A6FA8)
+    private static let basePrimary = adaptive(0x096EBD, 0x5CC4FF)
+    private static let baseActionFill = adaptive(0x096EBD, 0x1A6FA8)
 
     // Text.
 
-    static let textPrimary = adaptive(0x0F1B27, 0xEEF3F7)
-    static let textSecondary = adaptive(0x4A5866, 0xA3B1BF, highContrastLight: 0x0F1B27, highContrastDark: 0xEEF3F7)
-    static let textTertiary = adaptive(0x5E6B78, 0x8B9AA9, highContrastLight: 0x0F1B27, highContrastDark: 0xEEF3F7)
+    static let textPrimary = adaptive(0x0C1A2A, 0xF0F4F8)
+    static let textSecondary = adaptive(0x3E5063, 0xA6B5C4, highContrastLight: 0x0C1A2A, highContrastDark: 0xF0F4F8)
+    static let textTertiary = adaptive(0x556677, 0x8E9EAE, highContrastLight: 0x0C1A2A, highContrastDark: 0xF0F4F8)
 
-    // Surfaces. Light mode is a white page; dark mode steps up from the page.
+    // Surfaces. Light mode is a white page with cool sky-tinted muted blocks; dark mode steps up from the page.
 
     static let background = adaptive(0xFFFFFF, 0x0B121A)
     static let surface = adaptive(0xFFFFFF, 0x141D27)
     /// أشرطة الفصل بين الأقسام والبلوكات الهادئة (الموجز الذكي، الحقول).
-    static let surfaceMuted = adaptive(0xF2F4F7, 0x1A2531)
-    static let surfaceStrong = adaptive(0xE8ECF0, 0x223040)
+    static let surfaceMuted = adaptive(0xEFF6FC, 0x152230)
+    static let surfaceStrong = adaptive(0xDFECF7, 0x1F3145)
+    /// خلفية البطاقات التحريرية المميزة بهوية سبق السماوية (الموجز اليومي، الموجز الذكي، بطاقة الآراء).
+    static let skyTint = adaptive(0xDCF1FE, 0x152C44)
+    /// إطار سماوي واضح للبطاقات التحريرية المميزة.
+    static let skyOutline = adaptive(0xA6D8FB, 0x264B73)
     /// خط رفيع بين الأخبار داخل القائمة.
-    static let separator = adaptive(0xE4E8EC, 0x25313D)
+    static let separator = adaptive(0xE2E9F0, 0x24313F)
     /// حدود عناصر التحكم (حقول، أزرار ثانوية).
-    static let outline = adaptive(0xD3DAE0, 0x34414F)
+    static let outline = adaptive(0xCFDCE8, 0x334354)
 
     // Status.
 
@@ -180,9 +184,15 @@ nonisolated struct SabqTextRole: Sendable {
 
     private func postScriptName(boldText: Bool) -> String {
         switch weight {
-        case .regular: boldText ? SabqFonts.semibold : SabqFonts.regular
-        case .semibold: boldText ? SabqFonts.bold : SabqFonts.semibold
-        case .bold: SabqFonts.bold
+        case .regular:
+            return boldText ? SabqFonts.semibold : SabqFonts.regular
+        case .semibold:
+            if boldText { return SabqFonts.bold }
+            // استخدام الوزن المتوسط (Medium) لعناوين صفوف الأخبار (16pt) ليبقى الفارق
+            // واضحاً بينها وبين العنوان الرئيسي (22pt Bold).
+            return style == .headline ? SabqFonts.medium : SabqFonts.semibold
+        case .bold:
+            return SabqFonts.bold
         }
     }
 
@@ -198,8 +208,8 @@ nonisolated struct SabqTextRole: Sendable {
 /// IBM Plex Sans Arabic. Bold only for titles of 20pt and above, SemiBold for
 /// list headlines, labels and buttons, Regular for everything else; 12pt floor.
 nonisolated enum SabqType {
-    static let articleTitle = SabqTextRole(size: 26, weight: .bold, style: .title, lineSpacing: 2)
-    static let leadTitle = SabqTextRole(size: 22, weight: .bold, style: .title2, lineSpacing: 2)
+    static let articleTitle = SabqTextRole(size: 23, weight: .bold, style: .title, lineSpacing: 3)
+    static let leadTitle = SabqTextRole(size: 21, weight: .bold, style: .title2, lineSpacing: 2)
     static let sectionHeading = SabqTextRole(size: 20, weight: .bold, style: .title3, lineSpacing: 0)
     static let rowTitle = SabqTextRole(size: 16, weight: .semibold, style: .headline, lineSpacing: 2)
     static let articleBody = SabqTextRole(size: 18, weight: .regular, style: .body, lineSpacing: 5)
