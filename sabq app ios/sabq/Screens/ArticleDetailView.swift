@@ -709,9 +709,9 @@ struct ArticleDetailView: View {
     /// FlowLayout wraps onto a second line on narrow screens.
     private var labelsRow: some View {
         FlowLayout(spacing: 8) {
-            // Category is context, not severity. Uses the exact same skyTint
-            // capsule style as the hero card on the home screen.
-            DetailLabelPill(title: article.categoryTitle, tint: SabqTheme.primary, fill: SabqTheme.skyTint)
+            // Category is context, not severity. Uses the exact same soft
+            // capsule style as the hero and compact rows on the home screen.
+            DetailLabelPill(title: article.categoryTitle, tint: SabqTheme.primary)
 
             // شارة «قراءة» التحريرية — تطابق شارة صفحة الخبر في الويب (#1420).
             // من `displayArticle` كي تظهر بعد وصول حمولة التفاصيل حتى لو دخل
@@ -865,18 +865,6 @@ struct ArticleDetailView: View {
             .padding(SabqLayout.cardInset)
             .frame(maxWidth: .infinity, alignment: .leading)
             .sabqSkyCardSurface()
-            .overlay(alignment: .leading) {
-                UnevenRoundedRectangle(
-                    topLeadingRadius: SabqTheme.cardRadius,
-                    bottomLeadingRadius: SabqTheme.cardRadius,
-                    bottomTrailingRadius: 0,
-                    topTrailingRadius: 0,
-                    style: .continuous
-                )
-                .fill(SabqTheme.primary)
-                .frame(width: 4)
-                .accessibilityHidden(true)
-            }
         }
     }
 

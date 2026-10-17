@@ -43,12 +43,33 @@ struct ArticleSubmissionView: View {
     // بوابة اليوم الأسبوعي: كاتب رأي بلا يوم محدد يختاره قبل أول إرسال،
     // ثم يُستكمل الإرسال تلقائياً بعد التثبيت.
     @State private var writerSchedule: WriterScheduleResponse?
+    @State private var writerWorkspace: WriterWorkspaceModel?
     @State private var showDayGate = false
     @State private var savingDay = false
     @State private var dayGateError: String?
     /// true فقط عندما تُفتح البوابة من زر الإرسال — عندها يُستكمل الإرسال
     /// تلقائياً بعد التثبيت. الفتح من التنبيه المبكر لا يُرسل شيئاً.
     @State private var dayGateShouldContinue = false
+
+    private var blockingUnpublishedArticleTitle: String? {
+        guard kind == .opinion else { return nil }
+        if let active = writerSchedule?.activeArticle {
+            return active.title
+        }
+        let tracking = writerWorkspace?.tracking ?? []
+        if let scheduled = tracking.first(where: { $0.status == "scheduled" }) {
+            return scheduled.title
+        }
+        if let draft = tracking.first(where: { $0.status == "draft" && $0.reviewStatus != "rejected" }) {
+            return draft.title
+        }
+        if let desk = (writerWorkspace?.desk ?? []).first(where: {
+            ($0.status == "draft" || $0.status == "scheduled") && $0.reviewStatus != "rejected"
+        }) {
+            return desk.title
+        }
+        return nil
+    }
 
     enum Stage {
         case form, submitting, success
@@ -105,7 +126,9 @@ struct ArticleSubmissionView: View {
                         headerHero
                             .contentShape(Rectangle())
                             .onTapGesture { sabqDismissKeyboard() }
-                        if kind == .opinion, writerSchedule?.canChoose == true {
+                        if let blockingTitle = blockingUnpublishedArticleTitle {
+                            activePipelineNoticeBanner(title: blockingTitle)
+                        } else if kind == .opinion, writerSchedule?.canChoose == true {
                             dayNoticeBanner
                         }
                         formCard
@@ -159,11 +182,39 @@ struct ArticleSubmissionView: View {
             .task {
                 guard kind == .opinion else { return }
                 writerSchedule = try? await APIClient.shared.get(WriterScheduleResponse.self, path: "/contributor/schedule", ignoreCache: true)
+                writerWorkspace = try? await APIClient.shared.get(WriterWorkspaceModel.self, path: "/contributor/workspace", ignoreCache: true)
             }
             .sheet(isPresented: $showDayGate, onDismiss: { dayGateShouldContinue = false }) {
                 dayGateSheet
             }
         }
+    }
+
+    private func activePipelineNoticeBanner(title: String) -> some View {
+        HStack(alignment: .top, spacing: SabqLayout.space12) {
+            Image(systemName: "clock.badge.exclamationmark")
+                .font(SabqFonts.app(size: 16, weight: .semibold))
+                .foregroundStyle(SabqTheme.warning)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: SabqLayout.space4) {
+                Text("لديك مقال لم يُنشر بعد")
+                    .sabqText(SabqType.metaEmphasis)
+                    .foregroundStyle(SabqTheme.textPrimary)
+                Text("لا يمكن إرسال مقال جديد ووجود مقال في المسودات أو مجدول («\(title)») — يُتاح الإرسال بعد نشره.")
+                    .sabqText(SabqType.meta)
+                    .foregroundStyle(SabqTheme.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, SabqLayout.space16)
+        .padding(.vertical, SabqLayout.space12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous).fill(SabqTheme.warning.opacity(0.08)))
+        .overlay(
+            RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                .strokeBorder(SabqTheme.warning.opacity(0.22), lineWidth: 0.75)
+        )
     }
 
     // MARK: - Day gate (تحديد اليوم الأسبوعي قبل أول إرسال)
@@ -561,7 +612,8 @@ struct ArticleSubmissionView: View {
     // MARK: - Submit button
 
     private var submitButton: some View {
-        let enabled = isFormValid && screenState != .submitting
+        let isBlockedByActivePipeline = blockingUnpublishedArticleTitle != nil
+        let enabled = isFormValid && screenState != .submitting && !isBlockedByActivePipeline
         let filled = enabled || screenState == .submitting
         return Button {
             Task { await submit() }
@@ -570,7 +622,7 @@ struct ArticleSubmissionView: View {
                 if screenState == .submitting {
                     ProgressView().tint(SabqTheme.onAction)
                 } else {
-                    Image(systemName: "paperplane")
+                    Image(systemName: isBlockedByActivePipeline ? "lock.fill" : "paperplane")
                         .font(SabqFonts.app(size: 15, weight: .semibold))
                 }
                 Text(screenState == .submitting
@@ -584,7 +636,7 @@ struct ArticleSubmissionView: View {
                         in: RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
         }
         .buttonStyle(.plain)
-        .disabled(!isFormValid || screenState == .submitting)
+        .disabled(!enabled)
     }
 
     // MARK: - Success state — the celebration

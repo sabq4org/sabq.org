@@ -254,25 +254,6 @@ struct SettingsView: View {
                     }
                 }
 
-                if let jobTitle = user.jobTitle, !jobTitle.isEmpty, jobTitle != user.localizedRole {
-                    HStack(spacing: SabqLayout.space8) {
-                        Image(systemName: "briefcase")
-                            .font(SabqType.meta.font)
-                            .foregroundStyle(SabqTheme.textTertiary)
-                        Text(jobTitle)
-                            .sabqText(SabqType.meta)
-                            .foregroundStyle(SabqTheme.textSecondary)
-                        if let dept = user.department, !dept.isEmpty {
-                            Text("·")
-                                .foregroundStyle(SabqTheme.textTertiary)
-                            Text(dept)
-                                .sabqText(SabqType.meta)
-                                .foregroundStyle(SabqTheme.textSecondary)
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
-
                 if let bio = user.bio, !bio.isEmpty {
                     Text(bio)
                         .sabqText(SabqType.excerpt)
@@ -508,21 +489,32 @@ struct SettingsView: View {
 
     @ViewBuilder
     private func profileDetails(user: APIUser) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 6) {
-                Text(user.displayName)
-                    .sabqText(SabqType.sectionHeading)
-                    .foregroundStyle(SabqTheme.textPrimary)
+        HStack(alignment: .top, spacing: 8) {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    Text(user.displayName)
+                        .sabqText(SabqType.sectionHeading)
+                        .foregroundStyle(SabqTheme.textPrimary)
 
-                if user.isVerified {
-                    Image(systemName: "checkmark.seal.fill")
-                        .font(SabqType.excerpt.font)
-                        .foregroundStyle(SabqTheme.success)
-                        .accessibilityLabel("حساب موثّق")
+                    if user.isVerified {
+                        Image(systemName: "checkmark.seal.fill")
+                            .font(SabqType.excerpt.font)
+                            .foregroundStyle(SabqTheme.success)
+                            .accessibilityLabel("حساب موثّق")
+                    }
                 }
 
-                Spacer(minLength: 0)
+                if let email = user.email, !email.isEmpty {
+                    Text(email)
+                        .sabqText(SabqType.meta)
+                        .foregroundStyle(SabqTheme.textSecondary)
+                        .lineLimit(1)
+                }
+            }
 
+            Spacer(minLength: 0)
+
+            VStack(alignment: .center, spacing: 3) {
                 HStack(spacing: 4) {
                     Image(systemName: "person.fill")
                         .font(.system(size: 10, weight: .semibold))
@@ -534,20 +526,20 @@ struct SettingsView: View {
                 .padding(.vertical, 3)
                 .background(
                     Capsule(style: .continuous)
-                        .fill(SabqTheme.skyTint)
+                        .fill(SabqTheme.surface)
                 )
                 .contentShape(Rectangle())
                 .onLongPressGesture(minimumDuration: 0.6) {
                     roleDebugMessage = user.roleDebugSummary
                     showRoleDebug = true
                 }
-            }
 
-            if let email = user.email, !email.isEmpty {
-                Text(email)
-                    .sabqText(SabqType.meta)
-                    .foregroundStyle(SabqTheme.textSecondary)
-                    .lineLimit(1)
+                if user.isWriter || user.isReporter || user.isAdminLike || !(user.department ?? "").isEmpty {
+                    Text("هيئة التحرير")
+                        .font(SabqFonts.app(size: 11, weight: .medium))
+                        .foregroundStyle(SabqTheme.textTertiary)
+                        .lineLimit(1)
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

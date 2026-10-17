@@ -50,10 +50,10 @@ nonisolated enum SabqTheme {
     /// أشرطة الفصل بين الأقسام والبلوكات الهادئة (الموجز الذكي، الحقول).
     static let surfaceMuted = adaptive(0xEFF6FC, 0x152230)
     static let surfaceStrong = adaptive(0xDFECF7, 0x1F3145)
-    /// خلفية البطاقات التحريرية المميزة بهوية سبق السماوية (الموجز اليومي، الموجز الذكي، بطاقة الآراء).
-    static let skyTint = adaptive(0xDCF1FE, 0x152C44)
-    /// إطار سماوي واضح للبطاقات التحريرية المميزة.
-    static let skyOutline = adaptive(0xA6D8FB, 0x264B73)
+    /// خلفية البطاقات التحريرية المميزة بهوية سبق السماوية الهادئة (الموجز اليومي، الموجز الذكي، بطاقة الآراء).
+    static let skyTint = adaptive(0xF3F8FD, 0x13202E)
+    /// إطار سماوي ناعم للبطاقات التحريرية المميزة.
+    static let skyOutline = adaptive(0xDCEAF7, 0x22364A)
     /// خط رفيع بين الأخبار داخل القائمة.
     static let separator = adaptive(0xE2E9F0, 0x24313F)
     /// حدود عناصر التحكم (حقول، أزرار ثانوية).

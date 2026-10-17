@@ -1404,10 +1404,10 @@ struct DetailLabelPill: View {
         }
         .foregroundStyle(tint)
         .padding(.horizontal, 8)
-        .padding(.vertical, 3)
+        .padding(.vertical, 2.5)
         .background(
             Capsule(style: .continuous)
-                .fill(fill ?? tint.opacity(0.12))
+                .fill(fill ?? tint.opacity(0.08))
         )
         .contentShape(Capsule(style: .continuous))
     }
@@ -1459,15 +1459,27 @@ struct FeaturedArticleCard: View {
                     .font(SabqType.tag.font)
                     .foregroundStyle(SabqTheme.primary)
                     .padding(.horizontal, 8)
-                    .padding(.vertical, 3)
+                    .padding(.vertical, 2.5)
                     .background(
                         Capsule(style: .continuous)
-                            .fill(SabqTheme.skyTint)
+                            .fill(SabqTheme.primary.opacity(0.07))
                     )
-                Text(heroWhen)
-                    .font(SabqType.meta.font)
-                    .foregroundStyle(SabqTheme.textTertiary)
-                    .monospacedDigit()
+                if article.isFreshlyPublished {
+                    Text("جديد")
+                        .font(SabqType.tag.font)
+                        .foregroundStyle(SabqTheme.success)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 2.5)
+                        .background(
+                            Capsule(style: .continuous)
+                                .fill(SabqTheme.success.opacity(0.08))
+                        )
+                } else {
+                    Text(heroWhen)
+                        .font(SabqType.meta.font)
+                        .foregroundStyle(SabqTheme.textTertiary)
+                        .monospacedDigit()
+                }
             }
             .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
             .padding(.bottom, SabqLayout.space8)
@@ -1664,76 +1676,53 @@ struct CompactArticleRow: View {
 
     // MARK: - Shared sub-views
 
+    private var categoryPill: some View {
+        Text(article.categoryTitle)
+            .font(SabqType.tag.font)
+            .foregroundStyle(SabqTheme.primary)
+            .lineLimit(1)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 2.5)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(SabqTheme.primary.opacity(0.07))
+            )
+            .fixedSize(horizontal: true, vertical: false)
+    }
+
     private var newPill: some View {
         Text("جديد")
             .font(SabqType.tag.font)
-            .foregroundStyle(SabqTheme.leaf)
+            .foregroundStyle(SabqTheme.success)
             .padding(.horizontal, 8)
-            .padding(.vertical, 4)
+            .padding(.vertical, 2.5)
             .background(
                 Capsule(style: .continuous)
-                    .fill(SabqTheme.leaf.opacity(0.12))
+                    .fill(SabqTheme.success.opacity(0.08))
             )
+            .fixedSize(horizontal: true, vertical: false)
     }
 
     private var metadataRow: some View {
-        Group {
-            if showsCategory || isNew {
-                ViewThatFits(in: .horizontal) {
-                    HStack(alignment: .firstTextBaseline, spacing: 6) {
-                        metadataBadges
-                        relativeDateLabel
-                    }
-                    .fixedSize(horizontal: true, vertical: false)
-
-                    VStack(alignment: .leading, spacing: 6) {
-                        metadataBadges
-                        relativeDateLabel
-                    }
+        TimelineView(.periodic(from: .now, by: 30)) { context in
+            let showNew = isNew || article.isFreshlyPublished(relativeTo: context.date)
+            HStack(alignment: .center, spacing: 6) {
+                if showsCategory {
+                    categoryPill
                 }
-            } else {
-                relativeDateLabel
+                if showNew {
+                    newPill
+                } else {
+                    Text(SabqFormatters.relativeArabic.localizedString(for: article.publishDate, relativeTo: context.date))
+                        .fixedSize(horizontal: false, vertical: true)
+                        .foregroundStyle(SabqTheme.tertiaryInk)
+                }
             }
-        }
-        .font(SabqType.meta.font)
-        .lineSpacing(NewsRowStyle.metadataLineSpacing)
-        .foregroundStyle(SabqTheme.textTertiary)
-        .fixedSize(horizontal: false, vertical: true)
-    }
-
-    /// سطر بيانات واحد بحجم واحد وبلا كبسولات: «جديد» أخضر شبه عريض عند
-    /// الحاجة، ثم اسم القسم بلون الهوية الموحّد الهادئ، ثم الوقت النسبي.
-    @ViewBuilder
-    private var metadataBadges: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 6) {
-            if isNew {
-                Text("جديد")
-                    .font(SabqType.metaEmphasis.font)
-                    .foregroundStyle(SabqTheme.success)
-                    .fixedSize(horizontal: true, vertical: false)
-                metadataSeparator
-            }
-            if showsCategory {
-                Text(article.categoryTitle)
-                    .font(SabqType.metaEmphasis.font)
-                    .foregroundStyle(SabqTheme.primary)
-                    .lineLimit(1)
-                    .fixedSize(horizontal: true, vertical: false)
-                metadataSeparator
-            }
-        }
-    }
-
-    private var metadataSeparator: some View {
-        Text("·")
             .font(SabqType.meta.font)
+            .lineSpacing(NewsRowStyle.metadataLineSpacing)
             .foregroundStyle(SabqTheme.textTertiary)
-    }
-
-    private var relativeDateLabel: some View {
-        Text(article.relativeDate)
             .fixedSize(horizontal: false, vertical: true)
-            .foregroundStyle(SabqTheme.tertiaryInk)
+        }
     }
 }
 
@@ -2088,11 +2077,11 @@ extension View {
             .clipShape(shape)
     }
 
-    /// بطاقة تحريرية مميزة بخلفية سماوية سبق وإطار سماوي ناعم.
+    /// بطاقة تحريرية مميزة بخلفية سماوية سبق هادئة وإطار سماوي ناعم.
     func sabqSkyCardSurface() -> some View {
         let shape = RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
         return background(shape.fill(SabqTheme.skyTint))
-            .overlay(shape.strokeBorder(SabqTheme.skyOutline, lineWidth: 1))
+            .overlay(shape.strokeBorder(SabqTheme.skyOutline.opacity(0.85), lineWidth: 0.75))
             .clipShape(shape)
     }
 }

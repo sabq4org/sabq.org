@@ -40,42 +40,53 @@ private extension AdminOpinionTicketStatus {
     }
 }
 
-/// Small radius-8 status tag: coloured text on a quiet fill.
-private struct AdminInboxStatusPill: View {
+/// Compact borderless capsule status pill.
+struct AdminInboxStatusPill: View {
     let title: String
     let icon: String
     let tint: Color
 
     var body: some View {
-        Label(title, systemImage: icon)
-            .labelStyle(.titleAndIcon)
-            .font(SabqType.tag.font)
-            .foregroundStyle(tint)
-            .padding(.horizontal, SabqLayout.space8)
-            .padding(.vertical, SabqLayout.space4)
-            .background(
-                RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
-                    .fill(SabqTheme.surfaceMuted)
-            )
+        HStack(spacing: SabqLayout.space4) {
+            Image(systemName: icon)
+                .font(SabqFonts.app(size: 11, weight: .semibold))
+                .accessibilityHidden(true)
+            Text(title)
+                .font(SabqType.tag.font)
+        }
+        .foregroundStyle(tint)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 3)
+        .background(
+            Capsule(style: .continuous)
+                .fill(tint.opacity(0.12))
+        )
+        .environment(\.layoutDirection, .rightToLeft)
     }
 }
 
 private struct AdminInboxFilterChip: View {
     let title: String
     var tint: Color = SabqTheme.textPrimary
+    var isActive: Bool = false
 
     var body: some View {
-        HStack(spacing: SabqLayout.space8) {
+        HStack(spacing: 6) {
             Image(systemName: "line.3.horizontal.decrease")
+                .font(.system(size: 12, weight: .semibold))
             Text(title)
             Image(systemName: "chevron.down")
-                .font(SabqFonts.app(size: 12, weight: .semibold))
+                .font(.system(size: 10, weight: .bold))
         }
         .font(SabqType.metaEmphasis.font)
-        .foregroundStyle(tint)
+        .foregroundStyle(isActive ? SabqTheme.primary : tint)
         .padding(.horizontal, SabqLayout.space12)
-        .frame(minHeight: SabqLayout.touchTarget)
-        .background(Capsule().fill(SabqTheme.surfaceMuted))
+        .frame(minHeight: 36)
+        .background(
+            Capsule(style: .continuous)
+                .fill(isActive ? SabqTheme.skyTint : SabqTheme.surfaceMuted)
+        )
+        .environment(\.layoutDirection, .rightToLeft)
     }
 }
 
@@ -229,20 +240,25 @@ private struct AdminInboxLoadMoreLabel: View {
     }
 }
 
-/// Small text menu trigger for changing an item's status.
+/// Compact capsule menu trigger for changing an item's status.
 private struct AdminInboxStatusMenuLabel: View {
     var body: some View {
-        Text("تغيير الحالة")
-            .font(SabqType.metaEmphasis.font)
-            .foregroundStyle(SabqTheme.primary)
-            .padding(.horizontal, SabqLayout.space12)
-            .frame(minHeight: SabqLayout.touchTarget)
-            .overlay(
-                RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
-                    .stroke(SabqTheme.outline, lineWidth: 1)
-                    .frame(height: 32)
-            )
-            .contentShape(Rectangle())
+        HStack(spacing: 6) {
+            Image(systemName: "arrow.triangle.2.circlepath")
+                .font(.system(size: 11, weight: .semibold))
+            Text("تغيير الحالة")
+                .font(SabqType.metaEmphasis.font)
+            Image(systemName: "chevron.down")
+                .font(.system(size: 10, weight: .bold))
+        }
+        .foregroundStyle(SabqTheme.primary)
+        .padding(.horizontal, SabqLayout.space12)
+        .frame(minHeight: 34)
+        .background(
+            Capsule(style: .continuous)
+                .fill(SabqTheme.skyTint)
+        )
+        .contentShape(Rectangle())
     }
 }
 
@@ -304,18 +320,20 @@ struct AdminContactMessagesView: View {
     var body: some View {
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: SabqLayout.space16) {
-                header
-                filter
+                toolbarBar
                 content
             }
             .padding(.horizontal, SabqLayout.pageMargin)
-            .padding(.vertical, SabqLayout.space8)
-            .padding(.bottom, SabqLayout.space40)
+            .padding(.top, SabqLayout.space12)
+            .padding(.bottom, 108)
         }
+        .sabqNavigationEdge()
+        .sabqAutoHideTabBar()
         .background(SabqTheme.background)
         .sabqRTL()
         .navigationTitle("رسائل التواصل")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(SabqTheme.background, for: .navigationBar)
         .searchable(text: $search, prompt: "ابحث بالاسم أو البريد أو الموضوع")
         .onSubmit(of: .search) { Task { await vm.load(search: search) } }
         .onChange(of: vm.selectedStatus) { _, _ in Task { await vm.load(search: search) } }
@@ -327,31 +345,35 @@ struct AdminContactMessagesView: View {
         .sabqScreen("AdminContactMessages")
     }
 
-    private var header: some View {
-        VStack(alignment: .leading, spacing: SabqLayout.space4) {
-            Text("رسائل التواصل")
-                .sabqText(SabqType.sectionHeading)
-                .foregroundStyle(SabqTheme.textPrimary)
-                .accessibilityAddTraits(.isHeader)
-            Text(vm.isLoading ? "جارٍ التحميل…" : "\(vm.total) رسالة")
-                .sabqText(SabqType.meta)
-                .foregroundStyle(SabqTheme.textTertiary)
-        }
-    }
-
-    private var filter: some View {
-        Menu {
-            Button("كل الرسائل") { vm.selectedStatus = nil }
-            Divider()
-            ForEach(AdminContactMessageStatus.allCases) { status in
-                Button(status.label) { vm.selectedStatus = status }
+    private var toolbarBar: some View {
+        HStack(alignment: .center, spacing: SabqLayout.space12) {
+            HStack(spacing: 6) {
+                Image(systemName: "envelope.fill")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(SabqTheme.primary)
+                Text(vm.isLoading ? "جارٍ التحميل…" : "\(vm.total) رسالة")
+                    .sabqText(SabqType.metaEmphasis)
+                    .foregroundStyle(SabqTheme.textSecondary)
+                    .monospacedDigit()
             }
-        } label: {
-            AdminInboxFilterChip(
-                title: vm.selectedStatus?.label ?? "كل الحالات",
-                tint: vm.selectedStatus?.themeTint ?? SabqTheme.textPrimary
-            )
+
+            Spacer(minLength: 0)
+
+            Menu {
+                Button("كل الرسائل") { vm.selectedStatus = nil }
+                Divider()
+                ForEach(AdminContactMessageStatus.allCases) { status in
+                    Button(status.label) { vm.selectedStatus = status }
+                }
+            } label: {
+                AdminInboxFilterChip(
+                    title: vm.selectedStatus?.label ?? "كل الحالات",
+                    tint: vm.selectedStatus?.themeTint ?? SabqTheme.textPrimary,
+                    isActive: vm.selectedStatus != nil
+                )
+            }
         }
+        .environment(\.layoutDirection, .rightToLeft)
     }
 
     @ViewBuilder
@@ -365,11 +387,8 @@ struct AdminContactMessagesView: View {
         } else if vm.messages.isEmpty {
             AdminInboxEmptyState(icon: "tray", title: "لا توجد رسائل", subtitle: "ستظهر هنا رسائل نموذج التواصل الواردة.")
         } else {
-            LazyVStack(spacing: 0) {
+            LazyVStack(spacing: SabqLayout.space12) {
                 ForEach(vm.messages) { message in
-                    if message.id != vm.messages.first?.id {
-                        Divider().overlay(SabqTheme.separator)
-                    }
                     NavigationLink(value: AdminContactMessageRoute(id: message.id)) {
                         AdminContactMessageRow(message: message)
                     }
@@ -381,7 +400,7 @@ struct AdminContactMessagesView: View {
                     }
                     .buttonStyle(.plain)
                     .disabled(vm.isLoadingMore)
-                    .padding(.top, SabqLayout.space8)
+                    .padding(.top, SabqLayout.space4)
                 }
             }
         }
@@ -405,23 +424,35 @@ private struct AdminContactMessageRow: View {
                 .sabqText(SabqType.rowTitle)
                 .foregroundStyle(SabqTheme.textPrimary)
                 .lineLimit(2)
+                .multilineTextAlignment(.leading)
             Text(message.message)
                 .sabqText(SabqType.meta)
                 .foregroundStyle(SabqTheme.textSecondary)
                 .lineLimit(2)
                 .multilineTextAlignment(.leading)
-            HStack(spacing: SabqLayout.space8) {
+            Divider().overlay(SabqTheme.separator.opacity(0.6))
+            HStack(spacing: 6) {
+                Image(systemName: "person.fill")
+                    .font(.system(size: 11))
+                    .foregroundStyle(SabqTheme.primary)
                 Text(message.name)
+                    .sabqText(SabqType.metaEmphasis)
+                    .foregroundStyle(SabqTheme.textSecondary)
+                    .lineLimit(1)
                 Spacer(minLength: 0)
-                Image(systemName: "chevron.forward")
-                    .font(SabqFonts.app(size: 12))
+                HStack(spacing: 4) {
+                    Text("التفاصيل")
+                        .sabqText(SabqType.tag)
+                    Image(systemName: "chevron.backward")
+                        .font(.system(size: 10, weight: .bold))
+                }
+                .foregroundStyle(SabqTheme.primary)
             }
-            .sabqText(SabqType.meta)
-            .foregroundStyle(SabqTheme.textTertiary)
-            .lineLimit(1)
         }
-        .padding(.vertical, SabqLayout.rowPadding)
+        .padding(SabqLayout.space16)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .sabqBlockSurface()
+        .environment(\.layoutDirection, .rightToLeft)
         .contentShape(Rectangle())
     }
 }
@@ -496,12 +527,15 @@ struct AdminContactMessageDetailView: View {
                 }
             }
             .padding(SabqLayout.pageMargin)
-            .padding(.bottom, SabqLayout.space32)
+            .padding(.bottom, 108)
         }
+        .sabqNavigationEdge()
+        .sabqAutoHideTabBar()
         .background(SabqTheme.background)
         .sabqRTL()
         .navigationTitle("تفاصيل الرسالة")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(SabqTheme.background, for: .navigationBar)
         .task { await vm.load() }
         .refreshable { await vm.load() }
         .alert("تعذّر الإجراء", isPresented: Binding(get: { vm.error != nil && vm.detail != nil }, set: { if !$0 { vm.error = nil } })) {
@@ -546,7 +580,10 @@ struct AdminContactMessageDetailView: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .multilineTextAlignment(.leading)
             }
+            .padding(SabqLayout.space16)
             .frame(maxWidth: .infinity, alignment: .leading)
+            .sabqBlockSurface()
+            .environment(\.layoutDirection, .rightToLeft)
 
             if !detail.replies.isEmpty || message.replyText != nil {
                 VStack(alignment: .leading, spacing: SabqLayout.space12) {
@@ -669,35 +706,47 @@ struct AdminOpinionTicketsView: View {
     var body: some View {
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: SabqLayout.space16) {
-                VStack(alignment: .leading, spacing: SabqLayout.space4) {
-                    Text("استفسارات كتّاب الرأي")
-                        .sabqText(SabqType.sectionHeading)
-                        .foregroundStyle(SabqTheme.textPrimary)
-                        .accessibilityAddTraits(.isHeader)
-                    Text(vm.isLoading ? "جارٍ التحميل…" : "\(vm.total) استفسار")
-                        .sabqText(SabqType.meta)
-                        .foregroundStyle(SabqTheme.textTertiary)
+                HStack(alignment: .center, spacing: SabqLayout.space12) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "text.bubble.fill")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(SabqTheme.primary)
+                        Text(vm.isLoading ? "جارٍ التحميل…" : "\(vm.total) استفسار")
+                            .sabqText(SabqType.metaEmphasis)
+                            .foregroundStyle(SabqTheme.textSecondary)
+                            .monospacedDigit()
+                    }
+
+                    Spacer(minLength: 0)
+
+                    Menu {
+                        Button("كل الاستفسارات") { vm.selectedStatus = nil }
+                        Divider()
+                        ForEach(AdminOpinionTicketStatus.allCases) { status in
+                            Button(status.label) { vm.selectedStatus = status }
+                        }
+                    } label: {
+                        AdminInboxFilterChip(
+                            title: vm.selectedStatus?.label ?? "كل الحالات",
+                            tint: vm.selectedStatus?.themeTint ?? SabqTheme.textPrimary,
+                            isActive: vm.selectedStatus != nil
+                        )
+                    }
                 }
-                Menu {
-                    Button("كل الاستفسارات") { vm.selectedStatus = nil }
-                    Divider()
-                    ForEach(AdminOpinionTicketStatus.allCases) { status in Button(status.label) { vm.selectedStatus = status } }
-                } label: {
-                    AdminInboxFilterChip(
-                title: vm.selectedStatus?.label ?? "كل الحالات",
-                tint: vm.selectedStatus?.themeTint ?? SabqTheme.textPrimary
-            )
-                }
+                .environment(\.layoutDirection, .rightToLeft)
                 ticketContent
             }
             .padding(.horizontal, SabqLayout.pageMargin)
-            .padding(.vertical, SabqLayout.space8)
-            .padding(.bottom, SabqLayout.space40)
+            .padding(.top, SabqLayout.space12)
+            .padding(.bottom, 108)
         }
+        .sabqNavigationEdge()
+        .sabqAutoHideTabBar()
         .background(SabqTheme.background)
         .sabqRTL()
-        .navigationTitle("استفسارات الرأي")
+        .navigationTitle("استفسارات كتّاب الرأي")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(SabqTheme.background, for: .navigationBar)
         .searchable(text: $search, prompt: "ابحث بالعنوان أو الكاتب")
         .onSubmit(of: .search) { Task { await vm.load(search: search) } }
         .onChange(of: vm.selectedStatus) { _, _ in Task { await vm.load(search: search) } }
@@ -718,13 +767,12 @@ struct AdminOpinionTicketsView: View {
         } else if vm.tickets.isEmpty {
             AdminInboxEmptyState(icon: "text.bubble", title: "لا توجد استفسارات", subtitle: "ستظهر هنا مراسلات كتّاب الرأي مع هيئة التحرير.")
         } else {
-            LazyVStack(spacing: 0) {
+            LazyVStack(spacing: SabqLayout.space12) {
                 ForEach(vm.tickets) { ticket in
-                    if ticket.id != vm.tickets.first?.id {
-                        Divider().overlay(SabqTheme.separator)
+                    NavigationLink(value: AdminOpinionTicketRoute(id: ticket.id)) {
+                        AdminOpinionTicketRow(ticket: ticket)
                     }
-                    NavigationLink(value: AdminOpinionTicketRoute(id: ticket.id)) { AdminOpinionTicketRow(ticket: ticket) }
-                        .buttonStyle(.plain)
+                    .buttonStyle(.plain)
                 }
                 if vm.canLoadMore {
                     Button { Task { await vm.loadMore(search: search) } } label: {
@@ -732,7 +780,7 @@ struct AdminOpinionTicketsView: View {
                     }
                     .buttonStyle(.plain)
                     .disabled(vm.isLoadingMore)
-                    .padding(.top, SabqLayout.space8)
+                    .padding(.top, SabqLayout.space4)
                 }
             }
         }
@@ -749,7 +797,7 @@ private struct AdminOpinionTicketRow: View {
                 if ticket.hasUnread {
                     StatusChip(title: "جديد", tint: SabqTheme.danger)
                 }
-                Spacer()
+                Spacer(minLength: 0)
                 Text(adminInboxDate(ticket.lastMessageAt))
                     .sabqText(SabqType.meta)
                     .foregroundStyle(SabqTheme.textTertiary)
@@ -760,17 +808,29 @@ private struct AdminOpinionTicketRow: View {
                 .foregroundStyle(SabqTheme.textPrimary)
                 .lineLimit(2)
                 .multilineTextAlignment(.leading)
-            HStack(spacing: SabqLayout.space8) {
+            Divider().overlay(SabqTheme.separator.opacity(0.6))
+            HStack(spacing: 6) {
+                Image(systemName: "person.fill")
+                    .font(.system(size: 11))
+                    .foregroundStyle(SabqTheme.primary)
                 Text(ticket.writerName ?? ticket.writerEmail ?? "كاتب الرأي")
-                Spacer()
-                Image(systemName: "chevron.forward")
-                    .font(SabqFonts.app(size: 12))
+                    .sabqText(SabqType.metaEmphasis)
+                    .foregroundStyle(SabqTheme.textSecondary)
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+                HStack(spacing: 4) {
+                    Text("المحادثة")
+                        .sabqText(SabqType.tag)
+                    Image(systemName: "chevron.backward")
+                        .font(.system(size: 10, weight: .bold))
+                }
+                .foregroundStyle(SabqTheme.primary)
             }
-            .sabqText(SabqType.meta)
-            .foregroundStyle(SabqTheme.textTertiary)
         }
-        .padding(.vertical, SabqLayout.rowPadding)
+        .padding(SabqLayout.space16)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .sabqBlockSurface()
+        .environment(\.layoutDirection, .rightToLeft)
         .contentShape(Rectangle())
     }
 }
@@ -832,12 +892,15 @@ struct AdminOpinionTicketDetailView: View {
                 }
             }
             .padding(SabqLayout.pageMargin)
-            .padding(.bottom, SabqLayout.space32)
+            .padding(.bottom, 108)
         }
+        .sabqNavigationEdge()
+        .sabqAutoHideTabBar()
         .background(SabqTheme.background)
         .sabqRTL()
         .navigationTitle("محادثة الرأي")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(SabqTheme.background, for: .navigationBar)
         .task { await vm.load() }
         .refreshable { await vm.load() }
         .alert("تعذّر الإجراء", isPresented: Binding(get: { vm.error != nil && vm.detail != nil }, set: { if !$0 { vm.error = nil } })) {
@@ -850,7 +913,7 @@ struct AdminOpinionTicketDetailView: View {
     private func ticketDetail(_ detail: AdminOpinionTicketDetailResponse) -> some View {
         let ticket = detail.ticket
         VStack(alignment: .leading, spacing: SabqLayout.space16) {
-            VStack(alignment: .leading, spacing: SabqLayout.space8) {
+            VStack(alignment: .leading, spacing: SabqLayout.space12) {
                 HStack(alignment: .center) {
                     AdminInboxStatusPill(title: ticket.status.label, icon: ticket.status.icon, tint: ticket.status.themeTint)
                     Spacer()
@@ -865,70 +928,110 @@ struct AdminOpinionTicketDetailView: View {
                     .sabqText(SabqType.leadTitle)
                     .foregroundStyle(SabqTheme.textPrimary)
                     .accessibilityAddTraits(.isHeader)
-                Text(ticket.writerName ?? ticket.writerEmail ?? "كاتب الرأي")
-                    .sabqText(SabqType.metaEmphasis)
-                    .foregroundStyle(SabqTheme.textSecondary)
-                Text("فتح في \(adminInboxDate(ticket.createdAt))")
-                    .sabqText(SabqType.meta)
-                    .foregroundStyle(SabqTheme.textTertiary)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-            ForEach(detail.messages) { message in
-                let parent = message.parentMessageId.flatMap { parentId in detail.messages.first(where: { $0.id == parentId }) }
-                VStack(alignment: .leading, spacing: SabqLayout.space8) {
-                    HStack {
-                        Text(message.senderName ?? (message.isFromAdmin ? "الإدارة" : "الكاتب"))
+                HStack(spacing: SabqLayout.space8) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "person.fill")
+                            .font(.system(size: 11))
+                            .foregroundStyle(SabqTheme.primary)
+                        Text(ticket.writerName ?? ticket.writerEmail ?? "كاتب الرأي")
                             .sabqText(SabqType.metaEmphasis)
                             .foregroundStyle(SabqTheme.textSecondary)
-                        if message.isFromAdmin {
-                            Text("· إدارة")
+                    }
+                    Text("·")
+                        .sabqText(SabqType.meta)
+                        .foregroundStyle(SabqTheme.textTertiary)
+                    Text("فُتح في \(adminInboxDate(ticket.createdAt))")
+                        .sabqText(SabqType.meta)
+                        .foregroundStyle(SabqTheme.textTertiary)
+                }
+            }
+            .padding(SabqLayout.space16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .sabqBlockSurface()
+            .environment(\.layoutDirection, .rightToLeft)
+
+            VStack(alignment: .leading, spacing: SabqLayout.space12) {
+                ForEach(detail.messages) { message in
+                    let parent = message.parentMessageId.flatMap { parentId in detail.messages.first(where: { $0.id == parentId }) }
+                    VStack(alignment: .leading, spacing: SabqLayout.space8) {
+                        HStack(alignment: .center, spacing: 6) {
+                            Image(systemName: message.isFromAdmin ? "shield.lefthalf.filled" : "person.circle.fill")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(message.isFromAdmin ? SabqTheme.primary : SabqTheme.textSecondary)
+                            Text(message.senderName ?? (message.isFromAdmin ? "الإدارة" : "الكاتب"))
+                                .sabqText(SabqType.metaEmphasis)
+                                .foregroundStyle(SabqTheme.textPrimary)
+                            if message.isFromAdmin {
+                                Text("الإدارة")
+                                    .font(SabqType.tag.font)
+                                    .foregroundStyle(SabqTheme.primary)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(Capsule(style: .continuous).fill(SabqTheme.skyTint))
+                            }
+                            Spacer()
+                            Text(adminInboxDate(message.createdAt))
                                 .sabqText(SabqType.meta)
                                 .foregroundStyle(SabqTheme.textTertiary)
                         }
-                        Spacer()
-                        Text(adminInboxDate(message.createdAt))
-                            .sabqText(SabqType.meta)
-                            .foregroundStyle(SabqTheme.textTertiary)
-                    }
-                    if let parent {
-                        Text("رد على: \(parent.message)")
-                            .sabqText(SabqType.meta)
-                            .foregroundStyle(SabqTheme.textTertiary)
-                            .lineLimit(2)
-                            .padding(SabqLayout.space8)
+                        if let parent {
+                            HStack(spacing: 6) {
+                                Rectangle()
+                                    .fill(SabqTheme.primary.opacity(0.5))
+                                    .frame(width: 2.5)
+                                Text("رد على: \(parent.message)")
+                                    .sabqText(SabqType.meta)
+                                    .foregroundStyle(SabqTheme.textSecondary)
+                                    .lineLimit(2)
+                                    .padding(.vertical, 6)
+                            }
+                            .padding(.horizontal, SabqLayout.space8)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .background(
                                 RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
-                                    .fill(message.isFromAdmin ? SabqTheme.background : SabqTheme.surfaceMuted)
+                                    .fill(SabqTheme.background.opacity(0.75))
                             )
-                    }
-                    Text(message.message)
-                        .sabqText(SabqType.excerpt)
-                        .foregroundStyle(SabqTheme.textPrimary)
-                        .fixedSize(horizontal: false, vertical: true)
-                    if ticket.status != .closed {
-                        Button { replyTo = message } label: {
-                            Text("رد على هذه الرسالة")
-                                .sabqText(SabqType.metaEmphasis)
-                                .foregroundStyle(SabqTheme.primary)
-                                .frame(minHeight: SabqLayout.touchTarget)
-                                .contentShape(Rectangle())
                         }
-                        .buttonStyle(.plain)
+                        Text(message.message)
+                            .sabqText(SabqType.excerpt)
+                            .foregroundStyle(SabqTheme.textPrimary)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .multilineTextAlignment(.leading)
+
+                        if ticket.status != .closed {
+                            HStack {
+                                Spacer(minLength: 0)
+                                Button { replyTo = message } label: {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "arrowshape.turn.up.backward.fill")
+                                            .font(.system(size: 11, weight: .semibold))
+                                        Text("رد على هذه الرسالة")
+                                            .sabqText(SabqType.tag)
+                                    }
+                                    .foregroundStyle(SabqTheme.primary)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 5)
+                                    .background(
+                                        Capsule(style: .continuous)
+                                            .fill(message.isFromAdmin ? SabqTheme.surface : SabqTheme.skyTint)
+                                    )
+                                    .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
                     }
-                }
-                .padding(.horizontal, message.isFromAdmin ? SabqLayout.space12 : 0)
-                .padding(.vertical, SabqLayout.space12)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(
-                    RoundedRectangle(cornerRadius: adminInboxCorner, style: .continuous)
-                        .fill(message.isFromAdmin ? SabqTheme.surfaceMuted : Color.clear)
-                )
-                .overlay(alignment: .bottom) {
-                    if !message.isFromAdmin {
-                        Divider().overlay(SabqTheme.separator)
-                    }
+                    .padding(SabqLayout.space12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(
+                        RoundedRectangle(cornerRadius: adminInboxCorner, style: .continuous)
+                            .fill(message.isFromAdmin ? SabqTheme.skyTint : SabqTheme.surface)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: adminInboxCorner, style: .continuous)
+                            .stroke(message.isFromAdmin ? SabqTheme.skyOutline : SabqTheme.outline, lineWidth: 1)
+                    )
+                    .environment(\.layoutDirection, .rightToLeft)
                 }
             }
 

@@ -92,6 +92,7 @@ final class ArticlesStore {
         }
 
         if !result.latest.isEmpty {
+            let previousIDs = Set(allFetchedArticles.map(\.id))
             allFetchedArticles = result.latest
             applyFeaturedCarousel(result.featured)
             breakingNews = result.breaking
@@ -104,7 +105,11 @@ final class ArticlesStore {
             allArticles = Array(allFetchedArticles.prefix(displayedCount))
             hasMore = displayedCount < allFetchedArticles.count || hasMoreFromAPI
             pendingNewArticles.removeAll()
-            recentlyAddedIDs.removeAll()
+            if !previousIDs.isEmpty {
+                recentlyAddedIDs = Set(result.latest.map(\.id)).subtracting(previousIDs)
+            } else {
+                recentlyAddedIDs.removeAll()
+            }
 
             let heroURLs = featuredArticles.prefix(3)
                 .compactMap { $0.imageURL.flatMap(URL.init(string:)) }

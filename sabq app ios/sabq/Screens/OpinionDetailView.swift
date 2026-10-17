@@ -397,7 +397,7 @@ struct OpinionDetailView: View {
     /// drop in cleanly.
     private var labelsRow: some View {
         FlowLayout(spacing: 14) {
-            DetailLabelPill(title: "مقال رأي", tint: SabqTheme.primary, icon: "text.quote", fill: SabqTheme.skyTint)
+            DetailLabelPill(title: "مقال رأي", tint: SabqTheme.primary, icon: "text.quote")
         }
     }
 
