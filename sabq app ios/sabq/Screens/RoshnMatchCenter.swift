@@ -19,12 +19,18 @@ struct RoshnMatchCenter: View {
     @State private var loadError: String?
     @State private var retryToken = 0
     @State private var selectedTeam: RsTeam?
+    @State private var prediction: RsPrediction?
+    @State private var predictionRequested = false
+    @State private var headToHead: RsHeadToHead?
+    @State private var headToHeadRequested = false
 
     enum Tab: String, CaseIterable {
         case events = "الأحداث"
         case stats = "الإحصائيات"
         case lineups = "التشكيلات"
         case ratings = "التقييمات"
+        case prediction = "التوقعات"
+        case h2h = "المواجهات"
     }
 
     var body: some View {
@@ -131,7 +137,7 @@ struct RoshnMatchCenter: View {
     }
 
     /// تبويبات العمود الأيسر مفتوحًا — «الأحداث» في العمود الأيمن دائمًا.
-    private static let columnTabs: [Tab] = [.stats, .lineups, .ratings]
+    private static let columnTabs: [Tab] = [.stats, .lineups, .ratings, .prediction, .h2h]
 
     /// التبويب نفسه يبقى عند تغيير الوضعية؛ «الأحداث» ظاهرة أصلًا يمينًا.
     private var columnTab: Tab { tab == .events ? .stats : tab }
@@ -222,22 +228,42 @@ struct RoshnMatchCenter: View {
     // MARK: التبويبات
 
     private func tabBar(_ items: [Tab]) -> some View {
+        // ستة تبويبات لا تتسع بعرض متساوٍ على الهاتف، فيتمرّر الشريط أفقيًا.
+        ScrollView(.horizontal, showsIndicators: false) {
+            tabButtons(items)
+        }
+        .scrollClipDisabled()
+    }
+
+    private func select(_ item: Tab) {
+        tab = item
+        if item == .ratings, !ratingsRequested {
+            ratingsRequested = true
+            Task { await loadRatings() }
+        }
+        if item == .prediction, !predictionRequested {
+            predictionRequested = true
+            Task { prediction = try? await APIClient.shared.fetchRoshnPrediction(fixtureId: fixtureId) }
+        }
+        if item == .h2h, !headToHeadRequested, let f = detail?.fixture {
+            headToHeadRequested = true
+            Task { headToHead = try? await APIClient.shared.fetchRoshnHeadToHead(home: f.home.id, away: f.away.id) }
+        }
+    }
+
+    private func tabButtons(_ items: [Tab]) -> some View {
         // في العمود الأيسر مفتوحًا لا تظهر «الأحداث»؛ يُبرز أول تبويب حينها.
         let current = items.contains(tab) ? tab : (items.first ?? tab)
         return HStack(spacing: SabqLayout.space8) {
             ForEach(items, id: \.self) { item in
                 Button {
-                    tab = item
-                    if item == .ratings, !ratingsRequested {
-                        ratingsRequested = true
-                        Task { await loadRatings() }
-                    }
+                    select(item)
                 } label: {
                     Text(item.rawValue)
                         .sabqText(current == item ? SabqType.metaEmphasis : SabqType.meta)
-                        .lineLimit(1).minimumScaleFactor(0.85)
+                        .lineLimit(1)
                         .foregroundStyle(current == item ? Color.white : SabqTheme.textPrimary)
-                        .frame(maxWidth: .infinity)
+                        .padding(.horizontal, SabqLayout.space16)
                         .frame(minHeight: SabqLayout.touchTarget)
                         .background(
                             RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
@@ -257,7 +283,168 @@ struct RoshnMatchCenter: View {
         case .stats: statsTab(d)
         case .lineups: lineupsTab(d)
         case .ratings: ratingsTab(d)
+        case .prediction: predictionTab(d)
+        case .h2h: headToHeadTab(d)
         }
+    }
+
+    // MARK: التوقعات
+
+    /// نسب ما قبل المباراة. صف القيم RTL فيقع المضيف يمينًا، والشريط تحته بلا
+    /// فرض LTR حتى تبقى الأعمدة تحت تسمياتها (قاعدة اتجاه النتائج).
+    @ViewBuilder
+    private func predictionTab(_ d: RsMatchDetail) -> some View {
+        if let p = prediction {
+            if p.isAvailable {
+                VStack(alignment: .leading, spacing: SabqLayout.space12) {
+                    HStack(alignment: .top) {
+                        pctCell(d.fixture.home.name, p.homePct, RoshnTheme.pitch)
+                        pctCell("تعادل", p.drawPct, SabqTheme.textSecondary)
+                        pctCell(d.fixture.away.name, p.awayPct, RoshnTheme.gold)
+                    }
+                    GeometryReader { g in
+                        let total = CGFloat(max(1, p.homePct + p.drawPct + p.awayPct))
+                        HStack(spacing: 2) {
+                            Capsule().fill(RoshnTheme.pitch).frame(width: g.size.width * CGFloat(p.homePct) / total)
+                            Capsule().fill(SabqTheme.textTertiary.opacity(0.5)).frame(width: g.size.width * CGFloat(p.drawPct) / total)
+                            Capsule().fill(RoshnTheme.gold)
+                        }
+                    }
+                    .frame(height: 8)
+                    .accessibilityHidden(true)
+                    Text("توقّع ما قبل المباراة من بيانات المواجهات والمستوى، وليس نتيجة مؤكدة.")
+                        .sabqText(SabqType.meta)
+                        .foregroundStyle(SabqTheme.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(SabqLayout.space16)
+                .background(SabqTheme.surfaceMuted, in: RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
+            } else {
+                emptyNote("لا توقعات منشورة لهذه المباراة.")
+            }
+        } else {
+            ProgressView().frame(maxWidth: .infinity).padding(.vertical, SabqLayout.space24)
+        }
+    }
+
+    private func pctCell(_ label: String, _ value: Int, _ tint: Color) -> some View {
+        VStack(spacing: 2) {
+            Text(verbatim: "\(value)%")
+                .font(SabqFonts.app(size: 24, weight: .bold))
+                .monospacedDigit()
+                .foregroundStyle(tint)
+            Text(label)
+                .font(SabqType.meta.font)
+                .foregroundStyle(SabqTheme.textSecondary)
+                .lineLimit(1).minimumScaleFactor(0.8)
+        }
+        .frame(maxWidth: .infinity)
+        .accessibilityElement(children: .combine)
+    }
+
+    // MARK: المواجهات
+
+    @ViewBuilder
+    private func headToHeadTab(_ d: RsMatchDetail) -> some View {
+        if let h = headToHead {
+            // المباراة الحالية خارج السجل، والملخص يُحسب من المعروض نفسه حتى لا يختلف عن القائمة
+            // (ملخص الخادم يعدّ مباراة اليوم إن انتهت).
+            let past = h.meetings.filter { $0.id != d.fixture.id }
+            let tally = Self.tally(past, homeId: d.fixture.home.id)
+            if !past.isEmpty {
+                VStack(alignment: .leading, spacing: SabqLayout.space16) {
+                    HStack(alignment: .top) {
+                        pctCellCount("فوز \(d.fixture.home.name)", tally.home, RoshnTheme.pitch)
+                        pctCellCount("تعادل", tally.draws, SabqTheme.textSecondary)
+                        pctCellCount("فوز \(d.fixture.away.name)", tally.away, RoshnTheme.gold)
+                    }
+                    .padding(SabqLayout.space12)
+                    .background(SabqTheme.surfaceMuted, in: RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
+
+                    Text("آخر المواجهات")
+                        .font(SabqType.rowTitle.font)
+                        .foregroundStyle(SabqTheme.textPrimary)
+                    VStack(spacing: 0) {
+                        ForEach(past.prefix(10)) { m in
+                            if m.id != past.first?.id { Rectangle().fill(SabqTheme.separator).frame(height: 1) }
+                            meetingRow(m)
+                        }
+                    }
+                }
+            } else {
+                emptyNote("أول مواجهة مسجّلة بين الفريقين.")
+            }
+        } else {
+            ProgressView().frame(maxWidth: .infinity).padding(.vertical, SabqLayout.space24)
+        }
+    }
+
+    /// انتصارات الفريقين والتعادلات من منظور مضيف المباراة الحالية، أيًّا كان المضيف في كل لقاء.
+    private static func tally(_ meetings: [RsHeadToHead.Meeting], homeId: Int) -> (home: Int, draws: Int, away: Int) {
+        var home = 0, draws = 0, away = 0
+        for m in meetings {
+            guard let hg = m.goals?.home, let ag = m.goals?.away else { continue }
+            if hg == ag { draws += 1; continue }
+            let winnerId = hg > ag ? m.home.id : m.away.id
+            if winnerId == homeId { home += 1 } else { away += 1 }
+        }
+        return (home, draws, away)
+    }
+
+    private func pctCellCount(_ label: String, _ value: Int, _ tint: Color) -> some View {
+        VStack(spacing: 2) {
+            Text(verbatim: "\(value)")
+                .font(SabqFonts.app(size: 24, weight: .bold))
+                .monospacedDigit()
+                .foregroundStyle(tint)
+            Text(label)
+                .font(SabqType.tag.font)
+                .foregroundStyle(SabqTheme.textSecondary)
+                .lineLimit(2)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .accessibilityElement(children: .combine)
+    }
+
+    /// المضيف يمينًا، والنتيجة داخل LTR بالضيف أولًا فيقع رقم المضيف يمينًا.
+    private func meetingRow(_ m: RsHeadToHead.Meeting) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text([RsFormat.day(iso: m.date), m.competition].compactMap { $0 }.joined(separator: " · "))
+                .font(SabqType.tag.font)
+                .foregroundStyle(SabqTheme.textTertiary)
+            HStack(spacing: SabqLayout.space8) {
+                Text(m.home.name)
+                    .font(SabqType.metaEmphasis.font)
+                    .foregroundStyle(SabqTheme.textPrimary)
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Text(verbatim: "\(m.goals?.away.map(String.init) ?? "–") - \(m.goals?.home.map(String.init) ?? "–")")
+                    .font(SabqFonts.app(size: 16, weight: .bold))
+                    .monospacedDigit()
+                    .foregroundStyle(SabqTheme.textPrimary)
+                    .environment(\.layoutDirection, .leftToRight)
+                    .padding(.horizontal, SabqLayout.space8)
+                    .padding(.vertical, 2)
+                    .background(SabqTheme.surfaceMuted, in: RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous))
+                Text(m.away.name)
+                    .font(SabqType.metaEmphasis.font)
+                    .foregroundStyle(SabqTheme.textPrimary)
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+            }
+        }
+        .padding(.vertical, SabqLayout.space12)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(m.home.name) \(m.goals?.home ?? 0)، \(m.away.name) \(m.goals?.away ?? 0)")
+    }
+
+    private func emptyNote(_ text: String) -> some View {
+        Text(text)
+            .sabqText(SabqType.meta)
+            .foregroundStyle(SabqTheme.textSecondary)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, SabqLayout.space24)
     }
 
     // MARK: الأحداث

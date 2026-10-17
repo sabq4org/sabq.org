@@ -366,6 +366,10 @@ private struct SabqDestinations: ViewModifier {
                 SabqAIView()
                     .duoContentInsets()
             }
+            .navigationDestination(for: SportsTodayRoute.self) { _ in
+                SportsTodayView()
+                    .duoContentInsets()
+            }
             .navigationDestination(for: MomentByMomentRoute.self) { _ in
                 MomentByMomentView()
                     .duoContentInsets()

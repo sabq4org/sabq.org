@@ -175,6 +175,10 @@ struct HomeFeedView: View {
 
                     featuredSection
 
+                    // مدخل الرياضة تحت الهيرو كما في الويب (SportsPortalStrip): أهم مباراة الآن أو اليوم.
+                    SportsPortalStrip()
+                        .padding(.horizontal, -SabqLayout.pageMargin)
+
                     SabqSectionBand()
 
                     // الاقتصاد الحي: «أين أنفق السعوديون…» أو «السعوديون في شهر بالأرقام»
