@@ -19,26 +19,30 @@ struct LoyaltyAccountView: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: SabqLayout.space24) {
+            VStack(spacing: 20) {
                 heroCard
                 statsTriplet
                 quickActions
                 tierLadder
             }
-            .padding(SabqLayout.pageMargin)
+            .padding(.horizontal, SabqLayout.pageMargin)
+            .padding(.top, SabqLayout.space12)
+            .padding(.bottom, 108)
         }
+        .sabqNavigationEdge()
+        .sabqAutoHideTabBar()
         .background(SabqTheme.background.ignoresSafeArea())
         .navigationTitle("نقاطي والمكافآت")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(SabqTheme.background, for: .navigationBar)
+        .toolbarBackground(.visible, for: .navigationBar)
         .task { await loader.load() }
         .refreshable { await loader.refresh() }
-        .environment(\.layoutDirection, .rightToLeft)
+        .sabqRTL()
     }
 
-    // MARK: Quick actions — gateway to the new "rewards store" and
-    // "points history" screens (2026-05-20). Two side-by-side cards
-    // that mirror the loyalty card's gradient so they feel like a
-    // continuation of the hero rather than detached menu items.
+    // MARK: Quick actions — gateway to the "rewards store" and
+    // "points history" screens.
 
     @ViewBuilder
     private var quickActions: some View {
@@ -66,25 +70,34 @@ struct LoyaltyAccountView: View {
     }
 
     private func quickActionCard(title: String, subtitle: String, icon: String, tint: Color) -> some View {
-        VStack(alignment: .leading, spacing: SabqLayout.space8) {
-            Image(systemName: icon)
-                .font(SabqFonts.app(size: 16, weight: .semibold))
-                .foregroundStyle(SabqTheme.primary)
-                .frame(width: 36, height: 36)
-                .background(SabqTheme.surface, in: RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous))
-                .accessibilityHidden(true)
-            Text(title)
-                .font(SabqType.button.font)
-                .foregroundStyle(SabqTheme.textPrimary)
-            Text(subtitle)
-                .font(SabqType.meta.font)
-                .foregroundStyle(SabqTheme.textSecondary)
-                .lineLimit(2)
-                .multilineTextAlignment(.leading)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Image(systemName: icon)
+                    .font(SabqFonts.app(size: 16, weight: .semibold))
+                    .foregroundStyle(tint)
+                    .frame(width: 36, height: 36)
+                    .background(SabqTheme.skyTint, in: RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous))
+                    .accessibilityHidden(true)
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.backward")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(SabqTheme.textTertiary)
+                    .accessibilityHidden(true)
+            }
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(SabqType.rowTitle.font)
+                    .foregroundStyle(SabqTheme.textPrimary)
+                Text(subtitle)
+                    .font(SabqType.meta.font)
+                    .foregroundStyle(SabqTheme.textSecondary)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(SabqLayout.space16)
-        .background(SabqTheme.surfaceMuted, in: RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
+        .sabqBlockSurface()
         .contentShape(Rectangle())
     }
 
@@ -115,26 +128,49 @@ struct LoyaltyAccountView: View {
     @ViewBuilder
     private var statsTriplet: some View {
         let summary = loader.summary
-        HStack(spacing: SabqLayout.space12) {
-            statTile(label: "هذا الأسبوع", value: summary?.weekPoints ?? 0, accent: true, icon: "bolt.fill")
-            statTile(label: "هذا الشهر", value: summary?.monthPoints ?? 0, accent: false, icon: "star.fill")
-            statTile(label: "streak", value: summary?.streakDays ?? 0, accent: false, icon: "flame.fill", suffix: "يوم")
+        HStack(spacing: 10) {
+            statTile(
+                label: "هذا الأسبوع",
+                value: summary?.weekPoints ?? 0,
+                icon: "bolt.fill",
+                iconColor: SabqTheme.primary
+            )
+            statTile(
+                label: "هذا الشهر",
+                value: summary?.monthPoints ?? 0,
+                icon: "star.fill",
+                iconColor: SabqTheme.warning
+            )
+            statTile(
+                label: "أيام متتالية",
+                value: summary?.streakDays ?? 0,
+                icon: "flame.fill",
+                iconColor: SabqTheme.coral,
+                suffix: "يوم"
+            )
         }
     }
 
-    private func statTile(label: String, value: Int, accent: Bool, icon: String, suffix: String? = nil) -> some View {
-        VStack(spacing: SabqLayout.space4) {
-            HStack(spacing: SabqLayout.space4) {
-                Image(systemName: icon).font(SabqType.tag.font)
-                    .foregroundStyle(accent ? SabqTheme.primary : SabqTheme.textSecondary)
+    private func statTile(label: String, value: Int, icon: String, iconColor: Color, suffix: String? = nil) -> some View {
+        VStack(spacing: 6) {
+            HStack(spacing: 4) {
+                Image(systemName: icon)
+                    .font(SabqType.tag.font)
+                    .foregroundStyle(iconColor)
                     .accessibilityHidden(true)
-                Text(label).font(SabqType.meta.font)
+                Text(label)
+                    .font(SabqType.tag.font)
                     .foregroundStyle(SabqTheme.textSecondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
             }
-            HStack(alignment: .firstTextBaseline, spacing: SabqLayout.space4) {
-                Text("\(value)")
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                Text(value.formatted(.number.locale(Locale(identifier: "en_US"))))
                     .font(SabqType.leadTitle.font)
                     .foregroundStyle(SabqTheme.textPrimary)
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
                 if let suffix {
                     Text(suffix)
                         .font(SabqType.tag.font)
@@ -144,19 +180,11 @@ struct LoyaltyAccountView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, SabqLayout.space12)
-        .background(
-            RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
-                .fill(SabqTheme.surfaceMuted)
-        )
+        .padding(.horizontal, SabqLayout.space8)
+        .sabqBlockSurface()
     }
 
     // MARK: Tier ladder (vertical timeline)
-    //
-    // Each tier renders as a node on a continuous vertical line, with
-    // its real brand color regardless of locked state — locked tiers
-    // are still shown in their proper hue (outlined, smaller) instead
-    // of being greyed out, per editorial preference: "كل مرحلة بلونها
-    // الحقيقي".
 
     @ViewBuilder
     private var tierLadder: some View {
@@ -176,6 +204,8 @@ struct LoyaltyAccountView: View {
                     )
                 }
             }
+            .padding(SabqLayout.space16)
+            .sabqBlockSurface()
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -183,8 +213,9 @@ struct LoyaltyAccountView: View {
     private func tierTimelineRow(tier: LoyaltyTier, currentLevel: Int, isFirst: Bool, isLast: Bool) -> some View {
         let reached = tier.level <= currentLevel
         let isCurrent = tier.level == currentLevel
-        let nextReached = tier.level < currentLevel  // the connector below is "filled" only if the next tier is also reached
-        let nodeColumnWidth: CGFloat = 36
+        let nextReached = tier.level < currentLevel
+        let nodeColumnWidth: CGFloat = 32
+        let pointsFormatted = tier.minLifetimePoints.formatted(.number.locale(Locale(identifier: "en_US")))
 
         return HStack(alignment: .top, spacing: SabqLayout.space12) {
             // ── Timeline column: top connector ─ node ─ bottom connector
@@ -205,28 +236,42 @@ struct LoyaltyAccountView: View {
             .frame(width: nodeColumnWidth)
 
             // ── Tier info
-            VStack(alignment: .leading, spacing: SabqLayout.space4) {
-                HStack(spacing: SabqLayout.space8) {
-                    Text(tier.nameAr)
-                        .font(SabqType.rowTitle.font)
-                        .foregroundStyle(reached ? SabqTheme.textPrimary : SabqTheme.textSecondary)
-                    if isCurrent {
-                        Text("مستواك الآن")
-                            .font(SabqType.tag.font)
-                            .foregroundStyle(SabqTheme.onAction)
-                            .padding(.horizontal, SabqLayout.space8)
-                            .padding(.vertical, 2)
-                            .background(Capsule().fill(SabqTheme.actionFill))
+            HStack(alignment: .center, spacing: SabqLayout.space8) {
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: SabqLayout.space8) {
+                        Text(tier.nameAr)
+                            .font(SabqType.rowTitle.font)
+                            .foregroundStyle(reached ? SabqTheme.textPrimary : SabqTheme.textSecondary)
+                        if isCurrent {
+                            Text("مستواك الآن")
+                                .font(SabqType.tag.font)
+                                .foregroundStyle(SabqTheme.onAction)
+                                .padding(.horizontal, SabqLayout.space8)
+                                .padding(.vertical, 3)
+                                .background(Capsule(style: .continuous).fill(SabqTheme.actionFill))
+                        }
                     }
+                    Text(tier.minLifetimePoints == 0 ? "نقطة البداية" : "يبدأ من \(pointsFormatted) نقطة")
+                        .font(SabqType.meta.font)
+                        .foregroundStyle(SabqTheme.textSecondary)
                 }
-                Text("يبدأ من \(tier.minLifetimePoints.formatted(.number.locale(Locale(identifier: "ar_SA")))) نقطة")
-                    .font(SabqType.meta.font)
-                    .foregroundStyle(SabqTheme.textSecondary)
-            }
-            .padding(.top, SabqLayout.space8)   // align text baseline with the node center
-            .padding(.bottom, isLast ? SabqLayout.space4 : SabqLayout.space16)
 
-            Spacer(minLength: 0)
+                Spacer(minLength: 0)
+
+                Text("\(pointsFormatted)")
+                    .font(SabqType.tag.font)
+                    .monospacedDigit()
+                    .foregroundStyle(reached ? tier.color : SabqTheme.textTertiary)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(
+                        Capsule(style: .continuous)
+                            .fill(reached ? tier.color.opacity(0.12) : SabqTheme.surfaceMuted)
+                    )
+                    .environment(\.layoutDirection, .leftToRight)
+            }
+            .padding(.top, 6)
+            .padding(.bottom, isLast ? SabqLayout.space4 : SabqLayout.space16)
         }
     }
 

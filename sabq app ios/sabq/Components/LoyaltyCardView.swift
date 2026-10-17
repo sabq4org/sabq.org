@@ -40,69 +40,86 @@ struct LoyaltyCardView: View {
     private var memberSinceLabel: String? {
         guard let date = memberSince else { return nil }
         let fmt = DateFormatter()
-        fmt.locale = Locale(identifier: "ar_SA")
+        fmt.locale = Locale(identifier: "ar_SA@numbers=latn")
         fmt.dateFormat = "MMMM yyyy"
         return "عضو منذ " + fmt.string(from: date)
     }
 
     var body: some View {
-        // بطاقة العضوية: لون هوية واحد مسطح (خلفية الأزرار، تكفي لنص أبيض في الوضعين)،
-        // بلا تدرج ولا توهج ولا ظل.
-        VStack(alignment: .leading, spacing: 0) {
-            // Top row
+        VStack(alignment: .leading, spacing: SabqLayout.space16) {
+            // Top row: tier identity + level badge + trophy emblem
             HStack(alignment: .top, spacing: SabqLayout.space12) {
-                VStack(alignment: .leading, spacing: SabqLayout.space4) {
-                    Text("سبق · LOYALTY")
-                        .font(SabqType.tag.font)
-                        .tracking(1.5)
-                        .foregroundStyle(SabqTheme.onAction.opacity(0.85))
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 6) {
+                        Text("ولاء سَبْق")
+                            .font(SabqType.tag.font)
+                            .foregroundStyle(SabqTheme.onAction.opacity(0.85))
+                        Text("·")
+                            .font(SabqType.tag.font)
+                            .foregroundStyle(SabqTheme.onAction.opacity(0.6))
+                        HStack(spacing: 4) {
+                            Image(systemName: "sparkles")
+                                .font(.system(size: 10, weight: .semibold))
+                            Text("المستوى \(tier.level) من 5")
+                                .font(SabqType.tag.font)
+                        }
+                        .foregroundStyle(SabqTheme.onAction)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 2)
+                        .background(
+                            Capsule(style: .continuous)
+                                .fill(SabqTheme.onAction.opacity(0.16))
+                        )
+                    }
+
                     Text(tier.nameAr)
                         .sabqText(SabqType.leadTitle)
                         .foregroundStyle(SabqTheme.onAction)
-                    Text(tier.nameEn)
-                        .font(SabqType.meta.font)
+                }
+
+                Spacer(minLength: 0)
+
+                ZStack {
+                    Circle()
+                        .fill(SabqTheme.onAction.opacity(0.16))
+                        .frame(width: 40, height: 40)
+                    Image(systemName: "trophy.fill")
+                        .font(SabqFonts.app(size: 18, weight: .semibold))
+                        .foregroundStyle(SabqTheme.onAction)
+                }
+                .accessibilityHidden(true)
+            }
+
+            // Center: lifetime points (Arabic-first, clean horizontal balance)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("إجمالي النقاط")
+                    .font(SabqType.meta.font)
+                    .foregroundStyle(SabqTheme.onAction.opacity(0.82))
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text(lifetimePoints.formatted(.number.locale(Locale(identifier: "en_US"))))
+                        .font(SabqFonts.headline(size: 36))
+                        .foregroundStyle(SabqTheme.onAction)
+                        .monospacedDigit()
+                        .minimumScaleFactor(0.6)
+                        .lineLimit(1)
+                        .environment(\.layoutDirection, .leftToRight)
+                    Text("نقطة")
+                        .font(SabqType.metaEmphasis.font)
                         .foregroundStyle(SabqTheme.onAction.opacity(0.85))
                 }
-                Spacer(minLength: 0)
-                Image(systemName: "trophy.fill")
-                    .font(SabqFonts.app(size: 22, weight: .semibold))
-                    .foregroundStyle(SabqTheme.onAction)
-                    .accessibilityHidden(true)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
 
-            Spacer(minLength: SabqLayout.space8)
-
-            // Center: lifetime points
-            VStack(spacing: SabqLayout.space4) {
-                Text("Lifetime Points")
-                    .font(SabqType.tag.font)
-                    .tracking(1.5)
-                    .foregroundStyle(SabqTheme.onAction.opacity(0.85))
-                Text(lifetimePoints.formatted(.number.locale(Locale(identifier: "en_US"))))
-                    .font(SabqFonts.headline(size: 40))
-                    .foregroundStyle(SabqTheme.onAction)
-                    .minimumScaleFactor(0.6)
-                    .lineLimit(1)
-                    .environment(\.layoutDirection, .leftToRight)
-                HStack(spacing: SabqLayout.space4) {
-                    Image(systemName: "sparkles")
-                        .font(SabqType.tag.font)
-                        .accessibilityHidden(true)
-                    Text("المستوى \(tier.level) من 5")
-                        .font(SabqType.tag.font)
-                }
-                .foregroundStyle(SabqTheme.onAction.opacity(0.85))
-            }
-            .frame(maxWidth: .infinity)
-
-            Spacer(minLength: SabqLayout.space8)
+            Rectangle()
+                .fill(SabqTheme.onAction.opacity(0.16))
+                .frame(height: 1)
 
             // Bottom: holder + member ID
             HStack(alignment: .bottom, spacing: SabqLayout.space12) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("حامل البطاقة")
                         .font(SabqType.tag.font)
-                        .foregroundStyle(SabqTheme.onAction.opacity(0.85))
+                        .foregroundStyle(SabqTheme.onAction.opacity(0.78))
                     Text(userName)
                         .font(SabqType.rowTitle.font)
                         .foregroundStyle(SabqTheme.onAction)
@@ -110,27 +127,32 @@ struct LoyaltyCardView: View {
                     if let memberSinceLabel {
                         Text(memberSinceLabel)
                             .font(SabqType.tag.font)
-                            .foregroundStyle(SabqTheme.onAction.opacity(0.85))
+                            .foregroundStyle(SabqTheme.onAction.opacity(0.82))
                     }
                 }
                 Spacer(minLength: 0)
-                VStack(alignment: .trailing, spacing: 2) {
+                VStack(alignment: .trailing, spacing: 3) {
                     Text("رقم العضوية")
                         .font(SabqType.tag.font)
-                        .foregroundStyle(SabqTheme.onAction.opacity(0.85))
+                        .foregroundStyle(SabqTheme.onAction.opacity(0.78))
                     Text(memberIdShort)
-                        .font(SabqType.metaEmphasis.font)
-                        .tracking(1.5)
+                        .font(SabqType.tag.font)
+                        .tracking(1.2)
                         .foregroundStyle(SabqTheme.onAction)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(
+                            Capsule(style: .continuous)
+                                .fill(SabqTheme.onAction.opacity(0.14))
+                        )
                         .environment(\.layoutDirection, .leftToRight)
                 }
             }
         }
         .padding(SabqLayout.space16)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
         .background(SabqTheme.actionFill)
-        .aspectRatio(1.586, contentMode: .fit)
         .clipShape(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
-        .environment(\.layoutDirection, .rightToLeft)
+        .sabqRTL()
     }
 }

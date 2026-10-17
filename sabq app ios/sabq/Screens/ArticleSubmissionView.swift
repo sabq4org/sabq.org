@@ -254,17 +254,28 @@ struct ArticleSubmissionView: View {
     // MARK: - Header hero
 
     private var headerHero: some View {
-        VStack(alignment: .leading, spacing: SabqLayout.space4) {
-            Text(pageTitle)
-                .sabqText(SabqType.leadTitle)
-                .foregroundStyle(SabqTheme.textPrimary)
-                .accessibilityAddTraits(.isHeader)
+        HStack(spacing: 10) {
+            Image(systemName: kind == .opinion ? "square.and.pencil" : "newspaper.fill")
+                .font(SabqFonts.app(size: 16, weight: .semibold))
+                .foregroundStyle(SabqTheme.primary)
+                .frame(width: 34, height: 34)
+                .background(
+                    RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
+                        .fill(SabqTheme.surface)
+                )
+                .accessibilityHidden(true)
+
             Text(pageSubtitle)
-                .sabqText(SabqType.meta)
+                .sabqText(SabqType.metaEmphasis)
                 .foregroundStyle(SabqTheme.textSecondary)
                 .multilineTextAlignment(.leading)
+
+            Spacer(minLength: 0)
         }
+        .padding(.horizontal, SabqLayout.space12)
+        .padding(.vertical, 10)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .sabqSkyCardSurface()
     }
 
     // MARK: - Form
@@ -275,55 +286,50 @@ struct ArticleSubmissionView: View {
                 errorBanner(errorMessage)
             }
 
-            fieldLabel("العنوان", required: true)
-            TextField(titlePlaceholder, text: $title, axis: .vertical)
-                .lineLimit(2...3)
-                .sabqText(SabqType.rowTitle)
-                .foregroundStyle(SabqTheme.textPrimary)
-                .submitLabel(.next)
-                // .leading في بيئة RTL = اليمين — يضع المؤشر يمين الحقل الفارغ
-                .multilineTextAlignment(.leading)
-                .modifier(SabqInputSurface())
-
-            fieldLabel("النص", required: true)
-            // The body uses a UITextView-backed editor instead of
-            // SwiftUI's `TextEditor`. Reader feedback (2026-05-20):
-            // selection + copy/paste were unreliable on the
-            // built-in editor — magnifier never appeared, edit
-            // menu didn't surface — because the inner UITextView's
-            // long-press gesture lost to the outer ScrollView. The
-            // UITextView wrapper disables its own scroll (so the
-            // outer ScrollView still handles vertical scrolling)
-            // and forces RTL natural alignment so Arabic caret
-            // placement is consistent.
-            ZStack(alignment: .topTrailing) {
-                SabqRichTextEditor(
-                    text: $articleContent,
-                    minHeight: 180,
-                    font: SabqType.excerpt.uiFont,
-                    textColor: UIColor(SabqTheme.textPrimary),
-                    tintColor: UIColor(SabqTheme.primary),
-                    onEditingChanged: { editing in isBodyEditing = editing }
-                )
-                .padding(SabqLayout.space8)
-
-                if articleContent.isEmpty {
-                    Text(bodyPlaceholder)
-                        .font(SabqType.excerpt.font)
-                        .foregroundStyle(SabqTheme.textTertiary)
-                        .padding(.horizontal, SabqLayout.space8)
-                        .padding(.vertical, SabqLayout.space8)
-                        .allowsHitTesting(false)
-                }
+            VStack(alignment: .leading, spacing: SabqLayout.space8) {
+                fieldLabel("العنوان", required: true)
+                TextField(titlePlaceholder, text: $title, axis: .vertical)
+                    .lineLimit(1...3)
+                    .sabqText(SabqType.rowTitle)
+                    .foregroundStyle(SabqTheme.textPrimary)
+                    .submitLabel(.next)
+                    // .leading في بيئة RTL = اليمين — يضع المؤشر يمين الحقل الفارغ
+                    .multilineTextAlignment(.leading)
+                    .modifier(SabqInputSurface())
             }
-            .background(
-                RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
-                    .fill(SabqTheme.surface)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
-                    .stroke(isBodyEditing ? SabqTheme.primary : SabqTheme.outline, lineWidth: 1)
-            )
+
+            VStack(alignment: .leading, spacing: SabqLayout.space8) {
+                fieldLabel("النص", required: true)
+                ZStack(alignment: .topLeading) {
+                    SabqRichTextEditor(
+                        text: $articleContent,
+                        minHeight: 180,
+                        font: SabqType.excerpt.uiFont,
+                        textColor: UIColor(SabqTheme.textPrimary),
+                        tintColor: UIColor(SabqTheme.primary),
+                        onEditingChanged: { editing in isBodyEditing = editing }
+                    )
+                    .padding(SabqLayout.space8)
+
+                    if articleContent.isEmpty {
+                        Text(bodyPlaceholder)
+                            .font(SabqType.excerpt.font)
+                            .foregroundStyle(SabqTheme.textTertiary)
+                            .multilineTextAlignment(.leading)
+                            .padding(.horizontal, SabqLayout.space12)
+                            .padding(.vertical, SabqLayout.space12)
+                            .allowsHitTesting(false)
+                    }
+                }
+                .background(
+                    RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                        .fill(SabqTheme.surface)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                        .stroke(isBodyEditing ? SabqTheme.primary : SabqTheme.outline, lineWidth: 1)
+                )
+            }
 
             imagesSection
 
@@ -384,41 +390,39 @@ struct ArticleSubmissionView: View {
     private var imagePickerPlaceholder: some View {
         Button {
             Task {
-                // Surface the photo-library permission alert before
-                // opening the picker — required by App Store review even
-                // though PhotosUI.PhotosPicker doesn't strictly need it.
                 await SabqPhotoPermission.ensureRequested()
                 showImagePicker = true
             }
         } label: {
             VStack(spacing: SabqLayout.space8) {
-                Image(systemName: "photo.badge.plus")
-                    .font(SabqFonts.app(size: 28, weight: .light))
-                    .foregroundStyle(SabqTheme.primary)
+                ZStack {
+                    Circle()
+                        .fill(SabqTheme.skyTint)
+                        .frame(width: 44, height: 44)
+                    Image(systemName: "photo.badge.plus")
+                        .font(SabqFonts.app(size: 20, weight: .semibold))
+                        .foregroundStyle(SabqTheme.primary)
+                }
                 Text(kind == .opinion ? "اختر صورة" : "اختر الصور")
                     .sabqText(SabqType.rowTitle)
                     .foregroundStyle(SabqTheme.textPrimary)
                 Text("جودة عالية تُحفظ كما هي بدون ضغط")
                     .sabqText(SabqType.meta)
-                    .foregroundStyle(SabqTheme.textTertiary)
+                    .foregroundStyle(SabqTheme.textSecondary)
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, SabqLayout.space24)
+            .padding(.vertical, SabqLayout.space16)
             .background(
                 RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
-                    .fill(SabqTheme.surfaceMuted)
+                    .fill(SabqTheme.surface)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
                     .stroke(style: StrokeStyle(lineWidth: 1, dash: [5]))
-                    .foregroundStyle(SabqTheme.outline)
+                    .foregroundStyle(SabqTheme.skyOutline)
             )
         }
         .buttonStyle(.plain)
-        // The `.photosPicker` modifier + `pickerItems.onChange` listener
-        // are mounted on the parent section so the same `showImagePicker`
-        // flag works for both this initial placeholder and the
-        // "add more" Button inside `imagePreviewGrid`.
     }
 
     private var imagePreviewGrid: some View {

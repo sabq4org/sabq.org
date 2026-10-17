@@ -49,6 +49,10 @@ struct HomeFeedView: View {
     @State private var richInsights: APITodayInsights?
     @State private var calendarToday: [APICalendarEvent] = []
     @State private var latestNewsletter: APIAudioNewsletter?
+    /// «نشرة سَبْق» الصوتية المعتمدة (`/api/audio-bulletin/current`) — تظهر شريطًا
+    /// مدمجًا أعلى الرئيسية فقط عند وجود نشرة منشورة.
+    @State private var audioBulletin: APIAudioBulletin?
+    @State private var audioPlayer = SabqAudioPlayer.shared
     /// Dashboard-managed breaking strip (شريط الأخبار العاجلة). `nil` until the
     /// background fetch resolves; an empty `headlines` array means no active
     /// topic, in which case we fall back to the single-article breaking card.
@@ -151,13 +155,14 @@ struct HomeFeedView: View {
                         )
                     }
 
-                    // موجزك اليومي — ثابت تحت الرأس مباشرة.
-                    NavigationLink(value: DailyBriefRoute()) {
-                        greetingBlock
+                    // «نشرة سَبْق» الصوتية — شريط مدمج أعلى الرئيسية يظهر فقط عند توفر نشرة.
+                    if let bulletin = audioBulletin, !bulletin.audioUrl.isEmpty {
+                        audioBulletinTopBar(bulletin)
+                    } else if let newsletter = latestNewsletter, newsletter.audioUrl != nil {
+                        compactLegacyNewsletterTopBar(newsletter)
                     }
-                    .buttonStyle(.plain)
 
-                    // عاجل — يظهر تحت الموجز وفوق الخبر الرئيسي مباشرة.
+                    // عاجل — يظهر في الأعلى وفوق الخبر الرئيسي مباشرة.
                     if let ticker = breakingTicker, !ticker.headlines.isEmpty {
                         BreakingTickerBar(headlines: ticker.headlines)
 
@@ -215,10 +220,6 @@ struct HomeFeedView: View {
                     if !calendarToday.isEmpty {
                         calendarTodayCard
                     }
-
-                    if latestNewsletter != nil {
-                        audioNewsletterCard
-                    }
                 }
                 .frame(width: max(0, container.size.width - 32), alignment: .leading)
                 .padding(.horizontal, 16)
@@ -268,6 +269,7 @@ struct HomeFeedView: View {
                 // أعد جلب شريط العاجل أيضاً حتى ينعكس أي تفعيل/تعطيل من لوحة
                 // التحكم فور السحب للتحديث.
                 breakingTicker = (try? await APIClient.shared.fetchBreakingTicker(ignoreCache: true)) ?? nil
+                audioBulletin = (try? await APIClient.shared.fetchCurrentAudioBulletin(ignoreCache: true)) ?? nil
             }
             // شريط "⬆️ X أخبار جديدة" عائم أسفل الشاشة فوق شريط التبويبات —
             // في الأعلى كان يغطي زر البحث في رأس الرئيسية. يسمح باللمس فقط
@@ -304,6 +306,7 @@ struct HomeFeedView: View {
                         } else {
                             breakingTicker = nil
                         }
+                        audioBulletin = (try? await APIClient.shared.fetchCurrentAudioBulletin(ignoreCache: true)) ?? nil
                         lastForcedHeroCheck = Date()
                     }
                 }
@@ -332,6 +335,7 @@ struct HomeFeedView: View {
             async let insights: [String: String]? = try? await APIClient.shared.fetchTodayInsights()
             async let upcoming: [APICalendarEvent]? = try? await APIClient.shared.fetchUpcomingCalendarEvents(days: 14)
             async let newsletters: [APIAudioNewsletter]? = try? await APIClient.shared.fetchAudioNewsletters()
+            async let bulletin = (try? await APIClient.shared.fetchCurrentAudioBulletin()) ?? nil
             async let breaking = (try? await APIClient.shared.fetchBreakingTicker()) ?? nil
             // Rich personal-journey insights (member-session only). Returns
             // nil for logged-out users so the block stays hidden cleanly.
@@ -342,6 +346,7 @@ struct HomeFeedView: View {
             if let v = await insights { todayInsights = v }
             calendarToday = (await upcoming) ?? []
             latestNewsletter = (await newsletters)?.first
+            audioBulletin = await bulletin
             breakingTicker = await breaking
             richInsights = await richJourney
 
@@ -395,6 +400,7 @@ struct HomeFeedView: View {
         } else {
             breakingTicker = nil
         }
+        audioBulletin = (try? await APIClient.shared.fetchCurrentAudioBulletin(ignoreCache: true)) ?? nil
         return true
     }
 
@@ -1212,58 +1218,170 @@ struct HomeFeedView: View {
         }
     }
 
-    // MARK: - Audio newsletter card
+    // MARK: - Compact Audio Bulletin Top Bar
 
-    @ViewBuilder
-    private var audioNewsletterCard: some View {
-        if let n = latestNewsletter {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack {
-                    sectionHeading(
-                        title: "النشرات الصوتية",
-                        icon: "waveform",
-                        tint: SabqTheme.primary
-                    )
-                    NavigationLink(value: AudioNewslettersRoute()) {
-                        Text("الكل")
-                            .font(SabqType.metaEmphasis.font)
-                            .foregroundStyle(SabqTheme.primary)
-                    }
-                }
-                NavigationLink(value: AudioNewslettersRoute()) {
-                    HStack(spacing: 14) {
-                        ZStack {
-                            RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
-                                .fill(SabqTheme.surfaceMuted)
-                            Image(systemName: "waveform")
-                                .font(SabqFonts.app(size: 20, weight: .regular))
-                                .foregroundStyle(SabqTheme.primary)
-                        }
-                        .frame(width: 54, height: 54)
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(n.title)
-                                .font(SabqType.rowTitle.font)
-                                .foregroundStyle(SabqTheme.textPrimary)
-                                .lineLimit(2)
-                                .multilineTextAlignment(.leading)
-                            if let d = n.duration {
-                                Text("\(d / 60) دقيقة استماع")
-                                    .font(SabqType.meta.font)
-                                    .foregroundStyle(SabqTheme.textTertiary)
-                                    .monospacedDigit()
-                            }
-                        }
-                        Spacer(minLength: 0)
-                        Image(systemName: "play.circle.fill")
-                            .font(SabqFonts.app(size: 28))
-                            .foregroundStyle(SabqTheme.primary)
-                    }
-                    .padding(14)
-                    .sabqBlockSurface()
-                }
-                .buttonStyle(.plain)
+    private func audioBulletinKey(_ id: String) -> String {
+        "audio-bulletin:\(id)"
+    }
+
+    private func audioBulletinTopBar(_ bulletin: APIAudioBulletin) -> some View {
+        let key = audioBulletinKey(bulletin.id)
+        let isCurrent = audioPlayer.currentKey == key
+        let isPlaying = audioPlayer.isPlaying(key: key)
+        let elapsed = isCurrent ? audioPlayer.currentTime : 0
+        let total = max(1, Double(bulletin.durationSec))
+        let duration = (isCurrent && audioPlayer.currentDuration > 0) ? audioPlayer.currentDuration : total
+        let progress = min(1.0, max(0.0, elapsed / duration))
+        let activeSubtitle: String = {
+            if (isPlaying || elapsed > 0), let active = bulletin.activeChapter(at: elapsed) {
+                return active.chapter.label
             }
+            return bulletin.title
+        }()
+        let minutes = max(1, Int(round(Double(bulletin.durationSec) / 60.0)))
+        let durationLabel: String = {
+            if isPlaying || elapsed > 0 {
+                return "\(formatBulletinClock(elapsed)) / \(formatBulletinClock(duration))"
+            }
+            return minutes == 1 ? "دقيقة" : (minutes == 2 ? "دقيقتان" : "\(minutes) د")
+        }()
+
+        return Button {
+            guard let url = URL(string: bulletin.audioUrl) else { return }
+            SabqHaptics.medium()
+            audioPlayer.toggle(
+                SabqAudioPlayer.Item(
+                    key: key,
+                    url: url,
+                    title: bulletin.title,
+                    subtitle: "نشرة سَبْق الصوتية",
+                    artworkURL: nil,
+                    delivery: .stream
+                )
+            )
+        } label: {
+            VStack(spacing: isCurrent ? 6 : 0) {
+                HStack(spacing: 10) {
+                    ZStack {
+                        Circle()
+                            .fill(SabqTheme.primary)
+                            .frame(width: 30, height: 30)
+                        Image(systemName: isPlaying ? "pause.fill" : "play.fill")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(SabqTheme.onAction)
+                    }
+
+                    HStack(spacing: 6) {
+                        Text("نشرة سَبْق")
+                            .font(SabqType.tag.font)
+                            .foregroundStyle(SabqTheme.primary)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 2)
+                            .background(
+                                Capsule(style: .continuous)
+                                    .fill(SabqTheme.surface)
+                            )
+
+                        Text(activeSubtitle)
+                            .font(SabqType.metaEmphasis.font)
+                            .foregroundStyle(SabqTheme.textPrimary)
+                            .lineLimit(1)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                    Text(durationLabel)
+                        .font(SabqType.tag.font)
+                        .foregroundStyle(SabqTheme.textSecondary)
+                        .monospacedDigit()
+                        .environment(\.layoutDirection, .leftToRight)
+                }
+
+                if isCurrent {
+                    GeometryReader { geo in
+                        ZStack(alignment: .leading) {
+                            Capsule(style: .continuous)
+                                .fill(SabqTheme.primary.opacity(0.18))
+                                .frame(height: 3)
+                            Capsule(style: .continuous)
+                                .fill(SabqTheme.primary)
+                                .frame(width: max(4, geo.size.width * progress), height: 3)
+                        }
+                    }
+                    .frame(height: 3)
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .sabqSkyCardSurface()
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
+        .accessibilityLabel(isPlaying ? "إيقاف نشرة سبق الصوتية: \(activeSubtitle)" : "تشغيل نشرة سبق الصوتية: \(bulletin.title)")
+    }
+
+    private func compactLegacyNewsletterTopBar(_ newsletter: APIAudioNewsletter) -> some View {
+        let key = "newsletter:\(newsletter.id)"
+        let isPlaying = audioPlayer.isPlaying(key: key)
+        return Button {
+            guard let raw = newsletter.audioUrl, let url = URL(string: raw) else { return }
+            SabqHaptics.medium()
+            audioPlayer.toggle(
+                SabqAudioPlayer.Item(
+                    key: key,
+                    url: url,
+                    title: newsletter.title,
+                    subtitle: "النشرة الصوتية · سبق",
+                    artworkURL: newsletter.coverImageUrl.flatMap(URL.init(string:)),
+                    delivery: .stream
+                )
+            )
+        } label: {
+            HStack(spacing: 10) {
+                ZStack {
+                    Circle()
+                        .fill(SabqTheme.primary)
+                        .frame(width: 30, height: 30)
+                    Image(systemName: isPlaying ? "pause.fill" : "play.fill")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(SabqTheme.onAction)
+                }
+
+                HStack(spacing: 6) {
+                    Text("نشرة صوتية")
+                        .font(SabqType.tag.font)
+                        .foregroundStyle(SabqTheme.primary)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 2)
+                        .background(
+                            Capsule(style: .continuous)
+                                .fill(SabqTheme.surface)
+                        )
+
+                    Text(newsletter.title)
+                        .font(SabqType.metaEmphasis.font)
+                        .foregroundStyle(SabqTheme.textPrimary)
+                        .lineLimit(1)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                if let d = newsletter.duration, d > 0 {
+                    Text("\(max(1, d / 60)) د")
+                        .font(SabqType.tag.font)
+                        .foregroundStyle(SabqTheme.textSecondary)
+                        .monospacedDigit()
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .sabqSkyCardSurface()
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func formatBulletinClock(_ seconds: Double) -> String {
+        let s = max(0, Int(seconds.rounded(.down)))
+        return String(format: "%d:%02d", s / 60, s % 60)
     }
 
     private func sectionHeading(title: String, icon: String, tint: Color) -> some View {

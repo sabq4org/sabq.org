@@ -1382,20 +1382,20 @@ struct StatusChip: View {
     }
 }
 
-/// Detail-page label pill — shared by category, passport "موثَّق", etc.
+/// Detail-page label pill — matches the clean, compact, borderless capsule
+/// style used on the home hero card (`FeaturedArticleCard`).
 struct DetailLabelPill: View {
     let title: String
     let tint: Color
     var icon: String? = nil
+    var fill: Color? = nil
 
     var body: some View {
-        HStack(spacing: 5) {
+        HStack(spacing: 4) {
             if let icon {
                 Image(systemName: icon)
-                    .font(.system(size: 11, weight: .semibold))
-                    // SF Symbols vary in bounding box — lock size so every pill
-                    // matches the passport "موثَّق" chip height.
-                    .frame(width: 13, height: 13)
+                    .font(.system(size: 10, weight: .semibold))
+                    .frame(width: 12, height: 12)
                     .accessibilityHidden(true)
             }
             Text(title)
@@ -1403,15 +1403,11 @@ struct DetailLabelPill: View {
                 .lineLimit(1)
         }
         .foregroundStyle(tint)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 5)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 3)
         .background(
             Capsule(style: .continuous)
-                .fill(tint.opacity(0.11))
-        )
-        .overlay(
-            Capsule(style: .continuous)
-                .strokeBorder(tint.opacity(0.24), lineWidth: 0.75)
+                .fill(fill ?? tint.opacity(0.12))
         )
         .contentShape(Capsule(style: .continuous))
     }

@@ -171,3 +171,30 @@ nonisolated struct APIAudioNewsletter: Decodable, Sendable, Identifiable {
         publishedAt = try? c.decode(String.self, forKey: .publishedAt)
     }
 }
+
+// MARK: - Audio Bulletin («نشرة سَبْق» الصوتية)
+
+nonisolated struct APIAudioBulletinChapter: Decodable, Sendable, Equatable {
+    let start: Double
+    let label: String
+    let href: String?
+}
+
+nonisolated struct APIAudioBulletin: Decodable, Sendable, Identifiable, Equatable {
+    let id: String
+    let title: String
+    let publishedAt: String
+    let audioUrl: String
+    let durationSec: Int
+    let chapters: [APIAudioBulletinChapter]
+
+    /// الفصل النشط عند ثانية التشغيل الحالية.
+    func activeChapter(at seconds: Double) -> (index: Int, chapter: APIAudioBulletinChapter)? {
+        guard !chapters.isEmpty else { return nil }
+        var index = 0
+        for (i, ch) in chapters.enumerated() where seconds >= ch.start {
+            index = i
+        }
+        return (index, chapters[index])
+    }
+}

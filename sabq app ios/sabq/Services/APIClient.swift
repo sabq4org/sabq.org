@@ -1644,6 +1644,20 @@ actor APIClient {
         return try await get(WrappedObject<APIAudioNewsletter>.self, path: "/audio-newsletters/\(slug)", apiRoot: publicAPIBaseURL).item
     }
 
+    /// «نشرة سَبْق» الصوتية الحالية تحت الهيدر (`/api/audio-bulletin/current`).
+    /// تعيد `nil` إذا لم تكن هناك نشرة معتمدة خلال آخر 6 ساعات.
+    func fetchCurrentAudioBulletin(ignoreCache: Bool = false) async throws -> APIAudioBulletin? {
+        struct Response: Decodable {
+            let bulletin: APIAudioBulletin?
+        }
+        return try await get(
+            Response.self,
+            path: "/audio-bulletin/current",
+            ignoreCache: ignoreCache,
+            apiRoot: publicAPIBaseURL
+        ).bulletin
+    }
+
     // MARK: - Private Helpers
 
     private func buildURL(path: String, query: [String: String] = [:], apiRoot: String? = nil) throws -> URL {

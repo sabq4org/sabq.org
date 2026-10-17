@@ -44,6 +44,8 @@ final class SabqAudioPlayer {
 
     private(set) var currentKey: String?
     private(set) var isPlaying = false
+    private(set) var currentTime: Double = 0
+    private(set) var currentDuration: Double = 0
     /// مزوّد المقطع الحالي (`humain` / `elevenlabs` / `google`) من رأس الاستجابة —
     /// يُعرف فقط في وضع التنزيل.
     private(set) var provider: String?
@@ -98,6 +100,8 @@ final class SabqAudioPlayer {
         removeLocalFile()
         currentItem = item
         currentKey = item.key
+        currentTime = 0
+        currentDuration = 0
         artwork = nil
         provider = nil
         SabqAudioSession.activate()
@@ -195,6 +199,8 @@ final class SabqAudioPlayer {
         artworkTask?.cancel()
         artworkTask = nil
         isPlaying = false
+        currentTime = 0
+        currentDuration = 0
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
         SabqAudioSession.deactivate()
     }
@@ -234,12 +240,22 @@ final class SabqAudioPlayer {
             }
         }
 
-        // موضع التشغيل لشاشة القفل كل ثانية.
+        // موضع التشغيل لشاشة القفل والواجهات كل نصف ثانية.
         timeObserver = newPlayer.addPeriodicTimeObserver(
-            forInterval: CMTime(seconds: 1, preferredTimescale: 10),
+            forInterval: CMTime(seconds: 0.5, preferredTimescale: 10),
             queue: .main
         ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.publishNowPlaying() }
+            MainActor.assumeIsolated {
+                guard let self, let player = self.player else { return }
+                let elapsed = player.currentTime().seconds
+                if elapsed.isFinite, elapsed >= 0 {
+                    self.currentTime = elapsed
+                }
+                if let dur = player.currentItem?.duration.seconds, dur.isFinite, dur > 0 {
+                    self.currentDuration = dur
+                }
+                self.publishNowPlaying()
+            }
         }
     }
 

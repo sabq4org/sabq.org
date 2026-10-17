@@ -709,9 +709,9 @@ struct ArticleDetailView: View {
     /// FlowLayout wraps onto a second line on narrow screens.
     private var labelsRow: some View {
         FlowLayout(spacing: 8) {
-            // Category is context, not severity. Keep red reserved for the
-            // explicit breaking state below so ordinary sections stay calm.
-            DetailLabelPill(title: article.categoryTitle, tint: SabqTheme.primary)
+            // Category is context, not severity. Uses the exact same skyTint
+            // capsule style as the hero card on the home screen.
+            DetailLabelPill(title: article.categoryTitle, tint: SabqTheme.primary, fill: SabqTheme.skyTint)
 
             // شارة «قراءة» التحريرية — تطابق شارة صفحة الخبر في الويب (#1420).
             // من `displayArticle` كي تظهر بعد وصول حمولة التفاصيل حتى لو دخل
@@ -722,23 +722,19 @@ struct ArticleDetailView: View {
 
             // Breaking pill (only when applicable)
             if article.isBreaking {
-                HStack(spacing: 5) {
+                HStack(spacing: 4) {
                     PulsingDot(color: SabqTheme.breaking)
-                        .scaleEffect(0.58)
-                        .frame(width: 11, height: 11)
+                        .scaleEffect(0.55)
+                        .frame(width: 10, height: 10)
                     Text("عاجل")
                         .font(SabqType.tag.font)
                         .foregroundStyle(SabqTheme.breaking)
                 }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
                 .background(
                     Capsule(style: .continuous)
-                        .fill(SabqTheme.breaking.opacity(0.11))
-                )
-                .overlay(
-                    Capsule(style: .continuous)
-                        .strokeBorder(SabqTheme.breaking.opacity(0.24), lineWidth: 0.75)
+                        .fill(SabqTheme.breaking.opacity(0.12))
                 )
             }
 

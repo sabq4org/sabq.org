@@ -233,7 +233,7 @@ struct ArticleRevisionView: View {
 
             fieldLabel("العنوان", required: true)
             TextField("عنوان المقال", text: $title, axis: .vertical)
-                .lineLimit(2...3)
+                .lineLimit(1...3)
                 .sabqText(SabqType.rowTitle)
                 .foregroundStyle(SabqTheme.textPrimary)
                 .submitLabel(.next)
@@ -242,7 +242,7 @@ struct ArticleRevisionView: View {
                 .modifier(SabqInputSurface())
 
             fieldLabel("النص", required: true)
-            ZStack(alignment: .topTrailing) {
+            ZStack(alignment: .topLeading) {
                 SabqRichTextEditor(
                     text: $bodyText,
                     minHeight: 220,
