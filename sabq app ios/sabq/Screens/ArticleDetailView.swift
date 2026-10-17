@@ -46,7 +46,6 @@ struct ArticleDetailView: View {
 
     @State private var showReaderControls = false
     @State private var isFocusMode = false
-    @State private var aiInsights: [String: String] = [:]
 
     @State private var relatedArticles: [Article] = []
     /// مقالات رأي من تصنيف الخبر — بلوك «مقالات قد تهمك» (نقل الويب #1609/#1624).
@@ -592,17 +591,15 @@ struct ArticleDetailView: View {
             }
 
             async let detail = Self.detailBundle(slug: slug, cached: cached)
-            // Best-effort: returns sentiment + credibility hints when ai
-            // processing has run for this article. Failures are silent.
-            async let insights: [String: String]? = try? await APIClient.shared.fetchAIInsights(slug: slug)
             // Drive the comments store load in parallel — it manages its own
             // state, so we don't await its return value.
             if let store {
                 Task { await store.load() }
             }
 
-            let (bundle, ins) = await (detail, insights)
-            if let ins { aiInsights = ins }
+            // كان يُجلب معها `/articles/:slug/ai-insights` لشارة «إيجابي/سلبي»، والخادم
+            // يرد أرقام قراءة لا نصوصًا فيفشل الفك دائمًا — طلب ضائع مع كل خبر، فحُذف.
+            let bundle = await detail
 
             if let bundle {
                 fullArticle = bundle.article
@@ -711,7 +708,12 @@ struct ArticleDetailView: View {
         FlowLayout(spacing: 8) {
             // Category is context, not severity. Uses the exact same soft
             // capsule style as the hero and compact rows on the home screen.
-            DetailLabelPill(title: article.categoryTitle, tint: SabqTheme.primary)
+            // من `displayArticle` لا `article`: الخبر المفتوح من إشعار أو رابط عميق
+            // يبدأ بهيكل `Article.placeholder` قسمه الثابت «محليات» وبلا «عاجل».
+            // والهيكل عنوانه فارغ، فلا تُرسم الشارة قبل وصول الحمولة الحقيقية.
+            if !displayArticle.title.isEmpty {
+                DetailLabelPill(title: displayArticle.categoryTitle, tint: SabqTheme.primary)
+            }
 
             // شارة «قراءة» التحريرية — تطابق شارة صفحة الخبر في الويب (#1420).
             // من `displayArticle` كي تظهر بعد وصول حمولة التفاصيل حتى لو دخل
@@ -721,7 +723,7 @@ struct ArticleDetailView: View {
             }
 
             // Breaking pill (only when applicable)
-            if article.isBreaking {
+            if displayArticle.isBreaking {
                 HStack(spacing: 4) {
                     PulsingDot(color: SabqTheme.breaking)
                         .scaleEffect(0.55)
@@ -738,37 +740,10 @@ struct ArticleDetailView: View {
                 )
             }
 
-            sentimentPill
-
             // Passport "موثوق" pill — opens the same sheet as the action bar.
             if let slug = article.slug {
                 PassportInlineBadge(slug: slug)
             }
-        }
-    }
-
-    /// Renders a small sentiment pill when aiInsights returns one. Accepts
-    /// either localized Arabic labels or the canonical English keys.
-    @ViewBuilder
-    private var sentimentPill: some View {
-        if let raw = aiInsights["sentiment"]?.lowercased(),
-           let mapped = sentimentMapping(for: raw) {
-            DetailLabelPill(title: mapped.label, tint: mapped.tint, icon: mapped.icon)
-        }
-    }
-
-    private func sentimentMapping(for raw: String) -> (label: String, icon: String, tint: Color)? {
-        switch raw {
-        case "positive", "ايجابي", "إيجابي":
-            return ("إيجابي", "face.smiling", SabqTheme.success)
-        case "neutral", "محايد":
-            return ("محايد", "minus.circle", SabqTheme.textSecondary)
-        case "negative", "سلبي":
-            return ("سلبي", "exclamationmark.triangle.fill", SabqTheme.danger)
-        case "mixed", "مختلط":
-            return ("مختلط", "circle.lefthalf.fill", SabqTheme.warning)
-        default:
-            return nil
         }
     }
 

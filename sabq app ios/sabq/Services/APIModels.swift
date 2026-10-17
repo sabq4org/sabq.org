@@ -1147,6 +1147,10 @@ nonisolated struct APIUser: Decodable, Identifiable {
     let verificationBadge: String?
     let hasPressCard: Bool?
     let authProvider: String?
+    /// هل للحساب كلمة مرور؟ يرسلها `/api/v1/members/profile` (`hasPassword`) دون
+    /// الهاش نفسه. حسابات Apple والجوال بلا كلمة مرور، فلا يُطلب منها إدخالها عند الحذف.
+    /// `nil` حين تأتي بيانات المستخدم من مسار لا يرسلها (استجابة الدخول مثلًا).
+    let hasPassword: Bool?
     let createdAt: String?
     /// User-selected interest categories returned by `/api/v1/members/profile`
     /// (see `mobileApiRoutes.ts` — joins userInterests + categories). Drives
@@ -1374,6 +1378,8 @@ nonisolated struct APIUser: Decodable, Identifiable {
             ?? (try? c.decode(Bool.self, forKey: FlexKey("has_press_card")))
         authProvider = (try? c.decode(String.self, forKey: FlexKey("authProvider")))
             ?? (try? c.decode(String.self, forKey: FlexKey("auth_provider")))
+        hasPassword = (try? c.decode(Bool.self, forKey: FlexKey("hasPassword")))
+            ?? (try? c.decode(Bool.self, forKey: FlexKey("has_password")))
         createdAt = (try? c.decode(String.self, forKey: FlexKey("createdAt")))
             ?? (try? c.decode(String.self, forKey: FlexKey("created_at")))
         interests = (try? c.decode([APIUserInterest].self, forKey: FlexKey("interests"))) ?? []

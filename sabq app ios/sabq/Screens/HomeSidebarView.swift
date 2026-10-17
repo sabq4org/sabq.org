@@ -244,7 +244,7 @@ struct HomeSidebarView: View {
 
     // MARK: - Briefing card
 
-    /// نسخة مضغوطة من بطاقة التحية في `HomeFeedView.greetingBlock` (التحية
+    /// نسخة مضغوطة من بطاقة التحية في بطاقة التحية التي كانت في `HomeFeedView` (حُذفت لأنها لم تكن تُرسم) (التحية
     /// حسب الساعة + شارة SABQ AI) تناسب عمودًا عرضه 340–520 نقطة.
     private var briefingCard: some View {
         let hour = Calendar.current.component(.hour, from: Date())

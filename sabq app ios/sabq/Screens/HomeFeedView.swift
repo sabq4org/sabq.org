@@ -43,7 +43,6 @@ struct HomeFeedView: View {
     @State private var isFirstLoad = true
     /// آخر طابع إبطال كاش رُصد — `0` يعني لم يُبذَر بعد (لا نُعيد الجلب عند أول قراءة).
     @State private var lastCacheInvalidation: Double = 0
-    @State private var todayInsights: [String: String] = [:]
     /// Rich personal-journey insights (member-session only). Drives the
     /// inline metric tiles + interest chips in personalJourneyBlock.
     @State private var richInsights: APITodayInsights?
@@ -335,7 +334,6 @@ struct HomeFeedView: View {
         .task {
             // Phase-4 + Phase-5 background fetches. All best-effort: silent
             // on failure so the home screen still renders.
-            async let insights: [String: String]? = try? await APIClient.shared.fetchTodayInsights()
             async let upcoming: [APICalendarEvent]? = try? await APIClient.shared.fetchUpcomingCalendarEvents(days: 14)
             async let newsletters: [APIAudioNewsletter]? = try? await APIClient.shared.fetchAudioNewsletters()
             async let bulletin = (try? await APIClient.shared.fetchCurrentAudioBulletin()) ?? nil
@@ -346,7 +344,6 @@ struct HomeFeedView: View {
                 ? (try? await APIClient.shared.fetchTodayInsightsRich())
                 : nil
 
-            if let v = await insights { todayInsights = v }
             calendarToday = (await upcoming) ?? []
             latestNewsletter = (await newsletters)?.first
             audioBulletin = await bulletin
@@ -917,95 +914,6 @@ struct HomeFeedView: View {
                 .padding(.bottom, 8)
             }
         }
-    }
-
-    // MARK: - Greeting Block (Phase 2)
-
-    /// صف «موجزك اليومي» بأيقونة الوقت. السطر الثاني عبارة الخادم المولّدة إن
-    /// وصلت، وإلا جملة ثابتة بحسب حالة الدخول.
-    private var greetingBlock: some View {
-        let hour = Calendar.current.component(.hour, from: Date())
-        let greeting: String
-        let icon: String
-        switch hour {
-        case 5..<12:
-            greeting = "صباح الخير"
-            icon = "sun.max.fill"
-        case 12..<17:
-            greeting = "نهارك سعيد"
-            icon = "sun.haze.fill"
-        case 17..<21:
-            greeting = "مساء الخير"
-            icon = "sunset.fill"
-        default:
-            greeting = "ليلة هادئة"
-            icon = "moon.stars.fill"
-        }
-
-        let backendAIPhrase = (todayInsights["phrase"]
-            ?? todayInsights["headline"]
-            ?? todayInsights["summary"])?
-            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let subline: String = {
-            if !backendAIPhrase.isEmpty { return backendAIPhrase }
-            return authStore.isLoggedIn
-                ? "أهم ما يهمّك اليوم، مرتّبًا من اهتماماتك."
-                : "اختر اهتماماتك ونرتّب لك أهم الأخبار."
-        }()
-
-        let layout = dynamicTypeSize.isAccessibilitySize
-            ? AnyLayout(VStackLayout(alignment: .leading, spacing: SabqLayout.space12))
-            : AnyLayout(HStackLayout(alignment: .center, spacing: SabqLayout.space12))
-        return layout {
-            Image(systemName: icon)
-                .font(.system(size: 18, weight: .medium))
-                .foregroundStyle(SabqTheme.primary)
-                .frame(width: 38, height: 38)
-                .background(
-                    RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
-                        .fill(SabqTheme.surface)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
-                        .strokeBorder(SabqTheme.skyOutline, lineWidth: 0.75)
-                )
-                .accessibilityHidden(true)
-
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(alignment: .firstTextBaseline, spacing: SabqLayout.space8) {
-                    Text("\(greeting) · موجزك اليومي")
-                        .font(SabqType.label)
-                        .foregroundStyle(SabqTheme.textPrimary)
-                        .fixedSize(horizontal: false, vertical: true)
-                    // يُعلَّم السطر الثاني اقتراحًا آليًا حين تأتي العبارة من الخادم.
-                    if !backendAIPhrase.isEmpty {
-                        Text("SABQ AI")
-                            .font(SabqType.tag.font)
-                            .foregroundStyle(SabqTheme.primary)
-                    }
-                }
-
-                Text(subline)
-                    .font(SabqType.meta.font)
-                    .foregroundStyle(SabqTheme.textSecondary)
-                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
-                    .multilineTextAlignment(.leading)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-            Image(systemName: "chevron.left")
-                .font(SabqType.meta.font)
-                .foregroundStyle(SabqTheme.primary)
-                .accessibilityHidden(true)
-        }
-        .padding(.horizontal, SabqLayout.space12)
-        .padding(.vertical, 10)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .sabqSkyCardSurface()
-        .contentShape(Rectangle())
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(greeting). موجزك اليومي في سبق. \(subline)")
     }
 
     // MARK: - Personal Journey Block (auth-gated)
