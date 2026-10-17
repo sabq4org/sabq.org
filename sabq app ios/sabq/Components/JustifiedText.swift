@@ -110,9 +110,20 @@ private func justifiedParagraphStyle(lineSpacing: CGFloat, justified: Bool = tru
 }
 
 private func readerFont(size: CGFloat, weight: UIFont.Weight, serif: Bool) -> UIFont {
-    let base = UIFont.systemFont(ofSize: size, weight: weight).fontDescriptor
-    let descriptor = serif ? (base.withDesign(.serif) ?? base) : base
-    return UIFont(descriptor: descriptor, size: size)
+    if serif {
+        let base = UIFont.systemFont(ofSize: size, weight: weight).fontDescriptor
+        let descriptor = base.withDesign(.serif) ?? base
+        return UIFont(descriptor: descriptor, size: size)
+    }
+    let fontName: String
+    if weight.rawValue >= UIFont.Weight.bold.rawValue {
+        fontName = SabqFonts.bold
+    } else if weight.rawValue >= UIFont.Weight.medium.rawValue {
+        fontName = SabqFonts.semibold
+    } else {
+        fontName = SabqFonts.regular
+    }
+    return UIFont(name: fontName, size: size) ?? UIFont.systemFont(ofSize: size, weight: weight)
 }
 
 // MARK: - فقرة نصية بسيطة
@@ -316,7 +327,7 @@ enum InlineRunAttributing {
             }
             if let link = run.link {
                 attrs[.link] = link
-                attrs[.foregroundColor] = UIColor.systemBlue
+                attrs[.foregroundColor] = UIColor(SabqTheme.primary)
                 attrs[.underlineStyle] = NSUnderlineStyle.single.rawValue
             }
             out.append(NSAttributedString(string: run.text, attributes: attrs))

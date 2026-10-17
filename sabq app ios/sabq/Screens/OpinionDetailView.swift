@@ -551,7 +551,7 @@ struct OpinionDetailView: View {
                             weight: index == 0 ? .medium : .regular,
                             useSerifReader: useReaderFont,
                             lineSpacing: CGFloat(lineSpacing) + (index == 0 ? 4 : 3),
-                            textColor: UIColor(SabqTheme.ink.opacity(0.92))
+                            textColor: UIColor(SabqTheme.textPrimary)
                         )
                         .frame(maxWidth: .infinity, alignment: .leading)
                     }

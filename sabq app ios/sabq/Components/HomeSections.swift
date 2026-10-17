@@ -16,13 +16,20 @@ struct HomeSectionHeader<Link: View>: View {
     var body: some View {
         let layout = dynamicTypeSize.isAccessibilitySize
             ? AnyLayout(VStackLayout(alignment: .leading, spacing: SabqLayout.space8))
-            : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: SabqLayout.space12))
+            : AnyLayout(HStackLayout(alignment: .center, spacing: SabqLayout.space12))
         return layout {
-            Text(title)
-                .font(SabqType.sectionHeading.font)
-                .foregroundStyle(SabqTheme.textPrimary)
-                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
-                .accessibilityAddTraits(.isHeader)
+            HStack(alignment: .center, spacing: 8) {
+                Capsule(style: .continuous)
+                    .fill(SabqTheme.primary)
+                    .frame(width: 4, height: 18)
+                    .accessibilityHidden(true)
+
+                Text(title)
+                    .font(SabqType.sectionHeading.font)
+                    .foregroundStyle(SabqTheme.textPrimary)
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+                    .accessibilityAddTraits(.isHeader)
+            }
 
             if let context {
                 HStack(spacing: 6) {
@@ -138,7 +145,7 @@ struct LatestTimelineNowRow: View {
                 PulsingDot(color: SabqTheme.leaf)
                     .frame(width: LatestTimelineStyle.railWidth, height: 18)
                 Text("الآن \(SabqFormatters.riyadhHourMinute.string(from: context.date)) \(SabqFormatters.riyadhPeriod.string(from: context.date)) · تتحدّث تلقائيًا")
-                    .font(SabqFonts.app(size: 12, weight: .semibold))
+                    .font(SabqType.tag.font)
                     .foregroundStyle(SabqTheme.leaf)
                     .monospacedDigit()
                 Spacer(minLength: 0)
@@ -167,7 +174,7 @@ struct LatestTimelineDayDivider: View {
                 .frame(width: 11, height: 11)
                 .frame(width: LatestTimelineStyle.railWidth)
             Text(label)
-                .font(SabqFonts.app(size: 13, weight: .semibold))
+                .font(SabqType.metaEmphasis.font)
                 .foregroundStyle(SabqTheme.secondaryInk)
                 .fixedSize()
             Rectangle()
@@ -203,10 +210,11 @@ struct LatestTimelineRow: View {
                 HStack(alignment: .top, spacing: LatestTimelineStyle.gap) {
                     SabqRTLText(
                         article.title,
-                        uiFont: SabqFonts.uiSubhead(size: NewsRowStyle.compactTitleSize),
-                        color: SabqTheme.ink,
+                        uiFont: SabqType.rowTitle.uiFont,
+                        color: SabqTheme.textPrimary,
                         lineLimit: dynamicTypeSize.isAccessibilitySize ? 0 : NewsRowStyle.compactTitleLines,
-                        lineSpacing: NewsRowStyle.titleLineSpacing
+                        lineSpacing: SabqType.rowTitle.lineSpacing,
+                        textStyle: SabqType.rowTitle.uiTextStyle
                     )
                     .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -223,20 +231,20 @@ struct LatestTimelineRow: View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             HStack(alignment: .firstTextBaseline, spacing: 2) {
                 Text(SabqFormatters.riyadhHourMinute.string(from: article.publishDate))
-                    .font(SabqFonts.app(size: 12, weight: .bold))
-                    .foregroundStyle(SabqTheme.ink)
+                    .font(SabqType.tag.font)
+                    .foregroundStyle(SabqTheme.textPrimary)
                     .monospacedDigit()
                 Text(SabqFormatters.riyadhPeriod.string(from: article.publishDate))
-                    .font(SabqFonts.app(size: 11, weight: .medium))
-                    .foregroundStyle(SabqTheme.tertiaryInk)
+                    .font(SabqType.tag.font)
+                    .foregroundStyle(SabqTheme.textTertiary)
             }
             if isNew {
                 Text("جديد")
-                    .font(SabqFonts.app(size: 12, weight: .semibold))
+                    .font(SabqType.tag.font)
                     .foregroundStyle(SabqTheme.leaf)
             }
             Text(article.categoryTitle)
-                .font(SabqFonts.app(size: 12, weight: .semibold))
+                .font(SabqType.tag.font)
                 .foregroundStyle(article.category.tint)
                 .lineLimit(1)
         }
@@ -251,10 +259,15 @@ struct LatestTimelineRow: View {
                 }
             } else {
                 placeholder
+                    .environment(\.sabqImageLoadFailed, true)
             }
         }
         .frame(width: LatestTimelineStyle.thumbnailWidth, height: LatestTimelineStyle.thumbnailHeight)
         .clipShape(RoundedRectangle(cornerRadius: NewsRowStyle.thumbnailRadius, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: NewsRowStyle.thumbnailRadius, style: .continuous)
+                .strokeBorder(SabqTheme.separator, lineWidth: 0.75)
+        )
         .aiImageBadgeOverlay(
             isVisible: article.isAiGeneratedImage,
             model: article.aiImageModel,
@@ -265,13 +278,7 @@ struct LatestTimelineRow: View {
     }
 
     private var placeholder: some View {
-        RoundedRectangle(cornerRadius: NewsRowStyle.thumbnailRadius, style: .continuous)
-            .fill(article.category.tint.opacity(0.10))
-            .overlay {
-                Image(systemName: article.category.icon)
-                    .font(SabqFonts.app(size: 22, weight: .light))
-                    .foregroundStyle(article.category.tint.opacity(0.5))
-            }
+        SabqImagePlaceholder()
     }
 }
 
@@ -294,10 +301,11 @@ struct OpinionWriterRow: View {
 
                 SabqRTLText(
                     opinion.title,
-                    uiFont: SabqFonts.uiSubhead(size: NewsRowStyle.compactTitleSize),
-                    color: SabqTheme.ink,
+                    uiFont: SabqType.rowTitle.uiFont,
+                    color: SabqTheme.textPrimary,
                     lineLimit: dynamicTypeSize.isAccessibilitySize ? 0 : 2,
-                    lineSpacing: NewsRowStyle.titleLineSpacing
+                    lineSpacing: SabqType.rowTitle.lineSpacing,
+                    textStyle: SabqType.rowTitle.uiTextStyle
                 )
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -308,14 +316,14 @@ struct OpinionWriterRow: View {
 
     private var nameText: Text {
         Text(opinion.authorName)
-            .font(SabqFonts.app(size: 13, weight: .semibold))
-            .foregroundStyle(SabqTheme.brandBlue)
+            .font(SabqType.metaEmphasis.font)
+            .foregroundStyle(SabqTheme.primary)
     }
 
     private var timeText: Text {
         Text(" · \(opinion.relativeDate)")
-            .font(SabqFonts.app(size: 12, weight: .regular))
-            .foregroundStyle(SabqTheme.tertiaryInk)
+            .font(SabqType.meta.font)
+            .foregroundStyle(SabqTheme.textTertiary)
     }
 }
 
@@ -323,7 +331,7 @@ struct OpinionWriterRow: View {
 struct OpinionRowDivider: View {
     var body: some View {
         Rectangle()
-            .fill(SabqTheme.separator)
+            .fill(SabqTheme.skyOutline.opacity(0.65))
             .frame(height: 1)
     }
 }

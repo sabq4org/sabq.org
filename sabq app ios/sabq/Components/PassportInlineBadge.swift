@@ -22,7 +22,7 @@ struct PassportInlineBadge: View {
                 icon: "checkmark.shield.fill"
             )
         }
-        .frame(minWidth: SabqLayout.touchTarget, minHeight: SabqLayout.touchTarget)
+        .contentShape(Rectangle().inset(by: -10))
         .buttonStyle(.plain)
         .accessibilityLabel("جواز المحتوى — موثَّق")
         .sheet(isPresented: $isPresented) {

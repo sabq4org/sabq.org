@@ -110,7 +110,7 @@ private struct SabqRTLLabel: UIViewRepresentable {
            let descriptor = font.fontDescriptor.withSymbolicTraits(.traitBold) {
             base = UIFont(descriptor: descriptor, size: font.pointSize)
         }
-        return UIFontMetrics(forTextStyle: textStyle).scaledFont(for: base, compatibleWith: traits)
+        return UIFontMetrics(forTextStyle: .body).scaledFont(for: base, compatibleWith: traits)
     }
 
     /// القياس لا يلمس الملصق: SwiftUI يقيس بعروض متعددة، وكان تعديل النص أثناء

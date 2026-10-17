@@ -9,10 +9,11 @@ import UIKit
 // Info.plist `UIAppFonts` so the project layout stays purely
 // synchronized-folders friendly — no pbxproj edit required.
 enum SabqFonts {
-    /// PostScript names. Verified against the IBM Plex Sans Arabic
-    /// distribution shipped via @fontsource/ibm-plex-sans-arabic.
-    nonisolated static let regular  = "IBMPlexSansArabic-Regular"
-    nonisolated static let semibold = "IBMPlexSansArabic-SemiBold"
+    /// PostScript names matching the bundled TrueType files in
+    /// `Resources/Fonts/IBMPlexSansArabic-*.ttf` (same distribution as SabqSports).
+    nonisolated static let regular  = "IBMPlexSansArabic"
+    nonisolated static let medium   = "IBMPlexSansArabic-Medm"
+    nonisolated static let semibold = "IBMPlexSansArabic-SmBld"
     nonisolated static let bold     = "IBMPlexSansArabic-Bold"
 
     /// Editorial display font used for article titles, hero headings,
@@ -115,9 +116,10 @@ enum SabqFonts {
         didRegister = true
 
         let filenames = [
-            "IBMPlexSansArabic-Regular.woff2",
-            "IBMPlexSansArabic-SemiBold.woff2",
-            "IBMPlexSansArabic-Bold.woff2",
+            "IBMPlexSansArabic-Regular.ttf",
+            "IBMPlexSansArabic-Medium.ttf",
+            "IBMPlexSansArabic-SemiBold.ttf",
+            "IBMPlexSansArabic-Bold.ttf",
         ]
         for filename in filenames {
             registerFont(named: filename)

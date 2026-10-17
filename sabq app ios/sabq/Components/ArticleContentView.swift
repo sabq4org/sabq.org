@@ -177,7 +177,7 @@ struct ArticleContentView: View {
             baseSize: CGFloat(fontSize),
             baseWeight: .regular,
             useSerifReader: useReaderFont,
-            textColor: UIColor(SabqTheme.ink.opacity(0.92)),
+            textColor: UIColor(SabqTheme.textPrimary),
             lineSpacing: CGFloat(lineSpacing) + 3
         )
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -193,7 +193,7 @@ struct ArticleContentView: View {
                         .foregroundStyle(SabqTheme.primary)
                         .frame(minWidth: 18, alignment: .trailing)
                     renderText(runs: runs, baseSize: CGFloat(fontSize))
-                        .foregroundStyle(SabqTheme.ink.opacity(0.92))
+                        .foregroundStyle(SabqTheme.textPrimary)
                         .multilineTextAlignment(.leading)
                         .lineSpacing(CGFloat(lineSpacing) + 2)
                         .fixedSize(horizontal: false, vertical: true)
@@ -327,11 +327,10 @@ struct ArticleContentView: View {
             // Inline body image — the column is narrower than the hero,
             // so a 1600px decode is more than enough for retina and
             // halves the decode time + memory cost vs. the default 2400.
-            CachedAsyncImage(url: url, contentMode: .fill, maxPixelSize: 1600) {
+            CachedAsyncImage(url: url, contentMode: .fit, maxPixelSize: 1600) {
                 placeholder
             }
             .frame(maxWidth: .infinity)
-            .frame(minHeight: targetWidth == nil ? 200 : 200 * fraction)
             .clipShape(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
             .contentShape(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
             .onTapGesture {
