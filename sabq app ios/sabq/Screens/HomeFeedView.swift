@@ -542,6 +542,13 @@ struct HomeFeedView: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel("تبديل المظهر — الحالي: \((AppAppearance(rawValue: appearanceRaw) ?? .system).arabicLabel)")
 
+                // «مواعيدك» — رابط رئيسي في رأس الويب: الرواتب والدعم والإجازات.
+                NavigationLink(value: MawaeedRoute()) {
+                    headerIcon("calendar")
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("مواعيدك — الرواتب والدعم والإجازات")
+
                 // "لحظة بلحظة" entry point. The red pulsing dot was removed
                 // to avoid confusing it with the editorial-notifications
                 // unread indicator on the bell next to it — same colour

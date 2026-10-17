@@ -358,6 +358,10 @@ private struct SabqDestinations: ViewModifier {
                 MuqtarabWriterView(id: route.id, initialName: route.name)
                     .duoContentInsets()
             }
+            .navigationDestination(for: MawaeedRoute.self) { _ in
+                MawaeedView()
+                    .duoContentInsets()
+            }
             .navigationDestination(for: MomentByMomentRoute.self) { _ in
                 MomentByMomentView()
                     .duoContentInsets()
