@@ -29,16 +29,16 @@ struct LoyaltyStripView: View {
             HStack(spacing: SabqLayout.space12) {
                 Image(systemName: "trophy.fill")
                     .font(SabqFonts.app(size: 15, weight: .semibold))
-                    .foregroundStyle(SabqTheme.primary)
+                    .foregroundStyle(progress.current.color)
                     .frame(width: 32, height: 32)
-                    .background(SabqTheme.surfaceMuted, in: RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous))
+                    .background(progress.current.color.opacity(0.14), in: RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous))
                     .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: SabqLayout.space4) {
                     HStack(spacing: SabqLayout.space8) {
                         Text(progress.current.nameAr)
                             .font(SabqType.button.font)
-                            .foregroundStyle(SabqTheme.textPrimary)
+                            .foregroundStyle(progress.current.color)
                         if summary.weekPoints > 0 {
                             HStack(spacing: 2) {
                                 Text("+\(summary.weekPoints)")
@@ -65,7 +65,7 @@ struct LoyaltyStripView: View {
                                     .fill(SabqTheme.surfaceStrong)
                                     .frame(height: 4)
                                 Capsule()
-                                    .fill(SabqTheme.primary)
+                                    .fill(progress.current.color)
                                     .frame(width: geo.size.width * progress.fraction, height: 4)
                             }
                         }

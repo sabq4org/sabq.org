@@ -151,8 +151,37 @@ struct LoyaltyCardView: View {
         }
         .padding(SabqLayout.space16)
         .frame(maxWidth: .infinity, alignment: .topLeading)
-        .background(SabqTheme.actionFill)
-        .clipShape(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
+        .background {
+            ZStack {
+                tier.gradient
+
+                // Diagonal pattern overlay (subtle membership-card texture)
+                Canvas { ctx, size in
+                    ctx.opacity = 0.06
+                    var path = Path()
+                    let spacing: CGFloat = 18
+                    var x: CGFloat = -size.height
+                    while x < size.width + size.height {
+                        path.move(to: CGPoint(x: x, y: 0))
+                        path.addLine(to: CGPoint(x: x + size.height, y: size.height))
+                        x += spacing
+                    }
+                    ctx.stroke(path, with: .color(.white), lineWidth: 1)
+                }
+
+                // Soft radial highlight in the top-leading corner
+                GeometryReader { geo in
+                    RadialGradient(
+                        colors: [Color.white.opacity(0.18), .clear],
+                        center: .topLeading,
+                        startRadius: 10,
+                        endRadius: geo.size.width * 0.7
+                    )
+                }
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .shadow(color: tier.color.opacity(0.28), radius: 14, x: 0, y: 6)
         .sabqRTL()
     }
 }
