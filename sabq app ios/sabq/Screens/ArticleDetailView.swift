@@ -180,7 +180,9 @@ struct ArticleDetailView: View {
                     heroImage
                         .contentShape(Rectangle())
                         .onTapGesture {
-                            guard displayArticle.imageURL?.isEmpty == false else { return }
+                            // الفيديو يتولى نقرته بنفسه (تشغيل) — لا معرض صور فوقه
+                            guard displayArticle.videoURL == nil,
+                                  displayArticle.imageURL?.isEmpty == false else { return }
                             SabqHaptics.light()
                             isHeroLightboxPresented = true
                         }
@@ -667,7 +669,14 @@ struct ArticleDetailView: View {
     // detail view we show the editor's photo whole as-is.
     private var heroImage: some View {
         Group {
-            if let urlString = displayArticle.imageURL, let url = URL(string: urlString) {
+            if let video = displayArticle.videoURL {
+                // قالب الفيديو: الفيديو مكان الصورة كما في الويب
+                ArticleVideoHero(
+                    videoURL: video,
+                    thumbnailURL: displayArticle.videoThumbnailURL,
+                    fallbackImageURL: displayArticle.imageURL
+                )
+            } else if let urlString = displayArticle.imageURL, let url = URL(string: urlString) {
                 CachedAsyncImage(url: url, contentMode: .fit) {
                     heroPlaceholder
                 }

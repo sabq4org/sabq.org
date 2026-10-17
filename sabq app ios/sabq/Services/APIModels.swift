@@ -136,6 +136,11 @@ nonisolated struct APIArticle: Decodable {
     /// `excerpt` when it isn't set.
     let aiSummary: String?
     let subtitle: String?
+    /// قالب الفيديو (`isVideoTemplate` + `videoUrl` في حمولة الويب): الفيديو
+    /// مكان الصورة البارزة. حمولة v1 لا تحمله، فيُكمَّل من /api/articles/:slug.
+    var isVideoTemplate: Bool = false
+    var videoUrl: String?
+    var videoThumbnailUrl: String?
     let slug: String?
     let englishSlug: String?
     let categoryName: String?
@@ -205,6 +210,12 @@ nonisolated struct APIArticle: Decodable {
         aiSummary = (try? c.decode(String.self, forKey: FlexKey("aiSummary")))
             ?? (try? c.decode(String.self, forKey: FlexKey("ai_summary")))
         subtitle = try? c.decode(String.self, forKey: FlexKey("subtitle"))
+        isVideoTemplate = (try? c.decode(Bool.self, forKey: FlexKey("isVideoTemplate")))
+            ?? (try? c.decode(Bool.self, forKey: FlexKey("is_video_template"))) ?? false
+        videoUrl = (try? c.decode(String.self, forKey: FlexKey("videoUrl")))
+            ?? (try? c.decode(String.self, forKey: FlexKey("video_url")))
+        videoThumbnailUrl = (try? c.decode(String.self, forKey: FlexKey("videoThumbnailUrl")))
+            ?? (try? c.decode(String.self, forKey: FlexKey("video_thumbnail_url")))
         slug = try? c.decode(String.self, forKey: FlexKey("slug"))
         englishSlug = (try? c.decode(String.self, forKey: FlexKey("englishSlug")))
             ?? (try? c.decode(String.self, forKey: FlexKey("english_slug")))

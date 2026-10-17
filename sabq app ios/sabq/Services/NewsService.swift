@@ -143,13 +143,20 @@ enum NewsService {
     }
 
     static func fetchArticleDetail(slug: String) async -> (article: Article, related: [Article])? {
+        // حمولة الويب بالتوازي مع v1 (لا زمن إضافي): منها الكلمات المفتاحية حين
+        // تخلو منها v1، وقالب الفيديو الذي لا تحمله v1 أصلًا.
+        async let publicArticle = APIClient.shared.fetchPublicArticle(slug: slug)
         guard let api = try? await APIClient.shared.fetchArticle(slug: slug) else { return nil }
         guard !api.isOpinionContent else { return nil }
         var main = Article.from(api)
-        if main.tags.isEmpty {
-            let seoKeywords = await APIClient.shared.fetchSEOKeywords(slug: slug)
-            if !seoKeywords.isEmpty {
-                main.tags = seoKeywords
+        if let web = await publicArticle {
+            if main.tags.isEmpty {
+                let seoKeywords = (web.keywords ?? []).filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+                if !seoKeywords.isEmpty { main.tags = seoKeywords }
+            }
+            if main.videoURL == nil, let video = Article.videoURL(from: web) {
+                main.videoURL = video
+                main.videoThumbnailURL = web.videoThumbnailUrl.flatMap { $0.isEmpty ? nil : $0 }
             }
         }
         let related = nonOpinionArticles(from: api.relatedArticles ?? []).filter { $0.id != main.id }

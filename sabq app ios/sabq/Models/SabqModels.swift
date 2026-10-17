@@ -509,6 +509,10 @@ struct Article: Identifiable, Equatable, Hashable {
     var subtitle: String? = nil
     /// سطور التحديث والتصحيح المنشورة أسفل النص.
     var updateLines: [APIUpdateLine]? = nil
+    /// قالب الفيديو: رابط الفيديو (X/يوتيوب/مباشر) يحل محل الصورة البارزة،
+    /// وصورته المصغرة إن رفعها المحرر. nil = خبر عادي بصورة.
+    var videoURL: String? = nil
+    var videoThumbnailURL: String? = nil
 
     /// اسم القسم المعروض للقارئ: القسم الثابت إن طابق، وإلا اسم الخادم، وإلا «أخبار».
     var categoryTitle: String { categoryLabel ?? category.title }
@@ -660,8 +664,18 @@ struct Article: Identifiable, Equatable, Hashable {
             mediaAssets: api.mediaAssets,
             whatsappCta: api.whatsappCta,
             subtitle: api.subtitle.flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0 },
-            updateLines: api.updateLines
+            updateLines: api.updateLines,
+            videoURL: Self.videoURL(from: api),
+            videoThumbnailURL: api.videoThumbnailUrl.flatMap { $0.isEmpty ? nil : $0 }
         )
+    }
+
+    /// مثل الويب (ArticleDetail.tsx): الفيديو يظهر فقط حين يجتمع القالب والرابط.
+    nonisolated static func videoURL(from api: APIArticle) -> String? {
+        guard api.isVideoTemplate,
+              let raw = api.videoUrl?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty
+        else { return nil }
+        return raw
     }
 
     nonisolated fileprivate static func parsePublishedAt(_ string: String) -> Date {

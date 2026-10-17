@@ -710,10 +710,14 @@ actor APIClient {
     }
 
     func fetchSEOKeywords(slug: String) async -> [String] {
-        guard let article = try? await get(WrappedObject<APIArticle>.self, path: "/articles/\(slug)", apiRoot: publicAPIBaseURL).item else {
-            return []
-        }
+        guard let article = await fetchPublicArticle(slug: slug) else { return [] }
         return (article.keywords ?? []).filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+    }
+
+    /// حمولة الويب للخبر (/api/articles/:slug) — تحمل ما تُسقطه حمولة v1
+    /// (الكلمات المفتاحية من SEO، وقالب الفيديو). أفضل جهد: nil عند أي فشل.
+    func fetchPublicArticle(slug: String) async -> APIArticle? {
+        try? await get(WrappedObject<APIArticle>.self, path: "/articles/\(slug)", apiRoot: publicAPIBaseURL).item
     }
 
     func fetchArticlesByKeyword(_ keyword: String) async throws -> [APIArticle] {
