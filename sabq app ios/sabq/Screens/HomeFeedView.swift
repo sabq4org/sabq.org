@@ -175,6 +175,10 @@ struct HomeFeedView: View {
 
                     featuredSection
 
+                    // مدخل الرياضة تحت الهيرو كما في الويب (SportsPortalStrip): أهم مباراة الآن أو اليوم.
+                    SportsPortalStrip()
+                        .padding(.horizontal, -SabqLayout.pageMargin)
+
                     SabqSectionBand()
 
                     // الاقتصاد الحي: «أين أنفق السعوديون…» أو «السعوديون في شهر بالأرقام»
@@ -559,19 +563,16 @@ struct HomeFeedView: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel("لحظة بلحظة — التغطية المباشرة")
 
-                // Editorial notifications bell — fast access to the user's
-                // own notifications (article scheduled/published/rejected/
-                // needs_revision/archived). Red dot when unread > 0. Visible
-                // only when signed in; readers without editorial roles still
-                // see it but its history is naturally empty.
+                // جرس الإشعارات — صندوق القارئ (/v1/inbox)، وفي أعلاه للكتّاب
+                // صفّ «إشعاراتي التحريرية». النقطة الحمراء = غير المقروء في الاثنين.
                 if authStore.isLoggedIn {
-                    NavigationLink(value: EditorialNotificationsRoute()) {
+                    NavigationLink(value: ReaderInboxRoute()) {
                         headerIcon("bell")
                             .overlay(alignment: .topTrailing) {
                                 // Red unread dot — driven by NotificationsStore's
                                 // `unreadCount` which the EditorialNotificationsView
                                 // updates on every fetch.
-                                if notificationsStore.unreadCount > 0 {
+                                if notificationsStore.totalUnread > 0 {
                                     Circle()
                                         .fill(SabqTheme.breaking)
                                         .frame(width: 10, height: 10)
@@ -584,7 +585,7 @@ struct HomeFeedView: View {
                             }
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel(notificationsStore.unreadCount > 0
+                    .accessibilityLabel(notificationsStore.totalUnread > 0
                         ? "الإشعارات — لديك إشعارات غير مقروءة"
                         : "الإشعارات")
                 }
@@ -1175,7 +1176,7 @@ struct HomeFeedView: View {
         let isCurrent = audioPlayer.currentKey == key
         let isPlaying = audioPlayer.isPlaying(key: key)
         let elapsed = isCurrent ? audioPlayer.currentTime : 0
-        let total = max(1, Double(bulletin.durationSec))
+        let total = max(1, bulletin.durationSec)
         let duration = (isCurrent && audioPlayer.currentDuration > 0) ? audioPlayer.currentDuration : total
         let progress = min(1.0, max(0.0, elapsed / duration))
         let activeSubtitle: String = {
@@ -1184,7 +1185,7 @@ struct HomeFeedView: View {
             }
             return bulletin.title
         }()
-        let minutes = max(1, Int(round(Double(bulletin.durationSec) / 60.0)))
+        let minutes = max(1, Int((bulletin.durationSec / 60.0).rounded()))
         let durationLabel: String = {
             if isPlaying || elapsed > 0 {
                 return "\(formatBulletinClock(elapsed)) / \(formatBulletinClock(duration))"
@@ -1243,19 +1244,12 @@ struct HomeFeedView: View {
                 }
 
                 if isCurrent {
-                    GeometryReader { geo in
-                        ZStack(alignment: .leading) {
-                            Capsule(style: .continuous)
-                                .fill(SabqTheme.primary.opacity(0.18))
-                                .frame(height: 3)
-                            Capsule(style: .continuous)
-                                .fill(SabqTheme.primary)
-                                .frame(width: max(4, geo.size.width * progress), height: 3)
-                        }
-                    }
-                    .frame(height: 3)
+                    // ترددات تتحرك أثناء الاستماع وتسكن عند الإيقاف، وتبيّن التقدم
+                    BulletinWaveform(progress: progress, isPlaying: isPlaying)
+                        .transition(.opacity)
                 }
             }
+            .animation(.easeOut(duration: 0.25), value: isCurrent)
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
             .sabqSkyCardSurface()

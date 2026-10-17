@@ -305,9 +305,9 @@ struct AcTeamSheet: View {
                         ProgressView().controlSize(.small)
                             .tint(isFollowing ? SabqTheme.onAction : AcStyle.accent)
                     } else {
-                        Image(systemName: isFollowing ? "bell.fill" : "bell")
+                        Image(systemName: isFollowing ? "star.fill" : "star")
                     }
-                    Text(isFollowing ? "تتابع التنبيهات" : "تابع التنبيهات")
+                    Text(isFollowing ? "تتابع المنتخب" : "تابع المنتخب")
                         .font(SabqType.button.font)
                 }
                 .foregroundStyle(isFollowing ? SabqTheme.onAction : AcStyle.accent)
@@ -330,7 +330,7 @@ struct AcTeamSheet: View {
                 Button { showAlertPrefs = true } label: {
                     HStack(spacing: SabqLayout.space8) {
                         Image(systemName: "slider.horizontal.3")
-                        Text("نوع التنبيهات")
+                        Text("التنبيهات في فارا")
                             .font(SabqType.button.font)
                     }
                     .foregroundStyle(AcStyle.accent)

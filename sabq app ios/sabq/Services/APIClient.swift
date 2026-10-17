@@ -454,6 +454,56 @@ actor APIClient {
         return try await deleteRequest(APICommentLikeResult.self, path: "/comments/\(id)/like")
     }
 
+    // MARK: - Reader inbox (صندوق الإشعارات)
+
+    func fetchInbox(offset: Int = 0, limit: Int = 30) async throws -> APIInboxPage {
+        try await get(APIInboxPage.self, path: "/inbox", query: ["limit": String(limit), "offset": String(offset)])
+    }
+
+    func fetchInboxUnreadCount() async throws -> Int {
+        struct Count: Decodable { let unread: Int }
+        return try await get(Count.self, path: "/inbox/unread-count").unread
+    }
+
+    func markInboxRead(id: String) async throws {
+        try await postRaw(path: "/inbox/\(id)/read")
+    }
+
+    func markInboxAllRead() async throws {
+        try await postRaw(path: "/inbox/read-all")
+    }
+
+    func deleteInboxItem(id: String) async throws {
+        _ = try await deleteRequest(APIKeywordFollowResult.self, path: "/inbox/\(id)")
+    }
+
+    func fetchReaderNotificationPrefs() async throws -> APIReaderNotificationPrefs {
+        try await get(APIReaderNotificationPrefs.self, path: "/inbox/preferences")
+    }
+
+    func updateReaderNotificationPrefs(_ prefs: APIReaderNotificationPrefs) async throws -> APIReaderNotificationPrefs {
+        try await patch(APIReaderNotificationPrefs.self, path: "/inbox/preferences", body: prefs)
+    }
+
+    // MARK: - Followed keywords (كلماتي)
+
+    func fetchFollowedKeywords() async throws -> [APIFollowedKeyword] {
+        try await get(APIFollowedKeywords.self, path: "/keywords/followed").keywords
+    }
+
+    /// يدمج ما تابعه القارئ على الجهاز في حسابه ويرجّع القائمة كاملة.
+    func syncFollowedKeywords(_ local: [String]) async throws -> [APIFollowedKeyword] {
+        try await post(APIFollowedKeywords.self, path: "/keywords/sync", body: ["keywords": local]).keywords
+    }
+
+    func setKeywordFollow(_ keyword: String, followed: Bool) async throws {
+        _ = try await post(
+            APIKeywordFollowResult.self,
+            path: followed ? "/keywords/follow" : "/keywords/unfollow",
+            body: ["keyword": keyword]
+        )
+    }
+
     // ملاحظة: /articles/:slug/summary-audio يعيد بايتات MP3 خامًا لا JSON —
     // fetchAudioSummary القديمة كانت تفشل فكًّا دائمًا وتشغّل توليدًا صوتيًا
     // عبثًا مع كل فتح مقال، فحُذفت. التشغيل يتم بتمرير الرابط لـ AVPlayer مباشرة.
@@ -660,10 +710,14 @@ actor APIClient {
     }
 
     func fetchSEOKeywords(slug: String) async -> [String] {
-        guard let article = try? await get(WrappedObject<APIArticle>.self, path: "/articles/\(slug)", apiRoot: publicAPIBaseURL).item else {
-            return []
-        }
+        guard let article = await fetchPublicArticle(slug: slug) else { return [] }
         return (article.keywords ?? []).filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+    }
+
+    /// حمولة الويب للخبر (/api/articles/:slug) — تحمل ما تُسقطه حمولة v1
+    /// (الكلمات المفتاحية من SEO، وقالب الفيديو). أفضل جهد: nil عند أي فشل.
+    func fetchPublicArticle(slug: String) async -> APIArticle? {
+        try? await get(WrappedObject<APIArticle>.self, path: "/articles/\(slug)", apiRoot: publicAPIBaseURL).item
     }
 
     func fetchArticlesByKeyword(_ keyword: String) async throws -> [APIArticle] {

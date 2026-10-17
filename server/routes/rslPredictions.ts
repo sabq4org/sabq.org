@@ -32,6 +32,18 @@ const router = Router();
 
 const NOT_CONFIGURED = { configured: false, message: "تغطية دوري روشن غير مفعّلة حاليًا" };
 
+// مباريات بلا موعد لعب فعلي (مؤجلة/ملغاة/موقوفة/محسومة إداريًا): ليست «قادمة»
+// وإن لم تنتهِ — بقاؤها في upcoming كان يثبّت بانر الرئيسية على مباراة مؤجلة
+// موعدها مضى، فيظهر «تنطلق بعد 00:00:00» بعد انتهاء الجولة (2026-10-17).
+const UNPLAYABLE_STATUS = new Set(["PST", "CANC", "ABD", "SUSP", "AWD", "WO"]);
+// مهلة تأخّر المزوّد في قلب الحالة إلى «مباشر» بعد موعد الانطلاق.
+const KICKOFF_GRACE_SEC = 3 * 60 * 60;
+
+function isUpcomingFixture(f: { timestamp: number; status: { code: string; live: boolean; finished: boolean } }): boolean {
+  if (f.status.live || f.status.finished || UNPLAYABLE_STATUS.has(f.status.code)) return false;
+  return f.timestamp > Date.now() / 1000 - KICKOFF_GRACE_SEC;
+}
+
 function guard(res: any): boolean {
   if (!isSaudiLeagueConfigured()) {
     res.status(503).json(NOT_CONFIGURED);
@@ -98,10 +110,8 @@ router.get("/api/rsl/hero", async (_req, res) => {
 
     const todayKey = new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString().slice(0, 10);
     const today = fixtures.filter((f) => (f.date ?? "").slice(0, 10) === todayKey);
-    const upcoming = fixtures
-      .filter((f) => !f.status.live && !f.status.finished)
-      .sort((a, b) => a.timestamp - b.timestamp);
-    const nextMatch = live[0] ?? today.find((f) => !f.status.finished) ?? upcoming[0] ?? null;
+    const upcoming = fixtures.filter(isUpcomingFixture).sort((a, b) => a.timestamp - b.timestamp);
+    const nextMatch = live[0] ?? today.find(isUpcomingFixture) ?? upcoming[0] ?? null;
 
     // «يوم الجولة» — نفس شكل كأس الملك (جولة الدوري تمتد أيامًا فالملخّص يُحسب ليوم المرساة).
     const anchorFx = nextMatch;
@@ -109,7 +119,7 @@ router.get("/api/rsl/hero", async (_req, res) => {
     const dayMatches = dayKey
       ? fixtures.filter((f) => String(f.date ?? "").slice(0, 10) === dayKey)
       : [];
-    const dayUpcoming = dayMatches.filter((f) => !f.status.live && !f.status.finished);
+    const dayUpcoming = dayMatches.filter(isUpcomingFixture);
     const matchday =
       anchorFx && dayMatches.length > 0
         ? {

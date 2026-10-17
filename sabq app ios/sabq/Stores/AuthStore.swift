@@ -512,6 +512,7 @@ final class AuthStore {
             needsProfileCompletion = false
             SabqAnalytics.setUserId(nil)
             NotificationsStore.shared.unreadCount = 0
+            NotificationsStore.shared.readerUnread = 0
             successMessage = "تم حذف الحساب بنجاح"
         } catch {
             if password == nil, case APIError.serverError(400) = error {
@@ -576,6 +577,7 @@ final class AuthStore {
         needsProfileCompletion = false
         SabqAnalytics.setUserId(nil)
         NotificationsStore.shared.unreadCount = 0
+        NotificationsStore.shared.readerUnread = 0
         successMessage = nil
         errorMessage = nil
     }

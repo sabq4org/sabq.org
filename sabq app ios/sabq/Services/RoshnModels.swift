@@ -49,6 +49,17 @@ nonisolated struct RsFixture: Decodable, Identifiable, Hashable {
 
     var started: Bool { status.live || status.finished }
     var kickoff: Date? { SabqFormatters.parseISO8601(date) }
+
+    /// مؤجلة/ملغاة/موقوفة/محسومة إداريًا — لا موعد لعب فعلي لها.
+    var unplayable: Bool { ["PST", "CANC", "ABD", "SUSP", "AWD", "WO"].contains(status.code) }
+
+    /// قادمة فعلًا: لم تبدأ، وليست مؤجلة، ولم يمضِ على موعدها أكثر من ثلاث
+    /// ساعات (مهلة تأخّر المزوّد في قلبها إلى «مباشر»). مرآة isUpcomingFixture
+    /// في server/routes/rslPredictions.ts.
+    func isUpcoming(now: Date = Date()) -> Bool {
+        if started || unplayable { return false }
+        return TimeInterval(timestamp) > now.timeIntervalSince1970 - 3 * 3_600
+    }
 }
 
 // MARK: حالة الموسم (hero → outlook)
@@ -328,6 +339,50 @@ nonisolated struct RsMatchDetail: Decodable, Hashable {
     let leagueId: Int?
 }
 
+// MARK: التوقعات والمواجهات (تبويبا مركز المباراة — مطابقة SportsHub.tsx)
+
+nonisolated struct RsPrediction: Decodable, Hashable {
+    let homePct: Int
+    let drawPct: Int
+    let awayPct: Int
+    let winnerName: String?
+
+    private enum CodingKeys: String, CodingKey { case homePct, drawPct, awayPct, winnerName }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        homePct = (try? c.decode(Int.self, forKey: .homePct)) ?? 0
+        drawPct = (try? c.decode(Int.self, forKey: .drawPct)) ?? 0
+        awayPct = (try? c.decode(Int.self, forKey: .awayPct)) ?? 0
+        winnerName = try? c.decode(String.self, forKey: .winnerName)
+    }
+
+    var isAvailable: Bool { homePct + drawPct + awayPct > 0 }
+}
+
+nonisolated struct RsHeadToHead: Decodable, Hashable {
+    struct Summary: Decodable, Hashable { let total: Int; let homeWins: Int; let draws: Int; let awayWins: Int }
+    struct Side: Decodable, Hashable { let id: Int; let name: String; let logo: String? }
+    struct Goals: Decodable, Hashable { let home: Int?; let away: Int? }
+    struct Meeting: Decodable, Hashable, Identifiable {
+        let id: Int
+        let date: String
+        let competition: String?
+        let home: Side
+        let away: Side
+        let goals: Goals?
+    }
+
+    let summary: Summary?
+    let meetings: [Meeting]
+
+    private enum CodingKeys: String, CodingKey { case summary, meetings }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        summary = try? c.decode(Summary.self, forKey: .summary)
+        meetings = (try? c.decode([Meeting].self, forKey: .meetings)) ?? []
+    }
+}
+
 // MARK: تقييمات اللاعبين (/api/sports/match/:id/players)
 
 nonisolated struct RsRatedPlayer: Decodable, Identifiable, Hashable {
@@ -555,6 +610,16 @@ extension APIClient {
     func fetchRoshnMatchRatings(fixtureId: Int, ignoreCache: Bool = false) async throws -> RsMatchRatings {
         try await roshnGet(RsMatchRatings.self, path: "/sports/match/\(fixtureId)/players",
                            ignoreCache: ignoreCache)
+    }
+
+    /// نسب الفوز/التعادل قبل المباراة (`/api/sports/match/:id/prediction`، API-Football).
+    func fetchRoshnPrediction(fixtureId: Int) async throws -> RsPrediction {
+        try await roshnGet(RsPrediction.self, path: "/sports/match/\(fixtureId)/prediction")
+    }
+
+    /// سجل المواجهات بين الفريقين (`/api/sports/h2h?home=&away=`). `summary.homeWins` للفريق `home`.
+    func fetchRoshnHeadToHead(home: Int, away: Int) async throws -> RsHeadToHead {
+        try await roshnGet(RsHeadToHead.self, path: "/sports/h2h", query: ["home": String(home), "away": String(away)])
     }
 
     func fetchRoshnTeamProfile(teamId: Int, ignoreCache: Bool = false) async throws -> RsTeamProfile {

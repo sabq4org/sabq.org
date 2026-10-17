@@ -180,7 +180,9 @@ struct ArticleDetailView: View {
                     heroImage
                         .contentShape(Rectangle())
                         .onTapGesture {
-                            guard displayArticle.imageURL?.isEmpty == false else { return }
+                            // الفيديو يتولى نقرته بنفسه (تشغيل) — لا معرض صور فوقه
+                            guard displayArticle.videoURL == nil,
+                                  displayArticle.imageURL?.isEmpty == false else { return }
                             SabqHaptics.light()
                             isHeroLightboxPresented = true
                         }
@@ -667,7 +669,14 @@ struct ArticleDetailView: View {
     // detail view we show the editor's photo whole as-is.
     private var heroImage: some View {
         Group {
-            if let urlString = displayArticle.imageURL, let url = URL(string: urlString) {
+            if let video = displayArticle.videoURL {
+                // قالب الفيديو: الفيديو مكان الصورة كما في الويب
+                ArticleVideoHero(
+                    videoURL: video,
+                    thumbnailURL: displayArticle.videoThumbnailURL,
+                    fallbackImageURL: displayArticle.imageURL
+                )
+            } else if let urlString = displayArticle.imageURL, let url = URL(string: urlString) {
                 CachedAsyncImage(url: url, contentMode: .fit) {
                     heroPlaceholder
                 }
@@ -1056,13 +1065,15 @@ struct ArticleDetailView: View {
 
     /// العنوان الفرعي (`article-detail-subtitle` في الويب): أصغر من العنوان وبلون ثانوي.
     private func articleSubtitle(_ text: String) -> some View {
+        // وزن عادي وحجم أصغر من العنوان (17 عند حجم الخط الافتراضي) حتى لا ينافسه،
+        // ويتبع إعداد «حجم الخط» في صفحة الخبر.
         SabqRTLText(
             text,
-            uiFont: SabqType.leadTitle.uiFont(adding: CGFloat(fontSize) - SabqType.articleBody.size - 3),
+            uiFont: SabqType.articleBody.uiFont(adding: CGFloat(fontSize) - SabqType.articleBody.size - 1),
             color: SabqTheme.textSecondary,
             lineLimit: 0,
-            lineSpacing: 2,
-            textStyle: SabqType.leadTitle.uiTextStyle
+            lineSpacing: 3,
+            textStyle: .subheadline
         )
     }
 

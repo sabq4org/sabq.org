@@ -136,6 +136,11 @@ nonisolated struct APIArticle: Decodable {
     /// `excerpt` when it isn't set.
     let aiSummary: String?
     let subtitle: String?
+    /// قالب الفيديو (`isVideoTemplate` + `videoUrl` في حمولة الويب): الفيديو
+    /// مكان الصورة البارزة. حمولة v1 لا تحمله، فيُكمَّل من /api/articles/:slug.
+    var isVideoTemplate: Bool = false
+    var videoUrl: String?
+    var videoThumbnailUrl: String?
     let slug: String?
     let englishSlug: String?
     let categoryName: String?
@@ -205,6 +210,12 @@ nonisolated struct APIArticle: Decodable {
         aiSummary = (try? c.decode(String.self, forKey: FlexKey("aiSummary")))
             ?? (try? c.decode(String.self, forKey: FlexKey("ai_summary")))
         subtitle = try? c.decode(String.self, forKey: FlexKey("subtitle"))
+        isVideoTemplate = (try? c.decode(Bool.self, forKey: FlexKey("isVideoTemplate")))
+            ?? (try? c.decode(Bool.self, forKey: FlexKey("is_video_template"))) ?? false
+        videoUrl = (try? c.decode(String.self, forKey: FlexKey("videoUrl")))
+            ?? (try? c.decode(String.self, forKey: FlexKey("video_url")))
+        videoThumbnailUrl = (try? c.decode(String.self, forKey: FlexKey("videoThumbnailUrl")))
+            ?? (try? c.decode(String.self, forKey: FlexKey("video_thumbnail_url")))
         slug = try? c.decode(String.self, forKey: FlexKey("slug"))
         englishSlug = (try? c.decode(String.self, forKey: FlexKey("englishSlug")))
             ?? (try? c.decode(String.self, forKey: FlexKey("english_slug")))
@@ -638,6 +649,55 @@ nonisolated struct APIStory: Decodable, Identifiable {
 }
 
 // MARK: - Comment
+
+/// إشعار شخصي في صندوق القارئ (/v1/inbox) — نفس مركز الإشعارات في الويب.
+nonisolated struct APIInboxItem: Decodable, Identifiable, Hashable {
+    let id: String
+    let type: String
+    let title: String
+    let body: String
+    let deeplink: String?
+    var read: Bool
+    let imageUrl: String?
+    let createdAt: String
+}
+
+nonisolated struct APIInboxPage: Decodable {
+    let items: [APIInboxItem]
+    let unread: Int
+    let hasMore: Bool
+}
+
+/// ما يقرؤه خادم الإرسال فعلًا من تفضيلات القارئ (/v1/inbox/preferences).
+nonisolated struct APIReaderNotificationPrefs: Codable, Equatable {
+    var dailyDigest: Bool
+    var becauseYouLiked: Bool
+    var similarToSaved: Bool
+    var withinReads: Bool
+    var trendingForYou: Bool
+    var quietHoursStart: String
+    var quietHoursEnd: String
+
+    static let defaults = APIReaderNotificationPrefs(
+        dailyDigest: false, becauseYouLiked: true, similarToSaved: true,
+        withinReads: true, trendingForYou: true, quietHoursStart: "22:00", quietHoursEnd: "08:00"
+    )
+}
+
+/// كلمة يتابعها القارئ في حسابه (/v1/keywords/followed) — نفس قائمة «كلماتي» في الويب.
+nonisolated struct APIFollowedKeyword: Decodable, Hashable {
+    let tagId: String
+    let name: String
+    let articleCount: Int
+}
+
+nonisolated struct APIFollowedKeywords: Decodable {
+    let keywords: [APIFollowedKeyword]
+}
+
+nonisolated struct APIKeywordFollowResult: Decodable {
+    let success: Bool
+}
 
 nonisolated struct APICommentLikeResult: Decodable {
     let likesCount: Int

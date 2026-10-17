@@ -86,6 +86,7 @@ struct ContentView: View {
                 Task { await notificationsStore.refreshUnreadCount() }
                 Task { await revisionsStore.refresh() }
                 bookmarksStore.syncFromServer()
+                followedKeywords.syncFromServer()
             }
         }
         .onChange(of: authStore.isLoggedIn) { _, loggedIn in
@@ -94,7 +95,11 @@ struct ContentView: View {
             // writer's queue.
             if loggedIn {
                 Task { await revisionsStore.refresh() }
+                // الدخول يكتمل غالبًا بعد تحميل الرئيسية ونداء .active، فلا
+                // يُطلب عدّاد الجرس قبله وتبقى النقطة مطفأة حتى السحب للتحديث.
+                Task { await notificationsStore.refreshUnreadCount() }
                 bookmarksStore.syncFromServer()
+                followedKeywords.syncFromServer()
             } else {
                 navigation.reset()
                 revisionsStore.clear()
@@ -103,6 +108,7 @@ struct ContentView: View {
                 // تعود بالمزامنة عند الدخول القادم.
                 bookmarksStore.clear()
                 likesStore.clear()
+                followedKeywords.clear()
                 UserDefaults.standard.removeObject(forKey: "sabq_recent_searches")
             }
         }
