@@ -496,10 +496,10 @@ struct WCTeamSheet: View {
                         ProgressView().controlSize(.small)
                             .tint(isFollowing ? .white : WCTheme.emeraldDeep)
                     } else {
-                        Image(systemName: isFollowing ? "bell.fill" : "bell")
+                        Image(systemName: isFollowing ? "star.fill" : "star")
                             .font(SabqFonts.app(size: 15, weight: .semibold))
                     }
-                    Text(isFollowing ? "تتابع التنبيهات" : "تابع التنبيهات")
+                    Text(isFollowing ? "تتابع المنتخب" : "تابع المنتخب")
                         .sabqText(SabqType.button)
                 }
                 // متابِع: تعبئة الهوية ونص أبيض؛ غير متابِع: حدّ outline بنص الهوية
@@ -523,7 +523,7 @@ struct WCTeamSheet: View {
                     HStack(spacing: SabqLayout.space8) {
                         Image(systemName: "slider.horizontal.3")
                             .font(SabqFonts.app(size: 13))
-                        Text("نوع التنبيهات")
+                        Text("التنبيهات في فارا")
                             .sabqText(SabqType.button)
                     }
                     .foregroundStyle(WCTheme.emeraldDeep)

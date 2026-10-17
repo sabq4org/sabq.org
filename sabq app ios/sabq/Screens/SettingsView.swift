@@ -810,13 +810,13 @@ struct SettingsView: View {
 
     // MARK: - Display
 
-    /// اختصار لشاشة اختيار أنواع تنبيهات المباريات (هدف/كرت/فار…) للفِرق المتابَعة.
+    /// تنبيهات المباريات تصل من فارا وحده؛ الصف يوجّه إليه.
     private var matchAlertsSection: some View {
         SettingsSection {
             NavigationLink(destination: WCMatchEventNotificationsView()) {
                 settingsRow(
                     title: "تنبيهات المباريات",
-                    subtitle: "اختر أنواع الأحداث (هدف/كرت/فار) للفِرق التي تتابعها",
+                    subtitle: "تصلك من تطبيق فارا حتى لا تتكرر",
                     icon: "soccerball"
                 )
             }
