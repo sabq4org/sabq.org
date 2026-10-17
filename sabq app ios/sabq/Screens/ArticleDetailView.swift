@@ -201,27 +201,37 @@ struct ArticleDetailView: View {
                         // Focus mode collapses secondary surfaces to keep
                         // only the reading column.
 
-                        if !isFocusMode {
-                            labelsRow
-                                .animatedAppear(index: 0)
+                        // ترتيب النموذج المعتمد ومسافاته: الوسوم ← 12 ← العنوان ← 16 ←
+                        // الكاتب ← 16 ← فاصل ← 16 ← الموجز ← 24 ← النص.
+                        // سطر الوسوم بارتفاع هدف لمس 44 يزيد ~12 فوق النص وتحته.
+                        VStack(alignment: .leading, spacing: 0) {
+                            if !isFocusMode {
+                                labelsRow
+                                    .animatedAppear(index: 0)
+                            }
+
+                            articleTitle
+                                .animatedAppear(index: 1)
+                                .padding(.bottom, SabqLayout.space16)
+
+                            articleMeta
+                                .animatedAppear(index: 2)
+
+                            if showsContextButton {
+                                contextButton
+                                    .padding(.top, SabqLayout.space12)
+                            }
+
+                            SidebarRowDivider()
+                                .padding(.vertical, SabqLayout.space16)
+
+                            if !isFocusMode, !summaryMovedToContextColumn {
+                                smartSummaryCard
+                                    .animatedAppear(index: 3)
+                                    .padding(.bottom, SabqLayout.space8)
+                            }
                         }
 
-                        articleTitle
-                            .animatedAppear(index: 1)
-
-                        articleMeta
-                            .animatedAppear(index: 2)
-
-                        if showsContextButton {
-                            contextButton
-                        }
-
-                        if !isFocusMode, !summaryMovedToContextColumn {
-                            smartSummaryCard
-                                .animatedAppear(index: 3)
-                        }
-
-                        SidebarRowDivider()
                         articleBody
                             .analyticsReadingBody()
                         mediaAssetsGallery
@@ -266,7 +276,7 @@ struct ArticleDetailView: View {
                     }
                     .frame(width: max(0, min(proxy.size.width - (SabqLayout.pageMargin * 2), SabqLayout.readingWidth)), alignment: .leading)
                     .padding(.horizontal, SabqLayout.pageMargin)
-                    .padding(.top, SabqLayout.space16)
+                    .padding(.top, SabqLayout.space4)
                     .padding(.bottom, 40)
                     .frame(maxWidth: .infinity)
                 }
@@ -852,8 +862,6 @@ struct ArticleDetailView: View {
                             HStack(spacing: 4) {
                                 Text(isSummaryExpanded ? "إخفاء التفاصيل" : "قراءة الموجز كاملًا")
                                     .font(SabqType.metaEmphasis.font)
-                                Image(systemName: isSummaryExpanded ? "chevron.up" : "chevron.down")
-                                    .font(SabqType.tag.font)
                             }
                             .foregroundStyle(SabqTheme.primary)
                             .frame(minHeight: SabqLayout.touchTarget)
@@ -913,72 +921,63 @@ struct ArticleDetailView: View {
 
     // Two compact lines beside the avatar: author and role, then publication details.
     // Keep the full update timestamp available without adding another visual line.
+    /// سطر الكاتب كما في النموذج: الصورة، ثم الاسم وتحته التاريخ والوقت ومدة القراءة.
+    /// السطر كله رابط صفحة الكاتب فيكفي هدف اللمس دون حشو إضافي.
     private var articleMeta: some View {
         let layout = dynamicTypeSize.isAccessibilitySize
             ? AnyLayout(VStackLayout(alignment: .leading, spacing: SabqLayout.space8))
             : AnyLayout(HStackLayout(spacing: SabqLayout.space12))
-        return layout {
-            OpinionAuthorAvatar(
-                name: displayArticle.author,
-                imageURL: displayArticle.authorImageURL,
-                size: 40
-            )
-            .accessibilityHidden(true)
+        return NavigationLink(value: AuthorRoute(name: displayArticle.author)) {
+            layout {
+                OpinionAuthorAvatar(
+                    name: displayArticle.author,
+                    imageURL: displayArticle.authorImageURL,
+                    size: 40
+                )
+                .accessibilityHidden(true)
 
-            VStack(alignment: .leading, spacing: 3) {
-                let authorLayout = dynamicTypeSize.isAccessibilitySize
-                    ? AnyLayout(VStackLayout(alignment: .leading, spacing: SabqLayout.space4))
-                    : AnyLayout(HStackLayout(spacing: SabqLayout.space4))
-                authorLayout {
-                    NavigationLink(value: AuthorRoute(name: displayArticle.author)) {
-                        HStack(spacing: 3) {
-                            Text(displayArticle.author)
-                                .font(SabqType.label)
-                                .foregroundStyle(SabqTheme.textPrimary)
-                                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
-                            if displayArticle.isAuthorVerified {
-                                Image(systemName: "checkmark.seal.fill")
-                                    .font(.system(size: 10, weight: .semibold))
-                                    .foregroundStyle(SabqTheme.primaryEnd)
-                            }
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: SabqLayout.space4) {
+                        Text(displayArticle.author)
+                            .font(SabqType.label)
+                            .foregroundStyle(SabqTheme.textPrimary)
+                            .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+                        if displayArticle.isAuthorVerified {
+                            Image(systemName: "checkmark.seal.fill")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(SabqTheme.primary)
+                                .accessibilityHidden(true)
                         }
                     }
-                    .buttonStyle(.plain)
-                    .frame(minHeight: SabqLayout.touchTarget, alignment: .leading)
-                    .layoutPriority(1)
 
-                    if !dynamicTypeSize.isAccessibilitySize {
-                        Text("·").accessibilityHidden(true)
-                    }
-                    Text(reporterTitle ?? displayArticle.authorRole ?? "كاتب الخبر")
-                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
-                        .truncationMode(.tail)
-                }
-                .font(SabqType.meta.font)
-                .foregroundStyle(SabqTheme.textSecondary)
+                    publicationSummary
 
-                publicationSummary
-                    .accessibilityLabel(publicationAccessibilityLabel)
-
-                // «آخر تحديث» سطر ظاهر كما في الويب (#1598) لا خلف قائمة؛ يُقرأ من
-                // `seoMetadata.editorialModifiedAt` فقط فلا يظهر بلا تعديل تحريري.
-                if let updated = displayArticle.lastUpdatedLabel {
-                    HStack(spacing: 3) {
-                        Image(systemName: "arrow.triangle.2.circlepath")
-                            .font(.system(size: 9, weight: .regular))
-                            .accessibilityHidden(true)
+                    // «آخر تحديث» سطر ظاهر كما في الويب (#1598) لا خلف قائمة؛ يُقرأ من
+                    // `seoMetadata.editorialModifiedAt` فقط فلا يظهر بلا تعديل تحريري.
+                    if let updated = displayArticle.lastUpdatedLabel {
                         Text("آخر تحديث: \(updated)")
                             .monospacedDigit()
                             .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+                            .font(SabqType.meta.font)
+                            .foregroundStyle(SabqTheme.textTertiary)
                     }
-                    .font(SabqType.meta.font)
-                    .foregroundStyle(SabqTheme.textTertiary)
-                    .accessibilityLabel("آخر تحديث \(updated)")
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(minHeight: SabqLayout.touchTarget)
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(bylineAccessibilityLabel)
+        .accessibilityAddTraits(.isLink)
+    }
+
+    private var bylineAccessibilityLabel: String {
+        var parts = [displayArticle.author, reporterTitle ?? displayArticle.authorRole ?? "كاتب الخبر", publicationAccessibilityLabel]
+        if let updated = displayArticle.lastUpdatedLabel { parts.append("آخر تحديث \(updated)") }
+        return parts.joined(separator: "، ")
     }
 
     private var publicationSummary: some View {
