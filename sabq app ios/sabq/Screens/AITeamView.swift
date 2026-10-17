@@ -51,24 +51,11 @@ extension APIClient {
     }
 }
 
-/// ألوان الشريط الكحلي كما في الويب.
-private enum AITeamPalette {
-    static let band = Color(red: 0x0E / 255, green: 0x22 / 255, blue: 0x33 / 255)
-    static let card = Color(red: 0x12 / 255, green: 0x29 / 255, blue: 0x3B / 255)
-    static let border = Color(red: 0x1E / 255, green: 0x34 / 255, blue: 0x48 / 255)
-    static let accent = Color(red: 0x4C / 255, green: 0xBC / 255, blue: 0xFD / 255)
-    static let muted = Color(red: 0x8C / 255, green: 0xA3 / 255, blue: 0xB5 / 255)
-    static let avatar = Color(red: 0x0E / 255, green: 0x76 / 255, blue: 0xB8 / 255)
-    static let role = Color(red: 0xDC / 255, green: 0xF1 / 255, blue: 0xFE / 255).opacity(0.8)
-}
-
 struct AITeamView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var payload: APIAITeam?
     @State private var isLoading = true
     @State private var loadError: String?
-
-    private let columns = SabqGrid.adaptive(spacing: 10)
 
     var body: some View {
         ScrollView(showsIndicators: false) {
@@ -76,12 +63,12 @@ struct AITeamView: View {
                 if let payload, payload.isRenderable {
                     band(payload)
                 } else if isLoading {
-                    SkeletonBox(height: 320, radius: 20)
-                        .padding(16)
+                    SkeletonBox(height: 320, radius: SabqRadius.medium)
+                        .padding(SabqLayout.pageMargin)
                 } else {
                     EmptyStateView(
                         icon: "person.3",
-                        tint: SabqTheme.primaryEnd,
+                        tint: SabqTheme.textSecondary,
                         title: "الفريق غير متاح حاليًا",
                         subtitle: loadError ?? "لم نتمكن من جلب بيانات الفريق الآن. حاول مرة أخرى بعد قليل.",
                         action: { Task { await load() } },
@@ -110,48 +97,51 @@ struct AITeamView: View {
     }
 
     private func band(_ p: APIAITeam) -> some View {
-        VStack(spacing: 18) {
-            VStack(spacing: 8) {
+        VStack(alignment: .leading, spacing: SabqLayout.space24) {
+            VStack(alignment: .leading, spacing: SabqLayout.space8) {
                 Text("داخل عقل سبق")
-                    .font(SabqFonts.app(size: 11, weight: .bold))
-                    .foregroundStyle(AITeamPalette.accent)
+                    .font(SabqType.tag.font)
+                    .foregroundStyle(SabqTheme.primary)
                     .textCase(nil)
                 Text("فريق سبق الذكي")
-                    .font(SabqFonts.app(size: 24, weight: .heavy))
-                    .foregroundStyle(.white)
+                    .sabqText(SabqType.articleTitle)
+                    .foregroundStyle(SabqTheme.textPrimary)
+                    .accessibilityAddTraits(.isHeader)
                 Text("أول غرفة أخبار سعودية تعرّفك بزملائها الرقميين بأسمائهم وأدوارهم — يعملون على مدار الساعة، ولا يُنشر لهم حرف قبل اعتماد محرر بشري.")
-                    .font(SabqFonts.app(size: 13, weight: .regular))
-                    .foregroundStyle(AITeamPalette.muted)
-                    .multilineTextAlignment(.center)
-                    .lineSpacing(4)
+                    .sabqText(SabqType.excerpt)
+                    .foregroundStyle(SabqTheme.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            .frame(maxWidth: .infinity)
-
-            LazyVGrid(columns: columns, spacing: 10) {
-                ForEach(p.team) { m in memberCard(m) }
-            }
+            .frame(maxWidth: .infinity, alignment: .leading)
 
             counters(p)
 
+            LazyVStack(alignment: .leading, spacing: 0) {
+                ForEach(Array(p.team.enumerated()), id: \.element.id) { index, m in
+                    if index > 0 {
+                        Rectangle().fill(SabqTheme.separator).frame(height: 1)
+                    }
+                    memberRow(m)
+                }
+            }
+
             Text("🛡 الإنسان يعتمد كل شيء — سياسة سبق للذكاء الاصطناعي")
-                .font(SabqFonts.app(size: 11, weight: .semibold))
-                .foregroundStyle(.white)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 8)
-                .background(Capsule(style: .continuous).fill(Color.white.opacity(0.08)))
-                .overlay(Capsule(style: .continuous).stroke(AITeamPalette.border, lineWidth: 1))
+                .font(SabqType.metaEmphasis.font)
+                .foregroundStyle(SabqTheme.textPrimary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, SabqLayout.space16)
+                .padding(.vertical, SabqLayout.space12)
+                .background(SabqTheme.surfaceMuted, in: RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 28)
+        .padding(.horizontal, SabqLayout.pageMargin)
+        .padding(.vertical, SabqLayout.space24)
         .frame(maxWidth: .infinity)
-        .background(AITeamPalette.band)
     }
 
-    private func memberCard(_ m: APIAITeamMember) -> some View {
-        HStack(spacing: 10) {
+    private func memberRow(_ m: APIAITeamMember) -> some View {
+        HStack(spacing: SabqLayout.space12) {
             ZStack {
-                Circle().fill(AITeamPalette.avatar)
+                Circle().fill(SabqTheme.surfaceMuted)
                 if let url = m.absoluteAvatarURL {
                     CachedAsyncImage(url: url, contentMode: .fill) {
                         initial(m.nameAr)
@@ -162,42 +152,36 @@ struct AITeamView: View {
                 }
             }
             .frame(width: 44, height: 44)
+            .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(m.nameAr)
-                    .font(SabqFonts.app(size: 14, weight: .heavy))
-                    .foregroundStyle(.white)
+                    .font(SabqType.rowTitle.font)
+                    .foregroundStyle(SabqTheme.textPrimary)
                     .lineLimit(1)
                 Text(m.titleAr)
-                    .font(SabqFonts.app(size: 11, weight: .regular))
-                    .foregroundStyle(AITeamPalette.role)
+                    .font(SabqType.meta.font)
+                    .foregroundStyle(SabqTheme.textSecondary)
                     .lineLimit(1)
                 Text(m.departmentAr)
-                    .font(SabqFonts.app(size: 10, weight: .regular))
-                    .foregroundStyle(AITeamPalette.accent)
+                    .font(SabqType.tag.font)
+                    .foregroundStyle(SabqTheme.primary)
                     .lineLimit(1)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(AITeamPalette.card)
-                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(AITeamPalette.border, lineWidth: 1))
-        )
+        .padding(.vertical, SabqLayout.space12)
         .accessibilityElement(children: .combine)
     }
 
     private func initial(_ name: String) -> some View {
         Text(String(name.prefix(1)))
-            .font(SabqFonts.app(size: 16, weight: .bold))
-            .foregroundStyle(.white)
+            .font(SabqType.button.font)
+            .foregroundStyle(SabqTheme.textSecondary)
     }
 
     private func counters(_ p: APIAITeam) -> some View {
-        HStack(alignment: .top, spacing: 8) {
+        HStack(alignment: .top, spacing: SabqLayout.space8) {
             if let ops = p.counters?.monthOps, ops > 0 {
                 counter(value: EconomyFormat.trimNum(Double(ops), 0), label: "عملًا هذا الشهر")
             }
@@ -205,18 +189,23 @@ struct AITeamView: View {
             counter(value: "100%", label: "تحت إشراف بشري")
         }
         .frame(maxWidth: .infinity)
+        .padding(.vertical, SabqLayout.space16)
+        .background(SabqTheme.surfaceMuted, in: RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
     }
 
     private func counter(value: String, label: String) -> some View {
         VStack(spacing: 2) {
             Text(value)
-                .font(SabqFonts.app(size: 22, weight: .heavy))
-                .foregroundStyle(AITeamPalette.accent)
+                .font(SabqType.leadTitle.font)
+                .foregroundStyle(SabqTheme.textPrimary)
                 .monospacedDigit()
+                .environment(\.layoutDirection, .leftToRight)
             Text(label)
-                .font(SabqFonts.app(size: 11, weight: .regular))
-                .foregroundStyle(AITeamPalette.muted)
+                .font(SabqType.meta.font)
+                .foregroundStyle(SabqTheme.textSecondary)
+                .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
+        .accessibilityElement(children: .combine)
     }
 }

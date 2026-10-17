@@ -33,17 +33,17 @@ struct PressCardActivationView: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 20) {
+            VStack(spacing: SabqLayout.space24) {
                 if isCheckingStatus {
                     ProgressView()
-                        .padding(.top, 40)
+                        .padding(.top, SabqLayout.space40)
                 } else if let status, status.authorized {
                     authorizedBody(status: status)
                 } else {
                     unauthorizedBody
                 }
             }
-            .padding(16)
+            .padding(SabqLayout.pageMargin)
         }
         .background(SabqTheme.background.ignoresSafeArea())
         .navigationTitle("بطاقتي الصحفية")
@@ -81,30 +81,26 @@ struct PressCardActivationView: View {
             profileImageUrl: authStore.currentUser?.avatar
         )
 
-        VStack(spacing: 10) {
+        VStack(spacing: SabqLayout.space12) {
             Text(status.hasPass
                  ? "بطاقتك مُصدرة بالفعل. اضغط الزر لإعادة إضافتها إذا حذفتها من Apple Wallet."
                  : "أضف بطاقتك إلى Apple Wallet للوصول إليها بنقرة واحدة من قفل الشاشة.")
-                .font(SabqFonts.app(size: 13, weight: .medium))
-                .foregroundStyle(SabqTheme.secondaryInk)
+                .sabqText(SabqType.excerpt)
+                .foregroundStyle(SabqTheme.textSecondary)
                 .multilineTextAlignment(.center)
-                .padding(.horizontal, 8)
+                .padding(.horizontal, SabqLayout.space8)
 
             addToWalletButton
 
             if isIssuing {
-                ProgressView().padding(.top, 2)
+                ProgressView().padding(.top, SabqLayout.space4)
             }
         }
-        .padding(16)
+        .padding(SabqLayout.space16)
         .frame(maxWidth: .infinity)
         .background(
-            RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
-                .fill(.ultraThinMaterial)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
-                .stroke(SabqTheme.outline.opacity(0.5), lineWidth: 0.5)
+            RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                .fill(SabqTheme.surfaceMuted)
         )
 
         helpSection
@@ -120,59 +116,59 @@ struct PressCardActivationView: View {
         AddPassButtonRepresentable(style: PKAddPassButtonStyle.blackOutline, isEnabled: !isIssuing) {
             Task { await issuePass() }
         }
-        .frame(height: 38)
+        .frame(height: SabqLayout.touchTarget)
         .frame(maxWidth: 260)
     }
 
     // MARK: - Unauthorized
 
     private var unauthorizedBody: some View {
-        VStack(spacing: 14) {
-            Image(systemName: "lock.shield.fill")
-                .font(SabqFonts.app(size: 42))
-                .foregroundStyle(SabqTheme.secondaryInk)
+        VStack(spacing: SabqLayout.space12) {
+            Image(systemName: "lock.shield")
+                .font(SabqFonts.app(size: 40, weight: .light))
+                .foregroundStyle(SabqTheme.textSecondary)
+                .accessibilityHidden(true)
             Text("غير مصرّح لك بإصدار بطاقة صحفية")
-                .font(SabqFonts.app(size: 16, weight: .heavy))
-                .foregroundStyle(SabqTheme.ink)
-            Text("البطاقة متاحة للمراسلين وكتّاب الرأي والمحرّرين. إذا اعتقدت أن هذا خطأ، تواصل مع إدارة سبق.")
-                .font(SabqFonts.app(size: 12, weight: .medium))
-                .foregroundStyle(SabqTheme.secondaryInk)
+                .sabqText(SabqType.rowTitle)
+                .foregroundStyle(SabqTheme.textPrimary)
                 .multilineTextAlignment(.center)
-                .padding(.horizontal, 8)
+            Text("البطاقة متاحة للمراسلين وكتّاب الرأي والمحرّرين. إذا اعتقدت أن هذا خطأ، تواصل مع إدارة سبق.")
+                .sabqText(SabqType.meta)
+                .foregroundStyle(SabqTheme.textSecondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, SabqLayout.space8)
         }
-        .padding(24)
+        .padding(SabqLayout.space24)
         .frame(maxWidth: .infinity)
         .background(
-            RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
-                .fill(.ultraThinMaterial)
+            RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                .fill(SabqTheme.surfaceMuted)
         )
     }
 
     // MARK: - Help
 
     private var helpSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: SabqLayout.space8) {
             Text("كيف تعمل البطاقة؟")
-                .font(SabqFonts.app(size: 13, weight: .heavy))
-                .foregroundStyle(SabqTheme.ink)
+                .sabqText(SabqType.rowTitle)
+                .foregroundStyle(SabqTheme.textPrimary)
+                .accessibilityAddTraits(.isHeader)
             bullet("تُحفظ في تطبيق Wallet على iPhone و Apple Watch")
             bullet("تُحدَّث تلقائياً عند تجديد صلاحيتها من قبل سبق")
             bullet("اعرضها على شاشة القفل بالنقر على زر الجانب مرتين")
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
-                .fill(.ultraThinMaterial)
-        )
+        .padding(.top, SabqLayout.space8)
     }
 
     private func bullet(_ text: String) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Circle().fill(SabqTheme.secondaryInk).frame(width: 4, height: 4)
+        HStack(alignment: .firstTextBaseline, spacing: SabqLayout.space8) {
+            Circle().fill(SabqTheme.textSecondary).frame(width: 4, height: 4)
             Text(text)
-                .font(SabqFonts.app(size: 12, weight: .medium))
-                .foregroundStyle(SabqTheme.secondaryInk)
+                .sabqText(SabqType.excerpt)
+                .foregroundStyle(SabqTheme.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 

@@ -105,8 +105,8 @@ struct NationalDayWelcomeView: View {
 ///
 /// البديل النصّي أدناه يبقى شبكة أمان لو غاب الأصل عن حزمة البناء.
 struct NationalDayLockup: View {
-    @ScaledMetric(relativeTo: .caption) private var subtitleSize: CGFloat = 12
-    @ScaledMetric(relativeTo: .caption2) private var latinSize: CGFloat = 8
+    @ScaledMetric(relativeTo: .footnote) private var subtitleSize: CGFloat = 13
+    @ScaledMetric(relativeTo: .caption) private var latinSize: CGFloat = 12
 
     /// وجود الأصل لا يتغيّر أثناء التشغيل، وUIKit يخزّن نتيجة البحث،
     /// فالقراءة عند الرسم رخيصة ولا تحتاج تخزينًا ساكنًا.
@@ -121,9 +121,9 @@ struct NationalDayLockup: View {
                     "\(NationalDayTheme.sloganArabic) — \(NationalDayTheme.occasionArabic)"
                 )
         } else {
-            VStack(spacing: 6) {
+            VStack(spacing: SabqLayout.space4) {
                 Text(NationalDayTheme.sloganArabic)
-                    .font(SabqFonts.app(size: 22, weight: .heavy))
+                    .sabqText(SabqType.leadTitle)
                     .foregroundStyle(.white)
 
                 Text(NationalDayTheme.occasionArabic)

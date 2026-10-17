@@ -23,28 +23,28 @@ struct OnboardingView: View {
             Slide(
                 id: 0,
                 icon: "newspaper.fill",
-                tint: SabqTheme.primaryEnd,
+                tint: SabqTheme.primary,
                 title: "أهلاً بك في سبق",
                 body: "صحيفتك العربية الذكية — قراءة هادئة، محتوى موثوق، ذكاء اصطناعي شفّاف."
             ),
             Slide(
                 id: 1,
                 icon: "checkmark.shield.fill",
-                tint: Color(red: 0.16, green: 0.68, blue: 0.40),
+                tint: SabqTheme.primary,
                 title: "جواز المحتوى",
                 body: "كل خبر تشاهده مرفق بـ جواز يكشف: من كتبه، من راجعه، نسبة الذكاء الاصطناعي، ومصدر الخبر — بشفّافية كاملة."
             ),
             Slide(
                 id: 2,
                 icon: "textformat",
-                tint: SabqTheme.sky,
+                tint: SabqTheme.primary,
                 title: "اقرأ كما تحب",
                 body: "تحكّم في حجم الخط وتباعد الأسطر، استخدم خطّ القراءة الهادئ، وفعّل وضع التركيز لتجربة قراءة خالية من المشتّتات."
             ),
             Slide(
                 id: 3,
                 icon: "sparkles",
-                tint: SabqTheme.coral,
+                tint: SabqTheme.primary,
                 title: "اكتشاف ذكي",
                 body: "تقويم الأحداث، تحليلات عميقة بالذكاء الاصطناعي، نشرات صوتية يومية، وموجز شخصي بناءً على اهتماماتك."
             )
@@ -73,35 +73,33 @@ struct OnboardingView: View {
     }
 
     private func slideView(_ slide: Slide) -> some View {
-        VStack(spacing: 30) {
+        VStack(spacing: SabqLayout.space32) {
             Spacer()
 
             ZStack {
                 Circle()
-                    .fill(slide.tint.opacity(0.12))
+                    .fill(SabqTheme.surfaceMuted)
                     .frame(width: 160, height: 160)
-                Circle()
-                    .stroke(slide.tint.opacity(0.20), lineWidth: 1)
-                    .frame(width: 200, height: 200)
                 Image(systemName: slide.icon)
                     .font(SabqFonts.app(size: 64, weight: .light))
                     .foregroundStyle(slide.tint)
                     .symbolRenderingMode(.hierarchical)
             }
 
-            VStack(spacing: 14) {
+            VStack(spacing: SabqLayout.space12) {
                 Text(slide.title)
-                    .font(SabqFonts.app(size: 26, weight: .heavy))
-                    .foregroundStyle(SabqTheme.ink)
+                    .sabqText(SabqType.articleTitle)
+                    .foregroundStyle(SabqTheme.textPrimary)
                     .multilineTextAlignment(.center)
+                    .accessibilityAddTraits(.isHeader)
 
                 Text(slide.body)
-                    .font(SabqFonts.app(size: 15))
-                    .foregroundStyle(SabqTheme.secondaryInk)
+                    .sabqText(SabqType.excerpt)
+                    .foregroundStyle(SabqTheme.textSecondary)
                     .multilineTextAlignment(.center)
                     .lineSpacing(5)
                     .fixedSize(horizontal: false, vertical: true)
-                    .padding(.horizontal, 28)
+                    .padding(.horizontal, SabqLayout.space32)
             }
 
             Spacer()
@@ -110,7 +108,7 @@ struct OnboardingView: View {
     }
 
     private var bottomBar: some View {
-        VStack(spacing: 18) {
+        VStack(spacing: SabqLayout.space16) {
             indicators
 
             primaryButton
@@ -121,17 +119,20 @@ struct OnboardingView: View {
                     finishOnboarding()
                 } label: {
                     Text("تخطّي")
-                        .font(SabqFonts.app(size: 13, weight: .semibold))
-                        .foregroundStyle(SabqTheme.tertiaryInk)
+                        .sabqText(SabqType.button)
+                        .foregroundStyle(SabqTheme.textSecondary)
+                        .frame(minHeight: SabqLayout.touchTarget)
+                        .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
             } else {
                 // Reserve the same vertical space when the skip button is gone.
-                Color.clear.frame(height: 18)
+                Color.clear.frame(height: SabqLayout.touchTarget)
             }
         }
-        .padding(.horizontal, 26)
-        .padding(.bottom, 30)
-        .padding(.top, 16)
+        .padding(.horizontal, SabqLayout.space24)
+        .padding(.bottom, SabqLayout.space32)
+        .padding(.top, SabqLayout.space16)
     }
 
     /// Finish onboarding for both paths (skip + "ابدأ الآن"). Asks for
@@ -150,11 +151,11 @@ struct OnboardingView: View {
     }
 
     private var indicators: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: SabqLayout.space8) {
             ForEach(slides) { slide in
                 let isActive = page == slide.id
                 Capsule()
-                    .fill(isActive ? slides[page].tint : SabqTheme.outline.opacity(0.6))
+                    .fill(isActive ? SabqTheme.primary : SabqTheme.outline)
                     .frame(width: isActive ? 24 : 8, height: 8)
                     .animation(.spring(response: 0.4, dampingFraction: 0.85), value: page)
             }
@@ -173,19 +174,14 @@ struct OnboardingView: View {
             }
         } label: {
             Text(page < slides.count - 1 ? "التالي" : "ابدأ الآن")
-                .font(SabqFonts.app(size: 16, weight: .heavy))
-                .foregroundStyle(.white)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 14)
+                .sabqText(SabqType.button)
+                .foregroundStyle(SabqTheme.onAction)
+                .frame(maxWidth: .infinity, minHeight: SabqLayout.controlHeight)
                 .background(
-                    Capsule(style: .continuous)
-                        .fill(LinearGradient(
-                            colors: [SabqTheme.primaryStart, SabqTheme.primaryEnd],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ))
+                    RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                        .fill(SabqTheme.actionFill)
                 )
-                .shadow(color: SabqTheme.primaryEnd.opacity(0.25), radius: 14, x: 0, y: 6)
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }

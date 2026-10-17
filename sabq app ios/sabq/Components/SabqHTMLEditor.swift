@@ -132,29 +132,36 @@ struct SabqHTMLEditor: UIViewRepresentable {
         <head>
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
         <style>
-          :root { color-scheme: light dark; }
+          /* ألوان رموز SabqTheme (textPrimary/Secondary/Tertiary، primary، outline). */
+          :root {
+            color-scheme: light dark;
+            --ink: #0F1B27; --ink2: #4A5866; --ink3: #5E6B78;
+            --link: #0A5F94; --rule: #D3DAE0;
+          }
+          @media (prefers-color-scheme: dark) {
+            :root { --ink: #EEF3F7; --ink2: #A3B1BF; --ink3: #8B9AA9; --link: #66C7FF; --rule: #34414F; }
+          }
           html, body { margin: 0; padding: 0; background: transparent; }
           #sabq-editor {
             font-family: -apple-system, "SF Arabic", system-ui, sans-serif;
             font-size: 17px; line-height: 1.9;
-            padding: 14px; min-height: 280px;
+            padding: 16px; min-height: 280px;
             direction: rtl; text-align: right;
             outline: none; -webkit-user-select: text;
-            color: #15151c;
+            color: var(--ink);
           }
-          @media (prefers-color-scheme: dark) { #sabq-editor { color: #f2f2f5; } }
-          #sabq-editor h2 { font-size: 22px; font-weight: 800; margin: 0.6em 0 0.3em; }
-          #sabq-editor h3 { font-size: 19px; font-weight: 800; margin: 0.6em 0 0.3em; }
+          #sabq-editor h2 { font-size: 22px; font-weight: 700; margin: 0.6em 0 0.3em; }
+          #sabq-editor h3 { font-size: 20px; font-weight: 700; margin: 0.6em 0 0.3em; }
           #sabq-editor p { margin: 0 0 0.9em; }
-          #sabq-editor ul, #sabq-editor ol { padding-inline-start: 22px; }
+          #sabq-editor ul, #sabq-editor ol { padding-inline-start: 24px; }
           #sabq-editor blockquote {
-            border-inline-start: 3px solid #c9ccd4; margin: 0.6em 0;
-            padding-inline-start: 12px; color: #5b5f6a;
+            border-inline-start: 3px solid var(--rule); margin: 0.6em 0;
+            padding-inline-start: 12px; color: var(--ink2);
           }
-          #sabq-editor img { max-width: 100%; height: auto; border-radius: 10px; }
-          #sabq-editor a { color: #2f7ad6; }
+          #sabq-editor img { max-width: 100%; height: auto; border-radius: 12px; }
+          #sabq-editor a { color: var(--link); }
           #sabq-editor:empty:before {
-            content: "اكتب نص الخبر هنا…"; color: #9aa0ab;
+            content: "اكتب نص الخبر هنا…"; color: var(--ink3);
           }
         </style>
         </head>

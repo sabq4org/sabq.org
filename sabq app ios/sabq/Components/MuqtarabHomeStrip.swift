@@ -91,56 +91,52 @@ private struct MuqtarabHomeRow: View {
     private var byline: String { topic.writer?.name ?? topic.angle?.name ?? "مُقترب" }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            Group {
-                if let imageURL {
-                    CachedAsyncImage(url: imageURL, contentMode: .fill) { placeholder }
-                } else {
-                    placeholder
-                }
-            }
-            .frame(width: LatestTimelineStyle.thumbnailWidth, height: LatestTimelineStyle.thumbnailHeight)
-            .clipShape(RoundedRectangle(cornerRadius: NewsRowStyle.thumbnailRadius, style: .continuous))
-
-            VStack(alignment: .leading, spacing: 4) {
+        // نفس صف الخبر المضغوط: العنوان ثم سطر البيانات، والمصغّرة على طرف السطر.
+        HStack(alignment: .top, spacing: NewsRowStyle.thumbnailGap) {
+            VStack(alignment: .leading, spacing: NewsRowStyle.textStackSpacing) {
                 SabqRTLText(
                     topic.title,
-                    uiFont: SabqFonts.uiSubhead(size: NewsRowStyle.compactTitleSize),
-                    color: SabqTheme.ink,
-                    lineLimit: dynamicTypeSize.isAccessibilitySize ? 0 : 2,
-                    lineSpacing: NewsRowStyle.titleLineSpacing
+                    uiFont: SabqType.rowTitle.uiFont,
+                    color: SabqTheme.textPrimary,
+                    lineLimit: dynamicTypeSize.isAccessibilitySize ? 0 : NewsRowStyle.compactTitleLines,
+                    lineSpacing: NewsRowStyle.titleLineSpacing,
+                    textStyle: SabqType.rowTitle.uiTextStyle
                 )
-                HStack(spacing: 4) {
+                HStack(spacing: SabqLayout.space4) {
                     Text(byline)
-                        .font(SabqFonts.app(size: 12, weight: .semibold))
-                        .foregroundStyle(SabqTheme.brandBlue)
+                        .font(SabqType.metaEmphasis.font)
+                        .foregroundStyle(SabqTheme.primary)
                         .lineLimit(1)
                     // النقطة نص مستقل: في بداية نص عربي تنقلب لآخر السطر.
                     if let date = muqRelativeDate(topic.publishedAt) {
                         Text("·")
-                            .font(SabqFonts.app(size: 12, weight: .regular))
-                            .foregroundStyle(SabqTheme.tertiaryInk)
+                            .font(SabqType.meta.font)
+                            .foregroundStyle(SabqTheme.textTertiary)
                         Text(date)
-                            .font(SabqFonts.app(size: 12, weight: .regular))
-                            .foregroundStyle(SabqTheme.tertiaryInk)
+                            .font(SabqType.meta.font)
+                            .foregroundStyle(SabqTheme.textTertiary)
                             .lineLimit(1)
                     }
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .padding(.vertical, 12)
-        .contentShape(Rectangle())
-    }
 
-    private var placeholder: some View {
-        RoundedRectangle(cornerRadius: NewsRowStyle.thumbnailRadius, style: .continuous)
-            .fill(SabqTheme.primaryEnd.opacity(0.10))
-            .overlay {
-                Image(systemName: "square.stack.3d.up")
-                    .font(SabqFonts.app(size: 20, weight: .light))
-                    .foregroundStyle(SabqTheme.primaryEnd.opacity(0.45))
+            Group {
+                if let imageURL {
+                    CachedAsyncImage(url: imageURL, contentMode: .fill, maxPixelSize: LatestTimelineStyle.thumbnailPixels) {
+                        SabqImagePlaceholder()
+                    }
+                } else {
+                    SabqImagePlaceholder()
+                        .environment(\.sabqImageLoadFailed, true)
+                }
             }
+            .frame(width: NewsRowStyle.thumbnailWidth, height: NewsRowStyle.thumbnailHeight)
+            .clipShape(RoundedRectangle(cornerRadius: NewsRowStyle.thumbnailRadius, style: .continuous))
+            .accessibilityHidden(true)
+        }
+        .padding(.vertical, SabqLayout.rowPadding)
+        .contentShape(Rectangle())
     }
 }
 

@@ -20,11 +20,11 @@ struct HomeReaderRoot: View {
             ArticleDetailView(article: article)
                 .id(article.id)
         } else if articlesStore.isLoading {
-            VStack(spacing: 12) {
-                ProgressView().tint(SabqTheme.primaryEnd)
+            VStack(spacing: SabqLayout.space12) {
+                ProgressView().tint(SabqTheme.primary)
                 Text("جارٍ تحميل الأخبار…")
-                    .font(SabqFonts.app(size: 14, weight: .medium))
-                    .foregroundStyle(SabqTheme.secondaryInk)
+                    .font(SabqType.meta.font)
+                    .foregroundStyle(SabqTheme.textSecondary)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(SabqTheme.background)

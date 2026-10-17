@@ -1470,17 +1470,13 @@ struct ArticleDetailView: View {
                 ForEach(displayTags, id: \.self) { tag in
                     NavigationLink(value: KeywordRoute(keyword: tag)) {
                         Text(tag)
-                            .font(SabqFonts.app(size: 13, weight: .medium))
-                            .foregroundStyle(SabqTheme.secondaryInk)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 6)
+                            .font(SabqType.metaEmphasis.font)
+                            .foregroundStyle(SabqTheme.textPrimary)
+                            .padding(.horizontal, SabqLayout.space12)
+                            .padding(.vertical, SabqLayout.space8)
                             .background(
-                                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                    .fill(SabqTheme.publicSurface)
-                            )
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                    .stroke(SabqTheme.outline, lineWidth: 1)
+                                RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
+                                    .fill(SabqTheme.surfaceMuted)
                             )
                     }
                     .buttonStyle(.plain)

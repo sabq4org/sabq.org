@@ -35,10 +35,10 @@ struct SearchView: View {
 
     var body: some View {
         ScrollView(showsIndicators: false) {
-            VStack(alignment: .leading, spacing: SabqLayout.space24) {
+            VStack(alignment: .leading, spacing: SabqLayout.sectionGap) {
                 Text("ابحث في آلاف الأخبار المحلية والعالمية")
-                    .font(SabqType.body)
-                    .foregroundStyle(SabqTheme.secondaryInk)
+                    .sabqText(SabqType.excerpt)
+                    .foregroundStyle(SabqTheme.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
 
                 if searchText.isEmpty {
@@ -55,7 +55,7 @@ struct SearchView: View {
                     searchResultsSection
                 }
             }
-            .padding(.horizontal, SabqLayout.pageInset)
+            .padding(.horizontal, SabqLayout.pageMargin)
             .padding(.top, SabqLayout.space16)
             .padding(.bottom, SabqLayout.space32)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -162,39 +162,42 @@ struct SearchView: View {
     // MARK: - Suggestions (autocomplete)
 
     private var suggestionsSection: some View {
-        VStack(alignment: .leading, spacing: SabqLayout.space4) {
-            ForEach(suggestions.prefix(5), id: \.self) { suggestion in
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(Array(suggestions.prefix(5).enumerated()), id: \.element) { index, suggestion in
+                if index > 0 { SidebarRowDivider() }
                 Button {
                     searchText = suggestion
                     performSearch()
                 } label: {
-                    HStack(spacing: 10) {
-                        Image(systemName: "magnifyingglass")
-                            .font(SabqFonts.app(size: 13, weight: .medium))
-                            .foregroundStyle(SabqTheme.tertiaryInk)
-
-                        Text(suggestion)
-                            .font(SabqFonts.app(size: 15, weight: .medium))
-                            .foregroundStyle(SabqTheme.ink)
-
-                        Spacer(minLength: 0)
-
-                        Image(systemName: "arrow.up.backward")
-                            .font(SabqFonts.app(size: 12, weight: .medium))
-                            .foregroundStyle(SabqTheme.tertiaryInk)
-                    }
-                    .padding(.vertical, SabqLayout.space8)
-                    .padding(.horizontal, SabqLayout.space12)
-                    .frame(minHeight: SabqLayout.touchTarget)
+                    queryRow(leading: Image(systemName: "magnifyingglass"), text: suggestion)
                 }
                 .buttonStyle(.plain)
             }
         }
-        .background(
-            RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous)
-                .fill(SabqTheme.surface)
-                .shadow(color: SabqTheme.shadow, radius: 8, x: 0, y: 3)
-        )
+    }
+
+    /// صف استعلام على الصفحة: أيقونة هادئة، النص، وسهم «املأ البحث».
+    private func queryRow(leading: some View, text: String) -> some View {
+        HStack(spacing: SabqLayout.space12) {
+            leading
+                .font(SabqType.excerpt.font)
+                .foregroundStyle(SabqTheme.textTertiary)
+                .accessibilityHidden(true)
+
+            Text(text)
+                .font(SabqType.excerpt.font)
+                .foregroundStyle(SabqTheme.textPrimary)
+
+            Spacer(minLength: 0)
+
+            Image(systemName: "arrow.up.backward")
+                .font(SabqType.meta.font)
+                .foregroundStyle(SabqTheme.textTertiary)
+                .accessibilityHidden(true)
+        }
+        .padding(.vertical, SabqLayout.space12)
+        .frame(minHeight: SabqLayout.touchTarget)
+        .contentShape(Rectangle())
     }
 
     // MARK: - Trending
@@ -202,38 +205,36 @@ struct SearchView: View {
     private var trendingSection: some View {
         Group {
             if !trendingKeywords.isEmpty {
-                SurfaceCard(accent: SabqTheme.brandBlue) {
-                    SectionHeader(
-                        title: "الأكثر بحثاً",
-                        subtitle: "المواضيع الرائجة الآن",
-                        icon: "chart.line.uptrend.xyaxis",
-                        tint: SabqTheme.brandBlue
-                    )
+                VStack(alignment: .leading, spacing: SabqLayout.space4) {
+                    DiscoverySectionHeading(title: "الأكثر بحثاً", subtitle: "المواضيع الرائجة الآن")
 
                     ForEach(Array(trendingKeywords.prefix(5).enumerated()), id: \.offset) { index, keyword in
+                        if index > 0 { SidebarRowDivider() }
                         Button {
                             searchText = keyword
                             performSearch()
                         } label: {
-                            HStack(spacing: 12) {
+                            HStack(spacing: SabqLayout.space12) {
                                 Text("\(index + 1)")
-                                    .font(SabqFonts.app(size: 16, weight: .bold))
-                                    .foregroundStyle(index < 3 ? SabqTheme.brandBlue : SabqTheme.tertiaryInk)
+                                    .font(SabqType.rowTitle.font)
+                                    .foregroundStyle(index < 3 ? SabqTheme.primary : SabqTheme.textTertiary)
                                     .monospacedDigit()
-                                    .frame(width: 24)
+                                    .frame(width: SabqLayout.space24)
 
                                 Text(keyword)
-                                    .font(SabqFonts.app(size: 15, weight: .semibold))
-                                    .foregroundStyle(SabqTheme.ink)
+                                    .font(SabqType.rowTitle.font)
+                                    .foregroundStyle(SabqTheme.textPrimary)
 
                                 Spacer(minLength: 0)
 
                                 Image(systemName: "arrow.up.backward")
-                                    .font(SabqFonts.app(size: 12, weight: .medium))
-                                    .foregroundStyle(SabqTheme.tertiaryInk)
+                                    .font(SabqType.meta.font)
+                                    .foregroundStyle(SabqTheme.textTertiary)
+                                    .accessibilityHidden(true)
                             }
-                            .padding(.vertical, SabqLayout.space8)
+                            .padding(.vertical, SabqLayout.space12)
                             .frame(minHeight: SabqLayout.touchTarget)
+                            .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
                     }
@@ -247,36 +248,16 @@ struct SearchView: View {
     private var recentSearchesSection: some View {
         Group {
             if !recentSearches.isEmpty {
-                SurfaceCard {
-                    SectionHeader(
-                        title: "عمليات البحث الأخيرة",
-                        subtitle: "اضغط للبحث مجدداً",
-                        icon: "clock.arrow.circlepath",
-                        tint: SabqTheme.secondaryInk
-                    )
+                VStack(alignment: .leading, spacing: SabqLayout.space4) {
+                    DiscoverySectionHeading(title: "عمليات البحث الأخيرة", subtitle: "اضغط للبحث مجدداً")
 
-                    ForEach(recentSearches, id: \.self) { search in
+                    ForEach(Array(recentSearches.enumerated()), id: \.element) { index, search in
+                        if index > 0 { SidebarRowDivider() }
                         Button {
                             searchText = search
                             performSearch()
                         } label: {
-                            HStack(spacing: 10) {
-                                Image(systemName: "magnifyingglass")
-                                    .font(SabqFonts.app(size: 14, weight: .medium))
-                                    .foregroundStyle(SabqTheme.tertiaryInk)
-
-                                Text(search)
-                                    .font(SabqFonts.app(size: 15, weight: .medium))
-                                    .foregroundStyle(SabqTheme.ink)
-
-                                Spacer(minLength: 0)
-
-                                Image(systemName: "arrow.up.backward")
-                                    .font(SabqFonts.app(size: 13, weight: .medium))
-                                    .foregroundStyle(SabqTheme.tertiaryInk)
-                            }
-                            .padding(.vertical, SabqLayout.space8)
-                            .frame(minHeight: SabqLayout.touchTarget)
+                            queryRow(leading: Image(systemName: "magnifyingglass"), text: search)
                         }
                         .buttonStyle(.plain)
                     }
@@ -288,34 +269,16 @@ struct SearchView: View {
     // MARK: - Suggested Topics
 
     private var suggestedTopicsSection: some View {
-        SurfaceCard(accent: SabqTheme.leaf) {
-            SectionHeader(
-                title: "مواضيع مقترحة",
-                subtitle: "استكشف مواضيع متنوعة",
-                icon: "sparkles",
-                tint: SabqTheme.leaf
-            )
+        VStack(alignment: .leading, spacing: SabqLayout.space12) {
+            DiscoverySectionHeading(title: "مواضيع مقترحة", subtitle: "استكشف مواضيع متنوعة")
 
-            FlowLayout(spacing: 8) {
+            FlowLayout(spacing: SabqLayout.space8) {
                 ForEach(suggestedTopics, id: \.self) { topic in
                     Button {
                         searchText = topic
                         performSearch()
                     } label: {
-                        HStack(spacing: 6) {
-                            Image(systemName: "plus")
-                                .font(SabqFonts.app(size: 10, weight: .regular))
-                            Text(topic)
-                                .font(SabqFonts.app(size: 12, weight: .medium))
-                        }
-                        .foregroundStyle(SabqTheme.primaryStart)
-                        .padding(.horizontal, SabqLayout.space12)
-                        .padding(.vertical, SabqLayout.space8)
-                        .frame(minHeight: SabqLayout.touchTarget)
-                        .background(
-                            Capsule(style: .continuous)
-                                .fill(SabqTheme.primaryEnd.opacity(0.08))
-                        )
+                        DiscoveryChip(title: topic, icon: "plus")
                     }
                     .buttonStyle(.plain)
                 }
@@ -326,21 +289,22 @@ struct SearchView: View {
     // MARK: - Search Results
 
     private var searchResultsSection: some View {
-        VStack(alignment: .leading, spacing: SabqLayout.space16) {
-            HStack {
+        VStack(alignment: .leading, spacing: SabqLayout.space8) {
+            HStack(alignment: .firstTextBaseline) {
                 Text("نتائج البحث")
-                    .font(SabqType.sectionTitle)
-                    .foregroundStyle(SabqTheme.ink)
+                    .font(SabqType.sectionHeading.font)
+                    .foregroundStyle(SabqTheme.textPrimary)
+                    .accessibilityAddTraits(.isHeader)
 
                 Spacer(minLength: 0)
 
                 if isSearching {
                     ProgressView()
-                        .tint(SabqTheme.primaryEnd)
+                        .tint(SabqTheme.primary)
                 } else {
                     Text("\(searchTotal > 0 ? searchTotal : displayResults.count) نتيجة")
-                        .font(SabqType.caption)
-                        .foregroundStyle(SabqTheme.tertiaryInk)
+                        .font(SabqType.meta.font)
+                        .foregroundStyle(SabqTheme.textTertiary)
                 }
             }
 
@@ -363,10 +327,10 @@ struct SearchView: View {
             } else {
                 if searchFailed {
                     Text("تُعرض نتائج محفوظة من الجهاز")
-                        .font(SabqType.caption)
-                        .foregroundStyle(SabqTheme.secondaryInk)
+                        .font(SabqType.meta.font)
+                        .foregroundStyle(SabqTheme.textSecondary)
                 }
-                SurfaceCard(lazy: true, cornerRadius: 22, spacing: 0) {
+                LazyVStack(alignment: .leading, spacing: 0) {
                     ForEach(Array(displayResults.enumerated()), id: \.element.id) { index, article in
                         if index > 0 {
                             SidebarRowDivider()

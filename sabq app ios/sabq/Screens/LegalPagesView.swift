@@ -8,7 +8,7 @@ import SwiftUI
 struct LegalPageContent {
     let heroBadge: String        // small pill above the title — e.g. "حماية البيانات"
     let heroBadgeIcon: String    // SF Symbol shown inside the pill
-    let heroTint: Color          // tint colour for the hero gradient + pill
+    let heroTint: Color          // identity tint (kept for content data; the page uses Sabq roles)
     let title: String            // "سياسة الخصوصية" / "الشروط والأحكام"
     let subtitle: String         // 'في "سبق الذكية"' / 'لمنصة "سبق الذكية"'
     let lastUpdated: String      // "أكتوبر 2025"
@@ -57,18 +57,22 @@ struct LegalPageView: View {
 
     var body: some View {
         ScrollView(showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 24) {
+            VStack(alignment: .leading, spacing: 0) {
                 hero
                 introCard
+                    .padding(.bottom, SabqLayout.space8)
                 ForEach(content.sections) { section in
                     sectionCard(section)
                 }
                 if let footer = content.footer {
                     footerCard(footer)
+                        .padding(.top, SabqLayout.space24)
                 }
             }
-            .padding(.horizontal, 20)
-            .padding(.bottom, 60)
+            .padding(.horizontal, SabqLayout.pageMargin)
+            .padding(.bottom, SabqLayout.space40)
+            .frame(maxWidth: SabqLayout.readingWidth, alignment: .leading)
+            .frame(maxWidth: .infinity)
         }
         .background(SabqTheme.background)
         .sabqRTL()
@@ -78,128 +82,105 @@ struct LegalPageView: View {
 
     // MARK: Hero
 
+    /// Unboxed title block on the white page.
     private var hero: some View {
-        VStack(alignment: .center, spacing: 12) {
-            HStack(spacing: 6) {
+        VStack(alignment: .leading, spacing: SabqLayout.space8) {
+            HStack(spacing: SabqLayout.space4) {
                 Image(systemName: content.heroBadgeIcon)
-                    .font(SabqFonts.app(size: 12, weight: .semibold))
+                    .font(SabqType.tag.font)
                 Text(content.heroBadge)
-                    .font(SabqFonts.app(size: 12, weight: .heavy))
+                    .sabqText(SabqType.tag)
             }
-            .foregroundStyle(content.heroTint)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
+            .foregroundStyle(SabqTheme.primary)
+            .padding(.horizontal, SabqLayout.space8)
+            .padding(.vertical, SabqLayout.space4)
             .background(
-                Capsule(style: .continuous).fill(content.heroTint.opacity(0.10))
-            )
-            .overlay(
-                Capsule(style: .continuous).stroke(content.heroTint.opacity(0.25), lineWidth: 0.5)
+                RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
+                    .fill(SabqTheme.surfaceMuted)
             )
 
             Text(content.title)
-                .font(SabqFonts.headline(size: 28))
-                .foregroundStyle(SabqTheme.ink)
-                .multilineTextAlignment(.center)
+                .sabqText(SabqType.articleTitle)
+                .foregroundStyle(SabqTheme.textPrimary)
+                .accessibilityAddTraits(.isHeader)
 
             Text(content.subtitle)
-                .font(SabqFonts.app(size: 15, weight: .medium))
-                .foregroundStyle(SabqTheme.secondaryInk)
+                .sabqText(SabqType.excerpt)
+                .foregroundStyle(SabqTheme.textSecondary)
 
-            HStack(spacing: 4) {
+            HStack(spacing: SabqLayout.space4) {
                 Text("آخر تحديث:")
-                    .foregroundStyle(SabqTheme.tertiaryInk)
+                    .foregroundStyle(SabqTheme.textTertiary)
                 Text(content.lastUpdated)
-                    .foregroundStyle(SabqTheme.secondaryInk)
-                    .fontWeight(.semibold)
+                    .foregroundStyle(SabqTheme.textSecondary)
             }
-            .font(SabqFonts.app(size: 12, weight: .medium))
-            .padding(.top, 4)
+            .sabqText(SabqType.meta)
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 28)
-        .padding(.horizontal, 16)
-        .background(
-            RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [content.heroTint.opacity(0.12), SabqTheme.surface.opacity(0)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                .stroke(content.heroTint.opacity(0.15), lineWidth: 0.5)
-        )
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.top, SabqLayout.space24)
+        .padding(.bottom, SabqLayout.space24)
     }
 
     // MARK: Intro card
 
+    /// Quiet surfaceMuted block.
     private var introCard: some View {
-        HStack(alignment: .top, spacing: 14) {
-            iconBubble(systemName: content.introIcon, tint: content.heroTint)
-
-            VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: SabqLayout.space8) {
+            HStack(spacing: SabqLayout.space8) {
+                Image(systemName: content.introIcon)
+                    .font(SabqType.rowTitle.font)
+                    .foregroundStyle(SabqTheme.primary)
+                    .accessibilityHidden(true)
                 Text("مقدمة")
-                    .font(SabqFonts.app(size: 16, weight: .bold))
-                    .foregroundStyle(SabqTheme.ink)
-                Text(content.intro)
-                    .font(SabqFonts.app(size: 14, weight: .regular))
-                    .foregroundStyle(SabqTheme.secondaryInk)
-                    .lineSpacing(6)
-                    .multilineTextAlignment(.leading)
-                    .fixedSize(horizontal: false, vertical: true)
+                    .sabqText(SabqType.rowTitle)
+                    .foregroundStyle(SabqTheme.textPrimary)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            Text(content.intro)
+                .sabqText(SabqType.excerpt)
+                .foregroundStyle(SabqTheme.textSecondary)
+                .lineSpacing(6)
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(18)
+        .padding(SabqLayout.space16)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                .fill(content.heroTint.opacity(0.05))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                .stroke(content.heroTint.opacity(0.20), lineWidth: 0.5)
+            RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                .fill(SabqTheme.surfaceMuted)
         )
     }
 
-    // MARK: Section card
+    // MARK: Section
 
+    /// Unboxed section: heading + body, a thin separator above.
     private func sectionCard(_ section: LegalSection) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .top, spacing: 14) {
-                iconBubble(systemName: section.icon, tint: SabqTheme.primaryEnd)
+        VStack(alignment: .leading, spacing: SabqLayout.space12) {
+            HStack(alignment: .firstTextBaseline, spacing: SabqLayout.space8) {
+                Image(systemName: section.icon)
+                    .font(SabqType.rowTitle.font)
+                    .foregroundStyle(SabqTheme.primary)
+                    .accessibilityHidden(true)
                 Text(section.title)
-                    .font(SabqFonts.app(size: 16, weight: .bold))
-                    .foregroundStyle(SabqTheme.ink)
-                    .padding(.top, 6)
+                    .sabqText(SabqType.sectionHeading)
+                    .foregroundStyle(SabqTheme.textPrimary)
+                    .accessibilityAddTraits(.isHeader)
                     .fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 0)
             }
 
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: SabqLayout.space12) {
                 ForEach(section.blocks) { block in
                     renderBlock(block)
                 }
             }
-            // Slight indent so the body aligns under the title text, not the icon
-            .padding(.leading, 4)
         }
-        .padding(18)
+        .padding(.vertical, SabqLayout.space24)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                .fill(.ultraThinMaterial)
-                .overlay(
-                    RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                        .fill(SabqTheme.paleFill.opacity(0.35))
-                )
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                .stroke(SabqTheme.outline.opacity(0.4), lineWidth: 0.5)
-        )
+        .overlay(alignment: .top) {
+            Rectangle()
+                .fill(SabqTheme.separator)
+                .frame(height: 1)
+        }
     }
 
     @ViewBuilder
@@ -207,8 +188,8 @@ struct LegalPageView: View {
         switch block {
         case .paragraph(let text):
             Text(text)
-                .font(SabqFonts.app(size: 14, weight: .regular))
-                .foregroundStyle(SabqTheme.secondaryInk)
+                .sabqText(SabqType.excerpt)
+                .foregroundStyle(SabqTheme.textSecondary)
                 .lineSpacing(6)
                 .multilineTextAlignment(.leading)
                 .fixedSize(horizontal: false, vertical: true)
@@ -216,8 +197,8 @@ struct LegalPageView: View {
 
         case .labeledPoint(let label, let text):
             (
-                Text(label).font(SabqFonts.app(size: 14, weight: .bold)).foregroundColor(SabqTheme.ink)
-                + Text(" \(text)").font(SabqFonts.app(size: 14, weight: .regular)).foregroundColor(SabqTheme.secondaryInk)
+                Text(label).font(SabqFonts.app(size: 15, weight: .semibold)).foregroundColor(SabqTheme.textPrimary)
+                + Text(" \(text)").font(SabqType.excerpt.font).foregroundColor(SabqTheme.textSecondary)
             )
             .lineSpacing(6)
             .multilineTextAlignment(.leading)
@@ -225,15 +206,15 @@ struct LegalPageView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
 
         case .subsection(let title, let content, let points):
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: SabqLayout.space8) {
                 Text(title)
-                    .font(SabqFonts.app(size: 14, weight: .bold))
-                    .foregroundStyle(SabqTheme.ink)
+                    .sabqText(SabqType.rowTitle)
+                    .foregroundStyle(SabqTheme.textPrimary)
 
                 if let content {
                     Text(content)
-                        .font(SabqFonts.app(size: 14, weight: .regular))
-                        .foregroundStyle(SabqTheme.secondaryInk)
+                        .sabqText(SabqType.excerpt)
+                        .foregroundStyle(SabqTheme.textSecondary)
                         .lineSpacing(6)
                         .multilineTextAlignment(.leading)
                         .fixedSize(horizontal: false, vertical: true)
@@ -241,14 +222,14 @@ struct LegalPageView: View {
 
                 ForEach(points, id: \.self) { point in
                     (
-                        Text("• \(point.label) ").font(SabqFonts.app(size: 14, weight: .bold)).foregroundColor(SabqTheme.ink)
-                        + Text(point.text).font(SabqFonts.app(size: 14, weight: .regular)).foregroundColor(SabqTheme.secondaryInk)
+                        Text("• \(point.label) ").font(SabqFonts.app(size: 15, weight: .semibold)).foregroundColor(SabqTheme.textPrimary)
+                        + Text(point.text).font(SabqType.excerpt.font).foregroundColor(SabqTheme.textSecondary)
                     )
                     .lineSpacing(6)
                     .multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.leading, 8)
+                    .padding(.leading, SabqLayout.space8)
                 }
             }
         }
@@ -257,46 +238,30 @@ struct LegalPageView: View {
     // MARK: Footer card
 
     private func footerCard(_ footer: LegalFooter) -> some View {
-        VStack(spacing: 10) {
+        VStack(spacing: SabqLayout.space8) {
             Image(systemName: footer.icon)
                 .font(SabqFonts.app(size: 28, weight: .light))
-                .foregroundStyle(content.heroTint)
+                .foregroundStyle(SabqTheme.primary)
+                .accessibilityHidden(true)
 
             Text(footer.title)
-                .font(SabqFonts.app(size: 16, weight: .bold))
-                .foregroundStyle(SabqTheme.ink)
+                .sabqText(SabqType.rowTitle)
+                .foregroundStyle(SabqTheme.textPrimary)
 
             Text(footer.message)
-                .font(SabqFonts.app(size: 13, weight: .regular))
-                .foregroundStyle(SabqTheme.secondaryInk)
+                .sabqText(SabqType.meta)
+                .foregroundStyle(SabqTheme.textSecondary)
                 .multilineTextAlignment(.center)
                 .lineSpacing(5)
-                .padding(.horizontal, 12)
+                .padding(.horizontal, SabqLayout.space12)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 22)
-        .padding(.horizontal, 18)
+        .padding(.vertical, SabqLayout.space24)
+        .padding(.horizontal, SabqLayout.space16)
         .background(
-            RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                .fill(content.heroTint.opacity(0.05))
+            RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                .fill(SabqTheme.surfaceMuted)
         )
-        .overlay(
-            RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                .stroke(content.heroTint.opacity(0.20), lineWidth: 0.5)
-        )
-    }
-
-    // MARK: Helpers
-
-    private func iconBubble(systemName: String, tint: Color) -> some View {
-        RoundedRectangle(cornerRadius: 12, style: .continuous)
-            .fill(tint.opacity(0.12))
-            .frame(width: 40, height: 40)
-            .overlay {
-                Image(systemName: systemName)
-                    .font(SabqFonts.app(size: 18, weight: .semibold))
-                    .foregroundStyle(tint)
-            }
     }
 }
 

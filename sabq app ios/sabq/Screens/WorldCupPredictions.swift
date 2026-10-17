@@ -25,40 +25,29 @@ struct WCPredictCTA: View {
 
     var body: some View {
         Button(action: onTap) {
-            HStack(spacing: 14) {
-                ZStack {
-                    Circle()
-                        .fill(LinearGradient(colors: [WCTheme.gold, WCTheme.gold.opacity(0.7)],
-                                             startPoint: .top, endPoint: .bottom))
-                        .frame(width: 44, height: 44)
-                    Image(systemName: "target")
-                        .font(.system(size: 20, weight: .semibold))
-                        .foregroundStyle(WCTheme.heroTop)
-                }
-                .shadow(color: WCTheme.gold.opacity(0.45), radius: 6, y: 2)
+            // شريط هوية مسطّح (أخضر ثابت داكن): لا تدرّج ولا ظل ولا حدّ
+            HStack(spacing: SabqLayout.space12) {
+                Image(systemName: "target")
+                    .font(SabqFonts.app(size: 20, weight: .semibold))
+                    .foregroundStyle(WCTheme.heroTop)
+                    .frame(width: 44, height: 44)
+                    .background(Circle().fill(WCTheme.gold))
+                    .accessibilityHidden(true)
 
-                VStack(alignment: .leading, spacing: 3) {
+                VStack(alignment: .leading, spacing: SabqLayout.space4) {
                     Text("توقّع واربح")
-                        .font(SabqFonts.app(size: 16, weight: .semibold)).foregroundStyle(.white)
+                        .sabqText(SabqType.rowTitle).foregroundStyle(.white)
                     Text("أصِب النتيجة بالضبط واكسب من 500 نقطة لكل مباراة")
-                        .font(SabqFonts.app(size: 11)).foregroundStyle(.white.opacity(0.85))
+                        .sabqText(SabqType.meta).foregroundStyle(.white.opacity(0.85))
                         .lineLimit(2)
                 }
-                Spacer(minLength: 4)
+                Spacer(minLength: SabqLayout.space4)
                 Image(systemName: "chevron.left")
-                    .font(SabqFonts.app(size: 14, weight: .semibold)).foregroundStyle(WCTheme.gold)
+                    .font(SabqFonts.app(size: 15, weight: .semibold)).foregroundStyle(WCTheme.gold)
+                    .accessibilityHidden(true)
             }
-            .padding(.horizontal, 16).padding(.vertical, 14)
-            .background(
-                LinearGradient(colors: [WCTheme.heroTop, WCTheme.royal, WCTheme.heroBottom],
-                               startPoint: .topTrailing, endPoint: .bottomLeading)
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .stroke(WCTheme.gold.opacity(0.30), lineWidth: 1)
-            )
-            .shadow(color: WCTheme.royal.opacity(0.30), radius: 12, x: 0, y: 6)
+            .padding(.horizontal, SabqLayout.space16).padding(.vertical, SabqLayout.space16)
+            .background(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous).fill(WCTheme.heroTop))
         }
         .buttonStyle(.plain)
     }
@@ -99,10 +88,10 @@ struct WCPredictionsView: View {
                         case .board: WCPredLeaderboardTab()
                         }
                     }
-                    .padding(16)
+                    .padding(SabqLayout.pageMargin)
                 }
             }
-            .background(WCTheme.sectionBackground.ignoresSafeArea())
+            .background(SabqTheme.background.ignoresSafeArea())
             .navigationTitle("مسابقة التوقّعات")
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(WCTheme.stadiumTop, for: .navigationBar)
@@ -134,20 +123,22 @@ struct WCPredictionsView: View {
     }
 
     private var tabBar: some View {
-        HStack(spacing: 8) {
+        // التبويبات على شريط الهوية الداكن: المختار أبيض بنص أخضر، والبقية شفافة بنص أبيض
+        HStack(spacing: SabqLayout.space8) {
             ForEach(Tab.allCases, id: \.self) { t in
                 Button { withAnimation(.easeOut(duration: 0.2)) { tab = t } } label: {
                     Text(t.rawValue)
-                        .font(SabqFonts.app(size: 12, weight: .medium))
-                        .foregroundStyle(tab == t ? .white : WCTheme.onDarkDim)
+                        .sabqText(SabqType.tag)
+                        .lineLimit(1).minimumScaleFactor(0.9)
+                        .foregroundStyle(tab == t ? WCTheme.stadiumTop : .white)
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 9)
-                        .background(Capsule().fill(tab == t ? WCTheme.emeraldDeep : WCTheme.chipFill))
+                        .frame(minHeight: SabqLayout.touchTarget)
+                        .background(Capsule().fill(tab == t ? Color.white : Color.white.opacity(0.12)))
                 }
                 .buttonStyle(.plain)
             }
         }
-        .padding(.horizontal, 16).padding(.top, 12).padding(.bottom, 4)
+        .padding(.horizontal, SabqLayout.pageMargin).padding(.top, SabqLayout.space12).padding(.bottom, SabqLayout.space12)
         .background(WCTheme.stadiumTop)
     }
 
@@ -186,19 +177,25 @@ private struct WCPredTodayTab: View {
     struct ScoreInput: Equatable { var home: Int; var away: Int }
 
     var body: some View {
-        VStack(spacing: 14) {
+        VStack(spacing: SabqLayout.space16) {
             if let toast {
                 Text(toast)
-                    .font(SabqFonts.app(size: 11, weight: .medium)).foregroundStyle(.white)
-                    .frame(maxWidth: .infinity).padding(.vertical, 9)
-                    .background(RoundedRectangle(cornerRadius: 12).fill(WCTheme.emeraldDeep))
+                    .font(SabqFonts.app(size: 13, weight: .semibold)).foregroundStyle(SabqTheme.onAction)
+                    .frame(maxWidth: .infinity).padding(.vertical, SabqLayout.space12)
+                    .background(RoundedRectangle(cornerRadius: SabqRadius.medium).fill(WCTheme.royal))
             }
             if loading {
-                WCLoading().padding(.top, 30)
+                WCLoading().padding(.top, SabqLayout.space32)
             } else if matches.isEmpty {
                 emptyText("لا توجد مباريات قابلة للتوقّع اليوم أو غدًا — تابع الجدول لاحقًا")
             } else {
-                ForEach(matches) { m in card(m) }
+                // بطاقات غير مؤطّرة تفصلها خطوط رفيعة
+                VStack(spacing: 0) {
+                    ForEach(Array(matches.enumerated()), id: \.element.id) { index, m in
+                        if index > 0 { WCRowSeparator() }
+                        card(m)
+                    }
+                }
             }
         }
         .task { await load() }
@@ -223,16 +220,16 @@ private struct WCPredTodayTab: View {
 
     @ViewBuilder private func card(_ m: WCPredictableMatch) -> some View {
         let f = m.fixture
-        VStack(spacing: 12) {
+        VStack(spacing: SabqLayout.space12) {
             // الترويسة: المنتخبان + الموعد
             HStack {
                 teamSide(f.home)
-                VStack(spacing: 3) {
+                VStack(spacing: SabqLayout.space4) {
                     Text(WCFormat.time(f))
-                        .font(SabqFonts.app(size: 11, weight: .regular)).foregroundStyle(WCTheme.onDark)
-                    Text(f.round).font(SabqFonts.app(size: 9)).foregroundStyle(WCTheme.onDarkDim).lineLimit(1)
+                        .font(SabqFonts.app(size: 15, weight: .semibold)).foregroundStyle(SabqTheme.textPrimary)
+                    Text(f.round).font(SabqFonts.app(size: 12)).foregroundStyle(SabqTheme.textSecondary).lineLimit(1)
                 }
-                .frame(minWidth: 70)
+                .frame(minWidth: 72)
                 teamSide(f.away)
             }
 
@@ -243,29 +240,28 @@ private struct WCPredTodayTab: View {
             } else {
                 Button { showLogin = true } label: {
                     Text("سجّل الدخول للتوقّع")
-                        .font(SabqFonts.app(size: 12, weight: .medium)).foregroundStyle(.white)
-                        .frame(maxWidth: .infinity).padding(.vertical, 11)
-                        .background(Capsule().fill(WCTheme.emeraldDeep))
+                        .sabqText(SabqType.button).foregroundStyle(SabqTheme.onAction)
+                        .frame(maxWidth: .infinity).frame(minHeight: SabqLayout.controlHeight)
+                        .background(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous).fill(WCTheme.royal))
                 }
                 .buttonStyle(.plain)
             }
 
-            HStack(spacing: 6) {
-                Image(systemName: "person.2.fill").font(.system(size: 10)).foregroundStyle(WCTheme.onDarkDim)
-                Text("\(m.predictionsCount) مشارك").font(SabqFonts.app(size: 11)).foregroundStyle(WCTheme.onDarkDim)
+            HStack(spacing: SabqLayout.space8) {
+                Image(systemName: "person.2.fill").font(SabqFonts.app(size: 12)).foregroundStyle(SabqTheme.textSecondary)
+                    .accessibilityHidden(true)
+                Text("\(m.predictionsCount) مشارك").sabqText(SabqType.meta).foregroundStyle(SabqTheme.textSecondary)
                 Spacer()
-                Text("الجائزة 500 نقطة").font(SabqFonts.app(size: 11, weight: .medium)).foregroundStyle(WCTheme.gold)
+                Text("الجائزة 500 نقطة").sabqText(SabqType.metaEmphasis).foregroundStyle(SabqTheme.warning)
             }
         }
-        .padding(14)
-        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(WCTheme.card))
-        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(WCTheme.cardStroke.opacity(0.5), lineWidth: 0.5))
+        .padding(.vertical, SabqLayout.space16)
     }
 
     private func teamSide(_ team: WCTeam) -> some View {
-        VStack(spacing: 6) {
-            WCTeamLogo(team: team, size: 42, ring: WCTheme.cardStroke)
-            Text(team.name).font(SabqFonts.app(size: 11, weight: .medium)).foregroundStyle(WCTheme.onDark)
+        VStack(spacing: SabqLayout.space8) {
+            WCTeamLogo(team: team, size: 44, ring: SabqTheme.separator)
+            Text(team.name).font(SabqFonts.app(size: 15, weight: .semibold)).foregroundStyle(SabqTheme.textPrimary)
                 .lineLimit(1).multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
@@ -283,29 +279,29 @@ private struct WCPredTodayTab: View {
         // التعادل ممنوع في خروج المغلوب — نُظهر التنبيه فورًا (حتى لتوقّع محفوظ
         // مسبقًا بتعادل) ونُعطّل الحفظ حتى يختار المستخدم فائزًا.
         let drawNotAllowed = input.home == input.away && wcIsKnockoutRound(m.fixture.roundEn)
-        VStack(spacing: 10) {
+        VStack(spacing: SabqLayout.space12) {
             // المضيف يمينًا (تحت شعاره) والضيف يسارًا — مطابقةً لترتيب الشعارات في
             // الترويسة (RTL) ولعرض النتيجة/التوقّع (ضيف-مضيف). نُبقي فرض LTR لثبات
             // تخطيط الأرقام، لكن نرتّب الضيف أولًا ثم المضيف كي يقع عدّاد كل فريق
             // تحت شعاره — وإلا خُزِّن التوقّع مقلوبًا فظهر «لم تُصب» لتوقّع صحيح.
             HStack(spacing: 16) {
                 stepper(value: input.away) { setAway(id, $0) }
-                Text("-").font(SabqFonts.app(size: 18, weight: .semibold)).foregroundStyle(WCTheme.onDarkDim)
+                Text("-").font(SabqFonts.app(size: 18, weight: .semibold)).foregroundStyle(SabqTheme.textSecondary)
                 stepper(value: input.home) { setHome(id, $0) }
             }
             .environment(\.layoutDirection, .leftToRight)
 
             if drawNotAllowed {
                 Text(WC_DRAW_NOT_ALLOWED_MESSAGE)
-                    .font(SabqFonts.app(size: 11, weight: .medium)).foregroundStyle(.white)
+                    .font(SabqFonts.app(size: 13, weight: .semibold)).foregroundStyle(SabqTheme.danger)
                     .multilineTextAlignment(.center)
-                    .frame(maxWidth: .infinity).padding(.vertical, 8).padding(.horizontal, 8)
-                    .background(RoundedRectangle(cornerRadius: 10).fill(WCTheme.liveRed))
+                    .frame(maxWidth: .infinity).padding(.vertical, SabqLayout.space8).padding(.horizontal, SabqLayout.space8)
+                    .wcQuietBlock()
             }
 
             if dirty {
                 Button { Task { await submit(m) } } label: {
-                    HStack(spacing: 6) {
+                    HStack(spacing: SabqLayout.space8) {
                         if submitting.contains(id) {
                             ProgressView().controlSize(.small).tint(.white)
                         } else {
@@ -313,36 +309,36 @@ private struct WCPredTodayTab: View {
                                 .font(.system(size: 12))
                         }
                         Text(saved != nil ? "تحديث التوقّع" : "حفظ التوقّع")
-                            .font(SabqFonts.app(size: 12, weight: .medium))
+                            .sabqText(SabqType.button)
                     }
                     .foregroundStyle(.white)
-                    .frame(maxWidth: .infinity).padding(.vertical, 9)
-                    .background(Capsule().fill(drawNotAllowed ? WCTheme.onDarkDim : WCTheme.emeraldDeep))
+                    .frame(maxWidth: .infinity).frame(minHeight: SabqLayout.controlHeight)
+                    .background(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous).fill(drawNotAllowed ? SabqTheme.textSecondary : WCTheme.royal))
                 }
                 .buttonStyle(.plain)
                 .disabled(submitting.contains(id) || drawNotAllowed)
             } else if !drawNotAllowed {
-                HStack(spacing: 5) {
+                HStack(spacing: SabqLayout.space4) {
                     Image(systemName: "checkmark.seal.fill")
-                        .font(.system(size: 12)).foregroundStyle(WCTheme.emerald)
+                        .font(SabqFonts.app(size: 13)).foregroundStyle(WCTheme.emeraldDeep)
                     Text("تم حفظ توقّعك")
-                        .font(SabqFonts.app(size: 11, weight: .regular)).foregroundStyle(WCTheme.onDarkDim)
+                        .sabqText(SabqType.meta).foregroundStyle(SabqTheme.textSecondary)
                 }
-                .frame(maxWidth: .infinity).padding(.vertical, 7)
+                .frame(maxWidth: .infinity).padding(.vertical, SabqLayout.space8)
             }
         }
     }
 
     private func stepper(value: Int, set: @escaping (Int) -> Void) -> some View {
-        HStack(spacing: 10) {
+        HStack(spacing: SabqLayout.space8) {
             stepBtn("minus") { if value > 0 { set(value - 1) } }
             Text("\(value)")
                 .font(SabqFonts.app(size: 20, weight: .semibold).monospacedDigit())
-                .foregroundStyle(WCTheme.onDark).frame(minWidth: 30)
+                .foregroundStyle(SabqTheme.textPrimary).frame(minWidth: 30)
             stepBtn("plus") { if value < 20 { set(value + 1) } }
         }
-        .padding(.horizontal, 10).padding(.vertical, 6)
-        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(WCTheme.chipFill))
+        .padding(.horizontal, SabqLayout.space4).padding(.vertical, 2)
+        .background(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous).fill(SabqTheme.surfaceMuted))
     }
 
     private func stepBtn(_ icon: String, _ action: @escaping () -> Void) -> some View {
@@ -350,9 +346,9 @@ private struct WCPredTodayTab: View {
         // واضحة وقابلة للّمس لكن هادئة (تقلّل ازدحام الأخضر في كل بطاقة).
         Button(action: action) {
             Image(systemName: icon)
-                .font(.system(size: 14, weight: .semibold)).foregroundStyle(WCTheme.emeraldDeep)
-                .frame(width: 32, height: 32)
-                .background(Circle().fill(WCTheme.emerald.opacity(0.14)))
+                .font(SabqFonts.app(size: 15, weight: .semibold)).foregroundStyle(WCTheme.emeraldDeep)
+                .frame(width: SabqLayout.touchTarget, height: SabqLayout.touchTarget)
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }
@@ -366,33 +362,33 @@ private struct WCPredTodayTab: View {
 
     // عرض المباراة المقفلة: توقّعي + النتيجة النهائية إن سُوّيت
     @ViewBuilder private func lockedView(_ m: WCPredictableMatch) -> some View {
-        VStack(spacing: 8) {
+        VStack(spacing: SabqLayout.space8) {
             if let s = m.settlement, let fh = s.finalHome, let fa = s.finalAway {
-                HStack(spacing: 6) {
-                    Text("النتيجة").font(SabqFonts.app(size: 11)).foregroundStyle(WCTheme.onDarkDim)
-                    wcScorePair(away: fa, home: fh, size: 15, color: WCTheme.onDark)
+                HStack(spacing: SabqLayout.space8) {
+                    Text("النتيجة").font(SabqFonts.app(size: 12)).foregroundStyle(SabqTheme.textSecondary)
+                    wcScorePair(away: fa, home: fh, size: 15, color: SabqTheme.textPrimary)
                 }
             }
             // خروج المغلوب: «1-1» وحدها مضلِّلة — نوضّح من حُسمت له بالترجيح.
             if let po = m.fixture.penaltyOutcome {
                 Text("فاز \(po.winnerName) بالترجيح (\(po.winnerScore)-\(po.loserScore))")
-                    .font(SabqFonts.app(size: 11, weight: .medium)).foregroundStyle(WCTheme.emeraldDeep)
+                    .font(SabqFonts.app(size: 12, weight: .medium)).foregroundStyle(WCTheme.emeraldDeep)
                     .multilineTextAlignment(.center)
             }
             if let mine = m.myPrediction {
                 HStack(spacing: 8) {
-                    Text("توقّعك:").font(SabqFonts.app(size: 11, weight: .medium)).foregroundStyle(WCTheme.onDark)
-                    wcScorePair(away: mine.predAway, home: mine.predHome, size: 12, color: WCTheme.onDark)
+                    Text("توقّعك:").font(SabqFonts.app(size: 12, weight: .medium)).foregroundStyle(SabqTheme.textPrimary)
+                    wcScorePair(away: mine.predAway, home: mine.predHome, size: 12, color: SabqTheme.textPrimary)
                     statusBadge(mine.status, points: mine.pointsAwarded)
                 }
             } else {
                 Text("أُغلق التوقّع — انطلقت المباراة")
-                    .font(SabqFonts.app(size: 12)).foregroundStyle(WCTheme.onDarkDim)
+                    .font(SabqFonts.app(size: 12)).foregroundStyle(SabqTheme.textSecondary)
             }
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 8)
-        .background(RoundedRectangle(cornerRadius: 12).fill(WCTheme.chipFill))
+        .padding(.vertical, SabqLayout.space12)
+        .wcQuietBlock()
     }
 
     private func submit(_ m: WCPredictableMatch) async {
@@ -467,19 +463,20 @@ func statusBadge(_ status: String, points: Int) -> some View {
     switch status {
     case "correct":
         Text("أصبت +\(points)")
-            .font(SabqFonts.app(size: 10, weight: .medium)).foregroundStyle(.white)
-            .padding(.horizontal, 8).padding(.vertical, 3)
-            .background(Capsule().fill(WCTheme.emeraldDeep))
+            .sabqText(SabqType.tag).foregroundStyle(SabqTheme.onAction)
+            .padding(.horizontal, SabqLayout.space8).padding(.vertical, SabqLayout.space4)
+            .background(Capsule().fill(WCTheme.royal))
     case "incorrect":
+        // نص بلون الحالة على سطح هادئ (الأبيض على الأحمر يسقط في الليلي)
         Text("لم تُصب")
-            .font(SabqFonts.app(size: 10, weight: .medium)).foregroundStyle(.white)
-            .padding(.horizontal, 8).padding(.vertical, 3)
-            .background(Capsule().fill(WCTheme.liveRed))
+            .sabqText(SabqType.tag).foregroundStyle(SabqTheme.danger)
+            .padding(.horizontal, SabqLayout.space8).padding(.vertical, SabqLayout.space4)
+            .background(Capsule().fill(SabqTheme.surfaceMuted))
     default:
         Text("بانتظار النتيجة")
-            .font(SabqFonts.app(size: 10, weight: .medium)).foregroundStyle(WCTheme.onDarkDim)
-            .padding(.horizontal, 8).padding(.vertical, 3)
-            .background(Capsule().fill(WCTheme.chipFill))
+            .sabqText(SabqType.tag).foregroundStyle(SabqTheme.textSecondary)
+            .padding(.horizontal, SabqLayout.space8).padding(.vertical, SabqLayout.space4)
+            .background(Capsule().fill(SabqTheme.surfaceMuted))
     }
 }
 
@@ -517,18 +514,19 @@ private struct WCPredTournamentTab: View {
     ]
 
     var body: some View {
-        VStack(spacing: 14) {
+        VStack(spacing: SabqLayout.space24) {
             if let toast = toast {
                 Text(toast)
-                    .font(SabqFonts.app(size: 11, weight: .medium)).foregroundStyle(.white)
-                    .frame(maxWidth: .infinity).padding(.vertical, 9)
-                    .background(RoundedRectangle(cornerRadius: 12).fill(WCTheme.emeraldDeep))
+                    .font(SabqFonts.app(size: 13, weight: .semibold)).foregroundStyle(SabqTheme.onAction)
+                    .frame(maxWidth: .infinity).padding(.vertical, SabqLayout.space12)
+                    .background(RoundedRectangle(cornerRadius: SabqRadius.medium).fill(WCTheme.royal))
             }
             if loading {
-                WCLoading().padding(.top, 30)
+                WCLoading().padding(.top, SabqLayout.space32)
             } else if let data = data {
                 howItWorksCard(data)
                 championSection(data)
+                WCRowSeparator()
                 scorerSection(data)
             } else {
                 unavailableView
@@ -538,42 +536,43 @@ private struct WCPredTournamentTab: View {
     }
 
     private var unavailableView: some View {
-        VStack(spacing: 10) {
-            Image(systemName: "crown.fill").font(.system(size: 34)).foregroundStyle(WCTheme.onDarkDim.opacity(0.5))
+        VStack(spacing: SabqLayout.space8) {
+            Image(systemName: "crown.fill").font(SabqFonts.app(size: 28)).foregroundStyle(SabqTheme.textTertiary)
+                .accessibilityHidden(true)
             Text("توقّعات البطولة قيد الإطلاق")
-                .font(SabqFonts.app(size: 14, weight: .semibold)).foregroundStyle(WCTheme.onDark)
+                .sabqText(SabqType.rowTitle).foregroundStyle(SabqTheme.textPrimary)
             Text("عُد قريبًا — توقّع البطل والهدّاف واربح آلاف النقاط.")
-                .font(SabqFonts.app(size: 12)).foregroundStyle(WCTheme.onDarkDim)
+                .sabqText(SabqType.meta).foregroundStyle(SabqTheme.textSecondary)
                 .multilineTextAlignment(.center)
         }
-        .frame(maxWidth: .infinity).padding(.vertical, 40)
+        .frame(maxWidth: .infinity).padding(.vertical, SabqLayout.space40)
     }
 
     // MARK: كيف تعمل
 
     private func howItWorksCard(_ data: WCLongData) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 6) {
+        VStack(alignment: .leading, spacing: SabqLayout.space12) {
+            HStack(spacing: SabqLayout.space8) {
                 Image(systemName: "info.circle.fill").foregroundStyle(WCTheme.emeraldDeep)
+                    .accessibilityHidden(true)
                 Text("كيف تعمل توقّعات البطولة؟")
-                    .font(SabqFonts.app(size: 15, weight: .semibold)).foregroundStyle(WCTheme.onDark)
+                    .sabqText(SabqType.rowTitle).foregroundStyle(SabqTheme.textPrimary)
             }
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: SabqLayout.space8) {
                 bullet("🏆", "البطل (\(data.pools.champion) نقطة): اختر من يرفع الكأس من المنتخبات المتأهّلة لدور الـ32. تُقسَّم الجائزة على كل من يصيب البطل مرجّحةً بوزن توقّعك — لا بالتساوي.")
                 bullet("⏱️", "وزن المبادر: كلّما ثبّتَّ توقّعك أبكر كبُرت حصّتك — ×1.0 حتى دور الـ16، ×0.6 في دور الـ16، ×0.3 في ربع النهائي، ثم يُغلق عند انطلاق نصف النهائي.")
                 bullet("⚽", "الهدّاف (\(data.pools.topScorer) نقطة): اختر متصدّر الهدّافين. تُقسَّم الجائزة بالتساوي على المصيبين، ويُغلق التوقّع عند انطلاق ربع النهائي.")
                 bullet("🎯", "الاحتساب: تُمنَح النقاط تلقائيًّا بعد النهائي — البطل = الفائز باللقب، الهدّاف = متصدّر لائحة الهدّافين الرسمية.")
             }
         }
-        .padding(14)
-        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(WCTheme.card))
-        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(WCTheme.cardStroke.opacity(0.5), lineWidth: 0.5))
+        .padding(SabqLayout.space16)
+        .wcQuietBlock()
     }
 
     private func bullet(_ icon: String, _ text: String) -> some View {
-        HStack(alignment: .top, spacing: 8) {
-            Text(icon).font(.system(size: 13))
-            Text(text).font(SabqFonts.app(size: 12)).foregroundStyle(WCTheme.onDarkDim)
+        HStack(alignment: .top, spacing: SabqLayout.space8) {
+            Text(icon).font(SabqFonts.app(size: 13))
+            Text(text).sabqText(SabqType.meta).foregroundStyle(SabqTheme.textSecondary)
         }
     }
 
@@ -622,70 +621,73 @@ private struct WCPredTournamentTab: View {
         let pickedId = champPick ?? mine?.teamId
         let estShare = estimatedChampShare(data, mine: mine, pickedId: pickedId, votes: votes)
 
-        return VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 8) {
-                Image(systemName: "crown.fill").foregroundStyle(WCTheme.gold)
+        return VStack(alignment: .leading, spacing: SabqLayout.space12) {
+            HStack(spacing: SabqLayout.space8) {
+                Image(systemName: "crown.fill").foregroundStyle(SabqTheme.warning)
+                    .accessibilityHidden(true)
                 Text("من يرفع كأس العالم 2026؟")
-                    .font(SabqFonts.app(size: 15, weight: .semibold)).foregroundStyle(WCTheme.onDark)
+                    .sabqText(SabqType.sectionHeading).foregroundStyle(SabqTheme.textPrimary)
                 Spacer()
+                // شارة الجائزة بلون الهوية الذهبي ونص أخضر داكن (تباين كافٍ)
                 Text("\(data.pools.champion) نقطة")
-                    .font(SabqFonts.app(size: 11, weight: .medium)).foregroundStyle(WCTheme.heroTop)
-                    .padding(.horizontal, 9).padding(.vertical, 3)
+                    .sabqText(SabqType.tag).foregroundStyle(WCTheme.heroTop)
+                    .padding(.horizontal, SabqLayout.space8).padding(.vertical, SabqLayout.space4)
                     .background(Capsule().fill(WCTheme.gold))
             }
 
             weightTimeline(data)
 
             if total > 0 {
-                statsRow(count: total, leaderName: leader?.name, leaderPct: leader?.pct, tint: WCTheme.gold)
+                statsRow(count: total, leaderName: leader?.name, leaderPct: leader?.pct, tint: SabqTheme.warning)
             }
 
             if let mine = mine, let name = mine.teamName {
-                HStack(spacing: 6) {
-                    Text("اخترت: \(name)").font(SabqFonts.app(size: 11, weight: .medium)).foregroundStyle(WCTheme.onDark)
+                HStack(spacing: SabqLayout.space8) {
+                    Text("اخترت: \(name)").font(SabqFonts.app(size: 13, weight: .semibold)).foregroundStyle(SabqTheme.textPrimary)
                     statusBadge(mine.status, points: mine.pointsAwarded)
                     if mine.status == "pending" && champOpen {
                         Text("بوزن ×\(String(format: "%.1f", Double(mine.weight) / 100))")
-                            .font(SabqFonts.app(size: 10)).foregroundStyle(WCTheme.onDarkDim)
+                            .font(SabqFonts.app(size: 12)).foregroundStyle(SabqTheme.textSecondary)
                     }
                 }
             }
 
             if champOpen {
-                VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: SabqLayout.space12) {
                     Text("اختر البطل من المتأهّلين لدور الـ32 (\(data.teams.filter { !$0.eliminated }.count) ما زال في المنافسة)")
-                        .font(SabqFonts.app(size: 11, weight: .medium)).foregroundStyle(WCTheme.onDarkDim)
+                        .font(SabqFonts.app(size: 12, weight: .medium)).foregroundStyle(SabqTheme.textSecondary)
 
-                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 3), spacing: 8) {
+                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: SabqLayout.space8), count: 3), spacing: SabqLayout.space8) {
                         ForEach(data.teams) { t in
                             let selected = pickedId == t.id
                             let pct = total > 0 ? Int((Double(votes[t.id]?.n ?? 0) / Double(total) * 100).rounded()) : 0
                             Button {
                                 if authStore.isLoggedIn { champPick = t.id } else { showLogin = true }
                             } label: {
-                                VStack(spacing: 5) {
-                                    teamLogo(t.logo, size: 38)
+                                VStack(spacing: SabqLayout.space4) {
+                                    teamLogo(t.logo, size: 40)
                                     Text(t.name)
-                                        .font(SabqFonts.app(size: 11, weight: .medium)).foregroundStyle(WCTheme.onDark)
+                                        .font(SabqFonts.app(size: 12, weight: .medium)).foregroundStyle(SabqTheme.textPrimary)
                                         .lineLimit(1).multilineTextAlignment(.center)
                                     if t.eliminated {
                                         Text("خرج")
-                                            .font(SabqFonts.app(size: 9, weight: .medium)).foregroundStyle(WCTheme.liveRed)
+                                            .font(SabqFonts.app(size: 12, weight: .medium)).foregroundStyle(SabqTheme.breaking)
                                     } else if total > 0 {
                                         Text("\(pct)%")
-                                            .font(SabqFonts.app(size: 9).monospacedDigit()).foregroundStyle(WCTheme.onDarkDim)
+                                            .font(SabqFonts.app(size: 12).monospacedDigit()).foregroundStyle(SabqTheme.textSecondary)
                                             .environment(\.layoutDirection, .leftToRight)
                                     }
                                 }
                                 .frame(maxWidth: .infinity)
-                                .padding(.vertical, 8).padding(.horizontal, 4)
+                                .padding(.vertical, SabqLayout.space8).padding(.horizontal, SabqLayout.space4)
                                 .background(
-                                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                        .fill(selected ? WCTheme.gold.opacity(0.14) : WCTheme.card)
+                                    RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                                        .fill(SabqTheme.surfaceMuted)
                                 )
+                                // المختار يُعلَّم بحدّ بلون الهوية لا بتعبئة ملوّنة
                                 .overlay(
-                                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                        .stroke(selected ? WCTheme.gold : WCTheme.cardStroke.opacity(0.5), lineWidth: selected ? 1.5 : 0.5)
+                                    RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                                        .stroke(selected ? WCTheme.royal : Color.clear, lineWidth: 2)
                                 )
                                 .opacity(t.eliminated ? 0.45 : 1)
                                 .saturation(t.eliminated ? 0 : 1)
@@ -697,17 +699,17 @@ private struct WCPredTournamentTab: View {
 
                     if pickedId != nil && estShare > 0 {
                         Text("إذا فاز اختيارك، حصّتك التقديرية ≈ \(estShare) نقطة")
-                            .font(SabqFonts.app(size: 11, weight: .medium)).foregroundStyle(WCTheme.gold)
+                            .font(SabqFonts.app(size: 13, weight: .semibold)).foregroundStyle(SabqTheme.warning)
                             .multilineTextAlignment(.center).frame(maxWidth: .infinity)
-                            .padding(.vertical, 8)
-                            .background(RoundedRectangle(cornerRadius: 12).fill(WCTheme.gold.opacity(0.10)))
+                            .padding(.vertical, SabqLayout.space12)
+                            .wcQuietBlock()
                     }
 
                     if authStore.isLoggedIn {
                         Button {
                             Task { await submitChampion() }
                         } label: {
-                            HStack(spacing: 6) {
+                            HStack(spacing: SabqLayout.space8) {
                                 if submittingChamp {
                                     ProgressView().controlSize(.small).tint(.white)
                                 } else {
@@ -716,19 +718,19 @@ private struct WCPredTournamentTab: View {
                                 Text(mine != nil
                                      ? "حدّث البطل (بوزن ×\(String(format: "%.1f", Double(liveWeight) / 100)))"
                                      : "احفظ البطل (بوزن ×\(String(format: "%.1f", Double(liveWeight) / 100)))")
-                                    .font(SabqFonts.app(size: 12, weight: .medium))
+                                    .sabqText(SabqType.button)
                             }
-                            .foregroundStyle(.white).frame(maxWidth: .infinity).padding(.vertical, 10)
-                            .background(Capsule().fill(WCTheme.gold))
+                            .foregroundStyle(SabqTheme.onAction).frame(maxWidth: .infinity).frame(minHeight: SabqLayout.controlHeight)
+                            .background(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous).fill(WCTheme.royal))
                         }
                         .buttonStyle(.plain)
                         .disabled(champPick == nil || champPick == mine?.teamId || submittingChamp)
                     } else {
                         Button { showLogin = true } label: {
                             Text("سجّل دخولك للتوقّع")
-                                .font(SabqFonts.app(size: 12, weight: .medium)).foregroundStyle(.white)
-                                .frame(maxWidth: .infinity).padding(.vertical, 10)
-                                .background(Capsule().fill(WCTheme.emeraldDeep))
+                                .sabqText(SabqType.button).foregroundStyle(SabqTheme.onAction)
+                                .frame(maxWidth: .infinity).frame(minHeight: SabqLayout.controlHeight)
+                                .background(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous).fill(WCTheme.royal))
                         }
                         .buttonStyle(.plain)
                     }
@@ -737,57 +739,50 @@ private struct WCPredTournamentTab: View {
                 lockedBanner("أُغلق توقّع البطل — انطلق نصف النهائي")
             }
         }
-        .padding(14)
-        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(WCTheme.gold.opacity(0.05)))
-        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(WCTheme.gold.opacity(0.25), lineWidth: 1))
     }
 
     private func weightTimeline(_ data: WCLongData) -> some View {
         let idx = Self.weightTiers.firstIndex { $0.id == data.champion.stage } ?? -1
-        return VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 5) {
-                Image(systemName: "chart.line.uptrend.xyaxis").font(.system(size: 11))
-                Text("ثبّت مبكرًا = حصّة أكبر").font(SabqFonts.app(size: 11, weight: .medium))
+        return VStack(alignment: .leading, spacing: SabqLayout.space8) {
+            HStack(spacing: SabqLayout.space4) {
+                Image(systemName: "chart.line.uptrend.xyaxis").font(SabqFonts.app(size: 12)).accessibilityHidden(true)
+                Text("ثبّت مبكرًا = حصّة أكبر").sabqText(SabqType.tag)
             }
-            .foregroundStyle(WCTheme.gold)
+            .foregroundStyle(SabqTheme.warning)
 
-            HStack(spacing: 4) {
+            HStack(spacing: SabqLayout.space4) {
                 ForEach(Self.weightTiers) { t in
                     let i = Self.weightTiers.firstIndex { $0.id == t.id } ?? 0
                     let active = data.champion.stage == t.id
                     let passed = idx > i || !data.champion.open
                     VStack(spacing: 1) {
-                        Text(t.mult).font(SabqFonts.app(size: 11, weight: .regular).monospacedDigit())
-                        Text(t.label).font(SabqFonts.app(size: 8)).lineLimit(1).minimumScaleFactor(0.7)
+                        Text(t.mult).font(SabqFonts.app(size: 12, weight: .regular).monospacedDigit())
+                        Text(t.label).font(SabqFonts.app(size: 12)).lineLimit(1).minimumScaleFactor(0.7)
                     }
-                    .foregroundStyle(active ? .white : (passed ? WCTheme.onDarkDim : WCTheme.onDark))
+                    // المرحلة الحالية: تعبئة الهوية ونص أبيض؛ البقية سطح هادئ
+                    .foregroundStyle(active ? SabqTheme.onAction : (passed ? SabqTheme.textSecondary : SabqTheme.textPrimary))
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 6)
+                    .padding(.vertical, SabqLayout.space8)
                     .background(
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .fill(active ? WCTheme.gold : (passed ? WCTheme.chipFill : WCTheme.card))
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .stroke(WCTheme.gold.opacity(active || passed ? 0 : 0.25), lineWidth: 1)
+                        RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
+                            .fill(active ? WCTheme.royal : (passed ? SabqTheme.surfaceStrong : SabqTheme.surface))
                     )
                 }
                 VStack(spacing: 1) {
-                    Image(systemName: "lock.fill").font(.system(size: 10))
-                    Text("إغلاق").font(SabqFonts.app(size: 8))
+                    Image(systemName: "lock.fill").font(SabqFonts.app(size: 12))
+                    Text("إغلاق").font(SabqFonts.app(size: 12))
                 }
-                .foregroundStyle(.white)
-                .frame(width: 40)
-                .padding(.vertical, 6)
+                .foregroundStyle(!data.champion.open ? SabqTheme.danger : SabqTheme.textSecondary)
+                .frame(width: 48)
+                .padding(.vertical, SabqLayout.space8)
                 .background(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(!data.champion.open ? WCTheme.liveRed : WCTheme.chipFill)
+                    RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
+                        .fill(SabqTheme.surface)
                 )
             }
         }
-        .padding(10)
-        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(WCTheme.gold.opacity(0.06)))
-        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(WCTheme.gold.opacity(0.20), lineWidth: 1))
+        .padding(SabqLayout.space12)
+        .wcQuietBlock()
     }
 
     // MARK: الهدّاف
@@ -815,31 +810,32 @@ private struct WCPredTournamentTab: View {
         let leader = scorerLeader(data)
         let pickedId = scorerPick ?? mine?.playerId
 
-        return VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 8) {
+        return VStack(alignment: .leading, spacing: SabqLayout.space12) {
+            HStack(spacing: SabqLayout.space8) {
                 Image(systemName: "soccerball").foregroundStyle(WCTheme.emeraldDeep)
+                    .accessibilityHidden(true)
                 Text("من هدّاف البطولة؟")
-                    .font(SabqFonts.app(size: 15, weight: .semibold)).foregroundStyle(WCTheme.onDark)
+                    .sabqText(SabqType.sectionHeading).foregroundStyle(SabqTheme.textPrimary)
                 Spacer()
                 Text("\(data.pools.topScorer) نقطة")
-                    .font(SabqFonts.app(size: 11, weight: .medium)).foregroundStyle(.white)
-                    .padding(.horizontal, 9).padding(.vertical, 3)
-                    .background(Capsule().fill(WCTheme.emeraldDeep))
+                    .sabqText(SabqType.tag).foregroundStyle(SabqTheme.onAction)
+                    .padding(.horizontal, SabqLayout.space8).padding(.vertical, SabqLayout.space4)
+                    .background(Capsule().fill(WCTheme.royal))
             }
 
-            HStack(spacing: 5) {
-                Image(systemName: "clock").font(.system(size: 11))
-                Text("تُقسَّم بالتساوي على المصيبين · يُغلق عند انطلاق ربع النهائي").font(SabqFonts.app(size: 11))
+            HStack(spacing: SabqLayout.space4) {
+                Image(systemName: "clock").font(SabqFonts.app(size: 12)).accessibilityHidden(true)
+                Text("تُقسَّم بالتساوي على المصيبين · يُغلق عند انطلاق ربع النهائي").sabqText(SabqType.meta)
             }
-            .foregroundStyle(WCTheme.onDarkDim)
+            .foregroundStyle(SabqTheme.textSecondary)
 
             if total > 0 {
                 statsRow(count: total, leaderName: leader?.name, leaderPct: leader?.pct, tint: WCTheme.emeraldDeep)
             }
 
             if let mine = mine, let name = mine.playerName {
-                HStack(spacing: 6) {
-                    Text("اخترت: \(name)").font(SabqFonts.app(size: 11, weight: .medium)).foregroundStyle(WCTheme.onDark)
+                HStack(spacing: SabqLayout.space8) {
+                    Text("اخترت: \(name)").font(SabqFonts.app(size: 13, weight: .semibold)).foregroundStyle(SabqTheme.textPrimary)
                     statusBadge(mine.status, points: mine.pointsAwarded)
                 }
             }
@@ -848,30 +844,30 @@ private struct WCPredTournamentTab: View {
                 lockedBanner("أُغلق توقّع الهدّاف — انطلق ربع النهائي")
             } else if data.scorers.isEmpty {
                 Text("لم تُسجّل أهداف بعد — عُد بعد انطلاق المباريات.")
-                    .font(SabqFonts.app(size: 12)).foregroundStyle(WCTheme.onDarkDim)
-                    .frame(maxWidth: .infinity).multilineTextAlignment(.center).padding(.vertical, 10)
+                    .font(SabqFonts.app(size: 12)).foregroundStyle(SabqTheme.textSecondary)
+                    .frame(maxWidth: .infinity).multilineTextAlignment(.center).padding(.vertical, SabqLayout.space12)
             } else {
-                VStack(alignment: .leading, spacing: 10) {
-                    VStack(spacing: 8) {
+                VStack(alignment: .leading, spacing: SabqLayout.space12) {
+                    VStack(spacing: SabqLayout.space8) {
                         ForEach(data.scorers) { s in
                             let selected = pickedId == s.id
                             let pct = total > 0 ? Int((Double(votes[s.id] ?? 0) / Double(total) * 100).rounded()) : 0
                             Button {
                                 if authStore.isLoggedIn { scorerPick = s.id } else { showLogin = true }
                             } label: {
-                                HStack(spacing: 10) {
+                                HStack(spacing: SabqLayout.space12) {
                                     scorerPhoto(s.photo, size: 40)
                                     VStack(alignment: .leading, spacing: 2) {
-                                        HStack(spacing: 5) {
-                                            Text(s.name).font(SabqFonts.app(size: 12, weight: .medium)).foregroundStyle(WCTheme.onDark).lineLimit(1)
+                                        HStack(spacing: SabqLayout.space4) {
+                                            Text(s.name).font(SabqFonts.app(size: 15, weight: .semibold)).foregroundStyle(SabqTheme.textPrimary).lineLimit(1)
                                             if s.eliminated {
                                                 Text("خرج فريقه")
-                                                    .font(SabqFonts.app(size: 9, weight: .medium)).foregroundStyle(WCTheme.liveRed)
+                                                    .font(SabqFonts.app(size: 12, weight: .medium)).foregroundStyle(SabqTheme.breaking)
                                             }
                                         }
                                         HStack(spacing: 4) {
                                             teamLogo(s.team.logo, size: 12)
-                                            Text(s.team.name).font(SabqFonts.app(size: 10)).foregroundStyle(WCTheme.onDarkDim).lineLimit(1)
+                                            Text(s.team.name).font(SabqFonts.app(size: 12)).foregroundStyle(SabqTheme.textSecondary).lineLimit(1)
                                         }
                                     }
                                     Spacer(minLength: 4)
@@ -880,18 +876,18 @@ private struct WCPredTournamentTab: View {
                                             .font(SabqFonts.app(size: 15, weight: .semibold).monospacedDigit())
                                             .foregroundStyle(WCTheme.emeraldDeep)
                                         Text(total > 0 ? "\(pct)%" : "هدف")
-                                            .font(SabqFonts.app(size: 8)).foregroundStyle(WCTheme.onDarkDim)
+                                            .font(SabqFonts.app(size: 12)).foregroundStyle(SabqTheme.textSecondary)
                                     }
                                     .environment(\.layoutDirection, .leftToRight)
                                 }
-                                .padding(.horizontal, 10).padding(.vertical, 8)
+                                .padding(.horizontal, SabqLayout.space12).padding(.vertical, SabqLayout.space8)
                                 .background(
-                                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                        .fill(selected ? WCTheme.emerald.opacity(0.12) : WCTheme.card)
+                                    RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                                        .fill(SabqTheme.surfaceMuted)
                                 )
                                 .overlay(
-                                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                        .stroke(selected ? WCTheme.emeraldDeep : WCTheme.cardStroke.opacity(0.5), lineWidth: selected ? 1.5 : 0.5)
+                                    RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                                        .stroke(selected ? WCTheme.royal : Color.clear, lineWidth: 2)
                                 )
                                 .opacity(s.eliminated ? 0.45 : 1)
                                 .saturation(s.eliminated ? 0 : 1)
@@ -905,35 +901,32 @@ private struct WCPredTournamentTab: View {
                         Button {
                             Task { await submitScorer() }
                         } label: {
-                            HStack(spacing: 6) {
+                            HStack(spacing: SabqLayout.space8) {
                                 if submittingScorer {
                                     ProgressView().controlSize(.small).tint(.white)
                                 } else {
                                     Image(systemName: "soccerball").font(.system(size: 12))
                                 }
                                 Text(mine != nil ? "حدّث توقّع الهدّاف" : "احفظ توقّع الهدّاف")
-                                    .font(SabqFonts.app(size: 12, weight: .medium))
+                                    .sabqText(SabqType.button)
                             }
-                            .foregroundStyle(.white).frame(maxWidth: .infinity).padding(.vertical, 10)
-                            .background(Capsule().fill(WCTheme.emeraldDeep))
+                            .foregroundStyle(SabqTheme.onAction).frame(maxWidth: .infinity).frame(minHeight: SabqLayout.controlHeight)
+                            .background(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous).fill(WCTheme.royal))
                         }
                         .buttonStyle(.plain)
                         .disabled(scorerPick == nil || scorerPick == mine?.playerId || submittingScorer)
                     } else {
                         Button { showLogin = true } label: {
                             Text("سجّل دخولك للتوقّع")
-                                .font(SabqFonts.app(size: 12, weight: .medium)).foregroundStyle(.white)
-                                .frame(maxWidth: .infinity).padding(.vertical, 10)
-                                .background(Capsule().fill(WCTheme.emeraldDeep))
+                                .sabqText(SabqType.button).foregroundStyle(SabqTheme.onAction)
+                                .frame(maxWidth: .infinity).frame(minHeight: SabqLayout.controlHeight)
+                                .background(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous).fill(WCTheme.royal))
                         }
                         .buttonStyle(.plain)
                     }
                 }
             }
         }
-        .padding(14)
-        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(WCTheme.emeraldDeep.opacity(0.05)))
-        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(WCTheme.emeraldDeep.opacity(0.20), lineWidth: 1))
     }
 
     // MARK: مساعدات مشتركة
@@ -943,53 +936,50 @@ private struct WCPredTournamentTab: View {
             .padding(size * 0.14)
             .frame(width: size, height: size)
             .background(Circle().fill(.white))
-            .overlay(Circle().stroke(WCTheme.cardStroke, lineWidth: 1))
+            .overlay(Circle().stroke(SabqTheme.separator, lineWidth: 1))
     }
 
     @ViewBuilder private func scorerPhoto(_ url: String, size: CGFloat) -> some View {
         if !url.isEmpty {
             WCRemoteImage(url: url, contentMode: .fill).frame(width: size, height: size).clipShape(Circle())
         } else {
-            Circle().fill(WCTheme.chipFill).frame(width: size, height: size)
+            Circle().fill(SabqTheme.surfaceMuted).frame(width: size, height: size)
         }
     }
 
     private func statsRow(count: Int, leaderName: String?, leaderPct: Int?, tint: Color) -> some View {
-        HStack(spacing: 14) {
-            HStack(spacing: 5) {
-                Image(systemName: "person.2.fill").font(.system(size: 11))
-                Text("\(count) توقّعوا").font(SabqFonts.app(size: 11, weight: .medium))
+        HStack(spacing: SabqLayout.space12) {
+            HStack(spacing: SabqLayout.space4) {
+                Image(systemName: "person.2.fill").font(SabqFonts.app(size: 12)).accessibilityHidden(true)
+                Text("\(count) توقّعوا").sabqText(SabqType.tag)
             }
             .foregroundStyle(tint)
 
             if let leaderName = leaderName, let leaderPct = leaderPct {
-                HStack(spacing: 4) {
-                    Image(systemName: "flame.fill").font(.system(size: 11)).foregroundStyle(tint)
-                    Text("الأكثر توقّعًا:").font(SabqFonts.app(size: 11)).foregroundStyle(WCTheme.onDarkDim)
-                    Text(leaderName).font(SabqFonts.app(size: 11, weight: .medium)).foregroundStyle(WCTheme.onDark).lineLimit(1)
+                HStack(spacing: SabqLayout.space4) {
+                    Image(systemName: "flame.fill").font(SabqFonts.app(size: 12)).foregroundStyle(tint).accessibilityHidden(true)
+                    Text("الأكثر توقّعًا:").font(SabqFonts.app(size: 12)).foregroundStyle(SabqTheme.textSecondary)
+                    Text(leaderName).font(SabqFonts.app(size: 12, weight: .medium)).foregroundStyle(SabqTheme.textPrimary).lineLimit(1)
                     Text("(\(leaderPct)%)")
-                        .font(SabqFonts.app(size: 11).monospacedDigit()).foregroundStyle(WCTheme.onDarkDim)
+                        .font(SabqFonts.app(size: 12).monospacedDigit()).foregroundStyle(SabqTheme.textSecondary)
                         .environment(\.layoutDirection, .leftToRight)
                 }
             }
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, 10).padding(.vertical, 8)
-        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(tint.opacity(0.08)))
+        .padding(.horizontal, SabqLayout.space12).padding(.vertical, SabqLayout.space8)
+        .wcQuietBlock()
     }
 
     private func lockedBanner(_ text: String) -> some View {
-        HStack(spacing: 6) {
-            Image(systemName: "lock.fill").font(.system(size: 13))
-            Text(text).font(SabqFonts.app(size: 12, weight: .medium))
+        HStack(spacing: SabqLayout.space8) {
+            Image(systemName: "lock.fill").font(SabqFonts.app(size: 13)).accessibilityHidden(true)
+            Text(text).font(SabqFonts.app(size: 13, weight: .semibold))
         }
-        .foregroundStyle(WCTheme.liveRed)
+        .foregroundStyle(SabqTheme.danger)
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 14)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(WCTheme.liveRed.opacity(0.35), style: StrokeStyle(lineWidth: 1, dash: [5, 3]))
-        )
+        .padding(.vertical, SabqLayout.space16)
+        .wcQuietBlock()
     }
 
     // MARK: شبكة
@@ -1059,58 +1049,65 @@ private struct WCPredMineTab: View {
     @State private var loading = true
 
     var body: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: SabqLayout.space16) {
             if !authStore.isLoggedIn {
                 loginPrompt
             } else if loading {
-                WCLoading().padding(.top, 30)
+                WCLoading().padding(.top, SabqLayout.space32)
             } else if items.isEmpty {
                 emptyText("لم تضع أي توقّع بعد — ابدأ من تبويب «مباريات اليوم»")
             } else {
                 summaryBar
-                ForEach(items) { row($0) }
+                VStack(spacing: 0) {
+                    ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+                        if index > 0 { WCRowSeparator() }
+                        row(item)
+                    }
+                }
             }
         }
         .task(id: authStore.isLoggedIn) { if authStore.isLoggedIn { await load() } }
     }
 
     private var loginPrompt: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: SabqLayout.space12) {
             Image(systemName: "person.crop.circle.badge.questionmark")
-                .font(.system(size: 40)).foregroundStyle(WCTheme.onDarkDim)
+                .font(.system(size: 40)).foregroundStyle(SabqTheme.textTertiary)
+                .accessibilityHidden(true)
             Text("سجّل الدخول لعرض توقّعاتك ونقاطك")
-                .font(SabqFonts.app(size: 14)).foregroundStyle(WCTheme.onDarkDim)
+                .font(SabqFonts.app(size: 15)).foregroundStyle(SabqTheme.textSecondary)
             Button { showLogin = true } label: {
                 Text("تسجيل الدخول")
-                    .font(SabqFonts.app(size: 12, weight: .medium)).foregroundStyle(.white)
-                    .padding(.horizontal, 24).padding(.vertical, 11)
-                    .background(Capsule().fill(WCTheme.emeraldDeep))
+                    .sabqText(SabqType.button).foregroundStyle(SabqTheme.onAction)
+                    .padding(.horizontal, SabqLayout.space24)
+                    .frame(minHeight: SabqLayout.controlHeight)
+                    .background(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous).fill(WCTheme.royal))
             }
             .buttonStyle(.plain)
         }
-        .frame(maxWidth: .infinity).padding(.vertical, 40)
+        .frame(maxWidth: .infinity).padding(.vertical, SabqLayout.space40)
     }
 
     private var summaryBar: some View {
         let total = items.reduce(0) { $0 + $1.pointsAwarded }
         let correct = items.filter { $0.status == "correct" }.count
         let played = items.filter { $0.status != "pending" }.count
-        return HStack(spacing: 8) {
-            tile("\(total)", "نقاطك", WCTheme.gold)
+        return HStack(spacing: SabqLayout.space8) {
+            tile("\(total)", "نقاطك", SabqTheme.warning)
             tile("\(correct)", "إصابات", WCTheme.emeraldDeep)
             tile("\(played)", "مباريات", nil)
         }
     }
 
     private func tile(_ value: String, _ label: String, _ accent: Color?) -> some View {
-        VStack(spacing: 2) {
-            Text(value).font(SabqFonts.app(size: 17, weight: .semibold).monospacedDigit())
-                .foregroundStyle(accent ?? WCTheme.onDark)
+        VStack(spacing: 0) {
+            Text(value).font(SabqFonts.app(size: 20, weight: .semibold).monospacedDigit())
+                .foregroundStyle(accent ?? SabqTheme.textPrimary)
                 .environment(\.layoutDirection, .leftToRight)
-            Text(label).font(SabqFonts.app(size: 10)).foregroundStyle(WCTheme.onDarkDim)
+            Text(label).sabqText(SabqType.meta).foregroundStyle(SabqTheme.textSecondary)
         }
-        .frame(maxWidth: .infinity).padding(.vertical, 10)
-        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(WCTheme.card))
+        .frame(maxWidth: .infinity).padding(.vertical, SabqLayout.space12)
+        .wcQuietBlock()
     }
 
     // بطاقة توقّع احترافية مطابقة لتصميم الويب (MyPredictionsList): شريط علوي
@@ -1129,50 +1126,41 @@ private struct WCPredMineTab: View {
             // شريط علوي: اليوم + شارة الحالة
             HStack {
                 Text(kickoffDayLabel(item.kickoffAt))
-                    .font(SabqFonts.app(size: 11, weight: .regular)).foregroundStyle(WCTheme.onDarkDim)
+                    .sabqText(SabqType.meta).foregroundStyle(SabqTheme.textSecondary)
                 Spacer()
                 statusPill(settled: settled, isWin: isWin, points: item.pointsAwarded)
             }
-            .padding(.horizontal, 12).padding(.vertical, 8)
-            .background(isWin ? WCTheme.emeraldDeep.opacity(0.10) : WCTheme.chipFill.opacity(0.6))
+            .padding(.top, SabqLayout.space12)
 
             // الشعارات + توقّعي/النتيجة
-            HStack(spacing: 8) {
+            HStack(spacing: SabqLayout.space8) {
                 crest(name: item.homeTeamName, logo: item.homeTeamLogo)
-                HStack(spacing: 14) {
+                HStack(spacing: SabqLayout.space16) {
                     scoreBlock("توقّعي", away: item.predAway, home: item.predHome,
-                               tint: isWin ? WCTheme.emeraldDeep : WCTheme.onDark)
+                               tint: isWin ? WCTheme.emeraldDeep : SabqTheme.textPrimary)
                     if settled, let fh = item.finalHome, let fa = item.finalAway {
-                        Rectangle().fill(WCTheme.cardStroke).frame(width: 1, height: 34)
-                        scoreBlock("النتيجة", away: fa, home: fh, tint: WCTheme.onDarkDim)
+                        Rectangle().fill(SabqTheme.separator).frame(width: 1, height: 34)
+                        scoreBlock("النتيجة", away: fa, home: fh, tint: SabqTheme.textSecondary)
                     }
                 }
                 .frame(maxWidth: .infinity)
                 crest(name: item.awayTeamName, logo: item.awayTeamLogo)
             }
-            .padding(.horizontal, 12).padding(.vertical, 12)
+            .padding(.vertical, SabqLayout.space12)
 
             // تذييل: الفائز بركلات الترجيح
             if let pw = penWin {
-                Rectangle().fill(WCTheme.cardStroke.opacity(0.6)).frame(height: 1)
                 Text("فاز \(pw.name) بالترجيح (\(pw.w)-\(pw.l))")
-                    .font(SabqFonts.app(size: 11, weight: .medium)).foregroundStyle(WCTheme.emeraldDeep)
+                    .sabqText(SabqType.metaEmphasis).foregroundStyle(WCTheme.emeraldDeep)
                     .frame(maxWidth: .infinity).multilineTextAlignment(.center)
-                    .padding(.vertical, 6).padding(.horizontal, 8)
+                    .padding(.bottom, SabqLayout.space12)
             }
         }
-        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(WCTheme.card))
-        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(isWin ? WCTheme.emeraldDeep.opacity(0.5) : WCTheme.cardStroke.opacity(0.5),
-                        lineWidth: isWin ? 1 : 0.5)
-        )
     }
 
     // شعار + اسم منتخب — عمود متمركز بعرض ثابت (المضيف يمينًا في RTL)
     private func crest(name: String?, logo url: String?) -> some View {
-        VStack(spacing: 6) {
+        VStack(spacing: SabqLayout.space8) {
             ZStack {
                 Circle().fill(.white)
                 if let url, !url.isEmpty {
@@ -1180,9 +1168,9 @@ private struct WCPredMineTab: View {
                 }
             }
             .frame(width: 44, height: 44)
-            .overlay(Circle().stroke(WCTheme.cardStroke, lineWidth: 1))
+            .overlay(Circle().stroke(SabqTheme.separator, lineWidth: 1))
             Text(name ?? "—")
-                .font(SabqFonts.app(size: 11, weight: .medium)).foregroundStyle(WCTheme.onDark)
+                .font(SabqFonts.app(size: 12, weight: .medium)).foregroundStyle(SabqTheme.textPrimary)
                 .lineLimit(2).multilineTextAlignment(.center).frame(width: 62)
         }
     }
@@ -1190,7 +1178,7 @@ private struct WCPredMineTab: View {
     // كتلة نتيجة (توقّعي/النتيجة): عنوان صغير + رقم كبير موحّد الاتجاه
     private func scoreBlock(_ label: String, away: Int, home: Int, tint: Color) -> some View {
         VStack(spacing: 2) {
-            Text(label).font(SabqFonts.app(size: 10)).foregroundStyle(WCTheme.onDarkDim)
+            Text(label).font(SabqFonts.app(size: 12)).foregroundStyle(SabqTheme.textSecondary)
             wcScorePair(away: away, home: home, size: 22, color: tint)
         }
     }
@@ -1198,27 +1186,27 @@ private struct WCPredMineTab: View {
     @ViewBuilder private func statusPill(settled: Bool, isWin: Bool, points: Int) -> some View {
         if settled {
             if isWin {
-                HStack(spacing: 4) {
-                    Image(systemName: "trophy.fill").font(.system(size: 10))
-                    Text("+\(points) نقطة").font(SabqFonts.app(size: 11, weight: .medium))
+                HStack(spacing: SabqLayout.space4) {
+                    Image(systemName: "trophy.fill").font(SabqFonts.app(size: 12))
+                    Text("+\(points) نقطة").sabqText(SabqType.tag)
                 }
-                .foregroundStyle(.white).padding(.horizontal, 10).padding(.vertical, 3)
-                .background(Capsule().fill(WCTheme.emeraldDeep))
+                .foregroundStyle(SabqTheme.onAction).padding(.horizontal, SabqLayout.space8).padding(.vertical, SabqLayout.space4)
+                .background(Capsule().fill(WCTheme.royal))
             } else {
-                HStack(spacing: 4) {
-                    Image(systemName: "xmark").font(.system(size: 9, weight: .medium))
-                    Text("لم تُصب").font(SabqFonts.app(size: 11, weight: .medium))
+                HStack(spacing: SabqLayout.space4) {
+                    Image(systemName: "xmark").font(SabqFonts.app(size: 12))
+                    Text("لم تُصب").sabqText(SabqType.tag)
                 }
-                .foregroundStyle(WCTheme.onDarkDim).padding(.horizontal, 10).padding(.vertical, 3)
-                .background(Capsule().fill(WCTheme.chipFill))
+                .foregroundStyle(SabqTheme.textSecondary).padding(.horizontal, SabqLayout.space8).padding(.vertical, SabqLayout.space4)
+                .background(Capsule().fill(SabqTheme.surfaceMuted))
             }
         } else {
-            HStack(spacing: 4) {
-                Image(systemName: "clock").font(.system(size: 9))
-                Text("قيد الانتظار").font(SabqFonts.app(size: 11, weight: .medium))
+            HStack(spacing: SabqLayout.space4) {
+                Image(systemName: "clock").font(SabqFonts.app(size: 12))
+                Text("قيد الانتظار").sabqText(SabqType.tag)
             }
-            .foregroundStyle(WCTheme.gold).padding(.horizontal, 10).padding(.vertical, 3)
-            .background(Capsule().fill(WCTheme.gold.opacity(0.15)))
+            .foregroundStyle(SabqTheme.warning).padding(.horizontal, SabqLayout.space8).padding(.vertical, SabqLayout.space4)
+            .background(Capsule().fill(SabqTheme.surfaceMuted))
         }
     }
 
@@ -1247,14 +1235,14 @@ struct WCWinCelebration: View {
 
     var body: some View {
         ZStack {
-            WCTheme.card.ignoresSafeArea()
+            SabqTheme.surface.ignoresSafeArea()
             WCConfettiView().allowsHitTesting(false)
-            VStack(spacing: 16) {
+            VStack(spacing: SabqLayout.space16) {
                 Text("🎯").font(.system(size: 60))
                 Text("توقّع موفّق! 🎉")
-                    .font(SabqFonts.app(size: 22, weight: .semibold)).foregroundStyle(WCTheme.onDark)
+                    .sabqText(SabqType.leadTitle).foregroundStyle(SabqTheme.textPrimary)
                 Text("\(item.homeTeamName ?? "") ضد \(item.awayTeamName ?? "")")
-                    .font(SabqFonts.app(size: 14, weight: .semibold)).foregroundStyle(WCTheme.onDarkDim)
+                    .font(SabqFonts.app(size: 15, weight: .semibold)).foregroundStyle(SabqTheme.textSecondary)
                     .multilineTextAlignment(.center)
 
                 detailsCard
@@ -1265,45 +1253,44 @@ struct WCWinCelebration: View {
                         .foregroundStyle(WCTheme.emeraldDeep)
                         .environment(\.layoutDirection, .leftToRight)
                     Text("نقطة من إصابة النتيجة الدقيقة")
-                        .font(SabqFonts.app(size: 12)).foregroundStyle(WCTheme.onDarkDim)
+                        .font(SabqFonts.app(size: 12)).foregroundStyle(SabqTheme.textSecondary)
                 }
-                .padding(.top, 2)
+                .padding(.top, SabqLayout.space4)
 
                 Button(action: onClose) {
                     Text("رائع!")
-                        .font(SabqFonts.app(size: 16, weight: .semibold)).foregroundStyle(.white)
-                        .frame(maxWidth: .infinity).frame(height: 50)
-                        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(WCTheme.emeraldDeep))
+                        .sabqText(SabqType.button).foregroundStyle(SabqTheme.onAction)
+                        .frame(maxWidth: .infinity).frame(minHeight: SabqLayout.controlHeight)
+                        .background(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous).fill(WCTheme.royal))
                 }
-                .buttonStyle(.plain).padding(.horizontal, 24).padding(.top, 4)
+                .buttonStyle(.plain).padding(.horizontal, SabqLayout.space24).padding(.top, SabqLayout.space4)
             }
-            .padding(28)
+            .padding(SabqLayout.space24)
         }
     }
 
     // تفاصيل التوقّع: الشعارات + توقّعي/النتيجة
     private var detailsCard: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: SabqLayout.space12) {
             celebCrest(name: item.homeTeamName, logo: item.homeTeamLogo)
-            HStack(spacing: 14) {
+            HStack(spacing: SabqLayout.space16) {
                 VStack(spacing: 2) {
-                    Text("توقّعي").font(SabqFonts.app(size: 10)).foregroundStyle(WCTheme.onDarkDim)
+                    Text("توقّعي").font(SabqFonts.app(size: 12)).foregroundStyle(SabqTheme.textSecondary)
                     wcScorePair(away: item.predAway, home: item.predHome, size: 20, color: WCTheme.emeraldDeep)
                 }
                 if let fh = item.finalHome, let fa = item.finalAway {
-                    Rectangle().fill(WCTheme.cardStroke).frame(width: 1, height: 32)
+                    Rectangle().fill(SabqTheme.separator).frame(width: 1, height: 32)
                     VStack(spacing: 2) {
-                        Text("النتيجة").font(SabqFonts.app(size: 10)).foregroundStyle(WCTheme.onDarkDim)
-                        wcScorePair(away: fa, home: fh, size: 20, color: WCTheme.onDark)
+                        Text("النتيجة").font(SabqFonts.app(size: 12)).foregroundStyle(SabqTheme.textSecondary)
+                        wcScorePair(away: fa, home: fh, size: 20, color: SabqTheme.textPrimary)
                     }
                 }
             }
             .frame(maxWidth: .infinity)
             celebCrest(name: item.awayTeamName, logo: item.awayTeamLogo)
         }
-        .padding(.horizontal, 14).padding(.vertical, 12)
-        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(WCTheme.chipFill))
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(WCTheme.cardStroke, lineWidth: 1))
+        .padding(.horizontal, SabqLayout.space16).padding(.vertical, SabqLayout.space12)
+        .wcQuietBlock()
     }
 
     private func celebCrest(name: String?, logo url: String?) -> some View {
@@ -1313,9 +1300,9 @@ struct WCWinCelebration: View {
                 if let url, !url.isEmpty { WCRemoteImage(url: url).padding(7) }
             }
             .frame(width: 44, height: 44)
-            .overlay(Circle().stroke(WCTheme.cardStroke, lineWidth: 1))
+            .overlay(Circle().stroke(SabqTheme.separator, lineWidth: 1))
             Text(name ?? "—")
-                .font(SabqFonts.app(size: 11, weight: .medium)).foregroundStyle(WCTheme.onDark)
+                .font(SabqFonts.app(size: 12, weight: .medium)).foregroundStyle(SabqTheme.textPrimary)
                 .lineLimit(2).multilineTextAlignment(.center).frame(width: 58)
         }
     }
@@ -1337,7 +1324,7 @@ struct WCConfettiView: View {
     private let start = Date()
 
     init(count: Int = 80) {
-        let palette: [Color] = [WCTheme.emeraldDeep, WCTheme.gold, WCTheme.leaf, WCTheme.emerald]
+        let palette: [Color] = [WCTheme.emeraldDeep, WCTheme.gold, SabqTheme.success, WCTheme.emerald]
         pieces = (0..<count).map { _ in
             Piece(
                 x: .random(in: 0...1),
@@ -1390,19 +1377,22 @@ private struct WCPredLeaderboardTab: View {
     private let serverLimitCap = 500
 
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 0) {
             if loading {
-                WCLoading().padding(.top, 30)
+                WCLoading().padding(.top, SabqLayout.space32)
             } else if leaders.isEmpty {
                 emptyText("لا متصدّرين بعد — كن أول من يصيب نتيجة مباراة!")
             } else {
                 if let total, total > 0 {
                     Text("\(total) مشاركًا في المسابقة")
-                        .font(SabqFonts.app(size: 11)).foregroundStyle(WCTheme.onDarkDim)
+                        .font(SabqFonts.app(size: 12)).foregroundStyle(SabqTheme.textSecondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 2)
+                        .padding(.bottom, SabqLayout.space8)
                 }
-                ForEach(leaders) { row($0) }
+                ForEach(Array(leaders.enumerated()), id: \.element.id) { index, l in
+                    if index > 0 { WCRowSeparator() }
+                    row(l)
+                }
                 if let viewer, !leaders.contains(where: { $0.userId == viewer.userId }) {
                     viewerRow(viewer)
                 }
@@ -1420,33 +1410,32 @@ private struct WCPredLeaderboardTab: View {
     }
 
     private func row(_ l: WCPredLeader) -> some View {
-        HStack(spacing: 12) {
+        HStack(spacing: SabqLayout.space12) {
             rankBadge(l.rank)
             avatar(l.avatar)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(l.name).font(SabqFonts.app(size: 14, weight: .semibold)).foregroundStyle(WCTheme.onDark).lineLimit(1)
+            VStack(alignment: .leading, spacing: 0) {
+                Text(l.name).sabqText(SabqType.rowTitle).foregroundStyle(SabqTheme.textPrimary).lineLimit(1)
                 Text("\(l.correctCount) إصابة من \(l.playedCount)")
-                    .font(SabqFonts.app(size: 10)).foregroundStyle(WCTheme.onDarkDim)
+                    .font(SabqFonts.app(size: 12)).foregroundStyle(SabqTheme.textSecondary)
             }
             Spacer()
             VStack(spacing: 1) {
                 Text("\(l.totalPoints)")
-                    .font(SabqFonts.app(size: 16, weight: .semibold).monospacedDigit()).foregroundStyle(WCTheme.gold)
+                    .font(SabqFonts.app(size: 16, weight: .semibold).monospacedDigit()).foregroundStyle(SabqTheme.warning)
                     .environment(\.layoutDirection, .leftToRight)
-                Text("نقطة").font(SabqFonts.app(size: 9)).foregroundStyle(WCTheme.onDarkDim)
+                Text("نقطة").font(SabqFonts.app(size: 12)).foregroundStyle(SabqTheme.textSecondary)
             }
         }
-        .padding(.horizontal, 12).padding(.vertical, 10)
-        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(WCTheme.card))
+        .padding(.vertical, SabqLayout.space12)
     }
 
     private func rankBadge(_ rank: Int) -> some View {
-        let color: Color = rank == 1 ? WCTheme.gold : (rank == 2 ? WCTheme.onDarkDim : (rank == 3 ? WCTheme.leaf : WCTheme.chipFill))
-        let fg: Color = rank <= 3 ? .white : WCTheme.onDarkDim
+        // المراكز الثلاثة الأولى: رقم ملوّن على سطح هادئ (لا أبيض على الذهبي)
+        let fg: Color = rank == 1 ? SabqTheme.warning : (rank == 2 ? SabqTheme.textPrimary : (rank == 3 ? SabqTheme.success : SabqTheme.textSecondary))
         return Text("\(rank)")
-            .font(SabqFonts.app(size: 11, weight: .regular).monospacedDigit()).foregroundStyle(fg)
-            .frame(width: 30, height: 30)
-            .background(Circle().fill(rank <= 3 ? color : WCTheme.chipFill))
+            .font(SabqFonts.app(size: 13, weight: rank <= 3 ? .semibold : .regular).monospacedDigit()).foregroundStyle(fg)
+            .frame(width: 32, height: 32)
+            .background(Circle().fill(SabqTheme.surfaceMuted))
             .environment(\.layoutDirection, .leftToRight)
     }
 
@@ -1455,43 +1444,39 @@ private struct WCPredLeaderboardTab: View {
             WCRemoteImage(url: url, contentMode: .fill).frame(width: 34, height: 34).clipShape(Circle())
         } else {
             Image(systemName: "person.crop.circle.fill")
-                .font(.system(size: 30)).foregroundStyle(WCTheme.onDarkDim)
+                .font(.system(size: 30)).foregroundStyle(SabqTheme.textSecondary)
                 .frame(width: 34, height: 34)
         }
     }
 
     /// صف «أنت» المثبَّت — رتبة صاحب الجلسة الحقيقية وهو خارج الصفحة المعروضة.
     private func viewerRow(_ v: WCPredViewer) -> some View {
-        VStack(spacing: 8) {
-            Rectangle().fill(WCTheme.chipFill).frame(height: 1).padding(.top, 2)
-            HStack(spacing: 12) {
+        VStack(spacing: SabqLayout.space8) {
+            WCRowSeparator()
+            HStack(spacing: SabqLayout.space12) {
                 Text("\(v.rank)")
-                    .font(SabqFonts.app(size: 11, weight: .regular).monospacedDigit()).foregroundStyle(WCTheme.gold)
-                    .frame(width: 30, height: 30)
-                    .background(Circle().stroke(WCTheme.gold, lineWidth: 1.5))
+                    .font(SabqFonts.app(size: 13, weight: .semibold).monospacedDigit()).foregroundStyle(SabqTheme.warning)
+                    .frame(width: 32, height: 32)
+                    .background(Circle().fill(SabqTheme.surface))
                     .environment(\.layoutDirection, .leftToRight)
                 Image(systemName: "person.crop.circle.fill")
-                    .font(.system(size: 30)).foregroundStyle(WCTheme.gold)
+                    .font(.system(size: 30)).foregroundStyle(SabqTheme.warning)
                     .frame(width: 34, height: 34)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("أنت").font(SabqFonts.app(size: 14, weight: .semibold)).foregroundStyle(WCTheme.onDark)
+                    Text("أنت").font(SabqFonts.app(size: 15, weight: .semibold)).foregroundStyle(SabqTheme.textPrimary)
                     Text("\(v.correctCount) إصابة من \(v.playedCount)")
-                        .font(SabqFonts.app(size: 10)).foregroundStyle(WCTheme.onDarkDim)
+                        .font(SabqFonts.app(size: 12)).foregroundStyle(SabqTheme.textSecondary)
                 }
                 Spacer()
                 VStack(spacing: 1) {
                     Text("\(v.totalPoints)")
-                        .font(SabqFonts.app(size: 16, weight: .semibold).monospacedDigit()).foregroundStyle(WCTheme.gold)
+                        .font(SabqFonts.app(size: 16, weight: .semibold).monospacedDigit()).foregroundStyle(SabqTheme.warning)
                         .environment(\.layoutDirection, .leftToRight)
-                    Text("نقطة").font(SabqFonts.app(size: 9)).foregroundStyle(WCTheme.onDarkDim)
+                    Text("نقطة").font(SabqFonts.app(size: 12)).foregroundStyle(SabqTheme.textSecondary)
                 }
             }
-            .padding(.horizontal, 12).padding(.vertical, 10)
-            .background(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(WCTheme.card)
-                    .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(WCTheme.gold.opacity(0.5), lineWidth: 1))
-            )
+            .padding(.horizontal, SabqLayout.space12).padding(.vertical, SabqLayout.space12)
+            .wcQuietBlock()
         }
     }
 
@@ -1499,16 +1484,17 @@ private struct WCPredLeaderboardTab: View {
         Button {
             Task { await loadMore() }
         } label: {
-            HStack(spacing: 8) {
+            HStack(spacing: SabqLayout.space8) {
                 if loadingMore {
-                    ProgressView().tint(WCTheme.onDarkDim).scaleEffect(0.8)
+                    ProgressView().tint(SabqTheme.textSecondary).scaleEffect(0.8)
                 }
                 Text(loadingMore ? "جارٍ التحميل…" : "عرض المزيد (\(leaders.count) من \(total ?? 0))")
-                    .font(SabqFonts.app(size: 12, weight: .medium)).foregroundStyle(WCTheme.onDarkDim)
+                    .sabqText(SabqType.button).foregroundStyle(WCTheme.emeraldDeep)
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 12)
-            .background(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(WCTheme.chipFill, lineWidth: 1))
+            .frame(minHeight: SabqLayout.controlHeight)
+            // زر ثانوي: حدّ outline بزاوية 12
+            .background(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous).stroke(SabqTheme.outline, lineWidth: 1))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

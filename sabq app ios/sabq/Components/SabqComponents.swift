@@ -84,18 +84,18 @@ struct SkeletonBox: View {
 
 struct ArticleRowSkeleton: View {
     var body: some View {
-        HStack(alignment: .top, spacing: 14) {
-            VStack(alignment: .leading, spacing: 10) {
-                SkeletonBox(width: 70, height: 24, radius: 12)
+        HStack(alignment: .top, spacing: NewsRowStyle.thumbnailGap) {
+            VStack(alignment: .leading, spacing: SabqLayout.space8) {
                 SkeletonBox(height: 16)
-                SkeletonBox(width: 200, height: 14)
-                SkeletonBox(width: 140, height: 12)
+                SkeletonBox(width: 200, height: 16)
+                SkeletonBox(width: 120, height: 12)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            SkeletonBox(width: 80, height: 80, radius: 16)
+            SkeletonBox(width: NewsRowStyle.thumbnailWidth, height: NewsRowStyle.thumbnailHeight,
+                        radius: NewsRowStyle.thumbnailRadius)
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, SabqLayout.space4)
     }
 }
 
@@ -1134,13 +1134,13 @@ struct SurfaceCard<Content: View>: View {
     /// نصف قطر اختياري للحاويات ذات الكثافة الأعلى؛ يبقى الافتراضي هو هوية السطح العامة.
     var cornerRadius: CGFloat = SabqTheme.cardRadius
     /// المسافة بين عناصر المحتوى؛ تبقى 18 للحاويات العامة ويمكن تصفيرها للقوائم ذات الفواصل.
-    var spacing: CGFloat = 18
+    var spacing: CGFloat = SabqLayout.space16
 
     init(
         accent: Color? = nil,
         lazy: Bool = false,
         cornerRadius: CGFloat = SabqTheme.cardRadius,
-        spacing: CGFloat = 18,
+        spacing: CGFloat = SabqLayout.space16,
         @ViewBuilder content: () -> Content
     ) {
         self.accent = accent
@@ -1151,9 +1151,6 @@ struct SurfaceCard<Content: View>: View {
     }
 
     var body: some View {
-        let strokeColor = SabqTheme.outline.opacity(0.5)
-        let strokeWidth: CGFloat = 0.5
-
         // `lazy: true` للقوائم الطويلة داخل ScrollView — النسخة العادية كانت
         // تُركّب 50 صفًا وصورها دفعة واحدة أثناء حركة الدفع (تدقيق 2026-08-02).
         return Group {
@@ -1166,13 +1163,10 @@ struct SurfaceCard<Content: View>: View {
         .padding(SabqLayout.cardInset)
         .frame(maxWidth: .infinity, alignment: .leading)
         .multilineTextAlignment(.leading)
+        // بلوك هادئ بلا حد (النموذج المعتمد #1913).
         .background(
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                .fill(SabqTheme.surface)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                .stroke(strokeColor, lineWidth: strokeWidth)
+                .fill(SabqTheme.surfaceMuted)
         )
         .sabqRTL()
     }
@@ -1186,8 +1180,8 @@ struct SabqPageIntro: View {
 
     var body: some View {
         Text(text)
-            .font(SabqFonts.editorial(.subheadline, size: 14))
-            .foregroundStyle(SabqTheme.secondaryInk)
+            .sabqText(SabqType.excerpt)
+            .foregroundStyle(SabqTheme.textSecondary)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -1203,18 +1197,17 @@ struct CompactScreenHeader: View {
     var action: (() -> Void)?
 
     var body: some View {
-        HStack(alignment: .top, spacing: 14) {
-            VStack(alignment: .leading, spacing: 6) {
+        HStack(alignment: .top, spacing: SabqLayout.space12) {
+            VStack(alignment: .leading, spacing: SabqLayout.space4) {
                 Text(title)
-                    .font(SabqFonts.editorial(.title, size: 28, weight: .semibold, boldText: legibilityWeight == .bold))
+                    .font(SabqType.articleTitle.font(boldText: legibilityWeight == .bold))
                     .accessibilityAddTraits(.isHeader)
                     .foregroundStyle(SabqTheme.ink)
 
                 Text(subtitle)
-                    .font(SabqFonts.app(size: 14, weight: .regular))
-                    .foregroundStyle(SabqTheme.secondaryInk)
+                    .sabqText(SabqType.excerpt)
+                    .foregroundStyle(SabqTheme.textSecondary)
                     .multilineTextAlignment(.leading)
-                    .lineSpacing(4)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -1240,17 +1233,17 @@ struct SectionHeader: View {
     let tint: Color
 
     var body: some View {
-        HStack(alignment: .top, spacing: 14) {
-            VStack(alignment: .leading, spacing: 5) {
+        HStack(alignment: .top, spacing: SabqLayout.space12) {
+            VStack(alignment: .leading, spacing: SabqLayout.space4) {
                 Text(title)
-                    .font(SabqFonts.app(size: 18, weight: .semibold))
-                    .foregroundStyle(SabqTheme.ink)
+                    .font(SabqType.sectionHeading.font)
+                    .foregroundStyle(SabqTheme.textPrimary)
+                    .accessibilityAddTraits(.isHeader)
 
                 Text(subtitle)
-                    .font(SabqFonts.app(size: 13, weight: .regular))
-                    .foregroundStyle(SabqTheme.secondaryInk)
+                    .font(SabqType.meta.font)
+                    .foregroundStyle(SabqTheme.textSecondary)
                     .multilineTextAlignment(.leading)
-                    .lineSpacing(3)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -1266,20 +1259,15 @@ struct SmallSquareBadge: View {
     let tint: Color
 
     var body: some View {
-        RoundedRectangle(cornerRadius: 13, style: .continuous)
-            .fill(
-                LinearGradient(
-                    colors: [tint.opacity(0.12), tint.opacity(0.06)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            )
-            .frame(width: 44, height: 44)
+        RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
+            .fill(SabqTheme.surfaceMuted)
+            .frame(width: 40, height: 40)
             .overlay {
                 Image(systemName: systemImage)
-                    .font(.system(size: 20, weight: .semibold))
+                    .font(SabqFonts.app(size: 18, weight: .semibold))
                     .foregroundStyle(tint)
             }
+            .accessibilityHidden(true)
     }
 }
 
@@ -1288,14 +1276,8 @@ struct SquareIconBadge: View {
     let tint: Color
 
     var body: some View {
-        RoundedRectangle(cornerRadius: 18, style: .continuous)
-            .fill(
-                LinearGradient(
-                    colors: [tint.opacity(0.10), tint.opacity(0.05)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            )
+        RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+            .fill(SabqTheme.surfaceMuted)
             .frame(width: 72, height: 72)
             .overlay {
                 Image(systemName: systemImage)
@@ -1315,7 +1297,7 @@ struct SmallActionButton: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 7) {
+            HStack(spacing: SabqLayout.space8) {
                 Text(title)
                     .font(SabqType.caption)
 
@@ -1323,12 +1305,12 @@ struct SmallActionButton: View {
                     .font(SabqType.caption)
             }
             .foregroundStyle(tint)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
+            .padding(.horizontal, SabqLayout.space12)
+            .padding(.vertical, SabqLayout.space8)
             .frame(minHeight: SabqLayout.touchTarget)
             .background(
-                RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous)
-                    .fill(tint.opacity(0.10))
+                RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
+                    .fill(SabqTheme.surfaceMuted)
             )
         }
         .buttonStyle(.plain)
@@ -1344,7 +1326,7 @@ struct PrimaryCTAButton: View {
     var body: some View {
         Button(action: action) {
             Label(title, systemImage: systemImage)
-                .font(SabqType.label)
+                .font(SabqType.button.font)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
                 .foregroundStyle(isDisabled ? SabqTheme.disabledInk : SabqTheme.onAction)
@@ -1370,24 +1352,17 @@ struct CategoryChip: View {
     var body: some View {
         Button(action: action) {
             Text(title)
-                .font(SabqFonts.app(size: 13, weight: .medium))
-                .foregroundStyle(isSelected ? .white : SabqTheme.secondaryInk)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 9)
+                .font(SabqType.metaEmphasis.font)
+                .foregroundStyle(isSelected ? SabqTheme.onAction : SabqTheme.textPrimary)
+                .padding(.horizontal, SabqLayout.space16)
+                .padding(.vertical, SabqLayout.space8)
                 .frame(minHeight: SabqLayout.touchTarget)
                 .background(
                     Capsule(style: .continuous)
                         .fill(
                             isSelected
                                 ? AnyShapeStyle(SabqTheme.actionFill)
-                                : AnyShapeStyle(SabqTheme.paleFill)
-                        )
-                )
-                .overlay(
-                    Capsule(style: .continuous)
-                        .stroke(
-                            isSelected ? Color.clear : SabqTheme.outline.opacity(0.6),
-                            lineWidth: 0.5
+                                : AnyShapeStyle(SabqTheme.surfaceMuted)
                         )
                 )
         }
@@ -1402,13 +1377,13 @@ struct StatusChip: View {
 
     var body: some View {
         Text(title)
-            .font(SabqFonts.app(size: 11, weight: .regular))
+            .font(SabqType.tag.font)
             .foregroundStyle(tint)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
+            .padding(.horizontal, SabqLayout.space8)
+            .padding(.vertical, SabqLayout.space4)
             .background(
-                Capsule(style: .continuous)
-                    .fill(tint.opacity(0.10))
+                RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
+                    .fill(SabqTheme.surfaceMuted)
             )
     }
 }
@@ -1799,7 +1774,7 @@ struct CategoryTile: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                .fill(SabqTheme.surface)
+                .fill(SabqTheme.surfaceMuted)
 
         )
     }
@@ -1816,22 +1791,22 @@ struct EmptyStateView: View {
     var actionTitle: String? = nil
 
     var body: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: SabqLayout.space12) {
             Image(systemName: icon)
-                .font(.system(size: 28, weight: .regular))
+                .font(SabqFonts.app(size: 26, weight: .regular))
                 .symbolRenderingMode(.hierarchical)
-                .foregroundStyle(tint)
+                .foregroundStyle(SabqTheme.textSecondary)
                 .frame(width: 56, height: 56)
-                .background(tint.opacity(0.08), in: RoundedRectangle(cornerRadius: 16))
+                .background(SabqTheme.surfaceMuted, in: RoundedRectangle(cornerRadius: SabqRadius.medium))
                 .accessibilityHidden(true)
 
             Text(title)
-                .font(SabqFonts.editorial(.headline, size: 18, weight: .semibold))
-                .foregroundStyle(SabqTheme.ink)
+                .sabqText(SabqType.rowTitle)
+                .foregroundStyle(SabqTheme.textPrimary)
                 .accessibilityAddTraits(.isHeader)
             Text(subtitle)
-                .font(SabqFonts.editorial(.subheadline, size: 14))
-                .foregroundStyle(SabqTheme.secondaryInk)
+                .sabqText(SabqType.excerpt)
+                .foregroundStyle(SabqTheme.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: 360)
 
@@ -1840,14 +1815,18 @@ struct EmptyStateView: View {
                     SabqHaptics.light()
                     action()
                 }
-                .buttonStyle(.bordered)
-                .tint(tint)
-                .controlSize(.large)
+                .font(SabqType.button.font)
+                .foregroundStyle(SabqTheme.primary)
+                .padding(.horizontal, SabqLayout.space24)
+                .frame(minHeight: SabqLayout.controlHeight)
+                .overlay(RoundedRectangle(cornerRadius: SabqRadius.medium)
+                    .stroke(SabqTheme.outline, lineWidth: 1))
+                .padding(.top, SabqLayout.space4)
             }
         }
         .multilineTextAlignment(.center)
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 24)
+        .padding(.vertical, SabqLayout.space24)
     }
 }
 

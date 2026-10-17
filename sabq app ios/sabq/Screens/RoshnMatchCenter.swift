@@ -48,18 +48,18 @@ struct RoshnMatchCenter: View {
                 bottom: {
                     if let d = detail {
                         tabBar(Tab.allCases)
-                            .padding(.horizontal, 14)
+                            .padding(.horizontal, SabqLayout.pageMargin)
                         ScrollView {
                             content(d, tab: tab)
-                                .padding(.horizontal, 14)
-                                .padding(.bottom, 24)
+                                .padding(.horizontal, SabqLayout.pageMargin)
+                                .padding(.bottom, SabqLayout.space24)
                         }
                     }
                 },
-                titleColor: RoshnTheme.ink,
-                dividerColor: RoshnTheme.inkSoft.opacity(0.15)
+                titleColor: SabqTheme.textPrimary,
+                dividerColor: SabqTheme.separator
             )
-            .background(RoshnTheme.canvas)
+            .background(SabqTheme.background)
             .environment(\.layoutDirection, .rightToLeft)
             .environment(\.locale, RsFormat.latinLocale)
             .navigationTitle("مركز المباراة")
@@ -69,8 +69,10 @@ struct RoshnMatchCenter: View {
                     Button {
                         dismiss()
                     } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundStyle(RoshnTheme.inkSoft.opacity(0.5))
+                        Image(systemName: "xmark")
+                            .font(SabqType.rowTitle.font)
+                            .foregroundStyle(SabqTheme.textSecondary)
+                            .frame(minWidth: SabqLayout.touchTarget, minHeight: SabqLayout.touchTarget)
                     }
                 }
             }
@@ -111,7 +113,7 @@ struct RoshnMatchCenter: View {
     /// iPhone Duo مفتوحًا أو على الطاولة يرتّب `DuoMatchLayout` القطع نفسها.
     private var standardLayout: some View {
         ScrollView {
-            VStack(spacing: 14) {
+            VStack(alignment: .leading, spacing: SabqLayout.space16) {
                 if let d = detail {
                     header(d)
                     tabBar(Tab.allCases)
@@ -122,8 +124,9 @@ struct RoshnMatchCenter: View {
                     loadingBlock
                 }
             }
-            .padding(.horizontal, 14)
-            .padding(.bottom, 24)
+            .padding(.horizontal, SabqLayout.pageMargin)
+            .padding(.top, SabqLayout.space8)
+            .padding(.bottom, SabqLayout.space24)
         }
     }
 
@@ -136,26 +139,22 @@ struct RoshnMatchCenter: View {
     // MARK: الترويسة
 
     private func header(_ d: RsMatchDetail, scale: CGFloat = 1) -> some View {
-        ZStack {
-            RoshnTheme.hero
-            Circle()
-                .stroke(.white.opacity(0.14), lineWidth: 1)
-                .frame(width: 160, height: 160)
-
-            VStack(spacing: 12) {
-            HStack(alignment: .top, spacing: 10) {
+        // شريط هوية زمردي مسطّح — بلا زخرفة ولا ظل (نموذج سبق).
+        VStack(spacing: SabqLayout.space12) {
+            HStack(alignment: .top, spacing: SabqLayout.space8) {
                 teamColumn(d.fixture.home, scale: scale)
-                VStack(spacing: 5) {
+                VStack(spacing: SabqLayout.space8) {
                     if d.fixture.started {
                         Text("\(d.fixture.goals.away ?? 0) - \(d.fixture.goals.home ?? 0)")
-                            .font(SabqFonts.app(size: 30 * scale, weight: .bold))
+                            .font(.custom(SabqFonts.bold, size: 30 * scale, relativeTo: .largeTitle))
                             .foregroundStyle(RoshnTheme.heroOn)
                             .monospacedDigit()
                             .environment(\.layoutDirection, .leftToRight)
                     } else {
                         Text(RsFormat.time(d.fixture))
-                            .font(SabqFonts.app(size: 22 * scale, weight: .bold))
+                            .font(.custom(SabqFonts.bold, size: 22 * scale, relativeTo: .title2))
                             .foregroundStyle(RoshnTheme.heroOn)
+                            .monospacedDigit()
                     }
                     statusChip(d.fixture)
                 }
@@ -163,40 +162,28 @@ struct RoshnMatchCenter: View {
                 teamColumn(d.fixture.away, scale: scale)
             }
 
-            VStack(spacing: 3) {
+            VStack(spacing: SabqLayout.space4) {
                 Text("\(RsFormat.day(d.fixture)) · \(RsFormat.time(d.fixture))")
-                    .font(SabqFonts.app(size: 10.5))
-                    .foregroundStyle(RoshnTheme.heroOnSoft)
+                    .sabqText(SabqType.meta)
+                    .foregroundStyle(RoshnTheme.heroOn)
                 if !d.fixture.round.isEmpty || !d.fixture.venue.name.isEmpty {
                     Text([d.fixture.round, d.fixture.venue.name].filter { !$0.isEmpty }.joined(separator: " · "))
-                        .font(SabqFonts.app(size: 10.5))
-                        .foregroundStyle(RoshnTheme.heroOnSoft.opacity(0.9))
-                        .lineLimit(1).minimumScaleFactor(0.75)
+                        .sabqText(SabqType.meta)
+                        .foregroundStyle(RoshnTheme.heroOn)
+                        .lineLimit(1).minimumScaleFactor(0.8)
                 }
             }
-            }
-            .padding(.vertical, 18).padding(.horizontal, 12)
         }
+        .padding(.vertical, SabqLayout.space16).padding(.horizontal, SabqLayout.space12)
         .frame(maxWidth: .infinity)
-        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .overlay(alignment: .top) {
-            // خط الهوية الذهبي أعلى البطاقة — لمسة التتويج المميزة.
-            RoundedRectangle(cornerRadius: 2)
-                .fill(RoshnTheme.gold)
-                .frame(height: 3)
-                .padding(.horizontal, 40)
-        }
-        .shadow(color: RoshnTheme.cardShadow, radius: 12, y: 6)
+        .background(RoshnTheme.accentFill, in: RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
     }
 
     private func teamColumn(_ team: RsTeam, scale: CGFloat = 1) -> some View {
-        Button { selectedTeam = team } label: { VStack(spacing: 7) {
-            WCRemoteImage(url: team.logo)
-                .padding(5).frame(width: 58 * scale, height: 58 * scale)
-                .background(Circle().fill(.white))
-                .shadow(color: RoshnTheme.navyDeep.opacity(0.18), radius: 5, y: 2)
+        Button { selectedTeam = team } label: { VStack(spacing: SabqLayout.space8) {
+            RoshnTeamLogo(url: team.logo, size: 56 * scale)
             Text(team.name)
-                .font(SabqFonts.app(size: 13 * min(scale, 1.15), weight: .semibold))
+                .font(.custom(SabqFonts.semibold, size: 16 * min(scale, 1.15), relativeTo: .headline))
                 .foregroundStyle(RoshnTheme.heroOn)
                 .lineLimit(2).minimumScaleFactor(0.7)
                 .multilineTextAlignment(.center)
@@ -208,20 +195,20 @@ struct RoshnMatchCenter: View {
     private func statusChip(_ f: RsFixture) -> some View {
         Group {
             if f.status.live {
-                HStack(spacing: 5) {
+                HStack(spacing: SabqLayout.space4) {
                     Circle().fill(.white).frame(width: 5, height: 5)
                     Text(liveLabel(f)).monospacedDigit()
                 }
-                .font(SabqFonts.app(size: 11, weight: .semibold))
+                .sabqText(SabqType.tag)
                 .foregroundStyle(.white)
-                .padding(.horizontal, 11).padding(.vertical, 5)
-                .background(Capsule().fill(RoshnTheme.liveRed))
+                .padding(.horizontal, SabqLayout.space12).padding(.vertical, SabqLayout.space4)
+                .background(Capsule().fill(RoshnTheme.liveFill))
             } else {
                 Text(f.status.label.isEmpty ? "قادمة" : f.status.label)
-                    .font(SabqFonts.app(size: 11, weight: .medium))
+                    .sabqText(SabqType.tag)
                     .foregroundStyle(.white)
-                    .padding(.horizontal, 11).padding(.vertical, 5)
-                    .background(Capsule().fill(RoshnTheme.heroChip))
+                    .padding(.horizontal, SabqLayout.space12).padding(.vertical, SabqLayout.space4)
+                    .overlay(Capsule().stroke(.white.opacity(0.6), lineWidth: 1))
             }
         }
     }
@@ -237,7 +224,7 @@ struct RoshnMatchCenter: View {
     private func tabBar(_ items: [Tab]) -> some View {
         // في العمود الأيسر مفتوحًا لا تظهر «الأحداث»؛ يُبرز أول تبويب حينها.
         let current = items.contains(tab) ? tab : (items.first ?? tab)
-        return HStack(spacing: 6) {
+        return HStack(spacing: SabqLayout.space8) {
             ForEach(items, id: \.self) { item in
                 Button {
                     tab = item
@@ -247,16 +234,18 @@ struct RoshnMatchCenter: View {
                     }
                 } label: {
                     Text(item.rawValue)
-                        .font(SabqFonts.app(size: 12.5, weight: current == item ? .semibold : .regular))
-                        .foregroundStyle(current == item ? .white : RoshnTheme.inkSoft)
+                        .sabqText(current == item ? SabqType.metaEmphasis : SabqType.meta)
+                        .lineLimit(1).minimumScaleFactor(0.85)
+                        .foregroundStyle(current == item ? Color.white : SabqTheme.textPrimary)
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 8)
+                        .frame(minHeight: SabqLayout.touchTarget)
                         .background(
-                            RoundedRectangle(cornerRadius: 11, style: .continuous)
-                                .fill(current == item ? RoshnTheme.sky : RoshnTheme.skySoft.opacity(0.6))
+                            RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
+                                .fill(current == item ? RoshnTheme.accentFill : SabqTheme.surfaceMuted)
                         )
                 }
                 .buttonStyle(.plain)
+                .accessibilityAddTraits(current == item ? .isSelected : [])
             }
         }
     }
@@ -281,8 +270,9 @@ struct RoshnMatchCenter: View {
                 text: d.fixture.started ? "لا أحداث مسجّلة لهذه المباراة" : "الأحداث تتوالى هنا لحظة بلحظة مع الانطلاقة"
             )
         } else {
-            LazyVStack(spacing: 6) {
-                ForEach(sortedEvents(d), id: \.self) { ev in
+            LazyVStack(spacing: 0) {
+                ForEach(Array(sortedEvents(d).enumerated()), id: \.element) { index, ev in
+                    if index > 0 { RoshnRowSeparator() }
                     eventRow(ev, d: d)
                 }
             }
@@ -298,29 +288,29 @@ struct RoshnMatchCenter: View {
     private func eventRow(_ ev: RsMatchEvent, d: RsMatchDetail) -> some View {
         let isHome = ev.teamId == d.fixture.home.id
         let isGoal = ev.type == "goal"
-        return HStack(spacing: 10) {
+        return HStack(spacing: SabqLayout.space12) {
             Text(ev.minuteLabel)
-                .font(SabqFonts.app(size: 11, weight: .semibold))
-                .foregroundStyle(RoshnTheme.inkSoft)
+                .sabqText(SabqType.metaEmphasis)
+                .foregroundStyle(isGoal ? RoshnTheme.accentInk : SabqTheme.textSecondary)
                 .monospacedDigit()
-                .frame(width: 42)
+                .frame(width: 44)
                 .environment(\.layoutDirection, .leftToRight)
 
             eventIcon(ev.type)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(ev.player)
-                    .font(SabqFonts.app(size: 13, weight: isGoal ? .bold : .semibold))
-                    .foregroundStyle(RoshnTheme.ink)
+                    .sabqText(SabqType.rowTitle)
+                    .foregroundStyle(SabqTheme.textPrimary)
                     .lineLimit(1).minimumScaleFactor(0.75)
-                HStack(spacing: 4) {
+                HStack(spacing: SabqLayout.space4) {
                     Text(ev.label)
-                        .font(SabqFonts.app(size: 10))
-                        .foregroundStyle(RoshnTheme.inkSoft)
+                        .sabqText(SabqType.meta)
+                        .foregroundStyle(SabqTheme.textSecondary)
                     if let assist = ev.assist, !assist.isEmpty {
                         Text("· بمساعدة \(assist)")
-                            .font(SabqFonts.app(size: 10))
-                            .foregroundStyle(RoshnTheme.inkSoft)
+                            .sabqText(SabqType.meta)
+                            .foregroundStyle(SabqTheme.textSecondary)
                             .lineLimit(1)
                     }
                 }
@@ -329,37 +319,34 @@ struct RoshnMatchCenter: View {
             Spacer()
 
             Text(isHome ? d.fixture.home.name : d.fixture.away.name)
-                .font(SabqFonts.app(size: 10))
-                .foregroundStyle(RoshnTheme.inkSoft)
+                .sabqText(SabqType.tag)
+                .foregroundStyle(SabqTheme.textSecondary)
                 .lineLimit(1).minimumScaleFactor(0.7)
-                .frame(maxWidth: 76, alignment: .trailing)
+                .frame(maxWidth: 80, alignment: .trailing)
         }
-        .padding(.horizontal, 12).padding(.vertical, 9)
-        .background(
-            RoundedRectangle(cornerRadius: 13, style: .continuous)
-                .fill(isGoal ? RoshnTheme.pitchSoft : RoshnTheme.card)
-        )
-        .shadow(color: RoshnTheme.cardShadow, radius: 4, y: 2)
+        .padding(.vertical, SabqLayout.space12)
+        .accessibilityElement(children: .combine)
     }
 
     private func eventIcon(_ type: String) -> some View {
         Group {
             switch type {
             case "goal":
-                Image(systemName: "soccerball.inverse").foregroundStyle(RoshnTheme.pitch)
+                Image(systemName: "soccerball.inverse").foregroundStyle(RoshnTheme.accentInk)
             case "yellow-card":
-                RoundedRectangle(cornerRadius: 2).fill(.yellow).frame(width: 10, height: 14)
+                RoundedRectangle(cornerRadius: 2).fill(RoshnTheme.gold).frame(width: 10, height: 14)
             case "red-card":
-                RoundedRectangle(cornerRadius: 2).fill(RoshnTheme.liveRed).frame(width: 10, height: 14)
+                RoundedRectangle(cornerRadius: 2).fill(SabqTheme.danger).frame(width: 10, height: 14)
             case "substitution":
-                Image(systemName: "arrow.left.arrow.right").foregroundStyle(RoshnTheme.sky)
+                Image(systemName: "arrow.left.arrow.right").foregroundStyle(SabqTheme.textSecondary)
             default:
                 Image(systemName: type.lowercased().contains("var") ? "tv" : "circle.fill")
-                    .foregroundStyle(RoshnTheme.inkSoft)
+                    .foregroundStyle(SabqTheme.textSecondary)
             }
         }
-        .font(SabqFonts.app(size: 14, weight: .medium))
+        .font(SabqType.metaEmphasis.font)
         .frame(width: 20)
+        .accessibilityHidden(true)
     }
 
     // MARK: الإحصائيات
@@ -375,14 +362,12 @@ struct RoshnMatchCenter: View {
                     : "لا تتوفّر إحصاءات لهذه المباراة بعد"
             )
         } else {
-            VStack(spacing: 12) {
+            VStack(spacing: SabqLayout.space16) {
                 ForEach(rows) { row in
                     statBar(row)
                 }
             }
-            .padding(14)
-            .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(RoshnTheme.card))
-            .shadow(color: RoshnTheme.cardShadow, radius: 6, y: 3)
+            .padding(.vertical, SabqLayout.space8)
         }
     }
 
@@ -390,25 +375,27 @@ struct RoshnMatchCenter: View {
         let h = numeric(row.homeText)
         let a = numeric(row.awayText)
         let total = max(h + a, 0.001)
-        return VStack(spacing: 5) {
+        return VStack(spacing: SabqLayout.space8) {
             HStack {
-                Text(row.homeText).font(SabqFonts.app(size: 12, weight: .semibold)).foregroundStyle(RoshnTheme.ink).monospacedDigit()
+                Text(row.homeText).sabqText(SabqType.metaEmphasis).foregroundStyle(SabqTheme.textPrimary).monospacedDigit()
                 Spacer()
-                Text(row.label).font(SabqFonts.app(size: 11)).foregroundStyle(RoshnTheme.inkSoft)
+                Text(row.label).sabqText(SabqType.meta).foregroundStyle(SabqTheme.textSecondary)
                 Spacer()
-                Text(row.awayText).font(SabqFonts.app(size: 12, weight: .semibold)).foregroundStyle(RoshnTheme.ink).monospacedDigit()
+                Text(row.awayText).sabqText(SabqType.metaEmphasis).foregroundStyle(SabqTheme.textPrimary).monospacedDigit()
             }
             // بلا قلب اتجاه: صفّ القيم أعلاه RTL (المضيف يمينًا) والشريط يتبعه —
             // فرضُ LTR كان يعكس عمودَي المضيف والضيف تحت رقميهما (قاعدة المالك).
             GeometryReader { geo in
                 HStack(spacing: 2) {
-                    RoundedRectangle(cornerRadius: 2).fill(RoshnTheme.sky)
+                    Capsule().fill(RoshnTheme.accentFill)
                         .frame(width: max(geo.size.width * h / total - 1, 2))
-                    RoundedRectangle(cornerRadius: 2).fill(RoshnTheme.gold.opacity(0.75))
+                    Capsule().fill(SabqTheme.surfaceStrong)
                 }
             }
-            .frame(height: 5)
+            .frame(height: 6)
+            .accessibilityHidden(true)
         }
+        .accessibilityElement(children: .combine)
     }
 
     private func numeric(_ text: String) -> Double {
@@ -422,68 +409,65 @@ struct RoshnMatchCenter: View {
         if d.lineups.isEmpty {
             emptyState(icon: "person.3", text: "التشكيلات تُعلن قبل انطلاق المباراة بنحو ساعة عادةً")
         } else {
-            VStack(spacing: 12) {
-                ForEach(d.lineups) { lineup in
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(Array(d.lineups.enumerated()), id: \.element.id) { index, lineup in
+                    if index > 0 { SabqSectionBand().padding(.vertical, SabqLayout.space16) }
                     lineupCard(lineup)
                 }
             }
+            .padding(.top, SabqLayout.space8)
         }
     }
 
     private func lineupCard(_ lineup: RsLineup) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 8) {
-                WCRemoteImage(url: lineup.team.logo)
-                    .padding(2).frame(width: 28, height: 28)
-                    .background(Circle().fill(.white))
+        VStack(alignment: .leading, spacing: SabqLayout.space12) {
+            HStack(spacing: SabqLayout.space8) {
+                RoshnTeamLogo(url: lineup.team.logo, size: 32)
                 Text(lineup.team.name)
-                    .font(SabqFonts.app(size: 14, weight: .bold))
-                    .foregroundStyle(RoshnTheme.ink)
+                    .sabqText(SabqType.sectionHeading)
+                    .foregroundStyle(SabqTheme.textPrimary)
                 Spacer()
                 if let formation = lineup.formation {
                     Text(formation)
-                        .font(SabqFonts.app(size: 11, weight: .semibold))
-                        .foregroundStyle(RoshnTheme.sky)
+                        .sabqText(SabqType.tag)
+                        .foregroundStyle(SabqTheme.textPrimary)
                         .monospacedDigit()
-                        .padding(.horizontal, 8).padding(.vertical, 4)
-                        .background(Capsule().fill(RoshnTheme.skySoft))
+                        .padding(.horizontal, SabqLayout.space8).padding(.vertical, SabqLayout.space4)
+                        .background(SabqTheme.surfaceMuted, in: RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous))
                         .environment(\.layoutDirection, .leftToRight)
                 }
             }
 
             if let coach = lineup.coach, !coach.isEmpty {
                 Text("المدرب: \(coach)")
-                    .font(SabqFonts.app(size: 11))
-                    .foregroundStyle(RoshnTheme.inkSoft)
+                    .sabqText(SabqType.meta)
+                    .foregroundStyle(SabqTheme.textSecondary)
             }
 
-            playerGroup(title: "التشكيلة الأساسية", players: lineup.startXI, accent: RoshnTheme.pitch)
+            playerGroup(title: "التشكيلة الأساسية", players: lineup.startXI, accent: RoshnTheme.accentInk)
             if !lineup.substitutes.isEmpty {
-                playerGroup(title: "البدلاء", players: lineup.substitutes, accent: RoshnTheme.inkSoft)
+                playerGroup(title: "البدلاء", players: lineup.substitutes, accent: SabqTheme.textSecondary)
             }
         }
-        .padding(14)
-        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(RoshnTheme.card))
-        .shadow(color: RoshnTheme.cardShadow, radius: 6, y: 3)
     }
 
     private func playerGroup(title: String, players: [RsLineupPlayer], accent: Color) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: SabqLayout.space8) {
             Text(title)
-                .font(SabqFonts.app(size: 11, weight: .semibold))
+                .sabqText(SabqType.metaEmphasis)
                 .foregroundStyle(accent)
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 6)], alignment: .leading, spacing: 6) {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: SabqLayout.space8)], alignment: .leading, spacing: SabqLayout.space8) {
                 ForEach(players) { p in
-                    HStack(spacing: 6) {
+                    HStack(spacing: SabqLayout.space8) {
                         Text(p.number.map(String.init) ?? "–")
-                            .font(SabqFonts.app(size: 10, weight: .semibold))
-                            .foregroundStyle(RoshnTheme.sky)
+                            .sabqText(SabqType.tag)
+                            .foregroundStyle(SabqTheme.textPrimary)
                             .monospacedDigit()
-                            .frame(width: 22, height: 22)
-                            .background(Circle().fill(RoshnTheme.skySoft))
+                            .frame(width: 28, height: 28)
+                            .background(SabqTheme.surfaceMuted, in: RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous))
                         Text(p.name)
-                            .font(SabqFonts.app(size: 11.5))
-                            .foregroundStyle(RoshnTheme.ink)
+                            .sabqText(SabqType.meta)
+                            .foregroundStyle(SabqTheme.textPrimary)
                             .lineLimit(1).minimumScaleFactor(0.7)
                     }
                 }
@@ -499,49 +483,49 @@ struct RoshnMatchCenter: View {
             if r.players.isEmpty {
                 emptyState(icon: "star", text: "لا تتوفّر تقييمات لهذه المباراة")
             } else {
-                VStack(spacing: 8) {
+                VStack(alignment: .leading, spacing: SabqLayout.space12) {
                     if let motm = r.motm {
-                        HStack(spacing: 10) {
+                        HStack(spacing: SabqLayout.space12) {
                             Image(systemName: "crown.fill")
-                                .font(SabqFonts.app(size: 16, weight: .medium))
+                                .font(SabqType.rowTitle.font)
                                 .foregroundStyle(RoshnTheme.gold)
+                                .accessibilityHidden(true)
                             VStack(alignment: .leading, spacing: 2) {
                                 Text("رجل المباراة")
-                                    .font(SabqFonts.app(size: 10, weight: .semibold))
-                                    .foregroundStyle(RoshnTheme.gold)
+                                    .sabqText(SabqType.tag)
+                                    .foregroundStyle(SabqTheme.textSecondary)
                                 Text(motm.name)
-                                    .font(SabqFonts.app(size: 14, weight: .bold))
-                                    .foregroundStyle(RoshnTheme.ink)
+                                    .sabqText(SabqType.rowTitle)
+                                    .foregroundStyle(SabqTheme.textPrimary)
                             }
                             Spacer()
                             ratingBadge(motm.rating)
                         }
-                        .padding(12)
-                        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(RoshnTheme.goldSoft))
+                        .padding(SabqLayout.space12)
+                        .background(SabqTheme.surfaceMuted, in: RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
+                        .accessibilityElement(children: .combine)
                     }
 
-                    LazyVStack(spacing: 6) {
-                        ForEach(r.players) { p in
-                            HStack(spacing: 10) {
-                                WCRemoteImage(url: p.photo)
-                                    .frame(width: 32, height: 32)
-                                    .background(Circle().fill(RoshnTheme.skySoft))
-                                    .clipShape(Circle())
+                    LazyVStack(spacing: 0) {
+                        ForEach(Array(r.players.enumerated()), id: \.element.id) { index, p in
+                            if index > 0 { RoshnRowSeparator() }
+                            HStack(spacing: SabqLayout.space12) {
+                                RoshnAvatar(url: p.photo, size: 36)
                                 VStack(alignment: .leading, spacing: 2) {
-                                    HStack(spacing: 4) {
+                                    HStack(spacing: SabqLayout.space4) {
                                         Text(p.name)
-                                            .font(SabqFonts.app(size: 12.5, weight: .semibold))
-                                            .foregroundStyle(RoshnTheme.ink)
+                                            .sabqText(SabqType.rowTitle)
+                                            .foregroundStyle(SabqTheme.textPrimary)
                                             .lineLimit(1).minimumScaleFactor(0.75)
                                         if p.captain {
                                             Text("(ق)")
-                                                .font(SabqFonts.app(size: 9, weight: .semibold))
-                                                .foregroundStyle(RoshnTheme.gold)
+                                                .sabqText(SabqType.tag)
+                                                .foregroundStyle(SabqTheme.textSecondary)
                                         }
                                     }
                                     Text(meta(p))
-                                        .font(SabqFonts.app(size: 9.5))
-                                        .foregroundStyle(RoshnTheme.inkSoft)
+                                        .sabqText(SabqType.meta)
+                                        .foregroundStyle(SabqTheme.textSecondary)
                                         .lineLimit(1)
                                 }
                                 Spacer()
@@ -549,30 +533,23 @@ struct RoshnMatchCenter: View {
                                     ratingBadge(rating)
                                 }
                             }
-                            .padding(.horizontal, 12).padding(.vertical, 8)
-                            .background(RoundedRectangle(cornerRadius: 13, style: .continuous).fill(RoshnTheme.card))
-                            .shadow(color: RoshnTheme.cardShadow, radius: 4, y: 2)
+                            .padding(.vertical, SabqLayout.space12)
+                            .accessibilityElement(children: .combine)
                         }
                     }
                 }
             }
         } else if let ratingsError {
-            VStack(spacing: 10) {
-                Image(systemName: "star.slash")
-                    .font(SabqFonts.app(size: 25, weight: .light))
-                    .foregroundStyle(RoshnTheme.gold)
-                Text(ratingsError)
-                    .font(SabqFonts.app(size: 12))
-                    .foregroundStyle(RoshnTheme.inkSoft)
-                    .multilineTextAlignment(.center)
+            VStack(spacing: SabqLayout.space12) {
+                RoshnEmptyState(icon: "star.slash", text: ratingsError)
                 Button("إعادة المحاولة") { Task { await loadRatings(force: true) } }
-                    .font(SabqFonts.app(size: 12, weight: .semibold))
+                    .sabqText(SabqType.button)
                     .foregroundStyle(.white)
-                    .padding(.horizontal, 16).padding(.vertical, 9)
-                    .background(Capsule().fill(RoshnTheme.sky))
+                    .padding(.horizontal, SabqLayout.space24)
+                    .frame(minHeight: SabqLayout.controlHeight)
+                    .background(RoshnTheme.accentFill, in: RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 30)
         } else if ratingsRequested {
             loadingBlock
         } else {
@@ -589,15 +566,16 @@ struct RoshnMatchCenter: View {
         return parts.joined(separator: " · ")
     }
 
+    /// شارة التقييم: تعبئات مسطّحة تحت نص أبيض بتباين آمن في النمطين.
     private func ratingBadge(_ rating: Double) -> some View {
         Text(String(format: "%.1f", rating))
-            .font(SabqFonts.app(size: 12, weight: .bold))
-            .foregroundStyle(.white)
+            .sabqText(SabqType.metaEmphasis)
+            .foregroundStyle(rating >= 7.5 || rating < 6 ? Color.white : rating >= 6.5 ? SabqTheme.textPrimary : RoshnTheme.navy)
             .monospacedDigit()
-            .padding(.horizontal, 8).padding(.vertical, 4)
+            .padding(.horizontal, SabqLayout.space8).padding(.vertical, SabqLayout.space4)
             .background(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(rating >= 7.5 ? RoshnTheme.pitch : rating >= 6.5 ? RoshnTheme.sky : rating >= 6 ? RoshnTheme.gold : RoshnTheme.liveRed)
+                RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
+                    .fill(rating >= 7.5 ? RoshnTheme.accentFill : rating >= 6.5 ? SabqTheme.surfaceStrong : rating >= 6 ? RoshnTheme.gold : RoshnTheme.liveFill)
             )
             .environment(\.layoutDirection, .leftToRight)
     }
@@ -605,41 +583,30 @@ struct RoshnMatchCenter: View {
     // MARK: مساعدات
 
     private var loadingBlock: some View {
-        VStack(spacing: 10) {
-            ForEach(0..<4, id: \.self) { _ in
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(RoshnTheme.skySoft.opacity(0.5))
-                    .frame(height: 72)
-            }
-        }
-        .padding(.top, 8)
+        RoshnLoadingRows(count: 4, height: 64)
+            .padding(.top, SabqLayout.space8)
     }
 
     private func errorBlock(_ message: String) -> some View {
-        VStack(spacing: 12) {
+        VStack(spacing: SabqLayout.space12) {
             Image(systemName: "wifi.exclamationmark")
-                .font(SabqFonts.app(size: 32, weight: .light))
-                .foregroundStyle(RoshnTheme.gold)
+                .font(.system(size: 28, weight: .regular))
+                .foregroundStyle(SabqTheme.textTertiary)
+                .accessibilityHidden(true)
             Text("تعذّر فتح مركز المباراة")
-                .font(SabqFonts.app(size: 17, weight: .bold))
-                .foregroundStyle(RoshnTheme.ink)
+                .sabqText(SabqType.sectionHeading)
+                .foregroundStyle(SabqTheme.textPrimary)
             Text(message)
-                .font(SabqFonts.app(size: 12))
-                .foregroundStyle(RoshnTheme.inkSoft)
+                .sabqText(SabqType.excerpt)
+                .foregroundStyle(SabqTheme.textSecondary)
                 .multilineTextAlignment(.center)
-            Button {
+            RoshnPrimaryButton(title: "إعادة المحاولة", systemImage: "arrow.clockwise") {
                 retryToken += 1
-            } label: {
-                Label("إعادة المحاولة", systemImage: "arrow.clockwise")
-                    .font(SabqFonts.app(size: 12, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 18).padding(.vertical, 10)
-                    .background(Capsule().fill(RoshnTheme.sky))
             }
-            .buttonStyle(.plain)
+            .frame(maxWidth: 240)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 54)
+        .padding(.vertical, SabqLayout.space40)
     }
 
     @MainActor
@@ -656,17 +623,7 @@ struct RoshnMatchCenter: View {
     }
 
     private func emptyState(icon: String, text: String) -> some View {
-        VStack(spacing: 10) {
-            Image(systemName: icon)
-                .font(SabqFonts.app(size: 26, weight: .light))
-                .foregroundStyle(RoshnTheme.sky.opacity(0.6))
-            Text(text)
-                .font(SabqFonts.app(size: 12.5))
-                .foregroundStyle(RoshnTheme.inkSoft)
-                .multilineTextAlignment(.center)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 40)
+        RoshnEmptyState(icon: icon, text: text)
     }
 }
 

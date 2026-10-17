@@ -66,21 +66,21 @@ struct BreakingTickerBar: View {
     }
 
     private func bar(_ headline: APIBreakingHeadline) -> some View {
-        HStack(spacing: 12) {
-            HStack(spacing: 5) {
+        // كبطاقة العاجل في الرئيسية: تعبئة خفيفة بلون العاجل وحده، والنص
+        // بلون النص الأساسي فيبقى تباينه سليمًا في الوضعين (لا تدرّج).
+        HStack(spacing: SabqLayout.space12) {
+            HStack(spacing: SabqLayout.space4) {
                 Image(systemName: "bolt.fill")
-                    .font(SabqFonts.app(size: 10, weight: .semibold))
+                    .font(SabqType.tag.font)
                 Text("عاجل")
-                    .font(SabqFonts.app(size: 12, weight: .semibold))
+                    .font(SabqType.metaEmphasis.font)
             }
-            .foregroundStyle(.white)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 5)
-            .background(Capsule().fill(Color.white.opacity(0.20)))
+            .foregroundStyle(SabqTheme.breaking)
+            .fixedSize()
 
             Text(headline.headline)
-                .font(SabqFonts.app(size: 14, weight: .medium))
-                .foregroundStyle(.white)
+                .sabqText(SabqType.rowTitle)
+                .foregroundStyle(SabqTheme.textPrimary)
                 .lineLimit(2)
                 .multilineTextAlignment(.leading)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -88,31 +88,31 @@ struct BreakingTickerBar: View {
                 .transition(.opacity)
 
             if headlines.count > 1 {
-                HStack(spacing: 4) {
+                HStack(spacing: SabqLayout.space4) {
                     ForEach(headlines.indices, id: \.self) { i in
                         Circle()
-                            .fill(Color.white.opacity(i == index ? 1 : 0.4))
-                            .frame(width: 5, height: 5)
+                            .fill(i == index ? SabqTheme.breaking : SabqTheme.outline)
+                            .frame(width: 6, height: 6)
                     }
                 }
+                .accessibilityHidden(true)
             } else {
                 Image(systemName: "chevron.left")
-                    .font(SabqFonts.app(size: 11, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.7))
+                    .font(SabqType.meta.font)
+                    .foregroundStyle(SabqTheme.textTertiary)
+                    .accessibilityHidden(true)
             }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
+        .padding(.horizontal, SabqLayout.space16)
+        .padding(.vertical, SabqLayout.space12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [SabqTheme.coral, SabqTheme.coral.opacity(0.82)],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    )
-                )
+            RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                .fill(SabqTheme.breaking.opacity(0.07))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                .stroke(SabqTheme.breaking.opacity(0.18), lineWidth: 1)
         )
         .accessibilityElement(children: .combine)
         .accessibilityLabel("عاجل: \(headline.headline)")

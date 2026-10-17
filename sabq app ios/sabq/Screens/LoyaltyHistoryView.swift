@@ -16,14 +16,15 @@ struct LoyaltyHistoryView: View {
 
     var body: some View {
         ScrollView {
-            LazyVStack(spacing: 14, pinnedViews: []) {
+            LazyVStack(spacing: SabqLayout.space24, pinnedViews: []) {
                 if items.isEmpty && isLoading {
-                    ProgressView().padding(.top, 60)
+                    ProgressView().padding(.top, 64)
                 } else if items.isEmpty, let err = loadError {
                     Text(err)
-                        .font(SabqFonts.app(size: 14))
-                        .foregroundStyle(SabqTheme.coral)
-                        .padding(.top, 60)
+                        .sabqText(SabqType.excerpt)
+                        .foregroundStyle(SabqTheme.danger)
+                        .multilineTextAlignment(.center)
+                        .padding(.top, 64)
                 } else if items.isEmpty {
                     emptyState
                 } else {
@@ -33,12 +34,12 @@ struct LoyaltyHistoryView: View {
                     }
                     if hasMore {
                         ProgressView()
-                            .padding(.vertical, 18)
+                            .padding(.vertical, SabqLayout.space16)
                             .task { await loadMore() }
                     }
                 }
             }
-            .padding(16)
+            .padding(SabqLayout.pageMargin)
         }
         .background(SabqTheme.background.ignoresSafeArea())
         .navigationTitle("سجل نقاطي")
@@ -54,34 +55,26 @@ struct LoyaltyHistoryView: View {
         let total = items.reduce(0) { $0 + $1.points }
         let today = items.filter { isToday($0.date) }.reduce(0) { $0 + $1.points }
         let week = items.filter { isInThisWeek($0.date) }.reduce(0) { $0 + $1.points }
-        return HStack(spacing: 10) {
-            totalsCell(value: total, label: "إجمالي السجل", tint: SabqTheme.primaryEnd)
-            totalsCell(value: today, label: "اليوم", tint: SabqTheme.leaf)
-            totalsCell(value: week, label: "هذا الأسبوع", tint: Color.orange)
+        return HStack(spacing: SabqLayout.space12) {
+            totalsCell(value: total, label: "إجمالي السجل", tint: SabqTheme.primary)
+            totalsCell(value: today, label: "اليوم", tint: SabqTheme.primary)
+            totalsCell(value: week, label: "هذا الأسبوع", tint: SabqTheme.primary)
         }
     }
 
     private func totalsCell(value: Int, label: String, tint: Color) -> some View {
-        VStack(spacing: 4) {
-            HStack(spacing: 4) {
-                Text("+\(value)")
-                    .font(SabqFonts.app(size: 19, weight: .black))
-                    .foregroundStyle(tint)
-                Image(systemName: "sparkles")
-                    .font(SabqFonts.app(size: 10, weight: .heavy))
-                    .foregroundStyle(tint.opacity(0.75))
-            }
+        VStack(spacing: SabqLayout.space4) {
+            Text("+\(value)")
+                .font(SabqType.leadTitle.font)
+                .foregroundStyle(SabqTheme.textPrimary)
+                .environment(\.layoutDirection, .leftToRight)
             Text(label)
-                .font(SabqFonts.app(size: 11, weight: .semibold))
-                .foregroundStyle(SabqTheme.secondaryInk)
+                .font(SabqType.meta.font)
+                .foregroundStyle(SabqTheme.textSecondary)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 12)
-        .background(SabqTheme.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(tint.opacity(0.18), lineWidth: 0.5)
-        )
+        .padding(.vertical, SabqLayout.space12)
+        .background(SabqTheme.surfaceMuted, in: RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
     }
 
     // MARK: Grouping
@@ -123,27 +116,24 @@ struct LoyaltyHistoryView: View {
     }
 
     private func bucketSection(_ bucket: Bucket) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: SabqLayout.space8) {
                 Text(bucket.label)
-                    .font(SabqFonts.app(size: 13, weight: .heavy))
-                    .foregroundStyle(SabqTheme.ink)
+                    .sabqText(SabqType.sectionHeading)
+                    .foregroundStyle(SabqTheme.textPrimary)
+                    .accessibilityAddTraits(.isHeader)
                 Spacer(minLength: 0)
-                HStack(spacing: 3) {
-                    Text("+\(bucket.subtotal)")
-                        .font(SabqFonts.app(size: 12, weight: .black))
-                    Image(systemName: "sparkles").font(SabqFonts.app(size: 9, weight: .heavy))
-                }
-                .foregroundStyle(SabqTheme.leaf)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 3)
-                .background(SabqTheme.leaf.opacity(0.10), in: Capsule())
+                Text("+\(bucket.subtotal)")
+                    .font(SabqType.metaEmphasis.font)
+                    .foregroundStyle(SabqTheme.success)
+                    .environment(\.layoutDirection, .leftToRight)
             }
-            .padding(.horizontal, 4)
-            VStack(spacing: 6) {
-                ForEach(bucket.events) { event in
-                    eventRow(event)
+            .padding(.bottom, SabqLayout.space4)
+            ForEach(Array(bucket.events.enumerated()), id: \.element.id) { index, event in
+                if index > 0 {
+                    Rectangle().fill(SabqTheme.separator).frame(height: 1)
                 }
+                eventRow(event)
             }
         }
     }
@@ -151,63 +141,47 @@ struct LoyaltyHistoryView: View {
     // MARK: Row
 
     private func eventRow(_ event: LoyaltyHistoryEvent) -> some View {
-        HStack(spacing: 12) {
-            ZStack {
-                Circle()
-                    .fill(actionColor(for: event.action).opacity(0.12))
-                    .frame(width: 40, height: 40)
-                Text(actionIcon(for: event.action))
-                    .font(SabqFonts.app(size: 19))
-            }
-            VStack(alignment: .leading, spacing: 3) {
+        HStack(alignment: .top, spacing: SabqLayout.space12) {
+            Image(systemName: actionIcon(for: event.action))
+                .font(SabqFonts.app(size: 16, weight: .regular))
+                .foregroundStyle(SabqTheme.textSecondary)
+                .frame(width: 36, height: 36)
+                .background(SabqTheme.surfaceMuted, in: RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous))
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: SabqLayout.space4) {
                 Text(actionLabel(for: event.action))
-                    .font(SabqFonts.app(size: 14, weight: .semibold))
-                    .foregroundStyle(SabqTheme.ink)
+                    .font(SabqType.rowTitle.font)
+                    .foregroundStyle(SabqTheme.textPrimary)
                 if let title = event.articleTitle, !title.isEmpty {
                     Text(title)
-                        .font(SabqFonts.app(size: 12, weight: .medium))
-                        .foregroundStyle(SabqTheme.secondaryInk)
+                        .sabqText(SabqType.meta)
+                        .foregroundStyle(SabqTheme.textSecondary)
                         .lineLimit(2)
                 }
                 if let date = event.date {
                     Text(relativeTime(date))
-                        .font(SabqFonts.app(size: 11, weight: .medium))
-                        .foregroundStyle(SabqTheme.tertiaryInk)
+                        .font(SabqType.meta.font)
+                        .foregroundStyle(SabqTheme.textTertiary)
                 }
             }
             Spacer(minLength: 0)
-            HStack(spacing: 2) {
-                Text("+\(event.points)")
-                    .font(SabqFonts.app(size: 15, weight: .black))
-                    .foregroundStyle(SabqTheme.leaf)
-                Image(systemName: "sparkles")
-                    .font(SabqFonts.app(size: 11, weight: .heavy))
-                    .foregroundStyle(SabqTheme.leaf.opacity(0.7))
-            }
+            Text("+\(event.points)")
+                .font(SabqType.button.font)
+                .foregroundStyle(SabqTheme.success)
+                .environment(\.layoutDirection, .leftToRight)
         }
-        .padding(12)
-        .background(SabqTheme.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(SabqTheme.outline.opacity(0.35), lineWidth: 0.5)
-        )
+        .padding(.vertical, SabqLayout.space12)
+        .accessibilityElement(children: .combine)
     }
 
     private var emptyState: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "clock.arrow.circlepath")
-                .font(SabqFonts.app(size: 44, weight: .ultraLight))
-                .foregroundStyle(SabqTheme.tertiaryInk)
-            Text("لا يوجد نشاط بعد")
-                .font(SabqFonts.app(size: 14, weight: .semibold))
-                .foregroundStyle(SabqTheme.ink)
-            Text("ابدأ بالقراءة والتفاعل لكسب نقاطك الأولى ⭐")
-                .font(SabqFonts.app(size: 12))
-                .foregroundStyle(SabqTheme.secondaryInk)
-                .multilineTextAlignment(.center)
-        }
-        .padding(.vertical, 60)
-        .frame(maxWidth: .infinity)
+        EmptyStateView(
+            icon: "clock.arrow.circlepath",
+            tint: SabqTheme.textSecondary,
+            title: "لا يوجد نشاط بعد",
+            subtitle: "ابدأ بالقراءة والتفاعل لكسب نقاطك الأولى ⭐"
+        )
+        .padding(.top, SabqLayout.space40)
     }
 
     // MARK: Networking
@@ -279,28 +253,16 @@ struct LoyaltyHistoryView: View {
 
     private func actionIcon(for action: String) -> String {
         switch action {
-        case "READ": return "📖"
-        case "READ_DEEP": return "📕"
-        case "LIKE": return "❤️"
-        case "SHARE": return "🔄"
-        case "COMMENT": return "💬"
-        case "NOTIFICATION_OPEN": return "🔔"
-        case "DAILY_LOGIN": return "🚪"
-        case "PROFILE_COMPLETE": return "🎉"
-        case "EMAIL_VERIFIED": return "✉️"
-        default: return "✨"
-        }
-    }
-
-    private func actionColor(for action: String) -> Color {
-        switch action {
-        case "DAILY_LOGIN": return Color.orange
-        case "READ_DEEP", "READ": return SabqTheme.primaryEnd
-        case "LIKE": return SabqTheme.coral
-        case "COMMENT": return Color(red: 0.40, green: 0.73, blue: 0.22)
-        case "SHARE": return Color(red: 0.40, green: 0.50, blue: 0.95)
-        case "PROFILE_COMPLETE", "EMAIL_VERIFIED": return SabqTheme.leaf
-        default: return SabqTheme.secondaryInk
+        case "READ": return "book"
+        case "READ_DEEP": return "book.closed"
+        case "LIKE": return "heart"
+        case "SHARE": return "arrowshape.turn.up.left"
+        case "COMMENT": return "bubble.left"
+        case "NOTIFICATION_OPEN": return "bell"
+        case "DAILY_LOGIN": return "door.left.hand.open"
+        case "PROFILE_COMPLETE": return "person.crop.circle.badge.checkmark"
+        case "EMAIL_VERIFIED": return "envelope"
+        default: return "sparkles"
         }
     }
 

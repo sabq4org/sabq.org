@@ -60,7 +60,6 @@ struct ArticleRevisionView: View {
 
     private var isOpinion: Bool { draft?.isOpinion ?? true }
     private var maxImages: Int { isOpinion ? 1 : 10 }
-    private var pageTint: Color { isOpinion ? SabqTheme.primaryEnd : SabqTheme.coral }
 
     private var isFormValid: Bool {
         title.trimmingCharacters(in: .whitespacesAndNewlines).count >= 3 &&
@@ -69,7 +68,7 @@ struct ArticleRevisionView: View {
 
     var body: some View {
         ScrollView(showsIndicators: false) {
-            VStack(spacing: 20) {
+            VStack(alignment: .leading, spacing: SabqLayout.space24) {
                 switch screenState {
                 case .loading:
                     loadingState
@@ -81,31 +80,15 @@ struct ArticleRevisionView: View {
                     formCard
                 case .success:
                     successHero
-                    Button { dismiss() } label: {
-                        Text("رجوع")
-                            .font(SabqFonts.app(size: 16, weight: .bold))
-                            .foregroundStyle(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 15)
-                            .background(SabqTheme.brandGradient, in: RoundedRectangle(cornerRadius: SabqTheme.buttonRadius, style: .continuous))
-                    }
-                    .buttonStyle(.plain)
+                    backButton
                 case .alreadyResubmitted:
                     alreadyResubmittedView
-                    Button { dismiss() } label: {
-                        Text("رجوع")
-                            .font(SabqFonts.app(size: 16, weight: .bold))
-                            .foregroundStyle(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 15)
-                            .background(SabqTheme.brandGradient, in: RoundedRectangle(cornerRadius: SabqTheme.buttonRadius, style: .continuous))
-                    }
-                    .buttonStyle(.plain)
+                    backButton
                 }
             }
-            .padding(.horizontal, 20)
-            .padding(.top, 18)
-            .padding(.bottom, 60)
+            .padding(.horizontal, SabqLayout.pageMargin)
+            .padding(.top, SabqLayout.space16)
+            .padding(.bottom, 64)
         }
         .background(SabqTheme.background)
         .sabqRTL()
@@ -114,14 +97,14 @@ struct ArticleRevisionView: View {
         .toolbar {
             ToolbarItem(placement: .principal) {
                 Text("تعديل المقال")
-                    .font(SabqFonts.app(size: 15, weight: .bold))
-                    .foregroundStyle(SabqTheme.ink)
+                    .sabqText(SabqType.rowTitle)
+                    .foregroundStyle(SabqTheme.textPrimary)
             }
             ToolbarItemGroup(placement: .keyboard) {
                 Spacer()
                 Button("تم") { sabqDismissKeyboard() }
-                    .font(SabqFonts.app(size: 15, weight: .semibold))
-                    .foregroundStyle(pageTint)
+                    .font(SabqType.button.font)
+                    .foregroundStyle(SabqTheme.primary)
             }
         }
         .task { await loadDraft() }
@@ -136,18 +119,29 @@ struct ArticleRevisionView: View {
         }
     }
 
+    private var backButton: some View {
+        Button { dismiss() } label: {
+            Text("رجوع")
+                .sabqText(SabqType.button)
+                .foregroundStyle(SabqTheme.onAction)
+                .frame(maxWidth: .infinity, minHeight: SabqLayout.controlHeight)
+                .background(SabqTheme.actionFill, in: RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
+        }
+        .buttonStyle(.plain)
+    }
+
     // MARK: Loading / error states
 
     private var loadingState: some View {
-        VStack(spacing: 14) {
-            ProgressView().tint(SabqTheme.primaryEnd).scaleEffect(1.2)
+        VStack(spacing: SabqLayout.space12) {
+            ProgressView().tint(SabqTheme.primary).scaleEffect(1.2)
             Text("نجلب المقال…")
-                .font(SabqFonts.app(size: 14, weight: .medium))
-                .foregroundStyle(SabqTheme.secondaryInk)
+                .sabqText(SabqType.excerpt)
+                .foregroundStyle(SabqTheme.textSecondary)
             if let loadingError {
                 Text(loadingError)
-                    .font(SabqFonts.app(size: 12, weight: .medium))
-                    .foregroundStyle(SabqTheme.coral)
+                    .sabqText(SabqType.meta)
+                    .foregroundStyle(SabqTheme.danger)
                     .multilineTextAlignment(.center)
             }
         }
@@ -156,150 +150,132 @@ struct ArticleRevisionView: View {
     }
 
     private var headerHero: some View {
-        VStack(spacing: 10) {
-            ZStack {
-                Circle()
-                    .fill(pageTint.opacity(0.10))
-                    .frame(width: 80, height: 80)
-                Image(systemName: isOpinion ? "square.and.pencil" : "newspaper.fill")
-                    .font(SabqFonts.app(size: 32, weight: .regular))
-                    .foregroundStyle(pageTint)
-            }
+        VStack(alignment: .leading, spacing: SabqLayout.space4) {
             Text(isOpinion ? "إعادة إرسال المقال" : "إعادة إرسال الخبر")
-                .font(SabqFonts.headline(size: 20))
-                .foregroundStyle(SabqTheme.ink)
+                .sabqText(SabqType.leadTitle)
+                .foregroundStyle(SabqTheme.textPrimary)
+                .accessibilityAddTraits(.isHeader)
             Text("راجع ملاحظة فريق التحرير ثم أعد الإرسال")
-                .font(SabqFonts.app(size: 13, weight: .medium))
-                .foregroundStyle(SabqTheme.secondaryInk)
-                .multilineTextAlignment(.center)
+                .sabqText(SabqType.meta)
+                .foregroundStyle(SabqTheme.textSecondary)
+                .multilineTextAlignment(.leading)
         }
-        .frame(maxWidth: .infinity)
-        .padding(.top, 4)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     // MARK: Revision-note banner
 
     private func revisionNoteBanner(_ note: String) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 8) {
+        VStack(alignment: .leading, spacing: SabqLayout.space8) {
+            HStack(spacing: SabqLayout.space8) {
                 Image(systemName: "quote.opening")
-                    .font(SabqFonts.app(size: 13, weight: .bold))
+                    .font(SabqFonts.app(size: 13, weight: .semibold))
                     .foregroundStyle(RevisionPalette.accent)
+                    .accessibilityHidden(true)
                 Text("ملاحظة هيئة التحرير")
-                    .font(SabqFonts.app(size: 13, weight: .heavy))
+                    .sabqText(SabqType.metaEmphasis)
                     .foregroundStyle(RevisionPalette.accent)
                 Spacer(minLength: 0)
                 if noteCollapsed {
                     Button { withAnimation(.easeInOut(duration: 0.22)) { noteCollapsed = false } } label: {
-                        Image(systemName: "chevron.down.circle.fill")
-                            .font(SabqFonts.app(size: 18))
-                            .foregroundStyle(RevisionPalette.accent.opacity(0.6))
+                        Image(systemName: "chevron.down")
+                            .font(SabqFonts.app(size: 15, weight: .semibold))
+                            .foregroundStyle(SabqTheme.textSecondary)
+                            .frame(width: SabqLayout.touchTarget, height: SabqLayout.touchTarget)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                 }
             }
             if !noteCollapsed {
                 Text(note)
-                    .font(SabqFonts.app(size: 14, weight: .medium))
-                    .foregroundStyle(SabqTheme.ink)
+                    .sabqText(SabqType.excerpt)
+                    .foregroundStyle(SabqTheme.textPrimary)
                     .lineSpacing(5)
                     .multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)
                 Button {
                     withAnimation(.easeInOut(duration: 0.22)) { noteCollapsed = true }
                 } label: {
-                    HStack(spacing: 4) {
+                    HStack(spacing: SabqLayout.space4) {
                         Image(systemName: "checkmark")
-                            .font(SabqFonts.app(size: 11, weight: .heavy))
-                        Text("فهمت")
                             .font(SabqFonts.app(size: 12, weight: .semibold))
+                        Text("فهمت")
+                            .sabqText(SabqType.tag)
                     }
-                    .foregroundStyle(RevisionPalette.accent)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(
-                        Capsule().stroke(RevisionPalette.accent.opacity(0.35), lineWidth: 1)
+                    .foregroundStyle(SabqTheme.textPrimary)
+                    .padding(.horizontal, SabqLayout.space12)
+                    .frame(minHeight: SabqLayout.touchTarget)
+                    .overlay(
+                        Capsule().stroke(SabqTheme.outline, lineWidth: 1)
+                            .frame(height: 32)
                     )
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
             }
         }
-        .padding(14)
+        .padding(SabqLayout.space16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(RevisionPalette.accent.opacity(0.10))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(RevisionPalette.accent.opacity(0.30), lineWidth: 1)
+            RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                .fill(SabqTheme.surfaceMuted)
         )
     }
 
     // MARK: Form
 
     private var formCard: some View {
-        SurfaceCard(accent: pageTint) {
-            VStack(alignment: .leading, spacing: 16) {
-                if let errorMessage {
-                    errorBanner(errorMessage)
-                }
-
-                fieldLabel("العنوان", required: true)
-                TextField("عنوان المقال", text: $title, axis: .vertical)
-                    .lineLimit(2...3)
-                    .font(SabqFonts.app(size: 16, weight: .bold))
-                    .foregroundStyle(SabqTheme.ink)
-                    .submitLabel(.next)
-                    // .leading في بيئة RTL = اليمين — يضع المؤشر يمين الحقل الفارغ
-                    .multilineTextAlignment(.leading)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 12)
-                    .background(
-                        RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous)
-                            .fill(SabqTheme.paleFill)
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous)
-                            .stroke(SabqTheme.outline, lineWidth: 0.5)
-                    )
-
-                fieldLabel("النص", required: true)
-                ZStack(alignment: .topTrailing) {
-                    SabqRichTextEditor(
-                        text: $bodyText,
-                        minHeight: 220,
-                        font: .systemFont(ofSize: 15, weight: .regular),
-                        textColor: UIColor(SabqTheme.ink),
-                        tintColor: UIColor(pageTint),
-                        onEditingChanged: { editing in isBodyEditing = editing }
-                    )
-                    .padding(8)
-                }
-                .background(
-                    RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous)
-                        .fill(SabqTheme.paleFill)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous)
-                        .stroke(isBodyEditing ? pageTint.opacity(0.4) : SabqTheme.outline, lineWidth: isBodyEditing ? 1 : 0.5)
-                )
-
-                heroImageSection
-                submitButton
+        VStack(alignment: .leading, spacing: SabqLayout.space16) {
+            if let errorMessage {
+                errorBanner(errorMessage)
             }
+
+            fieldLabel("العنوان", required: true)
+            TextField("عنوان المقال", text: $title, axis: .vertical)
+                .lineLimit(2...3)
+                .sabqText(SabqType.rowTitle)
+                .foregroundStyle(SabqTheme.textPrimary)
+                .submitLabel(.next)
+                // .leading في بيئة RTL = اليمين — يضع المؤشر يمين الحقل الفارغ
+                .multilineTextAlignment(.leading)
+                .modifier(SabqInputSurface())
+
+            fieldLabel("النص", required: true)
+            ZStack(alignment: .topTrailing) {
+                SabqRichTextEditor(
+                    text: $bodyText,
+                    minHeight: 220,
+                    font: SabqType.excerpt.uiFont,
+                    textColor: UIColor(SabqTheme.textPrimary),
+                    tintColor: UIColor(SabqTheme.primary),
+                    onEditingChanged: { editing in isBodyEditing = editing }
+                )
+                .padding(SabqLayout.space8)
+            }
+            .background(
+                RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                    .fill(SabqTheme.surface)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                    .stroke(isBodyEditing ? SabqTheme.primary : SabqTheme.outline, lineWidth: 1)
+            )
+
+            heroImageSection
+            submitButton
         }
     }
 
     private func fieldLabel(_ text: String, required: Bool = false) -> some View {
-        HStack(spacing: 4) {
+        HStack(spacing: SabqLayout.space4) {
             Text(text)
-                .font(SabqFonts.app(size: 14, weight: .semibold))
-                .foregroundStyle(SabqTheme.ink)
+                .sabqText(SabqType.metaEmphasis)
+                .foregroundStyle(SabqTheme.textPrimary)
             if required {
                 Text("*")
-                    .font(SabqFonts.app(size: 14, weight: .heavy))
-                    .foregroundStyle(SabqTheme.coral)
+                    .sabqText(SabqType.metaEmphasis)
+                    .foregroundStyle(SabqTheme.danger)
             }
         }
     }
@@ -307,54 +283,62 @@ struct ArticleRevisionView: View {
     // MARK: Image section
 
     private var heroImageSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: SabqLayout.space8) {
             fieldLabel(isOpinion ? "صورة المقال (اختياري)" : "الصور")
 
             // Existing image (only shown until replaced)
             if !replacedHero, let urlStr = existingHeroURL, let url = URL(string: urlStr) {
                 ZStack(alignment: .topTrailing) {
                     CachedAsyncImage(url: url, contentMode: .fill) {
-                        Color.gray.opacity(0.1)
+                        SabqImagePlaceholder()
                     }
-                    .frame(height: 180)
                     .frame(maxWidth: .infinity)
-                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .aspectRatio(16.0 / 9.0, contentMode: .fit)
+                    .clipShape(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
 
                     PhotosPicker(
                         selection: $pickerItems,
                         maxSelectionCount: maxImages,
                         matching: .images
                     ) {
-                        HStack(spacing: 4) {
+                        HStack(spacing: SabqLayout.space4) {
                             Image(systemName: "arrow.triangle.2.circlepath")
-                                .font(SabqFonts.app(size: 11, weight: .heavy))
-                            Text("تغيير")
                                 .font(SabqFonts.app(size: 12, weight: .semibold))
+                            Text("تغيير")
+                                .sabqText(SabqType.tag)
                         }
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(.black.opacity(0.55), in: Capsule())
+                        .foregroundStyle(SabqTheme.textPrimary)
+                        .padding(.horizontal, SabqLayout.space12)
+                        .padding(.vertical, SabqLayout.space8)
+                        .background(.regularMaterial, in: Capsule())
+                        .frame(minHeight: SabqLayout.touchTarget)
                     }
-                    .padding(10)
+                    .padding(SabqLayout.space8)
                 }
             } else if let preview = newHeroPreview {
                 ZStack(alignment: .topTrailing) {
-                    Image(uiImage: preview)
-                        .resizable()
-                        .scaledToFill()
-                        .frame(height: 180)
+                    Color.clear
                         .frame(maxWidth: .infinity)
-                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .aspectRatio(16.0 / 9.0, contentMode: .fit)
+                        .overlay {
+                            Image(uiImage: preview)
+                                .resizable()
+                                .scaledToFill()
+                        }
+                        .clipShape(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
 
                     Button {
                         withAnimation { newHeroPreview = nil; newHeroData = nil; replacedHero = false }
                     } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(SabqFonts.app(size: 22))
-                            .foregroundStyle(.white, .black.opacity(0.55))
+                        Image(systemName: "xmark")
+                            .font(SabqFonts.app(size: 13, weight: .semibold))
+                            .foregroundStyle(SabqTheme.textPrimary)
+                            .frame(width: 32, height: 32)
+                            .background(.regularMaterial, in: Circle())
+                            .frame(width: SabqLayout.touchTarget, height: SabqLayout.touchTarget)
+                            .contentShape(Rectangle())
                     }
-                    .padding(10)
+                    .padding(SabqLayout.space4)
                 }
             } else {
                 PhotosPicker(
@@ -362,22 +346,22 @@ struct ArticleRevisionView: View {
                     maxSelectionCount: maxImages,
                     matching: .images
                 ) {
-                    VStack(spacing: 8) {
+                    VStack(spacing: SabqLayout.space8) {
                         Image(systemName: "photo.badge.plus")
                             .font(SabqFonts.app(size: 22, weight: .light))
-                            .foregroundStyle(SabqTheme.tertiaryInk)
+                            .foregroundStyle(SabqTheme.textSecondary)
                         Text("اضغط لاختيار صورة")
-                            .font(SabqFonts.app(size: 13, weight: .medium))
-                            .foregroundStyle(SabqTheme.tertiaryInk)
+                            .sabqText(SabqType.meta)
+                            .foregroundStyle(SabqTheme.textSecondary)
                     }
-                    .frame(height: 100)
+                    .frame(height: 104)
                     .frame(maxWidth: .infinity)
                     .background(
-                        RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .fill(SabqTheme.paleFill)
+                        RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                            .fill(SabqTheme.surfaceMuted)
                     )
                     .overlay(
-                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
                             .strokeBorder(SabqTheme.outline, style: StrokeStyle(lineWidth: 1, dash: [6]))
                     )
                 }
@@ -388,41 +372,44 @@ struct ArticleRevisionView: View {
     // MARK: Submit
 
     private var submitButton: some View {
-        Button {
+        let enabled = isFormValid && screenState != .submitting
+        return Button {
             Task { await resubmit() }
         } label: {
-            HStack(spacing: 10) {
+            HStack(spacing: SabqLayout.space8) {
                 if screenState == .submitting {
-                    ProgressView().tint(.white)
+                    ProgressView().tint(SabqTheme.onAction)
                 }
                 Text("إرسال التعديل")
-                    .font(SabqFonts.app(size: 17, weight: .bold))
+                    .sabqText(SabqType.button)
             }
-            .foregroundStyle(.white)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 15)
-            .background(SabqTheme.brandGradient, in: RoundedRectangle(cornerRadius: SabqTheme.buttonRadius, style: .continuous))
-            .opacity(isFormValid && screenState != .submitting ? 1 : 0.55)
+            .foregroundStyle(enabled || screenState == .submitting ? SabqTheme.onAction : SabqTheme.disabledInk)
+            .frame(maxWidth: .infinity, minHeight: SabqLayout.controlHeight)
+            .background(
+                enabled || screenState == .submitting ? SabqTheme.actionFill : SabqTheme.disabledFill,
+                in: RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+            )
         }
         .buttonStyle(.plain)
         .disabled(!isFormValid || screenState == .submitting)
     }
 
     private func errorBanner(_ text: String) -> some View {
-        HStack(spacing: 8) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .font(SabqFonts.app(size: 14))
+        HStack(alignment: .top, spacing: SabqLayout.space8) {
+            Image(systemName: "exclamationmark.triangle")
+                .font(SabqFonts.app(size: 14, weight: .semibold))
+                .foregroundStyle(SabqTheme.danger)
+                .accessibilityHidden(true)
             Text(text)
-                .font(SabqFonts.app(size: 13, weight: .medium))
+                .sabqText(SabqType.meta)
+                .foregroundStyle(SabqTheme.textPrimary)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .foregroundStyle(SabqTheme.coral)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
+        .padding(SabqLayout.space12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(SabqTheme.coral.opacity(0.08))
+            RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                .fill(SabqTheme.surfaceMuted)
         )
     }
 
@@ -432,48 +419,41 @@ struct ArticleRevisionView: View {
     /// after already resubmitting. Replaces the form so a double-edit
     /// can't happen by accident.
     private var alreadyResubmittedView: some View {
-        VStack(spacing: 16) {
-            Spacer().frame(height: 30)
-            ZStack {
-                Circle()
-                    .fill(RevisionPalette.accent.opacity(0.12))
-                    .frame(width: 110, height: 110)
-                Image(systemName: "checkmark.seal.fill")
-                    .font(SabqFonts.app(size: 56))
-                    .foregroundStyle(RevisionPalette.accent)
-            }
+        VStack(spacing: SabqLayout.space16) {
+            Spacer().frame(height: SabqLayout.space32)
+            Image(systemName: "checkmark.seal")
+                .font(SabqFonts.app(size: 56, weight: .light))
+                .foregroundStyle(RevisionPalette.accent)
+                .accessibilityHidden(true)
             Text("تم إرسال التعديل سابقاً")
-                .font(SabqFonts.headline(size: 22))
-                .foregroundStyle(SabqTheme.ink)
-            Text("هذا المقال قيد المراجعة لدى هيئة التحرير. سيصلك إشعار جديد إذا طُلب تعديل إضافي أو عند النشر.")
-                .font(SabqFonts.app(size: 14))
-                .foregroundStyle(SabqTheme.secondaryInk)
+                .sabqText(SabqType.leadTitle)
+                .foregroundStyle(SabqTheme.textPrimary)
                 .multilineTextAlignment(.center)
-                .padding(.horizontal, 24)
+            Text("هذا المقال قيد المراجعة لدى هيئة التحرير. سيصلك إشعار جديد إذا طُلب تعديل إضافي أو عند النشر.")
+                .sabqText(SabqType.excerpt)
+                .foregroundStyle(SabqTheme.textSecondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, SabqLayout.space24)
                 .lineSpacing(5)
         }
         .frame(maxWidth: .infinity)
     }
 
     private var successHero: some View {
-        VStack(spacing: 14) {
-            Spacer().frame(height: 30)
-            ZStack {
-                Circle()
-                    .fill(SabqTheme.leaf.opacity(0.15))
-                    .frame(width: 110, height: 110)
-                Image(systemName: "checkmark.circle.fill")
-                    .font(SabqFonts.app(size: 64))
-                    .foregroundStyle(SabqTheme.leaf)
-            }
+        VStack(spacing: SabqLayout.space12) {
+            Spacer().frame(height: SabqLayout.space32)
+            Image(systemName: "checkmark.circle")
+                .font(SabqFonts.app(size: 56, weight: .light))
+                .foregroundStyle(SabqTheme.success)
+                .accessibilityHidden(true)
             Text("تم إرسال التعديل")
-                .font(SabqFonts.headline(size: 22))
-                .foregroundStyle(SabqTheme.ink)
+                .sabqText(SabqType.leadTitle)
+                .foregroundStyle(SabqTheme.textPrimary)
             Text("سيراجع فريق التحرير التعديل قريباً ويصلك إشعار بالقرار.")
-                .font(SabqFonts.app(size: 14))
-                .foregroundStyle(SabqTheme.secondaryInk)
+                .sabqText(SabqType.excerpt)
+                .foregroundStyle(SabqTheme.textSecondary)
                 .multilineTextAlignment(.center)
-                .padding(.horizontal, 24)
+                .padding(.horizontal, SabqLayout.space24)
         }
         .frame(maxWidth: .infinity)
     }

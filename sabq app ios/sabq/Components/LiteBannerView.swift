@@ -42,55 +42,60 @@ struct LiteBannerView: View {
             }
         }
         .animation(.easeOut(duration: 0.25), value: lite.banner)
-        .padding(.horizontal, 14)
-        .padding(.top, 8)
+        .padding(.horizontal, SabqLayout.pageMargin)
+        .padding(.top, SabqLayout.space8)
         // لا تعترض لمسات السحب للتحديث عندما لا يوجد شريط ظاهر
         .allowsHitTesting(lite.banner != .none)
     }
 
     @ViewBuilder
     private func ActivationPill() -> some View {
-        HStack(spacing: 10) {
+        HStack(spacing: SabqLayout.space8) {
             Image(systemName: "bolt.fill")
-                .font(SabqFonts.app(size: 12, weight: .medium))
-                .foregroundStyle(.white)
+                .font(SabqType.tag.font)
+                .foregroundStyle(SabqTheme.onAction)
+                .accessibilityHidden(true)
             Text("الاتصال بطيء — تم التحويل لتصفح سبق Lite ⚡")
-                .font(SabqFonts.app(size: 12, weight: .medium))
-                .foregroundStyle(.white)
+                .font(SabqType.meta.font)
+                .foregroundStyle(SabqTheme.onAction)
                 .lineLimit(2)
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
+        .padding(.horizontal, SabqLayout.space16)
+        .padding(.vertical, SabqLayout.space12)
         .background(
-            Capsule().fill(SabqTheme.primaryEnd)
-                .shadow(color: .black.opacity(0.18), radius: 10, x: 0, y: 4)
+            RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                .fill(SabqTheme.actionFill)
         )
     }
 
     @ViewBuilder
     private func RecoveryCard() -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 8) {
+        VStack(alignment: .leading, spacing: SabqLayout.space12) {
+            HStack(spacing: SabqLayout.space8) {
                 Image(systemName: "wifi")
-                    .font(SabqFonts.app(size: 12, weight: .medium))
-                    .foregroundStyle(SabqTheme.primaryEnd)
+                    .font(SabqType.tag.font)
+                    .foregroundStyle(SabqTheme.primary)
+                    .accessibilityHidden(true)
                 Text("الاتصال تحسّن — العودة للوضع الطبيعي؟")
-                    .font(SabqFonts.app(size: 12, weight: .medium))
-                    .foregroundStyle(SabqTheme.ink)
+                    .font(SabqType.meta.font)
+                    .foregroundStyle(SabqTheme.textPrimary)
                 Spacer(minLength: 0)
             }
-            HStack(spacing: 8) {
+            HStack(spacing: SabqLayout.space8) {
                 Button {
                     SabqHaptics.medium()
                     lite.acceptRecovery()
                 } label: {
                     Text("عودة")
-                        .font(SabqFonts.app(size: 12, weight: .medium))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 7)
-                        .background(Capsule().fill(SabqTheme.primaryEnd))
+                        .font(SabqType.metaEmphasis.font)
+                        .foregroundStyle(SabqTheme.onAction)
+                        .padding(.horizontal, SabqLayout.space16)
+                        .frame(minHeight: SabqLayout.touchTarget)
+                        .background(
+                            RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                                .fill(SabqTheme.actionFill)
+                        )
                 }
                 .buttonStyle(.plain)
 
@@ -99,27 +104,27 @@ struct LiteBannerView: View {
                     lite.dismissRecovery()
                 } label: {
                     Text("ابقَ في Lite")
-                        .font(SabqFonts.app(size: 12, weight: .medium))
-                        .foregroundStyle(SabqTheme.secondaryInk)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 7)
-                        .background(
-                            Capsule().stroke(SabqTheme.outline.opacity(0.6), lineWidth: 0.5)
+                        .font(SabqType.metaEmphasis.font)
+                        .foregroundStyle(SabqTheme.textPrimary)
+                        .padding(.horizontal, SabqLayout.space16)
+                        .frame(minHeight: SabqLayout.touchTarget)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                                .stroke(SabqTheme.outline, lineWidth: 1)
                         )
                 }
                 .buttonStyle(.plain)
                 Spacer(minLength: 0)
             }
         }
-        .padding(14)
+        .padding(SabqLayout.space16)
         .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(.ultraThinMaterial)
-                .shadow(color: .black.opacity(0.12), radius: 14, x: 0, y: 5)
+            RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                .fill(SabqTheme.surface)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(SabqTheme.outline.opacity(0.5), lineWidth: 0.5)
+            RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                .stroke(SabqTheme.outline, lineWidth: 1)
         )
     }
 }

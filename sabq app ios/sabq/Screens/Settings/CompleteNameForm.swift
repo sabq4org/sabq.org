@@ -16,30 +16,31 @@ struct CompleteNameForm: View {
     }
 
     var body: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SabqLayout.space16) {
             Image(systemName: "person.crop.circle.badge.plus")
-                .font(SabqFonts.app(size: 36, weight: .semibold))
-                .foregroundStyle(SabqTheme.primaryEnd)
-                .padding(.top, 8)
+                .font(SabqFonts.app(size: 36, weight: .light))
+                .foregroundStyle(SabqTheme.primary)
+                .padding(.top, SabqLayout.space8)
+                .accessibilityHidden(true)
 
             Text("أكمل اسمك")
-                .font(SabqFonts.app(size: 22, weight: .bold))
-                .foregroundStyle(SabqTheme.ink)
+                .sabqText(SabqType.leadTitle)
+                .foregroundStyle(SabqTheme.textPrimary)
 
             Text("سجّلت بجوالك بنجاح. أضف اسمك ليظهر في عضويتك وتعليقاتك.")
-                .font(SabqFonts.app(size: 14, weight: .regular))
-                .foregroundStyle(SabqTheme.secondaryInk)
+                .sabqText(SabqType.excerpt)
+                .foregroundStyle(SabqTheme.textSecondary)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
 
             if let phone = authStore.currentUser?.phoneNumber, !phone.isEmpty {
                 Text(phone)
-                    .font(SabqFonts.app(size: 13, weight: .bold))
-                    .foregroundStyle(SabqTheme.ink)
+                    .sabqText(SabqType.metaEmphasis)
+                    .foregroundStyle(SabqTheme.textPrimary)
                     .environment(\.layoutDirection, .leftToRight)
             }
 
-            VStack(spacing: 12) {
+            VStack(spacing: SabqLayout.space12) {
                 nameField(
                     label: "الاسم الأول",
                     placeholder: "مثال: أحمد",
@@ -57,33 +58,32 @@ struct CompleteNameForm: View {
             }
 
             Text("لا يمكن تعديل الاسم لاحقًا لاعتبارات مصداقية التعليقات.")
-                .font(SabqFonts.app(size: 12, weight: .regular))
-                .foregroundStyle(SabqTheme.tertiaryInk)
+                .sabqText(SabqType.meta)
+                .foregroundStyle(SabqTheme.textTertiary)
                 .multilineTextAlignment(.center)
 
             if let err = localError ?? authStore.errorMessage {
                 Text(err)
-                    .font(SabqFonts.app(size: 13, weight: .regular))
-                    .foregroundStyle(.red)
+                    .sabqText(SabqType.meta)
+                    .foregroundStyle(SabqTheme.danger)
                     .multilineTextAlignment(.center)
             }
 
             Button {
                 Task { await save() }
             } label: {
-                HStack(spacing: 8) {
+                HStack(spacing: SabqLayout.space8) {
                     if authStore.isLoading {
-                        ProgressView().tint(.white)
+                        ProgressView().tint(SabqTheme.onAction)
                     }
                     Text("متابعة")
-                        .font(SabqFonts.app(size: 16, weight: .bold))
+                        .sabqText(SabqType.button)
                 }
-                .foregroundStyle(.white)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 15)
+                .foregroundStyle(canSave ? SabqTheme.onAction : SabqTheme.disabledInk)
+                .frame(maxWidth: .infinity, minHeight: SabqLayout.controlHeight)
                 .background(
-                    canSave ? AnyShapeStyle(SabqTheme.brandGradient) : AnyShapeStyle(SabqTheme.primaryEnd.opacity(0.4)),
-                    in: RoundedRectangle(cornerRadius: SabqTheme.buttonRadius, style: .continuous)
+                    canSave ? SabqTheme.actionFill : SabqTheme.disabledFill,
+                    in: RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
                 )
             }
             .buttonStyle(.plain)
@@ -93,28 +93,23 @@ struct CompleteNameForm: View {
     }
 
     private func nameField(label: String, placeholder: String, text: Binding<String>, required: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 4) {
+        VStack(alignment: .leading, spacing: SabqLayout.space8) {
+            HStack(spacing: SabqLayout.space4) {
                 Text(label)
-                    .font(SabqFonts.app(size: 13, weight: .semibold))
-                    .foregroundStyle(SabqTheme.secondaryInk)
+                    .sabqText(SabqType.metaEmphasis)
+                    .foregroundStyle(SabqTheme.textSecondary)
                 if required {
                     Text("*")
-                        .font(SabqFonts.app(size: 13, weight: .bold))
-                        .foregroundStyle(.red)
+                        .sabqText(SabqType.metaEmphasis)
+                        .foregroundStyle(SabqTheme.danger)
                 }
             }
-            TextField("", text: text, prompt: Text(placeholder).foregroundStyle(SabqTheme.tertiaryInk))
-                .font(SabqFonts.app(size: 15))
-                .foregroundStyle(SabqTheme.ink)
+            TextField("", text: text, prompt: Text(placeholder).foregroundStyle(SabqTheme.textTertiary))
+                .sabqText(SabqType.excerpt)
+                .foregroundStyle(SabqTheme.textPrimary)
                 .textInputAutocapitalization(.words)
                 .autocorrectionDisabled()
-                .padding(.horizontal, 14)
-                .padding(.vertical, 13)
-                .background(
-                    RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous)
-                        .fill(SabqTheme.paleFill)
-                )
+                .modifier(SabqInputSurface())
         }
     }
 

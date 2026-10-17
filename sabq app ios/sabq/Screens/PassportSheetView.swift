@@ -16,7 +16,7 @@ struct PassportSheetView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 16) {
+                VStack(spacing: 0) {
                     if isLoading {
                         loadingState
                     } else if let errorMessage {
@@ -42,7 +42,9 @@ struct PassportSheetView: View {
                                              isStaff: passport.viewer.isStaff)
                     }
                 }
-                .padding(20)
+                .padding(.horizontal, SabqLayout.pageMargin)
+                .padding(.top, SabqLayout.space16)
+                .padding(.bottom, SabqLayout.space32)
             }
             .background(SabqTheme.background)
             .navigationTitle("جواز المحتوى")
@@ -50,18 +52,19 @@ struct PassportSheetView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     if let url = passportURL {
-                        HStack(spacing: 4) {
+                        HStack(spacing: SabqLayout.space4) {
                             Button {
                                 isQRPresented = true
                             } label: {
                                 Image(systemName: "qrcode")
-                                    .font(SabqFonts.app(size: 18, weight: .semibold))
-                                    .foregroundStyle(SabqTheme.primaryEnd)
+                                    .font(SabqFonts.app(size: 18))
+                                    .foregroundStyle(SabqTheme.textPrimary)
                             }
+                            .accessibilityLabel("رمز QR")
                             ShareLink(item: url) {
                                 Image(systemName: "square.and.arrow.up")
-                                    .font(SabqFonts.app(size: 18, weight: .semibold))
-                                    .foregroundStyle(SabqTheme.primaryEnd)
+                                    .font(SabqFonts.app(size: 18))
+                                    .foregroundStyle(SabqTheme.textPrimary)
                             }
                         }
                     }
@@ -70,10 +73,11 @@ struct PassportSheetView: View {
                     Button {
                         dismiss()
                     } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(SabqFonts.app(size: 22))
-                            .foregroundStyle(SabqTheme.tertiaryInk)
+                        Image(systemName: "xmark")
+                            .font(SabqFonts.app(size: 18))
+                            .foregroundStyle(SabqTheme.textPrimary)
                     }
+                    .accessibilityLabel("إغلاق")
                 }
             }
             .sheet(isPresented: $isQRPresented) {
@@ -89,7 +93,7 @@ struct PassportSheetView: View {
     }
 
     private var loadingState: some View {
-        VStack(spacing: 14) {
+        VStack(spacing: SabqLayout.space16) {
             SkeletonBox(height: 100, radius: SabqTheme.tileRadius)
             SkeletonBox(height: 160, radius: SabqTheme.tileRadius)
             SkeletonBox(height: 200, radius: SabqTheme.tileRadius)
@@ -97,25 +101,34 @@ struct PassportSheetView: View {
     }
 
     private func errorState(_ message: String) -> some View {
-        VStack(spacing: 14) {
+        VStack(spacing: SabqLayout.space12) {
             Image(systemName: "exclamationmark.shield")
                 .font(SabqFonts.app(size: 48, weight: .ultraLight))
-                .foregroundStyle(SabqTheme.tertiaryInk)
+                .foregroundStyle(SabqTheme.textTertiary)
+                .accessibilityHidden(true)
             Text("تعذّر تحميل جواز المحتوى")
-                .font(SabqFonts.app(size: 16, weight: .bold))
-                .foregroundStyle(SabqTheme.ink)
+                .sabqText(SabqType.rowTitle)
+                .foregroundStyle(SabqTheme.textPrimary)
             Text(message)
-                .font(SabqFonts.app(size: 13))
-                .foregroundStyle(SabqTheme.secondaryInk)
+                .sabqText(SabqType.meta)
+                .foregroundStyle(SabqTheme.textSecondary)
                 .multilineTextAlignment(.center)
-            Button("إعادة المحاولة") {
+            Button {
                 Task { await load() }
+            } label: {
+                Text("إعادة المحاولة")
+                    .sabqText(SabqType.button)
+                    .foregroundStyle(SabqTheme.onAction)
+                    .padding(.horizontal, SabqLayout.space24)
+                    .frame(minHeight: SabqLayout.controlHeight)
+                    .background(SabqTheme.actionFill,
+                                in: RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
             }
-            .buttonStyle(.borderedProminent)
-            .tint(SabqTheme.primaryEnd)
-            .padding(.top, 4)
+            .buttonStyle(.plain)
+            .padding(.top, SabqLayout.space4)
         }
-        .padding(.vertical, 40)
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, SabqLayout.space40)
     }
 
     private func load() async {
@@ -137,28 +150,25 @@ private struct PassportTrustHeader: View {
     let verifiedAt: String?
 
     var body: some View {
-        VStack(spacing: 14) {
-            ZStack {
-                Circle()
-                    .fill(tierColor.opacity(0.12))
-                    .frame(width: 88, height: 88)
-                Image(systemName: tierIcon)
-                    .font(SabqFonts.app(size: 40, weight: .light))
-                    .foregroundStyle(tierColor)
-            }
+        VStack(spacing: SabqLayout.space12) {
+            Image(systemName: tierIcon)
+                .font(SabqFonts.app(size: 40, weight: .light))
+                .foregroundStyle(tierColor)
+                .frame(height: 56)
+                .accessibilityHidden(true)
 
-            VStack(spacing: 6) {
+            VStack(spacing: SabqLayout.space8) {
                 Text(badge.label.ar)
-                    .font(SabqFonts.app(size: 20, weight: .bold))
-                    .foregroundStyle(SabqTheme.ink)
+                    .sabqText(SabqType.sectionHeading)
+                    .foregroundStyle(SabqTheme.textPrimary)
                     .multilineTextAlignment(.center)
 
                 if let score = badge.credibilityScore {
-                    HStack(spacing: 6) {
+                    HStack(spacing: SabqLayout.space8) {
                         Image(systemName: "shield.checkered")
-                            .font(SabqFonts.app(size: 12, weight: .semibold))
+                            .sabqText(SabqType.tag)
                         Text("درجة المصداقية: \(formatScore(score))")
-                            .font(SabqFonts.app(size: 13, weight: .semibold))
+                            .sabqText(SabqType.metaEmphasis)
                             .monospacedDigit()
                     }
                     .foregroundStyle(tierColor)
@@ -166,30 +176,27 @@ private struct PassportTrustHeader: View {
 
                 if let verifiedAt, !verifiedAt.isEmpty {
                     Text("تم التحقّق في \(formatDate(verifiedAt))")
-                        .font(SabqFonts.app(size: 11, weight: .medium))
-                        .foregroundStyle(SabqTheme.tertiaryInk)
+                        .sabqText(SabqType.meta)
+                        .foregroundStyle(SabqTheme.textTertiary)
                 }
             }
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 22)
-        .padding(.horizontal, 16)
+        .padding(.vertical, SabqLayout.space24)
+        .padding(.horizontal, SabqLayout.space16)
         .background(
-            RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                .fill(SabqTheme.surface)
+            RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                .fill(SabqTheme.surfaceMuted)
         )
-        .overlay(
-            RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                .stroke(tierColor.opacity(0.25), lineWidth: 1)
-        )
+        .padding(.bottom, SabqLayout.space8)
     }
 
     private var tierColor: Color {
         switch badge.tier {
-        case "human_edited": return Color(red: 0.16, green: 0.68, blue: 0.40)
-        case "ai_assisted": return Color(red: 0.20, green: 0.50, blue: 0.92)
-        case "ai_drafted_human_reviewed": return Color(red: 0.95, green: 0.60, blue: 0.10)
-        default: return SabqTheme.primaryEnd
+        case "human_edited": return SabqTheme.success
+        case "ai_assisted": return SabqTheme.primary
+        case "ai_drafted_human_reviewed": return SabqTheme.warning
+        default: return SabqTheme.primary
         }
     }
 
@@ -231,15 +238,15 @@ private struct PassportAIFootprintCard: View {
     let isStaff: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: SabqLayout.space16) {
             header
 
             totalBlock
 
-            VStack(spacing: 10) {
+            VStack(spacing: SabqLayout.space12) {
                 row(
                     title: "النص",
-                    accent: Color(red: 0.20, green: 0.50, blue: 0.92),
+                    accent: SabqTheme.primary,
                     icon: "sparkles",
                     pct: footprint.percentages.body,
                     primary: bodyTierLabel,
@@ -248,7 +255,7 @@ private struct PassportAIFootprintCard: View {
                 )
                 row(
                     title: "الصورة",
-                    accent: Color(red: 0.62, green: 0.36, blue: 0.92),
+                    accent: SabqTheme.primary,
                     icon: "photo",
                     pct: footprint.percentages.cover,
                     primary: footprint.cover.isAiGenerated ? "صورة مولّدة بالذكاء الاصطناعي" : "صورة من تصوير بشري",
@@ -257,7 +264,7 @@ private struct PassportAIFootprintCard: View {
                 )
                 row(
                     title: "SEO",
-                    accent: Color(red: 0.16, green: 0.68, blue: 0.40),
+                    accent: SabqTheme.primary,
                     icon: "magnifyingglass",
                     pct: footprint.percentages.seo,
                     primary: footprint.seo.status ?? (footprint.percentages.seo == 0 ? "تحرير يدوي" : "—"),
@@ -266,60 +273,52 @@ private struct PassportAIFootprintCard: View {
                 )
             }
         }
-        .padding(16)
+        .padding(.top, SabqLayout.space24)
+        .padding(.bottom, SabqLayout.space8)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                .fill(SabqTheme.surface)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                .stroke(SabqTheme.outline.opacity(0.5), lineWidth: 0.5)
-        )
+        .overlay(alignment: .top) { PassportSectionRule() }
     }
 
     private var header: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: SabqLayout.space8) {
             Image(systemName: "wand.and.stars")
-                .font(SabqFonts.app(size: 14, weight: .semibold))
-                .foregroundStyle(Color(red: 0.20, green: 0.50, blue: 0.92))
+                .font(SabqFonts.app(size: 18))
+                .foregroundStyle(SabqTheme.primary)
+                .accessibilityHidden(true)
             Text("بصمة الذكاء الاصطناعي")
-                .font(SabqFonts.app(size: 15, weight: .bold))
-                .foregroundStyle(SabqTheme.ink)
+                .sabqText(SabqType.sectionHeading)
+                .foregroundStyle(SabqTheme.textPrimary)
+                .accessibilityAddTraits(.isHeader)
             Spacer(minLength: 0)
         }
     }
 
     private var totalBlock: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: SabqLayout.space8) {
             HStack(alignment: .firstTextBaseline) {
                 Text("النسبة الإجمالية")
-                    .font(SabqFonts.app(size: 13, weight: .semibold))
-                    .foregroundStyle(SabqTheme.secondaryInk)
+                    .sabqText(SabqType.metaEmphasis)
+                    .foregroundStyle(SabqTheme.textSecondary)
                 Spacer(minLength: 0)
                 Text("\(footprint.percentages.total)%")
-                    .font(SabqFonts.app(size: 22, weight: .heavy))
+                    .sabqText(SabqType.leadTitle)
                     .monospacedDigit()
-                    .foregroundStyle(Color(red: 0.96, green: 0.62, blue: 0.04))
+                    .foregroundStyle(SabqTheme.warning)
             }
             PassportSplitBar(aiPct: footprint.percentages.total)
             if !footprint.explanation.ar.isEmpty {
                 Text(footprint.explanation.ar)
-                    .font(SabqFonts.app(size: 12))
-                    .foregroundStyle(SabqTheme.secondaryInk)
+                    .sabqText(SabqType.meta)
+                    .foregroundStyle(SabqTheme.textSecondary)
                     .lineSpacing(3)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .padding(12)
+        .padding(SabqLayout.space12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous)
-                .fill(SabqTheme.paleFill.opacity(0.5))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous)
-                .stroke(SabqTheme.outline.opacity(0.4), lineWidth: 0.5)
+            RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                .fill(SabqTheme.surfaceMuted)
         )
     }
 
@@ -332,28 +331,25 @@ private struct PassportAIFootprintCard: View {
         secondary: String?,
         helper: String
     ) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .top, spacing: 10) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(accent.opacity(0.15))
-                    Image(systemName: icon)
-                        .font(SabqFonts.app(size: 16, weight: .semibold))
-                        .foregroundStyle(accent)
-                }
-                .frame(width: 36, height: 36)
+        VStack(alignment: .leading, spacing: SabqLayout.space8) {
+            HStack(alignment: .top, spacing: SabqLayout.space8) {
+                Image(systemName: icon)
+                    .font(SabqFonts.app(size: 18))
+                    .foregroundStyle(accent)
+                    .frame(width: 24, height: 24)
+                    .accessibilityHidden(true)
 
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: SabqLayout.space4) {
                     Text(title)
-                        .font(SabqFonts.app(size: 13, weight: .bold))
-                        .foregroundStyle(SabqTheme.ink)
+                        .sabqText(SabqType.metaEmphasis)
+                        .foregroundStyle(SabqTheme.textPrimary)
                     Text(primary)
-                        .font(SabqFonts.app(size: 11, weight: .medium))
-                        .foregroundStyle(SabqTheme.secondaryInk)
+                        .sabqText(SabqType.meta)
+                        .foregroundStyle(SabqTheme.textSecondary)
                     if let secondary, !secondary.isEmpty {
                         Text(secondary)
-                            .font(SabqFonts.app(size: 11, weight: .medium))
-                            .foregroundStyle(SabqTheme.tertiaryInk)
+                            .sabqText(SabqType.meta)
+                            .foregroundStyle(SabqTheme.textTertiary)
                             .lineLimit(2)
                     }
                 }
@@ -361,28 +357,24 @@ private struct PassportAIFootprintCard: View {
                 Spacer(minLength: 0)
 
                 Text("\(pct)%")
-                    .font(SabqFonts.app(size: 14, weight: .heavy))
+                    .sabqText(SabqType.rowTitle)
                     .monospacedDigit()
-                    .foregroundStyle(Color(red: 0.96, green: 0.62, blue: 0.04))
+                    .foregroundStyle(SabqTheme.warning)
             }
 
             PassportSplitBar(aiPct: pct)
 
             Text(helper)
-                .font(SabqFonts.app(size: 10))
-                .foregroundStyle(SabqTheme.tertiaryInk)
+                .sabqText(SabqType.meta)
+                .foregroundStyle(SabqTheme.textTertiary)
                 .lineSpacing(2)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(12)
+        .padding(SabqLayout.space12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous)
-                .fill(accent.opacity(0.05))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous)
-                .stroke(accent.opacity(0.25), lineWidth: 0.5)
+            RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                .fill(SabqTheme.surfaceMuted)
         )
     }
 
@@ -449,44 +441,39 @@ private struct PassportPeopleCard: View {
         if rows.isEmpty && publisher == nil {
             EmptyView()
         } else {
-            VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: SabqLayout.space12) {
                 Text("المسؤولون عن المحتوى")
-                    .font(SabqFonts.app(size: 14, weight: .bold))
-                    .foregroundStyle(SabqTheme.ink)
+                    .sabqText(SabqType.sectionHeading)
+                    .foregroundStyle(SabqTheme.textPrimary)
+                    .accessibilityAddTraits(.isHeader)
 
-                VStack(spacing: 12) {
+                VStack(spacing: SabqLayout.space12) {
                     ForEach(rows.indices, id: \.self) { i in
                         personRow(label: rows[i].label, person: rows[i].person)
                         if i < rows.count - 1 {
-                            Divider().foregroundStyle(SabqTheme.outline.opacity(0.5))
+                            Rectangle().fill(SabqTheme.separator).frame(height: 1)
                         }
                     }
                 }
             }
-            .padding(16)
+            .padding(.top, SabqLayout.space24)
+            .padding(.bottom, SabqLayout.space8)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                    .fill(SabqTheme.surface)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                    .stroke(SabqTheme.outline.opacity(0.5), lineWidth: 0.5)
-            )
+            .overlay(alignment: .top) { PassportSectionRule() }
         }
     }
 
     private func personRow(label: String, person: APIPassport.Person) -> some View {
-        HStack(spacing: 12) {
+        HStack(spacing: SabqLayout.space12) {
             avatar(person: person)
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: SabqLayout.space4) {
                 Text(person.displayName.isEmpty ? "—" : person.displayName)
-                    .font(SabqFonts.app(size: 14, weight: .semibold))
-                    .foregroundStyle(SabqTheme.ink)
+                    .sabqText(SabqType.metaEmphasis)
+                    .foregroundStyle(SabqTheme.textPrimary)
                     .lineLimit(1)
                 Text(label)
-                    .font(SabqFonts.app(size: 11, weight: .medium))
-                    .foregroundStyle(SabqTheme.tertiaryInk)
+                    .sabqText(SabqType.meta)
+                    .foregroundStyle(SabqTheme.textTertiary)
             }
             Spacer(minLength: 0)
         }
@@ -510,10 +497,10 @@ private struct PassportPeopleCard: View {
 
     private func initialsPlaceholder(person: APIPassport.Person) -> some View {
         ZStack {
-            Circle().fill(SabqTheme.paleFill)
+            Circle().fill(SabqTheme.surfaceMuted)
             Text(initials(of: person.displayName))
-                .font(SabqFonts.app(size: 13, weight: .bold))
-                .foregroundStyle(SabqTheme.secondaryInk)
+                .sabqText(SabqType.metaEmphasis)
+                .foregroundStyle(SabqTheme.textSecondary)
         }
     }
 
@@ -532,25 +519,26 @@ private struct PassportSourceCard: View {
     let isPublisherNews: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SabqLayout.space12) {
             Text("المصدر")
-                .font(SabqFonts.app(size: 14, weight: .bold))
-                .foregroundStyle(SabqTheme.ink)
+                .sabqText(SabqType.sectionHeading)
+                .foregroundStyle(SabqTheme.textPrimary)
+                .accessibilityAddTraits(.isHeader)
 
-            HStack(spacing: 10) {
+            HStack(spacing: SabqLayout.space8) {
                 Image(systemName: channelIcon)
-                    .font(SabqFonts.app(size: 16, weight: .semibold))
-                    .foregroundStyle(SabqTheme.primaryEnd)
+                    .sabqText(SabqType.button)
+                    .foregroundStyle(SabqTheme.primary)
                     .frame(width: 28)
 
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: SabqLayout.space4) {
                     Text(channelLabel)
-                        .font(SabqFonts.app(size: 14, weight: .semibold))
-                        .foregroundStyle(SabqTheme.ink)
+                        .sabqText(SabqType.metaEmphasis)
+                        .foregroundStyle(SabqTheme.textPrimary)
                     if let raw = source.rawSource, !raw.isEmpty {
                         Text(raw)
-                            .font(SabqFonts.app(size: 11, weight: .medium))
-                            .foregroundStyle(SabqTheme.tertiaryInk)
+                            .sabqText(SabqType.meta)
+                            .foregroundStyle(SabqTheme.textTertiary)
                             .lineLimit(2)
                     }
                 }
@@ -558,41 +546,36 @@ private struct PassportSourceCard: View {
             }
 
             if isPublisherNews, let publisher {
-                Divider().foregroundStyle(SabqTheme.outline.opacity(0.5))
-                HStack(spacing: 10) {
+                Rectangle().fill(SabqTheme.separator).frame(height: 1)
+                HStack(spacing: SabqLayout.space8) {
                     Image(systemName: "newspaper.fill")
-                        .font(SabqFonts.app(size: 16, weight: .semibold))
-                        .foregroundStyle(SabqTheme.primaryEnd)
+                        .sabqText(SabqType.button)
+                        .foregroundStyle(SabqTheme.primary)
                         .frame(width: 28)
                     Text(publisher.agencyName)
-                        .font(SabqFonts.app(size: 14, weight: .semibold))
-                        .foregroundStyle(SabqTheme.ink)
+                        .sabqText(SabqType.metaEmphasis)
+                        .foregroundStyle(SabqTheme.textPrimary)
                     Spacer(minLength: 0)
                 }
             }
 
             if let urlStr = source.sourceUrl, let url = URL(string: urlStr) {
                 Link(destination: url) {
-                    HStack(spacing: 6) {
+                    HStack(spacing: SabqLayout.space8) {
                         Image(systemName: "arrow.up.right.square")
-                            .font(SabqFonts.app(size: 12, weight: .semibold))
+                            .sabqText(SabqType.tag)
                         Text("فتح المصدر الأصلي")
-                            .font(SabqFonts.app(size: 12, weight: .semibold))
+                            .sabqText(SabqType.metaEmphasis)
                     }
-                    .foregroundStyle(SabqTheme.primaryEnd)
+                    .foregroundStyle(SabqTheme.primary)
+                    .frame(minHeight: SabqLayout.touchTarget)
                 }
             }
         }
-        .padding(16)
+        .padding(.top, SabqLayout.space24)
+        .padding(.bottom, SabqLayout.space8)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                .fill(SabqTheme.surface)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                .stroke(SabqTheme.outline.opacity(0.5), lineWidth: 0.5)
-        )
+        .overlay(alignment: .top) { PassportSectionRule() }
     }
 
     private var channelLabel: String {
@@ -627,19 +610,21 @@ private struct PassportAIImagesCard: View {
     private let columns: [GridItem] = SabqGrid.adaptive(spacing: 10)
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 8) {
+        VStack(alignment: .leading, spacing: SabqLayout.space12) {
+            HStack(spacing: SabqLayout.space8) {
                 Image(systemName: "photo.stack")
-                    .font(SabqFonts.app(size: 14, weight: .semibold))
-                    .foregroundStyle(Color(red: 0.62, green: 0.36, blue: 0.92))
+                    .font(SabqFonts.app(size: 18))
+                    .foregroundStyle(SabqTheme.primary)
+                    .accessibilityHidden(true)
                 Text("صور مولّدة بالذكاء الاصطناعي")
-                    .font(SabqFonts.app(size: 14, weight: .bold))
-                    .foregroundStyle(SabqTheme.ink)
+                    .sabqText(SabqType.sectionHeading)
+                    .foregroundStyle(SabqTheme.textPrimary)
+                    .accessibilityAddTraits(.isHeader)
                 Spacer(minLength: 0)
                 Text("\(images.count)")
-                    .font(SabqFonts.app(size: 13, weight: .heavy))
+                    .sabqText(SabqType.metaEmphasis)
                     .monospacedDigit()
-                    .foregroundStyle(SabqTheme.tertiaryInk)
+                    .foregroundStyle(SabqTheme.textTertiary)
             }
 
             LazyVGrid(columns: columns, spacing: 10) {
@@ -648,67 +633,54 @@ private struct PassportAIImagesCard: View {
                 }
             }
         }
-        .padding(16)
+        .padding(.top, SabqLayout.space24)
+        .padding(.bottom, SabqLayout.space8)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                .fill(SabqTheme.surface)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                .stroke(SabqTheme.outline.opacity(0.5), lineWidth: 0.5)
-        )
+        .overlay(alignment: .top) { PassportSectionRule() }
     }
 
     private func imageCell(_ img: APIPassport.AIImageGeneration) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: SabqLayout.space8) {
             let urlStr = img.thumbnailUrl ?? img.imageUrl
             if let url = urlStr.flatMap(URL.init(string:)) {
                 CachedAsyncImage(url: url, contentMode: .fill) {
                     placeholder
                 }
                 .aspectRatio(1, contentMode: .fit)
-                .clipShape(RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous))
             } else {
                 placeholder.aspectRatio(1, contentMode: .fit)
             }
 
             if let prompt = img.prompt, !prompt.isEmpty {
                 Text(prompt)
-                    .font(SabqFonts.app(size: 11))
-                    .foregroundStyle(SabqTheme.secondaryInk)
+                    .sabqText(SabqType.meta)
+                    .foregroundStyle(SabqTheme.textSecondary)
                     .lineLimit(2)
             } else if !isStaff {
-                HStack(spacing: 4) {
-                    Image(systemName: "lock.fill").font(SabqFonts.app(size: 9))
+                HStack(spacing: SabqLayout.space4) {
+                    Image(systemName: "lock.fill").sabqText(SabqType.meta)
                     Text("الـ prompt للموظّفين فقط").italic()
-                        .font(SabqFonts.app(size: 11))
+                        .sabqText(SabqType.meta)
                 }
-                .foregroundStyle(SabqTheme.tertiaryInk)
+                .foregroundStyle(SabqTheme.textTertiary)
             }
 
             Text(img.model)
-                .font(SabqFonts.app(size: 10, weight: .semibold))
-                .foregroundStyle(SabqTheme.secondaryInk)
-                .padding(.horizontal, 7)
-                .padding(.vertical, 3)
+                .sabqText(SabqType.tag)
+                .foregroundStyle(SabqTheme.textSecondary)
+                .padding(.horizontal, SabqLayout.space8)
+                .padding(.vertical, SabqLayout.space4)
                 .background(
-                    Capsule().fill(SabqTheme.paleFill)
-                )
-                .overlay(
-                    Capsule().stroke(SabqTheme.outline.opacity(0.5), lineWidth: 0.5)
+                    RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
+                        .fill(SabqTheme.surfaceMuted)
                 )
         }
     }
 
     private var placeholder: some View {
-        RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous)
-            .fill(SabqTheme.paleFill)
-            .overlay(
-                Image(systemName: "photo")
-                    .font(SabqFonts.app(size: 24, weight: .ultraLight))
-                    .foregroundStyle(SabqTheme.tertiaryInk)
-            )
+        SabqImagePlaceholder()
+            .clipShape(RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous))
     }
 }
 
@@ -718,50 +690,46 @@ private struct PassportSEOHistoryCard: View {
     let entry: APIPassport.SEOHistoryEntry
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 8) {
+        VStack(alignment: .leading, spacing: SabqLayout.space12) {
+            HStack(spacing: SabqLayout.space8) {
                 Image(systemName: "magnifyingglass")
-                    .font(SabqFonts.app(size: 14, weight: .semibold))
-                    .foregroundStyle(Color(red: 0.16, green: 0.68, blue: 0.40))
+                    .font(SabqFonts.app(size: 18))
+                    .foregroundStyle(SabqTheme.primary)
+                    .accessibilityHidden(true)
                 Text("سجل تحسين الظهور (SEO)")
-                    .font(SabqFonts.app(size: 14, weight: .bold))
-                    .foregroundStyle(SabqTheme.ink)
+                    .sabqText(SabqType.sectionHeading)
+                    .foregroundStyle(SabqTheme.textPrimary)
+                    .accessibilityAddTraits(.isHeader)
                 Spacer(minLength: 0)
                 Text("v\(entry.version)")
-                    .font(SabqFonts.app(size: 12, weight: .heavy))
+                    .sabqText(SabqType.tag)
                     .monospacedDigit()
-                    .foregroundStyle(SabqTheme.secondaryInk)
+                    .foregroundStyle(SabqTheme.textSecondary)
             }
 
-            HStack(spacing: 6) {
-                Tag(entry.provider, tint: Color(red: 0.16, green: 0.68, blue: 0.40))
-                Tag(entry.model, tint: SabqTheme.secondaryInk)
+            HStack(spacing: SabqLayout.space8) {
+                Tag(entry.provider, tint: SabqTheme.textSecondary)
+                Tag(entry.model, tint: SabqTheme.textSecondary)
                 if entry.manualOverride == true {
-                    Tag("تعديل يدوي", tint: Color(red: 0.96, green: 0.62, blue: 0.04))
+                    Tag("تعديل يدوي", tint: SabqTheme.warning)
                 }
             }
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: SabqLayout.space4) {
                 if let by = entry.generatedByName ?? entry.generatedBy {
                     Text("مُنشئ: \(by)")
-                        .font(SabqFonts.app(size: 12))
-                        .foregroundStyle(SabqTheme.secondaryInk)
+                        .sabqText(SabqType.meta)
+                        .foregroundStyle(SabqTheme.textSecondary)
                 }
                 Text(formatDate(entry.createdAt))
-                    .font(SabqFonts.app(size: 11))
-                    .foregroundStyle(SabqTheme.tertiaryInk)
+                    .sabqText(SabqType.meta)
+                    .foregroundStyle(SabqTheme.textTertiary)
             }
         }
-        .padding(16)
+        .padding(.top, SabqLayout.space24)
+        .padding(.bottom, SabqLayout.space8)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                .fill(SabqTheme.surface)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                .stroke(SabqTheme.outline.opacity(0.5), lineWidth: 0.5)
-        )
+        .overlay(alignment: .top) { PassportSectionRule() }
     }
 
     private struct Tag: View {
@@ -771,12 +739,14 @@ private struct PassportSEOHistoryCard: View {
 
         var body: some View {
             Text(title)
-                .font(SabqFonts.app(size: 11, weight: .semibold))
+                .sabqText(SabqType.tag)
                 .foregroundStyle(tint)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 3)
-                .background(Capsule().fill(tint.opacity(0.10)))
-                .overlay(Capsule().stroke(tint.opacity(0.30), lineWidth: 0.5))
+                .padding(.horizontal, SabqLayout.space8)
+                .padding(.vertical, SabqLayout.space4)
+                .background(
+                    RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
+                        .fill(SabqTheme.surfaceMuted)
+                )
         }
     }
 }
@@ -788,21 +758,23 @@ private struct PassportTimelineCard: View {
     let isStaff: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(spacing: 8) {
+        VStack(alignment: .leading, spacing: SabqLayout.space12) {
+            HStack(spacing: SabqLayout.space8) {
                 Image(systemName: "clock.arrow.circlepath")
-                    .font(SabqFonts.app(size: 14, weight: .semibold))
-                    .foregroundStyle(SabqTheme.secondaryInk)
+                    .font(SabqFonts.app(size: 18))
+                    .foregroundStyle(SabqTheme.primary)
+                    .accessibilityHidden(true)
                 Text("سجل أحداث الخبر")
-                    .font(SabqFonts.app(size: 14, weight: .bold))
-                    .foregroundStyle(SabqTheme.ink)
+                    .sabqText(SabqType.sectionHeading)
+                    .foregroundStyle(SabqTheme.textPrimary)
+                    .accessibilityAddTraits(.isHeader)
                 Spacer(minLength: 0)
             }
 
             if events.isEmpty {
                 Text("لا توجد أحداث مسجّلة بعد.")
-                    .font(SabqFonts.app(size: 12))
-                    .foregroundStyle(SabqTheme.tertiaryInk)
+                    .sabqText(SabqType.meta)
+                    .foregroundStyle(SabqTheme.textTertiary)
             } else {
                 VStack(alignment: .leading, spacing: 0) {
                     ForEach(Array(events.enumerated()), id: \.element.id) { idx, event in
@@ -811,105 +783,105 @@ private struct PassportTimelineCard: View {
                 }
             }
         }
-        .padding(16)
+        .padding(.top, SabqLayout.space24)
+        .padding(.bottom, SabqLayout.space8)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                .fill(SabqTheme.surface)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                .stroke(SabqTheme.outline.opacity(0.5), lineWidth: 0.5)
-        )
+        .overlay(alignment: .top) { PassportSectionRule() }
     }
 
     private func timelineRow(event: APIPassport.TimelineEvent, isLast: Bool) -> some View {
-        HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .top, spacing: SabqLayout.space12) {
             VStack(spacing: 0) {
                 Circle()
-                    .fill(SabqTheme.primaryEnd)
-                    .frame(width: 11, height: 11)
+                    .fill(SabqTheme.primary)
+                    .frame(width: 12, height: 12)
                     .overlay(
                         Circle().stroke(SabqTheme.background, lineWidth: 2)
                     )
                 if !isLast {
                     Rectangle()
-                        .fill(SabqTheme.outline.opacity(0.5))
+                        .fill(SabqTheme.separator)
                         .frame(width: 1)
                         .frame(maxHeight: .infinity)
                 }
             }
             .frame(width: 14)
 
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 6) {
+            VStack(alignment: .leading, spacing: SabqLayout.space8) {
+                HStack(spacing: SabqLayout.space8) {
                     Text(eventLabel(event.eventType))
-                        .font(SabqFonts.app(size: 11, weight: .bold))
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 3)
-                        .foregroundStyle(SabqTheme.primaryEnd)
-                        .background(Capsule().fill(SabqTheme.primaryEnd.opacity(0.10)))
+                        .sabqText(SabqType.tag)
+                        .padding(.horizontal, SabqLayout.space8)
+                        .padding(.vertical, SabqLayout.space4)
+                        .foregroundStyle(SabqTheme.primary)
+                        .background(
+                            RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
+                                .fill(SabqTheme.surfaceMuted)
+                        )
 
                     Text(sourceLabel(event.source))
-                        .font(SabqFonts.app(size: 10, weight: .medium))
-                        .foregroundStyle(SabqTheme.tertiaryInk)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(Capsule().stroke(SabqTheme.outline.opacity(0.5), lineWidth: 0.5))
+                        .sabqText(SabqType.meta)
+                        .foregroundStyle(SabqTheme.textTertiary)
+                        .padding(.horizontal, SabqLayout.space8)
+                        .padding(.vertical, SabqLayout.space4)
+                        .background(
+                            RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
+                                .stroke(SabqTheme.outline, lineWidth: 1)
+                        )
 
                     Spacer(minLength: 0)
 
                     Text(formatDate(event.createdAt))
-                        .font(SabqFonts.app(size: 10))
-                        .foregroundStyle(SabqTheme.tertiaryInk)
+                        .sabqText(SabqType.meta)
+                        .foregroundStyle(SabqTheme.textTertiary)
                 }
 
                 if let summary = event.summary, !summary.isEmpty {
                     Text(summary)
-                        .font(SabqFonts.app(size: 12))
-                        .foregroundStyle(SabqTheme.secondaryInk)
+                        .sabqText(SabqType.meta)
+                        .foregroundStyle(SabqTheme.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
                 if let actor = event.actor {
-                    HStack(spacing: 6) {
+                    HStack(spacing: SabqLayout.space8) {
                         ZStack {
-                            Circle().fill(SabqTheme.paleFill)
+                            Circle().fill(SabqTheme.surfaceMuted)
                             Text(String(actor.displayName.prefix(1)))
-                                .font(SabqFonts.app(size: 9, weight: .bold))
-                                .foregroundStyle(SabqTheme.secondaryInk)
+                                .sabqText(SabqType.tag)
+                                .foregroundStyle(SabqTheme.textSecondary)
                         }
-                        .frame(width: 20, height: 20)
+                        .frame(width: 24, height: 24)
 
                         Text(actor.displayName.isEmpty ? "—" : actor.displayName)
-                            .font(SabqFonts.app(size: 11, weight: .medium))
-                            .foregroundStyle(SabqTheme.secondaryInk)
+                            .sabqText(SabqType.meta)
+                            .foregroundStyle(SabqTheme.textSecondary)
                     }
                 }
 
                 if isStaff, let details = event.details, !details.isEmpty {
                     DisclosureGroup {
-                        VStack(alignment: .leading, spacing: 3) {
+                        VStack(alignment: .leading, spacing: SabqLayout.space4) {
                             ForEach(details.keys.sorted(), id: \.self) { key in
                                 Text("\(key): \(details[key]?.displayString ?? "—")")
-                                    .font(SabqFonts.app(size: 10))
-                                    .foregroundStyle(SabqTheme.secondaryInk)
+                                    .sabqText(SabqType.meta)
+                                    .foregroundStyle(SabqTheme.textSecondary)
                                     .lineLimit(3)
                             }
                         }
-                        .padding(8)
+                        .padding(SabqLayout.space8)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .background(
-                            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                .fill(SabqTheme.paleFill.opacity(0.5))
+                            RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
+                                .fill(SabqTheme.surfaceMuted)
                         )
                     } label: {
-                        HStack(spacing: 4) {
-                            Image(systemName: "lock.fill").font(SabqFonts.app(size: 9))
+                        HStack(spacing: SabqLayout.space4) {
+                            Image(systemName: "lock.fill").sabqText(SabqType.meta)
                             Text("تفاصيل التغيير (للموظّفين)")
-                                .font(SabqFonts.app(size: 11))
+                                .sabqText(SabqType.meta)
                         }
-                        .foregroundStyle(SabqTheme.tertiaryInk)
+                        .foregroundStyle(SabqTheme.textTertiary)
                     }
                 }
             }
@@ -951,17 +923,21 @@ private struct PassportQRSheet: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 18) {
+            VStack(spacing: SabqLayout.space16) {
                 Text("امسح الرمز لفتح جواز المحتوى")
-                    .font(SabqFonts.app(size: 14, weight: .semibold))
-                    .foregroundStyle(SabqTheme.secondaryInk)
+                    .sabqText(SabqType.metaEmphasis)
+                    .foregroundStyle(SabqTheme.textSecondary)
                     .multilineTextAlignment(.center)
 
                 ZStack {
-                    RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .fill(.white)
+                    // QR stays on white in both modes so scanners read it.
+                    RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                        .fill(Color.white)
                         .frame(width: 240, height: 240)
-                        .shadow(color: .black.opacity(0.08), radius: 14, x: 0, y: 6)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                                .stroke(SabqTheme.outline, lineWidth: 1)
+                        )
 
                     if let qrImage {
                         Image(uiImage: qrImage)
@@ -970,39 +946,40 @@ private struct PassportQRSheet: View {
                             .scaledToFit()
                             .frame(width: 200, height: 200)
                     } else {
-                        ProgressView().tint(SabqTheme.primaryEnd)
+                        ProgressView().tint(SabqTheme.primary)
                     }
                 }
 
                 Text(url.absoluteString)
-                    .font(SabqFonts.app(size: 11))
-                    .foregroundStyle(SabqTheme.tertiaryInk)
+                    .sabqText(SabqType.meta)
+                    .foregroundStyle(SabqTheme.textTertiary)
                     .multilineTextAlignment(.center)
-                    .padding(.horizontal, 24)
+                    .padding(.horizontal, SabqLayout.space24)
                     .textSelection(.enabled)
 
                 ShareLink(item: url) {
-                    HStack(spacing: 6) {
+                    HStack(spacing: SabqLayout.space8) {
                         Image(systemName: "square.and.arrow.up")
                         Text("مشاركة الرابط")
                     }
-                    .font(SabqFonts.app(size: 14, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 18)
-                    .padding(.vertical, 10)
-                    .background(Capsule().fill(SabqTheme.primaryEnd))
+                    .sabqText(SabqType.button)
+                    .foregroundStyle(SabqTheme.onAction)
+                    .padding(.horizontal, SabqLayout.space24)
+                    .frame(minHeight: SabqLayout.controlHeight)
+                    .background(SabqTheme.actionFill,
+                                in: RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
                 }
 
                 Spacer()
             }
-            .padding(.top, 30)
+            .padding(.top, SabqLayout.space32)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(SabqTheme.background)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("تم") { dismiss() }
-                        .foregroundStyle(SabqTheme.primaryEnd)
+                        .foregroundStyle(SabqTheme.primary)
                 }
             }
         }
@@ -1025,6 +1002,18 @@ private struct PassportQRSheet: View {
         let context = CIContext()
         guard let cg = context.createCGImage(scaled, from: scaled.extent) else { return nil }
         return UIImage(cgImage: cg)
+    }
+}
+
+// MARK: - Section rule
+
+/// Thin separator above each unboxed passport section.
+private struct PassportSectionRule: View {
+    var body: some View {
+        Rectangle()
+            .fill(SabqTheme.separator)
+            .frame(height: 1)
+            .accessibilityHidden(true)
     }
 }
 

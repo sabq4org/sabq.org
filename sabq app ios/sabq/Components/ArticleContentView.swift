@@ -75,41 +75,36 @@ struct ArticleContentView: View {
         case .table(let header, let rows, let cardStyle):
             tableView(header: header, rows: rows, cardStyle: cardStyle)
         case .divider:
-            Divider().foregroundStyle(SabqTheme.outline.opacity(0.5))
+            SidebarRowDivider()
         }
     }
 
     private func whatsappCtaCard(phrase: String, url: URL) -> some View {
         Link(destination: url) {
-            HStack(spacing: 12) {
-                ZStack {
-                    Circle()
-                        .fill(Color.white.opacity(0.2))
-                        .frame(width: 44, height: 44)
-                    Image(systemName: "message.fill")
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(.white)
-                }
+            // بلوك هادئ بلا تدرّج ولا ظل (النموذج المعتمد).
+            HStack(spacing: SabqLayout.space12) {
+                Image(systemName: "message.fill")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(SabqTheme.primary)
+                    .frame(width: SabqLayout.touchTarget, height: SabqLayout.touchTarget)
+                    .background(
+                        RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
+                            .fill(SabqTheme.surface)
+                    )
+                    .accessibilityHidden(true)
                 Text(phrase)
-                    .font(SabqType.body)
-                    .foregroundStyle(.white)
+                    .font(SabqType.button.font)
+                    .foregroundStyle(SabqTheme.textPrimary)
                     .multilineTextAlignment(.leading)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 Image(systemName: "chevron.left")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.85))
+                    .font(SabqType.meta.font)
+                    .foregroundStyle(SabqTheme.textTertiary)
+                    .accessibilityHidden(true)
             }
             .padding(.horizontal, SabqLayout.cardInset)
             .padding(.vertical, SabqLayout.space12)
-            .background(
-                LinearGradient(
-                    colors: [Color(red: 0.145, green: 0.827, blue: 0.4), Color(red: 0.071, green: 0.549, blue: 0.494)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .shadow(color: Color(red: 0.071, green: 0.549, blue: 0.494).opacity(0.28), radius: 12, y: 6)
+            .sabqBlockSurface()
         }
         .buttonStyle(.plain)
     }
@@ -136,7 +131,7 @@ struct ArticleContentView: View {
             if let hex = run.colorHex, let color = colorFromHex(hex) {
                 t = t.foregroundColor(color)
             } else if run.link != nil {
-                t = t.foregroundColor(SabqTheme.primaryEnd)
+                t = t.foregroundColor(SabqTheme.primary)
             }
             return acc + t
         }
@@ -166,8 +161,8 @@ struct ArticleContentView: View {
             default: return CGFloat(fontSize + 1)
             }
         }()
-        return renderText(runs: runs, baseSize: size, baseWeight: .heavy)
-            .foregroundStyle(SabqTheme.ink)
+        return renderText(runs: runs, baseSize: size, baseWeight: .bold)
+            .foregroundStyle(SabqTheme.textPrimary)
             .multilineTextAlignment(.leading)
             .lineSpacing(CGFloat(lineSpacing))
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -191,10 +186,11 @@ struct ArticleContentView: View {
     private func listView(ordered: Bool, items: [[InlineRun]]) -> some View {
         VStack(alignment: .leading, spacing: SabqLayout.space8) {
             ForEach(Array(items.enumerated()), id: \.offset) { idx, runs in
-                HStack(alignment: .firstTextBaseline, spacing: 10) {
+                HStack(alignment: .firstTextBaseline, spacing: SabqLayout.space8) {
                     Text(ordered ? "\(idx + 1)." : "•")
-                        .font(SabqFonts.app(size: CGFloat(fontSize), weight: .bold))
-                        .foregroundStyle(SabqTheme.primaryEnd)
+                        .font(SabqFonts.app(size: CGFloat(fontSize), weight: .semibold))
+                        .monospacedDigit()
+                        .foregroundStyle(SabqTheme.primary)
                         .frame(minWidth: 18, alignment: .trailing)
                     renderText(runs: runs, baseSize: CGFloat(fontSize))
                         .foregroundStyle(SabqTheme.ink.opacity(0.92))
@@ -219,20 +215,20 @@ struct ArticleContentView: View {
             if let header {
                 tableRow(header, columnCount: columnCount, minColumnWidth: minColumnWidth,
                          isHeader: true, cardStyle: cardStyle)
-                    .background(SabqTheme.paleFill)
+                    .background(SabqTheme.surfaceMuted)
             }
             ForEach(Array(rows.enumerated()), id: \.offset) { idx, cells in
                 if header != nil || idx > 0 {
-                    Divider().overlay(SabqTheme.outline.opacity(0.6))
+                    SidebarRowDivider()
                 }
                 tableRow(cells, columnCount: columnCount, minColumnWidth: minColumnWidth,
                          isHeader: false, cardStyle: cardStyle)
             }
         }
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(SabqTheme.outline.opacity(0.8), lineWidth: 1)
+            RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                .stroke(SabqTheme.outline, lineWidth: 1)
         )
 
         return ViewThatFits(in: .horizontal) {
@@ -256,19 +252,19 @@ struct ArticleContentView: View {
             ForEach(0..<columnCount, id: \.self) { col in
                 let runs = col < cells.count ? cells[col] : []
                 let emphasised = isHeader || (cardStyle && col == 0)
-                renderText(runs: runs, baseSize: cellSize, baseWeight: emphasised ? .bold : .regular)
-                    .foregroundStyle(emphasised ? SabqTheme.ink : SabqTheme.ink.opacity(0.92))
+                renderText(runs: runs, baseSize: cellSize, baseWeight: emphasised ? .semibold : .regular)
+                    .foregroundStyle(SabqTheme.textPrimary)
                     .multilineTextAlignment(.leading)
                     .lineSpacing(3)
                     .fixedSize(horizontal: false, vertical: true)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 9)
+                    .padding(.horizontal, SabqLayout.space8)
+                    .padding(.vertical, SabqLayout.space8)
                     // الحشو داخل الحد الأدنى — وإلا صار عرض العمود الفعلي
                     // min+16 فيفشل شرط «يتسع» في ViewThatFits ويُقصّ الطرفان.
                     .frame(minWidth: minColumnWidth, maxWidth: .infinity, alignment: .leading)
-                    .background(cardStyle && col == 0 && !isHeader ? SabqTheme.paleFill.opacity(0.6) : Color.clear)
+                    .background(cardStyle && col == 0 && !isHeader ? SabqTheme.surfaceMuted : Color.clear)
                 if col < columnCount - 1 {
-                    Divider().overlay(SabqTheme.outline.opacity(0.6))
+                    Rectangle().fill(SabqTheme.separator).frame(width: 1)
                 }
             }
         }
@@ -276,19 +272,19 @@ struct ArticleContentView: View {
     }
 
     private func quoteView(_ runs: [InlineRun], attribution: [InlineRun]?) -> some View {
-        HStack(alignment: .top, spacing: 14) {
-            RoundedRectangle(cornerRadius: 3, style: .continuous)
-                .fill(SabqTheme.brandBlue)
+        HStack(alignment: .top, spacing: SabqLayout.space12) {
+            Capsule()
+                .fill(SabqTheme.primary)
                 .frame(width: 3)
 
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: SabqLayout.space8) {
                 Image(systemName: "quote.opening")
-                    .font(SabqFonts.app(size: 18, weight: .light))
-                    .foregroundStyle(SabqTheme.primaryEnd.opacity(0.55))
+                    .font(SabqFonts.app(size: 18, weight: .regular))
+                    .foregroundStyle(SabqTheme.primary)
+                    .accessibilityHidden(true)
 
                 renderText(runs: runs, baseSize: CGFloat(fontSize + 1), baseWeight: .medium)
-                    .italic()
-                    .foregroundStyle(SabqTheme.ink.opacity(0.88))
+                    .foregroundStyle(SabqTheme.textPrimary)
                     .multilineTextAlignment(.leading)
                     .lineSpacing(CGFloat(lineSpacing) + 4)
                     .fixedSize(horizontal: false, vertical: true)
@@ -297,27 +293,16 @@ struct ArticleContentView: View {
                 if let attribution {
                     (Text("— ").font(SabqFonts.app(size: CGFloat(fontSize - 2), weight: .semibold))
                         + renderText(runs: attribution, baseSize: CGFloat(fontSize - 2), baseWeight: .semibold))
-                        .foregroundStyle(SabqTheme.ink.opacity(0.6))
+                        .foregroundStyle(SabqTheme.textSecondary)
                         .multilineTextAlignment(.leading)
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.top, 2)
                 }
             }
         }
-        .padding(16)
+        .padding(SabqLayout.cardInset)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                .fill(.ultraThinMaterial)
-                .overlay(
-                    RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                        .fill(SabqTheme.primaryEnd.opacity(0.04))
-                )
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                .stroke(SabqTheme.primaryEnd.opacity(0.18), lineWidth: 0.5)
-        )
+        .sabqBlockSurface()
     }
 
     // MARK: - Images
@@ -338,7 +323,7 @@ struct ArticleContentView: View {
         // المقيس ونحاذيها إلى الجهة المطلوبة (نقل تعديل الويب #1512).
         let fraction = layout.widthFraction ?? 1
         let targetWidth: CGFloat? = (fraction < 1 && columnWidth > 0) ? floor(columnWidth * fraction) : nil
-        return VStack(alignment: .leading, spacing: 8) {
+        return VStack(alignment: .leading, spacing: SabqLayout.space8) {
             // Inline body image — the column is narrower than the hero,
             // so a 1600px decode is more than enough for retina and
             // halves the decode time + memory cost vs. the default 2400.
@@ -347,8 +332,8 @@ struct ArticleContentView: View {
             }
             .frame(maxWidth: .infinity)
             .frame(minHeight: targetWidth == nil ? 200 : 200 * fraction)
-            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-            .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
             .onTapGesture {
                 guard let onImageTap else { return }
                 SabqHaptics.light()
@@ -359,9 +344,8 @@ struct ArticleContentView: View {
 
             if let caption, !caption.isEmpty {
                 Text(caption)
-                    .font(SabqFonts.app(size: 12, weight: .medium))
-                    .foregroundStyle(SabqTheme.tertiaryInk)
-                    .lineSpacing(2)
+                    .sabqText(SabqType.meta)
+                    .foregroundStyle(SabqTheme.textTertiary)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
@@ -370,47 +354,41 @@ struct ArticleContentView: View {
     }
 
     private var placeholder: some View {
-        RoundedRectangle(cornerRadius: 18, style: .continuous)
-            .fill(SabqTheme.paleFill)
+        SabqImagePlaceholder()
             .frame(height: 220)
-            .overlay(
-                Image(systemName: "photo")
-                    .font(SabqFonts.app(size: 28, weight: .ultraLight))
-                    .foregroundStyle(SabqTheme.tertiaryInk)
-            )
     }
 
     // MARK: - Gallery
 
     private func galleryView(images: [GalleryImage]) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 6) {
+        VStack(alignment: .leading, spacing: SabqLayout.space12) {
+            HStack(spacing: SabqLayout.space8) {
                 Image(systemName: "photo.stack")
-                    .font(SabqFonts.app(size: 12, weight: .semibold))
-                        .foregroundStyle(SabqTheme.brandBlue)
+                    .font(SabqType.tag.font)
+                    .foregroundStyle(SabqTheme.primary)
+                    .accessibilityHidden(true)
                 Text("ألبوم صور")
-                    .font(SabqType.label)
-                    .foregroundStyle(SabqTheme.brandBlue)
+                    .font(SabqType.metaEmphasis.font)
+                    .foregroundStyle(SabqTheme.primary)
                 Spacer(minLength: 0)
                 Text("\(images.count) صورة")
-                        .font(SabqType.caption)
+                    .font(SabqType.meta.font)
                     .monospacedDigit()
-                    .foregroundStyle(SabqTheme.tertiaryInk)
+                    .foregroundStyle(SabqTheme.textTertiary)
             }
 
             ScrollView(.horizontal, showsIndicators: false) {
-                LazyHStack(spacing: 12) {
+                LazyHStack(spacing: SabqLayout.space12) {
                     ForEach(Array(images.enumerated()), id: \.offset) { _, img in
-                        VStack(alignment: .leading, spacing: 6) {
+                        VStack(alignment: .leading, spacing: SabqLayout.space8) {
                             // 260×260 thumbnail — 1200px decode is plenty
                             // for retina without paying for full 2400px.
                             CachedAsyncImage(url: img.url, contentMode: .fill, maxPixelSize: 1200) {
-                                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                    .fill(SabqTheme.paleFill)
+                                SabqImagePlaceholder()
                             }
                             .frame(width: 260, height: 260)
-                            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                            .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                            .clipShape(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
+                            .contentShape(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
                             .onTapGesture {
                                 guard let onImageTap else { return }
                                 SabqHaptics.light()
@@ -419,8 +397,8 @@ struct ArticleContentView: View {
 
                             if let caption = img.caption, !caption.isEmpty {
                                 Text(caption)
-                                    .font(SabqFonts.app(size: 11, weight: .medium))
-                                    .foregroundStyle(SabqTheme.tertiaryInk)
+                                    .font(SabqType.meta.font)
+                                    .foregroundStyle(SabqTheme.textTertiary)
                                     .lineLimit(2)
                                     .frame(width: 260, alignment: .leading)
                             }
@@ -444,13 +422,6 @@ struct ArticleContentView: View {
 
     private func videoCard(provider: VideoProvider, embedURL: URL, sourceURL: URL?) -> some View {
         let openURL = sourceURL ?? embedURL
-        let tint: Color = {
-            switch provider {
-            case .youtube:     return Color(red: 0.93, green: 0.20, blue: 0.20)
-            case .dailymotion: return SabqTheme.sky
-            case .other:       return SabqTheme.secondaryInk
-            }
-        }()
         let providerName: String = {
             switch provider {
             case .youtube:     return "يوتيوب"
@@ -459,35 +430,25 @@ struct ArticleContentView: View {
             }
         }()
         return Link(destination: openURL) {
+            // خانة 16:9 هادئة بزر تشغيل ممتلئ، بلا تدرّج بلون المزوّد.
             ZStack {
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(LinearGradient(
-                        colors: [tint.opacity(0.20), tint.opacity(0.05)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing))
+                RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                    .fill(SabqTheme.surfaceMuted)
 
-                VStack(spacing: 10) {
-                    ZStack {
-                        Circle().fill(.white).frame(width: 60, height: 60)
-                        Image(systemName: "play.fill")
-                            .font(SabqFonts.app(size: 22, weight: .heavy))
-                            .foregroundStyle(tint)
-                            .offset(x: 2)
-                    }
+                VStack(spacing: SabqLayout.space12) {
+                    Image(systemName: "play.fill")
+                        .font(SabqFonts.app(size: 22, weight: .semibold))
+                        .foregroundStyle(SabqTheme.onAction)
+                        .offset(x: 2)
+                        .frame(width: 60, height: 60)
+                        .background(Circle().fill(SabqTheme.actionFill))
                     Text(providerName)
-                        .font(SabqFonts.app(size: 12, weight: .heavy))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 4)
-                        .background(Capsule().fill(tint))
+                        .font(SabqType.tag.font)
+                        .foregroundStyle(SabqTheme.textPrimary)
                 }
             }
             .frame(maxWidth: .infinity)
             .aspectRatio(16 / 9, contentMode: .fit)
-            .overlay(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .stroke(tint.opacity(0.25), lineWidth: 0.5)
-            )
         }
         .buttonStyle(.plain)
     }

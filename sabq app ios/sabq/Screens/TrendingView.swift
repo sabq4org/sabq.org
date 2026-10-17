@@ -10,11 +10,12 @@ struct TrendingView: View {
 
     var body: some View {
         ScrollView(showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 20) {
+            VStack(alignment: .leading, spacing: SabqLayout.space24) {
                 heroSection
 
                 if !tags.isEmpty {
                     tagsSection
+                    SabqSectionBand()
                 }
 
                 if isLoading {
@@ -27,7 +28,7 @@ struct TrendingView: View {
                 } else if articles.isEmpty {
                     EmptyStateView(
                         icon: "flame",
-                        tint: .orange,
+                        tint: SabqTheme.textSecondary,
                         title: "لا توجد أخبار رائجة",
                         subtitle: "تابعنا لاحقاً لمعرفة الأكثر تداولاً"
                     )
@@ -35,9 +36,9 @@ struct TrendingView: View {
                     articlesSection
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 18)
-            .padding(.bottom, 40)
+            .padding(.horizontal, SabqLayout.pageMargin)
+            .padding(.top, SabqLayout.space16)
+            .padding(.bottom, SabqLayout.space40)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .background(SabqTheme.background)
@@ -52,119 +53,91 @@ struct TrendingView: View {
     }
 
     private var tagsSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("الوسوم الرائجة")
-                .font(SabqFonts.app(size: 15, weight: .bold))
-                .foregroundStyle(SabqTheme.ink)
+        VStack(alignment: .leading, spacing: SabqLayout.space12) {
+            DiscoverySectionHeading(title: "الوسوم الرائجة")
 
-            FlowLayout(spacing: 8) {
+            FlowLayout(spacing: SabqLayout.space8) {
                 ForEach(tags, id: \.self) { tag in
                     NavigationLink(value: KeywordRoute(keyword: tag)) {
-                        Text(tag)
-                            .font(SabqFonts.app(size: 12, weight: .medium))
-                            .foregroundStyle(SabqTheme.primaryEnd)
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 8)
-                            .background(
-                                Capsule().fill(SabqTheme.primaryEnd.opacity(0.08))
-                            )
+                        DiscoveryChip(title: tag)
                     }
                     .buttonStyle(.plain)
                 }
             }
         }
-        .padding(.vertical, 4)
     }
 
     private var loadingSection: some View {
-        VStack(spacing: 16) {
-            ForEach(0..<5, id: \.self) { _ in
-                HStack(spacing: 14) {
-                    SkeletonBox(width: 36, height: 36)
-                    VStack(alignment: .leading, spacing: 6) {
-                        SkeletonBox(height: 14)
-                        SkeletonBox(width: 120, height: 10)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    SkeletonBox(width: 64, height: 64, radius: 8)
-                }
-                .padding(.vertical, 6)
-            }
-        }
-        .padding(20)
-        .background(
-            RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
-                .fill(SabqTheme.surface)
-                .shadow(color: SabqTheme.shadow, radius: 16, x: 0, y: 6)
-        )
+        DiscoveryListSkeleton()
     }
 
     private var articlesSection: some View {
-        SurfaceCard(lazy: true, cornerRadius: 22, spacing: 0) {
+        LazyVStack(alignment: .leading, spacing: 0) {
             ForEach(Array(articles.enumerated()), id: \.element.id) { index, article in
                 if index > 0 {
                     SidebarRowDivider()
                 }
 
                 NavigationLink(value: article) {
-                    HStack(alignment: .top, spacing: 12) {
-                        Text("\(index + 1)")
-                            .font(SabqFonts.app(size: 22, weight: .heavy))
-                            .foregroundStyle(rankColor(for: index))
-                            .frame(width: 36)
-
-                        VStack(alignment: .leading, spacing: NewsRowStyle.textStackSpacing) {
-                            SabqRTLText(
-                                article.title,
-                                uiFont: SabqFonts.uiApp(size: NewsRowStyle.titleSize, weight: .regular),
-                                color: SabqTheme.ink,
-                                lineLimit: dynamicTypeSize.isAccessibilitySize ? 0 : 2,
-                                lineSpacing: NewsRowStyle.titleLineSpacing
-                            )
-
-                            HStack(spacing: 6) {
-                                Text(article.categoryTitle)
-                                    .font(SabqFonts.app(size: NewsRowStyle.metadataSize, weight: .regular))
-                                    .foregroundStyle(SabqTheme.primaryEnd)
-
-                                Text("·")
-                                Text(article.relativeDate)
-                                    .font(SabqFonts.app(size: NewsRowStyle.metadataSize, weight: .regular))
-                                    .foregroundStyle(SabqTheme.tertiaryInk)
-                            }
-                            .foregroundStyle(SabqTheme.secondaryInk)
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-
-                        if let urlStr = article.imageURL, let url = URL(string: urlStr) {
-                            FocalCachedAsyncImage(url: url, focalPoint: article.imageFocalPoint) {
-                                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                    .fill(SabqTheme.paleFill)
-                            }
-                            .frame(width: 64, height: 64)
-                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                            .aiImageBadgeOverlay(
-                                isVisible: article.isAiGeneratedImage,
-                                model: article.aiImageModel,
-                                inset: 3,
-                                sizeScale: 0.55
-                            )
-                        }
-                    }
-                    .padding(.vertical, 12)
+                    rankedRow(article, index: index)
                 }
                 .buttonStyle(.plain)
             }
         }
     }
 
-    private func rankColor(for index: Int) -> Color {
-        switch index {
-        case 0: return .orange
-        case 1: return SabqTheme.primaryEnd
-        case 2: return SabqTheme.teal
-        default: return SabqTheme.tertiaryInk
+    /// صف خبر بمقاس `CompactArticleRow` يسبقه رقم الترتيب.
+    private func rankedRow(_ article: Article, index: Int) -> some View {
+        HStack(alignment: .top, spacing: SabqLayout.space12) {
+            Text("\(index + 1)")
+                .font(SabqType.sectionHeading.font)
+                .foregroundStyle(index < 3 ? SabqTheme.primary : SabqTheme.textTertiary)
+                .monospacedDigit()
+                .frame(minWidth: SabqLayout.space24)
+
+            VStack(alignment: .leading, spacing: NewsRowStyle.textStackSpacing) {
+                SabqRTLText(
+                    article.title,
+                    uiFont: SabqType.rowTitle.uiFont,
+                    color: SabqTheme.textPrimary,
+                    lineLimit: dynamicTypeSize.isAccessibilitySize ? 0 : 3,
+                    lineSpacing: SabqType.rowTitle.lineSpacing,
+                    textStyle: SabqType.rowTitle.uiTextStyle
+                )
+
+                HStack(spacing: SabqLayout.space4) {
+                    Text(article.categoryTitle)
+                        .foregroundStyle(SabqTheme.primary)
+                    Text("·")
+                        .foregroundStyle(SabqTheme.textTertiary)
+                    Text(article.relativeDate)
+                        .foregroundStyle(SabqTheme.textTertiary)
+                }
+                .font(SabqType.meta.font)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            Group {
+                if let urlStr = article.imageURL, let url = URL(string: urlStr) {
+                    FocalCachedAsyncImage(url: url, focalPoint: article.imageFocalPoint, maxPixelSize: 360, fitsMismatchedAspect: true) {
+                        SabqImagePlaceholder()
+                    }
+                } else {
+                    SabqImagePlaceholder()
+                        .environment(\.sabqImageLoadFailed, true)
+                }
+            }
+            .frame(width: NewsRowStyle.thumbnailWidth, height: NewsRowStyle.thumbnailHeight)
+            .clipShape(RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous))
+            .aiImageBadgeOverlay(
+                isVisible: article.isAiGeneratedImage,
+                model: article.aiImageModel,
+                inset: 4,
+                sizeScale: 0.65
+            )
         }
+        .padding(.vertical, SabqLayout.rowPadding)
+        .contentShape(Rectangle())
     }
 
     private func loadData() async {

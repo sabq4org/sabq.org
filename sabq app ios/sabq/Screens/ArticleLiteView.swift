@@ -34,16 +34,16 @@ struct ArticleLiteView: View {
 
     var body: some View {
         ScrollView(showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: SabqLayout.space16) {
                 titleBlock
                 heroImage
                 bodyText
                     .analyticsReadingBody()
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 12)
-            .padding(.bottom, 40)
-            .frame(maxWidth: 760, alignment: .leading)
+            .padding(.horizontal, SabqLayout.pageMargin)
+            .padding(.top, SabqLayout.space12)
+            .padding(.bottom, SabqLayout.space40)
+            .frame(maxWidth: SabqLayout.readingWidth + SabqLayout.pageMargin * 2, alignment: .leading)
             .frame(maxWidth: .infinity)
         }
         .background(SabqTheme.background.ignoresSafeArea())
@@ -89,19 +89,20 @@ struct ArticleLiteView: View {
     // MARK: - Sub-views
 
     private var titleBlock: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: SabqLayout.space8) {
             // شارة التصنيف حُذفت من سبق لايت كما في الويب (#1614) — يبقى الوقت.
             HStack(spacing: 8) {
                 Text(SabqFormatters.relativeArabic.localizedString(for: displayArticle.publishDate, relativeTo: Date()))
-                    .font(SabqFonts.app(size: 11, weight: .medium))
-                    .foregroundStyle(SabqTheme.tertiaryInk)
+                    .font(SabqType.meta.font)
+                    .foregroundStyle(SabqTheme.textTertiary)
             }
             SabqRTLText(
                 displayArticle.title,
-                uiFont: SabqFonts.uiApp(size: 22, weight: .bold),
-                color: SabqTheme.ink,
+                uiFont: SabqType.articleTitle.uiFont,
+                color: SabqTheme.textPrimary,
                 lineLimit: 0,
-                lineSpacing: 4
+                lineSpacing: SabqType.articleTitle.lineSpacing,
+                textStyle: SabqType.articleTitle.uiTextStyle
             )
         }
     }
@@ -113,11 +114,11 @@ struct ArticleLiteView: View {
             // the existing FocalCachedAsyncImage so cached bytes from
             // the home list aren't refetched.
             FocalCachedAsyncImage(url: url, focalPoint: displayArticle.imageFocalPoint) {
-                Color(.systemGray6)
+                SabqImagePlaceholder()
             }
             .frame(maxWidth: .infinity)
-            .aspectRatio(16.0 / 10.0, contentMode: .fit)
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .aspectRatio(16.0 / 9.0, contentMode: .fit)
+            .clipShape(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
         }
     }
 
@@ -126,15 +127,14 @@ struct ArticleLiteView: View {
         if isLoading && fullArticle == nil {
             HStack {
                 Spacer()
-                ProgressView().tint(SabqTheme.primaryEnd)
+                ProgressView().tint(SabqTheme.primary)
                 Spacer()
             }
-            .padding(.vertical, 30)
+            .padding(.vertical, SabqLayout.space32)
         } else {
             Text(displayArticle.body.isEmpty ? displayArticle.excerpt : displayArticle.body)
-                .font(SabqFonts.app(size: 17))
-                .foregroundStyle(SabqTheme.ink)
-                .lineSpacing(8)
+                .sabqText(SabqType.articleBody)
+                .foregroundStyle(SabqTheme.textPrimary)
                 .multilineTextAlignment(.leading)
         }
     }
@@ -148,11 +148,11 @@ struct ArticleLiteView: View {
                 bookmarksStore.toggle(displayArticle.id, article: displayArticle)
             } label: {
                 Image(systemName: bookmarksStore.isBookmarked(displayArticle.id) ? "bookmark.fill" : "bookmark")
-                    .font(SabqFonts.app(size: 14, weight: .semibold))
+                    .font(SabqFonts.app(size: 16, weight: .semibold))
                     .foregroundStyle(
                         bookmarksStore.isBookmarked(displayArticle.id)
-                            ? SabqTheme.primaryEnd
-                            : SabqTheme.secondaryInk
+                            ? SabqTheme.primary
+                            : SabqTheme.textSecondary
                     )
 
             }
@@ -162,8 +162,8 @@ struct ArticleLiteView: View {
                 share()
             } label: {
                 Image(systemName: "square.and.arrow.up")
-                    .font(SabqFonts.app(size: 14, weight: .semibold))
-                    .foregroundStyle(SabqTheme.ink)
+                    .font(SabqFonts.app(size: 16, weight: .semibold))
+                    .foregroundStyle(SabqTheme.textSecondary)
 
             }
             .accessibilityLabel("مشاركة")

@@ -20,6 +20,7 @@ import GoogleSignIn
 /// keeps building before the Swift Package is added in Xcode.
 struct SocialAuthButtons: View {
     @Environment(AuthStore.self) private var authStore
+    @Environment(\.colorScheme) private var colorScheme
     let onSuccess: () -> Void
 
     /// Holds the Apple authorization controller delegate strongly while
@@ -27,7 +28,7 @@ struct SocialAuthButtons: View {
     @State private var appleCoordinator: AppleSignInCoordinator?
 
     var body: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: SabqLayout.space12) {
             appleButton
             googleButton
             dividerOr
@@ -37,23 +38,25 @@ struct SocialAuthButtons: View {
     // MARK: - Apple
 
     private var appleButton: some View {
-        Button(action: startAppleSignIn) {
-            HStack(spacing: 10) {
+        // Apple HIG: the black style belongs on light backgrounds; on dark
+        // backgrounds the white style is used instead.
+        let isDark = colorScheme == .dark
+        return Button(action: startAppleSignIn) {
+            HStack(spacing: SabqLayout.space8) {
                 Text("تسجيل الدخول بـ Apple")
-                    .font(SabqFonts.app(size: 16, weight: .semibold))
-                    .foregroundStyle(.white)
+                    .sabqText(SabqType.button)
                 Image(systemName: "applelogo")
-                    .font(SabqFonts.app(size: 18, weight: .semibold))
-                    .foregroundStyle(.white)
+                    .font(SabqType.button.font)
             }
+            .foregroundStyle(isDark ? Color.black : Color.white)
             .frame(maxWidth: .infinity)
             .padding(.horizontal, SabqLayout.space16)
-            .padding(.vertical, SabqLayout.space12)
             .frame(minHeight: SabqLayout.controlHeight)
             .background(
-                RoundedRectangle(cornerRadius: SabqTheme.buttonRadius, style: .continuous)
-                    .fill(Color.black)
+                RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                    .fill(isDark ? Color.white : Color.black)
             )
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .disabled(authStore.isLoading)
@@ -123,27 +126,32 @@ struct SocialAuthButtons: View {
     // MARK: - Google
 
     private var googleButton: some View {
-        Button(action: startGoogleSignIn) {
-            HStack(spacing: 10) {
+        // Google Identity branding: light theme = white fill, #747775 1pt
+        // stroke, #1F1F1F text; dark theme = #131314 fill, #8E918F stroke,
+        // #E3E3E3 text. Brand-mandated values, so they live here and not
+        // in SabqTheme.
+        let isDark = colorScheme == .dark
+        return Button(action: startGoogleSignIn) {
+            HStack(spacing: SabqLayout.space12) {
                 Text("المتابعة باستخدام Google")
-                    .font(SabqFonts.app(size: 16, weight: .semibold))
-                    // Google's branded surface stays white in both appearances.
-                    .foregroundStyle(Color(white: 0.12))
+                    .sabqText(SabqType.button)
+                    .foregroundStyle(isDark ? GoogleBrand.darkText : GoogleBrand.lightText)
                 GoogleGLogo()
                     .frame(width: 20, height: 20)
+                    .accessibilityHidden(true)
             }
             .frame(maxWidth: .infinity)
             .padding(.horizontal, SabqLayout.space16)
-            .padding(.vertical, SabqLayout.space12)
             .frame(minHeight: SabqLayout.controlHeight)
             .background(
-                RoundedRectangle(cornerRadius: SabqTheme.buttonRadius, style: .continuous)
-                    .fill(Color.white)
+                RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                    .fill(isDark ? GoogleBrand.darkFill : Color.white)
             )
             .overlay(
-                RoundedRectangle(cornerRadius: SabqTheme.buttonRadius, style: .continuous)
-                    .stroke(SabqTheme.outline.opacity(0.5), lineWidth: 1)
+                RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
+                    .stroke(isDark ? GoogleBrand.darkStroke : GoogleBrand.lightStroke, lineWidth: 1)
             )
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .disabled(authStore.isLoading)
@@ -201,18 +209,18 @@ struct SocialAuthButtons: View {
     // MARK: - Divider
 
     private var dividerOr: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: SabqLayout.space12) {
             Rectangle()
-                .fill(SabqTheme.outline.opacity(0.5))
+                .fill(SabqTheme.separator)
                 .frame(height: 1)
             Text("أو")
-                .font(SabqFonts.app(size: 12, weight: .semibold))
-                .foregroundStyle(SabqTheme.tertiaryInk)
+                .sabqText(SabqType.meta)
+                .foregroundStyle(SabqTheme.textTertiary)
             Rectangle()
-                .fill(SabqTheme.outline.opacity(0.5))
+                .fill(SabqTheme.separator)
                 .frame(height: 1)
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, SabqLayout.space4)
     }
 }
 
@@ -254,6 +262,17 @@ final class AppleSignInCoordinator: NSObject, ASAuthorizationControllerDelegate,
             .first { $0.activationState == .foregroundActive }
         return scene?.windows.first { $0.isKeyWindow } ?? ASPresentationAnchor()
     }
+}
+
+// MARK: - Google brand colours
+
+/// Values from Google's Sign-In branding guidelines.
+private enum GoogleBrand {
+    static let lightText = Color(red: 0x1F / 255, green: 0x1F / 255, blue: 0x1F / 255)
+    static let lightStroke = Color(red: 0x74 / 255, green: 0x77 / 255, blue: 0x75 / 255)
+    static let darkFill = Color(red: 0x13 / 255, green: 0x13 / 255, blue: 0x14 / 255)
+    static let darkStroke = Color(red: 0x8E / 255, green: 0x91 / 255, blue: 0x8F / 255)
+    static let darkText = Color(red: 0xE3 / 255, green: 0xE3 / 255, blue: 0xE3 / 255)
 }
 
 // MARK: - Google G Logo

@@ -15,19 +15,27 @@ struct OmqListView: View {
 
     var body: some View {
         ScrollView(showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: SabqLayout.space24) {
                 header
 
                 if isLoading {
-                    VStack(spacing: 12) {
-                        SkeletonBox(height: 120, radius: SabqTheme.tileRadius)
-                        SkeletonBox(height: 120, radius: SabqTheme.tileRadius)
-                        SkeletonBox(height: 120, radius: SabqTheme.tileRadius)
+                    VStack(alignment: .leading, spacing: 0) {
+                        ForEach(0..<3, id: \.self) { index in
+                            if index > 0 { SidebarRowDivider() }
+                            VStack(alignment: .leading, spacing: SabqLayout.space8) {
+                                SkeletonBox(width: 72, height: 20, radius: SabqRadius.small)
+                                SkeletonBox(height: 16, radius: SabqRadius.small)
+                                SkeletonBox(width: 220, height: 16, radius: SabqRadius.small)
+                                SkeletonBox(width: 140, height: 12, radius: SabqRadius.small)
+                            }
+                            .padding(.vertical, SabqLayout.rowPadding)
+                        }
                     }
+                    .accessibilityHidden(true)
                 } else if let errorMessage {
                     EmptyStateView(
                         icon: "exclamationmark.shield",
-                        tint: SabqTheme.coral,
+                        tint: SabqTheme.danger,
                         title: "تعذّر التحميل",
                         subtitle: errorMessage,
                         action: { Task { await load() } },
@@ -41,17 +49,20 @@ struct OmqListView: View {
                         subtitle: "تحليلات الذكاء الاصطناعي العميقة قيد التحضير — قريباً."
                     )
                 } else {
-                    ForEach(analyses) { analysis in
-                        NavigationLink(value: OmqDetailRoute(id: analysis.id, title: analysis.title)) {
-                            analysisCard(analysis)
+                    LazyVStack(alignment: .leading, spacing: 0) {
+                        ForEach(Array(analyses.enumerated()), id: \.element.id) { index, analysis in
+                            if index > 0 { SidebarRowDivider() }
+                            NavigationLink(value: OmqDetailRoute(id: analysis.id, title: analysis.title)) {
+                                analysisCard(analysis)
+                            }
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
                     }
                 }
             }
-            .padding(.horizontal, 18)
-            .padding(.top, 18)
-            .padding(.bottom, 60)
+            .padding(.horizontal, SabqLayout.pageMargin)
+            .padding(.top, SabqLayout.space16)
+            .padding(.bottom, SabqLayout.space40)
         }
         .background(SabqTheme.background)
         .sabqRTL()
@@ -64,63 +75,53 @@ struct OmqListView: View {
         SabqPageIntro("تحليلات أسبوعية لأهم القضايا بمزيج من نماذج الذكاء الاصطناعي")
     }
 
+    /// صف تحليل على الصفحة: الوسم والمشاهدات، العنوان، الموضوع، والكلمات.
     private func analysisCard(_ a: APIDeepAnalysis) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 8) {
+        VStack(alignment: .leading, spacing: SabqLayout.space8) {
+            HStack(spacing: SabqLayout.space8) {
                 if let cat = a.categoryName ?? a.category, !cat.isEmpty {
-                    Text(cat)
-                        .font(SabqFonts.app(size: 10, weight: .heavy))
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 3)
-                        .foregroundStyle(SabqTheme.sky)
-                        .background(Capsule().fill(SabqTheme.sky.opacity(0.10)))
+                    StatusChip(title: cat, tint: SabqTheme.primary)
                 }
                 Spacer(minLength: 0)
                 if let views = a.viewsCount, views > 0 {
-                    HStack(spacing: 4) {
-                        Image(systemName: "eye.fill").font(SabqFonts.app(size: 10))
+                    HStack(spacing: SabqLayout.space4) {
+                        Image(systemName: "eye")
+                            .accessibilityHidden(true)
                         Text("\(views)")
-                            .font(SabqFonts.app(size: 11, weight: .semibold))
                             .monospacedDigit()
                     }
-                    .foregroundStyle(SabqTheme.tertiaryInk)
+                    .font(SabqType.meta.font)
+                    .foregroundStyle(SabqTheme.textTertiary)
                 }
             }
 
             Text(a.title)
-                .font(SabqFonts.app(size: 16, weight: .heavy))
-                .foregroundStyle(SabqTheme.ink)
+                .sabqText(SabqType.rowTitle)
+                .foregroundStyle(SabqTheme.textPrimary)
                 .multilineTextAlignment(.leading)
                 .lineLimit(3)
                 .fixedSize(horizontal: false, vertical: true)
 
             if let topic = a.topic, !topic.isEmpty, topic != a.title {
                 Text(topic)
-                    .font(SabqFonts.app(size: 12))
-                    .foregroundStyle(SabqTheme.secondaryInk)
+                    .sabqText(SabqType.excerpt)
+                    .foregroundStyle(SabqTheme.textSecondary)
                     .lineLimit(2)
             }
 
             if let kw = a.keywords, !kw.isEmpty {
-                HStack(spacing: 6) {
+                HStack(spacing: SabqLayout.space8) {
                     ForEach(kw.prefix(3), id: \.self) { tag in
                         Text("#\(tag)")
-                            .font(SabqFonts.app(size: 10, weight: .semibold))
-                            .foregroundStyle(SabqTheme.tertiaryInk)
+                            .font(SabqType.tag.font)
+                            .foregroundStyle(SabqTheme.textTertiary)
                     }
                 }
             }
         }
-        .padding(16)
+        .padding(.vertical, SabqLayout.rowPadding)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                .fill(SabqTheme.surface)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                .stroke(SabqTheme.sky.opacity(0.15), lineWidth: 0.5)
-        )
+        .contentShape(Rectangle())
     }
 
     private func load() async {
@@ -149,17 +150,17 @@ struct OmqDetailView: View {
 
     var body: some View {
         ScrollView(showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: SabqLayout.space24) {
                 if isLoading && analysis == nil {
-                    VStack(spacing: 12) {
-                        SkeletonBox(height: 30, radius: 6)
-                        SkeletonBox(height: 16, radius: 6)
-                        SkeletonBox(height: 200, radius: SabqTheme.tileRadius)
+                    VStack(spacing: SabqLayout.space12) {
+                        SkeletonBox(height: 30, radius: SabqRadius.small)
+                        SkeletonBox(height: 16, radius: SabqRadius.small)
+                        SkeletonBox(height: 200, radius: SabqRadius.medium)
                     }
                 } else if let errorMessage, analysis == nil {
                     EmptyStateView(
                         icon: "exclamationmark.shield",
-                        tint: SabqTheme.coral,
+                        tint: SabqTheme.danger,
                         title: "تعذّر التحميل",
                         subtitle: errorMessage,
                         action: { Task { await load() } },
@@ -169,9 +170,9 @@ struct OmqDetailView: View {
                     detailContent(a)
                 }
             }
-            .padding(.horizontal, 18)
-            .padding(.top, 18)
-            .padding(.bottom, 60)
+            .padding(.horizontal, SabqLayout.pageMargin)
+            .padding(.top, SabqLayout.space16)
+            .padding(.bottom, SabqLayout.space40)
         }
         .background(SabqTheme.background)
         .sabqRTL()
@@ -182,78 +183,69 @@ struct OmqDetailView: View {
 
     @ViewBuilder
     private func detailContent(_ a: APIDeepAnalysis) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 6) {
+        VStack(alignment: .leading, spacing: SabqLayout.space8) {
+            HStack(spacing: SabqLayout.space4) {
                 Image(systemName: "brain.head.profile")
-                    .font(SabqFonts.app(size: 12, weight: .semibold))
-                    .foregroundStyle(SabqTheme.sky)
+                    .accessibilityHidden(true)
                 Text("تحليل عميق")
-                    .font(SabqFonts.app(size: 11, weight: .heavy))
-                    .foregroundStyle(SabqTheme.sky)
             }
+            .font(SabqType.metaEmphasis.font)
+            .foregroundStyle(SabqTheme.primary)
+
             Text(a.title)
-                .font(SabqFonts.app(size: 22, weight: .heavy))
-                .foregroundStyle(SabqTheme.ink)
+                .sabqText(SabqType.articleTitle)
+                .foregroundStyle(SabqTheme.textPrimary)
                 .multilineTextAlignment(.leading)
                 .fixedSize(horizontal: false, vertical: true)
             if let topic = a.topic, !topic.isEmpty, topic != a.title {
                 Text(topic)
-                    .font(SabqFonts.app(size: 14))
-                    .foregroundStyle(SabqTheme.secondaryInk)
+                    .sabqText(SabqType.excerpt)
+                    .foregroundStyle(SabqTheme.textSecondary)
             }
         }
 
         if let exec = a.executiveSummary, !exec.isEmpty {
-            section(title: "الملخّص التنفيذي", icon: "doc.text.fill", body: exec, tint: SabqTheme.primaryEnd)
+            section(title: "الملخّص التنفيذي", body: exec)
         }
 
         if let merged = a.mergedAnalysis, !merged.isEmpty {
-            section(title: "التحليل المُجمَّع", icon: "sparkles", body: merged, tint: SabqTheme.sky)
+            section(title: "التحليل المُجمَّع", body: merged)
         }
 
         if let recs = a.recommendations, !recs.isEmpty {
-            section(title: "التوصيات", icon: "lightbulb.fill", body: recs, tint: SabqTheme.gold)
+            section(title: "التوصيات", body: recs)
         }
 
         if let gpt = a.gptAnalysis, !gpt.isEmpty {
-            section(title: "تحليل GPT", icon: "g.circle.fill", body: gpt, tint: SabqTheme.teal)
+            section(title: "تحليل GPT", body: gpt)
         }
         if let gemini = a.geminiAnalysis, !gemini.isEmpty {
-            section(title: "تحليل Gemini", icon: "diamond.fill", body: gemini, tint: SabqTheme.sky)
+            section(title: "تحليل Gemini", body: gemini)
         }
         if let claude = a.claudeAnalysis, !claude.isEmpty {
-            section(title: "تحليل Claude", icon: "c.circle.fill", body: claude, tint: SabqTheme.coral)
+            section(title: "تحليل Claude", body: claude)
         }
     }
 
-    private func section(title: String, icon: String, body: String, tint: Color) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 8) {
-                Image(systemName: icon)
-                    .font(SabqFonts.app(size: 13, weight: .semibold))
-                    .foregroundStyle(tint)
-                Text(title)
-                    .font(SabqFonts.app(size: 14, weight: .heavy))
-                    .foregroundStyle(SabqTheme.ink)
-            }
+    /// قسم بلا صندوق: شريط فصل رمادي، ثم عنوان 20 ونص القراءة.
+    private func section(title: String, body: String) -> some View {
+        VStack(alignment: .leading, spacing: SabqLayout.space24) {
+            SabqSectionBand()
 
-            Text(body)
-                .font(SabqFonts.app(size: 14))
-                .foregroundStyle(SabqTheme.ink.opacity(0.9))
-                .lineSpacing(6)
-                .multilineTextAlignment(.leading)
-                .fixedSize(horizontal: false, vertical: true)
+            VStack(alignment: .leading, spacing: SabqLayout.space12) {
+                Text(title)
+                    .font(SabqType.sectionHeading.font)
+                    .foregroundStyle(SabqTheme.textPrimary)
+                    .accessibilityAddTraits(.isHeader)
+
+                Text(body)
+                    .sabqText(SabqType.articleBody)
+                    .foregroundStyle(SabqTheme.textPrimary)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
-        .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                .fill(SabqTheme.surface)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                .stroke(tint.opacity(0.15), lineWidth: 0.5)
-        )
     }
 
     private func load() async {

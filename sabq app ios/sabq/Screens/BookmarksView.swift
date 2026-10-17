@@ -19,27 +19,27 @@ struct BookmarksView: View {
                 SabqPageIntro("الأخبار التي حفظتها للقراءة لاحقاً")
 
                 if isSyncing {
-                    HStack { Spacer(); ProgressView().tint(SabqTheme.primaryEnd); Spacer() }
-                        .padding(.vertical, 40)
+                    HStack { Spacer(); ProgressView().tint(SabqTheme.primary); Spacer() }
+                        .padding(.vertical, SabqLayout.space40)
                 } else if bookmarkedArticles.isEmpty && bookmarksStore.bookmarkedIDs.isEmpty {
                     emptyState
                 } else if bookmarkedArticles.isEmpty {
                     // IDs exist (from server sync) but no cached metadata.
                     // Show a hint that data is loading.
-                    VStack(spacing: 12) {
-                        ProgressView().tint(SabqTheme.primaryEnd)
+                    VStack(spacing: SabqLayout.space12) {
+                        ProgressView().tint(SabqTheme.primary)
                         Text("يتم تحميل المحفوظات…")
-                            .font(SabqFonts.app(size: 13, weight: .medium))
-                            .foregroundStyle(SabqTheme.secondaryInk)
+                            .font(SabqType.meta.font)
+                            .foregroundStyle(SabqTheme.textSecondary)
                     }
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 40)
+                    .padding(.vertical, SabqLayout.space40)
                 } else {
                     statsSection
                     articlesListSection
                 }
             }
-            .padding(.horizontal, SabqLayout.pageInset)
+            .padding(.horizontal, SabqLayout.pageMargin)
             .padding(.top, SabqLayout.space16)
             .padding(.bottom, SabqLayout.space32)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -63,31 +63,29 @@ struct BookmarksView: View {
     // MARK: - Empty State
 
     private var emptyState: some View {
-        SurfaceCard {
-            EmptyStateView(
-                icon: "bookmark",
-                tint: SabqTheme.primaryEnd,
-                title: "لا توجد محفوظات",
-                subtitle: "احفظ الأخبار المهمة لقراءتها لاحقاً.",
-                action: { navigation.selectedTab = .home },
-                actionTitle: "استعرض الأخبار"
-            )
-        }
+        EmptyStateView(
+            icon: "bookmark",
+            tint: SabqTheme.primary,
+            title: "لا توجد محفوظات",
+            subtitle: "احفظ الأخبار المهمة لقراءتها لاحقاً.",
+            action: { navigation.selectedTab = .home },
+            actionTitle: "استعرض الأخبار"
+        )
     }
 
     // MARK: - Stats
 
     private var statsSection: some View {
         let layout = dynamicTypeSize.isAccessibilitySize
-            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 12))
-            : AnyLayout(HStackLayout(alignment: .top, spacing: 12))
-        return SurfaceCard {
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: SabqLayout.space12))
+            : AnyLayout(HStackLayout(alignment: .top, spacing: SabqLayout.space12))
+        return VStack(alignment: .leading, spacing: 0) {
             layout {
                 statTile(
                     title: "محفوظة",
                     value: "\(bookmarkedArticles.count)",
                     icon: "bookmark.fill",
-                    tint: SabqTheme.primaryEnd
+                    tint: SabqTheme.primary
                 )
 
                 let totalMinutes = bookmarkedArticles.reduce(0) { $0 + $1.readingMinutes }
@@ -95,7 +93,7 @@ struct BookmarksView: View {
                     title: "وقت القراءة",
                     value: "\(totalMinutes) د",
                     icon: "clock",
-                    tint: SabqTheme.teal
+                    tint: SabqTheme.primary
                 )
 
                 let categories = Set(bookmarkedArticles.map(\.category)).count
@@ -103,21 +101,30 @@ struct BookmarksView: View {
                     title: "أقسام",
                     value: "\(categories)",
                     icon: "square.grid.2x2",
-                    tint: SabqTheme.gold
+                    tint: SabqTheme.primary
                 )
             }
         }
+        .padding(SabqLayout.space16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .sabqBlockSurface()
     }
 
     private func statTile(title: String, value: String, icon: String, tint: Color) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Label(value, systemImage: icon)
-                .font(SabqFonts.editorial(.headline, size: 18, weight: .semibold))
-                .foregroundStyle(tint)
-                .monospacedDigit()
+        VStack(alignment: .leading, spacing: SabqLayout.space4) {
+            HStack(spacing: SabqLayout.space8) {
+                Image(systemName: icon)
+                    .font(SabqType.rowTitle.font)
+                    .foregroundStyle(tint)
+                    .accessibilityHidden(true)
+                Text(value)
+                    .font(SabqType.sectionHeading.font)
+                    .foregroundStyle(SabqTheme.textPrimary)
+                    .monospacedDigit()
+            }
             Text(title)
-                .font(SabqType.caption)
-                .foregroundStyle(SabqTheme.secondaryInk)
+                .font(SabqType.meta.font)
+                .foregroundStyle(SabqTheme.textSecondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine)
@@ -126,7 +133,7 @@ struct BookmarksView: View {
     // MARK: - Articles List
 
     private var articlesListSection: some View {
-        SurfaceCard(lazy: true, cornerRadius: 22, spacing: 0) {
+        LazyVStack(alignment: .leading, spacing: 0) {
             ForEach(Array(bookmarkedArticles.enumerated()), id: \.element.id) { index, article in
                 if index > 0 {
                     SidebarRowDivider()

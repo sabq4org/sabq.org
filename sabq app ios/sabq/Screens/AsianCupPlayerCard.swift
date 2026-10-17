@@ -16,7 +16,7 @@ struct AcPlayerSheet: View {
                 if loading {
                     AcLoading().padding(.top, 40)
                 } else if let card {
-                    VStack(alignment: .leading, spacing: 18) {
+                    VStack(alignment: .leading, spacing: SabqLayout.space24) {
                         identityHeader(card)
                         factTiles(card)
                         birthLine(card)
@@ -32,22 +32,28 @@ struct AcPlayerSheet: View {
                             trophiesSection(card.trophies)
                         }
                     }
-                    .padding(16)
+                    .padding(.horizontal, SabqLayout.pageMargin)
+                    .padding(.top, SabqLayout.space16)
+                    .padding(.bottom, SabqLayout.space40)
                 } else {
                     Text("ملف اللاعب غير متاح حاليًا")
-                        .font(SabqFonts.app(size: 13)).foregroundStyle(AcTheme.onDarkDim)
-                        .frame(maxWidth: .infinity).padding(.top, 50)
+                        .font(SabqType.meta.font).foregroundStyle(SabqTheme.textSecondary)
+                        .frame(maxWidth: .infinity).padding(.top, SabqLayout.space40)
                 }
             }
-            .background(AcTheme.sectionBackground.ignoresSafeArea())
+            .background(SabqTheme.background.ignoresSafeArea())
             .navigationTitle("بطاقة اللاعب")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(AcTheme.stadiumTop, for: .navigationBar)
+            .toolbarBackground(SabqTheme.background, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
-            .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button { dismiss() } label: { Image(systemName: "xmark").foregroundStyle(.white) }
+                    Button { dismiss() } label: {
+                        Image(systemName: "xmark")
+                            .foregroundStyle(SabqTheme.textPrimary)
+                            .frame(width: SabqLayout.touchTarget, height: SabqLayout.touchTarget)
+                    }
+                    .accessibilityLabel("إغلاق")
                 }
             }
             .task {
@@ -62,36 +68,37 @@ struct AcPlayerSheet: View {
     }
 
     private func identityHeader(_ p: AcPlayerCard) -> some View {
-        HStack(spacing: 14) {
+        HStack(spacing: SabqLayout.space16) {
             photo(p)
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: SabqLayout.space4) {
                 Text(p.name)
-                    .font(SabqFonts.headline(size: 20)).foregroundStyle(AcTheme.onDark)
+                    .sabqText(SabqType.leadTitle).foregroundStyle(SabqTheme.textPrimary)
                     .lineLimit(2)
+                    .accessibilityAddTraits(.isHeader)
                 if let full = p.fullName {
-                    Text(full).font(SabqFonts.app(size: 11)).foregroundStyle(AcTheme.onDarkDim).lineLimit(1)
+                    Text(full).font(SabqType.meta.font).foregroundStyle(SabqTheme.textSecondary).lineLimit(1)
                 }
-                HStack(spacing: 6) {
+                HStack(spacing: SabqLayout.space8) {
                     if !p.position.isEmpty {
-                        chip(p.position, fill: AcTheme.emerald.opacity(0.15), fg: AcTheme.emeraldDeep)
+                        chip(p.position, fg: AcStyle.accent)
                     }
                     if let number = p.number {
-                        HStack(spacing: 3) {
-                            Image(systemName: "tshirt.fill").font(SabqFonts.app(size: 9))
-                            Text("\(number)").font(SabqFonts.app(size: 11, weight: .medium).monospacedDigit())
+                        HStack(spacing: SabqLayout.space4) {
+                            Image(systemName: "tshirt.fill").font(SabqFonts.app(size: 12))
+                            Text("\(number)").font(SabqType.tag.font.monospacedDigit())
                         }
-                        .foregroundStyle(AcTheme.onDark)
-                        .padding(.horizontal, 8).padding(.vertical, 3)
-                        .background(Capsule().fill(AcTheme.chipFill))
+                        .foregroundStyle(SabqTheme.textPrimary)
+                        .padding(.horizontal, SabqLayout.space8).padding(.vertical, SabqLayout.space4)
+                        .background(RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous).fill(SabqTheme.surfaceMuted))
                     }
                     if p.injury != nil {
-                        chip("مصاب حاليًا", fill: AcTheme.gold.opacity(0.2), fg: AcTheme.gold)
+                        chip("مصاب حاليًا", fg: SabqTheme.warning)
                     }
                 }
                 if let team = p.currentTeam {
-                    HStack(spacing: 6) {
-                        AcTeamLogo(team: team, size: 18)
-                        Text(team.name).font(SabqFonts.app(size: 12, weight: .medium)).foregroundStyle(AcTheme.onDark)
+                    HStack(spacing: SabqLayout.space8) {
+                        AcTeamLogo(team: team, size: 20)
+                        Text(team.name).font(SabqType.metaEmphasis.font).foregroundStyle(SabqTheme.textPrimary)
                     }
                 }
             }
@@ -100,24 +107,15 @@ struct AcPlayerSheet: View {
     }
 
     private func photo(_ p: AcPlayerCard) -> some View {
-        Group {
-            if p.photo.isEmpty {
-                Text(String(p.name.prefix(2)))
-                    .font(SabqFonts.app(size: 20, weight: .semibold)).foregroundStyle(AcTheme.onDarkDim)
-                    .frame(width: 76, height: 76).background(Circle().fill(AcTheme.chipFill))
-            } else {
-                AcRemoteImage(url: p.photo, contentMode: .fill)
-                    .frame(width: 76, height: 76).clipShape(Circle())
-            }
-        }
-        .overlay(Circle().stroke(AcTheme.emeraldDeep, lineWidth: 3))
+        AcPlayerAvatar(photo: p.photo, size: 80, initials: String(p.name.prefix(2)))
+            .overlay(Circle().stroke(AcStyle.accent, lineWidth: 2))
     }
 
-    private func chip(_ text: String, fill: Color, fg: Color) -> some View {
+    private func chip(_ text: String, fg: Color) -> some View {
         Text(text)
-            .font(SabqFonts.app(size: 11, weight: .medium)).foregroundStyle(fg)
-            .padding(.horizontal, 8).padding(.vertical, 3)
-            .background(Capsule().fill(fill))
+            .font(SabqType.tag.font).foregroundStyle(fg)
+            .padding(.horizontal, SabqLayout.space8).padding(.vertical, SabqLayout.space4)
+            .background(RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous).fill(SabqTheme.surfaceMuted))
     }
 
     @ViewBuilder private func factTiles(_ p: AcPlayerCard) -> some View {
@@ -127,7 +125,7 @@ struct AcPlayerSheet: View {
             p.weight.map { ("\($0) كجم", "الوزن") },
         ].compactMap { $0 }
         if !facts.isEmpty {
-            HStack(spacing: 8) {
+            HStack(spacing: SabqLayout.space8) {
                 ForEach(facts, id: \.label) { fact in
                     AcFactTile(value: fact.value, label: fact.label)
                 }
@@ -139,11 +137,11 @@ struct AcPlayerSheet: View {
         let date = p.birthDate.flatMap { SabqFormatters.parseISO8601($0) ?? Self.birthParser.date(from: $0) }
         let parts = [date.map { Self.birthFormatter.string(from: $0) }, p.birthPlace].compactMap { $0 }
         if !parts.isEmpty {
-            HStack(spacing: 6) {
-                Image(systemName: "birthday.cake").font(SabqFonts.app(size: 11))
+            HStack(spacing: SabqLayout.space8) {
+                Image(systemName: "birthday.cake").accessibilityHidden(true)
                 Text(parts.joined(separator: " — "))
             }
-            .font(SabqFonts.app(size: 12)).foregroundStyle(AcTheme.onDarkDim)
+            .font(SabqType.meta.font).foregroundStyle(SabqTheme.textSecondary)
         }
     }
 
@@ -164,73 +162,75 @@ struct AcPlayerSheet: View {
     }()
 
     private func careerSection(_ career: [AcPlayerCareerStop]) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 0) {
             sectionTitle(icon: "clock.arrow.circlepath", text: "المسيرة")
-            ForEach(career) { stop in
-                HStack(spacing: 10) {
+                .padding(.bottom, SabqLayout.space8)
+            ForEach(Array(career.enumerated()), id: \.element.id) { index, stop in
+                if index > 0 { AcRowDivider() }
+                HStack(spacing: SabqLayout.space12) {
                     AcRemoteImage(url: stop.logo)
-                        .padding(4)
-                        .frame(width: 30, height: 30)
+                        .padding(SabqLayout.space4)
+                        .frame(width: 32, height: 32)
                         .background(Circle().fill(.white))
-                    Text(stop.team).font(SabqFonts.app(size: 14, weight: .semibold)).foregroundStyle(AcTheme.onDark).lineLimit(1)
+                        .clipShape(Circle())
+                        .overlay(Circle().stroke(SabqTheme.separator, lineWidth: 1))
+                    Text(stop.team).sabqText(SabqType.rowTitle).foregroundStyle(SabqTheme.textPrimary).lineLimit(1)
                     Spacer()
                     if !stop.seasons.isEmpty {
                         Text(stop.seasonsLabel)
-                            .font(SabqFonts.app(size: 11, weight: .regular).monospacedDigit())
-                            .foregroundStyle(AcTheme.onDarkDim)
+                            .font(SabqType.meta.font.monospacedDigit())
+                            .foregroundStyle(SabqTheme.textSecondary)
                             .environment(\.layoutDirection, .leftToRight)
                     }
                 }
-                .padding(.horizontal, 12).padding(.vertical, 8)
-                .acElevatedCard()
+                .padding(.vertical, SabqLayout.space12)
             }
         }
     }
 
     private func trophiesSection(_ trophies: [AcPlayerTrophy]) -> some View {
         let titles = trophies.filter(\.winner).count
-        return VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 6) {
+        return VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: SabqLayout.space8) {
                 sectionTitle(icon: "trophy.fill", text: "الألقاب")
                 if titles > 0 {
-                    Text("\(titles) بطولة")
-                        .font(SabqFonts.app(size: 10, weight: .medium)).foregroundStyle(AcTheme.onDarkDim)
-                        .padding(.horizontal, 7).padding(.vertical, 2)
-                        .background(Capsule().fill(AcTheme.chipFill))
+                    AcTag(text: "\(titles) بطولة")
                 }
             }
-            ForEach(trophies) { trophy in
-                HStack(spacing: 10) {
+            .padding(.bottom, SabqLayout.space8)
+            ForEach(Array(trophies.enumerated()), id: \.element.id) { index, trophy in
+                if index > 0 { AcRowDivider() }
+                HStack(spacing: SabqLayout.space12) {
                     Image(systemName: "trophy.fill")
-                        .font(SabqFonts.app(size: 13))
-                        .foregroundStyle(trophy.winner ? AcTheme.gold : AcTheme.onDarkDim.opacity(0.5))
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(trophy.competition).font(SabqFonts.app(size: 12, weight: .medium)).foregroundStyle(AcTheme.onDark).lineLimit(1)
+                        .font(SabqType.meta.font)
+                        .foregroundStyle(trophy.winner ? AcTheme.gold : SabqTheme.outline)
+                        .accessibilityHidden(true)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(trophy.competition).font(SabqType.excerpt.font).foregroundStyle(SabqTheme.textPrimary).lineLimit(1)
                         if !trophy.country.isEmpty {
-                            Text(trophy.country).font(SabqFonts.app(size: 10)).foregroundStyle(AcTheme.onDarkDim)
+                            Text(trophy.country).font(SabqType.meta.font).foregroundStyle(SabqTheme.textSecondary)
                         }
                     }
                     Spacer()
                     Text(trophy.place)
-                        .font(SabqFonts.app(size: 10, weight: .medium)).foregroundStyle(trophy.winner ? .white : AcTheme.onDarkDim)
-                        .padding(.horizontal, 7).padding(.vertical, 2)
-                        .background(Capsule().fill(trophy.winner ? AcTheme.emeraldDeep : AcTheme.chipFill))
+                        .font(SabqType.tag.font).foregroundStyle(trophy.winner ? SabqTheme.onAction : SabqTheme.textSecondary)
+                        .padding(.horizontal, SabqLayout.space8).padding(.vertical, SabqLayout.space4)
+                        .background(
+                            RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
+                                .fill(trophy.winner ? AcStyle.accentFill : SabqTheme.surfaceMuted)
+                        )
                     Text(trophy.season)
-                        .font(SabqFonts.app(size: 11, weight: .regular).monospacedDigit())
-                        .foregroundStyle(AcTheme.onDarkDim)
+                        .font(SabqType.meta.font.monospacedDigit())
+                        .foregroundStyle(SabqTheme.textSecondary)
                         .environment(\.layoutDirection, .leftToRight)
                 }
-                .padding(.horizontal, 12).padding(.vertical, 8)
-                .acElevatedCard()
+                .padding(.vertical, SabqLayout.space12)
             }
         }
     }
 
     private func sectionTitle(icon: String, text: String) -> some View {
-        HStack(spacing: 6) {
-            Image(systemName: icon).font(SabqFonts.app(size: 11, weight: .regular)).foregroundStyle(AcTheme.emerald)
-            Text(text).font(SabqFonts.app(size: 14, weight: .semibold)).foregroundStyle(AcTheme.emerald)
-        }
+        AcSectionHeader(icon: icon, title: text, subtitle: "")
     }
 }
 
@@ -265,36 +265,22 @@ struct AcPlayerStatsGrid: View {
         return t
     }
 
-    private let columns = [GridItem(.adaptive(minimum: 100), spacing: 8)]
+    private let columns = [GridItem(.adaptive(minimum: 100), spacing: SabqLayout.space8)]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 6) {
-                Image(systemName: "chart.bar.fill").font(SabqFonts.app(size: 11, weight: .regular)).foregroundStyle(AcTheme.emerald)
-                Text("أرقامه في كأس آسيا").font(SabqFonts.app(size: 14, weight: .semibold)).foregroundStyle(AcTheme.emerald)
-                Spacer()
+        VStack(alignment: .leading, spacing: SabqLayout.space12) {
+            HStack(spacing: SabqLayout.space8) {
+                AcSectionHeader(icon: "chart.bar.fill", title: "أرقامه في كأس آسيا", subtitle: "")
                 if let rating = stats.rating {
-                    Text(String(format: "%.1f", rating))
-                        .font(SabqFonts.app(size: 11, weight: .regular).monospacedDigit())
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 7).padding(.vertical, 3)
-                        .background(RoundedRectangle(cornerRadius: 8).fill(ratingColor(rating)))
-                        .environment(\.layoutDirection, .leftToRight)
+                    AcRatingBadge(rating: rating)
                 }
             }
-            LazyVGrid(columns: columns, spacing: 8) {
+            LazyVGrid(columns: columns, spacing: SabqLayout.space8) {
                 ForEach(tiles, id: \.label) { tile in
                     AcFactTile(value: tile.value, label: tile.label)
                 }
             }
         }
-    }
-
-    private func ratingColor(_ r: Double) -> Color {
-        if r >= 8 { return AcTheme.emeraldDeep }
-        if r >= 7 { return AcTheme.leaf }
-        if r >= 6 { return AcTheme.gold }
-        return AcTheme.liveRed
     }
 }
 
@@ -312,17 +298,11 @@ struct AcPlayerFormSection: View {
         ZStack {
             Color.clear.frame(height: 0)
             if let form, form.available, !form.matches.isEmpty {
-                VStack(alignment: .leading, spacing: 10) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "chart.line.uptrend.xyaxis")
-                            .font(SabqFonts.app(size: 11, weight: .regular)).foregroundStyle(AcTheme.emerald)
-                        Text(hasXg ? "الفورمة الأخيرة · xG" : "الفورمة الأخيرة")
-                            .font(SabqFonts.app(size: 14, weight: .semibold)).foregroundStyle(AcTheme.emerald)
-                        Spacer()
-                        Text("آخر \(matches.count)")
-                            .font(SabqFonts.app(size: 10, weight: .medium)).foregroundStyle(AcTheme.onDarkDim)
-                            .padding(.horizontal, 7).padding(.vertical, 2)
-                            .background(Capsule().fill(AcTheme.chipFill))
+                VStack(alignment: .leading, spacing: SabqLayout.space12) {
+                    HStack(spacing: SabqLayout.space8) {
+                        AcSectionHeader(icon: "chart.line.uptrend.xyaxis",
+                                        title: hasXg ? "الفورمة الأخيرة · xG" : "الفورمة الأخيرة", subtitle: "")
+                        AcTag(text: "آخر \(matches.count)")
                     }
                     if hasXg {
                         Chart(matches) { m in
@@ -330,34 +310,32 @@ struct AcPlayerFormSection: View {
                                 x: .value("الخصم", m.opponent),
                                 y: .value("xG", m.xg ?? 0)
                             )
-                            .foregroundStyle(AcTheme.emerald.gradient)
-                            .cornerRadius(3)
+                            .foregroundStyle(AcStyle.accentFill)
+                            .cornerRadius(2)
                         }
                         .frame(height: 96)
                     }
-                    ForEach(matches.prefix(5)) { m in
-                        HStack(spacing: 10) {
-                            Text(m.opponent.isEmpty ? "—" : m.opponent)
-                                .font(SabqFonts.app(size: 12, weight: .medium)).foregroundStyle(AcTheme.onDark).lineLimit(1)
-                            Spacer()
-                            if let xg = m.xg {
-                                Text(String(format: "xG %.1f", xg))
-                                    .font(SabqFonts.app(size: 11).monospacedDigit()).foregroundStyle(AcTheme.emerald)
+                    VStack(spacing: 0) {
+                        ForEach(Array(matches.prefix(5).enumerated()), id: \.element.id) { index, m in
+                            if index > 0 { AcRowDivider() }
+                            HStack(spacing: SabqLayout.space12) {
+                                Text(m.opponent.isEmpty ? "—" : m.opponent)
+                                    .font(SabqType.excerpt.font).foregroundStyle(SabqTheme.textPrimary).lineLimit(1)
+                                Spacer()
+                                if let xg = m.xg {
+                                    Text(String(format: "xG %.1f", xg))
+                                        .font(SabqType.meta.font.monospacedDigit()).foregroundStyle(AcStyle.accent)
+                                }
+                                if m.goals > 0 {
+                                    Text("\(m.goals)G")
+                                        .font(SabqType.metaEmphasis.font).foregroundStyle(SabqTheme.textPrimary)
+                                }
+                                if let r = m.rating {
+                                    AcRatingBadge(rating: r)
+                                }
                             }
-                            if m.goals > 0 {
-                                Text("\(m.goals)G")
-                                    .font(SabqFonts.app(size: 12, weight: .bold)).foregroundStyle(AcTheme.emeraldDeep)
-                            }
-                            if let r = m.rating {
-                                Text(String(format: "%.1f", r))
-                                    .font(SabqFonts.app(size: 11, weight: .medium).monospacedDigit())
-                                    .foregroundStyle(.white)
-                                    .padding(.horizontal, 6).padding(.vertical, 2)
-                                    .background(RoundedRectangle(cornerRadius: 7).fill(ratingColor(r)))
-                            }
+                            .padding(.vertical, SabqLayout.space12)
                         }
-                        .padding(.horizontal, 12).padding(.vertical, 8)
-                        .acElevatedCard()
                     }
                 }
             }
@@ -367,13 +345,6 @@ struct AcPlayerFormSection: View {
             loaded = true
             form = try? await APIClient.shared.fetchAsianCupPlayerForm(playerId: playerId)
         }
-    }
-
-    private func ratingColor(_ r: Double) -> Color {
-        if r >= 8 { return AcTheme.emeraldDeep }
-        if r >= 7 { return AcTheme.leaf }
-        if r >= 6 { return AcTheme.gold }
-        return AcTheme.liveRed
     }
 }
 
@@ -405,16 +376,17 @@ struct AcPlayerMarketSection: View {
         ZStack {
             Color.clear.frame(height: 0)
             if available, current != nil || history.count >= 2 {
-                VStack(alignment: .leading, spacing: 10) {
-                    HStack(spacing: 6) {
+                VStack(alignment: .leading, spacing: SabqLayout.space12) {
+                    HStack(spacing: SabqLayout.space8) {
                         Image(systemName: "chart.line.uptrend.xyaxis")
-                            .font(SabqFonts.app(size: 11, weight: .regular)).foregroundStyle(AcTheme.gold)
-                        Text("القيمة السوقية").font(SabqFonts.app(size: 14, weight: .semibold)).foregroundStyle(AcTheme.gold)
+                            .font(SabqType.button.font).foregroundStyle(AcStyle.accent)
+                            .accessibilityHidden(true)
+                        Text("القيمة السوقية").sabqText(SabqType.rowTitle).foregroundStyle(SabqTheme.textPrimary)
                         Spacer()
                         if let current {
                             Text(Self.format(current, currency: currency))
-                                .font(SabqFonts.app(size: 16, weight: .bold))
-                                .foregroundStyle(AcTheme.gold)
+                                .font(SabqType.sectionHeading.font)
+                                .foregroundStyle(SabqTheme.textPrimary)
                                 .environment(\.layoutDirection, .leftToRight)
                         }
                     }
@@ -424,7 +396,7 @@ struct AcPlayerMarketSection: View {
                                 x: .value("ت", pt.date),
                                 y: .value("ق", pt.value)
                             )
-                            .foregroundStyle(AcTheme.gold)
+                            .foregroundStyle(AcStyle.accent)
                             .interpolationMethod(.catmullRom)
                         }
                         .chartXAxis(.hidden)
@@ -432,8 +404,8 @@ struct AcPlayerMarketSection: View {
                         .frame(height: 72)
                     }
                 }
-                .padding(14)
-                .acElevatedCard()
+                .padding(SabqLayout.space16)
+                .acQuietBlock()
             }
         }
         .task(id: playerId) {

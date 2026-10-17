@@ -65,8 +65,8 @@ final class RoshnHomeStore {
 
 // MARK: - شريط دوري روشن في الواجهة الرئيسية
 //
-// بطاقة بهوية «أخضر الملعب» (2026-08-02): زمردي صلب بنص أبيض — نفس لون هيرو
-// المركز — بثلاثة عناصر فقط: شعار الدوري، سطرا الهوية، وشارة حالة واحدة
+// بطاقة بهوية «أخضر الملعب» (2026-08-02): زمردي صلب بنص أبيض — نفس لون ترويسة
+// المركز (RoshnTheme.accentFill، آمن التباين منذ 2026-10-17) — بثلاثة عناصر فقط: شعار الدوري، سطرا الهوية، وشارة حالة واحدة
 // (عدّاد/نتيجة حية/بطل). قرار المالك بعد البطاقة البيضاء المزدحمة.
 // أربع حالات: عدّاد انطلاق الموسم / يوم الجولة / المباراة القادمة أو الحية /
 // بطاقة البطل. تختفي كليًا عند إطفاء البلوك من لوحة التحكم (blockHidden).
@@ -172,8 +172,8 @@ struct RoshnHomeStrip: View {
     private func matchdayCard(_ md: RsMatchday) -> some View {
         banner(subtitle: "\(md.round ?? "جولة الدوري") · \(md.count) \(md.count == 2 ? "مباراتان" : "مباريات")") {
             if md.liveCount > 0 {
-                chip(background: RoshnTheme.liveRed) {
-                    HStack(spacing: 5) {
+                chip(background: RoshnTheme.liveFill) {
+                    HStack(spacing: SabqLayout.space4) {
                         Circle().fill(.white).frame(width: 5, height: 5)
                         Text(md.liveCount == 1 ? "مباشر" : "\(md.liveCount) مباشر")
                     }
@@ -186,8 +186,8 @@ struct RoshnHomeStrip: View {
 
     private func championCard(_ c: RsChampion) -> some View {
         banner(subtitle: "اكتمل الموسم") {
-            chip(background: RoshnTheme.gold) {
-                HStack(spacing: 6) {
+            chip(background: RoshnTheme.gold, ink: RoshnTheme.navy) {
+                HStack(spacing: SabqLayout.space4) {
                     Text("🏆")
                     Text(c.name).lineLimit(1)
                 }
@@ -198,53 +198,61 @@ struct RoshnHomeStrip: View {
     // MARK: هيكل البطاقة والعناصر
 
     private func banner(subtitle: String, @ViewBuilder trailing: () -> some View) -> some View {
-        HStack(spacing: 11) {
+        HStack(spacing: SabqLayout.space12) {
             Image("RoshnLeagueLogo")
                 .resizable()
                 .scaledToFit()
-                .padding(4)
+                .padding(SabqLayout.space4)
                 .frame(width: 40, height: 40)
-                .background(RoundedRectangle(cornerRadius: 11, style: .continuous).fill(.white))
+                .background(RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous).fill(.white))
+                .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text("دوري روشن")
-                    .font(SabqFonts.app(size: 15, weight: .bold))
+                    .sabqText(SabqType.rowTitle)
                     .foregroundStyle(.white)
                     .lineLimit(1)
                 Text(subtitle)
-                    .font(SabqFonts.app(size: 10))
-                    .foregroundStyle(.white.opacity(0.85))
-                    .lineLimit(1).minimumScaleFactor(0.8)
+                    .sabqText(SabqType.meta)
+                    .foregroundStyle(.white)
+                    .lineLimit(1).minimumScaleFactor(0.85)
             }
 
-            Spacer(minLength: 8)
+            Spacer(minLength: SabqLayout.space8)
 
             trailing()
 
             Image(systemName: "chevron.left")
-                .font(SabqFonts.app(size: 11, weight: .semibold))
+                .font(SabqType.metaEmphasis.font)
                 .foregroundStyle(.white)
-                .frame(width: 22, height: 22)
-                .background(Circle().fill(.white.opacity(0.18)))
+                .accessibilityHidden(true)
         }
-        .padding(.horizontal, 14).padding(.vertical, 13)
-        .background(RoshnTheme.sky)
-        // زوايا بطاقات الرئيسية الحادة وبلا ظل (طلب المالك 2026-10-09)؛ الأخضر
-        // الصلب بلا حد رمادي يبقى هوية «أخضر الملعب».
-        .clipShape(RoundedRectangle(cornerRadius: SabqTheme.blockRadius, style: .continuous))
+        .padding(.horizontal, SabqLayout.space16).padding(.vertical, SabqLayout.space12)
+        .frame(minHeight: 64)
+        // زمردي الهوية الصلب بلا حد ولا ظل — بدرجة تحفظ تباين النص الأبيض.
+        .background(RoshnTheme.accentFill)
+        .clipShape(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
+        .contentShape(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
     }
 
-    private func chip(background: Color, @ViewBuilder content: () -> some View) -> some View {
+    /// شارة حالة: تعبئة مسطّحة، أو حدّ أبيض حين تكون فوق الزمردي مباشرة.
+    private func chip(background: Color? = nil, ink: Color = .white, @ViewBuilder content: () -> some View) -> some View {
         content()
-            .font(SabqFonts.app(size: 11, weight: .semibold))
-            .foregroundStyle(.white)
-            .padding(.horizontal, 10).padding(.vertical, 6)
-            .background(Capsule().fill(background))
+            .sabqText(SabqType.tag)
+            .foregroundStyle(ink)
+            .padding(.horizontal, SabqLayout.space8).padding(.vertical, SabqLayout.space4)
+            .background {
+                if let background {
+                    Capsule().fill(background)
+                } else {
+                    Capsule().stroke(.white.opacity(0.6), lineWidth: 1)
+                }
+            }
     }
 
     private func countdownChip(prefix: String, timestamp: Int) -> some View {
         TimelineView(.periodic(from: .now, by: 1)) { _ in
-            chip(background: .white.opacity(0.16)) {
+            chip {
                 Text("\(prefix) \(WCFormat.countdown(to: timestamp))")
                     .monospacedDigit()
                     .lineLimit(1).fixedSize()
@@ -253,11 +261,11 @@ struct RoshnHomeStrip: View {
     }
 
     private func liveScoreChip(_ f: RsFixture) -> some View {
-        chip(background: RoshnTheme.liveRed) {
-            HStack(spacing: 6) {
+        chip(background: RoshnTheme.liveFill) {
+            HStack(spacing: SabqLayout.space4) {
                 Circle().fill(.white).frame(width: 5, height: 5)
                 Text("\(f.goals.away ?? 0) - \(f.goals.home ?? 0)")
-                    .font(SabqFonts.app(size: 13, weight: .bold))
+                    .sabqText(SabqType.metaEmphasis)
                     .monospacedDigit()
                     .environment(\.layoutDirection, .leftToRight)
                 if let elapsed = f.status.elapsed, elapsed > 0 {

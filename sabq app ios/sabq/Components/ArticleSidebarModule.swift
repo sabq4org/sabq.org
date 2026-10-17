@@ -1,17 +1,16 @@
 import SwiftUI
 
 /// الحاوية الموحدة لكل بلوك قائمة بجوار/تحت الخبر أو المقال — نقل
-/// `ArticleSidebarModule` من الويب (#1610): سطح أزرق فاتح بدرجة الويب
-/// (`SabqTheme.publicSurface`)، عنوان واحد بأيقونة في مربع، وصف، رابط إجراء
-/// اختياري، ثم صفوف بشكل بطاقة الخبر المضغوطة يفصلها خط شعري — فتُقرأ
-/// «اقرأ أيضاً» و«مقالات قد تهمك» و«مقالات أخرى» كعائلة واحدة.
+/// `ArticleSidebarModule` من الويب (#1610). بعد النموذج المعتمد (#1913) صارت
+/// قسمًا بلا صندوق كـ`HomeSectionCard`: عنوان 20 عريض، وصف قصير، رابط إجراء
+/// اختياري، ثم صفوف بفواصل رفيعة على الصفحة مباشرة.
 struct ArticleSidebarModule<Content: View, Action: View>: View {
     let title: String
     let description: String
+    /// محفوظ للتوافق مع النداءات القائمة؛ الرأس الموحّد بلا مربع أيقونة.
     let icon: String
-    /// لون الحاوية: أزرق فاتح على صفحة الخبر البيضاء، وأبيض على الرئيسية التي
-    /// خلفيتها بالدرجة الزرقاء نفسها (وإلا ذابت البطاقة في الخلفية — ملاحظة المالك).
-    var fill: Color = SabqTheme.publicSurface
+    /// محفوظ للتوافق؛ القسم لم يعد يرسم سطحًا خلفه.
+    var fill: Color = SabqTheme.background
     @ViewBuilder let action: () -> Action
     @ViewBuilder let content: () -> Content
 
@@ -19,7 +18,7 @@ struct ArticleSidebarModule<Content: View, Action: View>: View {
         title: String,
         description: String,
         icon: String,
-        fill: Color = SabqTheme.publicSurface,
+        fill: Color = SabqTheme.background,
         @ViewBuilder action: @escaping () -> Action,
         @ViewBuilder content: @escaping () -> Content
     ) {
@@ -34,56 +33,33 @@ struct ArticleSidebarModule<Content: View, Action: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             heading
-                .padding(.bottom, 14)
-            Rectangle()
-                .fill(SabqTheme.outline.opacity(0.55))
-                .frame(height: 0.5)
-                .padding(.bottom, 2)
+                .padding(.bottom, SabqLayout.space4)
             VStack(alignment: .leading, spacing: 0) {
                 content()
             }
         }
-        .padding(18)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(fill)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(SabqTheme.outline.opacity(0.75), lineWidth: 0.5)
-        )
         .accessibilityElement(children: .contain)
         .accessibilityLabel(title)
     }
 
     private var heading: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 10) {
-                Image(systemName: icon)
-                    .font(SabqFonts.app(size: 16, weight: .semibold))
-                    .foregroundStyle(SabqTheme.primaryEnd)
-                    .frame(width: 34, height: 34)
-                    .background(
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .fill(SabqTheme.primaryEnd.opacity(0.10))
-                    )
+        HStack(alignment: .firstTextBaseline, spacing: SabqLayout.space12) {
+            VStack(alignment: .leading, spacing: SabqLayout.space4) {
                 Text(title)
-                    .font(SabqFonts.app(size: 20, weight: .bold))
-                    .foregroundStyle(SabqTheme.ink)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.85)
-            }
-            HStack(alignment: .center, spacing: 8) {
+                    .font(SabqType.sectionHeading.font)
+                    .foregroundStyle(SabqTheme.textPrimary)
+                    .accessibilityAddTraits(.isHeader)
                 Text(description)
-                    .font(SabqFonts.app(size: 14, weight: .regular))
-                    .foregroundStyle(SabqTheme.secondaryInk)
+                    .font(SabqType.meta.font)
+                    .foregroundStyle(SabqTheme.textTertiary)
                     .lineLimit(2)
-                Spacer(minLength: 0)
-                action()
-                    .font(SabqFonts.app(size: 13, weight: .medium))
-                    .foregroundStyle(SabqTheme.primaryEnd)
+                    .fixedSize(horizontal: false, vertical: true)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            action()
+                .font(SabqType.tag.font)
+                .foregroundStyle(SabqTheme.primary)
         }
     }
 
@@ -103,16 +79,16 @@ extension ArticleSidebarModule where Action == EmptyView {
         title: String,
         description: String,
         icon: String,
-        fill: Color = SabqTheme.publicSurface,
+        fill: Color = SabqTheme.background,
         @ViewBuilder content: @escaping () -> Content
     ) {
         self.init(title: title, description: description, icon: icon, fill: fill, action: { EmptyView() }, content: content)
     }
 }
 
-/// صف بشكل بطاقة الخبر المضغوطة داخل الحاوية الموحدة: صورة 112×63 (16:9) بإطار
-/// خفيف، عنوان سطرين، ثم سطر بيانات (صورة الكاتب الصغيرة + اسمه · الوقت).
-/// نقل `SidebarArticleCard` من الويب (#1610/#1612/#1624).
+/// صف بشكل `CompactArticleRow` داخل الحاوية الموحدة: عنوان 16 في سطرين،
+/// سطر بيانات (صورة الكاتب الصغيرة + اسمه · الوقت)، والمصغّرة 112×63 في طرف
+/// السطر. نقل `SidebarArticleCard` من الويب (#1610/#1612/#1624).
 struct SidebarArticleRow: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let title: String
@@ -123,50 +99,50 @@ struct SidebarArticleRow: View {
     var bylineAvatarURL: String? = nil
     /// الوقت النسبي؛ nil لبلوك الرأي داخل الخبر (يُقرأ كقائمة كتّاب لا خطًّا زمنيًا).
     var date: String? = nil
+    /// محفوظان للتوافق؛ الخانة الموحّدة (`SabqImagePlaceholder`) لكل الصور.
     var placeholderIcon: String = "newspaper"
-    var placeholderTint: Color = SabqTheme.primaryEnd
+    var placeholderTint: Color = SabqTheme.primary
 
     var body: some View {
         HStack(alignment: .top, spacing: NewsRowStyle.thumbnailGap) {
-            thumbnail
-
             VStack(alignment: .leading, spacing: NewsRowStyle.textStackSpacing) {
                 SabqRTLText(
                     title,
-                    uiFont: SabqFonts.uiApp(size: NewsRowStyle.titleSize, weight: .regular),
-                    color: SabqTheme.ink,
+                    uiFont: SabqType.rowTitle.uiFont,
+                    color: SabqTheme.textPrimary,
                     lineLimit: dynamicTypeSize.isAccessibilitySize ? 0 : 2,
-                    lineSpacing: NewsRowStyle.titleLineSpacing
+                    lineSpacing: NewsRowStyle.titleLineSpacing,
+                    textStyle: SabqType.rowTitle.uiTextStyle
                 )
 
                 if byline != nil || date != nil {
-                    HStack(spacing: 6) {
+                    HStack(spacing: SabqLayout.space4) {
                         if let byline {
-                            HStack(spacing: 6) {
+                            HStack(spacing: SabqLayout.space8) {
                                 if let bylineAvatarURL, !bylineAvatarURL.isEmpty {
                                     OpinionAuthorAvatar(name: byline, imageURL: bylineAvatarURL, size: 20)
                                 }
                                 Text(byline)
                                     .lineLimit(1)
+                                    .foregroundStyle(SabqTheme.textSecondary)
                             }
                         }
                         if byline != nil, date != nil {
                             Text("·")
                         }
                         if let date {
-                            HStack(spacing: 4) {
-                                Text(date)
-                            }
-                            .foregroundStyle(SabqTheme.tertiaryInk)
+                            Text(date)
                         }
                     }
-                    .font(SabqFonts.app(size: NewsRowStyle.metadataSize, weight: .regular))
-                    .foregroundStyle(SabqTheme.secondaryInk)
+                    .font(SabqType.meta.font)
+                    .foregroundStyle(SabqTheme.textTertiary)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+
+            thumbnail
         }
-        .padding(.vertical, 12)
+        .padding(.vertical, SabqLayout.rowPadding)
         .contentShape(Rectangle())
     }
 
@@ -175,23 +151,14 @@ struct SidebarArticleRow: View {
         Group {
             if let imageURL, !imageURL.isEmpty, let url = URL(string: imageURL) {
                 CachedAsyncImage(url: url, contentMode: .fill) {
-                    placeholder
+                    SabqImagePlaceholder()
                 }
             } else {
-                placeholder
+                SabqImagePlaceholder()
+                    .environment(\.sabqImageLoadFailed, true)
             }
         }
         .frame(width: NewsRowStyle.thumbnailWidth, height: NewsRowStyle.thumbnailHeight)
         .clipShape(RoundedRectangle(cornerRadius: NewsRowStyle.thumbnailRadius, style: .continuous))
-    }
-
-    private var placeholder: some View {
-        RoundedRectangle(cornerRadius: NewsRowStyle.thumbnailRadius, style: .continuous)
-            .fill(placeholderTint.opacity(0.10))
-            .overlay {
-                Image(systemName: placeholderIcon)
-                    .font(SabqFonts.app(size: 20, weight: .light))
-                    .foregroundStyle(placeholderTint.opacity(0.45))
-            }
     }
 }

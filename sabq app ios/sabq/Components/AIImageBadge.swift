@@ -6,8 +6,6 @@ struct AIImageBadge: View {
     let model: String?
     private let sizeScale: CGFloat
 
-    @Environment(\.colorScheme) private var colorScheme
-
     init(model: String? = nil, sizeScale: CGFloat = 1) {
         self.model = model
         self.sizeScale = sizeScale
@@ -25,22 +23,19 @@ struct AIImageBadge: View {
         }
         // Icon on the physical right, Arabic text flows inward.
         .environment(\.layoutDirection, .leftToRight)
-        .foregroundStyle(.white)
+        .foregroundStyle(SabqTheme.onAction)
         .padding(.horizontal, 10 * sizeScale)
         .padding(.vertical, 5 * sizeScale)
+        // شارة مسطحة بلا ظل ولا حد زخرفي؛ تعبئة الإجراء الصلبة تكفي للتباين فوق الصورة.
         .background(
             Capsule().fill(badgeFill)
         )
-        .overlay(
-            Capsule().stroke(.white.opacity(colorScheme == .dark ? 0.22 : 0.30), lineWidth: 0.5)
-        )
-        .shadow(color: .black.opacity(colorScheme == .dark ? 0.45 : 0.25), radius: 6, x: 0, y: 2)
         .accessibilityLabel("مولدة بالذكاء الاصطناعي")
     }
 
     /// White label on the action fill keeps 4.5:1 in both modes.
     private var badgeFill: Color {
-        SabqTheme.actionFill.opacity(0.95)
+        SabqTheme.actionFill
     }
 }
 

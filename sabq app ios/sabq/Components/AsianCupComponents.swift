@@ -1,6 +1,45 @@
 import SwiftUI
 
 // MARK: - كأس آسيا — مكونات مشتركة (نظير WorldCupComponents)
+//
+// نموذج سبق المعتمد: صفحة بيضاء، أقسام بلا صناديق تفصلها خطوط رفيعة، زوايا
+// 8/12/كبسولة، ومقياس الخط الموحّد. تبقى هوية البطولة التركوازية لكنةً فقط.
+
+/// أدوار لون البطولة فوق نظام سبق.
+nonisolated enum AcStyle {
+    /// نص ولكنة (العنوان النشط، النقاط، الوقت) — متكيّف وآمن التباين في الوضعين.
+    static let accent = AcTheme.emeraldDeep
+    /// تعبئة ثابتة داكنة تحمل نصًا أبيض (التبويب النشط، شريط الهوية، زر المتابعة).
+    static let accentFill = AcTheme.royal
+}
+
+extension View {
+    /// بلوك هادئ: تعبئة رمادية خفيفة بلا حدود، زاوية 12.
+    func acQuietBlock() -> some View {
+        background(SabqTheme.surfaceMuted, in: RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous))
+    }
+
+    /// شريحة/تبويب: المختار بلون الهوية ونص أبيض، والباقي رمادي هادئ.
+    func acChip(selected: Bool) -> some View {
+        self
+            .font(SabqType.tag.font)
+            .foregroundStyle(selected ? SabqTheme.onAction : SabqTheme.textPrimary)
+            .padding(.horizontal, SabqLayout.space12)
+            .frame(minHeight: SabqLayout.touchTarget)
+            .background(Capsule().fill(selected ? AcStyle.accentFill : SabqTheme.surfaceMuted))
+            .contentShape(Capsule())
+    }
+}
+
+/// خط فاصل رفيع بين صفوف القائمة.
+struct AcRowDivider: View {
+    var body: some View {
+        Rectangle()
+            .fill(SabqTheme.separator)
+            .frame(height: 1)
+            .accessibilityHidden(true)
+    }
+}
 
 /// صورة بعيدة (شعار منتخب / صورة لاعب) مع كاش عبر CachedAsyncImage.
 struct AcRemoteImage: View {
@@ -14,7 +53,7 @@ struct AcRemoteImage: View {
             contentMode: contentMode,
             maxPixelSize: maxPixelSize
         ) {
-            Color.clear
+            SabqImagePlaceholder()
         }
     }
 }
@@ -23,45 +62,70 @@ struct AcRemoteImage: View {
 struct AcTeamLogo: View {
     let team: AcTeam
     var size: CGFloat = 40
-    var ring: Color = Color.white.opacity(0.15)
+    var ring: Color = SabqTheme.separator
 
     var body: some View {
         AcRemoteImage(url: team.logo)
             .padding(size * 0.14)
             .frame(width: size, height: size)
             .background(Circle().fill(.white))
-            .overlay(Circle().stroke(ring, lineWidth: 2))
+            .clipShape(Circle())
+            .overlay(Circle().stroke(ring, lineWidth: 1))
     }
 }
 
-/// شارة حالة المباراة: مباشر (نبض أبيض) / انتهت / وقت الانطلاق.
+/// صورة لاعب دائرية، وحين تغيب صورته دائرة رمادية هادئة.
+struct AcPlayerAvatar: View {
+    let photo: String
+    var size: CGFloat = 40
+    var initials: String? = nil
+
+    var body: some View {
+        Group {
+            if photo.isEmpty {
+                Circle().fill(SabqTheme.surfaceMuted)
+                    .overlay {
+                        if let initials, !initials.isEmpty {
+                            Text(initials)
+                                .font(SabqType.tag.font)
+                                .foregroundStyle(SabqTheme.textSecondary)
+                        }
+                    }
+            } else {
+                AcRemoteImage(url: photo, contentMode: .fill)
+                    .clipShape(Circle())
+            }
+        }
+        .frame(width: size, height: size)
+    }
+}
+
+/// شارة حالة المباراة: مباشر / انتهت / وقت الانطلاق.
 struct AcStatusPill: View {
     let fixture: AcFixture
+    /// فوق شريط الهوية الداكن: نص أبيض على تعبئة شفافة.
     var onDark: Bool = false
 
     var body: some View {
-        if fixture.status.live {
-            HStack(spacing: 4) {
-                Circle().fill(.white).frame(width: 5, height: 5)
-                Text(elapsedText)
+        Group {
+            if fixture.status.live {
+                HStack(spacing: SabqLayout.space4) {
+                    Circle().fill(onDark ? Color.white : SabqTheme.danger).frame(width: 6, height: 6)
+                    Text(elapsedText)
+                }
+                .foregroundStyle(onDark ? Color.white : SabqTheme.danger)
+            } else if fixture.status.finished {
+                Text(fixture.status.label)
+                    .foregroundStyle(onDark ? Color.white : SabqTheme.textSecondary)
+            } else {
+                Text(AcFormat.time(fixture))
+                    .foregroundStyle(onDark ? Color.white : AcStyle.accent)
             }
-            .font(SabqFonts.app(size: 11, weight: .medium))
-            .foregroundStyle(.white)
-            .padding(.horizontal, 8).padding(.vertical, 3)
-            .background(Capsule().fill(AcTheme.liveRed))
-        } else if fixture.status.finished {
-            Text(fixture.status.label)
-                .font(SabqFonts.app(size: 11, weight: .regular))
-                .foregroundStyle(AcTheme.liveRed)
-                .padding(.horizontal, 8).padding(.vertical, 3)
-                .background(Capsule().fill(AcTheme.liveRed.opacity(onDark ? 0.20 : 0.12)))
-        } else {
-            Text(AcFormat.time(fixture))
-                .font(SabqFonts.app(size: 11, weight: .medium))
-                .foregroundStyle(AcTheme.emeraldDeep)
-                .padding(.horizontal, 8).padding(.vertical, 3)
-                .background(Capsule().fill(AcTheme.emerald.opacity(0.16)))
         }
+        .font(SabqType.tag.font)
+        .padding(.horizontal, SabqLayout.space8)
+        .padding(.vertical, SabqLayout.space4)
+        .background(Capsule().fill(onDark ? Color.white.opacity(0.16) : SabqTheme.surfaceMuted))
     }
 
     private var elapsedText: String {
@@ -82,18 +146,18 @@ struct AcCountdownChips: View {
         TimelineView(.periodic(from: .now, by: 1)) { _ in
             let total = max(0, Double(timestamp) - Date().timeIntervalSince1970)
             if total <= 0 {
-                HStack(spacing: 6) {
-                    Circle().fill(AcTheme.emerald).frame(width: 8, height: 8)
+                HStack(spacing: SabqLayout.space8) {
+                    Circle().fill(AcStyle.accent).frame(width: 8, height: 8)
                     Text("حان موعد الانطلاق — التغطية الحية تبدأ خلال لحظات")
-                        .font(SabqFonts.app(size: 12, weight: .medium))
-                        .foregroundStyle(AcTheme.onDark)
+                        .font(SabqType.meta.font)
+                        .foregroundStyle(SabqTheme.textPrimary)
                 }
             } else {
                 let days = Int(total) / 86_400
                 let hours = (Int(total) % 86_400) / 3_600
                 let minutes = (Int(total) % 3_600) / 60
                 let seconds = Int(total) % 60
-                HStack(spacing: 8) {
+                HStack(spacing: SabqLayout.space8) {
                     chip(days, "يوم")
                     chip(hours, "ساعة")
                     chip(minutes, "دقيقة")
@@ -105,17 +169,17 @@ struct AcCountdownChips: View {
     }
 
     private func chip(_ value: Int, _ label: String) -> some View {
-        VStack(spacing: 1) {
+        VStack(spacing: 0) {
             Text("\(value)")
-                .font(SabqFonts.app(size: 18, weight: .semibold))
-                .foregroundStyle(AcTheme.onDark)
+                .font(SabqType.sectionHeading.font.monospacedDigit())
+                .foregroundStyle(SabqTheme.textPrimary)
             Text(label)
-                .font(SabqFonts.app(size: 10))
-                .foregroundStyle(AcTheme.emeraldDeep)
+                .font(SabqFonts.app(size: 12))
+                .foregroundStyle(SabqTheme.textSecondary)
         }
-        .frame(minWidth: 52)
-        .padding(.vertical, 6)
-        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(AcTheme.chipFill))
+        .frame(minWidth: 56)
+        .padding(.vertical, SabqLayout.space8)
+        .background(RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous).fill(SabqTheme.surfaceMuted))
     }
 }
 
@@ -129,106 +193,113 @@ struct AcProbabilityBar: View {
         let h = Int(Double(prediction.home) / Double(total) * 100)
         let d = Int(Double(prediction.draw) / Double(total) * 100)
         let a = Int(Double(prediction.away) / Double(total) * 100)
-        VStack(spacing: 6) {
+        VStack(spacing: SabqLayout.space8) {
             HStack {
                 Text("فوز \(fixture.home.name) \(h)%")
                 Spacer()
-                Text("تعادل \(d)%").foregroundStyle(AcTheme.onDarkDim)
+                Text("تعادل \(d)%")
                 Spacer()
                 Text("فوز \(fixture.away.name) \(a)%")
             }
-            .font(SabqFonts.app(size: 11, weight: .regular))
-            .foregroundStyle(AcTheme.emeraldDeep)
+            .font(SabqFonts.app(size: 12))
+            .foregroundStyle(SabqTheme.textSecondary)
 
             GeometryReader { geo in
                 HStack(spacing: 0) {
-                    Rectangle().fill(AcTheme.royal).frame(width: geo.size.width * CGFloat(h) / 100)
-                    Rectangle().fill(AcTheme.onDarkDim.opacity(0.5)).frame(width: geo.size.width * CGFloat(d) / 100)
+                    Rectangle().fill(AcStyle.accentFill).frame(width: geo.size.width * CGFloat(h) / 100)
+                    Rectangle().fill(SabqTheme.outline).frame(width: geo.size.width * CGFloat(d) / 100)
                     Rectangle().fill(AcTheme.sky)
                 }
             }
-            .frame(height: 10)
+            .frame(height: 8)
             .clipShape(Capsule())
 
             Text("توقعات خوارزمية للاستئناس من مزود البيانات")
-                .font(SabqFonts.app(size: 10))
-                .foregroundStyle(AcTheme.onDarkDim)
+                .font(SabqFonts.app(size: 12))
+                .foregroundStyle(SabqTheme.textTertiary)
         }
     }
 }
 
-/// ترويسة قسم: أيقونة + عنوان + وصف.
+/// ترويسة قسم: عنوان 20 عريض، وأيقونة بسيطة بلون الهوية، ووصف اختياري.
 struct AcSectionHeader: View {
     let icon: String
     let title: String
     let subtitle: String
-    var tint: Color = AcTheme.emeraldDeep
+    var tint: Color = AcStyle.accent
 
     var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: icon)
-                .font(SabqFonts.app(size: 20, weight: .semibold))
-                .foregroundStyle(tint)
-                .frame(width: 40, height: 40)
-                .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(tint.opacity(0.12)))
-            VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: SabqLayout.space4) {
+            HStack(spacing: SabqLayout.space8) {
+                Image(systemName: icon)
+                    .font(SabqType.button.font)
+                    .foregroundStyle(tint)
+                    .accessibilityHidden(true)
                 Text(title)
-                    .font(SabqFonts.headline(size: 21))
-                    .foregroundStyle(AcTheme.onDark)
-                Text(subtitle)
-                    .font(SabqFonts.app(size: 12))
-                    .foregroundStyle(AcTheme.onDarkDim)
+                    .font(SabqType.sectionHeading.font)
+                    .foregroundStyle(SabqTheme.textPrimary)
+                    .accessibilityAddTraits(.isHeader)
+                Spacer(minLength: 0)
             }
-            Spacer(minLength: 0)
+            if !subtitle.isEmpty {
+                Text(subtitle)
+                    .font(SabqType.meta.font)
+                    .foregroundStyle(SabqTheme.textSecondary)
+            }
         }
     }
 }
 
-/// حالة فارغة داخل بطاقة داكنة.
+/// حالة فارغة داخل بلوك هادئ.
 struct AcEmptyDark: View {
     let icon: String
     let title: String
     let subtitle: String
 
     var body: some View {
-        VStack(spacing: 8) {
-            Image(systemName: icon).font(SabqFonts.app(size: 30)).foregroundStyle(AcTheme.emerald)
-            Text(title).font(SabqFonts.app(size: 16, weight: .semibold)).foregroundStyle(AcTheme.onDark)
-            Text(subtitle).font(SabqFonts.app(size: 12)).foregroundStyle(AcTheme.onDarkDim)
+        VStack(spacing: SabqLayout.space8) {
+            Image(systemName: icon)
+                .font(SabqType.sectionHeading.font)
+                .foregroundStyle(SabqTheme.textTertiary)
+                .accessibilityHidden(true)
+            Text(title).sabqText(SabqType.rowTitle).foregroundStyle(SabqTheme.textPrimary)
+            Text(subtitle).font(SabqType.meta.font).foregroundStyle(SabqTheme.textSecondary)
                 .multilineTextAlignment(.center)
         }
-        .frame(maxWidth: .infinity).padding(.vertical, 24)
-        .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(AcTheme.card))
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, SabqLayout.space24)
+        .padding(.horizontal, SabqLayout.space16)
+        .acQuietBlock()
     }
 }
 
 /// مؤشر تحميل بلون العلامة.
 struct AcLoading: View {
     var body: some View {
-        HStack { Spacer(); ProgressView().tint(AcTheme.emeraldDeep); Spacer() }
-            .padding(.vertical, 32)
+        HStack { Spacer(); ProgressView().tint(AcStyle.accent); Spacer() }
+            .padding(.vertical, SabqLayout.space32)
     }
 }
 
-/// بلاطة حقيقة: قيمة كبيرة فوق وصف صغير.
+/// بلاطة حقيقة: قيمة فوق وصف صغير، في بلوك هادئ.
 struct AcFactTile: View {
     let value: String
     let label: String
 
     var body: some View {
-        VStack(spacing: 2) {
+        VStack(spacing: SabqLayout.space4) {
             Text(value)
-                .font(SabqFonts.app(size: 15, weight: .semibold).monospacedDigit())
-                .foregroundStyle(AcTheme.onDark)
-                .lineLimit(1).minimumScaleFactor(0.7)
+                .font(SabqType.rowTitle.font.monospacedDigit())
+                .foregroundStyle(SabqTheme.textPrimary)
+                .lineLimit(1).minimumScaleFactor(0.75)
             Text(label)
-                .font(SabqFonts.app(size: 10)).foregroundStyle(AcTheme.onDarkDim)
-                .lineLimit(1).minimumScaleFactor(0.8)
+                .font(SabqFonts.app(size: 12)).foregroundStyle(SabqTheme.textSecondary)
+                .lineLimit(2)
+                .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 9).padding(.horizontal, 6)
-        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(AcTheme.card))
-        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(AcTheme.cardStroke.opacity(0.5), lineWidth: 0.5))
+        .padding(.vertical, SabqLayout.space12).padding(.horizontal, SabqLayout.space8)
+        .acQuietBlock()
     }
 }
 
@@ -244,7 +315,46 @@ struct AcFormDots: View {
         .environment(\.layoutDirection, .leftToRight)
     }
     private func color(_ ch: String) -> Color {
-        switch ch { case "W": return AcTheme.emeraldDeep; case "D": return AcTheme.onDarkDim; case "L": return AcTheme.liveRed; default: return AcTheme.cardStroke }
+        switch ch {
+        case "W": return SabqTheme.success
+        case "D": return SabqTheme.textTertiary
+        case "L": return SabqTheme.danger
+        default: return SabqTheme.outline
+        }
+    }
+}
+
+/// شارة تقييم اللاعب: الرقم بلون الحالة على تعبئة هادئة (آمن التباين في الوضعين).
+struct AcRatingBadge: View {
+    let rating: Double
+
+    var body: some View {
+        Text(String(format: "%.1f", rating))
+            .font(SabqType.tag.font.monospacedDigit())
+            .foregroundStyle(color)
+            .padding(.horizontal, SabqLayout.space8).padding(.vertical, SabqLayout.space4)
+            .background(RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous).fill(SabqTheme.surfaceMuted))
+            .environment(\.layoutDirection, .leftToRight)
+    }
+
+    private var color: Color {
+        if rating >= 8 { return SabqTheme.success }
+        if rating >= 7 { return SabqTheme.teal }
+        if rating >= 6 { return SabqTheme.warning }
+        return SabqTheme.danger
+    }
+}
+
+/// شارة رمادية صغيرة (عدد، تشكيلة، قناة).
+struct AcTag: View {
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .font(SabqType.tag.font)
+            .foregroundStyle(SabqTheme.textSecondary)
+            .padding(.horizontal, SabqLayout.space8).padding(.vertical, SabqLayout.space4)
+            .background(RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous).fill(SabqTheme.surfaceMuted))
     }
 }
 
@@ -261,9 +371,9 @@ nonisolated struct AcPlayerSelection: Identifiable {
 @ViewBuilder
 func acEmptyText(_ message: String) -> some View {
     Text(message)
-        .font(SabqFonts.app(size: 13))
-        .foregroundStyle(AcTheme.onDarkDim)
+        .font(SabqType.meta.font)
+        .foregroundStyle(SabqTheme.textSecondary)
         .multilineTextAlignment(.center)
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 28)
+        .padding(.vertical, SabqLayout.space24)
 }

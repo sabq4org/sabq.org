@@ -37,19 +37,26 @@ struct CalendarView: View {
 
     var body: some View {
         ScrollView(showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: SabqLayout.space24) {
                 header
 
                 if isLoading {
-                    VStack(spacing: 12) {
-                        SkeletonBox(height: 80, radius: SabqTheme.tileRadius)
-                        SkeletonBox(height: 80, radius: SabqTheme.tileRadius)
-                        SkeletonBox(height: 80, radius: SabqTheme.tileRadius)
+                    VStack(alignment: .leading, spacing: 0) {
+                        ForEach(0..<3, id: \.self) { index in
+                            if index > 0 { SidebarRowDivider() }
+                            VStack(alignment: .leading, spacing: SabqLayout.space8) {
+                                SkeletonBox(width: 72, height: 20, radius: SabqRadius.small)
+                                SkeletonBox(height: 16, radius: SabqRadius.small)
+                                SkeletonBox(width: 200, height: 12, radius: SabqRadius.small)
+                            }
+                            .padding(.vertical, SabqLayout.rowPadding)
+                        }
                     }
+                    .accessibilityHidden(true)
                 } else if let errorMessage {
                     EmptyStateView(
                         icon: "calendar.badge.exclamationmark",
-                        tint: SabqTheme.coral,
+                        tint: SabqTheme.danger,
                         title: "تعذّر تحميل التقويم",
                         subtitle: errorMessage,
                         action: { Task { await load() } },
@@ -63,15 +70,17 @@ struct CalendarView: View {
                         subtitle: "لا توجد فعاليات أو أيام عالمية مسجّلة للفترة القادمة."
                     )
                 } else {
-                    ForEach(Array(grouped.enumerated()), id: \.offset) { _, group in
-                        VStack(alignment: .leading, spacing: 10) {
+                    ForEach(Array(grouped.enumerated()), id: \.offset) { groupIndex, group in
+                        if groupIndex > 0 { SabqSectionBand() }
+                        VStack(alignment: .leading, spacing: SabqLayout.space4) {
                             Text(group.date)
-                                .font(SabqFonts.app(size: 12, weight: .heavy))
-                                .foregroundStyle(SabqTheme.tertiaryInk)
-                                .padding(.horizontal, 4)
+                                .font(SabqType.sectionHeading.font)
+                                .foregroundStyle(SabqTheme.textPrimary)
+                                .accessibilityAddTraits(.isHeader)
 
-                            VStack(spacing: 10) {
-                                ForEach(group.events) { event in
+                            VStack(alignment: .leading, spacing: 0) {
+                                ForEach(Array(group.events.enumerated()), id: \.element.id) { index, event in
+                                    if index > 0 { SidebarRowDivider() }
                                     eventRow(event)
                                 }
                             }
@@ -79,9 +88,9 @@ struct CalendarView: View {
                     }
                 }
             }
-            .padding(.horizontal, 18)
-            .padding(.top, 18)
-            .padding(.bottom, 60)
+            .padding(.horizontal, SabqLayout.pageMargin)
+            .padding(.top, SabqLayout.space16)
+            .padding(.bottom, SabqLayout.space40)
         }
         .background(SabqTheme.background)
         .sabqRTL()
@@ -95,56 +104,36 @@ struct CalendarView: View {
     }
 
     private func eventRow(_ event: APICalendarEvent) -> some View {
-        let tint = colorFor(type: event.type)
-        return HStack(alignment: .top, spacing: 14) {
-            RoundedRectangle(cornerRadius: 3, style: .continuous)
-                .fill(tint)
-                .frame(width: 3)
-                .frame(maxHeight: .infinity)
-
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 6) {
-                    Text(labelFor(type: event.type))
-                        .font(SabqFonts.app(size: 10, weight: .heavy))
-                        .foregroundStyle(tint)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 3)
-                        .background(Capsule().fill(tint.opacity(0.10)))
-                    if let imp = event.importance, imp >= 4 {
-                        HStack(spacing: 2) {
-                            ForEach(0..<min(imp, 5), id: \.self) { _ in
-                                Image(systemName: "star.fill")
-                                    .font(SabqFonts.app(size: 8))
-                                    .foregroundStyle(SabqTheme.gold)
-                            }
+        VStack(alignment: .leading, spacing: SabqLayout.space8) {
+            HStack(spacing: SabqLayout.space8) {
+                StatusChip(title: labelFor(type: event.type), tint: SabqTheme.primary)
+                if let imp = event.importance, imp >= 4 {
+                    HStack(spacing: 2) {
+                        ForEach(0..<min(imp, 5), id: \.self) { _ in
+                            Image(systemName: "star.fill")
+                                .font(SabqType.tag.font)
+                                .foregroundStyle(SabqTheme.warning)
                         }
                     }
-                    Spacer(minLength: 0)
+                    .accessibilityHidden(true)
                 }
-                Text(event.title)
-                    .font(SabqFonts.app(size: 14, weight: .bold))
-                    .foregroundStyle(SabqTheme.ink)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.leading)
-                if let desc = event.description, !desc.isEmpty {
-                    Text(desc)
-                        .font(SabqFonts.app(size: 12))
-                        .foregroundStyle(SabqTheme.secondaryInk)
-                        .lineLimit(3)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+                Spacer(minLength: 0)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            Text(event.title)
+                .sabqText(SabqType.rowTitle)
+                .foregroundStyle(SabqTheme.textPrimary)
+                .lineLimit(2)
+                .multilineTextAlignment(.leading)
+            if let desc = event.description, !desc.isEmpty {
+                Text(desc)
+                    .sabqText(SabqType.excerpt)
+                    .foregroundStyle(SabqTheme.textSecondary)
+                    .lineLimit(3)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
-        .padding(14)
-        .background(
-            RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                .fill(SabqTheme.surface)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                .stroke(SabqTheme.outline.opacity(0.4), lineWidth: 0.5)
-        )
+        .padding(.vertical, SabqLayout.rowPadding)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func labelFor(type: String?) -> String {
@@ -153,15 +142,6 @@ struct CalendarView: View {
         case "NATIONAL": return "يوم وطني"
         case "INTERNAL": return "حدث داخلي"
         default: return "حدث"
-        }
-    }
-
-    private func colorFor(type: String?) -> Color {
-        switch type?.uppercased() {
-        case "GLOBAL": return SabqTheme.sky
-        case "NATIONAL": return SabqTheme.primaryEnd
-        case "INTERNAL": return SabqTheme.teal
-        default: return SabqTheme.secondaryInk
         }
     }
 

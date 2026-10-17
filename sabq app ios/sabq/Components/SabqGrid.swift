@@ -10,7 +10,7 @@ import SwiftUI
 /// `minimum` الافتراضي 150 مضبوط بحيث لا ينزل أي هاتف مدعوم (≥ 375 نقطة مع
 /// هوامش 16) إلى عمود واحد؛ للبطاقات الأصغر (شعارات، أرقام) مرّر قيمة أقل.
 enum SabqGrid {
-    static func adaptive(minimum: CGFloat = 150, spacing: CGFloat = 10) -> [GridItem] {
+    static func adaptive(minimum: CGFloat = 150, spacing: CGFloat = SabqLayout.space12) -> [GridItem] {
         [GridItem(.adaptive(minimum: minimum), spacing: spacing)]
     }
 }

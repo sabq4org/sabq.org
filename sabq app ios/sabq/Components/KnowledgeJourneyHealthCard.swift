@@ -6,8 +6,8 @@ struct KnowledgeJourneyHealthCard: View {
 
     @ObservedObject private var hk = HealthKitManager.shared
 
-    private let stepsAccent = Color(red: 0.18, green: 0.62, blue: 0.42)
-    private let sleepAccent = Color(red: 0.36, green: 0.42, blue: 0.78)
+    private let stepsAccent = SabqTheme.primary
+    private let sleepAccent = SabqTheme.primary
 
     var body: some View {
         Group {
@@ -17,17 +17,10 @@ struct KnowledgeJourneyHealthCard: View {
                 invitationContent
             }
         }
-        .padding(.vertical, 10)
-        .padding(.horizontal, 12)
+        .padding(.vertical, SabqLayout.space12)
+        .padding(.horizontal, SabqLayout.space12)
         .frame(maxWidth: .infinity)
-        .background(
-            RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                .fill(SabqTheme.background)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                .stroke(SabqTheme.outline.opacity(0.4), lineWidth: 0.5)
-        )
+        .sabqBlockSurface()
         .onAppear { hk.fetchIfNeeded() }
     }
 
@@ -44,8 +37,8 @@ struct KnowledgeJourneyHealthCard: View {
             )
 
             Rectangle()
-                .fill(SabqTheme.outline.opacity(0.4))
-                .frame(width: 0.5, height: 28)
+                .fill(SabqTheme.separator)
+                .frame(width: 1, height: 28)
 
             compactMetric(
                 symbol: "moon.stars.fill",
@@ -57,16 +50,20 @@ struct KnowledgeJourneyHealthCard: View {
     }
 
     private var invitationContent: some View {
-        HStack(alignment: .center, spacing: 10) {
+        HStack(alignment: .center, spacing: SabqLayout.space12) {
             Image(systemName: "heart.text.square.fill")
                 .font(SabqFonts.app(size: 16, weight: .medium))
                 .foregroundStyle(sleepAccent)
-                .frame(width: 28, height: 28)
-                .background(Circle().fill(sleepAccent.opacity(0.12)))
+                .frame(width: 32, height: 32)
+                .background(
+                    RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
+                        .fill(SabqTheme.surface)
+                )
+                .accessibilityHidden(true)
 
             Text("اربط خطواتك ونومك")
-                .font(SabqFonts.app(size: 12, weight: .medium))
-                .foregroundStyle(SabqTheme.ink)
+                .font(SabqType.metaEmphasis.font)
+                .foregroundStyle(SabqTheme.textPrimary)
                 .lineLimit(1)
 
             Spacer(minLength: 0)
@@ -76,11 +73,13 @@ struct KnowledgeJourneyHealthCard: View {
                 Task { await hk.requestAccess() }
             } label: {
                 Text("تفعيل")
-                    .font(SabqFonts.app(size: 12, weight: .medium))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(Capsule().fill(SabqTheme.primaryEnd))
+                    .font(SabqType.metaEmphasis.font)
+                    .foregroundStyle(SabqTheme.onAction)
+                    .padding(.horizontal, SabqLayout.space16)
+                    .frame(minHeight: 36)
+                    .background(Capsule().fill(SabqTheme.actionFill))
+                    .frame(minHeight: SabqLayout.touchTarget)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
         }
@@ -89,28 +88,32 @@ struct KnowledgeJourneyHealthCard: View {
     // MARK: - Sub-views
 
     private func compactMetric(symbol: String, tint: Color, value: String, unit: String) -> some View {
-        HStack(spacing: 8) {
+        HStack(spacing: SabqLayout.space8) {
             Image(systemName: symbol)
                 .font(SabqFonts.app(size: 13, weight: .medium))
                 .foregroundStyle(tint)
-                .frame(width: 26, height: 26)
-                .background(Circle().fill(tint.opacity(0.12)))
+                .frame(width: 28, height: 28)
+                .background(
+                    RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
+                        .fill(SabqTheme.surface)
+                )
+                .accessibilityHidden(true)
 
-            VStack(alignment: .leading, spacing: 1) {
+            VStack(alignment: .leading, spacing: 0) {
                 Text(value)
-                    .font(SabqFonts.app(size: 15, weight: .semibold))
-                    .foregroundStyle(SabqTheme.ink)
+                    .font(SabqType.rowTitle.font)
+                    .foregroundStyle(SabqTheme.textPrimary)
                     .monospacedDigit()
                     .minimumScaleFactor(0.75)
                     .lineLimit(1)
                 Text(unit)
-                    .font(SabqFonts.app(size: 10, weight: .regular))
-                    .foregroundStyle(SabqTheme.tertiaryInk)
+                    .font(SabqType.tag.font)
+                    .foregroundStyle(SabqTheme.textTertiary)
                     .lineLimit(1)
             }
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, 8)
+        .padding(.horizontal, SabqLayout.space8)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 

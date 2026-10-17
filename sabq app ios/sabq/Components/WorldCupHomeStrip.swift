@@ -107,7 +107,7 @@ struct WorldCupHomeStrip: View {
                     if let champion = ov.champion {
                         championCard(champion)
                     } else {
-                        VStack(spacing: 10) {
+                        VStack(spacing: SabqLayout.space8) {
                             ForEach(matches) { f in
                                 card(f)
                             }
@@ -168,27 +168,23 @@ struct WorldCupHomeStrip: View {
         }
     }
 
-    // هوية المونديال: أخضر زمردي حيّ مع توهّج أخضر فاتح خفيف في الزاوية،
-    // والشعار الرسمي يوفّر اللمسة الذهبية بدل اللون المنفصل.
-    private var cardGradient: LinearGradient {
-        LinearGradient(
-            colors: [WCTheme.heroTop, WCTheme.royal, WCTheme.heroBottom],
-            startPoint: .topTrailing, endPoint: .bottomLeading
-        )
-    }
+    // هوية المونديال: شريط أخضر زمردي مسطّح (بلا تدرّج ولا توهّج ولا ظل)،
+    // والشعار الرسمي يوفّر اللمسة الذهبية. اللون ثابت داكن في الوضعين فنصوصه بيضاء.
+    private var bandFill: Color { WCTheme.heroTop }
+    /// نص ثانوي على الشريط الداكن الثابت.
+    private var bandSecondary: Color { Color.white.opacity(0.82) }
 
     private func card(_ f: WCFixture) -> some View {
-        HStack(spacing: 10) {
+        HStack(spacing: SabqLayout.space12) {
             // شعار البطولة الرسمي (على خلفية بيضاء لإبراز الرقم الأسود) + الهوية
-            HStack(spacing: 10) {
+            HStack(spacing: SabqLayout.space12) {
                 Image("WorldCupEmblem")
                     .resizable().scaledToFit()
                     .frame(height: 32)
-                    .padding(.horizontal, 6).padding(.vertical, 4)
-                    .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(.white))
-                    .shadow(color: .black.opacity(0.20), radius: 5, y: 2)
+                    .padding(.horizontal, SabqLayout.space8).padding(.vertical, SabqLayout.space4)
+                    .background(RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous).fill(.white))
 
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: 0) {
                     Text("مونديال 2026")
                         .font(SabqFonts.app(size: 15, weight: .semibold)).foregroundStyle(.white)
                         .lineLimit(1).minimumScaleFactor(0.8)
@@ -196,11 +192,11 @@ struct WorldCupHomeStrip: View {
                 }
                 .fixedSize(horizontal: false, vertical: true)
             }
-            .frame(width: 126, alignment: .leading)
+            .frame(width: 132, alignment: .leading)
 
             Spacer(minLength: 4)
 
-            HStack(spacing: 7) {
+            HStack(spacing: SabqLayout.space8) {
                 logo(f.home.logo)
                 centerColumn(f)
                 logo(f.away.logo)
@@ -210,58 +206,41 @@ struct WorldCupHomeStrip: View {
 
             Image(systemName: "chevron.left")
                 .font(SabqFonts.app(size: 12, weight: .medium))
-                .foregroundStyle(.white.opacity(0.9))
+                .foregroundStyle(bandSecondary)
+                .accessibilityHidden(true)
         }
-        .padding(.horizontal, 16).padding(.vertical, 13)
-        .background(
-            cardGradient
-                .overlay(alignment: .topLeading) {
-                    // توهّج أخضر فاتح ناعم يضيف عمقًا دون لون دخيل
-                    Circle()
-                        .fill(WCTheme.leaf.opacity(0.20))
-                        .frame(width: 140, height: 140)
-                        .blur(radius: 50)
-                        .offset(x: -30, y: -50)
-                }
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .stroke(.white.opacity(0.18), lineWidth: 1)
-        )
-        .shadow(color: WCTheme.royal.opacity(0.30), radius: 14, x: 0, y: 7)
+        .padding(.horizontal, SabqLayout.space16).padding(.vertical, SabqLayout.space12)
+        .background(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous).fill(bandFill))
     }
 
     private func logo(_ url: String) -> some View {
         WCRemoteImage(url: url)
-            .padding(3).frame(width: 32, height: 32)
+            .padding(4).frame(width: 32, height: 32)
             .background(Circle().fill(.white))
-            .overlay(Circle().stroke(.white.opacity(0.5), lineWidth: 1))
     }
 
     /// بطاقة البطل — تحل محل مربع المباراة بعد حسم النهائي. سطر النتيجة
     /// بصيغة «فاز على {الوصيف} W-L» الموحّدة (الفائز أولًا من الخادم).
     private func championCard(_ c: WCChampion) -> some View {
-        HStack(spacing: 10) {
-            HStack(spacing: 10) {
+        HStack(spacing: SabqLayout.space12) {
+            HStack(spacing: SabqLayout.space12) {
                 Image("WorldCupEmblem")
                     .resizable().scaledToFit()
                     .frame(height: 32)
-                    .padding(.horizontal, 6).padding(.vertical, 4)
-                    .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(.white))
-                    .shadow(color: .black.opacity(0.20), radius: 5, y: 2)
+                    .padding(.horizontal, SabqLayout.space8).padding(.vertical, SabqLayout.space4)
+                    .background(RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous).fill(.white))
 
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: 0) {
                     Text("مونديال 2026")
                         .font(SabqFonts.app(size: 15, weight: .semibold)).foregroundStyle(.white)
                         .lineLimit(1).minimumScaleFactor(0.8)
                     Text("اكتملت البطولة")
-                        .font(SabqFonts.app(size: 9)).foregroundStyle(WCTheme.leaf)
+                        .font(SabqFonts.app(size: 12)).foregroundStyle(bandSecondary)
                         .lineLimit(1).minimumScaleFactor(0.7)
                 }
                 .fixedSize(horizontal: false, vertical: true)
             }
-            .frame(width: 126, alignment: .leading)
+            .frame(width: 132, alignment: .leading)
 
             Spacer(minLength: 4)
 
@@ -270,27 +249,26 @@ struct WorldCupHomeStrip: View {
                     WCRemoteImage(url: c.team.logo)
                         .padding(4).frame(width: 40, height: 40)
                         .background(Circle().fill(.white))
-                        .overlay(Circle().stroke(WCTheme.gold.opacity(0.8), lineWidth: 1.5))
+                        .overlay(Circle().stroke(WCTheme.gold, lineWidth: 1.5))
                     Image(systemName: "trophy.fill")
-                        .font(SabqFonts.app(size: 11, weight: .medium))
+                        .font(SabqFonts.app(size: 12, weight: .medium))
                         .foregroundStyle(WCTheme.gold)
-                        .shadow(color: .black.opacity(0.35), radius: 2)
                         .offset(x: -4, y: 3)
                 }
 
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: 0) {
                     Text("🏆 بطل كأس العالم 2026")
-                        .font(SabqFonts.app(size: 10, weight: .medium))
+                        .sabqText(SabqType.tag)
                         .foregroundStyle(WCTheme.gold)
                         .lineLimit(1).minimumScaleFactor(0.7)
                     Text(c.team.name)
-                        .font(SabqFonts.app(size: 17, weight: .semibold))
+                        .font(SabqFonts.app(size: 16, weight: .semibold))
                         .foregroundStyle(.white)
                         .lineLimit(1).minimumScaleFactor(0.75)
                     if let runnerUp = c.runnerUp, let score = c.score {
                         Text("فاز على \(runnerUp.name) \(score)\(c.penalties.map { " (ركلات الترجيح \($0))" } ?? "")")
-                            .font(SabqFonts.app(size: 9, weight: .regular))
-                            .foregroundStyle(WCTheme.leaf)
+                            .font(SabqFonts.app(size: 12, weight: .regular))
+                            .foregroundStyle(bandSecondary)
                             .lineLimit(1).minimumScaleFactor(0.65)
                     }
                 }
@@ -300,39 +278,24 @@ struct WorldCupHomeStrip: View {
 
             Image(systemName: "chevron.left")
                 .font(SabqFonts.app(size: 12, weight: .medium))
-                .foregroundStyle(.white.opacity(0.9))
+                .foregroundStyle(bandSecondary)
+                .accessibilityHidden(true)
         }
-        .padding(.horizontal, 16).padding(.vertical, 13)
-        .background(
-            cardGradient
-                .overlay(alignment: .topLeading) {
-                    // توهّج ذهبي احتفالي بدل الأخضر — لحظة التتويج
-                    Circle()
-                        .fill(WCTheme.gold.opacity(0.22))
-                        .frame(width: 140, height: 140)
-                        .blur(radius: 50)
-                        .offset(x: -30, y: -50)
-                }
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .stroke(WCTheme.gold.opacity(0.35), lineWidth: 1)
-        )
-        .shadow(color: WCTheme.royal.opacity(0.30), radius: 14, x: 0, y: 7)
+        .padding(.horizontal, SabqLayout.space16).padding(.vertical, SabqLayout.space12)
+        .background(RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous).fill(bandFill))
     }
 
     /// السطر الثاني تحت العنوان: «مباشر» عند البث، أو شعار التغطية.
     @ViewBuilder private func statusLine(_ f: WCFixture) -> some View {
         if f.status.live {
-            HStack(spacing: 4) {
+            HStack(spacing: SabqLayout.space4) {
                 Circle().fill(WCTheme.liveRed).frame(width: 6, height: 6)
                 Text("مباشر الآن")
-                    .font(SabqFonts.app(size: 9, weight: .medium)).foregroundStyle(.white)
+                    .font(SabqFonts.app(size: 12)).foregroundStyle(.white)
             }
         } else {
             Text("تغطية حية بتوقيت الرياض")
-                .font(SabqFonts.app(size: 9)).foregroundStyle(WCTheme.leaf)
+                .font(SabqFonts.app(size: 12)).foregroundStyle(bandSecondary)
                 .lineLimit(1).minimumScaleFactor(0.7)
         }
     }
@@ -350,15 +313,15 @@ struct WorldCupHomeStrip: View {
         } else {
             VStack(spacing: 2) {
                 Text(WCFormat.time(f))
-                    .font(SabqFonts.app(size: 14, weight: .semibold))
+                    .font(SabqFonts.app(size: 15, weight: .semibold))
                     .foregroundStyle(.white)
                     .lineLimit(1)
                     .fixedSize()
                 // عدّاد يتحرّك كل ثانية (TimelineView) كما في الهيرو
                 TimelineView(.periodic(from: .now, by: 1)) { _ in
                     Text("تنطلق بعد \(WCFormat.countdown(to: f.timestamp))")
-                        .font(SabqFonts.app(size: 10, weight: .regular))
-                        .foregroundStyle(WCTheme.leaf)
+                        .font(SabqFonts.app(size: 12, weight: .regular))
+                        .foregroundStyle(bandSecondary)
                         .lineLimit(1).fixedSize()
                 }
             }
@@ -372,7 +335,10 @@ struct WorldCupHomeStrip: View {
         let period = f.status.label.isEmpty ? "مباشر" : f.status.label
         let minute = liveMinute(f)
 
-        return HStack(spacing: 5) {
+        return HStack(spacing: SabqLayout.space4) {
+            Circle()
+                .fill(WCTheme.liveRed)
+                .frame(width: 6, height: 6)
             Text(period)
                 .lineLimit(1)
                 .minimumScaleFactor(0.72)
@@ -386,18 +352,15 @@ struct WorldCupHomeStrip: View {
                     .environment(\.layoutDirection, .leftToRight)
             }
         }
-        .font(SabqFonts.app(size: 10, weight: .medium))
+        // نقطة حمراء ونص أبيض على الشريط الداكن (لا تعبئة حمراء تُسقط التباين في الليلي)
+        .font(SabqFonts.app(size: 12, weight: .medium))
         .foregroundStyle(.white)
-        .padding(.horizontal, 9)
-        .padding(.vertical, 5)
-        .frame(minWidth: 78, maxWidth: 94)
+        .padding(.horizontal, SabqLayout.space8)
+        .padding(.vertical, SabqLayout.space4)
+        .frame(minWidth: 78, maxWidth: 100)
         .background(
-            RoundedRectangle(cornerRadius: 11, style: .continuous)
-                .fill(WCTheme.liveRed)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 11, style: .continuous)
-                .stroke(.white.opacity(0.12), lineWidth: 1)
+            RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
+                .fill(Color.white.opacity(0.12))
         )
     }
 
