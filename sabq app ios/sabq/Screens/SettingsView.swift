@@ -24,7 +24,6 @@ struct SettingsView: View {
     @Environment(FollowedKeywordsStore.self) private var followedKeywords
     @AppStorage("appAppearance") private var appearanceRaw: String = AppAppearance.system.rawValue
     @AppStorage("articleFontSize") private var textSize: Double = 17
-    @AppStorage("appAccent") private var accentRaw: String = AppAccent.blue.rawValue
     @AppStorage("homeCardStyle") private var cardStyleRaw: String = "classic"
     @AppStorage("sabq.analytics.consent") private var analyticsConsent = false
     @State private var showLogin = false
@@ -148,8 +147,8 @@ struct SettingsView: View {
 
     /// Clears bookmarks, recent searches, followed keywords, and the
     /// in-memory image cache. Does NOT touch auth, reading preferences,
-    /// dark mode, or the accent colour — those are explicit user
-    /// settings that aren't considered "data" for this control.
+    /// or dark mode — those are explicit user settings that aren't
+    /// considered "data" for this control.
     private func clearLocalData() {
         // Drop in-memory state on the live stores too — clearing only
         // UserDefaults left the Observable bookmarks/followed lists
@@ -956,53 +955,6 @@ struct SettingsView: View {
                     Text("كلاسيكي").tag("classic")
                 }
                 .modifier(SabqAdaptivePickerStyle())
-            }
-
-            VStack(alignment: .leading, spacing: 12) {
-                Text("لون التطبيق")
-                    .font(SabqFonts.app(size: 15, weight: .semibold))
-                    .foregroundStyle(SabqTheme.ink)
-
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: dynamicTypeSize.isAccessibilitySize ? 100 : 48))], spacing: 12) {
-                    ForEach(AppAccent.allCases) { accent in
-                        let isSelected = accentRaw == accent.rawValue
-                        Button {
-                            withAnimation(reduceMotion ? nil : .spring(response: 0.3)) {
-                                accentRaw = accent.rawValue
-                            }
-                        } label: {
-                            VStack(spacing: 8) {
-                                Circle()
-                                    .fill(accent.color)
-                                    .frame(width: 40, height: 40)
-                                    .overlay {
-                                        if isSelected {
-                                            Image(systemName: "checkmark")
-                                                .font(.system(size: 16, weight: .bold))
-                                                .foregroundStyle(SabqTheme.onAction)
-                                        }
-                                    }
-                                    .overlay(
-                                        Circle()
-                                            .stroke(Color.white, lineWidth: isSelected ? 3 : 0)
-                                    )
-                                    .overlay(
-                                        Circle()
-                                            .stroke(isSelected ? accent.color : Color.clear, lineWidth: isSelected ? 2 : 0)
-                                            .padding(-3)
-                                    )
-
-                                Text(accent.title)
-                                    .font(SabqFonts.app(size: 11, weight: isSelected ? .bold : .medium))
-                                    .foregroundStyle(isSelected ? SabqTheme.primaryEnd : SabqTheme.tertiaryInk)
-                            }
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel(accent.title)
-                        .accessibilityAddTraits(isSelected ? .isSelected : [])
-                        .frame(maxWidth: .infinity, minHeight: 44)
-                    }
-                }
             }
 
             VStack(alignment: .leading, spacing: 10) {
