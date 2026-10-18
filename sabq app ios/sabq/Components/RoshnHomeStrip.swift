@@ -96,6 +96,8 @@ final class RoshnHomeStore {
 // صفري أبدًا. تختفي كليًا عند إطفاء البلوك من لوحة التحكم (blockHidden).
 
 struct RoshnHomeStrip: View {
+    @Environment(\.homeSideColumn) private var compactType
+    @Environment(\.homeSpreadLayout) private var narrow
     private let store = RoshnHomeStore.shared
 
     private var offSeasonChampion: RsChampion? {
@@ -243,6 +245,8 @@ struct RoshnHomeStrip: View {
 
     private func banner(subtitle: String, @ViewBuilder trailing: () -> some View) -> some View {
         HStack(spacing: SabqLayout.space12) {
+            // عمود الأقسام الضيق في رئيسية Duo: الشعار يُخفى ليتسع الاسم والنتيجة
+            if !narrow {
             Image("RoshnLeagueLogo")
                 .resizable()
                 .scaledToFit()
@@ -257,24 +261,27 @@ struct RoshnHomeStrip: View {
                         .strokeBorder(SabqTheme.outline.opacity(0.6), lineWidth: 0.75)
                 )
                 .accessibilityHidden(true)
+            }
 
             VStack(alignment: .leading, spacing: 2) {
                 Text("دوري روشن")
-                    .sabqText(SabqType.rowTitle)
+                    .sabqText(SabqType.rowTitle.scaled(compactType))
                     .foregroundStyle(SabqTheme.textPrimary)
                     .lineLimit(1)
                 Text(subtitle)
-                    .sabqText(SabqType.meta)
+                    .sabqText(SabqType.meta.scaled(compactType))
                     .foregroundStyle(SabqTheme.textSecondary)
                     .lineLimit(1).minimumScaleFactor(0.85)
+                // العمود الضيق: النتيجة/العدّاد تحت الاسم فلا يُقصّ «دوري روشن»
+                if narrow { trailing().padding(.top, SabqLayout.space4) }
             }
 
             Spacer(minLength: SabqLayout.space8)
 
-            trailing()
+            if !narrow { trailing() }
 
             Image(systemName: "chevron.left")
-                .font(SabqType.metaEmphasis.font)
+                .font(SabqType.metaEmphasis.scaled(compactType).font)
                 .foregroundStyle(SabqTheme.textTertiary)
                 .accessibilityHidden(true)
         }
@@ -300,7 +307,7 @@ struct RoshnHomeStrip: View {
     private func chip(background: Color? = nil, ink: Color? = nil, @ViewBuilder content: () -> some View) -> some View {
         let resolvedInk = ink ?? (background != nil ? Color.white : SabqTheme.textPrimary)
         return content()
-            .sabqText(SabqType.tag)
+            .sabqText(SabqType.tag.scaled(compactType))
             .foregroundStyle(resolvedInk)
             .padding(.horizontal, SabqLayout.space8).padding(.vertical, SabqLayout.space4)
             .background {
@@ -336,7 +343,7 @@ struct RoshnHomeStrip: View {
             HStack(spacing: SabqLayout.space4) {
                 Circle().fill(.white).frame(width: 5, height: 5)
                 Text("\(f.goals.away ?? 0) - \(f.goals.home ?? 0)")
-                    .sabqText(SabqType.metaEmphasis)
+                    .sabqText(SabqType.metaEmphasis.scaled(compactType))
                     .monospacedDigit()
                     .environment(\.layoutDirection, .leftToRight)
                 if let elapsed = f.status.elapsed, elapsed > 0 {
@@ -345,6 +352,8 @@ struct RoshnHomeStrip: View {
                         .environment(\.layoutDirection, .leftToRight)
                 }
             }
+            .lineLimit(1)
+            .fixedSize()
         }
     }
 }

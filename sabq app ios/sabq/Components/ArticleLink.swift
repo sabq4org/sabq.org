@@ -11,6 +11,11 @@ extension EnvironmentValues {
     /// يحل محل كتل الرئيسية تحت الرأس والنشرة — «سياق الخبر» في عمود Duo، فيبقى
     /// الرأس والمفتاح والنشرة ثابتة بين الوضعين ولا يُعاد بناء العمود. `nil` على الهاتف.
     @Entry var homeFeedReplacement: AnyView? = nil
+    /// Duo مفتوحًا أفقيًا: رئيسية بعمودين (الأخبار بالثلثين، والأقسام بالثلث)
+    /// بدل عمود الأخبار والقارئ — تصميم المالك المعتمد 2026-10-18.
+    @Entry var homeSpreadLayout = false
+    /// داخل عمود الأقسام (الثلث) في رئيسية Duo: الكتل تستخدم `SabqTextRole.scaled`.
+    @Entry var homeSideColumn = false
 }
 
 /// رابط خبر في رئيسية الآيفون: `NavigationLink` على الهاتف، وعلى عمود الأخبار

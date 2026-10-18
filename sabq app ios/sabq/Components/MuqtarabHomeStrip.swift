@@ -78,6 +78,7 @@ struct MuqtarabHomeStrip: View {
 }
 
 private struct MuqtarabHomeRow: View {
+    @Environment(\.homeSideColumn) private var compactType
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let topic: MuqTopic
 
@@ -96,27 +97,44 @@ private struct MuqtarabHomeRow: View {
             VStack(alignment: .leading, spacing: NewsRowStyle.textStackSpacing) {
                 SabqRTLText(
                     topic.title,
-                    uiFont: SabqType.rowTitle.uiFont,
+                    uiFont: SabqType.rowTitle.scaled(compactType).uiFont,
                     color: SabqTheme.textPrimary,
                     lineLimit: dynamicTypeSize.isAccessibilitySize ? 0 : NewsRowStyle.compactTitleLines,
                     lineSpacing: NewsRowStyle.titleLineSpacing,
-                    textStyle: SabqType.rowTitle.uiTextStyle
+                    textStyle: SabqType.rowTitle.scaled(compactType).uiTextStyle
                 )
+                if compactType {
+                    // عمود الأقسام الضيق: الاسم كاملًا في سطره، والزمن تحته بخط صغير
+                    // (طلب المالك 2026-10-18) بدل سطر واحد يقصّ الاسم والزمن معًا.
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(byline)
+                            .font(SabqType.metaEmphasis.scaled(true).font)
+                            .foregroundStyle(SabqTheme.primary)
+                            .lineLimit(1)
+                        if let date = muqRelativeDate(topic.publishedAt) {
+                            Text(date)
+                                .font(SabqFonts.app(size: 11, weight: .regular))
+                                .foregroundStyle(SabqTheme.textTertiary)
+                                .lineLimit(1)
+                        }
+                    }
+                } else {
                 HStack(spacing: SabqLayout.space4) {
                     Text(byline)
-                        .font(SabqType.metaEmphasis.font)
+                        .font(SabqType.metaEmphasis.scaled(compactType).font)
                         .foregroundStyle(SabqTheme.primary)
                         .lineLimit(1)
                     // النقطة نص مستقل: في بداية نص عربي تنقلب لآخر السطر.
                     if let date = muqRelativeDate(topic.publishedAt) {
                         Text("·")
-                            .font(SabqType.meta.font)
+                            .font(SabqType.meta.scaled(compactType).font)
                             .foregroundStyle(SabqTheme.textTertiary)
                         Text(date)
-                            .font(SabqType.meta.font)
+                            .font(SabqType.meta.scaled(compactType).font)
                             .foregroundStyle(SabqTheme.textTertiary)
                             .lineLimit(1)
                     }
+                }
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)

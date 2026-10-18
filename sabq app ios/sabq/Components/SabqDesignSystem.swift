@@ -229,6 +229,21 @@ nonisolated enum SabqType {
     static var caption: Font { SabqFonts.editorial(.caption, size: 13) }
 }
 
+extension SabqTextRole {
+    /// سلّم مضغوط لعمود الأقسام في رئيسية Duo (ثلث العرض): كل درجة أصغر
+    /// بنسبة واحدة فتبقى المراتب متناسقة. على غير ذلك يعيد الدرجة كما هي.
+    func scaled(_ compact: Bool) -> SabqTextRole {
+        guard compact else { return self }
+        let target: CGFloat
+        switch size {
+        case 20...: target = (size * 0.8).rounded()
+        case 15...: target = size - 2
+        default: target = max(11, size - 1)
+        }
+        return SabqTextRole(size: target, weight: weight, style: style, lineSpacing: max(0, lineSpacing - 1))
+    }
+}
+
 extension View {
     func sabqText(_ role: SabqTextRole) -> some View {
         font(role.font).lineSpacing(role.lineSpacing)
