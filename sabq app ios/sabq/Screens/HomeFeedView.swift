@@ -104,6 +104,7 @@ struct HomeFeedView: View {
     // ContentView. See issue #81 for the full design.
     @Environment(LiteModeManager.self) private var liteManager
     @Environment(\.homeFeedTopAccessory) private var homeFeedTopAccessory
+    @Environment(\.opensArticlesInReader) private var opensArticlesInReader
 
     var body: some View {
         // Reactive switch — flipping the manager (manual toggle or
@@ -182,8 +183,9 @@ struct HomeFeedView: View {
                     featuredSection
 
                     // مدخل الرياضة تحت الهيرو كما في الويب (SportsPortalStrip): أهم مباراة الآن أو اليوم.
+                    // الهاتف: من حافة إلى حافة كالويب؛ عمود Duo: بطاقة بهوامش الصفحة
                     SportsPortalStrip()
-                        .padding(.horizontal, -SabqLayout.pageMargin)
+                        .padding(.horizontal, opensArticlesInReader ? 0 : -SabqLayout.pageMargin)
 
                     SabqSectionBand()
 

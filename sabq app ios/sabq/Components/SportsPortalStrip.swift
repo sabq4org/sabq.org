@@ -4,6 +4,10 @@ import SwiftUI
 /// يعرض أهم مباراة سعودية أو كبرى جارية أو قادمة اليوم، وإلا عدّاد أقرب بطولة.
 struct SportsPortalStrip: View {
     @State private var headline: SportsHeadline.Headline?
+    /// عمود Duo: بطاقة بهوامش الصفحة وإطار بطاقات العمود (كشريط النشرة) بدل
+    /// الشريط الممتد من حافة إلى حافة الذي يناسب الهاتف — بطلب المالك
+    /// 2026-10-18 («يحتاج توازن مع بقية العناصر»).
+    @Environment(\.opensArticlesInReader) private var inColumn
 
     var body: some View {
         NavigationLink(value: SportsTodayRoute()) {
@@ -53,10 +57,8 @@ struct SportsPortalStrip: View {
                     .foregroundStyle(SabqTheme.primary)
             }
             .frame(height: 48)
-            .padding(.horizontal, SabqLayout.pageMargin)
-            // لون صلب يتمدد افتراضيًا في حواف الأمان: في عمود Duo مفتوحًا امتد إلى
-            // شريط الحسّاس تحت الساعة (بلاغ المالك 2026-10-18). الحافة حافة المحتوى.
-            .background(SabqTheme.surfaceMuted, ignoresSafeAreaEdges: [])
+            .padding(.horizontal, inColumn ? 12 : SabqLayout.pageMargin)
+            .modifier(StripSurface(card: inColumn))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -82,5 +84,19 @@ struct SportsPortalStrip: View {
                 : "\(m.home.name) ضد \(m.away.name)، \(h.tail)"
         }
         return h.text ?? "الرياضة"
+    }
+}
+
+private struct StripSurface: ViewModifier {
+    let card: Bool
+
+    func body(content: Content) -> some View {
+        if card {
+            content.sabqSkyCardSurface()
+        } else {
+            // لون صلب يتمدد افتراضيًا في حواف الأمان: في عمود Duo مفتوحًا امتد إلى
+            // شريط الحسّاس تحت الساعة (بلاغ المالك 2026-10-18). الحافة حافة المحتوى.
+            content.background(SabqTheme.surfaceMuted, ignoresSafeAreaEdges: [])
+        }
     }
 }
