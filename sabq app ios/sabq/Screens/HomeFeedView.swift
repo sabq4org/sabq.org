@@ -274,8 +274,8 @@ struct HomeFeedView: View {
                 await articlesStore.loadArticles(ignoreCache: true)
                 // أعد جلب شريط العاجل أيضاً حتى ينعكس أي تفعيل/تعطيل من لوحة
                 // التحكم فور السحب للتحديث.
-                breakingTicker = (try? await APIClient.shared.fetchBreakingTicker(ignoreCache: true)) ?? nil
-                audioBulletin = (try? await APIClient.shared.fetchCurrentAudioBulletin(ignoreCache: true)) ?? nil
+                await refreshBreakingTicker()
+                await refreshAudioBulletin()
             }
             // شريط "⬆️ X أخبار جديدة" عائم أسفل الشاشة فوق شريط التبويبات —
             // في الأعلى كان يغطي زر البحث في رأس الرئيسية. يسمح باللمس فقط
@@ -307,12 +307,8 @@ struct HomeFeedView: View {
                         lastForcedHeroCheck = Date()
                     } else if Date().timeIntervalSince(lastForcedHeroCheck) >= 60 {
                         await articlesStore.checkForNewArticles()
-                        if let ticker = try? await APIClient.shared.fetchBreakingTicker(ignoreCache: true) {
-                            breakingTicker = ticker
-                        } else {
-                            breakingTicker = nil
-                        }
-                        audioBulletin = (try? await APIClient.shared.fetchCurrentAudioBulletin(ignoreCache: true)) ?? nil
+                        await refreshBreakingTicker()
+                        await refreshAudioBulletin()
                         lastForcedHeroCheck = Date()
                     }
                 }
@@ -340,8 +336,8 @@ struct HomeFeedView: View {
             // on failure so the home screen still renders.
             async let upcoming: [APICalendarEvent]? = try? await APIClient.shared.fetchUpcomingCalendarEvents(days: 14)
             async let newsletters: [APIAudioNewsletter]? = try? await APIClient.shared.fetchAudioNewsletters()
-            async let bulletin = (try? await APIClient.shared.fetchCurrentAudioBulletin()) ?? nil
-            async let breaking = (try? await APIClient.shared.fetchBreakingTicker()) ?? nil
+            async let bulletin = Self.attempt { try await APIClient.shared.fetchCurrentAudioBulletin() }
+            async let breaking = Self.attempt { try await APIClient.shared.fetchBreakingTicker() }
             // Rich personal-journey insights (member-session only). Returns
             // nil for logged-out users so the block stays hidden cleanly.
             async let richJourney: APITodayInsights? = authStore.isLoggedIn
@@ -350,8 +346,9 @@ struct HomeFeedView: View {
 
             calendarToday = (await upcoming) ?? []
             latestNewsletter = (await newsletters)?.first
-            audioBulletin = await bulletin
-            breakingTicker = await breaking
+            // فشل/إلغاء الطلب لا يمسح ما يظهر (العودة للرئيسية تعيد تشغيل .task)
+            if let value = await bulletin { audioBulletin = value }
+            if let value = await breaking { breakingTicker = value }
             richInsights = await richJourney
 
             // Fetch unread editorial-notification count so the header bell's
@@ -399,13 +396,34 @@ struct HomeFeedView: View {
 
         await articlesStore.checkForNewArticles()
         // شريط العاجل من لوحة التحكم — تجاوز الكاش حتى يظهر فور التفعيل/التعديل.
-        if let ticker = try? await APIClient.shared.fetchBreakingTicker(ignoreCache: true) {
-            breakingTicker = ticker
-        } else {
-            breakingTicker = nil
-        }
-        audioBulletin = (try? await APIClient.shared.fetchCurrentAudioBulletin(ignoreCache: true)) ?? nil
+        await refreshBreakingTicker()
+        await refreshAudioBulletin()
         return true
+    }
+
+    /// يحدّث شريط النشرة من ردّ ناجح فقط (null من الخادم = لا نشرة فعلًا فيُخفى).
+    /// كان `(try? …) ?? nil` يحوّل أي فشل — انقطاع، مهلة، أو إلغاء الطلب عند
+    /// سحب التحديث أو تغيّر scenePhase — إلى nil فيختفي الشريط والنشرة قائمة.
+    /// ملاحظة: `try?` يسطّح الاختياري فلا يميّز الفشل من null؛ لذا do/catch.
+    private func refreshAudioBulletin() async {
+        do {
+            audioBulletin = try await APIClient.shared.fetchCurrentAudioBulletin(ignoreCache: true)
+        } catch {
+            // نُبقي الشريط الحالي؛ الدورة القادمة (كل دقيقة) تصحّحه
+        }
+    }
+
+    /// نجاح → .some(القيمة، ولو كانت nil)، فشل → nil. عام عمدًا: `try?` على نوع
+    /// عام لا يسطّح الاختياري، فيبقى «لا نشرة» مختلفًا عن «فشل الطلب».
+    private static func attempt<T>(_ body: () async throws -> T) async -> T? {
+        try? await body()
+    }
+
+    /// نفس القاعدة لشريط العاجل: الإخفاء بقرار الخادم لا بفشل الشبكة.
+    private func refreshBreakingTicker() async {
+        do {
+            breakingTicker = try await APIClient.shared.fetchBreakingTicker(ignoreCache: true)
+        } catch {}
     }
 
     // MARK: - New Articles Banner ("⬆️ X أخبار جديدة")
