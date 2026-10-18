@@ -1560,6 +1560,8 @@ struct CompactArticleRow: View {
     var isNew: Bool = false
     /// The category page already names the section in its header.
     var showsCategory: Bool = true
+    /// تكبير المصغّرة (رئيسية Duo مفتوحًا تكبّر صور البارزة قليلًا).
+    var thumbnailScale: CGFloat = 1
 
     // Reader can flip between the legacy thumbnail-on-the-side layout
     // ("classic") and the experimental image-on-top hero layout
@@ -1635,7 +1637,7 @@ struct CompactArticleRow: View {
                     .environment(\.sabqImageLoadFailed, true)
             }
         }
-        .frame(width: NewsRowStyle.thumbnailWidth, height: NewsRowStyle.thumbnailHeight)
+        .frame(width: NewsRowStyle.thumbnailWidth * thumbnailScale, height: NewsRowStyle.thumbnailHeight * thumbnailScale)
         .clipShape(RoundedRectangle(cornerRadius: NewsRowStyle.thumbnailRadius, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: NewsRowStyle.thumbnailRadius, style: .continuous)

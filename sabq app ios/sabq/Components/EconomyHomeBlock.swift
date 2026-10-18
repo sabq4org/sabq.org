@@ -210,6 +210,8 @@ struct EconomyWeeklyHomeCard: View {
     let isFresh: Bool
     @State private var isExpanded = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// عمود الأقسام في رئيسية Duo (ثلث العرض): أعمدة أصغر.
+    @Environment(\.homeSpreadLayout) private var narrow
 
     private var series: [Double] {
         weekly.kpis.first(where: { $0.key == "total" })?.series ?? []
@@ -288,9 +290,13 @@ struct EconomyWeeklyHomeCard: View {
                         .monospacedDigit()
                         .foregroundStyle(SabqTheme.textPrimary)
                         .accessibilityIdentifier("economy.home.figure")
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
+                        .layoutPriority(1)
                     Text(unit)
                         .font(SabqType.excerpt.font)
                         .foregroundStyle(SabqTheme.textSecondary)
+                        .lineLimit(1)
                 }
                 changeBadge
             }
@@ -299,7 +305,7 @@ struct EconomyWeeklyHomeCard: View {
             if series.count > 1 {
                 VStack(spacing: SabqLayout.space4) {
                     weeksBars
-                        .frame(width: 92, height: 54)
+                        .frame(width: narrow ? 64 : 92, height: narrow ? 44 : 54)
                     Text("آخر \(series.count) أسابيع")
                         .font(SabqType.tag.font)
                         .foregroundStyle(SabqTheme.textTertiary)

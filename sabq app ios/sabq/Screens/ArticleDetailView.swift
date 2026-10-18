@@ -128,10 +128,11 @@ struct ArticleDetailView: View {
         ArticleContext.news(article: displayArticle, related: relatedArticles, keywords: displayTags)
     }
 
-    /// الشاشة الخارجية لـ Duo: زر «سياق الخبر» تحت العنوان يفتح ورقة. مفتوحًا
-    /// ينتقل السياق إلى العمود المجاور، والهاتف العادي وiPad لا يتغيران.
+    /// Duo: زر «سياق الخبر» تحت العنوان يفتح ورقة، مطويًا ومفتوحًا (لا عمود
+    /// جانبي منذ رئيسية العمودين 2026-10-18). الهاتف العادي وiPad لا يتغيران.
     private var showsContextButton: Bool {
-        duoContentInsets != nil && !isFocusMode && !articleContext.isEmpty
+        (duoContentInsets != nil || FoldableDevice.isFoldable(observed: foldableObserved))
+            && !isFocusMode && !articleContext.isEmpty
     }
 
     /// مفتوحًا على Duo والعمود المجاور يعرض «سياق الخبر»: الموجز الذكي ينتقل
@@ -419,7 +420,7 @@ struct ArticleDetailView: View {
         .onChange(of: articleContext) { _, context in publishContext(context) }
         .onChange(of: duoContentInsets == nil) { _, isWide in
             // فُتح الجهاز والورقة ظاهرة: السياق ينتقل إلى العمود.
-            if isWide { isContextSheetPresented = false }
+            if isWide && !FoldableDevice.isFoldable(observed: foldableObserved) { isContextSheetPresented = false }
         }
         .sheet(isPresented: $isContextSheetPresented) {
             ArticleContextSheet(

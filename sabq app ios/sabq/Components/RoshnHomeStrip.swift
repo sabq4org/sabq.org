@@ -96,6 +96,7 @@ final class RoshnHomeStore {
 // صفري أبدًا. تختفي كليًا عند إطفاء البلوك من لوحة التحكم (blockHidden).
 
 struct RoshnHomeStrip: View {
+    @Environment(\.homeSpreadLayout) private var narrow
     private let store = RoshnHomeStore.shared
 
     private var offSeasonChampion: RsChampion? {
@@ -243,6 +244,8 @@ struct RoshnHomeStrip: View {
 
     private func banner(subtitle: String, @ViewBuilder trailing: () -> some View) -> some View {
         HStack(spacing: SabqLayout.space12) {
+            // عمود الأقسام الضيق في رئيسية Duo: الشعار يُخفى ليتسع الاسم والنتيجة
+            if !narrow {
             Image("RoshnLeagueLogo")
                 .resizable()
                 .scaledToFit()
@@ -257,6 +260,7 @@ struct RoshnHomeStrip: View {
                         .strokeBorder(SabqTheme.outline.opacity(0.6), lineWidth: 0.75)
                 )
                 .accessibilityHidden(true)
+            }
 
             VStack(alignment: .leading, spacing: 2) {
                 Text("دوري روشن")
@@ -345,6 +349,8 @@ struct RoshnHomeStrip: View {
                         .environment(\.layoutDirection, .leftToRight)
                 }
             }
+            .lineLimit(1)
+            .fixedSize()
         }
     }
 }

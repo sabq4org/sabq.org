@@ -56,6 +56,7 @@ struct DuoTabContainer<Content: View>: View {
                     bottom: bottomBar ? DuoBottomTabBar.height : 0
                 )
                 : nil)
+            .environment(\.homeSpreadLayout, !narrow)
             .overlay(alignment: .bottom) {
                 if bottomBar {
                     DuoBottomTabBar(selection: $selection, onReselect: onReselect)

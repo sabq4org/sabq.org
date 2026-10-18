@@ -106,6 +106,7 @@ struct HomeFeedView: View {
     @Environment(\.homeFeedTopAccessory) private var homeFeedTopAccessory
     @Environment(\.homeFeedReplacement) private var homeFeedReplacement
     @Environment(\.opensArticlesInReader) private var opensArticlesInReader
+    @Environment(\.homeSpreadLayout) private var homeSpreadLayout
 
     var body: some View {
         // Reactive switch — flipping the manager (manual toggle or
@@ -131,7 +132,9 @@ struct HomeFeedView: View {
         GeometryReader { container in
         ScrollViewReader { scrollProxy in
             ScrollView(showsIndicators: false) {
-                if isContentReady {
+                if isContentReady, homeSpreadLayout {
+                    spreadContent(containerWidth: container.size.width)
+                } else if isContentReady {
                     // Newspaper-first home: عاجل → هيرو → رياضة → رحلة → آخر الأخبار.
                     // Secondary blocks (ستوريز، تقويم، نشرة، ترند…) live in
                     // a collapsed «المزيد اليوم» disclosure.
@@ -743,6 +746,104 @@ struct HomeFeedView: View {
                         )
                     }
                 }
+            }
+        }
+    }
+
+    // MARK: - Duo Spread (open, landscape)
+
+    /// رئيسية Duo مفتوحًا (تصميم المالك المعتمد 2026-10-18): الأخبار بثلثي
+    /// العرض — البارز بالعنوان فوق الصورة، فالخبران البارزان، فآخر الأخبار —
+    /// والأقسام بالثلث: الرياضة، الاقتصاد، البطولات، المقالات، مُقترب، الأكثر
+    /// تداولًا. الخبر يُفتح بعرض الشاشة لا في قارئ جانبي.
+    private func spreadContent(containerWidth: CGFloat) -> some View {
+        let gap = SabqLayout.space24
+        let inner = max(0, containerWidth - SabqLayout.pageMargin * 2)
+        let mainWidth = max(0, (inner - gap) * 2 / 3)
+        let sideWidth = max(0, inner - gap - mainWidth)
+        return HStack(alignment: .top, spacing: gap) {
+            VStack(alignment: .leading, spacing: SabqLayout.space16) {
+                Color.clear
+                    .frame(height: 0)
+                    .id(Self.scrollTopID)
+
+                headerSection
+
+                NationalDayHeaderAccent()
+
+                if let bulletin = audioBulletin, !bulletin.audioUrl.isEmpty {
+                    AudioBulletinBar(bulletin: bulletin)
+                } else if let newsletter = latestNewsletter, newsletter.audioUrl != nil {
+                    compactLegacyNewsletterTopBar(newsletter)
+                }
+
+                if let ticker = breakingTicker, !ticker.headlines.isEmpty {
+                    BreakingTickerBar(headlines: ticker.headlines)
+                } else if !articlesStore.breakingNews.isEmpty {
+                    breakingNewsSection
+                }
+
+                spreadFeaturedSection
+
+                SabqSectionBand()
+
+                latestArticlesSection
+                    .id(Self.latestSectionID)
+            }
+            .frame(width: mainWidth, alignment: .leading)
+
+            CollapsingVStack(spacing: SabqLayout.space16) {
+                SportsPortalStrip()
+
+                if EconomyFormat.homeMode(economyStore.snapshot) != .hidden {
+                    EconomyHomeBlock()
+                }
+
+                WorldCupHomeStrip()
+                AsianCupHomeStrip()
+                KingsCupHomeStrip()
+                RoshnHomeStrip()
+
+                opinionsPreviewSection
+
+                MuqtarabHomeStrip()
+
+                trendingPreviewSection
+            }
+            .frame(width: sideWidth, alignment: .leading)
+        }
+        .padding(.horizontal, SabqLayout.pageMargin)
+        .padding(.top, SabqLayout.space16)
+        .padding(.bottom, 40)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// البارز بالعنوان فوق الصورة، ثم الخبران البارزان بصور أكبر قليلًا.
+    private var spreadFeaturedSection: some View {
+        let featured = heroArticles
+        return VStack(alignment: .leading, spacing: 0) {
+            if let lead = featured.first {
+                ArticleLink(article: lead) {
+                    SpreadHeroCard(
+                        article: lead,
+                        onBookmark: { bookmarksStore.toggle(lead.id, article: lead) },
+                        isBookmarked: bookmarksStore.isBookmarked(lead.id)
+                    )
+                }
+                .buttonStyle(.plain)
+                .padding(.bottom, SabqLayout.space8)
+            }
+            ForEach(Array(featured.dropFirst().enumerated()), id: \.element.id) { index, article in
+                if index > 0 { SidebarRowDivider() }
+                ArticleLink(article: article) {
+                    CompactArticleRow(
+                        article: article,
+                        onBookmark: { bookmarksStore.toggle(article.id, article: article) },
+                        isBookmarked: bookmarksStore.isBookmarked(article.id),
+                        thumbnailScale: 1.35
+                    )
+                }
+                .buttonStyle(.plain)
             }
         }
     }

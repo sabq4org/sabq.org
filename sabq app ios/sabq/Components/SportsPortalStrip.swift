@@ -8,6 +8,7 @@ struct SportsPortalStrip: View {
     /// الشريط الممتد من حافة إلى حافة الذي يناسب الهاتف — بطلب المالك
     /// 2026-10-18 («يحتاج توازن مع بقية العناصر»).
     @Environment(\.opensArticlesInReader) private var inColumn
+    @Environment(\.homeSpreadLayout) private var inSpread
 
     var body: some View {
         ReaderLink(value: SportsTodayRoute()) {
@@ -58,7 +59,7 @@ struct SportsPortalStrip: View {
             }
             .frame(height: 48)
             .padding(.horizontal, inColumn ? 12 : SabqLayout.pageMargin)
-            .modifier(StripSurface(card: inColumn))
+            .modifier(StripSurface(card: inColumn || inSpread))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
