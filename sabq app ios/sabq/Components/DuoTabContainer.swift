@@ -70,13 +70,14 @@ struct DuoTabContainer<Content: View>: View {
             // SwiftUI هنا مباشرة يقع تحت مكدّسات التنقل، فكانت الصفحات المدفوعة —
             // خلفيتها معتمة حتى حافة الشاشة — تغطي الشريط ولا يبقى ظاهرًا إلا فوق
             // جذر التبويب الشفاف (هرمية العرض على المحاكي 2026-10-18).
-            // مفتوحًا: الشريط في شريط جهة البداية (اليمين، تحت الساعة) — طلب المالك
+            // مفتوحًا: الشريط أسفل شريط جهة البداية (اليمين) — طلب المالك
             // 2026-10-18. UIKit يحجز الشريطين بالتساوي مفتوحًا، فإن ضاق الأيمن عن
             // الشريط يبقى أسفل الجهة الأخرى كما كان.
-            .overlay(alignment: proxy.safeAreaInsets.leading >= DuoPosture.sideRailMinStrip ? .leading : .bottomTrailing) {
+            .overlay(alignment: proxy.safeAreaInsets.leading >= DuoPosture.sideRailMinStrip ? .bottomLeading : .bottomTrailing) {
                 if !narrow {
                     if proxy.safeAreaInsets.leading >= DuoPosture.sideRailMinStrip {
-                        AbovePlatformViews(content: DuoTabRail(selection: $selection, onReselect: onReselect, horizontalPadding: 0, centered: true))
+                        AbovePlatformViews(content: DuoTabRail(selection: $selection, onReselect: onReselect, horizontalPadding: 0, centered: true)
+                            .padding(.bottom, 12))
                             .frame(width: proxy.safeAreaInsets.leading)
                             .offset(x: stripOffset(edge: .leading, insets: proxy.safeAreaInsets))
                     } else {
