@@ -61,6 +61,22 @@ enum DuoPosture {
     static func usesBottomTabBar(windowWidth: CGFloat) -> Bool {
         windowWidth < matchColumnsMinWidth
     }
+
+    /// أدنى عرض لشريط الحسّاس الجانبي يتّسع لشريط التبويب العمودي (`DuoTabRail`
+    /// ‏76 نقطة؛ الشريط 84).
+    static let sideRailMinStrip: CGFloat = 76
+
+    /// على الشاشة الضيقة: الجهة التي فيها شريط حسّاس جانبي يتّسع لشريط التبويب
+    /// العمودي، فيُعرض فيه بدل الشريط السفلي (طلب المالك 2026-10-18 — الشريط
+    /// تحت الساعة فارغ، وإزالة الشريط السفلي تعيد للأخبار ~54 نقطة ارتفاعًا).
+    /// `nil` = لا شريط جانبي كافٍ (أو النافذة عريضة) فيبقى الشريط السفلي/الجانبي
+    /// المعتاد.
+    static func sideStripRailEdge(windowWidth: CGFloat, leadingInset: CGFloat, trailingInset: CGFloat) -> HorizontalEdge? {
+        guard usesBottomTabBar(windowWidth: windowWidth) else { return nil }
+        let widest = max(leadingInset, trailingInset)
+        guard widest >= sideRailMinStrip else { return nil }
+        return leadingInset >= trailingInset ? .leading : .trailing
+    }
 }
 
 // واجهات المفصلة موجودة في SDK ‏iOS 27.1 فقط؛ `#available` لا يكفي لأن الرموز

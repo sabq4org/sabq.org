@@ -39,6 +39,17 @@ struct DuoLayoutTests {
         #expect(!DuoPosture.usesBottomTabBar(windowWidth: 951))  // مفتوحًا
     }
 
+    @Test func tabRailMovesIntoSensorStripWhenFolded() {
+        // الشاشة الخارجية بحسّاس جانبي 84 نقطة: الشريط في جهة الحسّاس
+        #expect(DuoPosture.sideStripRailEdge(windowWidth: 466, leadingInset: 84, trailingInset: 0) == .leading)
+        #expect(DuoPosture.sideStripRailEdge(windowWidth: 466, leadingInset: 0, trailingInset: 84) == .trailing)
+        // بلا شريط جانبي أو بشريط أضيق من الشريط العمودي: يبقى السفلي
+        #expect(DuoPosture.sideStripRailEdge(windowWidth: 466, leadingInset: 0, trailingInset: 0) == nil)
+        #expect(DuoPosture.sideStripRailEdge(windowWidth: 466, leadingInset: 44, trailingInset: 0) == nil)
+        // مفتوحًا: الشريط الجانبي المعتاد لا شريط الحسّاس
+        #expect(DuoPosture.sideStripRailEdge(windowWidth: 951, leadingInset: 84, trailingInset: 84) == nil)
+    }
+
     // MARK: - الموجز
 
     @Test func summaryPointsSplitSentencesButNotDecimals() {
