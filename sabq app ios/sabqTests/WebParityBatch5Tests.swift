@@ -15,17 +15,18 @@ struct WebParityBatch5Tests {
          "counters":{"monthOps":0,"teamCount":16}}
         """.data(using: .utf8)!
         let team = try JSONDecoder().decode(APIAITeam.self, from: json)
-        #expect(team.isRenderable)
+        #expect(!team.team.isEmpty)
         #expect(team.team[0].absoluteAvatarURL?.absoluteString == "https://sabq.org/ai-team/rased.jpg")
         #expect(team.team[1].absoluteAvatarURL == nil)
         #expect(team.counters?.monthOps == 0)
     }
 
+    // `isRenderable` حُذف مع شاشة الفريق القديمة (#1920)؛ «عقل سبق» يعرض الفريق متى لم يكن فارغًا.
     @Test func aiTeamWithoutMembersIsNotRenderable() throws {
         let team = try JSONDecoder().decode(APIAITeam.self, from: #"{"team":[]}"#.data(using: .utf8)!)
-        #expect(!team.isRenderable)
+        #expect(team.team.isEmpty)
         let missing = try JSONDecoder().decode(APIAITeam.self, from: #"{"generatedAt":"x"}"#.data(using: .utf8)!)
-        #expect(!missing.isRenderable)
+        #expect(missing.team.isEmpty)
     }
 
     // MARK: - 14. المشاهدات على بطاقة الرأي

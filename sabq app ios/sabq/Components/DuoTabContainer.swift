@@ -7,7 +7,8 @@ import SwiftUI
 /// نقطة — والحجز يبقى حتى لو أُخفي الشريط لأنه يأتي من `UITabBarController`.
 /// هنا التبويبات الأربعة أحياء داخل `ZStack` (كما يبقيها `TabView`، فلا تضيع
 /// الحالة عند التبديل)، والشريط:
-/// - سفلي حين تضيق النافذة عن عمودين (الشاشة الخارجية بأي وضعية).
+/// - في شريط الحسّاس الجانبي حين تضيق النافذة ويوجد شريط حسّاس يتّسع له
+///   (الشاشة الخارجية مطويًا من الوضع الأفقي)، وإلا سفلي.
 /// - جانبي في الجهة المقابلة للعمود الجانبي حين تتسع (مفتوحًا أو كتابًا)،
 ///   كالشريط النظامي اليوم.
 ///
@@ -21,8 +22,21 @@ struct DuoTabContainer<Content: View>: View {
 
     var body: some View {
         GeometryReader { proxy in
-            let windowWidth = proxy.size.width + proxy.safeAreaInsets.leading + proxy.safeAreaInsets.trailing
-            let bottomBar = DuoPosture.usesBottomTabBar(windowWidth: windowWidth)
+            // منطقة المحتوى نفسها التي يقيسها `SabqTabNavigation` لقرار العمودين —
+            // القياس بالنافذة (مع شريط الحسّاس) جعل الخارجية أفقيًا عمودًا واحدًا
+            // بشريط جانبي عائم فوق الصورة (محاكي 2026-10-18).
+            let windowWidth = proxy.size.width
+            let windowHeight = proxy.size.height
+            let narrow = DuoPosture.usesBottomTabBar(windowWidth: windowWidth, windowHeight: windowHeight)
+            // مطويًا بحسّاس جانبي: الشريط العمودي في شريط الحسّاس الفارغ تحت
+            // الساعة بدل الشريط السفلي، فيستعيد المحتوى ارتفاع الشريط.
+            let stripEdge = DuoPosture.sideStripRailEdge(
+                windowWidth: windowWidth,
+                windowHeight: windowHeight,
+                leadingInset: proxy.safeAreaInsets.leading,
+                trailingInset: proxy.safeAreaInsets.trailing
+            )
+            let bottomBar = narrow && stripEdge == nil
             ZStack {
                 ForEach(AppTab.allCases) { tab in
                     if loaded.contains(tab) || tab == selection {
@@ -35,11 +49,11 @@ struct DuoTabContainer<Content: View>: View {
                     }
                 }
             }
-            .environment(\.duoContentInsets, bottomBar
+            .environment(\.duoContentInsets, narrow
                 ? DuoContentInsets(
                     leading: proxy.safeAreaInsets.leading,
                     trailing: proxy.safeAreaInsets.trailing,
-                    bottom: DuoBottomTabBar.height
+                    bottom: bottomBar ? DuoBottomTabBar.height : 0
                 )
                 : nil)
             .overlay(alignment: .bottom) {
@@ -51,12 +65,26 @@ struct DuoTabContainer<Content: View>: View {
             // الحافة البعيدة (حواف متماثلة)، والشريط يقع داخله كما يقع شريط
             // النظام اليوم، فلا يغطي نصًا.
             .overlay(alignment: .bottomTrailing) {
-                if !bottomBar {
+                if !narrow {
                     DuoTabRail(selection: $selection, onReselect: onReselect)
+                }
+            }
+            // الشريط العمودي داخل شريط الحسّاس (خارج منطقة المحتوى الآمنة)
+            .overlay(alignment: stripEdge == .trailing ? .trailing : .leading) {
+                if let edge = stripEdge {
+                    DuoTabRail(selection: $selection, onReselect: onReselect, horizontalPadding: 0, centered: true)
+                        .frame(width: edge == .leading ? proxy.safeAreaInsets.leading : proxy.safeAreaInsets.trailing)
+                        .offset(x: stripOffset(edge: edge, insets: proxy.safeAreaInsets))
                 }
             }
         }
         .onChange(of: selection, initial: true) { _, tab in loaded.insert(tab) }
+    }
+
+    /// يزيح الشريط من حافة منطقة المحتوى إلى داخل شريط الحسّاس. `offset` يتبع
+    /// اتجاه الواجهة (يُعكس في RTL — مقيس على المحاكي)، فالسالب نحو البداية.
+    private func stripOffset(edge: HorizontalEdge, insets: EdgeInsets) -> CGFloat {
+        edge == .leading ? -insets.leading : insets.trailing
     }
 }
 
@@ -130,10 +158,15 @@ struct DuoBottomTabBar: View {
 struct DuoTabRail: View {
     @Binding var selection: AppTab
     var onReselect: (AppTab) -> Void = { _ in }
+    /// 10 بجوار القارئ مفتوحًا؛ 0 داخل شريط الحسّاس مطويًا (عرضه يحدده الإطار).
+    var horizontalPadding: CGFloat = 10
+    /// مفتوحًا أسفل الحافة؛ في شريط الحسّاس وسطه، فالكاميرا أعلاه رأسيًا وأسفله
+    /// أفقيًا (محاكي 2026-10-18).
+    var centered = false
 
     var body: some View {
         VStack {
-            Spacer(minLength: 0)
+            if !centered { Spacer(minLength: 0) }
             VStack(spacing: 6) {
                 ForEach(AppTab.allCases) { tab in
                     DuoTabButton(tab: tab, selection: $selection, onReselect: onReselect) { isSelected in
@@ -156,9 +189,9 @@ struct DuoTabRail: View {
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
                     .strokeBorder(SabqTheme.outline.opacity(0.6), lineWidth: 0.5)
             }
-            .padding(.bottom, 12)
+            .padding(.bottom, centered ? 0 : 12)
         }
-        .padding(.horizontal, 10)
+        .padding(.horizontal, horizontalPadding)
     }
 }
 

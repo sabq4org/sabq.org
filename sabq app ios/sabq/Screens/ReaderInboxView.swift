@@ -14,6 +14,7 @@ struct ReaderInboxView: View {
     @State private var loading = true
     @State private var loadingMore = false
     @State private var loadError: String?
+    @State private var showSettings = false
 
     private var hasEditorial: Bool {
         guard let user = authStore.currentUser else { return false }
@@ -48,6 +49,31 @@ struct ReaderInboxView: View {
                 if loadingMore {
                     ProgressView().frame(maxWidth: .infinity).listRowBackground(SabqTheme.background)
                 }
+            } header: {
+                HStack(spacing: SabqLayout.space16) {
+                    if notificationsStore.readerUnread > 0 {
+                        Text(Self.unreadLabel(notificationsStore.readerUnread))
+                            .sabqText(SabqType.metaEmphasis)
+                            .foregroundStyle(SabqTheme.textSecondary)
+                    }
+                    Spacer(minLength: 0)
+                    if notificationsStore.readerUnread > 0 {
+                        Button("قراءة الكل") { markAllRead() }
+                            .sabqText(SabqType.metaEmphasis)
+                            .foregroundStyle(SabqTheme.primary)
+                            .frame(minHeight: SabqLayout.touchTarget)
+                    }
+                    Button { showSettings = true } label: {
+                        Label("الإعدادات", systemImage: "gearshape")
+                            .sabqText(SabqType.metaEmphasis)
+                            .foregroundStyle(SabqTheme.primary)
+                    }
+                    .frame(minHeight: SabqLayout.touchTarget)
+                    .accessibilityLabel("إعدادات الإشعارات")
+                }
+                .textCase(nil)
+                // هامش رأس القائمة الافتراضي ~10 نقاط على شاشة Duo المطوية
+                .padding(.horizontal, SabqLayout.space8)
             }
         }
         .listStyle(.plain)
@@ -57,18 +83,12 @@ struct ReaderInboxView: View {
         .sabqRTL()
         .navigationTitle("الإشعارات")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                NavigationLink(value: ReaderNotificationSettingsRoute()) {
-                    Image(systemName: "gearshape")
-                }
-                .accessibilityLabel("إعدادات الإشعارات")
-            }
-            if notificationsStore.readerUnread > 0 {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("قراءة الكل") { markAllRead() }
-                }
-            }
+        // لا أزرار في شريط التنقل: على Duo ينزل زر الأيقونة سطرًا ثانيًا تحت زر
+        // الرجوع فيغطي أول إشعار (محاكي 2026-10-18، حتى في HStack). الإعدادات
+        // و«قراءة الكل» في رأس القائمة.
+        .navigationDestination(isPresented: $showSettings) {
+            ReaderNotificationSettingsView()
+                .duoContentInsets()
         }
         .task(id: authStore.isLoggedIn) { await load() }
         // مهمة منفصلة: تغيّر الحالة أثناء السحب كان يلغي مهمة refreshable
@@ -152,6 +172,15 @@ struct ReaderInboxView: View {
             .frame(width: 36, height: 36)
             .background(RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous).fill(SabqTheme.surfaceMuted))
             .accessibilityHidden(true)
+    }
+
+    static func unreadLabel(_ n: Int) -> String {
+        switch n {
+        case 1: return "إشعار غير مقروء"
+        case 2: return "إشعاران غير مقروءين"
+        case 3...10: return "\(n) إشعارات غير مقروءة"
+        default: return "\(n) إشعارًا غير مقروء"
+        }
     }
 
     static func symbol(for type: String) -> String {

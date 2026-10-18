@@ -103,6 +103,9 @@ struct HomeFeedView: View {
     // swaps between the full feed and HomeLiteView. Injected from
     // ContentView. See issue #81 for the full design.
     @Environment(LiteModeManager.self) private var liteManager
+    @Environment(\.homeFeedTopAccessory) private var homeFeedTopAccessory
+    @Environment(\.homeFeedReplacement) private var homeFeedReplacement
+    @Environment(\.opensArticlesInReader) private var opensArticlesInReader
 
     var body: some View {
         // Reactive switch — flipping the manager (manual toggle or
@@ -139,6 +142,11 @@ struct HomeFeedView: View {
 
                         headerSection
 
+                    // عمود Duo مفتوحًا: مفتاح «الأخبار | سياق الخبر» تحت الرأس
+                    if let accessory = homeFeedTopAccessory {
+                        accessory
+                    }
+
                     // لمسة السدو الموسمية: شريط رفيع تحت الرأس وحده. لا يقع
                     // خلف نصوص الأخبار، ولا يتكرّر في البطاقات. يختفي تمامًا
                     // عند إطفاء المفتاح.
@@ -159,11 +167,15 @@ struct HomeFeedView: View {
 
                     // «نشرة سَبْق» الصوتية — شريط مدمج أعلى الرئيسية يظهر فقط عند توفر نشرة.
                     if let bulletin = audioBulletin, !bulletin.audioUrl.isEmpty {
-                        audioBulletinTopBar(bulletin)
+                        AudioBulletinBar(bulletin: bulletin)
                     } else if let newsletter = latestNewsletter, newsletter.audioUrl != nil {
                         compactLegacyNewsletterTopBar(newsletter)
                     }
 
+                    // عمود Duo على «سياق الخبر»: السياق مكان الكتل، والرأس والنشرة كما هي
+                    if let replacement = homeFeedReplacement {
+                        replacement
+                    } else {
                     // عاجل — يظهر في الأعلى وفوق الخبر الرئيسي مباشرة.
                     if let ticker = breakingTicker, !ticker.headlines.isEmpty {
                         BreakingTickerBar(headlines: ticker.headlines)
@@ -176,8 +188,9 @@ struct HomeFeedView: View {
                     featuredSection
 
                     // مدخل الرياضة تحت الهيرو كما في الويب (SportsPortalStrip): أهم مباراة الآن أو اليوم.
+                    // الهاتف: من حافة إلى حافة كالويب؛ عمود Duo: بطاقة بهوامش الصفحة
                     SportsPortalStrip()
-                        .padding(.horizontal, -SabqLayout.pageMargin)
+                        .padding(.horizontal, opensArticlesInReader ? 0 : -SabqLayout.pageMargin)
 
                     SabqSectionBand()
 
@@ -226,6 +239,7 @@ struct HomeFeedView: View {
                     if !calendarToday.isEmpty {
                         calendarTodayCard
                     }
+                    } // homeFeedReplacement
                 }
                 .frame(width: max(0, container.size.width - 32), alignment: .leading)
                 .padding(.horizontal, 16)
@@ -565,7 +579,7 @@ struct HomeFeedView: View {
                 .accessibilityLabel("تبديل المظهر — الحالي: \((AppAppearance(rawValue: appearanceRaw) ?? .system).arabicLabel)")
 
                 // «مواعيدك» — رابط رئيسي في رأس الويب: الرواتب والدعم والإجازات.
-                NavigationLink(value: MawaeedRoute()) {
+                ReaderLink(value: MawaeedRoute()) {
                     headerIcon("calendar")
                 }
                 .buttonStyle(.plain)
@@ -575,7 +589,7 @@ struct HomeFeedView: View {
                 // to avoid confusing it with the editorial-notifications
                 // unread indicator on the bell next to it — same colour
                 // would have meant two different things side by side.
-                NavigationLink(value: MomentByMomentRoute()) {
+                ReaderLink(value: MomentByMomentRoute()) {
                     headerIcon("dot.radiowaves.left.and.right")
                 }
                 .buttonStyle(.plain)
@@ -584,7 +598,7 @@ struct HomeFeedView: View {
                 // جرس الإشعارات — صندوق القارئ (/v1/inbox)، وفي أعلاه للكتّاب
                 // صفّ «إشعاراتي التحريرية». النقطة الحمراء = غير المقروء في الاثنين.
                 if authStore.isLoggedIn {
-                    NavigationLink(value: ReaderInboxRoute()) {
+                    ReaderLink(value: ReaderInboxRoute()) {
                         headerIcon("bell")
                             .overlay(alignment: .topTrailing) {
                                 // Red unread dot — driven by NotificationsStore's
@@ -608,7 +622,7 @@ struct HomeFeedView: View {
                         : "الإشعارات")
                 }
 
-                NavigationLink(value: SearchRoute()) {
+                ReaderLink(value: SearchRoute()) {
                     headerIcon("magnifyingglass")
                 }
                 .buttonStyle(.plain)
@@ -637,7 +651,7 @@ struct HomeFeedView: View {
     @ViewBuilder
     private var breakingNewsSection: some View {
         if let article = articlesStore.breakingNews.first {
-            NavigationLink(value: article) {
+            ArticleLink(article: article) {
                 HStack(alignment: .top, spacing: 12) {
                     VStack(spacing: 2) {
                         HStack(spacing: 4) {
@@ -699,7 +713,7 @@ struct HomeFeedView: View {
         let featured = heroArticles
         return VStack(alignment: .leading, spacing: 0) {
             if let lead = featured.first {
-                NavigationLink(value: lead) {
+                ArticleLink(article: lead) {
                     FeaturedArticleCard(
                         article: lead,
                         onBookmark: { bookmarksStore.toggle(lead.id, article: lead) },
@@ -711,7 +725,7 @@ struct HomeFeedView: View {
             }
             ForEach(Array(featured.dropFirst().enumerated()), id: \.element.id) { index, article in
                 if index > 0 || featured.first != nil { SidebarRowDivider() }
-                NavigationLink(value: article) {
+                ArticleLink(article: article) {
                     CompactArticleRow(
                         article: article,
                         onBookmark: { bookmarksStore.toggle(article.id, article: article) },
@@ -768,7 +782,7 @@ struct HomeFeedView: View {
     private var trendingPreviewSection: some View {
         if !articlesStore.trendingArticles.isEmpty {
             HomeSectionCard(title: "الأكثر تداولًا", context: "آخر 48 ساعة") {
-                NavigationLink(value: TrendingRoute()) {
+                ReaderLink(value: TrendingRoute()) {
                     HomeSectionLinkLabel()
                 }
                 .buttonStyle(.plain)
@@ -778,7 +792,7 @@ struct HomeFeedView: View {
                         SidebarRowDivider()
                     }
 
-                    NavigationLink(value: article) {
+                    ArticleLink(article: article) {
                         HStack(alignment: .top, spacing: 12) {
                             Text("\(index + 1)")
                                 .font(SabqType.metaEmphasis.font)
@@ -823,7 +837,7 @@ struct HomeFeedView: View {
         if !opinions.isEmpty {
             SabqSectionBand()
             HomeSectionCard(title: "آراء تستحق القراءة") {
-                NavigationLink(value: OpinionsRoute()) {
+                ReaderLink(value: OpinionsRoute()) {
                     HomeSectionLinkLabel()
                 }
                 .buttonStyle(.plain)
@@ -833,7 +847,7 @@ struct HomeFeedView: View {
                         if index > 0 {
                             OpinionRowDivider()
                         }
-                        NavigationLink(value: opinion) {
+                        ReaderLink(value: opinion) {
                             OpinionWriterRow(opinion: opinion)
                         }
                         .buttonStyle(.plain)
@@ -873,7 +887,7 @@ struct HomeFeedView: View {
                     SidebarRowDivider()
                 }
 
-                NavigationLink(value: article) {
+                ArticleLink(article: article) {
                     CompactArticleRow(
                         article: article,
                         onBookmark: { bookmarksStore.toggle(article.id, article: article) },
@@ -1153,7 +1167,7 @@ struct HomeFeedView: View {
                     icon: "calendar",
                     tint: gold
                 )
-                NavigationLink(value: CalendarRoute()) {
+                ReaderLink(value: CalendarRoute()) {
                     Text("الكل")
                         .font(SabqType.tag.font)
                         .foregroundStyle(gold)
@@ -1184,98 +1198,6 @@ struct HomeFeedView: View {
     }
 
     // MARK: - Compact Audio Bulletin Top Bar
-
-    private func audioBulletinKey(_ id: String) -> String {
-        "audio-bulletin:\(id)"
-    }
-
-    private func audioBulletinTopBar(_ bulletin: APIAudioBulletin) -> some View {
-        let key = audioBulletinKey(bulletin.id)
-        let isCurrent = audioPlayer.currentKey == key
-        let isPlaying = audioPlayer.isPlaying(key: key)
-        let elapsed = isCurrent ? audioPlayer.currentTime : 0
-        let total = max(1, bulletin.durationSec)
-        let duration = (isCurrent && audioPlayer.currentDuration > 0) ? audioPlayer.currentDuration : total
-        let progress = min(1.0, max(0.0, elapsed / duration))
-        let activeSubtitle: String = {
-            if (isPlaying || elapsed > 0), let active = bulletin.activeChapter(at: elapsed) {
-                return active.chapter.label
-            }
-            return bulletin.title
-        }()
-        let minutes = max(1, Int((bulletin.durationSec / 60.0).rounded()))
-        let durationLabel: String = {
-            if isPlaying || elapsed > 0 {
-                return "\(formatBulletinClock(elapsed)) / \(formatBulletinClock(duration))"
-            }
-            return minutes == 1 ? "دقيقة" : (minutes == 2 ? "دقيقتان" : "\(minutes) د")
-        }()
-
-        return Button {
-            guard let url = URL(string: bulletin.audioUrl) else { return }
-            SabqHaptics.medium()
-            audioPlayer.toggle(
-                SabqAudioPlayer.Item(
-                    key: key,
-                    url: url,
-                    title: bulletin.title,
-                    subtitle: "نشرة سَبْق الصوتية",
-                    artworkURL: nil,
-                    delivery: .stream
-                )
-            )
-        } label: {
-            VStack(spacing: isCurrent ? 6 : 0) {
-                HStack(spacing: 10) {
-                    ZStack {
-                        Circle()
-                            .fill(SabqTheme.primary)
-                            .frame(width: 30, height: 30)
-                        Image(systemName: isPlaying ? "pause.fill" : "play.fill")
-                            .font(.system(size: 11, weight: .bold))
-                            .foregroundStyle(SabqTheme.onAction)
-                    }
-
-                    HStack(spacing: 6) {
-                        Text("نشرة سَبْق")
-                            .font(SabqType.tag.font)
-                            .foregroundStyle(SabqTheme.primary)
-                            .padding(.horizontal, 7)
-                            .padding(.vertical, 2)
-                            .background(
-                                Capsule(style: .continuous)
-                                    .fill(SabqTheme.surface)
-                            )
-
-                        Text(activeSubtitle)
-                            .font(SabqType.metaEmphasis.font)
-                            .foregroundStyle(SabqTheme.textPrimary)
-                            .lineLimit(1)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-
-                    Text(durationLabel)
-                        .font(SabqType.tag.font)
-                        .foregroundStyle(SabqTheme.textSecondary)
-                        .monospacedDigit()
-                        .environment(\.layoutDirection, .leftToRight)
-                }
-
-                if isCurrent {
-                    // ترددات تتحرك أثناء الاستماع وتسكن عند الإيقاف، وتبيّن التقدم
-                    BulletinWaveform(progress: progress, isPlaying: isPlaying)
-                        .transition(.opacity)
-                }
-            }
-            .animation(.easeOut(duration: 0.25), value: isCurrent)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .sabqSkyCardSurface()
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(isPlaying ? "إيقاف نشرة سبق الصوتية: \(activeSubtitle)" : "تشغيل نشرة سبق الصوتية: \(bulletin.title)")
-    }
 
     private func compactLegacyNewsletterTopBar(_ newsletter: APIAudioNewsletter) -> some View {
         let key = "newsletter:\(newsletter.id)"
@@ -1337,10 +1259,6 @@ struct HomeFeedView: View {
         .buttonStyle(.plain)
     }
 
-    private func formatBulletinClock(_ seconds: Double) -> String {
-        let s = max(0, Int(seconds.rounded(.down)))
-        return String(format: "%d:%02d", s / 60, s % 60)
-    }
 
     private func sectionHeading(title: String, icon: String, tint: Color) -> some View {
         HStack(spacing: 8) {

@@ -123,7 +123,7 @@ struct RoshnHomeStrip: View {
         ZStack {
             HomeStripAnchor()
             if let h = store.hero, !hidden {
-                NavigationLink(value: RoshnRoute()) {
+                ReaderLink(value: RoshnRoute()) {
                     if let champion = offSeasonChampion {
                         championCard(champion)
                     } else if h.preSeason, !h.inSeason, let opener = cardFixture, !opener.started {

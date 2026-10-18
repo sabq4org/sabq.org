@@ -59,6 +59,15 @@ final class SabqNavigationState {
         if readerContext != context { readerContext = context }
     }
 
+    /// يسحب سياق خبر لم يعد ظاهرًا في القارئ (غُطّي بوجهة أخرى كـ«مُقترب»).
+    /// بالمعرّف فقط: إن نشرت الوجهة الجديدة سياقها قبل اختفاء القديمة لا يُمسح.
+    /// بلاغ المالك 2026-10-18: «سياق الخبر» عرض خبر الأباتشي ومقال مُقترب مفتوح.
+    func withdrawReaderContext(id: String) {
+        guard readerContext?.id == id else { return }
+        readerContext = nil
+        homeSidebarMode = .news
+    }
+
     /// جسر الطي/الفتح على iPhone Duo (وتقسيم الشاشة على iPad).
     ///
     /// التخطيطان العريض والضيق يتشاركان `paths[.home]`، لكن الخبر المفتوح في
@@ -71,16 +80,23 @@ final class SabqNavigationState {
     /// - الفتح (ضيق → عريض): إن كان المكدّس ما زال يحمل ذلك الخبر وحده،
     ///   يُزال لأن القارئ يعرضه أصلًا. إن تعمّق المستخدم بعده (كلمة مفتاحية،
     ///   كاتب…) يبقى المكدّس كما هو فوق القارئ.
+    ///
+    /// الدفع والإزالة بلا حركة: الجسر جزء من الطي نفسه، فيظهر الخبر في مكانه
+    /// بدل أن ينزلق كأن المستخدم فتحه للتو.
     func homeLayoutDidChange(isWide: Bool) {
         let path = paths[.home] ?? NavigationPath()
-        if isWide {
-            if bridgedReaderArticleIntoStack, path.count == 1 {
-                paths[.home] = NavigationPath()
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            if isWide {
+                if bridgedReaderArticleIntoStack, path.count == 1 {
+                    paths[.home] = NavigationPath()
+                }
+                bridgedReaderArticleIntoStack = false
+            } else if path.isEmpty, let article = homeReaderArticle {
+                paths[.home] = NavigationPath([article])
+                bridgedReaderArticleIntoStack = true
             }
-            bridgedReaderArticleIntoStack = false
-        } else if path.isEmpty, let article = homeReaderArticle {
-            paths[.home] = NavigationPath([article])
-            bridgedReaderArticleIntoStack = true
         }
     }
 }
@@ -123,10 +139,13 @@ struct SabqTabNavigation<Root: View, Sidebar: View, Detail: View>: View {
 
     var body: some View {
         GeometryReader { geo in
-            let isWide = usesReaderColumns
-                && (sizeClass == .regular || geo.size.width >= Self.readerColumnsMinWidth)
             // Duo فقط: حاوية واحدة ثابتة في الوضعين. غيره يبقى على التبديل.
             let usesStableSplit = usesReaderColumns && FoldableDevice.isFoldable(observed: foldableObserved)
+            // Duo يقرر بالهندسة وحدها (عرض كافٍ وأفقي، `DuoPosture`) — صنف الحجم
+            // قد يبقى «منتظمًا» مفتوحًا رأسيًا فيفرض عمودين ضيقين. غيره كما كان.
+            let isWide = usesReaderColumns && (usesStableSplit
+                ? DuoPosture.usesReaderColumns(width: geo.size.width, height: geo.size.height)
+                : (sizeClass == .regular || geo.size.width >= Self.readerColumnsMinWidth))
             Group {
                 if usesStableSplit {
                     stableSplitLayout(isWide: isWide)
@@ -173,7 +192,17 @@ struct SabqTabNavigation<Root: View, Sidebar: View, Detail: View>: View {
         )
         let contentSizeClass: UserInterfaceSizeClass? = isWide ? .regular : sizeClass
         return NavigationSplitView(columnVisibility: visibility) {
-            sidebar()
+            // مطويًا يُخفى العمود بحركة يُعاد فيها تخطيط محتواه على عرض يتقلص،
+            // فظهرت رئيسية الآيفون مضغوطة (حرف في كل سطر) نحو ثانيتين قبل أن
+            // يستقر القارئ (محاكي Duo 2026-10-18). المحتوى يُفرّغ فور الطي فتنزلق
+            // خلفية فارغة؛ حالة القارئ في `path` لا تتأثر.
+            Group {
+                if isWide {
+                    sidebar()
+                } else {
+                    SabqTheme.background
+                }
+            }
                 .modifier(SabqDestinations())
                 .navigationSplitViewColumnWidth(min: 340, ideal: 400, max: 520)
                 .toolbar(removing: .sidebarToggle)
@@ -192,6 +221,15 @@ struct SabqTabNavigation<Root: View, Sidebar: View, Detail: View>: View {
         }
         .navigationSplitViewStyle(.balanced)
         .environment(\.horizontalSizeClass, .regular)
+        // إخفاء العمود وإظهاره بلا حركة. الحركة تتقاطع مع انتقال النافذة بين
+        // الشاشتين، والطي والفتح المتتاليان كانا يتركان صفحة الخبر المدفوعة
+        // بمقاسات الشاشة الداخلية (محتوى بعرض 811 نقطة مقصوص عند حافة الخارجية)
+        // حتى تُغلق الصفحة. بلاغ المالك 2026-10-18؛ ست من سبع طيّات معطوبة قبل
+        // الإصلاح وأربع عشرة سليمة بعده على المحاكي، بالوضعين الرأسي والأفقي.
+        .transaction(value: isWide) { transaction in
+            transaction.animation = nil
+            transaction.disablesAnimations = true
+        }
     }
 
     private var splitLayout: some View {

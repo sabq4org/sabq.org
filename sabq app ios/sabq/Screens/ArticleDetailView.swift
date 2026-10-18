@@ -412,7 +412,10 @@ struct ArticleDetailView: View {
             isOnScreen = true
             publishContext(articleContext)
         }
-        .onDisappear { isOnScreen = false }
+        .onDisappear {
+            isOnScreen = false
+            if publishesReaderContext { navigation?.withdrawReaderContext(id: articleContext.id) }
+        }
         .onChange(of: articleContext) { _, context in publishContext(context) }
         .onChange(of: duoContentInsets == nil) { _, isWide in
             // فُتح الجهاز والورقة ظاهرة: السياق ينتقل إلى العمود.

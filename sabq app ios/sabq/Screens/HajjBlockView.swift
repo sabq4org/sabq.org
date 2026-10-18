@@ -51,7 +51,7 @@ struct HajjBlockView: View {
                     if index > 0 {
                         Rectangle().fill(SabqTheme.separator).frame(height: 1)
                     }
-                    NavigationLink(value: Article.placeholder(slug: article.slug ?? "")) {
+                    ReaderLink(value: Article.placeholder(slug: article.slug ?? "")) {
                         articleRow(article)
                     }
                     .buttonStyle(.plain)

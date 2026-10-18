@@ -152,6 +152,17 @@ struct ContentView: View {
         if FoldableDevice.isFoldable(observed: foldableObserved) {
             DuoTabContainer(selection: $navigation.selectedTab, onReselect: { tab in
                 navigation.paths[tab] = NavigationPath()
+                // «الرئيسية» مفتوحًا: الخبر في القارئ لا في المكدّس، فكان تفريغ
+                // المكدّس لا يغيّر شيئًا والعمود باقٍ على «سياق الخبر» (بلاغ
+                // المالك 2026-10-18). اللمس يعيد العمود إلى الأخبار، والثاني
+                // يصعد إلى أعلى الرئيسية.
+                if tab == .home {
+                    if navigation.homeSidebarMode == .context && navigation.readerContext != nil {
+                        navigation.homeSidebarMode = .news
+                    } else {
+                        NotificationCenter.default.post(name: .sabqHomeScrollToTop, object: nil)
+                    }
+                }
             }) { tab in
                 tabNavigation(tab)
             }
