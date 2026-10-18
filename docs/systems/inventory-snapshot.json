@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-18T04:38:45.359Z",
+  "generatedAt": "2026-10-18T04:56:26.070Z",
   "systems": [
     {
       "id": "account-center",
@@ -59,16 +59,16 @@
     },
     {
       "id": "editorial",
-      "fileCount": 277,
+      "fileCount": 278,
       "samplePaths": [
         "server/routes/videoResolver.ts",
         "server/services/videoResolverService.ts",
         "tests/unit/videoResolver.test.ts",
         "tests/unit/videoResolverStream.test.ts",
+        "tests/unit/videoStreamLifecycle.test.ts",
         "server/services/mobileAdminSchedule.ts",
         "tests/unit/mobileAdminSchedule.test.ts",
-        "sabq app ios/sabq/Models/AdminModels.swift",
-        "sabq app ios/sabq/Screens/AdminArticleEditorView.swift"
+        "sabq app ios/sabq/Models/AdminModels.swift"
       ]
     },
     {

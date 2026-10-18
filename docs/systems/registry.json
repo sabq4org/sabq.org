@@ -165,6 +165,7 @@
         "server/services/videoResolverService.ts",
         "tests/unit/videoResolver.test.ts",
         "tests/unit/videoResolverStream.test.ts",
+        "tests/unit/videoStreamLifecycle.test.ts",
         "server/services/mobileAdminSchedule.ts",
         "tests/unit/mobileAdminSchedule.test.ts",
         "sabq app ios/sabq/Models/AdminModels.swift",

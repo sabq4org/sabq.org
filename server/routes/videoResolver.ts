@@ -177,6 +177,7 @@ router.get("/api/video/stream/:tweetId", async (req: Request, res: ExpressRespon
 
   const controller = new AbortController();
   let downstreamClosed = false;
+  let upstreamBody: ReadableStream<Uint8Array> | null = null;
   const abortForDownstream = () => {
     downstreamClosed = true;
     controller.abort();
@@ -209,6 +210,8 @@ router.get("/api/video/stream/:tweetId", async (req: Request, res: ExpressRespon
     }
 
     const upstream = await fetchUpstreamVideo(upstreamUrl, headers, controller);
+    upstreamBody = upstream.body;
+    if (downstreamClosed || res.destroyed) return;
 
     if (!upstream.ok && upstream.status !== 206) {
       console.error("[VideoResolver] upstream media error", {
@@ -263,6 +266,12 @@ router.get("/api/video/stream/:tweetId", async (req: Request, res: ExpressRespon
     }
     next(err);
   } finally {
+    controller.abort();
+    if (upstreamBody && !upstreamBody.locked) {
+      // Non-OK responses and responses arriving after a reader left were never
+      // consumed by the Node stream. Release their underlying connection too.
+      await upstreamBody.cancel().catch(() => undefined);
+    }
     req.off("aborted", abortForDownstream);
     res.off("close", abortForPrematureResponseClose);
   }
