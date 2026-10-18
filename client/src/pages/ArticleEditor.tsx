@@ -1069,7 +1069,10 @@ export default function ArticleEditor() {
   // Age does not discard the copy — reopening from the dashboard or another day still prompts.
   useEffect(() => {
     if (!user?.id || !(isNewArticle || hasLoadedArticleRef.current)) return;
-    if (!isNewArticle && id && skipDraftRecoveryIdRef.current === id) return;
+    if (!isNewArticle && id && skipDraftRecoveryIdRef.current === id) {
+      skipDraftRecoveryIdRef.current = null;
+      return;
+    }
     try {
       const found = readMigratedLocalDraft(localStorage, {
         userId: user.id,
@@ -2543,7 +2546,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
     );
   }
 
-  if (!isNewArticle && !keepFormForCreatedDraft && (isArticleError || (isArticleFetched && !article?.id))) {
+  if (!isNewArticle && (isArticleError || (isArticleFetched && !article?.id))) {
     const message =
       articleError instanceof Error && articleError.message
         ? articleError.message
