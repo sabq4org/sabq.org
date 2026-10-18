@@ -393,6 +393,9 @@ struct HomeFeedView: View {
             }
         }
         }
+        // Duo مفتوحًا: الشريط الأيسر محجوز بلا حسّاس (حواف UIKit متماثلة)؛ يمتد
+        // إليه عمود الأقسام بدل أن يبقى فراغًا (طلب المالك 2026-10-18).
+        .ignoresSafeArea(.container, edges: homeSpreadLayout ? .trailing : [])
     }
 
     // MARK: - Cache Invalidation Poll
