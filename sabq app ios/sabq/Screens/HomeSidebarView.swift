@@ -4,7 +4,8 @@ import SwiftUI
 ///
 /// كان `SabqTabNavigation` يضع `HomeFeedView` كاملة — الهيرو الدوّار والشرائط
 /// والشبكات — في عمود عرضه 320–520 نقطة بجوار قارئ فارغ. هذا العرض بديلها في
-/// العمود فقط: رأس مضغوط (الشعار + بحث/لحظة بلحظة/المظهر)، بطاقة موجز
+/// العمود فقط: رأس مضغوط (الشعار + بحث/الجرس/لحظة بلحظة/المظهر)، شريط «نشرة
+/// سَبْق» عند توفرها، بطاقة موجز
 /// SABQ AI، ثم «عاجل» و«أبرز الأخبار» كصفوف مضغوطة. النقر لا يدفع صفحة
 /// جديدة بل يبدّل الخبر المفتوح في عمود القارئ (`SabqNavigationState.openInReader`)
 /// ويُبرز الصف المفتوح حاليًا. على العرض الضيق (الجهاز مطويًا) يبقى
@@ -17,7 +18,11 @@ struct HomeSidebarView: View {
     /// جوهر «سبق لايت») ويظهر شريط التفعيل/التعافي أعلى العمود كما في
     /// `HomeFeedView`. القارئ المجاور يتحوّل تلقائيًا إلى `ArticleLiteView`.
     @Environment(LiteModeManager.self) private var liteManager
+    @Environment(AuthStore.self) private var authStore
     @AppStorage("appAppearance") private var appearanceRaw: String = AppAppearance.system.rawValue
+    @State private var notificationsStore = NotificationsStore.shared
+    /// «نشرة سَبْق» — نفس شريط رئيسية الهاتف. يُحدَّث من ردّ ناجح فقط (#1923).
+    @State private var audioBulletin: APIAudioBulletin?
 
     private var breaking: [Article] { Array(articlesStore.breakingNews.prefix(3)) }
     /// الأبرز ثم آخر الأخبار بلا تكرار لما ظهر في «عاجل».
@@ -69,6 +74,10 @@ struct HomeSidebarView: View {
                     .id(Self.columnTopID)
                 header
 
+                if let bulletin = audioBulletin, !bulletin.audioUrl.isEmpty {
+                    AudioBulletinBar(bulletin: bulletin)
+                }
+
                 if let context = navigation.readerContext {
                     modePicker
                     if navigation.homeSidebarMode == .context {
@@ -95,6 +104,15 @@ struct HomeSidebarView: View {
         .background(SabqTheme.background)
         .refreshable {
             await articlesStore.loadArticles(ignoreCache: true)
+            await refreshAudioBulletin()
+            await notificationsStore.refreshUnreadCount()
+        }
+        // النشرة تُعتمد عدة مرات يوميًا: فحص كل دقيقتين ما دام العمود ظاهرًا
+        .task {
+            while !Task.isCancelled {
+                await refreshAudioBulletin()
+                try? await Task.sleep(for: .seconds(120))
+            }
         }
         // اختيار خبر من أسفل القائمة يبدّل العمود إلى سياقه الأقصر؛ بلا هذا
         // يبقى موضع التمرير بعد نهاية المحتوى فيظهر العمود فارغًا (محاكي
@@ -178,6 +196,26 @@ struct HomeSidebarView: View {
                         .buttonStyle(.plain)
                         .accessibilityLabel("البحث")
 
+                    // الجرس كما في رئيسية الهاتف: صندوق القارئ والنقطة تجمع العدّادين
+                    if authStore.isLoggedIn {
+                        NavigationLink(value: ReaderInboxRoute()) {
+                            headerIcon("bell")
+                                .overlay(alignment: .topTrailing) {
+                                    if notificationsStore.totalUnread > 0 {
+                                        Circle()
+                                            .fill(SabqTheme.breaking)
+                                            .frame(width: 9, height: 9)
+                                            .overlay(Circle().stroke(SabqTheme.background, lineWidth: 2))
+                                            .padding(10)
+                                    }
+                                }
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(notificationsStore.totalUnread > 0
+                            ? "الإشعارات — لديك إشعارات غير مقروءة"
+                            : "الإشعارات")
+                    }
+
                     NavigationLink(value: MomentByMomentRoute()) { headerIcon("dot.radiowaves.left.and.right") }
                         .buttonStyle(.plain)
                         .accessibilityLabel("لحظة بلحظة — التغطية المباشرة")
@@ -220,6 +258,13 @@ struct HomeSidebarView: View {
             }
         }
         .padding(.vertical, SabqLayout.space4)
+    }
+
+    /// فشل الطلب لا يُخفي الشريط؛ null من الخادم وحده يعني «لا نشرة».
+    private func refreshAudioBulletin() async {
+        do {
+            audioBulletin = try await APIClient.shared.fetchCurrentAudioBulletin(ignoreCache: true)
+        } catch {}
     }
 
     private func headerIcon(_ systemName: String) -> some View {
