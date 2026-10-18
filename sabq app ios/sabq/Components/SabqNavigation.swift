@@ -59,6 +59,15 @@ final class SabqNavigationState {
         if readerContext != context { readerContext = context }
     }
 
+    /// يسحب سياق خبر لم يعد ظاهرًا في القارئ (غُطّي بوجهة أخرى كـ«مُقترب»).
+    /// بالمعرّف فقط: إن نشرت الوجهة الجديدة سياقها قبل اختفاء القديمة لا يُمسح.
+    /// بلاغ المالك 2026-10-18: «سياق الخبر» عرض خبر الأباتشي ومقال مُقترب مفتوح.
+    func withdrawReaderContext(id: String) {
+        guard readerContext?.id == id else { return }
+        readerContext = nil
+        homeSidebarMode = .news
+    }
+
     /// جسر الطي/الفتح على iPhone Duo (وتقسيم الشاشة على iPad).
     ///
     /// التخطيطان العريض والضيق يتشاركان `paths[.home]`، لكن الخبر المفتوح في

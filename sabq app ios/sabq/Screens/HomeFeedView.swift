@@ -104,6 +104,7 @@ struct HomeFeedView: View {
     // ContentView. See issue #81 for the full design.
     @Environment(LiteModeManager.self) private var liteManager
     @Environment(\.homeFeedTopAccessory) private var homeFeedTopAccessory
+    @Environment(\.homeFeedReplacement) private var homeFeedReplacement
     @Environment(\.opensArticlesInReader) private var opensArticlesInReader
 
     var body: some View {
@@ -171,6 +172,10 @@ struct HomeFeedView: View {
                         compactLegacyNewsletterTopBar(newsletter)
                     }
 
+                    // عمود Duo على «سياق الخبر»: السياق مكان الكتل، والرأس والنشرة كما هي
+                    if let replacement = homeFeedReplacement {
+                        replacement
+                    } else {
                     // عاجل — يظهر في الأعلى وفوق الخبر الرئيسي مباشرة.
                     if let ticker = breakingTicker, !ticker.headlines.isEmpty {
                         BreakingTickerBar(headlines: ticker.headlines)
@@ -234,6 +239,7 @@ struct HomeFeedView: View {
                     if !calendarToday.isEmpty {
                         calendarTodayCard
                     }
+                    } // homeFeedReplacement
                 }
                 .frame(width: max(0, container.size.width - 32), alignment: .leading)
                 .padding(.horizontal, 16)

@@ -248,7 +248,10 @@ struct OpinionDetailView: View {
             isOnScreen = true
             publishContext(opinionContext)
         }
-        .onDisappear { isOnScreen = false }
+        .onDisappear {
+            isOnScreen = false
+            if publishesReaderContext { navigation?.withdrawReaderContext(id: opinionContext.id) }
+        }
         .onChange(of: opinionContext) { _, context in publishContext(context) }
     }
 
