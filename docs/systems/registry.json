@@ -1,7 +1,7 @@
 {
   "$schemaNote": "Machine-readable catalog of Sabq product systems. Consumed by scripts/systems-inventory.mjs and /api/admin/systems-catalog. aiFeatureKeys must be exclusive (one system owner) to avoid double-counting.",
   "version": 2,
-  "updatedAt": "2026-10-04",
+  "updatedAt": "2026-10-18",
   "systems": [
     {
       "id": "account-center",
@@ -161,6 +161,11 @@
         "docs/systems/editorial/bot-drafts.openapi.yaml"
       ],
       "pathGlobs": [
+        "server/routes/videoResolver.ts",
+        "server/services/videoResolverService.ts",
+        "tests/unit/videoResolver.test.ts",
+        "tests/unit/videoResolverStream.test.ts",
+        "tests/unit/videoStreamLifecycle.test.ts",
         "server/services/mobileAdminSchedule.ts",
         "tests/unit/mobileAdminSchedule.test.ts",
         "sabq app ios/sabq/Models/AdminModels.swift",
@@ -456,7 +461,7 @@
       "owners": [
         "editorial"
       ],
-      "lastReviewed": "2026-10-17"
+      "lastReviewed": "2026-10-18"
     },
     {
       "id": "ifox",

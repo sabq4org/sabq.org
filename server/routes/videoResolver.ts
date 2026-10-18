@@ -1,10 +1,9 @@
-import { Router, type Request, type Response } from "express";
+import { Router, type NextFunction, type Request, type Response as ExpressResponse } from "express";
 import { z } from "zod";
-import { captureException } from "@sentry/node";
 import { Readable } from "node:stream";
-import { pipeline } from "node:stream/promises";
 import { resolveVideoUrl } from "../services/videoResolverService";
 import { resolveXVideoFromPostUrl } from "../services/sahraaTvVideoResolver";
+import { extractTweetId } from "../services/sahraaTvBlockUtils";
 import { requireAuth } from "../rbac";
 
 const router = Router();
@@ -13,191 +12,14 @@ const resolveSchema = z.object({
   url: z.string().min(1),
 });
 
-const UPSTREAM_TIMEOUT_MS = 30_000;
-
-export type VideoStreamLifecycle = {
-  signal: AbortSignal;
-  isResponseClosed: () => boolean;
-  isClientDisconnected: () => boolean;
-  getUpstreamStreamError: () => unknown;
-  setNodeStream: (stream: Readable) => void;
-  finish: () => void;
-};
-
-export function createVideoStreamLifecycle(req: Request, res: Response): VideoStreamLifecycle {
-  const controller = new AbortController();
-  let responseClosed = false;
-  let clientDisconnected = false;
-  let finished = false;
-  let nodeStream: Readable | null = null;
-  let upstreamStreamError: unknown;
-
-  const abortUpstream = () => {
-    if (finished) return;
-    responseClosed = true;
-    if (!upstreamStreamError) clientDisconnected = true;
-    controller.abort();
-    nodeStream?.destroy();
-  };
-
-  const onResponseClose = () => {
-    if (finished || res.writableEnded || res.writableFinished) return;
-    responseClosed = true;
-    abortUpstream();
-  };
-
-  req.once("aborted", abortUpstream);
-  res.once("close", onResponseClose);
-
-  return {
-    signal: controller.signal,
-    isResponseClosed: () => responseClosed || req.aborted || req.socket?.destroyed === true || res.destroyed,
-    isClientDisconnected: () => clientDisconnected,
-    getUpstreamStreamError: () => upstreamStreamError,
-    setNodeStream: (stream) => {
-      nodeStream = stream;
-      stream.once("error", (error) => {
-        if (!clientDisconnected) upstreamStreamError = error;
-      });
-      stream.once("close", () => {
-        if (!clientDisconnected && !stream.readableEnded) {
-          upstreamStreamError ??= new Error("Upstream video stream closed prematurely");
-        }
-      });
-      if (responseClosed || req.aborted || req.socket?.destroyed === true || res.destroyed) {
-        stream.destroy();
-      }
-    },
-    finish: () => {
-      finished = true;
-      controller.abort();
-      req.removeListener("aborted", abortUpstream);
-      res.removeListener("close", onResponseClose);
-    },
-  };
-}
-
-function isExpectedClientStreamError(error: unknown, lifecycle: VideoStreamLifecycle): boolean {
-  const code = error && typeof error === "object" && "code" in error
-    ? (error as { code?: unknown }).code
-    : undefined;
-  const name = error && typeof error === "object" && "name" in error
-    ? (error as { name?: unknown }).name
-    : undefined;
-  const message = error instanceof Error ? error.message : String(error);
-
-  if (lifecycle.getUpstreamStreamError() !== undefined) return false;
-
-  if (lifecycle.isClientDisconnected()) {
-    return name === "AbortError"
-      || code === "ERR_STREAM_PREMATURE_CLOSE"
-      || code === "ERR_STREAM_DESTROYED"
-      || message === "terminated"
-      || message.includes("Cannot pipe to a closed or destroyed stream");
-  }
-
-  return false;
-}
-
-async function cancelUpstreamBody(body: ReadableStream<Uint8Array> | null): Promise<void> {
-  if (!body) return;
-  try {
-    await body.cancel();
-  } catch {
-    // The abort signal may already have canceled the body.
-  }
-}
-
-export async function streamVideoResponse(
-  req: Request,
-  res: Response,
-  upstreamUrl: string,
-  lifecycle: VideoStreamLifecycle,
-  timeoutMs = UPSTREAM_TIMEOUT_MS,
-): Promise<void> {
-  const timeoutController = new AbortController();
-  const timeoutTimer = setTimeout(() => timeoutController.abort(), timeoutMs);
-  const signal = AbortSignal.any([lifecycle.signal, timeoutController.signal]);
-
-  try {
-    const headers: Record<string, string> = {
-      Accept: "*/*",
-      "User-Agent": "Mozilla/5.0 (compatible; SabqVideo/1.0; +https://sabq.org)",
-      Referer: "https://x.com/",
-      Origin: "https://x.com",
-    };
-    if (typeof req.headers.range === "string" && req.headers.range) {
-      headers.Range = req.headers.range;
-    }
-
-    if (lifecycle.isResponseClosed()) return;
-    const upstream = await fetch(upstreamUrl, {
-      headers,
-      signal,
-      redirect: "follow",
-    });
-
-    if (!upstream.ok && upstream.status !== 206) {
-      console.error("[VideoResolver] upstream media error", upstream.status, upstreamUrl);
-      await cancelUpstreamBody(upstream.body);
-      if (!lifecycle.isResponseClosed()) {
-        res.status(502).json({ message: "تعذر بث الفيديو من المصدر" });
-      }
-      return;
-    }
-
-    if (lifecycle.isResponseClosed()) {
-      await cancelUpstreamBody(upstream.body);
-      return;
-    }
-
-    res.status(upstream.status);
-    const passHeaders = [
-      "content-type",
-      "content-length",
-      "content-range",
-      "accept-ranges",
-    ] as const;
-    for (const name of passHeaders) {
-      const value = upstream.headers.get(name);
-      if (value) res.setHeader(name, value);
-    }
-    if (!res.getHeader("content-type")) {
-      res.setHeader("Content-Type", "video/mp4");
-    }
-    res.setHeader("Cache-Control", "public, max-age=3600, stale-while-revalidate=86400");
-
-    if (!upstream.body) {
-      res.end();
-      return;
-    }
-
-    const nodeStream = Readable.fromWeb(upstream.body as import("stream/web").ReadableStream);
-    lifecycle.setNodeStream(nodeStream);
-    if (lifecycle.isResponseClosed()) {
-      nodeStream.destroy();
-      return;
-    }
-
-    await pipeline(nodeStream, res);
-  } catch (err: unknown) {
-    if (isExpectedClientStreamError(err, lifecycle)) return;
-    const failure = lifecycle.getUpstreamStreamError() ?? err;
-    captureException(failure, { tags: { component: "video-stream" } });
-    if (!res.headersSent) {
-      console.error("[VideoResolver] media proxy error:", failure);
-      if (!lifecycle.isResponseClosed()) {
-        res.status(502).json({ message: "تعذر بث الفيديو" });
-      }
-    } else {
-      console.error("[VideoResolver] media proxy error:", failure);
-      res.destroy(failure instanceof Error ? failure : undefined);
-    }
-  } finally {
-    clearTimeout(timeoutTimer);
-    timeoutController.abort();
-  }
-}
+const UPSTREAM_HEADER_TIMEOUT_MS = 30_000;
+const VIDEO_RESPONSE_HEADERS = [
+  "content-type",
+  "content-length",
+  "content-range",
+  "accept-ranges",
+  "cache-control",
+] as const;
 
 // Cache resolved video URLs in memory for 1 hour to avoid repeated API lookups
 const resolvedUrlCache = new Map<string, { url: string; posterUrl: string; expiresAt: number }>();
@@ -224,6 +46,113 @@ async function getUpstreamMp4Url(tweetId: string): Promise<string | null> {
   return null;
 }
 
+type ErrorWithCause = Error & {
+  code?: unknown;
+  cause?: unknown;
+};
+
+function errorCode(error: unknown): string | undefined {
+  if (!error || typeof error !== "object") return undefined;
+  const code = (error as ErrorWithCause).code;
+  return typeof code === "string" ? code : undefined;
+}
+
+/**
+ * Undici wraps an upstream socket closing during body streaming exactly this way.
+ * It is an external transport interruption, not an uncaught application failure.
+ * Keep the match narrow so arbitrary TypeErrors and database/network failures still
+ * reach the normal Express/Sentry error path.
+ */
+export function isExpectedUpstreamStreamEnd(error: unknown): boolean {
+  if (!(error instanceof TypeError) || error.message !== "terminated") return false;
+  const cause = (error as ErrorWithCause).cause;
+  return errorCode(cause) === "UND_ERR_SOCKET";
+}
+
+/**
+ * Limit only the wait for upstream response headers. Keeping the same timer alive
+ * while piping the MP4 aborts every stream that takes more than 30 seconds.
+ */
+export async function fetchUpstreamVideo(
+  url: string,
+  headers: Record<string, string>,
+  controller: AbortController,
+  fetchImpl: typeof fetch = fetch,
+): Promise<Response> {
+  const timer = setTimeout(() => controller.abort(), UPSTREAM_HEADER_TIMEOUT_MS);
+  try {
+    return await fetchImpl(url, {
+      headers,
+      signal: controller.signal,
+      redirect: "follow",
+    });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function streamErrorContext(error: unknown): Record<string, string | undefined> {
+  const typed = error instanceof Error ? error as ErrorWithCause : undefined;
+  return {
+    name: typed?.name,
+    message: typed?.message,
+    code: errorCode(typed),
+    causeCode: errorCode(typed?.cause),
+  };
+}
+
+function clearVideoResponseHeaders(res: ExpressResponse): void {
+  for (const name of VIDEO_RESPONSE_HEADERS) res.removeHeader(name);
+}
+
+function sendVideoProxyError(res: ExpressResponse, message: string): void {
+  clearVideoResponseHeaders(res);
+  res.status(502).setHeader("Cache-Control", "no-store").json({ message });
+}
+
+/**
+ * `stream.pipeline(source, res)` destroys the HTTP response with the upstream
+ * error before its promise rejects. A plain pipe lets the route classify the
+ * source failure first and close the client socket without re-emitting it.
+ */
+export function pipeVideoToResponse(source: Readable, res: ExpressResponse): Promise<void> {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const cleanup = () => {
+      source.off("error", onSourceError);
+      res.off("finish", onFinish);
+      res.off("close", onClose);
+    };
+    const settle = (error?: unknown) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      if (error !== undefined) reject(error);
+      else resolve();
+    };
+    const onSourceError = (error: unknown) => {
+      source.unpipe(res);
+      settle(error);
+    };
+    const onFinish = () => settle();
+    const onClose = () => {
+      if (res.writableEnded) settle();
+      else {
+        source.unpipe(res);
+        source.destroy();
+        settle(Object.assign(new Error("Downstream closed during video stream"), {
+          code: "SABQ_VIDEO_DOWNSTREAM_CLOSED",
+        }));
+      }
+    };
+
+    source.once("error", onSourceError);
+    res.once("finish", onFinish);
+    res.once("close", onClose);
+    source.pipe(res);
+  });
+}
+
 router.post("/api/video/resolve", requireAuth, async (req, res) => {
   try {
     const parsed = resolveSchema.safeParse(req.body);
@@ -233,41 +162,118 @@ router.post("/api/video/resolve", requireAuth, async (req, res) => {
 
     const info = await resolveVideoUrl(parsed.data.url);
     res.json(info);
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("[VideoResolver] Failed to resolve video:", error);
     res.status(500).json({ message: "تعذر معالجة رابط الفيديو" });
   }
 });
 
-router.get("/api/video/stream/:tweetId", async (req, res) => {
+router.get("/api/video/stream/:tweetId", async (req: Request, res: ExpressResponse, next: NextFunction) => {
   const tweetId = req.params.tweetId;
   if (!tweetId || !/^\d{5,25}$/.test(tweetId)) {
     res.status(400).json({ message: "معرف التغريدة غير صالح" });
     return;
   }
 
-  const lifecycle = createVideoStreamLifecycle(req, res);
+  const controller = new AbortController();
+  let downstreamClosed = false;
+  let upstreamBody: ReadableStream<Uint8Array> | null = null;
+  const abortForDownstream = () => {
+    downstreamClosed = true;
+    controller.abort();
+  };
+  const abortForPrematureResponseClose = () => {
+    if (!res.writableEnded) abortForDownstream();
+  };
+  req.once("aborted", abortForDownstream);
+  res.once("close", abortForPrematureResponseClose);
+  if (req.aborted || res.destroyed) abortForDownstream();
+
   try {
+    if (downstreamClosed) return;
+
     const upstreamUrl = await getUpstreamMp4Url(tweetId);
+    if (downstreamClosed || res.destroyed) return;
     if (!upstreamUrl) {
-      if (!lifecycle.isResponseClosed()) {
-        res.status(404).json({ message: "تعذر العثور على ملف الفيديو" });
+      res.status(404).json({ message: "تعذر العثور على ملف الفيديو" });
+      return;
+    }
+
+    const headers: Record<string, string> = {
+      Accept: "*/*",
+      "User-Agent": "Mozilla/5.0 (compatible; SabqVideo/1.0; +https://sabq.org)",
+      Referer: "https://x.com/",
+      Origin: "https://x.com",
+    };
+    if (typeof req.headers.range === "string" && req.headers.range) {
+      headers.Range = req.headers.range;
+    }
+
+    const upstream = await fetchUpstreamVideo(upstreamUrl, headers, controller);
+    upstreamBody = upstream.body;
+    if (downstreamClosed || res.destroyed) return;
+
+    if (!upstream.ok && upstream.status !== 206) {
+      console.error("[VideoResolver] upstream media error", {
+        status: upstream.status,
+        tweetId,
+      });
+      sendVideoProxyError(res, "تعذر بث الفيديو من المصدر");
+      return;
+    }
+
+    res.status(upstream.status);
+    const passHeaders = VIDEO_RESPONSE_HEADERS.slice(0, 4);
+    for (const name of passHeaders) {
+      const value = upstream.headers.get(name);
+      if (value) res.setHeader(name, value);
+    }
+    if (!res.getHeader("content-type")) {
+      res.setHeader("Content-Type", "video/mp4");
+    }
+    res.setHeader("Cache-Control", "public, max-age=3600, stale-while-revalidate=86400");
+
+    if (!upstream.body) {
+      res.end();
+      return;
+    }
+
+    const nodeStream = Readable.fromWeb(upstream.body as import("stream/web").ReadableStream);
+    await pipeVideoToResponse(nodeStream, res);
+  } catch (err: unknown) {
+    if (downstreamClosed) return;
+
+    if (isExpectedUpstreamStreamEnd(err)) {
+      console.error("[VideoResolver] upstream media stream ended early", {
+        tweetId,
+        ...streamErrorContext(err),
+      });
+      if (!res.headersSent) {
+        sendVideoProxyError(res, "تعذر بث الفيديو");
+      } else {
+        // Do not re-emit the upstream Error on the downstream socket. Native
+        // video clients can retry with Range; emitting it here created a fatal
+        // process-level Sentry event (NODE-EXPRESS-Q).
+        res.destroy();
       }
       return;
     }
-    if (lifecycle.isResponseClosed()) return;
-    await streamVideoResponse(req, res, upstreamUrl, lifecycle);
-  } catch (err: unknown) {
-    if (isExpectedClientStreamError(err, lifecycle)) return;
-    if (!res.headersSent && !lifecycle.isResponseClosed()) {
-      console.error("[VideoResolver] media proxy error:", err);
-      res.status(502).json({ message: "تعذر بث الفيديو" });
-    } else if (res.headersSent) {
-      console.error("[VideoResolver] media proxy error:", err);
-      res.destroy(err instanceof Error ? err : undefined);
+
+    if (res.headersSent) res.destroy();
+    else {
+      clearVideoResponseHeaders(res);
+      res.setHeader("Cache-Control", "no-store");
     }
+    next(err);
   } finally {
-    lifecycle.finish();
+    controller.abort();
+    if (upstreamBody && !upstreamBody.locked) {
+      // Non-OK responses and responses arriving after a reader left were never
+      // consumed by the Node stream. Release their underlying connection too.
+      await upstreamBody.cancel().catch(() => undefined);
+    }
+    req.off("aborted", abortForDownstream);
+    res.off("close", abortForPrematureResponseClose);
   }
 });
 

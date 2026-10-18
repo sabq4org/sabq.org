@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-15T07:23:11.615Z",
+  "generatedAt": "2026-10-18T04:56:26.070Z",
   "systems": [
     {
       "id": "account-center",
@@ -31,7 +31,7 @@
     },
     {
       "id": "loyalty",
-      "fileCount": 848,
+      "fileCount": 31,
       "samplePaths": [
         "server/services/loyalty.ts",
         "server/routes/loyaltyAdmin.ts",
@@ -59,16 +59,16 @@
     },
     {
       "id": "editorial",
-      "fileCount": 269,
+      "fileCount": 278,
       "samplePaths": [
+        "server/routes/videoResolver.ts",
+        "server/services/videoResolverService.ts",
+        "tests/unit/videoResolver.test.ts",
+        "tests/unit/videoResolverStream.test.ts",
+        "tests/unit/videoStreamLifecycle.test.ts",
         "server/services/mobileAdminSchedule.ts",
         "tests/unit/mobileAdminSchedule.test.ts",
-        "sabq app ios/sabq/Models/AdminModels.swift",
-        "sabq app ios/sabq/Screens/AdminArticleEditorView.swift",
-        "sabq app ios/sabq/Screens/AdminDashboardView.swift",
-        "sabq app ios/sabq/Components/AdminDashboardComponents.swift",
-        "sabq app ios/sabqTests/AdminScheduleTests.swift",
-        "sabq app ios/sabqTests/AdminScheduleSnapshotTests.swift"
+        "sabq app ios/sabq/Models/AdminModels.swift"
       ]
     },
     {
@@ -157,7 +157,7 @@
     },
     {
       "id": "sports-tournaments",
-      "fileCount": 139,
+      "fileCount": 140,
       "samplePaths": [
         "server/services/sportsComponentSnapshot.ts",
         "client/src/hooks/useSportsHomeQuery.ts",
@@ -213,21 +213,21 @@
     },
     {
       "id": "seo-ssr",
-      "fileCount": 470,
+      "fileCount": 72,
       "samplePaths": [
         "server/seoInjector.ts",
         "server/middleware/slugRedirect.ts",
         "server/routes/edgeMeta.ts",
         "server/utils/noindexPaths.ts",
-        "web-next/.DS_Store",
         "web-next/.dockerignore",
         "web-next/.env.example",
-        "web-next/.gitignore"
+        "web-next/.gitignore",
+        "web-next/Dockerfile"
       ]
     },
     {
       "id": "comments",
-      "fileCount": 12,
+      "fileCount": 13,
       "samplePaths": [
         "server/services/commentInsightsService.ts",
         "server/services/commentModerationService.ts",
@@ -235,8 +235,8 @@
         "server/routes/commentAppeals.ts",
         "server/routes/commentModeration.ts",
         "server/routes/commentReactions.ts",
-        "server/routes/topicComments.ts",
-        "server/ai/commentModeration.ts"
+        "server/routes/commentReactionsMobile.ts",
+        "server/routes/topicComments.ts"
       ]
     },
     {
@@ -262,21 +262,21 @@
     },
     {
       "id": "mawaeed",
-      "fileCount": 22,
+      "fileCount": 43,
       "samplePaths": [
         "shared/mawaeed/content.ts",
+        "shared/mawaeed/dashboard.ts",
         "shared/mawaeed/dates.ts",
+        "shared/mawaeed/display.ts",
+        "shared/mawaeed/home.ts",
         "shared/mawaeed/model.ts",
-        "shared/mawaeed/present.ts",
-        "shared/mawaeed/seed.ts",
-        "shared/mawaeed/validate.ts",
-        "server/services/mawaeedService.ts",
-        "server/routes/mawaeed.ts"
+        "shared/mawaeed/notes.ts",
+        "shared/mawaeed/present.ts"
       ]
     },
     {
       "id": "systems-catalog",
-      "fileCount": 47,
+      "fileCount": 46,
       "samplePaths": [
         "docs/systems/AUDIT-2026-07-17.md",
         "docs/systems/GOVERNANCE.md",
@@ -285,7 +285,7 @@
         "docs/systems/ads/SYSTEM.md",
         "docs/systems/ai-hub/RUNTIME_READ_ACCESS.md",
         "docs/systems/ai-hub/SYSTEM.md",
-        "docs/systems/ai-hub/runtime-read-access.sql"
+        "docs/systems/ai-staff/SYSTEM.md"
       ]
     },
     {

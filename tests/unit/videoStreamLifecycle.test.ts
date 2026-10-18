@@ -1,17 +1,15 @@
-import { EventEmitter } from "node:events";
 import { createServer, request as httpRequest, type IncomingMessage, type Server } from "node:http";
-import express, { type Request, type Response as ExpressResponse } from "express";
+import express, { type Response as ExpressResponse } from "express";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-const state = vi.hoisted(() => ({ resolveXVideo: vi.fn(), captureException: vi.fn() }));
-vi.mock("@sentry/node", () => ({ captureException: state.captureException }));
+const state = vi.hoisted(() => ({ resolveXVideo: vi.fn() }));
 vi.mock("../../server/services/sahraaTvVideoResolver", () => ({
   resolveXVideoFromPostUrl: (...args: unknown[]) => state.resolveXVideo(...args),
 }));
 vi.mock("../../server/rbac", () => ({
   requireAuth: (_req: unknown, _res: unknown, next: () => void) => next(),
 }));
-import router, { createVideoStreamLifecycle, streamVideoResponse } from "../../server/routes/videoResolver";
+import router from "../../server/routes/videoResolver";
 
 let server: Server;
 let baseUrl = "";
@@ -55,11 +53,6 @@ function getResponse(path: string, headers: Record<string, string> = {}) {
 beforeAll(async () => {
   const app = express();
   app.use((_req, res, next) => { responses.push(res); next(); });
-  app.get("/test-timeout", async (req, res) => {
-    const lifecycle = createVideoStreamLifecycle(req, res);
-    try { await streamVideoResponse(req, res, upstreamUrl, lifecycle, 10); }
-    finally { lifecycle.finish(); }
-  });
   app.use(router);
   server = createServer(app);
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -69,7 +62,6 @@ beforeAll(async () => {
 });
 beforeEach(() => {
   responses = [];
-  state.captureException.mockClear();
   vi.spyOn(console, "error").mockImplementation(() => undefined);
   upstreamFetch = vi.fn();
   vi.stubGlobal("fetch", upstreamFetch);
@@ -86,16 +78,6 @@ afterAll(async () => {
 });
 
 describe("video stream lifecycle", () => {
-  it("does not mistake a completed request body for a disconnected response", () => {
-    const req = Object.assign(new EventEmitter(), { destroyed: true, aborted: false, socket: { destroyed: false } }) as Request;
-    const res = Object.assign(new EventEmitter(), { destroyed: false }) as ExpressResponse;
-    const lifecycle = createVideoStreamLifecycle(req, res);
-    expect(lifecycle.isResponseClosed()).toBe(false);
-    lifecycle.finish();
-    expect(req.listenerCount("aborted")).toBe(0);
-    expect(res.listenerCount("close")).toBe(0);
-  });
-
   it("does not fetch after the client disconnects during URL resolution", async () => {
     let release!: (value: { videoUrl: string; posterUrl: string }) => void;
     state.resolveXVideo.mockReturnValueOnce(new Promise(resolve => { release = resolve; }));
@@ -106,7 +88,6 @@ describe("video stream lifecycle", () => {
     release({ videoUrl: upstreamUrl, posterUrl: "" });
     await new Promise<void>(resolve => setImmediate(resolve));
     expect(upstreamFetch).not.toHaveBeenCalled();
-    expect(state.captureException).not.toHaveBeenCalled();
   });
 
   it("aborts a pending upstream fetch when the client disconnects", async () => {
@@ -120,7 +101,6 @@ describe("video stream lifecycle", () => {
     request.destroy();
     await waitFor(() => signal!.aborted);
     await new Promise<void>(resolve => setImmediate(resolve));
-    expect(state.captureException).not.toHaveBeenCalled();
   });
 
   it("cancels a response body delivered after the downstream has already closed", async () => {
@@ -133,15 +113,17 @@ describe("video stream lifecycle", () => {
     await waitFor(() => responses[0].destroyed);
     release(new Response(new ReadableStream({ cancel() { canceled = true; } })));
     await waitFor(() => canceled);
-    expect(state.captureException).not.toHaveBeenCalled();
   });
 
-  it("cancels the body and fetch when the client disconnects mid-stream", async () => {
+  it.each([false, true])("cancels mid-stream even when body cancellation rejects: %s", async (rejectCancel) => {
     let canceled = false;
     let signal: AbortSignal | undefined;
     const body = new ReadableStream<Uint8Array>({
       start(controller) { controller.enqueue(new TextEncoder().encode("first chunk")); },
-      cancel() { canceled = true; },
+      cancel() {
+        canceled = true;
+        if (rejectCancel) return Promise.reject(new DOMException("Canceled", "AbortError"));
+      },
     });
     upstreamFetch.mockImplementation(async (_url: string, init: RequestInit) => {
       signal = init.signal!;
@@ -153,7 +135,6 @@ describe("video stream lifecycle", () => {
       response.on("error", () => undefined);
     });
     await waitFor(() => canceled && signal?.aborted === true);
-    expect(state.captureException).not.toHaveBeenCalled();
   });
 
   it.each([200, 206])("preserves status %i, media bytes and range headers", async status => {
@@ -168,7 +149,6 @@ describe("video stream lifecycle", () => {
     expect(response.headers["content-length"]).toBe("4");
     expect(body).toBe("part");
     expect(upstreamFetch.mock.calls[0][1].headers.Range).toBe("bytes=0-3");
-    expect(state.captureException).not.toHaveBeenCalled();
   });
 
   it("cancels non-OK upstream bodies and returns 502", async () => {
@@ -177,35 +157,7 @@ describe("video stream lifecycle", () => {
     const { response } = await getResponse(videoPath());
     expect(response.statusCode).toBe(502);
     expect(canceled).toBe(true);
-    expect(console.error).toHaveBeenCalledWith("[VideoResolver] upstream media error", 503, upstreamUrl);
+    expect(console.error).toHaveBeenCalledWith("[VideoResolver] upstream media error", expect.objectContaining({ status: 503 }));
   });
 
-  it.each(["UND_ERR_SOCKET", "ERR_STREAM_PREMATURE_CLOSE"])("reports genuine upstream %s after sending media bytes", async code => {
-    const failure = Object.assign(new TypeError("terminated"), { code });
-    let controller!: ReadableStreamDefaultController<Uint8Array>;
-    const body = new ReadableStream<Uint8Array>({ start(value) {
-      controller = value;
-      controller.enqueue(new TextEncoder().encode("first chunk"));
-    } });
-    upstreamFetch.mockResolvedValue(new Response(body, { headers: { "content-type": "video/mp4" } }));
-    const request = openRequest(videoPath());
-    request.on("response", response => {
-      response.once("data", () => controller.error(failure));
-      response.on("error", () => undefined);
-    });
-    await waitFor(() => state.captureException.mock.calls.length > 0);
-    expect(state.captureException).toHaveBeenCalledExactlyOnceWith(failure, { tags: { component: "video-stream" } });
-    expect(console.error).toHaveBeenCalledWith("[VideoResolver] media proxy error:", failure);
-  });
-
-  it("reports an upstream timeout and returns 502 before sending headers", async () => {
-    const failure = new DOMException("upstream timed out", "AbortError");
-    upstreamFetch.mockImplementation((_url: string, init: RequestInit) => new Promise((_resolve, reject) => {
-      init.signal!.addEventListener("abort", () => reject(failure), { once: true });
-    }));
-    const { response, body } = await getResponse("/test-timeout");
-    expect(response.statusCode).toBe(502);
-    expect(JSON.parse(body)).toEqual({ message: "تعذر بث الفيديو" });
-    expect(state.captureException).toHaveBeenCalledWith(failure, { tags: { component: "video-stream" } });
-  });
 });
