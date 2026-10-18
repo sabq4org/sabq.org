@@ -761,56 +761,60 @@ struct HomeFeedView: View {
         let inner = max(0, containerWidth - SabqLayout.pageMargin * 2)
         let mainWidth = max(0, (inner - gap) * 2 / 3)
         let sideWidth = max(0, inner - gap - mainWidth)
-        return HStack(alignment: .top, spacing: gap) {
-            VStack(alignment: .leading, spacing: SabqLayout.space16) {
-                Color.clear
-                    .frame(height: 0)
-                    .id(Self.scrollTopID)
+        // الرأس والنشرة والعاجل بعرض الصفحة كلها: الشعار يمينًا وأيقونات الرأس
+        // في أقصى اليسار، ويبدأ العمودان معًا من أعلى الخبر البارز (طلب المالك).
+        return VStack(alignment: .leading, spacing: SabqLayout.space16) {
+            Color.clear
+                .frame(height: 0)
+                .id(Self.scrollTopID)
 
-                headerSection
+            headerSection
 
-                NationalDayHeaderAccent()
+            NationalDayHeaderAccent()
 
-                if let bulletin = audioBulletin, !bulletin.audioUrl.isEmpty {
-                    AudioBulletinBar(bulletin: bulletin)
-                } else if let newsletter = latestNewsletter, newsletter.audioUrl != nil {
-                    compactLegacyNewsletterTopBar(newsletter)
-                }
-
-                if let ticker = breakingTicker, !ticker.headlines.isEmpty {
-                    BreakingTickerBar(headlines: ticker.headlines)
-                } else if !articlesStore.breakingNews.isEmpty {
-                    breakingNewsSection
-                }
-
-                spreadFeaturedSection
-
-                SabqSectionBand()
-
-                latestArticlesSection
-                    .id(Self.latestSectionID)
+            if let bulletin = audioBulletin, !bulletin.audioUrl.isEmpty {
+                AudioBulletinBar(bulletin: bulletin)
+            } else if let newsletter = latestNewsletter, newsletter.audioUrl != nil {
+                compactLegacyNewsletterTopBar(newsletter)
             }
-            .frame(width: mainWidth, alignment: .leading)
 
-            CollapsingVStack(spacing: SabqLayout.space16) {
-                SportsPortalStrip()
-
-                if EconomyFormat.homeMode(economyStore.snapshot) != .hidden {
-                    EconomyHomeBlock()
-                }
-
-                WorldCupHomeStrip()
-                AsianCupHomeStrip()
-                KingsCupHomeStrip()
-                RoshnHomeStrip()
-
-                opinionsPreviewSection
-
-                MuqtarabHomeStrip()
-
-                trendingPreviewSection
+            if let ticker = breakingTicker, !ticker.headlines.isEmpty {
+                BreakingTickerBar(headlines: ticker.headlines)
+            } else if !articlesStore.breakingNews.isEmpty {
+                breakingNewsSection
             }
-            .frame(width: sideWidth, alignment: .leading)
+
+            HStack(alignment: .top, spacing: gap) {
+                VStack(alignment: .leading, spacing: SabqLayout.space16) {
+                    spreadFeaturedSection
+
+                    SabqSectionBand()
+
+                    latestArticlesSection
+                        .id(Self.latestSectionID)
+                }
+                .frame(width: mainWidth, alignment: .leading)
+
+                CollapsingVStack(spacing: SabqLayout.space16) {
+                    SportsPortalStrip()
+
+                    if EconomyFormat.homeMode(economyStore.snapshot) != .hidden {
+                        EconomyHomeBlock()
+                    }
+
+                    WorldCupHomeStrip()
+                    AsianCupHomeStrip()
+                    KingsCupHomeStrip()
+                    RoshnHomeStrip()
+
+                    opinionsPreviewSection
+
+                    MuqtarabHomeStrip()
+
+                    trendingPreviewSection
+                }
+                .frame(width: sideWidth, alignment: .leading)
+            }
         }
         .padding(.horizontal, SabqLayout.pageMargin)
         .padding(.top, SabqLayout.space16)
