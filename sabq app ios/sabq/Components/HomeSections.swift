@@ -7,6 +7,7 @@ import SwiftUI
 // (نموذج الرئيسية المعتمد 2026-10-09).
 
 struct HomeSectionHeader<Link: View>: View {
+    @Environment(\.homeSideColumn) private var compactType
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let title: String
     var context: String? = nil
@@ -25,7 +26,7 @@ struct HomeSectionHeader<Link: View>: View {
                     .accessibilityHidden(true)
 
                 Text(title)
-                    .font(SabqType.sectionHeading.font)
+                    .font(SabqType.sectionHeading.scaled(compactType).font)
                     .foregroundStyle(SabqTheme.textPrimary)
                     .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
                     .accessibilityAddTraits(.isHeader)
@@ -39,7 +40,7 @@ struct HomeSectionHeader<Link: View>: View {
                             .frame(width: 7, height: 7)
                     }
                     Text(context)
-                        .font(SabqType.meta.font)
+                        .font(SabqType.meta.scaled(compactType).font)
                         .foregroundStyle(SabqTheme.textTertiary)
                         .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
                 }
@@ -60,14 +61,15 @@ extension HomeSectionHeader where Link == EmptyView {
 
 /// نص رابط «الكل ‹» في رأس القسم.
 struct HomeSectionLinkLabel: View {
+    @Environment(\.homeSideColumn) private var compactType
     var title: String = "عرض الكل"
 
     var body: some View {
         HStack(spacing: 2) {
             Text(title)
-                .font(SabqType.tag.font)
+                .font(SabqType.tag.scaled(compactType).font)
             Image(systemName: "chevron.left")
-                .font(SabqType.tag.font)
+                .font(SabqType.tag.scaled(compactType).font)
         }
         .foregroundStyle(SabqTheme.primary)
         .fixedSize(horizontal: false, vertical: true)
@@ -139,13 +141,14 @@ struct LatestTimelineRail: View {
 
 /// سطر «الآن 10:58 ص · تتحدّث تلقائيًا» أعلى الخط.
 struct LatestTimelineNowRow: View {
+    @Environment(\.homeSideColumn) private var compactType
     var body: some View {
         TimelineView(.everyMinute) { context in
             HStack(spacing: LatestTimelineStyle.gap - 2) {
                 PulsingDot(color: SabqTheme.leaf)
                     .frame(width: LatestTimelineStyle.railWidth, height: 18)
                 Text("الآن \(SabqFormatters.riyadhHourMinute.string(from: context.date)) \(SabqFormatters.riyadhPeriod.string(from: context.date)) · تتحدّث تلقائيًا")
-                    .font(SabqType.tag.font)
+                    .font(SabqType.tag.scaled(compactType).font)
                     .foregroundStyle(SabqTheme.leaf)
                     .monospacedDigit()
                 Spacer(minLength: 0)
@@ -157,6 +160,7 @@ struct LatestTimelineNowRow: View {
 
 /// فاصل اليوم داخل الشريط: «أمس · الخميس 8 أكتوبر».
 struct LatestTimelineDayDivider: View {
+    @Environment(\.homeSideColumn) private var compactType
     let date: Date
 
     private var label: String {
@@ -174,7 +178,7 @@ struct LatestTimelineDayDivider: View {
                 .frame(width: 11, height: 11)
                 .frame(width: LatestTimelineStyle.railWidth)
             Text(label)
-                .font(SabqType.metaEmphasis.font)
+                .font(SabqType.metaEmphasis.scaled(compactType).font)
                 .foregroundStyle(SabqTheme.secondaryInk)
                 .fixedSize()
             Rectangle()
@@ -189,6 +193,7 @@ struct LatestTimelineDayDivider: View {
 
 /// صف خبر في الشريط الزمني: نقطة التصنيف، ثم الوقت والتصنيف والعنوان، ثم الصورة.
 struct LatestTimelineRow: View {
+    @Environment(\.homeSideColumn) private var compactType
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let article: Article
     var isNew: Bool = false
@@ -210,11 +215,11 @@ struct LatestTimelineRow: View {
                 HStack(alignment: .top, spacing: LatestTimelineStyle.gap) {
                     SabqRTLText(
                         article.title,
-                        uiFont: SabqType.rowTitle.uiFont,
+                        uiFont: SabqType.rowTitle.scaled(compactType).uiFont,
                         color: SabqTheme.textPrimary,
                         lineLimit: dynamicTypeSize.isAccessibilitySize ? 0 : NewsRowStyle.compactTitleLines,
-                        lineSpacing: SabqType.rowTitle.lineSpacing,
-                        textStyle: SabqType.rowTitle.uiTextStyle
+                        lineSpacing: SabqType.rowTitle.scaled(compactType).lineSpacing,
+                        textStyle: SabqType.rowTitle.scaled(compactType).uiTextStyle
                     )
                     .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -231,20 +236,20 @@ struct LatestTimelineRow: View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             HStack(alignment: .firstTextBaseline, spacing: 2) {
                 Text(SabqFormatters.riyadhHourMinute.string(from: article.publishDate))
-                    .font(SabqType.tag.font)
+                    .font(SabqType.tag.scaled(compactType).font)
                     .foregroundStyle(SabqTheme.textPrimary)
                     .monospacedDigit()
                 Text(SabqFormatters.riyadhPeriod.string(from: article.publishDate))
-                    .font(SabqType.tag.font)
+                    .font(SabqType.tag.scaled(compactType).font)
                     .foregroundStyle(SabqTheme.textTertiary)
             }
             if isNew {
                 Text("جديد")
-                    .font(SabqType.tag.font)
+                    .font(SabqType.tag.scaled(compactType).font)
                     .foregroundStyle(SabqTheme.leaf)
             }
             Text(article.categoryTitle)
-                .font(SabqType.tag.font)
+                .font(SabqType.tag.scaled(compactType).font)
                 .foregroundStyle(article.category.tint)
                 .lineLimit(1)
         }
@@ -287,6 +292,7 @@ struct LatestTimelineRow: View {
 /// صف رأي يقوده الكاتب: صورته، ثم اسمه الكامل والوقت، ثم العنوان في سطرين.
 /// كل الصفوف متساوية بلا مقال بارز (قرار المالك 2026-10-09).
 struct OpinionWriterRow: View {
+    @Environment(\.homeSideColumn) private var compactType
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let opinion: OpinionArticle
 
@@ -301,11 +307,11 @@ struct OpinionWriterRow: View {
 
                 SabqRTLText(
                     opinion.title,
-                    uiFont: SabqType.rowTitle.uiFont,
+                    uiFont: SabqType.rowTitle.scaled(compactType).uiFont,
                     color: SabqTheme.textPrimary,
                     lineLimit: dynamicTypeSize.isAccessibilitySize ? 0 : 2,
-                    lineSpacing: SabqType.rowTitle.lineSpacing,
-                    textStyle: SabqType.rowTitle.uiTextStyle
+                    lineSpacing: SabqType.rowTitle.scaled(compactType).lineSpacing,
+                    textStyle: SabqType.rowTitle.scaled(compactType).uiTextStyle
                 )
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -316,13 +322,13 @@ struct OpinionWriterRow: View {
 
     private var nameText: Text {
         Text(opinion.authorName)
-            .font(SabqType.metaEmphasis.font)
+            .font(SabqType.metaEmphasis.scaled(compactType).font)
             .foregroundStyle(SabqTheme.primary)
     }
 
     private var timeText: Text {
         Text(" · \(opinion.relativeDate)")
-            .font(SabqType.meta.font)
+            .font(SabqType.meta.scaled(compactType).font)
             .foregroundStyle(SabqTheme.textTertiary)
     }
 }

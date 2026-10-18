@@ -14,6 +14,8 @@ extension EnvironmentValues {
     /// Duo مفتوحًا أفقيًا: رئيسية بعمودين (الأخبار بالثلثين، والأقسام بالثلث)
     /// بدل عمود الأخبار والقارئ — تصميم المالك المعتمد 2026-10-18.
     @Entry var homeSpreadLayout = false
+    /// داخل عمود الأقسام (الثلث) في رئيسية Duo: الكتل تستخدم `SabqTextRole.scaled`.
+    @Entry var homeSideColumn = false
 }
 
 /// رابط خبر في رئيسية الآيفون: `NavigationLink` على الهاتف، وعلى عمود الأخبار

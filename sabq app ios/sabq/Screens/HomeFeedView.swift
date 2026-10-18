@@ -230,7 +230,7 @@ struct HomeFeedView: View {
 
                     // «الأكثر تداولًا» ظاهر مباشرة بدل طيّه خلف «المزيد اليوم»،
                     // وبعده البلوكات الاختيارية حين تتوفر لها بيانات فقط.
-                    trendingPreviewSection
+                    trendingPreviewSection()
 
 
                     if !articlesStore.stories.isEmpty {
@@ -811,10 +811,10 @@ struct HomeFeedView: View {
 
                     MuqtarabHomeStrip()
 
-                    trendingPreviewSection
+                    trendingPreviewSection(compact: true)
                 }
-                // عمود الثلث أضيق من الجوال: خطوطه درجة أصغر (طلب المالك 2026-10-18)
-                .dynamicTypeSize(.small)
+                // عمود الثلث: سلّم خطوط مضغوط موحّد (`SabqTextRole.scaled`) — طلب المالك
+                .environment(\.homeSideColumn, true)
                 .frame(width: sideWidth, alignment: .leading)
             }
         }
@@ -886,7 +886,7 @@ struct HomeFeedView: View {
     // MARK: - Trending Preview
 
     @ViewBuilder
-    private var trendingPreviewSection: some View {
+    private func trendingPreviewSection(compact: Bool = false) -> some View {
         if !articlesStore.trendingArticles.isEmpty {
             HomeSectionCard(title: "الأكثر تداولًا", context: "آخر 48 ساعة") {
                 ReaderLink(value: TrendingRoute()) {
@@ -902,10 +902,10 @@ struct HomeFeedView: View {
                     ArticleLink(article: article) {
                         HStack(alignment: .top, spacing: 12) {
                             Text("\(index + 1)")
-                                .font(SabqType.metaEmphasis.font)
+                                .font(SabqType.metaEmphasis.scaled(compact).font)
                                 .foregroundStyle(SabqTheme.primary)
                                 .monospacedDigit()
-                                .frame(width: 28, height: 28)
+                                .frame(width: compact ? 24 : 28, height: compact ? 24 : 28)
                                 .background(
                                     RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
                                         .fill(SabqTheme.skyTint)
@@ -917,14 +917,14 @@ struct HomeFeedView: View {
 
                             SabqRTLText(
                                 article.title,
-                                uiFont: SabqType.rowTitle.uiFont,
+                                uiFont: SabqType.rowTitle.scaled(compact).uiFont,
                                 color: SabqTheme.textPrimary,
                                 lineLimit: dynamicTypeSize.isAccessibilitySize ? 0 : 3,
-                                lineSpacing: SabqType.rowTitle.lineSpacing,
-                                textStyle: SabqType.rowTitle.uiTextStyle
+                                lineSpacing: SabqType.rowTitle.scaled(compact).lineSpacing,
+                                textStyle: SabqType.rowTitle.scaled(compact).uiTextStyle
                             )
                         }
-                        .padding(.vertical, 13)
+                        .padding(.vertical, compact ? 10 : 13)
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)

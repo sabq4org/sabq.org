@@ -78,6 +78,7 @@ struct MuqtarabHomeStrip: View {
 }
 
 private struct MuqtarabHomeRow: View {
+    @Environment(\.homeSideColumn) private var compactType
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let topic: MuqTopic
 
@@ -96,24 +97,24 @@ private struct MuqtarabHomeRow: View {
             VStack(alignment: .leading, spacing: NewsRowStyle.textStackSpacing) {
                 SabqRTLText(
                     topic.title,
-                    uiFont: SabqType.rowTitle.uiFont,
+                    uiFont: SabqType.rowTitle.scaled(compactType).uiFont,
                     color: SabqTheme.textPrimary,
                     lineLimit: dynamicTypeSize.isAccessibilitySize ? 0 : NewsRowStyle.compactTitleLines,
                     lineSpacing: NewsRowStyle.titleLineSpacing,
-                    textStyle: SabqType.rowTitle.uiTextStyle
+                    textStyle: SabqType.rowTitle.scaled(compactType).uiTextStyle
                 )
                 HStack(spacing: SabqLayout.space4) {
                     Text(byline)
-                        .font(SabqType.metaEmphasis.font)
+                        .font(SabqType.metaEmphasis.scaled(compactType).font)
                         .foregroundStyle(SabqTheme.primary)
                         .lineLimit(1)
                     // النقطة نص مستقل: في بداية نص عربي تنقلب لآخر السطر.
                     if let date = muqRelativeDate(topic.publishedAt) {
                         Text("·")
-                            .font(SabqType.meta.font)
+                            .font(SabqType.meta.scaled(compactType).font)
                             .foregroundStyle(SabqTheme.textTertiary)
                         Text(date)
-                            .font(SabqType.meta.font)
+                            .font(SabqType.meta.scaled(compactType).font)
                             .foregroundStyle(SabqTheme.textTertiary)
                             .lineLimit(1)
                     }

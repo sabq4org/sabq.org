@@ -3,6 +3,7 @@ import SwiftUI
 /// شريط المدخل إلى الرياضة تحت الهيرو — نقل SportsPortalStrip.tsx: سطر واحد بارتفاع ثابت
 /// يعرض أهم مباراة سعودية أو كبرى جارية أو قادمة اليوم، وإلا عدّاد أقرب بطولة.
 struct SportsPortalStrip: View {
+    @Environment(\.homeSideColumn) private var compactType
     @State private var headline: SportsHeadline.Headline?
     /// عمود Duo: بطاقة بهوامش الصفحة وإطار بطاقات العمود (كشريط النشرة) بدل
     /// الشريط الممتد من حافة إلى حافة الذي يناسب الهاتف — بطلب المالك
@@ -18,14 +19,14 @@ struct SportsPortalStrip: View {
                         Circle().fill(SabqTheme.breaking).frame(width: 6, height: 6)
                         Text("مباشر")
                     }
-                    .font(SabqType.tag.font)
+                    .font(SabqType.tag.scaled(compactType).font)
                     .foregroundStyle(SabqTheme.breaking)
                     .padding(.horizontal, SabqLayout.space8)
                     .padding(.vertical, 2)
                     .background(SabqTheme.breaking.opacity(0.1), in: RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous))
                 } else {
                     Text("الرياضة")
-                        .font(SabqType.tag.font)
+                        .font(SabqType.tag.scaled(compactType).font)
                         .foregroundStyle(SabqTheme.primary)
                         .padding(.horizontal, SabqLayout.space8)
                         .padding(.vertical, 2)
@@ -44,17 +45,17 @@ struct SportsPortalStrip: View {
                         }
                         Text(match.away.name).lineLimit(1)
                     }
-                    .font(SabqType.metaEmphasis.font)
+                    .font(SabqType.metaEmphasis.scaled(compactType).font)
                     .foregroundStyle(SabqTheme.textPrimary)
                 } else {
                     Text(headline?.text ?? "مباريات اليوم لكل البطولات")
-                        .font(SabqType.metaEmphasis.font)
+                        .font(SabqType.metaEmphasis.scaled(compactType).font)
                         .foregroundStyle(SabqTheme.textPrimary)
                         .lineLimit(1)
                 }
                 Spacer(minLength: SabqLayout.space4)
                 Image(systemName: "chevron.left")
-                    .font(SabqType.tag.font)
+                    .font(SabqType.tag.scaled(compactType).font)
                     .foregroundStyle(SabqTheme.primary)
             }
             .frame(height: 48)
