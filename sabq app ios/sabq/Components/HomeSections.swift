@@ -298,12 +298,21 @@ struct OpinionWriterRow: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
-            OpinionAuthorAvatar(name: opinion.authorName, imageURL: opinion.authorImageURL, size: 52)
+            OpinionAuthorAvatar(name: opinion.authorName, imageURL: opinion.authorImageURL, size: compactType ? 44 : 52)
                 .overlay(Circle().stroke(SabqTheme.surface, lineWidth: 2))
 
             VStack(alignment: .leading, spacing: 3) {
-                Text("\(nameText)\(timeText)")
-                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+                if compactType {
+                    // عمود الأقسام: الاسم في سطره والزمن تحته بخط صغير (كمُقترب)
+                    nameText.lineLimit(1)
+                    Text(opinion.relativeDate)
+                        .font(SabqFonts.app(size: 11, weight: .regular))
+                        .foregroundStyle(SabqTheme.textTertiary)
+                        .lineLimit(1)
+                } else {
+                    Text("\(nameText)\(timeText)")
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+                }
 
                 SabqRTLText(
                     opinion.title,

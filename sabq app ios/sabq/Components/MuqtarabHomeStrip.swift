@@ -103,6 +103,22 @@ private struct MuqtarabHomeRow: View {
                     lineSpacing: NewsRowStyle.titleLineSpacing,
                     textStyle: SabqType.rowTitle.scaled(compactType).uiTextStyle
                 )
+                if compactType {
+                    // عمود الأقسام الضيق: الاسم كاملًا في سطره، والزمن تحته بخط صغير
+                    // (طلب المالك 2026-10-18) بدل سطر واحد يقصّ الاسم والزمن معًا.
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(byline)
+                            .font(SabqType.metaEmphasis.scaled(true).font)
+                            .foregroundStyle(SabqTheme.primary)
+                            .lineLimit(1)
+                        if let date = muqRelativeDate(topic.publishedAt) {
+                            Text(date)
+                                .font(SabqFonts.app(size: 11, weight: .regular))
+                                .foregroundStyle(SabqTheme.textTertiary)
+                                .lineLimit(1)
+                        }
+                    }
+                } else {
                 HStack(spacing: SabqLayout.space4) {
                     Text(byline)
                         .font(SabqType.metaEmphasis.scaled(compactType).font)
@@ -118,6 +134,7 @@ private struct MuqtarabHomeRow: View {
                             .foregroundStyle(SabqTheme.textTertiary)
                             .lineLimit(1)
                     }
+                }
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
