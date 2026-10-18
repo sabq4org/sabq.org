@@ -103,6 +103,7 @@ struct HomeFeedView: View {
     // swaps between the full feed and HomeLiteView. Injected from
     // ContentView. See issue #81 for the full design.
     @Environment(LiteModeManager.self) private var liteManager
+    @Environment(\.homeFeedTopAccessory) private var homeFeedTopAccessory
 
     var body: some View {
         // Reactive switch — flipping the manager (manual toggle or
@@ -138,6 +139,11 @@ struct HomeFeedView: View {
                             .id(Self.scrollTopID)
 
                         headerSection
+
+                    // عمود Duo مفتوحًا: مفتاح «الأخبار | سياق الخبر» تحت الرأس
+                    if let accessory = homeFeedTopAccessory {
+                        accessory
+                    }
 
                     // لمسة السدو الموسمية: شريط رفيع تحت الرأس وحده. لا يقع
                     // خلف نصوص الأخبار، ولا يتكرّر في البطاقات. يختفي تمامًا
@@ -637,7 +643,7 @@ struct HomeFeedView: View {
     @ViewBuilder
     private var breakingNewsSection: some View {
         if let article = articlesStore.breakingNews.first {
-            NavigationLink(value: article) {
+            ArticleLink(article: article) {
                 HStack(alignment: .top, spacing: 12) {
                     VStack(spacing: 2) {
                         HStack(spacing: 4) {
@@ -699,7 +705,7 @@ struct HomeFeedView: View {
         let featured = heroArticles
         return VStack(alignment: .leading, spacing: 0) {
             if let lead = featured.first {
-                NavigationLink(value: lead) {
+                ArticleLink(article: lead) {
                     FeaturedArticleCard(
                         article: lead,
                         onBookmark: { bookmarksStore.toggle(lead.id, article: lead) },
@@ -711,7 +717,7 @@ struct HomeFeedView: View {
             }
             ForEach(Array(featured.dropFirst().enumerated()), id: \.element.id) { index, article in
                 if index > 0 || featured.first != nil { SidebarRowDivider() }
-                NavigationLink(value: article) {
+                ArticleLink(article: article) {
                     CompactArticleRow(
                         article: article,
                         onBookmark: { bookmarksStore.toggle(article.id, article: article) },
@@ -778,7 +784,7 @@ struct HomeFeedView: View {
                         SidebarRowDivider()
                     }
 
-                    NavigationLink(value: article) {
+                    ArticleLink(article: article) {
                         HStack(alignment: .top, spacing: 12) {
                             Text("\(index + 1)")
                                 .font(SabqType.metaEmphasis.font)
@@ -873,7 +879,7 @@ struct HomeFeedView: View {
                     SidebarRowDivider()
                 }
 
-                NavigationLink(value: article) {
+                ArticleLink(article: article) {
                     CompactArticleRow(
                         article: article,
                         onBookmark: { bookmarksStore.toggle(article.id, article: article) },

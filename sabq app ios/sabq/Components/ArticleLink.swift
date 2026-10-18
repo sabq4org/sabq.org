@@ -1,0 +1,34 @@
+import SwiftUI
+
+extension EnvironmentValues {
+    /// عمود الأخبار على العرض العريض (Duo مفتوحًا، iPad): النقر على خبر يبدّل
+    /// خبر القارئ المجاور بدل دفع صفحة جديدة. `HomeSidebarView` يفعّله لرئيسية
+    /// الآيفون حين تُعرض عمودًا؛ على الهاتف يبقى `false` فلا يتغير شيء.
+    @Entry var opensArticlesInReader = false
+    /// محتوى يُدرج في رئيسية الآيفون تحت الرأس مباشرة — يستخدمه عمود Duo لمفتاح
+    /// «الأخبار | سياق الخبر». `nil` على الهاتف.
+    @Entry var homeFeedTopAccessory: AnyView? = nil
+}
+
+/// رابط خبر في رئيسية الآيفون: `NavigationLink` على الهاتف، وعلى عمود الأخبار
+/// العريض يفتح الخبر في القارئ (`SabqNavigationState.openInReader`) كما كانت
+/// صفوف العمود تفعل، فيبقى العمود في مكانه ويُنشر «سياق الخبر».
+struct ArticleLink<Label: View>: View {
+    let article: Article
+    @ViewBuilder var label: () -> Label
+    @Environment(\.opensArticlesInReader) private var opensInReader
+    @Environment(SabqNavigationState.self) private var navigation
+
+    var body: some View {
+        if opensInReader {
+            Button {
+                SabqHaptics.light()
+                navigation.openInReader(article)
+            } label: {
+                label()
+            }
+        } else {
+            NavigationLink(value: article) { label() }
+        }
+    }
+}

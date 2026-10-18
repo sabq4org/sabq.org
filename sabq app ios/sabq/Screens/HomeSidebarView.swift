@@ -2,14 +2,12 @@ import SwiftUI
 
 /// عمود الأخبار على العرض العريض (iPhone Duo مفتوحًا، iPad، Stage Manager).
 ///
-/// كان `SabqTabNavigation` يضع `HomeFeedView` كاملة — الهيرو الدوّار والشرائط
-/// والشبكات — في عمود عرضه 320–520 نقطة بجوار قارئ فارغ. هذا العرض بديلها في
-/// العمود فقط: رأس مضغوط (الشعار + بحث/الجرس/لحظة بلحظة/المظهر)، شريط «نشرة
-/// سَبْق» عند توفرها، بطاقة موجز
-/// SABQ AI، ثم «عاجل» و«أبرز الأخبار» كصفوف مضغوطة. النقر لا يدفع صفحة
-/// جديدة بل يبدّل الخبر المفتوح في عمود القارئ (`SabqNavigationState.openInReader`)
-/// ويُبرز الصف المفتوح حاليًا. على العرض الضيق (الجهاز مطويًا) يبقى
-/// `HomeFeedView` كما هو ولا يُستخدم هذا العرض إطلاقًا.
+/// «الأخبار»: رئيسية الآيفون نفسها (`HomeFeedView`) بمحتواها وترتيبها، بطلب
+/// المالك 2026-10-18 بدل الصفوف المضغوطة السابقة. النقر على خبر لا يدفع صفحة بل
+/// يبدّل خبر القارئ المجاور (`ArticleLink` → `openInReader`)، وبقية الوجهات
+/// تُدفع في عمود القارئ. «سياق الخبر»: رأس العمود + سياق الخبر المفتوح، ومفتاح
+/// «الأخبار | سياق الخبر» يظهر في الحالتين متى كان في القارئ خبر له سياق.
+/// على العرض الضيق (الجهاز مطويًا) يُعرض `HomeFeedView` مباشرة لا هذا العرض.
 struct HomeSidebarView: View {
     @Environment(ArticlesStore.self) private var articlesStore
     @Environment(BookmarksStore.self) private var bookmarksStore
@@ -24,21 +22,6 @@ struct HomeSidebarView: View {
     /// «نشرة سَبْق» — نفس شريط رئيسية الهاتف. يُحدَّث من ردّ ناجح فقط (#1923).
     @State private var audioBulletin: APIAudioBulletin?
 
-    private var breaking: [Article] { Array(articlesStore.breakingNews.prefix(3)) }
-    /// الأبرز ثم آخر الأخبار بلا تكرار لما ظهر في «عاجل».
-    private var highlights: [Article] {
-        let shownBreaking = Set(breaking.map(\.id))
-        var seen = shownBreaking
-        var result: [Article] = []
-        for article in articlesStore.featuredArticles + articlesStore.filteredArticles
-        where !seen.contains(article.id) {
-            seen.insert(article.id)
-            result.append(article)
-        }
-        return result
-    }
-    private var isEmpty: Bool { breaking.isEmpty && highlights.isEmpty }
-
     /// الترتيب نفسه الذي يراه المستخدم في العمود؛ `HomeReaderRoot` يفتح أوله
     /// تلقائيًا، فيتطابق الخبر المفتوح مع أول صف مُبرز.
     static func orderedArticles(_ store: ArticlesStore) -> [Article] {
@@ -52,14 +35,20 @@ struct HomeSidebarView: View {
         return result
     }
 
-    private var openArticleID: String? {
-        (navigation.homeReaderArticle ?? Self.orderedArticles(articlesStore).first)?.id
-    }
-
     var body: some View {
-        ZStack(alignment: .top) {
-            column
-            LiteBannerView()
+        if navigation.readerContext != nil && navigation.homeSidebarMode == .context {
+            ZStack(alignment: .top) {
+                column
+                LiteBannerView()
+            }
+        } else {
+            // «الأخبار»: رئيسية الآيفون نفسها بمحتواها وترتيبها (طلب المالك
+            // 2026-10-18)، والنقر على خبر يفتحه في القارئ المجاور.
+            HomeFeedView()
+                .environment(\.opensArticlesInReader, true)
+                .environment(\.homeFeedTopAccessory, navigation.readerContext == nil ? nil : AnyView(
+                    modePicker.padding(.top, SabqLayout.space4)
+                ))
         }
     }
 
@@ -80,20 +69,14 @@ struct HomeSidebarView: View {
 
                 if let context = navigation.readerContext {
                     modePicker
-                    if navigation.homeSidebarMode == .context {
-                        ArticleContextView(
-                            context: context,
-                            onOpenArticle: { navigation.openInReader($0) },
-                            onOpenOpinion: { navigation.openFromReaderContext($0, in: .home) },
-                            onOpenKeyword: { navigation.openFromReaderContext(KeywordRoute(keyword: $0), in: .home) }
-                        )
-                        .id(context.id)
-                        .transition(.opacity)
-                    }
-                }
-
-                if navigation.readerContext == nil || navigation.homeSidebarMode == .news {
-                    newsList
+                    ArticleContextView(
+                        context: context,
+                        onOpenArticle: { navigation.openInReader($0) },
+                        onOpenOpinion: { navigation.openFromReaderContext($0, in: .home) },
+                        onOpenKeyword: { navigation.openFromReaderContext(KeywordRoute(keyword: $0), in: .home) }
+                    )
+                    .id(context.id)
+                    .transition(.opacity)
                 }
             }
             .padding(.horizontal, SabqLayout.pageMargin)
@@ -162,24 +145,6 @@ struct HomeSidebarView: View {
         .buttonStyle(.plain)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
         .accessibilityIdentifier(mode == .context ? "homeSidebarMode.context" : "homeSidebarMode.news")
-    }
-
-    @ViewBuilder
-    private var newsList: some View {
-        briefingCard
-
-        if isEmpty {
-            emptyState
-        } else {
-            if !breaking.isEmpty {
-                section("عاجل", icon: "bolt.fill", tint: SabqTheme.breaking, articles: breaking)
-            }
-            if !highlights.isEmpty {
-                SabqSectionBand()
-                section("أبرز الأخبار", icon: nil, tint: SabqTheme.primary, articles: highlights)
-                if articlesStore.hasMore { loadMoreButton }
-            }
-        }
     }
 
     // MARK: - Header
@@ -286,174 +251,8 @@ struct HomeSidebarView: View {
         default: return "\(count) خبرًا جديدًا"
         }
     }
-
-    // MARK: - Briefing card
-
-    /// نسخة مضغوطة من بطاقة التحية في بطاقة التحية التي كانت في `HomeFeedView` (حُذفت لأنها لم تكن تُرسم) (التحية
-    /// حسب الساعة + شارة SABQ AI) تناسب عمودًا عرضه 340–520 نقطة.
-    private var briefingCard: some View {
-        let hour = Calendar.current.component(.hour, from: Date())
-        let greeting: String
-        let icon: String
-        switch hour {
-        case 5..<12:
-            greeting = "صباح الخير"; icon = "sun.max.fill"
-        case 12..<17:
-            greeting = "نهارك سعيد"; icon = "sun.haze.fill"
-        case 17..<21:
-            greeting = "مساء الخير"; icon = "sunset.fill"
-        default:
-            greeting = "ليلة هادئة"; icon = "moon.stars.fill"
-        }
-
-        // بلوك هادئ كتحية الرئيسية: رمز في مربع هادئ، بلا ألوان الساعة ولا تدرّج.
-        return NavigationLink(value: DailyBriefRoute()) {
-            HStack(alignment: .center, spacing: SabqLayout.space12) {
-                Image(systemName: icon)
-                    .font(.system(size: 20, weight: .regular))
-                    .foregroundStyle(SabqTheme.primary)
-                    .frame(width: SabqLayout.touchTarget, height: SabqLayout.touchTarget)
-                    .background(
-                        RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
-                            .fill(SabqTheme.surface)
-                    )
-                    .accessibilityHidden(true)
-
-                VStack(alignment: .leading, spacing: SabqLayout.space4) {
-                    HStack(spacing: SabqLayout.space8) {
-                        Text(greeting)
-                            .font(SabqType.meta.font)
-                            .foregroundStyle(SabqTheme.textSecondary)
-                        HStack(spacing: SabqLayout.space4) {
-                            Image(systemName: "sparkles")
-                            Text("SABQ AI")
-                        }
-                        .font(SabqType.tag.font)
-                        .foregroundStyle(SabqTheme.primary)
-                    }
-                    Text("موجز خاص بك داخل سبق")
-                        .font(SabqType.rowTitle.font)
-                        .foregroundStyle(SabqTheme.textPrimary)
-                        .lineLimit(2)
-                        .multilineTextAlignment(.leading)
-                    Text("بعد التسجيل يظهر لك موجز يومي مبني على اهتماماتك")
-                        .font(SabqType.meta.font)
-                        .foregroundStyle(SabqTheme.textSecondary)
-                        .lineLimit(2)
-                        .multilineTextAlignment(.leading)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-                Image(systemName: "chevron.left")
-                    .font(SabqType.meta.font)
-                    .foregroundStyle(SabqTheme.textTertiary)
-                    .accessibilityHidden(true)
-            }
-            .padding(SabqLayout.cardInset)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .sabqBlockSurface()
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-    }
-
-    // MARK: - Sections
-
-    private func section(_ title: String, icon: String?, tint: Color, articles: [Article]) -> some View {
-        VStack(alignment: .leading, spacing: SabqLayout.space4) {
-            HStack(spacing: SabqLayout.space8) {
-                if let icon {
-                    Image(systemName: icon)
-                        .font(SabqType.tag.font)
-                        .foregroundStyle(tint)
-                        .accessibilityHidden(true)
-                }
-                Text(title)
-                    .font(SabqType.sectionHeading.font)
-                    .foregroundStyle(SabqTheme.textPrimary)
-                    .accessibilityAddTraits(.isHeader)
-            }
-
-            // صفوف بفواصل رفيعة على الصفحة، بلا بطاقات.
-            LazyVStack(spacing: 0) {
-                ForEach(Array(articles.enumerated()), id: \.element.id) { index, article in
-                    if index > 0 { SidebarRowDivider() }
-                    Button {
-                        SabqHaptics.light()
-                        navigation.openInReader(article)
-                    } label: {
-                        HomeSidebarNewsRow(
-                            article: article,
-                            isOpen: article.id == openArticleID,
-                            isNew: articlesStore.isRecentlyAdded(article.id),
-                            showsThumbnail: !liteManager.isLiteActive
-                        )
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityIdentifier("homeSidebarRow")
-                    .contextMenu {
-                        Button {
-                            bookmarksStore.toggle(article.id, article: article)
-                        } label: {
-                            Label(bookmarksStore.isBookmarked(article.id) ? "إزالة من المحفوظات" : "حفظ",
-                                  systemImage: bookmarksStore.isBookmarked(article.id) ? "bookmark.slash" : "bookmark")
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    private var loadMoreButton: some View {
-        Button {
-            Task { await articlesStore.loadMore() }
-        } label: {
-            HStack(spacing: SabqLayout.space8) {
-                if articlesStore.isLoading {
-                    ProgressView().tint(SabqTheme.primary)
-                }
-                Text("تحميل المزيد")
-            }
-            .font(SabqType.button.font)
-            .foregroundStyle(SabqTheme.primary)
-            .frame(maxWidth: .infinity, minHeight: SabqLayout.controlHeight)
-            .overlay(
-                RoundedRectangle(cornerRadius: SabqRadius.medium, style: .continuous)
-                    .stroke(SabqTheme.outline, lineWidth: 1)
-            )
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .disabled(articlesStore.isLoading)
-    }
-
-    // MARK: - Empty
-
-    private var emptyState: some View {
-        VStack(spacing: SabqLayout.space12) {
-            if articlesStore.isLoading {
-                ProgressView().tint(SabqTheme.primary)
-                Text("جارٍ تحميل الأخبار…")
-            } else {
-                Image(systemName: "newspaper")
-                    .font(.system(size: 28))
-                    .accessibilityHidden(true)
-                Text(articlesStore.errorMessage ?? "لا توجد أخبار الآن")
-            }
-        }
-        .font(SabqType.excerpt.font)
-        .foregroundStyle(SabqTheme.textSecondary)
-        .multilineTextAlignment(.center)
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, SabqLayout.space40)
-    }
 }
 
-// MARK: - Row
-
-/// صف خبر في العمود الجانبي: عنوان حتى ثلاثة أسطر، سطر «القسم • منذ …»،
-/// وصورة مصغّرة على الطرف البادئ. الصف المفتوح في القارئ يحمل خلفية زرقاء
-/// خفيفة وشريطًا على الطرف الختامي حتى يعرف القارئ أين هو في القائمة.
 struct HomeSidebarNewsRow: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let article: Article
