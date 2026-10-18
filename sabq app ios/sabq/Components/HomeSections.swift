@@ -302,14 +302,7 @@ struct OpinionWriterRow: View {
                 .overlay(Circle().stroke(SabqTheme.surface, lineWidth: 2))
 
             VStack(alignment: .leading, spacing: 3) {
-                if compactType {
-                    // عمود الأقسام: الاسم في سطره والزمن تحته بخط صغير (كمُقترب)
-                    nameText.lineLimit(1)
-                    Text(opinion.relativeDate)
-                        .font(SabqFonts.app(size: 11, weight: .regular))
-                        .foregroundStyle(SabqTheme.textTertiary)
-                        .lineLimit(1)
-                } else {
+                if !compactType {
                     Text("\(nameText)\(timeText)")
                         .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
                 }
@@ -322,6 +315,16 @@ struct OpinionWriterRow: View {
                     lineSpacing: SabqType.rowTitle.scaled(compactType).lineSpacing,
                     textStyle: SabqType.rowTitle.scaled(compactType).uiTextStyle
                 )
+
+                if compactType {
+                    // عمود الأقسام: ترتيب مُقترب نفسه — العنوان، فالاسم، فالزمن بخط صغير
+                    nameText.lineLimit(1)
+                        .padding(.top, SabqLayout.space4)
+                    Text(opinion.relativeDate)
+                        .font(SabqFonts.app(size: 11, weight: .regular))
+                        .foregroundStyle(SabqTheme.textTertiary)
+                        .lineLimit(1)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
