@@ -813,6 +813,8 @@ struct HomeFeedView: View {
 
                     trendingPreviewSection
                 }
+                // عمود الثلث أضيق من الجوال: خطوطه درجة أصغر (طلب المالك 2026-10-18)
+                .dynamicTypeSize(.small)
                 .frame(width: sideWidth, alignment: .leading)
             }
         }
