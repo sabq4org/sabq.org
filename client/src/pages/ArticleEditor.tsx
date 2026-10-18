@@ -356,6 +356,10 @@ export default function ArticleEditor() {
   const [recoveredDraft, setRecoveredDraft] = useState<any>(null);
   const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const hasLoadedArticleRef = useRef(false);
+  // المسودة التي أنشأها الحفظ التلقائي للتو: النموذج يحمل أحدث نسخة منها، فلا نعرض
+  // شاشة التحميل ولا نعيد تعبئة الحقول من الخادم عند الانتقال إلى صفحة التعديل.
+  const createdDraftIdRef = useRef<string | null>(null);
+  const skipDraftRecoveryIdRef = useRef<string | null>(null);
   
   // Collapsible sections states
   const [focalPointOpen, setFocalPointOpen] = useState(false);
@@ -803,6 +807,18 @@ export default function ArticleEditor() {
     if (!article || isNewArticle || Array.isArray(article) || !article.id || (id && article.id !== id)) {
       return;
     }
+    if (createdDraftIdRef.current === article.id) {
+      createdDraftIdRef.current = null;
+      skipDraftRecoveryIdRef.current = article.id;
+      if (article.slug) setSlug((prev) => prev || article.slug);
+      setStatus(article.status as any);
+      setReviewStatus((article as any).reviewStatus ?? null);
+      setReviewNotes((article as any).reviewNotes ?? null);
+      setReviewedAt((article as any).reviewedAt ?? null);
+      setArticleUpdatedAt((article as any).updatedAt ?? null);
+      hasLoadedArticleRef.current = true;
+      return;
+    }
       console.log('[ArticleEditor] Loading article data:', {
         articleId: article.id,
         reporterId: article.reporterId,
@@ -1053,6 +1069,7 @@ export default function ArticleEditor() {
   // Age does not discard the copy — reopening from the dashboard or another day still prompts.
   useEffect(() => {
     if (!user?.id || !(isNewArticle || hasLoadedArticleRef.current)) return;
+    if (!isNewArticle && id && skipDraftRecoveryIdRef.current === id) return;
     try {
       const found = readMigratedLocalDraft(localStorage, {
         userId: user.id,
@@ -1142,7 +1159,9 @@ export default function ArticleEditor() {
       expectedUpdatedAt: articleUpdatedAt,
     },
     onDraftCreated: (articleId) => {
-      navigate(`/dashboard/articles/${articleId}/edit`);
+      // replace + keepScroll: تغيير الرابط فقط، دون إعادة تحميل المحرر أو القفز لأعلى الصفحة
+      createdDraftIdRef.current = articleId;
+      navigate(`/dashboard/articles/${articleId}/edit`, { replace: true, state: { keepScroll: true } });
     },
     onServerSaved: (updatedAt) => {
       if (updatedAt) setArticleUpdatedAt(updatedAt);
@@ -2510,8 +2529,10 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
     return null;
   }
 
+  const keepFormForCreatedDraft = !isNewArticle && !!id && createdDraftIdRef.current === id;
+
   // Editing an existing article: show loading / error instead of an empty form
-  if (!isNewArticle && (isUserLoading || isArticleLoading)) {
+  if (!isNewArticle && !keepFormForCreatedDraft && (isUserLoading || isArticleLoading)) {
     return (
       <DashboardLayout>
         <div className="flex flex-col items-center justify-center gap-3 py-24 text-muted-foreground" data-testid="article-editor-loading">
@@ -2522,7 +2543,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
     );
   }
 
-  if (!isNewArticle && (isArticleError || (isArticleFetched && !article?.id))) {
+  if (!isNewArticle && !keepFormForCreatedDraft && (isArticleError || (isArticleFetched && !article?.id))) {
     const message =
       articleError instanceof Error && articleError.message
         ? articleError.message

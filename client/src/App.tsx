@@ -609,6 +609,8 @@ function ScrollRestoration() {
   const [location] = useLocation();
 
   useEffect(() => {
+    // navigate(..., { state: { keepScroll: true } }) يغيّر الرابط دون القفز لأعلى الصفحة
+    if ((window.history.state as { keepScroll?: boolean } | null)?.keepScroll) return;
     window.scrollTo(0, 0);
   }, [location]);
 
