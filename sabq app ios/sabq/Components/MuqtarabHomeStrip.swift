@@ -57,14 +57,14 @@ struct MuqtarabHomeStrip: View {
 
     private var content: some View {
         HomeSectionCard(title: "مُقترب", context: "زوايا كتّاب سبق") {
-            NavigationLink(value: MuqtarabRoute()) {
+            ReaderLink(value: MuqtarabRoute()) {
                 HomeSectionLinkLabel(title: "كل الزوايا")
             }
             .buttonStyle(.plain)
         } content: {
             ForEach(Array(visibleTopics.enumerated()), id: \.element.id) { index, topic in
                 if index > 0 { SidebarRowDivider() }
-                NavigationLink(value: MuqtarabTopicRoute(
+                ReaderLink(value: MuqtarabTopicRoute(
                     angleSlug: topic.angle?.slug ?? "",
                     topicSlug: topic.slug,
                     title: topic.title

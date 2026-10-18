@@ -103,7 +103,7 @@ struct WorldCupHomeStrip: View {
             if let ov = store.overview, !stripHidden {
                 // البطل (بعد حسم النهائي) يتقدّم على مربع المباراة — يبقي البانر
                 // حيًّا بعد انتهاء آخر مباراة حتى يُطفأ البلوك من لوحة التحكم.
-                NavigationLink(value: WorldCupRoute()) {
+                ReaderLink(value: WorldCupRoute()) {
                     if let champion = ov.champion {
                         championCard(champion)
                     } else {

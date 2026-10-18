@@ -32,7 +32,10 @@ struct HomeSidebarView: View {
     var body: some View {
         HomeFeedView()
             .environment(\.opensArticlesInReader, true)
-            .environment(\.homeFeedTopAccessory, navigation.readerContext == nil ? nil : AnyView(
+            // المفتاح ثابت في العمود دائمًا: إخفاؤه حين يُسحب السياق (فتح مُقترب أو
+            // رأي من العمود) كان يرفع العمود كله ~90 نقطة تحت إصبع القارئ، ويُبقي
+            // الصف الملموس في موضعه القديم فوق ما بعده (محاكي 2026-10-18).
+            .environment(\.homeFeedTopAccessory, AnyView(
                 modePicker.padding(.top, SabqLayout.space4)
             ))
             .environment(\.homeFeedReplacement, showsContext ? contextReplacement : nil)
@@ -44,7 +47,6 @@ struct HomeSidebarView: View {
             .onChange(of: navigation.readerContext?.id) { _, _ in
                 if showsContext { NotificationCenter.default.post(name: .sabqHomeScrollToTop, object: nil) }
             }
-            .animation(.easeOut(duration: 0.18), value: showsContext)
     }
 
     private var contextReplacement: AnyView? {
@@ -61,8 +63,8 @@ struct HomeSidebarView: View {
         )
     }
 
-    /// «الأخبار | سياق الخبر» أعلى العمود (نموذج Duo المعتمد). يظهر فقط حين
-    /// يكون في القارئ خبر له سياق.
+    /// «الأخبار | سياق الخبر» أعلى العمود (نموذج Duo المعتمد). «سياق الخبر» معطّل
+    /// حين لا يكون في القارئ خبر له سياق (صفحة مُقترب، بحث، قسم…).
     private var modePicker: some View {
         HStack(spacing: SabqLayout.space4) {
             modeButton("الأخبار", mode: .news)
@@ -76,15 +78,18 @@ struct HomeSidebarView: View {
     }
 
     private func modeButton(_ title: String, mode: HomeSidebarMode) -> some View {
-        let isSelected = navigation.homeSidebarMode == mode
+        let isAvailable = mode == .news || navigation.readerContext != nil
+        let isSelected = isAvailable && navigation.homeSidebarMode == mode
+            || mode == .news && navigation.readerContext == nil
         return Button {
-            guard !isSelected else { return }
+            guard !isSelected, isAvailable else { return }
             SabqHaptics.light()
             navigation.homeSidebarMode = mode
         } label: {
             Text(title)
                 .font(SabqType.metaEmphasis.font)
-                .foregroundStyle(isSelected ? SabqTheme.onAction : SabqTheme.textPrimary)
+                .foregroundStyle(isSelected ? SabqTheme.onAction
+                                 : isAvailable ? SabqTheme.textPrimary : SabqTheme.textTertiary)
                 .frame(maxWidth: .infinity, minHeight: 36)
                 .background(
                     RoundedRectangle(cornerRadius: SabqRadius.small, style: .continuous)
@@ -93,6 +98,7 @@ struct HomeSidebarView: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .disabled(!isAvailable)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
         .accessibilityIdentifier(mode == .context ? "homeSidebarMode.context" : "homeSidebarMode.news")
     }

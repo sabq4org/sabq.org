@@ -579,7 +579,7 @@ struct HomeFeedView: View {
                 .accessibilityLabel("تبديل المظهر — الحالي: \((AppAppearance(rawValue: appearanceRaw) ?? .system).arabicLabel)")
 
                 // «مواعيدك» — رابط رئيسي في رأس الويب: الرواتب والدعم والإجازات.
-                NavigationLink(value: MawaeedRoute()) {
+                ReaderLink(value: MawaeedRoute()) {
                     headerIcon("calendar")
                 }
                 .buttonStyle(.plain)
@@ -589,7 +589,7 @@ struct HomeFeedView: View {
                 // to avoid confusing it with the editorial-notifications
                 // unread indicator on the bell next to it — same colour
                 // would have meant two different things side by side.
-                NavigationLink(value: MomentByMomentRoute()) {
+                ReaderLink(value: MomentByMomentRoute()) {
                     headerIcon("dot.radiowaves.left.and.right")
                 }
                 .buttonStyle(.plain)
@@ -598,7 +598,7 @@ struct HomeFeedView: View {
                 // جرس الإشعارات — صندوق القارئ (/v1/inbox)، وفي أعلاه للكتّاب
                 // صفّ «إشعاراتي التحريرية». النقطة الحمراء = غير المقروء في الاثنين.
                 if authStore.isLoggedIn {
-                    NavigationLink(value: ReaderInboxRoute()) {
+                    ReaderLink(value: ReaderInboxRoute()) {
                         headerIcon("bell")
                             .overlay(alignment: .topTrailing) {
                                 // Red unread dot — driven by NotificationsStore's
@@ -622,7 +622,7 @@ struct HomeFeedView: View {
                         : "الإشعارات")
                 }
 
-                NavigationLink(value: SearchRoute()) {
+                ReaderLink(value: SearchRoute()) {
                     headerIcon("magnifyingglass")
                 }
                 .buttonStyle(.plain)
@@ -782,7 +782,7 @@ struct HomeFeedView: View {
     private var trendingPreviewSection: some View {
         if !articlesStore.trendingArticles.isEmpty {
             HomeSectionCard(title: "الأكثر تداولًا", context: "آخر 48 ساعة") {
-                NavigationLink(value: TrendingRoute()) {
+                ReaderLink(value: TrendingRoute()) {
                     HomeSectionLinkLabel()
                 }
                 .buttonStyle(.plain)
@@ -837,7 +837,7 @@ struct HomeFeedView: View {
         if !opinions.isEmpty {
             SabqSectionBand()
             HomeSectionCard(title: "آراء تستحق القراءة") {
-                NavigationLink(value: OpinionsRoute()) {
+                ReaderLink(value: OpinionsRoute()) {
                     HomeSectionLinkLabel()
                 }
                 .buttonStyle(.plain)
@@ -847,7 +847,7 @@ struct HomeFeedView: View {
                         if index > 0 {
                             OpinionRowDivider()
                         }
-                        NavigationLink(value: opinion) {
+                        ReaderLink(value: opinion) {
                             OpinionWriterRow(opinion: opinion)
                         }
                         .buttonStyle(.plain)
@@ -1167,7 +1167,7 @@ struct HomeFeedView: View {
                     icon: "calendar",
                     tint: gold
                 )
-                NavigationLink(value: CalendarRoute()) {
+                ReaderLink(value: CalendarRoute()) {
                     Text("الكل")
                         .font(SabqType.tag.font)
                         .foregroundStyle(gold)

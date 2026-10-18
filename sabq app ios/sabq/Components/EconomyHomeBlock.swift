@@ -149,7 +149,7 @@ struct EconomyHomeBlock: View {
 
     private func teaser(title: String, figure: String, caption: String,
                         badge: String?, cta: String) -> some View {
-        NavigationLink(value: EconomyRoute()) {
+        ReaderLink(value: EconomyRoute()) {
             VStack(alignment: .leading, spacing: SabqLayout.space8) {
                 HStack(spacing: SabqLayout.space8) {
                     Text(title)
@@ -390,7 +390,7 @@ struct EconomyWeeklyHomeCard: View {
                     .font(SabqType.tag.font)
                     .foregroundStyle(SabqTheme.textTertiary)
                 Spacer(minLength: SabqLayout.space8)
-                NavigationLink(value: EconomyRoute()) {
+                ReaderLink(value: EconomyRoute()) {
                     HomeSectionLinkLabel(title: "التفاصيل")
                 }
                 .buttonStyle(.plain)

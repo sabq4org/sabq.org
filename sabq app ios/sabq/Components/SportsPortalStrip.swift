@@ -10,7 +10,7 @@ struct SportsPortalStrip: View {
     @Environment(\.opensArticlesInReader) private var inColumn
 
     var body: some View {
-        NavigationLink(value: SportsTodayRoute()) {
+        ReaderLink(value: SportsTodayRoute()) {
             HStack(spacing: SabqLayout.space8) {
                 if headline?.live == true {
                     HStack(spacing: 4) {

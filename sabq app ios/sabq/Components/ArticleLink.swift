@@ -35,3 +35,32 @@ struct ArticleLink<Label: View>: View {
         }
     }
 }
+
+/// رابط بقيمة لأي وجهة في رئيسية الآيفون: `NavigationLink` على الهاتف، وعلى عمود
+/// الأخبار العريض يُدفع في مكدّس القارئ (`paths[.home]`) فيظهر بزر رجوع ويُفرّغه
+/// زر الرئيسية. `NavigationLink(value:)` داخل عمود NavigationSplitView كان يستبدل
+/// جذر القارئ بلا رجوع ولا يصل إلى `paths` (طلب المالك 2026-10-18). الخبر
+/// (`Article`) يُفتح في القارئ نفسه كما يفعل `ArticleLink`.
+struct ReaderLink<Value: Hashable, Label: View>: View {
+    let value: Value
+    @ViewBuilder var label: () -> Label
+    @Environment(\.opensArticlesInReader) private var opensInReader
+    @Environment(SabqNavigationState.self) private var navigation
+
+    var body: some View {
+        if opensInReader {
+            Button {
+                SabqHaptics.light()
+                if let article = value as? Article {
+                    navigation.openInReader(article)
+                } else {
+                    navigation.openFromReaderContext(value, in: .home)
+                }
+            } label: {
+                label()
+            }
+        } else {
+            NavigationLink(value: value) { label() }
+        }
+    }
+}

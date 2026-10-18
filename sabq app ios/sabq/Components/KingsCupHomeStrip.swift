@@ -82,7 +82,7 @@ struct KingsCupHomeStrip: View {
         ZStack {
             HomeStripAnchor()
             if let ov = store.overview, !hidden {
-                NavigationLink(value: KingsCupRoute()) {
+                ReaderLink(value: KingsCupRoute()) {
                     if let champion = ov.champion {
                         championCard(champion)
                     } else if matchdayMode, let md = ov.matchday {

@@ -55,7 +55,9 @@ struct BreakingTickerBar: View {
         @ViewBuilder content: () -> Content
     ) -> some View {
         if let slug = headline.linkedArticleSlug, !slug.isEmpty {
-            NavigationLink(value: ArticleSlugRoute(slug: slug)) { content() }
+            // ReaderLink يخزّن مُنشئ التسمية، والمعامل غير هارب؛ نبنيها مرة هنا
+            let label = content()
+            ReaderLink(value: ArticleSlugRoute(slug: slug)) { label }
                 .buttonStyle(.plain)
         } else if let ext = headline.externalUrl, let url = URL(string: ext) {
             Button { openURL(url) } label: { content() }

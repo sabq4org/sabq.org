@@ -50,7 +50,7 @@ struct AsianCupHomeStrip: View {
             if store.overview?.blockHidden == true {
                 EmptyView()
             } else if let ov = store.overview {
-                NavigationLink(value: AsianCupRoute()) {
+                ReaderLink(value: AsianCupRoute()) {
                     card(overview: ov)
                 }
                 .buttonStyle(.plain)
