@@ -64,15 +64,21 @@ struct DuoTabContainer<Content: View>: View {
             // مفتوحًا: UIKit يحجز لعمود القارئ شريطًا بعرض حسّاس الكاميرا على
             // الحافة البعيدة (حواف متماثلة)، والشريط يقع داخله كما يقع شريط
             // النظام اليوم، فلا يغطي نصًا.
+            //
+            // الشريطان العموديان مستضافان في UIKit (`AbovePlatformViews`): ما يرسمه
+            // SwiftUI هنا مباشرة يقع تحت مكدّسات التنقل، فكانت الصفحات المدفوعة —
+            // خلفيتها معتمة حتى حافة الشاشة — تغطي الشريط ولا يبقى ظاهرًا إلا فوق
+            // جذر التبويب الشفاف (هرمية العرض على المحاكي 2026-10-18).
             .overlay(alignment: .bottomTrailing) {
                 if !narrow {
-                    DuoTabRail(selection: $selection, onReselect: onReselect)
+                    AbovePlatformViews(content: DuoTabRail(selection: $selection, onReselect: onReselect, centered: true)
+                        .padding(.bottom, 12))
                 }
             }
             // الشريط العمودي داخل شريط الحسّاس (خارج منطقة المحتوى الآمنة)
             .overlay(alignment: stripEdge == .trailing ? .trailing : .leading) {
                 if let edge = stripEdge {
-                    DuoTabRail(selection: $selection, onReselect: onReselect, horizontalPadding: 0, centered: true)
+                    AbovePlatformViews(content: DuoTabRail(selection: $selection, onReselect: onReselect, horizontalPadding: 0, centered: true))
                         .frame(width: edge == .leading ? proxy.safeAreaInsets.leading : proxy.safeAreaInsets.trailing)
                         .offset(x: stripOffset(edge: edge, insets: proxy.safeAreaInsets))
                 }
@@ -85,6 +91,27 @@ struct DuoTabContainer<Content: View>: View {
     /// اتجاه الواجهة (يُعكس في RTL — مقيس على المحاكي)، فالسالب نحو البداية.
     private func stripOffset(edge: HorizontalEdge, insets: EdgeInsets) -> CGFloat {
         edge == .leading ? -insets.leading : insets.trailing
+    }
+}
+
+/// يستضيف محتوى SwiftUI في `UIHostingController` شفاف فيصير عرض UIKit مستقلًا
+/// يُرتَّب فوق مكدّسات التنقل المستضافة قبله. حجمه حجم محتواه.
+private struct AbovePlatformViews<Content: View>: UIViewControllerRepresentable {
+    let content: Content
+
+    func makeUIViewController(context: Context) -> UIHostingController<Content> {
+        let host = UIHostingController(rootView: content)
+        host.view.backgroundColor = .clear
+        host.safeAreaRegions = []
+        return host
+    }
+
+    func updateUIViewController(_ host: UIHostingController<Content>, context: Context) {
+        host.rootView = content
+    }
+
+    func sizeThatFits(_ proposal: ProposedViewSize, uiViewController host: UIHostingController<Content>, context: Context) -> CGSize? {
+        host.sizeThatFits(in: proposal.replacingUnspecifiedDimensions(by: CGSize(width: 10_000, height: 10_000)))
     }
 }
 
