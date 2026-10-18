@@ -31,6 +31,8 @@ struct MyKeywordsView: View {
                          : "كلماتك محفوظة على هذا الجهاز فقط. سجّل الدخول لتُحفظ في حسابك.")
                         .sabqText(SabqType.meta)
                         .foregroundStyle(SabqTheme.textTertiary)
+                        // هامش ذيل القائمة الافتراضي ~10 نقاط على شاشة Duo المطوية
+                        .padding(.horizontal, SabqLayout.space8)
                 }
             }
         }
