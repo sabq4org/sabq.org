@@ -80,16 +80,23 @@ final class SabqNavigationState {
     /// - الفتح (ضيق → عريض): إن كان المكدّس ما زال يحمل ذلك الخبر وحده،
     ///   يُزال لأن القارئ يعرضه أصلًا. إن تعمّق المستخدم بعده (كلمة مفتاحية،
     ///   كاتب…) يبقى المكدّس كما هو فوق القارئ.
+    ///
+    /// الدفع والإزالة بلا حركة: الجسر جزء من الطي نفسه، فيظهر الخبر في مكانه
+    /// بدل أن ينزلق كأن المستخدم فتحه للتو.
     func homeLayoutDidChange(isWide: Bool) {
         let path = paths[.home] ?? NavigationPath()
-        if isWide {
-            if bridgedReaderArticleIntoStack, path.count == 1 {
-                paths[.home] = NavigationPath()
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            if isWide {
+                if bridgedReaderArticleIntoStack, path.count == 1 {
+                    paths[.home] = NavigationPath()
+                }
+                bridgedReaderArticleIntoStack = false
+            } else if path.isEmpty, let article = homeReaderArticle {
+                paths[.home] = NavigationPath([article])
+                bridgedReaderArticleIntoStack = true
             }
-            bridgedReaderArticleIntoStack = false
-        } else if path.isEmpty, let article = homeReaderArticle {
-            paths[.home] = NavigationPath([article])
-            bridgedReaderArticleIntoStack = true
         }
     }
 }
@@ -214,6 +221,15 @@ struct SabqTabNavigation<Root: View, Sidebar: View, Detail: View>: View {
         }
         .navigationSplitViewStyle(.balanced)
         .environment(\.horizontalSizeClass, .regular)
+        // إخفاء العمود وإظهاره بلا حركة. الحركة تتقاطع مع انتقال النافذة بين
+        // الشاشتين، والطي والفتح المتتاليان كانا يتركان صفحة الخبر المدفوعة
+        // بمقاسات الشاشة الداخلية (محتوى بعرض 811 نقطة مقصوص عند حافة الخارجية)
+        // حتى تُغلق الصفحة. بلاغ المالك 2026-10-18؛ ست من سبع طيّات معطوبة قبل
+        // الإصلاح وأربع عشرة سليمة بعده على المحاكي، بالوضعين الرأسي والأفقي.
+        .transaction(value: isWide) { transaction in
+            transaction.animation = nil
+            transaction.disablesAnimations = true
+        }
     }
 
     private var splitLayout: some View {
