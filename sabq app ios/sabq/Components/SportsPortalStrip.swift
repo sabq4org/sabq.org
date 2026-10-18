@@ -54,7 +54,9 @@ struct SportsPortalStrip: View {
             }
             .frame(height: 48)
             .padding(.horizontal, SabqLayout.pageMargin)
-            .background(SabqTheme.surfaceMuted)
+            // لون صلب يتمدد افتراضيًا في حواف الأمان: في عمود Duo مفتوحًا امتد إلى
+            // شريط الحسّاس تحت الساعة (بلاغ المالك 2026-10-18). الحافة حافة المحتوى.
+            .background(SabqTheme.surfaceMuted, ignoresSafeAreaEdges: [])
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
