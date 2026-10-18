@@ -50,16 +50,27 @@ enum DuoPosture {
         return band.minY...band.maxY
     }
 
-    /// أي شريط تبويب يستخدمه `DuoTabContainer`: سفلي حين تضيق النافذة عن
-    /// عمودين (الشاشة الخارجية بأي وضعية)، وجانبي حين تتسع (مفتوحًا).
+    /// أي شريط تبويب يستخدمه `DuoTabContainer`: سفلي حين لا تُعرض النافذة
+    /// عمودين (الخارجية رأسيًا، ومفتوحًا رأسيًا)، وجانبي مع العمودين.
     ///
     /// الخلفية: على الشاشة الخارجية بوضعية «الكتاب المغلق» يعرض `TabView`
     /// شريطًا رأسيًا ويحجز له 84 نقطة مقابل الحسّاس، فلا يبقى للمحتوى إلا 298
     /// من 466 نقطة (مقيس على المحاكي 2026-10-15)، ولا يُلغى الحجز بإخفاء
     /// الشريط. لذلك يملك Duo شريطه الخاص.
     /// - Parameter windowWidth: عرض النافذة كاملًا مع حواف الأمان.
-    static func usesBottomTabBar(windowWidth: CGFloat) -> Bool {
-        windowWidth < matchColumnsMinWidth
+    static func usesBottomTabBar(windowWidth: CGFloat, windowHeight: CGFloat) -> Bool {
+        !usesReaderColumns(width: windowWidth, height: windowHeight)
+    }
+
+    /// أقل عرض لعمودي «الأخبار + القارئ».
+    static let readerColumnsMinWidth: CGFloat = 640
+
+    /// عمودان على Duo: عرض كافٍ **وأفقي**. مفتوحًا رأسيًا (≈669×951) عمود واحد
+    /// بطلب المالك 2026-10-18 — كان العرض وحده يفرّق، لكن الرأسي المفتوح والخارجية
+    /// أفقيًا (≈678×466) شبه متساويين عرضًا. مفتوحًا أفقيًا (951×669) والخارجية
+    /// أفقيًا عمودان كما كانا.
+    static func usesReaderColumns(width: CGFloat, height: CGFloat) -> Bool {
+        width >= readerColumnsMinWidth && width > height
     }
 
     /// أدنى عرض لشريط الحسّاس الجانبي يتّسع لشريط التبويب العمودي (`DuoTabRail`
@@ -71,8 +82,8 @@ enum DuoPosture {
     /// تحت الساعة فارغ، وإزالة الشريط السفلي تعيد للأخبار ~54 نقطة ارتفاعًا).
     /// `nil` = لا شريط جانبي كافٍ (أو النافذة عريضة) فيبقى الشريط السفلي/الجانبي
     /// المعتاد.
-    static func sideStripRailEdge(windowWidth: CGFloat, leadingInset: CGFloat, trailingInset: CGFloat) -> HorizontalEdge? {
-        guard usesBottomTabBar(windowWidth: windowWidth) else { return nil }
+    static func sideStripRailEdge(windowWidth: CGFloat, windowHeight: CGFloat, leadingInset: CGFloat, trailingInset: CGFloat) -> HorizontalEdge? {
+        guard usesBottomTabBar(windowWidth: windowWidth, windowHeight: windowHeight) else { return nil }
         let widest = max(leadingInset, trailingInset)
         guard widest >= sideRailMinStrip else { return nil }
         return leadingInset >= trailingInset ? .leading : .trailing

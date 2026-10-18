@@ -22,12 +22,17 @@ struct DuoTabContainer<Content: View>: View {
 
     var body: some View {
         GeometryReader { proxy in
-            let windowWidth = proxy.size.width + proxy.safeAreaInsets.leading + proxy.safeAreaInsets.trailing
-            let narrow = DuoPosture.usesBottomTabBar(windowWidth: windowWidth)
+            // منطقة المحتوى نفسها التي يقيسها `SabqTabNavigation` لقرار العمودين —
+            // القياس بالنافذة (مع شريط الحسّاس) جعل الخارجية أفقيًا عمودًا واحدًا
+            // بشريط جانبي عائم فوق الصورة (محاكي 2026-10-18).
+            let windowWidth = proxy.size.width
+            let windowHeight = proxy.size.height
+            let narrow = DuoPosture.usesBottomTabBar(windowWidth: windowWidth, windowHeight: windowHeight)
             // مطويًا بحسّاس جانبي: الشريط العمودي في شريط الحسّاس الفارغ تحت
             // الساعة بدل الشريط السفلي، فيستعيد المحتوى ارتفاع الشريط.
             let stripEdge = DuoPosture.sideStripRailEdge(
                 windowWidth: windowWidth,
+                windowHeight: windowHeight,
                 leadingInset: proxy.safeAreaInsets.leading,
                 trailingInset: proxy.safeAreaInsets.trailing
             )
@@ -65,9 +70,9 @@ struct DuoTabContainer<Content: View>: View {
                 }
             }
             // الشريط العمودي داخل شريط الحسّاس (خارج منطقة المحتوى الآمنة)
-            .overlay(alignment: stripEdge == .trailing ? .bottomTrailing : .bottomLeading) {
+            .overlay(alignment: stripEdge == .trailing ? .trailing : .leading) {
                 if let edge = stripEdge {
-                    DuoTabRail(selection: $selection, onReselect: onReselect, horizontalPadding: 0)
+                    DuoTabRail(selection: $selection, onReselect: onReselect, horizontalPadding: 0, centered: true)
                         .frame(width: edge == .leading ? proxy.safeAreaInsets.leading : proxy.safeAreaInsets.trailing)
                         .offset(x: stripOffset(edge: edge, insets: proxy.safeAreaInsets))
                 }
@@ -155,10 +160,13 @@ struct DuoTabRail: View {
     var onReselect: (AppTab) -> Void = { _ in }
     /// 10 بجوار القارئ مفتوحًا؛ 0 داخل شريط الحسّاس مطويًا (عرضه يحدده الإطار).
     var horizontalPadding: CGFloat = 10
+    /// مفتوحًا أسفل الحافة؛ في شريط الحسّاس وسطه، فالكاميرا أعلاه رأسيًا وأسفله
+    /// أفقيًا (محاكي 2026-10-18).
+    var centered = false
 
     var body: some View {
         VStack {
-            Spacer(minLength: 0)
+            if !centered { Spacer(minLength: 0) }
             VStack(spacing: 6) {
                 ForEach(AppTab.allCases) { tab in
                     DuoTabButton(tab: tab, selection: $selection, onReselect: onReselect) { isSelected in
@@ -181,7 +189,7 @@ struct DuoTabRail: View {
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
                     .strokeBorder(SabqTheme.outline.opacity(0.6), lineWidth: 0.5)
             }
-            .padding(.bottom, 12)
+            .padding(.bottom, centered ? 0 : 12)
         }
         .padding(.horizontal, horizontalPadding)
     }

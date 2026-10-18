@@ -33,21 +33,30 @@ struct DuoLayoutTests {
         #expect(DuoPosture.horizontalDivision(from: []) == nil)
     }
 
-    @Test func bottomTabBarOnlyOnNarrowWindows() {
-        #expect(DuoPosture.usesBottomTabBar(windowWidth: 466))   // الشاشة الخارجية
-        #expect(!DuoPosture.usesBottomTabBar(windowWidth: 678))  // الخارجية أفقيًا
-        #expect(!DuoPosture.usesBottomTabBar(windowWidth: 951))  // مفتوحًا
+    // الأبعاد هنا منطقة المحتوى (بعد شريط الحسّاس 84) كما تمرّرها الحاوية.
+    @Test func bottomTabBarOnlyWithoutReaderColumns() {
+        #expect(DuoPosture.usesBottomTabBar(windowWidth: 382, windowHeight: 678))   // الخارجية رأسيًا
+        #expect(DuoPosture.usesBottomTabBar(windowWidth: 594, windowHeight: 466))   // الخارجية أفقيًا: عمود واحد
+        #expect(!DuoPosture.usesBottomTabBar(windowWidth: 867, windowHeight: 669))  // مفتوحًا أفقيًا
+        #expect(DuoPosture.usesBottomTabBar(windowWidth: 669, windowHeight: 900))   // مفتوحًا رأسيًا
+    }
+
+    @Test func readerColumnsNeedWidthAndLandscape() {
+        #expect(DuoPosture.usesReaderColumns(width: 867, height: 669))   // مفتوحًا أفقيًا
+        #expect(!DuoPosture.usesReaderColumns(width: 594, height: 466))  // الخارجية أفقيًا: أضيق من عمودين
+        #expect(!DuoPosture.usesReaderColumns(width: 669, height: 900))  // مفتوحًا رأسيًا: عمود واحد
+        #expect(!DuoPosture.usesReaderColumns(width: 382, height: 678))  // الخارجية رأسيًا
     }
 
     @Test func tabRailMovesIntoSensorStripWhenFolded() {
         // الشاشة الخارجية بحسّاس جانبي 84 نقطة: الشريط في جهة الحسّاس
-        #expect(DuoPosture.sideStripRailEdge(windowWidth: 466, leadingInset: 84, trailingInset: 0) == .leading)
-        #expect(DuoPosture.sideStripRailEdge(windowWidth: 466, leadingInset: 0, trailingInset: 84) == .trailing)
+        #expect(DuoPosture.sideStripRailEdge(windowWidth: 382, windowHeight: 678, leadingInset: 84, trailingInset: 0) == .leading)
+        #expect(DuoPosture.sideStripRailEdge(windowWidth: 382, windowHeight: 678, leadingInset: 0, trailingInset: 84) == .trailing)
         // بلا شريط جانبي أو بشريط أضيق من الشريط العمودي: يبقى السفلي
-        #expect(DuoPosture.sideStripRailEdge(windowWidth: 466, leadingInset: 0, trailingInset: 0) == nil)
-        #expect(DuoPosture.sideStripRailEdge(windowWidth: 466, leadingInset: 44, trailingInset: 0) == nil)
+        #expect(DuoPosture.sideStripRailEdge(windowWidth: 382, windowHeight: 678, leadingInset: 0, trailingInset: 0) == nil)
+        #expect(DuoPosture.sideStripRailEdge(windowWidth: 382, windowHeight: 678, leadingInset: 44, trailingInset: 0) == nil)
         // مفتوحًا: الشريط الجانبي المعتاد لا شريط الحسّاس
-        #expect(DuoPosture.sideStripRailEdge(windowWidth: 951, leadingInset: 84, trailingInset: 84) == nil)
+        #expect(DuoPosture.sideStripRailEdge(windowWidth: 867, windowHeight: 669, leadingInset: 84, trailingInset: 84) == nil)
     }
 
     // MARK: - الموجز

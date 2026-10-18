@@ -123,10 +123,13 @@ struct SabqTabNavigation<Root: View, Sidebar: View, Detail: View>: View {
 
     var body: some View {
         GeometryReader { geo in
-            let isWide = usesReaderColumns
-                && (sizeClass == .regular || geo.size.width >= Self.readerColumnsMinWidth)
             // Duo فقط: حاوية واحدة ثابتة في الوضعين. غيره يبقى على التبديل.
             let usesStableSplit = usesReaderColumns && FoldableDevice.isFoldable(observed: foldableObserved)
+            // Duo يقرر بالهندسة وحدها (عرض كافٍ وأفقي، `DuoPosture`) — صنف الحجم
+            // قد يبقى «منتظمًا» مفتوحًا رأسيًا فيفرض عمودين ضيقين. غيره كما كان.
+            let isWide = usesReaderColumns && (usesStableSplit
+                ? DuoPosture.usesReaderColumns(width: geo.size.width, height: geo.size.height)
+                : (sizeClass == .regular || geo.size.width >= Self.readerColumnsMinWidth))
             Group {
                 if usesStableSplit {
                     stableSplitLayout(isWide: isWide)
