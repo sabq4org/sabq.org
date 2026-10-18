@@ -173,7 +173,17 @@ struct SabqTabNavigation<Root: View, Sidebar: View, Detail: View>: View {
         )
         let contentSizeClass: UserInterfaceSizeClass? = isWide ? .regular : sizeClass
         return NavigationSplitView(columnVisibility: visibility) {
-            sidebar()
+            // مطويًا يُخفى العمود بحركة يُعاد فيها تخطيط محتواه على عرض يتقلص،
+            // فظهرت رئيسية الآيفون مضغوطة (حرف في كل سطر) نحو ثانيتين قبل أن
+            // يستقر القارئ (محاكي Duo 2026-10-18). المحتوى يُفرّغ فور الطي فتنزلق
+            // خلفية فارغة؛ حالة القارئ في `path` لا تتأثر.
+            Group {
+                if isWide {
+                    sidebar()
+                } else {
+                    SabqTheme.background
+                }
+            }
                 .modifier(SabqDestinations())
                 .navigationSplitViewColumnWidth(min: 340, ideal: 400, max: 520)
                 .toolbar(removing: .sidebarToggle)
