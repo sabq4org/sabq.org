@@ -638,9 +638,45 @@ function mergeAndSortTimelines(
   return merged.slice(0, 100);
 }
 
+/**
+ * The passport no longer shows «المسؤولون عن المحتوى» (people) or
+ * «سجل أحداث الخبر» (timeline) — removed from web and the apps in #1932.
+ * App versions already installed still render both sections from this
+ * response, so the API hides their content too: every person is null
+ * (the iOS/Android people card hides itself when no one is listed) and the
+ * timeline keeps only the publish milestone with no actor or details, so the
+ * old timeline card shows a date instead of an empty state. Field shapes are
+ * unchanged so older app decoders keep working.
+ */
+export function hidePassportContributors(passport: PassportResponse): PassportResponse {
+  const published = passport.timeline.find((e) => e.eventType === "published");
+  return {
+    ...passport,
+    people: {
+      author: null,
+      submitter: null,
+      reporter: null,
+      reviewer: null,
+      verifier: null,
+      publisherApprover: null,
+    },
+    timeline: published
+      ? [{ ...published, actor: null, details: null, summary: null }]
+      : [],
+  };
+}
+
 export async function buildArabicPassport(
   slug: string,
   viewerIsStaff: boolean = false,
+): Promise<PassportResponse | null> {
+  const passport = await buildArabicPassportFull(slug, viewerIsStaff);
+  return passport ? hidePassportContributors(passport) : null;
+}
+
+async function buildArabicPassportFull(
+  slug: string,
+  viewerIsStaff: boolean,
 ): Promise<PassportResponse | null> {
   // Resolve the article by slug, english_slug (short code), or UUID id —
   // mirrors the /api/articles/:slug fallback so passport links work for any
@@ -1049,12 +1085,14 @@ export async function buildEnglishPassport(
   slug: string,
   viewerIsStaff: boolean = false,
 ): Promise<PassportResponse | null> {
-  return buildLocalizedPassport(slug, "en", viewerIsStaff);
+  const passport = await buildLocalizedPassport(slug, "en", viewerIsStaff);
+  return passport ? hidePassportContributors(passport) : null;
 }
 
 export async function buildUrduPassport(
   slug: string,
   viewerIsStaff: boolean = false,
 ): Promise<PassportResponse | null> {
-  return buildLocalizedPassport(slug, "ur", viewerIsStaff);
+  const passport = await buildLocalizedPassport(slug, "ur", viewerIsStaff);
+  return passport ? hidePassportContributors(passport) : null;
 }
