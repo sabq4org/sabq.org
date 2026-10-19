@@ -1137,7 +1137,7 @@ export default function ArticleEditor() {
     saveDraftToLocalStorage
   ]);
 
-  useArticleServerAutosave({
+  const serverAutosave = useArticleServerAutosave({
     enabled: Boolean(user?.id) && (isNewArticle || Boolean(article?.id)),
     isNewArticle,
     articleId: id,
@@ -1571,8 +1571,19 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
       skipToast?: boolean;
       submitForReview?: boolean;
     }) => {
+      // A server autosave may have just created this "new" article (or be creating it):
+      // stop it and save onto that row, otherwise publishing leaves a twin draft behind.
+      const settled = await serverAutosave.pauseForManualSave();
+      const draftFromAutosave = isNewArticle ? settled.created : null;
+      const targetArticleId = draftFromAutosave?.id ?? id;
+      // An autosave PATCH that finished while we waited moved updatedAt; this closure's
+      // articleUpdatedAt predates it and would 409.
+      const expectedVersion = settled.settledVersion
+        ?? (draftFromAutosave ? (draftFromAutosave.updatedAt ?? null) : articleUpdatedAt);
+
       console.log('[Save Article] Starting save...', {
         isNewArticle,
+        draftFromAutosave: draftFromAutosave?.id ?? null,
         publishNow,
         title,
         slug,
@@ -1770,7 +1781,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
         reporterIdType: typeof articleData.reporterId,
       });
 
-      if (isNewArticle) {
+      if (isNewArticle && !draftFromAutosave) {
         console.log('[Save Article] Creating NEW article via POST /api/admin/articles');
         const result = await apiRequest("/api/admin/articles", {
           method: "POST",
@@ -1779,10 +1790,10 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
         console.log('[Save Article] POST result:', result);
         return result;
       } else {
-        console.log('[Save Article] Updating EXISTING article via PATCH /api/admin/articles/' + id);
-        const result = await apiRequest(`/api/admin/articles/${id}`, {
+        console.log('[Save Article] Updating EXISTING article via PATCH /api/admin/articles/' + targetArticleId);
+        const result = await apiRequest(`/api/admin/articles/${targetArticleId}`, {
           method: "PATCH",
-          body: JSON.stringify({ ...articleData, expectedUpdatedAt: articleUpdatedAt }),
+          body: JSON.stringify({ ...articleData, expectedUpdatedAt: expectedVersion }),
         });
         console.log('[Save Article] PATCH result:', result);
         return result;
@@ -1894,6 +1905,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
       }
     },
     onError: (error: Error) => {
+      serverAutosave.resumeAfterManualSave();
       console.error('[Save Article] Error:', error.message, error);
       toast({
         title: "خطأ",
@@ -2160,6 +2172,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
       }
       return { ok: true, articleId };
     } catch (err) {
+      serverAutosave.resumeAfterManualSave();
       console.error('[handleSave] Save failed:', err);
       if (options?.submitForReview && savedArticleIdForReview) {
         toast({

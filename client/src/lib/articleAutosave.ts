@@ -209,3 +209,57 @@ export function readMigratedLocalDraft(
   store.setItem(key, legacy);
   return { key, raw: legacy, migrated: true };
 }
+
+export type AutosavedDraft = { id: string; updatedAt?: string };
+
+/**
+ * Keeps server autosave and a manual save (publish/schedule/save) from both writing.
+ * Without it, an autosave create still on the wire when the editor pressed «نشر» (or
+ * one fired while the publish POST was running) left a second row behind as a draft.
+ */
+export function createManualSaveGate() {
+  let paused = false;
+  let inFlight: Promise<void> | null = null;
+  let created: AutosavedDraft | null = null;
+  let version: string | null = null;
+
+  return {
+    isPaused: () => paused,
+    /** Runs one autosave unless paused or another one is still running. */
+    run(flush: () => Promise<void>): Promise<void> | null {
+      if (paused || inFlight) return null;
+      const run = flush().finally(() => {
+        inFlight = null;
+      });
+      inFlight = run;
+      return run;
+    },
+    recordCreated(draft: AutosavedDraft) {
+      created = draft;
+      version = draft.updatedAt ?? null;
+    },
+    /** updatedAt returned by an autosave PATCH. */
+    recordSaved(updatedAt: string | undefined) {
+      if (updatedAt) version = updatedAt;
+    },
+    /**
+     * Stops autosave, waits for a request already sent, and returns the draft autosave
+     * created plus the row version that request left, so the manual save's
+     * expectedUpdatedAt is not one autosave already moved past (409).
+     */
+    async pause(): Promise<{ created: AutosavedDraft | null; settledVersion: string | null }> {
+      paused = true;
+      version = null;
+      if (inFlight) await inFlight.catch(() => undefined);
+      return { created, settledVersion: version };
+    },
+    resume() {
+      paused = false;
+    },
+    /** A fresh "new article" screen must not reuse a draft made for an earlier one. */
+    resetForNewArticle() {
+      created = null;
+      paused = false;
+    },
+  };
+}
