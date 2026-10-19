@@ -11,8 +11,6 @@ import {
   Sparkles,
   Image as ImageIcon,
   Search as SearchIcon,
-  Clock,
-  User as UserIcon,
   ExternalLink,
   Globe,
   Building2,
@@ -375,36 +373,6 @@ function formatDate(value: string | null | undefined, language: Language): strin
   }
 }
 
-function getPersonName(person: PassportPerson, language: Language): string {
-  if (language === "en") {
-    return [person.firstNameEn || person.firstName, person.lastNameEn || person.lastName]
-      .filter(Boolean)
-      .join(" ") || "—";
-  }
-  return [person.firstName, person.lastName].filter(Boolean).join(" ") || "—";
-}
-
-function PersonRow({ person, role, language }: { person: PassportPerson; role: string; language: Language }) {
-  const initials = getPersonName(person, language).slice(0, 2).toUpperCase();
-  return (
-    <div
-      className="flex items-center gap-3 rounded-md border p-3 hover-elevate"
-      data-testid={`person-${role}`}
-    >
-      <Avatar className="h-10 w-10">
-        {person.profileImageUrl && <AvatarImage src={person.profileImageUrl} alt={getPersonName(person, language)} />}
-        <AvatarFallback>{initials || <UserIcon className="h-4 w-4" />}</AvatarFallback>
-      </Avatar>
-      <div className="min-w-0 flex-1">
-        <div className="text-sm font-medium truncate" data-testid={`text-person-name-${role}`}>
-          {getPersonName(person, language)}
-        </div>
-        <div className="text-xs text-muted-foreground">{role}</div>
-      </div>
-    </div>
-  );
-}
-
 // Visualizes "AI X% · Human Y%" as a single horizontal split bar.
 // The amber-filled portion = AI contribution, the rest stays emerald
 // background so it's instantly readable as "rest is human".
@@ -572,20 +540,8 @@ export function ArticlePassportPage({ language }: ArticlePassportPageProps) {
   }
 
   const a = passport.article;
-  const people = passport.people;
   const ai = passport.aiFootprint;
   const src = passport.source;
-  const peopleEntries: Array<[keyof typeof people, PassportPerson | null, string]> = [
-    ["submitter", people.submitter, t.role.submitter],
-    ["reporter", people.reporter, t.role.reporter],
-    ["reviewer", people.reviewer, t.role.reviewer],
-    ["verifier", people.verifier, t.role.verifier],
-    ["publisherApprover", people.publisherApprover, t.role.publisherApprover],
-  ];
-  const filledPeople = peopleEntries.filter(([, p]) => !!p) as Array<
-    [keyof typeof people, PassportPerson, string]
-  >;
-
   const showSources =
     !!src.rawSource ||
     !!src.sourceUrl ||
@@ -815,27 +771,6 @@ export function ArticlePassportPage({ language }: ArticlePassportPageProps) {
               </CardContent>
             </Card>
 
-            {/* People */}
-            <Card className="border-slate-200/70 dark:border-slate-800/60">
-              <CardHeader className="bg-gradient-to-l from-slate-50/80 to-transparent dark:from-slate-900/30 dark:to-transparent rounded-t-xl border-b border-slate-100/70 dark:border-slate-800/50">
-                <CardTitle className="flex items-center gap-2 text-lg">
-                  <UserIcon className="h-5 w-5 text-slate-600 dark:text-slate-400" />
-                  {t.sectionPeople}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="pt-5">
-                {filledPeople.length === 0 ? (
-                  <p className="text-sm text-muted-foreground" data-testid="text-no-people">{t.noPeople}</p>
-                ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {filledPeople.map(([key, person, label]) => (
-                      <PersonRow key={key as string} person={person} role={label} language={language} />
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
             {/* AI image generations */}
             {passport.aiImageGenerations.length > 0 && (
               <Card className="border-violet-200/60 dark:border-violet-900/50">
@@ -1060,78 +995,6 @@ export function ArticlePassportPage({ language }: ArticlePassportPageProps) {
             </Card>
           </div>
         </div>
-
-        {/* FULL-WIDTH TIMELINE */}
-        <Card className="border-slate-200/70 dark:border-slate-800/60">
-          <CardHeader className="bg-gradient-to-l from-slate-100/80 via-slate-50/50 to-transparent dark:from-slate-900/40 dark:via-slate-900/20 dark:to-transparent rounded-t-xl border-b border-slate-100/70 dark:border-slate-800/50">
-            <CardTitle className="flex items-center gap-2 text-lg">
-              <Clock className="h-5 w-5 text-slate-600 dark:text-slate-400" />
-              {t.sectionTimeline}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="pt-5">
-            {passport.timeline.length === 0 ? (
-              <p className="text-sm text-muted-foreground" data-testid="text-no-timeline">{t.noTimeline}</p>
-            ) : (
-              <ol className="relative ps-7" data-testid="list-timeline">
-                {/* Vertical line spanning all events */}
-                <div className="absolute top-1 bottom-1 start-[11px] w-px bg-border" aria-hidden />
-                {passport.timeline.map((event, idx) => {
-                  const eventLabel = t.eventType[event.eventType] || event.eventType;
-                  const isLast = idx === passport.timeline.length - 1;
-                  return (
-                    <li
-                      key={event.id}
-                      className={`relative ${isLast ? "" : "pb-5"}`}
-                      data-testid={`item-timeline-${event.id}`}
-                    >
-                      {/* Dot */}
-                      <div className="absolute start-[-21px] top-1 h-[14px] w-[14px] rounded-full bg-primary border-[3px] border-background shadow" aria-hidden />
-                      <div className="space-y-1.5">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Badge variant="secondary" className="text-xs">{eventLabel}</Badge>
-                          <Badge variant="outline" className="text-[10px]">
-                            {t.eventSource[event.source]}
-                          </Badge>
-                          <span className="text-xs text-muted-foreground">
-                            {formatDate(event.createdAt, language)}
-                          </span>
-                        </div>
-                        {event.summary && (
-                          <p className="text-sm text-muted-foreground">{event.summary}</p>
-                        )}
-                        {event.actor && (
-                          <div className="flex items-center gap-2 pt-0.5">
-                            <Avatar className="h-6 w-6">
-                              {event.actor.profileImageUrl && <AvatarImage src={event.actor.profileImageUrl} />}
-                              <AvatarFallback className="text-[10px]">
-                                {getPersonName(event.actor, language).slice(0, 1)}
-                              </AvatarFallback>
-                            </Avatar>
-                            <span className="text-xs text-muted-foreground" data-testid={`text-event-actor-${event.id}`}>
-                              {getPersonName(event.actor, language)}
-                            </span>
-                          </div>
-                        )}
-                        {event.details && passport.viewer.isStaff && (
-                          <details className="pt-1" data-testid={`details-event-${event.id}`}>
-                            <summary className="text-xs text-muted-foreground cursor-pointer hover:underline inline-flex items-center gap-1">
-                              <Lock className="h-3 w-3" />
-                              {t.changeDetails} ({t.staffOnly})
-                            </summary>
-                            <pre className="mt-1 text-[11px] bg-muted/50 rounded p-2 overflow-x-auto leading-relaxed">
-                              {JSON.stringify(event.details, null, 2)}
-                            </pre>
-                          </details>
-                        )}
-                      </div>
-                    </li>
-                  );
-                })}
-              </ol>
-            )}
-          </CardContent>
-        </Card>
 
         <div className="text-xs text-muted-foreground text-center pt-2 pb-6">
           Sabq · {t.title}
