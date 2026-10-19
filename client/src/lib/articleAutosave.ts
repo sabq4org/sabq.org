@@ -209,3 +209,46 @@ export function readMigratedLocalDraft(
   store.setItem(key, legacy);
   return { key, raw: legacy, migrated: true };
 }
+
+export type AutosavedDraft = { id: string; updatedAt?: string };
+
+/**
+ * Keeps server autosave and a manual save (publish/schedule/save) from both writing.
+ * Without it, an autosave create still on the wire when the editor pressed «نشر» (or
+ * one fired while the publish POST was running) left a second row behind as a draft.
+ */
+export function createManualSaveGate() {
+  let paused = false;
+  let inFlight: Promise<void> | null = null;
+  let created: AutosavedDraft | null = null;
+
+  return {
+    isPaused: () => paused,
+    /** Runs one autosave unless paused or another one is still running. */
+    run(flush: () => Promise<void>): Promise<void> | null {
+      if (paused || inFlight) return null;
+      const run = flush().finally(() => {
+        inFlight = null;
+      });
+      inFlight = run;
+      return run;
+    },
+    recordCreated(draft: AutosavedDraft) {
+      created = draft;
+    },
+    /** Stops autosave, waits for a request already sent, returns the draft it created. */
+    async pause(): Promise<AutosavedDraft | null> {
+      paused = true;
+      if (inFlight) await inFlight.catch(() => undefined);
+      return created;
+    },
+    resume() {
+      paused = false;
+    },
+    /** A fresh "new article" screen must not reuse a draft made for an earlier one. */
+    resetForNewArticle() {
+      created = null;
+      paused = false;
+    },
+  };
+}

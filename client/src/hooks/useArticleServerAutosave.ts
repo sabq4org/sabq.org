@@ -10,8 +10,10 @@ import {
   buildDraftAutosavePatch,
   buildNewDraftCreateBody,
   canServerAutosaveExistingDraft,
+  createManualSaveGate,
   hasMeaningfulDraftContent,
   stableLocalDraftKey,
+  type AutosavedDraft,
   type DraftAutosaveFields,
 } from "@/lib/articleAutosave";
 
@@ -35,11 +37,16 @@ export function useArticleServerAutosave(args: ServerAutosaveArgs) {
   const lockRef = useRef(false);
   const lastPayloadRef = useRef("");
   const blockedUntilRef = useRef(0);
+  // حفظ يدوي (نشر/جدولة/حفظ) جارٍ: لا يُنشئ الحفظ التلقائي صفًا ثانيًا ولا يسابق PATCH النشر.
+  const gateRef = useRef<ReturnType<typeof createManualSaveGate> | null>(null);
+  if (!gateRef.current) gateRef.current = createManualSaveGate();
+  const gate = gateRef.current;
 
   const flushRef = useRef<() => Promise<void>>(async () => {});
   flushRef.current = async () => {
     const current = argsRef.current;
     if (!current.enabled || !current.userId) return;
+    if (gate.isPaused()) return;
     if (lockRef.current) return;
     if (Date.now() < blockedUntilRef.current) return;
     if (!hasMeaningfulDraftContent(current.fields.title, current.fields.content)) return;
@@ -59,6 +66,10 @@ export function useArticleServerAutosave(args: ServerAutosaveArgs) {
         });
         if (!result?.id) throw new Error("missing draft id");
         lastPayloadRef.current = signature;
+        gate.recordCreated({
+          id: result.id,
+          updatedAt: typeof result.updatedAt === "string" ? result.updatedAt : undefined,
+        });
         // Move the browser copy onto the new article (it may hold fields the create body
         // does not send) and drop "-new", which would otherwise prompt on every new article.
         if (current.localDraftKey) {
@@ -113,10 +124,28 @@ export function useArticleServerAutosave(args: ServerAutosaveArgs) {
     }
   };
 
+  const runFlush = () => {
+    void gate.run(() => flushRef.current());
+  };
+
+  /**
+   * Called by a manual save before it sends anything: stops autosave, waits for a
+   * request already on the wire, and returns the draft autosave created (if any) so a
+   * save that still sees the article as new PATCHes that row instead of POSTing a twin.
+   */
+  const pauseForManualSave = (): Promise<AutosavedDraft | null> => gate.pause();
+
+  /** Resume after a manual save failed; a successful one leaves the editor. */
+  const resumeAfterManualSave = () => gate.resume();
+
+  useEffect(() => {
+    if (args.isNewArticle) gate.resetForNewArticle();
+  }, [args.isNewArticle, gate]);
+
   useEffect(() => {
     if (!args.enabled || !args.userId) return;
     const interval = window.setInterval(() => {
-      void flushRef.current();
+      runFlush();
     }, AUTOSAVE_INTERVAL_MS);
     return () => window.clearInterval(interval);
   }, [args.enabled, args.userId, args.isNewArticle, args.articleId]);
@@ -125,8 +154,10 @@ export function useArticleServerAutosave(args: ServerAutosaveArgs) {
     if (!args.enabled || !args.userId || !args.isNewArticle) return;
     if (!hasMeaningfulDraftContent(args.fields.title, args.fields.content)) return;
     const timer = window.setTimeout(() => {
-      void flushRef.current();
+      runFlush();
     }, 2000);
     return () => window.clearTimeout(timer);
   }, [args.enabled, args.userId, args.isNewArticle, args.fields.title, args.fields.content]);
+
+  return { pauseForManualSave, resumeAfterManualSave };
 }
