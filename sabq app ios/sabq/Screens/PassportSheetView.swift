@@ -26,8 +26,6 @@ struct PassportSheetView: View {
                                             verifiedAt: passport.article.verifiedAt)
                         PassportAIFootprintCard(footprint: passport.aiFootprint,
                                                 isStaff: passport.viewer.isStaff)
-                        PassportPeopleCard(people: passport.people,
-                                           publisher: passport.publisher)
                         PassportSourceCard(source: passport.source,
                                            publisher: passport.publisher,
                                            isPublisherNews: passport.article.isPublisherNews)
@@ -38,8 +36,6 @@ struct PassportSheetView: View {
                         if let seo = passport.seoHistoryLatest {
                             PassportSEOHistoryCard(entry: seo)
                         }
-                        PassportTimelineCard(events: passport.timeline,
-                                             isStaff: passport.viewer.isStaff)
                     }
                 }
                 .padding(.horizontal, SabqLayout.pageMargin)

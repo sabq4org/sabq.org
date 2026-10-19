@@ -89,11 +89,12 @@ import java.util.Locale
  * Composition (top to bottom):
  *   1. PassportTrustHeader  — tier circle + label + credibility + verified date
  *   2. PassportAIFootprintCard — total bar + 3 surfaces (body/cover/seo)
- *   3. PassportPeopleCard — reporter / submitter / reviewer / verifier / publisher approver
- *   4. PassportSourceCard — channel + rawSource + publisher + canonical link
- *   5. PassportAIImagesCard (if any) — grid of AI-generated images
- *   6. PassportSEOHistoryCard (if any) — latest SEO version
- *   7. PassportTimelineCard — events with actor + staff-only details
+ *   3. PassportSourceCard — channel + rawSource + publisher + canonical link
+ *   4. PassportAIImagesCard (if any) — grid of AI-generated images
+ *   5. PassportSEOHistoryCard (if any) — latest SEO version
+ *
+ * PassportPeopleCard («المسؤولون عن المحتوى») and PassportTimelineCard
+ * («سجل أحداث الخبر») are no longer shown, matching iOS and web.
  *
  * Top bar: "جواز المحتوى" title, close X on the trailing edge.
  * Share + QR are deferred to a later iteration (iOS implementation in
@@ -203,7 +204,6 @@ private fun LoadedContent(passport: Passport) {
     ) {
         item { PassportTrustHeader(badge = passport.trustBadge, verifiedAt = passport.article.verifiedAt) }
         item { PassportAIFootprintCard(footprint = passport.aiFootprint, isStaff = passport.viewerIsStaff) }
-        item { PassportPeopleCard(people = passport.people, publisher = passport.publisher) }
         item {
             PassportSourceCard(
                 source = passport.source,
@@ -217,7 +217,6 @@ private fun LoadedContent(passport: Passport) {
         passport.seoHistoryLatest?.let { seo ->
             item { PassportSEOHistoryCard(entry = seo) }
         }
-        item { PassportTimelineCard(events = passport.timeline, isStaff = passport.viewerIsStaff) }
     }
 }
 
