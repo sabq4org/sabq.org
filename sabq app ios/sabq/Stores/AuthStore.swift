@@ -496,7 +496,7 @@ final class AuthStore {
     /// ورقة الحذف إلى حقل كلمة المرور بدل رسالة خطأ عامة.
     private(set) var deleteRequiresPassword = false
 
-    func deleteAccount(password: String?) async {
+    func deleteAccount(password: String?, appleAuthorizationCode: String? = nil) async {
         isLoading = true
         errorMessage = nil
         successMessage = nil
@@ -506,7 +506,8 @@ final class AuthStore {
         // خاطئة مثلًا) نعيد التسجيل كي لا يخسر المستخدم إشعاراته.
         await NotificationsStore.shared.unregisterCurrentToken()
         do {
-            try await APIClient.shared.deleteAccount(password: password)
+            try await APIClient.shared.deleteAccount(password: password, appleAuthorizationCode: appleAuthorizationCode)
+            CommentSafetyStore.shared.clear()
             currentUser = nil
             isLoggedIn = false
             needsProfileCompletion = false
@@ -578,6 +579,7 @@ final class AuthStore {
         SabqAnalytics.setUserId(nil)
         NotificationsStore.shared.unreadCount = 0
         NotificationsStore.shared.readerUnread = 0
+        CommentSafetyStore.shared.clear()
         successMessage = nil
         errorMessage = nil
     }

@@ -707,6 +707,8 @@ nonisolated struct APICommentLikeResult: Decodable {
 nonisolated struct APIComment: Decodable, Identifiable, Hashable {
     let id: String
     let body: String
+    /// صاحب التعليق — للإبلاغ والحظر وإخفاء تعليقات المحظورين.
+    let userId: String?
     let userName: String?
     let userAvatar: String?
     let createdAt: String
@@ -718,6 +720,7 @@ nonisolated struct APIComment: Decodable, Identifiable, Hashable {
     init(
         id: String,
         body: String,
+        userId: String? = nil,
         userName: String?,
         userAvatar: String?,
         createdAt: String,
@@ -728,6 +731,7 @@ nonisolated struct APIComment: Decodable, Identifiable, Hashable {
     ) {
         self.id = id
         self.body = body
+        self.userId = userId
         self.userName = userName
         self.userAvatar = userAvatar
         self.createdAt = createdAt
@@ -751,6 +755,11 @@ nonisolated struct APIComment: Decodable, Identifiable, Hashable {
             ?? (try? c.decode(String.self, forKey: FlexKey("body")))
             ?? (try? c.decode(String.self, forKey: FlexKey("text")))
             ?? ""
+        let nestedUserId = (try? c.nestedContainer(keyedBy: FlexKey.self, forKey: FlexKey("user")))
+            .flatMap { try? $0.decode(String.self, forKey: FlexKey("id")) }
+        userId = (try? c.decode(String.self, forKey: FlexKey("userId")))
+            ?? (try? c.decode(String.self, forKey: FlexKey("user_id")))
+            ?? nestedUserId
         if let user = try? c.nestedContainer(keyedBy: FlexKey.self, forKey: FlexKey("user")) {
             let first = (try? user.decode(String.self, forKey: FlexKey("firstName"))) ?? ""
             let last = (try? user.decode(String.self, forKey: FlexKey("lastName"))) ?? ""
@@ -772,6 +781,13 @@ nonisolated struct APIComment: Decodable, Identifiable, Hashable {
             ?? (try? c.decode(String.self, forKey: FlexKey("parent_id")))
         replies = (try? c.decode([APIComment].self, forKey: FlexKey("replies"))) ?? []
     }
+}
+
+/// قارئ حظره المستخدم — `GET /api/v1/members/blocks`.
+nonisolated struct APIBlockedUser: Decodable, Identifiable, Hashable {
+    let id: String
+    let name: String?
+    let profileImageUrl: String?
 }
 
 // MARK: - Opinion

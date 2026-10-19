@@ -529,10 +529,12 @@ struct SettingsView: View {
                         .fill(SabqTheme.surface)
                 )
                 .contentShape(Rectangle())
+                #if DEBUG
                 .onLongPressGesture(minimumDuration: 0.6) {
                     roleDebugMessage = user.roleDebugSummary
                     showRoleDebug = true
                 }
+                #endif
 
                 if user.isWriter || user.isReporter || user.isAdminLike || !(user.department ?? "").isEmpty {
                     Text("هيئة التحرير")
@@ -874,6 +876,19 @@ struct SettingsView: View {
             .tint(SabqTheme.actionFill)
             .padding(.vertical, SabqLayout.space12)
             .frame(minHeight: SabqLayout.touchTarget)
+
+            if authStore.isLoggedIn {
+                SettingsRowDivider()
+
+                NavigationLink(destination: BlockedUsersView()) {
+                    settingsRow(
+                        title: "المستخدمون المحظورون",
+                        subtitle: "من حظرتهم لا تظهر لك تعليقاتهم",
+                        icon: "hand.raised"
+                    )
+                }
+                .buttonStyle(.plain)
+            }
         }
     }
 

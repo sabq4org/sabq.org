@@ -1,6 +1,7 @@
 import SwiftUI
 import PhotosUI
 import UIKit
+import AuthenticationServices
 
 // كانت هذه الورقة جزءًا من SettingsView.swift (3394 سطرًا = 8 شاشات
 // في ملف واحد) — فُكّكت إلى Screens/Settings/ في تدقيق 2026-07-01.
@@ -15,6 +16,8 @@ struct DeleteAccountSheet: View {
     @State private var password = ""
     @State private var confirmText = ""
     @State private var showConfirmation = false
+    /// يُبقي منسّق تفويض آبل حيًّا أثناء طلب الحذف.
+    @State private var appleCoordinator: AppleSignInCoordinator?
 
     private let confirmWord = "حذف"
 
@@ -37,6 +40,40 @@ struct DeleteAccountSheet: View {
     }
 
     private var passwordStep: Bool { requiresPassword && !showConfirmation }
+
+    private var isAppleAccount: Bool {
+        authStore.currentUser?.authProvider?.lowercased() == "apple"
+    }
+
+    /// حسابات آبل: تفويض جديد لحظة الحذف كي يلغي الخادم رمز «تسجيل الدخول بآبل»
+    /// (بند أبل 5.1.1(v)). الإلغاء أو الفشل لا يمنع الحذف.
+    private func requestAppleAuthorizationCode() async -> String? {
+        await withCheckedContinuation { (cont: CheckedContinuation<String?, Never>) in
+            let request = ASAuthorizationAppleIDProvider().createRequest()
+            request.requestedScopes = []
+            var resumed = false
+            let finish: (String?) -> Void = { code in
+                guard !resumed else { return }
+                resumed = true
+                cont.resume(returning: code)
+            }
+            let coordinator = AppleSignInCoordinator(
+                onSuccess: { credential in
+                    finish(credential.authorizationCode.flatMap { String(data: $0, encoding: .utf8) })
+                },
+                onFailure: { _ in finish(nil) },
+                onFinish: {
+                    finish(nil)
+                    Task { @MainActor in appleCoordinator = nil }
+                }
+            )
+            appleCoordinator = coordinator
+            let controller = ASAuthorizationController(authorizationRequests: [request])
+            controller.delegate = coordinator
+            controller.presentationContextProvider = coordinator
+            controller.performRequests()
+        }
+    }
 
     var body: some View {
         NavigationStack {
@@ -133,7 +170,11 @@ struct DeleteAccountSheet: View {
 
                         Button {
                             Task {
-                                await authStore.deleteAccount(password: requiresPassword ? password : nil)
+                                let appleCode = isAppleAccount ? await requestAppleAuthorizationCode() : nil
+                                await authStore.deleteAccount(
+                                    password: requiresPassword ? password : nil,
+                                    appleAuthorizationCode: appleCode
+                                )
                                 if authStore.deleteRequiresPassword {
                                     // الخادم أكّد أن للحساب كلمة مرور: نعود إلى حقلها.
                                     withAnimation { showConfirmation = false }

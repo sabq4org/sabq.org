@@ -1619,6 +1619,33 @@ export const commentReactions = pgTable("comment_reactions", {
   uniqueIndex("idx_comment_reactions_unique").on(table.commentId, table.userId),
 ]);
 
+// بلاغات القرّاء على التعليقات (بند أبل 1.2). أول بلاغ يحوّل التعليق إلى
+// `flagged` فيختفي من العرض العام ويظهر في تبويب «مُبلَّغ عنها» للمشرفين؛
+// unique(comment, reporter) يجعل تكرار البلاغ بلا أثر.
+export const commentReports = pgTable("comment_reports", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  commentId: varchar("comment_id").references(() => comments.id, { onDelete: "cascade" }).notNull(),
+  reporterId: varchar("reporter_id").references(() => users.id).notNull(),
+  reason: text("reason").notNull(), // offensive, spam, harassment, misinformation, other
+  details: text("details"),
+  status: text("status").default("open").notNull(), // open, resolved
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_comment_reports_comment").on(table.commentId),
+  index("idx_comment_reports_reporter_created").on(table.reporterId, table.createdAt),
+  uniqueIndex("idx_comment_reports_unique").on(table.commentId, table.reporterId),
+]);
+
+// حظر قارئ لقارئ آخر (بند أبل 1.2): تطبيقات الجوال تُخفي تعليقات المحظورين
+// عن صاحب الحظر. لا يؤثر على ما يراه الآخرون.
+export const userBlocks = pgTable("user_blocks", {
+  blockerId: varchar("blocker_id").references(() => users.id).notNull(),
+  blockedId: varchar("blocked_id").references(() => users.id).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  primaryKey({ columns: [table.blockerId, table.blockedId] }),
+]);
+
 // Comment sentiment analysis (tracks sentiment history)
 export const commentSentiments = pgTable("comment_sentiments", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

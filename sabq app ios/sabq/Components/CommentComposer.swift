@@ -9,7 +9,11 @@ import SwiftUI
 /// this composer assumes it is only visible when the user can in fact post.
 struct CommentComposer: View {
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(AuthStore.self) private var authStore
     @Bindable var store: CommentsStore
+    /// موافقة لمرة واحدة على قواعد التعليق قبل أول تعليق (بند أبل 1.2).
+    @State private var showCommentTerms = false
+    @State private var showTermsPage = false
 
     /// Local text buffer; cleared on successful publish/awaiting-review.
     @State private var text: String = ""
@@ -37,6 +41,19 @@ struct CommentComposer: View {
 
             counterRow
         }
+        .alert("قبل أن تعلّق", isPresented: $showCommentTerms) {
+            Button("أوافق") {
+                CommentSafetyStore.shared.acceptCommentTerms(userId: authStore.currentUser?.id)
+                Task { await submit() }
+            }
+            Button("شروط الاستخدام") { showTermsPage = true }
+            Button("إلغاء", role: .cancel) { }
+        } message: {
+            Text("لا نتسامح مع المحتوى المسيء أو المستخدمين المسيئين. لا إساءة ولا كراهية ولا تحرش ولا رسائل مزعجة. تُراجَع التعليقات قبل نشرها، ويُحذف المخالف وقد يُحظر صاحبه.")
+        }
+        .sheet(isPresented: $showTermsPage) {
+            NavigationStack { TermsOfUseView() }
+        }
     }
 
     private var composerField: some View {
@@ -59,7 +76,11 @@ struct CommentComposer: View {
 
     private var sendButton: some View {
         Button {
-            Task { await submit() }
+            if CommentSafetyStore.shared.hasAcceptedCommentTerms(userId: authStore.currentUser?.id) {
+                Task { await submit() }
+            } else {
+                showCommentTerms = true
+            }
         } label: {
             if store.isSubmitting {
                 ProgressView()

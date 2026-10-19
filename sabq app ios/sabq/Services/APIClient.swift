@@ -454,6 +454,29 @@ actor APIClient {
         return try await deleteRequest(APICommentLikeResult.self, path: "/comments/\(id)/like")
     }
 
+    // MARK: - Comment safety (بند أبل 1.2)
+
+    /// `POST /api/v1/comments/:id/report` — أول بلاغ يسحب التعليق من العرض العام
+    /// حتى يراجعه مشرف.
+    func reportComment(id: String, reason: String, details: String?) async throws {
+        struct Body: Encodable { let reason: String; let details: String? }
+        try await postRaw(path: "/comments/\(id)/report", body: Body(reason: reason, details: details))
+    }
+
+    func fetchBlockedUsers() async throws -> [APIBlockedUser] {
+        struct Response: Decodable { let users: [APIBlockedUser] }
+        return try await get(Response.self, path: "/members/blocks", ignoreCache: true).users
+    }
+
+    func blockUser(id: String) async throws {
+        struct Body: Encodable { let userId: String }
+        try await postRaw(path: "/members/blocks", body: Body(userId: id))
+    }
+
+    func unblockUser(id: String) async throws {
+        try await deleteRaw(path: "/members/blocks/\(id)", apiRoot: nil)
+    }
+
     // MARK: - Reader inbox (صندوق الإشعارات)
 
     func fetchInbox(offset: Int = 0, limit: Int = 30) async throws -> APIInboxPage {
@@ -1000,9 +1023,15 @@ actor APIClient {
     /// `password` يُرسل فقط للحسابات التي لها كلمة مرور؛ الخادم يقبل حذف حسابات
     /// Apple والجوال بالجلسة وحدها (`DELETE /members/account`)، ويرد 400 إن كان
     /// للحساب كلمة مرور ولم تُرسل.
-    func deleteAccount(password: String?) async throws {
+    /// `appleAuthorizationCode`: تفويض آبل جديد يُطلب لحظة الحذف لحسابات آبل
+    /// فيلغي الخادم رمز «تسجيل الدخول بآبل» بعد الحذف (بند أبل 5.1.1(v)).
+    func deleteAccount(password: String?, appleAuthorizationCode: String? = nil) async throws {
         await ensureCSRF()
-        let body: [String: String] = password.map { ["password": $0] } ?? [:]
+        var body: [String: String] = password.map { ["password": $0] } ?? [:]
+        if let code = appleAuthorizationCode {
+            body["appleAuthorizationCode"] = code
+            body["appleClientId"] = Bundle.main.bundleIdentifier ?? ""
+        }
         try await deleteRaw(path: "/members/account", body: body)
         markLoggedOut()
     }

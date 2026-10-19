@@ -10,6 +10,10 @@ struct ArticleCommentsSection: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var showLoginForCommentSheet = false
     @State private var commentFeedback: CommentFeedback?
+    /// الإبلاغ والحظر (بند أبل 1.2): تعليقات المحظورين وما أبلغ عنه القارئ تُخفى عنه.
+    private let safety = CommentSafetyStore.shared
+    @State private var reportTarget: APIComment?
+    @State private var blockTarget: APIComment?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -57,6 +61,82 @@ struct ArticleCommentsSection: View {
         .task(id: authStore.isLoggedIn) {
             if authStore.isLoggedIn { await store.loadMyLikes() }
         }
+        .task(id: authStore.currentUser?.id) {
+            await safety.syncIfNeeded(userId: authStore.isLoggedIn ? authStore.currentUser?.id : nil)
+        }
+        .confirmationDialog(
+            "لماذا تبلّغ عن هذا التعليق؟",
+            isPresented: Binding(get: { reportTarget != nil }, set: { if !$0 { reportTarget = nil } }),
+            titleVisibility: .visible,
+            presenting: reportTarget
+        ) { comment in
+            ForEach(CommentSafetyStore.ReportReason.allCases) { reason in
+                Button(reason.label) { report(comment, reason: reason) }
+            }
+            Button("إلغاء", role: .cancel) { }
+        } message: { _ in
+            Text("يُخفى التعليق عنك فورًا، ويراجعه فريق الإشراف.")
+        }
+        .alert(
+            "حظر \(blockTarget?.userName ?? "المستخدم")؟",
+            isPresented: Binding(get: { blockTarget != nil }, set: { if !$0 { blockTarget = nil } }),
+            presenting: blockTarget
+        ) { comment in
+            Button("حظر", role: .destructive) { block(comment) }
+            Button("إلغاء", role: .cancel) { }
+        } message: { _ in
+            Text("لن ترى تعليقاته بعد الآن. يمكنك إلغاء الحظر من «حسابي» ← «المستخدمون المحظورون».")
+        }
+    }
+
+    private func requestReport(_ comment: APIComment) {
+        guard authStore.isLoggedIn else {
+            showLoginForCommentSheet = true
+            return
+        }
+        reportTarget = comment
+    }
+
+    private func requestBlock(_ comment: APIComment) {
+        guard authStore.isLoggedIn else {
+            showLoginForCommentSheet = true
+            return
+        }
+        blockTarget = comment
+    }
+
+    private func report(_ comment: APIComment, reason: CommentSafetyStore.ReportReason) {
+        Task {
+            do {
+                try await safety.report(comment, reason: reason)
+                SabqHaptics.success()
+                showFeedback(.init(message: "شكرًا لك، وصل بلاغك وسيراجعه فريق الإشراف", icon: "flag.fill"))
+            } catch {
+                SabqHaptics.error()
+                showFeedback(.init(message: (error as? APIError)?.errorDescription ?? "تعذر إرسال البلاغ، حاول مرة أخرى", isError: true))
+            }
+        }
+    }
+
+    private func block(_ comment: APIComment) {
+        guard let userId = comment.userId else { return }
+        Task {
+            do {
+                try await safety.block(userId: userId, name: comment.userName)
+                SabqHaptics.success()
+                showFeedback(.init(message: "تم الحظر، لن تظهر لك تعليقاته", icon: "hand.raised.fill"))
+            } catch {
+                SabqHaptics.error()
+                showFeedback(.init(message: "تعذر حظر المستخدم، حاول مرة أخرى", isError: true))
+            }
+        }
+    }
+
+    private func showFeedback(_ feedback: CommentFeedback) {
+        withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) {
+            commentFeedback = feedback
+        }
+        scheduleFeedbackDismissal()
     }
 
     /// «الأحدث / الأكثر إعجابًا» كما في قسم التعليقات بالويب.
@@ -112,7 +192,7 @@ struct ArticleCommentsSection: View {
             }
         } else {
             LazyVStack(alignment: .leading, spacing: 6) {
-                let ordered = store.sortedComments
+                let ordered = safety.visible(store.sortedComments)
                 ForEach(ordered) { comment in
                     if comment.id != ordered.first?.id {
                         SidebarRowDivider()
@@ -121,7 +201,10 @@ struct ArticleCommentsSection: View {
                         comment: comment,
                         onReply: { tapped in store.replyingTo = tapped },
                         likeState: { c in (store.isLiked(c), store.likes(for: c)) },
-                        onLike: { c in like(c) }
+                        onLike: { c in like(c) },
+                        currentUserId: authStore.currentUser?.id,
+                        onReport: { c in requestReport(c) },
+                        onBlock: { c in requestBlock(c) }
                     )
                 }
             }
