@@ -48,6 +48,14 @@ describe("hidePassportContributors", () => {
     ]);
   });
 
+  it("accepts the audit-log \"publish\" alias and normalizes it", () => {
+    const p = passport();
+    p.timeline = p.timeline.map((e) => (e.id === "p" ? { ...e, eventType: "PUBLISH" } : e));
+    const out = hidePassportContributors(p);
+    expect(out.timeline).toHaveLength(1);
+    expect(out.timeline[0]).toMatchObject({ id: "p", eventType: "published", actor: null });
+  });
+
   it("returns an empty timeline when there is no publish event", () => {
     const p = passport();
     p.timeline = p.timeline.filter((e) => e.eventType !== "published");
