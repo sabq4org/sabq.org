@@ -221,6 +221,7 @@ export function createManualSaveGate() {
   let paused = false;
   let inFlight: Promise<void> | null = null;
   let created: AutosavedDraft | null = null;
+  let version: string | null = null;
 
   return {
     isPaused: () => paused,
@@ -235,12 +236,22 @@ export function createManualSaveGate() {
     },
     recordCreated(draft: AutosavedDraft) {
       created = draft;
+      version = draft.updatedAt ?? null;
     },
-    /** Stops autosave, waits for a request already sent, returns the draft it created. */
-    async pause(): Promise<AutosavedDraft | null> {
+    /** updatedAt returned by an autosave PATCH. */
+    recordSaved(updatedAt: string | undefined) {
+      if (updatedAt) version = updatedAt;
+    },
+    /**
+     * Stops autosave, waits for a request already sent, and returns the draft autosave
+     * created plus the row version that request left, so the manual save's
+     * expectedUpdatedAt is not one autosave already moved past (409).
+     */
+    async pause(): Promise<{ created: AutosavedDraft | null; settledVersion: string | null }> {
       paused = true;
+      version = null;
       if (inFlight) await inFlight.catch(() => undefined);
-      return created;
+      return { created, settledVersion: version };
     },
     resume() {
       paused = false;

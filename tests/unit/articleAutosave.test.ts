@@ -162,12 +162,39 @@ describe("createManualSaveGate", () => {
 
     const paused = gate.pause();
     finishCreate();
-    await expect(paused).resolves.toEqual({ id: "draft-1", updatedAt: "2026-10-19T11:32:00.000Z" });
+    await expect(paused).resolves.toEqual({
+      created: { id: "draft-1", updatedAt: "2026-10-19T11:32:00.000Z" },
+      settledVersion: "2026-10-19T11:32:00.000Z",
+    });
   });
 
   it("returns no draft when autosave never created one", async () => {
     const gate = createManualSaveGate();
-    await expect(gate.pause()).resolves.toBeNull();
+    await expect(gate.pause()).resolves.toEqual({ created: null, settledVersion: null });
+  });
+
+  it("hands a save the version an in-flight autosave PATCH left, so it does not 409", async () => {
+    const gate = createManualSaveGate();
+    gate.recordSaved("2026-10-19T11:00:00.000Z");
+    let finishPatch: () => void = () => {};
+    gate.run(
+      () =>
+        new Promise<void>((resolve) => {
+          finishPatch = () => {
+            gate.recordSaved("2026-10-19T11:00:45.000Z");
+            resolve();
+          };
+        }),
+    );
+    const paused = gate.pause();
+    finishPatch();
+    await expect(paused).resolves.toEqual({ created: null, settledVersion: "2026-10-19T11:00:45.000Z" });
+  });
+
+  it("reports no settled version when nothing was in flight", async () => {
+    const gate = createManualSaveGate();
+    gate.recordSaved("2026-10-19T11:00:00.000Z");
+    await expect(gate.pause()).resolves.toEqual({ created: null, settledVersion: null });
   });
 
   it("does not start an autosave while a manual save runs, and resumes after a failure", async () => {
@@ -194,7 +221,7 @@ describe("createManualSaveGate", () => {
   it("still pauses when the in-flight autosave fails", async () => {
     const gate = createManualSaveGate();
     gate.run(() => Promise.reject(new Error("network")))?.catch(() => undefined);
-    await expect(gate.pause()).resolves.toBeNull();
+    await expect(gate.pause()).resolves.toEqual({ created: null, settledVersion: null });
     expect(gate.isPaused()).toBe(true);
   });
 
@@ -204,6 +231,6 @@ describe("createManualSaveGate", () => {
     await gate.pause();
     gate.resetForNewArticle();
     expect(gate.isPaused()).toBe(false);
-    await expect(gate.pause()).resolves.toBeNull();
+    await expect(gate.pause()).resolves.toEqual({ created: null, settledVersion: null });
   });
 });

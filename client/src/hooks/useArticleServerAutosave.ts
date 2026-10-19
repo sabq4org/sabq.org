@@ -114,6 +114,7 @@ export function useArticleServerAutosave(args: ServerAutosaveArgs) {
       lastPayloadRef.current = signature;
       current.onActivity("saved");
       const updatedAt = result?.updatedAt;
+      gate.recordSaved(typeof updatedAt === "string" ? updatedAt : undefined);
       current.onServerSaved(typeof updatedAt === "string" ? updatedAt : undefined);
     } catch (err) {
       console.warn("[Auto-save] server draft update failed", err);
@@ -131,9 +132,13 @@ export function useArticleServerAutosave(args: ServerAutosaveArgs) {
   /**
    * Called by a manual save before it sends anything: stops autosave, waits for a
    * request already on the wire, and returns the draft autosave created (if any) so a
-   * save that still sees the article as new PATCHes that row instead of POSTing a twin.
+   * save that still sees the article as new PATCHes that row instead of POSTing a twin,
+   * plus the version that request left behind.
    */
-  const pauseForManualSave = (): Promise<AutosavedDraft | null> => gate.pause();
+  const pauseForManualSave = (): Promise<{
+    created: AutosavedDraft | null;
+    settledVersion: string | null;
+  }> => gate.pause();
 
   /** Resume after a manual save failed; a successful one leaves the editor. */
   const resumeAfterManualSave = () => gate.resume();

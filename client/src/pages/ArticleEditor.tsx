@@ -1573,12 +1573,13 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
     }) => {
       // A server autosave may have just created this "new" article (or be creating it):
       // stop it and save onto that row, otherwise publishing leaves a twin draft behind.
-      const autosavedDraft = await serverAutosave.pauseForManualSave();
-      const draftFromAutosave = isNewArticle ? autosavedDraft : null;
+      const settled = await serverAutosave.pauseForManualSave();
+      const draftFromAutosave = isNewArticle ? settled.created : null;
       const targetArticleId = draftFromAutosave?.id ?? id;
-      const expectedVersion = draftFromAutosave
-        ? (draftFromAutosave.updatedAt ?? null)
-        : articleUpdatedAt;
+      // An autosave PATCH that finished while we waited moved updatedAt; this closure's
+      // articleUpdatedAt predates it and would 409.
+      const expectedVersion = settled.settledVersion
+        ?? (draftFromAutosave ? (draftFromAutosave.updatedAt ?? null) : articleUpdatedAt);
 
       console.log('[Save Article] Starting save...', {
         isNewArticle,
