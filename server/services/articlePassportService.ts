@@ -649,7 +649,9 @@ function mergeAndSortTimelines(
  * unchanged so older app decoders keep working.
  */
 export function hidePassportContributors(passport: PassportResponse): PassportResponse {
-  const published = passport.timeline.find((e) => e.eventType === "published");
+  // Audit/legacy rows may say "publish" (any case); the synthetic milestone
+  // is skipped when one exists, so match every alias milestoneKey accepts.
+  const published = passport.timeline.find((e) => milestoneKey(e.eventType) === "published");
   return {
     ...passport,
     people: {
@@ -661,7 +663,7 @@ export function hidePassportContributors(passport: PassportResponse): PassportRe
       publisherApprover: null,
     },
     timeline: published
-      ? [{ ...published, actor: null, details: null, summary: null }]
+      ? [{ ...published, eventType: "published", actor: null, details: null, summary: null }]
       : [],
   };
 }
