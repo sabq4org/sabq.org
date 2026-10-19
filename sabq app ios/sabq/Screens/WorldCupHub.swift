@@ -396,7 +396,7 @@ struct WCNewsSection: View {
                     if let d = item.publishedDate {
                         Text("·").sabqText(SabqType.meta).foregroundStyle(SabqTheme.textTertiary)
                         Text(Self.relativeTime(d))
-                            .sabqText(SabqType.meta).foregroundStyle(SabqTheme.textSecondary)
+                            .sabqText(SabqType.timestamp).foregroundStyle(SabqTheme.textSecondary)
                     }
                 }
             }

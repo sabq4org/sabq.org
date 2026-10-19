@@ -352,10 +352,11 @@ struct ArticleContentView: View {
     }
 
     private func imageBlock(url: URL, alt: String?, caption: String?, layout: ImageLayout) -> some View {
-        // عرض جزئي من المحرر (25/33/50/75٪) → نضيّق الصورة إلى نسبة العمود
-        // المقيس ونحاذيها إلى الجهة المطلوبة (نقل تعديل الويب #1512).
-        let fraction = layout.widthFraction ?? 1
-        let targetWidth: CGFloat? = (fraction < 1 && columnWidth > 0) ? floor(columnWidth * fraction) : nil
+        // عرض جزئي من المحرر (25/33/50/75٪) نسبةٌ من عمود الويب (760)، فيُحسب
+        // عرضها الفعلي هناك ولا تُضيَّق إلا إن كان أصغر من عمود الجهاز؛ نسبتها من
+        // عمود الهاتف الضيق صغّرت الصور (طلب المالك 2026-10-19، أصل الميزة #1512).
+        let webWidth = (layout.widthFraction ?? 1) * ImageLayout.nominalColumnWidth
+        let targetWidth: CGFloat? = (columnWidth > 0 && webWidth < columnWidth) ? floor(webWidth) : nil
         return VStack(alignment: .leading, spacing: SabqLayout.space8) {
             // Inline body image — the column is narrower than the hero,
             // so a 1600px decode is more than enough for retina and

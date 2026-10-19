@@ -132,6 +132,7 @@ struct SidebarArticleRow: View {
                         }
                         if let date {
                             Text(date)
+                                .font(SabqType.timestamp.font)
                         }
                     }
                     .font(SabqType.meta.font)

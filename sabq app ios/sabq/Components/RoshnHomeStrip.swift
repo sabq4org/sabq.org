@@ -329,8 +329,14 @@ struct RoshnHomeStrip: View {
                     if TimeInterval(timestamp) <= context.date.timeIntervalSince1970 {
                         Text("حان الموعد")
                     } else {
-                        Text("\(prefix) \(WCFormat.countdown(to: timestamp))")
-                            .monospacedDigit()
+                        // الكلمة أولًا (يمينًا) ثم العدّاد، أيًّا كان اتجاه الحاوية
+                        // (طلب المالك 2026-10-19).
+                        HStack(spacing: 4) {
+                            Text(prefix)
+                            Text(WCFormat.countdown(to: timestamp))
+                                .monospacedDigit()
+                        }
+                        .environment(\.layoutDirection, .rightToLeft)
                     }
                 }
                 .lineLimit(1).fixedSize()

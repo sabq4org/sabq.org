@@ -179,7 +179,7 @@ struct OpinionsView: View {
                         .font(SabqType.meta.font)
                         .foregroundStyle(SabqTheme.textTertiary)
                     Text(opinion.relativeDate)
-                        .font(SabqType.meta.font)
+                        .font(SabqType.timestamp.font)
                         .foregroundStyle(SabqTheme.textTertiary)
                         .lineLimit(1)
                 }

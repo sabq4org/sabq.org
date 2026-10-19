@@ -256,6 +256,7 @@ private struct CompactOpinionKeywordRow: View {
                 .monospacedDigit()
             Text(opinion.dateFormatted)
         }
+        .font(SabqType.timestamp.font)
         .foregroundStyle(SabqTheme.textTertiary)
     }
 

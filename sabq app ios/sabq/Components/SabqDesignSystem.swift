@@ -218,6 +218,8 @@ nonisolated enum SabqType {
     /// اسم القسم داخل سطر البيانات.
     static let metaEmphasis = SabqTextRole(size: 13, weight: .semibold, style: .footnote, lineSpacing: 0)
     static let tag = SabqTextRole(size: 12, weight: .semibold, style: .caption, lineSpacing: 0)
+    /// توقيت النشر في كل التطبيق: أصغر من سطر البيانات (قرار المالك 2026-10-19).
+    static let timestamp = SabqTextRole(size: 11, weight: .regular, style: .caption2, lineSpacing: 0)
     static let button = SabqTextRole(size: 16, weight: .semibold, style: .callout, lineSpacing: 0)
 
     // Roles used by the account, discovery and form screens before the scale above.

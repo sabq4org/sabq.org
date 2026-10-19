@@ -236,11 +236,11 @@ struct LatestTimelineRow: View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             HStack(alignment: .firstTextBaseline, spacing: 2) {
                 Text(SabqFormatters.riyadhHourMinute.string(from: article.publishDate))
-                    .font(SabqType.tag.scaled(compactType).font)
+                    .font(SabqType.timestamp.font)
                     .foregroundStyle(SabqTheme.textPrimary)
                     .monospacedDigit()
                 Text(SabqFormatters.riyadhPeriod.string(from: article.publishDate))
-                    .font(SabqType.tag.scaled(compactType).font)
+                    .font(SabqType.timestamp.font)
                     .foregroundStyle(SabqTheme.textTertiary)
             }
             if isNew {
@@ -321,7 +321,7 @@ struct OpinionWriterRow: View {
                     nameText.lineLimit(1)
                         .padding(.top, SabqLayout.space4)
                     Text(opinion.relativeDate)
-                        .font(SabqFonts.app(size: 11, weight: .regular))
+                        .font(SabqType.timestamp.font)
                         .foregroundStyle(SabqTheme.textTertiary)
                         .lineLimit(1)
                 }
@@ -340,7 +340,7 @@ struct OpinionWriterRow: View {
 
     private var timeText: Text {
         Text(" · \(opinion.relativeDate)")
-            .font(SabqType.meta.scaled(compactType).font)
+            .font(SabqType.timestamp.font)
             .foregroundStyle(SabqTheme.textTertiary)
     }
 }

@@ -113,7 +113,7 @@ private struct MuqtarabHomeRow: View {
                             .lineLimit(1)
                         if let date = muqRelativeDate(topic.publishedAt) {
                             Text(date)
-                                .font(SabqFonts.app(size: 11, weight: .regular))
+                                .font(SabqType.timestamp.font)
                                 .foregroundStyle(SabqTheme.textTertiary)
                                 .lineLimit(1)
                         }
@@ -130,7 +130,7 @@ private struct MuqtarabHomeRow: View {
                             .font(SabqType.meta.scaled(compactType).font)
                             .foregroundStyle(SabqTheme.textTertiary)
                         Text(date)
-                            .font(SabqType.meta.scaled(compactType).font)
+                            .font(SabqType.timestamp.font)
                             .foregroundStyle(SabqTheme.textTertiary)
                             .lineLimit(1)
                     }

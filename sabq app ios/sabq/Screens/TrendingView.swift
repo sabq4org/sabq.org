@@ -111,6 +111,7 @@ struct TrendingView: View {
                     Text("·")
                         .foregroundStyle(SabqTheme.textTertiary)
                     Text(article.relativeDate)
+                        .font(SabqType.timestamp.font)
                         .foregroundStyle(SabqTheme.textTertiary)
                 }
                 .font(SabqType.meta.font)
