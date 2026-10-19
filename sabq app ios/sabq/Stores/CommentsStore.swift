@@ -164,6 +164,7 @@ final class CommentsStore {
                     copy = APIComment(
                         id: copy.id,
                         body: copy.body,
+                        userId: copy.userId,
                         userName: copy.userName,
                         userAvatar: copy.userAvatar,
                         createdAt: copy.createdAt,

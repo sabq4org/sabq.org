@@ -20,19 +20,29 @@ struct CommentRow: View {
     /// حالة الإعجاب لكل تعليق (معجب؟، العدد) — من `CommentsStore` كي تشمل الردود.
     var likeState: ((APIComment) -> (liked: Bool, count: Int))? = nil
     var onLike: ((APIComment) -> Void)? = nil
+    /// الإبلاغ وحظر صاحب التعليق (بند أبل 1.2). لا يظهران على تعليق القارئ نفسه.
+    var currentUserId: String? = nil
+    var onReport: ((APIComment) -> Void)? = nil
+    var onBlock: ((APIComment) -> Void)? = nil
 
     init(
         comment: APIComment,
         depth: Int = 0,
         onReply: ((APIComment) -> Void)? = nil,
         likeState: ((APIComment) -> (liked: Bool, count: Int))? = nil,
-        onLike: ((APIComment) -> Void)? = nil
+        onLike: ((APIComment) -> Void)? = nil,
+        currentUserId: String? = nil,
+        onReport: ((APIComment) -> Void)? = nil,
+        onBlock: ((APIComment) -> Void)? = nil
     ) {
         self.comment = comment
         self.depth = depth
         self.onReply = onReply
         self.likeState = likeState
         self.onLike = onLike
+        self.currentUserId = currentUserId
+        self.onReport = onReport
+        self.onBlock = onBlock
     }
 
     var body: some View {
@@ -61,7 +71,15 @@ struct CommentRow: View {
     private var repliesStack: some View {
         VStack(alignment: .leading, spacing: 14) {
             ForEach(comment.replies) { reply in
-                CommentRow(comment: reply, depth: depth + 1, likeState: likeState, onLike: onLike)
+                CommentRow(
+                    comment: reply,
+                    depth: depth + 1,
+                    likeState: likeState,
+                    onLike: onLike,
+                    currentUserId: currentUserId,
+                    onReport: onReport,
+                    onBlock: onBlock
+                )
                     .background(
                         GeometryReader { geo in
                             Color.clear.preference(
@@ -89,6 +107,42 @@ struct CommentRow: View {
                     .foregroundStyle(SabqTheme.textTertiary)
             }
             Spacer(minLength: 0)
+            safetyMenu
+        }
+    }
+
+    private var isOwnComment: Bool {
+        guard let currentUserId, let author = comment.userId else { return false }
+        return currentUserId == author
+    }
+
+    /// «⋯» بجوار الاسم: إبلاغ عن التعليق، وحظر صاحبه.
+    @ViewBuilder
+    private var safetyMenu: some View {
+        if !isOwnComment, comment.status?.lowercased() != "pending", onReport != nil || onBlock != nil {
+            Menu {
+                if let onReport {
+                    Button(role: .destructive) {
+                        onReport(comment)
+                    } label: {
+                        Label("إبلاغ عن التعليق", systemImage: "flag")
+                    }
+                }
+                if let onBlock, comment.userId != nil {
+                    Button(role: .destructive) {
+                        onBlock(comment)
+                    } label: {
+                        Label("حظر \(comment.userName ?? "المستخدم")", systemImage: "hand.raised")
+                    }
+                }
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(SabqType.metaEmphasis.font)
+                    .foregroundStyle(SabqTheme.textTertiary)
+                    .frame(width: SabqLayout.touchTarget, height: SabqLayout.touchTarget)
+                    .contentShape(Rectangle())
+            }
+            .accessibilityLabel("خيارات التعليق")
         }
     }
 

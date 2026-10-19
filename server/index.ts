@@ -1038,6 +1038,9 @@ if (!(globalThis as any).__sabqServer) {
     // requirePermission see an unauthenticated request and return 401 Unauthorized
     // (which the dashboard treats as session expiry and kicks the admin out).
     const mobileApiRoutes = (await import("./routes/mobileApiRoutes")).default;
+    // خطافات حذف الحساب وتعديل الملف تسبق mobileApiRoutes (ملف فوق سقف الأسطر).
+    const mobileAccountHooks = (await import("./routes/mobileAccountHooks")).default;
+    app.use("/api/v1", mobileAccountHooks);
     app.use("/api/v1", mobileApiRoutes);
     console.log("[Server] ✅ Mobile API routes registered (v1)");
 
