@@ -86,10 +86,13 @@ struct DuoTabContainer<Content: View>: View {
                     }
                 }
             }
-            // الشريط العمودي داخل شريط الحسّاس (خارج منطقة المحتوى الآمنة)
-            .overlay(alignment: stripEdge == .trailing ? .trailing : .leading) {
+            // الشريط العمودي داخل شريط الحسّاس (خارج منطقة المحتوى الآمنة).
+            // رأسيًا الكاميرا أعلى الشريط فينزل الشريط إلى أسفله (طلب المالك
+            // 2026-10-19)؛ أفقيًا الكاميرا أسفله فيبقى في المنتصف.
+            .overlay(alignment: stripRailAlignment(edge: stripEdge, portrait: windowHeight > windowWidth)) {
                 if let edge = stripEdge {
-                    AbovePlatformViews(content: DuoTabRail(selection: $selection, onReselect: onReselect, horizontalPadding: 0, centered: true))
+                    AbovePlatformViews(content: DuoTabRail(selection: $selection, onReselect: onReselect, horizontalPadding: 0, centered: true)
+                        .padding(.bottom, windowHeight > windowWidth ? 12 : 0))
                         .frame(width: edge == .leading ? proxy.safeAreaInsets.leading : proxy.safeAreaInsets.trailing)
                         .offset(x: stripOffset(edge: edge, insets: proxy.safeAreaInsets))
                 }
@@ -102,6 +105,15 @@ struct DuoTabContainer<Content: View>: View {
     /// اتجاه الواجهة (يُعكس في RTL — مقيس على المحاكي)، فالسالب نحو البداية.
     private func stripOffset(edge: HorizontalEdge, insets: EdgeInsets) -> CGFloat {
         edge == .leading ? -insets.leading : insets.trailing
+    }
+
+    private func stripRailAlignment(edge: HorizontalEdge?, portrait: Bool) -> Alignment {
+        switch (edge, portrait) {
+        case (.leading, true): .bottomLeading
+        case (.leading, false): .leading
+        case (_, true): .bottomTrailing
+        default: .trailing
+        }
     }
 }
 

@@ -1476,7 +1476,7 @@ struct FeaturedArticleCard: View {
                         )
                 } else {
                     Text(heroWhen)
-                        .font(SabqType.meta.font)
+                        .font(SabqType.timestamp.font)
                         .foregroundStyle(SabqTheme.textTertiary)
                         .monospacedDigit()
                 }
@@ -1716,6 +1716,7 @@ struct CompactArticleRow: View {
                     newPill
                 } else {
                     Text(SabqFormatters.relativeArabic.localizedString(for: article.publishDate, relativeTo: context.date))
+                        .font(SabqType.timestamp.font)
                         .fixedSize(horizontal: false, vertical: true)
                         .foregroundStyle(SabqTheme.tertiaryInk)
                 }

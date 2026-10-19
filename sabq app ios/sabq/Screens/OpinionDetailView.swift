@@ -460,7 +460,7 @@ struct OpinionDetailView: View {
 
                     // U+200F: التاريخ قد يبدأ برقم فينقلب ترتيب السطر بلا علامة اتجاه.
                     Text("\u{200F}\(displayOpinion.dateFormatted) · \(displayOpinion.readingTime)")
-                        .font(SabqType.meta.font)
+                        .font(SabqType.timestamp.font)
                         .foregroundStyle(SabqTheme.textTertiary)
                         .monospacedDigit()
                         .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)

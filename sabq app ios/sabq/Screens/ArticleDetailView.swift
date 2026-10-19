@@ -120,19 +120,11 @@ struct ArticleDetailView: View {
     /// يصلح هنا: الحاوية الثابتة تفرض `.regular` داخل مكدّسات UIKit.
     @Environment(\.duoContentInsets) private var duoContentInsets
     @AppStorage(FoldableDevice.observedDefaultsKey) private var foldableObserved = false
-    @State private var isContextSheetPresented = false
     /// الخبر ظاهر فعلًا (ليس مغطًّى بصفحة مدفوعة فوقه) — وحده ينشر سياقه.
     @State private var isOnScreen = false
 
     private var articleContext: ArticleContext {
         ArticleContext.news(article: displayArticle, related: relatedArticles, keywords: displayTags)
-    }
-
-    /// Duo: زر «سياق الخبر» تحت العنوان يفتح ورقة، مطويًا ومفتوحًا (لا عمود
-    /// جانبي منذ رئيسية العمودين 2026-10-18). الهاتف العادي وiPad لا يتغيران.
-    private var showsContextButton: Bool {
-        (duoContentInsets != nil || FoldableDevice.isFoldable(observed: foldableObserved))
-            && !isFocusMode && !articleContext.isEmpty
     }
 
     /// مفتوحًا على Duo والعمود المجاور يعرض «سياق الخبر»: الموجز الذكي ينتقل
@@ -223,11 +215,6 @@ struct ArticleDetailView: View {
 
                             articleMeta
                                 .animatedAppear(index: 2)
-
-                            if showsContextButton {
-                                contextButton
-                                    .padding(.top, SabqLayout.space12)
-                            }
 
                             SidebarRowDivider()
                                 .padding(.vertical, SabqLayout.space16)
@@ -418,18 +405,6 @@ struct ArticleDetailView: View {
             if publishesReaderContext { navigation?.withdrawReaderContext(id: articleContext.id) }
         }
         .onChange(of: articleContext) { _, context in publishContext(context) }
-        .onChange(of: duoContentInsets == nil) { _, isWide in
-            // فُتح الجهاز والورقة ظاهرة: السياق ينتقل إلى العمود.
-            if isWide && !FoldableDevice.isFoldable(observed: foldableObserved) { isContextSheetPresented = false }
-        }
-        .sheet(isPresented: $isContextSheetPresented) {
-            ArticleContextSheet(
-                context: articleContext,
-                onOpenArticle: { pushFromContext($0) },
-                onOpenOpinion: { pushFromContext($0) },
-                onOpenKeyword: { pushFromContext(KeywordRoute(keyword: $0)) }
-            )
-        }
     }
 
     private var bookmarkToolbarButton: some View {
@@ -457,42 +432,6 @@ struct ArticleDetailView: View {
         guard publishesReaderContext, isOnScreen, displayArticle.id != displayArticle.slug,
               FoldableDevice.isFoldable(observed: foldableObserved) else { return }
         navigation?.publishReaderContext(context)
-    }
-
-    /// لمس عنصر في ورقة السياق يغلقها ويدفع وجهته في مكدّس التبويب الحالي.
-    private func pushFromContext<Value: Hashable>(_ value: Value) {
-        isContextSheetPresented = false
-        guard let navigation else { return }
-        navigation.openFromReaderContext(value, in: navigation.selectedTab)
-    }
-
-    private var contextButton: some View {
-        Button {
-            SabqHaptics.light()
-            isContextSheetPresented = true
-        } label: {
-            HStack(spacing: 8) {
-                Image(systemName: "text.line.first.and.arrowtriangle.forward")
-                    .font(.system(size: 14, weight: .semibold))
-                Text(articleContext.storySoFar.isEmpty ? "سياق الخبر: الموجز والأخبار المرتبطة" : "سياق الخبر: الموجز والقصة حتى الآن")
-                    .font(SabqFonts.app(size: 13.5, weight: .semibold))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.85)
-                Spacer(minLength: 4)
-                Image(systemName: "chevron.left")
-                    .font(.system(size: 12, weight: .semibold))
-            }
-            .foregroundStyle(SabqTheme.primaryEnd)
-            .padding(.horizontal, 14)
-            .frame(minHeight: SabqLayout.touchTarget)
-            .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(SabqTheme.primaryEnd.opacity(0.10))
-            )
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier("article.contextButton")
     }
 
     // MARK: - Reading Progress Bar
@@ -973,7 +912,7 @@ struct ArticleDetailView: View {
         // U+200F في أول السطر: التاريخ يبدأ برقم («9 أكتوبر») فيُقرأ السطر LTR
         // وينقلب ترتيب العناصر الثلاثة بلا علامة اتجاه عربية.
         Text("\u{200F}\(displayArticle.publicationDate) · \(displayArticle.publicationClock) · \(displayArticle.readingLabel)")
-        .font(SabqType.meta.font)
+        .font(SabqType.timestamp.font)
         .foregroundStyle(SabqTheme.textTertiary)
         .monospacedDigit()
         .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)

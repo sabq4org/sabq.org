@@ -132,6 +132,8 @@ struct MawaeedHero: View {
                     clockCell(clock.hours, (3...10).contains(clock.hours) ? "ساعات" : "ساعة")
                     clockCell(clock.minutes, "دقيقة")
                 }
+                // الأيام يسارًا كالعدّاد الرقمي (طلب المالك 2026-10-19).
+                .environment(\.layoutDirection, .leftToRight)
             }
         }
         .padding(SabqLayout.space12)

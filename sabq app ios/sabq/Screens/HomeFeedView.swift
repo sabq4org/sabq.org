@@ -667,7 +667,7 @@ struct HomeFeedView: View {
                                 .foregroundStyle(SabqTheme.breaking)
                         }
                         Text("\(SabqFormatters.riyadhHourMinute.string(from: article.publishDate)) \(SabqFormatters.riyadhPeriod.string(from: article.publishDate))")
-                            .font(SabqType.tag.font)
+                            .font(SabqType.timestamp.font)
                             .foregroundStyle(SabqTheme.textTertiary)
                             .monospacedDigit()
                     }

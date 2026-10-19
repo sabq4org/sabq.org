@@ -148,6 +148,7 @@ struct HomeSidebarNewsRow: View {
                             .background(Capsule(style: .continuous).fill(SabqTheme.success.opacity(0.08)))
                     } else {
                         Text(Self.relativeTime(article.publishDate))
+                            .font(SabqType.timestamp.font)
                     }
                 }
                 .font(SabqType.meta.font)
