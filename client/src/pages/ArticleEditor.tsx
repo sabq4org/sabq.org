@@ -192,7 +192,7 @@ import {
 import { generateSlug } from "@/lib/slug";
 import { cn } from "@/lib/utils";
 import { isAvifFile, transcodeAvifInBrowser } from "@/lib/browserImageTranscode";
-import { uploadNewsImage, newsImageUploadLabel, type NewsImageUploadProgress } from "@/lib/newsImageUpload";
+import { uploadNewsImage, newsImageUploadLabel, NEWS_IMAGE_MAX_BYTES, type NewsImageUploadProgress } from "@/lib/newsImageUpload";
 
 // تعطيل مؤقت لحاجز توثيق حقوق الصورة عند النشر.
 // غيّر القيمة إلى true لإعادة الخطوة دون استرجاع الكود المحذوف.
@@ -1433,10 +1433,10 @@ export default function ArticleEditor() {
       return;
     }
 
-    if (file.size > 5 * 1024 * 1024) {
+    if (file.size > NEWS_IMAGE_MAX_BYTES) {
       toast({
         title: "خطأ",
-        description: "حجم الصورة يجب أن يكون أقل من 5 ميجابايت",
+        description: "حجم الصورة يجب أن يكون أقل من 10 ميجابايت",
         variant: "destructive",
       });
       return;
@@ -1459,10 +1459,10 @@ export default function ArticleEditor() {
       return;
     }
 
-    if (file.size > 5 * 1024 * 1024) {
+    if (file.size > NEWS_IMAGE_MAX_BYTES) {
       toast({
         title: "خطأ",
-        description: "حجم الصورة يجب أن يكون أقل من 5 ميجابايت",
+        description: "حجم الصورة يجب أن يكون أقل من 10 ميجابايت",
         variant: "destructive",
       });
       return;

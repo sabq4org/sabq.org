@@ -19,6 +19,8 @@ export function newsImageUploadLabel(progress: NewsImageUploadProgress): string 
  * deadline the original file is uploaded and the server resizes it.
  */
 export const PREPARE_TIMEOUT_MS = 8_000;
+/** Same cap as the multer limit on POST /api/media/upload. */
+export const NEWS_IMAGE_MAX_BYTES = 10 * 1024 * 1024;
 /** Generous for a 10MB file on a slow link; a stalled transfer ends with an error, not an endless spinner. */
 export const UPLOAD_TIMEOUT_MS = 120_000;
 

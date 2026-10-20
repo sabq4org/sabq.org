@@ -51,6 +51,7 @@ import { MediaLibraryPicker } from "@/components/dashboard/MediaLibraryPicker";
 import { InlineHeadlineSuggestions } from "@/components/InlineHeadlineSuggestions";
 import { AIImageGeneratorDialog } from "@/components/AIImageGeneratorDialog";
 import { InfographicGeneratorDialog } from "@/components/InfographicGeneratorDialog";
+import { NEWS_IMAGE_MAX_BYTES } from "@/lib/newsImageUpload";
 import type { Editor } from "@tiptap/react";
 
 export default function UrduArticleEditor() {
@@ -211,7 +212,7 @@ export default function UrduArticleEditor() {
       return;
     }
 
-    if (file.size > 5 * 1024 * 1024) {
+    if (file.size > NEWS_IMAGE_MAX_BYTES) {
       toast({
         title: "Error",
         description: "Image size must be less than 10MB",
