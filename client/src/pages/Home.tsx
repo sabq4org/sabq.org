@@ -44,6 +44,7 @@ const GulfCupHomeSection = lazyDefault(() => import("@/components/gulfcup/GulfCu
 const KingsCupHomeSection = lazyDefault(() => import("@/components/kingscup/KingsCupHomeSection"));
 const RoshnHomeSection = lazyDefault(() => import("@/components/rsl/RoshnHomeSection"));
 const SportsPortalStrip = lazyDefault(() => import("@/components/sports/SportsPortalStrip"));
+const MawaeedHomeStrip = lazyDefault(() => import("@/components/mawaeed/MawaeedHomeStrip"));
 const AsianCupHomeSection = lazyDefault(() => import("@/components/asiancup/AsianCupHomeSection"));
 const HajjBlock = lazyNamed(() => import("@/components/HajjBlock"), "HajjBlock");
 const NationalDay96Block = lazyNamed(() => import("@/components/seasonal/NationalDay96Block"), "NationalDay96Block");
@@ -441,6 +442,12 @@ export default function Home() {
             <SmartNewsletterForm variant="compact" source="home-first-group" className="mx-auto max-w-3xl" />
           </div>
         )}
+
+        <ErrorBoundary fallback={null}>
+          <Suspense fallback={null}>
+            <MawaeedHomeStrip />
+          </Suspense>
+        </ErrorBoundary>
 
         {/* شريط المدخل إلى البوابة الرياضية — الباب الوحيد إلى /sports من الرئيسية.
             سطر واحد بارتفاع ثابت (فلا يزحزح ما تحته عند وصول البيانات)، ونصّه
