@@ -12,6 +12,10 @@
  *   الاسم والنبذة يظهران بجوار التعليقات، فيمرّان بفلتر الكلمات المحظورة
  *   نفسه المطبّق على التعليقات (بند أبل 1.2).
  *
+ * POST /api/v1/devices/register
+ *   يقصّ اللغة (Android يرسل وسومًا مثل ar-SA-u-nu-latn) ويُسقط القيم الأطول
+ *   من أعمدة push_devices، فلا يفشل تسجيل الجهاز بخطأ "value too long".
+ *
  * لا استيراد لـ db هنا (ADR-001).
  */
 import { Router, type NextFunction, type Request, type Response } from "express";
@@ -24,6 +28,7 @@ import {
 } from "../services/appleTokenRevocation";
 import { removeBlocksByUser } from "../services/commentSafetyService";
 import { checkTextForSuspiciousWords } from "../utils/suspiciousWordsChecker";
+import { sanitizeDeviceRegistrationBody } from "../services/deviceRegistrationPolicy";
 
 const router = Router();
 
@@ -88,6 +93,11 @@ router.put("/members/profile", async (req: Request, res: Response, next: NextFun
   } catch (error) {
     console.warn("[AccountHooks] profile text check failed, continuing:", error);
   }
+  next();
+});
+
+router.post("/devices/register", (req: Request, _res: Response, next: NextFunction) => {
+  sanitizeDeviceRegistrationBody(req.body);
   next();
 });
 
