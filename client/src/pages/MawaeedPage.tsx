@@ -13,6 +13,7 @@ import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { useCanonical } from "@/hooks/useCanonical";
 import { apiUrl } from "@/lib/queryClient";
+import { mawaeedApiPath, readRegion, REGION_PREF_ID } from "@/lib/mawaeedRegion";
 import "@/styles/article-detail.css";
 import "@/styles/mawaeed-page.css";
 import { compactOccurrenceTitle } from "@shared/mawaeed/display";
@@ -28,24 +29,6 @@ import {
 } from "@shared/mawaeed/home";
 import { normalizeRegion, type RegionId, type SeriesKind } from "@shared/mawaeed/model";
 import type { MawaeedCard, MawaeedSeriesBlock, MawaeedView } from "@shared/mawaeed/present";
-
-/** المفتاح نفسه الذي تقرؤه صفحة التقويم الدراسي، حتى تتبع اختيار القارئ هنا. */
-const REGION_PREF_ID = "mawaeed-region";
-
-/** المنطقة من الرابط أولاً ثم من آخر اختيار محفوظ. الرياض افتراضية. */
-function readRegion(search: string): RegionId {
-  const fromUrl = new URLSearchParams(search).get("region");
-  try {
-    if (fromUrl) {
-      const region = normalizeRegion(fromUrl);
-      window.localStorage.setItem(REGION_PREF_ID, region);
-      return region;
-    }
-    return normalizeRegion(window.localStorage.getItem(REGION_PREF_ID));
-  } catch {
-    return normalizeRegion(fromUrl);
-  }
-}
 
 /** ساعة واحدة للصفحة كلها: تدق كل نصف دقيقة، وتعيد الجلب مرة لكل يوم جديد بتوقيت الرياض. */
 function useRiyadhClock(onDayChange: () => void): number {
@@ -137,7 +120,7 @@ export default function MawaeedPage() {
   const viewQuery = useQuery<MawaeedView>({
     queryKey: ["/api/mawaeed", { region }],
     queryFn: async () => {
-      const res = await fetch(apiUrl(`/api/mawaeed${region === "riyadh" ? "" : `?region=${region}`}`), { credentials: "include" });
+      const res = await fetch(apiUrl(mawaeedApiPath(region)), { credentials: "include" });
       if (!res.ok) throw new Error(`تعذر تحميل المواعيد (${res.status})`);
       return (await res.json()) as MawaeedView;
     },
