@@ -40,6 +40,7 @@
 
 ## الاكتشاف الآلي / Machine-readable
 
+- [فهرس خدمات الوكلاء (مخطط سبق المحلي)](https://sabq.org/.well-known/agent-index.json)
 - [Sitemap](https://sabq.org/sitemap.xml)
 - [Google News sitemap](https://sabq.org/sitemap-news.xml): آخر 48 ساعة
 - [RSS](https://sabq.org/api/rss/articles) · [JSON Feed](https://sabq.org/api/rss/articles.json)

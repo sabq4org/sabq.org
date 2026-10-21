@@ -1,0 +1,33 @@
+{
+  "schema": "sabq.agent-index.v1",
+  "schema_note": "Sabq organization-specific discovery index; this is not a registered interoperability standard.",
+  "publisher": {
+    "name": "Sabq Newspaper",
+    "url": "https://sabq.org"
+  },
+  "base_url": "https://sabq.org",
+  "services": [
+    {
+      "id": "news-feeds",
+      "kind": "https-feeds",
+      "access": "public-get",
+      "semantics": "Each endpoint is fetched with HTTPS GET and returns a public news feed.",
+      "endpoints": [
+        { "id": "rss", "url": "https://sabq.org/api/rss/articles", "format": "application/rss+xml", "method": "GET" },
+        { "id": "json-feed", "url": "https://sabq.org/api/rss/articles.json", "format": "application/json", "method": "GET" }
+      ]
+    }
+  ],
+  "guides": [
+    { "id": "llms", "url": "https://sabq.org/llms.txt", "format": "text/plain", "method": "GET" },
+    { "id": "ai-policy", "url": "https://sabq.org/ai-policy", "format": "text/html", "method": "GET" }
+  ],
+  "policy": {
+    "source": "https://sabq.org/ai-policy",
+    "content_signal": "search=yes, ai-input=yes, ai-train=no",
+    "attribution_required": true,
+    "attribution_name": "سبق",
+    "direct_article_link_required": true,
+    "short_summary_approx_max_words": 150
+  }
+}
