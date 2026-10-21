@@ -35,13 +35,14 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Edit, Trash2, Send, Star, Bell, Plus, Archive, Trash, GripVertical, Sparkles, Newspaper, Clock, FilePenLine, Brain, MessageCircle, Mail, ChevronLeft, ChevronRight, Camera, BarChart3, Images, Building2, Languages, Loader2, Smartphone, Share2, BookOpen, HeartPulse, Zap, UserRound, ImageOff, AlertTriangle, EyeOff, Bot, Video, Undo2 } from "lucide-react";
+import { Edit, Trash2, Send, Star, Bell, Plus, Archive, Trash, GripVertical, Sparkles, Newspaper, Clock, FilePenLine, Brain, MessageCircle, Mail, ChevronLeft, ChevronRight, Camera, BarChart3, Images, Building2, Languages, Loader2, Smartphone, Share2, BookOpen, HeartPulse, Zap, UserRound, ImageOff, AlertTriangle, Eye, EyeOff, Bot, Video, Undo2 } from "lucide-react";
 import { BOT_DRAFT_READY_STATUS } from "@shared/botDrafts";
 import { buildCloudflareUrl, normalizeImageSrc } from "@/lib/cdnImage";
 import { OpinionWeekBoard } from "@/components/admin/OpinionWeekBoard";
 import { SocialPublishDialog } from "@/components/social/SocialPublishDialog";
 import { ViewsCount } from "@/components/ViewsCount";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { useIsTouchTablet } from "@/hooks/use-touch-tablet";
 import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
 import { DashboardPageShell } from "@/components/dashboard/DashboardPageShell";
 import { BreakingSwitch } from "@/components/admin/BreakingSwitch";
@@ -1186,6 +1187,8 @@ export default function ArticlesManagement() {
 
   // State for mobile detection
   const [isMobile, setIsMobile] = useState(isMobileViewport);
+  // الآيباد: الإجراءات تنزل سطرًا تحت العنوان بدل عمودها حتى يتسع الجدول بلا تمرير أفقي.
+  const isTouchTablet = useIsTouchTablet();
 
   // Mobile detection effect
   useEffect(() => {
@@ -1316,6 +1319,34 @@ export default function ArticlesManagement() {
   const articlesBusy = articlesFetching || isPlaceholderData || searchTerm !== listParams.search;
   const now = useMinuteClock();
   const deskList = useMemo(() => buildDeskList(articles, activeStatus, now), [articles, activeStatus, now]);
+
+  // نفس أزرار الصف في الموضعين: عمود «الإجراءات» على الديسكتوب، وسطر تحت العنوان على الآيباد.
+  const renderRowActions = (article: Article, wireAlign: "start" | "end") => (
+    <RowActions
+      variant="wire"
+      wireAlign={wireAlign}
+      articleId={article.id}
+      articleTitle={article.title}
+      status={article.status}
+      onEdit={() => handleEdit(article)}
+      isFeatured={article.isFeatured}
+      isBreaking={article.newsType === "breaking"}
+      notifiedAt={article.signals?.notifiedAt ?? null}
+      socialPublishedAt={article.signals?.socialPublishedAt ?? null}
+      onDelete={() => setDeletingArticle(article)}
+      onRequestRevision={
+        activeStatus !== "archived"
+          ? () => setRevisionArticle(article)
+          : undefined
+      }
+      onSocialPublish={() => setSocialPublishArticle(article)}
+      canEdit={canEditArticle(article)}
+      canDelete={!!(canDeleteArticle || canArchiveArticle)}
+      canFeature={!!canFeatureArticle}
+      canPublish={!!canPublishArticle}
+      canSocialPublish={!!canSocialPublish}
+    />
+  );
   const canSeeWeekBoard = !!user && hasAnyPermission(user, "opinion.review", "articles.schedule");
   const displayedPage = articlesData?.page ?? currentPage;
   const totalPages = articlesData?.totalPages || 1;
@@ -2038,7 +2069,7 @@ export default function ArticlesManagement() {
           </div>
 
           {/* Quick Source Filter Bar */}
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 pt-2 border-t border-border/50 no-scrollbar" data-testid="source-filter-bar">
+          <div className={cn("flex items-center gap-1.5 pb-0.5 pt-2 border-t border-border/50", isTouchTablet ? "flex-wrap" : "overflow-x-auto no-scrollbar")} data-testid="source-filter-bar">
             <span className="shrink-0 text-[11px] font-semibold text-muted-foreground ml-1">
               المصدر:
             </span>
@@ -2230,7 +2261,7 @@ export default function ArticlesManagement() {
                 collisionDetection={closestCenter}
                 onDragEnd={handleDragEnd}
               >
-                <table className="w-full min-w-[1080px] table-fixed">
+                <table className={cn("w-full table-fixed", !isTouchTablet && "min-w-[1080px]")}>
                   <thead className="border-b border-border bg-muted/40 text-muted-foreground">
                     <tr>
                       <th className="w-8 px-1 py-2.5 text-center" data-testid="header-drag"></th>
@@ -2241,11 +2272,15 @@ export default function ArticlesManagement() {
                           data-testid="checkbox-select-all"
                         />
                       </th>
-                      <th className="w-[132px] px-2 py-2.5 text-right text-xs font-semibold">الوقت</th>
-                      <th className="w-[84px] px-1 py-2.5"><span className="sr-only">الصورة</span></th>
+                      <th className={cn("px-2 py-2.5 text-right text-xs font-semibold", isTouchTablet ? "w-[100px]" : "w-[132px]")}>الوقت</th>
+                      <th className={cn("px-1 py-2.5", isTouchTablet ? "w-[72px]" : "w-[84px]")}><span className="sr-only">الصورة</span></th>
                       <th className="px-3 py-2.5 text-right text-xs font-semibold">المادة</th>
-                      <th className="w-24 px-2 py-2.5 text-left text-xs font-semibold">{activeStatus === "published" ? "القراءات" : ""}</th>
-                      <th className={cn("px-3 py-2.5 text-left text-xs font-semibold", activeStatus === "published" ? "w-[372px]" : "w-[212px]")}>الإجراءات</th>
+                      {!isTouchTablet && (
+                        <th className="w-24 px-2 py-2.5 text-left text-xs font-semibold">{activeStatus === "published" ? "القراءات" : ""}</th>
+                      )}
+                      {!isTouchTablet && (
+                        <th className={cn("px-3 py-2.5 text-left text-xs font-semibold", activeStatus === "published" ? "w-[372px]" : "w-[212px]")}>الإجراءات</th>
+                      )}
                     </tr>
                   </thead>
                   <tbody>
@@ -2257,7 +2292,7 @@ export default function ArticlesManagement() {
                         if (item.kind === "group") {
                           return (
                             <tr key={`group-${item.key}`} className="border-b border-border/70 bg-muted/30" data-testid={`group-${item.key}`}>
-                              <td colSpan={7} className={cn("px-4 py-2 text-xs font-semibold", item.tone ? DESK_TONE[item.tone] : "text-foreground")}>
+                              <td colSpan={isTouchTablet ? 5 : 7} className={cn("px-4 py-2 text-xs font-semibold", item.tone ? DESK_TONE[item.tone] : "text-foreground")}>
                                 {item.label}
                               </td>
                             </tr>
@@ -2295,10 +2330,30 @@ export default function ArticlesManagement() {
                           </td>
                           <td className="px-3 py-2.5 align-middle">
                             <div className="space-y-1.5">
-                              <ArticleDeskMain
-                                article={article}
-                                onTitleClick={canEditArticle(article) ? () => handleEdit(article) : undefined}
-                              />
+                              {isTouchTablet && article.status === "published" ? (
+                                <div className="flex items-start gap-3">
+                                  <div className="min-w-0 flex-1">
+                                    <ArticleDeskMain
+                                      article={article}
+                                      onTitleClick={canEditArticle(article) ? () => handleEdit(article) : undefined}
+                                    />
+                                  </div>
+                                  <div className="flex shrink-0 items-start gap-1.5 pt-0.5 text-muted-foreground" title="القراءات">
+                                    <Eye className="mt-0.5 h-4 w-4" aria-hidden="true" />
+                                    <DeskViewsCell article={article} now={now} />
+                                  </div>
+                                </div>
+                              ) : (
+                                <ArticleDeskMain
+                                  article={article}
+                                  onTitleClick={canEditArticle(article) ? () => handleEdit(article) : undefined}
+                                />
+                              )}
+                              {isTouchTablet && (
+                                <div className="pt-0.5" data-testid={`row-actions-tablet-${article.id}`}>
+                                  {renderRowActions(article, "start")}
+                                </div>
+                              )}
                               <EditorialDraftReviewCue
                                 article={article}
                                 layout="banner"
@@ -2325,34 +2380,16 @@ export default function ArticlesManagement() {
                               )}
                             </div>
                           </td>
-                          <td className="px-2 py-2.5 align-middle">
-                            <DeskViewsCell article={article} now={now} />
-                          </td>
-                          <td className="px-2 py-2.5 align-middle">
-                            <RowActions
-                              variant="wire"
-                              articleId={article.id}
-                              articleTitle={article.title}
-                              status={article.status}
-                              onEdit={() => handleEdit(article)}
-                              isFeatured={article.isFeatured}
-                              isBreaking={article.newsType === "breaking"}
-                              notifiedAt={article.signals?.notifiedAt ?? null}
-                              socialPublishedAt={article.signals?.socialPublishedAt ?? null}
-                              onDelete={() => setDeletingArticle(article)}
-                              onRequestRevision={
-                                activeStatus !== "archived"
-                                  ? () => setRevisionArticle(article)
-                                  : undefined
-                              }
-                              onSocialPublish={() => setSocialPublishArticle(article)}
-                              canEdit={canEditArticle(article)}
-                              canDelete={!!(canDeleteArticle || canArchiveArticle)}
-                              canFeature={!!canFeatureArticle}
-                              canPublish={!!canPublishArticle}
-                              canSocialPublish={!!canSocialPublish}
-                            />
-                          </td>
+                          {!isTouchTablet && (
+                            <td className="px-2 py-2.5 align-middle">
+                              <DeskViewsCell article={article} now={now} />
+                            </td>
+                          )}
+                          {!isTouchTablet && (
+                            <td className="px-2 py-2.5 align-middle">
+                              {renderRowActions(article, "end")}
+                            </td>
+                          )}
                         </SortableRow>
                         );
                       })}

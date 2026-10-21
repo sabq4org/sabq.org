@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { CheckCircle2, CircleDashed, Clock, AlarmClockOff, FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useIsTouchTablet } from "@/hooks/use-touch-tablet";
 
 type Entry = {
   writerId: string;
@@ -32,6 +33,8 @@ export function OpinionWeekBoard({ onOpenArticle }: { onOpenArticle?: (articleId
     staleTime: 60_000,
     refetchInterval: 5 * 60_000,
   });
+  // الآيباد: سبعة أعمدة لا تتسع للأسماء؛ الأيام تمرّر أفقيًا بعرض ثابت يبدأ باليوم.
+  const isTouchTablet = useIsTouchTablet();
   const days = Array.isArray(data?.days) ? data.days : [];
   const entries = days.flatMap((day) => day.entries);
   if (entries.length === 0) return null;
@@ -48,12 +51,13 @@ export function OpinionWeekBoard({ onOpenArticle }: { onOpenArticle?: (articleId
           {late > 0 ? <span className="text-red-600 dark:text-red-400"> · فات {late}</span> : null}
         </span>
       </header>
-      <div className="grid grid-cols-7 gap-2 p-3">
+      <div className={cn("gap-2 p-3", isTouchTablet ? "flex snap-x overflow-x-auto" : "grid grid-cols-7")}>
         {days.map((day, index) => (
           <div
             key={day.date}
             className={cn(
               "min-h-[76px] min-w-0 rounded-lg border px-2.5 py-2",
+              isTouchTablet && "w-[176px] shrink-0 snap-start",
               index === 0 ? "border-violet-400/70 dark:border-violet-700" : "border-border/70",
             )}
           >
@@ -73,6 +77,7 @@ export function OpinionWeekBoard({ onOpenArticle }: { onOpenArticle?: (articleId
                   title={`${entry.name} · ${clock(entry.slotAt)} · ${state.label}`}
                   className={cn(
                     "mt-1 flex w-full min-w-0 items-center gap-1 text-start text-[11.5px] leading-5 disabled:cursor-default",
+                    isTouchTablet && "no-min-touch-size min-h-[36px] text-[12.5px]",
                     clickable && "hover:underline",
                     state.tone,
                   )}
