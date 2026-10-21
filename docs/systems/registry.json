@@ -1041,6 +1041,7 @@
         "server/utils/spaRouteMatcher.ts",
         "tests/unit/spaTopLevelRoutes.test.ts",
         "tests/unit/edgeSoftNotFound.test.ts",
+        "tests/unit/pagesAgentDiscovery.test.ts",
         "tests/unit/categoryCardPreload.test.ts",
         "tests/unit/slugRedirectQuery.test.ts",
         "server/routes/rssFeedRoutes.ts",

@@ -389,6 +389,25 @@ export function shouldApplyHtmlSecurityHeaders(pathname, res) {
   return !isProxyPath(pathname) && isHtml(res);
 }
 
+const AGENT_DISCOVERY_LINK = '<https://sabq.org/llms.txt>; rel="describedby"; type="text/plain"';
+
+export function applyAgentDiscoveryHeaders(res, request) {
+  const url = new URL(request.url);
+  if (
+    (request.method !== "GET" && request.method !== "HEAD") ||
+    url.hostname !== "sabq.org" ||
+    url.pathname !== "/" ||
+    res.status !== 200 ||
+    !isHtml(res)
+  ) return res;
+
+  const existing = res.headers.get("Link") || "";
+  if (existing.includes(AGENT_DISCOVERY_LINK)) return res;
+  const headers = new Headers(res.headers);
+  headers.set("Link", existing ? `${existing}, ${AGENT_DISCOVERY_LINK}` : AGENT_DISCOVERY_LINK);
+  return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
+}
+
 // Cloudflare does NOT auto-cache text/html from a Pages Function based on
 // Cache-Control alone (Function responses are "dynamic"). To actually serve the
 // injected shell from the edge — the part that turns the report's 1.5s TTFB
@@ -1520,17 +1539,18 @@ async function handleRequest(context) {
   }
 }
 
-// Security-only outer layer. The inner handler owns routing, caching, redirects,
-// and response headers; this wrapper never rewrites those decisions. API and
-// other proxy responses are deliberately excluded so their existing contract
-// remains byte/header compatible.
+// Outer HTML header layer. The inner handler owns routing, caching, redirects,
+// and response headers; this wrapper only adds shared security and discovery
+// headers. API and other proxy responses are deliberately excluded so their
+// existing contract remains byte/header compatible.
 export async function onRequest(context) {
   const response = await handleRequest(context);
   const url = new URL(context.request.url);
   const secured = shouldApplyHtmlSecurityHeaders(url.pathname, response)
     ? applyHtmlSecurityHeaders(response, url.hostname)
     : response;
-  return shouldApplyPublicContentHeaders(url.pathname, url.hostname, secured, context.request)
+  const publicResponse = shouldApplyPublicContentHeaders(url.pathname, url.hostname, secured, context.request)
     ? applyPublicContentHeaders(secured)
     : secured;
+  return applyAgentDiscoveryHeaders(publicResponse, context.request);
 }
