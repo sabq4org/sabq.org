@@ -10,6 +10,7 @@ import {
   parseStoredSnapshot,
   resolveRestoreFields,
   snapshotFromArticle,
+  summarizeContentChange,
   summarizeContentDiff,
   versionActionFor,
 } from "@shared/articleHistory";
@@ -126,5 +127,40 @@ describe("parseStoredSnapshot", () => {
     const stored = JSON.parse(JSON.stringify(original)) as Record<string, unknown>;
     expect(parseStoredSnapshot(stored)).toEqual(original);
     expect(snapshotFromArticle(stored).keywords).toEqual([]);
+  });
+});
+
+describe("images and media", () => {
+  it("tracks the lead image source, album and video, and ignores fields missing from old snapshots", () => {
+    const uploaded = snapshotFromArticle({ title: "x", imageUrl: "https://example.test/a.jpg", albumImages: ["https://example.test/1.jpg"] });
+    const generated = snapshotFromArticle({ title: "x", imageUrl: "https://example.test/ai.png", isAiGeneratedImage: true, albumImages: ["https://example.test/1.jpg"] });
+    expect(uploaded.imageSource).toBe("upload");
+    expect(changedSnapshotFields(uploaded, generated)).toEqual(["imageUrl", "imageSource"]);
+    const legacy = parseStoredSnapshot({ title: "x", imageUrl: "https://example.test/a.jpg", keywords: [] });
+    expect(legacy.albumImages).toBeUndefined();
+    expect(changedSnapshotFields(legacy, generated)).toEqual(["imageUrl"]);
+    expect(buildRestorePatch({ snapshot: legacy, fields: ["albumImages", "videoUrl", "imageUrl"], currentSeo: null })).toEqual({
+      imageUrl: "https://example.test/a.jpg",
+    });
+    expect(buildRestorePatch({ snapshot: uploaded, fields: ["imageUrl"], currentSeo: null })).toEqual({
+      imageUrl: "https://example.test/a.jpg",
+      isAiGeneratedImage: false,
+    });
+  });
+
+  it("reports images added inside the body even when the text is unchanged", () => {
+    const before = "<p>نص الخبر.</p>";
+    const after = '<p>نص الخبر.</p><figure><img src="https://example.test/ai.png" alt=""></figure>';
+    expect(summarizeContentChange(before, after)).toEqual({
+      beforeWords: 2,
+      afterWords: 2,
+      textChanged: false,
+      mediaAdded: [{ kind: "image", src: "https://example.test/ai.png" }],
+      mediaRemoved: [],
+    });
+    const diff = diffContent(before, after);
+    expect(diff).toHaveLength(2);
+    expect(diff[1].type).toBe("added");
+    expect(contentParagraphs(after)).toEqual(["نص الخبر."]);
   });
 });

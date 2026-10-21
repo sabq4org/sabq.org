@@ -32,6 +32,7 @@ import {
 } from "@shared/botDrafts";
 import { resolveUniqueArticleSlug } from "./articleSlugService";
 import { logArticleEvent } from "./articleEventsService";
+import { recordArticleSave } from "./articleHistoryService";
 import { generateEnglishSlug } from "../utils/slugTransliterator";
 import { sanitizeArticleHtml } from "../utils/sanitizeArticleHtml";
 import { buildEditorialMetadataUpdate } from "../utils/editorialDatesSql";
@@ -1946,10 +1947,14 @@ async function recordEvent(
     channel: "bot-drafts-api",
     ...extraMetadata,
   };
+  // تعديلات البوت تمر بسجل النسخ نفسه الذي يمر به المحرر: نسخة كاملة وقيم قبل وبعد
+  // لكل حقل (الصورة ومصدرها والمتن…)، لا وصف الحدث وحده. الحذف يبقى حدثًا فقط.
+  const history =
+    action === "deleted" && activityAction !== "archived"
+      ? logArticleEvent({ articleId, eventType: action, actorId, summary, metadata })
+      : recordArticleSave({ before: oldValue ?? null, after: newValue, actorId, summary, metadata });
   await Promise.all([
-    logArticleEvent({ articleId, eventType: action, actorId, summary, metadata }).catch((error) =>
-      console.error("[BotDrafts] article event log failed:", error),
-    ),
+    history.catch((error) => console.error("[BotDrafts] article event log failed:", error)),
     logActivity({
       userId: actorId,
       action: activityAction ?? action,

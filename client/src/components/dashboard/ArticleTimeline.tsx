@@ -36,9 +36,11 @@ import {
   History,
 } from "lucide-react";
 import {
+  ARTICLE_IMAGE_SOURCE_LABELS,
   ARTICLE_STATUS_LABELS,
   ARTICLE_VERSION_FIELD_LABELS,
   type ArticleVersionField,
+  type ContentMedia,
 } from "@shared/articleHistory";
 import { ArticleVersionCompare, type RestoreRequest } from "./ArticleVersionCompare";
 
@@ -61,7 +63,13 @@ interface EventMetadata {
   autosave?: boolean;
   versionId?: string;
   versionNumber?: number;
-  content?: { beforeWords: number; afterWords: number };
+  content?: {
+    beforeWords: number;
+    afterWords: number;
+    textChanged?: boolean;
+    mediaAdded?: ContentMedia[];
+    mediaRemoved?: ContentMedia[];
+  };
   restoredFromVersionNumber?: number;
   reason?: string;
   [key: string]: unknown;
@@ -127,7 +135,7 @@ const EVENT_STYLE: Record<
 };
 
 function formatDateTime(dateString: string): string {
-  return new Intl.DateTimeFormat("ar-SA-u-ca-gregory", {
+  return new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-latn", {
     weekday: "long",
     year: "numeric",
     month: "long",
@@ -138,7 +146,7 @@ function formatDateTime(dateString: string): string {
 }
 
 function shortTime(dateString: string): string {
-  return new Intl.DateTimeFormat("ar-SA-u-ca-gregory", { hour: "numeric", minute: "2-digit" }).format(new Date(dateString));
+  return new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-latn", { hour: "numeric", minute: "2-digit" }).format(new Date(dateString));
 }
 
 function actorName(first: string | null, last: string | null): string {
@@ -163,11 +171,63 @@ function valueText(field: ArticleVersionField, value: unknown, categories: Recor
   if (field === "categoryId") return categories[String(value)] ?? "تصنيف محذوف";
   if (field === "status") return ARTICLE_STATUS_LABELS[String(value)] ?? String(value);
   if (field === "keywords") return Array.isArray(value) && value.length ? value.join("، ") : "—";
+  if (field === "imageSource") return ARTICLE_IMAGE_SOURCE_LABELS[String(value)] ?? String(value);
   return String(value);
+}
+
+function Thumb({ src, alt }: { src: string; alt: string }) {
+  return (
+    <a href={src} target="_blank" rel="noreferrer" className="block">
+      <img src={src} alt={alt} className="h-16 w-28 rounded border object-cover" loading="lazy" />
+    </a>
+  );
+}
+
+/** صور قبل وبعد (الصورة الرئيسية أو الألبوم): ما حُذف بإطار أحمر وما أضيف بإطار أخضر. */
+function ImageListRow({ label, before, after }: { label: string; before: string[]; after: string[] }) {
+  const removed = before.filter((src) => !after.includes(src));
+  const added = after.filter((src) => !before.includes(src));
+  const groups = [
+    { key: "removed", title: before.length === 1 && after.length <= 1 ? "قبل" : "حُذفت", items: removed, tone: "text-red-800 dark:text-red-300" },
+    { key: "added", title: after.length === 1 && before.length <= 1 ? "بعد" : "أضيفت", items: added, tone: "text-green-800 dark:text-green-300" },
+  ];
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-[88px_minmax(0,1fr)] border-b last:border-b-0">
+      <div className="bg-muted/50 px-3 py-1.5 text-xs font-semibold text-muted-foreground sm:p-3">{label}</div>
+      <div className="flex flex-wrap items-start gap-4 p-3">
+        {groups.map((group) => (
+          <figure key={group.key} className="m-0 space-y-1">
+            <figcaption className={cn("text-xs font-semibold", group.tone)}>{group.title}</figcaption>
+            {group.items.length ? (
+              <div className="flex flex-wrap gap-2">
+                {group.items.map((src) => <Thumb key={src} src={src} alt={`${label} — ${group.title}`} />)}
+              </div>
+            ) : (
+              <span className="text-xs text-muted-foreground">بلا صورة</span>
+            )}
+          </figure>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function asList(value: unknown): string[] {
+  if (Array.isArray(value)) return value.filter((v): v is string => typeof v === "string" && v !== "");
+  return typeof value === "string" && value ? [value] : [];
+}
+
+function contentSummary(content: NonNullable<EventMetadata["content"]>): string {
+  const words = `${content.beforeWords} ← ${content.afterWords} كلمة`;
+  if (content.textChanged === false) return `النص لم يتغيّر (${content.afterWords} كلمة)، التغيير في التنسيق أو الوسائط`;
+  return words;
 }
 
 function ChangeRow({ change, categories }: { change: FieldChange; categories: Record<string, string> }) {
   const label = ARTICLE_VERSION_FIELD_LABELS[change.field] ?? change.field;
+  if (change.field === "albumImages") {
+    return <ImageListRow label={label} before={asList(change.oldValue)} after={asList(change.newValue)} />;
+  }
   if (change.field === "imageUrl") {
     return (
       <div className="grid grid-cols-1 sm:grid-cols-[88px_minmax(0,1fr)] border-b last:border-b-0">
@@ -189,7 +249,8 @@ function ChangeRow({ change, categories }: { change: FieldChange; categories: Re
       </div>
     );
   }
-  const inline = change.field === "categoryId" || change.field === "status" || change.field === "newsType";
+  const inline =
+    change.field === "categoryId" || change.field === "status" || change.field === "newsType" || change.field === "imageSource";
   return (
     <div className="grid grid-cols-1 sm:grid-cols-[88px_minmax(0,1fr)] border-b last:border-b-0">
       <div className="bg-muted/50 px-3 py-1.5 text-xs font-semibold text-muted-foreground sm:p-3">{label}</div>
@@ -363,9 +424,32 @@ export function ArticleTimeline({ articleId, canRestore = false }: ArticleTimeli
                 <div className="grid grid-cols-1 sm:grid-cols-[88px_minmax(0,1fr)]">
                   <div className="bg-muted/50 px-3 py-1.5 text-xs font-semibold text-muted-foreground sm:p-3">المتن</div>
                   <div className="flex flex-wrap items-center justify-between gap-2 p-3 text-sm">
-                    <span className="text-foreground/85">
-                      {meta.content ? `${meta.content.beforeWords} ← ${meta.content.afterWords} كلمة` : "تغيّر المتن"}
-                    </span>
+                    <div className="space-y-2">
+                      <span className="text-foreground/85">{meta.content ? contentSummary(meta.content) : "تغيّر المتن"}</span>
+                      {(["mediaAdded", "mediaRemoved"] as const).map((key) => {
+                        const media = meta.content?.[key] ?? [];
+                        if (!media.length) return null;
+                        const added = key === "mediaAdded";
+                        return (
+                          <div key={key} className="space-y-1">
+                            <div className={cn("text-xs font-semibold", added ? "text-green-800 dark:text-green-300" : "text-red-800 dark:text-red-300")}>
+                              {added ? "أضيف داخل المتن" : "حُذف من المتن"}: {media.length} {media.length === 1 ? "عنصر" : "عناصر"}
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              {media.map((m) =>
+                                m.kind === "image" ? (
+                                  <Thumb key={m.src} src={m.src} alt={added ? "صورة أضيفت داخل المتن" : "صورة حُذفت من المتن"} />
+                                ) : (
+                                  <a key={m.src} href={m.src} target="_blank" rel="noreferrer" className="break-all text-xs text-primary underline">
+                                    فيديو: {m.src}
+                                  </a>
+                                ),
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
                     {versionId && (
                       <Button type="button" variant="ghost" size="sm" className="h-9 px-2 text-primary underline-offset-4 hover:underline" onClick={() => setCompare({ versionId, field: "content" })} data-testid={`button-compare-content-${event.id}`}>
                         مقارنة المتن قبل وبعد

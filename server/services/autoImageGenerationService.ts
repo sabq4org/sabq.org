@@ -7,6 +7,7 @@ import { generateNewsImage } from "./visualAiService";
 import { db } from "../db";
 import { articles, mediaFiles, systemSettings } from "@shared/schema";
 import { eq } from "drizzle-orm";
+import { recordArticleSave } from "./articleHistoryService";
 import { sql } from "drizzle-orm";
 
 const SETTINGS_KEY = "auto_image_generation_settings";
@@ -308,7 +309,8 @@ export async function autoGenerateImage(
     // بلا updatedAt: هو نسخة الحفظ لدى المحرر (expectedUpdatedAt)، والمحرر المفتوح
     // يضع الصورة نفسها في نموذجه عبر onImageGenerated فيحفظها مع الحفظ التالي.
     // رفعه هنا كان يجعل ذلك الحفظ يُرفض بـ«تغير المقال منذ فتحه» (قاعدة 2026-09-24).
-    await db.update(articles)
+    const [before] = await db.select().from(articles).where(eq(articles.id, request.articleId)).limit(1);
+    const [after] = await db.update(articles)
       .set({ 
         imageUrl: generationResult.imageUrl,
         thumbnailUrl: generationResult.thumbnailUrl || generationResult.imageUrl, // Also set thumbnail
@@ -316,7 +318,17 @@ export async function autoGenerateImage(
         aiImageModel: generationResult.model || settings.provider,
         aiImagePrompt: generationResult.finalPrompt || smartPrompt,
       })
-      .where(eq(articles.id, request.articleId));
+      .where(eq(articles.id, request.articleId))
+      .returning();
+    if (before && after) {
+      await recordArticleSave({
+        before,
+        after,
+        actorId: userId,
+        summary: "ولّد النظام صورة رئيسية بالذكاء الاصطناعي",
+        metadata: { channel: "auto-image", model: generationResult.model || settings.provider },
+      }).catch((error) => console.error("[Auto Image] history log failed:", error));
+    }
     
     await incrementGenerationCount();
     
