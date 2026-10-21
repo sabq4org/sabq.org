@@ -6,33 +6,17 @@ import { useParams } from "wouter";
 import { useArticleInsights, useArticleRecommendations } from "@/hooks/useArticleSidebarData";
 import { getObjectPosition, getCacheBustedImageUrl } from "@/lib/imageUtils";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { CommentsTeaser } from "@/components/CommentsTeaser";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import SmartNewsletterForm from "@/components/SmartNewsletterForm";
 import { INLINE_NEWSLETTER_SIGNUP_ENABLED } from "@/config/newsletter";
-import { CommentSection } from "@/components/CommentSection";
-import { ArticlePoll } from "@/components/ArticlePoll";
-import { RecommendationsWidget } from "@/components/RecommendationsWidget";
-import { AIRecommendationsPanel } from "@/components/AIRecommendationsBlock";
-import { RelatedOpinionsSection } from "@/components/RelatedOpinionsSection";
-import { Paywall } from "@/components/Paywall";
-import StoryTimeline from "@/components/StoryTimeline";
-import FollowStoryButton from "@/components/FollowStoryButton";
 import { AdSlot } from "@/components/AdSlot";
-import { NativeAdsSection } from "@/components/NativeAdsSection";
 import { DmsLeaderboardAd, DmsMpuAd, useAdTracking } from "@/components/DmsAdSlot";
 import { SocialShareBar } from "@/components/SocialShareBar";
 import { DigitalPassportButton } from "@/components/passport/DigitalPassportButton";
-import { FocusReader, FocusReaderTrigger } from "@/components/FocusReader";
 // PassportTrustBadge removed from this page on 2026-05-16 (user request).
 // Kept import out so esbuild doesn't pull the component into the bundle.
 import { ImageWithCaption } from "@/components/ImageWithCaption";
-import { VideoPlayer } from "@/components/VideoPlayer";
-import { InfographicDetail } from "@/components/InfographicDetail";
-import { DataInfographicPage } from "@/components/data-infographic/DataInfographicPage";
-import { RelatedInfographics } from "@/components/RelatedInfographics";
-import { WeeklyPhotosDisplay } from "@/components/WeeklyPhotosDisplay";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -61,12 +45,10 @@ import {
   ChevronRight,
   CheckCircle2,
   Loader2,
-  MessageSquare,
   Archive,
   Zap,
-  Lock,
-  User,
   BookOpen,
+  Eye,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { formatArticleTimestamp } from "@/lib/formatTime";
@@ -77,6 +59,7 @@ import { transformArticleHtml } from "@/lib/legacyHtmlTransformer";
 import { useHeroPreload } from "@/hooks/useHeroPreload";
 import { ARTICLE_HERO_QUALITY, ARTICLE_HERO_FALLBACK_WIDTH } from "@shared/articleHeroPreload";
 import { useNaturalAspectRatio } from "@/hooks/useNaturalAspectRatio";
+import { useInViewport } from "@/hooks/useInViewport";
 
 // الإعلان البارز أعلى صفحة المقال (تحت الهيدر). أُعيد إظهاره 2026-07-09 (بعد إخفاء المونديال). للإخفاء: بدّل إلى false.
 const SHOW_TOP_AD = true;
@@ -84,6 +67,57 @@ const SHOW_TOP_AD = true;
 const AiArticleStats = lazy(() =>
   import("@/components/AiArticleStats").then(module => ({ default: module.AiArticleStats }))
 );
+const CommentSection = lazy(() =>
+  import("@/components/CommentSection").then(module => ({ default: module.CommentSection }))
+);
+const ArticlePoll = lazy(() =>
+  import("@/components/ArticlePoll").then(module => ({ default: module.ArticlePoll }))
+);
+const RecommendationsWidget = lazy(() =>
+  import("@/components/RecommendationsWidget").then(module => ({ default: module.RecommendationsWidget }))
+);
+const AIRecommendationsPanel = lazy(() =>
+  import("@/components/AIRecommendationsBlock").then(module => ({ default: module.AIRecommendationsPanel }))
+);
+const RelatedOpinionsSection = lazy(() =>
+  import("@/components/RelatedOpinionsSection").then(module => ({ default: module.RelatedOpinionsSection }))
+);
+const NativeAdsSection = lazy(() =>
+  import("@/components/NativeAdsSection").then(module => ({ default: module.NativeAdsSection }))
+);
+const Paywall = lazy(() =>
+  import("@/components/Paywall").then(module => ({ default: module.Paywall }))
+);
+const StoryTimeline = lazy(() => import("@/components/StoryTimeline"));
+const FollowStoryButton = lazy(() => import("@/components/FollowStoryButton"));
+const VideoPlayer = lazy(() =>
+  import("@/components/VideoPlayer").then(module => ({ default: module.VideoPlayer }))
+);
+const InfographicDetail = lazy(() =>
+  import("@/components/InfographicDetail").then(module => ({ default: module.InfographicDetail }))
+);
+const DataInfographicPage = lazy(() =>
+  import("@/components/data-infographic/DataInfographicPage").then(module => ({ default: module.DataInfographicPage }))
+);
+const WeeklyPhotosDisplay = lazy(() =>
+  import("@/components/WeeklyPhotosDisplay").then(module => ({ default: module.WeeklyPhotosDisplay }))
+);
+const FocusReader = lazy(() =>
+  import("@/components/FocusReader").then(module => ({ default: module.FocusReader }))
+);
+
+function DeferredArticleSection({ children, minHeight = 120 }: { children: React.ReactNode; minHeight?: number }) {
+  const [ref, isVisible] = useInViewport<HTMLDivElement>({ rootMargin: "300px" });
+  const [rendered, setRendered] = useState(false);
+  useEffect(() => {
+    if (isVisible && !rendered) setRendered(true);
+  }, [isVisible, rendered]);
+  return (
+    <div ref={ref} style={{ minHeight: rendered ? undefined : minHeight }}>
+      {rendered ? <Suspense fallback={<div style={{ minHeight }} />}>{children}</Suspense> : null}
+    </div>
+  );
+}
 
 export default function ArticleDetail() {
   const { slug } = useParams<{ slug: string }>();
@@ -455,7 +489,7 @@ export default function ArticleDetail() {
 
   // Load Twitter widgets script and render embedded tweets with theme support
   useEffect(() => {
-    if (!article?.content) return;
+    if (!article?.content || !article.content.includes('twitter-tweet')) return;
 
     // Function to apply theme to all tweet blockquotes
     const applyThemeToTweets = () => {
@@ -996,31 +1030,37 @@ export default function ArticleDetail() {
           <Header user={user} />
           
           {/* Data Infographic with visual blocks */}
-          <DataInfographicPage 
-            article={article}
-            onReact={handleReact}
-            onBookmark={handleBookmark}
-            hasReacted={article.hasReacted}
-            isBookmarked={article.isBookmarked}
-            shortLink={shortLink}
-          />
+          <Suspense fallback={<Skeleton className="h-96 w-full" />}>
+            <DataInfographicPage
+              article={article}
+              onReact={handleReact}
+              onBookmark={handleBookmark}
+              hasReacted={article.hasReacted}
+              isBookmarked={article.isBookmarked}
+              shortLink={shortLink}
+            />
+          </Suspense>
           
           {/* Article Poll */}
           <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 mb-8">
-            <ArticlePoll articleId={article.id} />
+            <DeferredArticleSection minHeight={80}>
+              <ArticlePoll articleId={article.id} />
+            </DeferredArticleSection>
           </div>
 
           {/* Comments Section */}
           <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pb-12">
             <Separator className="mb-8" />
-            <CommentSection
-              articleId={article.id}
-              comments={comments}
-              currentUser={user}
-              onSubmitComment={handleComment}
-              onLikeComment={handleLikeComment}
-              likedCommentIds={likedCommentIds}
-            />
+            <DeferredArticleSection minHeight={200}>
+              <CommentSection
+                articleId={article.id}
+                comments={comments}
+                currentUser={user}
+                onSubmitComment={handleComment}
+                onLikeComment={handleLikeComment}
+                likedCommentIds={likedCommentIds}
+              />
+            </DeferredArticleSection>
           </div>
         </div>
       );
@@ -1032,31 +1072,37 @@ export default function ArticleDetail() {
         <Header user={user} />
         
         {/* Full-width Infographic Detail with integrated carousel */}
-        <InfographicDetail 
-          article={article}
-          onReact={handleReact}
-          onBookmark={handleBookmark}
-          hasReacted={article.hasReacted}
-          isBookmarked={article.isBookmarked}
-          shortLink={shortLink}
-        />
+        <Suspense fallback={<Skeleton className="h-96 w-full" />}>
+          <InfographicDetail
+            article={article}
+            onReact={handleReact}
+            onBookmark={handleBookmark}
+            hasReacted={article.hasReacted}
+            isBookmarked={article.isBookmarked}
+            shortLink={shortLink}
+          />
+        </Suspense>
         
         {/* Article Poll */}
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 mb-8">
-          <ArticlePoll articleId={article.id} />
+          <DeferredArticleSection minHeight={80}>
+            <ArticlePoll articleId={article.id} />
+          </DeferredArticleSection>
         </div>
 
         {/* Comments Section */}
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pb-12">
           <Separator className="mb-8" />
-          <CommentSection
-            articleId={article.id}
-            comments={comments}
-            currentUser={user}
-            onSubmitComment={handleComment}
-            onLikeComment={handleLikeComment}
-            likedCommentIds={likedCommentIds}
-          />
+          <DeferredArticleSection minHeight={200}>
+            <CommentSection
+              articleId={article.id}
+              comments={comments}
+              currentUser={user}
+              onSubmitComment={handleComment}
+              onLikeComment={handleLikeComment}
+              likedCommentIds={likedCommentIds}
+            />
+          </DeferredArticleSection>
         </div>
       </div>
     );
@@ -1219,15 +1265,17 @@ export default function ArticleDetail() {
 
             {/* Featured Image or Video */}
             {(article as any).isVideoTemplate && (article as any).videoUrl ? (
-              <VideoPlayer
-                videoUrl={(article as any).videoUrl}
-                thumbnailUrl={getCacheBustedImageUrl(
-                  (article as any).videoThumbnailUrl || article.imageUrl,
-                  article.updatedAt,
-                )}
-                title={article.title}
-                className="article-detail-hero rounded-xl"
-              />
+              <Suspense fallback={<Skeleton className="aspect-video w-full rounded-xl" />}>
+                <VideoPlayer
+                  videoUrl={(article as any).videoUrl}
+                  thumbnailUrl={getCacheBustedImageUrl(
+                    (article as any).videoThumbnailUrl || article.imageUrl,
+                    article.updatedAt,
+                  )}
+                  title={article.title}
+                  className="article-detail-hero rounded-xl"
+                />
+              </Suspense>
             ) : article.imageUrl && (() => {
               const heroImageAsset = mediaAssets?.find(
                 (asset: any) => asset.displayOrder === 0
@@ -1290,20 +1338,22 @@ export default function ArticleDetail() {
                   <p className="text-muted-foreground">جاري التحقق من حالة الشراء...</p>
                 </div>
               ) : article.isPaid && !purchaseStatus?.hasPurchased ? (
-                <Paywall 
-                  article={{
-                    id: article.id,
-                    title: article.title,
-                    content: article.content,
-                    priceHalalas: article.priceHalalas || 0,
-                    previewLength: article.previewLength ?? undefined,
-                    imageUrl: article.imageUrl,
-                    slug: article.slug
-                  }}
-                  onPurchaseComplete={() => {
-                    queryClient.invalidateQueries({ queryKey: ['/api/payments/check-purchase', article.id] });
-                  }}
-                />
+                <Suspense fallback={<Skeleton className="h-64 w-full" />}>
+                  <Paywall
+                    article={{
+                      id: article.id,
+                      title: article.title,
+                      content: article.content,
+                      priceHalalas: article.priceHalalas || 0,
+                      previewLength: article.previewLength ?? undefined,
+                      imageUrl: article.imageUrl,
+                      slug: article.slug
+                    }}
+                    onPurchaseComplete={() => {
+                      queryClient.invalidateQueries({ queryKey: ['/api/payments/check-purchase', article.id] });
+                    }}
+                  />
+                </Suspense>
               ) : (
                 <div 
                   ref={articleBodyRef}
@@ -1328,10 +1378,12 @@ export default function ArticleDetail() {
             {/* Weekly Photos Section */}
             {article.articleType === 'weekly_photos' && (article as any).weeklyPhotosData?.photos && (
               <div className="article-detail-gallery">
-                <WeeklyPhotosDisplay 
-                  photos={(article as any).weeklyPhotosData.photos}
-                  title="صور الأسبوع"
-                />
+                <Suspense fallback={<Skeleton className="h-64 w-full" />}>
+                  <WeeklyPhotosDisplay
+                    photos={(article as any).weeklyPhotosData.photos}
+                    title="صور الأسبوع"
+                  />
+                </Suspense>
               </div>
             )}
 
@@ -1449,11 +1501,16 @@ export default function ArticleDetail() {
                   </Button>
 
                   {/* Focus Mode trigger (Task #80) */}
-                  <FocusReaderTrigger
-                    language="ar"
-                    className="article-action"
+                  <Button
+                    variant="outline"
+                    size="sm"
                     onClick={() => setFocusOpen(true)}
-                  />
+                    className="article-action"
+                    data-testid="button-focus-mode-toggle"
+                  >
+                    <Eye className="me-1.5 h-3.5 w-3.5 shrink-0" />
+                    <span>وضع التركيز</span>
+                  </Button>
                 </div>
               </div>
 
@@ -1479,27 +1536,29 @@ export default function ArticleDetail() {
             </div>
 
             {/* Focus mode overlay (Task #80) */}
-            {article && (
-              <FocusReader
-                open={focusOpen}
-                onClose={() => setFocusOpen(false)}
-                articleId={article.id}
-                language="ar"
-                isLoggedIn={!!user}
-                title={article.title}
-                subtitle={article.excerpt || article.subtitle || null}
-                contentHtml={article.content}
-                authorName={article.author ? `${article.author.firstName || ""} ${article.author.lastName || ""}`.trim() || article.author.email || null : null}
-                publishedAt={article.publishedAt}
-                articleSlug={slug}
-                articleImageUrl={article.imageUrl}
-                categoryName={article.category?.nameAr || article.category?.nameEn || null}
-              />
+            {article && focusOpen && (
+              <Suspense fallback={null}>
+                <FocusReader
+                  open={focusOpen}
+                  onClose={() => setFocusOpen(false)}
+                  articleId={article.id}
+                  language="ar"
+                  isLoggedIn={!!user}
+                  title={article.title}
+                  subtitle={article.excerpt || article.subtitle || null}
+                  contentHtml={article.content}
+                  authorName={article.author ? `${article.author.firstName || ""} ${article.author.lastName || ""}`.trim() || article.author.email || null : null}
+                  publishedAt={article.publishedAt}
+                  articleSlug={slug}
+                  articleImageUrl={article.imageUrl}
+                  categoryName={article.category?.nameAr || article.category?.nameEn || null}
+                />
+              </Suspense>
             )}
 
             {/* Story Timeline */}
             {article.storyId && (
-              <>
+              <DeferredArticleSection minHeight={120}>
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
                     <h2 className="text-2xl font-bold">تطور القصة</h2>
@@ -1511,66 +1570,84 @@ export default function ArticleDetail() {
                   <StoryTimeline storyId={article.storyId} />
                 </div>
                 <Separator />
-              </>
+              </DeferredArticleSection>
             )}
 
             {/* Native Ads - Sponsored Content */}
-            <NativeAdsSection
-              articleId={article.id}
-              categorySlug={article.category?.slug}
-              keywords={articleTags?.map(tag => tag.nameAr) || []}
-              limit={4}
-            />
+            <DeferredArticleSection minHeight={100}>
+              <NativeAdsSection
+                articleId={article.id}
+                categorySlug={article.category?.slug}
+                keywords={articleTags?.map(tag => tag.nameAr) || []}
+                limit={4}
+              />
+            </DeferredArticleSection>
 
             {INLINE_NEWSLETTER_SIGNUP_ENABLED && <SmartNewsletterForm variant="compact" source="article" className="my-8" />}
 
             {/* Article Poll */}
             <div className="mb-8">
-              <ArticlePoll articleId={article.id} />
+              <DeferredArticleSection minHeight={80}>
+                <ArticlePoll articleId={article.id} />
+              </DeferredArticleSection>
             </div>
 
             {/* Comments */}
-            <CommentSection
-              articleId={article.id}
-              comments={comments}
-              currentUser={user}
-              onSubmitComment={handleComment}
-              onLikeComment={handleLikeComment}
-              likedCommentIds={likedCommentIds}
-            />
+            <DeferredArticleSection minHeight={200}>
+              <CommentSection
+                articleId={article.id}
+                comments={comments}
+                currentUser={user}
+                onSubmitComment={handleComment}
+                onLikeComment={handleLikeComment}
+                likedCommentIds={likedCommentIds}
+              />
+            </DeferredArticleSection>
           </article>
 
           {/* Sidebar */}
           <aside className="article-detail-sidebar" aria-label="المزيد عن الخبر">
             {/* AI Article Analytics */}
             <div className="article-sidebar-stats">
-            <Suspense fallback={<Skeleton className="h-48 w-full" />}>
-              <AiArticleStats query={insightsQuery} />
-            </Suspense>
+              <DeferredArticleSection minHeight={192}>
+                <AiArticleStats query={insightsQuery} />
+              </DeferredArticleSection>
             </div>
 
             {/* Advertisement Slot - Article Sidebar */}
             <AdSlot slotId="sidebar" className="my-6" />
 
             {/* AI-Powered Smart Recommendations */}
-            <div className="article-sidebar-recommendations"><AIRecommendationsPanel query={recommendationsQuery} /></div>
+            <div className="article-sidebar-recommendations">
+              <DeferredArticleSection minHeight={160}>
+                <AIRecommendationsPanel query={recommendationsQuery} />
+              </DeferredArticleSection>
+            </div>
 
             {/* Related Opinion Articles */}
             {article?.category && (
-              <div className="article-sidebar-opinions"><RelatedOpinionsSection
-                categoryId={article.category.id}
-                categoryName={article.category.nameAr}
-                excludeArticleId={article.id}
-                limit={5}
-              /></div>
+              <div className="article-sidebar-opinions">
+                <DeferredArticleSection minHeight={160}>
+                  <RelatedOpinionsSection
+                    categoryId={article.category.id}
+                    categoryName={article.category.nameAr}
+                    excludeArticleId={article.id}
+                    limit={5}
+                  />
+                </DeferredArticleSection>
+              </div>
             )}
 
             {relatedArticles.length > 0 && (
-              <div className="article-sidebar-related"><RecommendationsWidget
-                articles={relatedArticles}
-                title="اقرأ أيضاً"
-                reason="آخر ما نُشر في القسم"
-              /></div>
+              <div className="article-sidebar-related">
+                <DeferredArticleSection minHeight={160}>
+                  <RecommendationsWidget
+                    articles={relatedArticles}
+                    title="اقرأ أيضاً"
+                    reason="آخر ما نُشر في القسم"
+                  />
+                </DeferredArticleSection>
+              </div>
             )}
           </aside>
         </div>

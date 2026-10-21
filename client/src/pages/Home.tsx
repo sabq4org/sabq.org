@@ -98,10 +98,10 @@ class SectionErrorBoundary extends Component<{ children: ReactNode }, { hasError
 }
 
 function LazySection({ children, minHeight = 200 }: { children: ReactNode; minHeight?: number }) {
-  // Start loading well before the section enters the viewport so its JS chunk
-  // and data fetch resolve by the time the user scrolls to it — eliminates the
-  // per-section skeleton flash that made mobile scrolling feel laggy.
-  const [ref, isVisible] = useInViewport<HTMLDivElement>({ rootMargin: '800px' });
+  // Start loading before the section enters the viewport so its JS chunk
+  // and data fetch resolve as the user scrolls to it, while avoiding
+  // triggering below-the-fold sections on initial mobile paint.
+  const [ref, isVisible] = useInViewport<HTMLDivElement>({ rootMargin: '250px' });
   const [shouldRender, setShouldRender] = useState(false);
   
   useEffect(() => {
@@ -263,17 +263,19 @@ export default function Home() {
   // Warm the article-detail chunk during idle time: virtually every homepage
   // visitor opens an article next, so this makes the first click feel instant
   // instead of blocking on the chunk download. Runs once the feed has data.
+  // Skip on slow connections / data-saver, and delay on mobile so below-the-fold
+  // chunk evaluation never competes with initial TBT / INP.
   useEffect(() => {
     if (!initialLoadComplete) return;
+    const conn = (navigator as Navigator & { connection?: { saveData?: boolean; effectiveType?: string } }).connection;
+    if (conn?.saveData || (conn?.effectiveType && /2g|3g/i.test(conn.effectiveType))) return;
     const cancel = prefetchWhenIdle(() => {
       prefetchArticleDetail();
       prefetchCategoryPage();
-      // Warm the below-the-fold homepage section chunks during idle so they're
-      // already cached when the user scrolls — only the data fetch remains.
-      // Skip desktop-only chunks on mobile (map + trending panels aren't
-      // rendered there).
-      prefetchHomeSections({ includeDesktopOnly: !isMobile });
-    });
+      if (!isMobile) {
+        prefetchHomeSections({ includeDesktopOnly: true });
+      }
+    }, isMobile ? 6000 : 2500);
     return cancel;
   }, [initialLoadComplete, isMobile]);
 
@@ -332,9 +334,15 @@ export default function Home() {
       <div className="public-page home-surface-theme min-h-screen bg-background flex flex-col" dir="rtl">
         <Header user={user || undefined} />
         <CategoryPills categories={visibleCategories} />
-        <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-12 flex-1">
-          <Skeleton className="w-full h-[400px] md:h-[500px] rounded-lg" />
-          <div className="space-y-4">
+        <main className="flex-1">
+          <div className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-8">
+            <Skeleton className="w-full h-[504px] md:h-[420px] rounded-lg" />
+          </div>
+          <div className="h-12 border-y border-border/60 bg-muted/40" />
+          <div className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-2">
+            <div className="min-h-[148px] md:min-h-[212px]" aria-hidden="true" />
+          </div>
+          <div className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-4">
             <Skeleton className="h-8 w-48" />
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {[1, 2, 3, 4, 5, 6].map((i) => (
@@ -427,9 +435,7 @@ export default function Home() {
           )}
         </div>
       )}
-      {visibleCategories.length > 0 && (
-        <CategoryPills categories={visibleCategories} />
-      )}
+      <CategoryPills categories={visibleCategories} />
 
       <main className="flex-1">
         <div className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-8">
@@ -457,6 +463,30 @@ export default function Home() {
             <SportsPortalStrip />
           </Suspense>
         </ErrorBoundary>
+
+        {/* الاقتصاد بالأرقام — شريط بيانات البنك المركزي (يختفي ذاتيًا بلا بيانات).
+            نضعه قبل البلوكات الرياضية غير المتزامنة لتفادي إزاحة هذا القسم للأسفل عند ظهور شريط الدوري. */}
+        <div className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-2">
+          <ErrorBoundary fallback={null}>
+            <Suspense fallback={<div className="min-h-[148px] md:min-h-[212px]" aria-hidden="true" />}>
+              <EconomyNumbersBlock />
+            </Suspense>
+          </ErrorBoundary>
+        </div>
+
+        <div className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-8">
+          {/* الإعلان البارز أسفل الهيدر — الإطفاء الفوري من اللوحة: إعدادات النظام ← إعلانات DMS أعلى الصفحات. SHOW_TOP_ADS بقي كقاطع طوارئ في الكود. */}
+          {SHOW_TOP_ADS && (
+            <>
+              {/* DMS Ads - Leaderboard for desktop, MPU for mobile - تحت الكاروسيل */}
+              <DmsLeaderboardAd />
+              <DmsMpuAd topSlot />
+
+              {/* Ad Banner Slot - Below Featured News */}
+              <AdSlot slotId="header-banner" className="w-full" />
+            </>
+          )}
+        </div>
 
         {/* كأس العالم 2026 على الرئيسية — مخفي 2026-07-20؛ إعادة التفعيل: WorldCupHomeSection تحت الهيرو */}
 
@@ -490,7 +520,7 @@ export default function Home() {
           </Suspense>
         </ErrorBoundary>
 
-        <div className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-8">
+        <div className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
           {/* Gulf Live Coverage Block — hidden (no active events) */}
           {/* <ErrorBoundary fallback={null}>
             <Suspense fallback={null}>
@@ -516,25 +546,6 @@ export default function Home() {
               <NationalDay96Block />
             </Suspense>
           </ErrorBoundary>
-
-          {/* الاقتصاد بالأرقام — شريط بيانات البنك المركزي (يختفي ذاتيًا بلا بيانات) */}
-          <ErrorBoundary fallback={null}>
-            <Suspense fallback={null}>
-              <EconomyNumbersBlock />
-            </Suspense>
-          </ErrorBoundary>
-
-          {/* الإعلان البارز أسفل الهيدر — الإطفاء الفوري من اللوحة: إعدادات النظام ← إعلانات DMS أعلى الصفحات. SHOW_TOP_ADS بقي كقاطع طوارئ في الكود. */}
-          {SHOW_TOP_ADS && (
-            <>
-              {/* DMS Ads - Leaderboard for desktop, MPU for mobile - تحت الكاروسيل */}
-              <DmsLeaderboardAd />
-              <DmsMpuAd topSlot />
-
-              {/* Ad Banner Slot - Below Featured News */}
-              <AdSlot slotId="header-banner" className="w-full" />
-            </>
-          )}
         </div>
 
         {/* AI Summary Section — shared homepage surface, lazy loaded */}

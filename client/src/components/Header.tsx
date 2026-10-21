@@ -1,20 +1,16 @@
-import { Menu, User, LogOut, Newspaper, Brain, Sparkles, ExternalLink, Zap, Home, Clock, BookOpen, Boxes, ChevronLeft, FolderOpen, Search, Mail, CalendarClock } from "lucide-react";
+import { Menu, User, LogOut, Newspaper, Brain, Sparkles, ExternalLink, Zap, Home, Clock, BookOpen, Boxes, ChevronLeft, FolderOpen, Search, Mail, CalendarClock, Eye, Palette, Bell } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "./ThemeToggle";
-import { VariantSwitcher } from "./VariantSwitcher";
-import { AccessibilitySettings } from "./AccessibilitySettings";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
 import { AdSlot } from "./AdSlot";
 import { BreakingNewsTicker } from "./BreakingNewsTicker";
 import { AudioBulletinBar } from "./AudioBulletinBar";
-import { NotificationBell } from "./NotificationBell";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { UserAccountMenu } from "@/components/UserAccountMenu";
 import {
   Sheet,
   SheetContent,
@@ -22,7 +18,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import "@/styles/header-brand.css";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
@@ -39,8 +35,13 @@ import {
   useNationalDay96Season,
 } from "@/components/seasonal/NationalDay96Theme";
 import type { Category } from "@shared/schema";
-import { SearchDialog } from "./SearchDialog";
 import { getMobileToolsItems } from "@/nav/accountMenuItems";
+
+const SearchDialog = lazy(() => import("./SearchDialog").then((m) => ({ default: m.SearchDialog })));
+const AccessibilitySettings = lazy(() => import("./AccessibilitySettings").then((m) => ({ default: m.AccessibilitySettings })));
+const VariantSwitcher = lazy(() => import("./VariantSwitcher").then((m) => ({ default: m.VariantSwitcher })));
+const NotificationBell = lazy(() => import("./NotificationBell").then((m) => ({ default: m.NotificationBell })));
+const UserAccountMenu = lazy(() => import("@/components/UserAccountMenu").then((m) => ({ default: m.UserAccountMenu })));
 
 interface HeaderProps {
   user?: { name?: string | null; email?: string | null; role?: string; profileImageUrl?: string | null; permissions?: string[] } | null;
@@ -159,7 +160,9 @@ export function Header({ user, onMenuClick, sticky = true }: HeaderProps) {
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-72 text-right">
-        <UserAccountMenu user={user} onLogout={handleLogout} />
+        <Suspense fallback={<div className="p-4 text-center text-xs text-muted-foreground">جارٍ التحميل...</div>}>
+          <UserAccountMenu user={user} onLogout={handleLogout} />
+        </Suspense>
       </DropdownMenuContent>
     </DropdownMenu>
   ) : (
@@ -330,24 +333,76 @@ export function Header({ user, onMenuClick, sticky = true }: HeaderProps) {
 
             {/* Mobile Actions */}
             <div className="lg:hidden flex items-center gap-0.5 max-sm:gap-0">
-              <SearchDialog />
+              <Suspense
+                fallback={
+                  <Button variant="ghost" size="icon" className="shrink-0" data-testid="button-search" aria-label="بحث">
+                    <Search className="h-5 w-5" aria-hidden="true" />
+                  </Button>
+                }
+              >
+                <SearchDialog />
+              </Suspense>
               <LanguageSwitcher />
               <ThemeToggle />
 
               {/* Notification Bell - Mobile */}
-              {user && <NotificationBell />}
+              {user && (
+                <Suspense
+                  fallback={
+                    <Button variant="ghost" size="icon" className="relative" data-testid="button-notifications" aria-label="الإشعارات">
+                      <Bell className="h-5 w-5" aria-hidden="true" />
+                    </Button>
+                  }
+                >
+                  <NotificationBell />
+                </Suspense>
+              )}
             </div>
 
             {/* Desktop Actions */}
             <div className="hidden lg:flex items-center gap-1">
-              <SearchDialog />
-              <AccessibilitySettings variant="desktop" />
+              <Suspense
+                fallback={
+                  <Button variant="ghost" size="icon" className="shrink-0" data-testid="button-search" aria-label="بحث">
+                    <Search className="h-5 w-5" aria-hidden="true" />
+                  </Button>
+                }
+              >
+                <SearchDialog />
+              </Suspense>
+              <Suspense
+                fallback={
+                  <Button variant="ghost" size="icon" className="hover-elevate active-elevate-2" data-testid="button-accessibility-settings-desktop" aria-label="إعدادات الوصول">
+                    <Eye className="h-5 w-5" aria-hidden="true" />
+                  </Button>
+                }
+              >
+                <AccessibilitySettings variant="desktop" />
+              </Suspense>
               <LanguageSwitcher />
-              <VariantSwitcher />
+              <Suspense
+                fallback={
+                  <Button variant="ghost" size="icon" className="hover-elevate active-elevate-2" data-testid="button-variant-switcher" aria-label="تبديل النمط البصري">
+                    <Palette className="h-5 w-5" aria-hidden="true" />
+                  </Button>
+                }
+              >
+                <VariantSwitcher />
+              </Suspense>
               <ThemeToggle />
               
               {/* Notification Bell - Desktop */}
-              {user && <NotificationBell />}
+              {user && (
+                <Suspense
+                  fallback={
+                    <Button variant="ghost" size="icon" className="relative" data-testid="button-notifications" aria-label="الإشعارات">
+                      <Bell className="h-5 w-5" aria-hidden="true" />
+                    </Button>
+                  }
+                >
+                  <NotificationBell />
+                </Suspense>
+              )}
             </div>
             {accountMenu}
           </div>
@@ -574,7 +629,9 @@ export function Header({ user, onMenuClick, sticky = true }: HeaderProps) {
               <h3 className="px-3 py-2 text-xs font-semibold text-foreground/65 uppercase tracking-wider">
                 النمط البصري
               </h3>
-              <VariantSwitcher inline onSelect={() => setMobileMenuOpen(false)} />
+              <Suspense fallback={null}>
+                <VariantSwitcher inline onSelect={() => setMobileMenuOpen(false)} />
+              </Suspense>
             </div>
 
             {/* إعدادات الوصول - Accessibility Settings */}
@@ -583,7 +640,9 @@ export function Header({ user, onMenuClick, sticky = true }: HeaderProps) {
                 إعدادات الوصول
               </h3>
               <div className="px-3">
-                <AccessibilitySettings variant="mobile" />
+                <Suspense fallback={null}>
+                  <AccessibilitySettings variant="mobile" />
+                </Suspense>
               </div>
             </div>
           </div>

@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import DOMPurify from "isomorphic-dompurify";
+import { apiUrl } from "@/lib/queryClient";
 
 interface AdSlotProps {
   slotId: string;
@@ -80,7 +81,7 @@ export function AdSlot({ slotId, className = "", reservedSize = "mpu" }: AdSlotP
   const { data: ad, isLoading, error } = useQuery<AdData>({
     queryKey: ["/api/ads/slot", slotId, deviceType],
     queryFn: async () => {
-      const response = await fetch(`/api/ads/slot/${slotId}?deviceType=${deviceType}`, {
+      const response = await fetch(apiUrl(`/api/ads/slot/${slotId}?deviceType=${deviceType}`), {
         credentials: "include",
       });
       
@@ -101,7 +102,7 @@ export function AdSlot({ slotId, className = "", reservedSize = "mpu" }: AdSlotP
 
   useEffect(() => {
     if (ad?.impressionId) {
-      fetch(`/api/ads/track/impression/${ad.impressionId}`, {
+      fetch(apiUrl(`/api/ads/track/impression/${ad.impressionId}`), {
         method: "POST",
         credentials: "include",
       }).catch(console.error);
@@ -137,7 +138,7 @@ export function AdSlot({ slotId, className = "", reservedSize = "mpu" }: AdSlotP
 
   const handleClick = () => {
     if (ad?.impressionId) {
-      fetch(`/api/ads/track/click/${ad.impressionId}`, {
+      fetch(apiUrl(`/api/ads/track/click/${ad.impressionId}`), {
         method: "POST",
         credentials: "include",
       }).catch(console.error);
@@ -151,6 +152,9 @@ export function AdSlot({ slotId, className = "", reservedSize = "mpu" }: AdSlotP
   // Server says this slot has no chance of filling — render nothing at all.
   // No reserved box (no layout gap on legacy/no-inventory pages) and no
   // request to /api/ads/slot/...
+  // Keep the reservation while the fill-rate signal is loading. If the slot
+  // is active, removing the reservation here would insert 250px/90px after
+  // the first paint and create the same CLS this component is meant to avoid.
   if (shouldServeSlot === false) {
     return null;
   }
