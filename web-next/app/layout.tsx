@@ -56,6 +56,20 @@ export default function RootLayout({
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
         <link
+          rel="preload"
+          as="font"
+          type="font/woff2"
+          href="https://fonts.gstatic.com/s/ibmplexsansarabic/v15/Qw3CZRtWPQCuHme67tEYUIx3Kh0PHR9N6Ys43PW5fslBEg0.woff2"
+          crossOrigin=""
+        />
+        <link
+          rel="preload"
+          as="font"
+          type="font/woff2"
+          href="https://fonts.gstatic.com/s/ibmplexsansarabic/v15/Qw3NZRtWPQCuHme67tEYUIx3Kh0PHR9N6YOG-eCRXMRrKATtYV0.woff2"
+          crossOrigin=""
+        />
+        <link
           rel="stylesheet"
           href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap"
         />

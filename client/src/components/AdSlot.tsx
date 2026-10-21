@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import DOMPurify from "isomorphic-dompurify";
+import { apiUrl } from "@/lib/queryClient";
 
 interface AdSlotProps {
   slotId: string;
@@ -80,7 +81,7 @@ export function AdSlot({ slotId, className = "", reservedSize = "mpu" }: AdSlotP
   const { data: ad, isLoading, error } = useQuery<AdData>({
     queryKey: ["/api/ads/slot", slotId, deviceType],
     queryFn: async () => {
-      const response = await fetch(`/api/ads/slot/${slotId}?deviceType=${deviceType}`, {
+      const response = await fetch(apiUrl(`/api/ads/slot/${slotId}?deviceType=${deviceType}`), {
         credentials: "include",
       });
       
@@ -101,7 +102,7 @@ export function AdSlot({ slotId, className = "", reservedSize = "mpu" }: AdSlotP
 
   useEffect(() => {
     if (ad?.impressionId) {
-      fetch(`/api/ads/track/impression/${ad.impressionId}`, {
+      fetch(apiUrl(`/api/ads/track/impression/${ad.impressionId}`), {
         method: "POST",
         credentials: "include",
       }).catch(console.error);
@@ -137,7 +138,7 @@ export function AdSlot({ slotId, className = "", reservedSize = "mpu" }: AdSlotP
 
   const handleClick = () => {
     if (ad?.impressionId) {
-      fetch(`/api/ads/track/click/${ad.impressionId}`, {
+      fetch(apiUrl(`/api/ads/track/click/${ad.impressionId}`), {
         method: "POST",
         credentials: "include",
       }).catch(console.error);
@@ -151,18 +152,21 @@ export function AdSlot({ slotId, className = "", reservedSize = "mpu" }: AdSlotP
   // Server says this slot has no chance of filling — render nothing at all.
   // No reserved box (no layout gap on legacy/no-inventory pages) and no
   // request to /api/ads/slot/...
-  if (shouldServeSlot === false) {
+  // Wait to reserve space until shouldServeSlot is known to be true —
+  // reserving 250px while `/api/ads/slots/active` is still loading and then
+  // collapsing when `slotIds` is `[]` caused a 282px layout shift (CLS).
+  if (shouldServeSlot !== true) {
     return null;
   }
 
-  if (isLoading || shouldServeSlot === undefined || (!ad && !collapsed)) {
+  if (isLoading || (!ad && !collapsed)) {
     return (
       <div
         ref={containerRef}
         className={`ad-slot ${className}`}
         style={{ minHeight: `${reservedMinHeight}px`, width: '100%' }}
         data-testid={`ad-slot-${slotId}`}
-        data-ad-state={isLoading || shouldServeSlot === undefined ? "loading" : "pending"}
+        data-ad-state={isLoading ? "loading" : "pending"}
         aria-hidden="true"
       />
     );

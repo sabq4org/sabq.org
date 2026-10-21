@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { motion, AnimatePresence } from "framer-motion";
 import { ChevronLeft, ChevronRight, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -141,29 +140,24 @@ export function BreakingNewsTicker({ className }: BreakingNewsTickerProps) {
               </Button>
             </div>
           </div>
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={currentIndex}
-              initial={{ opacity: 0, y: 5 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -5 }}
-              transition={{ duration: 0.2 }}
+          <div
+            key={currentIndex}
+            className="animate-in fade-in slide-in-from-bottom-1 duration-200"
+          >
+            <button
+              type="button"
+              onClick={handleHeadlineClick}
+              disabled={!isClickable}
+              className={cn(
+                "block w-full text-start font-medium text-sm leading-relaxed",
+                isClickable && "cursor-pointer hover:underline"
+              )}
+              data-testid={`ticker-headline-mobile-${currentIndex}`}
+              aria-current="true"
             >
-              <button
-                type="button"
-                onClick={handleHeadlineClick}
-                disabled={!isClickable}
-                className={cn(
-                  "block w-full text-start font-medium text-sm leading-relaxed",
-                  isClickable && "cursor-pointer hover:underline"
-                )}
-                data-testid={`ticker-headline-mobile-${currentIndex}`}
-                aria-current="true"
-              >
-                {currentHeadline?.headline}
-              </button>
-            </motion.div>
-          </AnimatePresence>
+              {currentHeadline?.headline}
+            </button>
+          </div>
         </div>
 
         {/* Desktop: Horizontal layout */}
@@ -188,30 +182,24 @@ export function BreakingNewsTicker({ className }: BreakingNewsTickerProps) {
           </Button>
 
           <div className="flex-1 min-w-0 overflow-hidden">
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={currentIndex}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                transition={{ duration: 0.2 }}
-                className="w-full overflow-hidden"
+            <div
+              key={currentIndex}
+              className="w-full overflow-hidden animate-in fade-in slide-in-from-bottom-1 duration-200"
+            >
+              <button
+                type="button"
+                onClick={handleHeadlineClick}
+                disabled={!isClickable}
+                className={cn(
+                  "block w-full text-start font-medium text-sm whitespace-nowrap overflow-hidden text-ellipsis",
+                  isClickable && "cursor-pointer hover:underline"
+                )}
+                data-testid={`ticker-headline-${currentIndex}`}
+                aria-current="true"
               >
-                <button
-                  type="button"
-                  onClick={handleHeadlineClick}
-                  disabled={!isClickable}
-                  className={cn(
-                    "block w-full text-start font-medium text-sm whitespace-nowrap overflow-hidden text-ellipsis",
-                    isClickable && "cursor-pointer hover:underline"
-                  )}
-                  data-testid={`ticker-headline-${currentIndex}`}
-                  aria-current="true"
-                >
-                  {currentHeadline?.headline}
-                </button>
-              </motion.div>
-            </AnimatePresence>
+                {currentHeadline?.headline}
+              </button>
+            </div>
           </div>
 
           <Button
