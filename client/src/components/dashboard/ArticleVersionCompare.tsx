@@ -9,12 +9,14 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
+  ARTICLE_IMAGE_SOURCE_LABELS,
   ARTICLE_STATUS_LABELS,
   ARTICLE_VERSION_ACTION_LABELS,
   ARTICLE_VERSION_FIELD_LABELS,
-  contentParagraphs,
+  contentBlocks,
   diffContent,
   diffSequence,
+  parseMediaBlock,
   parseStoredSnapshot,
   type ArticleRestorableField,
   type ArticleSnapshot,
@@ -36,8 +38,8 @@ interface VersionPairResponse {
   versions: VersionRow[];
 }
 
-type CompareField = "title" | "subtitle" | "excerpt" | "content" | "categoryId" | "imageUrl" | "keywords";
-const COMPARE_FIELDS: CompareField[] = ["title", "subtitle", "excerpt", "content", "categoryId", "imageUrl", "keywords"];
+type CompareField = ArticleRestorableField;
+const COMPARE_FIELDS: CompareField[] = ["title", "subtitle", "excerpt", "content", "categoryId", "imageUrl", "albumImages", "videoUrl", "keywords"];
 
 export interface RestoreRequest {
   versionId: string;
@@ -46,7 +48,7 @@ export interface RestoreRequest {
 }
 
 function shortTime(value: string): string {
-  return new Intl.DateTimeFormat("ar-SA-u-ca-gregory", {
+  return new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-latn", {
     day: "numeric",
     month: "short",
     hour: "numeric",
@@ -62,7 +64,40 @@ function versionLabel(row: VersionRow): string {
 function fieldText(snapshot: ArticleSnapshot, field: CompareField, categories: Record<string, string>): string {
   if (field === "categoryId") return snapshot.categoryId ? categories[snapshot.categoryId] ?? "تصنيف محذوف" : "بلا تصنيف";
   if (field === "keywords") return snapshot.keywords.join("، ");
+  if (field === "albumImages") return (snapshot.albumImages ?? []).join("\n");
+  if (field === "imageUrl") return `${snapshot.imageUrl ?? ""}|${snapshot.imageSource ?? ""}`;
   return (snapshot[field] as string | null) ?? "";
+}
+
+function imageSourceLabel(snapshot: ArticleSnapshot): string | null {
+  if (!snapshot.imageUrl || !snapshot.imageSource) return null;
+  return ARTICLE_IMAGE_SOURCE_LABELS[snapshot.imageSource] ?? null;
+}
+
+function MediaBlock({ block, tone }: { block: string; tone?: "removed" | "added" }) {
+  const media = parseMediaBlock(block);
+  if (!media) return null;
+  const caption = tone === "removed" ? "حُذفت من المتن" : tone === "added" ? "أضيفت إلى المتن" : null;
+  return (
+    <figure
+      className={cn(
+        "m-0 space-y-1 rounded-md p-2",
+        tone === "removed" && "bg-red-50 dark:bg-red-950/60",
+        tone === "added" && "bg-green-50 dark:bg-green-950/60",
+      )}
+    >
+      {caption && (
+        <figcaption className={cn("text-xs font-bold", tone === "removed" ? "text-red-800 dark:text-red-300" : "text-green-800 dark:text-green-300")}>
+          {media.kind === "image" ? "صورة" : "فيديو"} {caption}
+        </figcaption>
+      )}
+      {media.kind === "image" ? (
+        <img src={media.src} alt={caption ? `صورة ${caption}` : "صورة داخل المتن"} className={cn("max-h-48 rounded border", tone === "removed" && "opacity-60")} loading="lazy" />
+      ) : (
+        <a href={media.src} target="_blank" rel="noreferrer" className="break-all text-sm text-primary underline">فيديو: {media.src}</a>
+      )}
+    </figure>
+  );
 }
 
 function WordRun({ words }: { words: ReturnType<typeof diffSequence<string>> }) {
@@ -91,6 +126,9 @@ function WordRun({ words }: { words: ReturnType<typeof diffSequence<string>> }) 
 }
 
 function ParagraphBlock({ part }: { part: ParagraphDiff }) {
+  if (part.type !== "changed" && parseMediaBlock(part.text)) {
+    return <MediaBlock block={part.text} tone={part.type === "same" ? undefined : part.type} />;
+  }
   if (part.type === "same") return <p className="m-0">{part.text}</p>;
   if (part.type === "changed") return <p className="m-0"><WordRun words={part.words} /></p>;
   const removed = part.type === "removed";
@@ -154,7 +192,11 @@ export function ArticleVersionCompare({
   const changedFields = useMemo(() => {
     if (!after) return new Set<CompareField>();
     return new Set(
-      COMPARE_FIELDS.filter((f) => !before || fieldText(before, f, categories) !== fieldText(after, f, categories)),
+      COMPARE_FIELDS.filter(
+        (f) =>
+          !before ||
+          (before[f] !== undefined && after[f] !== undefined && fieldText(before, f, categories) !== fieldText(after, f, categories)),
+      ),
     );
   }, [after, before, categories]);
 
@@ -245,7 +287,9 @@ export function ArticleVersionCompare({
                   {[before, after].map((snap, index) => (
                     <div key={index} className="space-y-3 rounded-md border p-3 text-[15px] leading-8">
                       <p className="m-0 text-xs font-bold text-muted-foreground">{index === 0 ? `النسخة ${older?.versionNumber}` : `النسخة ${data.version.versionNumber}`}</p>
-                      {contentParagraphs(snap.content).map((text, i) => <p key={i} className="m-0">{text}</p>)}
+                      {contentBlocks(snap.content).map((block, i) =>
+                        parseMediaBlock(block) ? <MediaBlock key={i} block={block} /> : <p key={i} className="m-0">{block}</p>,
+                      )}
                     </div>
                   ))}
                 </div>
@@ -258,14 +302,39 @@ export function ArticleVersionCompare({
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 {before && (
                   <figure className="m-0 space-y-1">
-                    <figcaption className="text-xs font-bold text-red-800 dark:text-red-300">قبل</figcaption>
+                    <figcaption className="text-xs font-bold text-red-800 dark:text-red-300">
+                      قبل{imageSourceLabel(before) ? ` — ${imageSourceLabel(before)}` : ""}
+                    </figcaption>
                     {before.imageUrl ? <img src={before.imageUrl} alt="الصورة قبل" className="w-full rounded-md border" /> : <p className="text-sm text-muted-foreground">بلا صورة</p>}
                   </figure>
                 )}
                 <figure className="m-0 space-y-1">
-                  <figcaption className="text-xs font-bold text-green-800 dark:text-green-300">بعد</figcaption>
+                  <figcaption className="text-xs font-bold text-green-800 dark:text-green-300">
+                    بعد{imageSourceLabel(after) ? ` — ${imageSourceLabel(after)}` : ""}
+                  </figcaption>
                   {after.imageUrl ? <img src={after.imageUrl} alt="الصورة بعد" className="w-full rounded-md border" /> : <p className="text-sm text-muted-foreground">بلا صورة</p>}
                 </figure>
+              </div>
+            ) : field === "albumImages" ? (
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                {[...(before ? [{ snap: before, title: "قبل", tone: "text-red-800 dark:text-red-300" }] : []), { snap: after, title: "بعد", tone: "text-green-800 dark:text-green-300" }].map(
+                  ({ snap, title, tone }) => (
+                    <div key={title} className="space-y-1">
+                      <p className={cn("m-0 text-xs font-bold", tone)}>{title}</p>
+                      {snap.albumImages === undefined ? (
+                        <p className="text-sm text-muted-foreground">غير مسجّل في هذه النسخة</p>
+                      ) : snap.albumImages.length ? (
+                        <div className="flex flex-wrap gap-2">
+                          {snap.albumImages.map((src) => (
+                            <img key={src} src={src} alt={`صورة ألبوم — ${title}`} className="h-20 w-32 rounded border object-cover" loading="lazy" />
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">بلا صور</p>
+                      )}
+                    </div>
+                  ),
+                )}
               </div>
             ) : (
               <div className="space-y-2 text-[15px] leading-8">
@@ -290,6 +359,7 @@ export function ArticleVersionCompare({
               <div className="flex flex-wrap items-center gap-2 border-t pt-4">
                 <Button
                   type="button"
+                  disabled={older.snapshot ? parseStoredSnapshot(older.snapshot)[field] === undefined : false}
                   onClick={() => onRestore({ versionId: older.id, versionNumber: older.versionNumber, fields: [field] })}
                   data-testid="button-restore-field"
                 >

@@ -12,6 +12,7 @@ import {
   inlineChanges,
   parseStoredSnapshot,
   snapshotFromArticle,
+  summarizeContentChange,
   versionActionFor,
   type ArticleRestorableField,
   type ArticleSnapshot,
@@ -103,6 +104,10 @@ export async function recordArticleSave(input: {
   action?: ArticleVersionAction;
   reason?: string | null;
   restoredFromVersion?: { id: string; versionNumber: number } | null;
+  /** وصف الحدث بدل الوصف العام، مثل «حدّث البوت … المسودة». */
+  summary?: string;
+  /** بيانات إضافية للحدث (القناة، البوت…). */
+  metadata?: Record<string, unknown>;
 }) {
   const articleId = input.after.id;
   const actorId = input.actorId ?? null;
@@ -116,8 +121,8 @@ export async function recordArticleSave(input: {
       articleId,
       eventType: "updated",
       actorId,
-      summary: "تم تحديث إعدادات المادة",
-      metadata: { changedFields: [], fields: [], autosave: input.autosave === true },
+      summary: input.summary ?? "تم تحديث إعدادات المادة",
+      metadata: { ...input.metadata, changedFields: [], fields: [], autosave: input.autosave === true },
     });
     return null;
   }
@@ -142,6 +147,7 @@ export async function recordArticleSave(input: {
   }
 
   const metadata: Record<string, unknown> = {
+    ...input.metadata,
     changedFields: fields.map((field) => ARTICLE_VERSION_FIELD_LABELS[field]),
     fields,
     changes: beforeSnap ? inlineChanges(beforeSnap, afterSnap, fields) : [],
@@ -152,14 +158,14 @@ export async function recordArticleSave(input: {
     metadata.versionNumber = version.versionNumber;
   }
   if (fields.includes("content") && beforeSnap) {
-    metadata.content = { beforeWords: contentWordCount(beforeSnap.content), afterWords: contentWordCount(afterSnap.content) };
+    metadata.content = summarizeContentChange(beforeSnap.content, afterSnap.content);
   }
   if (input.restoredFromVersion) metadata.restoredFromVersionNumber = input.restoredFromVersion.versionNumber;
   if (input.reason?.trim()) metadata.reason = input.reason.trim().slice(0, 500);
 
   const summary = input.restoredFromVersion
     ? `تم استرجاع النسخة ${input.restoredFromVersion.versionNumber}`
-    : SUMMARY_FOR_ACTION[action];
+    : input.summary ?? SUMMARY_FOR_ACTION[action];
   await logArticleEvent({ articleId, eventType: EVENT_FOR_ACTION[action], actorId, summary, metadata });
   return version ?? null;
 }

@@ -8,6 +8,9 @@ export const ARTICLE_VERSION_FIELDS = [
   "content",
   "categoryId",
   "imageUrl",
+  "imageSource",
+  "albumImages",
+  "videoUrl",
   "keywords",
   "status",
   "newsType",
@@ -15,7 +18,10 @@ export const ARTICLE_VERSION_FIELDS = [
 
 export type ArticleVersionField = (typeof ARTICLE_VERSION_FIELDS)[number];
 
-/** الحقول التي يعيدها الاسترجاع. الحالة ونوع الخبر لا تُسترجع: النشر قرار مستقل. */
+/**
+ * الحقول التي يعيدها الاسترجاع. الحالة ونوع الخبر لا تُسترجع: النشر قرار مستقل.
+ * مصدر الصورة يتبع الصورة نفسها (buildRestorePatch).
+ */
 export const ARTICLE_RESTORABLE_FIELDS = [
   "title",
   "subtitle",
@@ -23,6 +29,8 @@ export const ARTICLE_RESTORABLE_FIELDS = [
   "content",
   "categoryId",
   "imageUrl",
+  "albumImages",
+  "videoUrl",
   "keywords",
 ] as const;
 
@@ -34,7 +42,10 @@ export const ARTICLE_VERSION_FIELD_LABELS: Record<ArticleVersionField, string> =
   excerpt: "الموجز",
   content: "المتن",
   categoryId: "التصنيف",
-  imageUrl: "الصورة",
+  imageUrl: "الصورة الرئيسية",
+  imageSource: "مصدر الصورة",
+  albumImages: "صور الألبوم",
+  videoUrl: "الفيديو",
   keywords: "الكلمات المفتاحية",
   status: "الحالة",
   newsType: "نوع الخبر",
@@ -46,6 +57,11 @@ export const ARTICLE_STATUS_LABELS: Record<string, string> = {
   scheduled: "مجدول",
   published: "منشور",
   archived: "مؤرشف",
+};
+
+export const ARTICLE_IMAGE_SOURCE_LABELS: Record<string, string> = {
+  ai: "مولّدة بالذكاء الاصطناعي",
+  upload: "مرفوعة أو من المكتبة",
 };
 
 export type ArticleVersionAction =
@@ -76,6 +92,13 @@ export interface ArticleSnapshot {
   content: string;
   categoryId: string | null;
   imageUrl: string | null;
+  /**
+   * الحقول التالية أضيفت بعد أول نسخ محفوظة: غيابها (undefined) في لقطة قديمة
+   * يعني «غير معروف»، فلا تُعرض تغييرًا ولا يمسّها الاسترجاع.
+   */
+  imageSource?: "ai" | "upload" | null;
+  albumImages?: string[];
+  videoUrl?: string | null;
   keywords: string[];
   status: string;
   newsType: string | null;
@@ -88,6 +111,9 @@ export interface ArticleLikeForSnapshot {
   content?: string | null;
   categoryId?: string | null;
   imageUrl?: string | null;
+  isAiGeneratedImage?: boolean | null;
+  albumImages?: string[] | null;
+  videoUrl?: string | null;
   status?: string | null;
   newsType?: string | null;
   seo?: { keywords?: unknown } | null;
@@ -104,23 +130,33 @@ export function snapshotFromArticle(article: ArticleLikeForSnapshot): ArticleSna
     content: article.content ?? "",
     categoryId: article.categoryId ?? null,
     imageUrl: article.imageUrl ?? null,
+    imageSource: article.imageUrl ? (article.isAiGeneratedImage ? "ai" : "upload") : null,
+    albumImages: stringList(article.albumImages),
+    videoUrl: article.videoUrl ?? null,
     keywords,
     status: article.status ?? "draft",
     newsType: article.newsType ?? null,
   };
 }
 
+function stringList(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((v): v is string => typeof v === "string" && v !== "") : [];
+}
+
 /** لقطة محفوظة في article_versions.snapshot (الكلمات المفتاحية في أعلاها، لا داخل seo). */
 export function parseStoredSnapshot(value: Record<string, unknown> | null | undefined): ArticleSnapshot {
   const stored = (value ?? {}) as Record<string, unknown>;
-  const keywords = Array.isArray(stored.keywords)
-    ? (stored.keywords as unknown[]).filter((k): k is string => typeof k === "string")
-    : [];
-  return { ...snapshotFromArticle(stored as ArticleLikeForSnapshot), keywords };
+  const base = snapshotFromArticle(stored as ArticleLikeForSnapshot);
+  const snapshot: ArticleSnapshot = { ...base, keywords: stringList(stored.keywords) };
+  if ("imageSource" in stored) snapshot.imageSource = (stored.imageSource as ArticleSnapshot["imageSource"]) ?? null;
+  else delete snapshot.imageSource;
+  if (!("albumImages" in stored)) delete snapshot.albumImages;
+  if (!("videoUrl" in stored)) delete snapshot.videoUrl;
+  return snapshot;
 }
 
 function normalized(field: ArticleVersionField, value: unknown): string {
-  if (field === "keywords") return JSON.stringify(Array.isArray(value) ? value : []);
+  if (field === "keywords" || field === "albumImages") return JSON.stringify(Array.isArray(value) ? value : []);
   if (value === null || value === undefined) return "";
   return String(value);
 }
@@ -131,7 +167,10 @@ export function changedSnapshotFields(
 ): ArticleVersionField[] {
   if (!before) return [];
   return ARTICLE_VERSION_FIELDS.filter(
-    (field) => normalized(field, before[field]) !== normalized(field, after[field]),
+    (field) =>
+      before[field] !== undefined &&
+      after[field] !== undefined &&
+      normalized(field, before[field]) !== normalized(field, after[field]),
   );
 }
 
@@ -142,6 +181,9 @@ export const ARTICLE_INLINE_CHANGE_FIELDS = [
   "excerpt",
   "categoryId",
   "imageUrl",
+  "imageSource",
+  "albumImages",
+  "videoUrl",
   "keywords",
   "status",
   "newsType",
@@ -203,7 +245,14 @@ export function buildRestorePatch(input: {
 }): Record<string, unknown> {
   const patch: Record<string, unknown> = {};
   for (const field of input.fields) {
-    if (field === "keywords") {
+    if (input.snapshot[field] === undefined) continue;
+    if (field === "imageUrl") {
+      patch.imageUrl = input.snapshot.imageUrl;
+      // مصدر الصورة يتبعها؛ لقطة قديمة بلا مصدر تُترك علامة الذكاء الاصطناعي كما هي
+      if (!input.snapshot.imageUrl || input.snapshot.imageSource) {
+        patch.isAiGeneratedImage = input.snapshot.imageSource === "ai";
+      }
+    } else if (field === "keywords") {
       patch.seo = { ...(input.currentSeo ?? {}), keywords: input.snapshot.keywords };
     } else if (field === "excerpt") {
       patch.excerpt = input.snapshot.excerpt;
@@ -231,17 +280,63 @@ function decodeEntities(text: string): string {
     .replace(/&amp;/g, "&");
 }
 
-/** المتن إلى فقرات نصية مقروءة (بلا وسوم)، للمقارنة والعدّ. */
-export function contentParagraphs(html: string | null | undefined): string[] {
+const MEDIA_PREFIX = "\uE000media:";
+const MEDIA_TAG = /<(img|iframe|video|source|embed)\b[^>]*?\bsrc\s*=\s*["']([^"']+)["'][^>]*>/gi;
+
+export type ContentMedia = { kind: "image" | "video"; src: string };
+
+/** كتلة وسائط داخل المتن (صورة أو فيديو مضمّن) كما تُخرجها contentBlocks. */
+export function parseMediaBlock(block: string): ContentMedia | null {
+  if (!block.startsWith(MEDIA_PREFIX)) return null;
+  const rest = block.slice(MEDIA_PREFIX.length);
+  const sep = rest.indexOf(":");
+  return { kind: rest.slice(0, sep) === "image" ? "image" : "video", src: rest.slice(sep + 1) };
+}
+
+/** المتن إلى كتل مقروءة بالترتيب: فقرات نصية (بلا وسوم) وصور وفيديوهات مضمّنة. */
+export function contentBlocks(html: string | null | undefined): string[] {
   if (!html) return [];
-  return decodeEntities(html.replace(BLOCK_BREAK, "\n").replace(/<[^>]+>/g, ""))
+  const withMedia = html.replace(MEDIA_TAG, (_tag, name: string, src: string) => {
+    const kind = name.toLowerCase() === "img" ? "image" : "video";
+    return `\n${MEDIA_PREFIX}${kind}:${src.trim()}\n`;
+  });
+  return decodeEntities(withMedia.replace(BLOCK_BREAK, "\n").replace(/<[^>]+>/g, ""))
     .split(/\n+/)
-    .map((line) => line.replace(/\s+/g, " ").trim())
+    .map((line) => (line.startsWith(MEDIA_PREFIX) ? line.trim() : line.replace(/\s+/g, " ").trim()))
     .filter(Boolean);
+}
+
+/** فقرات المتن النصية فقط، للعرض والعدّ. */
+export function contentParagraphs(html: string | null | undefined): string[] {
+  return contentBlocks(html).filter((block) => !block.startsWith(MEDIA_PREFIX));
+}
+
+export function contentMedia(html: string | null | undefined): ContentMedia[] {
+  return contentBlocks(html).map(parseMediaBlock).filter((m): m is ContentMedia => m !== null);
 }
 
 export function contentWordCount(html: string | null | undefined): number {
   return contentParagraphs(html).reduce((sum, p) => sum + p.split(" ").filter(Boolean).length, 0);
+}
+
+/**
+ * ملخص تغيير المتن للسجل: الكلمات قبل وبعد، والصور والفيديوهات المضافة والمحذوفة،
+ * وهل تغيّر النص نفسه (وإلا فالتغيير تنسيق أو وسائط فقط).
+ */
+export function summarizeContentChange(beforeHtml: string | null | undefined, afterHtml: string | null | undefined) {
+  const beforeText = contentParagraphs(beforeHtml);
+  const afterText = contentParagraphs(afterHtml);
+  const beforeMedia = contentMedia(beforeHtml).map((m) => m.src);
+  const afterMedia = contentMedia(afterHtml);
+  const beforeSet = new Set(beforeMedia);
+  const afterSet = new Set(afterMedia.map((m) => m.src));
+  return {
+    beforeWords: contentWordCount(beforeHtml),
+    afterWords: contentWordCount(afterHtml),
+    textChanged: beforeText.join("\n") !== afterText.join("\n"),
+    mediaAdded: afterMedia.filter((m) => !beforeSet.has(m.src)),
+    mediaRemoved: contentMedia(beforeHtml).filter((m) => !afterSet.has(m.src)),
+  };
 }
 
 export type DiffOp<T> = { type: "same" | "removed" | "added"; value: T };
@@ -286,7 +381,7 @@ export type ParagraphDiff =
  * داخل الفقرة بالكلمات، والباقي فقرات كاملة محذوفة أو مضافة.
  */
 export function diffContent(beforeHtml: string | null | undefined, afterHtml: string | null | undefined): ParagraphDiff[] {
-  const ops = diffSequence(contentParagraphs(beforeHtml), contentParagraphs(afterHtml));
+  const ops = diffSequence(contentBlocks(beforeHtml), contentBlocks(afterHtml));
   const out: ParagraphDiff[] = [];
   let k = 0;
   while (k < ops.length) {
@@ -326,6 +421,7 @@ export function diffContent(beforeHtml: string | null | undefined, afterHtml: st
 }
 
 function paragraphsSimilar(a: string, b: string): boolean {
+  if (a.startsWith(MEDIA_PREFIX) || b.startsWith(MEDIA_PREFIX)) return false;
   const wordsA = new Set(a.split(" "));
   const wordsB = b.split(" ");
   const common = wordsB.filter((w) => wordsA.has(w)).length;

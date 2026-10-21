@@ -12,6 +12,7 @@ const dbState = vi.hoisted(() => ({
 const invalidateArticleWrite = vi.hoisted(() => vi.fn());
 const memoryDelete = vi.hoisted(() => vi.fn());
 const logArticleEvent = vi.hoisted(() => vi.fn().mockResolvedValue([]));
+const recordArticleSave = vi.hoisted(() => vi.fn().mockResolvedValue(null));
 const logActivity = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 const sendArticleNotification = vi.hoisted(() => vi.fn());
 const notifySearchEngines = vi.hoisted(() => vi.fn());
@@ -59,6 +60,7 @@ vi.mock("../../server/memoryCache", () => ({
 }));
 vi.mock("../../server/services/contentInvalidation", () => ({ invalidateArticleWrite }));
 vi.mock("../../server/services/articleEventsService", () => ({ logArticleEvent }));
+vi.mock("../../server/services/articleHistoryService", () => ({ recordArticleSave }));
 vi.mock("../../server/rbac", () => ({ logActivity }));
 vi.mock("../../server/notificationService", () => ({ sendArticleNotification }));
 vi.mock("../../server/indexNow", () => ({ notifySearchEngines }));
@@ -108,6 +110,7 @@ describe("updateBotDraft on a published article", () => {
     invalidateArticleWrite.mockReset();
     memoryDelete.mockReset();
     logArticleEvent.mockClear();
+    recordArticleSave.mockClear();
     logActivity.mockClear();
     sendArticleNotification.mockClear();
     notifySearchEngines.mockClear();
@@ -174,10 +177,12 @@ describe("updateBotDraft on a published article", () => {
     expect(memoryDelete).toHaveBeenCalledWith("lite-feed");
     expect(sendArticleNotification).not.toHaveBeenCalled();
     expect(notifySearchEngines).not.toHaveBeenCalled();
-    expect(logArticleEvent).toHaveBeenCalledWith(
+    // تعديل البوت يمر بسجل النسخ: المادة قبل وبعد كاملة، لا وصف الحدث وحده
+    expect(recordArticleSave).toHaveBeenCalledWith(
       expect.objectContaining({
-        articleId: "art-pub",
-        eventType: "updated",
+        before: expect.objectContaining({ id: "art-pub" }),
+        after: expect.objectContaining({ id: "art-pub" }),
+        summary: expect.stringContaining("الخبر المنشور"),
         metadata: expect.objectContaining({ changedFields: expect.arrayContaining(["العنوان", "الملخص", "الكلمات المفتاحية"]) }),
       }),
     );
@@ -225,8 +230,8 @@ describe("updateBotDraft on a published article", () => {
     );
 
     expect(dbState.setArg).toMatchObject({ status: "archived", reviewStatus: null, reviewNotes: "خبر مكرر" });
-    expect(logArticleEvent).toHaveBeenCalledWith(expect.objectContaining({
-      eventType: "deleted",
+    expect(recordArticleSave).toHaveBeenCalledWith(expect.objectContaining({
+      after: expect.objectContaining({ status: "archived" }),
       metadata: expect.objectContaining({ archiveReason: "خبر مكرر" }),
     }));
     expect(logActivity).toHaveBeenCalledWith(expect.objectContaining({
