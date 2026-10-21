@@ -1042,14 +1042,19 @@
         "tests/unit/spaTopLevelRoutes.test.ts",
         "tests/unit/edgeSoftNotFound.test.ts",
         "tests/unit/categoryCardPreload.test.ts",
-        "tests/unit/slugRedirectQuery.test.ts"
+        "tests/unit/slugRedirectQuery.test.ts",
+        "server/routes/rssFeedRoutes.ts",
+        "server/utils/rssXml.ts",
+        "tests/unit/rssFeedReadiness.test.ts",
+        "tests/unit/edgeAiReadiness.test.ts",
+        "docs/ai-readiness-acceptance-ar.md"
       ],
       "aiFeatureKeys": [],
       "dashboardPath": null,
       "owners": [
         "platform"
       ],
-      "lastReviewed": "2026-10-16"
+      "lastReviewed": "2026-10-21"
     },
     {
       "id": "comments",

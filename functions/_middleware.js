@@ -34,9 +34,9 @@
  *                e.g. "https://next.sabq.org". Required when SSR_ROUTES=on.
  *   SSR_ROUTES — "on" enables DYNAMIC RENDERING on the SSR content surfaces
  *                (/, /article/:slug, /category/:slug, /en|ur/article/:slug):
- *                  • Human visitors ALWAYS get the original SPA (unchanged
- *                    design + the EDGE_SEO injected shell, exactly as before
- *                    SSR existed). Their experience is literally untouched.
+ *                  • Human visitors get the original SPA unless they
+ *                    explicitly advertise text/markdown; those public
+ *                    requests need complete HTML for Cloudflare's transform.
  *                  • Search/social crawlers (Googlebot, bingbot, Applebot,
  *                    facebookexternalhit, …) are proxied to NEXT_ORIGIN, which
  *                    renders the full meta+body server-side (skipping EDGE_SEO
@@ -62,6 +62,7 @@ export { newPublicApiCacheKey, newPublicApiPolicy };
 const pagesPublicApiBurstCache = createPublicApiBurstCache();
 
 const DEFAULT_API_ORIGIN = "https://api.sabq.org";
+const CONTENT_SIGNAL = "search=yes, ai-input=yes, ai-train=no";
 
 // Short TTLs so a freshly published/edited article's meta + slug canonical
 // surface at the edge within ~10s (mirrors the standalone worker).
@@ -216,12 +217,47 @@ function isSsrPath(p) {
 // SSR (full server-rendered) HTML, while human visitors keep the original SPA.
 // The SSR body is the same article content a human sees after hydration, so
 // this is equivalent-content dynamic rendering (not cloaking). Kept focused on
-// indexing/preview bots; ordinary headless Chrome / Lighthouse is intentionally
-// excluded so PageSpeed reflects the real (SPA) user experience.
+// indexing/preview bots; ordinary headless Chrome / Lighthouse and ordinary
+// browser requests are intentionally excluded so PageSpeed reflects the SPA.
 const CRAWLER_RE =
-  /(googlebot|google-inspectiontool|storebot-google|google-site-verification|bingbot|bingpreview|applebot|oai-searchbot|claude-searchbot|perplexitybot|yandex(bot)?|duckduckbot|baiduspider|sogou|naverbot|petalbot|facebookexternalhit|facebot|twitterbot|linkedinbot|slackbot|slack-imgproxy|telegrambot|whatsapp|discordbot|pinterest(bot)?|redditbot|embedly|vkshare|skypeuripreview|nuzzel|qwantify|googleweblight)/i;
+  /(googlebot|google-inspectiontool|storebot-google|google-site-verification|bingbot|bingpreview|applebot|oai-searchbot|chatgpt-user|claude-searchbot|claude-user|perplexity(bot|-user)|yandex(bot)?|duckduckbot|baiduspider|sogou|naverbot|petalbot|facebookexternalhit|facebot|twitterbot|linkedinbot|slackbot|slack-imgproxy|telegrambot|whatsapp|discordbot|pinterest(bot)?|redditbot|embedly|vkshare|skypeuripreview|nuzzel|qwantify|googleweblight)/i;
 function isCrawler(ua) {
   return !!ua && CRAWLER_RE.test(ua);
+}
+
+function mediaQuality(accept, mediaType) {
+  let textWildcard = null;
+  let anyWildcard = null;
+  for (const part of String(accept || "").split(",")) {
+    const [rawType, ...params] = part.trim().toLowerCase().split(";");
+    const q = params.find((param) => param.trim().startsWith("q="));
+    const value = q ? Number.parseFloat(q.trim().slice(2)) : 1;
+    const quality = Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 0;
+    const type = rawType.trim();
+    if (type === mediaType) return quality;
+    if (type === "text/*" && mediaType.startsWith("text/")) textWildcard = quality;
+    if (type === "*/*") anyWildcard = quality;
+  }
+  return textWildcard ?? anyWildcard ?? 0;
+}
+
+function explicitMediaQuality(accept, mediaType) {
+  for (const part of String(accept || "").split(",")) {
+    const [rawType, ...params] = part.trim().toLowerCase().split(";");
+    if (rawType.trim() !== mediaType) continue;
+    const q = params.find((param) => param.trim().startsWith("q="));
+    const value = q ? Number.parseFloat(q.trim().slice(2)) : 1;
+    return Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 0;
+  }
+  return null;
+}
+
+export function acceptsMarkdown(accept) {
+  const markdown = explicitMediaQuality(accept, "text/markdown");
+  const html = mediaQuality(accept, "text/html");
+  // Only an explicit, positively weighted Markdown preference opts in. An
+  // explicit HTML preference wins, while text/html;q=0 still permits Markdown.
+  return markdown !== null && markdown > 0 && markdown >= html;
 }
 
 function isInjectablePath(p) {
@@ -324,6 +360,29 @@ export function applyHtmlSecurityHeaders(res, hostname) {
   const headers = new Headers(res.headers);
   for (const [k, v] of Object.entries(htmlSecurityHeadersForHost(hostname))) headers.set(k, v);
   return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
+}
+
+function appendVary(headers, value) {
+  const values = new Set((headers.get("Vary") || "").split(",").map((item) => item.trim()).filter(Boolean));
+  values.add(value);
+  headers.set("Vary", Array.from(values).join(", "));
+}
+
+export function applyPublicContentHeaders(res) {
+  if (!isHtml(res)) return res;
+  const headers = new Headers(res.headers);
+  headers.set("Content-Signal", CONTENT_SIGNAL);
+  appendVary(headers, "Accept");
+  return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
+}
+
+export function shouldApplyPublicContentHeaders(pathname, hostname, res, request) {
+  const method = request?.method || "GET";
+  const hasCredentials = !!request?.headers?.get("cookie") || !!request?.headers?.get("authorization");
+  const robots = res.headers.get("X-Robots-Tag") || "";
+  return (method === "GET" || method === "HEAD") && !hasCredentials && hostname === "sabq.org" &&
+    res.status === 200 && !res.headers.has("Set-Cookie") && !/noindex/i.test(robots) &&
+    !isProxyPath(pathname) && !isNoindexPrefix(pathname) && isHtml(res);
 }
 
 export function shouldApplyHtmlSecurityHeaders(pathname, res) {
@@ -996,13 +1055,15 @@ async function handleRequest(context) {
     // and the store so it always pulls the fresh origin shell.
     !isRecoveryReload;
 
-  // Dynamic rendering: only search/social crawlers get the SSR rendering on SSR
-  // paths; humans always get the original SPA. The cache is namespaced by
-  // audience on SSR paths so the two renderings never collide.
+  // Dynamic rendering: search/social crawlers and explicit Markdown requests
+  // get SSR on SSR paths; ordinary humans keep the original SPA. The cache is
+  // namespaced by audience/representation so the renderings never collide.
   const userAgent = request.headers.get("user-agent") || "";
+  const hasCredentials = !!request.headers.get("cookie") || !!request.headers.get("authorization");
+  const markdownRequested = !hasCredentials && acceptsMarkdown(request.headers.get("accept"));
   const ssrPath = ssrEnabled && isSsrPath(path);
-  const wantsSsr = ssrPath && isCrawler(userAgent);
-  const cacheVariant = ssrPath ? (wantsSsr ? "b" : "h") : "";
+  const wantsSsr = ssrPath && !hasCredentials && (isCrawler(userAgent) || markdownRequested);
+  const cacheVariant = ssrPath ? (wantsSsr ? (markdownRequested ? "m" : "b") : "h") : "";
   const cacheKey =
     request.method === "GET"
       ? htmlCacheKey(request.url, commit, cacheVariant)
@@ -1310,12 +1371,12 @@ async function handleRequest(context) {
     }
   }
 
-  // SSR content routes (CRAWLERS ONLY → dynamic rendering) → proxy to the
+  // SSR content routes (crawlers and explicit Markdown requests) → proxy to the
   // Next.js deployment (web-next). Next renders the full article/category/home
   // HTML (meta + body) server-side, so we return its output directly and SKIP
-  // the EDGE_SEO shell injection below (never double-inject). Human visitors
-  // never reach here — they fall through to the SPA shell path below and keep
-  // the original design. Slug-redirect still runs first so Arabic/legacy slugs
+  // the EDGE_SEO shell injection below (never double-inject). Ordinary human
+  // visitors fall through to the SPA shell path below and keep the original
+  // design. Slug-redirect still runs first so Arabic/legacy slugs
   // keep 301'ing to the English canonical before reaching Next. A failure falls
   // through to the existing SPA-shell path, so SSR is fail-safe.
   if (wantsSsr && htmlCacheable) {
@@ -1338,12 +1399,12 @@ async function handleRequest(context) {
       const ssrRes = await proxyToApi(request, nextOrigin, SSR_PROXY_TIMEOUT_MS, env.EDGE_PROXY_SHARED_SECRET);
       // Buffer and validate the complete render before caching it. A 200 SPA
       // fallback is not a usable SSR response and must never be cached for a
-      // crawler.
+      // crawler or Markdown request.
       const validated = await validatedSsrResponse(ssrRes, path);
       if (!validated) throw new Error("invalid-or-empty-ssr-html");
       if (validated.status !== 200) return deliverHtml(validated, { cacheable: false });
       // web-next renders every route with the root layout's lang="ar" dir="rtl";
-      // correct the declared language for the /en|/ur surfaces (crawler-only path).
+      // correct the declared language for the /en|/ur surfaces.
       const ssrLocale = localeAttrsForPath(path);
       const localized = ssrLocale
         ? new HTMLRewriter().on("html", new HtmlLangSetter(ssrLocale)).transform(validated)
@@ -1356,7 +1417,7 @@ async function handleRequest(context) {
   }
 
   if (!seoEnabled || !injectable) {
-    // With SSR enabled, this is a failure fallback for a crawler. Returning a
+    // With SSR enabled, this is a failure fallback for a crawler or Markdown request. Returning a
     // generic 200 shell is acceptable as a user-facing emergency response but
     // must never be stored as the crawler's SSR representation.
     if (wantsSsr) return crawlerSsrFailureResponse();
@@ -1441,7 +1502,17 @@ async function handleRequest(context) {
       rewriter = rewriter.on("html", new HtmlLangSetter(shellLocale));
     }
     if (notFound) return finalizeHtml(notFoundHtml(rewriter.transform(shell)), { cacheable: false });
-    return deliverHtml(rewriter.transform(shell), { cacheable: injectedCacheable });
+    const transformed = rewriter.transform(shell);
+    if (metaNoindex) {
+      const headers = new Headers(transformed.headers);
+      headers.set("X-Robots-Tag", meta.robots);
+      return finalizeHtml(new Response(transformed.body, {
+        status: transformed.status,
+        statusText: transformed.statusText,
+        headers,
+      }), { cacheable: false });
+    }
+    return deliverHtml(transformed, { cacheable: injectedCacheable });
   } catch (err) {
     console.error("[pages-fn] html error:", err);
     if (wantsSsr) return crawlerSsrFailureResponse();
@@ -1456,7 +1527,10 @@ async function handleRequest(context) {
 export async function onRequest(context) {
   const response = await handleRequest(context);
   const url = new URL(context.request.url);
-  return shouldApplyHtmlSecurityHeaders(url.pathname, response)
+  const secured = shouldApplyHtmlSecurityHeaders(url.pathname, response)
     ? applyHtmlSecurityHeaders(response, url.hostname)
     : response;
+  return shouldApplyPublicContentHeaders(url.pathname, url.hostname, secured, context.request)
+    ? applyPublicContentHeaders(secured)
+    : secured;
 }

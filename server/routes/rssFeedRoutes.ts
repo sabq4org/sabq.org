@@ -4,6 +4,7 @@ import { eq, desc, and, isNotNull, sql } from 'drizzle-orm';
 import { audioNewsletters, audioNewsletterArticles, articles, categories } from '@shared/schema';
 import { cacheControl, CACHE_DURATIONS } from '../cacheMiddleware';
 import { paginationOrReject } from '../utils/pagination';
+import { articleCanonicalUrl, cdata, escapeXmlAttribute, escapeXmlText } from '../utils/rssXml';
 
 const router = express.Router();
 
@@ -276,6 +277,7 @@ router.get('/articles', cacheControl({ maxAge: 300, staleWhileRevalidate: 600 })
         id: articles.id,
         title: articles.title,
         slug: articles.slug,
+        englishSlug: articles.englishSlug,
         excerpt: articles.excerpt,
         imageUrl: articles.imageUrl,
         publishedAt: articles.publishedAt,
@@ -292,17 +294,18 @@ router.get('/articles', cacheControl({ maxAge: 300, staleWhileRevalidate: 600 })
         : currentDate;
       const description = article.excerpt || '';
       const imageUrl = article.imageUrl || '';
+      const canonicalUrl = articleCanonicalUrl(baseUrl, article);
       
       return `
     <item>
-      <title><![CDATA[${article.title}]]></title>
-      <description><![CDATA[${description}]]></description>
-      <link>${baseUrl}/article/${article.slug}</link>
-      <guid isPermaLink="true">${baseUrl}/article/${article.slug}</guid>
+      <title>${cdata(article.title)}</title>
+      <description>${cdata(description)}</description>
+      <link>${escapeXmlText(canonicalUrl)}</link>
+      <guid isPermaLink="true">${escapeXmlText(baseUrl)}/article/${escapeXmlText(article.slug)}</guid>
       <pubDate>${pubDate}</pubDate>
       <author>سبق</author>
-      ${imageUrl ? `<enclosure url="${imageUrl}" type="image/jpeg"/>` : ''}
-      ${imageUrl ? `<media:content url="${imageUrl}" medium="image"/>` : ''}
+      ${imageUrl ? `<enclosure url="${escapeXmlAttribute(imageUrl)}" type="image/jpeg"/>` : ''}
+      ${imageUrl ? `<media:content url="${escapeXmlAttribute(imageUrl)}" medium="image"/>` : ''}
     </item>`;
     }).join('\n');
 
@@ -313,8 +316,8 @@ router.get('/articles', cacheControl({ maxAge: 300, staleWhileRevalidate: 600 })
      xmlns:content="http://purl.org/rss/1.0/modules/content/">
   <channel>
     <title>سبق الذكية - آخر الأخبار</title>
-    <link>${baseUrl}</link>
-    <atom:link href="${baseUrl}/api/rss/articles" rel="self" type="application/rss+xml"/>
+    <link>${escapeXmlText(baseUrl)}</link>
+    <atom:link href="${escapeXmlAttribute(baseUrl)}/api/rss/articles" rel="self" type="application/rss+xml"/>
     <description>آخر الأخبار والتحليلات من منصة سبق الذكية - المنصة الإخبارية العربية المدعومة بالذكاء الاصطناعي</description>
     <language>ar-SA</language>
     <copyright>© ${new Date().getFullYear()} سبق الذكية</copyright>
@@ -327,9 +330,9 @@ router.get('/articles', cacheControl({ maxAge: 300, staleWhileRevalidate: 600 })
     <category>Saudi Arabia</category>
     <ttl>15</ttl>
     <image>
-      <url>${baseUrl}/logo.png</url>
+      <url>${escapeXmlText(baseUrl)}/logo.png</url>
       <title>سبق الذكية</title>
-      <link>${baseUrl}</link>
+      <link>${escapeXmlText(baseUrl)}</link>
     </image>
     ${rssItems}
   </channel>
@@ -368,6 +371,7 @@ router.get('/articles/category/:slug', cacheControl({ maxAge: 300, staleWhileRev
         id: articles.id,
         title: articles.title,
         slug: articles.slug,
+        englishSlug: articles.englishSlug,
         excerpt: articles.excerpt,
         imageUrl: articles.imageUrl,
         publishedAt: articles.publishedAt,
@@ -386,16 +390,17 @@ router.get('/articles/category/:slug', cacheControl({ maxAge: 300, staleWhileRev
         : currentDate;
       const description = article.excerpt || '';
       const imageUrl = article.imageUrl || '';
+      const canonicalUrl = articleCanonicalUrl(baseUrl, article);
       
       return `
     <item>
-      <title><![CDATA[${article.title}]]></title>
-      <description><![CDATA[${description}]]></description>
-      <link>${baseUrl}/article/${article.slug}</link>
-      <guid isPermaLink="true">${baseUrl}/article/${article.slug}</guid>
+      <title>${cdata(article.title)}</title>
+      <description>${cdata(description)}</description>
+      <link>${escapeXmlText(canonicalUrl)}</link>
+      <guid isPermaLink="true">${escapeXmlText(baseUrl)}/article/${escapeXmlText(article.slug)}</guid>
       <pubDate>${pubDate}</pubDate>
       <author>سبق</author>
-      ${imageUrl ? `<enclosure url="${imageUrl}" type="image/jpeg"/>` : ''}
+      ${imageUrl ? `<enclosure url="${escapeXmlAttribute(imageUrl)}" type="image/jpeg"/>` : ''}
     </item>`;
     }).join('\n');
 
@@ -404,18 +409,18 @@ router.get('/articles/category/:slug', cacheControl({ maxAge: 300, staleWhileRev
      xmlns:atom="http://www.w3.org/2005/Atom"
      xmlns:media="http://search.yahoo.com/mrss/">
   <channel>
-    <title>سبق الذكية - ${category.nameAr}</title>
-    <link>${baseUrl}/category/${category.slug}</link>
-    <atom:link href="${baseUrl}/api/rss/articles/category/${category.slug}" rel="self" type="application/rss+xml"/>
-    <description>آخر أخبار ${category.nameAr} من منصة سبق الذكية</description>
+      <title>${escapeXmlText(`سبق الذكية - ${category.nameAr}`)}</title>
+    <link>${escapeXmlText(baseUrl)}/category/${escapeXmlText(category.slug)}</link>
+    <atom:link href="${escapeXmlAttribute(baseUrl)}/api/rss/articles/category/${escapeXmlAttribute(category.slug)}" rel="self" type="application/rss+xml"/>
+    <description>${escapeXmlText(`آخر أخبار ${category.nameAr} من منصة سبق الذكية`)}</description>
     <language>ar-SA</language>
     <copyright>© ${new Date().getFullYear()} سبق الذكية</copyright>
     <lastBuildDate>${currentDate}</lastBuildDate>
     <ttl>15</ttl>
     <image>
-      <url>${baseUrl}/logo.png</url>
-      <title>سبق الذكية - ${category.nameAr}</title>
-      <link>${baseUrl}</link>
+      <url>${escapeXmlText(baseUrl)}/logo.png</url>
+      <title>${escapeXmlText(`سبق الذكية - ${category.nameAr}`)}</title>
+      <link>${escapeXmlText(baseUrl)}</link>
     </image>
     ${rssItems}
   </channel>
@@ -443,6 +448,7 @@ router.get('/articles.json', cacheControl({ maxAge: 300, staleWhileRevalidate: 6
         id: articles.id,
         title: articles.title,
         slug: articles.slug,
+        englishSlug: articles.englishSlug,
         excerpt: articles.excerpt,
         imageUrl: articles.imageUrl,
         publishedAt: articles.publishedAt,
@@ -467,9 +473,11 @@ router.get('/articles.json', cacheControl({ maxAge: 300, staleWhileRevalidate: 6
       }],
       items: publishedArticles.map(article => ({
         id: article.id.toString(),
-        url: `${baseUrl}/article/${article.slug}`,
+        url: articleCanonicalUrl(baseUrl, article),
         title: article.title,
         summary: article.excerpt || '',
+        // JSON Feed 1.1 excerpt feed: keep the public excerpt, with a useful title fallback.
+        content_text: article.excerpt || article.title,
         image: article.imageUrl || undefined,
         date_published: article.publishedAt,
         authors: [{
