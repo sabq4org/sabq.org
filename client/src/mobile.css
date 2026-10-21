@@ -26,9 +26,10 @@ body {
 
 /* Tablet (iPad) only: checkboxes, radios and switches keep their drawn size —
    a 44px box breaks table columns and looks like an empty frame. The 44px tap
-   zone comes from an invisible ::after instead. Phones (<768px) keep the rule
-   above and the index.css one; desktops (fine pointer) never match. */
-@media (pointer: coarse) and (min-width: 768px) {
+   zone comes from an invisible ::after instead. Phones (<768px wide, or a
+   landscape phone under 600px tall) keep the rule above and the index.css one;
+   desktops (fine pointer) never match. Keep in sync with TOUCH_TABLET_QUERY. */
+@media (pointer: coarse) and (min-width: 768px) and (min-height: 600px) {
   button[role="checkbox"]:not(.no-min-touch-size),
   button[role="radio"]:not(.no-min-touch-size),
   button[role="switch"]:not(.no-min-touch-size) {
@@ -41,7 +42,11 @@ body {
   button[role="switch"]::after {
     content: "";
     position: absolute;
-    inset: -10px;
+    top: 50%;
+    left: 50%;
+    width: max(44px, 100%);
+    height: max(44px, 100%);
+    transform: translate(-50%, -50%);
   }
 }
 
