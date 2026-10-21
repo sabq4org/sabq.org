@@ -43,16 +43,26 @@ const CRAWLER_USER_AGENTS = [
 ];
 
 /**
- * يُبقي استعلام الطلب على هدف التحويل 301.
+ * يُبقي استعلام الطلب على هدف التحويل 301 مع حذف معامل كسر الكاش `_cb`.
  * وسوم القياس (utm_source / utm_medium / utm_campaign / utm_content) تصل مع
  * الزائر إلى الصفحة، وحافة Pages تفعل الشيء نفسه بإلحاق url.search.
  */
 export function redirectTargetWithSearch(targetPath: string, originalUrl: string): string {
   const queryIndex = originalUrl.indexOf("?");
   if (queryIndex === -1) return targetPath;
-  const query = originalUrl.slice(queryIndex);
-  if (query === "?") return targetPath;
-  return `${targetPath}${query}`;
+  const rawQuery = originalUrl.slice(queryIndex + 1);
+  if (!rawQuery) return targetPath;
+  const params = new URLSearchParams(rawQuery);
+  params.delete("_cb");
+  const cleanSearch = params.toString();
+  return cleanSearch ? `${targetPath}?${cleanSearch}` : targetPath;
+}
+
+function hasCacheBusterParam(originalUrl: string): boolean {
+  const queryIndex = originalUrl.indexOf("?");
+  if (queryIndex === -1) return false;
+  const params = new URLSearchParams(originalUrl.slice(queryIndex + 1));
+  return params.has("_cb");
 }
 
 function isCrawler(req: Request): boolean {
@@ -129,6 +139,21 @@ export async function slugRedirectMiddleware(
           return;
         }
       }
+    }
+
+    // (ج) Strip `_cb` cache-buster from HTML page requests with a 301 redirect
+    // to the clean URL. Never touches `/api/*` or static file requests.
+    const rawOriginalUrl = req.originalUrl || req.url || "";
+    if (
+      (req.method === "GET" || req.method === "HEAD") &&
+      !path.startsWith("/api/") &&
+      !path.startsWith("/assets/") &&
+      !/\.\w{2,5}$/.test(path) &&
+      hasCacheBusterParam(rawOriginalUrl)
+    ) {
+      const cleanPath = path !== "/" && path.endsWith("/") ? path.replace(/\/+$/, "") : path;
+      res.redirect(301, redirectTargetWithSearch(cleanPath, rawOriginalUrl));
+      return;
     }
     
     next();

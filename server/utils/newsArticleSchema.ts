@@ -38,7 +38,11 @@ export function buildNewsArticleImageVariants(
   imageUrl: string,
   siteUrl: string,
 ): string[] {
-  const base = imageUrl || `${siteUrl}/icon.png`;
+  const fallback = `${siteUrl}/branding/sabq-og-image.png`;
+  const base =
+    !imageUrl || imageUrl === `${siteUrl}/icon.png` || imageUrl === "/icon.png"
+      ? fallback
+      : imageUrl;
   const specs = [
     { width: 1200, height: 675 },
     { width: 1200, height: 900 },
@@ -136,3 +140,36 @@ export function buildNewsArticleSchemaExtras(
     speakable,
   };
 }
+
+export interface BreadcrumbItemInput {
+  name: string | null | undefined;
+  item?: string | null | undefined;
+}
+
+/**
+ * Build a Schema.org BreadcrumbList JSON-LD object.
+ * Guarantees every ListItem has a non-empty `name`, sequential `position`,
+ * and an absolute `item` URL when provided (last item may omit `item`).
+ */
+export function buildBreadcrumbListJsonLd(
+  items: BreadcrumbItemInput[],
+): Record<string, unknown> | undefined {
+  const valid = items
+    .map((entry) => ({
+      name: String(entry.name ?? "").trim(),
+      item: entry.item ? String(entry.item).trim() : undefined,
+    }))
+    .filter((entry) => entry.name.length > 0);
+  if (valid.length === 0) return undefined;
+  return {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: valid.map((entry, idx) => ({
+      "@type": "ListItem",
+      position: idx + 1,
+      name: entry.name,
+      ...(entry.item ? { item: entry.item } : {}),
+    })),
+  };
+}
+

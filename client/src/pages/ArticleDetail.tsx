@@ -524,65 +524,9 @@ export default function ArticleDetail() {
     };
   }, [article?.content]);
 
-  // googlebot-news 30-day noindex meta is owned by seoInjector
-  // (server/seoInjector.ts) — duplicated client-side logic was
-  // race-condition-prone with React reconciliation (removeChild error).
-
-  // Add ImageObject JSON-LD for image SEO
-  useEffect(() => {
-    if (!article?.imageUrl) return;
-
-    // Get hero image asset data (displayOrder === 0)
-    const heroAsset = mediaAssets?.find((asset: any) => asset.displayOrder === 0);
-    
-    // Convert relative URL to absolute URL
-    const absoluteImageUrl = article.imageUrl.startsWith('http') 
-      ? article.imageUrl 
-      : `${window.location.origin}${article.imageUrl}`;
-
-    const imageObject: any = {
-      "@context": "https://schema.org",
-      "@type": "ImageObject",
-      "contentUrl": absoluteImageUrl,
-      "url": absoluteImageUrl,
-      "caption": heroAsset?.captionPlain || article.title,
-      "description": heroAsset?.altText || article.title,
-    };
-
-    // Add keywords if available
-    if (heroAsset?.keywordTags && heroAsset.keywordTags.length > 0) {
-      imageObject["keywords"] = heroAsset.keywordTags.join(", ");
-    } else if (article.seo?.keywords && article.seo.keywords.length > 0) {
-      imageObject["keywords"] = article.seo.keywords.join(", ");
-    }
-
-    // Add author/source if available
-    if (heroAsset?.sourceName) {
-      imageObject["author"] = {
-        "@type": "Organization",
-        "name": heroAsset.sourceName,
-      };
-      if (heroAsset.sourceUrl) {
-        imageObject["author"]["url"] = heroAsset.sourceUrl;
-      }
-    }
-
-    // Add copyright notice if available
-    if (heroAsset?.rightsStatement) {
-      imageObject["copyrightNotice"] = heroAsset.rightsStatement;
-    }
-
-    // Add script tag to head
-    const script = document.createElement('script');
-    script.type = 'application/ld+json';
-    script.text = JSON.stringify(imageObject);
-    script.id = 'image-structured-data';
-    document.head.appendChild(script);
-
-    return () => {
-      document.getElementById('image-structured-data')?.remove();
-    };
-  }, [article?.id, article?.imageUrl, mediaAssets]);
+  // googlebot-news 30-day noindex meta and NewsArticle/BreadcrumbList JSON-LD
+  // are owned by the server/edge SEO layer — do not inject duplicate/conflicting
+  // client-side JSON-LD blocks into document.head.
 
   // Add Open Graph and Twitter Cards meta tags
   useEffect(() => {
@@ -592,12 +536,21 @@ export default function ArticleDetail() {
     const seoDescription = article.seo?.metaDescription || article.excerpt || article.aiSummary || "";
     
     // Convert relative imageUrl to absolute URL
-    let seoImage = article.imageUrl || `${window.location.origin}/og-image.png`;
+    let seoImage = article.imageUrl || `${window.location.origin}/branding/sabq-og-image.png`;
     if (article.imageUrl && !article.imageUrl.startsWith('http')) {
       seoImage = `${window.location.origin}${article.imageUrl}`;
     }
     
-    const seoUrl = window.location.href;
+    const canonicalSlug = article.englishSlug || article.slug;
+    const seoUrl = `https://sabq.org/article/${canonicalSlug}`;
+
+    let canonicalLink = document.querySelector('link[rel="canonical"]') as HTMLLinkElement | null;
+    if (!canonicalLink) {
+      canonicalLink = document.createElement("link");
+      canonicalLink.rel = "canonical";
+      document.head.appendChild(canonicalLink);
+    }
+    canonicalLink.href = seoUrl;
 
     // Get hero image asset data for alt text
     const heroAsset = mediaAssets?.find((asset: any) => asset.displayOrder === 0);
@@ -1077,7 +1030,7 @@ export default function ArticleDetail() {
       <main className="article-detail-main container mx-auto px-4 sm:px-6 lg:px-8 py-8 max-w-7xl">
         <nav aria-label="مسار التنقل" className="article-breadcrumbs">
           <Link href="/">الرئيسية</Link>
-          {article.category && <><ChevronRight aria-hidden="true" /><Link href={`/category/${article.category.slug}`}>{article.category.nameAr}</Link></>}
+          {article.category && <><ChevronRight aria-hidden="true" /><Link href={`/category/${article.category.englishSlug || article.category.slug}`}>{article.category.nameAr}</Link></>}
           <ChevronRight aria-hidden="true" />
           <span aria-current="page">تفاصيل الخبر</span>
         </nav>

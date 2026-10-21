@@ -7,6 +7,8 @@ import { sanitizeArticleHtml } from "./utils/sanitizeHtml";
 import path from "path";
 import fs from "fs/promises";
 import { resolveMuqtarabOgImage } from "./utils/muqtarabShareImage";
+import { buildBreadcrumbListJsonLd, buildNewsArticleImageVariants } from "./utils/newsArticleSchema";
+import { archiveHref, archivePage } from "./utils/seoArchive";
 
 /**
  * Social Media Crawler Middleware
@@ -160,7 +162,7 @@ async function prepareSocialImage(imageUrl: string): Promise<void> {
 }
 
 function ensureAbsoluteUrl(url: string, baseUrl: string): string {
-  if (!url) return `${baseUrl}/icon.png`;
+  if (!url) return `${baseUrl}/branding/sabq-og-image.png`;
   
   if (url.startsWith('http://') || url.startsWith('https://')) {
     return url;
@@ -181,13 +183,13 @@ function ensureAbsoluteUrl(url: string, baseUrl: string): string {
 function generateArticleHTML(article: any, baseUrl: string): string {
   // Extract SEO data from article.seo JSON field or fallback to article fields
   const seoData = article.seo || {};
-  const seoTitle = seoData.title || article.title || 'خبر من سبق';
+  const seoTitle = article.title || seoData.metaTitle || seoData.title || 'خبر من سبق';
   // Support both camelCase and snake_case for aiSummary
-  const seoDescription = seoData.description || article.excerpt || article.aiSummary || article.ai_summary || 'اقرأ المزيد';
+  const seoDescription = seoData.metaDescription || seoData.description || article.excerpt || article.aiSummary || article.ai_summary || 'اقرأ المزيد';
   // Support both camelCase and snake_case for imageUrl - ensure absolute URL
   const rawImageUrl = article.imageUrl || article.image_url || '';
   const seoImage = ensureAbsoluteUrl(rawImageUrl, baseUrl);
-  const articleUrl = `${baseUrl}/article/${article.slug}`;
+  const articleUrl = `${baseUrl}/article/${article.englishSlug || article.slug}`;
   
   const safeSeoTitle = escapeHtml(seoTitle);
   const safeSeoDescription = escapeHtml(seoDescription);
@@ -201,7 +203,7 @@ function generateArticleHTML(article: any, baseUrl: string): string {
   
   // NewsArticle structured data
   const publishedAt = article.publishedAt || article.published_at;
-  const publishedIso = publishedAt ? new Date(publishedAt).toISOString() : undefined;
+  const publishedIso = publishedAt ? toSaudiIso(publishedAt) : undefined;
   const structuredData = {
     "@context": "https://schema.org",
     "@type": "NewsArticle",
@@ -211,23 +213,31 @@ function generateArticleHTML(article: any, baseUrl: string): string {
     },
     "headline": seoTitle,
     "description": seoDescription,
-    "image": [seoImage],
+    "image": buildNewsArticleImageVariants(seoImage, baseUrl),
     "datePublished": publishedIso,
     "dateModified": publishedIso,
+    "inLanguage": "ar",
     "author": {
       "@type": "Organization",
-      "name": "صحيفة سبق الإلكترونية",
+      "name": "صحيفة سبق",
       "url": baseUrl
     },
     "publisher": {
-      "@type": "Organization",
+      "@type": "NewsMediaOrganization",
       "name": "صحيفة سبق الإلكترونية",
+      "url": baseUrl,
       "logo": {
         "@type": "ImageObject",
-        "url": `${baseUrl}/branding/sabq-og-image.png`
+        "url": `${baseUrl}/branding/sabq-og-image.png`,
+        "width": 1200,
+        "height": 630
       }
     }
   };
+  const breadcrumbData = buildBreadcrumbListJsonLd([
+    { name: "الرئيسية", item: `${baseUrl}/` },
+    { name: seoTitle, item: articleUrl },
+  ]);
   
   return generateMetaHTML({
     title: safeSeoTitle,
@@ -241,6 +251,7 @@ function generateArticleHTML(article: any, baseUrl: string): string {
     twitterSite: '@sabq',
     alternateLanguages,
     structuredData,
+    breadcrumbData,
     articleBody: article.content || '',
     heroImage: rawImageUrl ? seoImage : undefined,
   });
@@ -252,13 +263,13 @@ function generateArticleHTML(article: any, baseUrl: string): string {
 function generateOpinionArticleHTML(article: any, baseUrl: string): string {
   // Extract SEO data from article.seo JSON field or fallback to article fields
   const seoData = article.seo || {};
-  const seoTitle = seoData.title || article.title || 'مقال رأي من سبق';
+  const seoTitle = article.title || seoData.metaTitle || seoData.title || 'مقال رأي من سبق';
   // Support both camelCase and snake_case for aiSummary
-  const seoDescription = seoData.description || article.excerpt || article.aiSummary || article.ai_summary || 'اقرأ مقال الرأي';
+  const seoDescription = seoData.metaDescription || seoData.description || article.excerpt || article.aiSummary || article.ai_summary || 'اقرأ مقال الرأي';
   // Support both camelCase and snake_case for imageUrl - ensure absolute URL
   const rawImageUrl = article.imageUrl || article.image_url || '';
   const seoImage = ensureAbsoluteUrl(rawImageUrl, baseUrl);
-  const articleUrl = `${baseUrl}/opinion/${article.slug}`;
+  const articleUrl = `${baseUrl}/article/${article.englishSlug || article.slug}`;
   
   const safeSeoTitle = escapeHtml(seoTitle);
   const safeSeoDescription = escapeHtml(seoDescription);
@@ -267,33 +278,41 @@ function generateOpinionArticleHTML(article: any, baseUrl: string): string {
   
   // NewsArticle structured data
   const publishedAt = article.publishedAt || article.published_at;
-  const publishedIso = publishedAt ? new Date(publishedAt).toISOString() : undefined;
+  const publishedIso = publishedAt ? toSaudiIso(publishedAt) : undefined;
   const structuredData = {
     "@context": "https://schema.org",
-    "@type": "NewsArticle",
+    "@type": "OpinionNewsArticle",
     "mainEntityOfPage": {
       "@type": "WebPage",
       "@id": articleUrl
     },
     "headline": seoTitle,
     "description": seoDescription,
-    "image": [seoImage],
+    "image": buildNewsArticleImageVariants(seoImage, baseUrl),
     "datePublished": publishedIso,
     "dateModified": publishedIso,
+    "inLanguage": "ar",
     "author": {
       "@type": "Organization",
-      "name": "صحيفة سبق الإلكترونية",
+      "name": "صحيفة سبق",
       "url": baseUrl
     },
     "publisher": {
-      "@type": "Organization",
+      "@type": "NewsMediaOrganization",
       "name": "صحيفة سبق الإلكترونية",
+      "url": baseUrl,
       "logo": {
         "@type": "ImageObject",
-        "url": `${baseUrl}/branding/sabq-og-image.png`
+        "url": `${baseUrl}/branding/sabq-og-image.png`,
+        "width": 1200,
+        "height": 630
       }
     }
   };
+  const breadcrumbData = buildBreadcrumbListJsonLd([
+    { name: "الرئيسية", item: `${baseUrl}/` },
+    { name: seoTitle, item: articleUrl },
+  ]);
   
   return generateMetaHTML({
     title: safeSeoTitle,
@@ -306,6 +325,7 @@ function generateOpinionArticleHTML(article: any, baseUrl: string): string {
     modifiedTime: publishedIso,
     twitterSite: '@sabq',
     structuredData,
+    breadcrumbData,
     articleBody: article.content || '',
     heroImage: rawImageUrl ? seoImage : undefined,
   });
@@ -314,13 +334,18 @@ function generateOpinionArticleHTML(article: any, baseUrl: string): string {
 /**
  * Generates static HTML with Open Graph meta tags for a category
  */
-function generateCategoryHTML(category: any, baseUrl: string): string {
-  const seoTitle = `${category.nameAr} - صحيفة سبق الإلكترونية`;
+function generateCategoryHTML(category: any, baseUrl: string, page = 1): string {
+  const seoTitle = `${category.nameAr}${page > 1 ? ` — الصفحة ${page}` : ''} - صحيفة سبق الإلكترونية`;
   const seoDescription = category.description || `أخبار ${category.nameAr} على مدار الساعة من صحيفة سبق الإلكترونية`;
   // Support both camelCase and snake_case for heroImageUrl - ensure absolute URL
   const rawImageUrl = category.heroImageUrl || category.hero_image_url || '';
   const seoImage = ensureAbsoluteUrl(rawImageUrl, baseUrl);
-  const categoryUrl = `${baseUrl}/category/${category.slug}`;
+  const canonicalSlug = category.englishSlug || category.english_slug || category.slug;
+  const categoryUrl = `${baseUrl}${archiveHref(`/category/${canonicalSlug}`, page)}`;
+  const breadcrumbData = buildBreadcrumbListJsonLd([
+    { name: "الرئيسية", item: `${baseUrl}/` },
+    { name: category.nameAr || canonicalSlug, item: categoryUrl },
+  ]);
   
   const safeSeoTitle = escapeHtml(seoTitle);
   const safeSeoDescription = escapeHtml(seoDescription);
@@ -335,6 +360,7 @@ function generateCategoryHTML(category: any, baseUrl: string): string {
     type: 'website',
     baseUrl,
     twitterSite: '@sabq',
+    breadcrumbData,
   });
 }
 
@@ -649,6 +675,7 @@ interface MetaHTMLOptions {
   readMoreText?: string;
   alternateLanguages?: { lang: string; url: string }[];
   structuredData?: object;
+  breadcrumbData?: object;
   // Full sanitized article HTML body (rendered for crawlers so they index the actual text)
   articleBody?: string;
   // Hero image URL to render at the top of the body (already absolute)
@@ -684,7 +711,8 @@ function generateMetaHTML(options: MetaHTMLOptions): string {
     siteName = 'صحيفة سبق الإلكترونية',
     readMoreText = 'اقرأ المزيد',
     alternateLanguages,
-    structuredData
+    structuredData,
+    breadcrumbData
   } = options;
   
   // Note: title, description, url, and image are already escaped by the calling functions
@@ -701,11 +729,14 @@ function generateMetaHTML(options: MetaHTMLOptions): string {
   // Generate JSON-LD structured data. Escape `<` so a `</script>` inside any
   // string field (article title/description, foreign-imported event.content)
   // can't break out of the script tag → stored XSS (audit #5, JSON-LD sink).
-  const structuredDataScript = structuredData
-    ? `<script type="application/ld+json">
-${JSON.stringify(structuredData, null, 2).replace(/</g, '\\u003c')}
-</script>`
-    : '';
+  const structuredDataScript = [structuredData, breadcrumbData]
+    .filter(Boolean)
+    .map(
+      (block) => `<script type="application/ld+json">
+${JSON.stringify(block, null, 2).replace(/</g, '\\u003c')}
+</script>`,
+    )
+    .join('\n  ');
   
   return `<!DOCTYPE html>
 <html lang="${lang}" dir="${dir}">
@@ -1131,7 +1162,7 @@ export async function socialCrawlerMiddleware(
       console.log(`[SocialCrawler] Handling category: ${slug}`);
       
       const [category] = await withCache(`crawler:category:${slug}`, CACHE_TTL.LONG, async () =>
-        db.select().from(categories).where(eq(categories.slug, slug)).limit(1)
+        db.select().from(categories).where(or(eq(categories.slug, slug), eq(categories.englishSlug, slug))).limit(1)
       );
 
       if (!category) {
@@ -1141,7 +1172,8 @@ export async function socialCrawlerMiddleware(
         return res.status(404).send(generate404HTML(baseUrl, 'ar'));
       }
 
-      const html = generateCategoryHTML(category, baseUrl);
+      const page = archivePage(typeof req.query.page === 'string' ? req.query.page : undefined) ?? 1;
+      const html = generateCategoryHTML(category, baseUrl, page);
       console.log(`[SocialCrawler] ✅ Serving category: ${category.nameAr}`);
       
       res.setHeader('Content-Type', 'text/html; charset=utf-8');

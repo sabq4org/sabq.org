@@ -32,8 +32,8 @@ describe("article creator JSON-LD", () => {
       reporterName: "",
       editorName: "",
     })).toMatchObject({
-      "@type": "NewsMediaOrganization",
-      name: "صحيفة سبق الإلكترونية",
+      "@type": "Organization",
+      name: "صحيفة سبق",
       url: "https://sabq.org",
     });
   });
@@ -42,6 +42,6 @@ describe("article creator JSON-LD", () => {
     expect(buildArticleAuthorPerson("https://sabq.org", {
       reporterName: "",
       editorName: "صحيفة سبق",
-    })).toMatchObject({ "@type": "NewsMediaOrganization", name: "صحيفة سبق" });
+    })).toMatchObject({ "@type": "Organization", name: "صحيفة سبق", url: "https://sabq.org" });
   });
 });

@@ -43,4 +43,22 @@ describe("ArticleView SEO rendering", () => {
     expect(html).toContain("آخر تحديث");
     expect(html).toContain('dateTime="2026-09-08T02:00:00.000Z"');
   });
+
+  it("renders BreadcrumbList with non-empty names and absolute item URLs", () => {
+    const html = renderToStaticMarkup(createElement(ArticleView, { bundle, lang: "ar" }));
+    const scripts = [...html.matchAll(/<script type="application\/ld\+json">(.*?)<\/script>/g)].map((m) =>
+      JSON.parse(m[1]),
+    );
+    expect(scripts).toHaveLength(2);
+    const breadcrumb = scripts.find((s) => s["@type"] === "BreadcrumbList");
+    expect(breadcrumb).toEqual({
+      "@context": "https://schema.org",
+      "@type": "BreadcrumbList",
+      itemListElement: [
+        { "@type": "ListItem", position: 1, name: "الرئيسية", item: "https://sabq.org/" },
+        { "@type": "ListItem", position: 2, name: "محليات", item: "https://sabq.org/category/local" },
+        { "@type": "ListItem", position: 3, name: "خبر الاختبار", item: "https://sabq.org/article/story" },
+      ],
+    });
+  });
 });

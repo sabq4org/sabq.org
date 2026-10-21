@@ -276,6 +276,7 @@ router.get('/articles', cacheControl({ maxAge: 300, staleWhileRevalidate: 600 })
         id: articles.id,
         title: articles.title,
         slug: articles.slug,
+        englishSlug: articles.englishSlug,
         excerpt: articles.excerpt,
         imageUrl: articles.imageUrl,
         publishedAt: articles.publishedAt,
@@ -292,13 +293,14 @@ router.get('/articles', cacheControl({ maxAge: 300, staleWhileRevalidate: 600 })
         : currentDate;
       const description = article.excerpt || '';
       const imageUrl = article.imageUrl || '';
+      const canonicalSlug = article.englishSlug || article.slug;
       
       return `
     <item>
       <title><![CDATA[${article.title}]]></title>
       <description><![CDATA[${description}]]></description>
-      <link>${baseUrl}/article/${article.slug}</link>
-      <guid isPermaLink="true">${baseUrl}/article/${article.slug}</guid>
+      <link>${baseUrl}/article/${canonicalSlug}</link>
+      <guid isPermaLink="true">${baseUrl}/article/${canonicalSlug}</guid>
       <pubDate>${pubDate}</pubDate>
       <author>سبق</author>
       ${imageUrl ? `<enclosure url="${imageUrl}" type="image/jpeg"/>` : ''}
@@ -356,7 +358,7 @@ router.get('/articles/category/:slug', cacheControl({ maxAge: 300, staleWhileRev
 
     // Get category
     const category = await db.query.categories.findFirst({
-      where: eq(categories.slug, slug)
+      where: sql`${categories.slug} = ${slug} OR ${categories.englishSlug} = ${slug}`
     });
 
     if (!category) {
@@ -368,6 +370,7 @@ router.get('/articles/category/:slug', cacheControl({ maxAge: 300, staleWhileRev
         id: articles.id,
         title: articles.title,
         slug: articles.slug,
+        englishSlug: articles.englishSlug,
         excerpt: articles.excerpt,
         imageUrl: articles.imageUrl,
         publishedAt: articles.publishedAt,
@@ -386,27 +389,29 @@ router.get('/articles/category/:slug', cacheControl({ maxAge: 300, staleWhileRev
         : currentDate;
       const description = article.excerpt || '';
       const imageUrl = article.imageUrl || '';
+      const canonicalSlug = article.englishSlug || article.slug;
       
       return `
     <item>
       <title><![CDATA[${article.title}]]></title>
       <description><![CDATA[${description}]]></description>
-      <link>${baseUrl}/article/${article.slug}</link>
-      <guid isPermaLink="true">${baseUrl}/article/${article.slug}</guid>
+      <link>${baseUrl}/article/${canonicalSlug}</link>
+      <guid isPermaLink="true">${baseUrl}/article/${canonicalSlug}</guid>
       <pubDate>${pubDate}</pubDate>
       <author>سبق</author>
       ${imageUrl ? `<enclosure url="${imageUrl}" type="image/jpeg"/>` : ''}
     </item>`;
     }).join('\n');
 
+    const categorySlug = category.englishSlug || category.slug;
     const rssFeed = `<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0" 
      xmlns:atom="http://www.w3.org/2005/Atom"
      xmlns:media="http://search.yahoo.com/mrss/">
   <channel>
     <title>سبق الذكية - ${category.nameAr}</title>
-    <link>${baseUrl}/category/${category.slug}</link>
-    <atom:link href="${baseUrl}/api/rss/articles/category/${category.slug}" rel="self" type="application/rss+xml"/>
+    <link>${baseUrl}/category/${categorySlug}</link>
+    <atom:link href="${baseUrl}/api/rss/articles/category/${categorySlug}" rel="self" type="application/rss+xml"/>
     <description>آخر أخبار ${category.nameAr} من منصة سبق الذكية</description>
     <language>ar-SA</language>
     <copyright>© ${new Date().getFullYear()} سبق الذكية</copyright>
@@ -443,6 +448,7 @@ router.get('/articles.json', cacheControl({ maxAge: 300, staleWhileRevalidate: 6
         id: articles.id,
         title: articles.title,
         slug: articles.slug,
+        englishSlug: articles.englishSlug,
         excerpt: articles.excerpt,
         imageUrl: articles.imageUrl,
         publishedAt: articles.publishedAt,
@@ -467,7 +473,7 @@ router.get('/articles.json', cacheControl({ maxAge: 300, staleWhileRevalidate: 6
       }],
       items: publishedArticles.map(article => ({
         id: article.id.toString(),
-        url: `${baseUrl}/article/${article.slug}`,
+        url: `${baseUrl}/article/${article.englishSlug || article.slug}`,
         title: article.title,
         summary: article.excerpt || '',
         image: article.imageUrl || undefined,
@@ -543,9 +549,10 @@ router.get('/feeds.opml', cacheControl({ maxAge: 300, staleWhileRevalidate: 600 
       orderBy: [desc(categories.displayOrder)]
     });
 
-    const categoryOutlines = activeCategories.map(cat => 
-      `    <outline text="${cat.nameAr}" title="${cat.nameAr}" type="rss" xmlUrl="${baseUrl}/api/rss/articles/category/${cat.slug}" htmlUrl="${baseUrl}/category/${cat.slug}"/>`
-    ).join('\n');
+    const categoryOutlines = activeCategories.map(cat => {
+      const catSlug = cat.englishSlug || cat.slug;
+      return `    <outline text="${cat.nameAr}" title="${cat.nameAr}" type="rss" xmlUrl="${baseUrl}/api/rss/articles/category/${catSlug}" htmlUrl="${baseUrl}/category/${catSlug}"/>`;
+    }).join('\n');
 
     const opml = `<?xml version="1.0" encoding="UTF-8"?>
 <opml version="2.0">

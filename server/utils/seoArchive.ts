@@ -14,8 +14,9 @@ export function archiveHref(path: string, page: number): string {
 }
 
 export function normalizeSeoPath(raw: string): string | null {
-  const path = raw.replace(/[?#].*$/, '');
-  if (!/^\/(category|author)\/[^/]+\/?$/.test(path)) return path;
+  const rawPath = raw.replace(/[?#].*$/, '');
+  const path = rawPath.length > 1 ? rawPath.replace(/\/+$/, '') : rawPath;
+  if (!/^(?:\/(?:en|ur))?\/(category|author)\/[^/]+$/.test(path)) return path;
   const page = archivePage(new URL(raw, 'https://sabq.org').searchParams.get('page'));
   return page === null ? null : archiveHref(path, page);
 }

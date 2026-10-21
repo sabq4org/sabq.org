@@ -53,12 +53,13 @@ export default async function CategoryPage({
   if (page === null) notFound();
   const bundle = await getCategoryBundle(slug, page);
   if (!bundle) notFound();
-  const siteUrl = process.env.PUBLIC_SITE_URL || "https://sabq.org";
+  const siteUrl = (process.env.PUBLIC_SITE_URL || "https://sabq.org").replace(/\/+$/, "");
+  const categoryName = (bundle.name || slug).trim();
   const jsonLd = [
     {
       "@context": "https://schema.org",
       "@type": "CollectionPage",
-      name: bundle.name,
+      name: categoryName,
       description: bundle.description,
       url: bundle.canonical,
       inLanguage: "ar",
@@ -71,13 +72,16 @@ export default async function CategoryPage({
     {
       "@context": "https://schema.org",
       "@type": "ItemList",
-      name: `أحدث الأخبار في ${bundle.name}`,
-      itemListElement: bundle.articles.slice(0, 30).map((item, index) => ({
-        "@type": "ListItem",
-        position: (page - 1) * 30 + index + 1,
-        url: `${siteUrl}${item.href}`,
-        name: item.title,
-      })),
+      name: `أحدث الأخبار في ${categoryName}`,
+      itemListElement: bundle.articles
+        .filter((item) => item.title && item.title.trim())
+        .slice(0, 30)
+        .map((item, index) => ({
+          "@type": "ListItem",
+          position: (page - 1) * 30 + index + 1,
+          url: `${siteUrl}${item.href}`,
+          name: item.title.trim(),
+        })),
     },
     {
       "@context": "https://schema.org",
@@ -87,12 +91,12 @@ export default async function CategoryPage({
           "@type": "ListItem",
           position: 1,
           name: "الرئيسية",
-          item: siteUrl,
+          item: `${siteUrl}/`,
         },
         {
           "@type": "ListItem",
           position: 2,
-          name: bundle.name,
+          name: categoryName,
           item: bundle.canonical,
         },
       ],

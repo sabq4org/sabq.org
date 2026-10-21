@@ -310,6 +310,18 @@ function buildJsonLd(
   region: RegionId,
 ): Record<string, unknown> {
   const events = blocks.flatMap((block) => (block.next ? [block.next] : []));
+  const breadcrumbItems: Array<Record<string, unknown>> = [
+    { "@type": "ListItem", position: 1, name: "الرئيسية", item: `${SITE}/` },
+    { "@type": "ListItem", position: 2, name: "مواعيدك", item: `${SITE}/mawaeed` },
+  ];
+  if (page.slug && page.h1.trim()) {
+    breadcrumbItems.push({
+      "@type": "ListItem",
+      position: 3,
+      name: page.h1.trim(),
+      item: page.canonical,
+    });
+  }
   const graph: Record<string, unknown>[] = [
     {
       "@type": "WebPage",
@@ -320,6 +332,10 @@ function buildJsonLd(
       dateModified,
       isPartOf: { "@type": "WebSite", name: "سبق", url: SITE },
     },
+    {
+      "@type": "BreadcrumbList",
+      itemListElement: breadcrumbItems,
+    },
   ];
   if (events.length > 0) {
     graph.push({
@@ -327,6 +343,7 @@ function buildJsonLd(
       itemListElement: events.map((card, index) => ({
         "@type": "ListItem",
         position: index + 1,
+        name: card.title,
         item: eventNode(card, region),
       })),
     });
