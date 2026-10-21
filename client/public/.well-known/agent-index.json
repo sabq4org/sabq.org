@@ -14,7 +14,7 @@
       "semantics": "Each endpoint is fetched with HTTPS GET and returns a public news feed.",
       "endpoints": [
         { "id": "rss", "url": "https://sabq.org/api/rss/articles", "format": "application/rss+xml", "method": "GET" },
-        { "id": "json-feed", "url": "https://sabq.org/api/rss/articles.json", "format": "application/feed+json", "method": "GET" }
+        { "id": "json-feed", "url": "https://sabq.org/api/rss/articles.json", "format": "application/json", "method": "GET" }
       ]
     }
   ],
