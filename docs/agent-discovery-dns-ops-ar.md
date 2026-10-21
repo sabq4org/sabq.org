@@ -10,12 +10,15 @@
 الفهرس يستخدم المخطط المحلي `sabq.agent-index.v1` الموثق داخل ملف JSON، ويصف
 قراءات HTTPS العامة والخلاصات فقط. لا يعني وجوده توفير MCP أو A2A أو OAuth.
 
-## سجل HTTPS تجريبي
+## سجل SVCB تجريبي
 
-التعيين المقترح، بصيغة توضيحية لسجل DNS HTTPS، هو:
+يُستخدم SVCB (النوع 64) كما في القسم 3.2، وليس HTTPS (النوع 65)؛
+فالاستعلام عن نوع لا يعيد سجلات النوع الآخر.
+
+التعيين المقترح، بصيغة توضيحية لسجل DNS SVCB، هو:
 
 ```text
-_index._agents.sabq.org. 300 IN HTTPS 1 sabq.org. alpn="h2" port=443 key65400="path=/.well-known/agent-index.json"
+_index._agents.sabq.org. 300 IN SVCB 1 sabq.org. alpn="h2" port=443 key65400="path=/.well-known/agent-index.json"
 ```
 
 `key65400` رقم تجريبي خاص بالمؤسسة (private-use mapping)، وليس معاملًا قياسيًا
@@ -31,7 +34,7 @@ _index._agents.sabq.org. 300 IN HTTPS 1 sabq.org. alpn="h2" port=443 key65400="p
 نفّذ الأوامر التالية من جهاز يملك DNS وHTTPS خارجيين، مع عدم تضمين أي أسرار:
 
 ```sh
-dig +short HTTPS _index._agents.sabq.org
+dig +short SVCB _index._agents.sabq.org
 curl --fail --silent --show-error --proto '=https' --tlsv1.2 \
   -H 'Accept: application/json' \
   https://sabq.org/.well-known/agent-index.json | jq -e '
@@ -49,10 +52,10 @@ curl --fail --silent --show-error --proto '=https' --tlsv1.2 \
 
 ## التراجع
 
-احذف سجل HTTPS المضاف لهذا الغرض فقط من مزود DNS، ثم أعد التحقق:
+احذف سجل SVCB المضاف لهذا الغرض فقط من مزود DNS، ثم أعد التحقق:
 
 ```sh
-dig +short HTTPS _index._agents.sabq.org
+dig +short SVCB _index._agents.sabq.org
 curl --fail --silent --show-error https://sabq.org/.well-known/agent-index.json \
   | jq -e '.schema == "sabq.agent-index.v1"'
 ```
