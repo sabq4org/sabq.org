@@ -96,7 +96,7 @@ export function buildArticleAuthorPerson(
   },
 ): Record<string, unknown> {
   const lang = opts.lang || "ar";
-  const fallbackName = opts.fallbackName || (lang === "en" ? "Sabq News" : "صحيفة سبق الإلكترونية");
+  const fallbackName = opts.fallbackName || (lang === "en" ? "Sabq News" : "صحيفة سبق");
   const useReporter = !!opts.reporterName;
   // A user id is not itself a public profile.  Only a staff slug proves that
   // the /reporter route exists; otherwise use the public name route below.
@@ -119,10 +119,12 @@ export function buildArticleAuthorPerson(
     "سبق",
     "Sabq News",
     "SABQ",
+    "سبق نیوز",
   ]);
   if (corporateNames.has(name.trim())) {
     const org = lang === "en" ? SABQ_ORG_EN : SABQ_ORG_AR;
-    return { "@type": "NewsMediaOrganization", name: name.trim(), url: org.url };
+    const orgName = lang === "en" ? "Sabq News" : name.trim() === "سبق نیوز" ? "سبق نیوز" : "صحيفة سبق";
+    return { "@type": "Organization", name: orgName, url: org.url };
   }
 
   return buildPersonJsonLd({ name, url, worksFor: lang === "en" ? SABQ_ORG_EN : SABQ_ORG_AR });

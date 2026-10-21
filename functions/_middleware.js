@@ -392,7 +392,7 @@ function htmlCacheKey(requestUrl, commit, variant) {
   // Tracking parameters must not fragment the HTML cache. Pagination is a
   // meaningful query only for the category/author discovery surfaces; keep a
   // strictly positive integer there and discard every other query parameter.
-  const isPagedSurface = /^\/(?:category|author)\/[^/]+$/.test(u.pathname);
+  const isPagedSurface = /^(?:\/(?:en|ur))?\/(?:category|author)\/[^/]+$/.test(u.pathname);
   const pageRaw = isPagedSurface ? u.searchParams.get("page") || "" : "";
   const page = /^\d+$/.test(pageRaw) ? Number(pageRaw) : 0;
   u.search = "";
@@ -415,7 +415,7 @@ export function seoRequestPath(urlOrRequest) {
   // handleRequest passes a URL; Request objects expose .url, but URL uses .href.
   const input = urlOrRequest instanceof URL ? urlOrRequest.href : urlOrRequest;
   const u = new URL(typeof input === "string" ? input : input.url);
-  if (!/^\/(?:category|author)\/[^/]+$/.test(u.pathname)) return u.pathname;
+  if (!/^(?:\/(?:en|ur))?\/(?:category|author)\/[^/]+$/.test(u.pathname)) return u.pathname;
   const rawPage = u.searchParams.get("page");
   if (rawPage === null) return u.pathname;
   const page = /^\d+$/.test(rawPage) ? Number(rawPage) : 0;
@@ -424,6 +424,50 @@ export function seoRequestPath(urlOrRequest) {
   return page > 0 && page <= 10000
     ? `${u.pathname}?page=${page}`
     : `${u.pathname}?page=${encodeURIComponent(rawPage)}`;
+}
+
+const CANONICAL_ORIGIN = "https://sabq.org";
+
+/**
+ * Builds the clean absolute canonical URL for article and category surfaces:
+ *   - Strips all query params on articles (/article/:slug, /en|ur/article/:slug).
+ *   - Keeps self-referencing `?page=N` (for integer N > 1) on categories and
+ *     strips every other query param (`_cb`, `utm_*`, etc.).
+ */
+export function cleanCanonicalForUrl(urlOrRequest) {
+  const input = urlOrRequest instanceof URL ? urlOrRequest.href : urlOrRequest;
+  const u = new URL(typeof input === "string" ? input : input.url);
+  const cleanPath = u.pathname === "/" ? "/" : u.pathname.replace(/\/+$/, "");
+  if (/^(?:\/(?:en|ur))?\/category\/[^/]+$/.test(cleanPath)) {
+    const rawPage = u.searchParams.get("page");
+    const page = rawPage && /^[1-9]\d*$/.test(rawPage) ? Number(rawPage) : 1;
+    if (Number.isInteger(page) && page > 1 && page <= 10000) {
+      return `${CANONICAL_ORIGIN}${cleanPath}?page=${page}`;
+    }
+    return `${CANONICAL_ORIGIN}${cleanPath}`;
+  }
+  if (/^(?:\/(?:en|ur))?\/article\/[^/]+$/.test(cleanPath) || /^\/opinion\/[^/]+$/.test(cleanPath)) {
+    return `${CANONICAL_ORIGIN}${cleanPath}`;
+  }
+  return null;
+}
+
+function ensureFallbackCanonical(res, requestUrl) {
+  if (!isHtml(res) || res.status !== 200 || typeof HTMLRewriter === "undefined") return res;
+  const canonical = cleanCanonicalForUrl(requestUrl);
+  if (!canonical) return res;
+  const safeCanonical = escapeHtml(canonical);
+  const remover = new TagRemover();
+  return new HTMLRewriter()
+    .on('head > link[rel="canonical"]', remover)
+    .on('head > meta[property="og:url"]', remover)
+    .on(
+      "head",
+      new HeadInjector(
+        `<link rel="canonical" href="${safeCanonical}">\n<meta property="og:url" content="${safeCanonical}">`,
+      ),
+    )
+    .transform(res);
 }
 
 function hasUsableSsrHtml(path, text) {
@@ -779,6 +823,8 @@ function buildMetaBlock(meta) {
 
   const jsonLd = buildJsonLd(meta.jsonLd);
   if (jsonLd) parts.push(jsonLd);
+  const breadcrumbJsonLd = buildJsonLd(meta.breadcrumbJsonLd);
+  if (breadcrumbJsonLd) parts.push(breadcrumbJsonLd);
 
   // Homepage LCP: preload the hero-carousel lead image from the initial HTML.
   // Without this the SPA only discovers it after React boots + homepage-lite
@@ -1115,6 +1161,24 @@ async function handleRequest(context) {
     return tagged;
   };
 
+  // (ج) Strip cache-buster `_cb` parameter from HTML page requests with a 301
+  // redirect to the clean URL. Never touches `/api/*` (`isProxyPath`) or static
+  // assets (`isStaticAsset`), so API fetches that rely on `_cb` work unchanged.
+  if (
+    (request.method === "GET" || request.method === "HEAD") &&
+    url.searchParams.has("_cb") &&
+    !isProxyPath(path) &&
+    !isStaticAsset(path) &&
+    !path.startsWith("/_next/")
+  ) {
+    const cleanUrl = new URL(url.toString());
+    cleanUrl.searchParams.delete("_cb");
+    if (cleanUrl.pathname !== "/" && cleanUrl.pathname.endsWith("/")) {
+      cleanUrl.pathname = cleanUrl.pathname.replace(/\/+$/, "");
+    }
+    return Response.redirect(cleanUrl.toString(), 301);
+  }
+
   // Normalize trailing slashes on content routes: /article/x/ -> /article/x
   // (301). Both forms return 200 today (the slash version self-canonicalizes,
   // so it's the benign "alternate w/ canonical" GSC bucket — this just saves
@@ -1417,7 +1481,9 @@ async function handleRequest(context) {
     // generic 200 shell is acceptable as a user-facing emergency response but
     // must never be stored as the crawler's SSR representation.
     if (wantsSsr) return crawlerSsrFailureResponse();
-    return deliverHtml(await next(), { cacheable: htmlCacheable });
+    const rawShell = await next();
+    const fallbackShell = injectable ? ensureFallbackCanonical(rawShell, url) : rawShell;
+    return deliverHtml(fallbackShell, { cacheable: htmlCacheable });
   }
 
   // 3) Indexable HTML route → slug redirect + SEO meta/body injection.
@@ -1462,7 +1528,7 @@ async function handleRequest(context) {
     // content URL; serve it no-store so the next crawl re-tries injection.
     if (!isHtml(shell) || !meta) {
       if (wantsSsr) return crawlerSsrFailureResponse();
-      return finalizeHtml(shell, { cacheable: false });
+      return finalizeHtml(ensureFallbackCanonical(shell, url), { cacheable: false });
     }
 
     // A resolved `noindex` (e.g. missing row, unpublished, aged-out) must never
@@ -1488,8 +1554,11 @@ async function handleRequest(context) {
       .on('head > meta[property^="twitter:"]', remover)
       .on('head > meta[property^="article:"]', remover)
       .on('head > meta[name="googlebot-news"]', remover)
-      .on('head > link[rel="alternate"][hreflang]', remover)
-      .on("head", new HeadInjector(buildMetaBlock(meta)));
+      .on('head > link[rel="alternate"][hreflang]', remover);
+    if (meta.jsonLd || meta.breadcrumbJsonLd) {
+      rewriter = rewriter.on('head > script[type="application/ld+json"]', remover);
+    }
+    rewriter = rewriter.on("head", new HeadInjector(buildMetaBlock(meta)));
     if (meta.semanticHtml) {
       rewriter = rewriter.on("div#root", new RootInjector(meta.semanticHtml));
     }
@@ -1504,7 +1573,7 @@ async function handleRequest(context) {
   } catch (err) {
     console.error("[pages-fn] html error:", err);
     if (wantsSsr) return crawlerSsrFailureResponse();
-    return finalizeHtml(await next(), { cacheable: false });
+    return finalizeHtml(ensureFallbackCanonical(await next(), url), { cacheable: false });
   }
 }
 

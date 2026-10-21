@@ -267,6 +267,8 @@ function buildMetaBlock(meta) {
 
   const jsonLd = buildJsonLd(meta.jsonLd);
   if (jsonLd) parts.push(jsonLd);
+  const breadcrumbJsonLd = buildJsonLd(meta.breadcrumbJsonLd);
+  if (breadcrumbJsonLd) parts.push(breadcrumbJsonLd);
 
   parts.push(`<!-- sabq-edge-meta-injected -->`);
   return parts.filter(Boolean).join("\n");
@@ -306,6 +308,12 @@ class RootInjector {
 async function handleHtml(request, env) {
   const url = new URL(request.url);
   const pathname = url.pathname;
+
+  if (url.searchParams.has("_cb")) {
+    const cleanUrl = new URL(url.toString());
+    cleanUrl.searchParams.delete("_cb");
+    return Response.redirect(cleanUrl.toString(), 301);
+  }
 
   // 1) Slug redirect — DB-backed lookup on the backend.
   const redirectTo = await checkSlugRedirect(env.API_ORIGIN, pathname);
@@ -360,8 +368,11 @@ async function handleHtml(request, env) {
     .on('head > meta[property^="twitter:"]', remover)
     .on('head > meta[property^="article:"]', remover)
     .on('head > meta[name="googlebot-news"]', remover)
-    .on('head > link[rel="alternate"][hreflang]', remover)
-    .on("head", new HeadInjector(metaBlock));
+    .on('head > link[rel="alternate"][hreflang]', remover);
+  if (meta.jsonLd || meta.breadcrumbJsonLd) {
+    rewriter = rewriter.on('head > script[type="application/ld+json"]', remover);
+  }
+  rewriter = rewriter.on("head", new HeadInjector(metaBlock));
   if (meta.semanticHtml) {
     rewriter = rewriter.on("div#root", new RootInjector(meta.semanticHtml));
   }

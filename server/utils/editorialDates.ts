@@ -83,3 +83,16 @@ export function getPublicEditorialModifiedAt(
   const publishedMs = new Date(publishedAt).getTime();
   return Number.isNaN(publishedMs) || Date.parse(modified) <= publishedMs ? null : modified;
 }
+
+/**
+ * Format a Date or ISO timestamp as an ISO 8601 string in Riyadh time (+03:00),
+ * e.g. "2026-10-21T08:00:00+03:00".
+ */
+export function toRiyadhIso(value: Date | string | null | undefined): string | undefined {
+  if (!value) return undefined;
+  const d = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(d.getTime())) return undefined;
+  const riyadhMs = d.getTime() + 3 * 60 * 60 * 1000;
+  return new Date(riyadhMs).toISOString().replace(/\.\d{3}Z$/, "+03:00").replace(/Z$/, "+03:00");
+}
+

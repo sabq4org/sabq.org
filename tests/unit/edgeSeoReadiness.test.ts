@@ -108,4 +108,130 @@ describe('public SEO projections', () => {
     f.rows = [[], []];
     expect((await request('/api/edge/slug-redirect', {}, {path:'/ur/article/missing'})).body.redirect).toBeNull();
   });
+
+  it.each([
+    ['6ihtdc4', 'هيئة تطوير مكة شريك تنموي في معسكر للتوظيف بجامعة جدة', 'مناطق', 'Mm7WgHL'],
+    ['5aflbvr', '"ليدار للاستثمار" تستعرض مشروع "دار المكيمن" في معرض "المدينة بيلدكس 2026"', 'أعمال', '-IHYckx'],
+    ['kkqajht', 'تباين أسعار النفط وارتفاع الذهب إلى 4156 دولاراً للأوقية', 'أعمال', '-IHYckx'],
+    ['2r5rr9f', 'الفيصلي يقلب تأخره بهدفين ويهزم الخلود بثلاثية ميندي', 'رياضة', 'VrlEcMg'],
+    ['ne5e6tf', 'حرس الحدود بجدة يضبط مواطنَين يمارسان الصيد دون تصريح بأدوات محظورة', 'محليات', 'CWtMvGT'],
+  ])('emits clean canonical, +03:00 NewsArticle JSON-LD, and named BreadcrumbList for sample article %s', async (slug, title, categoryName, categoryEnglishSlug) => {
+    f.rows = [
+      [{
+        id: `id-${slug}`,
+        title,
+        slug: `ar-${slug}`,
+        englishSlug: slug,
+        excerpt: 'ملخص الخبر',
+        content: '<p>متن الخبر الكامل</p>',
+        imageUrl: 'https://media.sabq.org/news/2026/10/test/w1280.webp',
+        publishedAt: '2026-10-15T18:04:59.394Z',
+        updatedAt: '2026-10-15T18:04:59.414Z',
+        status: 'published',
+        seo: {},
+        seoMetadata: {},
+        categoryId: 'cat-1',
+        categoryName,
+        categorySlug: categoryName,
+        categoryEnglishSlug,
+        reporterFirstName: 'صحيفة',
+        reporterLastName: 'سبق',
+      }],
+      [], // media assets
+      [], // en sibling
+    ];
+    const r = await request('/api/edge/seo-meta', {}, { path: `/article/${slug}?_cb=123&utm_source=x` });
+    expect(r.status).toBe(200);
+    expect(r.body.canonical).toBe(`https://sabq.org/article/${slug}`);
+    expect(r.body.jsonLd['@type']).toBe('NewsArticle');
+    expect(r.body.jsonLd.mainEntityOfPage).toEqual({
+      '@type': 'WebPage',
+      '@id': `https://sabq.org/article/${slug}`,
+    });
+    expect(r.body.jsonLd.headline).toBe(title);
+    expect(r.body.semanticHtml).toContain(`<h1>${title.replace(/"/g, '&quot;')}</h1>`);
+    expect(r.body.jsonLd.datePublished).toBe('2026-10-15T21:04:59+03:00');
+    expect(r.body.jsonLd.dateModified).toBe('2026-10-15T21:04:59+03:00');
+    expect(r.body.jsonLd.inLanguage).toBe('ar');
+    expect(r.body.jsonLd.author).toEqual({
+      '@type': 'Organization',
+      name: 'صحيفة سبق',
+      url: 'https://sabq.org',
+    });
+    expect(r.body.jsonLd.publisher).toMatchObject({
+      '@type': 'NewsMediaOrganization',
+      name: 'صحيفة سبق الإلكترونية',
+      url: 'https://sabq.org',
+      logo: {
+        '@type': 'ImageObject',
+        url: 'https://sabq.org/branding/sabq-og-image.png',
+        width: 1200,
+        height: 630,
+      },
+    });
+    expect(r.body.breadcrumbJsonLd).toEqual({
+      '@context': 'https://schema.org',
+      '@type': 'BreadcrumbList',
+      itemListElement: [
+        { '@type': 'ListItem', position: 1, name: 'الرئيسية', item: 'https://sabq.org/' },
+        { '@type': 'ListItem', position: 2, name: categoryName, item: `https://sabq.org/category/${categoryEnglishSlug}` },
+        { '@type': 'ListItem', position: 3, name: title, item: `https://sabq.org/article/${slug}` },
+      ],
+    });
+  });
+
+  it('emits Person author with profile URL when a named journalist exists', async () => {
+    f.rows = [
+      [{
+        id: 'id-named',
+        title: 'خبر بمحرر مسمى',
+        slug: 'named-slug',
+        englishSlug: 'named12',
+        excerpt: 'ملخص',
+        content: '<p>المتن</p>',
+        imageUrl: '',
+        publishedAt: '2026-10-21T05:00:00.000Z',
+        updatedAt: '2026-10-21T07:30:00.000Z',
+        status: 'published',
+        seo: {},
+        seoMetadata: { editorialModifiedAt: '2026-10-21T07:30:00.000Z' },
+        categoryName: 'السعودية',
+        categorySlug: 'saudia',
+        categoryEnglishSlug: 'saudia',
+        reporterId: 'u-rep',
+        reporterFirstName: 'أحمد',
+        reporterLastName: 'العتيبي',
+        reporterStaffSlug: 'ahmed-otaibi',
+      }],
+      [],
+      [],
+    ];
+    const r = await request('/api/edge/seo-meta', {}, { path: '/article/named12' });
+    expect(r.body.jsonLd.author).toMatchObject({
+      '@type': 'Person',
+      name: 'أحمد العتيبي',
+      url: 'https://sabq.org/reporter/ahmed-otaibi',
+    });
+    expect(r.body.jsonLd.datePublished).toBe('2026-10-21T08:00:00+03:00');
+    expect(r.body.jsonLd.dateModified).toBe('2026-10-21T10:30:00+03:00');
+    expect(r.body.jsonLd.image[0]).toContain('width=1200');
+  });
+
+  it('keeps self-referencing ?page= on category seo-meta while stripping _cb and utm params, with BreadcrumbList', async () => {
+    f.rows = [
+      [{ id: 'c1', nameAr: 'السعودية', slug: 'saudia', englishSlug: 'saudia' }],
+      [{ slug: 'a1', englishSlug: 'x1', title: 'خبر 1' }],
+    ];
+    const r = await request('/api/edge/seo-meta', {}, { path: '/category/saudia?page=2&_cb=999&utm_source=x' });
+    expect(r.status).toBe(200);
+    expect(r.body.canonical).toBe('https://sabq.org/category/saudia?page=2');
+    expect(r.body.breadcrumbJsonLd).toEqual({
+      '@context': 'https://schema.org',
+      '@type': 'BreadcrumbList',
+      itemListElement: [
+        { '@type': 'ListItem', position: 1, name: 'الرئيسية', item: 'https://sabq.org/' },
+        { '@type': 'ListItem', position: 2, name: 'السعودية', item: 'https://sabq.org/category/saudia?page=2' },
+      ],
+    });
+  });
 });

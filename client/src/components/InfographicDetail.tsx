@@ -152,7 +152,7 @@ export function InfographicDetail({
             <span className="text-muted-foreground/50">|</span>
             {article.category && (
               <>
-                <Link href={`/category/${article.category.slug}`} className="hover:text-foreground transition-colors font-medium" data-testid="link-breadcrumb-category">
+                <Link href={`/category/${article.category.englishSlug || article.category.slug}`} className="hover:text-foreground transition-colors font-medium" data-testid="link-breadcrumb-category">
                   {article.category.nameAr}
                 </Link>
                 <span className="text-muted-foreground/50">|</span>

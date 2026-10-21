@@ -44,7 +44,7 @@ import {
   HERO_SIZES_ATTR,
 } from "@shared/cdnImage";
 import { buildArticleHeroPreload, buildCardImagePreload, pickCategoryLandingLead } from "@shared/articleHeroPreload";
-import { buildNewsArticleSchemaExtras, getArticleSchemaType, htmlToPlainText } from "../utils/newsArticleSchema";
+import { buildBreadcrumbListJsonLd, buildNewsArticleSchemaExtras, getArticleSchemaType, htmlToPlainText } from "../utils/newsArticleSchema";
 import { sanitizeArticleHtml } from "../utils/sanitizeHtml";
 import {
   buildArticleAuthorPerson,
@@ -71,7 +71,7 @@ import { isKnownSpaTopLevelPath } from "../utils/spaTopLevelRoutes";
 import { AI_POLICY_ALLOWED, AI_POLICY_FORBIDDEN, AI_POLICY_INTRO } from "@shared/aiPolicyContent";
 import { archivePage, archiveHref, normalizeSeoPath, SEO_ARCHIVE_PAGE_SIZE } from "../utils/seoArchive";
 
-import { getPublicEditorialModifiedAt } from "../utils/editorialDates";
+import { getPublicEditorialModifiedAt, toRiyadhIso } from "../utils/editorialDates";
 import { getSeoCacheGeneration } from "../services/seoCacheInvalidation";
 
 import { seoProjectionCacheMiddleware } from "../middleware/seoProjectionCache";
@@ -162,7 +162,7 @@ function isRedirectCandidate(path: string): boolean {
 
 const SITE_URL = process.env.PUBLIC_SITE_URL || "https://sabq.org";
 const BRAND_OG_IMAGE = `${SITE_URL}/branding/sabq-og-image.png`;
-const DEFAULT_OG_IMAGE = `${SITE_URL}/icon.png`;
+const DEFAULT_OG_IMAGE = BRAND_OG_IMAGE;
 
 // Crawlers and corrupted/double-encoded URLs occasionally hit these edge
 // endpoints with invalid percent-encoding (a lone `%`, bad `%XX`, or a
@@ -451,14 +451,13 @@ function buildSemanticHtml(opts: {
   if (!safeBody) return undefined;
   const safeTitle = escapeHtml(opts.title);
   const safeExcerpt = escapeHtml(trunc(opts.excerpt, 300));
-  const publishedIso = opts.publishedAt
-    ? new Date(opts.publishedAt).toISOString()
-    : undefined;
+  const publishedIso = toRiyadhIso(opts.publishedAt);
+  const modifiedIso = toRiyadhIso(opts.modifiedAt);
   const label = opts.articleType === "opinion" || opts.articleType === "column" ? "مقال رأي" : opts.articleType === "analysis" ? "تحليل" : "";
   const byline = opts.author ? `<p>${opts.authorHref ? `<a href="${escapeHtml(opts.authorHref)}">${escapeHtml(opts.author)}</a>` : escapeHtml(opts.author)}</p>` : "";
   const caption = [opts.imageCaption, opts.imageSource, opts.isAiGeneratedImage ? "صورة مولدة بالذكاء الاصطناعي" : ""].filter(Boolean).join(" — ");
   const excerpt = htmlToPlainText(opts.excerpt) === htmlToPlainText(opts.content) ? "" : `<p>${safeExcerpt}</p>`;
-  return `<article style="position:absolute;left:-9999px;top:0;width:1px;height:1px;overflow:hidden;" aria-hidden="true"><h1>${safeTitle}</h1>${label ? `<p>${label}</p>` : ""}${byline}${publishedIso ? `<time datetime="${publishedIso}">${publishedIso}</time>` : ""}${opts.modifiedAt ? `<p>آخر تحديث: <time datetime="${escapeHtml(opts.modifiedAt)}">${escapeHtml(opts.modifiedAt)}</time></p>` : ""}${caption ? `<p>${escapeHtml(caption)}</p>` : ""}${excerpt}<div>${safeBody}</div></article>`;
+  return `<article style="position:absolute;left:-9999px;top:0;width:1px;height:1px;overflow:hidden;" aria-hidden="true"><h1>${safeTitle}</h1>${label ? `<p>${label}</p>` : ""}${byline}${publishedIso ? `<time datetime="${publishedIso}">${publishedIso}</time>` : ""}${modifiedIso ? `<p>آخر تحديث: <time datetime="${escapeHtml(modifiedIso)}">${escapeHtml(modifiedIso)}</time></p>` : ""}${caption ? `<p>${escapeHtml(caption)}</p>` : ""}${excerpt}<div>${safeBody}</div></article>`;
 }
 
 /**
@@ -564,6 +563,7 @@ function articleMetaPayload(opts: {
   author: string;
   authorPerson?: Record<string, unknown>;
   section?: string | null;
+  sectionUrl?: string | null;
   keywords?: string[];
   semanticHtml?: string;
   /** Raw article HTML — used for articleBody / wordCount in JSON-LD. */
@@ -572,15 +572,12 @@ function articleMetaPayload(opts: {
   editorialMetadata?: unknown;
 }) {
   const b = ARTICLE_BRAND[opts.lang];
-  const publishedTime = opts.publishedAt
-    ? new Date(opts.publishedAt).toISOString()
-    : undefined;
-  const updatedIso = opts.updatedAt
-    ? new Date(opts.updatedAt).toISOString()
-    : publishedTime;
-  const modifiedTime = opts.lang === "ar"
+  const publishedTime = toRiyadhIso(opts.publishedAt);
+  const updatedIso = toRiyadhIso(opts.updatedAt) || publishedTime;
+  const rawModified = opts.lang === "ar"
     ? getPublicEditorialModifiedAt(opts.publishedAt, opts.editorialMetadata) || publishedTime
     : clampModified(opts.publishedAt, opts.updatedAt, publishedTime, updatedIso);
+  const modifiedTime = toRiyadhIso(rawModified) || publishedTime;
   const keywords = (opts.keywords || []).filter(Boolean);
 
   // hreflang chain — only emit sibling locales when the target URL exists.
@@ -628,6 +625,15 @@ function articleMetaPayload(opts: {
     ? buildNewsArticleSchemaExtras(opts.contentHtml, opts.image, SITE_URL)
     : buildNewsArticleSchemaExtras(null, opts.image, SITE_URL);
 
+  const authorNode =
+    opts.authorPerson ||
+    buildArticleAuthorPerson(SITE_URL, {
+      reporterName: "",
+      editorName: opts.author,
+      lang: opts.lang === "en" ? "en" : "ar",
+      fallbackName: opts.lang === "en" ? ARTICLE_BRAND.en.name : opts.lang === "ur" ? ARTICLE_BRAND.ur.name : "صحيفة سبق",
+    });
+
   const jsonLd: Record<string, unknown> = {
     "@context": "https://schema.org",
     "@type": getArticleSchemaType(opts.articleType),
@@ -638,10 +644,11 @@ function articleMetaPayload(opts: {
     datePublished: publishedTime,
     dateModified: modifiedTime,
     inLanguage: opts.lang,
-    author: opts.authorPerson || { "@type": "Person", name: opts.author },
+    author: authorNode,
     publisher: {
       "@type": "NewsMediaOrganization",
       name: b.name,
+      url: SITE_URL,
       logo: { "@type": "ImageObject", url: BRAND_OG_IMAGE, width: 1200, height: 630 },
     },
     speakable: schemaExtras.speakable,
@@ -650,6 +657,15 @@ function articleMetaPayload(opts: {
   if (schemaExtras.wordCount) jsonLd.wordCount = schemaExtras.wordCount;
   if (opts.section) jsonLd.articleSection = opts.section;
   if (keywords.length) jsonLd.keywords = keywords;
+
+  const homeLabel = opts.lang === "en" ? "Home" : opts.lang === "ur" ? "سرورق" : "الرئيسية";
+  const breadcrumbJsonLd = buildBreadcrumbListJsonLd([
+    { name: homeLabel, item: `${SITE_URL}/` },
+    ...(opts.section && opts.sectionUrl
+      ? [{ name: opts.section, item: opts.sectionUrl }]
+      : []),
+    { name: opts.title, item: opts.canonical },
+  ]);
 
   const { robots, googlebotNews } = computeArticleRobots(
     opts.publishedAt,
@@ -677,6 +693,7 @@ function articleMetaPayload(opts: {
     twitterSite: "@sabq",
     hreflang,
     jsonLd,
+    breadcrumbJsonLd,
     // Same rule as articleBody above — the SPA fallback shell must not carry
     // the text of an article that isn't published.
     semanticHtml: isPublished ? opts.semanticHtml : undefined,
@@ -756,7 +773,7 @@ async function buildArArticlePayload(
   // Byline prefers the chosen reporter over the staff author, then the brand.
   const reporterName = [row.reporterFirstName, row.reporterLastName].filter(Boolean).join(" ");
   const editorName = [row.authorFirstName, row.authorLastName].filter(Boolean).join(" ");
-  const author = reporterName || editorName || ARTICLE_BRAND.ar.name;
+  const author = reporterName || editorName || "صحيفة سبق";
   const authorPerson = buildArticleAuthorPerson(SITE_URL, {
     reporterName,
     editorName,
@@ -764,7 +781,7 @@ async function buildArArticlePayload(
     reporterStaffSlug: row.reporterStaffSlug,
     authorId: row.authorId,
     authorStaffSlug: row.authorStaffSlug,
-    fallbackName: ARTICLE_BRAND.ar.name,
+    fallbackName: "صحيفة سبق",
   });
   // مقالات المونديال تربط للهب برابط يراه الزاحف — يبني الرسم الداخلي الذي
   // يدفع /world-cup كرابط فرعي (sitelink) ويغذي ترتيبه للكلمة المفتاحية.
@@ -778,6 +795,8 @@ async function buildArArticlePayload(
     : undefined;
 
   const siblingEnSlug = row.id ? await resolveEnSiblingSlug(row.id) : null;
+  const catSlug = row.categoryEnglishSlug || row.categorySlug;
+  const sectionUrl = catSlug ? `${SITE_URL}/category/${catSlug}` : undefined;
 
   const meta = articleMetaPayload({
     lang: "ar",
@@ -796,6 +815,7 @@ async function buildArArticlePayload(
     author,
     authorPerson,
     section: row.categoryName,
+    sectionUrl,
     keywords: Array.isArray(seoData.keywords) ? seoData.keywords : [],
     contentHtml: row.content,
     semanticHtml:
@@ -835,11 +855,23 @@ async function fetchEnArticle(slug: string) {
       status: enArticles.status,
       seo: enArticles.seo,
       seoMetadata: enArticles.seoMetadata,
+      categoryName: enCategories.name,
+      categorySlug: enCategories.slug,
+      authorId: enArticles.authorId,
+      reporterId: enArticles.reporterId,
       authorFirstName: users.firstName,
       authorLastName: users.lastName,
+      reporterFirstName: reporterUsers.firstName,
+      reporterLastName: reporterUsers.lastName,
+      reporterStaffSlug: reporterStaff.slug,
+      authorStaffSlug: authorStaff.slug,
     })
     .from(enArticles)
+    .leftJoin(enCategories, eq(enArticles.categoryId, enCategories.id))
     .leftJoin(users, eq(enArticles.authorId, users.id))
+    .leftJoin(reporterUsers, eq(enArticles.reporterId, reporterUsers.id))
+    .leftJoin(reporterStaff, and(eq(enArticles.reporterId, reporterStaff.userId), eq(reporterStaff.isActive, true), inArray(reporterStaff.staffType, ["reporter", "writer", "opinion_author", "content_creator"])))
+    .leftJoin(authorStaff, and(eq(enArticles.authorId, authorStaff.userId), eq(authorStaff.isActive, true), inArray(authorStaff.staffType, ["reporter", "writer", "opinion_author", "content_creator"])))
     .where(where!)
     .limit(1);
   return row || null;
@@ -900,11 +932,22 @@ async function buildEnArticlePayload(
     seoData.metaDescription || row.aiSummary || row.excerpt || title,
     220,
   );
-  const author =
-    [row.authorFirstName, row.authorLastName].filter(Boolean).join(" ") ||
-    ARTICLE_BRAND.en.name;
+  const reporterName = [row.reporterFirstName, row.reporterLastName].filter(Boolean).join(" ");
+  const editorName = [row.authorFirstName, row.authorLastName].filter(Boolean).join(" ");
+  const author = reporterName || editorName || ARTICLE_BRAND.en.name;
+  const authorPerson = buildArticleAuthorPerson(SITE_URL, {
+    reporterName,
+    editorName,
+    reporterId: row.reporterId,
+    reporterStaffSlug: row.reporterStaffSlug,
+    authorId: row.authorId,
+    authorStaffSlug: row.authorStaffSlug,
+    lang: "en",
+    fallbackName: ARTICLE_BRAND.en.name,
+  });
   const enCanonicalSlug = row.englishSlug || slug;
   const siblingArSlug = await resolveArSiblingSlug(row.seoMetadata, enCanonicalSlug);
+  const sectionUrl = row.categorySlug ? `${SITE_URL}/en/category/${row.categorySlug}` : undefined;
   return articleMetaPayload({
     lang: "en",
     title,
@@ -918,6 +961,9 @@ async function buildEnArticlePayload(
     updatedAt: row.updatedAt,
     status: row.status,
     author,
+    authorPerson,
+    section: row.categoryName,
+    sectionUrl,
     keywords: Array.isArray(seoData.keywords) ? seoData.keywords : [],
     contentHtml: row.content,
     semanticHtml: buildSemanticHtml({
@@ -945,11 +991,23 @@ async function fetchUrArticle(slug: string) {
       updatedAt: urArticles.updatedAt,
       status: urArticles.status,
       seo: urArticles.seo,
+      categoryName: urCategories.name,
+      categorySlug: urCategories.slug,
+      authorId: urArticles.authorId,
+      reporterId: urArticles.reporterId,
       authorFirstName: users.firstName,
       authorLastName: users.lastName,
+      reporterFirstName: reporterUsers.firstName,
+      reporterLastName: reporterUsers.lastName,
+      reporterStaffSlug: reporterStaff.slug,
+      authorStaffSlug: authorStaff.slug,
     })
     .from(urArticles)
+    .leftJoin(urCategories, eq(urArticles.categoryId, urCategories.id))
     .leftJoin(users, eq(urArticles.authorId, users.id))
+    .leftJoin(reporterUsers, eq(urArticles.reporterId, reporterUsers.id))
+    .leftJoin(reporterStaff, and(eq(urArticles.reporterId, reporterStaff.userId), eq(reporterStaff.isActive, true), inArray(reporterStaff.staffType, ["reporter", "writer", "opinion_author", "content_creator"])))
+    .leftJoin(authorStaff, and(eq(urArticles.authorId, authorStaff.userId), eq(authorStaff.isActive, true), inArray(authorStaff.staffType, ["reporter", "writer", "opinion_author", "content_creator"])))
     .where(where!)
     .limit(1);
   return row || null;
@@ -965,9 +1023,19 @@ function buildUrArticlePayload(
     seoData.metaDescription || row.aiSummary || row.excerpt || title,
     220,
   );
-  const author =
-    [row.authorFirstName, row.authorLastName].filter(Boolean).join(" ") ||
-    ARTICLE_BRAND.ur.name;
+  const reporterName = [row.reporterFirstName, row.reporterLastName].filter(Boolean).join(" ");
+  const editorName = [row.authorFirstName, row.authorLastName].filter(Boolean).join(" ");
+  const author = reporterName || editorName || ARTICLE_BRAND.ur.name;
+  const authorPerson = buildArticleAuthorPerson(SITE_URL, {
+    reporterName,
+    editorName,
+    reporterId: row.reporterId,
+    reporterStaffSlug: row.reporterStaffSlug,
+    authorId: row.authorId,
+    authorStaffSlug: row.authorStaffSlug,
+    fallbackName: ARTICLE_BRAND.ur.name,
+  });
+  const sectionUrl = row.categorySlug ? `${SITE_URL}/ur/category/${row.categorySlug}` : undefined;
   return articleMetaPayload({
     lang: "ur",
     title,
@@ -980,6 +1048,9 @@ function buildUrArticlePayload(
     updatedAt: row.updatedAt,
     status: row.status,
     author,
+    authorPerson,
+    section: row.categoryName,
+    sectionUrl,
     keywords: Array.isArray(seoData.keywords) ? seoData.keywords : [],
     contentHtml: row.content,
     semanticHtml: buildSemanticHtml({
@@ -1918,6 +1989,7 @@ const ROUTE_HANDLERS: RouteHandler[] = [
         .limit(SEO_ARCHIVE_PAGE_SIZE + 1);
       if (page > 1 && !sectionArticles.length) return null;
       const categoryPath = `/category/${row.englishSlug || slug}`;
+      const canonical = `${SITE_URL}${archiveHref(categoryPath, page)}`;
       const links = sectionArticles.slice(0, SEO_ARCHIVE_PAGE_SIZE).map(r => ({ href: `/article/${r.englishSlug || r.slug}`, title: r.title || "" }));
       if (page > 1) links.push({ href: archiveHref(categoryPath, page - 1), title: "الصفحة السابقة" });
       if (sectionArticles.length > SEO_ARCHIVE_PAGE_SIZE) links.push({ href: archiveHref(categoryPath, page + 1), title: "الصفحة التالية" });
@@ -1925,10 +1997,14 @@ const ROUTE_HANDLERS: RouteHandler[] = [
         title: `${displayName}${page > 1 ? ` — الصفحة ${page}` : ""} | سبق`,
         description: trunc(row.description || `أحدث الأخبار في ${displayName}`, 220),
         image: row.heroImageUrl ? abs(row.heroImageUrl) : BRAND_OG_IMAGE,
-        canonical: `${SITE_URL}${archiveHref(categoryPath, page)}`,
+        canonical,
         robots: "index,follow",
         type: "website",
         locale: "ar_SA",
+        breadcrumbJsonLd: buildBreadcrumbListJsonLd([
+          { name: "الرئيسية", item: `${SITE_URL}/` },
+          { name: displayName || slug, item: canonical },
+        ]),
         semanticHtml: buildLinkListHtml(
           `أحدث الأخبار في ${displayName}`,
           links,
@@ -1939,9 +2015,10 @@ const ROUTE_HANDLERS: RouteHandler[] = [
   },
   // English category: /en/category/:slug
   {
-    pattern: /^\/en\/category\/([^/?#]+)/,
+    pattern: /^\/en\/category\/([^/?#]+)\/?(?:\?page=(\d+))?$/,
     handle: async (m) => {
       const slug = safeDecode(m[1]);
+      const page = Number(m[2] || 1);
       const [row] = await db
         .select({
           id: enCategories.id,
@@ -1966,14 +2043,20 @@ const ROUTE_HANDLERS: RouteHandler[] = [
         .where(and(eq(enArticles.categoryId, row.id), eq(enArticles.status, "published")))
         .orderBy(desc(enArticles.publishedAt))
         .limit(40);
+      const categoryPath = `/en/category/${row.slug}`;
+      const canonical = `${SITE_URL}${archiveHref(categoryPath, page)}`;
       return {
-        title: `${row.name} | Sabq`,
+        title: `${row.name}${page > 1 ? ` — Page ${page}` : ""} | Sabq`,
         description: trunc(row.description || `Latest news in ${row.name}`, 220),
         image: row.heroImageUrl ? abs(row.heroImageUrl) : BRAND_OG_IMAGE,
-        canonical: `${SITE_URL}/en/category/${row.slug}`,
+        canonical,
         robots: "index,follow",
         type: "website",
         locale: "en_US",
+        breadcrumbJsonLd: buildBreadcrumbListJsonLd([
+          { name: "Home", item: `${SITE_URL}/en` },
+          { name: row.name || slug, item: canonical },
+        ]),
         semanticHtml: buildLinkListHtml(
           `Latest news in ${row.name}`,
           sectionArticles.map((r) => ({
@@ -1986,9 +2069,10 @@ const ROUTE_HANDLERS: RouteHandler[] = [
   },
   // Urdu category: /ur/category/:slug
   {
-    pattern: /^\/ur\/category\/([^/?#]+)/,
+    pattern: /^\/ur\/category\/([^/?#]+)\/?(?:\?page=(\d+))?$/,
     handle: async (m) => {
       const slug = safeDecode(m[1]);
+      const page = Number(m[2] || 1);
       const [row] = await db
         .select({
           name: urCategories.name,
@@ -2000,14 +2084,20 @@ const ROUTE_HANDLERS: RouteHandler[] = [
         .where(eq(urCategories.slug, slug))
         .limit(1);
       if (!row) return null;
+      const categoryPath = `/ur/category/${row.slug}`;
+      const canonical = `${SITE_URL}${archiveHref(categoryPath, page)}`;
       return {
-        title: `${row.name} | سبق`,
+        title: `${row.name}${page > 1 ? ` — صفحہ ${page}` : ""} | سبق`,
         description: trunc(row.description || `تازہ ترین خبریں: ${row.name}`, 220),
         image: row.heroImageUrl ? abs(row.heroImageUrl) : BRAND_OG_IMAGE,
-        canonical: `${SITE_URL}/ur/category/${row.slug}`,
+        canonical,
         robots: "index,follow",
         type: "website",
         locale: "ur_PK",
+        breadcrumbJsonLd: buildBreadcrumbListJsonLd([
+          { name: "سرورق", item: `${SITE_URL}/ur` },
+          { name: row.name || slug, item: canonical },
+        ]),
       };
     },
   },
@@ -3033,13 +3123,25 @@ router.get("/api/articles/:slug/seo-bundle", seoProjectionCacheMiddleware, async
       const r = await fetchEnArticle(slug);
       if (r) {
         row = r;
+        category = r.categoryName || null;
+        categoryHref = r.categorySlug ? `/en/category/${r.categorySlug}` : null;
         meta = await buildEnArticlePayload(r, slug);
+        reporterHref =
+          typeof meta.jsonLd.author === "object" && meta.jsonLd.author && "url" in meta.jsonLd.author
+            ? String(meta.jsonLd.author.url)
+            : null;
       }
     } else if (lang === "ur") {
       const r = await fetchUrArticle(slug);
       if (r) {
         row = r;
+        category = r.categoryName || null;
+        categoryHref = r.categorySlug ? `/ur/category/${r.categorySlug}` : null;
         meta = buildUrArticlePayload(r, slug);
+        reporterHref =
+          typeof meta.jsonLd.author === "object" && meta.jsonLd.author && "url" in meta.jsonLd.author
+            ? String(meta.jsonLd.author.url)
+            : null;
       }
     } else {
       const r = await fetchArArticle(slug);

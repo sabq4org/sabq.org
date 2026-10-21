@@ -1,6 +1,6 @@
 # SEO و SSR (`seo-ssr`)
 
-> آخر مراجعة: 2026-10-16 (صفحات الخدمة داخل تخطيط المقال) | المالك: platform
+> آخر مراجعة: 2026-10-21 (توحيد Canonical وNewsArticle وBreadcrumbList وتحويل `_cb`) | المالك: platform
 
 ## الغرض
 ميتادات للدوالش، إعادة توجيه السلاق، وSSR للمحتوى العام عبر `web-next`.
@@ -126,4 +126,11 @@
 - `GET/HEAD /services/:id` يتبع المقال: القارئ يأخذ قشرة SPA (`client/src/pages/ServiceDatePage.tsx`) داخل الهيدر والفوتر. الزاحف، مع `SSR_ROUTES=on`، يأخذ `web-next/app/services/[id]` ويُقبل الرد فقط إذا احتوى `h1` وJSON-LD. عند سقوط SSR تُحقن الميتا من `buildServicePageEdgeMeta`، ومنها `dateModified` وصورة `GET /api/service-pages/:id/og.png`. المعرّف غير المعروف يعيد 404 مع noindex. المضيف غير `sabq.org` يبقى noindex. التفاصيل في [`docs/systems/mawaeed/SYSTEM.md`](../mawaeed/SYSTEM.md).
 - المصدر `GET /api/mawaeed` على Railway. الفشل 503 مع `noindex` و`no-store` ولا سقوط إلى القشرة. `dateModified` يأتي من JSON (`content_updated_at`) لا من ساعة الطلب.
 - كاش المتصفح `private, no-cache`. `CDN-Cache-Control: public, max-age=60`. مفتاح Workers يضم المنطقة ووسم النشر حتى لا تختلط نسخة الرياض بمكة. المسح العادي لا يفرغ مفاتيح Workers المخصصة.
+
+## توحيد Canonical وNewsArticle وBreadcrumbList وإزالة `_cb` — 2026-10-21
+
+- **تحويل `_cb`:** أي طلب صفحة HTML (`GET`/`HEAD` خارج `/api/*` والأصول الثابتة) يحمل معامل `_cb` يُعاد توجيهه `301` إلى الرابط النظيف بلا `_cb` في `functions/_middleware.js` و`slugRedirectMiddleware` و`seoInjectorMiddleware`، مع عدم حظر `_cb` في `robots.txt`.
+- **Canonical و`?page=`:** لكل مقال وتصنيف رابط canonical مطلق واحد داخل `<head>` يطابق `og:url` و`mainEntityOfPage`، مع شبكة أمان `ensureFallbackCanonical` عند غياب ميتا الحافة. صفحات التصنيفات (`/category/:slug` و`/en|ur/category/:slug`) تحتفظ بمعامل `?page=N` (عند `N > 1`) وتجرّد بقية المعاملات.
+- **NewsArticle وBreadcrumbList:** تواريخ `datePublished` و`dateModified` بصيغة ISO 8601 بتوقيت الرياض `+03:00` (`toRiyadhIso`)، والكاتب `Person` مع الاسم ورابط صفحته عند وجود محرر مسمّى وإلا `Organization` باسم «صحيفة سبق»، والناشر `NewsMediaOrganization` مع `url` و`logo`، وحذف كتل JSON-LD الموروثة من القشرة عند حقن مخطط الصفحة، وتوليد `BreadcrumbList` مضمون الأسماء (`buildBreadcrumbListJsonLd`) للمقالات والتصنيفات ومواعيدك.
+
 

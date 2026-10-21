@@ -104,12 +104,15 @@ export default async function HomePage() {
       "@context": "https://schema.org",
       "@type": "ItemList",
       name: "أحدث الأخبار على سبق",
-      itemListElement: bundle.articles.slice(0, 30).map((item, index) => ({
-        "@type": "ListItem",
-        position: index + 1,
-        url: `${siteUrl}${item.href}`,
-        name: item.title,
-      })),
+      itemListElement: bundle.articles
+        .filter((item) => item.title && item.title.trim())
+        .slice(0, 30)
+        .map((item, index) => ({
+          "@type": "ListItem",
+          position: index + 1,
+          url: `${siteUrl}${item.href}`,
+          name: item.title.trim(),
+        })),
     },
   ];
 

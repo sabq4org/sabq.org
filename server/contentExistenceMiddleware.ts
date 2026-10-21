@@ -113,7 +113,7 @@ export async function contentExistenceMiddleware(
       const [category] = await db
         .select({ id: categories.id })
         .from(categories)
-        .where(eq(categories.slug, slug))
+        .where(or(eq(categories.slug, slug), eq(categories.englishSlug, slug)))
         .limit(1);
 
       if (!category) {

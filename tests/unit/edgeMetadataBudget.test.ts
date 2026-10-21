@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 // @ts-expect-error Pages middleware has no TypeScript declaration.
-import { cachedJson, onRequest, seoRequestPath } from '../../functions/_middleware.js';
+import { cachedJson, cleanCanonicalForUrl, onRequest, seoRequestPath } from '../../functions/_middleware.js';
 const match = vi.fn();
 const put = vi.fn();
 const fetcher = vi.fn();
@@ -56,8 +56,46 @@ describe('Pages metadata budget', () => {
 
   it('preserves only positive pagination on category and author SEO paths', () => {
     expect(seoRequestPath('https://sabq.org/category/saudi?page=2&utm_source=x')).toBe('/category/saudi?page=2');
+    expect(seoRequestPath('https://sabq.org/en/category/world?page=3&_cb=1')).toBe('/en/category/world?page=3');
     expect(seoRequestPath('https://sabq.org/author/name?page=0&utm_source=x')).toBe('/author/name?page=0');
     expect(seoRequestPath('https://sabq.org/article/story?page=2&utm_source=x')).toBe('/article/story');
+  });
+
+  it('301 redirects HTML GET and HEAD requests carrying _cb to the clean URL while leaving /api/* untouched', async () => {
+    const next = vi.fn();
+    for (const method of ['GET', 'HEAD']) {
+      const res = await onRequest({
+        ...context,
+        request: new Request('https://sabq.org/category/saudia?_cb=1', {
+          method,
+          headers: { Accept: 'text/html' },
+        }),
+        env: { EDGE_SEO: 'on' },
+        next,
+      });
+      expect(res.status).toBe(301);
+      expect(res.headers.get('location')).toBe('https://sabq.org/category/saudia');
+    }
+
+    const pagedRes = await onRequest({
+      ...context,
+      request: new Request('https://sabq.org/category/saudia?_cb=123&page=2', {
+        method: 'GET',
+        headers: { Accept: 'text/html' },
+      }),
+      env: { EDGE_SEO: 'on' },
+      next,
+    });
+    expect(pagedRes.status).toBe(301);
+    expect(pagedRes.headers.get('location')).toBe('https://sabq.org/category/saudia?page=2');
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  it('computes clean canonical URLs for articles and paginated categories', () => {
+    expect(cleanCanonicalForUrl('https://sabq.org/article/6ihtdc4?_cb=1&utm_source=x')).toBe('https://sabq.org/article/6ihtdc4');
+    expect(cleanCanonicalForUrl('https://sabq.org/category/saudia?_cb=1&utm_source=x')).toBe('https://sabq.org/category/saudia');
+    expect(cleanCanonicalForUrl('https://sabq.org/category/saudia?page=1&utm_source=x')).toBe('https://sabq.org/category/saudia');
+    expect(cleanCanonicalForUrl('https://sabq.org/category/saudia?page=2&_cb=1&utm_source=x')).toBe('https://sabq.org/category/saudia?page=2');
   });
 
   it('serves a cache hit without contacting origin', async () => {

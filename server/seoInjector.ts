@@ -18,8 +18,10 @@ import path from "path";
 import { withCache, CACHE_TTL } from "./memoryCache";
 import { VALID_PREFIXES } from "./utils/spaRouteMatcher";
 import { isNoindexPath } from "./utils/noindexPaths";
-import { buildNewsArticleSchemaExtras, getArticleSchemaType } from "./utils/newsArticleSchema";
-import { getPublicEditorialModifiedAt } from "./utils/editorialDates";
+import { buildBreadcrumbListJsonLd, buildNewsArticleSchemaExtras, getArticleSchemaType } from "./utils/newsArticleSchema";
+import { getPublicEditorialModifiedAt, toRiyadhIso } from "./utils/editorialDates";
+import { archiveHref, archivePage } from "./utils/seoArchive";
+import { redirectTargetWithSearch } from "./middleware/slugRedirect";
 import {
   buildPersonJsonLd,
   buildProfilePageJsonLd,
@@ -67,7 +69,7 @@ function getSocialImageFilename(url: string): string | null {
 }
 
 function ensureAbsoluteUrl(url: string, baseUrl: string): string {
-  if (!url) return `${baseUrl}/icon.png`;
+  if (!url) return `${baseUrl}/branding/sabq-og-image.png`;
   if (url.startsWith('http://') || url.startsWith('https://')) return url;
 
   const parsed = parseStorageUrl(url);
@@ -150,6 +152,7 @@ interface SeoData {
   articleAuthor?: string;
   twitterSite: string;
   jsonLd?: object;
+  breadcrumbJsonLd?: object;
   semanticHtml?: string;
   preloadImage?: string;
   robots?: string;
@@ -170,9 +173,14 @@ function injectSeoIntoHtml(html: string, seo: SeoData): string {
     `<meta name="description" content="${safeDesc}">`
   );
 
+  result = result.replace(/<link\s+rel="canonical"\s+href="[^"]*"\s*\/?>\s*\n?/gi, '');
+  result = result.replace(/<meta\s+name="robots"\s+content="[^"]*"\s*\/?>\s*\n?/gi, '');
   result = result.replace(/<meta\s+property="og:[^"]*"\s+content="[^"]*"\s*\/?>\s*\n?/g, '');
   result = result.replace(/<meta\s+name="twitter:[^"]*"\s+content="[^"]*"\s*\/?>\s*\n?/g, '');
   result = result.replace(/<meta\s+property="twitter:[^"]*"\s+content="[^"]*"\s*\/?>\s*\n?/g, '');
+  if (seo.jsonLd || seo.breadcrumbJsonLd) {
+    result = result.replace(/<script\s+type="application\/ld\+json">[\s\S]*?<\/script>\s*\n?/gi, '');
+  }
 
   const isArticlePage = seo.ogType === 'article' && !!seo.publishedTime;
   let robotsContent = seo.robots || (isArticlePage ? 'index, follow, max-image-preview:large' : 'index, follow');
@@ -220,6 +228,7 @@ function injectSeoIntoHtml(html: string, seo: SeoData): string {
   <meta name="twitter:description" content="${safeDesc}">
   <meta name="twitter:image" content="${safeImage}">
   ${seo.jsonLd ? `<script type="application/ld+json">${JSON.stringify(seo.jsonLd).replace(/</g, '\\u003c')}</script>` : ''}
+  ${seo.breadcrumbJsonLd ? `<script type="application/ld+json">${JSON.stringify(seo.breadcrumbJsonLd).replace(/</g, '\\u003c')}</script>` : ''}
   <!-- End SEO Injected -->`;
 
   result = result.replace('</head>', `${metaTags}\n</head>`);
@@ -258,6 +267,8 @@ async function handleArticlePage(slug: string, baseUrl: string, urlPrefix: strin
         articleType: articles.articleType,
         status: articles.status,
         categoryName: categories.nameAr,
+        categorySlug: categories.slug,
+        categoryEnglishSlug: categories.englishSlug,
         authorId: articles.authorId,
         reporterId: articles.reporterId,
         authorFirstName: users.firstName,
@@ -296,9 +307,9 @@ async function handleArticlePage(slug: string, baseUrl: string, urlPrefix: strin
   // newspaper brand when neither is available.
   const reporterName = [a.reporterFirstName, a.reporterLastName].filter(Boolean).join(' ');
   const editorName = [a.authorFirstName, a.authorLastName].filter(Boolean).join(' ');
-  const authorName = reporterName || editorName || 'صحيفة سبق الإلكترونية';
-  const publishedTime = a.publishedAt ? new Date(a.publishedAt).toISOString() : undefined;
-  const modifiedTime = getPublicEditorialModifiedAt(a.publishedAt, a.seoMetadata) || publishedTime;
+  const authorName = reporterName || editorName || 'صحيفة سبق';
+  const publishedTime = toRiyadhIso(a.publishedAt);
+  const modifiedTime = toRiyadhIso(getPublicEditorialModifiedAt(a.publishedAt, a.seoMetadata)) || publishedTime;
   const keywords = seoData.keywords || [];
   const schemaExtras = buildNewsArticleSchemaExtras(a.content, image, baseUrl);
   const authorPerson = buildArticleAuthorPerson(baseUrl, {
@@ -308,6 +319,7 @@ async function handleArticlePage(slug: string, baseUrl: string, urlPrefix: strin
     reporterStaffSlug: a.reporterStaffSlug,
     authorId: a.authorId,
     authorStaffSlug: a.authorStaffSlug,
+    fallbackName: 'صحيفة سبق',
   });
 
   const jsonLd = {
@@ -319,11 +331,13 @@ async function handleArticlePage(slug: string, baseUrl: string, urlPrefix: strin
     "image": schemaExtras.image,
     "datePublished": publishedTime,
     "dateModified": modifiedTime,
+    "inLanguage": "ar",
     "author": authorPerson,
     "publisher": {
       "@type": "NewsMediaOrganization",
       "name": "صحيفة سبق الإلكترونية",
-      "logo": { "@type": "ImageObject", "url": `${baseUrl}/branding/sabq-og-image.png` }
+      "url": baseUrl,
+      "logo": { "@type": "ImageObject", "url": `${baseUrl}/branding/sabq-og-image.png`, "width": 1200, "height": 630 }
     },
     "articleSection": a.categoryName || undefined,
     "keywords": keywords.length > 0 ? keywords : undefined,
@@ -331,6 +345,15 @@ async function handleArticlePage(slug: string, baseUrl: string, urlPrefix: strin
     ...(schemaExtras.articleBody ? { articleBody: schemaExtras.articleBody } : {}),
     ...(schemaExtras.wordCount ? { wordCount: schemaExtras.wordCount } : {}),
   };
+
+  const catSlug = a.categoryEnglishSlug || a.categorySlug;
+  const breadcrumbJsonLd = buildBreadcrumbListJsonLd([
+    { name: "الرئيسية", item: `${baseUrl}/` },
+    ...(a.categoryName && catSlug
+      ? [{ name: a.categoryName, item: `${baseUrl}/category/${catSlug}` }]
+      : []),
+    { name: title, item: canonicalUrl },
+  ]);
 
   const safeTitle = escapeHtml(title);
   const safeExcerpt = escapeHtml(truncate(a.excerpt || a.aiSummary || '', 300));
@@ -375,6 +398,7 @@ async function handleArticlePage(slug: string, baseUrl: string, urlPrefix: strin
     articleAuthor: authorName,
     twitterSite: '@sabq',
     jsonLd,
+    breadcrumbJsonLd,
     semanticHtml,
     preloadImage: image,
     hreflangLinks,
@@ -431,8 +455,8 @@ async function handleEnArticlePage(slug: string, baseUrl: string): Promise<SeoDa
   const reporterName = [a.reporterFirstName, a.reporterLastName].filter(Boolean).join(' ');
   const editorName = [a.authorFirstName, a.authorLastName].filter(Boolean).join(' ');
   const authorName = reporterName || editorName || 'Sabq News';
-  const publishedTime = a.publishedAt ? new Date(a.publishedAt).toISOString() : undefined;
-  let modifiedTime = a.updatedAt ? new Date(a.updatedAt).toISOString() : publishedTime;
+  const publishedTime = toRiyadhIso(a.publishedAt);
+  let modifiedTime = toRiyadhIso(a.updatedAt) || publishedTime;
   if (publishedTime && modifiedTime && a.publishedAt && a.updatedAt) {
     const pubMs = new Date(a.publishedAt).getTime();
     const updMs = new Date(a.updatedAt).getTime();
@@ -463,17 +487,24 @@ async function handleEnArticlePage(slug: string, baseUrl: string): Promise<SeoDa
     "image": schemaExtras.image,
     "datePublished": publishedTime,
     "dateModified": modifiedTime,
+    "inLanguage": "en",
     "author": authorPerson,
     "publisher": {
       "@type": "NewsMediaOrganization",
       "name": "Sabq News",
-      "logo": { "@type": "ImageObject", "url": `${baseUrl}/branding/sabq-og-image.png` }
+      "url": baseUrl,
+      "logo": { "@type": "ImageObject", "url": `${baseUrl}/branding/sabq-og-image.png`, "width": 1200, "height": 630 }
     },
     "keywords": keywords.length > 0 ? keywords : undefined,
     "speakable": schemaExtras.speakable,
     ...(schemaExtras.articleBody ? { articleBody: schemaExtras.articleBody } : {}),
     ...(schemaExtras.wordCount ? { wordCount: schemaExtras.wordCount } : {}),
   };
+
+  const breadcrumbJsonLd = buildBreadcrumbListJsonLd([
+    { name: "Home", item: `${baseUrl}/` },
+    { name: title, item: canonicalUrl },
+  ]);
 
   const safeTitle = escapeHtml(title);
   const safeExcerpt = escapeHtml(truncate(a.excerpt || a.aiSummary || '', 300));
@@ -514,6 +545,7 @@ async function handleEnArticlePage(slug: string, baseUrl: string): Promise<SeoDa
     modifiedTime,
     twitterSite: '@sabq',
     jsonLd,
+    breadcrumbJsonLd,
     semanticHtml,
     preloadImage: image,
     hreflangLinks,
@@ -569,8 +601,8 @@ async function handleUrArticlePage(slug: string, baseUrl: string): Promise<SeoDa
   const reporterName = [a.reporterFirstName, a.reporterLastName].filter(Boolean).join(' ');
   const editorName = [a.authorFirstName, a.authorLastName].filter(Boolean).join(' ');
   const authorName = reporterName || editorName || 'سبق نیوز';
-  const publishedTime = a.publishedAt ? new Date(a.publishedAt).toISOString() : undefined;
-  let modifiedTime = a.updatedAt ? new Date(a.updatedAt).toISOString() : publishedTime;
+  const publishedTime = toRiyadhIso(a.publishedAt);
+  let modifiedTime = toRiyadhIso(a.updatedAt) || publishedTime;
   if (publishedTime && modifiedTime && a.publishedAt && a.updatedAt) {
     const pubMs = new Date(a.publishedAt).getTime();
     const updMs = new Date(a.updatedAt).getTime();
@@ -600,17 +632,24 @@ async function handleUrArticlePage(slug: string, baseUrl: string): Promise<SeoDa
     "image": schemaExtras.image,
     "datePublished": publishedTime,
     "dateModified": modifiedTime,
+    "inLanguage": "ur",
     "author": authorPerson,
     "publisher": {
       "@type": "NewsMediaOrganization",
       "name": "سبق نیوز",
-      "logo": { "@type": "ImageObject", "url": `${baseUrl}/branding/sabq-og-image.png` }
+      "url": baseUrl,
+      "logo": { "@type": "ImageObject", "url": `${baseUrl}/branding/sabq-og-image.png`, "width": 1200, "height": 630 }
     },
     "keywords": keywords.length > 0 ? keywords : undefined,
     "speakable": schemaExtras.speakable,
     ...(schemaExtras.articleBody ? { articleBody: schemaExtras.articleBody } : {}),
     ...(schemaExtras.wordCount ? { wordCount: schemaExtras.wordCount } : {}),
   };
+
+  const breadcrumbJsonLd = buildBreadcrumbListJsonLd([
+    { name: "سرورق", item: `${baseUrl}/` },
+    { name: title, item: canonicalUrl },
+  ]);
 
   const safeTitle = escapeHtml(title);
   const safeExcerpt = escapeHtml(truncate(a.excerpt || a.aiSummary || '', 300));
@@ -639,13 +678,14 @@ async function handleUrArticlePage(slug: string, baseUrl: string): Promise<SeoDa
     modifiedTime,
     twitterSite: '@sabq',
     jsonLd,
+    breadcrumbJsonLd,
     semanticHtml,
     preloadImage: image,
     hreflangLinks,
   };
 }
 
-async function handleCategoryPage(slug: string, baseUrl: string): Promise<SeoData | null> {
+async function handleCategoryPage(slug: string, baseUrl: string, page = 1): Promise<SeoData | null> {
   const category = await withCache(`seo:category:${slug}`, CACHE_TTL.LONG, async () =>
     db
       .select({
@@ -664,11 +704,15 @@ async function handleCategoryPage(slug: string, baseUrl: string): Promise<SeoDat
   if (!category.length) return null;
 
   const c = category[0];
-  const title = `${c.nameAr} — سبق`;
+  const title = `${c.nameAr}${page > 1 ? ` — الصفحة ${page}` : ''} — سبق`;
   const description = c.description || `أخبار ${c.nameAr} على مدار الساعة من صحيفة سبق الإلكترونية`;
   const image = ensureAbsoluteUrl(c.heroImageUrl || '', baseUrl);
   const canonicalSlug = c.englishSlug || c.slug;
-  const canonicalUrl = `${baseUrl}/category/${canonicalSlug}`;
+  const canonicalUrl = `${baseUrl}${archiveHref(`/category/${canonicalSlug}`, page)}`;
+  const breadcrumbJsonLd = buildBreadcrumbListJsonLd([
+    { name: "الرئيسية", item: `${baseUrl}/` },
+    { name: c.nameAr || canonicalSlug, item: canonicalUrl },
+  ]);
 
   return {
     title,
@@ -679,6 +723,7 @@ async function handleCategoryPage(slug: string, baseUrl: string): Promise<SeoDat
     ogLocale: 'ar_SA',
     ogSiteName: 'صحيفة سبق الإلكترونية',
     twitterSite: '@sabq',
+    breadcrumbJsonLd,
   };
 }
 
@@ -1498,24 +1543,32 @@ async function handleSportsTeamPage(id: string, baseUrl: string): Promise<SeoDat
   };
 }
 
-async function handleLocalizedCategoryPage(slug: string, baseUrl: string, pathname: string): Promise<SeoData | null> {
+async function handleLocalizedCategoryPage(slug: string, baseUrl: string, pathname: string, page = 1): Promise<SeoData | null> {
   const isEn = pathname.startsWith('/en/');
   const display = slug.replace(/[-_]+/g, ' ');
+  const canonicalUrl = `${baseUrl}${archiveHref(pathname, page)}`;
+  const breadcrumbJsonLd = buildBreadcrumbListJsonLd([
+    { name: isEn ? "Home" : "سرورق", item: `${baseUrl}/${isEn ? "en" : "ur"}` },
+    { name: display, item: canonicalUrl },
+  ]);
   return {
-    title: isEn ? `${display} — Sabq` : `${display} — سبق`,
+    title: isEn
+      ? `${display}${page > 1 ? ` — Page ${page}` : ''} — Sabq`
+      : `${display}${page > 1 ? ` — صفحہ ${page}` : ''} — سبق`,
     description: isEn
       ? `Latest ${display} news on Sabq News.`
       : `آخر أخبار ${display} على صحيفة سبق الإلكترونية.`,
-    canonicalUrl: `${baseUrl}${pathname}`,
+    canonicalUrl,
     ogType: 'website',
     ogImage: `${baseUrl}/branding/sabq-og-image.png`,
     ogLocale: isEn ? 'en_US' : 'ur_PK',
     ogSiteName: isEn ? 'Sabq News' : 'سبق نیوز',
     twitterSite: '@sabq',
+    breadcrumbJsonLd,
   };
 }
 
-async function resolveSeoData(route: { type: string; slug?: string; angleSlug?: string; mvi?: string; pathname?: string }, baseUrl: string): Promise<SeoData | null> {
+async function resolveSeoData(route: { type: string; slug?: string; angleSlug?: string; mvi?: string; pathname?: string; page?: number }, baseUrl: string): Promise<SeoData | null> {
   switch (route.type) {
     case 'article':
       return handleArticlePage(route.slug!, baseUrl, 'article');
@@ -1526,9 +1579,9 @@ async function resolveSeoData(route: { type: string; slug?: string; angleSlug?: 
     case 'ur-article':
       return handleUrArticlePage(route.slug!, baseUrl);
     case 'category':
-      return handleCategoryPage(route.slug!, baseUrl);
+      return handleCategoryPage(route.slug!, baseUrl, route.page || 1);
     case 'category-localized':
-      return handleLocalizedCategoryPage(route.slug!, baseUrl, route.pathname!);
+      return handleLocalizedCategoryPage(route.slug!, baseUrl, route.pathname!, route.page || 1);
     case 'keyword':
       return handleKeywordPage(route.slug!, baseUrl, 'ar');
     case 'keyword-en':
@@ -1610,15 +1663,29 @@ export async function seoInjectorMiddleware(req: Request, res: Response, next: N
 
     if (SKIP_PREFIXES.some(prefix => pathname.startsWith(prefix))) return next();
     if (FILE_EXT_REGEX.test(pathname)) return next();
+    if (req.method !== 'GET' && req.method !== 'HEAD') return next();
+
+    if (req.query._cb !== undefined) {
+      const cleanPath = pathname !== '/' && pathname.endsWith('/') ? pathname.replace(/\/+$/, '') : pathname;
+      res.redirect(301, redirectTargetWithSearch(cleanPath, req.originalUrl || req.url));
+      return;
+    }
+
     if (req.method !== 'GET') return next();
 
     const hasTrackingParams = ['utm_source', 'utm_medium', 'utm_campaign', 'fbclid', 'gclid', 'ref'].some(p => req.query[p]);
     const hasFilterParams = ['sort', 'filter'].some(p => req.query[p]);
-    const pageNum = parseInt(req.query.page as string) || 0;
-    const shouldNoindex = hasTrackingParams || hasFilterParams || pageNum > 5;
 
     const route = matchRoute(pathname);
     if (!route) return next();
+
+    const isCategoryRoute = route.type === 'category' || route.type === 'category-localized';
+    const parsedPage = archivePage(typeof req.query.page === 'string' ? req.query.page : undefined);
+    if (isCategoryRoute) {
+      (route as any).page = parsedPage ?? 1;
+    }
+    const pageNum = parseInt(req.query.page as string) || 0;
+    const shouldNoindex = hasTrackingParams || hasFilterParams || (!isCategoryRoute && pageNum > 5) || (isCategoryRoute && parsedPage === null);
 
     if (route.type === 'sponsored' && req.query.mvi) {
       (route as any).mvi = String(req.query.mvi);

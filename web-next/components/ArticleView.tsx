@@ -53,30 +53,41 @@ export function ArticleView({
   const updatedLabel = lang === "en" ? "Updated" : lang === "ur" ? "آخری تازہ کاری" : "آخر تحديث";
   const timezoneLabel = lang === "en" ? "Riyadh time" : lang === "ur" ? "ریاض کا وقت" : "بتوقيت الرياض";
   const aiImageLabel = lang === "en" ? "AI-generated image" : lang === "ur" ? "مصنوعی ذہانت سے تیار کردہ تصویر" : "صورة مولدة بالذكاء الاصطناعي";
-  const siteUrl = process.env.PUBLIC_SITE_URL || "https://sabq.org";
+  const siteUrl = (process.env.PUBLIC_SITE_URL || "https://sabq.org").replace(/\/+$/, "");
+  const categoryName = (bundle.category || "").trim();
+  const categoryItemUrl = bundle.categoryHref
+    ? bundle.categoryHref.startsWith("http")
+      ? bundle.categoryHref
+      : `${siteUrl}${bundle.categoryHref.startsWith("/") ? "" : "/"}${bundle.categoryHref}`
+    : null;
+  const articleTitle = (bundle.title || bundle.meta.title || "").trim();
   const breadcrumbItems = [
     {
       "@type": "ListItem",
       position: 1,
       name: lang === "en" ? "Home" : lang === "ur" ? "سرورق" : "الرئيسية",
-      item: siteUrl,
+      item: `${siteUrl}/`,
     },
-    ...(bundle.category && bundle.categoryHref
+    ...(categoryName && categoryItemUrl
       ? [
           {
             "@type": "ListItem",
             position: 2,
-            name: bundle.category,
-            item: `${siteUrl}${bundle.categoryHref}`,
+            name: categoryName,
+            item: categoryItemUrl,
           },
         ]
       : []),
-    {
-      "@type": "ListItem",
-      position: bundle.category && bundle.categoryHref ? 3 : 2,
-      name: bundle.title,
-      item: bundle.meta.canonical,
-    },
+    ...(articleTitle
+      ? [
+          {
+            "@type": "ListItem",
+            position: categoryName && categoryItemUrl ? 3 : 2,
+            name: articleTitle,
+            ...(bundle.meta.canonical ? { item: bundle.meta.canonical } : {}),
+          },
+        ]
+      : []),
   ];
   const breadcrumbJsonLd = {
     "@context": "https://schema.org",
