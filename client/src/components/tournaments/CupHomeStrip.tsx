@@ -236,11 +236,11 @@ function PreSeasonBlock({ preSeason, theme }: { preSeason: CupPreSeason; theme: 
       {opener && (
         <p className={`flex items-center gap-1.5 text-[11px] ${theme.soft}`}>
           الافتتاح:
-          <img src={opener.home.logo} alt={opener.home.name} className="h-4 w-4 rounded-full bg-white p-px object-contain" loading="lazy" />
+          <img src={opener.home.logo} alt={opener.home.name} width={16} height={16} className="h-4 w-4 rounded-full bg-white p-px object-contain" loading="lazy" decoding="async" />
           <b className="text-white">{opener.home.name}</b>
           ×
           <b className="text-white">{opener.away.name}</b>
-          <img src={opener.away.logo} alt={opener.away.name} className="h-4 w-4 rounded-full bg-white p-px object-contain" loading="lazy" />
+          <img src={opener.away.logo} alt={opener.away.name} width={16} height={16} className="h-4 w-4 rounded-full bg-white p-px object-contain" loading="lazy" decoding="async" />
         </p>
       )}
     </div>
@@ -251,7 +251,7 @@ function TeamChip({ team }: { team: CupTeam }) {
   return (
     <div className="flex items-center gap-2 min-w-0">
       <span className="h-9 w-9 shrink-0 rounded-full bg-white p-1 ring-2 ring-white/15 shadow">
-        <img src={team.logo} alt={team.name} className="h-full w-full object-contain" loading="lazy" />
+        <img src={team.logo} alt={team.name} width={28} height={28} className="h-full w-full object-contain" loading="lazy" decoding="async" />
       </span>
       <span className="text-sm font-extrabold text-white truncate">{team.name}</span>
     </div>
@@ -317,8 +317,11 @@ function ChampionBlock({
         <img
           src={champion.team.logo}
           alt={champion.team.name}
+          width={44}
+          height={44}
           className="h-full w-full object-contain"
           loading="lazy"
+          decoding="async"
         />
         <Trophy className="absolute -bottom-1 -left-1 h-5 w-5 text-amber-300 drop-shadow" />
       </span>
@@ -403,8 +406,11 @@ export default function CupHomeStrip({
                     <img
                       src={emblemSrc}
                       alt={emblemAlt ?? title}
-                      className="h-11 w-auto object-contain"
+                      width={44}
+                      height={44}
+                      className="h-11 w-11 object-contain"
                       loading="lazy"
+                      decoding="async"
                     />
                   </span>
                 ) : (

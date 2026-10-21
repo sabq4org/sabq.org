@@ -16,8 +16,21 @@ import {
 import { ChangeChip } from "./ChangeChip";
 import { fmtCount, fmtPct, fmtSar, isFresh } from "./format";
 import { NewBadge } from "./NewBadge";
-import type { EconomySnapshot } from "./types";
-import { MonthlyCardView } from "./MonthlyModule";
+import { cn } from "@/lib/utils";
+import type { EconomySnapshot, MonthlyCard } from "./types";
+
+function MonthlyCardView({ c, compact = false }: { c: MonthlyCard; compact?: boolean }) {
+  const tone = c.tone === "up" ? "text-emerald-700 dark:text-emerald-300" : c.tone === "down" ? "text-red-700 dark:text-red-300" : "text-foreground";
+  return (
+    <article className={cn("rounded-xl border border-card-border bg-card p-4 border-t-[3px]", c.tone === "up" ? "border-t-emerald-500" : c.tone === "down" ? "border-t-red-500" : "border-t-primary")} data-testid={`economy-monthly-card-${c.key}`}>
+      <div className="text-[11px] text-muted-foreground">{c.cardTitle}</div>
+      <h4 className={cn("mt-1 font-bold leading-snug", compact ? "text-[14px]" : "text-[15px] sm:text-base")}>{c.headline}</h4>
+      <div className={cn("mt-2 font-extrabold tabular-nums", compact ? "text-xl" : "text-2xl", tone)}>{c.figure}</div>
+      <div className="mt-1 text-xs text-muted-foreground">{c.detailAr}</div>
+    </article>
+  );
+}
+
 
 const ICONS: Record<string, LucideIcon> = {
   "Restaurants & Cafés": Utensils,
@@ -75,10 +88,14 @@ function EconomyHomeTeaser({ title, figure, unit, unitNote, caption, badge, cta,
 }
 
 export function EconomyNumbersBlock() {
-  const { data } = useQuery<EconomySnapshot | null>({ queryKey: ["/api/economy/snapshot"], staleTime: 5 * 60_000, refetchInterval: 10 * 60_000 });
+  const { data, isLoading } = useQuery<EconomySnapshot | null>({ queryKey: ["/api/economy/snapshot"], staleTime: 5 * 60_000, refetchInterval: 10 * 60_000 });
   const isMobile = useIsMobile();
   const w = data?.weekly;
   const m = data?.monthly;
+
+  if (isLoading) {
+    return <div className="min-h-[148px] md:min-h-[212px]" aria-hidden="true" />;
+  }
 
   // نشرة شهرية جديدة (48 ساعة) → البلوك يتحول إلى «السعوديون في شهر»
   if (m && isFresh(m.ingestedAt) && m.cards.length >= 3) {

@@ -27,10 +27,31 @@
  */
 @font-face {
   font-family: "IBM Plex Sans Arabic Fallback";
-  src: local("Arial"), local("ArialMT");
+  src: local("Arial"), local("ArialMT"), local("Tahoma"), local("DejaVu Sans"), local("Noto Sans Arabic"), local("Liberation Sans");
+  font-weight: 400;
   size-adjust: 94.69%;
   ascent-override: 108.25%;
   descent-override: 29.04%;
+  line-gap-override: 0%;
+}
+
+@font-face {
+  font-family: "IBM Plex Sans Arabic Fallback";
+  src: local("Arial Bold"), local("Arial-BoldMT"), local("Tahoma Bold"), local("DejaVu Sans Bold"), local("Noto Sans Arabic Bold"), local("Liberation Sans Bold");
+  font-weight: 600 900;
+  size-adjust: 94.69%;
+  ascent-override: 108.25%;
+  descent-override: 29.04%;
+  line-gap-override: 0%;
+}
+
+@font-face {
+  font-family: "Tajawal Fallback";
+  src: local("Arial Bold"), local("Arial-BoldMT"), local("Tahoma Bold"), local("DejaVu Sans Bold"), local("Noto Sans Arabic Bold");
+  font-weight: 400 900;
+  size-adjust: 95%;
+  ascent-override: 105%;
+  descent-override: 25%;
   line-gap-override: 0%;
 }
 
@@ -367,7 +388,7 @@ input, select, textarea {
   --radius: 1.3rem;
   --spacing: 0.25rem;
   --font-mono: Menlo, monospace;
-  --font-sans: Open Sans, sans-serif;
+  --font-sans: "IBM Plex Sans Arabic", "IBM Plex Sans Arabic Fallback", Inter, system-ui, sans-serif;
   --font-serif: Georgia, serif;
   --tracking-normal: 0em;
 
@@ -383,13 +404,13 @@ input, select, textarea {
 :root,
 [data-variant="ai-first"] {
   --variant-primary: 203.7736 87.6033% 52.5490%;
-  --variant-font-family: "IBM Plex Sans Arabic", "IBM Plex Sans Arabic Fallback", "Open Sans", sans-serif;
+  --variant-font-family: "IBM Plex Sans Arabic", "IBM Plex Sans Arabic Fallback", Inter, system-ui, sans-serif;
   --variant-radius: 0.75rem;
 }
 
 [data-variant="magazine"] {
   --variant-primary: 24 95% 53%;
-  --variant-font-family: "Tajawal", "IBM Plex Sans Arabic", sans-serif;
+  --variant-font-family: "Tajawal", "Tajawal Fallback", "IBM Plex Sans Arabic", "IBM Plex Sans Arabic Fallback", sans-serif;
   --variant-radius: 0rem;
 }
 
