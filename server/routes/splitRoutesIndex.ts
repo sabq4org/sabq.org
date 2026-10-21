@@ -42,6 +42,7 @@ import botDraftsRouter from "./botDrafts";
 import botPublisherTokensRouter from "./botPublisherTokens";
 import botSocialRouter from "./botSocial";
 import publishFirstRouter from "./publishFirst";
+import articleHistoryRouter from "./articleHistory";
 import reportersAdminRouter from "./reportersAdmin";
 import replyPolishRouter from "./replyPolish";
 import deployWebhooksRouter from "./deployWebhooks";
@@ -169,6 +170,7 @@ export function registerSplitRoutes(app: Express) {
   // نشر X للبوت الخارجي — /api/internal/bot-social، توكن منفصل عن مسودات البوت
   app.use(botSocialRouter);
   app.use(publishFirstRouter);
+  app.use(articleHistoryRouter);
   app.use(reportersAdminRouter);
   app.use(replyPolishRouter);
   app.use(correspondentApplicationsRouter);

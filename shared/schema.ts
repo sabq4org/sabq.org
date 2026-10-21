@@ -1205,6 +1205,26 @@ export const articleRevisions = pgTable("article_revisions", {
   index("idx_article_revisions_article").on(table.articleId, table.createdAt.asc()),
 ]);
 
+// نسخة كاملة من المادة بعد كل حفظ من لوحة التحكم (السجل الزمني والاسترجاع).
+// إضافي فقط ولا يدخل في تنظيف السجلات؛ الشكل في shared/articleHistory.ts.
+export const articleVersions = pgTable("article_versions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  articleId: varchar("article_id").references(() => articles.id, { onDelete: "cascade" }).notNull(),
+  versionNumber: integer("version_number").notNull(),
+  action: text("action").notNull(), // baseline | created | updated | autosave | published | unpublished | archived | restored
+  actorId: varchar("actor_id").references(() => users.id, { onDelete: "set null" }),
+  snapshot: jsonb("snapshot").$type<Record<string, unknown>>().notNull(),
+  changedFields: jsonb("changed_fields").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+  restoredFromVersionId: varchar("restored_from_version_id"),
+  reason: text("reason"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("uq_article_versions_article_number").on(table.articleId, table.versionNumber),
+  index("idx_article_versions_article_created").on(table.articleId, table.createdAt.desc()),
+]);
+
+export type ArticleVersion = typeof articleVersions.$inferSelect;
+
 // تجاوز مسؤول لبوابة الحساسية. قابل للاستعلام ويُعرض في تاريخ المقال.
 export const articlePublishOverrides = pgTable("article_publish_overrides", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

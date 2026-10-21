@@ -145,6 +145,7 @@ import { staffCommunicationsService } from "./services/staffCommunications";
 import { cloudflareImagesService } from './services/cloudflareImagesService';
 import { isNewsImagePurpose, newsImageStorageService } from './services/newsImageStorageService';
 import { getArticleEventsWithActor, logArticleEvent } from './services/articleEventsService';
+import { recordArticleSave } from './services/articleHistoryService';
 import { extractGeoLocations } from "./services/geoExtractionService";
 import { analyzeSentiment, detectLanguage } from './sentiment-analyzer';
 import { classifyArticle } from './ai-classifier';
@@ -7819,24 +7820,10 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         });
       }
 
-      // Send notifications if article is published (fire-and-forget)
-      // Log article created event
-      logArticleEvent({
-        articleId: newArticle.id,
-        eventType: 'created',
-        actorId: req.user?.id,
-        summary: 'تم إنشاء الخبر',
-      }).catch(err => console.error("[CREATE ARTICLE] Failed to log event:", err));
-
-      // Log published event if article was created as published
-      if (newArticle.status === 'published') {
-        logArticleEvent({
-          articleId: newArticle.id,
-          eventType: 'published',
-          actorId: req.user?.id,
-          summary: 'تم نشر الخبر',
-        }).catch(err => console.error("[CREATE ARTICLE] Failed to log publish event:", err));
-      }
+      // السجل الزمني: النسخة الأولى (الأصل) وحدث الإدخال، ثم النشر إن أُنشئ منشورًا.
+      recordArticleSave({ before: null, after: newArticle, actorId: req.user?.id })
+        .then(() => newArticle.status === 'published' ? logArticleEvent({ articleId: newArticle.id, eventType: 'published', actorId: req.user?.id, summary: 'تم نشر الخبر' }) : undefined)
+        .catch(err => console.error("[CREATE ARTICLE] Failed to record history:", err));
 
       if (newArticle.status === 'published' && !newArticle.geoLocations) {
         extractGeoLocations(newArticle.title, newArticle.content || '').then(async (locations) => {
@@ -8552,32 +8539,9 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         });
       }
 
-      // Log article updated event with metadata about what changed
-      const changedFields: string[] = [];
-      if (existingArticle.title !== updatedArticle.title) changedFields.push('العنوان');
-      if (existingArticle.content !== updatedArticle.content) changedFields.push('المحتوى');
-      if (existingArticle.categoryId !== updatedArticle.categoryId) changedFields.push('التصنيف');
-      if (existingArticle.imageUrl !== updatedArticle.imageUrl) changedFields.push('الصورة');
-      if (existingArticle.excerpt !== updatedArticle.excerpt) changedFields.push('الملخص');
-      if (existingArticle.status !== updatedArticle.status) changedFields.push('الحالة');
-      
-      logArticleEvent({
-        articleId: updatedArticle.id,
-        eventType: 'updated',
-        actorId: req.user?.id,
-        summary: 'تم تحديث الخبر',
-        metadata: { changedFields },
-      }).catch(err => console.error("[UPDATE ARTICLE] Failed to log event:", err));
-
-      // Log published event if status changed to published
-      if (updatedArticle.status === "published" && existingArticle.status !== "published") {
-        logArticleEvent({
-          articleId: updatedArticle.id,
-          eventType: 'published',
-          actorId: req.user?.id,
-          summary: 'تم نشر الخبر',
-        }).catch(err => console.error("[UPDATE ARTICLE] Failed to log publish event:", err));
-      }
+      // السجل الزمني: نسخة كاملة بعد الحفظ + حدث بالقيم قبل وبعد (يشمل النشر وإلغاءه).
+      recordArticleSave({ before: existingArticle, after: updatedArticle, actorId: req.user?.id, autosave: req.body?.autosave === true })
+        .catch(err => console.error("[UPDATE ARTICLE] Failed to record history:", err));
 
       if (updatedArticle.status === 'published' && !updatedArticle.geoLocations) {
         extractGeoLocations(updatedArticle.title, updatedArticle.content || '').then(async (locations) => {
@@ -8586,16 +8550,6 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
             console.log(`[GeoExtraction] Saved ${locations.length} locations for updated article ${updatedArticle.id}`);
           }
         }).catch(err => console.error('[GeoExtraction] Error:', err));
-      }
-
-      // Log unpublished event if status changed from published to something else
-      if (existingArticle.status === "published" && updatedArticle.status !== "published") {
-        logArticleEvent({
-          articleId: updatedArticle.id,
-          eventType: 'unpublished',
-          actorId: req.user?.id,
-          summary: 'تم إلغاء نشر الخبر',
-        }).catch(err => console.error("[UPDATE ARTICLE] Failed to log unpublish event:", err));
       }
 
       // Notify reporter/opinion author when article transitions to scheduled
@@ -9214,7 +9168,8 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       memoryCache.invalidatePattern('^articles:');
       memoryCache.invalidatePattern('^sidebar:');
 
-      // Log activity
+      recordArticleSave({ before: article, after: updatedArticle, actorId: userId, action: "archived", reason: reviewNotes })
+        .catch(err => console.error("[ARCHIVE ARTICLE] Failed to record history:", err));
       await logActivity({
         userId,
         action: "archived",
@@ -14270,7 +14225,7 @@ Respond in valid JSON format only:
   // GET /api/keyword/:keyword moved to server/routes/keywordRoutes.ts (ADR-001).
 
   // Get article events history - requires authentication
-  app.get("/api/articles/:id/events", isAuthenticated, async (req: any, res) => {
+  app.get("/api/articles/:id/events", requireAuth, requirePermission("articles.view"), async (req: any, res) => {
     try {
       const articleId = req.params.id;
       
