@@ -444,7 +444,7 @@ export default function Home() {
         )}
 
         <ErrorBoundary fallback={null}>
-          <Suspense fallback={null}>
+          <Suspense fallback={<div className="h-12 border-t border-border/60 bg-muted/40" />}>
             <MawaeedHomeStrip />
           </Suspense>
         </ErrorBoundary>

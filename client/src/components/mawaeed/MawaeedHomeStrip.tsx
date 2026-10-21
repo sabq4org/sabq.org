@@ -1,11 +1,15 @@
 /**
  * سطر «مواعيدك» تحت الهيرو في الرئيسية: أقرب موعدين وكم بقي عليهما، والباب إلى /mawaeed.
- * ارتفاعه ثابت مثل شريط البوابة الرياضية فلا يزحزح ما تحته.
+ * ارتفاعه ثابت مثل شريط البوابة الرياضية، ويحجز مكانه أثناء التحميل فلا يزحزح ما تحته.
+ * يتبع منطقة القارئ المحفوظة في صفحة مواعيدك، ويعيد الجلب مع كل يوم جديد بتوقيت الرياض.
  */
+import { useEffect, useMemo } from "react";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { CalendarClock, ChevronLeft } from "lucide-react";
 import { apiUrl } from "@/lib/queryClient";
+import { mawaeedApiPath, readRegion } from "@/lib/mawaeedRegion";
+import { riyadhDateISO } from "@shared/mawaeed/dates";
 import { pulseBlocks } from "@shared/mawaeed/home";
 import type { MawaeedView, MawaeedSeriesBlock } from "@shared/mawaeed/present";
 
@@ -21,14 +25,32 @@ function homeLabel(kind: MawaeedSeriesBlock["kind"]): string {
 }
 
 export default function MawaeedHomeStrip() {
-  const { data } = useQuery<MawaeedView | null>({
-    queryKey: ["/api/mawaeed", { region: "riyadh" }],
+  const region = useMemo(() => readRegion(""), []);
+  // المفتاح نفسه في صفحة مواعيدك، فالضغط على السطر يفتحها من الكاش بلا انتظار.
+  const { data, isLoading, refetch } = useQuery<MawaeedView>({
+    queryKey: ["/api/mawaeed", { region }],
     queryFn: async () => {
-      const res = await fetch(apiUrl("/api/mawaeed"), { credentials: "include" });
-      return res.ok ? res.json() : null;
+      const res = await fetch(apiUrl(mawaeedApiPath(region)), { credentials: "include" });
+      if (!res.ok) throw new Error(`تعذر تحميل المواعيد (${res.status})`);
+      return (await res.json()) as MawaeedView;
     },
     staleTime: 10 * 60_000,
   });
+
+  // العميل لا يعيد الجلب تلقائيًا، فبعد منتصف الليل بتوقيت الرياض يتقدّم الموعد ويتغيّر العدّاد.
+  useEffect(() => {
+    let loadedDay = riyadhDateISO(new Date());
+    const id = window.setInterval(() => {
+      const today = riyadhDateISO(new Date());
+      if (today !== loadedDay) {
+        loadedDay = today;
+        void refetch();
+      }
+    }, 60_000);
+    return () => window.clearInterval(id);
+  }, [refetch]);
+
+  if (isLoading) return <MawaeedHomeStripPlaceholder />;
   const series = Array.isArray(data?.series) ? data.series : [];
   const top = pulseBlocks(series).filter((b) => b.next && !b.next.isPast).slice(0, 2);
   if (top.length === 0) return null;
@@ -63,4 +85,9 @@ export default function MawaeedHomeStrip() {
       </div>
     </div>
   );
+}
+
+/** يحجز ارتفاع السطر أثناء تحميل الكود والبيانات. */
+export function MawaeedHomeStripPlaceholder() {
+  return <div className="h-12 border-t border-border/60 bg-muted/40" aria-hidden="true" />;
 }

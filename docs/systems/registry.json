@@ -1145,6 +1145,10 @@
         "server/routes/mawaeed.ts",
         "server/routes/servicePages.ts",
         "functions/mawaeedPage.js",
+        "client/src/pages/MawaeedPage.tsx",
+        "client/src/components/mawaeed/**",
+        "client/src/lib/mawaeedRegion.ts",
+        "client/src/styles/mawaeed-page.css",
         "client/src/pages/ServiceDatePage.tsx",
         "web-next/app/services/**",
         "web-next/components/ServiceDateView.tsx",
@@ -1172,7 +1176,7 @@
       "owners": [
         "editorial"
       ],
-      "lastReviewed": "2026-10-16"
+      "lastReviewed": "2026-10-21"
     },
     {
       "id": "systems-catalog",

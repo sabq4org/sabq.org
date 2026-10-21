@@ -1,6 +1,6 @@
 # مواعيدك (`mawaeed`)
 
-> آخر مراجعة: 2026-10-16 | المالك: التحرير (البيانات) / المنصة (الصفحة والحافة)
+> آخر مراجعة: 2026-10-21 | المالك: التحرير (البيانات) / المنصة (الصفحة والحافة)
 
 ## الغرض
 صفحة عامة على `/mawaeed` تعرض مواعيد الخدمات العامة القادمة في السعودية: الرواتب، حساب المواطن، الضمان الاجتماعي، التقاعد، وإجازات التقويم الدراسي 1448. الصفحة HTML خفيف من حافة Pages، والبيانات من JSON على الـ API.
@@ -14,7 +14,7 @@
 | الطبقة | المسار |
 |--------|--------|
 | Backend | `server/services/mawaeedService.ts`, `server/routes/mawaeed.ts`, `server/routes/servicePages.ts`, `server/services/servicePageOgImage.ts`, `server/services/servicePageEdgeMeta.ts` |
-| Web | `client/src/pages/MawaeedPage.tsx` (+ `shared/mawaeed/home.ts`, `client/src/styles/mawaeed-page.css`), `functions/mawaeedPage.js`, `functions/_middleware.js`, `client/src/pages/ServiceDatePage.tsx`, `web-next/app/services/[id]/page.tsx`, `client/src/pages/dashboard/MawaeedManagement.tsx` |
+| Web | `client/src/pages/MawaeedPage.tsx` (+ `shared/mawaeed/home.ts`, `client/src/styles/mawaeed-page.css`, `client/src/lib/mawaeedRegion.ts`), سطر الرئيسية `client/src/components/mawaeed/MawaeedHomeStrip.tsx` (يُحمَّل في `client/src/pages/Home.tsx` فوق شريط البوابة الرياضية: أقرب موعدين لمنطقة القارئ المحفوظة، يفتح `/mawaeed`، ويعيد الجلب مع يوم الرياض الجديد), `functions/mawaeedPage.js`, `functions/_middleware.js`, `client/src/pages/ServiceDatePage.tsx`, `web-next/app/services/[id]/page.tsx`, `client/src/pages/dashboard/MawaeedManagement.tsx` |
 | Shared | `shared/mawaeed/*`, `shared/servicePages/*` |
 | Schema | `mawaeed_series`, `mawaeed_occurrences`, `mawaeed_changes` في `shared/schema.ts` و`migrations/20260927_mawaeed.sql` |
 | Seed | `scripts/seed-mawaeed.ts`, `migrations/20260927_mawaeed_seed.sql`, `data/mawaeed/2026-09-27-mawaeed-dates.csv` |
