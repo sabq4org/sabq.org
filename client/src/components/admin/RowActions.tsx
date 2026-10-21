@@ -42,6 +42,8 @@ interface RowActionsProps {
   canSocialPublish?: boolean;
   /** «wire»: شكل قائمة الأخبار الموحّد — أحادي اللون، ثلاث مجموعات، وزر البرق بدل عمود «عاجل». */
   variant?: "default" | "wire";
+  /** «wire» فقط: محاذاة الشريط. «start» حين ينزل تحت العنوان (الآيباد). */
+  wireAlign?: "start" | "end";
   isBreaking?: boolean;
   /** آخر إشعار خرج للخبر — نقطة خضراء على زر الجرس */
   notifiedAt?: string | null;
@@ -131,6 +133,7 @@ export function RowActions({
   canTranslate = true,
   canSocialPublish = false,
   variant = "default",
+  wireAlign = "end",
   isBreaking: initialIsBreaking = false,
   notifiedAt = null,
   socialPublishedAt = null,
@@ -373,7 +376,7 @@ export function RowActions({
   const isReadyToPublish = status === BOT_DRAFT_READY_STATUS;
 
   const wireRow = (
-    <div className="flex items-center justify-end gap-0.5" role="group" aria-label="إجراءات المقال">
+    <div className={cn("flex items-center gap-0.5", wireAlign === "start" ? "flex-wrap justify-start [&>button]:!h-10 [&>button]:!w-10 [&>button]:!min-h-10 [&>button]:!min-w-10" : "justify-end")} role="group" aria-label="إجراءات المقال">
       {canEdit && (
         <WireBtn onClick={onEdit} disabled={isLoading} data-testid={`button-action-edit-${articleId}`} title="تعديل">
           <Edit className="h-4 w-4" />

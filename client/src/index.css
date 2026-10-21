@@ -3035,6 +3035,14 @@ html[data-dashboard-theme] .text-indigo-600,
   }
 }
 
+/* Touch tablet in portrait (iPad): the sidebar is an overlay Sheet as on phones
+   (see isPortraitTablet in ui/sidebar.tsx), so the content takes the full width. */
+@media (pointer: coarse) and (min-width: 768px) and (orientation: portrait) {
+  [dir="rtl"] [data-slot="sidebar-inset"] {
+    margin-right: 0;
+  }
+}
+
 .dark #Leaderboard[data-ad-state="filled"],
 .dark #MPU[data-ad-state="filled"],
 .dark [data-testid^="dms-ad-slot-lite"][data-ad-state="filled"] {

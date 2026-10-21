@@ -6,6 +6,7 @@ import { cva, VariantProps } from "class-variance-authority"
 import { PanelLeftIcon } from "lucide-react"
 
 import { useIsMobile } from "@/hooks/use-mobile"
+import { useIsTouchTablet } from "@/hooks/use-touch-tablet"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -66,7 +67,9 @@ function SidebarProvider({
   open?: boolean
   onOpenChange?: (open: boolean) => void
 }) {
-  const isMobile = useIsMobile()
+  // الآيباد عموديًا: الشريط يفتح فوق المحتوى بزر الرأس كما في الجوال، ولا يقتطع ثلث الشاشة.
+  const isPortraitTablet = useIsTouchTablet("(pointer: coarse) and (min-width: 768px) and (orientation: portrait)")
+  const isMobile = useIsMobile() || isPortraitTablet
   const [openMobile, setOpenMobile] = React.useState(false)
 
   // This is the internal state of the sidebar.
