@@ -1,6 +1,8 @@
 # حالة النشر الحالية — sabq.org
 
-> **آخر تحديث:** 2026-08-01
+> **آخر تحديث:** 2026-10-21
+>
+> **تحديث 2026-10-21:** انتقل الـ API من Railway إلى **Render** (خدمة `sabq.org`، منطقة Virginia، `sabq-api-virginia.onrender.com`) بعد تعطل نشر Railway. `api.sabq.org` يمر عبر Cloudflare Worker `sabq-api-origin` الذي يوجّه إلى Render، وسجل DNS لـ`api.sabq.org` صار يشير إلى Render. أقسام Railway أدناه تاريخية حتى تُراجع الوثيقة كاملة.
 >
 > **ملاحظة تشغيلية:** انتقل الإنتاج الرسمي من **Replit** إلى **Cloudflare Pages** (الواجهة) + **Railway** (الـ API) في **منتصف مايو 2026** (~أسبوعين قبل هذا التاريخ). Replit لم يعد مسار النشر الحالي.
 
@@ -11,7 +13,7 @@
 | الطبقة | المنصة | النطاق | ملاحظات |
 |--------|--------|--------|---------|
 | **الواجهة (SPA)** | Cloudflare Pages | `sabq.org` · `www.sabq.org` | `npm run build:client` → `dist/public/` · `functions/_middleware.js` |
-| **الـ API** | Railway (Dockerfile) | `api.sabq.org` | `SERVE_SPA=false` · `DB_DRIVER=pg` |
+| **الـ API** | Render (Dockerfile، Virginia) — كان Railway حتى 2026-10-21 | `api.sabq.org` | `SERVE_SPA=false` · `DB_DRIVER=pg` |
 | **قاعدة البيانات** | Neon / Postgres | `NEON_DATABASE_URL` إن وُجد، وإلا `DATABASE_URL` على Railway | لا تشغّل `db:push` على prod بدون `./push-to-production.sh` |
 | **Redis** | Upstash (أو Redis مُدار) على Railway | `REDIS_URL` | **مُستخدم في الإنتاج** لتخفيف جلسات Neon — انظر § Redis |
 | **الوسائط** | R2 لصور الأخبار تدريجياً + Cloudflare Images fallback + R2/S3 لبقية الملفات | `media.sabq.org` | راجع [`R2_NEWS_IMAGES_ROLLOUT.md`](R2_NEWS_IMAGES_ROLLOUT.md) |
