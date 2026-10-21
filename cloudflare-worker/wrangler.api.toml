@@ -9,13 +9,13 @@ routes = [
   { pattern = "api.sabq.org/*", zone_name = "sabq.org" },
 ]
 
-# Run near the Railway origin in US East. Europe ingress intermittently
-# stalled for 20+ seconds; the regional path uses Railway's iad1 ingress.
+# Run near the origin in US East (Render Virginia since 2026-10-21; Railway
+# iad1 before). Europe ingress intermittently stalled for 20+ seconds.
 [placement]
 region = "aws:us-east-1"
 
 [vars]
-API_ORIGIN = "https://sabqorg-production.up.railway.app"
+API_ORIGIN = "https://sabq-api-virginia.onrender.com"
 
 [observability]
 enabled = true
