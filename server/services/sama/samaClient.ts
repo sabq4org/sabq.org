@@ -3,6 +3,8 @@
  *
  * فخّان موثّقان من فحص 2026-08-28:
  * - ساما تُسقط اتصالات IPv6 فورًا (Connection reset) → نُجبر `family: 4`.
+ * - منذ 2026-10-14 يرسل خادم ساما شهادته بلا الوسيطة → نكمل السلسلة عبر AIA مرة واحدة
+ *   لكل مضيف ونعيد الطلب بالتحقق الكامل (`tlsChain.ts`).
  * - نقاط JSON الحية (PortalHandler.ashx) غير موثّقة رسميًا؛ هي ما تستدعيه صفحة ساما
  *   نفسها. لذلك كل طلب يمرّ بمهلة قصيرة وبلا إعادة محاولة عمياء، والمستهلكون
  *   يتحققون من شكل الاستجابة ويجمّدون آخر قيمة سليمة عند أي اختلاف.
@@ -11,6 +13,7 @@
  */
 import https from "node:https";
 import { URL } from "node:url";
+import { caWithIntermediates, isIncompleteChainError, resolveMissingIntermediates } from "./tlsChain";
 
 export const SAMA_ORIGIN = "https://www.sama.gov.sa";
 export const SAMA_PORTAL_HANDLER = "/ar-sa/_LAYOUTS/15/SAMA.Portal/PortalHandler.ashx";
@@ -45,15 +48,47 @@ interface RawResponse {
   body: Buffer;
 }
 
+/** الوسيطات المستكملة لكل مضيف (لكل نسخة) — تُجلب عند أول خطأ «سلسلة ناقصة» فقط. */
+const hostCa = new Map<string, string[]>();
+const hostCaPending = new Map<string, Promise<string[]>>();
+
+async function completeChainFor(hostname: string): Promise<void> {
+  let pending = hostCaPending.get(hostname);
+  if (!pending) {
+    pending = resolveMissingIntermediates(hostname).finally(() => hostCaPending.delete(hostname));
+    hostCaPending.set(hostname, pending);
+  }
+  const intermediates = await pending;
+  hostCa.set(hostname, caWithIntermediates(intermediates));
+  console.log(`[SAMA] completed TLS chain for ${hostname} via AIA (${intermediates.length} intermediate)`);
+}
+
+async function requestWithChainRepair(url: string, accept: string, timeoutMs: number): Promise<RawResponse> {
+  try {
+    return await requestOnce(url, accept, timeoutMs);
+  } catch (e) {
+    const hostname = new URL(url).hostname;
+    if (!isIncompleteChainError(e)) throw e;
+    try {
+      await completeChainFor(hostname);
+    } catch (repairErr) {
+      throw new Error(`${(e as Error).message} (AIA repair failed: ${(repairErr as Error).message})`);
+    }
+    return requestOnce(url, accept, timeoutMs);
+  }
+}
+
 function requestOnce(url: string, accept: string, timeoutMs: number): Promise<RawResponse> {
   return new Promise((resolve, reject) => {
     const u = new URL(url);
+    const ca = hostCa.get(u.hostname);
     const req = https.request(
       {
         method: "GET",
         hostname: u.hostname,
         path: u.pathname + u.search,
         family: 4, // ساما تقطع IPv6
+        ...(ca ? { ca } : {}),
         headers: {
           "User-Agent": USER_AGENT,
           Accept: accept,
@@ -85,7 +120,7 @@ export async function samaGet(
   const accept = opts.accept ?? "application/json, text/html;q=0.9, */*;q=0.5";
   let url = pathOrUrl.startsWith("http") ? pathOrUrl : SAMA_ORIGIN + pathOrUrl;
   for (let hop = 0; hop < 4; hop++) {
-    const res = await requestOnce(url, accept, timeoutMs);
+    const res = await requestWithChainRepair(url, accept, timeoutMs);
     if (res.status >= 300 && res.status < 400) {
       const loc = res.headers.location;
       const next = Array.isArray(loc) ? loc[0] : loc;

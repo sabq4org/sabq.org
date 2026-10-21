@@ -1,6 +1,6 @@
 # اقتصاد سبق الحي (`economy-live`)
 
-> آخر مراجعة: 2026-10-04 | المالك: فريق التحرير التقني | **الحالة: نشط (المرحلة 0+1+2 من الخطة)**
+> آخر مراجعة: 2026-10-21 | المالك: فريق التحرير التقني | **الحالة: نشط (المرحلة 0+1+2 من الخطة)**
 
 ## الغرض
 تحويل قسم الاقتصاد من قائمة أخبار ثابتة إلى قسم حي يتحدث فور تغيّر بيانات **البنك المركزي السعودي (ساما)**، ويولّد «أرقام الأسبوع» بعناوين صحفية جاهزة من تقرير نقاط البيع الأسبوعي، إلى جانب الأخبار التحريرية المعتادة.
@@ -17,6 +17,8 @@
 **فخ موثّق:** ساما تُسقط IPv6 → العميل يفرض `family: 4` (`server/services/sama/samaClient.ts`).
 
 **فخ موثّق (2026-10):** منذ نشرة أغسطس 2026 (صدرت 30 سبتمبر) صارت النشرة الشهرية ملفًا واحدًا ثابت الاسم `Monthly Bulletin.xlsx` (بمسافة، يُستبدل كل شهر) بجانب PDF، والأصول الاحتياطية صارت `International_Reserves_<Mon><yyyy>.xlsx`. الأنماط في `samaReports.ts` تقبل الصيغتين، والملف الذي يخلو اسمه من سنة يُخزَّن بمفتاح `<الاسم>#<تاريخ النشر>` (`reportKey`) حتى لا يُعدّ الشهر التالي مكررًا. العَرَض عند تغيّر الاسم مستقبلًا: سطر `[SAMA Watch] monthly_bulletin: … no files parsed — layout changed?` في سجلات Railway والصفحة عالقة على آخر شهر.
+
+**فخ موثّق (2026-10-14):** خادم `www.sama.gov.sa` صار يرسل شهادته بلا الشهادة الوسيطة؛ المتصفحات تكمل السلسلة بنفسها، أما Node فيرفض بـ`unable to verify the first certificate` فتوقف الرصد كله (المؤشرات، الصرف، نقاط البيع، عرض النقود، الإعلانات) أسبوعًا وبقي «أين أنفق السعوديون» على أسبوع 04–10 أكتوبر. الإصلاح في `server/services/sama/tlsChain.ts`: عند هذا الخطأ فقط يقرأ رابط «CA Issuers» (AIA) من شهادة الخادم، يجلب الوسيطة، يتحقق أنها تنتهي إلى جذر في مخزن Node، ثم يعيد الطلب بالتحقق الكامل (`ca` = الجذور + الوسيطة، لكل مضيف ولكل نسخة). لا `rejectUnauthorized: false` على أي طلب بيانات. العَرَض لو فشل الإكمال: `[SAMA Watch] <source>: unable to verify the first certificate … (AIA repair failed: …)` في سجلات Railway، وسطر نجاحه `[SAMA] completed TLS chain for www.sama.gov.sa via AIA`. ملاحظة: السجل يطبع الخطأ مرة واحدة لكل مصدر لكل نسخة (لا يتكرر)، فابحث من بداية النشر.
 
 ## المعمارية
 ```
@@ -48,7 +50,7 @@ routes/economyRoutes.ts ──▶ client/src/components/economy/ (صفحة /econ
 - عند اختلال شكل استجابة ساما: الواجهة تعرض آخر قيمة سليمة بوقتها (لا أصفار)، وتنبيه في غرفة العمليات.
 
 ## الاختبارات
-`tests/unit/samaParsers.test.ts` (ملفان حقيقيان في `tests/fixtures/sama/`)، `economyWeeklyStory.test.ts`، `economyWatchCadence.test.ts`، `economyNumberGuard.test.ts`.
+`tests/unit/samaTlsChain.test.ts` (سلسلة ناقصة تُكمَل عبر AIA على خادم محلي)، `tests/unit/samaParsers.test.ts` (ملفان حقيقيان في `tests/fixtures/sama/`)، `economyWeeklyStory.test.ts`، `economyWatchCadence.test.ts`، `economyNumberGuard.test.ts`.
 
 ## مؤجل
 - صفحة أسعار الصرف `/economy/exchange-rates` (+ صفحة لكل عملة، edgeMeta/sitemap).
