@@ -2,12 +2,13 @@
  * Production api.sabq.org origin proxy.
  *
  * The production route is declared in wrangler.api.toml. Keep the shared
- * secret configured before binding the route. The origin is the Railway
- * generated hostname; never point this Worker at api.sabq.org itself.
+ * secret configured before binding the route. The origin is the Render
+ * service hostname (since 2026-10-21; Railway before that); never point this
+ * Worker at api.sabq.org itself.
  */
 import { createPublicApiBurstCache } from "./public-api-burst-cache.js";
 
-const DEFAULT_API_ORIGIN = "https://sabqorg-production.up.railway.app";
+const DEFAULT_API_ORIGIN = "https://sabq-api-virginia.onrender.com";
 const publicApiBurstCache = createPublicApiBurstCache();
 async function signedHeaders(request, secret) {
   const url = new URL(request.url);
@@ -40,8 +41,10 @@ async function signedHeaders(request, secret) {
 // while a fresh fetch answers in milliseconds. For GET/HEAD only, abort an
 // attempt that produced no headers within STALL_RETRY_MS and re-issue it; the
 // last attempt is unbounded (previous behaviour). Writes are never retried.
-const STALL_RETRY_MS = 3000;
-const STALL_RETRIES = 2;
+// On Render (2026-10-21) a slow answer usually means real load, so retrying
+// fast multiplied traffic during a breaking-news surge: one late retry only.
+const STALL_RETRY_MS = 8000;
+const STALL_RETRIES = 1;
 
 function isStallAbort(err) {
   const name = err?.name || "";

@@ -101,7 +101,8 @@ describe("api-origin-worker public API burst guard", () => {
     const failed = await apiOriginWorker.fetch(request("/api/themes/active?burst=stall"), env, ctx);
 
     expect(failed.status).toBe(502);
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    // One first attempt plus one stall retry (STALL_RETRIES = 1).
+    expect(fetchMock).toHaveBeenCalledTimes(2);
 
     fetchMock.mockResolvedValueOnce(apiResponse({ recovered: true }));
     const recovered = await apiOriginWorker.fetch(request("/api/themes/active?burst=stall"), env, ctx);
