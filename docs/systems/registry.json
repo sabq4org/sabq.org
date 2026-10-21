@@ -1,7 +1,7 @@
 {
   "$schemaNote": "Machine-readable catalog of Sabq product systems. Consumed by scripts/systems-inventory.mjs and /api/admin/systems-catalog. aiFeatureKeys must be exclusive (one system owner) to avoid double-counting.",
   "version": 2,
-  "updatedAt": "2026-10-18",
+  "updatedAt": "2026-10-22",
   "systems": [
     {
       "id": "account-center",
@@ -1048,14 +1048,17 @@
         "server/utils/rssXml.ts",
         "tests/unit/rssFeedReadiness.test.ts",
         "tests/unit/edgeAiReadiness.test.ts",
-        "docs/ai-readiness-acceptance-ar.md"
+        "docs/ai-readiness-acceptance-ar.md",
+        "client/public/.well-known/agent-index.json",
+        "client/public/llms.txt",
+        "docs/agent-discovery-dns-ops-ar.md"
       ],
       "aiFeatureKeys": [],
       "dashboardPath": null,
       "owners": [
         "platform"
       ],
-      "lastReviewed": "2026-10-21"
+      "lastReviewed": "2026-10-22"
     },
     {
       "id": "comments",
