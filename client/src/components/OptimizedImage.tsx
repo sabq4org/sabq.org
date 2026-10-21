@@ -267,8 +267,8 @@ export function OptimizedImage({
           // and download its srcset in Chromium before IntersectionObserver triggers.
           autoSrcSet && !useFallback && (priority || eager) ? (
             <picture className="contents">
-              <source 
-                srcSet={autoSrcSet} 
+              <source
+                srcSet={autoSrcSet}
                 sizes={sizes}
               />
               <img
