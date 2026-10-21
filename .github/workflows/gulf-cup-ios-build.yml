@@ -13,7 +13,7 @@ jobs:
   xcodebuild:
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # أحدث Xcode 16.x على الصورة — تثبيت 16.2 حرفيًا يكسر actool لأن GitHub
       # أزالت محاكي iOS 18.2 من macos-15 (actool يتحقق من وجود runtime مطابق
