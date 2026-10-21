@@ -1391,8 +1391,10 @@
         "tests/unit/economyWatchCadence.test.ts",
         "tests/unit/samaParsers.test.ts",
         "tests/unit/economyNumberGuard.test.ts",
+        "tests/unit/samaTlsChain.test.ts",
         "tests/fixtures/sama/**"
-      ]
+      ],
+      "lastReviewed": "2026-10-21"
     },
     {
       "id": "platform-runtime",
