@@ -152,21 +152,21 @@ export function AdSlot({ slotId, className = "", reservedSize = "mpu" }: AdSlotP
   // Server says this slot has no chance of filling — render nothing at all.
   // No reserved box (no layout gap on legacy/no-inventory pages) and no
   // request to /api/ads/slot/...
-  // Wait to reserve space until shouldServeSlot is known to be true —
-  // reserving 250px while `/api/ads/slots/active` is still loading and then
-  // collapsing when `slotIds` is `[]` caused a 282px layout shift (CLS).
-  if (shouldServeSlot !== true) {
+  // Keep the reservation while the fill-rate signal is loading. If the slot
+  // is active, removing the reservation here would insert 250px/90px after
+  // the first paint and create the same CLS this component is meant to avoid.
+  if (shouldServeSlot === false) {
     return null;
   }
 
-  if (isLoading || (!ad && !collapsed)) {
+  if (isLoading || shouldServeSlot === undefined || (!ad && !collapsed)) {
     return (
       <div
         ref={containerRef}
         className={`ad-slot ${className}`}
         style={{ minHeight: `${reservedMinHeight}px`, width: '100%' }}
         data-testid={`ad-slot-${slotId}`}
-        data-ad-state={isLoading ? "loading" : "pending"}
+        data-ad-state={isLoading || shouldServeSlot === undefined ? "loading" : "pending"}
         aria-hidden="true"
       />
     );
