@@ -1031,7 +1031,7 @@ export default function ArticleDetail() {
           
           {/* Data Infographic with visual blocks */}
           <Suspense fallback={<Skeleton className="h-96 w-full" />}>
-            <DataInfographicPage 
+            <DataInfographicPage
               article={article}
               onReact={handleReact}
               onBookmark={handleBookmark}
@@ -1073,7 +1073,7 @@ export default function ArticleDetail() {
         
         {/* Full-width Infographic Detail with integrated carousel */}
         <Suspense fallback={<Skeleton className="h-96 w-full" />}>
-          <InfographicDetail 
+          <InfographicDetail
             article={article}
             onReact={handleReact}
             onBookmark={handleBookmark}
@@ -1339,7 +1339,7 @@ export default function ArticleDetail() {
                 </div>
               ) : article.isPaid && !purchaseStatus?.hasPurchased ? (
                 <Suspense fallback={<Skeleton className="h-64 w-full" />}>
-                  <Paywall 
+                  <Paywall
                     article={{
                       id: article.id,
                       title: article.title,
@@ -1379,7 +1379,7 @@ export default function ArticleDetail() {
             {article.articleType === 'weekly_photos' && (article as any).weeklyPhotosData?.photos && (
               <div className="article-detail-gallery">
                 <Suspense fallback={<Skeleton className="h-64 w-full" />}>
-                  <WeeklyPhotosDisplay 
+                  <WeeklyPhotosDisplay
                     photos={(article as any).weeklyPhotosData.photos}
                     title="صور الأسبوع"
                   />
