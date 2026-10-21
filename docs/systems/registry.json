@@ -1043,7 +1043,12 @@
         "tests/unit/edgeSoftNotFound.test.ts",
         "tests/unit/pagesAgentDiscovery.test.ts",
         "tests/unit/categoryCardPreload.test.ts",
-        "tests/unit/slugRedirectQuery.test.ts"
+        "tests/unit/slugRedirectQuery.test.ts",
+        "server/routes/rssFeedRoutes.ts",
+        "server/utils/rssXml.ts",
+        "tests/unit/rssFeedReadiness.test.ts",
+        "tests/unit/edgeAiReadiness.test.ts",
+        "docs/ai-readiness-acceptance-ar.md"
       ],
       "aiFeatureKeys": [],
       "dashboardPath": null,

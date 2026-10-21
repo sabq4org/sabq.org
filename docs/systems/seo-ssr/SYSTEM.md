@@ -1,6 +1,7 @@
 # SEO و SSR (`seo-ssr`)
 
-> آخر مراجعة: 2026-10-21 (اكتشاف دليل المحتوى للوكلاء) | المالك: platform
+> آخر مراجعة: 2026-10-21 (سياسة AI والخلاصات واكتشاف دليل المحتوى) | المالك: platform
+
 
 ## الغرض
 ميتادات للدوالش، إعادة توجيه السلاق، وSSR للمحتوى العام عبر `web-next`.
@@ -128,6 +129,14 @@
 - **ترويسات صفحات الخدمات (2026-10-16):** أُزيل حظر `/services/:id` القديم من Middleware وإعدادات headers في Next؛ ميتا `index, follow` وحدها لا تتغلب على `X-Robots-Tag: noindex`. تظل بيئة staging محمية وغير قابلة للفهرسة. اختبار `tests/web-next/serviceMiddlewareRobots.test.ts` يتحقق من مساري إعدادات headers وMiddleware.
 
 - **تطابق مناطق التقويم (2026-10-16):** صفحة المدرسة في Next تقرأ `searchParams.region` وتطلب النموذج نفسه الذي يقرأه SPA؛ canonical ثابت بلا المنطقة. جميع الإدارات في نموذج API، ولا ينسخ SSR قائمة مستقلة.
+
+## توافق القراءة مع وكلاء AI — 2026-10-21
+
+- ترويسة `Content-Signal: search=yes, ai-input=yes, ai-train=no` تضاف إلى HTML العام الناجح في Pages، بما فيه cache hit والمسار البديل، مع `Vary: Accept`. تستثنى الطلبات ذات بيانات الدخول ومسارات/استجابات noindex والمضيف غير الأساسي والأخطاء. السياسة تطابق robots وai-policy؛ لا تصريح تدريب جديد.
+- `ChatGPT-User` و`Claude-User` و`Perplexity-User` تختار SSR مثل زواحف البحث القائمة. طلب Markdown الصريح المؤهل يختار HTML كاملًا ليحوّله Cloudflare خارجيًا؛ الوسيط لا ينتج Markdown بنفسه. تفاوض Accept يحترم q=0 وأفضلية HTML، ويفصل الكاش بعلامة `m` عن `b` و`h`.
+- اختيار العرض ليس مصادقة ولا إثبات هوية؛ لا تجاوز WAF أو صلاحيات الحساب. Cookie وAuthorization يستثنيان من اختيار SSR وإضافة Content-Signal؛ كاش SPA القائم دون تغيير. صفحة meta noindex تعلنها كذلك في X-Robots-Tag حتى لا يناقضها Content-Signal.
+- `/api/rss/articles` و`/api/rss/articles/category/:slug` و`/api/rss/articles.json` تستخدم `englishSlug || slug` في رابط المقال. RSS guid وJSON Feed id يحتفظان بقيمهما السابقة لمنع تكرار العناصر. RSS المقالات يعالج CDATA وسمات XML بأمان. JSON Feed يعلن content_text من المقتطف العام أو العنوان عند غيابه وفق الإصدار 1.1، دون جلب المتن الكامل. لا تغيير على التصفية أو نطاق البيانات ولا على عقود API للموبايل؛ خلاصات podcast وOPML خارج الإصلاح.
+- الاختبارات: `edgeAiReadiness.test.ts` و`rssFeedReadiness.test.ts` مع حراس SSR القائمة. معيار القبول الإنتاجي وحدود هدف 98% في [معيار جاهزية AI](../../ai-readiness-acceptance-ar.md). الاختبارات المحلية لا تثبت تحويل Cloudflare أو وصول الزواحف الحقيقي قبل نشر النسخة وفحصها.
 
 ## اكتشاف دليل المحتوى للوكلاء — 2026-10-21
 
