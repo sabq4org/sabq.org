@@ -565,6 +565,8 @@ export default function ArticleEditor() {
   });
   
   // Permission checks for article editor features
+  // يطابق صلاحية POST /api/admin/articles/:id/versions/:versionId/restore
+  const canRestoreVersions = Boolean(user && hasPermission(user, PERMISSION_CODES.ARTICLES_EDIT_ANY));
   const canUseAIGenerate = user && hasPermission(user, PERMISSION_CODES.ARTICLES_AI_GENERATE);
   const canSchedule = Boolean(!isOpinionAuthor && user && hasPermission(user, PERMISSION_CODES.ARTICLES_SCHEDULE));
   const canUsePolls = user && hasPermission(user, PERMISSION_CODES.ARTICLES_POLLS);
@@ -4497,7 +4499,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                   </CollapsibleTrigger>
                   <CollapsibleContent>
                     <CardContent className="pt-0">
-                      <ArticleTimeline articleId={id} />
+                      <ArticleTimeline articleId={id} canRestore={canRestoreVersions} />
                     </CardContent>
                   </CollapsibleContent>
                 </Card>
