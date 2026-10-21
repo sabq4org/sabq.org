@@ -6,7 +6,7 @@ import https from "node:https";
 import os from "node:os";
 import path from "node:path";
 import type { AddressInfo } from "node:net";
-import { caIssuerUrls, isIncompleteChainError, resolveMissingIntermediates } from "../../server/services/sama/tlsChain";
+import { caIssuerUrls, isIncompleteChainError, isPublicAddress, resolveMissingIntermediates } from "../../server/services/sama/tlsChain";
 
 /**
  * يحاكي خلل ساما (2026-10-14): خادم يرسل شهادته بلا الوسيطة، والوسيطة متاحة عبر AIA.
@@ -81,14 +81,23 @@ describe("إكمال سلسلة شهادة ساما عبر AIA", () => {
   });
 
   it("يجلب الوسيطة ويتحقق أنها تنتهي إلى الجذر، ثم ينجح الطلب بالتحقق الكامل", async () => {
-    const chain = await resolveMissingIntermediates("localhost", { port: tlsPort, roots: [rootPem] });
+    const chain = await resolveMissingIntermediates("localhost", { port: tlsPort, roots: [rootPem], allowPrivateAia: true });
     expect(chain).toHaveLength(1);
     expect(chain[0].replace(/\s/g, "")).toBe(intermediatePem.replace(/\s/g, ""));
     expect(await get([rootPem, ...chain])).toBe(200);
   });
 
   it("لا يقبل وسيطة لا تنتهي إلى جذر موثوق", async () => {
-    await expect(resolveMissingIntermediates("localhost", { port: tlsPort, roots: [] })).rejects.toThrow();
+    await expect(resolveMissingIntermediates("localhost", { port: tlsPort, roots: [], allowPrivateAia: true })).rejects.toThrow();
+  });
+
+  it("لا يتبع رابط AIA إلى عنوان داخلي في التشغيل الفعلي (شهادة الخادم لم يُتحقق منها بعد)", async () => {
+    await expect(resolveMissingIntermediates("localhost", { port: tlsPort, roots: [rootPem] })).rejects.toThrow(/could not fetch/);
+    for (const ip of ["127.0.0.1", "10.1.2.3", "169.254.169.254", "172.20.0.1", "192.168.1.1", "100.64.0.1", "::1", "fd00::1", "fe80::1", "::ffff:127.0.0.1"]) {
+      expect(isPublicAddress(ip), ip).toBe(false);
+    }
+    expect(isPublicAddress("8.8.8.8")).toBe(true);
+    expect(isPublicAddress("2606:4700::1111")).toBe(true);
   });
 
   it("لا يخلط أخطاء الشهادة الأخرى بالسلسلة الناقصة", () => {

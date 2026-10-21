@@ -15,6 +15,8 @@
 import http from "node:http";
 import https from "node:https";
 import tls from "node:tls";
+import dns from "node:dns";
+import net from "node:net";
 import { X509Certificate } from "node:crypto";
 
 const MAX_AIA_HOPS = 3;
@@ -81,10 +83,43 @@ function fetchLeafCertificate(hostname: string, port: number, timeoutMs: number)
   });
 }
 
-function download(url: string, timeoutMs: number): Promise<Buffer> {
+/** عناوين لا يجوز أن يقصدها رابط AIA: شهادة الخادم لم يُتحقق منها بعد، فرابطها قد يكون مزروعًا. */
+const NON_PUBLIC = new net.BlockList();
+for (const [addr, prefix] of [
+  ["0.0.0.0", 8], ["10.0.0.0", 8], ["100.64.0.0", 10], ["127.0.0.0", 8], ["169.254.0.0", 16],
+  ["172.16.0.0", 12], ["192.0.0.0", 24], ["192.168.0.0", 16], ["198.18.0.0", 15], ["224.0.0.0", 3],
+] as const) NON_PUBLIC.addSubnet(addr, prefix, "ipv4");
+for (const [addr, prefix] of [["::", 127], ["fc00::", 7], ["fe80::", 10], ["ff00::", 8]] as const) {
+  NON_PUBLIC.addSubnet(addr, prefix, "ipv6");
+}
+
+export function isPublicAddress(address: string): boolean {
+  const family = net.isIP(address);
+  if (!family) return false;
+  return !NON_PUBLIC.check(address, family === 4 ? "ipv4" : "ipv6");
+}
+
+/** lookup يرفض العناوين الخاصة — يُطبَّق على العنوان الذي يُتصل به فعلًا (لا ثغرة إعادة ربط DNS). */
+const publicOnlyLookup: net.LookupFunction = (hostname, options, callback) => {
+  dns.lookup(hostname, { ...options, all: true }, (err, addresses) => {
+    if (err) return callback(err, "", 0);
+    const list = addresses as dns.LookupAddress[];
+    const bad = list.find((a) => !isPublicAddress(a.address));
+    if (bad || !list.length) return callback(new Error(`AIA host ${hostname} resolves to a non-public address`), "", 0);
+    if ((options as dns.LookupOptions).all) return (callback as unknown as (e: null, a: dns.LookupAddress[]) => void)(null, list);
+    callback(null, list[0].address, list[0].family);
+  });
+};
+
+function download(url: string, timeoutMs: number, allowPrivate: boolean): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const client = url.startsWith("https:") ? https : http;
-    const req = client.get(url, { timeout: timeoutMs }, (res) => {
+    const host = new URL(url).hostname.replace(/^\[|\]$/g, "");
+    if (!allowPrivate && net.isIP(host) && !isPublicAddress(host)) {
+      reject(new Error(`AIA ${url} targets a non-public address`));
+      return;
+    }
+    const req = client.get(url, { timeout: timeoutMs, ...(allowPrivate ? {} : { lookup: publicOnlyLookup }) }, (res) => {
       if ((res.statusCode ?? 0) < 200 || (res.statusCode ?? 0) >= 300) {
         res.resume();
         reject(new Error(`AIA ${url} responded ${res.statusCode}`));
@@ -111,7 +146,8 @@ function download(url: string, timeoutMs: number): Promise<Buffer> {
  */
 export async function resolveMissingIntermediates(
   hostname: string,
-  opts: { port?: number; roots?: readonly string[] } = {},
+  /** allowPrivateAia للاختبار المحلي فقط */
+  opts: { port?: number; roots?: readonly string[]; allowPrivateAia?: boolean } = {},
 ): Promise<string[]> {
   const roots = opts.roots ? parseRoots(opts.roots) : defaultRoots();
   const port = opts.port ?? 443;
@@ -127,7 +163,7 @@ export async function resolveMissingIntermediates(
     let next: X509Certificate | null = null;
     for (const url of urls) {
       try {
-        const cert = new X509Certificate(await download(url, AIA_TIMEOUT_MS)); // DER أو PEM
+        const cert = new X509Certificate(await download(url, AIA_TIMEOUT_MS, opts.allowPrivateAia === true)); // DER أو PEM
         if (issuedBy(current, cert)) {
           next = cert;
           break;
