@@ -59,6 +59,9 @@ export function ImageWithCaption({
             تعذر تحميل الصورة
           </div>
         ) : (
+          // Do not pass aspectRatio into getOptimizedImageSrc when width/height are
+          // only intrinsic HTML attributes; aspectRatio in getOptimizedImageSrc adds
+          // h=... to Cloudflare Images URLs, which would mismatch buildArticleHeroPreload.
           <OptimizedImage
             src={imageUrl}
             alt={altText}
@@ -70,6 +73,7 @@ export function ImageWithCaption({
             objectPosition={objectPosition || "center 20%"}
             sizes={HERO_SIZES_ATTR}
             aspectRatio={aspectRatio}
+            style={!aspectRatio && priority ? { aspectRatio: "16 / 9", objectFit: "cover" } : undefined}
             onError={() => setError(true)}
           />
         )}

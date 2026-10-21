@@ -13,7 +13,13 @@ export function signalContentPainted(): void {
   fired = true;
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
-      window.dispatchEvent(new Event("sabq:content-painted"));
+      const dispatch = () => window.dispatchEvent(new Event("sabq:content-painted"));
+      const ric = (window as Window & { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number }).requestIdleCallback;
+      if (ric) {
+        ric(() => setTimeout(dispatch, 1500), { timeout: 3000 });
+      } else {
+        setTimeout(dispatch, 1500);
+      }
     });
   });
 }

@@ -261,15 +261,38 @@ export function OptimizedImage({
       
       {/* Main image with progressive loading */}
       {isInView && (
-        autoSrcSet && !useFallback ? (
-          <picture className="contents">
-            <source 
-              srcSet={autoSrcSet} 
-              sizes={sizes}
-            />
+          // Only render the <source srcset> when the image is priority or eager.
+          // When priority={false} (e.g. the hidden desktop hero on mobile or vice versa),
+          // omitting <source> ensures a display:none <picture> does not eagerly evaluate
+          // and download its srcset in Chromium before IntersectionObserver triggers.
+          autoSrcSet && !useFallback && (priority || eager) ? (
+            <picture className="contents">
+              <source
+                srcSet={autoSrcSet}
+                sizes={sizes}
+              />
+              <img
+                src={useFallback ? normalizedSrc : (optimizedSrc || normalizedSrc)}
+                alt={alt}
+                width={width}
+                height={height}
+                className={imgClassName}
+                style={imageStyles}
+                loading={priority || eager ? "eager" : "lazy"}
+                {...{ fetchpriority: priority ? "high" : fetchPriority }}
+                onLoad={handleLoad}
+                onError={handleError}
+                decoding={priority ? "sync" : "async"}
+                sizes={sizes}
+              />
+            </picture>
+          ) : (
             <img
               src={useFallback ? normalizedSrc : (optimizedSrc || normalizedSrc)}
+              srcSet={!useFallback && autoSrcSet ? autoSrcSet : undefined}
               alt={alt}
+              width={width}
+              height={height}
               className={imgClassName}
               style={imageStyles}
               loading={priority || eager ? "eager" : "lazy"}
@@ -279,21 +302,7 @@ export function OptimizedImage({
               decoding={priority ? "sync" : "async"}
               sizes={sizes}
             />
-          </picture>
-        ) : (
-          <img
-            src={useFallback ? normalizedSrc : (optimizedSrc || normalizedSrc)}
-            alt={alt}
-            className={imgClassName}
-            style={imageStyles}
-            loading={priority || eager ? "eager" : "lazy"}
-            {...{ fetchpriority: priority ? "high" : fetchPriority }}
-            onLoad={handleLoad}
-            onError={handleError}
-            decoding={priority ? "sync" : "async"}
-            sizes={sizes}
-          />
-        )
+          )
       )}
     </div>
   );

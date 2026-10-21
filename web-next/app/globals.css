@@ -67,10 +67,30 @@ html {
   text-size-adjust: 100%;
 }
 
+@font-face {
+  font-family: "IBM Plex Sans Arabic Fallback";
+  src: local("Arial"), local("ArialMT"), local("Tahoma"), local("DejaVu Sans"), local("Noto Sans Arabic"), local("Liberation Sans");
+  font-weight: 400;
+  size-adjust: 94.69%;
+  ascent-override: 108.25%;
+  descent-override: 29.04%;
+  line-gap-override: 0%;
+}
+
+@font-face {
+  font-family: "IBM Plex Sans Arabic Fallback";
+  src: local("Arial Bold"), local("Arial-BoldMT"), local("Tahoma Bold"), local("DejaVu Sans Bold"), local("Noto Sans Arabic Bold"), local("Liberation Sans Bold");
+  font-weight: 600 900;
+  size-adjust: 94.69%;
+  ascent-override: 108.25%;
+  descent-override: 29.04%;
+  line-gap-override: 0%;
+}
+
 body {
   background-color: hsl(var(--background));
   color: hsl(var(--foreground));
-  font-family: "IBM Plex Sans Arabic", Inter, system-ui, sans-serif;
+  font-family: "IBM Plex Sans Arabic", "IBM Plex Sans Arabic Fallback", Inter, system-ui, sans-serif;
 }
 
 /* ===== بلوك «سؤال وجواب» + جداول المقالات =====

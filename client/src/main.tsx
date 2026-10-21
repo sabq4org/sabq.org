@@ -23,9 +23,11 @@ if (import.meta.env.PROD) {
     import("./lib/sentryInit").then((m) => m.initSentry()).catch(() => {});
   };
   const whenIdle = () => {
-    const ric = (window as Window & { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number }).requestIdleCallback;
-    if (ric) ric(loadSentry, { timeout: 3000 });
-    else setTimeout(loadSentry, 1500);
+    setTimeout(() => {
+      const ric = (window as Window & { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number }).requestIdleCallback;
+      if (ric) ric(loadSentry, { timeout: 5000 });
+      else setTimeout(loadSentry, 2000);
+    }, 3500);
   };
   if (document.readyState === "complete") whenIdle();
   else window.addEventListener("load", whenIdle, { once: true });

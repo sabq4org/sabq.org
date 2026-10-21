@@ -73,7 +73,9 @@ export default function SportsPortalStrip() {
               <span className="truncate font-bold text-foreground">{headline.text}</span>
             )}
             {/* الذيل يختفي على الجوال حيث لا يتّسع السطر للاسمين والدعوة معًا */}
-            <span className="hidden truncate text-muted-foreground sm:inline">· {stale ? "آخر نتيجة متاحة" : headline.tail}</span>
+            <span className="hidden truncate text-muted-foreground sm:inline">
+              · {unavailable ? "تعذّر تحديث مباريات اليوم مؤقتًا" : stale ? (todayData?.freshness ? sportsLastFetchLabel(todayData.freshness.updatedAt) : "آخر نتيجة متاحة") : headline.tail}
+            </span>
           </span>
 
           <span className="flex shrink-0 items-center gap-0.5 font-bold text-primary">
@@ -81,8 +83,8 @@ export default function SportsPortalStrip() {
             <ChevronLeft className="h-4 w-4 transition-transform group-hover:-translate-x-0.5" strokeWidth={2.2} />
           </span>
         </Link>
-        {stale && todayData?.freshness && <p role="status" className="pb-2 text-xs text-muted-foreground" dir="rtl">{sportsLastFetchLabel(todayData.freshness.updatedAt)}</p>}
-        {unavailable && <p role="status" className="pb-2 text-xs text-muted-foreground" dir="rtl">تعذّر تحديث مباريات اليوم مؤقتًا.</p>}
+        {stale && todayData?.freshness && <p role="status" className="sr-only" dir="rtl">{sportsLastFetchLabel(todayData.freshness.updatedAt)}</p>}
+        {unavailable && <p role="status" className="sr-only" dir="rtl">تعذّر تحديث مباريات اليوم مؤقتًا.</p>}
       </div>
     </div>
   );

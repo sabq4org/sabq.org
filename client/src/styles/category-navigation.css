@@ -1,5 +1,6 @@
 /* A single editorial navigation row; scrolls with the page beneath the header. */
 .category-navigation {
+  min-height: 53px;
   border-bottom: 1px solid #e3ebf2;
   background: #fff;
   color: #526575;
