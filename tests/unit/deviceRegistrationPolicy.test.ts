@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   GULF_CUP_BUNDLE_ID,
+  normalizeDeviceLocale,
   resolveGenericDeviceRegistrationPolicy,
+  sanitizeDeviceRegistrationBody,
 } from "../../server/services/deviceRegistrationPolicy";
 
 describe("generic device registration identity policy", () => {
@@ -99,5 +101,48 @@ describe("generic device registration identity policy", () => {
 
     expect(policy.safeBundleId).toBe("com.sabqorg.sabq");
     expect(policy.bundleIdUpdate).toBe("com.sabqorg.sabq");
+  });
+});
+
+describe("device registration body sanitizing", () => {
+  it("shrinks Android language tags with extensions to fit varchar(10)", () => {
+    expect(normalizeDeviceLocale("ar-SA-u-nu-latn")).toBe("ar-SA");
+    expect(normalizeDeviceLocale("ar-SA-u-ca-islamic")).toBe("ar-SA");
+    expect(normalizeDeviceLocale("en_US")).toBe("en-US");
+    expect(normalizeDeviceLocale("zh-Hans-CN")).toBe("zh-Hans-CN");
+    expect(normalizeDeviceLocale("sr-Latn-RS-u-x")).toBe("sr-Latn-RS");
+    expect(normalizeDeviceLocale("es-419")).toBe("es-419");
+    expect(normalizeDeviceLocale("ar")).toBe("ar");
+    expect(normalizeDeviceLocale("   ")).toBeUndefined();
+    expect(normalizeDeviceLocale("abcdefghijklmnop")).toBeUndefined();
+    expect(normalizeDeviceLocale(42)).toBeUndefined();
+  });
+
+  it("keeps every value it leaves in the body within the column widths", () => {
+    const body: Record<string, unknown> = {
+      deviceToken: "t",
+      locale: "ar-SA-u-nu-latn",
+      language: "en-GB-u-mu-celsius",
+      tokenProvider: "firebase-cloud-messaging",
+      platform: "android",
+    };
+    sanitizeDeviceRegistrationBody(body);
+    expect(body).toEqual({
+      deviceToken: "t",
+      locale: "ar-SA",
+      language: "en-GB",
+      platform: "android",
+    });
+  });
+
+  it("drops unusable values so the route defaults apply", () => {
+    const body: Record<string, unknown> = {
+      locale: "x".repeat(40),
+      platform: "p".repeat(30),
+      tokenProvider: "",
+    };
+    sanitizeDeviceRegistrationBody(body);
+    expect(body).toEqual({});
+    expect(() => sanitizeDeviceRegistrationBody(undefined)).not.toThrow();
   });
 });

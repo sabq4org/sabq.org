@@ -59,3 +59,58 @@ export function resolveGenericDeviceRegistrationPolicy(
     bundleIdUpdate,
   };
 }
+
+/** Column widths of `push_devices` (shared/schema.ts). */
+const LOCALE_MAX = 10;
+const TOKEN_PROVIDER_MAX = 10;
+const PLATFORM_MAX = 20;
+
+/**
+ * Shrinks a BCP-47 tag to fit `push_devices.locale` (varchar 10).
+ *
+ * Android sends `Locale.toLanguageTag()`, which carries extensions such as
+ * `ar-SA-u-nu-latn` or `ar-SA-u-ca-islamic`. Those overflowed the column and
+ * the insert failed with "value too long", so the device got no pushes. Only
+ * language (+ script/region) matters for delivery; extensions are dropped.
+ */
+export function normalizeDeviceLocale(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const tag = value.trim().replace(/_/g, "-");
+  if (!tag) return undefined;
+  const parts = tag.split("-");
+  const kept = [parts[0]];
+  for (const part of parts.slice(1)) {
+    // Script (Latn) or region (SA / 419). A singleton like `u` starts extensions.
+    if (!/^([A-Za-z]{4}|[A-Za-z]{2}|\d{3})$/.test(part)) break;
+    if ([...kept, part].join("-").length > LOCALE_MAX) break;
+    kept.push(part);
+  }
+  const result = kept.join("-");
+  return result.length > 0 && result.length <= LOCALE_MAX ? result : undefined;
+}
+
+/**
+ * Makes a `/devices/register` body safe for the `push_devices` varchar
+ * columns. Oversized optional values are dropped so the route falls back to
+ * its own defaults instead of failing the whole registration.
+ */
+export function sanitizeDeviceRegistrationBody(body: unknown): void {
+  if (!body || typeof body !== "object") return;
+  const b = body as Record<string, unknown>;
+  for (const key of ["language", "locale"] as const) {
+    if (b[key] === undefined || b[key] === null) continue;
+    const normalized = normalizeDeviceLocale(b[key]);
+    if (normalized === undefined) delete b[key];
+    else b[key] = normalized;
+  }
+  if (b.tokenProvider !== undefined &&
+      (typeof b.tokenProvider !== "string" || b.tokenProvider.length === 0 ||
+       b.tokenProvider.length > TOKEN_PROVIDER_MAX)) {
+    delete b.tokenProvider;
+  }
+  if (b.platform !== undefined &&
+      (typeof b.platform !== "string" || b.platform.length === 0 ||
+       b.platform.length > PLATFORM_MAX)) {
+    delete b.platform;
+  }
+}
