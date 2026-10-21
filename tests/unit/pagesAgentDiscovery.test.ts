@@ -33,6 +33,8 @@ describe("homepage agent discovery Link header", () => {
     const response = await onRequest(contextFor("https://sabq.org/", next));
 
     expect(await response.text()).toBe("spa");
+    expect(response.headers.get("Content-Signal")).toBe("search=yes, ai-input=yes, ai-train=no");
+    expect(response.headers.get("Vary")).toContain("Accept");
     expect(response.headers.get("Link")).toBe('<https://example.test>; rel="preconnect", <https://sabq.org/llms.txt>; rel="describedby"; type="text/plain"');
   });
 
