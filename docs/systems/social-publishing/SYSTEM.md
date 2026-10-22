@@ -1,6 +1,6 @@
 # النشر الاجتماعي (`social-publishing`)
 
-> آخر مراجعة: 2026-10-04 (long_post عبر Publer، وإزالة ** من نص البوت) | المالك: editorial + platform
+> آخر مراجعة: 2026-10-22 (رفض المزود يعود 422 في مسارات اللوحة، وتلميح نطاق Media لـ403 Publer) | المالك: editorial + platform
 
 ## الغرض
 نشر أخبار سبق على منصة X من لوحة التحكم: فوري أو مجدول، بنص من العنوان أو
@@ -107,7 +107,13 @@
   الربط بلا OAuth: الحساب يُربط في لوحة Publer ثم يُزامَن عبر
   `POST /api/social-publishing/publer/sync` (صف الحساب بـ
   `credentialsEncrypted=null` — 401/403 من Publer خلل مفتاح/خطة ولا
-  يعلّم الحساب `expired`).
+  يعلّم الحساب `expired`). 403 على `/media` وحده يعني غالباً مفتاحاً بلا نطاق
+  Media (نطاقات مفتاح Publer: workspaces, accounts, posts, media)؛ المفتاح
+  يحتاج Posts وMedia معاً.
+- **رموز الحالة في مسارات اللوحة:** رفض المزود (`SocialProviderError` أو نشر
+  فوري فاشل) يعود **422** مع `message`/`lastError`، لا 502، لأن واجهة
+  `apiRequest` تستبدل كل 502 برسالة «الخادم غير متاح مؤقتاً». واجهة البوت
+  `/api/internal/bot-social` باقية على `502 publish_failed` (عقد منشور).
 
 - **مقترحات كتّاب الرأي (منذ 2026-08-18):** يستطيع كاتب الرأي، بعد نشر مقالته
   فعلياً (`status=published` و`publishedAt <= now`) وخلال أول **24 ساعة** فقط

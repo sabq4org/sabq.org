@@ -99,10 +99,15 @@ async function toPublerError(res: Response, phase: string): Promise<SocialProvid
   } catch {
     // جسم غير JSON — نكتفي بالحالة
   }
+  // 403 على /media مع نجاح بقية النداءات = مفتاح أُنشئ بلا نطاق Media
+  // (وثائق Publer: «Insufficient scopes for the endpoint»).
+  const isMediaPhase = phase.startsWith("media");
   const hint =
-    res.status === 401 || res.status === 403
-      ? " — تحقق من PUBLER_API_KEY وخطة Business وworkspace"
-      : "";
+    res.status === 403 && isMediaPhase
+      ? " — مفتاح Publer بلا صلاحية Media على الأرجح: أنشئ مفتاحاً بصلاحيات Posts وMedia وضعه في PUBLER_API_KEY، أو انشر بلا صورة"
+      : res.status === 401 || res.status === 403
+        ? " — تحقق من PUBLER_API_KEY وصلاحياته وخطة Business وworkspace"
+        : "";
   return new SocialProviderError(
     sanitizeSecretText(`Publer ${phase} فشل (HTTP ${res.status})${detail ? `: ${detail}` : ""}${hint}`),
     { httpStatus: res.status, retryable: res.status === 429 || res.status >= 500 },

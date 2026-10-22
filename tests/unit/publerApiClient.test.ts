@@ -179,6 +179,19 @@ describe("publerApiClient — الوسائط والنشر", () => {
     }
   });
 
+  it("403 على رفع الصورة يشير لصلاحية Media في المفتاح لا للخطة فقط", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("Forbidden", { status: 403 })));
+    try {
+      await uploadImageToPubler({ buffer: Buffer.from([1, 2, 3]), mimeType: "image/jpeg" });
+      expect.unreachable("كان يجب أن يرمي");
+    } catch (err) {
+      const pErr = err as SocialProviderError;
+      expect(pErr.opts.retryable).toBe(false);
+      expect(pErr.opts.httpStatus).toBe(403);
+      expect(pErr.message).toContain("صلاحية Media");
+    }
+  });
+
   it("429 من Publer مؤقت و401 دائم برسالة تشير للمفتاح", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(429, {})));
     try {
