@@ -129,6 +129,28 @@
 .article-prose :where(blockquote p:last-child) { margin-bottom: 0; }
 .article-prose :where(table) { display: block; max-width: 100%; overflow-x: auto; }
 .article-detail-gallery { padding-block: 16px; }
+/* سطر موعد الخدمة داخل الخبر: رابط إلى /services/* بالتاريخ وكم بقي. سطر واحد بلا حدود، بلون الكلمات المفتاحية. */
+.article-service-date {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 56px;
+  padding: 10px 16px;
+  border-radius: 8px;
+  background: var(--article-surface);
+  color: var(--article-ink);
+  text-decoration: none;
+}
+.article-service-date-icon { flex-shrink: 0; width: 20px; height: 20px; color: var(--article-brand); }
+.article-service-date-text { display: flex; flex: 1; flex-wrap: wrap; align-items: baseline; gap: 2px 12px; min-width: 0; font-size: 16px; line-height: 1.7; }
+.article-service-date-label { font-weight: 700; }
+.article-service-date:hover .article-service-date-label { color: var(--article-brand); }
+.article-service-date-when { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; color: var(--article-muted); font-size: 15px; }
+.article-service-date-count { color: var(--article-brand); font-weight: 800; font-variant-numeric: tabular-nums; }
+.article-service-date-expected { padding: 0 8px; border-radius: 999px; background: #fff2cf; color: #8a5a00; font-size: 13px; font-weight: 700; }
+.dark .article-service-date-expected { background: #3a2f14; color: #e8bd6a; }
+.article-service-date-arrow { flex-shrink: 0; width: 18px; height: 18px; color: var(--article-brand); transition: transform 0.15s; }
+.article-service-date:hover .article-service-date-arrow { transform: translateX(-2px); }
 .article-detail-keywords { display: grid; gap: 12px; padding-top: 22px; border-top: 1px solid var(--article-rule); }
 .article-keyword { padding: 7px 14px; background: var(--article-surface); border-radius: 7px; font-size: 15px; color: var(--article-muted); }
 .article-keyword:hover { color: var(--article-brand); }

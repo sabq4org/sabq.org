@@ -1187,6 +1187,7 @@
         "tests/unit/mawaeedEdge.test.ts",
         "tests/unit/servicePages.test.ts",
         "tests/unit/servicePagesApi.test.ts",
+        "tests/unit/serviceArticleLink.test.ts",
         "tests/unit/mawaeedLifecycle.test.ts",
         "tests/unit/mawaeedDashboard.test.ts",
         "tests/unit/servicePageEdge.test.ts",
@@ -1197,7 +1198,7 @@
       "owners": [
         "editorial"
       ],
-      "lastReviewed": "2026-10-21"
+      "lastReviewed": "2026-10-22"
     },
     {
       "id": "systems-catalog",

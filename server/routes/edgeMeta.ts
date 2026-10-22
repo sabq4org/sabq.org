@@ -69,6 +69,7 @@ import { getAuthorPageByName } from "../services/authorProfileService";
 import { buildServicePageEdgeMeta } from "../services/servicePageEdgeMeta";
 import { isKnownSpaTopLevelPath } from "../utils/spaTopLevelRoutes";
 import { AI_POLICY_ALLOWED, AI_POLICY_FORBIDDEN, AI_POLICY_INTRO } from "@shared/aiPolicyContent";
+import { withServiceLinkHtml } from "@shared/servicePages/articleLink";
 import { archivePage, archiveHref, normalizeSeoPath, SEO_ARCHIVE_PAGE_SIZE } from "../utils/seoArchive";
 
 import { getPublicEditorialModifiedAt } from "../utils/editorialDates";
@@ -3142,7 +3143,11 @@ router.get("/api/articles/:slug/seo-bundle", seoProjectionCacheMiddleware, async
       excerpt: row.excerpt || row.aiSummary || "",
       contentHtml:
         lang === "ar"
-          ? withWorldCupHubLink(stripUnsafeHtml(row.content || ""), row.title)
+          ? withServiceLinkHtml(withWorldCupHubLink(stripUnsafeHtml(row.content || ""), row.title), {
+              title: row.title,
+              categorySlug: "categorySlug" in row ? row.categorySlug : null,
+              articleType: "articleType" in row ? row.articleType : null,
+            })
           : stripUnsafeHtml(row.content || ""),
       imageUrl: abs(row.imageUrl),
       ...("articleType" in row ? { articleType: row.articleType, imageAlt: row.imageAlt,

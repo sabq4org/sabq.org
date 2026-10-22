@@ -1,6 +1,6 @@
 # مواعيدك (`mawaeed`)
 
-> آخر مراجعة: 2026-10-21 | المالك: التحرير (البيانات) / المنصة (الصفحة والحافة)
+> آخر مراجعة: 2026-10-22 | المالك: التحرير (البيانات) / المنصة (الصفحة والحافة)
 
 ## الغرض
 صفحة عامة على `/mawaeed` تعرض مواعيد الخدمات العامة القادمة في السعودية: الرواتب، حساب المواطن، الضمان الاجتماعي، التقاعد، وإجازات التقويم الدراسي 1448. الصفحة HTML خفيف من حافة Pages، والبيانات من JSON على الـ API.
@@ -14,7 +14,7 @@
 | الطبقة | المسار |
 |--------|--------|
 | Backend | `server/services/mawaeedService.ts`, `server/routes/mawaeed.ts`, `server/routes/servicePages.ts`, `server/services/servicePageOgImage.ts`, `server/services/servicePageEdgeMeta.ts` |
-| Web | `client/src/pages/MawaeedPage.tsx` (+ `shared/mawaeed/home.ts`, `client/src/styles/mawaeed-page.css`, `client/src/lib/mawaeedRegion.ts`), سطر الرئيسية `client/src/components/mawaeed/MawaeedHomeStrip.tsx` (يُحمَّل في `client/src/pages/Home.tsx` فوق شريط البوابة الرياضية: أقرب موعدين لمنطقة القارئ المحفوظة، يفتح `/mawaeed`، ويعيد الجلب مع يوم الرياض الجديد), `functions/mawaeedPage.js`, `functions/_middleware.js`, `client/src/pages/ServiceDatePage.tsx`, `web-next/app/services/[id]/page.tsx`, `client/src/pages/dashboard/MawaeedManagement.tsx` |
+| Web | `client/src/pages/MawaeedPage.tsx` (+ `shared/mawaeed/home.ts`, `client/src/styles/mawaeed-page.css`, `client/src/lib/mawaeedRegion.ts`), سطر الرئيسية `client/src/components/mawaeed/MawaeedHomeStrip.tsx` (يُحمَّل في `client/src/pages/Home.tsx` فوق شريط البوابة الرياضية: أقرب موعدين لمنطقة القارئ المحفوظة، يفتح `/mawaeed`، ويعيد الجلب مع يوم الرياض الجديد), سطر الموعد داخل الخبر `client/src/components/mawaeed/ArticleServiceDateLine.tsx` (في `client/src/pages/ArticleDetail.tsx`), `functions/mawaeedPage.js`, `functions/_middleware.js`, `client/src/pages/ServiceDatePage.tsx`, `web-next/app/services/[id]/page.tsx`, `client/src/pages/dashboard/MawaeedManagement.tsx` |
 | Shared | `shared/mawaeed/*`, `shared/servicePages/*` |
 | Schema | `mawaeed_series`, `mawaeed_occurrences`, `mawaeed_changes` في `shared/schema.ts` و`migrations/20260927_mawaeed.sql` |
 | Seed | `scripts/seed-mawaeed.ts`, `migrations/20260927_mawaeed_seed.sql`, `data/mawaeed/2026-09-27-mawaeed-dates.csv` |
@@ -53,6 +53,7 @@
 - زر «أضف إلى التقويم» يبني `GET /api/service-pages/:id/calendar.ics` من الصفوف القادمة غير الماضية فقط (`VALUE=DATE`، نهاية اليوم التالي المدني، و`DTSTAMP` من `dateModified`). لا صفوف قادمة يعني بلا زر و404 على المسار. صورة المشاركة `GET /api/service-pages/:id/og.png` تعرض شعار سبق والعنوان والتاريخ الهجري والميلادي والشارة على أرضية بيضاء بلون العلامة `#087dbb`، بلا عدّاد يومي؛ الفشل يحوّل إلى `/branding/sabq-og-image.png`. سطرا التاريخين يُرسمان بـ `drawRtlLine` (مقاطع من اليمين إلى اليسار) لأن Canvas لا يرتّب الأرقام داخل سطر عربي.
 - القارئ يرى الصفحة داخل `Header` و`Footer` وصفحة المقال (`article-detail`). الزاحف، حين يكون `SSR_ROUTES=on`، يأخذ الصفحة من `web-next` كما يأخذ المقال. عند تعذّر SSR تُحقن الميتا والمتن في قشرة SPA عبر `buildServicePageEdgeMeta` (الصفحة المفقودة وحدها `noindex, nofollow`). لا وثيقة HTML مستقلة بألوان خارج لوحة سبق.
 - أخبار ذات صلة تظهر على الصفحة نفسها فقط: حساب المواطن من `GET /api/keyword/حساب المواطن` (يحمل `englishSlug`)، والرواتب وبقية الصفحات من `GET /api/search`. الرابط يُقبل فقط إذا كان الـ slug لاتينيًا، والأحدث أولًا بحد أربعة، وفشل الجلب يحذف القسم ولا يُسقط الصفحة. كل خبر يحمل تاريخ نشره (`relatedArticleMeta`)، والأقدم من 45 يومًا (`RELATED_ARCHIVE_DAYS`) يأخذ وسم «من الأرشيف» ولونًا أخفت. فرز الروابط في `web-next/lib/servicePage.ts` نسخة من `shared/servicePages/related.ts` لأن صورة Docker تُبنى من مجلد `web-next` وحده.
+- **سطر الموعد داخل الخبر (2026-10-22):** `serviceLinkForArticle` في `shared/servicePages/articleLink.ts` يقرأ عنوان الخبر العربي وحده، فيعرض `ArticleServiceDateLine` قبل «الكلمات المفتاحية» سطرًا واحدًا: اسم الموعد وتاريخه القادم وكم بقي وشارة «متوقع»، ورابطه صفحة `/services/*`. يقرأ `/api/mawaeed` بمفتاح سطر الرئيسية نفسه، وقبل وصول البيانات يظهر الاسم وحده. نسخة الزاحف (`seo-bundle`) تلحق الرابط نصًا بآخر المتن عبر `withServiceLinkHtml`، بلا تاريخ لأنها مخزّنة. الضمان والتأمينات والتقاعد تشترط كلمة صرف في العنوان، والرواتب تشترط «موظفي الدولة» أو «الحكومي» أو «وزارة المالية»، والجامعات والرأي وقسما `world` و`sports` مستثناة. التطبيقات والإنجليزي والأردو بلا تغيير. أي توسعة للقاعدة تُجرَّب على عناوين حقيقية من الأرشيف وتُضاف أمثلتها إلى `tests/unit/serviceArticleLink.test.ts`.
 - هذا القالب يستبدل الصفحة المنفردة في PR #1882 (`functions/citizenAccountDatePage.js`). لا تُدمَج النسختان معًا. `functions/servicePage.js` غير مستخدم.
 
 - التاريخ الميلادي يُنسَّق بـ `ar-SA-u-ca-gregory-nu-latn`. المتصفح يجعل `ar-SA` هجريًا افتراضيًا، فحذف `ca-gregory` يطبع الهجري مكان الميلادي في اللوحة والصفحات، بينما Node يطبعه ميلاديًا فلا تكشفه الاختبارات.
@@ -62,7 +63,7 @@
 ## صحة وتشغيل
 - `GET /api/mawaeed` و`GET /api/mawaeed/:slug` بكاش `public, max-age=30, s-maxage=60`.
 - التحرير: `GET/POST/PUT /api/mawaeed/admin/...` بصلاحية `mawaeed.edit`. الأدمن يمر عبر اختصار المسؤول في `userHasPermission`.
-- الاختبارات: `tests/unit/mawaeedDates.test.ts`, `mawaeedPage.test.ts`, `mawaeedApi.test.ts`, `mawaeedEdge.test.ts`, `servicePages.test.ts`, `servicePagesApi.test.ts`, `servicePageEdge.test.ts`, `mawaeedLifecycle.test.ts`.
+- الاختبارات: `tests/unit/mawaeedDates.test.ts`, `mawaeedPage.test.ts`, `mawaeedApi.test.ts`, `mawaeedEdge.test.ts`, `servicePages.test.ts`, `servicePagesApi.test.ts`, `servicePageEdge.test.ts`, `mawaeedLifecycle.test.ts`, `serviceArticleLink.test.ts`.
 - لا مفاتيح ذكاء اصطناعي.
 
 ## عند التعديل
