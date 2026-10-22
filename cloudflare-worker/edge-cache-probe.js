@@ -80,7 +80,10 @@ export async function runEdgeCacheProbe(request, cacheStorage) {
   const themes = await timed(() => cacheStorage.default.match(themesKey));
   results.burstThemesEntry = themes.ok ? await describeEntry(themes.value, false) : { error: themes.error };
 
-  return new Response(JSON.stringify({ colo: request.cf?.colo ?? null, storedAt, results }, null, 2), {
+  // cf.colo is where the request entered; with placement on, the Worker and
+  // its local Cache API run where cf-placement says (e.g. "remote-IAD").
+  const where = { colo: request.cf?.colo ?? null, placement: request.headers.get("cf-placement") };
+  return new Response(JSON.stringify({ ...where, storedAt, results }, null, 2), {
     status: 200,
     headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" },
   });

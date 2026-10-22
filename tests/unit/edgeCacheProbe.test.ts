@@ -48,6 +48,17 @@ describe("api.sabq.org edge cache probe", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it("reports where placement ran the Worker, not only the ingress colo", async () => {
+    const res = await apiOriginWorker.fetch(
+      new Request(`https://api.sabq.org${EDGE_CACHE_PROBE_PATH}`, { headers: { "cf-placement": "remote-IAD" } }),
+      env,
+      ctx,
+    );
+    const body = await res.json();
+    expect(body.placement).toBe("remote-IAD");
+    expect(body).toHaveProperty("colo");
+  });
+
   it("reports the put, the read-back, and what an earlier probe left", async () => {
     const first = await (await probe()).json();
     expect(first.results.defaultOnRequestHost.previous).toBeNull();
