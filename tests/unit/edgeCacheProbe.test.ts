@@ -63,7 +63,6 @@ describe("api.sabq.org edge cache probe", () => {
     const first = await (await probe()).json();
     expect(first.results.defaultOnRequestHost.previous).toBeNull();
     expect(first.results.defaultOnRequestHost.afterPut.storedAt).toBe(first.storedAt);
-    expect(first.results.defaultOnSabqOrg.afterPut.storedAt).toBe(first.storedAt);
     expect(first.results.named.afterPut.storedAt).toBe(first.storedAt);
     expect(first.results.burstThemesEntry).toBeNull();
 
@@ -72,10 +71,10 @@ describe("api.sabq.org edge cache probe", () => {
     expect(second.results.named.previous.storedAt).toBe(first.storedAt);
   });
 
-  it("keeps the request-host and sabq.org probe keys apart", async () => {
+  it("keys its entries on the request host, which the zone's bypass rules exclude", async () => {
     await probe();
-    const hosts = [...defaultCache.entries.keys()].map((key) => new URL(key).hostname).sort();
-    expect(hosts).toEqual(["api.sabq.org", "sabq.org"]);
+    const hosts = [...defaultCache.entries.keys()].map((key) => new URL(key).hostname);
+    expect(hosts).toEqual(["api.sabq.org"]);
   });
 
   it("reports a failing put instead of throwing", async () => {
@@ -104,8 +103,8 @@ describe("api.sabq.org edge cache probe", () => {
     const puts = defaultCache.put.mock.calls.length;
     const body = await (await probe()).json();
     expect(body.results.burstThemesEntry).toEqual({ status: 200, age: null, storedAt: null });
-    // The probe writes its two own keys to the default cache, never the themes entry.
-    expect(defaultCache.put.mock.calls.length - puts).toBe(2);
+    // The probe writes its own key to the default cache, never the themes entry.
+    expect(defaultCache.put.mock.calls.length - puts).toBe(1);
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 

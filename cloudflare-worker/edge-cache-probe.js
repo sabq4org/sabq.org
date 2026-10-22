@@ -2,17 +2,18 @@
  * Edge cache self-test for the api.sabq.org Worker:
  * GET /__sabq/edge-cache-probe
  *
- * After the 2026-10-22 deploys the Worker still never found its own Cache API
- * entries again on api.sabq.org (no HIT), with keys on either host and with
- * placement off, while the same burst module hits on sabq.org (Pages). This
- * route answers from the edge itself: does a put land, how long does it take
- * (the burst cache only waits NEW_PUBLIC_API_CACHE_LEASE_MS for it), and does
- * the next probe request find it. It stores a fixed synthetic body under its
- * own keys, reads the real /api/themes/active entry without changing it, and
- * never calls the origin.
+ * It answered why the Worker never got a Cache API HIT (2026-10-22): put
+ * resolved in a few ms without error, yet even an immediate match was empty,
+ * because the sabq.org zone's cache rule bypass-cache-for-html (cache:false for
+ * any path without a static extension) also applies to Cache API keys. With
+ * api.sabq.org excluded from that rule by host, every probe found what the
+ * previous one stored. A healthy probe shows `previous` and `afterPut` filled
+ * in both stores; empty ones mean a zone cache rule matches api.sabq.org again.
+ *
+ * It stores a fixed synthetic body under its own keys, reads the real
+ * /api/themes/active entry without changing it, and never calls the origin.
  */
 import { newPublicApiCacheKey } from "./public-api-burst-cache.js";
-import { edgeCacheKey } from "./edge-cache-zone-key.js";
 
 export const EDGE_CACHE_PROBE_PATH = "/__sabq/edge-cache-probe";
 const PROBE_TTL_S = 300;
@@ -68,7 +69,6 @@ export async function runEdgeCacheProbe(request, cacheStorage) {
   const results = {};
 
   results.defaultOnRequestHost = await probeCache(cacheStorage.default, ownKey, storedAt);
-  results.defaultOnSabqOrg = await probeCache(cacheStorage.default, edgeCacheKey(ownKey), storedAt);
   const named = await timed(() => cacheStorage.open(NAMED_CACHE));
   results.named = named.ok
     ? await probeCache(named.value, ownKey, storedAt)
@@ -76,7 +76,7 @@ export async function runEdgeCacheProbe(request, cacheStorage) {
 
   // The entry the burst cache should have stored for an anonymous request
   // without Origin; read only, never written here.
-  const themesKey = edgeCacheKey(newPublicApiCacheKey(new Request(`${url.origin}/api/themes/active`)));
+  const themesKey = newPublicApiCacheKey(new Request(`${url.origin}/api/themes/active`));
   const themes = await timed(() => cacheStorage.default.match(themesKey));
   results.burstThemesEntry = themes.ok ? await describeEntry(themes.value, false) : { error: themes.error };
 

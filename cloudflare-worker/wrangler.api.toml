@@ -1,5 +1,9 @@
 # API origin proxy for the verified api.sabq.org cutover. The secret is a
 # dashboard-managed binding and is intentionally absent from this file.
+# The sabq.org zone's cache bypass rules (bypass-cache-for-html, Bypass API
+# Cache, /api/articles/) must exclude http.host "api.sabq.org": they also apply
+# to this Worker's Cache API keys and would make every put a no-op. Check with
+# GET https://api.sabq.org/__sabq/edge-cache-probe after any cache rule edit.
 name = "sabq-api-origin"
 main = "api-origin-worker.js"
 compatibility_date = "2024-09-01"
