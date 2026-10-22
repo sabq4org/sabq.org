@@ -102,6 +102,8 @@ describe("salary service page", () => {
     const next = view.series[0].next;
     expect(next?.startsOn).toBe("2026-10-27");
     expect(model.h1).toBe("موعد صرف رواتب موظفي الدولة");
+    // الشهر والسنة من الموعد القادم في العنوان، والعنوان الظاهر h1 كما هو
+    expect(model.title).toBe("موعد صرف رواتب موظفي الدولة أكتوبر 2026: الموعد القادم وكم باقي | سبق");
     expect(model.canonical).toBe("https://sabq.org/services/government-salaries-date");
     expect(model.dateModified).toBe(view.dateModified);
     expect(model.next?.hijriLabel).toBe(next?.hijriLabel);
@@ -184,6 +186,7 @@ describe("citizen account service page", () => {
       }),
     ]);
     expect(model.h1).toBe("موعد صرف حساب المواطن");
+    expect(model.title).toBe("موعد صرف حساب المواطن نوفمبر 2026: الدفعة القادمة بالتاريخ الهجري والميلادي | سبق");
     expect(model.next?.certaintyLabel).toBe("متوقع");
     expect(model.next?.expectedHint).toBe(EXPECTED_HINT);
     expect(model.shiftRule).toContain("الجدول المعتاد");
@@ -210,6 +213,8 @@ describe("citizen account service page", () => {
       row({ id: "old", seriesId: "s-citizen", titleAr: "دفعة قديمة", startsOn: "2026-09-10", certainty: "confirmed" }),
     ]);
     expect(model.next).toBeNull();
+    // بلا موعد قادم لا شهر في العنوان
+    expect(model.title).toBe("موعد صرف حساب المواطن: الدفعة القادمة بالتاريخ الهجري والميلادي | سبق");
     expect(model.calendarHref).toBeNull();
     expect(model.rows.map((item) => item.startsOn)).toEqual(["2026-09-10"]);
     expect(model.rows[0].pastLabel).toBe("صُرفت");
@@ -235,6 +240,7 @@ describe("other mawaeed service pages", () => {
       row({ id: "hol-next", seriesId: "s-school", titleAr: "إجازة الخريف", startsOn: "2026-11-20", certainty: "confirmed" }),
     ]);
     expect(schoolModel.tone).toBe("school");
+    expect(schoolModel.title).toBe("التقويم الدراسي 1448: موعد أقرب إجازة في نوفمبر 2026 وكم باقي عليها | سبق");
     expect(schoolModel.leadPrefix).toContain("موعد الإجازة المدرسية القادمة في الرياض هو");
     expect(schoolModel.rows.find((item) => item.isPast)?.pastLabel).toBe("انتهت");
     expect(renderServiceSemanticHtml(schoolModel)).toContain("انتهت");

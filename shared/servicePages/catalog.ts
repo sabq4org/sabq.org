@@ -17,7 +17,10 @@ export type ServicePageSpec = {
   id: string;
   path: string;
   h1: string;
+  /** العنوان حين لا يوجد موعد قادم معلن. */
   title: string;
+  /** العنوان مع موعد قادم: {month} يصبح شهره وسنته بالميلادي («نوفمبر 2026»). */
+  datedTitle: string;
   fallbackDescription: string;
   source: MawaeedServiceSource;
   navLabel: string;
@@ -35,6 +38,7 @@ export const SERVICE_PAGES: ServicePageSpec[] = [
     path: "/services/school-calendar-date",
     h1: "التقويم الدراسي 1448: موعد الإجازة القادمة",
     title: "التقويم الدراسي 1448: موعد أقرب إجازة وكم باقي عليها | سبق",
+    datedTitle: "التقويم الدراسي 1448: موعد أقرب إجازة في {month} وكم باقي عليها | سبق",
     fallbackDescription:
       "مواعيد إجازات العام الدراسي 1448-1449هـ حسب وزارة التعليم من السجل المنشور في مواعيدك، بالتاريخين الهجري والميلادي.",
     source: { type: "mawaeed", seriesSlug: "school-calendar-1448" },
@@ -49,6 +53,7 @@ export const SERVICE_PAGES: ServicePageSpec[] = [
     path: "/services/citizen-account-date",
     h1: "موعد صرف حساب المواطن",
     title: "موعد صرف حساب المواطن: الدفعة القادمة بالتاريخ الهجري والميلادي | سبق",
+    datedTitle: "موعد صرف حساب المواطن {month}: الدفعة القادمة بالتاريخ الهجري والميلادي | سبق",
     fallbackDescription:
       "موعد إيداع دعم حساب المواطن القادم بالتاريخين الهجري والميلادي، وجدول الدفعات المنشورة في مواعيدك. المحسوب يُعرض «متوقع».",
     source: { type: "mawaeed", seriesSlug: "citizen-account" },
@@ -63,6 +68,7 @@ export const SERVICE_PAGES: ServicePageSpec[] = [
     path: "/services/government-salaries-date",
     h1: "موعد صرف رواتب موظفي الدولة",
     title: "موعد صرف رواتب موظفي الدولة: الموعد القادم وكم باقي | سبق",
+    datedTitle: "موعد صرف رواتب موظفي الدولة {month}: الموعد القادم وكم باقي | سبق",
     fallbackDescription:
       "موعد صرف رواتب موظفي الدولة المدنيين والعسكريين حسب السجل المنشور في مواعيدك، بالتاريخين الهجري والميلادي. المحسوب يُعرض «متوقع».",
     source: { type: "mawaeed", seriesSlug: "salaries" },
@@ -77,6 +83,7 @@ export const SERVICE_PAGES: ServicePageSpec[] = [
     path: "/services/social-security-date",
     h1: "موعد صرف الضمان الاجتماعي المطوّر",
     title: "موعد صرف الضمان الاجتماعي المطوّر: الدفعة القادمة وكم باقي | سبق",
+    datedTitle: "موعد صرف الضمان الاجتماعي المطوّر {month}: الدفعة القادمة وكم باقي | سبق",
     fallbackDescription:
       "موعد صرف معاش الضمان الاجتماعي المطوّر وإعلان الأهلية حسب وزارة الموارد البشرية بالتاريخين الهجري والميلادي.",
     source: { type: "mawaeed", seriesSlug: "social-security" },
@@ -91,6 +98,7 @@ export const SERVICE_PAGES: ServicePageSpec[] = [
     path: "/services/pensions-date",
     h1: "موعد صرف معاشات التقاعد والتأمينات",
     title: "موعد صرف رواتب المتقاعدين (التأمينات الاجتماعية) وكم باقي | سبق",
+    datedTitle: "موعد صرف رواتب المتقاعدين {month} (التأمينات الاجتماعية) وكم باقي | سبق",
     fallbackDescription:
       "مواعيد صرف معاشات التقاعد المدني والعسكري والتأمينات الاجتماعية حسب المؤسسة العامة للتأمينات الاجتماعية بالتاريخين الهجري والميلادي.",
     source: { type: "mawaeed", seriesSlug: "pensions" },
@@ -119,9 +127,9 @@ export const SERVICE_PAGE_ROBOTS = "index, follow, max-image-preview:large";
 /**
  * يعيد رابط صفحة الخدمة المقابلة لسلسلة مواعيدك لتوجيه الروابط إليها مباشرة.
  */
-export function serviceLinkForSeries(seriesSlug: string): Pick<ServicePageSpec, "path" | "navLabel"> | null {
+export function serviceLinkForSeries(seriesSlug: string): Pick<ServicePageSpec, "path" | "navLabel" | "h1"> | null {
   const page = SERVICE_PAGES.find((item) => item.source.type === "mawaeed" && item.source.seriesSlug === seriesSlug);
-  return page ? { path: page.path, navLabel: page.navLabel } : null;
+  return page ? { path: page.path, navLabel: page.navLabel, h1: page.h1 } : null;
 }
 
 /** الصفحات التي تختلف مواعيدها حسب المنطقة التعليمية. */

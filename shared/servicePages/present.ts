@@ -5,6 +5,7 @@
 
 import type { FaqItem } from "../mawaeed/content";
 import { METHODOLOGY } from "../mawaeed/content";
+import { formatGregorian } from "../mawaeed/dates";
 import type { MawaeedCard, MawaeedView } from "../mawaeed/present";
 import { regionMeta, type RegionId } from "../mawaeed/model";
 import { SERVICE_PAGES, regionSuffix, servicePageById, servicePageUsesRegion, type ServicePageSpec, type ServicePageTone } from "./catalog";
@@ -100,7 +101,7 @@ export function presentServicePage(id: string, view: MawaeedView): ServicePageMo
     regions: view.regions,
     regionNotice,
     path: spec.path,
-    title: spec.title,
+    title: pageTitle(spec, next),
     description,
     h1: spec.h1,
     canonical,
@@ -201,6 +202,13 @@ function explanationParagraphs(summary: string): string[] {
   const badge = METHODOLOGY.split(/(?<=\.)\s+/).find((sentence) => sentence.includes("«متوقع»"));
   if (badge) paragraphs.push(badge.trim());
   return paragraphs;
+}
+
+/** الناس يبحثون بالشهر والسنة («موعد صرف حساب المواطن نوفمبر 2026»)، فالعنوان يحملهما من الموعد القادم نفسه. */
+function pageTitle(spec: ServicePageSpec, next: ServicePageNext | null): string {
+  if (!next) return spec.title;
+  const { month, year } = formatGregorian(next.startsOn);
+  return spec.datedTitle.replace("{month}", `${month} ${year}`);
 }
 
 function metaDescription(next: ServicePageNext | null, _shiftRule: string | null, spec: ServicePageSpec): string {
