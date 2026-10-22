@@ -56,9 +56,10 @@ describe("service page link inside an article", () => {
     expect(serviceLinkForArticle({ title, categorySlug: "saudi" })).toBeNull();
   });
 
-  it("skips opinion pieces and the world and sports sections", () => {
+  it("skips opinion pieces (including legacy columns) and the world and sports sections", () => {
     const title = "حساب المواطن يودع 3 مليارات ريال لمستفيدي دفعة سبتمبر";
     expect(serviceLinkForArticle({ title, articleType: "opinion" })).toBeNull();
+    expect(serviceLinkForArticle({ title, articleType: "column" })).toBeNull();
     expect(serviceLinkForArticle({ title, categorySlug: "world" })).toBeNull();
     expect(serviceLinkForArticle({ title, categorySlug: "sports" })).toBeNull();
     expect(serviceLinkForArticle({ title, categorySlug: null })?.seriesSlug).toBe("citizen-account");

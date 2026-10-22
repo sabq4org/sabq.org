@@ -18,6 +18,9 @@ export type ArticleServiceLink = {
 /** أخبار العالم والرياضة لا تخص مواعيد الصرف والإجازات في السعودية. */
 const EXCLUDED_CATEGORIES = new Set(["world", "sports"]);
 
+/** «column» نوع قديم يُعامل كمقال رأي في بقية الموقع (وسم «مقال رأي» في edgeMeta). */
+const OPINION_TYPES = new Set(["opinion", "column"]);
+
 /**
  * كلمة صرف في أول الكلمة، مع سوابقها («يُصرف»، «بصرف»، «سيودع»، «الدفعة»)،
  * حتى لا تطابق «المصرفية» أو «مستودع».
@@ -73,7 +76,7 @@ export type ArticleServiceLinkInput = {
 };
 
 export function serviceLinkForArticle(input: ArticleServiceLinkInput): ArticleServiceLink | null {
-  if (input.articleType === "opinion") return null;
+  if (input.articleType && OPINION_TYPES.has(input.articleType)) return null;
   if (input.categorySlug && EXCLUDED_CATEGORIES.has(input.categorySlug)) return null;
   const title = normalizeArabicTitle(input.title || "");
   if (!title) return null;

@@ -69,7 +69,7 @@ import { getAuthorPageByName } from "../services/authorProfileService";
 import { buildServicePageEdgeMeta } from "../services/servicePageEdgeMeta";
 import { isKnownSpaTopLevelPath } from "../utils/spaTopLevelRoutes";
 import { AI_POLICY_ALLOWED, AI_POLICY_FORBIDDEN, AI_POLICY_INTRO } from "@shared/aiPolicyContent";
-import { withServiceLinkHtml } from "@shared/servicePages/articleLink";
+import { serviceLinkForArticle, withServiceLinkHtml } from "@shared/servicePages/articleLink";
 import { archivePage, archiveHref, normalizeSeoPath, SEO_ARCHIVE_PAGE_SIZE } from "../utils/seoArchive";
 
 import { getPublicEditorialModifiedAt } from "../utils/editorialDates";
@@ -777,6 +777,11 @@ async function buildArArticlePayload(
         },
       ])
     : undefined;
+  // موعد الخدمة (/services/*) للزاحف حين تُخدم قشرة SPA بدل web-next؛ متن seo-bundle يحمله فقرةً.
+  const serviceLink = serviceLinkForArticle({ title: row.title, categorySlug: row.categorySlug, articleType: row.articleType });
+  const serviceDateLink = serviceLink
+    ? buildLinkListHtml("مواعيدك", [{ href: serviceLink.path, title: serviceLink.label }])
+    : undefined;
 
   const siblingEnSlug = row.id ? await resolveEnSiblingSlug(row.id) : null;
 
@@ -812,6 +817,7 @@ async function buildArArticlePayload(
           imageSource: row.imageSource, isAiGeneratedImage: row.isAiGeneratedImage,
         }),
         worldCupHubLink,
+        serviceDateLink,
       ]
         .filter(Boolean)
         .join("") || undefined,
