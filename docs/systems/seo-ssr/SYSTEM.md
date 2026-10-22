@@ -164,3 +164,7 @@
 
 ## نسخة Node في web-next — 2026-10-21
 - `web-next/Dockerfile` مثبّت على `node:22.23.4-alpine` بدل الوسم المتحرك `node:22-alpine`، بعد إصدار Node الأمني في 2026-10-21 (Brotli RCE وتجاوز تحقق اسم المضيف في TLS). التثبيت يجعل كل بناء على Render قابلًا للتحقق. أي ترقية لاحقة تغيّر الوسم صراحةً وتُراجع مع `platform-runtime` (صورة الـAPI وCI على 24.22.1).
+
+## كاش Pages لتقليل bandwidth على Render — 2026-10-22
+- Render يحاسب على الخروج (0.15$/GB بعد 25 GB)، وكانت أغلب طلبات `/api` من Pages تصل الأصل. `cachedJson` يقبل TTL رقمًا أو دالة على الحمولة: `seo-meta` و`slug-redirect` يُحفظان 60ث للإجابة المحسومة، و10ث لما يحجب الصفحة (noindex، not found، gone، redirect) حتى يظهر الخبر المنشور حديثًا سريعًا.
+- `FULL_QUERY_API_CACHE_ROUTES` في `functions/_middleware.js` يضيف قراءات عامة للمجهول: stories، opinion (القائمة وrelated/category)، reporters/:slug، economy/snapshot، audio-bulletin/current (30ث)، muqtarab/topics/featured، mawaeed، shortlinks/article (300ث)، لطلبات GET فقط. مفتاحها يحفظ الاستعلام كاملًا مرتبًا (معالجاتها تقرأ معاملات خارج قائمة `apiCacheKey`) ومعه `Origin` الطلب لأن CORS يعكسه. نتائج المباريات الحية (`sports/today` و`rsl/hero`) خارج القائمة عمدًا: الأصل يعلن no-store أو 5ث. الكوكي والتفويض و`_nc`/`_t` وno-cache تتجاوز الكاش كما في بقية المسارات. الحارس: `edgeAuditGuards.test.ts` و`edgeMetadataBudget.test.ts`.

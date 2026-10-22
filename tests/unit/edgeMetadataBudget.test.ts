@@ -71,6 +71,13 @@ describe('Pages metadata budget', () => {
     expect(await cachedJson('https://api.sabq.org/meta', 300, context)).toEqual({ title: 'خبر' });
     expect(context.waitUntil).toHaveBeenCalledOnce();
   });
+  it('derives the cache TTL from the payload when given a function', async () => {
+    fetcher.mockResolvedValue(Response.json({ title: 'خبر', robots: 'noindex, follow' }));
+    const ttl = vi.fn((meta: { robots?: string }) => (meta.robots?.includes('noindex') ? 10 : 60));
+    await cachedJson('https://api.sabq.org/meta', ttl, context);
+    expect(ttl).toHaveBeenCalledWith({ title: 'خبر', robots: 'noindex, follow' });
+    expect(put.mock.calls[0][1].headers.get('Cache-Control')).toBe('public, max-age=10');
+  });
   it('never caches malformed JSON', async () => {
     fetcher.mockResolvedValue(new Response('{"title":'));
     expect(await cachedJson('https://api.sabq.org/meta', 300, context)).toBeNull();

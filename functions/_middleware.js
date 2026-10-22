@@ -64,10 +64,17 @@ const pagesPublicApiBurstCache = createPublicApiBurstCache();
 const DEFAULT_API_ORIGIN = "https://api.sabq.org";
 const CONTENT_SIGNAL = "search=yes, ai-input=yes, ai-train=no";
 
-// Short TTLs so a freshly published/edited article's meta + slug canonical
-// surface at the edge within ~10s (mirrors the standalone worker).
-const SEO_META_TTL = 10;
-const SLUG_REDIRECT_TTL = 10;
+// Every HTML view asks the origin for these two answers, so they were ~15% of
+// API bandwidth on Render (billed per GB since 2026-10-21) at a 10s TTL. A
+// resolved meta/slug answer is held 60s; an answer that withholds the page
+// (noindex, not found, gone) keeps the short 10s TTL so a freshly published
+// article surfaces fast.
+const SEO_META_TTL = (meta) =>
+  !meta || isEdgeNotFoundMeta(meta) ||
+  (typeof meta.robots === "string" && meta.robots.toLowerCase().includes("noindex"))
+    ? 10
+    : 60;
+const SLUG_REDIRECT_TTL = (slug) => (slug && (slug.gone || slug.redirect) ? 10 : 60);
 // A crawler must never wait for an unbounded Next.js subrequest. If SSR is
 // unavailable we fall back to the existing SEO path (when enabled), but an
 // otherwise generic SPA shell is always no-store for that crawler request.
@@ -680,6 +687,7 @@ export async function proxyToApiWithFallback(request, apiOrigin, fallbackOrigin,
 }
 
 // Edge-cached JSON GET (slug-redirect / seo-meta), keyed on the full URL.
+// `ttl` is seconds, or a function of the parsed payload returning seconds.
 export async function cachedJson(url, ttl, context, sourceRequest, proxySecret) {
   const cache = caches.default;
   const key = new Request(url, { method: "GET" });
@@ -705,10 +713,11 @@ export async function cachedJson(url, ttl, context, sourceRequest, proxySecret) 
   const text = await res.text();
   let payload;
   try { payload = JSON.parse(text); } catch (_) { return null; }
+  const ttlSeconds = typeof ttl === "function" ? ttl(payload) : ttl;
   const write = cache.put(
     key,
     new Response(text, {
-      headers: { "Content-Type": "application/json", "Cache-Control": `public, max-age=${ttl}` },
+      headers: { "Content-Type": "application/json", "Cache-Control": `public, max-age=${ttlSeconds}` },
     }),
   ).catch((err) => console.warn("[pages-fn] metadata cache write failed:", err));
   // Cache persistence must not delay an otherwise ready HTML response.
@@ -889,11 +898,45 @@ export function getApiCacheTtl(path, request) {
   if (/^\/api\/articles\/[^/]+\/ai-bullets$/.test(path)) return 60;
   if (/^\/api\/articles\/[^/]+\/media-assets$/.test(path)) return 60;
 
+  // GET only: a HEAD answer has no JSON body to validate before caching.
+  const fullQueryRoute = request.method === "GET" ? fullQueryApiCacheRoute(path, url) : null;
+  if (fullQueryRoute) return fullQueryRoute.ttl;
+
   return 0;
 }
 
-export function apiCacheKey(requestUrl) {
+// Anonymous public reads added 2026-10-22 to cut Render bandwidth. Their
+// handlers read query parameters beyond apiCacheKey's keep-list (lang,
+// region, authorId, sort…), so their cache key keeps the whole query string.
+const FULL_QUERY_API_CACHE_ROUTES = [
+  { match: (p) => p === "/api/stories", ttl: 60 },
+  { match: (p) => p === "/api/opinion", ttl: 60 },
+  { match: (p) => /^\/api\/opinion\/related\/category\/[^/]+$/.test(p), ttl: 60 },
+  { match: (p) => /^\/api\/reporters\/[^/]+$/.test(p), ttl: 60 },
+  { match: (p) => p === "/api/economy/snapshot", ttl: 60 },
+  { match: (p) => p === "/api/audio-bulletin/current", ttl: 30 },
+  { match: (p) => p === "/api/muqtarab/topics/featured", ttl: 60 },
+  { match: (p) => p === "/api/mawaeed", ttl: 60 },
+  // Live-score reads (sports/today, rsl/hero) stay out: the origin sends
+  // no-store or a 5s TTL while a match is on.
+  { match: (p) => /^\/api\/shortlinks\/article\/[^/]+$/.test(p), ttl: 300 },
+];
+
+function fullQueryApiCacheRoute(path) {
+  return FULL_QUERY_API_CACHE_ROUTES.find(({ match }) => match(path)) || null;
+}
+
+export function apiCacheKey(requestUrl, requestOrigin = "") {
   const u = new URL(requestUrl);
+  if (fullQueryApiCacheRoute(u.pathname)) {
+    u.searchParams.delete("_nc");
+    u.searchParams.delete("_t");
+    u.searchParams.sort();
+    // The API's CORS middleware reflects the request Origin, so a cached
+    // answer must not cross from one Origin (or none) to another.
+    u.searchParams.set("__sabq_origin", requestOrigin ? `present:${requestOrigin}` : "absent");
+    return new Request(u.toString(), { method: "GET" });
+  }
   // Keep only essential query parameters that alter the backend response
   const cleanParams = new URLSearchParams();
   const keepParams = ["limit", "offset", "page", "q", "category", "type", "withStats", "includeIfox"];
@@ -1186,7 +1229,7 @@ async function handleRequest(context) {
     if (newPublicApiResponse) return newPublicApiResponse;
     const apiCacheTtl = getApiCacheTtl(path, request);
     const useApiCache = apiCacheTtl > 0;
-    const apiCacheKeyReq = useApiCache ? apiCacheKey(request.url) : null;
+    const apiCacheKeyReq = useApiCache ? apiCacheKey(request.url, request.headers.get("origin") || "") : null;
 
     if (useApiCache && apiCacheKeyReq) {
       try {
