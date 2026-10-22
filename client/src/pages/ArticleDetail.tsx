@@ -60,6 +60,8 @@ import { useHeroPreload } from "@/hooks/useHeroPreload";
 import { ARTICLE_HERO_QUALITY, ARTICLE_HERO_FALLBACK_WIDTH } from "@shared/articleHeroPreload";
 import { useNaturalAspectRatio } from "@/hooks/useNaturalAspectRatio";
 import { useInViewport } from "@/hooks/useInViewport";
+import ArticleServiceDateLine from "@/components/mawaeed/ArticleServiceDateLine";
+import { serviceLinkForArticle } from "@shared/servicePages/articleLink";
 
 // الإعلان البارز أعلى صفحة المقال (تحت الهيدر). أُعيد إظهاره 2026-07-09 (بعد إخفاء المونديال). للإخفاء: بدّل إلى false.
 const SHOW_TOP_AD = true;
@@ -1433,6 +1435,16 @@ export default function ArticleDetail() {
                   </div>
                 </div>
               );
+            })()}
+
+            {/* موعد الخدمة: خبر عن حساب المواطن أو الرواتب أو الضمان أو التقاعد أو الإجازات يربط بصفحة موعدها */}
+            {(() => {
+              const serviceLink = serviceLinkForArticle({
+                title: article.title,
+                categorySlug: article.category?.slug,
+                articleType: article.articleType,
+              });
+              return serviceLink ? <ArticleServiceDateLine link={serviceLink} /> : null;
             })()}
 
             {/* Keywords - from SEO field OR article_tags table (after attached images) */}

@@ -65,6 +65,19 @@ describe('public SEO projections', () => {
     expect(r.status).toBe(404); expect(JSON.stringify(r.body)).not.toContain('SECRET');
     expect(r.headers['Cache-Control']).toBe('no-store');
   });
+  it('links a service-date article to its service page in the crawler body and the SPA-shell fallback', async () => {
+    const row = {id:'a1',title:'حساب المواطن يودع 3 مليارات ريال لمستفيدي دفعة سبتمبر',content:'<p>نص الخبر</p>',slug:'s1',englishSlug:'x1',status:'published',seo:{},publishedAt:'2026-09-10',updatedAt:'2026-09-10',categorySlug:'saudi',articleType:'news'};
+    f.rows = [[row]];
+    const bundle = await request('/api/articles/:slug/seo-bundle', {slug:'x1'});
+    expect(bundle.status).toBe(200);
+    expect(bundle.body.contentHtml).toBe('<p>نص الخبر</p>\n<p><a href="/services/citizen-account-date">موعد صرف حساب المواطن القادم</a></p>');
+    f.rows = [[row]];
+    const shell = await request('/api/edge/seo-meta', {}, {path:'/article/x1'});
+    expect(shell.body.semanticHtml).toContain('<a href="/services/citizen-account-date">موعد صرف حساب المواطن القادم</a>');
+    f.rows = [[{...row, articleType:'column'}]];
+    const column = await request('/api/articles/:slug/seo-bundle', {slug:'x1'});
+    expect(column.body.contentHtml).not.toContain('/services/');
+  });
   it('answers an unknown top-level path with a real 404 and no canonical', async () => {
     const r = await request('/api/edge/seo-meta', {}, {path:'/this-page-does-not-exist-xyz123'});
     expect(r.body.status).toBe(404); expect(r.body.robots).toBe('noindex, follow');
