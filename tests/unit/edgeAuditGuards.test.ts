@@ -25,6 +25,25 @@ describe("edge audit boundaries", () => {
     expect(getApiCacheTtl("/api/categories/slug/sports", req({}, "POST"))).toBe(0);
     expect(getApiCacheTtl("/api/categories/slug/sports/extra", req())).toBe(0);
   });
+  it("edge-caches the public reads added for Render bandwidth with full-query keys", () => {
+    const req = (url: string, headers: Record<string, string> = {}) => new Request(url, { headers });
+    const ttl = (path: string, query = "", headers: Record<string, string> = {}) =>
+      getApiCacheTtl(path, req("https://sabq.org" + path + query, headers));
+    expect(ttl("/api/stories")).toBe(60);
+    expect(ttl("/api/opinion", "?page=1&limit=30")).toBe(60);
+    expect(ttl("/api/reporters/shyfh-sbq")).toBe(60);
+    expect(ttl("/api/audio-bulletin/current")).toBe(30);
+    expect(ttl("/api/shortlinks/article/abc")).toBe(300);
+    expect(ttl("/api/sports/today", "?resilient=1&lang=ar")).toBe(10);
+    expect(ttl("/api/sports/today", "?resilient=1")).toBe(0);
+    expect(ttl("/api/stories", "", { cookie: "connect.sid=s%3Aabc" })).toBe(0);
+    expect(ttl("/api/stories/some-slug")).toBe(0);
+    const key = (q: string) => apiCacheKey("https://sabq.org/api/opinion" + q).url;
+    expect(key("?sort=new&authorId=1")).not.toBe(key("?sort=new&authorId=2"));
+    expect(key("?limit=30&page=1")).toBe(key("?page=1&limit=30"));
+    expect(apiCacheKey("https://sabq.org/api/sports/today?lang=en&resilient=1").url)
+      .not.toBe(apiCacheKey("https://sabq.org/api/sports/today?lang=ar&resilient=1").url);
+  });
   it("preserves Google News exclusion in Next metadata", () => {
     expect(articleMetadata({ title: "test", googlebotNews: "noindex" } as any).other)
       .toEqual({ "googlebot-news": "noindex" });
