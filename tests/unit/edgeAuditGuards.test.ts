@@ -93,3 +93,85 @@ describe("SSR fallback contract", () => {
     await expect(fetchSsrResponse(new Request("https://sabq.org/"), "https://next.example", 10)).rejects.toThrow();
   });
 });
+
+// @ts-expect-error Pages JS is untyped
+import { onRequest } from "../../functions/_middleware.js";
+describe("Pages «استمع» edge copy", () => {
+  const put = vi.fn(async () => {});
+  const audio = (headers: Record<string, string>) =>
+    new Response(new Uint8Array(32), {
+      status: 200,
+      headers: {
+        "content-type": "audio/wav", "content-length": "32", "x-sabq-article-published": "1", ...headers,
+      },
+    });
+  const context = (path = "/api/articles/a/summary-audio?tts=tafqit-v2") => ({
+    request: new Request(`https://sabq.org${path}`),
+    env: { API_ORIGIN: "https://api.example" },
+    next: vi.fn(async () => new Response("shell")),
+    waitUntil: vi.fn(),
+  });
+  const stored = () => put.mock.calls.map(([key, res]) => ({
+    key: (key as Request).url,
+    cacheControl: (res as Response).headers.get("cache-control"),
+    cdn: (res as Response).headers.get("cdn-cache-control"),
+    age: (res as Response).headers.get("age"),
+  }));
+  afterEach(() => put.mockClear());
+
+  it("keeps a Worker HIT only for what is left of its window, with no last-good copy", async () => {
+    vi.stubGlobal("caches", { default: { match: vi.fn(async () => undefined), put, delete: vi.fn() } });
+    vi.stubGlobal("fetch", vi.fn(async () => audio({
+      age: "590",
+      "x-edge-cache": "HIT",
+      "cache-control": "public, max-age=0, s-maxage=600",
+      "cdn-cache-control": "public, max-age=600",
+    })));
+    const res = await onRequest(context());
+    expect(res.status).toBe(200);
+    expect(stored()).toEqual([expect.objectContaining({
+      cacheControl: "public, max-age=10, s-maxage=10", cdn: null, age: null,
+    })]);
+    expect(stored()[0].key).not.toContain("__sabq_last_good");
+  });
+
+  it("stores a clip the origin marks CDN no-store, since the edge owns this policy", async () => {
+    vi.stubGlobal("caches", { default: { match: vi.fn(async () => undefined), put, delete: vi.fn() } });
+    vi.stubGlobal("fetch", vi.fn(async () => audio({
+      "cache-control": "private, no-store",
+      "cdn-cache-control": "no-store",
+    })));
+    await onRequest(context());
+    expect(stored()).toEqual([expect.objectContaining({
+      cacheControl: "public, max-age=600, s-maxage=600", cdn: null,
+    })]);
+  });
+
+  it("keeps nothing the origin's guard did not confirm as published", async () => {
+    vi.stubGlobal("caches", { default: { match: vi.fn(async () => undefined), put, delete: vi.fn() } });
+    vi.stubGlobal("fetch", vi.fn(async () => audio({
+      "x-sabq-article-published": "", "cache-control": "private, no-store",
+    })));
+    const res = await onRequest(context());
+    expect(res.status).toBe(200);
+    expect(res.headers.get("cache-control")).toBe("private, no-store");
+    expect(put).not.toHaveBeenCalled();
+  });
+
+  it("gives a cold clip's last origin attempt no deadline, unlike other cached reads", async () => {
+    vi.stubGlobal("caches", { default: { match: vi.fn(async () => undefined), put, delete: vi.fn() } });
+    const stall = () => Promise.reject(Object.assign(new Error("stall"), { name: "TimeoutError" }));
+    const lastAttemptSignal = async (path: string, body: () => Response) => {
+      const fetchMock = vi.fn().mockImplementationOnce(stall).mockImplementationOnce(stall)
+        .mockImplementation(async () => body());
+      vi.stubGlobal("fetch", fetchMock);
+      await onRequest(context(path));
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+      return fetchMock.mock.calls[2][1].signal;
+    };
+    expect(await lastAttemptSignal("/api/articles/a/summary-audio", () => audio({}))).toBeUndefined();
+    expect(await lastAttemptSignal("/api/reporters/some-writer", () => new Response("{}", {
+      status: 200, headers: { "content-type": "application/json" },
+    }))).toBeInstanceOf(AbortSignal);
+  });
+});

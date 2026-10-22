@@ -12,7 +12,10 @@ const rows: Record<string, { status: string; authorId: string; reporterId: strin
 const perms: Record<string, string[]> = { reviewer: ["opinion.review"], reader: ["comments.create"] };
 
 vi.mock("../../server/services/articleVisibilityService", () => ({
-  getArticleVisibilityRow: async (lang: string, key: string) => rows[`${lang}:${key}`] ?? null,
+  getArticleVisibilityRow: async (lang: string, key: string) => {
+    if (key === "db-error") throw new Error("pool exhausted");
+    return rows[`${lang}:${key}`] ?? null;
+  },
 }));
 vi.mock("../../server/rbac", () => ({
   getEffectiveUserPermissions: async (id: string) => perms[id] ?? [],
@@ -85,5 +88,17 @@ describe("unpublished article guard", () => {
     const reviewer = await get("/api/opinion/frpdjs2", "reviewer", "opinion_author");
     expect(reviewer.status).toBe(200);
     expect(reviewer.headers.get("cache-control")).toBe("private, no-store");
+  });
+
+  it("marks only a confirmed published row as shareable at the edge", async () => {
+    const marker = async (path: string, user?: string, role?: string) =>
+      (await get(path, user, role)).headers.get("x-sabq-article-published");
+    expect(await marker("/api/articles/published-story/summary-audio")).toBe("1");
+    expect(await marker("/api/opinion/frpdjs2", "writer-1")).toBeNull();
+    expect(await marker("/api/articles/embargoed", "staff-x", "editor")).toBeNull();
+    expect(await marker("/api/articles/featured")).toBeNull();
+    const failOpen = await get("/api/articles/db-error/summary-audio");
+    expect(failOpen.status).toBe(200);
+    expect(failOpen.headers.get("x-sabq-article-published")).toBeNull();
   });
 });

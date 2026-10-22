@@ -927,7 +927,14 @@ const FULL_QUERY_API_CACHE_ROUTES = [
   // on request (HUMAIN alone may take 25 s), so it keeps the unbounded final
   // proxy attempt instead of the 10 s read deadline. No 24 h last-good copy:
   // an unpublished article's clip must not come back when the origin fails.
-  { match: (p) => /^\/api\/articles\/[^/]+\/summary-audio$/.test(p), ttl: 600, timeoutMs: 0, lastGood: false },
+  // Kept only when the origin's guard confirmed the article is published.
+  {
+    match: (p) => /^\/api\/articles\/[^/]+\/summary-audio$/.test(p),
+    ttl: 600,
+    timeoutMs: 0,
+    lastGood: false,
+    requireHeader: "x-sabq-article-published",
+  },
 ];
 
 function fullQueryApiCacheRoute(path) {
@@ -943,6 +950,11 @@ export function apiProxyTimeoutMs(path, useApiCache) {
 
 export function apiLastGoodAllowed(path) {
   return fullQueryApiCacheRoute(path)?.lastGood !== false;
+}
+
+export function apiAnswerShareable(path, res) {
+  const header = fullQueryApiCacheRoute(path)?.requireHeader;
+  return !header || res.headers.get(header) === "1";
 }
 
 // An answer the api.sabq.org Worker served from its own cache is already
@@ -1309,7 +1321,7 @@ async function handleRequest(context) {
       // visitors: homepage "Unterminated string in JSON…"; logged-in users
       // (connect.sid → cache bypass, single stream) were fine. Incident
       // 2026-07-26.
-      if (useApiCache && apiCacheKeyReq && res.status === 200) {
+      if (useApiCache && apiCacheKeyReq && res.status === 200 && apiAnswerShareable(path, res)) {
         if (!res.headers.has("set-cookie")) {
           let bodyBuf;
           try {
@@ -1352,6 +1364,11 @@ async function handleRequest(context) {
           const storeTtl = remainingApiCacheTtl(apiCacheTtl, res.headers.get("age"));
           // Counted once above; a stored Age would shorten the entry again.
           outHeaders.delete("age");
+          // These outrank Cache-Control at Cloudflare: the Worker's 600 s copy
+          // would outlive storeTtl, the origin's no-store («استمع») would keep
+          // nothing, and either would cap the last-good copy below.
+          outHeaders.delete("cdn-cache-control");
+          outHeaders.delete("cloudflare-cdn-cache-control");
           outHeaders.set(
             "Cache-Control",
             `public, max-age=${storeTtl}, s-maxage=${storeTtl}`,

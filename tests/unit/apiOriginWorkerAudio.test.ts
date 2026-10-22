@@ -19,6 +19,7 @@ const audioResponse = (body: Uint8Array = clip(), headers: Record<string, string
       "cache-control": "private, no-store",
       "cdn-cache-control": "no-store",
       "x-tts-provider": "humain",
+      "x-sabq-article-published": "1",
       ...headers,
     },
   });
@@ -143,7 +144,8 @@ describe("api-origin-worker summary audio edge cache", () => {
     ["no Content-Length", () => new Response(new ReadableStream({
       start(controller) { controller.enqueue(clip()); controller.close(); },
     }), { status: 200, headers: { "content-type": "audio/wav" } })],
-    ["an oversized clip", () => audioResponse(clip(), { "content-length": String(SUMMARY_AUDIO_MAX_BYTES + 1) })],
+    ["an oversized clip", () => audioResponse(clip(SUMMARY_AUDIO_MAX_BYTES + 1))],
+    ["a clip the guard did not confirm published", () => audioResponse(clip(), { "x-sabq-article-published": "" })],
   ])("does not store %s and passes it through", async (_label, make) => {
     const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(make()));
     vi.stubGlobal("fetch", fetchMock);
@@ -152,6 +154,7 @@ describe("api-origin-worker summary audio edge cache", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(cache.put).not.toHaveBeenCalled();
     expect(first.headers.has("x-edge-cache")).toBe(false);
+    expect(first.status).toBe(make().status);
   });
 
   it("refuses a cut transfer instead of storing or playing it", async () => {

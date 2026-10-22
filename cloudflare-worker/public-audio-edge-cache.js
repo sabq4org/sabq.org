@@ -8,11 +8,14 @@
  * Worker keeps it for SUMMARY_AUDIO_EDGE_TTL_S, like functions/_middleware.js
  * does for sabq.org (FULL_QUERY_API_CACHE_ROUTES).
  *
- * The policy lives at the edge; the origin is not asked to mark the response:
+ * The policy lives at the edge; the origin only confirms publication:
  * - only anonymous GETs (no Authorization, x-session-id or session cookie)
  *   that do not ask for fresh data (no-cache, `_nc`, `_t`);
  * - only a complete 200 audio/* body with an exact Content-Length, no
- *   Set-Cookie, no Content-Encoding, and at most SUMMARY_AUDIO_MAX_BYTES.
+ *   Set-Cookie, no Content-Encoding, and at most SUMMARY_AUDIO_MAX_BYTES;
+ * - only when server/routes/unpublishedArticleGuard.ts confirmed the article
+ *   is published (`X-Sabq-Article-Published: 1`). Its DB-error pass-through
+ *   sets no marker, so a draft's clip can never be shared.
  * Anything else passes through untouched. A hit is the whole clip (200), as
  * the origin answers today; Range is not served from here.
  */
@@ -65,6 +68,7 @@ export function summaryAudioPolicy(request) {
 /** A whole, shareable, anonymous audio answer (origin response or cache hit). */
 export function isShareableSummaryAudio(response, requestOrigin = "") {
   if (response.status !== 200 || response.headers.has("set-cookie")) return false;
+  if (response.headers.get("x-sabq-article-published") !== "1") return false;
   const contentType = (response.headers.get("content-type") || "").toLowerCase();
   if (!contentType.startsWith("audio/")) return false;
   const encoding = (response.headers.get("content-encoding") || "identity").trim().toLowerCase();

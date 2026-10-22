@@ -48,6 +48,10 @@ function guardFor(lang: ArticleLang) {
       if (decision === "allow") {
         // A staff/owner view of a draft must never land in a shared cache.
         if (row.status !== "published") res.setHeader("Cache-Control", "private, no-store");
+        // Only a confirmed published row lets the edge share an answer the
+        // handler marks private («استمع» audio, public-audio-edge-cache.js).
+        // Never set on the DB-error pass-through below.
+        else res.setHeader("X-Sabq-Article-Published", "1");
         return next();
       }
       res.setHeader("Cache-Control", "no-store");
