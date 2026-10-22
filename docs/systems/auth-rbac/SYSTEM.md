@@ -125,6 +125,7 @@
   ثُبت ذلك بالفحص أدناه في 09:24Z: بعد استثناء `api.sabq.org` من القاعدة الأولى وجد كل طلب ما حفظه سابقه، وعاد الفشل فور إعادتها.
 - لذلك تستثني القواعد الثلاث `http.host "api.sabq.org"`. هذا تغيير في لوحة Cloudflare لا في المستودع، والشرط مذكور في رأس `cloudflare-worker/wrangler.api.toml`. ولا أثر للاستثناء على غير ذلك، لأن كل طلبات `api.sabq.org` تمر بالـWorker، وهو يجلب من `onrender.com` مباشرة.
 - نقلُ المفاتيح إلى `sabq.org` في #1957 أبقاها تحت القاعدة، فأُلغي مع `edge-cache-zone-key.js`. وقد استُبعد قبل ذلك placement ومهلة الحفظ.
+- **المدة عبر الطبقتين:** Pages يشغّل وحدة القراءات نفسها، وعند فواته يطلب `api.sabq.org`، وقد يجيبه الـWorker من كاشه. لذلك تحمل الإصابة المدة المتبقية فقط في `Cache-Control` و`CDN-Cache-Control`، محسوبة من `Age` أو من `X-Sabq-Edge-Stored-At` الذي يُختم عند الحفظ، ولا تُمرَّر `Age`. فلا تبقى الرئيسية عند Pages أكثر من 15ث من لحظة جلبها من الأصل. الحارس: `publicApiBurstLayers.test.ts`.
 - **الفحص:** `GET https://api.sabq.org/__sabq/edge-cache-probe` (`cloudflare-worker/edge-cache-probe.js`) يحفظ مدخلًا تجريبيًا ثابتًا في `caches.default` وفي كاش مسمّى، ثم يقرؤه فورًا. ويعرض:
   - ما تركه طلب الفحص السابق.
   - وجود مدخل `/api/themes/active` الحقيقي.

@@ -983,6 +983,7 @@
         "cloudflare-worker/public-audio-edge-cache.js",
         "cloudflare-worker/edge-cache-probe.js",
         "tests/unit/edgeCacheProbe.test.ts",
+        "tests/unit/publicApiBurstLayers.test.ts",
         "tests/unit/apiOriginWorkerAudio.test.ts",
         "shared/botPublisherTokens.ts",
         "server/services/botPublisherTokenService.ts",
