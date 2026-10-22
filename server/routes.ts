@@ -25266,7 +25266,6 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
             id: users.id,
             firstName: users.firstName,
             lastName: users.lastName,
-            email: users.email,
             profileImageUrl: users.profileImageUrl,
             bio: users.bio,
             // gender drives the gendered byline on iOS opinion detail
@@ -25447,7 +25446,6 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
             id: users.id,
             firstName: users.firstName,
             lastName: users.lastName,
-            email: users.email,
             profileImageUrl: users.profileImageUrl,
             bio: users.bio,
           },
