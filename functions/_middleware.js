@@ -898,7 +898,8 @@ export function getApiCacheTtl(path, request) {
   if (/^\/api\/articles\/[^/]+\/ai-bullets$/.test(path)) return 60;
   if (/^\/api\/articles\/[^/]+\/media-assets$/.test(path)) return 60;
 
-  const fullQueryRoute = fullQueryApiCacheRoute(path, url);
+  // GET only: a HEAD answer has no JSON body to validate before caching.
+  const fullQueryRoute = request.method === "GET" ? fullQueryApiCacheRoute(path, url) : null;
   if (fullQueryRoute) return fullQueryRoute.ttl;
 
   return 0;
@@ -916,23 +917,24 @@ const FULL_QUERY_API_CACHE_ROUTES = [
   { match: (p) => p === "/api/audio-bulletin/current", ttl: 30 },
   { match: (p) => p === "/api/muqtarab/topics/featured", ttl: 60 },
   { match: (p) => p === "/api/mawaeed", ttl: 60 },
-  { match: (p) => p === "/api/rsl/hero", ttl: 30 },
+  // Live-score reads (sports/today, rsl/hero) stay out: the origin sends
+  // no-store or a 5s TTL while a match is on.
   { match: (p) => /^\/api\/shortlinks\/article\/[^/]+$/.test(p), ttl: 300 },
-  // Live scores: short TTL, and only with an explicit language, because the
-  // handler otherwise falls back to the request's language headers.
-  { match: (p, u) => p === "/api/sports/today" && u.searchParams.has("lang"), ttl: 10 },
 ];
 
-function fullQueryApiCacheRoute(path, url) {
-  return FULL_QUERY_API_CACHE_ROUTES.find(({ match }) => match(path, url)) || null;
+function fullQueryApiCacheRoute(path) {
+  return FULL_QUERY_API_CACHE_ROUTES.find(({ match }) => match(path)) || null;
 }
 
-export function apiCacheKey(requestUrl) {
+export function apiCacheKey(requestUrl, requestOrigin = "") {
   const u = new URL(requestUrl);
-  if (fullQueryApiCacheRoute(u.pathname, u)) {
+  if (fullQueryApiCacheRoute(u.pathname)) {
     u.searchParams.delete("_nc");
     u.searchParams.delete("_t");
     u.searchParams.sort();
+    // The API's CORS middleware reflects the request Origin, so a cached
+    // answer must not cross from one Origin (or none) to another.
+    u.searchParams.set("__sabq_origin", requestOrigin ? `present:${requestOrigin}` : "absent");
     return new Request(u.toString(), { method: "GET" });
   }
   // Keep only essential query parameters that alter the backend response
@@ -1227,7 +1229,7 @@ async function handleRequest(context) {
     if (newPublicApiResponse) return newPublicApiResponse;
     const apiCacheTtl = getApiCacheTtl(path, request);
     const useApiCache = apiCacheTtl > 0;
-    const apiCacheKeyReq = useApiCache ? apiCacheKey(request.url) : null;
+    const apiCacheKeyReq = useApiCache ? apiCacheKey(request.url, request.headers.get("origin") || "") : null;
 
     if (useApiCache && apiCacheKeyReq) {
       try {
