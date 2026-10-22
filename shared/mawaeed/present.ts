@@ -153,7 +153,7 @@ export function presentMawaeed(input: {
     sections,
     faq,
     methodology: pageSlug ? null : METHODOLOGY,
-    jsonLd: buildJsonLd(page, dateModified, blocks, faq, region),
+    jsonLd: buildJsonLd(page, dateModified, blocks, faq),
   };
   return { notFound: false, view };
 }
@@ -323,32 +323,52 @@ function maxModified(series: SeriesRecord[]): string {
   return new Date(Math.max(...stamps)).toISOString();
 }
 
+/**
+ * المواعيد مواعيد صرف وإجازات لا فعاليات يحضرها الناس، فلا تُوصف بـ Event
+ * (تحذيرات Search Console في 2026-10-13: address وoffers وperformer…).
+ * القائمة روابط صفحات الخدمة في سبق، والتاريخ نفسه في النص الظاهر.
+ */
 function buildJsonLd(
   page: MawaeedView["page"],
   dateModified: string,
   blocks: MawaeedSeriesBlock[],
   faq: FaqItem[],
-  region: RegionId,
 ): Record<string, unknown> {
-  const events = blocks.flatMap((block) => (block.next ? [block.next] : []));
+  const breadcrumbId = `${page.canonical}#breadcrumb`;
+  const listId = `${page.canonical}#services`;
+  const services = blocks.flatMap((block) => {
+    const link = serviceLinkForSeries(block.slug);
+    return link ? [{ name: link.h1, url: `${SITE}${link.path}` }] : [];
+  });
+  const crumbs = [
+    { "@type": "ListItem", position: 1, name: "سبق", item: `${SITE}/` },
+    { "@type": "ListItem", position: 2, name: "مواعيدك", item: `${SITE}/mawaeed` },
+  ];
+  if (page.slug) crumbs.push({ "@type": "ListItem", position: 3, name: page.h1, item: page.canonical });
   const graph: Record<string, unknown>[] = [
     {
-      "@type": "WebPage",
+      "@type": page.slug ? "WebPage" : "CollectionPage",
+      "@id": page.canonical,
       name: page.h1,
       url: page.canonical,
       description: page.description,
       inLanguage: "ar",
       dateModified,
-      isPartOf: { "@type": "WebSite", name: "سبق", url: SITE },
+      isPartOf: { "@type": "WebSite", name: "سبق", url: `${SITE}/` },
+      breadcrumb: { "@id": breadcrumbId },
+      ...(services.length > 0 ? { mainEntity: { "@id": listId } } : {}),
     },
+    { "@type": "BreadcrumbList", "@id": breadcrumbId, itemListElement: crumbs },
   ];
-  if (events.length > 0) {
+  if (services.length > 0) {
     graph.push({
       "@type": "ItemList",
-      itemListElement: events.map((card, index) => ({
+      "@id": listId,
+      itemListElement: services.map((service, index) => ({
         "@type": "ListItem",
         position: index + 1,
-        item: eventNode(card, region),
+        name: service.name,
+        url: service.url,
       })),
     });
   }
@@ -364,20 +384,4 @@ function buildJsonLd(
     });
   }
   return { "@context": "https://schema.org", "@graph": graph };
-}
-
-function eventNode(card: MawaeedCard, region: RegionId): Record<string, unknown> {
-  const place = card.regionGroup === "all"
-    ? "المملكة العربية السعودية"
-    : regionMeta(region).label;
-  return {
-    "@type": "Event",
-    name: card.title,
-    startDate: card.startsOn,
-    endDate: card.endsOn || card.startsOn,
-    eventStatus: "https://schema.org/EventScheduled",
-    location: { "@type": "Place", name: place },
-    organizer: { "@type": "Organization", name: card.sourceTitle, url: card.sourceUrl },
-    url: card.sourceUrl,
-  };
 }

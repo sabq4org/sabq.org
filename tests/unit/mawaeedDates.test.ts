@@ -202,19 +202,39 @@ describe("mawaeed presentation", () => {
     }
   });
 
-  it("names the selected administration for regional events and Saudi Arabia for national events", () => {
-    const regionalPage = presentMawaeed({ pageSlug: "school-calendar-1448", region: "riyadh", now: NOW, series: [school], occurrences: [
-      row({ id: "extra", seriesId: "s-school", titleAr: "إجازة إضافية", startsOn: "2026-10-25", regionGroup: "riyadh_most" }),
-    ] });
-    const nationalPage = presentMawaeed({ pageSlug: "school-calendar-1448", region: "riyadh", now: NOW, series: [school], occurrences: [
-      row({ id: "autumn", seriesId: "s-school", titleAr: "إجازة الخريف", startsOn: "2026-11-20" }),
-    ] });
-    if (regionalPage.notFound || nationalPage.notFound) throw new Error("expected school page");
-    const regionalJson = JSON.stringify(regionalPage.view.jsonLd);
-    const nationalJson = JSON.stringify(nationalPage.view.jsonLd);
-    expect(regionalJson).toContain('"name":"الرياض"');
-    expect(nationalJson).toContain('"name":"المملكة العربية السعودية"');
-    expect(regionalJson).not.toContain("القصيم");
+  it("lists the Sabq service pages instead of Event nodes (Search Console warnings, 2026-10-13)", () => {
+    for (const region of ["riyadh", "qassim", "makkah"]) {
+      const home = presentMawaeed({ region, now: NOW, series: [salary, school], occurrences });
+      if (home.notFound) throw new Error("expected home");
+      const json = home.view.jsonLd as { "@graph": Record<string, unknown>[] };
+      const text = JSON.stringify(json);
+      // صرف وإجازات لا فعاليات: لا Event ولا حقوله، ولا روابط المصادر الخارجية
+      for (const banned of ['"Event"', "startDate", "eventStatus", "organizer", "location", "example.sa"]) {
+        expect(text).not.toContain(banned);
+      }
+      expect(json["@graph"].map((node) => node["@type"])).toEqual(["CollectionPage", "BreadcrumbList", "ItemList"]);
+      const page = json["@graph"][0] as { "@id": string; mainEntity: { "@id": string }; breadcrumb: { "@id": string } };
+      expect(page["@id"]).toBe("https://sabq.org/mawaeed");
+      const crumbs = json["@graph"][1] as { "@id": string; itemListElement: { name: string; item: string }[] };
+      expect(crumbs["@id"]).toBe(page.breadcrumb["@id"]);
+      expect(crumbs.itemListElement.map((item) => item.item)).toEqual(["https://sabq.org/", "https://sabq.org/mawaeed"]);
+      const list = json["@graph"][2] as { "@id": string; itemListElement: { position: number; name: string; url: string }[] };
+      expect(list["@id"]).toBe(page.mainEntity["@id"]);
+      // ترتيب الأقسام، والرابط canonical بلا ?region= أياً كانت المنطقة المختارة
+      expect(list.itemListElement).toEqual([
+        { "@type": "ListItem", position: 1, name: "التقويم الدراسي 1448: موعد الإجازة القادمة", url: "https://sabq.org/services/school-calendar-date" },
+        { "@type": "ListItem", position: 2, name: "موعد صرف رواتب موظفي الدولة", url: "https://sabq.org/services/government-salaries-date" },
+      ]);
+    }
+  });
+
+  it("keeps a section link even when the section has no upcoming date", () => {
+    const home = presentMawaeed({ now: new Date("2026-12-01T12:00:00+03:00"), series: [salary], occurrences });
+    if (home.notFound) throw new Error("expected home");
+    expect(home.view.series[0].next).toBeNull();
+    const list = (home.view.jsonLd as { "@graph": { "@type": string; itemListElement?: { url: string }[] }[] })["@graph"]
+      .find((node) => node["@type"] === "ItemList");
+    expect(list?.itemListElement?.map((item) => item.url)).toEqual(["https://sabq.org/services/government-salaries-date"]);
   });
 
   it("uses انتهت for a passed school holiday", () => {
