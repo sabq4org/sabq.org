@@ -1426,6 +1426,14 @@ async function buildCategoryLandingPreload(category: { id: string; slug: string;
   }
 }
 
+// seo-meta is public and unauthenticated. A row the public API would not serve
+// (draft, scheduled, archived…) answers like a missing one — default meta with
+// noindex — so its title, summary, image and byline stay as private as its
+// body. seo-bundle already 404s these rows (security audit 2026-10-22).
+function publishedRow<T extends { status: string | null }>(row: T | null | undefined): T | null {
+  return row?.status === "published" ? row : null;
+}
+
 const ROUTE_HANDLERS: RouteHandler[] = [
   {
     pattern: /^\/services\/([a-z0-9-]+)$/,
@@ -1660,7 +1668,7 @@ const ROUTE_HANDLERS: RouteHandler[] = [
     handle: async (m) => {
       const angleSlug = safeDecode(m[1]);
       const topicSlug = safeDecode(m[2]);
-      const [row] = await db
+      const row = publishedRow((await db
         .select({
           title: topics.title,
           excerpt: topics.excerpt,
@@ -1676,7 +1684,7 @@ const ROUTE_HANDLERS: RouteHandler[] = [
         .from(topics)
         .innerJoin(angles, eq(topics.angleId, angles.id))
         .where(and(eq(angles.slug, angleSlug), eq(topics.slug, topicSlug)))
-        .limit(1);
+        .limit(1))[0]);
       if (!row) return null;
       const seoMeta = (row.seoMeta as any) || {};
       const plain = (row.content as any)?.plainText as string | undefined;
@@ -1698,7 +1706,7 @@ const ROUTE_HANDLERS: RouteHandler[] = [
         description,
         image: shareImage,
         canonical: `${SITE_URL}/muqtarab/${encodeURIComponent(row.angleSlug)}/topic/${encodeURIComponent(row.topicSlug)}`,
-        robots: row.status === "published" ? "index,follow" : "noindex, follow",
+        robots: "index,follow",
         type: "article",
         locale: "ar_SA",
       };
@@ -1841,7 +1849,7 @@ const ROUTE_HANDLERS: RouteHandler[] = [
     pattern: /^\/article\/([^/?#]+)/,
     handle: async (m) => {
       const slug = safeDecode(m[1]);
-      const row = await fetchArArticle(slug);
+      const row = publishedRow(await fetchArArticle(slug));
       if (!row) return null;
       return buildArArticlePayload(row, slug, `${SITE_URL}/article/${row.englishSlug || slug}`);
     },
@@ -1859,7 +1867,7 @@ const ROUTE_HANDLERS: RouteHandler[] = [
     pattern: /^\/opinion\/([^/?#]+)/,
     handle: async (m) => {
       const slug = safeDecode(m[1]);
-      const row = await fetchArArticle(slug);
+      const row = publishedRow(await fetchArArticle(slug));
       if (!row) return null;
       return buildArArticlePayload(row, slug, `${SITE_URL}/article/${row.englishSlug || slug}`);
     },
@@ -1869,7 +1877,7 @@ const ROUTE_HANDLERS: RouteHandler[] = [
     pattern: /^\/en\/article\/([^/?#]+)/,
     handle: async (m) => {
       const slug = safeDecode(m[1]);
-      const row = await fetchEnArticle(slug);
+      const row = publishedRow(await fetchEnArticle(slug));
       if (!row) return null;
       return buildEnArticlePayload(row, slug);
     },
@@ -1879,7 +1887,7 @@ const ROUTE_HANDLERS: RouteHandler[] = [
     pattern: /^\/ur\/article\/([^/?#]+)/,
     handle: async (m) => {
       const slug = safeDecode(m[1]);
-      const row = await fetchUrArticle(slug);
+      const row = publishedRow(await fetchUrArticle(slug));
       if (!row) return null;
       return buildUrArticlePayload(row, slug);
     },
@@ -2025,7 +2033,9 @@ const ROUTE_HANDLERS: RouteHandler[] = [
       const id = safeDecode(m[1]);
       // /omq/stats and /omq (without id) are SPA listings — skip DB lookup.
       if (id === "stats") return null;
-      const [row] = await db
+      // /api/omq/:id serves a published analysis only; a completed-but-
+      // unpublished one gets the same generic block as a missing id.
+      const row = publishedRow((await db
         .select({
           id: deepAnalyses.id,
           title: deepAnalyses.title,
@@ -2035,7 +2045,7 @@ const ROUTE_HANDLERS: RouteHandler[] = [
         })
         .from(deepAnalyses)
         .where(eq(deepAnalyses.id, id))
-        .limit(1);
+        .limit(1))[0]);
       if (!row) {
         return {
           title: "تحليل عميق — سبق",
@@ -2047,13 +2057,12 @@ const ROUTE_HANDLERS: RouteHandler[] = [
           locale: "ar_SA",
         };
       }
-      const indexable = row.status === "published" || row.status === "completed";
       return {
         title: `${row.title} — سبق`,
         description: trunc(row.description || row.executiveSummary || "تحليل عميق على صحيفة سبق الإلكترونية.", 220),
         image: BRAND_OG_IMAGE,
         canonical: `${SITE_URL}/omq/${encodeURIComponent(id)}`,
-        robots: indexable ? "index,follow" : "noindex, follow",
+        robots: "index,follow",
         type: "article",
         locale: "ar_SA",
       };
@@ -2122,7 +2131,7 @@ const ROUTE_HANDLERS: RouteHandler[] = [
     pattern: /^\/gulf\/([^/?#]+)/,
     handle: async (m) => {
       const id = safeDecode(m[1]);
-      const [row] = await db
+      const row = publishedRow((await db
         .select({
           id: gulfEvents.id,
           country: gulfEvents.country,
@@ -2132,7 +2141,7 @@ const ROUTE_HANDLERS: RouteHandler[] = [
         })
         .from(gulfEvents)
         .where(eq(gulfEvents.id, id))
-        .limit(1);
+        .limit(1))[0]);
       if (!row) return null;
       const title = `${row.country} — ${row.eventType} | سبق`;
       return {
@@ -2140,7 +2149,7 @@ const ROUTE_HANDLERS: RouteHandler[] = [
         description: trunc(row.content, 220),
         image: BRAND_OG_IMAGE,
         canonical: `${SITE_URL}/gulf/${encodeURIComponent(id)}`,
-        robots: row.status === "published" ? "index,follow" : "noindex, follow",
+        robots: "index,follow",
         type: "article",
         locale: "ar_SA",
       };
