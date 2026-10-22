@@ -857,6 +857,11 @@ class RootInjector {
   }
 }
 
+// The reads an article page makes beside the article itself, cached below and
+// dropped with it when the origin calls the article gone (apiGoneCopyKeys).
+const ARTICLE_API_SUBREADS = ["sidebar", "related", "ai-recommendations", "ai-insights", "ai-bullets", "media-assets"];
+const ARTICLE_API_SUBREAD_PATH = new RegExp(`^/api/articles/[^/]+/(?:${ARTICLE_API_SUBREADS.join("|")})$`);
+
 export function getApiCacheTtl(path, request) {
   if (request.method !== "GET" && request.method !== "HEAD") return 0;
 
@@ -891,12 +896,7 @@ export function getApiCacheTtl(path, request) {
   if (/^\/api\/categories\/slug\/[^/]+$/.test(path)) return 60;
 
   if (/^\/api\/articles\/[^/]+$/.test(path)) return 60;
-  if (/^\/api\/articles\/[^/]+\/sidebar$/.test(path)) return 60;
-  if (/^\/api\/articles\/[^/]+\/related$/.test(path)) return 60;
-  if (/^\/api\/articles\/[^/]+\/ai-recommendations$/.test(path)) return 60;
-  if (/^\/api\/articles\/[^/]+\/ai-insights$/.test(path)) return 60;
-  if (/^\/api\/articles\/[^/]+\/ai-bullets$/.test(path)) return 60;
-  if (/^\/api\/articles\/[^/]+\/media-assets$/.test(path)) return 60;
+  if (ARTICLE_API_SUBREAD_PATH.test(path)) return 60;
 
   // GET only: a HEAD answer has no JSON body to validate before caching.
   const fullQueryRoute = request.method === "GET" ? fullQueryApiCacheRoute(path, url) : null;
@@ -966,27 +966,59 @@ export function remainingApiCacheTtl(ttl, ageHeader) {
   return Math.max(1, ttl - age);
 }
 
+// Query names that never change an API answer: the cache-bypass markers,
+// marketing tags, and the edge's own `__sabq_*` key markers. A client cannot
+// set those; `?__sabq_last_good=1` would otherwise land on the outage copy.
+function isApiCacheNeutralParam(name) {
+  return name === "_nc" || name === "_t" || name === "fbclid" || name === "gclid" ||
+    name.startsWith("utm_") || name.startsWith("__sabq_");
+}
+
 export function apiCacheKey(requestUrl, requestOrigin = "") {
   const u = new URL(requestUrl);
+  // Every other parameter stays in the key. Handlers read more than any fixed
+  // list did (status on /api/categories/smart, locale on media-assets,
+  // excludeId on /api/articles/recent…), so a parameter left out let one
+  // visitor choose the answer every anonymous reader got (security audit
+  // 2026-10-22).
+  for (const name of new Set(u.searchParams.keys())) {
+    if (isApiCacheNeutralParam(name)) u.searchParams.delete(name);
+  }
+  u.searchParams.sort();
+  // The API's CORS middleware reflects the request Origin, so a cached
+  // answer must not cross from one Origin (or none) to another.
   if (fullQueryApiCacheRoute(u.pathname)) {
-    u.searchParams.delete("_nc");
-    u.searchParams.delete("_t");
-    u.searchParams.sort();
-    // The API's CORS middleware reflects the request Origin, so a cached
-    // answer must not cross from one Origin (or none) to another.
     u.searchParams.set("__sabq_origin", requestOrigin ? `present:${requestOrigin}` : "absent");
-    return new Request(u.toString(), { method: "GET" });
+  } else if (requestOrigin) {
+    // Without an Origin these keys stay the bare URL that purgeArticle,
+    // purgeHomepage and purgeCategory send to Cloudflare.
+    u.searchParams.set("__sabq_origin", `present:${requestOrigin}`);
   }
-  // Keep only essential query parameters that alter the backend response
-  const cleanParams = new URLSearchParams();
-  const keepParams = ["limit", "offset", "page", "q", "category", "type", "withStats", "includeIfox"];
-  for (const p of keepParams) {
-    if (u.searchParams.has(p)) {
-      cleanParams.set(p, u.searchParams.get(p));
-    }
-  }
-  u.search = cleanParams.toString();
   return new Request(u.toString(), { method: "GET" });
+}
+
+// A JSON 404/410 is the origin saying a read is gone: an unpublished or
+// archived article answers 404 from server/routes/unpublishedArticleGuard.ts.
+// A platform 404 page (HTML) is not, and must not cost the outage copy.
+export function isApiGoneAnswer(res) {
+  if (res.status !== 404 && res.status !== 410) return false;
+  return (res.headers.get("content-type") || "").toLowerCase().includes("application/json");
+}
+
+// Every copy this location keeps of a read the origin calls gone, fresh and
+// last-good, so a later origin failure cannot bring it back. A gone article
+// takes its per-article reads along: its page no longer asks for them.
+export function apiGoneCopyKeys(requestUrl, requestOrigin = "") {
+  const u = new URL(requestUrl);
+  const urls = [u.href];
+  const article = u.search ? null : u.pathname.match(/^\/api\/articles\/([^/]+)$/);
+  if (article) {
+    for (const sub of ARTICLE_API_SUBREADS) urls.push(`${u.origin}/api/articles/${article[1]}/${sub}`);
+  }
+  return urls.flatMap((url) => {
+    const key = apiCacheKey(url, requestOrigin);
+    return [key, apiLastGoodKey(key)];
+  });
 }
 
 // Shared public API burst caching is initialized above; the Pages adapter below
@@ -1405,6 +1437,14 @@ async function handleRequest(context) {
             headers: outHeaders,
           });
         }
+      }
+
+      // Unpublished, archived or deleted: drop this location's copies, the
+      // 24 h last-good one included, before an origin failure can replay them
+      // (security audit 2026-10-22).
+      if (useApiCache && apiCacheKeyReq && isApiGoneAnswer(res)) {
+        const keys = apiGoneCopyKeys(request.url, request.headers.get("origin") || "");
+        context.waitUntil(Promise.all(keys.map((key) => caches.default.delete(key).catch(() => false))));
       }
 
       // Origin answered but is sick (5xx), or Railway's edge refused us on

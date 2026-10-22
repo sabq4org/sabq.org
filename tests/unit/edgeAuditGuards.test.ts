@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import { NOINDEX_EXACT, NOINDEX_PREFIXES } from "../../server/utils/noindexPaths";
 // @ts-expect-error Pages JS is untyped
 import {
-  apiCacheKey, apiLastGoodAllowed, apiProxyTimeoutMs, getApiCacheTtl, isNoindexPrefix, remainingApiCacheTtl,
+  apiCacheKey, apiGoneCopyKeys, apiLastGoodAllowed, apiProxyTimeoutMs, getApiCacheTtl, isApiGoneAnswer, isNoindexPrefix,
+  remainingApiCacheTtl,
 } from "../../functions/_middleware.js";
 import { articleMetadata } from "../../web-next/lib/articleMetadata";
 describe("edge audit boundaries", () => {
@@ -48,6 +49,31 @@ describe("edge audit boundaries", () => {
       .not.toBe(apiCacheKey("https://sabq.org/api/mawaeed?region=makkah").url);
     expect(apiCacheKey("https://sabq.org/api/stories", "https://a.example").url)
       .not.toBe(apiCacheKey("https://sabq.org/api/stories").url);
+  });
+  it("keys every parameter the origin reads, so one visitor cannot choose another reader's answer", () => {
+    const key = (path: string, origin?: string) => apiCacheKey("https://sabq.org" + path, origin).url;
+    expect(key("/api/categories/smart?type=core&status=zz")).not.toBe(key("/api/categories/smart?type=core&status=active"));
+    expect(key("/api/articles/a/media-assets?locale=en")).not.toBe(key("/api/articles/a/media-assets?locale=ar"));
+    expect(key("/api/articles/recent?limit=5&excludeId=1")).not.toBe(key("/api/articles/recent?limit=5&excludeId=2"));
+    expect(key("/api/categories/smart?status=active&type=core")).toBe(key("/api/categories/smart?type=core&status=active"));
+    // The edge's own key markers cannot come from a client.
+    expect(key("/api/homepage?__sabq_last_good=1")).toBe(key("/api/homepage"));
+    expect(key("/api/stories?__sabq_origin=present:https://a.example")).toBe(key("/api/stories"));
+    // Without an Origin the key stays the URL Cloudflare purges; with one it differs.
+    expect(key("/api/articles/abc")).toBe("https://sabq.org/api/articles/abc");
+    expect(key("/api/articles/abc", "https://a.example")).not.toBe(key("/api/articles/abc"));
+  });
+  it("treats only the origin's JSON 404/410 as gone, and drops an article's page reads with it", () => {
+    const json = { "content-type": "application/json; charset=utf-8" };
+    expect(isApiGoneAnswer(new Response("{}", { status: 404, headers: json }))).toBe(true);
+    expect(isApiGoneAnswer(new Response("{}", { status: 410, headers: json }))).toBe(true);
+    expect(isApiGoneAnswer(new Response("<h1>Not Found</h1>", { status: 404, headers: { "content-type": "text/html" } }))).toBe(false);
+    expect(isApiGoneAnswer(new Response("{}", { status: 503, headers: json }))).toBe(false);
+    const urls = (u: string) => apiGoneCopyKeys(u).map((k: Request) => k.url);
+    expect(urls("https://sabq.org/api/articles/a")).toHaveLength(14);
+    expect(urls("https://sabq.org/api/articles/a")).toContain("https://sabq.org/api/articles/a/ai-bullets?__sabq_last_good=1");
+    expect(urls("https://sabq.org/api/categories/slug/x"))
+      .toEqual(["https://sabq.org/api/categories/slug/x", "https://sabq.org/api/categories/slug/x?__sabq_last_good=1"]);
   });
   it("lets a cold «استمع» clip finish synthesizing while other cached reads stay bounded", () => {
     expect(apiProxyTimeoutMs("/api/articles/some-slug/summary-audio", true)).toBe(0);
@@ -173,5 +199,71 @@ describe("Pages «استمع» edge copy", () => {
     expect(await lastAttemptSignal("/api/reporters/some-writer", () => new Response("{}", {
       status: 200, headers: { "content-type": "application/json" },
     }))).toBeInstanceOf(AbortSignal);
+  });
+});
+
+describe("Pages last-good copy of an article the origin calls gone", () => {
+  const store = new Map<string, { body: string; status: number; headers: [string, string][] }>();
+  const cache = {
+    match: vi.fn(async (key: Request) => {
+      const hit = store.get(key.url);
+      return hit && new Response(hit.body, { status: hit.status, headers: hit.headers });
+    }),
+    put: vi.fn(async (key: Request, res: Response) => {
+      store.set(key.url, { body: await res.text(), status: res.status, headers: [...res.headers] });
+    }),
+    delete: vi.fn(async (key: Request) => store.delete(key.url)),
+  };
+  const json = (status: number, body: unknown) => new Response(JSON.stringify(body), {
+    status, headers: { "content-type": "application/json; charset=utf-8" },
+  });
+  const read = async (path: string, answer: Response) => {
+    vi.stubGlobal("caches", { default: cache });
+    vi.stubGlobal("fetch", vi.fn(async () => answer));
+    const pending: Promise<unknown>[] = [];
+    const res = await onRequest({
+      request: new Request(`https://sabq.org${path}`),
+      env: { API_ORIGIN: "https://api.example" },
+      next: vi.fn(async () => new Response("shell")),
+      waitUntil: (p: Promise<unknown>) => pending.push(p),
+    });
+    await Promise.all(pending);
+    return res;
+  };
+  // The 60 s fresh copies have run out; only the 24 h last-good ones are left.
+  const expireFresh = () => {
+    for (const url of [...store.keys()]) if (!url.includes("__sabq_last_good")) store.delete(url);
+  };
+  afterEach(() => store.clear());
+
+  it("serves a live article from its last-good copy when the origin fails", async () => {
+    await read("/api/articles/a", json(200, { title: "LIVE" }));
+    expireFresh();
+    const res = await read("/api/articles/a", json(503, { message: "down" }));
+    expect(res.status).toBe(200);
+    expect(res.headers.get("x-sabq-stale")).toBe("1");
+    expect(await res.text()).toContain("LIVE");
+  });
+
+  it("forgets an article and its page reads once the origin answers 404", async () => {
+    await read("/api/articles/a", json(200, { title: "RETRACTED" }));
+    await read("/api/articles/a/ai-bullets", json(200, { bullets: ["RETRACTED"] }));
+    expireFresh();
+    expect((await read("/api/articles/a", json(404, { message: "Article not found" }))).status).toBe(404);
+    expect([...store.keys()]).toEqual([]);
+    for (const path of ["/api/articles/a", "/api/articles/a/ai-bullets"]) {
+      const res = await read(path, json(503, { message: "down" }));
+      expect(res.status, path).toBe(503);
+      expect(res.headers.get("x-sabq-stale"), path).toBeNull();
+    }
+  });
+
+  it("keeps the outage copy through a platform 404 page", async () => {
+    await read("/api/articles/a", json(200, { title: "LIVE" }));
+    expireFresh();
+    await read("/api/articles/a", new Response("<h1>Not Found</h1>", { status: 404, headers: { "content-type": "text/html" } }));
+    const res = await read("/api/articles/a", json(503, { message: "down" }));
+    expect(res.status).toBe(200);
+    expect(await res.text()).toContain("LIVE");
   });
 });

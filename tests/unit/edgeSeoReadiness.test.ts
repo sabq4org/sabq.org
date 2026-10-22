@@ -65,6 +65,24 @@ describe('public SEO projections', () => {
     expect(r.status).toBe(404); expect(JSON.stringify(r.body)).not.toContain('SECRET');
     expect(r.headers['Cache-Control']).toBe('no-store');
   });
+  it('answers an unpublished row like a missing one in seo-meta', async () => {
+    const hidden = {id:'d',title:'HIDDEN-TITLE',excerpt:'HIDDEN-EXCERPT',aiSummary:'HIDDEN-SUMMARY',content:'<p>HIDDEN-BODY</p>',imageUrl:'https://img.example/hidden.jpg',slug:'s',englishSlug:'x',seo:{},publishedAt:'2026-10-30',updatedAt:'2026-10-20',reporterFirstName:'HIDDEN-REPORTER'};
+    for (const [path, status] of [['/article/x','draft'],['/opinion/x','archived'],['/en/article/x','scheduled'],['/ur/article/x','draft']]) {
+      f.rows = [[{...hidden, status}]];
+      const r = await request('/api/edge/seo-meta', {}, {path});
+      expect(r.body.robots, path).toBe('noindex, follow');
+      expect(JSON.stringify(r.body), path).not.toContain('HIDDEN');
+    }
+    f.rows = [[{id:'g',country:'HIDDEN-COUNTRY',eventType:'x',content:'HIDDEN-BODY',status:'draft'}]];
+    expect(JSON.stringify((await request('/api/edge/seo-meta', {}, {path:'/gulf/g'})).body)).not.toContain('HIDDEN');
+    f.rows = [[{title:'HIDDEN-TITLE',excerpt:'HIDDEN-EXCERPT',content:{plainText:'HIDDEN-BODY'},status:'draft',seoMeta:{},topicSlug:'t',angleNameAr:'زاوية',angleSlug:'a'}]];
+    expect(JSON.stringify((await request('/api/edge/seo-meta', {}, {path:'/muqtarab/a/topic/t'})).body)).not.toContain('HIDDEN');
+    f.rows = [[{id:'o',title:'HIDDEN-TITLE',description:'HIDDEN-SUMMARY',status:'completed'}]];
+    const omq = await request('/api/edge/seo-meta', {}, {path:'/omq/o'});
+    expect(omq.body.robots).toBe('noindex, follow'); expect(JSON.stringify(omq.body)).not.toContain('HIDDEN');
+    f.rows = [[{...hidden, englishSlug:'y', status:'published'}]];
+    expect((await request('/api/edge/seo-meta', {}, {path:'/article/y'})).body.title).toContain('HIDDEN-TITLE');
+  });
   it('links a service-date article to its service page in the crawler body and the SPA-shell fallback', async () => {
     const row = {id:'a1',title:'حساب المواطن يودع 3 مليارات ريال لمستفيدي دفعة سبتمبر',content:'<p>نص الخبر</p>',slug:'s1',englishSlug:'x1',status:'published',seo:{},publishedAt:'2026-09-10',updatedAt:'2026-09-10',categorySlug:'saudi',articleType:'news'};
     f.rows = [[row]];
