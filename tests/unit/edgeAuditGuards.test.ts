@@ -34,6 +34,7 @@ describe("edge audit boundaries", () => {
     expect(ttl("/api/reporters/shyfh-sbq")).toBe(60);
     expect(ttl("/api/audio-bulletin/current")).toBe(30);
     expect(ttl("/api/shortlinks/article/abc")).toBe(300);
+    expect(ttl("/api/articles/some-slug/summary-audio")).toBe(600);
     expect(ttl("/api/sports/today", "?resilient=1&lang=ar")).toBe(0);
     expect(getApiCacheTtl("/api/stories", new Request("https://sabq.org/api/stories", { method: "HEAD" }))).toBe(0);
     expect(ttl("/api/stories", "", { cookie: "connect.sid=s%3Aabc" })).toBe(0);

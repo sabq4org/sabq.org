@@ -1041,6 +1041,9 @@ if (!(globalThis as any).__sabqServer) {
     // mounted inside registerRoutes() after setupAuth — otherwise requireRole /
     // requirePermission see an unauthenticated request and return 401 Unauthorized
     // (which the dashboard treats as session expiry and kicks the admin out).
+    // علامة الحفظ على الحافة لقراءات عامة (قبل كل المسارات، انظر الملف).
+    const publicEdgeCacheHooks = (await import("./routes/publicEdgeCacheHooks")).default;
+    app.use(publicEdgeCacheHooks);
     const mobileApiRoutes = (await import("./routes/mobileApiRoutes")).default;
     // خطافات حذف الحساب وتعديل الملف تسبق mobileApiRoutes (ملف فوق سقف الأسطر).
     const mobileAccountHooks = (await import("./routes/mobileAccountHooks")).default;

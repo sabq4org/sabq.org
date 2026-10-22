@@ -920,6 +920,10 @@ const FULL_QUERY_API_CACHE_ROUTES = [
   // Live-score reads (sports/today, rsl/hero) stay out: the origin sends
   // no-store or a 5s TTL while a match is on.
   { match: (p) => /^\/api\/shortlinks\/article\/[^/]+$/.test(p), ttl: 300 },
+  // «استمع» audio (~0.4 MB each) was ~8% of Render egress. Same article, same
+  // audio for every anonymous reader; a voice/provider switch reaches the edge
+  // within 10 minutes.
+  { match: (p) => /^\/api\/articles\/[^/]+\/summary-audio$/.test(p), ttl: 600 },
 ];
 
 function fullQueryApiCacheRoute(path) {
