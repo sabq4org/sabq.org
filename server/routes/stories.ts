@@ -240,6 +240,10 @@ export function registerStoryRoutes(app: Express) {
   // POST /api/admin/stories/link-existing - ربط المقالات الموجودة بقصص (للإدمن فقط)
   app.post("/api/admin/stories/link-existing", requireAuth, requireRole("admin"), async (req: any, res) => {
     try {
+      const { isStoryAutoMatchEnabled } = await import("../services/storyAutoMatch");
+      if (!isStoryAutoMatchEnabled()) {
+        return res.status(409).json({ success: false, code: "STORY_AUTO_MATCH_DISABLED", message: "الربط التلقائي للقصص متوقف حاليًا" });
+      }
       console.log("[ADMIN] Starting to link existing articles to stories...");
       
       // جلب جميع المقالات المنشورة
