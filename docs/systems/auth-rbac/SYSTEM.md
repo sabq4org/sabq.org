@@ -1,6 +1,6 @@
 # المصادقة والصلاحيات (`auth-rbac`)
 
-> آخر مراجعة: 2026-10-22 (كاش قراءات التطبيقات وصوت «استمع» في وسيط API) | المالك: platform
+> آخر مراجعة: 2026-10-22 (كاش قراءات التطبيقات وصوت «استمع» في وسيط API، وفحص كاش الوسيط) | المالك: platform
 
 ## الغرض
 مصادقة الويب (Passport) وموبايل (Bearer member session) + طبقتا RBAC (DB + constants).
@@ -119,3 +119,4 @@
 - لا علامة لطلب يحمل Authorization أو x-session-id أو كوكي الجلسة، ولا لطلب طازج (no-cache، `_nc`، `_t`، `refresh`)، فيبقى عقد `freshWindowCache` بعد العاجل. المعالج يستطيع استبدال Cache-Control (no-store عند الخطأ) فيمتنع الحفظ. الحارس: `publicEdgeCacheHooks.test.ts`.
 - صوت «استمع» `/api/articles/:slug/summary-audio` يمر بوحدة مستقلة `cloudflare-worker/public-audio-edge-cache.js` لأن تطبيق iOS ينزّله من `api.sabq.org` في كل تشغيل. السياسة على الحافة (الأصل يبقى `private, no-store`): GET مجهول فقط بلا Authorization ولا x-session-id ولا كوكي `connect.sid` (نفس فحص `needsSession`)، ولا no-cache ولا `_nc`/`_t`. يُحفظ 600ث فقط رد 200 من نوع `audio/*` بطول `Content-Length` مطابق للمتن، بلا Set-Cookie ولا ضغط، وحتى 6 MiB، ويحمل `X-Sabq-Article-Published: 1` من `unpublishedArticleGuard`؛ غير ذلك يمر كما هو، والنقل المقطوع يرد 502. المفتاح الاستعلام كاملًا مرتبًا مع Origin. الإصابة تعيد المقطع كاملًا 200 كما يفعل الأصل (بلا Range). جلب الأصل يبقى بلا مهلة كلية لأن التوليد الأول قد يطول. الحارس: `apiOriginWorkerAudio.test.ts`.
 - مفاتيح كاش الوسيط (القراءات والصوت) تُحفظ تحت `sabq.org` ومعها `__sabq_edge_host=api.sabq.org` (`cloudflare-worker/edge-cache-zone-key.js`). السبب: `api.sabq.org` اسم مخصص لدى Render أيضًا فيمر بمنطقتين في Cloudflare، ولم تُصب المفاتيح على `api.sabq.org` بعد نشر 2026-10-22 بينما الوحدة نفسها تُصاب على `sabq.org` في المركز نفسه. المعامل يمنع التقاءها بمفاتيح Pages.
+- **لم يحل ذلك المشكلة.** بعد نشر الـWorker في 2026-10-22 الساعة 08:47Z بقي `api.sabq.org` بلا HIT، وكذلك بعد إيقاف placement دقيقة واحدة (أُعيد كما كان). الـWorker يأخذ مسار الحفظ (الرد يحمل `CDN-Cache-Control` بمدة المسار، والأصل لا يضعه)، لكن الطلب التالي لا يجد المدخل. لمعرفة السبب من الحافة نفسها: `GET https://api.sabq.org/__sabq/edge-cache-probe` (`cloudflare-worker/edge-cache-probe.js`) يحفظ مدخلًا تجريبيًا ثابتًا ويقرؤه فورًا، ويعرض زمن الحفظ وخطأه، وما تركه طلب الفحص السابق، ونتيجة كاش مسمّى بديل، ووجود مدخل `/api/themes/active` الحقيقي. لا يصل للأصل ولا يُحفظ ردّه. الحارس: `edgeCacheProbe.test.ts`.

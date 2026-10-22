@@ -6,6 +6,8 @@
  * again (2026-10-22: no HIT there, while the same burst module hits on
  * sabq.org in the same colo), so the Worker keys its entries under sabq.org,
  * with the original host kept in the key so they never meet the Pages entries.
+ * That alone did not bring HITs back (deployed 2026-10-22 08:47Z); the cause
+ * is still open, see edge-cache-probe.js.
  */
 
 export const EDGE_CACHE_HOST = "sabq.org";

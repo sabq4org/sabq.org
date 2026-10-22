@@ -9,6 +9,7 @@
 import { createPublicApiBurstCache } from "./public-api-burst-cache.js";
 import { createSummaryAudioEdgeCache } from "./public-audio-edge-cache.js";
 import { zoneKeyedCache } from "./edge-cache-zone-key.js";
+import { isEdgeCacheProbe, runEdgeCacheProbe } from "./edge-cache-probe.js";
 
 const DEFAULT_API_ORIGIN = "https://sabq-api-virginia.onrender.com";
 const publicApiBurstCache = createPublicApiBurstCache();
@@ -121,6 +122,8 @@ export default {
         headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" },
       });
     }
+    // Cache self-test; answered here, never forwarded (edge-cache-probe.js).
+    if (isEdgeCacheProbe(request)) return runEdgeCacheProbe(request, caches);
     const newPublicApiResponse = await publicApiBurstCache(request, {
       cache: edgeCache,
       waitUntil: (promise) => ctx.waitUntil(promise),
