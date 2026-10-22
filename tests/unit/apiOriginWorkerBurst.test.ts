@@ -61,6 +61,10 @@ describe("api-origin-worker public API burst guard", () => {
     expect(signed.get("x-sabq-proxy-timestamp")).toBeTruthy();
     expect(signed.get("x-sabq-proxy-signature")).toMatch(/^[0-9a-f]{64}$/);
     expect(cache.put).toHaveBeenCalledTimes(1);
+    const stored = new URL((cache.put.mock.calls[0][0] as Request).url);
+    expect(stored.hostname).toBe("sabq.org");
+    expect(stored.searchParams.get("__sabq_edge_host")).toBe("api.sabq.org");
+    expect((cache.match.mock.calls[0][0] as Request).url).toBe(stored.toString());
   });
 
   it("shares sanitized 502 failures within the burst and recovers on the next request", async () => {

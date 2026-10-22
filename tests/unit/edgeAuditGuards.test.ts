@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { NOINDEX_EXACT, NOINDEX_PREFIXES } from "../../server/utils/noindexPaths";
 // @ts-expect-error Pages JS is untyped
-import { apiCacheKey, getApiCacheTtl, isNoindexPrefix } from "../../functions/_middleware.js";
+import {
+  apiCacheKey, apiLastGoodAllowed, apiProxyTimeoutMs, getApiCacheTtl, isNoindexPrefix, remainingApiCacheTtl,
+} from "../../functions/_middleware.js";
 import { articleMetadata } from "../../web-next/lib/articleMetadata";
 describe("edge audit boundaries", () => {
   it("keeps all backend private paths outside shared HTML caching", () => {
@@ -47,6 +49,25 @@ describe("edge audit boundaries", () => {
     expect(apiCacheKey("https://sabq.org/api/stories", "https://a.example").url)
       .not.toBe(apiCacheKey("https://sabq.org/api/stories").url);
   });
+  it("lets a cold «استمع» clip finish synthesizing while other cached reads stay bounded", () => {
+    expect(apiProxyTimeoutMs("/api/articles/some-slug/summary-audio", true)).toBe(0);
+    expect(apiProxyTimeoutMs("/api/stories", true)).toBe(10_000);
+    expect(apiProxyTimeoutMs("/api/homepage", true)).toBe(10_000);
+    expect(apiProxyTimeoutMs("/api/stories", false)).toBe(0);
+  });
+  it("never replays an unpublished article's clip from the 24 h last-good copy", () => {
+    expect(apiLastGoodAllowed("/api/articles/some-slug/summary-audio")).toBe(false);
+    expect(apiLastGoodAllowed("/api/stories")).toBe(true);
+    expect(apiLastGoodAllowed("/api/homepage")).toBe(true);
+  });
+  it("keeps an answer already aged at the api.sabq.org edge only for the rest of its window", () => {
+    expect(remainingApiCacheTtl(600, null)).toBe(600);
+    expect(remainingApiCacheTtl(600, "0")).toBe(600);
+    expect(remainingApiCacheTtl(600, "599")).toBe(1);
+    expect(remainingApiCacheTtl(600, "240")).toBe(360);
+    expect(remainingApiCacheTtl(600, "9000")).toBe(1);
+    expect(remainingApiCacheTtl(60, "junk")).toBe(60);
+  });
   it("preserves Google News exclusion in Next metadata", () => {
     expect(articleMetadata({ title: "test", googlebotNews: "noindex" } as any).other)
       .toEqual({ "googlebot-news": "noindex" });
@@ -70,5 +91,87 @@ describe("SSR fallback contract", () => {
       init.signal.addEventListener("abort", () => reject(init.signal.reason), { once: true });
     })));
     await expect(fetchSsrResponse(new Request("https://sabq.org/"), "https://next.example", 10)).rejects.toThrow();
+  });
+});
+
+// @ts-expect-error Pages JS is untyped
+import { onRequest } from "../../functions/_middleware.js";
+describe("Pages «استمع» edge copy", () => {
+  const put = vi.fn(async () => {});
+  const audio = (headers: Record<string, string>) =>
+    new Response(new Uint8Array(32), {
+      status: 200,
+      headers: {
+        "content-type": "audio/wav", "content-length": "32", "x-sabq-article-published": "1", ...headers,
+      },
+    });
+  const context = (path = "/api/articles/a/summary-audio?tts=tafqit-v2") => ({
+    request: new Request(`https://sabq.org${path}`),
+    env: { API_ORIGIN: "https://api.example" },
+    next: vi.fn(async () => new Response("shell")),
+    waitUntil: vi.fn(),
+  });
+  const stored = () => put.mock.calls.map(([key, res]) => ({
+    key: (key as Request).url,
+    cacheControl: (res as Response).headers.get("cache-control"),
+    cdn: (res as Response).headers.get("cdn-cache-control"),
+    age: (res as Response).headers.get("age"),
+  }));
+  afterEach(() => put.mockClear());
+
+  it("keeps a Worker HIT only for what is left of its window, with no last-good copy", async () => {
+    vi.stubGlobal("caches", { default: { match: vi.fn(async () => undefined), put, delete: vi.fn() } });
+    vi.stubGlobal("fetch", vi.fn(async () => audio({
+      age: "590",
+      "x-edge-cache": "HIT",
+      "cache-control": "public, max-age=0, s-maxage=600",
+      "cdn-cache-control": "public, max-age=600",
+    })));
+    const res = await onRequest(context());
+    expect(res.status).toBe(200);
+    expect(stored()).toEqual([expect.objectContaining({
+      cacheControl: "public, max-age=10, s-maxage=10", cdn: null, age: null,
+    })]);
+    expect(stored()[0].key).not.toContain("__sabq_last_good");
+  });
+
+  it("stores a clip the origin marks CDN no-store, since the edge owns this policy", async () => {
+    vi.stubGlobal("caches", { default: { match: vi.fn(async () => undefined), put, delete: vi.fn() } });
+    vi.stubGlobal("fetch", vi.fn(async () => audio({
+      "cache-control": "private, no-store",
+      "cdn-cache-control": "no-store",
+    })));
+    await onRequest(context());
+    expect(stored()).toEqual([expect.objectContaining({
+      cacheControl: "public, max-age=600, s-maxage=600", cdn: null,
+    })]);
+  });
+
+  it("keeps nothing the origin's guard did not confirm as published", async () => {
+    vi.stubGlobal("caches", { default: { match: vi.fn(async () => undefined), put, delete: vi.fn() } });
+    vi.stubGlobal("fetch", vi.fn(async () => audio({
+      "x-sabq-article-published": "", "cache-control": "private, no-store",
+    })));
+    const res = await onRequest(context());
+    expect(res.status).toBe(200);
+    expect(res.headers.get("cache-control")).toBe("private, no-store");
+    expect(put).not.toHaveBeenCalled();
+  });
+
+  it("gives a cold clip's last origin attempt no deadline, unlike other cached reads", async () => {
+    vi.stubGlobal("caches", { default: { match: vi.fn(async () => undefined), put, delete: vi.fn() } });
+    const stall = () => Promise.reject(Object.assign(new Error("stall"), { name: "TimeoutError" }));
+    const lastAttemptSignal = async (path: string, body: () => Response) => {
+      const fetchMock = vi.fn().mockImplementationOnce(stall).mockImplementationOnce(stall)
+        .mockImplementation(async () => body());
+      vi.stubGlobal("fetch", fetchMock);
+      await onRequest(context(path));
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+      return fetchMock.mock.calls[2][1].signal;
+    };
+    expect(await lastAttemptSignal("/api/articles/a/summary-audio", () => audio({}))).toBeUndefined();
+    expect(await lastAttemptSignal("/api/reporters/some-writer", () => new Response("{}", {
+      status: 200, headers: { "content-type": "application/json" },
+    }))).toBeInstanceOf(AbortSignal);
   });
 });
