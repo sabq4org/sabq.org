@@ -2,8 +2,7 @@ name: Smoke (production)
 
 # Read-only smoke tests against the live site (sabq.org).
 # - Runs every 6 hours as synthetic monitoring.
-# - Runs after a push to main (deploys go out from main via Pages/Railway);
-#   the wait step gives the deploy a head start.
+# - Runs after Railway reports a successful production deployment.
 # - Can be run manually against any URL (e.g. a preview deployment).
 #
 # These tests never log in and never write — see e2e/smoke.spec.ts.
@@ -11,8 +10,7 @@ name: Smoke (production)
 on:
   schedule:
     - cron: "17 */6 * * *"
-  push:
-    branches: [main]
+  deployment_status:
   workflow_dispatch:
     inputs:
       base_url:
@@ -24,13 +22,21 @@ on:
         required: false
         default: "https://api.sabq.org"
 
+permissions:
+  contents: read
+
 concurrency:
-  group: smoke-${{ github.ref }}
+  group: smoke-${{ github.event.deployment.id || github.ref }}
   cancel-in-progress: true
 
 jobs:
   smoke:
     name: Playwright smoke
+    if: >-
+      github.event_name != 'deployment_status' ||
+      (github.event.deployment_status.state == 'success' &&
+       github.event.deployment.environment == 'sabq.org / production' &&
+       github.event.deployment.creator.login == 'railway-app[bot]')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -48,10 +54,6 @@ jobs:
 
       - name: Install Playwright browser
         run: npx playwright install --with-deps chromium
-
-      - name: Wait for deploy to settle (push to main only)
-        if: github.event_name == 'push'
-        run: sleep 180
 
       - name: Run smoke tests
         run: npx playwright test e2e/smoke.spec.ts
