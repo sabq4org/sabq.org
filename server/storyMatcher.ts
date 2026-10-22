@@ -3,6 +3,7 @@ import OpenAI from "openai";
 import { storage } from "./storage";
 import type { Article, Story } from "@shared/schema";
 import { getActiveStoriesForList, type StoryListItem } from "./services/storyListService";
+import { isStoryAutoMatchEnabled } from "./services/storyAutoMatch";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -153,6 +154,7 @@ export async function autoLinkArticleToStory(articleId: string): Promise<boolean
  * ربط مقال بقصة أو إنشاء قصة جديدة - هذه الدالة المطلوبة من routes.ts
  */
 export async function matchAndLinkArticle(articleId: string): Promise<void> {
+  if (!isStoryAutoMatchEnabled()) return;
   try {
     console.log(`[STORY MATCHER] Starting story matching for article: ${articleId}`);
     
