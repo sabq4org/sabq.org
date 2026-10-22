@@ -41,6 +41,9 @@ export function ImageWithCaption({
   aspectRatio,
 }: ImageWithCaptionProps) {
   const [error, setError] = useState(false);
+  // The hero reserves 16:9 only while it loads (CLS). Once loaded it shows at
+  // its natural ratio, so tall images (infographics) are never cropped.
+  const [loaded, setLoaded] = useState(false);
   const sanitizedCaption = captionHtml ? DOMPurify.sanitize(captionHtml) : null;
 
   if (!imageUrl) return null;
@@ -73,7 +76,8 @@ export function ImageWithCaption({
             objectPosition={objectPosition || "center 20%"}
             sizes={HERO_SIZES_ATTR}
             aspectRatio={aspectRatio}
-            style={!aspectRatio && priority ? { aspectRatio: "16 / 9", objectFit: "cover" } : undefined}
+            style={!aspectRatio && priority && !loaded ? { aspectRatio: "16 / 9", objectFit: "cover" } : undefined}
+            onLoad={() => setLoaded(true)}
             onError={() => setError(true)}
           />
         )}
