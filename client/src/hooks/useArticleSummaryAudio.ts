@@ -45,7 +45,9 @@ export function useArticleSummaryAudio(slug: string | undefined, revision: strin
       if (!audio) {
         setProvider(null);
         const url = `/api/articles/${encodeURIComponent(slug)}/summary-audio?v=${encodeURIComponent(revision)}&tts=summary-v5`;
-        const response = await fetch(apiUrl(url), { credentials: 'include', signal: controller.signal, cache: 'no-store' });
+        // Default HTTP caching: `cache: 'no-store'` made the browser send no-cache, so
+        // sabq.org's edge never kept the clip. The URL carries the article revision.
+        const response = await fetch(apiUrl(url), { credentials: 'include', signal: controller.signal });
         if (!response.ok) throw new Error('Audio request failed');
         const blob = await response.blob();
         if (controller.signal.aborted) return;

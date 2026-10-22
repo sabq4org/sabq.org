@@ -920,14 +920,38 @@ const FULL_QUERY_API_CACHE_ROUTES = [
   // Live-score reads (sports/today, rsl/hero) stay out: the origin sends
   // no-store or a 5s TTL while a match is on.
   { match: (p) => /^\/api\/shortlinks\/article\/[^/]+$/.test(p), ttl: 300 },
-  // «استمع» audio (~0.4 MB each) was ~8% of Render egress. Same article, same
-  // audio for every anonymous reader; a voice/provider switch reaches the edge
-  // within 10 minutes.
-  { match: (p) => /^\/api\/articles\/[^/]+\/summary-audio$/.test(p), ttl: 600 },
+  // «استمع» audio (0.6–1.3 MB each) was 5–8% of Render egress. Same article,
+  // same audio for every anonymous reader; a voice/provider switch reaches the
+  // edge within 10 minutes. The api.sabq.org Worker keeps it the same way
+  // (cloudflare-worker/public-audio-edge-cache.js). A cold clip is synthesized
+  // on request (HUMAIN alone may take 25 s), so it keeps the unbounded final
+  // proxy attempt instead of the 10 s read deadline. No 24 h last-good copy:
+  // an unpublished article's clip must not come back when the origin fails.
+  { match: (p) => /^\/api\/articles\/[^/]+\/summary-audio$/.test(p), ttl: 600, timeoutMs: 0, lastGood: false },
 ];
 
 function fullQueryApiCacheRoute(path) {
   return FULL_QUERY_API_CACHE_ROUTES.find(({ match }) => match(path)) || null;
+}
+
+// Origin deadline for a proxied /api request: cacheable reads are bounded so a
+// hung origin falls back to the last-good copy; a route may opt out.
+export function apiProxyTimeoutMs(path, useApiCache) {
+  if (!useApiCache) return 0;
+  return fullQueryApiCacheRoute(path)?.timeoutMs ?? API_PROXY_TIMEOUT_MS;
+}
+
+export function apiLastGoodAllowed(path) {
+  return fullQueryApiCacheRoute(path)?.lastGood !== false;
+}
+
+// An answer the api.sabq.org Worker served from its own cache is already
+// `Age` seconds old; keep it only for the rest of the route's window so the
+// two edge layers do not add up.
+export function remainingApiCacheTtl(ttl, ageHeader) {
+  const age = Number.parseInt(ageHeader ?? "", 10);
+  if (!Number.isFinite(age) || age <= 0) return ttl;
+  return Math.max(1, ttl - age);
 }
 
 export function apiCacheKey(requestUrl, requestOrigin = "") {
@@ -974,6 +998,7 @@ function apiLastGoodKey(cacheKeyReq) {
 }
 
 async function serveApiLastGood(cacheKeyReq, reason) {
+  if (!apiLastGoodAllowed(new URL(cacheKeyReq.url).pathname)) return null;
   try {
     const hit = await caches.default.match(apiLastGoodKey(cacheKeyReq));
     if (!hit) return null;
@@ -1273,7 +1298,7 @@ async function handleRequest(context) {
         request,
         apiOrigin,
         resolveFallbackOrigin(apiOrigin, env),
-        useApiCache ? API_PROXY_TIMEOUT_MS : 0,
+        apiProxyTimeoutMs(path, useApiCache),
         env.EDGE_PROXY_SHARED_SECRET,
       );
 
@@ -1324,9 +1349,12 @@ async function handleRequest(context) {
           // encodings so Content-Length matches what we actually send.
           outHeaders.delete("content-encoding");
           outHeaders.delete("content-length");
+          const storeTtl = remainingApiCacheTtl(apiCacheTtl, res.headers.get("age"));
+          // Counted once above; a stored Age would shorten the entry again.
+          outHeaders.delete("age");
           outHeaders.set(
             "Cache-Control",
-            `public, max-age=${apiCacheTtl}, s-maxage=${apiCacheTtl}`,
+            `public, max-age=${storeTtl}, s-maxage=${storeTtl}`,
           );
 
           const responseToCache = new Response(bodyBuf.slice(0), {
@@ -1348,9 +1376,11 @@ async function handleRequest(context) {
             status: 200,
             headers: lastGoodHeaders,
           });
-          context.waitUntil(
-            caches.default.put(apiLastGoodKey(apiCacheKeyReq), lastGoodCopy).catch(() => {}),
-          );
+          if (apiLastGoodAllowed(path)) {
+            context.waitUntil(
+              caches.default.put(apiLastGoodKey(apiCacheKeyReq), lastGoodCopy).catch(() => {}),
+            );
+          }
 
           return new Response(bodyBuf, {
             status: res.status,

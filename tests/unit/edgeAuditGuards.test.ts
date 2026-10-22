@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { NOINDEX_EXACT, NOINDEX_PREFIXES } from "../../server/utils/noindexPaths";
 // @ts-expect-error Pages JS is untyped
-import { apiCacheKey, getApiCacheTtl, isNoindexPrefix } from "../../functions/_middleware.js";
+import {
+  apiCacheKey, apiLastGoodAllowed, apiProxyTimeoutMs, getApiCacheTtl, isNoindexPrefix, remainingApiCacheTtl,
+} from "../../functions/_middleware.js";
 import { articleMetadata } from "../../web-next/lib/articleMetadata";
 describe("edge audit boundaries", () => {
   it("keeps all backend private paths outside shared HTML caching", () => {
@@ -46,6 +48,25 @@ describe("edge audit boundaries", () => {
       .not.toBe(apiCacheKey("https://sabq.org/api/mawaeed?region=makkah").url);
     expect(apiCacheKey("https://sabq.org/api/stories", "https://a.example").url)
       .not.toBe(apiCacheKey("https://sabq.org/api/stories").url);
+  });
+  it("lets a cold «استمع» clip finish synthesizing while other cached reads stay bounded", () => {
+    expect(apiProxyTimeoutMs("/api/articles/some-slug/summary-audio", true)).toBe(0);
+    expect(apiProxyTimeoutMs("/api/stories", true)).toBe(10_000);
+    expect(apiProxyTimeoutMs("/api/homepage", true)).toBe(10_000);
+    expect(apiProxyTimeoutMs("/api/stories", false)).toBe(0);
+  });
+  it("never replays an unpublished article's clip from the 24 h last-good copy", () => {
+    expect(apiLastGoodAllowed("/api/articles/some-slug/summary-audio")).toBe(false);
+    expect(apiLastGoodAllowed("/api/stories")).toBe(true);
+    expect(apiLastGoodAllowed("/api/homepage")).toBe(true);
+  });
+  it("keeps an answer already aged at the api.sabq.org edge only for the rest of its window", () => {
+    expect(remainingApiCacheTtl(600, null)).toBe(600);
+    expect(remainingApiCacheTtl(600, "0")).toBe(600);
+    expect(remainingApiCacheTtl(600, "599")).toBe(1);
+    expect(remainingApiCacheTtl(600, "240")).toBe(360);
+    expect(remainingApiCacheTtl(600, "9000")).toBe(1);
+    expect(remainingApiCacheTtl(60, "junk")).toBe(60);
   });
   it("preserves Google News exclusion in Next metadata", () => {
     expect(articleMetadata({ title: "test", googlebotNews: "noindex" } as any).other)

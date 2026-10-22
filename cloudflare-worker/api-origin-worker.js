@@ -7,9 +7,14 @@
  * Worker at api.sabq.org itself.
  */
 import { createPublicApiBurstCache } from "./public-api-burst-cache.js";
+import { createSummaryAudioEdgeCache } from "./public-audio-edge-cache.js";
+import { zoneKeyedCache } from "./edge-cache-zone-key.js";
 
 const DEFAULT_API_ORIGIN = "https://sabq-api-virginia.onrender.com";
 const publicApiBurstCache = createPublicApiBurstCache();
+const summaryAudioEdgeCache = createSummaryAudioEdgeCache();
+// Entries are keyed under sabq.org; see edge-cache-zone-key.js.
+const edgeCache = zoneKeyedCache(() => caches.default);
 async function signedHeaders(request, secret) {
   const url = new URL(request.url);
   const realIp = request.headers.get("cf-connecting-ip");
@@ -117,11 +122,19 @@ export default {
       });
     }
     const newPublicApiResponse = await publicApiBurstCache(request, {
-      cache: caches.default,
+      cache: edgeCache,
       waitUntil: (promise) => ctx.waitUntil(promise),
       fetchOrigin: (sourceRequest) => fetchSignedOrigin(sourceRequest, origin, secret, 10_000),
     });
     if (newPublicApiResponse) return newPublicApiResponse;
+    // A cold clip is synthesized on request (HUMAIN alone may take 25 s), so
+    // its origin fetch keeps the unbounded final attempt of the default path.
+    const summaryAudioResponse = await summaryAudioEdgeCache(request, {
+      cache: edgeCache,
+      waitUntil: (promise) => ctx.waitUntil(promise),
+      fetchOrigin: (sourceRequest) => fetchSignedOrigin(sourceRequest, origin, secret),
+    });
+    if (summaryAudioResponse) return summaryAudioResponse;
 
     return fetchSignedOrigin(request, origin, secret);
   },
