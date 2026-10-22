@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import apiOriginWorker from "../../cloudflare-worker/api-origin-worker.js";
-import { edgeCacheKey } from "../../cloudflare-worker/edge-cache-zone-key.js";
 import {
   SUMMARY_AUDIO_MAX_BYTES,
   summaryAudioCacheKey,
@@ -77,8 +76,8 @@ describe("api-origin-worker summary audio edge cache", () => {
     expect(await bytes(first)).toEqual(body);
     expect(await bytes(second)).toEqual(body);
     const storedKey = new URL((cache.put.mock.calls[0][0] as Request).url);
-    expect(storedKey.hostname).toBe("sabq.org");
-    expect(storedKey.searchParams.get("__sabq_edge_host")).toBe("api.sabq.org");
+    expect(storedKey.hostname).toBe("api.sabq.org");
+    expect(storedKey.searchParams.has("__sabq_edge_host")).toBe(false);
     const stored = cache.put.mock.calls[0][1] as Response;
     expect(stored.headers.get("cache-control")).toBe("public, max-age=0, s-maxage=600");
     expect(stored.headers.get("cdn-cache-control")).toBe("public, max-age=600");
@@ -166,7 +165,7 @@ describe("api-origin-worker summary audio edge cache", () => {
   });
 
   it("drops a stored entry that no longer looks like shareable audio", async () => {
-    const key = edgeCacheKey(summaryAudioCacheKey(request(AUDIO_PATH)));
+    const key = summaryAudioCacheKey(request(AUDIO_PATH));
     store.set(key.url, new Response("{}", { status: 200, headers: { "content-type": "application/json" } }));
     vi.stubGlobal("fetch", vi.fn().mockImplementation(() => Promise.resolve(audioResponse())));
     const response = await run(request(AUDIO_PATH));

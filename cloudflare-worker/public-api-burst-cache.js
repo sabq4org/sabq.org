@@ -28,6 +28,8 @@ const NEW_PUBLIC_API_MAX_INFLIGHT = 32;
 const NEW_PUBLIC_API_MAX_BODY_BYTES = 1024 * 1024;
 const NEW_PUBLIC_API_BODY_TIMEOUT_MS = 10_000;
 const NEW_PUBLIC_API_CACHE_LEASE_MS = 1_000;
+// Store time of an entry, so a hit can hand on only what is left of its TTL.
+const NEW_PUBLIC_API_STORED_AT = "X-Sabq-Edge-Stored-At";
 
 function hasNewPublicApiCredentials(request) {
   if (request.headers.has("cookie")) return true;
@@ -94,6 +96,14 @@ function publicOriginTtl(response, routeTtl, path, requestOrigin = "") {
   // An explicit s-maxage=0 overrides a positive max-age at shared caches.
   const originTtl = sMaxAge.present ? sMaxAge.value : maxAge.value;
   return originTtl > 0 ? Math.min(routeTtl, originTtl) : 0;
+}
+
+// Seconds an entry has spent in cache: the Cache API's Age, or our own stamp.
+function newPublicApiEntryAge(response, now = Date.now()) {
+  const age = Number.parseInt(response.headers.get("age") || "", 10);
+  const storedAt = Number.parseInt(response.headers.get(NEW_PUBLIC_API_STORED_AT) || "", 10);
+  const stampAge = Number.isFinite(storedAt) ? Math.floor((now - storedAt) / 1000) : 0;
+  return Math.max(Number.isFinite(age) ? age : 0, stampAge, 0);
 }
 
 function newPublicApiResultResponse(result) {
@@ -223,6 +233,7 @@ async function fetchNewPublicApiResult(request, policy, fetchOrigin, runtime) {
   headers.delete("content-length");
   headers.set("Cache-Control", `public, max-age=0, s-maxage=${ttl}`);
   headers.set("CDN-Cache-Control", `public, max-age=${ttl}`);
+  headers.set(NEW_PUBLIC_API_STORED_AT, String(Date.now()));
   const result = {
     shareable: true,
     body,
@@ -274,15 +285,19 @@ export function createPublicApiBurstCache() {
     }
     if (hit) {
       const contentType = (hit.headers.get("content-type") || "").toLowerCase();
+      // Pages runs this module too and fetches api.sabq.org on its own miss:
+      // a hit must carry only the TTL it has left, or the second layer keeps
+      // an already aged copy for a full window again.
+      const remainingTtl = publicOriginTtl(
+        hit,
+        policy.ttl,
+        new URL(policy.key.url).pathname,
+        request.headers.get("origin") || "",
+      ) - newPublicApiEntryAge(hit);
       const hitContractValid =
         hit.status === 200 &&
         !hit.headers.has("set-cookie") &&
-        publicOriginTtl(
-          hit,
-          policy.ttl,
-          new URL(policy.key.url).pathname,
-          request.headers.get("origin") || "",
-        ) > 0 &&
+        remainingTtl > 0 &&
         contentType.includes("application/json");
       if (hitContractValid) {
         const bodyResult = await readNewPublicApiBody(hit.clone());
@@ -291,6 +306,9 @@ export function createPublicApiBurstCache() {
             JSON.parse(new TextDecoder("utf-8", { fatal: false }).decode(bodyResult.body));
             const headers = new Headers(hit.headers);
             headers.set("x-edge-cache", "HIT");
+            headers.set("Cache-Control", `public, max-age=0, s-maxage=${remainingTtl}`);
+            headers.set("CDN-Cache-Control", `public, max-age=${remainingTtl}`);
+            headers.delete("age");
             return new Response(hit.body, { status: hit.status, statusText: hit.statusText, headers });
           } catch (_) { /* discard malformed entry below */ }
         }

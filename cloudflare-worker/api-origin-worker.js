@@ -8,14 +8,15 @@
  */
 import { createPublicApiBurstCache } from "./public-api-burst-cache.js";
 import { createSummaryAudioEdgeCache } from "./public-audio-edge-cache.js";
-import { zoneKeyedCache } from "./edge-cache-zone-key.js";
 import { isEdgeCacheProbe, runEdgeCacheProbe } from "./edge-cache-probe.js";
 
 const DEFAULT_API_ORIGIN = "https://sabq-api-virginia.onrender.com";
 const publicApiBurstCache = createPublicApiBurstCache();
 const summaryAudioEdgeCache = createSummaryAudioEdgeCache();
-// Entries are keyed under sabq.org; see edge-cache-zone-key.js.
-const edgeCache = zoneKeyedCache(() => caches.default);
+// The sabq.org zone's cache rules also govern Cache API keys: a rule with
+// cache:false that matches a key turns put and match into silent no-ops
+// (2026-10-22). Keys stay on api.sabq.org, which the zone's bypass rules
+// exclude by host; GET /__sabq/edge-cache-probe shows whether that still holds.
 async function signedHeaders(request, secret) {
   const url = new URL(request.url);
   const realIp = request.headers.get("cf-connecting-ip");
@@ -125,7 +126,7 @@ export default {
     // Cache self-test; answered here, never forwarded (edge-cache-probe.js).
     if (isEdgeCacheProbe(request)) return runEdgeCacheProbe(request, caches);
     const newPublicApiResponse = await publicApiBurstCache(request, {
-      cache: edgeCache,
+      cache: caches.default,
       waitUntil: (promise) => ctx.waitUntil(promise),
       fetchOrigin: (sourceRequest) => fetchSignedOrigin(sourceRequest, origin, secret, 10_000),
     });
@@ -133,7 +134,7 @@ export default {
     // A cold clip is synthesized on request (HUMAIN alone may take 25 s), so
     // its origin fetch keeps the unbounded final attempt of the default path.
     const summaryAudioResponse = await summaryAudioEdgeCache(request, {
-      cache: edgeCache,
+      cache: caches.default,
       waitUntil: (promise) => ctx.waitUntil(promise),
       fetchOrigin: (sourceRequest) => fetchSignedOrigin(sourceRequest, origin, secret),
     });
