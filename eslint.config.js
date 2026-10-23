@@ -133,7 +133,8 @@ export default tseslint.config(
     // ينقل بوابة مسار كاتب الرأي إلى الإرسال فقط ويمسح reviewNotes عند إعادة
     // الإرسال، ويضيف سطراً واحداً. الاستخراج التالي يخفض السقف.
     // 2026-10-22: حذف بريد الكاتب من مسارَي الرأي العامّين → 36307.
-    rules: { "max-lines": ["error", { max: 36307 }] },
+    // 2026-10-23: نقل مسار «استمع» إلى routes/articleSummaryAudio.ts → 36271.
+    rules: { "max-lines": ["error", { max: 36271 }] },
   },
   {
     files: ["server/storage.ts"],

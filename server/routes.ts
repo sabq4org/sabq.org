@@ -14023,44 +14023,8 @@ Respond in valid JSON format only:
 
   // News Analytics Endpoint - Smart statistics and insights
 
-  // Get smart summary audio for an article
-  app.get("/api/articles/:slug/summary-audio", async (req: any, res) => {
-    // Settings changes must reach the origin; generated audio remains cached on the server.
-    res.setHeader("Cache-Control", "private, no-store");
-    res.setHeader("CDN-Cache-Control", "no-store");
-    res.setHeader("Vercel-CDN-Cache-Control", "no-store");
-    res.append("Access-Control-Expose-Headers", "X-TTS-Provider, X-TTS-Cache");
-    try {
-      const userId = req.user?.id;
-      const userRole = req.user?.role;
-      const article = await storage.getArticleBySlug(req.params.slug, userId, userRole);
-      
-      if (!article) {
-        return res.status(404).json({ message: "المقال غير موجود" });
-      }
-
-      // Use aiSummary or excerpt (in priority order)
-      const textToConvert = article.aiSummary || article.excerpt;
-      
-      if (!textToConvert) {
-        return res.status(400).json({ message: "الموجز غير متوفر لهذا المقال" });
-      }
-
-      const { getSummaryAudio } = await import("./services/summaryAudioService");
-      const audio = await getSummaryAudio(String(article.id), textToConvert);
-      res.setHeader("X-TTS-Provider", audio.provider);
-      res.setHeader("X-TTS-Cache", audio.cache);
-      res.setHeader("Content-Type", audio.contentType);
-      res.setHeader("Content-Length", audio.buffer.length.toString());
-      res.send(audio.buffer);
-    } catch (error) {
-      console.error("Error generating summary audio:", error);
-      const errorMessage = error instanceof Error && error.message === 'ElevenLabs timeout' 
-        ? "انتهت مهلة توليد الموجز الصوتي" 
-        : "فشل في توليد الموجز الصوتي";
-      res.status(500).json({ message: errorMessage });
-    }
-  });
+  // GET /api/articles/:slug/summary-audio → routes/articleSummaryAudio.ts
+  // (mounted centrally via registerSplitRoutes near setupAuth)
 
   // Get AI inline summary (3 short bullets) for an article
   // Returns existing aiSummary parsed into bullets if available; otherwise generates them

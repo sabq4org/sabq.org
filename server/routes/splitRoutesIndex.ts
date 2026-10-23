@@ -4,6 +4,7 @@ import { editAndGenerateStreamRouter } from "./editAndGenerateStream";
 import { integrationsStatusRouter } from "./integrationsStatus";
 import systemSettingsRouter from "./systemSettings";
 import unpublishedArticleGuardRouter from "./unpublishedArticleGuard";
+import articleSummaryAudioRouter from "./articleSummaryAudio";
 import audioBulletinRouter from "./audioBulletin";
 import userDashboardThemeRouter from "./userDashboardTheme";
 import adminActivityLogsRouter from "./adminActivityLogs";
@@ -126,6 +127,8 @@ export function registerSplitRoutes(app: Express) {
   // Must run after setupAuth (caller guarantees that).
   // First: hides drafts/scheduled articles from the public article handlers in routes.ts.
   app.use(unpublishedArticleGuardRouter);
+  // «استمع» audio: after the guard, so a draft's clip stays staff-only.
+  app.use(articleSummaryAudioRouter);
   app.use(systemSettingsRouter);
   app.use(audioBulletinRouter);
   app.use(userDashboardThemeRouter);
