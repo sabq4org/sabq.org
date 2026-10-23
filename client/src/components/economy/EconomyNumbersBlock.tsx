@@ -175,7 +175,7 @@ export function EconomyNumbersBlock() {
           </Link>
         </div>
 
-        <div className="mt-4 grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-6">
+        <div className="mt-4 grid grid-cols-2 gap-2.5 sm:grid-cols-3 xl:grid-cols-6">
           <Link href="/economy" className="col-span-2 sm:col-span-1 rounded-xl bg-primary px-3.5 py-3 text-primary-foreground hover:opacity-95" data-testid="economy-home-total">
             <div className="text-[11px] opacity-90">إجمالي الإنفاق في أسبوع</div>
             <div className="mt-0.5 text-2xl font-extrabold tabular-nums leading-tight">{fmtSar(w.totalValue)}<span className="text-xs font-semibold mr-1 opacity-90">ريال</span></div>
