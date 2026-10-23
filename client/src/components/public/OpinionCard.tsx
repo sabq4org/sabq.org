@@ -46,9 +46,21 @@ export function getOpinionAuthorName(article: OpinionCardArticle) {
   );
 }
 
-export function cleanOpinionAuthorBio(bio?: string | null): string {
+/** أول جملة، مع تجاوز النقطة بعد اختصار من حرف واحد مثل «د.» و«أ.». */
+function firstSentence(text: string): string {
+  const terminator = /[。.!؟]/g;
+  let match: RegExpExecArray | null;
+  while ((match = terminator.exec(text))) {
+    const before = text.slice(0, match.index).trim();
+    const lastWord = before.split(/\s+/).pop() || "";
+    if (lastWord.length >= 2) return before;
+  }
+  return text.trim();
+}
+
+export function cleanOpinionAuthorBio(bio?: string | null, authorName?: string): string {
   if (!bio) return "كاتب رأي";
-  const cleaned = bio
+  let cleaned = bio
     .replace(/https?:\/\/\S+/gi, "")
     .replace(/\b(?:x\.com|twitter\.com)\/\S+/gi, "")
     .replace(/^[\s\-–—•➢▪▫*]+/gm, "")
@@ -56,7 +68,12 @@ export function cleanOpinionAuthorBio(bio?: string | null): string {
     .map((line) => line.trim())
     .filter(Boolean)[0];
   if (!cleaned) return "كاتب رأي";
-  const firstClause = cleaned.split(/[。.!؟\n]/)[0]?.trim() || cleaned;
+  const name = authorName?.trim();
+  if (name && name !== "كاتب رأي" && cleaned.startsWith(name)) {
+    cleaned = cleaned.slice(name.length).replace(/^[\s،,:\-–—|]+/, "");
+  }
+  const firstClause = firstSentence(cleaned);
+  if (firstClause.length < 3) return "كاتب رأي";
   return firstClause.length > 68 ? `${firstClause.slice(0, 65).trim()}…` : firstClause;
 }
 
@@ -84,7 +101,7 @@ export function OpinionCard({
   onToggleSave?: (article: OpinionCardArticle) => void;
 }) {
   const name = getOpinionAuthorName(article);
-  const roleLabel = cleanOpinionAuthorBio(article.author?.bio);
+  const roleLabel = cleanOpinionAuthorBio(article.author?.bio, name);
   const href = `/opinion/${article.slug}`;
   const authorHref =
     name && name !== "كاتب رأي" ? `/author/${encodeURIComponent(name)}` : null;
