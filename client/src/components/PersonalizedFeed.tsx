@@ -154,7 +154,7 @@ export function PersonalizedFeed({ articles: initialArticles, title = "جميع 
   // the DOM nodes, OptimizedImage IntersectionObservers, and React work for the
   // feed — the heaviest block on the homepage. Breakpoint matches the original
   // `lg` (1024px) split so tablets keep the list view.
-  const isCompact = useIsMobile(860);
+  const isCompact = useIsMobile(768);
   const [articles, setArticles] = useState(initialArticles);
   const [isLoading, setIsLoading] = useState(false);
   const [hasMore, setHasMore] = useState(true);
@@ -345,7 +345,7 @@ export function PersonalizedFeed({ articles: initialArticles, title = "جميع 
 
       {/* Mobile View: Vertical List (like RecommendationsWidget) */}
       {isCompact && (
-      <div className="public-news-compact-list min-[860px]:hidden space-y-1" data-testid="personalized-feed-compact-list">
+      <div className="public-news-compact-list md:hidden space-y-1" data-testid="personalized-feed-compact-list">
         {articles.map((article, index) => (
           <div key={article.id} onMouseEnter={() => prefetchArticle(article.englishSlug || article.slug)} onTouchStart={() => prefetchArticle(article.englishSlug || article.slug)}>
             <NewsArticleCard article={article} viewMode="compact" priority={index < 3} />
@@ -356,7 +356,7 @@ export function PersonalizedFeed({ articles: initialArticles, title = "جميع 
 
       {/* Desktop View: Grid with 4 columns */}
       {!isCompact && (
-      <div className="hidden min-[860px]:grid grid-cols-4 gap-4 lg:gap-6">
+      <div className="hidden md:grid grid-cols-3 min-[860px]:grid-cols-4 gap-4 lg:gap-6">
         {articles.map((article, index) => {
           const match = matches.get(article.id);
           return (

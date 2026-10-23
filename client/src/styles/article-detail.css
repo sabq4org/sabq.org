@@ -31,6 +31,11 @@
 .article-breadcrumbs a { display: inline-flex; align-items: center; }
 .article-breadcrumbs a:hover { color: var(--article-brand); }
 .article-detail-layout { display: grid; gap: 48px; align-items: start; }
+@media (min-width: 768px) and (max-width: 859px) {
+  .article-detail-layout > .article-detail-sidebar { display: block; columns: 2; column-gap: 24px; }
+  .article-detail-layout > .article-detail-sidebar > * { break-inside: avoid; margin-bottom: 24px; }
+  .article-detail-layout > .article-detail-sidebar > .article-sidebar-stats { column-span: all; }
+}
 @media (min-width: 860px) and (max-width: 1023px) {
   .article-detail-layout { grid-template-columns: minmax(0, 1fr) 260px; gap: 32px; }
 }
