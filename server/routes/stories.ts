@@ -6,7 +6,12 @@ import { insertStorySchema, insertStoryLinkSchema } from "@shared/schema";
 import { storage } from "../storage";
 import { requireAuth, requireRole, logActivity } from "../rbac";
 import { withSWR, swrCache, CACHE_TTL } from "../memoryCache";
-import { getActiveStoriesForList } from "../services/storyListService";
+import {
+  DEFAULT_STORIES_LIMIT,
+  MAX_STORIES_LIMIT,
+  getActiveStoriesForList,
+} from "../services/storyListService";
+import { paginationOrReject } from "../utils/pagination";
 
 const STORIES_LIST_CACHE_KEY = "stories:list:active";
 
@@ -14,11 +19,18 @@ export function registerStoryRoutes(app: Express) {
   // GET /api/stories - جلب جميع القصص
   app.get("/api/stories", async (req, res) => {
     try {
+      const pg = paginationOrReject(
+        { query: req.query as Record<string, unknown>, path: req.path },
+        res,
+        { defaultLimit: DEFAULT_STORIES_LIMIT, maxLimit: MAX_STORIES_LIMIT, allowPage: true },
+      );
+      if (!pg) return;
+      const { limit, offset } = pg;
       const stories = await withSWR(
-        STORIES_LIST_CACHE_KEY,
+        `${STORIES_LIST_CACHE_KEY}:${limit}:${offset}`,
         CACHE_TTL.SHORT,
         CACHE_TTL.SHORT * 2,
-        getActiveStoriesForList
+        () => getActiveStoriesForList({ limit, offset }),
       );
       res.json(stories);
     } catch (error) {

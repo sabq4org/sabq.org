@@ -42,7 +42,6 @@ export async function findMatchingStories(article: Article): Promise<MatchResult
       tags: s.tags || [],
       rootArticle: s.rootArticle ? {
         title: s.rootArticle.title,
-        excerpt: s.rootArticle.excerpt
       } : null
     }));
 
