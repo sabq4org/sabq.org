@@ -6,26 +6,32 @@
  * caller's signing, fallback, and routing contract.
  */
 
-const NEW_PUBLIC_API_CACHE_ROUTES = [
+export const NEW_PUBLIC_API_CACHE_ROUTES = [
   { match: (path) => /^\/api\/articles\/[^/]+\/comments$/.test(path), ttl: 15 },
   { match: (path) => path === "/api/system/dms-top-ads", ttl: 15 },
   { match: (path) => path === "/api/themes/active", ttl: 30 },
   { match: (path) => path === "/api/kings-cup/overview", ttl: 5 },
-  // Reads the apps poll most (2026-10-22, Render bills egress per GB). The
+  // Reads the apps and web poll most (Render bills egress per GB). The
   // origin marks them in server/routes/publicEdgeCacheHooks.ts.
   { match: (path) => path === "/api/v1/homepage", ttl: 15 },
   { match: (path) => path === "/api/v1/news/paginated", ttl: 15 },
+  { match: (path) => path === "/api/v1/live", ttl: 15 },
+  { match: (path) => path === "/api/v1/articles", ttl: 15 },
+  { match: (path) => path === "/api/v1/sections", ttl: 300 },
   { match: (path) => path === "/api/v1/trending", ttl: 60 },
+  { match: (path) => path === "/api/homepage", ttl: 60 },
+  { match: (path) => path === "/api/categories", ttl: 60 },
+  { match: (path) => path === "/api/sports/competitions", ttl: 300 },
   { match: (path) => path === "/api/opinion", ttl: 60 },
   { match: (path) => /^\/api\/opinion\/related\/category\/[^/]+$/.test(path), ttl: 60 },
   { match: (path) => path === "/api/stories", ttl: 60 },
   { match: (path) => path === "/api/muqtarab/topics/featured", ttl: 60 },
   { match: (path) => path === "/api/economy/snapshot", ttl: 60 },
 ];
-// Bound retained bodies as well as key count: at most 32 x 1 MiB before
-// response/stream overhead, rather than retaining 256 MiB in an isolate.
+// Bound retained bodies as well as key count: 4 MiB ceiling as a safety net
+// so larger public payloads can still be cached while bounding isolate memory.
 const NEW_PUBLIC_API_MAX_INFLIGHT = 32;
-const NEW_PUBLIC_API_MAX_BODY_BYTES = 1024 * 1024;
+export const NEW_PUBLIC_API_MAX_BODY_BYTES = 4 * 1024 * 1024;
 const NEW_PUBLIC_API_BODY_TIMEOUT_MS = 10_000;
 const NEW_PUBLIC_API_CACHE_LEASE_MS = 1_000;
 // Store time of an entry, so a hit can hand on only what is left of its TTL.

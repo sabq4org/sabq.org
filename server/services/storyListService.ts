@@ -12,20 +12,21 @@
 import { db } from "../db";
 import { articles, stories, storyFollows, storyLinks } from "@shared/schema";
 import type { Story } from "@shared/schema";
-import { desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
+
+export const DEFAULT_STORIES_LIMIT = 30;
+export const MAX_STORIES_LIMIT = 100;
+
+export interface StoryListOptions {
+  limit?: number;
+  offset?: number;
+}
 
 export interface StoryListRootArticle {
   id: string;
-  title: string;
-  subtitle: string | null;
   slug: string;
-  englishSlug: string | null;
-  excerpt: string | null;
+  title: string;
   imageUrl: string | null;
-  thumbnailUrl: string | null;
-  articleType: string;
-  categoryId: string | null;
-  publishedAt: Date | null;
 }
 
 export type StoryListItem = Story & {
@@ -34,38 +35,51 @@ export type StoryListItem = Story & {
   followersCount: number;
 };
 
-export async function getActiveStoriesForList(): Promise<StoryListItem[]> {
+export async function getActiveStoriesForList(
+  options: StoryListOptions = {},
+): Promise<StoryListItem[]> {
+  const rawLimit = options.limit ?? DEFAULT_STORIES_LIMIT;
+  const limit =
+    Number.isFinite(rawLimit) && rawLimit > 0
+      ? Math.min(Math.trunc(rawLimit), MAX_STORIES_LIMIT)
+      : DEFAULT_STORIES_LIMIT;
+  const rawOffset = options.offset ?? 0;
+  const offset = Number.isFinite(rawOffset) && rawOffset >= 0 ? Math.trunc(rawOffset) : 0;
+
   const rows = await db
     .select({
       story: stories,
       rootArticle: {
         id: articles.id,
-        title: articles.title,
-        subtitle: articles.subtitle,
         slug: articles.slug,
-        englishSlug: articles.englishSlug,
-        excerpt: articles.excerpt,
+        title: articles.title,
         imageUrl: articles.imageUrl,
-        thumbnailUrl: articles.thumbnailUrl,
-        articleType: articles.articleType,
-        categoryId: articles.categoryId,
-        publishedAt: articles.publishedAt,
       },
     })
     .from(stories)
     .leftJoin(articles, eq(stories.rootArticleId, articles.id))
     .where(eq(stories.status, "active"))
-    .orderBy(desc(stories.createdAt));
+    .orderBy(desc(stories.createdAt))
+    .limit(limit)
+    .offset(offset);
 
-  const linkCounts = await db
-    .select({ storyId: storyLinks.storyId, count: sql<number>`count(*)` })
-    .from(storyLinks)
-    .groupBy(storyLinks.storyId);
-  const followCounts = await db
-    .select({ storyId: storyFollows.storyId, count: sql<number>`count(*)` })
-    .from(storyFollows)
-    .where(eq(storyFollows.isActive, true))
-    .groupBy(storyFollows.storyId);
+  if (rows.length === 0) {
+    return [];
+  }
+
+  const storyIds = rows.map((r) => r.story.id);
+  const [linkCounts, followCounts] = await Promise.all([
+    db
+      .select({ storyId: storyLinks.storyId, count: sql<number>`count(*)` })
+      .from(storyLinks)
+      .where(inArray(storyLinks.storyId, storyIds))
+      .groupBy(storyLinks.storyId),
+    db
+      .select({ storyId: storyFollows.storyId, count: sql<number>`count(*)` })
+      .from(storyFollows)
+      .where(and(eq(storyFollows.isActive, true), inArray(storyFollows.storyId, storyIds)))
+      .groupBy(storyFollows.storyId),
+  ]);
 
   const linksByStory = new Map(linkCounts.map((r) => [r.storyId, Number(r.count)]));
   const followsByStory = new Map(followCounts.map((r) => [r.storyId, Number(r.count)]));

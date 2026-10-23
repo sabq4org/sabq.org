@@ -118,7 +118,7 @@ describe("Pages auxiliary public API surge guard", () => {
   });
 
   it("does not buffer or share a body larger than the bounded response limit", async () => {
-    const oversized = JSON.stringify({ payload: "x".repeat(1024 * 1024 + 1) });
+    const oversized = JSON.stringify({ payload: "x".repeat(4 * 1024 * 1024 + 1) });
     const fetchMock = vi.fn().mockResolvedValue(new Response(oversized, {
       status: 200,
       headers: {

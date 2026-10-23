@@ -1,6 +1,6 @@
 # SEO و SSR (`seo-ssr`)
 
-> آخر مراجعة: 2026-10-22 (تدقيق أمني للحافة: seo-meta لغير المنشور، ومفتاح كاش Pages، ونسخة الطوارئ) | المالك: platform
+> آخر مراجعة: 2026-10-23 (كاش بروكسي Pages لطلبات GET المجهولة واحترام s-maxage للأصل) | المالك: platform
 
 
 ## الغرض
@@ -166,9 +166,10 @@
 ## نسخة Node في web-next — 2026-10-21
 - `web-next/Dockerfile` مثبّت على `node:22.23.4-alpine` بدل الوسم المتحرك `node:22-alpine`، بعد إصدار Node الأمني في 2026-10-21 (Brotli RCE وتجاوز تحقق اسم المضيف في TLS). التثبيت يجعل كل بناء على Render قابلًا للتحقق. أي ترقية لاحقة تغيّر الوسم صراحةً وتُراجع مع `platform-runtime` (صورة الـAPI وCI على 24.22.1).
 
-## كاش Pages لتقليل bandwidth على Render — 2026-10-22
+## كاش Pages لتقليل bandwidth على Render — 2026-10-22 (محدّث 2026-10-23)
 - Render يحاسب على الخروج (0.15$/GB بعد 25 GB)، وكانت أغلب طلبات `/api` من Pages تصل الأصل. `cachedJson` يقبل TTL رقمًا أو دالة على الحمولة: `seo-meta` و`slug-redirect` يُحفظان 60ث للإجابة المحسومة، و10ث لما يحجب الصفحة (noindex، not found، gone، redirect) حتى يظهر الخبر المنشور حديثًا سريعًا.
-- `FULL_QUERY_API_CACHE_ROUTES` في `functions/_middleware.js` يضيف قراءات عامة للمجهول: stories، opinion (القائمة وrelated/category)، reporters/:slug، economy/snapshot، audio-bulletin/current (30ث)، muqtarab/topics/featured، mawaeed، shortlinks/article (300ث)، لطلبات GET فقط. مفتاحها يحفظ الاستعلام كاملًا مرتبًا ومعه `Origin` الطلب دائمًا (`absent` أو `present:`) لأن CORS يعكسه. بقية المسارات صارت تحفظ الاستعلام كاملًا أيضًا (القسم التالي). نتائج المباريات الحية (`sports/today` و`rsl/hero`) خارج القائمة عمدًا: الأصل يعلن no-store أو 5ث. الكوكي والتفويض و`_nc`/`_t` وno-cache تتجاوز الكاش كما في بقية المسارات. الحارس: `edgeAuditGuards.test.ts` و`edgeMetadataBudget.test.ts`.
+- `FULL_QUERY_API_CACHE_ROUTES` في `functions/_middleware.js` يضيف قراءات عامة للمجهول: `v1/homepage` و`v1/news/paginated` و`v1/live` و`v1/articles` (15ث)، `v1/sections` و`sports/competitions` (300ث)، `v1/trending` وstories، opinion (القائمة وrelated/category)، reporters/:slug، economy/snapshot، audio-bulletin/current (30ث)، muqtarab/topics/featured، mawaeed، shortlinks/article (300ث)، لطلبات GET فقط. مفتاحها يحفظ الاستعلام كاملًا مرتبًا ومعه `Origin` الطلب دائمًا (`absent` أو `present:`) لأن CORS يعكسه. بقية المسارات صارت تحفظ الاستعلام كاملًا أيضًا (القسم التالي). نتائج المباريات الحية (`sports/today` و`rsl/hero`) خارج القائمة عمدًا: الأصل يعلن no-store أو 5ث. الكوكي والتفويض و`_nc`/`_t` وno-cache تتجاوز الكاش كما في بقية المسارات. الحارس: `edgeAuditGuards.test.ts` و`edgeMetadataBudget.test.ts`.
+- **بروكسي `proxyToApi` و`caches.default` لطلبات GET المجهولة (2026-10-23):** لأي طلب `GET /api/*` مجهول غير شخصي (`isAnonymousCacheableApiGet`: بلا كوكي جلسة `connect.sid`، بلا `Authorization` أو `x-session-id`، وليس `/api/admin` ولا `/api/auth` ولا مسارات الحساب/الإشعارات/المفضلة/الولاء)، يمرّر `proxyToApi` الخيار `cf: { cacheEverything: true }`، ويحفظ `handleRequest` الاستجابة في `caches.default` بمفتاح الـ URL الكامل المرتب (`apiCacheKey`) مع احترام `s-maxage` الموجب القادم من الأصل (`originPublicSmaxAge`) وعدم تخزين أي استجابة تحمل `Set-Cookie` أو `private` أو `no-store` أو `no-cache`.
 - 2026-10-22 (الجولة الثانية): صوت «استمع» `/api/articles/:slug/summary-audio` يُحفظ على حافة Pages 600ث للمجهول (0.6 إلى 1.3 MB للطلب، وكان 5 إلى 8% من خروج Render). تغيير الصوت أو المزوّد يصل الحافة خلال 10 دقائق. المدخل يحمل `timeoutMs: 0` فيبقى آخر محاولة للأصل بلا مهلة (`apiProxyTimeoutMs`) لأن التوليد الأول قد يتجاوز 10ث، وبقية القراءات المحفوظة تبقى بمهلة 10ث. ويحمل `lastGood: false` فلا نسخة 24 ساعة له (`apiLastGoodAllowed`). ما جاء من كاش وسيط `api.sabq.org` ومعه `Age` يُحفظ لما بقي من مدة المسار (`remainingApiCacheTtl`) حتى لا تتراكم الطبقتان، وتُحذف `CDN-Cache-Control` من النسخة المحفوظة لأنها تتقدم على Cache-Control (كانت `no-store` الأصل تمنع حفظ الصوت، و600ث الوسيط تتجاوز المدة الباقية). ويحمل `requireHeader` فلا يُحفظ إلا رد عليه `X-Sabq-Article-Published: 1` (`apiAnswerShareable`). مشغل الويب لم يعد يطلب `no-store`، وتطبيق iOS يأخذ الكاش نفسه من وسيط `api.sabq.org` (`auth-rbac`).
 
 ## تدقيق أمني لحافة Cloudflare — 2026-10-22

@@ -1,6 +1,6 @@
 # المصادقة والصلاحيات (`auth-rbac`)
 
-> آخر مراجعة: 2026-10-22 (كاش قراءات التطبيقات وصوت «استمع» في وسيط API، وفحص كاش الوسيط وسبب تعطّله: قواعد كاش المنطقة) | المالك: platform
+> آخر مراجعة: 2026-10-23 (توسيع كاش القراءات العامة في وسيط API ورفع سقف حجم الرد إلى 4 MiB) | المالك: platform
 
 ## الغرض
 مصادقة الويب (Passport) وموبايل (Bearer member session) + طبقتا RBAC (DB + constants).
@@ -114,8 +114,8 @@
 - **CSRF:** أُزيلت البادئات `/api/native-ads/` و`/api/muqtarab/topics/` و`/api/whatsapp/`. المستثنى الآن: نبضات الإعلانات (impression/click) ومسار المعلن العام (submit/upload/my-ads budget) وعدّاد مشاهدة موضوع مقترب كـregex مثبت، وwebhook وstatus-callback لـTwilio كمسارين محددين. إنشاء الإعلانات وتعديلها وتعليقات المواضيع ومسارات واتساب الإدارية محمية.
 - **تغيير الدور:** `storage.updateUserRole` يمر عبر `setUserSingleRole` (`services/userRoleSync.ts`): تحديث `users.role` واستبدال صفوف `user_roles` في معاملة واحدة. الإضافة وحدها كانت تُبقي صف `admin` القديم بعد التخفيض.
 
-## قراءات التطبيقات في وسيط API — 2026-10-22
-- `server/routes/publicEdgeCacheHooks.ts` يُركَّب قبل كل المسارات ويضع `X-Sabq-Public-Cache: 1` و`public, max-age=0, s-maxage` لقراءات عامة يكثر طلبها من التطبيقات: `/api/v1/homepage` و`/api/v1/news/paginated` (15ث)، و`/api/v1/trending` و`/api/opinion` و`opinion/related/category` و`/api/stories` و`muqtarab/topics/featured` و`economy/snapshot` (60ث). القائمة نفسها في `NEW_PUBLIC_API_CACHE_ROUTES`.
+## قراءات التطبيقات في وسيط API — 2026-10-22 (محدّث 2026-10-23)
+- `server/routes/publicEdgeCacheHooks.ts` يُركَّب قبل كل المسارات ويضع `X-Sabq-Public-Cache: 1` و`public, max-age=0, s-maxage` لقراءات عامة يكثر طلبها من التطبيقات والويب: `/api/v1/homepage` و`/api/v1/news/paginated` و`/api/v1/live` و`/api/v1/articles` (15ث)، و`/api/v1/sections` و`/api/sports/competitions` (300ث)، و`/api/v1/trending` و`/api/homepage` و`/api/categories` و`/api/opinion` و`opinion/related/category` و`/api/stories` و`muqtarab/topics/featured` و`economy/snapshot` (60ث). القائمة نفسها في `NEW_PUBLIC_API_CACHE_ROUTES`، مع رفع سقف حجم الرد المسموح بتخزينه (`NEW_PUBLIC_API_MAX_BODY_BYTES`) إلى 4 MiB كشبكة أمان.
 - لا علامة لطلب يحمل Authorization أو x-session-id أو كوكي الجلسة، ولا لطلب طازج (no-cache، `_nc`، `_t`، `refresh`)، فيبقى عقد `freshWindowCache` بعد العاجل. المعالج يستطيع استبدال Cache-Control (no-store عند الخطأ) فيمتنع الحفظ. الحارس: `publicEdgeCacheHooks.test.ts`.
 - صوت «استمع» `/api/articles/:slug/summary-audio` يمر بوحدة مستقلة `cloudflare-worker/public-audio-edge-cache.js` لأن تطبيق iOS ينزّله من `api.sabq.org` في كل تشغيل. السياسة على الحافة (الأصل يبقى `private, no-store`): GET مجهول فقط بلا Authorization ولا x-session-id ولا كوكي `connect.sid` (نفس فحص `needsSession`)، ولا no-cache ولا `_nc`/`_t`. يُحفظ 600ث فقط رد 200 من نوع `audio/*` بطول `Content-Length` مطابق للمتن، بلا Set-Cookie ولا ضغط، وحتى 6 MiB، ويحمل `X-Sabq-Article-Published: 1` من `unpublishedArticleGuard`؛ غير ذلك يمر كما هو، والنقل المقطوع يرد 502. المفتاح الاستعلام كاملًا مرتبًا مع Origin. الإصابة تعيد المقطع كاملًا 200 كما يفعل الأصل (بلا Range). جلب الأصل يبقى بلا مهلة كلية لأن التوليد الأول قد يطول. الحارس: `apiOriginWorkerAudio.test.ts`.
 - مفاتيح كاش الوسيط (القراءات والصوت) على `api.sabq.org` نفسه. قواعد كاش منطقة `sabq.org` تنطبق على مفاتيح Cache API أيضًا. أي قاعدة `cache:false` تطابق المفتاح تجعل الحفظ والقراءة بلا أثر، ودون أي خطأ. هذا ما عطّل كاش الوسيط كليًا حتى 2026-10-22:
