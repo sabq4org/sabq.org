@@ -1200,19 +1200,10 @@ router.post("/webhook", async (req: Request, res: Response) => {
         return res.status(200).send('OK');
       }
       
-      // Toggle breaking status
-      const newNewsType = existingArticle.newsType === 'breaking' ? 'regular' : 'breaking';
-      await storage.updateArticle(existingArticle.id, { newsType: newNewsType });
-      
-      // مسح الكاش فوراً وإشعار المتصفحات لظهور التغيير مباشرة
-      memoryCache.invalidatePatterns([
-        "^homepage",
-        "^blocks:",
-        "^breaking",
-        "^trending",
-        "^articles:",
-        "^category:"
-      ]);
+      // Toggle breaking status atomically and clear breaking from any previous article
+      const { toggleArticleBreakingExclusive } = await import("../services/breakingNewsService");
+      const toggled = await toggleArticleBreakingExclusive(existingArticle.id);
+      const newNewsType = toggled?.updatedArticle.newsType ?? (existingArticle.newsType === 'breaking' ? 'regular' : 'breaking');
       console.log(`[WhatsApp Agent] Cache invalidated and SSE broadcast for breaking news change`);
       
       

@@ -351,15 +351,20 @@ export default function EnglishArticlesPage() {
       
       const previousArticles = queryClient.getQueryData(queryKey);
       
+      const nextNewsType = currentState ? "regular" : "breaking";
       queryClient.setQueryData(queryKey, (old: { articles: Article[]; total: number; page: number; limit: number; totalPages: number } | undefined) => {
         if (!old?.articles) return old;
         return {
           ...old,
-          articles: old.articles.map(article =>
-            article.id === id
-              ? { ...article, newsType: currentState ? "regular" : "breaking" }
-              : article
-          ),
+          articles: old.articles.map(article => {
+            if (article.id === id) {
+              return { ...article, newsType: nextNewsType };
+            }
+            if (nextNewsType === "breaking" && article.newsType === "breaking") {
+              return { ...article, newsType: "regular" };
+            }
+            return article;
+          }),
         };
       });
       

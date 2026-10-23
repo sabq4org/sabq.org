@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-23T04:23:57.826Z",
+  "generatedAt": "2026-10-23T16:24:39.479Z",
   "systems": [
     {
       "id": "account-center",
@@ -59,7 +59,7 @@
     },
     {
       "id": "editorial",
-      "fileCount": 285,
+      "fileCount": 289,
       "samplePaths": [
         "server/routes/videoResolver.ts",
         "server/services/videoResolverService.ts",
@@ -129,7 +129,7 @@
     },
     {
       "id": "audio-newsletter",
-      "fileCount": 61,
+      "fileCount": 67,
       "samplePaths": [
         "server/services/aiNewsletterService.ts",
         "server/services/aiNewsletterEnhancer.ts",

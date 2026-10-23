@@ -5,6 +5,11 @@
 import { db } from "../db";
 import { articles, categories, enArticles, enCategories } from "@shared/schema";
 import { and, eq, or, sql } from "drizzle-orm";
+import {
+  clearOtherBreakingArticles,
+  invalidateClearedBreakingArticles,
+  isBreakingNewsType,
+} from "./breakingNewsService";
 
 /** Map an Arabic category to en_categories via slug / englishSlug / name. */
 export async function resolveEnCategoryId(
@@ -105,4 +110,11 @@ export async function syncBreakingToArabicSource(
     .update(articles)
     .set({ newsType, updatedAt: new Date() })
     .where(eq(articles.id, sourceId));
+
+  if (isBreakingNewsType(newsType)) {
+    const cleared = await clearOtherBreakingArticles(sourceId);
+    if (cleared.length > 0) {
+      invalidateClearedBreakingArticles(cleared, "en-sync-breaking-clear");
+    }
+  }
 }

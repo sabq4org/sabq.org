@@ -344,3 +344,8 @@
 - `/dashboard/articles` على اللوحي: لا عمودي «القراءات» و«الإجراءات»؛ شريط `RowActions variant="wire" wireAlign="start"` ينزل تحت العنوان بنفس الأزرار والترتيب (أزرار 40px)، والقراءات بجوار العنوان بأيقونة عين. **قرار «كل الأزرار ظاهرة» باقٍ.** شرائح «المصدر» تلتف بدل التمرير المخفي، و`OpinionWeekBoard` أعمدة 176px تمرّر أفقيًا.
 - الشريط الجانبي للوحة في الآيباد **العمودي** لوحة فوق المحتوى (`isPortraitTablet` في `ui/sidebar.tsx` + إلغاء هامش `sidebar-inset` في `index.css`). الأفقي كما هو.
 
+## حصرية الخبر العاجل الواحد — 2026-10-23
+- خبر عاجل واحد فقط (`newsType = 'breaking'`) مسموح في الوقت نفسه في كل جدول مقالات (`articles`، `en_articles`، `ur_articles`).
+- عند إنشاء أو حفظ أو نشر أو جدولة أو تبديل حالة العاجل لأي مقال مع `newsType = 'breaking'` (عبر لوحة التحكم، النشر المباشر، النشر المجدول `publishScheduledArticles`، بوت المسودات `/api/internal/bot-drafts`، وكيل واتساب، استرجاع النسخ، أو واجهة إدارة الجوال `/api/v1/admin/articles`)، ينفّذ `server/services/breakingNewsService.ts` تحديثاً ذرياً داخل المعاملة نفسها لتحويل جميع المقالات الأخرى التي تحمل `news_type = 'breaking'` إلى `'regular'` (`WHERE id <> current_id AND news_type = 'breaking'`)، مع مزامنة الترجمات الإنجليزية المرتبطة وإبطال الكاش (`invalidateArticleWrite` و`purgeBreakingNews`) للمقالات التي أُزيل عنها العاجل.
+
+

@@ -420,7 +420,7 @@ export function RowActions({
           onClick={() => void breaking.toggle(!breaking.isBreaking)}
           disabled={breaking.isPending}
           data-testid={`switch-breaking-${articleId}`}
-          title={breaking.isBreaking ? "إلغاء العاجل" : "عاجل"}
+          title={breaking.isBreaking ? "إلغاء العاجل" : "عاجل (يلغي العاجل عن الخبر السابق)"}
           aria-pressed={breaking.isBreaking}
           className={breaking.isBreaking ? "text-red-600 hover:text-red-700 dark:text-red-400" : undefined}
         >

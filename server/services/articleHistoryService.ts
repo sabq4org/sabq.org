@@ -21,6 +21,7 @@ import {
 import { logArticleEvent, getArticleEventsWithActor } from "./articleEventsService";
 import { articleLockAllowsWriter, nextArticleVersion } from "./articleWriteVersion";
 import { maybePlanPublishedRevision, recordArticleRevision, editorDisplayName } from "./publishFirstService";
+import { runWithExclusiveBreaking } from "./breakingNewsService";
 
 type ArticleRow = Article;
 
@@ -289,11 +290,17 @@ export async function restoreArticleVersion(input: {
     updateReason: null,
   });
 
-  const [updated] = await db
-    .update(articles)
-    .set({ ...patch, ...(revisionPlan?.contentChanged ? { correctedAt: new Date() } : {}), updatedAt: nextArticleVersion } as any)
-    .where(and(eq(articles.id, input.articleId), articleLockAllowsWriter(input.actorId)))
-    .returning();
+  const { article: updated } = await runWithExclusiveBreaking(
+    async (tx) => {
+      const [restored] = await tx
+        .update(articles)
+        .set({ ...patch, ...(revisionPlan?.contentChanged ? { correctedAt: new Date() } : {}), updatedAt: nextArticleVersion } as any)
+        .where(and(eq(articles.id, input.articleId), articleLockAllowsWriter(input.actorId)))
+        .returning();
+      return restored;
+    },
+    { reason: "article-history-restore-breaking-clear" },
+  );
   if (!updated) {
     return { ok: false as const, status: 409, code: "ARTICLE_LOCKED", message: "المادة مفتوحة للتحرير عند مستخدم آخر" };
   }

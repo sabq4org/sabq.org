@@ -8022,36 +8022,34 @@ router.get("/admin/articles/:id", async (req: Request, res: Response) => {
 router.post("/admin/articles/:id/publish", async (req: Request, res: Response) => {
   try {
     const admin = await verifyAdminSession(req);
-    if (!admin) {
-      return res.status(403).json({ success: false, message: "صلاحيات غير كافية" });
-    }
+    if (!admin) return res.status(403).json({ success: false, message: "صلاحيات غير كافية" });
 
     const id = req.params.id;
-    const [existing] = await db
-      .select({ id: articles.id, publishedAt: articles.publishedAt })
-      .from(articles)
-      .where(eq(articles.id, id))
-      .limit(1);
-    if (!existing) {
-      return res.status(404).json({ success: false, message: "الخبر غير موجود" });
-    }
+    const [existing] = await db.select({ id: articles.id, publishedAt: articles.publishedAt }).from(articles).where(eq(articles.id, id)).limit(1);
+    if (!existing) return res.status(404).json({ success: false, message: "الخبر غير موجود" });
 
-    await db
-      .update(articles)
-      .set({
-        status: "published",
-        reviewStatus: "approved",
-        publishedAt: existing.publishedAt ?? new Date(),
-        reviewedBy: admin.userId,
-        reviewedAt: new Date(),
-        updatedAt: new Date(),
-      })
-      .where(eq(articles.id, id));
+    const { runWithExclusiveBreaking } = await import("../services/breakingNewsService");
+    await runWithExclusiveBreaking(
+      async (tx) => {
+        const [published] = await tx
+          .update(articles)
+          .set({
+            status: "published",
+            reviewStatus: "approved",
+            publishedAt: existing.publishedAt ?? new Date(),
+            reviewedBy: admin.userId,
+            reviewedAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .where(eq(articles.id, id))
+          .returning();
+        return published;
+      },
+      { reason: "mobile-publish-breaking-clear" },
+    );
 
-    // SEO/indexing parity with the web: purge edge cache + ping IndexNow.
     const forSeo = await fetchArticleForNotify(id);
     if (forSeo) triggerPublishSeo(forSeo, "mobile-publish");
-
     res.json({ success: true, item: await fetchAdminArticleItem(id) });
   } catch (error) {
     console.error("[Mobile API] POST /admin/articles/:id/publish error:", error);
@@ -8063,9 +8061,7 @@ router.post("/admin/articles/:id/publish", async (req: Request, res: Response) =
 router.patch("/admin/articles/:id", async (req: Request, res: Response) => {
   try {
     const admin = await verifyAdminSession(req);
-    if (!admin) {
-      return res.status(403).json({ success: false, message: "صلاحيات غير كافية" });
-    }
+    if (!admin) return res.status(403).json({ success: false, message: "صلاحيات غير كافية" });
 
     const id = req.params.id;
     const [existing] = await db
@@ -8073,82 +8069,28 @@ router.patch("/admin/articles/:id", async (req: Request, res: Response) => {
       .from(articles)
       .where(eq(articles.id, id))
       .limit(1);
-    if (!existing) {
-      return res.status(404).json({ success: false, message: "الخبر غير موجود" });
-    }
+    if (!existing) return res.status(404).json({ success: false, message: "الخبر غير موجود" });
 
     const b = req.body || {};
-    const updates: Record<string, any> = { updatedAt: new Date() };
-
-    // Text fields
-    if (typeof b.title === "string") updates.title = b.title;
-    if (typeof b.subtitle === "string") updates.subtitle = b.subtitle;
-    if (typeof b.excerpt === "string") updates.excerpt = b.excerpt;
-    // `content` is the article HTML; accept legacy `body` alias too.
-    if (typeof b.content === "string") updates.content = b.content;
-    else if (typeof b.body === "string") updates.content = b.body;
-    if (typeof b.slug === "string" && b.slug.trim()) updates.slug = b.slug.trim();
-    if (typeof b.aiSummary === "string") updates.aiSummary = b.aiSummary;
-    if (typeof b.imageUrl === "string") updates.imageUrl = b.imageUrl;
-
-    // Relations (allow explicit null to clear)
-    if (b.categoryId === null || typeof b.categoryId === "string") updates.categoryId = b.categoryId || null;
-    if (b.reporterId === null || typeof b.reporterId === "string") updates.reporterId = b.reporterId || null;
-    // Opinion author → articles.authorId (the editor sends authorId for opinion).
-    if (b.authorId === null || typeof b.authorId === "string") updates.authorId = b.authorId || null;
-
-    // Enums / flags
-    if (typeof b.articleType === "string") updates.articleType = b.articleType;
-    if (typeof b.newsType === "string") updates.newsType = b.newsType;
-    if (typeof b.isFeatured === "boolean") {
-      updates.isFeatured = b.isFeatured;
-      // لوحة الويب تختم displayOrder بثواني يونكس لحظة التمييز وهو ما يرتب
-      // الكروسيل — بدون الختم هنا يبقى صفرًا ويغرق المقال تحت كل المختومين
-      updates.displayOrder = b.isFeatured ? Math.floor(Date.now() / 1000) : 0;
-    }
-    if (typeof b.isReading === "boolean") updates.isReading = b.isReading;
-    if (typeof b.hideFromHomepage === "boolean") updates.hideFromHomepage = b.hideFromHomepage;
-
-    // Scheduling
-    if (b.scheduledAt === null) {
-      updates.scheduledAt = null;
-    } else if (typeof b.scheduledAt === "string" && b.scheduledAt) {
-      const d = new Date(b.scheduledAt);
-      if (!isNaN(d.getTime())) updates.scheduledAt = d;
-    }
-
-    // SEO (merge over existing jsonb so partial updates don't wipe fields)
-    if (b.seo && typeof b.seo === "object") {
-      const prev = (existing.seo && typeof existing.seo === "object") ? (existing.seo as any) : {};
-      updates.seo = {
-        ...prev,
-        metaTitle: typeof b.seo.metaTitle === "string" ? b.seo.metaTitle : (prev.metaTitle ?? ""),
-        metaDescription: typeof b.seo.metaDescription === "string" ? b.seo.metaDescription : (prev.metaDescription ?? ""),
-        keywords: Array.isArray(b.seo.keywords) ? b.seo.keywords : (prev.keywords ?? []),
-      };
-    }
-
-    // Status (the four real values)
-    if (typeof b.status === "string" && (ADMIN_ARTICLE_STATUSES as readonly string[]).includes(b.status)) {
-      updates.status = b.status;
-      if (b.status === "published" && !existing.publishedAt) {
-        updates.publishedAt = new Date();
-      }
-    }
+    const { buildMobileAdminArticleUpdates, runWithExclusiveBreaking } = await import("../services/breakingNewsService");
+    const updates = buildMobileAdminArticleUpdates(b, existing);
 
     const scheduleError = mobileScheduleError(
-      updates.status ?? existing.status,
+      (updates.status as string | undefined) ?? existing.status,
       Object.prototype.hasOwnProperty.call(b, "scheduledAt") ? b.scheduledAt : existing.scheduledAt,
     );
     if (scheduleError) return res.status(400).json({ success: false, message: scheduleError });
 
-    await db.update(articles).set(updates).where(eq(articles.id, id));
+    await runWithExclusiveBreaking(
+      async (tx) => {
+        const [updated] = await tx.update(articles).set(updates).where(eq(articles.id, id)).returning();
+        return updated;
+      },
+      { reason: "mobile-edit-breaking-clear" },
+    );
 
-    // Editing/publishing a published article must purge the edge cache (+ ping)
-    // so crawlers/readers see the change, matching the web PATCH flow.
     const forSeo = await fetchArticleForNotify(id);
-    if (forSeo?.status === "published") triggerPublishSeo(forSeo, "mobile-edit");
-
+    if (forSeo?.status === "published" || forSeo?.newsType === "breaking") triggerPublishSeo(forSeo, "mobile-edit");
     res.json({ success: true, item: await fetchAdminArticleItem(id), article: await fetchAdminArticleDetail(id) });
   } catch (error) {
     console.error("[Mobile API] PATCH /admin/articles/:id error:", error);

@@ -1140,6 +1140,9 @@ export default function UrduArticleEditor() {
                       </Label>
                     </div>
                   </RadioGroup>
+                  <p className="text-xs text-muted-foreground mt-2" data-testid="text-breaking-exclusivity-note-ur">
+                    Only one article can be marked as breaking news at a time; enabling this clears the previous breaking article.
+                  </p>
                   
                   {/* Hide from Homepage Option */}
                   <div className="pt-4 border-t mt-4">
