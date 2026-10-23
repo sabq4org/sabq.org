@@ -169,11 +169,17 @@ export default function OpinionDetailPage() {
   });
   const likedCommentIds = Array.isArray(myLikesRaw) ? myLikesRaw : [];
 
-  const { data: relatedArticlesRaw } = useQuery<ArticleWithDetails[]>({
-    queryKey: ["/api/opinion", slug, "related"],
-    enabled: !!slug,
+  // `/api/opinion/:slug/related` يعيد أخباراً من التصنيف نفسه أيضاً؛ هذا المسار مقصور على الرأي المنشور.
+  const relatedCategoryId = article?.categoryId || article?.category?.id;
+  const { data: relatedPayload } = useQuery<{ articles: ArticleWithDetails[] }>({
+    queryKey: [
+      "/api/opinion/related/category",
+      relatedCategoryId,
+      { excludeId: article?.id, limit: 4 },
+    ],
+    enabled: !!relatedCategoryId && !!article?.id,
   });
-  const relatedArticles = Array.isArray(relatedArticlesRaw) ? relatedArticlesRaw : [];
+  const relatedArticles = Array.isArray(relatedPayload?.articles) ? relatedPayload.articles : [];
 
   // Fetch other opinion articles by the same author
   const authorIdForQuery = article?.authorId || article?.author?.id;
@@ -662,7 +668,10 @@ export default function OpinionDetailPage() {
     ? formatArticleTimestamp(editorialModifiedAt, { format: 'absolute', locale: 'ar' })
     : null;
 
-  const cleanedAuthorBio = cleanOpinionAuthorBio((article as any).staff?.bioAr || article.author?.bio);
+  const cleanedAuthorBio = cleanOpinionAuthorBio(
+    (article as any).staff?.bioAr || article.author?.bio,
+    article.author ? `${article.author.firstName || ""} ${article.author.lastName || ""}`.trim() : undefined,
+  );
   const authorTitle = bylineProfile?.title?.trim() || cleanedAuthorBio || "كاتب رأي";
 
   const handleCopySelectedQuote = async () => {

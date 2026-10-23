@@ -204,7 +204,7 @@ export default function OpinionPage() {
           id: authorId,
           name,
           avatar: article.author?.profileImageUrl || null,
-          bio: cleanOpinionAuthorBio(article.author?.bio),
+          bio: cleanOpinionAuthorBio(article.author?.bio, name),
           fullBio: article.author?.bio || null,
           articleCount: 1,
         });
@@ -278,6 +278,9 @@ export default function OpinionPage() {
         : [...displayedArticles].sort((a, b) => (b.views ?? 0) - (a.views ?? 0));
     return pool.filter((a) => a.id !== leadArticle?.id).slice(0, 3);
   }, [trendingData?.articles, displayedArticles, leadArticle?.id]);
+  const gridArticles = leadArticle
+    ? displayedArticles.filter((a) => a.id !== leadArticle.id)
+    : displayedArticles;
 
   const handlePageChange = (page: number) => {
     setCurrentPage(page);
@@ -470,6 +473,11 @@ export default function OpinionPage() {
                             : "border-border/80 bg-background hover:border-primary/50 hover:bg-background/90"
                         }`}
                         data-testid={`button-filter-writer-${writer.id}`}
+                        title={
+                          writer.fullBio
+                            ? `${writer.name} — ${writer.fullBio.replace(/[*•➢▪▫]/g, "").replace(/\s+/g, " ").trim()}`
+                            : writer.name
+                        }
                       >
                         <Avatar className="h-7 w-7 sm:h-8 sm:w-8 shrink-0 border border-border/50">
                           <AvatarImage
@@ -586,7 +594,7 @@ export default function OpinionPage() {
                           {getOpinionAuthorName(leadArticle)}
                         </Link>
                         <p className="text-xs text-muted-foreground line-clamp-1">
-                          {cleanOpinionAuthorBio(leadArticle.author?.bio)}
+                          {cleanOpinionAuthorBio(leadArticle.author?.bio, getOpinionAuthorName(leadArticle))}
                         </p>
                       </div>
                     </div>
@@ -856,7 +864,7 @@ export default function OpinionPage() {
               <>
                 {viewMode === "grid" ? (
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {displayedArticles.map((article) => (
+                    {gridArticles.map((article) => (
                       <OpinionCard
                         key={article.id}
                         article={article}
@@ -873,9 +881,9 @@ export default function OpinionPage() {
                     className="grid grid-cols-1 lg:grid-cols-2 gap-6"
                     data-testid="opinion-digest-list"
                   >
-                    {displayedArticles.map((article) => {
+                    {gridArticles.map((article) => {
                       const writerName = getOpinionAuthorName(article);
-                      const writerRole = cleanOpinionAuthorBio(article.author?.bio);
+                      const writerRole = cleanOpinionAuthorBio(article.author?.bio, writerName);
                       const summaryText = article.excerpt || article.aiSummary || "";
                       const isArticleSaved = savedIds.has(article.id);
                       return (
@@ -1092,7 +1100,7 @@ export default function OpinionPage() {
                         {getOpinionAuthorName(previewArticle)}
                       </Link>
                       <p className="text-xs text-muted-foreground line-clamp-1">
-                        {cleanOpinionAuthorBio(previewArticle.author?.bio)}
+                        {cleanOpinionAuthorBio(previewArticle.author?.bio, getOpinionAuthorName(previewArticle))}
                       </p>
                     </div>
                   </div>
