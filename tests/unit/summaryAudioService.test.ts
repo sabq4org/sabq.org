@@ -193,6 +193,33 @@ describe('summary clip kept once (R2 copy, no second paid fallback, synthesis li
     expect(store.write).toHaveBeenCalledTimes(1);
   });
 
+  it('copies a warm draft clip on the first published play, once', async () => {
+    await service.getSummaryAudio('published-same-day', 'نص');
+    expect(store.write).not.toHaveBeenCalled();
+    expect(await service.getSummaryAudio('published-same-day', 'نص', { persist: true })).toMatchObject({ provider: 'humain', cache: 'HIT' });
+    await service.getSummaryAudio('published-same-day', 'نص', { persist: true });
+    expect(store.write).toHaveBeenCalledTimes(1);
+    expect(store.write).toHaveBeenCalledWith(service.summaryAudioCacheKey('published-same-day', 'نص', settings), expect.objectContaining({ provider: 'humain' }));
+    expect(mocks.humain).toHaveBeenCalledTimes(1);
+  });
+
+  it('copies a draft fallback clip once published, without paying for it again', async () => {
+    vi.useFakeTimers(); mocks.humain.mockRejectedValue(new Error('offline'));
+    await service.getSummaryAudio('draft-fallback', 'نص');
+    await vi.advanceTimersByTimeAsync(61_000);
+    expect(await service.getSummaryAudio('draft-fallback', 'نص', { persist: true })).toMatchObject({ provider: 'elevenlabs', cache: 'HIT' });
+    expect(store.write).toHaveBeenCalledTimes(1);
+    expect(store.write).toHaveBeenCalledWith(service.summaryAudioCacheKey('draft-fallback', 'نص', settings), expect.objectContaining({ provider: 'elevenlabs' }));
+    expect(mocks.eleven).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not copy a clip read from R2 back to R2', async () => {
+    store.read.mockResolvedValue(humainClip());
+    await service.getSummaryAudio('already-stored', 'نص', { persist: true });
+    await service.getSummaryAudio('already-stored', 'نص', { persist: true });
+    expect(store.write).not.toHaveBeenCalled();
+  });
+
   it('asks the synthesis limit only for a clip that exists nowhere', async () => {
     const takeSynthesisSlot = vi.fn(() => true);
     await service.getSummaryAudio('id', 'نص', { takeSynthesisSlot });

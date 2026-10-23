@@ -9,7 +9,9 @@ import { readStoredSummaryAudio, storeSummaryAudio } from './summaryAudioStore';
 export type SummaryAudio = { buffer: Buffer; provider: 'gemini' | 'humain' | 'elevenlabs' | 'google'; contentType: 'audio/wav' | 'audio/mpeg' };
 export const SUMMARY_AUDIO_SAMPLE = 'أهلاً بكم في موجز الأخبار من سبق. من الرياض، نتابع أبرز المستجدات المحلية، ونستعرض أهم الأخبار الاقتصادية والرياضية. قراءة واضحة، ومعلومة موثوقة، ومتابعة مستمرة على مدار الساعة.';
 export type SummaryAudioResult = SummaryAudio & { cache: 'HIT' | 'MISS' | 'STORE' };
-const cache = new Map<string, { audio: SummaryAudio; expires: number }>();
+/** `durable`: the clip is in R2 already (read from it, or written by this replica). */
+type CachedSummaryAudio = { audio: SummaryAudio; expires: number; durable: boolean };
+const cache = new Map<string, CachedSummaryAudio>();
 const pending = new Map<string, Promise<SummaryAudioResult>>();
 const MAX_CACHE_BYTES = 64 * 1024 * 1024;
 const MAX_SYNTHESES = 4;
@@ -164,13 +166,13 @@ export type SummaryAudioOptions = {
   takeSynthesisSlot?: () => boolean;
 };
 
-function remember(key: string, audio: SummaryAudio, ttl: number): void {
+function remember(key: string, audio: SummaryAudio, ttl: number, durable: boolean): void {
   for (const [oldKey, entry] of cache) {
     if (entry.expires <= Date.now() || oldKey === key || cacheBytes + audio.buffer.length > MAX_CACHE_BYTES) {
       cache.delete(oldKey); cacheBytes -= entry.audio.buffer.length;
     }
   }
-  cache.set(key, { audio, expires: Date.now() + ttl }); cacheBytes += audio.buffer.length;
+  cache.set(key, { audio, expires: Date.now() + ttl, durable }); cacheBytes += audio.buffer.length;
 }
 
 /** Counts toward the four concurrent provider calls per replica (TTS_BUSY beyond). */
@@ -180,30 +182,36 @@ async function synthesize<T>(task: () => Promise<T>): Promise<T> {
 }
 
 function keep(key: string, audio: SummaryAudio, settings: SummaryAudioSettings, options: SummaryAudioOptions): SummaryAudioResult {
-  // Recover the preferred provider after an outage rather than pinning fallback for a day.
-  remember(key, audio, audio.provider === settings.primaryProvider ? PRIMARY_TTL_MS : FALLBACK_TTL_MS);
   if (options.persist) storeSummaryAudio(key, audio);
+  // Recover the preferred provider after an outage rather than pinning fallback for a day.
+  remember(key, audio, audio.provider === settings.primaryProvider ? PRIMARY_TTL_MS : FALLBACK_TTL_MS, Boolean(options.persist));
   return { ...audio, cache: 'MISS' };
+}
+
+/** A clip voiced for a draft, or a lost write: copy it once the article is published instead of paying again. */
+function persistIfNeeded(key: string, audio: SummaryAudio, durable: boolean, options: SummaryAudioOptions): boolean {
+  if (durable || !options.persist) return durable;
+  storeSummaryAudio(key, audio);
+  return true;
 }
 
 /**
  * Memory missed: R2 (or an expired memory copy) first, then the primary voice for a
  * fallback clip, and only a clip that exists nowhere is paid for through the chain.
  */
-async function resolveSummaryAudio(key: string, text: string, settings: SummaryAudioSettings, expired: SummaryAudio | undefined, options: SummaryAudioOptions): Promise<SummaryAudioResult> {
+async function resolveSummaryAudio(key: string, text: string, settings: SummaryAudioSettings, expired: CachedSummaryAudio | undefined, options: SummaryAudioOptions): Promise<SummaryAudioResult> {
   const stored = await readStoredSummaryAudio(key);
-  const known = stored ?? expired;
+  const known = stored ?? expired?.audio;
+  const durable = Boolean(stored) || Boolean(expired?.durable);
   const label = stored ? 'STORE' : 'HIT';
   if (known?.provider === settings.primaryProvider) {
-    remember(key, known, PRIMARY_TTL_MS);
-    // A draft voiced before publishing, or a lost write: copy it now instead of paying again.
-    if (!stored && options.persist) storeSummaryAudio(key, known);
+    remember(key, known, PRIMARY_TTL_MS, persistIfNeeded(key, known, durable, options));
     return { ...known, cache: label };
   }
   if (known) {
     const upgraded = synthesizing < MAX_SYNTHESES ? await synthesize(() => attemptPrimary(text, settings)) : null;
     if (upgraded) return keep(key, upgraded, settings, options);
-    remember(key, known, FALLBACK_TTL_MS);
+    remember(key, known, FALLBACK_TTL_MS, persistIfNeeded(key, known, durable, options));
     return { ...known, cache: label };
   }
   if (synthesizing >= MAX_SYNTHESES) throw new Error('TTS_BUSY');
@@ -216,10 +224,13 @@ export async function getSummaryAudio(articleId: string, text: string, options: 
   const settings = await loadSummaryAudioSettings();
   const key = summaryAudioCacheKey(articleId, text, settings);
   const cached = cache.get(key);
-  if (cached && cached.expires > Date.now()) return { ...cached.audio, cache: 'HIT' };
+  if (cached && cached.expires > Date.now()) {
+    cached.durable = persistIfNeeded(key, cached.audio, cached.durable, options);
+    return { ...cached.audio, cache: 'HIT' };
+  }
   let task = pending.get(key);
   if (!task) {
-    task = resolveSummaryAudio(key, text, settings, cached?.audio, options).finally(() => pending.delete(key));
+    task = resolveSummaryAudio(key, text, settings, cached, options).finally(() => pending.delete(key));
     pending.set(key, task);
   }
   return task;
