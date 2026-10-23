@@ -416,7 +416,11 @@
         "shared/articleVisibility.ts",
         "server/services/articleVisibilityService.ts",
         "server/routes/unpublishedArticleGuard.ts",
-        "tests/unit/unpublishedArticleGuard.test.ts"
+        "tests/unit/unpublishedArticleGuard.test.ts",
+        "server/services/breakingNewsService.ts",
+        "client/src/components/admin/BreakingSwitch.tsx",
+        "client/src/components/admin/RowActions.tsx",
+        "tests/unit/breakingNewsExclusivity.test.ts"
       ],
       "aiFeatureKeys": [
         "content-tools",

@@ -33,6 +33,14 @@ import {
 import { resolveUniqueArticleSlug } from "./articleSlugService";
 import { logArticleEvent } from "./articleEventsService";
 import { recordArticleSave } from "./articleHistoryService";
+import {
+  clearOtherBreakingArticles,
+  clearOtherEnBreakingArticles,
+  invalidateClearedBreakingArticles,
+  isBreakingNewsType,
+  runWithExclusiveBreaking,
+  type ClearedBreakingArticle,
+} from "./breakingNewsService";
 import { generateEnglishSlug } from "../utils/slugTransliterator";
 import { sanitizeArticleHtml } from "../utils/sanitizeArticleHtml";
 import { buildEditorialMetadataUpdate } from "../utils/editorialDatesSql";
@@ -1533,6 +1541,7 @@ export async function publishBotDraft(
   let response: BotDraftResponse;
   let publishPatch: (BotDraftPublishUpdate & { englishSlug?: string }) | undefined;
   let alreadyTerminal: BotDraftPublishOperationResponse | undefined;
+  let clearedBreaking: ClearedBreakingArticle[] = [];
   await db.transaction(async (tx) => {
     try {
     if (claimedOperation) {
@@ -1567,6 +1576,9 @@ export async function publishBotDraft(
     articleWriteStarted = true;
     const [updated] = await tx.update(articles).set(publishPatch).where(eq(articles.id, articleId)).returning();
     if (!updated) throw new BotDraftError(409, "not_a_draft", "تغيّرت حالة المادة أثناء النشر", { status: "unknown" });
+    if (isBreakingNewsType(updated.newsType)) {
+      clearedBreaking = await clearOtherBreakingArticles(updated.id, tx);
+    }
     row = updated;
     const [category] = await tx.select({ slug: categories.slug }).from(categories).where(eq(categories.id, row.categoryId ?? "")).limit(1);
     response = toBotDraftResponse(row, category?.slug ?? null);
@@ -1585,6 +1597,9 @@ export async function publishBotDraft(
   });
   transactionCommitted = true;
   if (alreadyTerminal) return alreadyTerminal;
+  if (clearedBreaking.length > 0) {
+    invalidateClearedBreakingArticles(clearedBreaking, `bot-draft-publish-breaking-clear:${bot.name}`);
+  }
   invalidateAdminListCaches();
   try {
     const { queueBotDraftPublishEffects } = await import("./botDraftPublishEffects");
@@ -1882,11 +1897,17 @@ export async function updateBotDraftVisibility(
 
   const now = new Date();
   const patch = buildBotDraftVisibilityUpdate(input, now);
-  const [row] = await db
-    .update(articles)
-    .set(patch)
-    .where(and(eq(articles.id, articleId), eq(articles.source, BOT_DRAFT_SOURCE), eq(articles.status, "published"), personalOwnershipWhere(bot)))
-    .returning();
+  const { article: row } = await runWithExclusiveBreaking(
+    async (tx) => {
+      const [updated] = await tx
+        .update(articles)
+        .set(patch)
+        .where(and(eq(articles.id, articleId), eq(articles.source, BOT_DRAFT_SOURCE), eq(articles.status, "published"), personalOwnershipWhere(bot)))
+        .returning();
+      return updated;
+    },
+    { reason: `bot-draft-visibility-breaking-clear:${bot.name}` },
+  );
   if (!row) {
     throw new BotDraftError(409, "not_published", "تغيّرت حالة المادة أثناء تحديث الظهور", { status: "unknown" });
   }
@@ -1917,10 +1938,14 @@ export async function updateBotDraftVisibility(
 /** نفس مزامنة زر العاجل في اللوحة: ترجمة EN المرتبطة عبر seoMetadata.sourceArticleId. */
 async function syncEnglishNewsType(articleId: string, newsType: string): Promise<void> {
   try {
-    await db
+    const updatedEn = await db
       .update(enArticles)
       .set({ newsType, updatedAt: new Date() })
-      .where(sql`${enArticles.seoMetadata}->>'sourceArticleId' = ${articleId}`);
+      .where(sql`${enArticles.seoMetadata}->>'sourceArticleId' = ${articleId}`)
+      .returning({ id: enArticles.id });
+    if (isBreakingNewsType(newsType) && updatedEn.length > 0) {
+      await clearOtherEnBreakingArticles(updatedEn[0].id);
+    }
   } catch (error) {
     console.warn(`[BotDrafts] EN newsType sync failed for ${articleId}:`, error);
   }

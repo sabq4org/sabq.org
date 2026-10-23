@@ -11,6 +11,8 @@ import { createServer, type Server } from "http";
 import * as Sentry from "@sentry/node";
 import { notifySearchEngines, INDEXNOW_KEY } from "./indexNow";
 import { storage } from "./storage";
+import { clearOtherBreakingArticles, clearOtherEnBreakingArticles, installStorageBreakingExclusivity, invalidateClearedBreakingArticles, isBreakingNewsType, runWithExclusiveBreaking, runWithExclusiveEnBreaking, runWithExclusiveUrBreaking, toggleArticleBreakingExclusive, toggleEnArticleBreakingExclusive, toggleUrArticleBreakingExclusive } from "./services/breakingNewsService";
+installStorageBreakingExclusivity(storage as unknown as Record<string, unknown>);
 import { sanitizeArticleHtml } from "./utils/sanitizeArticleHtml";
 import { validatePassword } from "./utils/passwordPolicy";
 import { findCategoryBySlugOrEnglishSlug } from "./utils/categorySlug";
@@ -7761,10 +7763,16 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
 
       prepareNewArticlePublishFirst(articleData);
 
-      const [newArticle] = await db
-        .insert(articles)
-        .values(articleData)
-        .returning();
+      const { article: newArticle } = await runWithExclusiveBreaking(
+        async (tx) => {
+          const [created] = await tx.insert(articles).values(articleData).returning();
+          return created;
+        },
+        { reason: "admin-create-breaking-clear" },
+      );
+      if (isBreakingNewsType(newArticle.newsType)) {
+        invalidateArticleWrite(newArticle, { reason: "admin-create-breaking" });
+      }
 
       // Invalidate caches when articles are created
       memoryCache.invalidatePattern('^homepage');
@@ -8358,15 +8366,17 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         updateData.slug = await resolveUniqueArticleSlug(updateData.slug, articleId);
       }
 
-      const [updatedArticle] = await db
-        .update(articles)
-        .set({
-          ...updateData,
-          updatedAt: nextArticleVersion,
-        })
-        .where(and(eq(articles.id, articleId),
-          matchesArticleVersion(expectedDate), articleLockAllowsWriter(userId)))
-        .returning();
+      const { article: updatedArticle } = await runWithExclusiveBreaking(
+        async (tx) => {
+          const [updated] = await tx
+            .update(articles)
+            .set({ ...updateData, updatedAt: nextArticleVersion })
+            .where(and(eq(articles.id, articleId), matchesArticleVersion(expectedDate), articleLockAllowsWriter(userId)))
+            .returning();
+          return updated;
+        },
+        { reason: "admin-patch-breaking-clear" },
+      );
 
       if (!updatedArticle) {
         return res.status(409).json(await articleWriteConflict(articleId, userId));
@@ -8376,17 +8386,14 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         recordArticleRevision({ articleId, editorUserId: userId, editorName: await editorDisplayName(userId), plan: revisionPlan }).catch((error) => console.error("[publish-first] revision failed", error));
       }
 
-      // Invalidate caches immediately (in-memory + Redis + Cloudflare CDN).
-      // Passing the article so its slug + englishSlug are BOTH purged at
-      // the edge — otherwise /api/articles/<englishSlug> stays stale for
-      // sMaxAge=3600s (browser fetches by englishSlug after slugRedirect,
-      // not the DB slug). oldSlug/oldEnglishSlug cover renames.
-      // invalidateArticleWrite() already targets this article's sidebar key by id/slug — no blanket wipe needed.
       invalidateArticleWrite(updatedArticle, {
         reason: 'admin-patch',
         oldSlug: existingArticle.slug,
         oldEnglishSlug: existingArticle.englishSlug,
       });
+      if (isBreakingNewsType(existingArticle.newsType) && !isBreakingNewsType(updatedArticle.newsType)) {
+        invalidatePublishedContent({ isBreaking: true, reason: "admin-patch-breaking-off" });
+      }
       memoryCache.delete('lite-feed');
 
       // Send response IMMEDIATELY — don't wait for background operations
@@ -8775,6 +8782,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         }
 
         try {
+          let clearedBreaking: Awaited<ReturnType<typeof clearOtherBreakingArticles>> = [];
           const result = await db.transaction(async (tx) => {
             const now = new Date();
             const [published] = await tx
@@ -8788,9 +8796,9 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
               })
               .where(eq(articles.id, articleId))
               .returning();
-
-            // الخصم الموحّد (publisherCreditService): مرة واحدة لكل خبر،
-            // ورفض النشر هنا إن لم توجد باقة صالحة
+            if (published && isBreakingNewsType(published.newsType)) {
+              clearedBreaking = await clearOtherBreakingArticles(published.id, tx);
+            }
             const charge = await chargePublishInTx(tx, {
               publisherId: agencyPublisher.id,
               articleId,
@@ -8800,14 +8808,12 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
             if (charge === "no_credits") {
               throw new Error("NO_CREDITS");
             }
-
-            console.log(
-              `📰 [PUBLISHER] Credit ${charge} for publisher ${agencyPublisher.id} - article ${articleId}`,
-            );
-
+            console.log(`📰 [PUBLISHER] Credit ${charge} for publisher ${agencyPublisher.id} - article ${articleId}`);
             return published;
           });
-
+          if (clearedBreaking.length > 0) {
+            invalidateClearedBreakingArticles(clearedBreaking, "publisher-publish-breaking-clear");
+          }
           updatedArticle = result;
         } catch (txError: any) {
           if (txError.message === "NO_CREDITS") {
@@ -8819,25 +8825,26 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
           throw txError;
         }
       } else {
-        // لا ارتباط بوكالة — نشر عادي بلا رصيد ناشر
-        const [published] = await db
-          .update(articles)
-          .set({
-            status: "published",
-            publishedAt: new Date(),
-            updatedAt: new Date(),
-          })
-          .where(eq(articles.id, articleId))
-          .returning();
-
+        const { article: published } = await runWithExclusiveBreaking(
+          async (tx) => {
+            const [row] = await tx
+              .update(articles)
+              .set({ status: "published", publishedAt: new Date(), updatedAt: new Date() })
+              .where(eq(articles.id, articleId))
+              .returning();
+            return row;
+          },
+          { reason: "article-publish-breaking-clear" },
+        );
         updatedArticle = published;
       }
 
-      // Defensive check - should never happen in normal flow
       if (!updatedArticle) {
         console.error("❌ [PUBLISH] Article update failed unexpectedly");
         return res.status(500).json({ message: "حدث خطأ أثناء نشر المقال" });
       }
+      invalidateArticleWrite(updatedArticle, { reason: "article-publish" });
+      memoryCache.delete("lite-feed");
 
       // Log activity
       await logActivity({
@@ -9492,6 +9499,11 @@ Respond in valid JSON format only:
         } as any])
         .returning();
 
+      if (isBreakingNewsType(newEnArticle.newsType)) {
+        await clearOtherEnBreakingArticles(newEnArticle.id).catch((err) =>
+          console.warn("[Translate] Failed to clear other EN breaking articles:", err),
+        );
+      }
       console.log(`[Translate] Article ${articleId} translated to English as ${newEnArticle.id} by user ${userId}`);
 
       // Notify search engines for the EN URL + refresh AR hreflang cluster.
@@ -9523,59 +9535,25 @@ Respond in valid JSON format only:
     }
   });
 
-  // Toggle article breaking news status
+  // Toggle article breaking news status (enforces single breaking article)
   app.post("/api/admin/articles/:id/toggle-breaking", requireAuth, requirePermission("articles.publish"), async (req: any, res) => {
     try {
       const userId = req.user?.id;
-      if (!userId) {
-        return res.status(401).json({ message: "Unauthorized" });
-      }
-
+      if (!userId) return res.status(401).json({ message: "Unauthorized" });
       const articleId = req.params.id;
-      const article = await storage.getArticleById(articleId);
+      const toggled = await toggleArticleBreakingExclusive(articleId);
+      if (!toggled) return res.status(404).json({ message: "Article not found" });
 
-      if (!article) {
-        return res.status(404).json({ message: "Article not found" });
-      }
-
-      const updatedArticle = await storage.toggleArticleBreaking(articleId, userId);
-
-      // Keep linked EN translation in sync (dashboard EN was stale when only Arabic was toggled).
-      try {
-        await db
-          .update(enArticles)
-          .set({
-            newsType: updatedArticle.newsType,
-            updatedAt: new Date(),
-          })
-          .where(sql`${enArticles.seoMetadata}->>'sourceArticleId' = ${articleId}`);
-      } catch (syncErr) {
-        console.warn(`[Breaking News] Failed to sync EN translation for ${articleId}:`, syncErr);
-      }
-
-      // Log activity
       await logActivity({
         userId,
         action: "toggle_breaking",
         entityType: "article",
         entityId: articleId,
-        oldValue: article,
-        newValue: updatedArticle,
-        metadata: {
-          ip: req.ip,
-          userAgent: req.get("user-agent"),
-        },
+        oldValue: toggled.previousArticle,
+        newValue: toggled.updatedArticle,
+        metadata: { ip: req.ip, userAgent: req.get("user-agent") },
       });
-
-      // Invalidate cache and broadcast to all connected clients for instant update.
-      // Pass the article so its slug is purged at the edge (sMaxAge=3600 otherwise).
-      // See article-publish above — invalidateArticleWrite() already scopes this article; no blanket wipe.
-      // This is the exact toggle a breaking-news click flood hits, so keeping the targeting intact matters most.
-      invalidateArticleWrite(updatedArticle, { reason: "article-toggle-breaking" });
-      memoryCache.delete('lite-feed'); // Clear mobile app feed cache
-      console.log(`[Breaking News] Cache invalidated and SSE broadcast sent for article ${articleId}`);
-
-      res.json(updatedArticle);
+      res.json(toggled.updatedArticle);
     } catch (error) {
       console.error("Error toggling breaking news:", error);
       res.status(500).json({ message: "Failed to toggle breaking news" });
@@ -15268,13 +15246,17 @@ Respond in valid JSON format only:
         articleData.slug = await resolveUniqueArticleSlug(articleData.slug, undefined, enArticles);
       }
 
-      [newArticle] = await db
-        .insert(enArticles)
-        .values([{
-          ...articleData,
-          publishedAt: articleData.status === 'published' ? new Date() : undefined,
-        } as any])
-        .returning();
+      const { article: createdEn } = await runWithExclusiveEnBreaking(
+        async (tx) => {
+          const [created] = await tx
+            .insert(enArticles)
+            .values([{ ...articleData, publishedAt: articleData.status === 'published' ? new Date() : undefined } as any])
+            .returning();
+          return created;
+        },
+        { reason: "en-dashboard-create-breaking-clear" },
+      );
+      newArticle = createdEn;
 
       // Log activity
       await logActivity({
@@ -15416,14 +15398,17 @@ Respond in valid JSON format only:
         updateData.slug = await resolveUniqueArticleSlug(updateData.slug, articleId, enArticles);
       }
 
-      const [updatedArticle] = await db
-        .update(enArticles)
-        .set({
-          ...updateData,
-          updatedAt: new Date(),
-        })
-        .where(eq(enArticles.id, articleId))
-        .returning();
+      const { article: updatedArticle } = await runWithExclusiveEnBreaking(
+        async (tx) => {
+          const [updated] = await tx
+            .update(enArticles)
+            .set({ ...updateData, updatedAt: new Date() })
+            .where(eq(enArticles.id, articleId))
+            .returning();
+          return updated;
+        },
+        { reason: "en-dashboard-patch-breaking-clear" },
+      );
 
       // Log activity
       await logActivity({
@@ -15548,68 +15533,25 @@ Respond in valid JSON format only:
 
   // News Analytics Endpoint - Smart statistics and insights
 
-  // Toggle English article breaking news status
+  // Toggle English article breaking news status (enforces single breaking article)
   app.patch("/api/en/dashboard/articles/:id/toggle-breaking", requireAuth, requirePermission("articles.publish"), async (req: any, res) => {
     try {
       const userId = req.user?.id;
-      if (!userId) {
-        return res.status(401).json({ message: "Unauthorized" });
-      }
-
+      if (!userId) return res.status(401).json({ message: "Unauthorized" });
       const articleId = req.params.id;
-      
-      const [article] = await db
-        .select()
-        .from(enArticles)
-        .where(eq(enArticles.id, articleId))
-        .limit(1);
+      const toggled = await toggleEnArticleBreakingExclusive(articleId);
+      if (!toggled) return res.status(404).json({ message: "Article not found" });
 
-      if (!article) {
-        return res.status(404).json({ message: "Article not found" });
-      }
-
-      const newNewsType = article.newsType === 'breaking' ? 'regular' : 'breaking';
-
-      const [updatedArticle] = await db
-        .update(enArticles)
-        .set({
-          newsType: newNewsType,
-          updatedAt: new Date(),
-        })
-        .where(eq(enArticles.id, articleId))
-        .returning();
-
-      // Keep Arabic source in sync when this EN row is a translation.
-      try {
-        await syncBreakingToArabicSource(updatedArticle, newNewsType);
-      } catch (syncErr) {
-        console.warn(`[Breaking News] Failed to sync AR source for EN ${articleId}:`, syncErr);
-      }
-
-      // Log activity
       await logActivity({
         userId,
         action: "toggle_breaking",
         entityType: "en_article",
         entityId: articleId,
-        oldValue: article,
-        newValue: updatedArticle,
-        metadata: {
-          ip: req.ip,
-          userAgent: req.get("user-agent"),
-        },
+        oldValue: toggled.previousArticle,
+        newValue: toggled.updatedArticle,
+        metadata: { ip: req.ip, userAgent: req.get("user-agent") },
       });
-
-      // Invalidate cache and broadcast to all connected clients for instant update
-      invalidatePublishedContent({ reason: "article-write" });
-      memoryCache.delete('lite-feed'); // Clear mobile app feed cache
-      memoryCache.invalidatePattern('^article:detail:');
-      memoryCache.invalidatePattern('^article:id:');
-      memoryCache.invalidatePattern('^articles:');
-      memoryCache.invalidatePattern('^sidebar:');
-      console.log(`[Breaking News] Cache invalidated and SSE broadcast sent for article ${articleId}`);
-
-      res.json(updatedArticle);
+      res.json(toggled.updatedArticle);
     } catch (error) {
       console.error("Error toggling English breaking news:", error);
       res.status(500).json({ message: "Failed to toggle English breaking news" });
@@ -28161,12 +28103,15 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         englishSlug: validatedData.englishSlug || generateEnglishSlug(),
       };
       
-      const newArticle = await db
-        .insert(enArticles)
-        .values([articleData as any])
-        .returning();
+      const { article: newArticle } = await runWithExclusiveEnBreaking(
+        async (tx) => {
+          const [created] = await tx.insert(enArticles).values([articleData as any]).returning();
+          return created;
+        },
+        { reason: "en-create-breaking-clear" },
+      );
       
-      res.json(newArticle[0]);
+      res.json(newArticle);
     } catch (error) {
       if (error instanceof z.ZodError) {
         return res.status(400).json({ message: "Invalid data", errors: error.errors });
@@ -28225,14 +28170,16 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         updateData.publishedAt = new Date();
       }
 
-      const updated = await db
-        .update(enArticles)
-        .set(updateData)
-        .where(eq(enArticles.id, req.params.id))
-        .returning();
+      const { article: updated } = await runWithExclusiveEnBreaking(
+        async (tx) => {
+          const [row] = await tx.update(enArticles).set(updateData).where(eq(enArticles.id, req.params.id)).returning();
+          return row;
+        },
+        { reason: "en-patch-breaking-clear" },
+      );
       
       memoryCache.invalidatePattern('^en:article:base:');
-      res.json(updated[0]);
+      res.json(updated);
     } catch (error) {
       console.error("Error updating EN article:", error);
       res.status(500).json({ message: "Failed to update article" });
@@ -29865,14 +29812,13 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         return res.status(denial.httpStatus).json({ message: denial.message, code: denial.code });
       }
 
-      const [article] = await db
-        .insert(urArticles)
-        .values({
-          ...parsed.data,
-          slug: finalSlug,
-          authorId: userId,
-        } as any)
-        .returning();
+      const { article } = await runWithExclusiveUrBreaking(
+        async (tx) => {
+          const [created] = await tx.insert(urArticles).values({ ...parsed.data, slug: finalSlug, authorId: userId } as any).returning();
+          return created;
+        },
+        { reason: "ur-create-breaking-clear" },
+      );
 
       await logActivity({
         userId,
@@ -29950,14 +29896,13 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         }
       }
 
-      const [article] = await db
-        .update(urArticles)
-        .set({
-          ...parsed.data,
-          updatedAt: new Date(),
-        } as any)
-        .where(eq(urArticles.id, articleId))
-        .returning();
+      const { article } = await runWithExclusiveUrBreaking(
+        async (tx) => {
+          const [updated] = await tx.update(urArticles).set({ ...parsed.data, updatedAt: new Date() } as any).where(eq(urArticles.id, articleId)).returning();
+          return updated;
+        },
+        { reason: "ur-patch-breaking-clear" },
+      );
 
       await logActivity({
         userId,
@@ -29983,6 +29928,20 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         });
       }
       res.status(500).json({ message: "Failed to update Urdu article" });
+    }
+  });
+
+  app.patch("/api/ur/dashboard/articles/:id/toggle-breaking", requireAuth, requirePermission("articles.publish"), async (req: any, res) => {
+    try {
+      const userId = req.user?.id;
+      if (!userId) return res.status(401).json({ message: "Unauthorized" });
+      const toggled = await toggleUrArticleBreakingExclusive(req.params.id);
+      if (!toggled) return res.status(404).json({ message: "Article not found" });
+      await logActivity({ userId, action: "toggle_breaking", entityType: "ur_article", entityId: req.params.id, oldValue: toggled.previousArticle, newValue: toggled.updatedArticle, metadata: { ip: req.ip, userAgent: req.get("user-agent") } });
+      res.json(toggled.updatedArticle);
+    } catch (error) {
+      console.error("Error toggling Urdu breaking news:", error);
+      res.status(500).json({ message: "Failed to toggle Urdu breaking news" });
     }
   });
 

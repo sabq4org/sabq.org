@@ -4984,6 +4984,12 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                         <span>خبر عاجل</span>
                       </Label>
                     </RadioGroup>
+                    <p
+                      className="text-[11px] text-muted-foreground leading-relaxed"
+                      data-testid="text-breaking-exclusivity-note"
+                    >
+                      خبر عاجل واحد فقط في كل مرة — تفعيل «خبر عاجل» يلغي العاجل تلقائياً عن الخبر السابق.
+                    </p>
 
                     <div className="space-y-2 pt-1">
                       {/* Featured Article Checkbox */}

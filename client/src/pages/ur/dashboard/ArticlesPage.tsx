@@ -3,7 +3,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { queryClient, apiRequest, apiUrl } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -146,14 +146,12 @@ export default function EnglishArticlesPage() {
   const { data: metrics, isLoading: metricsLoading, error: metricsError } = useQuery({
     queryKey: ["/api/ur/dashboard/articles/metrics"],
     queryFn: async () => {
-      const response = await fetch("/api/ur/dashboard/articles/metrics", { credentials: "include" });
+      const response = await fetch(apiUrl("/api/ur/dashboard/articles/metrics"), { credentials: "include" });
       if (!response.ok) {
         console.error("Metrics fetch failed:", response.status, response.statusText);
         throw new Error("Failed to fetch metrics");
       }
-      const data = await response.json();
-      console.log("English metrics loaded:", data);
-      return data;
+      return response.json();
     },
     enabled: !!user,
   });
@@ -297,13 +295,18 @@ export default function EnglishArticlesPage() {
       
       const previousArticles = queryClient.getQueryData(queryKey);
       
+      const nextNewsType = currentState ? "regular" : "breaking";
       queryClient.setQueryData(queryKey, (old: Article[] | undefined) => {
         if (!old) return old;
-        return old.map(article => 
-          article.id === id 
-            ? { ...article, newsType: currentState ? "regular" : "breaking" }
-            : article
-        );
+        return old.map(article => {
+          if (article.id === id) {
+            return { ...article, newsType: nextNewsType };
+          }
+          if (nextNewsType === "breaking" && article.newsType === "breaking") {
+            return { ...article, newsType: "regular" };
+          }
+          return article;
+        });
       });
       
       return { previousArticles, queryKey };

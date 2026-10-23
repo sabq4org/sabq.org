@@ -7,6 +7,12 @@ import { eq, and, lte, isNull, sql } from "drizzle-orm";
 import { notificationQueue, notificationsInbox, notificationMetrics, articles } from "@shared/schema";
 import { storage } from "./storage";
 import { invalidatePublishedContent } from "./services/contentInvalidation";
+import {
+  clearOtherBreakingArticles,
+  invalidateClearedBreakingArticles,
+  isBreakingNewsType,
+  type ClearedBreakingArticle,
+} from "./services/breakingNewsService";
 import { broadcastArticlePublished } from "./routes/editorPresence";
 import { 
   notificationMemoryService, 
@@ -348,18 +354,27 @@ async function publishScheduledArticles() {
         }
 
         const publishTime = new Date();
-        
-        const [published] = await db
-          .update(articles)
-          .set({
-            status: "published",
-            publishedAt: publishTime,
-            updatedAt: publishTime,
-          })
-          .where(and(eq(articles.id, article.id), eq(articles.status, "scheduled"),
-            lte(articles.scheduledAt, publishTime), personalBotScheduledWriteCondition(article)))
-          .returning({ id: articles.id });
+        let clearedBreaking: ClearedBreakingArticle[] = [];
+        const [published] = await db.transaction(async (tx) => {
+          const rows = await tx
+            .update(articles)
+            .set({
+              status: "published",
+              publishedAt: publishTime,
+              updatedAt: publishTime,
+            })
+            .where(and(eq(articles.id, article.id), eq(articles.status, "scheduled"),
+              lte(articles.scheduledAt, publishTime), personalBotScheduledWriteCondition(article)))
+            .returning({ id: articles.id });
+          if (rows[0] && isBreakingNewsType(article.newsType)) {
+            clearedBreaking = await clearOtherBreakingArticles(article.id, tx);
+          }
+          return rows;
+        });
         if (!published) continue;
+        if (clearedBreaking.length > 0) {
+          invalidateClearedBreakingArticles(clearedBreaking, `scheduled-publish-breaking-clear:${article.id}`);
+        }
 
         if (article.source === "bot" && article.sourceMetadata?.publisherUserId) {
           const { recordPersonalBotScheduledPublish } = await import("./services/botPersonalScheduleService");

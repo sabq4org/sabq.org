@@ -1560,14 +1560,22 @@ export default function ArticlesManagement() {
       // Snapshot the previous value with its query key
       const previousArticles = queryClient.getQueryData<ArticlesPage>(queryKey);
       
-      // Optimistically update to the new value
+      // Optimistically update to the new value (and clear breaking on all other articles when enabling)
+      const nextNewsType = currentState ? "regular" : "breaking";
       queryClient.setQueryData(queryKey, (old: ArticlesPage | undefined) => {
         if (!old) return old;
-        return { ...old, articles: old.articles.map(article =>
-          article.id === id 
-            ? { ...article, newsType: currentState ? "regular" : "breaking" }
-            : article
-        ) };
+        return {
+          ...old,
+          articles: old.articles.map((article) => {
+            if (article.id === id) {
+              return { ...article, newsType: nextNewsType };
+            }
+            if (nextNewsType === "breaking" && article.newsType === "breaking") {
+              return { ...article, newsType: "regular" };
+            }
+            return article;
+          }),
+        };
       });
       
       return { previousArticles, queryKey };
@@ -1578,7 +1586,7 @@ export default function ArticlesManagement() {
       toast({
         title: isNowBreaking ? "تم التمييز كخبر عاجل" : "تم إلغاء التمييز كخبر عاجل",
         description: isNowBreaking 
-          ? "تم تمييز المقال كخبر عاجل بنجاح"
+          ? "تم تمييز المقال كخبر عاجل وإلغاء العاجل تلقائياً عن الخبر السابق"
           : "تم إلغاء تمييز المقال كخبر عاجل بنجاح",
       });
     },
