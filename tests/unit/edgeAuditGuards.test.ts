@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import { NOINDEX_EXACT, NOINDEX_PREFIXES } from "../../server/utils/noindexPaths";
 // @ts-expect-error Pages JS is untyped
 import {
-  apiCacheKey, apiGoneCopyKeys, apiLastGoodAllowed, apiProxyTimeoutMs, getApiCacheTtl, isApiGoneAnswer, isNoindexPrefix,
+  apiCacheKey, apiGoneCopyKeys, apiLastGoodAllowed, apiProxyTimeoutMs, getApiCacheTtl, isAnonymousCacheableApiGet,
+  isApiGoneAnswer, isNoindexPrefix, originCacheControlAllowsSharedStore, originPublicSmaxAge, proxyToApi,
   remainingApiCacheTtl,
 } from "../../functions/_middleware.js";
 import { articleMetadata } from "../../web-next/lib/articleMetadata";
@@ -33,6 +34,10 @@ describe("edge audit boundaries", () => {
     const ttl = (path: string, query = "", headers: Record<string, string> = {}) =>
       getApiCacheTtl(path, req("https://sabq.org" + path + query, headers));
     expect(ttl("/api/stories")).toBe(60);
+    expect(ttl("/api/v1/live")).toBe(15);
+    expect(ttl("/api/v1/articles")).toBe(15);
+    expect(ttl("/api/v1/sections")).toBe(300);
+    expect(ttl("/api/sports/competitions")).toBe(300);
     expect(ttl("/api/opinion", "?page=1&limit=30")).toBe(60);
     expect(ttl("/api/reporters/shyfh-sbq")).toBe(60);
     expect(ttl("/api/audio-bulletin/current")).toBe(30);
@@ -267,3 +272,104 @@ describe("Pages last-good copy of an article the origin calls gone", () => {
     expect(await res.text()).toContain("LIVE");
   });
 });
+
+describe("proxyToApi anonymous edge caching & origin s-maxage respect", () => {
+  it("enables cf.cacheEverything only for anonymous non-personalized GET /api/* requests", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await proxyToApi(new Request("https://sabq.org/api/v1/live?limit=20"), "https://api.sabq.org");
+    expect((fetchMock.mock.calls[0][1] as any).cf).toEqual({ cacheEverything: true });
+
+    await proxyToApi(
+      new Request("https://sabq.org/api/v1/live", { headers: { cookie: "connect.sid=s%3Aabc" } }),
+      "https://api.sabq.org",
+    );
+    expect((fetchMock.mock.calls[1][1] as any).cf).toBeUndefined();
+
+    await proxyToApi(
+      new Request("https://sabq.org/api/v1/live", { headers: { authorization: "Bearer token" } }),
+      "https://api.sabq.org",
+    );
+    expect((fetchMock.mock.calls[2][1] as any).cf).toBeUndefined();
+
+    for (const excluded of [
+      "/api/admin/articles",
+      "/api/auth/user",
+      "/api/v1/auth/login",
+      "/api/v1/members/profile",
+      "/api/v1/inbox",
+      "/api/v1/loyalty/me",
+      "/api/stories/my-follows",
+      "/api/stories/123/is-following",
+    ]) {
+      expect(isAnonymousCacheableApiGet(new Request(`https://sabq.org${excluded}`), excluded), excluded).toBe(false);
+    }
+  });
+
+  it("caches anonymous GET /api/* responses respecting origin s-maxage and never caches Set-Cookie or private/no-store", async () => {
+    const put = vi.fn(async () => {});
+    vi.stubGlobal("caches", { default: { match: vi.fn(async () => undefined), put, delete: vi.fn() } });
+
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes("set-cookie")) {
+        return new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: {
+            "content-type": "application/json",
+            "cache-control": "public, max-age=0, s-maxage=120",
+            "set-cookie": "connect.sid=abc",
+          },
+        });
+      }
+      if (url.includes("private")) {
+        return new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: {
+            "content-type": "application/json",
+            "cache-control": "private, no-store",
+          },
+        });
+      }
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: {
+          "content-type": "application/json",
+          "cache-control": "public, max-age=60, s-maxage=180",
+        },
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const run = async (path: string) => {
+      const pending: Promise<unknown>[] = [];
+      const res = await onRequest({
+        request: new Request(`https://sabq.org${path}`, { headers: { cookie: "_ga=GA1.1.123" } }),
+        env: { API_ORIGIN: "https://api.example" },
+        next: vi.fn(async () => new Response("shell")),
+        waitUntil: (p: Promise<unknown>) => pending.push(p),
+      });
+      await Promise.all(pending);
+      return res;
+    };
+
+    await run("/api/sports/summary?b=2&a=1");
+    expect(put).toHaveBeenCalledTimes(1);
+    const [cachedKey, cachedRes] = put.mock.calls[0] as [Request, Response];
+    expect(cachedKey.url).toBe("https://sabq.org/api/sports/summary?a=1&b=2");
+    expect(cachedRes.headers.get("cache-control")).toBe("public, max-age=180, s-maxage=180");
+
+    put.mockClear();
+    await run("/api/homepage?case=set-cookie");
+    expect(put).not.toHaveBeenCalled();
+
+    await run("/api/homepage?case=private");
+    expect(put).not.toHaveBeenCalled();
+
+    expect(originPublicSmaxAge(new Response("{}", { headers: { "cache-control": "public, s-maxage=45" } }))).toBe(45);
+    expect(originPublicSmaxAge(new Response("{}", { headers: { "cache-control": "private, s-maxage=45" } }))).toBe(0);
+    expect(originCacheControlAllowsSharedStore("/api/homepage", new Response("{}", { headers: { "cache-control": "private, no-store" } }))).toBe(false);
+    expect(originCacheControlAllowsSharedStore("/api/homepage", new Response("{}", { headers: { "set-cookie": "sid=1" } }))).toBe(false);
+  });
+});
+
