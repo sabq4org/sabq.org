@@ -24,6 +24,7 @@ vi.mock("../../server/rbac", () => ({
 import router, {
   fetchUpstreamVideo,
   isExpectedUpstreamStreamEnd,
+  pipeVideoToResponse,
 } from "../../server/routes/videoResolver";
 
 type HttpResult = {
@@ -216,5 +217,42 @@ describe("video stream proxy failures", () => {
 
     expect(response.aborted).toBe(true);
     expect(observedErrors).toEqual([unexpected]);
+  });
+
+  it("absorbs late AbortError emitted by source stream after downstream close (NODE-EXPRESS-S)", async () => {
+    const { Readable, Writable } = await import("node:stream");
+    const uncaught: unknown[] = [];
+    const onUncaught = (err: unknown) => uncaught.push(err);
+    process.on("uncaughtException", onUncaught);
+
+    try {
+      const source = new Readable({
+        read() {},
+        destroy(err, cb) {
+          // Simulate Readable.fromWeb async reader.cancel() completion after abortForDownstream
+          Promise.resolve().then(() => cb(err));
+        },
+      });
+      const res = new Writable({
+        write(_chunk, _enc, cb) { cb(); },
+      }) as unknown as express.Response;
+
+      const pipePromise = pipeVideoToResponse(source, res);
+
+      // 1. In Node 24, abortForDownstream -> controller.abort() synchronously marks
+      //    the Readable.fromWeb stream destroyed with AbortError before res emits "close".
+      const abortErr = new DOMException("This operation was aborted", "AbortError");
+      source.destroy(abortErr);
+
+      // 2. Immediately after, socketOnClose emits "close" on res, settling pipeVideoToResponse.
+      res.emit("close");
+      await expect(pipePromise).rejects.toMatchObject({ code: "SABQ_VIDEO_DOWNSTREAM_CLOSED" });
+
+      // 3. Flush nextTick/microtasks where emitErrorCloseNT emits "error" on source.
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(uncaught).toEqual([]);
+    } finally {
+      process.off("uncaughtException", onUncaught);
+    }
   });
 });

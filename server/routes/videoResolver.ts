@@ -110,6 +110,8 @@ function sendVideoProxyError(res: ExpressResponse, message: string): void {
   res.status(502).setHeader("Cache-Control", "no-store").json({ message });
 }
 
+const ignorePostSettleStreamError = () => {};
+
 /**
  * `stream.pipeline(source, res)` destroys the HTTP response with the upstream
  * error before its promise rejects. A plain pipe lets the route classify the
@@ -119,6 +121,10 @@ export function pipeVideoToResponse(source: Readable, res: ExpressResponse): Pro
   return new Promise((resolve, reject) => {
     let settled = false;
     const cleanup = () => {
+      // Keep a no-op error listener after settling so late AbortError emissions
+      // from Readable.fromWeb teardown (after abortForDownstream / onClose) never
+      // become uncaught process exceptions (NODE-EXPRESS-S).
+      source.on("error", ignorePostSettleStreamError);
       source.off("error", onSourceError);
       res.off("finish", onFinish);
       res.off("close", onClose);
@@ -178,8 +184,10 @@ router.get("/api/video/stream/:tweetId", async (req: Request, res: ExpressRespon
   const controller = new AbortController();
   let downstreamClosed = false;
   let upstreamBody: ReadableStream<Uint8Array> | null = null;
+  let nodeStream: Readable | null = null;
   const abortForDownstream = () => {
     downstreamClosed = true;
+    nodeStream?.destroy();
     controller.abort();
   };
   const abortForPrematureResponseClose = () => {
@@ -238,7 +246,7 @@ router.get("/api/video/stream/:tweetId", async (req: Request, res: ExpressRespon
       return;
     }
 
-    const nodeStream = Readable.fromWeb(upstream.body as import("stream/web").ReadableStream);
+    nodeStream = Readable.fromWeb(upstream.body as import("stream/web").ReadableStream);
     await pipeVideoToResponse(nodeStream, res);
   } catch (err: unknown) {
     if (downstreamClosed) return;
@@ -266,14 +274,15 @@ router.get("/api/video/stream/:tweetId", async (req: Request, res: ExpressRespon
     }
     next(err);
   } finally {
+    req.off("aborted", abortForDownstream);
+    res.off("close", abortForPrematureResponseClose);
+    nodeStream?.destroy();
     controller.abort();
     if (upstreamBody && !upstreamBody.locked) {
       // Non-OK responses and responses arriving after a reader left were never
       // consumed by the Node stream. Release their underlying connection too.
       await upstreamBody.cancel().catch(() => undefined);
     }
-    req.off("aborted", abortForDownstream);
-    res.off("close", abortForPrematureResponseClose);
   }
 });
 

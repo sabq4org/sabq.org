@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-18T04:56:26.070Z",
+  "generatedAt": "2026-10-23T04:23:57.826Z",
   "systems": [
     {
       "id": "account-center",
@@ -59,7 +59,7 @@
     },
     {
       "id": "editorial",
-      "fileCount": 278,
+      "fileCount": 285,
       "samplePaths": [
         "server/routes/videoResolver.ts",
         "server/services/videoResolverService.ts",
@@ -199,7 +199,7 @@
     },
     {
       "id": "auth-rbac",
-      "fileCount": 77,
+      "fileCount": 82,
       "samplePaths": [
         "server/auth.ts",
         "server/rbac.ts",
@@ -213,7 +213,7 @@
     },
     {
       "id": "seo-ssr",
-      "fileCount": 72,
+      "fileCount": 81,
       "samplePaths": [
         "server/seoInjector.ts",
         "server/middleware/slugRedirect.ts",
@@ -227,16 +227,16 @@
     },
     {
       "id": "comments",
-      "fileCount": 13,
+      "fileCount": 15,
       "samplePaths": [
         "server/services/commentInsightsService.ts",
         "server/services/commentModerationService.ts",
         "server/services/commentReactionsService.ts",
+        "server/services/commentSafetyService.ts",
         "server/routes/commentAppeals.ts",
         "server/routes/commentModeration.ts",
         "server/routes/commentReactions.ts",
-        "server/routes/commentReactionsMobile.ts",
-        "server/routes/topicComments.ts"
+        "server/routes/commentReactionsMobile.ts"
       ]
     },
     {
@@ -262,7 +262,7 @@
     },
     {
       "id": "mawaeed",
-      "fileCount": 43,
+      "fileCount": 50,
       "samplePaths": [
         "shared/mawaeed/content.ts",
         "shared/mawaeed/dashboard.ts",
@@ -360,7 +360,7 @@
     },
     {
       "id": "economy-live",
-      "fileCount": 39,
+      "fileCount": 41,
       "samplePaths": [
         "server/services/sama/parsers/moneySupplyReport.ts",
         "server/services/sama/parsers/monthlyBulletin.ts",

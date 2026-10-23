@@ -118,8 +118,12 @@ describe("video stream lifecycle", () => {
   it.each([false, true])("cancels mid-stream even when body cancellation rejects: %s", async (rejectCancel) => {
     let canceled = false;
     let signal: AbortSignal | undefined;
+    let streamController: ReadableStreamDefaultController<Uint8Array> | undefined;
     const body = new ReadableStream<Uint8Array>({
-      start(controller) { controller.enqueue(new TextEncoder().encode("first chunk")); },
+      start(controller) {
+        streamController = controller;
+        controller.enqueue(new TextEncoder().encode("first chunk"));
+      },
       cancel() {
         canceled = true;
         if (rejectCancel) return Promise.reject(new DOMException("Canceled", "AbortError"));
@@ -127,6 +131,13 @@ describe("video stream lifecycle", () => {
     });
     upstreamFetch.mockImplementation(async (_url: string, init: RequestInit) => {
       signal = init.signal!;
+      signal.addEventListener("abort", () => {
+        try {
+          streamController?.error(signal?.reason ?? new DOMException("This operation was aborted", "AbortError"));
+        } catch {
+          // Stream may already be closed/canceled when nodeStream.destroy() runs first.
+        }
+      }, { once: true });
       return new Response(body, { headers: { "content-type": "video/mp4" } });
     });
     const request = openRequest(videoPath());
@@ -135,6 +146,7 @@ describe("video stream lifecycle", () => {
       response.on("error", () => undefined);
     });
     await waitFor(() => canceled && signal?.aborted === true);
+    await new Promise<void>(resolve => setTimeout(resolve, 20));
   });
 
   it.each([200, 206])("preserves status %i, media bytes and range headers", async status => {
