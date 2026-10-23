@@ -1,6 +1,15 @@
 import { describe, expect, it, vi } from "vitest";
 import express, { type Request, type Response } from "express";
 import { createServer } from "node:http";
+
+vi.mock("../../server/db", () => ({ db: {} }));
+vi.mock("../../server/storage", () => ({ storage: {} }));
+vi.mock("../../server/rbac", () => ({
+  requireAuth: (_req: unknown, _res: unknown, next: () => void) => next(),
+  requireRole: () => (_req: unknown, _res: unknown, next: () => void) => next(),
+  logActivity: async () => {},
+}));
+
 import { markPublicEdgeCache, publicEdgeCacheTtl } from "../../server/routes/publicEdgeCacheHooks";
 import { DEFAULT_STORIES_LIMIT, MAX_STORIES_LIMIT, type StoryListRootArticle } from "../../server/services/storyListService";
 import * as storyListService from "../../server/services/storyListService";
