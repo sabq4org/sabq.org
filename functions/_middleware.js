@@ -579,6 +579,93 @@ export async function fetchWithStallRetry(target, init, opts = {}) {
   throw lastErr;
 }
 
+const NON_CACHEABLE_API_PREFIXES = [
+  "/api/admin",
+  "/api/v1/admin",
+  "/api/auth",
+  "/api/v1/auth",
+  "/api/login",
+  "/api/logout",
+  "/api/register",
+  "/api/csrf-token",
+  "/api/account",
+  "/api/profile",
+  "/api/user",
+  "/api/users",
+  "/api/dashboard",
+  "/api/en/dashboard",
+  "/api/ur/dashboard",
+  "/api/internal",
+  "/api/publisher",
+  "/api/advertiser",
+  "/api/staff-profiles",
+  "/api/opinion-author",
+  "/api/reporter",
+  "/api/editorial-research",
+  "/api/editorial-images",
+  "/api/notifications",
+  "/api/v1/notifications",
+  "/api/v1/inbox",
+  "/api/v1/members",
+  "/api/bookmarks",
+  "/api/v1/bookmarks",
+  "/api/loyalty",
+  "/api/v1/loyalty",
+  "/api/v1/insights",
+  "/api/v1/contributor",
+  "/api/v1/wallet",
+  "/api/v1/plus",
+  "/api/v1/surveys/mine",
+  "/api/v1/keywords/followed",
+  "/api/v1/sports/follows",
+  "/api/v1/sports/alert-prefs",
+  "/api/preferences",
+  "/api/recommendations",
+  "/api/reading-history",
+  "/api/stories/my-follows",
+  "/api/articles/search-simple",
+  "/api/cache-invalidation",
+  "/api/edge/slug-redirect",
+  "/api/edge/seo-meta",
+  "/api/video/stream",
+];
+
+const NON_CACHEABLE_API_PATTERNS = [
+  /^\/api\/stories\/[^/]+\/is-following$/,
+  /^\/api\/(?:v1\/)?articles\/[^/]+\/(?:react|bookmark|comments\/my-likes|draft|resubmit)$/,
+  /^\/api\/v1\/articles\/my-revisions$/,
+  /^\/api\/(?:en\/)?ai\/(?:insights\/today|daily-summary)$/,
+];
+
+export function isAnonymousCacheableApiGet(request, pathname) {
+  if (!request || request.method !== "GET") return false;
+  const url = new URL(request.url);
+  const path = pathname || url.pathname;
+  if (!path.startsWith("/api/")) return false;
+
+  const cookie = request.headers.get("cookie") || "";
+  if (cookie.includes("connect.sid")) return false;
+  if (request.headers.has("authorization")) return false;
+  if (request.headers.has("x-session-id")) return false;
+
+  const accept = (request.headers.get("accept") || "").toLowerCase();
+  if (accept.includes("text/event-stream")) return false;
+
+  const cc = (request.headers.get("cache-control") || "").toLowerCase();
+  if (cc.includes("no-cache") || cc.includes("no-store")) return false;
+  if (url.searchParams.has("_nc") || url.searchParams.has("_t") || url.searchParams.has("refresh")) {
+    return false;
+  }
+
+  for (const prefix of NON_CACHEABLE_API_PREFIXES) {
+    if (path === prefix || path.startsWith(prefix + "/")) return false;
+  }
+  for (const pattern of NON_CACHEABLE_API_PATTERNS) {
+    if (pattern.test(path)) return false;
+  }
+  return true;
+}
+
 export async function proxyToApi(request, apiOrigin, timeoutMs = 0, proxySecret) {
   const url = new URL(request.url);
   const target = apiOrigin + url.pathname + url.search;
@@ -597,6 +684,9 @@ export async function proxyToApi(request, apiOrigin, timeoutMs = 0, proxySecret)
     redirect: "manual",
   };
   if (request.method !== "GET" && request.method !== "HEAD") init.body = request.body;
+  if (isAnonymousCacheableApiGet(request, url.pathname)) {
+    init.cf = { cacheEverything: true };
+  }
   // Bounded wait for cacheable anonymous GETs only (callers opt in): a HUNG
   // origin (the 2026-07-25 dawn incident mode — not a fast 502) would otherwise
   // pin the reader for the platform's full subrequest limit before the
@@ -869,13 +959,14 @@ export function getApiCacheTtl(path, request) {
   const cookie = request.headers.get("cookie") || "";
   if (cookie.includes("connect.sid")) return 0;
   if (request.headers.has("authorization")) return 0;
+  if (request.headers.has("x-session-id")) return 0;
 
   // Bypass cache if client explicitly asks for fresh data
   const cc = (request.headers.get("cache-control") || "").toLowerCase();
   if (cc.includes("no-cache") || cc.includes("no-store")) return 0;
 
   const url = new URL(request.url);
-  if (url.searchParams.has("_nc") || url.searchParams.has("_t")) return 0;
+  if (url.searchParams.has("_nc") || url.searchParams.has("_t") || url.searchParams.has("refresh")) return 0;
 
   // Match cacheable GET patterns and determine TTL (in seconds)
   if (path === "/api/homepage-lite") return 30;
@@ -909,6 +1000,13 @@ export function getApiCacheTtl(path, request) {
 // handlers read query parameters beyond apiCacheKey's keep-list (lang,
 // region, authorId, sort…), so their cache key keeps the whole query string.
 const FULL_QUERY_API_CACHE_ROUTES = [
+  { match: (p) => p === "/api/v1/homepage", ttl: 15 },
+  { match: (p) => p === "/api/v1/news/paginated", ttl: 15 },
+  { match: (p) => p === "/api/v1/live", ttl: 15 },
+  { match: (p) => p === "/api/v1/articles", ttl: 15 },
+  { match: (p) => p === "/api/v1/sections", ttl: 300 },
+  { match: (p) => p === "/api/v1/trending", ttl: 60 },
+  { match: (p) => p === "/api/sports/competitions", ttl: 300 },
   { match: (p) => p === "/api/stories", ttl: 60 },
   { match: (p) => p === "/api/opinion", ttl: 60 },
   { match: (p) => /^\/api\/opinion\/related\/category\/[^/]+$/.test(p), ttl: 60 },
@@ -939,6 +1037,37 @@ const FULL_QUERY_API_CACHE_ROUTES = [
 
 function fullQueryApiCacheRoute(path) {
   return FULL_QUERY_API_CACHE_ROUTES.find(({ match }) => match(path)) || null;
+}
+
+export function originCacheControlAllowsSharedStore(path, res) {
+  if (res.headers.has("set-cookie")) return false;
+  if (fullQueryApiCacheRoute(path)?.requireHeader) {
+    return apiAnswerShareable(path, res);
+  }
+  const cc = (res.headers.get("cache-control") || "").toLowerCase();
+  if (!cc) return true;
+  const directives = cc.split(",").map((d) => d.trim().split("=", 1)[0]);
+  if (directives.some((d) => d === "private" || d === "no-store" || d === "no-cache")) {
+    return false;
+  }
+  const sMaxAgeMatch = cc.match(/(?:^|,)\s*s-maxage\s*=\s*(\d+)/i);
+  if (sMaxAgeMatch && Number(sMaxAgeMatch[1]) === 0) {
+    return false;
+  }
+  return true;
+}
+
+export function originPublicSmaxAge(res) {
+  if (res.headers.has("set-cookie")) return 0;
+  const cc = (res.headers.get("cache-control") || "").toLowerCase();
+  if (!cc) return 0;
+  const directives = cc.split(",").map((d) => d.trim().split("=", 1)[0]);
+  if (!directives.includes("public")) return 0;
+  if (directives.some((d) => d === "private" || d === "no-store" || d === "no-cache")) return 0;
+  const sMaxAgeMatch = cc.match(/(?:^|,)\s*s-maxage\s*=\s*(\d+)/i);
+  if (!sMaxAgeMatch) return 0;
+  const value = Number(sMaxAgeMatch[1]);
+  return Number.isFinite(value) && value > 0 ? value : 0;
 }
 
 // Origin deadline for a proxied /api request: cacheable reads are bounded so a
@@ -1302,9 +1431,10 @@ async function handleRequest(context) {
     if (newPublicApiResponse) return newPublicApiResponse;
     const apiCacheTtl = getApiCacheTtl(path, request);
     const useApiCache = apiCacheTtl > 0;
-    const apiCacheKeyReq = useApiCache ? apiCacheKey(request.url, request.headers.get("origin") || "") : null;
+    const canEdgeCacheApi = useApiCache || isAnonymousCacheableApiGet(request, path);
+    const apiCacheKeyReq = canEdgeCacheApi ? apiCacheKey(request.url, request.headers.get("origin") || "") : null;
 
-    if (useApiCache && apiCacheKeyReq) {
+    if (canEdgeCacheApi && apiCacheKeyReq) {
       try {
         const hit = await caches.default.match(apiCacheKeyReq);
         if (hit) {
@@ -1346,6 +1476,11 @@ async function handleRequest(context) {
         env.EDGE_PROXY_SHARED_SECRET,
       );
 
+      const originSmax = originPublicSmaxAge(res);
+      const effectiveCacheTtl = useApiCache
+        ? (originSmax > 0 ? Math.min(apiCacheTtl, originSmax) : apiCacheTtl)
+        : originSmax;
+
       // Cacheable anonymous GETs: buffer the FULL body before cloning/caching.
       // Cloning a still-streaming origin body twice (fresh + last-good) while
       // also returning it to the browser tees the stream 3 ways — under load
@@ -1353,90 +1488,94 @@ async function handleRequest(context) {
       // visitors: homepage "Unterminated string in JSON…"; logged-in users
       // (connect.sid → cache bypass, single stream) were fine. Incident
       // 2026-07-26.
-      if (useApiCache && apiCacheKeyReq && res.status === 200 && apiAnswerShareable(path, res)) {
-        if (!res.headers.has("set-cookie")) {
-          let bodyBuf;
+      if (
+        effectiveCacheTtl > 0 &&
+        apiCacheKeyReq &&
+        res.status === 200 &&
+        apiAnswerShareable(path, res) &&
+        originCacheControlAllowsSharedStore(path, res)
+      ) {
+        let bodyBuf;
+        try {
+          bodyBuf = await res.arrayBuffer();
+        } catch (readErr) {
+          console.error("[pages-fn] api body read error:", readErr);
+          const stale = await serveApiLastGood(apiCacheKeyReq, "body-read-failed");
+          if (stale) return stale;
+          return new Response("Bad gateway", { status: 502 });
+        }
+
+        const contentType = (res.headers.get("content-type") || "").toLowerCase();
+        if (contentType.includes("application/json")) {
           try {
-            bodyBuf = await res.arrayBuffer();
-          } catch (readErr) {
-            console.error("[pages-fn] api body read error:", readErr);
-            const stale = await serveApiLastGood(apiCacheKeyReq, "body-read-failed");
+            JSON.parse(new TextDecoder("utf-8", { fatal: false }).decode(bodyBuf));
+          } catch (parseErr) {
+            console.error(
+              "[pages-fn] refusing to cache truncated/invalid JSON for",
+              path,
+              parseErr,
+            );
+            const stale = await serveApiLastGood(apiCacheKeyReq, "invalid-json");
             if (stale) return stale;
-            return new Response("Bad gateway", { status: 502 });
-          }
-
-          const contentType = (res.headers.get("content-type") || "").toLowerCase();
-          if (contentType.includes("application/json")) {
-            try {
-              JSON.parse(new TextDecoder("utf-8", { fatal: false }).decode(bodyBuf));
-            } catch (parseErr) {
-              console.error(
-                "[pages-fn] refusing to cache truncated/invalid JSON for",
-                path,
-                parseErr,
-              );
-              const stale = await serveApiLastGood(apiCacheKeyReq, "invalid-json");
-              if (stale) return stale;
-              // Do not serve a known-broken body to the browser.
-              return new Response(
-                JSON.stringify({ message: "Upstream response incomplete" }),
-                {
-                  status: 502,
-                  headers: { "Content-Type": "application/json; charset=utf-8" },
-                },
-              );
-            }
-          }
-
-          const outHeaders = new Headers(res.headers);
-          // Body is decoded/uncompressed after arrayBuffer(); drop transport
-          // encodings so Content-Length matches what we actually send.
-          outHeaders.delete("content-encoding");
-          outHeaders.delete("content-length");
-          const storeTtl = remainingApiCacheTtl(apiCacheTtl, res.headers.get("age"));
-          // Counted once above; a stored Age would shorten the entry again.
-          outHeaders.delete("age");
-          // These outrank Cache-Control at Cloudflare: the Worker's 600 s copy
-          // would outlive storeTtl, the origin's no-store («استمع») would keep
-          // nothing, and either would cap the last-good copy below.
-          outHeaders.delete("cdn-cache-control");
-          outHeaders.delete("cloudflare-cdn-cache-control");
-          outHeaders.set(
-            "Cache-Control",
-            `public, max-age=${storeTtl}, s-maxage=${storeTtl}`,
-          );
-
-          const responseToCache = new Response(bodyBuf.slice(0), {
-            status: res.status,
-            statusText: res.statusText,
-            headers: outHeaders,
-          });
-
-          context.waitUntil(
-            caches.default.put(apiCacheKeyReq, responseToCache).catch((err) => {
-              console.error("[pages-fn] api cache put error:", err);
-            }),
-          );
-
-          // «آخر نسخة سليمة» — تُقدَّم فقط عند فشل الأصل (انظر serveApiLastGood).
-          const lastGoodHeaders = new Headers(outHeaders);
-          lastGoodHeaders.set("Cache-Control", `public, s-maxage=${API_LAST_GOOD_TTL_S}`);
-          const lastGoodCopy = new Response(bodyBuf.slice(0), {
-            status: 200,
-            headers: lastGoodHeaders,
-          });
-          if (apiLastGoodAllowed(path)) {
-            context.waitUntil(
-              caches.default.put(apiLastGoodKey(apiCacheKeyReq), lastGoodCopy).catch(() => {}),
+            // Do not serve a known-broken body to the browser.
+            return new Response(
+              JSON.stringify({ message: "Upstream response incomplete" }),
+              {
+                status: 502,
+                headers: { "Content-Type": "application/json; charset=utf-8" },
+              },
             );
           }
-
-          return new Response(bodyBuf, {
-            status: res.status,
-            statusText: res.statusText,
-            headers: outHeaders,
-          });
         }
+
+        const outHeaders = new Headers(res.headers);
+        // Body is decoded/uncompressed after arrayBuffer(); drop transport
+        // encodings so Content-Length matches what we actually send.
+        outHeaders.delete("content-encoding");
+        outHeaders.delete("content-length");
+        const storeTtl = remainingApiCacheTtl(effectiveCacheTtl, res.headers.get("age"));
+        // Counted once above; a stored Age would shorten the entry again.
+        outHeaders.delete("age");
+        // These outrank Cache-Control at Cloudflare: the Worker's 600 s copy
+        // would outlive storeTtl, the origin's no-store («استمع») would keep
+        // nothing, and either would cap the last-good copy below.
+        outHeaders.delete("cdn-cache-control");
+        outHeaders.delete("cloudflare-cdn-cache-control");
+        outHeaders.set(
+          "Cache-Control",
+          `public, max-age=${storeTtl}, s-maxage=${storeTtl}`,
+        );
+
+        const responseToCache = new Response(bodyBuf.slice(0), {
+          status: res.status,
+          statusText: res.statusText,
+          headers: outHeaders,
+        });
+
+        context.waitUntil(
+          caches.default.put(apiCacheKeyReq, responseToCache).catch((err) => {
+            console.error("[pages-fn] api cache put error:", err);
+          }),
+        );
+
+        // «آخر نسخة سليمة» — تُقدَّم فقط عند فشل الأصل (انظر serveApiLastGood).
+        const lastGoodHeaders = new Headers(outHeaders);
+        lastGoodHeaders.set("Cache-Control", `public, s-maxage=${API_LAST_GOOD_TTL_S}`);
+        const lastGoodCopy = new Response(bodyBuf.slice(0), {
+          status: 200,
+          headers: lastGoodHeaders,
+        });
+        if (useApiCache && apiLastGoodAllowed(path)) {
+          context.waitUntil(
+            caches.default.put(apiLastGoodKey(apiCacheKeyReq), lastGoodCopy).catch(() => {}),
+          );
+        }
+
+        return new Response(bodyBuf, {
+          status: res.status,
+          statusText: res.statusText,
+          headers: outHeaders,
+        });
       }
 
       // Unpublished, archived or deleted: drop this location's copies, the
