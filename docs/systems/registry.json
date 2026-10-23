@@ -660,12 +660,16 @@
         "tests/unit/geminiTts.test.ts",
         "server/services/summaryAudioSettings.ts",
         "server/services/summaryAudioService.ts",
+        "server/services/summaryAudioStore.ts",
+        "server/services/summaryAudioBudget.ts",
+        "server/routes/articleSummaryAudio.ts",
         "server/services/elevenlabs.ts",
         "server/services/googleTts.ts",
         "server/routes/summaryAudioSettings.ts",
         "client/src/components/admin/SummaryAudioSettings.tsx",
         "tests/unit/humainTts.test.ts",
         "tests/unit/summaryAudio*.test.ts",
+        "tests/unit/articleSummaryAudioRoute.test.ts",
         "e2e/summary-audio-settings.spec.ts",
         "e2e/fixtures/summary-audio.*",
         "docs/systems/audio-newsletter/HUMAIN.md",
@@ -703,7 +707,7 @@
       "owners": [
         "content"
       ],
-      "lastReviewed": "2026-10-22"
+      "lastReviewed": "2026-10-23"
     },
     {
       "id": "media-library",

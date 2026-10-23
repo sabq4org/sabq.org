@@ -4,13 +4,19 @@ import { GEMINI_TTS_CONFIG_VERSION, GEMINI_TTS_VOICE, isGeminiContentRejection, 
 import { getElevenLabsService, isElevenLabsQuotaCoolingDown } from './elevenlabs';
 import { getGoogleTTSService } from './googleTts';
 import { loadSummaryAudioSettings, type SummaryAudioSettings } from './summaryAudioSettings';
+import { readStoredSummaryAudio, storeSummaryAudio } from './summaryAudioStore';
 
 export type SummaryAudio = { buffer: Buffer; provider: 'gemini' | 'humain' | 'elevenlabs' | 'google'; contentType: 'audio/wav' | 'audio/mpeg' };
 export const SUMMARY_AUDIO_SAMPLE = 'أهلاً بكم في موجز الأخبار من سبق. من الرياض، نتابع أبرز المستجدات المحلية، ونستعرض أهم الأخبار الاقتصادية والرياضية. قراءة واضحة، ومعلومة موثوقة، ومتابعة مستمرة على مدار الساعة.';
+export type SummaryAudioResult = SummaryAudio & { cache: 'HIT' | 'MISS' | 'STORE' };
 const cache = new Map<string, { audio: SummaryAudio; expires: number }>();
-const pending = new Map<string, Promise<SummaryAudio>>();
+const pending = new Map<string, Promise<SummaryAudioResult>>();
 const MAX_CACHE_BYTES = 64 * 1024 * 1024;
+const MAX_SYNTHESES = 4;
+const PRIMARY_TTL_MS = 86_400_000;
+const FALLBACK_TTL_MS = 60_000;
 let cacheBytes = 0;
+let synthesizing = 0;
 let humainUnavailableUntil = 0;
 let geminiUnavailableUntil = 0;
 
@@ -90,24 +96,39 @@ export async function synthesizeWithSummaryVoice(provider: SummaryVoiceProvider,
     voiceSettings: { stability: 0.6, speed: 1.0 } }, 15_000, false), 16_000), 'google');
 }
 
-export async function generateSummaryAudio(text: string, settings: SummaryAudioSettings): Promise<SummaryAudio> {
-  if (settings.primaryProvider === 'gemini' && Date.now() >= geminiUnavailableUntil && geminiConfigured()) {
-    try {
-      return checkedGemini(await synthesizeGemini(text));
-    } catch (error) {
-      if (isGeminiContentRejection(error)) throw error;
-      geminiUnavailableUntil = Date.now() + 60_000;
-      console.warn('[summary-audio] Gemini unavailable; trying HUMAIN');
-    }
+/** One attempt behind the provider's one-minute outage breaker; null when it is skipped or fails. */
+async function attemptGemini(text: string, next: string): Promise<SummaryAudio | null> {
+  if (Date.now() < geminiUnavailableUntil || !geminiConfigured()) return null;
+  try {
+    return checkedGemini(await synthesizeGemini(text));
+  } catch (error) {
+    if (isGeminiContentRejection(error)) throw error;
+    geminiUnavailableUntil = Date.now() + 60_000;
+    console.warn(`[summary-audio] Gemini unavailable; ${next}`);
+    return null;
   }
-  if ((settings.primaryProvider === 'gemini' || settings.primaryProvider === 'humain') && Date.now() >= humainUnavailableUntil && process.env.HUMAIN_VOICE_API_KEY?.trim()) {
-    try {
-      return checked(await synthesizeHumain(text, settings.humainVoiceId), 'humain');
-    } catch (error) {
-      if (isContentRejection(error)) throw error;
-      humainUnavailableUntil = Date.now() + 60_000;
-      console.warn('[summary-audio] HUMAIN unavailable; trying ElevenLabs');
-    }
+}
+
+async function attemptHumain(text: string, voiceId: string, next: string): Promise<SummaryAudio | null> {
+  if (Date.now() < humainUnavailableUntil || !process.env.HUMAIN_VOICE_API_KEY?.trim()) return null;
+  try {
+    return checked(await synthesizeHumain(text, voiceId), 'humain');
+  } catch (error) {
+    if (isContentRejection(error)) throw error;
+    humainUnavailableUntil = Date.now() + 60_000;
+    console.warn(`[summary-audio] HUMAIN unavailable; ${next}`);
+    return null;
+  }
+}
+
+export async function generateSummaryAudio(text: string, settings: SummaryAudioSettings): Promise<SummaryAudio> {
+  if (settings.primaryProvider === 'gemini') {
+    const audio = await attemptGemini(text, 'trying HUMAIN');
+    if (audio) return audio;
+  }
+  if (settings.primaryProvider === 'gemini' || settings.primaryProvider === 'humain') {
+    const audio = await attemptHumain(text, settings.humainVoiceId, 'trying ElevenLabs');
+    if (audio) return audio;
   }
   try { return await elevenlabs(text, settings.elevenlabsVoiceId); }
   catch {
@@ -119,31 +140,87 @@ export async function generateSummaryAudio(text: string, settings: SummaryAudioS
     voiceSettings: { stability: 0.6, speed: 1.0 } }, 15_000, false), 16_000), 'google');
 }
 
+/**
+ * The primary voice alone, for a text that already has a fallback clip: free while
+ * the primary is down (its breaker skips it), and the fallback is never paid twice.
+ * Content rejections still propagate, as in the full chain.
+ */
+async function attemptPrimary(text: string, settings: SummaryAudioSettings): Promise<SummaryAudio | null> {
+  if (settings.primaryProvider === 'gemini') return attemptGemini(text, 'keeping the fallback clip');
+  if (settings.primaryProvider === 'humain') return attemptHumain(text, settings.humainVoiceId, 'keeping the fallback clip');
+  try { return await elevenlabs(text, settings.elevenlabsVoiceId); }
+  catch { return null; }
+}
+
+/** Bump `summary-vN` when a change should re-voice clips already kept in R2 (they never expire). */
 export function summaryAudioCacheKey(articleId: string, text: string, settings: SummaryAudioSettings): string {
   return createHash('sha256').update(JSON.stringify(['summary-v5', GEMINI_TTS_CONFIG_VERSION, articleId, text, settings])).digest('hex');
 }
 
+export type SummaryAudioOptions = {
+  /** Keep a durable copy in R2: published articles only. */
+  persist?: boolean;
+  /** Asked before paying for a clip that exists nowhere yet; false refuses with TTS_RATE_LIMITED. */
+  takeSynthesisSlot?: () => boolean;
+};
+
+function remember(key: string, audio: SummaryAudio, ttl: number): void {
+  for (const [oldKey, entry] of cache) {
+    if (entry.expires <= Date.now() || oldKey === key || cacheBytes + audio.buffer.length > MAX_CACHE_BYTES) {
+      cache.delete(oldKey); cacheBytes -= entry.audio.buffer.length;
+    }
+  }
+  cache.set(key, { audio, expires: Date.now() + ttl }); cacheBytes += audio.buffer.length;
+}
+
+/** Counts toward the four concurrent provider calls per replica (TTS_BUSY beyond). */
+async function synthesize<T>(task: () => Promise<T>): Promise<T> {
+  synthesizing += 1;
+  try { return await task(); } finally { synthesizing -= 1; }
+}
+
+function keep(key: string, audio: SummaryAudio, settings: SummaryAudioSettings, options: SummaryAudioOptions): SummaryAudioResult {
+  // Recover the preferred provider after an outage rather than pinning fallback for a day.
+  remember(key, audio, audio.provider === settings.primaryProvider ? PRIMARY_TTL_MS : FALLBACK_TTL_MS);
+  if (options.persist) storeSummaryAudio(key, audio);
+  return { ...audio, cache: 'MISS' };
+}
+
+/**
+ * Memory missed: R2 (or an expired memory copy) first, then the primary voice for a
+ * fallback clip, and only a clip that exists nowhere is paid for through the chain.
+ */
+async function resolveSummaryAudio(key: string, text: string, settings: SummaryAudioSettings, expired: SummaryAudio | undefined, options: SummaryAudioOptions): Promise<SummaryAudioResult> {
+  const stored = await readStoredSummaryAudio(key);
+  const known = stored ?? expired;
+  const label = stored ? 'STORE' : 'HIT';
+  if (known?.provider === settings.primaryProvider) {
+    remember(key, known, PRIMARY_TTL_MS);
+    // A draft voiced before publishing, or a lost write: copy it now instead of paying again.
+    if (!stored && options.persist) storeSummaryAudio(key, known);
+    return { ...known, cache: label };
+  }
+  if (known) {
+    const upgraded = synthesizing < MAX_SYNTHESES ? await synthesize(() => attemptPrimary(text, settings)) : null;
+    if (upgraded) return keep(key, upgraded, settings, options);
+    remember(key, known, FALLBACK_TTL_MS);
+    return { ...known, cache: label };
+  }
+  if (synthesizing >= MAX_SYNTHESES) throw new Error('TTS_BUSY');
+  if (options.takeSynthesisSlot && !options.takeSynthesisSlot()) throw new Error('TTS_RATE_LIMITED');
+  return keep(key, await synthesize(() => generateSummaryAudio(text, settings)), settings, options);
+}
+
 /** Shared by all existing web/iOS/Android article and opinion audio consumers. */
-export async function getSummaryAudio(articleId: string, text: string): Promise<SummaryAudio & { cache: 'HIT' | 'MISS' }> {
+export async function getSummaryAudio(articleId: string, text: string, options: SummaryAudioOptions = {}): Promise<SummaryAudioResult> {
   const settings = await loadSummaryAudioSettings();
   const key = summaryAudioCacheKey(articleId, text, settings);
   const cached = cache.get(key);
   if (cached && cached.expires > Date.now()) return { ...cached.audio, cache: 'HIT' };
   let task = pending.get(key);
   if (!task) {
-    if (pending.size >= 4) throw new Error('TTS_BUSY');
-    task = generateSummaryAudio(text, settings).then(audio => {
-      for (const [oldKey, entry] of cache) {
-        if (entry.expires <= Date.now() || oldKey === key || cacheBytes + audio.buffer.length > MAX_CACHE_BYTES) {
-          cache.delete(oldKey); cacheBytes -= entry.audio.buffer.length;
-        }
-      }
-      // Recover the preferred provider after an outage rather than pinning fallback for a day.
-      const ttl = audio.provider === settings.primaryProvider ? 86_400_000 : 60_000;
-      cache.set(key, { audio, expires: Date.now() + ttl }); cacheBytes += audio.buffer.length;
-      return audio;
-    }).finally(() => pending.delete(key));
+    task = resolveSummaryAudio(key, text, settings, cached?.audio, options).finally(() => pending.delete(key));
     pending.set(key, task);
   }
-  return { ...await task, cache: 'MISS' };
+  return task;
 }

@@ -5,6 +5,8 @@ vi.mock('../../server/services/humainTts', () => ({ synthesizeHumain: mocks.huma
 vi.mock('../../server/services/elevenlabs', () => ({ getElevenLabsService: () => ({ textToSpeech: mocks.eleven }), isElevenLabsQuotaCoolingDown: mocks.cooldown }));
 vi.mock('../../server/services/googleTts', () => ({ getGoogleTTSService: () => ({ textToSpeech: mocks.google }) }));
 vi.mock('../../server/services/summaryAudioSettings', () => ({ loadSummaryAudioSettings: mocks.load }));
+const store = vi.hoisted(() => ({ read: vi.fn(), write: vi.fn() }));
+vi.mock('../../server/services/summaryAudioStore', () => ({ readStoredSummaryAudio: store.read, storeSummaryAudio: store.write }));
 const settings = { primaryProvider: 'humain' as const, humainVoiceId: 'humain-voice', elevenlabsVoiceId: 'eleven-voice' };
 const geminiSettings = { ...settings, primaryProvider: 'gemini' as const };
 const wav = () => { const audio = Buffer.alloc(48); audio.write('RIFF', 0); audio.write('WAVE', 8); audio.write('fmt ', 12); audio.write('data', 36); return audio; };
@@ -12,6 +14,7 @@ let service: typeof import('../../server/services/summaryAudioService');
 beforeEach(async () => {
   vi.resetAllMocks(); vi.resetModules(); vi.stubEnv('HUMAIN_VOICE_API_KEY', 'unit-test-key'); vi.stubEnv('GEMINI_API_KEY', 'unit-test-gemini-key');
   mocks.load.mockResolvedValue(settings); mocks.gemini.mockResolvedValue(wav()); mocks.humain.mockResolvedValue(Buffer.from('wav')); mocks.eleven.mockResolvedValue(Buffer.from('mp3')); mocks.google.mockResolvedValue(Buffer.from('google'));
+  store.read.mockResolvedValue(null);
   service = await import('../../server/services/summaryAudioService');
 });
 afterEach(() => { vi.unstubAllEnvs(); vi.useRealTimers(); });
@@ -120,5 +123,106 @@ describe('summary provider chain', () => {
     expect(recovered).toMatchObject({ provider: 'gemini', cache: 'MISS' });
     expect(mocks.gemini).toHaveBeenCalledTimes(2);
     expect(mocks.humain).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('summary clip kept once (R2 copy, no second paid fallback, synthesis limit)', () => {
+  const humainClip = () => ({ buffer: Buffer.from('stored-humain'), provider: 'humain' as const, contentType: 'audio/wav' as const });
+  const deferred = () => { let resolve!: (value: Buffer) => void; const promise = new Promise<Buffer>(r => { resolve = r; }); return { promise, resolve }; };
+
+  it('serves a stored primary clip without paying a provider, then from memory', async () => {
+    store.read.mockResolvedValue(humainClip());
+    expect(await service.getSummaryAudio('id', 'نص')).toMatchObject({ provider: 'humain', cache: 'STORE' });
+    expect((await service.getSummaryAudio('id', 'نص')).cache).toBe('HIT');
+    expect(store.read).toHaveBeenCalledTimes(1);
+    expect(store.read).toHaveBeenCalledWith(service.summaryAudioCacheKey('id', 'نص', settings));
+    expect(mocks.humain).not.toHaveBeenCalled(); expect(mocks.eleven).not.toHaveBeenCalled();
+    expect(store.write).not.toHaveBeenCalled();
+  });
+
+  it('keeps a durable copy of a published clip only', async () => {
+    const published = await service.getSummaryAudio('published', 'نص', { persist: true });
+    expect(store.write).toHaveBeenCalledTimes(1);
+    expect(store.write).toHaveBeenCalledWith(service.summaryAudioCacheKey('published', 'نص', settings), expect.objectContaining({ provider: 'humain', buffer: published.buffer }));
+    await service.getSummaryAudio('draft', 'نص');
+    expect(store.write).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps a stored fallback clip while Gemini is down instead of paying HUMAIN again', async () => {
+    mocks.load.mockResolvedValue(geminiSettings);
+    store.read.mockResolvedValue(humainClip());
+    mocks.gemini.mockRejectedValue(new Error('credit exhausted'));
+    expect(await service.getSummaryAudio('fallback', 'نص', { persist: true })).toMatchObject({ provider: 'humain', cache: 'STORE' });
+    expect(mocks.gemini).toHaveBeenCalledTimes(1);
+    expect(mocks.humain).not.toHaveBeenCalled(); expect(mocks.eleven).not.toHaveBeenCalled();
+    expect(store.write).not.toHaveBeenCalled();
+  });
+
+  it('replaces a stored fallback clip with the primary voice once it is back', async () => {
+    mocks.load.mockResolvedValue(geminiSettings);
+    store.read.mockResolvedValue(humainClip());
+    expect(await service.getSummaryAudio('upgrade', 'نص', { persist: true })).toMatchObject({ provider: 'gemini', cache: 'MISS' });
+    expect(store.write).toHaveBeenCalledWith(service.summaryAudioCacheKey('upgrade', 'نص', geminiSettings), expect.objectContaining({ provider: 'gemini' }));
+    expect(mocks.humain).not.toHaveBeenCalled();
+    expect((await service.getSummaryAudio('upgrade', 'نص')).cache).toBe('HIT');
+  });
+
+  it('never pays the fallback twice for the same text, even without R2', async () => {
+    vi.useFakeTimers(); mocks.humain.mockRejectedValue(new Error('offline'));
+    expect((await service.getSummaryAudio('id', 'نص')).provider).toBe('elevenlabs');
+    await vi.advanceTimersByTimeAsync(61_000);
+    expect(await service.getSummaryAudio('id', 'نص')).toMatchObject({ provider: 'elevenlabs', cache: 'HIT' });
+    expect(mocks.humain).toHaveBeenCalledTimes(2);
+    expect(mocks.eleven).toHaveBeenCalledTimes(1);
+  });
+
+  it('still refuses audio the primary voice rejects as content', async () => {
+    mocks.load.mockResolvedValue(geminiSettings);
+    store.read.mockResolvedValue(humainClip());
+    mocks.gemini.mockRejectedValue(new Error('TTS_INPUT_NOT_ALLOWED'));
+    await expect(service.getSummaryAudio('rejected', 'نص')).rejects.toThrow('TTS_INPUT_NOT_ALLOWED');
+  });
+
+  it('copies a primary clip voiced as a draft once the article is published', async () => {
+    vi.useFakeTimers();
+    await service.getSummaryAudio('draft-then-published', 'نص');
+    expect(store.write).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(86_400_000 + 1_000);
+    expect(await service.getSummaryAudio('draft-then-published', 'نص', { persist: true })).toMatchObject({ provider: 'humain', cache: 'HIT' });
+    expect(mocks.humain).toHaveBeenCalledTimes(1);
+    expect(store.write).toHaveBeenCalledTimes(1);
+  });
+
+  it('asks the synthesis limit only for a clip that exists nowhere', async () => {
+    const takeSynthesisSlot = vi.fn(() => true);
+    await service.getSummaryAudio('id', 'نص', { takeSynthesisSlot });
+    await service.getSummaryAudio('id', 'نص', { takeSynthesisSlot });
+    store.read.mockResolvedValue(humainClip());
+    await service.getSummaryAudio('stored', 'نص', { takeSynthesisSlot });
+    expect(takeSynthesisSlot).toHaveBeenCalledTimes(1);
+  });
+
+  it('refuses a new clip past the limit but still serves stored ones', async () => {
+    const takeSynthesisSlot = () => false;
+    await expect(service.getSummaryAudio('cold', 'نص', { takeSynthesisSlot })).rejects.toThrow('TTS_RATE_LIMITED');
+    expect(mocks.humain).not.toHaveBeenCalled();
+    store.read.mockResolvedValue(humainClip());
+    expect(await service.getSummaryAudio('warm', 'نص', { takeSynthesisSlot })).toMatchObject({ provider: 'humain', cache: 'STORE' });
+  });
+
+  it('allows four syntheses at once; a fifth new clip is busy, a fallback clip is served as is', async () => {
+    const calls = [deferred(), deferred(), deferred(), deferred()];
+    calls.forEach(call => mocks.humain.mockReturnValueOnce(call.promise));
+    const running = ['a', 'b', 'c', 'd'].map(id => service.getSummaryAudio(id, 'نص'));
+    await vi.waitFor(() => expect(mocks.humain).toHaveBeenCalledTimes(4));
+    const takeSynthesisSlot = vi.fn(() => true);
+    await expect(service.getSummaryAudio('e', 'نص', { takeSynthesisSlot })).rejects.toThrow('TTS_BUSY');
+    expect(takeSynthesisSlot).not.toHaveBeenCalled();
+    mocks.load.mockResolvedValue(geminiSettings);
+    store.read.mockResolvedValue(humainClip());
+    expect(await service.getSummaryAudio('f', 'نص')).toMatchObject({ provider: 'humain', cache: 'STORE' });
+    expect(mocks.gemini).not.toHaveBeenCalled();
+    calls.forEach(call => call.resolve(Buffer.from('wav')));
+    await Promise.all(running);
   });
 });
