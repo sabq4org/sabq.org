@@ -183,7 +183,7 @@ function SafariHeroCarousel({ articles }: HeroCarouselProps) {
                   <div className="p-3 hover-elevate active-elevate-2 transition-all">
                     <div className="flex gap-3">
                       {/* Image - Larger size with 16:9 aspect ratio to show full image */}
-                      <div className="relative flex-shrink-0 w-36 aspect-video rounded-lg overflow-hidden">
+                      <div className="relative flex-shrink-0 w-36 md:max-lg:w-24 aspect-video rounded-lg overflow-hidden">
                         {art.displayImage ? (
                           <OptimizedImage
                             src={art.displayImage}
@@ -339,7 +339,7 @@ function SafariHeroCarousel({ articles }: HeroCarouselProps) {
 
         {/* Four Secondary Articles - 1/3 width - Horizontal card style */}
         {desktopSecondaryArticles.length > 0 && (
-          <div className="w-1/3 h-full flex flex-col gap-1.5">
+          <div className="w-1/3 md:max-lg:w-2/5 h-full flex flex-col gap-1.5">
             {desktopSecondaryArticles.map((article) => (
               <Link key={article.id} href={`/article/${article.englishSlug || article.slug}`} className="flex-1 min-h-0">
                 <article 
@@ -352,7 +352,7 @@ function SafariHeroCarousel({ articles }: HeroCarouselProps) {
                   <div className="p-2 hover-elevate active-elevate-2 transition-all h-full">
                     <div className="flex gap-3 h-full">
                       {/* Image - wider with landscape aspect ratio matching mobile */}
-                      <div className="relative flex-shrink-0 w-36 aspect-video rounded-lg overflow-hidden">
+                      <div className="relative flex-shrink-0 w-36 md:max-lg:w-24 aspect-video rounded-lg overflow-hidden">
                         {article.displayImage ? (
                           <OptimizedImage
                             src={article.displayImage}
@@ -598,7 +598,7 @@ function EmblaHeroCarousel({ articles }: HeroCarouselProps) {
                   <div className="p-3 hover-elevate active-elevate-2 transition-all">
                     <div className="flex gap-3">
                       {/* Image - Larger size with 16:9 aspect ratio to show full image */}
-                      <div className="relative flex-shrink-0 w-36 aspect-video rounded-lg overflow-hidden">
+                      <div className="relative flex-shrink-0 w-36 md:max-lg:w-24 aspect-video rounded-lg overflow-hidden">
                         {article.displayImage ? (
                           <OptimizedImage
                             src={article.displayImage}
@@ -775,7 +775,7 @@ function EmblaHeroCarousel({ articles }: HeroCarouselProps) {
 
         {/* Four Secondary Articles - 1/3 width - Horizontal card style like mobile */}
         {desktopSecondaryArticles.length > 0 && (
-          <div className="w-1/3 h-full flex flex-col gap-1.5">
+          <div className="w-1/3 md:max-lg:w-2/5 h-full flex flex-col gap-1.5">
             {desktopSecondaryArticles.map((article) => (
               <Link key={article.id} href={`/article/${article.englishSlug || article.slug}`} className="flex-1 min-h-0">
                 <article 
@@ -788,7 +788,7 @@ function EmblaHeroCarousel({ articles }: HeroCarouselProps) {
                   <div className="p-2 hover-elevate active-elevate-2 transition-all h-full">
                     <div className="flex gap-3 h-full">
                       {/* Image - wider with landscape aspect ratio matching mobile */}
-                      <div className="relative flex-shrink-0 w-36 aspect-video rounded-lg overflow-hidden">
+                      <div className="relative flex-shrink-0 w-36 md:max-lg:w-24 aspect-video rounded-lg overflow-hidden">
                         {article.displayImage ? (
                           <OptimizedImage
                             src={article.displayImage}

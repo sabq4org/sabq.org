@@ -31,6 +31,9 @@
 .article-breadcrumbs a { display: inline-flex; align-items: center; }
 .article-breadcrumbs a:hover { color: var(--article-brand); }
 .article-detail-layout { display: grid; gap: 48px; align-items: start; }
+@media (min-width: 860px) and (max-width: 1023px) {
+  .article-detail-layout { grid-template-columns: minmax(0, 1fr) 260px; gap: 32px; }
+}
 .article-detail-content > * + * { margin-top: 28px; }
 .article-detail-title {
   margin: 16px 0 0;
