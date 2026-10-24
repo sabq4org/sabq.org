@@ -25,6 +25,9 @@ const mocks = vi.hoisted(() => ({
   schedulePost: vi.fn(),
   sendEmailNotification: vi.fn(),
   createNotification: vi.fn(),
+  realAppendOpinionTicketMessage: undefined as
+    | typeof import("../../server/services/opinionTicketsService").appendOpinionTicketMessage
+    | undefined,
 }));
 
 vi.mock("../../server/db", () => ({
@@ -44,13 +47,11 @@ vi.mock("../../server/rbac", () => ({
   logActivity: (...args: unknown[]) => mocks.logActivity(...args),
 }));
 
-let realAppendOpinionTicketMessage: typeof import("../../server/services/opinionTicketsService").appendOpinionTicketMessage;
-
 vi.mock("../../server/services/opinionTicketsService", async () => {
   const actual = await vi.importActual<typeof import("../../server/services/opinionTicketsService")>(
     "../../server/services/opinionTicketsService",
   );
-  realAppendOpinionTicketMessage = actual.appendOpinionTicketMessage;
+  mocks.realAppendOpinionTicketMessage = actual.appendOpinionTicketMessage;
   return {
     ...actual,
     canUserViewOpinionDesk: (...args: unknown[]) => mocks.canUserViewOpinionDesk(...args),
@@ -157,7 +158,11 @@ beforeEach(() => {
   vi.stubEnv("BOT_DESK_WRITE_RATE_LIMIT", "1000");
   vi.stubEnv("BOT_DESK_PUBLISH_RATE_LIMIT", "1000");
   vi.stubEnv("DESK_BOT_ALERT_EMAILS", "");
-  for (const fn of Object.values(mocks)) fn.mockReset();
+  for (const fn of Object.values(mocks)) {
+    if (fn && typeof (fn as { mockReset?: () => void }).mockReset === "function") {
+      (fn as { mockReset: () => void }).mockReset();
+    }
+  }
 
   mocks.authenticatePublisherToken.mockImplementation(async (raw: string) => {
     if (raw === VALID_BOTPUB_TOKEN) return TOKEN_OWNER_PRINCIPAL;
@@ -505,7 +510,7 @@ describe("Bot Desk API — Tickets", () => {
       },
     });
 
-    const replyOutcome = await realAppendOpinionTicketMessage({
+    const replyOutcome = await mocks.realAppendOpinionTicketMessage!({
       ticketId: "t-open-1",
       senderId: TOKEN_OWNER_PRINCIPAL.userId,
       isAdmin: true,
@@ -538,7 +543,7 @@ describe("Bot Desk API — Tickets", () => {
     });
 
     await expect(
-      realAppendOpinionTicketMessage({
+      mocks.realAppendOpinionTicketMessage!({
         ticketId: "t-closed-1",
         senderId: TOKEN_OWNER_PRINCIPAL.userId,
         isAdmin: true,

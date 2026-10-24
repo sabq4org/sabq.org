@@ -36,9 +36,7 @@ export const botDeskTicketReplySchema = z
 
 export const botDeskTicketStatusSchema = z
   .object({
-    status: z.enum(opinionTicketStatuses, {
-      errorMap: () => ({ message: "حالة غير صالحة" }),
-    }),
+    status: z.enum(opinionTicketStatuses),
   })
   .strict();
 

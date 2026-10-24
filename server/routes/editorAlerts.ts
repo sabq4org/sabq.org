@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, type Request, type Response } from "express";
 import { z } from "zod";
 import { logActivity, requireAuth, requireRole } from "../rbac";
 import {
@@ -12,7 +12,7 @@ router.get(
   "/api/admin/editor-alerts/settings",
   requireAuth,
   requireRole("admin"),
-  async (_req, res) => {
+  async (_req: Request, res: Response) => {
     try {
       const settings = await getEditorAlertSettingsPublic();
       res.json(settings);
@@ -38,21 +38,21 @@ router.put(
   "/api/admin/editor-alerts/settings",
   requireAuth,
   requireRole("admin"),
-  async (req: any, res) => {
+  async (req: Request, res: Response) => {
     try {
       const parsed = updateSettingsSchema.safeParse(req.body);
       if (!parsed.success) {
         return res.status(400).json({ message: "بيانات غير صالحة", errors: parsed.error.issues });
       }
       const settings = await updateEditorAlertSettings(parsed.data);
-      const userId = req.user?.id;
+      const userId = (req.user as { id?: string } | undefined)?.id;
       if (userId) {
         await logActivity({
           userId,
           action: "update",
           entityType: "system_setting",
           entityId: "editor_alerts",
-          newValue: settings as Record<string, unknown>,
+          newValue: { ...settings },
         });
       }
       res.json(settings);

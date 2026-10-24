@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, type SQL } from "drizzle-orm";
 import { db } from "../db";
 import {
   opinionTickets,
@@ -167,7 +167,7 @@ export async function listOpinionTickets(options: {
   unread?: boolean;
   limit?: number;
 }) {
-  const conditions: any[] = [];
+  const conditions: SQL[] = [];
   if (!options.isAdmin) {
     conditions.push(eq(opinionTickets.writerId, options.viewerId));
   } else if (options.writerId) {
@@ -283,7 +283,7 @@ export async function getOpinionTicketsUnreadCounts(options: {
   viewerId: string;
   isAdmin: boolean;
 }) {
-  const conditions: any[] = [];
+  const conditions: SQL[] = [];
   if (!options.isAdmin) conditions.push(eq(opinionTickets.writerId, options.viewerId));
 
   const rows = await db
