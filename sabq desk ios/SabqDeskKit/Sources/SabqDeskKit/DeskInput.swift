@@ -10,8 +10,8 @@ public enum DeskInput {
         for scalar in text.unicodeScalars {
             if scalar.properties.numericType == .decimal,
                let value = scalar.properties.numericValue,
-               let ascii = Unicode.Scalar(UInt8(48 + Int(value))) {
-                out.append(ascii)
+               (0...9).contains(Int(value)) {
+                out.append(Unicode.Scalar(UInt8(48 + Int(value))))
             } else {
                 out.append(scalar)
             }
