@@ -196,9 +196,9 @@ export const validateCsrfToken: RequestHandler = (req, res, next) => {
     return next();
   }
 
-  // Exact machine-to-machine endpoint; its Tap signature replaces cookie CSRF.
+  // Exact machine-to-machine endpoints; their Tap signatures replace cookie CSRF.
   // originalUrl retains /api when this middleware is mounted under that prefix.
-  if (req.method === "POST" && /^\/api\/media-store\/webhook\/?$/i.test(req.originalUrl.split("?")[0])) {
+  if (req.method === "POST" && /^\/api\/(media-store|advertiser-payments)\/webhook\/?$/i.test(req.originalUrl.split("?")[0])) {
     return next();
   }
 
