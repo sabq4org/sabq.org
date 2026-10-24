@@ -783,7 +783,8 @@ export async function fetchSitemapViaEdge(request, service, timeoutMs = 0) {
   if (timeoutMs > 0) init.signal = AbortSignal.timeout(timeoutMs);
   try {
     const res = await service.fetch(new Request(`${SITEMAP_EDGE_URL}${url.pathname}${url.search}`, init));
-    if (res.status < 500) return res;
+    // An edge 429 gets the same second route as proxyToApiWithFallback gives it.
+    if (res.status < 500 && !isEdgeRateLimited(res)) return res;
     await res.body?.cancel();
     console.warn(`[pages-fn] sitemap edge ${res.status}, using the API origin: ${url.pathname}`);
   } catch (err) {

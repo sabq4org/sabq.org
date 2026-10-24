@@ -172,6 +172,8 @@ describe("Pages sends sitemaps through the shared Worker copy", () => {
     const warns = vi.spyOn(console, "warn").mockImplementation(() => {});
     expect(await fetchSitemapViaEdge(new Request("https://sabq.org/sitemap.xml"), down)).toBeNull();
     expect(await fetchSitemapViaEdge(new Request("https://sabq.org/sitemap.xml"), thrown)).toBeNull();
+    const edge429 = { fetch: vi.fn(async () => new Response("rate limited", { status: 429 })) };
+    expect(await fetchSitemapViaEdge(new Request("https://sabq.org/sitemap.xml"), edge429)).toBeNull();
     errors.mockRestore();
     warns.mockRestore();
   });
