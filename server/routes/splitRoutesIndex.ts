@@ -40,6 +40,7 @@ import staffProfilesRouter from "./staffProfiles";
 import meetingsRouter from "./meetingsRoutes";
 import meetingMinutesRouter from "./meetingMinutesRoutes";
 import botDraftsRouter from "./botDrafts";
+import botDeskRouter from "./botDesk";
 import botPublisherTokensRouter from "./botPublisherTokens";
 import botSocialRouter from "./botSocial";
 import publishFirstRouter from "./publishFirst";
@@ -169,6 +170,8 @@ export function registerSplitRoutes(app: Express) {
   app.use(meetingMinutesRouter);
   // مسودات البوتات (نشر سبق / Grok) — /api/internal/bot-drafts، Bearer لكل بوت، draft فقط
   app.use(botDraftsRouter);
+  // بوت الديسك (استفسارات المساهمين + مقترحات النشر الاجتماعي) — /api/internal/bot-desk، Bearer botpub_*
+  app.use(botDeskRouter);
   app.use(botPublisherTokensRouter);
   // نشر X للبوت الخارجي — /api/internal/bot-social، توكن منفصل عن مسودات البوت
   app.use(botSocialRouter);

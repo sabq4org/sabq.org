@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-24T06:29:11.971Z",
+  "generatedAt": "2026-10-24T18:48:46.465Z",
   "systems": [
     {
       "id": "account-center",
@@ -59,7 +59,7 @@
     },
     {
       "id": "editorial",
-      "fileCount": 289,
+      "fileCount": 300,
       "samplePaths": [
         "server/routes/videoResolver.ts",
         "server/services/videoResolverService.ts",
@@ -276,7 +276,7 @@
     },
     {
       "id": "systems-catalog",
-      "fileCount": 46,
+      "fileCount": 48,
       "samplePaths": [
         "docs/systems/AUDIT-2026-07-17.md",
         "docs/systems/GOVERNANCE.md",
@@ -374,16 +374,16 @@
     },
     {
       "id": "platform-runtime",
-      "fileCount": 28,
+      "fileCount": 33,
       "samplePaths": [
         "server/index.ts",
         "server/bootstrap.ts",
+        "server/objectStorage.ts",
+        "tests/unit/objectStoragePrivate.test.ts",
+        "scripts/private-document-migration.mjs",
+        "tests/unit/privateDocumentMigration.test.ts",
         "server/leaderElection.ts",
-        "server/leaderCron.ts",
-        "server/shutdown.ts",
-        "server/routes.ts",
-        "server/storage.ts",
-        "server/routes/mobileApiRoutes.ts"
+        "server/leaderCron.ts"
       ]
     },
     {

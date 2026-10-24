@@ -1,6 +1,6 @@
 # النشر الاجتماعي (`social-publishing`)
 
-> آخر مراجعة: 2026-10-04 (long_post عبر Publer، وإزالة ** من نص البوت) | المالك: editorial + platform
+> آخر مراجعة: 2026-10-24 (مسارات `/api/internal/bot-desk/social/*` لمراجعة مقترحات الكتّاب والوكالات وتنبيهات البريد القابلة للتحليل آلياً) | المالك: editorial + platform
 
 ## الغرض
 نشر أخبار سبق على منصة X من لوحة التحكم: فوري أو مجدول، بنص من العنوان أو
@@ -26,6 +26,7 @@
 | Backend | `server/services/socialPublishing/` (service + xApiClient + publerApiClient + imageResolver + tokenCrypto + suggest) |
 | Routes | `server/routes/socialPublishing.ts` — `/api/social-publishing/*` (Passport + RBAC + CSRF عام) |
 | Bot API | `server/routes/botSocial.ts` — `/api/internal/bot-social/*` (Bearer `SABQ_BOT_SOCIAL_TOKEN`، ليس توكن المسودات). العقد: [`BOT_SOCIAL_API.md`](./BOT_SOCIAL_API.md) |
+| Bot Desk API | `server/routes/botDesk.ts` — `/api/internal/bot-desk/social/*` (Bearer `botpub_*` + صلاحيات `social_publish.*` لمالك التوكن، يعمل على مقترحات الكتّاب والوكالات). العقد: [`../editorial/BOT_DESK_API.md`](../editorial/BOT_DESK_API.md) |
 | Worker | `server/jobs/socialPublishWorker.ts` — cron كل دقيقة، مسجل في `server/index.ts` |
 | Shared | `shared/socialPostText.ts` (العد الموزون) + جداول في `shared/schema.ts` |
 | Web | زر «النشر على X» في `RowActions`/إدارة المقالات → `SocialPublishDialog`؛ صفحة `/dashboard/social-publishing` |
@@ -116,7 +117,8 @@
   المقترح يُحفظ كمسودة (`status=draft` مع `createdByUserId = authorId`) برابط المقال
   وصورته المعتمدين حصراً وبلا صلاحية نشر مباشر أو جدولة للكاتب. يظهر المقترح
   في `/dashboard/social-publishing` بشارة «مقترح كاتب رأي»، ويملك فريق سبق
-  المخوّل تعديل النص واعتماد النشر الفوري أو الجدولة أو الرفض (`status=canceled`).
+  المخوّل (أو بوت الديسك عبر `/api/internal/bot-desk/social/*`) تعديل النص واعتماد النشر الفوري أو الجدولة أو الرفض (`status=canceled`).
+  عند إنشاء المقترح أو تغيير نصه فعلياً يُرسل تنبيه بريدي للمستلمين المضبوطين في `DESK_BOT_ALERT_EMAILS` / `editor_alerts.deskBotAlertEmails` مع السطر القابل للتحليل آلياً `[sabq-desk] type=social_proposal id=<postId>`.
   انتهاء الـ24 ساعة بعد الإرسال لا يحذف المقترح من نظام مراجعة فريق سبق.
 
 ## متغيرات البيئة

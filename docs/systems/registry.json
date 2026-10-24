@@ -1,7 +1,7 @@
 {
   "$schemaNote": "Machine-readable catalog of Sabq product systems. Consumed by scripts/systems-inventory.mjs and /api/admin/systems-catalog. aiFeatureKeys must be exclusive (one system owner) to avoid double-counting.",
   "version": 2,
-  "updatedAt": "2026-10-23",
+  "updatedAt": "2026-10-24",
   "systems": [
     {
       "id": "account-center",
@@ -158,7 +158,8 @@
         "docs/editorial/sabq-unified-editorial-prompt.md",
         "docs/ai-prompts-article-editor.md",
         "docs/systems/editorial/BOT_DRAFTS_API.md",
-        "docs/systems/editorial/bot-drafts.openapi.yaml"
+        "docs/systems/editorial/bot-drafts.openapi.yaml",
+        "docs/systems/editorial/BOT_DESK_API.md"
       ],
       "pathGlobs": [
         "server/routes/videoResolver.ts",
@@ -422,7 +423,16 @@
         "client/src/components/admin/RowActions.tsx",
         "tests/unit/breakingNewsExclusivity.test.ts",
         "server/jobs/breakingNewsExpiryJob.ts",
-        "tests/unit/breakingNewsExpiry.test.ts"
+        "tests/unit/breakingNewsExpiry.test.ts",
+        "shared/botDesk.ts",
+        "server/routes/botDesk.ts",
+        "server/routes/opinionTickets.ts",
+        "server/services/opinionTicketsService.ts",
+        "server/services/opinionTicketNotice.ts",
+        "server/services/opinionTicketNotifications.ts",
+        "server/services/deskBotAlerts.ts",
+        "docs/systems/editorial/BOT_DESK_API.md",
+        "tests/unit/botDesk.test.ts"
       ],
       "aiFeatureKeys": [
         "content-tools",
@@ -1282,6 +1292,7 @@
       "relatedDocs": [
         "docs/setup/X_PUBLISHING_SETUP_AR.md",
         "docs/systems/social-publishing/BOT_SOCIAL_API.md",
+        "docs/systems/editorial/BOT_DESK_API.md",
         "docs/systems/editorial/SYSTEM.md",
         "docs/systems/auth-rbac/SYSTEM.md"
       ],
@@ -1320,7 +1331,7 @@
         "editorial",
         "platform"
       ],
-      "lastReviewed": "2026-10-04"
+      "lastReviewed": "2026-10-24"
     },
     {
       "id": "sahraa-tv-block",

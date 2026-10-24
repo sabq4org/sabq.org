@@ -46,6 +46,8 @@ export type BotPublisherLoginInput = z.infer<typeof botPublisherLoginSchema>;
 export type BotPublisherPrincipal = {
   userId: string;
   tokenId: string;
+  tokenPrefix?: string;
+  label?: string | null;
   email: string;
   name: string;
   expiresAt: Date;

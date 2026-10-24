@@ -240,7 +240,6 @@ export default tseslint.config(
       "server/routes/newsMap.ts",
       "server/routes/newsletterAnalyticsRoutes.ts",
       "server/routes/notebookLmRoutes.ts",
-      "server/routes/opinionTickets.ts",
       "server/routes/paymentAnalytics.ts",
       "server/routes/pollsRoutes.ts",
       "server/routes/pushNotificationRoutes.ts",

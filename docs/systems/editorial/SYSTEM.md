@@ -1,6 +1,6 @@
 # نظام التحرير وغرف الأخبار (`editorial`)
 
-> آخر مراجعة: 2026-10-23 (امتصاص AbortError المتأخر عند قطع العميل لبث الفيديو، NODE-EXPRESS-S) | المالك: editorial
+> آخر مراجعة: 2026-10-24 (واجهة بوت الديسك `/api/internal/bot-desk/*` لاستفسارات المساهمين ومقترحات النشر الاجتماعي وتنبيهات البريد القابلة للتحليل آلياً) | المالك: editorial
 
 ## الغرض
 غرفة الأخبار اليومية + أدوات التحرير بالذكاء الاصطناعي التي يستخدمها المحررون: عناوين، مقالات، تصنيف، SEO، روابط ذكية، صور، وكلاء بريد/واتساب، ومساعد كاتب الرأي، والإعلانات الداخلية الموجهة لفريق العمل.
@@ -19,6 +19,7 @@
 | الإعلانات الداخلية | `server/routes/announcements.ts`، `/api/announcements/*`، وصفحات `/dashboard/announcements` |
 | AI تحريري | `ai-content-tools`, `aiArticleGenerator`, `seo-generator` |
 | مسودات البوتات | `server/routes/botDrafts.ts` + `server/services/botDraftsService.ts` + `botDraftPublishEffects.ts` + `shared/botDrafts.ts` — إنشاء/تحديث محتوى المسودة أو الخبر المنشور (`PATCH /:id`)/`PATCH /ready` و`POST /publish` و`POST /schedule` و`POST /:id/verdict` و`POST /images` و`GET /history` للتوكن الشخصي المالك. Bearer من `BOT_DRAFTS_API_TOKENS`. الدليل: [`BOT_DRAFTS_API.md`](./BOT_DRAFTS_API.md) |
+| بوت الديسك (التذاكر والمقترحات) | `server/routes/botDesk.ts` + `server/services/opinionTicketsService.ts` + `server/services/deskBotAlerts.ts` + `shared/botDesk.ts` — `/api/internal/bot-desk/*` بـ `Bearer botpub_*` وRBAC مالك التوكن. الدليل: [`BOT_DESK_API.md`](./BOT_DESK_API.md) |
 | سجل المادة والاسترجاع | `shared/articleHistory.ts` + `server/services/articleHistoryService.ts` + `server/routes/articleHistory.ts` + `ArticleTimeline`/`ArticleVersionCompare` + `migrations/20261021_article_versions.sql` |
 | النشر أولاً | `shared/publishFirst.ts` + `server/services/publishFirstService.ts` + `server/routes/publishFirst.ts` + `migrations/20260927_publish_first.sql` |
 | رادار الفجوات | `server/services/coverageGapMatcher.ts` (محرك المطابقة الدلالية), `server/routes/coverageGaps.ts` (`/api/admin/dashboard/coverage-gaps` + تعيين/مسودة/استبعاد) |
@@ -318,9 +319,10 @@
 - استدعاءات OpenAI في `openai.ts` و`ai-content-tools.ts` و`seo-generator.ts` و`ai/contentAnalyzer.ts` تسجل تحت الوظيفة الفعلية، دون تغيير نماذج أو نصوص أو عقود النتائج. دمج الطلبات المتزامنة opt-in للموجز وتحليل SEO وتوليد SEO فقط؛ إعادة الصياغة والعناوين والتوليد الإبداعي لا تُدمج.
 - واجهة «تحرير وتوليد شامل» تنتقل من SSE إلى JSON فقط عند 404/405 (عدم توفر endpoint). أخطاء 401/403/429/5xx، الرد غير المبثوث، والانقطاع بعد بدء المعالجة تُعرض كخطأ دون إطلاق توليد مدفوع ثانٍ تلقائياً. تبقى إعادة المحاولة اليدوية متاحة.
 
-## استفسارات الكتّاب — إشعار هيئة التحرير — 2026-10-15
+## استفسارات الكتّاب — إشعار هيئة التحرير وبوت الديسك — 2026-10-24
 
-- `POST /api/opinion-tickets` و`POST /api/opinion-tickets/:id/messages` عند رسالة المساهم (وليس رسالة الإدارة) ينشئان إشعاراً داخل الصندوق `notifications_inbox` لكل حساب نشط بدور مسؤول/مدير النظام فقط (`SUPERUSER_ROLE_NAMES`، لا المحرر؛ `isOpinionTicketNotifyRecipient`). صف `user_roles` إداري لا يُحتسب إذا كان `users.role` قارئًا (صف قديم بعد تخفيض الدور)، والقاعدة نفسها تحكم من يفتح كل التذاكر (`isOpinionDeskViewer`: المسؤول والمحرر) (`OpinionTicketInquiry`، الرابط `/dashboard/opinion-tickets/:id`)، ويرسلان بريداً عبر `sendEmailNotification` إن وُجد عنوان. فشل الإشعار لا يمنع حفظ التذكرة.
+- `POST /api/opinion-tickets` و`POST /api/opinion-tickets/:id/messages` عند رسالة المساهم (وليس رسالة الإدارة) ينشئان إشعاراً داخل الصندوق `notifications_inbox` لكل حساب نشط بدور مسؤول/مدير النظام فقط (`SUPERUSER_ROLE_NAMES`، لا المحرر؛ `isOpinionTicketNotifyRecipient`). صف `user_roles` إداري لا يُحتسب إذا كان `users.role` قارئًا (صف قديم بعد تخفيض الدور)، والقاعدة نفسها تحكم من يفتح كل التذاكر (`isOpinionDeskViewer`: المسؤول والمحرر) (`OpinionTicketInquiry`، الرابط `/dashboard/opinion-tickets/:id`)، ويرسلان بريداً عبر `sendEmailNotification` إلى مستلمي الديسك بالإضافة إلى المستلمين الإضافيين المضبوطين في `DESK_BOT_ALERT_EMAILS` أو `editor_alerts.deskBotAlertEmails` مع سطر ثابت قابل للتحليل آلياً `[sabq-desk] type=ticket id=<id>`. فشل الإشعار لا يمنع حفظ التذكرة.
+- مسارات `/api/internal/bot-desk/tickets*` تتيح لبوت موثوق يحمل `Authorization: Bearer botpub_...` (لمالك يمر من `isOpinionDeskViewer`) قراءة التذاكر والرسائل والرد باسم مالك التوكن وتحديث الحالة مع تدقيق كل كتابة في `activity_logs` (`channel: "bot-desk-api"`). الدليل: [`BOT_DESK_API.md`](./BOT_DESK_API.md).
 - `GET /api/opinion-tickets/unread-count` يضيف `unansweredCount` لعدد التذاكر `open`. لوحة النبض وقائمة الاستفسارات تُظهران البلا رد في شريط بارز وتقدّمانها في الترتيب.
 
 ## تطوير قسم مقالات الرأي وتجربة القارئ (`/opinion` و `/opinion/:slug`) — 2026-10-14

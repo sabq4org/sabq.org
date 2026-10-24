@@ -25,6 +25,12 @@ import { suggestSocialPostForArticle } from "./socialPublishing/suggestService";
 import { listPublisherMembers, notifyAdmins, notifyPublisherMembers } from "./publisherPortalService";
 import { sendEditorWhatsAppNotice } from "./editorAlerts";
 import { button, emailShell, escapeHtml } from "./publisherRenewalService";
+import {
+  AGENCY_SOCIAL_DEFAULT_ALERT_EMAIL,
+  buildDeskSocialProposalAlertEmail,
+  loadDeskBotSettingEmails,
+  resolveAgencySocialAlertRecipients,
+} from "./deskBotAlerts";
 
 export type AgencySocialMode = "off" | "approval" | "direct";
 export type AgencyMediaChoice = "article" | "images" | "video" | "none";
@@ -181,7 +187,7 @@ export type AgencySocialOutcome = "submitted" | "updated" | "published" | "sched
 
 const AGENCY_REQUESTS_URL = "https://sabq.org/dashboard/social-publishing?filter=agency";
 /** نسخة بريدية من تنبيه تغريدات الوكالات (طلب الإدارة، 6 أكتوبر 2026). */
-const AGENCY_SOCIAL_ALERT_EMAIL = "aalhazmi@sabq.org";
+export const AGENCY_SOCIAL_ALERT_EMAIL = AGENCY_SOCIAL_DEFAULT_ALERT_EMAIL;
 
 /**
  * إنشاء أو تعديل تغريدة الوكالة لخبرها، ثم إرسالها للموافقة أو نشرها
@@ -257,15 +263,42 @@ export async function saveAgencySocialPost(
     void sendEditorWhatsAppNotice(
       `${headline}\nالوكالة: ${publisher.agencyName}\nالخبر: ${status.article.title}\nالتغريدة: ${text.slice(0, 200)}\n${AGENCY_REQUESTS_URL}`,
     ).catch((err) => console.error("[Agency Social] WhatsApp notice failed:", err));
-    void sendEmailNotification({
-      to: AGENCY_SOCIAL_ALERT_EMAIL,
-      subject: `سبق | ${headline.replace(/^\S+\s/, "")} · ${publisher.agencyName}`,
-      html: emailShell(`
-        <h3 style="margin:0 0 8px;color:#0f172a">${escapeHtml(headline)}</h3>
-        <p><strong>الوكالة:</strong> ${escapeHtml(publisher.agencyName)}<br><strong>الخبر:</strong> ${escapeHtml(status.article.title)}</p>
-        <p style="white-space:pre-wrap;background:#f1f5f9;border-radius:8px;padding:12px">${escapeHtml(text)}</p>
-        ${button(AGENCY_REQUESTS_URL, "طلبات الوكالات")}`),
-    }).catch((err) => console.error("[Agency Social] email notice failed:", err));
+
+    const emailPayload = buildDeskSocialProposalAlertEmail({
+      postId: post.id,
+      proposalKind: "agency",
+      senderName: publisher.agencyName,
+      senderRole: "agency",
+      text,
+      articleTitle: status.article.title,
+      articleUrl: status.article.url,
+      dashboardUrl: AGENCY_REQUESTS_URL,
+      headline: `${headline.replace(/^\S+\s/, "")} · ${publisher.agencyName}`,
+      isUpdate: false,
+      occurredAt: now,
+    });
+    const immediateRecipients = resolveAgencySocialAlertRecipients();
+    for (const to of immediateRecipients) {
+      void sendEmailNotification({
+        to,
+        subject: emailPayload.subject,
+        text: emailPayload.text,
+        html: emailPayload.html,
+      }).catch((err) => console.error("[Agency Social] email notice failed:", err));
+    }
+    void loadDeskBotSettingEmails()
+      .then((settingEmails) => {
+        const extra = settingEmails.filter((e) => !immediateRecipients.includes(e));
+        for (const to of extra) {
+          void sendEmailNotification({
+            to,
+            subject: emailPayload.subject,
+            text: emailPayload.text,
+            html: emailPayload.html,
+          }).catch((err) => console.error("[Agency Social] email notice failed:", err));
+        }
+      })
+      .catch(() => undefined);
   };
 
   if (input.action === "publish_now") {

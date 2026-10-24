@@ -30,6 +30,12 @@ import { SocialProviderError, type SocialPublishProvider } from "./types";
 import { xProvider } from "./xApiClient";
 import { activeSocialTransport, publerProvider } from "./publerApiClient";
 import { notifyAuthorOfSocialPostStatus } from "../editorialNotifications";
+import {
+  buildDeskSocialProposalAlertEmail,
+  getDeskBotAlertRecipients,
+  isMeaningfulProposalTextChange,
+  sendDeskAlertEmails,
+} from "../deskBotAlerts";
 
 export const MAX_PUBLISH_ATTEMPTS = 3;
 const STALE_LOCK_MINUTES = 10;
@@ -1105,10 +1111,12 @@ export async function createOrUpdateAuthorSocialProposal(
     .limit(1);
 
   if (existingDraft) {
+    const trimmedText = input.text.trim();
+    const meaningfulChange = isMeaningfulProposalTextChange(existingDraft.text, trimmedText);
     const [updated] = await db
       .update(socialPosts)
       .set({
-        text: input.text.trim(),
+        text: trimmedText,
         textSource: input.textSource,
         linkUrl,
         imageSource,
@@ -1118,6 +1126,15 @@ export async function createOrUpdateAuthorSocialProposal(
       })
       .where(eq(socialPosts.id, existingDraft.id))
       .returning();
+    if (meaningfulChange && updated) {
+      await notifyDeskOfAuthorSocialProposal({
+        post: updated,
+        articleTitle: article.title,
+        articleUrl: linkUrl,
+        authorUserId: input.authorUserId,
+        isUpdate: true,
+      });
+    }
     return updated;
   }
 
@@ -1159,5 +1176,202 @@ export async function createOrUpdateAuthorSocialProposal(
     })
     .returning();
 
+  if (post) {
+    await notifyDeskOfAuthorSocialProposal({
+      post,
+      articleTitle: article.title,
+      articleUrl: linkUrl,
+      authorUserId: input.authorUserId,
+      isUpdate: false,
+    });
+  }
+
   return post;
+}
+
+export async function notifyDeskOfAuthorSocialProposal(input: {
+  post: SocialPost;
+  articleTitle: string;
+  articleUrl: string;
+  authorUserId: string;
+  authorName?: string | null;
+  isUpdate?: boolean;
+}): Promise<void> {
+  try {
+    const recipients = await getDeskBotAlertRecipients();
+    if (recipients.length === 0) return;
+
+    let senderName = input.authorName?.trim() || "";
+    let senderRole = "opinion_author";
+    if (!senderName) {
+      try {
+        const rows = await db
+          .select({
+            firstName: users.firstName,
+            lastName: users.lastName,
+            email: users.email,
+            role: users.role,
+          })
+          .from(users)
+          .where(eq(users.id, input.authorUserId))
+          .limit(1);
+        const author = Array.isArray(rows) ? rows[0] : undefined;
+        if (author) {
+          senderName =
+            [author.firstName, author.lastName].filter(Boolean).join(" ").trim() ||
+            author.email ||
+            "كاتب رأي";
+          senderRole = author.role || "opinion_author";
+        }
+      } catch {
+        // Ignore user lookup failure; use default label
+      }
+    }
+    if (!senderName) senderName = "كاتب رأي";
+
+    const emailPayload = buildDeskSocialProposalAlertEmail({
+      postId: input.post.id,
+      proposalKind: "author",
+      senderName,
+      senderRole,
+      text: input.post.text,
+      articleTitle: input.articleTitle,
+      articleUrl: input.articleUrl,
+      isUpdate: input.isUpdate,
+    });
+    await sendDeskAlertEmails(recipients, emailPayload, "[SocialPublish AuthorProposal]");
+  } catch (err) {
+    console.error(`${LOG_PREFIX} فشل إرسال تنبيه مقترح كاتب الرأي:`, err);
+  }
+}
+
+export interface PendingSocialProposalItem {
+  id: string;
+  status: string;
+  kind: "author" | "agency";
+  text: string;
+  textSource: string;
+  linkUrl: string | null;
+  imageUrl: string | null;
+  imageSource: string;
+  mediaKind: string;
+  mediaUrls: string[];
+  requestedAt: string | null;
+  authorName: string | null;
+  agencyName: string | null;
+  proposerName: string | null;
+  createdByUserId: string;
+  createdByName: string | null;
+  publisherId: string | null;
+  isAuthorProposal: boolean;
+  isAgencyProposal: boolean;
+  articleId: string | null;
+  articleTitle: string | null;
+  articleUrl: string | null;
+  article: {
+    id: string;
+    title: string | null;
+    url: string | null;
+    imageUrl: string | null;
+  } | null;
+  createdAt: string;
+  created_at: string;
+  updatedAt: string;
+  updated_at: string;
+}
+
+export async function listPendingSocialProposalsForDesk(
+  kind: "author" | "agency" | "all" = "all",
+  limit = 50,
+): Promise<PendingSocialProposalItem[]> {
+  const creator = alias(users, "social_proposal_creator");
+  const rows = await db
+    .select({
+      post: socialPosts,
+      articleTitle: articles.title,
+      articleSlug: articles.slug,
+      articleEnglishSlug: articles.englishSlug,
+      articleImageUrl: articles.imageUrl,
+      articleAuthorId: articles.authorId,
+      articleSubmitterId: articles.submitterId,
+      agencyName: publishers.agencyName,
+      creatorFirst: creator.firstName,
+      creatorLast: creator.lastName,
+    })
+    .from(socialPosts)
+    .leftJoin(articles, eq(socialPosts.articleId, articles.id))
+    .leftJoin(publishers, eq(socialPosts.publisherId, publishers.id))
+    .leftJoin(creator, eq(socialPosts.createdByUserId, creator.id))
+    .where(eq(socialPosts.status, "draft"))
+    .orderBy(desc(socialPosts.createdAt))
+    .limit(Math.min(Math.max(limit * 2, 50), 200));
+
+  const fullName = (first: string | null, last: string | null) =>
+    [first, last].filter(Boolean).join(" ").trim() || null;
+  const toIso = (d: Date | string | null | undefined) =>
+    d ? new Date(d).toISOString() : new Date(0).toISOString();
+
+  const out: PendingSocialProposalItem[] = [];
+  for (const r of rows) {
+    const isAgency = Boolean(r.post.publisherId);
+    const isAuthor = Boolean(
+      !r.post.publisherId &&
+        r.post.articleId &&
+        ((r.articleAuthorId && r.post.createdByUserId === r.articleAuthorId) ||
+          (r.articleSubmitterId && r.post.createdByUserId === r.articleSubmitterId)),
+    );
+    if (!isAgency && !isAuthor) continue;
+    if (kind === "author" && !isAuthor) continue;
+    if (kind === "agency" && !isAgency) continue;
+
+    const createdByName = fullName(r.creatorFirst, r.creatorLast);
+    const agencyName = isAgency ? r.agencyName ?? null : null;
+    const articleUrl =
+      r.articleSlug
+        ? buildArticleUrl({ slug: r.articleSlug, englishSlug: r.articleEnglishSlug })
+        : r.post.linkUrl ?? null;
+    const createdAtIso = toIso(r.post.createdAt);
+    const updatedAtIso = toIso(r.post.updatedAt);
+
+    out.push({
+      id: r.post.id,
+      status: r.post.status,
+      kind: isAgency ? "agency" : "author",
+      text: r.post.text,
+      textSource: r.post.textSource,
+      linkUrl: r.post.linkUrl ?? null,
+      imageUrl: r.post.imageUrl ?? null,
+      imageSource: r.post.imageSource,
+      mediaKind: r.post.mediaKind,
+      mediaUrls: Array.isArray(r.post.mediaUrls) ? r.post.mediaUrls : [],
+      requestedAt: r.post.requestedAt ? new Date(r.post.requestedAt).toISOString() : null,
+      authorName: isAuthor ? createdByName : null,
+      agencyName,
+      proposerName: isAgency ? agencyName ?? createdByName : createdByName,
+      createdByUserId: r.post.createdByUserId,
+      createdByName,
+      publisherId: r.post.publisherId ?? null,
+      isAuthorProposal: isAuthor,
+      isAgencyProposal: isAgency,
+      articleId: r.post.articleId ?? null,
+      articleTitle: r.articleTitle ?? null,
+      articleUrl,
+      article: r.post.articleId
+        ? {
+            id: r.post.articleId,
+            title: r.articleTitle ?? null,
+            url: articleUrl,
+            imageUrl: r.articleImageUrl ?? null,
+          }
+        : null,
+      createdAt: createdAtIso,
+      created_at: createdAtIso,
+      updatedAt: updatedAtIso,
+      updated_at: updatedAtIso,
+    });
+
+    if (out.length >= limit) break;
+  }
+
+  return out;
 }

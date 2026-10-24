@@ -1,7 +1,67 @@
-import { Router } from "express";
-import { requireAuth, requireRole } from "../rbac";
+import { Router, type Request, type Response } from "express";
+import { z } from "zod";
+import { logActivity, requireAuth, requireRole } from "../rbac";
+import {
+  getEditorAlertSettingsPublic,
+  updateEditorAlertSettings,
+} from "../services/editorAlerts";
 
 const router: Router = Router();
+
+router.get(
+  "/api/admin/editor-alerts/settings",
+  requireAuth,
+  requireRole("admin"),
+  async (_req: Request, res: Response) => {
+    try {
+      const settings = await getEditorAlertSettingsPublic();
+      res.json(settings);
+    } catch (error) {
+      console.error("[Editor Alerts] Error fetching settings:", error);
+      res.status(500).json({ message: "فشل في جلب إعدادات التنبيهات" });
+    }
+  },
+);
+
+const updateSettingsSchema = z.object({
+  enabled: z.boolean().optional(),
+  email: z.string().email().optional().or(z.literal("")),
+  whatsappNumber: z.string().optional(),
+  whatsappNumbers: z.array(z.string()).optional(),
+  emailEnabled: z.boolean().optional(),
+  whatsappEnabled: z.boolean().optional(),
+  aiCriticalAlertsEnabled: z.boolean().optional(),
+  deskBotAlertEmails: z.array(z.string().trim().email()).optional(),
+});
+
+router.put(
+  "/api/admin/editor-alerts/settings",
+  requireAuth,
+  requireRole("admin"),
+  async (req: Request, res: Response) => {
+    try {
+      const parsed = updateSettingsSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "بيانات غير صالحة", errors: parsed.error.issues });
+      }
+      const settings = await updateEditorAlertSettings(parsed.data);
+      const userId = (req.user as { id?: string } | undefined)?.id;
+      if (userId) {
+        await logActivity({
+          userId,
+          action: "update",
+          entityType: "system_setting",
+          entityId: "editor_alerts",
+          newValue: { ...settings },
+        });
+      }
+      res.json(settings);
+    } catch (error) {
+      console.error("[Editor Alerts] Error updating settings:", error);
+      res.status(500).json({ message: "فشل في تحديث إعدادات التنبيهات" });
+    }
+  },
+);
 
 // Test the critical AI-Hub WhatsApp alert path: sends a sample "credit exhausted"
 // alert to the editor-in-chief's registered WhatsApp number(s), bypassing the
