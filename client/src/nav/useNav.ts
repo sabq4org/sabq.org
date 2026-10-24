@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import type { NavItem, NavContext, NavState, UserRole } from "./types";
 import { navConfig } from "./nav.config";
+import { isRoleExcluded } from "@shared/effectiveRoles";
 
 const STAFF_NAV_SECTION_DEFINITIONS = [
   {
@@ -260,7 +261,7 @@ function itemPassesAccessCheck(
   // permission, it only hides the sidebar entry from the curated view.
   if (item.excludeRoles && item.excludeRoles.length > 0) {
     const roles = allRoles && allRoles.length > 0 ? allRoles : [role];
-    if (item.excludeRoles.some((r) => roles.includes(r))) {
+    if (isRoleExcluded(roles, item.excludeRoles)) {
       return false;
     }
   }
@@ -319,7 +320,7 @@ function filterNavTree(
     // them individually.
     if (item.excludeRoles && item.excludeRoles.length > 0) {
       const roles = allRoles && allRoles.length > 0 ? allRoles : [role];
-      if (item.excludeRoles.some((r) => roles.includes(r))) {
+      if (isRoleExcluded(roles, item.excludeRoles)) {
         continue;
       }
     }

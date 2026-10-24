@@ -96,7 +96,7 @@ import { generateNewsletterSubtitle } from "./services/smartCategoryClassifier";
 import { createOAuthWebCompletion } from "./oauthWebCompletion";
 import { requireAuth, requirePermission, requireAnyPermission, requireRole, logActivity, redactActivityValue, getUserPermissionData, getUserPermissions, getEffectiveUserPermissions, userHasAnyRole, userHasPermission, invalidateUserPermissionCache, getRoleAssignmentAuthority, roleAssignmentError, roleIdsAssignmentError } from "./rbac";
 import { PERMISSION_CODES, ROLE_LABELS_AR, ROLE_NAMES } from "@shared/rbac-constants";
-import { isReaderLikeRole, mergeRoleSignals, primaryRoleKey } from "@shared/effectiveRoles";
+import { isReaderLikeRole, mergeRoleSignals, pickPrimaryRoleRecord, primaryRoleKey } from "@shared/effectiveRoles";
 import { inferStaffRolesFromWork } from "./services/staffRoleInference";
 import { createNotification, notifyReporterArticlePublished, notifyReporterArticleScheduled, notifyOpinionAuthorArticleScheduled } from "./notificationEngine";
 import { notificationBus } from "./notificationBus";
@@ -5410,8 +5410,11 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
 
       const roleMap = new Map<string, { id: string; name: string | null; nameAr: string | null }>();
       for (const r of allRoles) {
-        if (r.userId && !roleMap.has(r.userId)) {
-          roleMap.set(r.userId, { id: r.roleId!, name: r.roleName, nameAr: r.roleNameAr });
+        if (!r.userId) continue;
+        const candidate = { id: r.roleId!, name: r.roleName, nameAr: r.roleNameAr };
+        const current = roleMap.get(r.userId);
+        if (!current || pickPrimaryRoleRecord([current, candidate]) === candidate) {
+          roleMap.set(r.userId, candidate);
         }
       }
       const staffMap = new Map<string, { name: string | null; nameAr: string | null; profileImage: string | null }>();

@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Check, ChevronsUpDown, X, Search, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { apiUrl } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import {
   Command,
@@ -21,6 +22,7 @@ import {
   SABQ_NEWSPAPER_ACCOUNT_ID,
   SABQ_NEWSPAPER_DISPLAY_NAME,
 } from "@shared/sabqNewspaper";
+import { isContributorRoleOnly } from "@shared/effectiveRoles";
 
 interface Reporter {
   id: string;
@@ -129,17 +131,7 @@ export function ReporterSelect({ value, onChange, disabled }: ReporterSelectProp
   // مراسل فقط — بدون صلاحية اختيار الآخرين وبدون حساب ناشر
   const isReporterOnly = useMemo(() => {
     if (!user || isPublisherAccount) return false;
-    const staffRoles = [
-      "admin",
-      "system_admin",
-      "super_admin",
-      "superadmin",
-      "editor",
-      "chief_editor",
-      "content_manager",
-    ];
-    const canSelectOthers = userRoles.some((role) => staffRoles.includes(role));
-    return userRoles.includes("reporter") && !canSelectOthers;
+    return isContributorRoleOnly(userRoles, "reporter");
   }, [user, userRoles, isPublisherAccount]);
 
   const lockedToSingle = isPublisherAccount || isReporterOnly;
@@ -166,7 +158,7 @@ export function ReporterSelect({ value, onChange, disabled }: ReporterSelectProp
         limit: "100",
         ...(debouncedSearch && { query: debouncedSearch }),
       });
-      const res = await fetch(`/api/admin/users?${params}`);
+      const res = await fetch(apiUrl(`/api/admin/users?${params}`));
       if (!res.ok) throw new Error("فشل في جلب المراسلين");
       return res.json();
     },
@@ -190,7 +182,7 @@ export function ReporterSelect({ value, onChange, disabled }: ReporterSelectProp
     queryKey: ["/api/admin/users", "byId", value],
     queryFn: async () => {
       if (!value) return { items: [] };
-      const res = await fetch(`/api/admin/users?ids=${encodeURIComponent(value)}`);
+      const res = await fetch(apiUrl(`/api/admin/users?ids=${encodeURIComponent(value)}`));
       if (!res.ok) throw new Error("فشل في جلب بيانات المراسل");
       return res.json();
     },
