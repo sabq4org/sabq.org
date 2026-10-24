@@ -273,18 +273,124 @@ router.post("/purchase-package", async (req: Request, res: Response) => {
   }
 });
 
+async function settleAdvertiserTransaction(
+  transaction: typeof advertiserTransactions.$inferSelect,
+  chargeId: string,
+  verifiedStatus: string,
+): Promise<void> {
+  if (tapService.isPaymentSuccessful(verifiedStatus)) {
+    const metadata = transaction.metadata as { baseAmount?: number; vatAmount?: number } | null;
+    const creditAmount = metadata?.baseAmount || transaction.amountHalalas;
+
+    await db.transaction(async (tx) => {
+      const [claimed] = await tx
+        .update(advertiserTransactions)
+        .set({ status: "completed" })
+        .where(
+          and(
+            eq(advertiserTransactions.id, transaction.id),
+            eq(advertiserTransactions.chargeId, chargeId),
+            eq(advertiserTransactions.status, "pending"),
+          ),
+        )
+        .returning({ id: advertiserTransactions.id });
+
+      if (!claimed) return;
+
+      const [updatedWallet] = await tx
+        .update(advertiserWallets)
+        .set({
+          balanceHalalas: sql`${advertiserWallets.balanceHalalas} + ${creditAmount}`,
+          totalDepositedHalalas: sql`${advertiserWallets.totalDepositedHalalas} + ${creditAmount}`,
+          updatedAt: new Date(),
+        })
+        .where(eq(advertiserWallets.id, transaction.walletId))
+        .returning({ balanceHalalas: advertiserWallets.balanceHalalas });
+
+      if (!updatedWallet) {
+        throw new Error(`Wallet not found for transaction ${transaction.id}`);
+      }
+
+      await tx
+        .update(advertiserTransactions)
+        .set({ balanceAfterHalalas: updatedWallet.balanceHalalas })
+        .where(eq(advertiserTransactions.id, transaction.id));
+
+      if (transaction.adId) {
+        await tx
+          .update(nativeAds)
+          .set({
+            totalBudget: sql`COALESCE(${nativeAds.totalBudget}, 0) + ${creditAmount}`,
+            updatedAt: new Date(),
+          })
+          .where(
+            and(
+              eq(nativeAds.id, transaction.adId),
+              eq(nativeAds.advertiserId, transaction.advertiserId),
+            ),
+          );
+      }
+
+      console.log(`[Advertiser Payments] Transaction ${transaction.id} completed, added ${creditAmount} halalas (base, VAT=${metadata?.vatAmount || 0}) to wallet`);
+    });
+  } else if (tapService.isPaymentFailed(verifiedStatus)) {
+    const [updated] = await db
+      .update(advertiserTransactions)
+      .set({ status: "failed" })
+      .where(
+        and(
+          eq(advertiserTransactions.id, transaction.id),
+          eq(advertiserTransactions.chargeId, chargeId),
+          eq(advertiserTransactions.status, "pending"),
+        ),
+      )
+      .returning({ id: advertiserTransactions.id });
+
+    if (!updated) return;
+
+    console.log(`[Advertiser Payments] Transaction ${transaction.id} failed`);
+
+    await createPaymentAlert(
+      "advertiser",
+      "failed_payment",
+      "فشل عملية دفع معلن",
+      `فشلت عملية الدفع للمعلن - Charge ID: ${chargeId}`,
+      chargeId,
+      {
+        chargeId,
+        transactionId: transaction.id,
+        advertiserId: transaction.advertiserId,
+        amount: transaction.amountHalalas,
+        status: verifiedStatus,
+      },
+      "high"
+    );
+  }
+}
+
 router.post("/webhook", raw({ type: "application/json" }), async (req: Request, res: Response) => {
   try {
-    const rawBody = req.body.toString("utf8");
-    const hashstring = req.headers["hashstring"] as string || req.headers["hash"] as string;
+    const captured = (req as Request & { rawBody?: unknown }).rawBody;
+    const rawBuf = Buffer.isBuffer(captured) ? captured : Buffer.isBuffer(req.body) ? req.body : null;
+    if (!rawBuf) return res.status(400).send("Missing raw body");
+    const rawBody = rawBuf.toString("utf8");
+    const hashstring = (req.headers["hashstring"] as string) || (req.headers["hash"] as string) || "";
     
-    if (!tapService.verifyWebhookSignature(rawBody, hashstring || "")) {
+    if (!tapService.verifyWebhookSignature(rawBody, hashstring)) {
       console.error("[Advertiser Payments] Invalid or missing webhook signature");
       return res.status(401).send("Unauthorized");
     }
     
-    const payload = JSON.parse(rawBody);
-    const chargeId = payload.id;
+    let payload: any;
+    try {
+      payload = JSON.parse(rawBody);
+    } catch {
+      return res.status(400).send("Invalid JSON");
+    }
+    const chargeId = typeof payload?.id === "string" ? payload.id : "";
+    if (!chargeId) {
+      return res.status(400).send("Missing charge id");
+    }
     
     console.log(`[Advertiser Payments] Webhook received for charge ${chargeId}`);
     
@@ -299,98 +405,27 @@ router.post("/webhook", raw({ type: "application/json" }), async (req: Request, 
       return res.status(404).send("Transaction not found");
     }
     
-    if (transaction.status === "completed") {
-      console.log(`[Advertiser Payments] Transaction ${transaction.id} already completed`);
+    if (typeof payload.amount === "number" && Math.round(payload.amount * 100) !== transaction.amountHalalas) {
+      return res.status(400).send("Payment does not match transaction");
+    }
+
+    if (transaction.status !== "pending") {
+      console.log(`[Advertiser Payments] Transaction ${transaction.id} already ${transaction.status}`);
       return res.status(200).send("OK");
     }
     
     const verifiedCharge = await tapService.retrieveCharge(chargeId);
+    if (
+      verifiedCharge.id !== chargeId ||
+      verifiedCharge.currency !== "SAR" ||
+      Math.round(verifiedCharge.amount * 100) !== transaction.amountHalalas
+    ) {
+      return res.status(400).send("Verified payment does not match transaction");
+    }
     const verifiedStatus = verifiedCharge.status;
     
     console.log(`[Advertiser Payments] Verified status from Tap API: ${verifiedStatus}`);
-    
-    if (tapService.isPaymentSuccessful(verifiedStatus)) {
-      const [wallet] = await db
-        .select()
-        .from(advertiserWallets)
-        .where(eq(advertiserWallets.id, transaction.walletId))
-        .limit(1);
-      
-      if (!wallet) {
-        console.error(`[Advertiser Payments] Wallet not found for transaction ${transaction.id}`);
-        return res.status(404).send("Wallet not found");
-      }
-      
-      const [pkg] = transaction.packageId ? await db
-        .select()
-        .from(advertiserPackages)
-        .where(eq(advertiserPackages.id, transaction.packageId))
-        .limit(1) : [null];
-      
-      const impressionsToAdd = pkg ? (pkg.impressions + pkg.bonusImpressions) : 0;
-      const metadata = transaction.metadata as { baseAmount?: number; vatAmount?: number } | null;
-      const creditAmount = metadata?.baseAmount || transaction.amountHalalas;
-      const newBalance = wallet.balanceHalalas + creditAmount;
-      
-      await db.update(advertiserWallets)
-        .set({
-          balanceHalalas: newBalance,
-          totalDepositedHalalas: wallet.totalDepositedHalalas + creditAmount,
-          updatedAt: new Date(),
-        })
-        .where(eq(advertiserWallets.id, wallet.id));
-      
-      await db.update(advertiserTransactions)
-        .set({
-          status: "completed",
-          balanceAfterHalalas: newBalance,
-        })
-        .where(eq(advertiserTransactions.id, transaction.id));
-      
-      if (transaction.adId) {
-        const [ad] = await db
-          .select()
-          .from(nativeAds)
-          .where(eq(nativeAds.id, transaction.adId))
-          .limit(1);
-        
-        if (ad) {
-          const newTotalBudget = (ad.totalBudget || 0) + creditAmount;
-          await db.update(nativeAds)
-            .set({
-              totalBudget: newTotalBudget,
-              updatedAt: new Date(),
-            })
-            .where(eq(nativeAds.id, transaction.adId));
-          
-          console.log(`[Advertiser Payments] Added ${creditAmount} halalas (base amount) to ad ${transaction.adId} budget`);
-        }
-      }
-      
-      console.log(`[Advertiser Payments] Transaction ${transaction.id} completed, added ${creditAmount} halalas (base, VAT=${metadata?.vatAmount || 0}) to wallet`);
-    } else if (tapService.isPaymentFailed(verifiedStatus)) {
-      await db.update(advertiserTransactions)
-        .set({ status: "failed" })
-        .where(eq(advertiserTransactions.id, transaction.id));
-      
-      console.log(`[Advertiser Payments] Transaction ${transaction.id} failed`);
-      
-      await createPaymentAlert(
-        "advertiser",
-        "failed_payment",
-        "فشل عملية دفع معلن",
-        `فشلت عملية الدفع للمعلن - Charge ID: ${chargeId}`,
-        chargeId,
-        {
-          chargeId,
-          transactionId: transaction.id,
-          advertiserId: transaction.advertiserId,
-          amount: transaction.amountHalalas,
-          status: verifiedStatus,
-        },
-        "high"
-      );
-    }
+    await settleAdvertiserTransaction(transaction, chargeId, verifiedStatus);
     
     res.status(200).send("OK");
   } catch (error: any) {
@@ -401,12 +436,22 @@ router.post("/webhook", raw({ type: "application/json" }), async (req: Request, 
 
 router.get("/verify/:transactionId", async (req: Request, res: Response) => {
   try {
+    const advertiserId = await getAdvertiserId(req);
+    if (!advertiserId) {
+      return res.status(401).json({ success: false, error: "غير مصرح" });
+    }
+
     const { transactionId } = req.params;
     
     const [transaction] = await db
       .select()
       .from(advertiserTransactions)
-      .where(eq(advertiserTransactions.id, transactionId))
+      .where(
+        and(
+          eq(advertiserTransactions.id, transactionId),
+          eq(advertiserTransactions.advertiserId, advertiserId),
+        ),
+      )
       .limit(1);
     
     if (!transaction) {
@@ -439,55 +484,16 @@ router.get("/verify/:transactionId", async (req: Request, res: Response) => {
     }
     
     const charge = await tapService.retrieveCharge(transaction.chargeId);
-    
-    if (tapService.isPaymentSuccessful(charge.status) && transaction.status !== "completed") {
-      const [wallet] = await db
-        .select()
-        .from(advertiserWallets)
-        .where(eq(advertiserWallets.id, transaction.walletId))
-        .limit(1);
-      
-      if (wallet) {
-        const metadata = transaction.metadata as { baseAmount?: number; vatAmount?: number } | null;
-        const creditAmount = metadata?.baseAmount || transaction.amountHalalas;
-        const newBalance = wallet.balanceHalalas + creditAmount;
-        
-        await db.update(advertiserWallets)
-          .set({
-            balanceHalalas: newBalance,
-            totalDepositedHalalas: wallet.totalDepositedHalalas + creditAmount,
-            updatedAt: new Date(),
-          })
-          .where(eq(advertiserWallets.id, wallet.id));
-        
-        await db.update(advertiserTransactions)
-          .set({
-            status: "completed",
-            balanceAfterHalalas: newBalance,
-          })
-          .where(eq(advertiserTransactions.id, transaction.id));
-        
-        if (transaction.adId) {
-          const [ad] = await db
-            .select()
-            .from(nativeAds)
-            .where(eq(nativeAds.id, transaction.adId))
-            .limit(1);
-          
-          if (ad) {
-            await db.update(nativeAds)
-              .set({
-                totalBudget: (ad.totalBudget || 0) + creditAmount,
-                updatedAt: new Date(),
-              })
-              .where(eq(nativeAds.id, transaction.adId));
-          }
-        }
-      }
-    } else if (tapService.isPaymentFailed(charge.status)) {
-      await db.update(advertiserTransactions)
-        .set({ status: "failed" })
-        .where(eq(advertiserTransactions.id, transaction.id));
+    if (
+      charge.id !== transaction.chargeId ||
+      charge.currency !== "SAR" ||
+      Math.round(charge.amount * 100) !== transaction.amountHalalas
+    ) {
+      return res.status(400).json({ success: false, error: "بيانات الدفع غير مطابقة للمعاملة" });
+    }
+
+    if (transaction.status === "pending") {
+      await settleAdvertiserTransaction(transaction, transaction.chargeId, charge.status);
     }
     
     res.json({
@@ -509,12 +515,22 @@ router.get("/verify/:transactionId", async (req: Request, res: Response) => {
 
 router.get("/transaction/:transactionId", async (req: Request, res: Response) => {
   try {
+    const advertiserId = await getAdvertiserId(req);
+    if (!advertiserId) {
+      return res.status(401).json({ success: false, error: "غير مصرح" });
+    }
+
     const { transactionId } = req.params;
     
     const [transaction] = await db
       .select()
       .from(advertiserTransactions)
-      .where(eq(advertiserTransactions.id, transactionId))
+      .where(
+        and(
+          eq(advertiserTransactions.id, transactionId),
+          eq(advertiserTransactions.advertiserId, advertiserId),
+        ),
+      )
       .limit(1);
     
     if (!transaction) {

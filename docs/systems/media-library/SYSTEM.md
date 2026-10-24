@@ -1,6 +1,6 @@
 # مكتبة الوسائط (`media-library`)
 
-> آخر مراجعة: 2026-09-07 | المالك: content
+> آخر مراجعة: 2026-10-24 | المالك: content
 
 ## الغرض
 تخزين وبحث وحوكمة وأوصاف أصول الوسائط. توليد الصور من المحرر يُنسب لنظام `editorial`.
@@ -15,7 +15,7 @@
 ## Webhook متجر الوسائط
 - `POST /api/media-store/webhook` فقط معفى من CSRF، مع مطابقة query/trailing slash/case مثل Express؛ بقية عمليات المتجر تبقى محمية. المصدر هو `req.rawBody` الذي تحفظه `express.json.verify`، أو Buffer الراوتر المعزول؛ لا يُعاد بناء JSON من كائن محلل.
 - `services/mediaStoreWebhook.ts` يتحقق من `hashstring` وفق [عقد Tap الرسمي للـCharge](https://developers.tap.company/docs/webhook): الحقول المرتبة، مبلغ SAR بدقتين، وHMAC-SHA256 باستخدام `TAP_SECRET_KEY` المستخدم أصلًا لإنشاء العملية. لا يعتمد على HMAC للجسم الكامل أو ترويسة `hash` أو مفتاح webhook مختلف. المبلغ/العملة هنا خاصان بمتجر SAR الحالي.
-- `metadata.orderId` غير مغطى بتوقيع Tap؛ يجب مطابقته مع `order.paymentChargeId` والمبلغ المخزنين، ثم التحقق المستقل عبر Retrieve Charge من المعرف/المبلغ/العملة والحالة. لا يغير Webhook طلبًا تجاوز انتظار الدفع؛ والتحديث مشروط بالحالة ومعرف العملية لتفادي تكرار الأحداث عند التسابق.
+- `metadata.orderId` غير مغطى بتوقيع Tap؛ يجب مطابقته مع `order.paymentChargeId` والمبلغ المخزنين، ثم التحقق المستقل عبر Retrieve Charge من المعرف/المبلغ/العملة والحالة. لا يغير Webhook طلبًا تجاوز انتظار الدفع؛ والتحديث مشروط بالحالة ومعرف العملية لتفادي تكرار الأحداث عند التسابق. مسار `GET /api/media-store/orders/status/:orderId` يعيد الحالة ورقم الطلب فقط دون `trackingToken`.
 - اختبارات `mediaStoreWebhook.test.ts` تمر عبر ترتيب Express الفعلي (JSON ثم CSRF ثم الراوتر)، بمفاتيح وبيانات صناعية وRetrieve Charge وهمي؛ لم تُنفذ دفعة مالية أو مكالمة Tap حية.
 - المساران القديمان `/api/payments/webhook` و`/api/advertiser-payments/webhook` خارج هذه الدفعة، ويحتاجان مراجعة مستقلة لعقد التوقيع وترتيب middleware؛ لم يتغير `tapPaymentService.verifyWebhookSignature` المشترك.
 

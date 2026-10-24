@@ -13,6 +13,7 @@ import {
 } from '../services/smartCategoryClassifier';
 import { requireAnyPermission } from '../rbac';
 import { PERMISSION_CODES } from '@shared/rbac-constants';
+import { authorizeArticleWrite } from '../services/articleAccessService';
 import { db } from '../db';
 import { articles } from '@shared/schema';
 import { eq } from 'drizzle-orm';
@@ -92,6 +93,13 @@ router.post('/classify', isAuthenticated, isEditorOrAdmin, async (req, res) => {
 router.post('/classify-article/:articleId', isAuthenticated, isEditorOrAdmin, async (req, res) => {
   try {
     const { articleId } = req.params;
+    const access = await authorizeArticleWrite((req as any).user.id, articleId);
+    if (!access.ok) {
+      return res.status(access.httpStatus).json({
+        success: false,
+        message: access.message,
+      });
+    }
     
     // Fetch the article
     const [article] = await db
@@ -176,6 +184,13 @@ router.post('/newsletter-subtitle', isAuthenticated, isEditorOrAdmin, async (req
 router.post('/newsletter-subtitle/:articleId', isAuthenticated, isEditorOrAdmin, async (req, res) => {
   try {
     const { articleId } = req.params;
+    const access = await authorizeArticleWrite((req as any).user.id, articleId);
+    if (!access.ok) {
+      return res.status(access.httpStatus).json({
+        success: false,
+        message: access.message,
+      });
+    }
     
     // Fetch the article
     const [article] = await db
@@ -228,6 +243,13 @@ router.post('/newsletter-subtitle/:articleId', isAuthenticated, isEditorOrAdmin,
 router.put('/newsletter-content/:articleId', isAuthenticated, isEditorOrAdmin, async (req, res) => {
   try {
     const { articleId } = req.params;
+    const access = await authorizeArticleWrite((req as any).user.id, articleId);
+    if (!access.ok) {
+      return res.status(access.httpStatus).json({
+        success: false,
+        message: access.message,
+      });
+    }
     const { subtitle, excerpt } = req.body;
     
     await db
