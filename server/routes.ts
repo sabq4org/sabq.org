@@ -30865,7 +30865,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         return res.status(403).json({ error: 'غير مصرح لك بتحديث حالة هذا التحليل' });
       }
 
-      // Update status
+      const denial = status !== analysis.status ? await denyPublish((req.user as any).id, status) : null; if (denial) return res.status(denial.httpStatus).json({ error: denial.message, code: denial.code });
       const updated = await storage.updateDeepAnalysis(req.params.id, { status });
       
       // Log activity
@@ -30990,13 +30990,13 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   // GET /api/omq - قائمة التحليلات المنشورة (public)
   app.get("/api/omq", async (req, res) => {
     try {
-      const { status, keyword, category, dateFrom, dateTo } = req.query;
+      const { keyword, category, dateFrom, dateTo } = req.query;
       const pg = paginationOrReject({ query: req.query as Record<string, unknown>, path: req.path }, res, { defaultLimit: 20, maxLimit: 50, allowPage: true, defaultPage: 1 });
       if (!pg) return;
       
       // Parse filters
       const filters: any = {
-        status: status as string | undefined,
+        status: "published", // public list: ?status must not expose drafts/archived
         keyword: keyword as string | undefined,
         category: category as string | undefined,
         page: pg.page,
@@ -31243,7 +31243,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         });
       }
       
-      // Update analysis
+      const denial = validation.data.status && validation.data.status !== analysis.status ? await denyPublish(userId, validation.data.status) : null; if (denial) return res.status(denial.httpStatus).json({ success: false, error: denial.message, code: denial.code });
       const updated = await storage.updateDeepAnalysis(id, validation.data);
       
       // Log activity
