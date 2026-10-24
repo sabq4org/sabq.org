@@ -743,7 +743,7 @@
       "owners": [
         "content"
       ],
-      "lastReviewed": "2026-10-13"
+      "lastReviewed": "2026-10-24"
     },
     {
       "id": "sports-tournaments",
@@ -908,14 +908,15 @@
         "client/src/pages/dashboard/NativeAdsManagement.tsx",
         "client/src/pages/dashboard/AdvertiserDashboard.tsx",
         "client/src/hooks/useDmsTopAdsVisibility.ts",
-        "client/src/styles/dms-top-ads.css"
+        "client/src/styles/dms-top-ads.css",
+        "tests/unit/routeAccessAndPaymentSettlement.test.ts"
       ],
       "aiFeatureKeys": [],
       "dashboardPath": "/dashboard/ads",
       "owners": [
         "monetization"
       ],
-      "lastReviewed": "2026-09-28"
+      "lastReviewed": "2026-10-24"
     },
     {
       "id": "auth-rbac",
