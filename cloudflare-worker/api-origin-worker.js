@@ -10,11 +10,13 @@ import { createPublicApiBurstCache } from "./public-api-burst-cache.js";
 import { createSummaryAudioEdgeCache } from "./public-audio-edge-cache.js";
 import { isEdgeCacheProbe, runEdgeCacheProbe } from "./edge-cache-probe.js";
 import { createVideoEdgeCache } from "./video-edge-cache.js";
+import { createSitemapEdgeCache } from "./sitemap-edge-cache.js";
 
 const DEFAULT_API_ORIGIN = "https://sabq-api-virginia.onrender.com";
 const publicApiBurstCache = createPublicApiBurstCache();
 const summaryAudioEdgeCache = createSummaryAudioEdgeCache();
 const videoEdgeCache = createVideoEdgeCache();
+const sitemapEdgeCache = createSitemapEdgeCache();
 // The sabq.org zone's cache rules also govern Cache API keys: a rule with
 // cache:false that matches a key turns put and match into silent no-ops
 // (2026-10-22). Keys stay on api.sabq.org, which the zone's bypass rules
@@ -149,6 +151,14 @@ export default {
       fetchOrigin: (sourceRequest) => fetchSignedOrigin(sourceRequest, origin, secret),
     });
     if (videoResponse) return videoResponse;
+    // Sitemaps: Pages fetches them through here so the whole edge shares one
+    // copy in this placed location (sitemap-edge-cache.js).
+    const sitemapResponse = await sitemapEdgeCache(request, {
+      cache: caches.default,
+      waitUntil: (promise) => ctx.waitUntil(promise),
+      fetchOrigin: (sourceRequest) => fetchSignedOrigin(sourceRequest, origin, secret),
+    });
+    if (sitemapResponse) return sitemapResponse;
 
     return fetchSignedOrigin(request, origin, secret);
   },
