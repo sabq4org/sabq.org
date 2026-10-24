@@ -3,7 +3,7 @@
  * يعزل التطبيع + إنشاء/ربط المستخدم + حل تعارض منسوب/قارئ.
  */
 
-import { and, eq, isNotNull, ne, or, sql } from "drizzle-orm";
+import { and, eq, isNotNull, ne, or, sql, type AnyColumn } from "drizzle-orm";
 import {
   canUserLogin,
   correspondentApplications,
@@ -115,7 +115,7 @@ export function phoneMatchDigits(e164: string): string[] {
   return [...out];
 }
 
-function phoneMatchSql(column: typeof users.phoneNumber, e164: string) {
+function phoneMatchSql(column: AnyColumn, e164: string) {
   const accepted = phoneMatchDigits(e164);
   return sql`regexp_replace(coalesce(${column}, ''), '[^0-9]', '', 'g') IN (${sql.join(
     accepted.map((d) => sql`${d}`),
@@ -253,10 +253,7 @@ export async function retireDuplicateReaderPhoneAccounts(
  * يبحث عن منسوب بلا users.phoneNumber لكن جواله في طلب مراسل/كاتب معتمد
  * أو في staff_profiles.official_phone — ثم يُرجع الحساب ويربط الرقم.
  */
-async function findAndBackfillStaffByAlternatePhone(e164: string): Promise<UserRow | null> {
-  const digits = e164.replace(/\D/g, "");
-  const last9 = digits.slice(-9);
-
+export async function findAndBackfillStaffByAlternatePhone(e164: string): Promise<UserRow | null> {
   // 1) طلب مراسل معتمد
   const [corr] = await db
     .select({
@@ -268,10 +265,7 @@ async function findAndBackfillStaffByAlternatePhone(e164: string): Promise<UserR
       and(
         eq(correspondentApplications.status, "approved"),
         isNotNull(correspondentApplications.createdUserId),
-        sql`(
-          regexp_replace(coalesce(${correspondentApplications.phone}, ''), '[^0-9]', '', 'g') = ${digits}
-          OR right(regexp_replace(coalesce(${correspondentApplications.phone}, ''), '[^0-9]', '', 'g'), 9) = ${last9}
-        )`,
+        phoneMatchSql(correspondentApplications.phone, e164),
       ),
     )
     .limit(1);
@@ -289,10 +283,7 @@ async function findAndBackfillStaffByAlternatePhone(e164: string): Promise<UserR
           and(
             eq(opinionAuthorApplications.status, "approved"),
             isNotNull(opinionAuthorApplications.createdUserId),
-            sql`(
-              regexp_replace(coalesce(${opinionAuthorApplications.phone}, ''), '[^0-9]', '', 'g') = ${digits}
-              OR right(regexp_replace(coalesce(${opinionAuthorApplications.phone}, ''), '[^0-9]', '', 'g'), 9) = ${last9}
-            )`,
+            phoneMatchSql(opinionAuthorApplications.phone, e164),
           ),
         )
         .limit(1);
@@ -304,10 +295,7 @@ async function findAndBackfillStaffByAlternatePhone(e164: string): Promise<UserR
         .select({ userId: staffProfiles.userId, officialPhone: staffProfiles.officialPhone })
         .from(staffProfiles)
         .where(
-          sql`(
-            regexp_replace(coalesce(${staffProfiles.officialPhone}, ''), '[^0-9]', '', 'g') = ${digits}
-            OR right(regexp_replace(coalesce(${staffProfiles.officialPhone}, ''), '[^0-9]', '', 'g'), 9) = ${last9}
-          )`,
+          phoneMatchSql(staffProfiles.officialPhone, e164),
         )
         .limit(1);
 
@@ -318,9 +306,14 @@ async function findAndBackfillStaffByAlternatePhone(e164: string): Promise<UserR
   const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
   if (!user || user.status === "deleted") return null;
 
-  // اربط الرقم بالحساب الرسمي إن كان فارغاً أو بصيغة قديمة.
+  // اربط الرقم بالحساب الرسمي إن كان فارغاً أو بصيغة قديمة لنفس الرقم. حساب
+  // يحمل رقمًا آخر لا يُستبدل رقمه من مصدر بديل: الدخول بهذا الرقم يُرفض.
   const updates: Partial<typeof users.$inferInsert> = {};
-  if (!user.phoneNumber || normalizePhone(user.phoneNumber) !== e164) {
+  if (user.phoneNumber && normalizePhone(user.phoneNumber) !== e164) {
+    console.warn(`[PhoneAuth] Alternate-phone match for staff user ${user.id} ignored: account has another phone`);
+    return null;
+  }
+  if (!user.phoneNumber || user.phoneNumber !== e164) {
     updates.phoneNumber = e164;
   }
   if (!user.phoneVerified) updates.phoneVerified = true;
