@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("../../server/db", () => ({ db: {} }));
 
-import { setUserSingleRole } from "../../server/services/userRoleSync";
+import { setUserSingleRole, syncLegacyRoleFromRoleIds } from "../../server/services/userRoleSync";
 import { userRoles, users } from "@shared/schema";
 
 function fakeDb(roleRow: { id: string } | undefined) {
@@ -39,5 +39,31 @@ describe("setUserSingleRole", () => {
     const { database, ops } = fakeDb(undefined);
     await setUserSingleRole("u1", "legacy_role", database);
     expect(ops).toEqual(["update:users", "delete:user_roles"]);
+  });
+});
+
+describe("syncLegacyRoleFromRoleIds", () => {
+  it("keeps users.role as editor when user has [reporter, editor] regardless of DB row order", async () => {
+    const setPayloads: Array<{ role: string }> = [];
+    const tx: any = {
+      select: () => ({
+        from: () => ({
+          where: async () => [
+            { id: "role-reporter", name: "reporter" },
+            { id: "role-editor", name: "editor" },
+          ],
+        }),
+      }),
+      update: () => ({
+        set: (payload: { role: string }) => {
+          setPayloads.push(payload);
+          return { where: async () => undefined };
+        },
+      }),
+    };
+
+    const result = await syncLegacyRoleFromRoleIds(tx, "u-yasser", ["role-reporter", "role-editor"]);
+    expect(result).toHaveLength(2);
+    expect(setPayloads).toEqual([{ role: "editor" }]);
   });
 });

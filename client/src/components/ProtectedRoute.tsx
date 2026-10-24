@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useLocation } from "wouter";
 import { useAuth, hasRole, isStaff, hasAnyPermission, hasAllPermissions } from "@/hooks/useAuth";
+import { isRoleExcluded } from "@shared/effectiveRoles";
 import { Loader2 } from "lucide-react";
 
 interface ProtectedRouteProps {
@@ -49,8 +50,8 @@ export function ProtectedRoute({
       return;
     }
 
-    // Check excluded roles (user must NOT have any of these roles)
-    if (excludeRoles.length > 0 && hasRole(user, ...excludeRoles)) {
+    // Check excluded roles (user must NOT have any of these roles, unless a contributor exclusion is overridden by a supervisory staff role)
+    if (excludeRoles.length > 0 && isRoleExcluded(user, excludeRoles)) {
       setLocation(fallbackPath);
       return;
     }
@@ -117,7 +118,7 @@ export function ProtectedRoute({
   }
 
   // Excluded role check failed (user has a denied role)
-  if (excludeRoles.length > 0 && hasRole(user, ...excludeRoles)) {
+  if (excludeRoles.length > 0 && isRoleExcluded(user, excludeRoles)) {
     return null;
   }
 

@@ -116,6 +116,7 @@ import { SeoPreview } from "@/components/SeoPreview";
 import { useToast } from "@/hooks/use-toast";
 import { ToastAction } from "@/components/ui/toast";
 import { useAuth, hasAnyPermission, hasPermission } from "@/hooks/useAuth";
+import { isContributorRoleOnly } from "@shared/effectiveRoles";
 import { useArticleAiTools } from "@/hooks/useArticleAiTools";
 import { TitleProofreadDialog } from "@/components/article-editor/TitleProofreadDialog";
 import { ProofreadDialog } from "@/components/article-editor/ProofreadDialog";
@@ -449,11 +450,11 @@ export default function ArticleEditor() {
   // Check authentication and redirect if needed
   const { user, isLoading: isUserLoading } = useAuth({ redirectToLogin: true });
 
-  // Check if user is a reporter - reporters have restricted AI features
-  const isReporter = user?.role === 'reporter' || (user?.roles && user.roles.some((r: any) => r.name === 'reporter' || r === 'reporter'));
+  // Check if user is a reporter-only - reporters without supervisory roles have restricted AI features
+  const isReporter = isContributorRoleOnly(user, "reporter");
   
-  // Check if user is an opinion author - opinion authors have restricted editor interface
-  const isOpinionAuthor = user?.role === 'opinion_author' || (user?.roles && user.roles.some((r: any) => r.name === 'opinion_author' || r === 'opinion_author'));
+  // Check if user is an opinion author-only - opinion authors without supervisory roles have restricted editor interface
+  const isOpinionAuthor = isContributorRoleOnly(user, "opinion_author");
 
   const {
     createBlocked,

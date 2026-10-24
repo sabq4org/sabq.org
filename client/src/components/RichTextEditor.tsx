@@ -50,6 +50,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
+import { isContributorRoleOnly } from "@shared/effectiveRoles";
 import { apiRequest } from "@/lib/queryClient";
 import {
   Dialog,
@@ -143,8 +144,8 @@ export function RichTextEditor({
   const { user } = useAuth();
   const { theme } = useTheme();
   
-  // Check if user is a reporter - reporters have restricted AI features
-  const isReporter = user?.role === 'reporter' || (user?.roles && user.roles.some((r: any) => r.name === 'reporter' || r === 'reporter'));
+  // Check if user is a reporter-only (no supervisory/editorial role) - reporters have restricted AI features
+  const isReporter = isContributorRoleOnly(user, "reporter");
 
   // آخر HTML بثّه onUpdate — يميّز صدى تغييراتنا عن محتوى خارجي جديد،
   // فلا يُعاد ضبط المستند (وضياع المؤشر) حين يعيد الأب نفس ما بثثناه.
