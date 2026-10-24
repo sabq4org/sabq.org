@@ -1,43 +1,61 @@
 /**
- * إشعار هيئة التحرير عند استفسار أو رسالة من المساهم.
+ * إشعار مسؤول/مدير النظام عند استفسار أو رسالة من المساهم (لا المحرر).
  * الصندوق الداخلي عبر notifications_inbox (نفس جرس اللوحة)، والبريد عبر
  * sendEmailNotification إن كان مزود البريد مهيأً. فشل الإشعار لا يُفشل حفظ التذكرة.
  */
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, or } from "drizzle-orm";
 import { db } from "../db";
 import { roles, userRoles, users } from "@shared/schema";
-import { SUPERUSER_ROLE_NAMES } from "@shared/rbac-constants";
 import { storage } from "../storage";
 import { sendEmailNotification } from "./email";
 import {
+  OPINION_TICKET_NOTIFY_ROLE_NAMES,
   buildOpinionTicketStaffNotice,
+  isOpinionTicketNotifyRecipient,
   type OpinionTicketNoticeKind,
 } from "./opinionTicketNotice";
 
-const DESK_ROLE_NAMES = [...SUPERUSER_ROLE_NAMES, "editor"] as string[];
+const NOTIFY_ROLE_NAMES = [...OPINION_TICKET_NOTIFY_ROLE_NAMES];
 
 export async function listOpinionDeskRecipients(
   excludeUserId?: string | null,
 ): Promise<Array<{ id: string; email: string | null }>> {
-  const [legacy, rbac] = await Promise.all([
-    db
-      .select({ id: users.id, email: users.email })
-      .from(users)
-      .where(and(inArray(users.role, DESK_ROLE_NAMES), eq(users.status, "active"))),
-    db
-      .select({ id: users.id, email: users.email })
-      .from(users)
-      .innerJoin(userRoles, eq(userRoles.userId, users.id))
-      .innerJoin(roles, eq(roles.id, userRoles.roleId))
-      .where(and(inArray(roles.name, DESK_ROLE_NAMES), eq(users.status, "active"))),
-  ]);
+  const rbacDeskUserIds = db
+    .select({ userId: userRoles.userId })
+    .from(userRoles)
+    .innerJoin(roles, eq(roles.id, userRoles.roleId))
+    .where(inArray(roles.name, NOTIFY_ROLE_NAMES));
 
-  const byId = new Map<string, { id: string; email: string | null }>();
-  for (const row of [...legacy, ...rbac]) {
-    if (!row.id || row.id === excludeUserId) continue;
-    byId.set(row.id, { id: row.id, email: row.email ?? null });
+  const candidates = await db
+    .select({ id: users.id, email: users.email, role: users.role })
+    .from(users)
+    .where(
+      and(
+        eq(users.status, "active"),
+        or(inArray(users.role, NOTIFY_ROLE_NAMES), inArray(users.id, rbacDeskUserIds)),
+      ),
+    );
+  if (candidates.length === 0) return [];
+
+  const rbacRows = await db
+    .select({ userId: userRoles.userId, roleName: roles.name })
+    .from(userRoles)
+    .innerJoin(roles, eq(roles.id, userRoles.roleId))
+    .where(inArray(userRoles.userId, candidates.map((c) => c.id)));
+  const rbacByUser = new Map<string, string[]>();
+  for (const row of rbacRows) {
+    const list = rbacByUser.get(row.userId) ?? [];
+    list.push(row.roleName);
+    rbacByUser.set(row.userId, list);
   }
-  return [...byId.values()];
+
+  const recipients: Array<{ id: string; email: string | null }> = [];
+  for (const row of candidates) {
+    if (!row.id || row.id === excludeUserId) continue;
+    if (!isOpinionTicketNotifyRecipient(row.role, rbacByUser.get(row.id) ?? [])) continue;
+    recipients.push({ id: row.id, email: row.email ?? null });
+  }
+  return recipients;
 }
 
 export async function notifyDeskOfWriterInquiry(input: {

@@ -1,4 +1,6 @@
 /** نسخ إشعار استفسارات الكتّاب — بلا قاعدة بيانات حتى يُختبر بمعزل. */
+import { SUPERUSER_ROLE_NAMES } from "@shared/rbac-constants";
+import { isReaderLikeRole, normalizeRoleKey } from "@shared/effectiveRoles";
 
 export const OPINION_TICKET_NOTICE_TYPE = "OpinionTicketInquiry";
 
@@ -6,6 +8,43 @@ export type OpinionTicketNoticeKind = "new_ticket" | "writer_message";
 
 export function shouldNotifyDeskOfTicketMessage(senderRole: "writer" | "admin"): boolean {
   return senderRole === "writer";
+}
+
+/** من يصله إشعار الاستفسار (صندوق + بريد): مسؤول/مدير النظام فقط، لا المحرر. */
+export const OPINION_TICKET_NOTIFY_ROLE_NAMES: readonly string[] = [...SUPERUSER_ROLE_NAMES];
+
+/** من يفتح كل التذاكر في مركز رسائل الكتّاب. */
+export const OPINION_DESK_ROLE_NAMES: readonly string[] = [...SUPERUSER_ROLE_NAMES, "editor"];
+
+/**
+ * دور في users.role من القائمة يكفي. أما صف user_roles وحده فلا يُحتسب إذا كان
+ * users.role قارئًا: هذا صف قديم بقي بعد تخفيض الدور، واللوحة تُظهر صاحبه «قارئ».
+ */
+export function hasLiveRole(
+  legacyRole: string | null | undefined,
+  rbacRoleNames: Array<string | null | undefined>,
+  allowed: readonly string[],
+): boolean {
+  const set = new Set(allowed);
+  if (set.has(normalizeRoleKey(legacyRole))) return true;
+  if (isReaderLikeRole(legacyRole)) return false;
+  return rbacRoleNames.some((name) => set.has(normalizeRoleKey(name)));
+}
+
+/** هل يصل إشعار الاستفسار (وفيه نص رسالة المساهم) إلى هذا الحساب؟ */
+export function isOpinionTicketNotifyRecipient(
+  legacyRole: string | null | undefined,
+  rbacRoleNames: Array<string | null | undefined>,
+): boolean {
+  return hasLiveRole(legacyRole, rbacRoleNames, OPINION_TICKET_NOTIFY_ROLE_NAMES);
+}
+
+/** هل يرى هذا الحساب كل التذاكر في مركز الرسائل؟ */
+export function isOpinionDeskViewer(
+  legacyRole: string | null | undefined,
+  rbacRoleNames: Array<string | null | undefined>,
+): boolean {
+  return hasLiveRole(legacyRole, rbacRoleNames, OPINION_DESK_ROLE_NAMES);
 }
 
 export function countUnansweredTickets(rows: Array<{ status?: string | null }>): number {

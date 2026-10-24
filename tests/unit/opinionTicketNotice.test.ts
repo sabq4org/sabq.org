@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   buildOpinionTicketStaffNotice,
   countUnansweredTickets,
+  isOpinionDeskViewer,
+  isOpinionTicketNotifyRecipient,
   shouldNotifyDeskOfTicketMessage,
 } from "../../server/services/opinionTicketNotice";
 
@@ -47,5 +49,44 @@ describe("opinion ticket desk notices", () => {
     });
     expect(notice.title).toContain("رسالة جديدة");
     expect(notice.title).toContain("مساهم");
+  });
+});
+
+describe("opinion ticket notice recipients", () => {
+  it("notifies system admins only", () => {
+    expect(isOpinionTicketNotifyRecipient("admin", [])).toBe(true);
+    expect(isOpinionTicketNotifyRecipient("system_admin", ["system_admin"])).toBe(true);
+  });
+
+  it("does not notify editors", () => {
+    expect(isOpinionTicketNotifyRecipient("editor", ["editor"])).toBe(false);
+    expect(isOpinionTicketNotifyRecipient("reporter", ["reporter", "editor"])).toBe(false);
+  });
+
+  it("ignores a leftover admin row on an account shown as a reader", () => {
+    expect(isOpinionTicketNotifyRecipient("reader", ["admin"])).toBe(false);
+    expect(isOpinionTicketNotifyRecipient(null, ["system_admin"])).toBe(false);
+    expect(isOpinionTicketNotifyRecipient("", ["admin"])).toBe(false);
+  });
+
+  it("keeps a staff member whose admin role sits only in user_roles", () => {
+    expect(isOpinionTicketNotifyRecipient("content_manager", ["content_manager", "admin"])).toBe(true);
+  });
+
+  it("excludes contributors and readers", () => {
+    expect(isOpinionTicketNotifyRecipient("opinion_author", ["opinion_author"])).toBe(false);
+    expect(isOpinionTicketNotifyRecipient("reader", [])).toBe(false);
+  });
+});
+
+describe("opinion ticket desk viewers", () => {
+  it("lets admins and editors open all tickets", () => {
+    expect(isOpinionDeskViewer("admin", [])).toBe(true);
+    expect(isOpinionDeskViewer("editor", ["editor"])).toBe(true);
+  });
+
+  it("does not let a reader with a leftover desk row open all tickets", () => {
+    expect(isOpinionDeskViewer("reader", ["admin"])).toBe(false);
+    expect(isOpinionDeskViewer("reader", ["editor", "reader"])).toBe(false);
   });
 });
