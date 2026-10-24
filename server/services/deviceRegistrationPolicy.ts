@@ -1,5 +1,34 @@
 /** Bundle marker reserved for the authenticated Gulf Cup token endpoint. */
 export const GULF_CUP_BUNDLE_ID = "com.sabq.gulfcup";
+/** Bundle identifier for the main Sabq reader iOS app. */
+export const SABQ_READER_BUNDLE_ID = "com.sabq.sabqorg";
+/** Bundle identifier for the standalone Sabq Desk staff iOS app. */
+export const SABQ_DESK_BUNDLE_ID = "com.sabq.desk";
+
+/**
+ * Explicit allowlist of app bundle identifiers accepted by the authenticated
+ * `/api/v1/members/push-token` registration flow.
+ */
+export const ALLOWED_MEMBER_PUSH_BUNDLE_IDS = [
+  SABQ_READER_BUNDLE_ID,
+  "com.sabq.sabqapp",
+  "com.sabq.smart",
+  "com.sabq.smart.dev",
+  "com.sabqorg.sabq",
+  "com.sabqorg.sabq.dev",
+  "com.sabq.sports",
+  "com.sabq.sports.dev",
+  "com.sabq.asiancup",
+  GULF_CUP_BUNDLE_ID,
+  SABQ_DESK_BUNDLE_ID,
+  "com.sabq.desk.dev",
+] as const;
+
+export function isAllowedMemberPushBundleId(bundleId: unknown): bundleId is string {
+  if (typeof bundleId !== "string") return false;
+  const trimmed = bundleId.trim();
+  return (ALLOWED_MEMBER_PUSH_BUNDLE_IDS as readonly string[]).includes(trimmed);
+}
 
 export interface GenericDeviceRegistrationPolicyInput {
   sessionUserId?: string | null;

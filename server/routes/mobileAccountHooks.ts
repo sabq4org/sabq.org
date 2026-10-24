@@ -28,7 +28,10 @@ import {
 } from "../services/appleTokenRevocation";
 import { removeBlocksByUser } from "../services/commentSafetyService";
 import { checkTextForSuspiciousWords } from "../utils/suspiciousWordsChecker";
-import { sanitizeDeviceRegistrationBody } from "../services/deviceRegistrationPolicy";
+import {
+  isAllowedMemberPushBundleId,
+  sanitizeDeviceRegistrationBody,
+} from "../services/deviceRegistrationPolicy";
 
 const router = Router();
 
@@ -98,6 +101,21 @@ router.put("/members/profile", async (req: Request, res: Response, next: NextFun
 
 router.post("/devices/register", (req: Request, _res: Response, next: NextFunction) => {
   sanitizeDeviceRegistrationBody(req.body);
+  next();
+});
+
+router.post("/members/push-token", (req: Request, res: Response, next: NextFunction) => {
+  const rawBundleId = req.body?.bundleId;
+  if (typeof rawBundleId === "string" && rawBundleId.trim().length > 0) {
+    if (!isAllowedMemberPushBundleId(rawBundleId)) {
+      return res.status(400).json({
+        success: false,
+        code: "invalid_bundle_id",
+        message: "معرّف حزمة التطبيق غير مسموح به",
+      });
+    }
+    req.body.bundleId = rawBundleId.trim();
+  }
   next();
 });
 

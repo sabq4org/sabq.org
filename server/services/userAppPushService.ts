@@ -18,9 +18,13 @@ import {
   sendToFcmTargets,
 } from "./fcmService";
 import { SABQ_ANDROID_BUNDLE_IDS } from "./fcmRouting";
-import { GULF_CUP_BUNDLE_ID } from "./deviceRegistrationPolicy";
+import {
+  GULF_CUP_BUNDLE_ID,
+  SABQ_DESK_BUNDLE_ID,
+  SABQ_READER_BUNDLE_ID,
+} from "./deviceRegistrationPolicy";
 
-export { GULF_CUP_BUNDLE_ID };
+export { GULF_CUP_BUNDLE_ID, SABQ_DESK_BUNDLE_ID, SABQ_READER_BUNDLE_ID };
 
 export interface UserAppPushMessage {
   title: string;

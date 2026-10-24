@@ -27,6 +27,7 @@
 | Routes | `server/routes/socialPublishing.ts` — `/api/social-publishing/*` (Passport + RBAC + CSRF عام) |
 | Bot API | `server/routes/botSocial.ts` — `/api/internal/bot-social/*` (Bearer `SABQ_BOT_SOCIAL_TOKEN`، ليس توكن المسودات). العقد: [`BOT_SOCIAL_API.md`](./BOT_SOCIAL_API.md) |
 | Bot Desk API | `server/routes/botDesk.ts` — `/api/internal/bot-desk/social/*` (Bearer `botpub_*` + صلاحيات `social_publish.*` لمالك التوكن، يعمل على مقترحات الكتّاب والوكالات). العقد: [`../editorial/BOT_DESK_API.md`](../editorial/BOT_DESK_API.md) |
+| Staff App Mobile API | `server/routes/staffAppMobile.ts` — `/api/v1/staff/social/*` (Bearer جلسة عضو + 2FA إلزامي + صلاحيات `social_publish.*`، مع دفع فوري لأجهزة `com.sabq.desk`). العقد: [`../editorial/STAFF_APP_API.md`](../editorial/STAFF_APP_API.md) |
 | Worker | `server/jobs/socialPublishWorker.ts` — cron كل دقيقة، مسجل في `server/index.ts` |
 | Shared | `shared/socialPostText.ts` (العد الموزون) + جداول في `shared/schema.ts` |
 | Web | زر «النشر على X» في `RowActions`/إدارة المقالات → `SocialPublishDialog`؛ صفحة `/dashboard/social-publishing` |

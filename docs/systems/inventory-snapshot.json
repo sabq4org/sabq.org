@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-24T18:48:46.465Z",
+  "generatedAt": "2026-10-24T20:39:07.708Z",
   "systems": [
     {
       "id": "account-center",
@@ -59,7 +59,7 @@
     },
     {
       "id": "editorial",
-      "fileCount": 300,
+      "fileCount": 306,
       "samplePaths": [
         "server/routes/videoResolver.ts",
         "server/services/videoResolverService.ts",
@@ -276,7 +276,7 @@
     },
     {
       "id": "systems-catalog",
-      "fileCount": 48,
+      "fileCount": 49,
       "samplePaths": [
         "docs/systems/AUDIT-2026-07-17.md",
         "docs/systems/GOVERNANCE.md",

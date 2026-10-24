@@ -36,6 +36,7 @@ import {
   isMeaningfulProposalTextChange,
   sendDeskAlertEmails,
 } from "../deskBotAlerts";
+import { notifyStaffDeskOfSocialProposal } from "../staffAppPushService";
 
 export const MAX_PUBLISH_ATTEMPTS = 3;
 const STALE_LOCK_MINUTES = 10;
@@ -1197,13 +1198,11 @@ export async function notifyDeskOfAuthorSocialProposal(input: {
   authorName?: string | null;
   isUpdate?: boolean;
 }): Promise<void> {
+  let senderName = input.authorName?.trim() || "";
+  let senderRole = "opinion_author";
   try {
     const recipients = await getDeskBotAlertRecipients();
-    if (recipients.length === 0) return;
-
-    let senderName = input.authorName?.trim() || "";
-    let senderRole = "opinion_author";
-    if (!senderName) {
+    if (recipients.length > 0 && !senderName) {
       try {
         const rows = await db
           .select({
@@ -1229,19 +1228,35 @@ export async function notifyDeskOfAuthorSocialProposal(input: {
     }
     if (!senderName) senderName = "كاتب رأي";
 
-    const emailPayload = buildDeskSocialProposalAlertEmail({
-      postId: input.post.id,
-      proposalKind: "author",
-      senderName,
-      senderRole,
-      text: input.post.text,
-      articleTitle: input.articleTitle,
-      articleUrl: input.articleUrl,
-      isUpdate: input.isUpdate,
-    });
-    await sendDeskAlertEmails(recipients, emailPayload, "[SocialPublish AuthorProposal]");
+    if (recipients.length > 0) {
+      const emailPayload = buildDeskSocialProposalAlertEmail({
+        postId: input.post.id,
+        proposalKind: "author",
+        senderName,
+        senderRole,
+        text: input.post.text,
+        articleTitle: input.articleTitle,
+        articleUrl: input.articleUrl,
+        isUpdate: input.isUpdate,
+      });
+      await sendDeskAlertEmails(recipients, emailPayload, "[SocialPublish AuthorProposal]");
+    }
   } catch (err) {
     console.error(`${LOG_PREFIX} فشل إرسال تنبيه مقترح كاتب الرأي:`, err);
+  }
+
+  try {
+    await notifyStaffDeskOfSocialProposal({
+      postId: input.post.id,
+      proposalKind: "author",
+      senderName: senderName || input.authorName?.trim() || "كاتب رأي",
+      articleTitle: input.articleTitle,
+      text: input.post.text,
+      isUpdate: input.isUpdate,
+      excludeUserId: input.authorUserId,
+    });
+  } catch (pushErr) {
+    console.error(`${LOG_PREFIX} فشل دفع إشعار مقترح كاتب الرأي لتطبيق الديسك:`, pushErr);
   }
 }
 

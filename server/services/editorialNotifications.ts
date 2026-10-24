@@ -18,7 +18,7 @@
  */
 
 import { db } from "../db";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import {
   editorialNotifications,
   editorialNotificationPrefs,
@@ -31,6 +31,7 @@ import {
   createCustomNotificationPayload,
   isApnsConfigured,
 } from "./apnsService";
+import { SABQ_READER_BUNDLE_ID } from "./deviceRegistrationPolicy";
 import {
   isNonHumanAccount,
   resolveArticleStakeholderIds,
@@ -330,21 +331,35 @@ export async function notifyEditorialEvent(args: NotifyEditorialArgs): Promise<v
         .catch((err) => console.warn("[editorialNotifications] supersede scheduled failed:", err));
     }
 
-    // Find iOS devices to deliver to.
+    // Find iOS devices registered for the reader app (com.sabq.sabqorg) so
+    // desk-app devices (com.sabq.desk) or other app bundles on the same
+    // user account never receive reader-topic editorial pushes.
     const devices = await db
-      .select({ token: pushDevices.deviceToken, provider: pushDevices.tokenProvider })
+      .select({
+        token: pushDevices.deviceToken,
+        provider: pushDevices.tokenProvider,
+        bundleId: pushDevices.bundleId,
+      })
       .from(pushDevices)
       .where(and(
         eq(pushDevices.userId, args.userId),
         eq(pushDevices.platform, "ios"),
+        inArray(pushDevices.bundleId, [SABQ_READER_BUNDLE_ID]),
         eq(pushDevices.isActive, true),
       ));
 
-    // Only APNs tokens are sent through the apnsService; FCM iOS tokens go
-    // through Firebase elsewhere if/when that pipeline is added.
-    const apnsTokens = devices
-      .filter(d => d.provider === "apns")
-      .map(d => d.token);
+    // Only APNs tokens for the reader app are sent through apnsService.
+    const apnsTokens = Array.from(
+      new Set(
+        devices
+          .filter(
+            (d) =>
+              d.provider === "apns" &&
+              (d.bundleId === undefined || d.bundleId === SABQ_READER_BUNDLE_ID),
+          )
+          .map((d) => d.token),
+      ),
+    );
 
     if (apnsTokens.length === 0) {
       await db.update(editorialNotifications)
@@ -378,7 +393,7 @@ export async function notifyEditorialEvent(args: NotifyEditorialArgs): Promise<v
             : "active",
           category: `EDITORIAL_${args.event.toUpperCase()}`,
         }),
-        { priority: "10", pushType: "alert" }
+        { priority: "10", pushType: "alert", topic: SABQ_READER_BUNDLE_ID }
       )
     ));
 

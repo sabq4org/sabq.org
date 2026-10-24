@@ -1,0 +1,1090 @@
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
+import express from "express";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { PERMISSION_CODES } from "../../shared/rbac-constants";
+import {
+  STAFF_APP_AUDIT_CHANNEL,
+  STAFF_APP_BUNDLE_ID,
+  READER_APP_BUNDLE_ID,
+} from "../../shared/staffApp";
+
+const mocks = vi.hoisted(() => ({
+  dbSelect: vi.fn(),
+  dbInsert: vi.fn(),
+  dbUpdate: vi.fn(),
+  verifyMemberBearer: vi.fn(),
+  canUserViewOpinionDesk: vi.fn(),
+  userHasPermission: vi.fn(),
+  getUserRoleNames: vi.fn(),
+  invalidateUserPermissionCache: vi.fn(),
+  logActivity: vi.fn(),
+  listOpinionTickets: vi.fn(),
+  getOpinionTicketsUnreadCounts: vi.fn(),
+  getOpinionTicketWithMessages: vi.fn(),
+  appendOpinionTicketMessage: vi.fn(),
+  updateOpinionTicketStatus: vi.fn(),
+  listPendingSocialProposalsForDesk: vi.fn(),
+  getPost: vi.fn(),
+  getPostAttempts: vi.fn(),
+  cancelPost: vi.fn(),
+  claimPostForImmediatePublish: vi.fn(),
+  publishClaimedPost: vi.fn(),
+  schedulePost: vi.fn(),
+  sendEmailNotification: vi.fn(),
+  createNotification: vi.fn(),
+  sendPushToUserApp: vi.fn(),
+  sendPushNotification: vi.fn(),
+  isApnsConfigured: vi.fn(),
+  listOpinionDeskRecipients: vi.fn(),
+}));
+
+vi.mock("../../server/db", () => ({
+  db: {
+    select: (...args: unknown[]) => mocks.dbSelect(...args),
+    insert: (...args: unknown[]) => mocks.dbInsert(...args),
+    update: (...args: unknown[]) => mocks.dbUpdate(...args),
+  },
+}));
+
+vi.mock("../../server/services/memberSessionService", () => ({
+  verifyMemberBearer: (...args: unknown[]) => mocks.verifyMemberBearer(...args),
+}));
+
+vi.mock("../../server/rbac", () => ({
+  userHasPermission: (...args: unknown[]) => mocks.userHasPermission(...args),
+  getUserRoleNames: (...args: unknown[]) => mocks.getUserRoleNames(...args),
+  invalidateUserPermissionCache: (...args: unknown[]) =>
+    mocks.invalidateUserPermissionCache(...args),
+  logActivity: (...args: unknown[]) => mocks.logActivity(...args),
+}));
+
+vi.mock("../../server/services/opinionTicketsService", async () => {
+  const actual = await vi.importActual<
+    typeof import("../../server/services/opinionTicketsService")
+  >("../../server/services/opinionTicketsService");
+  return {
+    ...actual,
+    canUserViewOpinionDesk: (...args: unknown[]) => mocks.canUserViewOpinionDesk(...args),
+    listOpinionTickets: (...args: unknown[]) => mocks.listOpinionTickets(...args),
+    getOpinionTicketsUnreadCounts: (...args: unknown[]) =>
+      mocks.getOpinionTicketsUnreadCounts(...args),
+    getOpinionTicketWithMessages: (...args: unknown[]) =>
+      mocks.getOpinionTicketWithMessages(...args),
+    appendOpinionTicketMessage: (...args: unknown[]) =>
+      mocks.appendOpinionTicketMessage(...args),
+    updateOpinionTicketStatus: (...args: unknown[]) =>
+      mocks.updateOpinionTicketStatus(...args),
+  };
+});
+
+vi.mock("../../server/services/socialPublishing/socialPublishingService", async () => {
+  const actual = await vi.importActual<
+    typeof import("../../server/services/socialPublishing/socialPublishingService")
+  >("../../server/services/socialPublishing/socialPublishingService");
+  return {
+    ...actual,
+    listPendingSocialProposalsForDesk: (...args: unknown[]) =>
+      mocks.listPendingSocialProposalsForDesk(...args),
+    getPost: (...args: unknown[]) => mocks.getPost(...args),
+    getPostAttempts: (...args: unknown[]) => mocks.getPostAttempts(...args),
+    cancelPost: (...args: unknown[]) => mocks.cancelPost(...args),
+    claimPostForImmediatePublish: (...args: unknown[]) =>
+      mocks.claimPostForImmediatePublish(...args),
+    publishClaimedPost: (...args: unknown[]) => mocks.publishClaimedPost(...args),
+    schedulePost: (...args: unknown[]) => mocks.schedulePost(...args),
+  };
+});
+
+vi.mock("../../server/services/userAppPushService", async () => {
+  const actual = await vi.importActual<
+    typeof import("../../server/services/userAppPushService")
+  >("../../server/services/userAppPushService");
+  return {
+    ...actual,
+    sendPushToUserApp: (...args: unknown[]) => mocks.sendPushToUserApp(...args),
+  };
+});
+
+vi.mock("../../server/services/apnsService", async () => {
+  const actual = await vi.importActual<
+    typeof import("../../server/services/apnsService")
+  >("../../server/services/apnsService");
+  return {
+    ...actual,
+    sendPushNotification: (...args: unknown[]) => mocks.sendPushNotification(...args),
+    isApnsConfigured: (...args: unknown[]) => mocks.isApnsConfigured(...args),
+  };
+});
+
+vi.mock("../../server/services/email", () => ({
+  sendEmailNotification: (...args: unknown[]) => mocks.sendEmailNotification(...args),
+}));
+
+vi.mock("../../server/storage", () => ({
+  storage: {
+    createNotification: (...args: unknown[]) => mocks.createNotification(...args),
+  },
+}));
+
+import staffAppMobileRouter from "../../server/routes/staffAppMobile";
+import mobileAccountHooksRouter from "../../server/routes/mobileAccountHooks";
+import { isCsrfExemptRequest } from "../../server/csrf";
+import { OpinionTicketServiceError } from "../../server/services/opinionTicketsService";
+import { notifyDeskOfWriterInquiry } from "../../server/services/opinionTicketNotifications";
+import { notifyDeskOfAuthorSocialProposal } from "../../server/services/socialPublishing/socialPublishingService";
+import { notifyStaffDeskOfSocialProposal } from "../../server/services/staffAppService";
+import { notifyEditorialEvent } from "../../server/services/editorialNotifications";
+
+const MEMBER_SESSION_CREDENTIAL = "member_session_bearer_abc123";
+const BOTPUB_CREDENTIAL = "botpub_should_be_rejected_on_staff_app";
+
+interface MockUserRow {
+  id: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  role: string;
+  status: string;
+  profileImageUrl: string | null;
+  twoFactorEnabled: boolean;
+  twoFactorMethod: string;
+  bannedUntil: Date | null;
+  suspendedUntil: Date | null;
+  accountLocked: boolean;
+  lockedUntil: Date | null;
+  deletedAt: Date | null;
+  emailVerified: boolean;
+}
+
+const DEFAULT_STAFF_USER: MockUserRow = {
+  id: "staff-editor-1",
+  email: "editor@sabq.org",
+  firstName: "ماجد",
+  lastName: "العتيبي",
+  role: "editor",
+  status: "active",
+  profileImageUrl: "https://media.sabq.org/avatars/editor.webp",
+  twoFactorEnabled: true,
+  twoFactorMethod: "authenticator",
+  bannedUntil: null,
+  suspendedUntil: null,
+  accountLocked: false,
+  lockedUntil: null,
+  deletedAt: null,
+  emailVerified: true,
+};
+
+let activeMockUser: MockUserRow | null = { ...DEFAULT_STAFF_USER };
+
+const app = express();
+app.use(express.json());
+app.use("/api/v1", mobileAccountHooksRouter);
+app.post("/api/v1/members/push-token", (req, res) => {
+  res.json({ success: true, bundleId: req.body?.bundleId ?? null });
+});
+app.use("/api/v1/staff", staffAppMobileRouter);
+const server = createServer(app);
+let base = "";
+
+function call(
+  method: string,
+  path: string,
+  body?: unknown,
+  options?: {
+    credential?: string | null;
+    installationId?: string;
+  },
+) {
+  const credential =
+    options && "credential" in options ? options.credential : MEMBER_SESSION_CREDENTIAL;
+  return fetch(`${base}${path}`, {
+    method,
+    headers: {
+      ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
+      ...(credential ? { Authorization: `Bearer ${credential}` } : {}),
+      ...(options?.installationId ? { "X-Installation-Id": options.installationId } : {}),
+    },
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
+}
+
+beforeAll(async () => {
+  await new Promise<void>((resolve) => server.listen(0, resolve));
+  const address = server.address() as AddressInfo;
+  base = `http://127.0.0.1:${address.port}`;
+});
+
+afterAll(async () => {
+  await new Promise<void>((resolve, reject) =>
+    server.close((error) => (error ? reject(error) : resolve())),
+  );
+});
+
+beforeEach(() => {
+  vi.stubEnv("STAFF_APP_SOCIAL_RATE_LIMIT", "1000");
+  vi.stubEnv("STAFF_APP_READ_RATE_LIMIT", "1000");
+  vi.stubEnv("DESK_BOT_ALERT_EMAILS", "");
+
+  for (const fn of Object.values(mocks)) {
+    if (fn && typeof (fn as { mockReset?: () => void }).mockReset === "function") {
+      (fn as { mockReset: () => void }).mockReset();
+    }
+  }
+
+  activeMockUser = { ...DEFAULT_STAFF_USER };
+
+  mocks.verifyMemberBearer.mockImplementation(async (req: express.Request) => {
+    const auth = req.headers.authorization;
+    if (auth === `Bearer ${MEMBER_SESSION_CREDENTIAL}` && activeMockUser) {
+      return { userId: activeMockUser.id };
+    }
+    return null;
+  });
+
+  mocks.dbSelect.mockImplementation(() => ({
+    from: () => ({
+      where: () => ({
+        limit: () => Promise.resolve(activeMockUser ? [activeMockUser] : []),
+      }),
+    }),
+  }));
+
+  mocks.getUserRoleNames.mockImplementation(async () =>
+    activeMockUser ? [activeMockUser.role] : [],
+  );
+  mocks.canUserViewOpinionDesk.mockResolvedValue(true);
+  mocks.userHasPermission.mockResolvedValue(true);
+  mocks.logActivity.mockResolvedValue(undefined);
+  mocks.sendPushToUserApp.mockResolvedValue({
+    attempted: 1,
+    sent: 1,
+    failed: 0,
+    errors: [],
+  });
+  mocks.sendEmailNotification.mockResolvedValue({ success: true });
+  mocks.createNotification.mockResolvedValue(undefined);
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
+
+describe("Sabq Desk Staff API — Auth, 2FA Gate & RBAC", () => {
+  it("exempts /api/v1/staff/* from browser CSRF checks", () => {
+    expect(
+      isCsrfExemptRequest(
+        "POST",
+        "/v1/staff/tickets/t-1/reply",
+        "/api/v1/staff/tickets/t-1/reply",
+      ),
+    ).toBe(true);
+    expect(
+      isCsrfExemptRequest(
+        "POST",
+        "/v1/staff/social/p-1/publish",
+        "/api/v1/staff/social/p-1/publish",
+      ),
+    ).toBe(true);
+  });
+
+  it("rejects missing bearer tokens and botpub_ tokens with 401 unauthorized", async () => {
+    const noTokenRes = await call("GET", "/api/v1/staff/me", undefined, {
+      credential: null,
+    });
+    expect(noTokenRes.status).toBe(401);
+    expect(noTokenRes.headers.get("cache-control")).toBe("private, no-store");
+    expect((await noTokenRes.json()).code).toBe("unauthorized");
+
+    const botpubRes = await call("GET", "/api/v1/staff/me", undefined, {
+      credential: BOTPUB_CREDENTIAL,
+    });
+    expect(botpubRes.status).toBe(401);
+    expect((await botpubRes.json()).code).toBe("unauthorized");
+    // Must reject botpub_ before calling verifyMemberBearer
+    expect(mocks.verifyMemberBearer).not.toHaveBeenCalled();
+  });
+
+  it("enforces mandatory 2FA gate: returns 403 { code: 'two_factor_required' } when 2FA is disabled", async () => {
+    activeMockUser = {
+      ...DEFAULT_STAFF_USER,
+      twoFactorEnabled: false,
+    };
+
+    for (const [method, path, body] of [
+      ["GET", "/api/v1/staff/me", undefined],
+      ["GET", "/api/v1/staff/inbox", undefined],
+      ["GET", "/api/v1/staff/unread-counts", undefined],
+      ["GET", "/api/v1/staff/tickets/t-1", undefined],
+      ["POST", "/api/v1/staff/tickets/t-1/reply", { message: "رد" }],
+      ["GET", "/api/v1/staff/social/s-1", undefined],
+      ["POST", "/api/v1/staff/social/s-1/publish", {}],
+    ] as const) {
+      const res = await call(method, path, body);
+      expect(res.status).toBe(403);
+      const payload = await res.json();
+      expect(payload).toEqual({
+        code: "two_factor_required",
+        message: expect.any(String),
+      });
+    }
+  });
+
+  it("GET /me returns user basics, roles, and live capability matrix", async () => {
+    mocks.getUserRoleNames.mockResolvedValue(["editor", "reporter"]);
+    mocks.canUserViewOpinionDesk.mockResolvedValue(true);
+    mocks.userHasPermission.mockImplementation(async (_uid: string, code: string) => {
+      return (
+        code === PERMISSION_CODES.SOCIAL_PUBLISH_VIEW_LOG ||
+        code === PERMISSION_CODES.SOCIAL_PUBLISH_SCHEDULE
+      );
+    });
+
+    const res = await call("GET", "/api/v1/staff/me");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.user).toMatchObject({
+      id: "staff-editor-1",
+      email: "editor@sabq.org",
+      name: "ماجد العتيبي",
+      role: "editor",
+      twoFactorEnabled: true,
+    });
+    expect(body.roles).toEqual(["editor", "reporter"]);
+    expect(body.capabilities).toEqual({
+      canTickets: true,
+      canSocial: {
+        view: true,
+        publish: false,
+        schedule: true,
+        reject: false,
+      },
+    });
+    expect(mocks.invalidateUserPermissionCache).toHaveBeenCalledWith("staff-editor-1");
+  });
+
+  it("RBAC tickets: editor and admin can access tickets, reader cannot (403 forbidden)", async () => {
+    mocks.getOpinionTicketWithMessages.mockResolvedValue({
+      ticket: {
+        id: "t-1",
+        writerId: "w-1",
+        writerName: "د. سعد",
+        writerEmail: "saad@sabq.org",
+        authorKind: "opinion_author",
+        title: "استفسار",
+        status: "open",
+      },
+      messages: [],
+    });
+
+    // 1) Editor -> allowed
+    activeMockUser = { ...DEFAULT_STAFF_USER, role: "editor" };
+    mocks.canUserViewOpinionDesk.mockResolvedValue(true);
+    const editorRes = await call("GET", "/api/v1/staff/tickets/t-1");
+    expect(editorRes.status).toBe(200);
+
+    // 2) Admin -> allowed
+    activeMockUser = { ...DEFAULT_STAFF_USER, id: "staff-admin-1", role: "admin" };
+    mocks.canUserViewOpinionDesk.mockResolvedValue(true);
+    const adminRes = await call("GET", "/api/v1/staff/tickets/t-1");
+    expect(adminRes.status).toBe(200);
+
+    // 3) Reader -> 403 forbidden on ticket detail, reply, status, and ticket inbox
+    activeMockUser = { ...DEFAULT_STAFF_USER, id: "reader-user-1", role: "reader" };
+    mocks.canUserViewOpinionDesk.mockResolvedValue(false);
+    mocks.userHasPermission.mockResolvedValue(false);
+
+    const readerDetail = await call("GET", "/api/v1/staff/tickets/t-1");
+    expect(readerDetail.status).toBe(403);
+    expect((await readerDetail.json()).code).toBe("forbidden");
+
+    const readerReply = await call("POST", "/api/v1/staff/tickets/t-1/reply", {
+      message: "محاولة رد",
+    });
+    expect(readerReply.status).toBe(403);
+    expect((await readerReply.json()).code).toBe("forbidden");
+
+    const readerStatus = await call("PATCH", "/api/v1/staff/tickets/t-1/status", {
+      status: "closed",
+    });
+    expect(readerStatus.status).toBe(403);
+
+    const readerInbox = await call("GET", "/api/v1/staff/inbox");
+    expect(readerInbox.status).toBe(403);
+    expect((await readerInbox.json()).code).toBe("forbidden");
+
+    const readerUnread = await call("GET", "/api/v1/staff/unread-counts");
+    expect(readerUnread.status).toBe(403);
+    expect((await readerUnread.json()).code).toBe("forbidden");
+  });
+
+  it("RBAC social permission matrix: enforces view_log, publish_now, schedule, and manage_scheduled|create per route", async () => {
+    const samplePost = {
+      id: "soc-1",
+      articleId: "art-1",
+      platform: "x",
+      status: "draft",
+      text: "نص تغريدة مقترحة",
+      textSource: "custom",
+      linkUrl: "https://sabq.org/article/test",
+      imageSource: "none",
+      imageUrl: null,
+      mediaKind: "none",
+      mediaUrls: [],
+      createdByUserId: "writer-1",
+      publisherId: null,
+    };
+    mocks.getPost.mockResolvedValue(samplePost);
+    mocks.getPostAttempts.mockResolvedValue([]);
+    mocks.claimPostForImmediatePublish.mockResolvedValue({ ...samplePost, status: "processing" });
+    mocks.publishClaimedPost.mockResolvedValue({
+      ...samplePost,
+      status: "published",
+      externalPostUrl: "https://x.com/sabqorg/status/1",
+    });
+    mocks.schedulePost.mockResolvedValue({ ...samplePost, status: "scheduled" });
+    mocks.cancelPost.mockResolvedValue({ ...samplePost, status: "canceled" });
+
+    const futureIso = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
+
+    // Case A: Only view_log -> GET /social/:id succeeds (200), publish/schedule/reject fail (403)
+    mocks.userHasPermission.mockImplementation(
+      async (_uid: string, code: string) => code === PERMISSION_CODES.SOCIAL_PUBLISH_VIEW_LOG,
+    );
+
+    expect((await call("GET", "/api/v1/staff/social/soc-1")).status).toBe(200);
+    expect((await call("POST", "/api/v1/staff/social/soc-1/publish", {})).status).toBe(403);
+    expect(
+      (await call("POST", "/api/v1/staff/social/soc-1/schedule", { scheduledAt: futureIso }))
+        .status,
+    ).toBe(403);
+    expect(
+      (await call("POST", "/api/v1/staff/social/soc-1/reject", { reason: "سبب" })).status,
+    ).toBe(403);
+
+    // Case B: Only publish_now -> publish succeeds (200), view/schedule/reject fail (403)
+    mocks.userHasPermission.mockImplementation(
+      async (_uid: string, code: string) => code === PERMISSION_CODES.SOCIAL_PUBLISH_NOW,
+    );
+    expect((await call("GET", "/api/v1/staff/social/soc-1")).status).toBe(403);
+    expect((await call("POST", "/api/v1/staff/social/soc-1/publish", {})).status).toBe(200);
+
+    // Case C: Only schedule -> schedule succeeds (200), publish/reject fail (403)
+    mocks.userHasPermission.mockImplementation(
+      async (_uid: string, code: string) => code === PERMISSION_CODES.SOCIAL_PUBLISH_SCHEDULE,
+    );
+    expect(
+      (await call("POST", "/api/v1/staff/social/soc-1/schedule", { scheduledAt: futureIso }))
+        .status,
+    ).toBe(200);
+    expect((await call("POST", "/api/v1/staff/social/soc-1/publish", {})).status).toBe(403);
+
+    // Case D: Only create (or manage_scheduled) -> reject succeeds (200)
+    mocks.userHasPermission.mockImplementation(
+      async (_uid: string, code: string) => code === PERMISSION_CODES.SOCIAL_PUBLISH_CREATE,
+    );
+    expect(
+      (await call("POST", "/api/v1/staff/social/soc-1/reject", { reason: "غير مناسب" })).status,
+    ).toBe(200);
+  });
+});
+
+describe("Sabq Desk Staff API — Unified Inbox, Cursor Pagination & Unread Counts", () => {
+  const sampleTickets = [
+    {
+      id: "ticket-1",
+      writerId: "writer-1",
+      writerName: "د. خالد العتيبي",
+      writerEmail: "khalid@sabq.org",
+      authorKind: "opinion_author",
+      title: "استفسار عن موعد المقال",
+      status: "open",
+      createdAt: new Date("2026-10-24T10:00:00.000Z"),
+      updatedAt: new Date("2026-10-24T14:00:00.000Z"),
+      lastMessageAt: new Date("2026-10-24T14:00:00.000Z"),
+      hasUnread: true,
+      latestMessageExcerpt: "هل ينشر مقالي غداً؟",
+    },
+    {
+      id: "ticket-2",
+      writerId: "reporter-1",
+      writerName: "فهد الشمري",
+      writerEmail: "fahad@sabq.org",
+      authorKind: "reporter",
+      title: "تغطية ميدانية",
+      status: "answered",
+      createdAt: new Date("2026-10-24T09:00:00.000Z"),
+      updatedAt: new Date("2026-10-24T11:00:00.000Z"),
+      lastMessageAt: new Date("2026-10-24T11:00:00.000Z"),
+      hasUnread: false,
+      latestMessageExcerpt: "تم استلام الصور",
+    },
+  ];
+
+  const sampleSocialProposals = [
+    {
+      id: "social-1",
+      status: "draft",
+      kind: "agency",
+      text: "تغريدة وكالة الأنباء حول المؤتمر التقني",
+      authorName: null,
+      agencyName: "وكالة الأفق",
+      proposerName: "وكالة الأفق",
+      createdByUserId: "agency-user-1",
+      createdByName: "أحمد",
+      publisherId: "pub-1",
+      isAuthorProposal: false,
+      isAgencyProposal: true,
+      articleId: "art-10",
+      articleTitle: "انطلاق المؤتمر التقني بالرياض",
+      articleUrl: "https://sabq.org/article/tech-conf",
+      article: {
+        id: "art-10",
+        title: "انطلاق المؤتمر التقني بالرياض",
+        url: "https://sabq.org/article/tech-conf",
+        imageUrl: null,
+      },
+      createdAt: "2026-10-24T13:00:00.000Z",
+      created_at: "2026-10-24T13:00:00.000Z",
+      updatedAt: "2026-10-24T15:00:00.000Z",
+      updated_at: "2026-10-24T15:00:00.000Z",
+    },
+    {
+      id: "social-2",
+      status: "draft",
+      kind: "author",
+      text: "قراءة في التحول الوطني ومستقبل المعرفة",
+      authorName: "أ. نورة القحطاني",
+      agencyName: null,
+      proposerName: "أ. نورة القحطاني",
+      createdByUserId: "writer-2",
+      createdByName: "أ. نورة القحطاني",
+      publisherId: null,
+      isAuthorProposal: true,
+      isAgencyProposal: false,
+      articleId: "art-11",
+      articleTitle: "مستقبل المعرفة",
+      articleUrl: "https://sabq.org/article/future-knowledge",
+      article: {
+        id: "art-11",
+        title: "مستقبل المعرفة",
+        url: "https://sabq.org/article/future-knowledge",
+        imageUrl: null,
+      },
+      createdAt: "2026-10-24T12:00:00.000Z",
+      created_at: "2026-10-24T12:00:00.000Z",
+      updatedAt: "2026-10-24T12:30:00.000Z",
+      updated_at: "2026-10-24T12:30:00.000Z",
+    },
+  ];
+
+  it("returns unified items sorted newest first with normalized sender kinds and cursor pagination", async () => {
+    mocks.listOpinionTickets.mockResolvedValue(sampleTickets);
+    mocks.listPendingSocialProposalsForDesk.mockResolvedValue(sampleSocialProposals);
+
+    // Page 1 (limit=2) -> should return social-1 (15:00) and ticket-1 (14:00)
+    const page1Res = await call("GET", "/api/v1/staff/inbox?type=all&limit=2");
+    expect(page1Res.status).toBe(200);
+    const page1 = await page1Res.json();
+    expect(page1.items).toHaveLength(2);
+    expect(page1.hasMore).toBe(true);
+    expect(typeof page1.nextCursor).toBe("string");
+
+    expect(page1.items[0]).toMatchObject({
+      id: "social-1",
+      kind: "social",
+      title: "انطلاق المؤتمر التقني بالرياض",
+      previewText: "تغريدة وكالة الأنباء حول المؤتمر التقني",
+      sender: { name: "وكالة الأفق", kind: "agency" },
+      updatedAt: "2026-10-24T15:00:00.000Z",
+      status: "draft",
+      hasUnread: true,
+      deeplink: "sabqdesk://social/social-1",
+    });
+
+    expect(page1.items[1]).toMatchObject({
+      id: "ticket-1",
+      kind: "ticket",
+      title: "استفسار عن موعد المقال",
+      previewText: "هل ينشر مقالي غداً؟",
+      sender: { name: "د. خالد العتيبي", kind: "writer" },
+      updatedAt: "2026-10-24T14:00:00.000Z",
+      status: "open",
+      hasUnread: true,
+      deeplink: "sabqdesk://ticket/ticket-1",
+    });
+
+    // Page 2 using opaque cursor -> should return social-2 (12:30) and ticket-2 (11:00)
+    const page2Res = await call(
+      "GET",
+      `/api/v1/staff/inbox?type=all&limit=2&cursor=${encodeURIComponent(page1.nextCursor)}`,
+    );
+    expect(page2Res.status).toBe(200);
+    const page2 = await page2Res.json();
+    expect(page2.items).toHaveLength(2);
+    expect(page2.hasMore).toBe(false);
+    expect(page2.nextCursor).toBeNull();
+
+    expect(page2.items[0]).toMatchObject({
+      id: "social-2",
+      kind: "social",
+      sender: { name: "أ. نورة القحطاني", kind: "writer" },
+    });
+    expect(page2.items[1]).toMatchObject({
+      id: "ticket-2",
+      kind: "ticket",
+      sender: { name: "فهد الشمري", kind: "reporter" },
+      hasUnread: false,
+    });
+  });
+
+  it("supports filtering inbox by type, status, unread, and search query q, and rejects limit>50 or invalid cursor", async () => {
+    mocks.listOpinionTickets.mockResolvedValue(sampleTickets);
+    mocks.listPendingSocialProposalsForDesk.mockResolvedValue(sampleSocialProposals);
+
+    const searchRes = await call(
+      "GET",
+      `/api/v1/staff/inbox?type=all&q=${encodeURIComponent("المؤتمر")}`,
+    );
+    expect(searchRes.status).toBe(200);
+    const searchBody = await searchRes.json();
+    expect(searchBody.items).toHaveLength(1);
+    expect(searchBody.items[0].id).toBe("social-1");
+
+    // Reject limit > 50
+    const overLimitRes = await call("GET", "/api/v1/staff/inbox?limit=51");
+    expect(overLimitRes.status).toBe(400);
+    expect((await overLimitRes.json()).code).toBe("validation_error");
+
+    // Reject invalid opaque cursor
+    const badCursorRes = await call("GET", "/api/v1/staff/inbox?cursor=not-a-valid-cursor");
+    expect(badCursorRes.status).toBe(400);
+    expect((await badCursorRes.json()).code).toBe("validation_error");
+  });
+
+  it("GET /unread-counts returns { tickets, social, total }", async () => {
+    mocks.getOpinionTicketsUnreadCounts.mockResolvedValue({
+      unreadCount: 3,
+      unansweredCount: 2,
+    });
+    mocks.listPendingSocialProposalsForDesk.mockResolvedValue(sampleSocialProposals);
+
+    const res = await call("GET", "/api/v1/staff/unread-counts");
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      tickets: 3,
+      social: 2,
+      total: 5,
+    });
+  });
+});
+
+describe("Sabq Desk Staff API — Tickets, Social Actions, Schedule Validation, Audit & Rate Limiting", () => {
+  it("replies to a ticket and updates status, auditing channel='staff-app' with userId and installationId", async () => {
+    mocks.appendOpinionTicketMessage.mockResolvedValue({
+      message: {
+        id: "msg-99",
+        ticketId: "t-50",
+        senderId: DEFAULT_STAFF_USER.id,
+        senderRole: "admin",
+        message: "تم اعتماد المقال",
+        parentMessageId: null,
+        createdAt: new Date("2026-10-24T16:00:00.000Z"),
+      },
+      previousStatus: "open",
+      status: "answered",
+    });
+
+    const replyRes = await call(
+      "POST",
+      "/api/v1/staff/tickets/t-50/reply",
+      { message: "تم اعتماد المقال" },
+      { installationId: "ios-idfv-desk-001" },
+    );
+    expect(replyRes.status).toBe(201);
+    const replyBody = await replyRes.json();
+    expect(replyBody.status).toBe("answered");
+
+    expect(mocks.logActivity).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: DEFAULT_STAFF_USER.id,
+        action: "ticket_reply",
+        entityType: "opinion_ticket",
+        entityId: "t-50",
+        metadata: expect.objectContaining({
+          channel: STAFF_APP_AUDIT_CHANNEL,
+          userId: DEFAULT_STAFF_USER.id,
+          installationId: "ios-idfv-desk-001",
+        }),
+      }),
+    );
+
+    mocks.updateOpinionTicketStatus.mockResolvedValue({
+      id: "t-50",
+      status: "closed",
+    });
+
+    const statusRes = await call(
+      "PATCH",
+      "/api/v1/staff/tickets/t-50/status",
+      { status: "closed" },
+      { installationId: "ios-idfv-desk-001" },
+    );
+    expect(statusRes.status).toBe(200);
+    expect((await statusRes.json()).ticket.status).toBe("closed");
+
+    // Closed ticket reply -> 400 ticket_closed
+    mocks.appendOpinionTicketMessage.mockRejectedValueOnce(
+      new OpinionTicketServiceError(400, "ticket_closed", "تم إغلاق هذا الاستفسار"),
+    );
+    const closedRes = await call("POST", "/api/v1/staff/tickets/t-50/reply", {
+      message: "رد بعد الإغلاق",
+    });
+    expect(closedRes.status).toBe(400);
+    expect((await closedRes.json()).code).toBe("ticket_closed");
+  });
+
+  it("validates schedule time: requires ISO with offset and rejects past timestamps", async () => {
+    const draftPost = {
+      id: "soc-10",
+      articleId: "art-10",
+      platform: "x",
+      status: "draft",
+      text: "نص تغريدة",
+      textSource: "custom",
+      linkUrl: "https://sabq.org/article/test",
+      createdByUserId: "writer-1",
+      publisherId: null,
+    };
+    mocks.getPost.mockResolvedValue(draftPost);
+    mocks.schedulePost.mockResolvedValue({
+      ...draftPost,
+      status: "scheduled",
+    });
+
+    // 1) Past timestamp -> 400 validation_error without calling schedulePost
+    const pastIso = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+    const pastRes = await call("POST", "/api/v1/staff/social/soc-10/schedule", {
+      scheduledAt: pastIso,
+    });
+    expect(pastRes.status).toBe(400);
+    const pastBody = await pastRes.json();
+    expect(pastBody.code).toBe("validation_error");
+    expect(mocks.schedulePost).not.toHaveBeenCalled();
+
+    // 2) Timestamp without offset -> 400 validation_error
+    const noOffsetRes = await call("POST", "/api/v1/staff/social/soc-10/schedule", {
+      scheduledAt: "2027-05-01T18:00:00",
+    });
+    expect(noOffsetRes.status).toBe(400);
+    expect((await noOffsetRes.json()).code).toBe("validation_error");
+
+    // 3) Valid future timestamp with offset -> 200 and audited
+    const futureIso = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
+    const okRes = await call(
+      "POST",
+      "/api/v1/staff/social/soc-10/schedule",
+      { scheduledAt: futureIso },
+      { installationId: "ios-idfv-desk-002" },
+    );
+    expect(okRes.status).toBe(200);
+    expect(mocks.schedulePost).toHaveBeenCalledWith(
+      "soc-10",
+      new Date(futureIso),
+      { resetAttempts: true },
+    );
+    expect(mocks.logActivity).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: DEFAULT_STAFF_USER.id,
+        action: "social_post_schedule",
+        entityType: "social_post",
+        entityId: "soc-10",
+        metadata: expect.objectContaining({
+          channel: STAFF_APP_AUDIT_CHANNEL,
+          installationId: "ios-idfv-desk-002",
+        }),
+      }),
+    );
+  });
+
+  it("rate limits social publish/schedule/reject per user (429 rate_limited)", async () => {
+    vi.stubEnv("STAFF_APP_SOCIAL_RATE_LIMIT", "2");
+    activeMockUser = { ...DEFAULT_STAFF_USER, id: "rate-limited-editor" };
+
+    const draftPost = {
+      id: "soc-rl",
+      articleId: "art-1",
+      platform: "x",
+      status: "draft",
+      text: "تغريدة",
+      textSource: "custom",
+      linkUrl: null,
+      createdByUserId: "w-1",
+      publisherId: null,
+    };
+    mocks.getPost.mockResolvedValue(draftPost);
+    mocks.cancelPost.mockResolvedValue({ ...draftPost, status: "canceled" });
+
+    const r1 = await call("POST", "/api/v1/staff/social/soc-rl/reject", { reason: "1" });
+    const r2 = await call("POST", "/api/v1/staff/social/soc-rl/reject", { reason: "2" });
+    const r3 = await call("POST", "/api/v1/staff/social/soc-rl/reject", { reason: "3" });
+
+    expect(r1.status).toBe(200);
+    expect(r2.status).toBe(200);
+    expect(r3.status).toBe(429);
+    expect((await r3.json()).code).toBe("rate_limited");
+  });
+});
+
+describe("Sabq Desk Staff Push Hooks & Reader Bundle Isolation", () => {
+  it("notifyDeskOfWriterInquiry sends push to com.sabq.desk with sabqdesk://ticket/<id> and never throws when push fails", async () => {
+    // 1) subquery rbacDeskUserIds in listOpinionDeskRecipients
+    mocks.dbSelect
+      .mockReturnValueOnce({
+        from: () => ({
+          innerJoin: () => ({
+            where: () => [],
+          }),
+        }),
+      })
+      // 2) candidates query in listOpinionDeskRecipients
+      .mockReturnValueOnce({
+        from: () => ({
+          where: () =>
+            Promise.resolve([
+              { id: "admin-1", email: "admin1@sabq.org", role: "admin" },
+            ]),
+        }),
+      })
+      // 3) rbacRows query in listOpinionDeskRecipients
+      .mockReturnValueOnce({
+        from: () => ({
+          innerJoin: () => ({
+            where: () => Promise.resolve([{ userId: "admin-1", roleName: "admin" }]),
+          }),
+        }),
+      })
+      // 4) systemSettings query in getDeskBotAlertRecipients
+      .mockReturnValueOnce({
+        from: () => ({
+          where: () => ({
+            limit: () => Promise.resolve([]),
+          }),
+        }),
+      });
+
+    mocks.sendPushToUserApp.mockRejectedValueOnce(new Error("APNs socket error"));
+
+    await expect(
+      notifyDeskOfWriterInquiry({
+        kind: "new_ticket",
+        ticketId: "ticket-push-77",
+        title: "استفسار هام",
+        writerName: "د. فهد",
+        writerRole: "opinion_author",
+        message: "متى ينشر مقالي؟",
+        senderId: "writer-99",
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(mocks.createNotification).toHaveBeenCalledTimes(1);
+    expect(mocks.sendPushToUserApp).toHaveBeenCalledWith(
+      "admin-1",
+      STAFF_APP_BUNDLE_ID,
+      expect.objectContaining({
+        deeplink: "sabqdesk://ticket/ticket-push-77",
+        data: expect.objectContaining({
+          ticketId: "ticket-push-77",
+          kind: "new_ticket",
+        }),
+      }),
+    );
+  });
+
+  it("notifyStaffDeskOfSocialProposal & notifyDeskOfAuthorSocialProposal send push to social_publish.view_log users with sabqdesk://social/<id> and never throw", async () => {
+    // Mock candidates query in listSocialDeskRecipientUserIds
+    const subQueryChain = {
+      from: () => ({
+        innerJoin: () => ({
+          where: () => [],
+          innerJoin: () => ({ where: () => [] }),
+        }),
+        where: () => [],
+      }),
+    };
+    mocks.dbSelect
+      // 4 subqueries + 1 main candidates query
+      .mockReturnValueOnce(subQueryChain)
+      .mockReturnValueOnce(subQueryChain)
+      .mockReturnValueOnce(subQueryChain)
+      .mockReturnValueOnce(subQueryChain)
+      .mockReturnValueOnce({
+        from: () => ({
+          where: () =>
+            Promise.resolve([
+              { id: "social-editor-1", role: "editor" },
+              { id: "no-perm-user-2", role: "reporter" },
+            ]),
+        }),
+      });
+
+    mocks.userHasPermission.mockImplementation(
+      async (uid: string, code: string) =>
+        uid === "social-editor-1" && code === PERMISSION_CODES.SOCIAL_PUBLISH_VIEW_LOG,
+    );
+    mocks.sendPushToUserApp.mockRejectedValueOnce(new Error("FCM/APNs timeout"));
+
+    await expect(
+      notifyStaffDeskOfSocialProposal({
+        postId: "social-prop-88",
+        proposalKind: "agency",
+        senderName: "وكالة الأفق",
+        articleTitle: "خبر اقتصادي",
+        text: "نص مقترح التغريدة",
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(mocks.sendPushToUserApp).toHaveBeenCalledTimes(1);
+    expect(mocks.sendPushToUserApp).toHaveBeenCalledWith(
+      "social-editor-1",
+      STAFF_APP_BUNDLE_ID,
+      expect.objectContaining({
+        deeplink: "sabqdesk://social/social-prop-88",
+        type: "desk.social_proposal",
+      }),
+    );
+
+    // Also verify notifyDeskOfAuthorSocialProposal does not throw when push or DB fails
+    await expect(
+      notifyDeskOfAuthorSocialProposal({
+        post: {
+          id: "social-prop-99",
+          articleId: "art-1",
+          platform: "x",
+          accountId: "acc-1",
+          textSource: "custom",
+          text: "تغريدة كاتب رأي",
+          linkUrl: "https://sabq.org/article/1",
+          imageSource: "none",
+          imageUrl: null,
+          mediaKind: "none",
+          mediaUrls: [],
+          status: "draft",
+          scheduledAt: null,
+          publishedAt: null,
+          requestedAt: null,
+          externalPostId: null,
+          externalPostUrl: null,
+          attempts: 0,
+          lastError: null,
+          lockedAt: null,
+          createdByUserId: "writer-1",
+          publishedByUserId: null,
+          canceledByUserId: null,
+          publisherId: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+        articleTitle: "مقال الرأي",
+        articleUrl: "https://sabq.org/article/1",
+        authorUserId: "writer-1",
+        authorName: "د. علي",
+      }),
+    ).resolves.toBeUndefined();
+  });
+
+  it("notifyEditorialEvent filters iOS devices by reader bundleId (com.sabq.sabqorg) so com.sabq.desk devices do not get reader pushes", async () => {
+    mocks.isApnsConfigured.mockReturnValue(true);
+    mocks.sendPushNotification.mockResolvedValue({ success: true });
+
+    // 1) fetchUserPrefs
+    mocks.dbSelect.mockReturnValueOnce({
+      from: () => ({
+        where: () => ({
+          limit: () => Promise.resolve([]),
+        }),
+      }),
+    });
+
+    // 2) insert editorialNotifications
+    mocks.dbInsert.mockReturnValueOnce({
+      values: () => ({
+        returning: () => Promise.resolve([{ id: "ed-notif-1" }]),
+      }),
+    });
+
+    // 3) update supersede scheduled
+    mocks.dbUpdate.mockReturnValueOnce({
+      set: () => ({
+        where: () => Promise.resolve(),
+      }),
+    });
+
+    // 4) select pushDevices — simulate returning both a reader device and a desk device
+    mocks.dbSelect.mockReturnValueOnce({
+      from: () => ({
+        where: () =>
+          Promise.resolve([
+            {
+              token: "reader-apns-token-1",
+              provider: "apns",
+              bundleId: READER_APP_BUNDLE_ID,
+            },
+            {
+              token: "desk-apns-token-2",
+              provider: "apns",
+              bundleId: STAFF_APP_BUNDLE_ID,
+            },
+          ]),
+      }),
+    });
+
+    // 5) update editorialNotifications deliveryStatus
+    mocks.dbUpdate.mockReturnValueOnce({
+      set: () => ({
+        where: () => Promise.resolve(),
+      }),
+    });
+
+    await notifyEditorialEvent({
+      userId: "writer-with-both-apps",
+      event: "published",
+      article: {
+        id: "art-500",
+        title: "مقال منشور",
+        slug: "published-op",
+        articleType: "opinion",
+      },
+    });
+
+    expect(mocks.sendPushNotification).toHaveBeenCalledTimes(1);
+    expect(mocks.sendPushNotification).toHaveBeenCalledWith(
+      "reader-apns-token-1",
+      expect.any(Object),
+      expect.objectContaining({
+        topic: READER_APP_BUNDLE_ID,
+      }),
+    );
+  });
+
+  it("POST /api/v1/members/push-token accepts com.sabq.desk and rejects unknown bundleIds", async () => {
+    const deskRes = await call("POST", "/api/v1/members/push-token", {
+      provider: "apns",
+      platform: "ios",
+      bundleId: "com.sabq.desk",
+    });
+    expect(deskRes.status).toBe(200);
+    expect(await deskRes.json()).toEqual({
+      success: true,
+      bundleId: "com.sabq.desk",
+    });
+
+    const badRes = await call("POST", "/api/v1/members/push-token", {
+      provider: "apns",
+      platform: "ios",
+      bundleId: "com.unknown.app",
+    });
+    expect(badRes.status).toBe(400);
+    expect((await badRes.json()).code).toBe("invalid_bundle_id");
+  });
+});
